@@ -1,0 +1,38 @@
+# Build directories
+build/
+
+# IDE
+.vs/
+*.suo
+*.user
+*.opensdf
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+.vscode/
+
+# CMake
+CMakeCache.txt
+CMakeFiles/
+
+# Compiled objects
+*.o
+*.obj
+*.lib
+*.dll
+*.pdb
+*.exp
+*.ilk
+*.ipch
+
+# Binaries
+*.exe
+*.a
+*.so
+*.dylib
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini

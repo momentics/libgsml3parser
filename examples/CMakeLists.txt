@@ -1,0 +1,2 @@
+add_executable(example_parse_file example_parse_file.cpp)
+target_link_libraries(example_parse_file PRIVATE gsml3parser)
