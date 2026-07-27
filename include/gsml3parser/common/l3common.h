@@ -366,6 +366,416 @@ public:
     void text(std::ostream& os) const override;
 };
 
+// ── Channel Mode (GSM 04.08 10.5.2.6) ──────────────────────────────────
+
+class L3ChannelMode : public L3ProtocolElement {
+public:
+    enum Mode : uint8_t {
+        SignallingOnly = 0,
+        SpeechV1 = 1,
+        SpeechV2 = 2,
+        SpeechV3 = 3
+    };
+private:
+    Mode mMode;
+public:
+    explicit L3ChannelMode(Mode wMode = SignallingOnly);
+    Mode mode() const { return mMode; }
+    bool isAMR() const { return mMode == SpeechV3; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Timing Advance (GSM 04.08 10.5.2.40) ───────────────────────────────
+
+class L3TimingAdvance : public L3ProtocolElement {
+private:
+    unsigned mTimingAdvance;
+public:
+    explicit L3TimingAdvance(unsigned wTA = 0);
+    unsigned timingAdvance() const { return mTimingAdvance; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Cell Description (GSM 04.08 10.5.2.2) ──────────────────────────────
+
+class L3CellDescription : public L3ProtocolElement {
+private:
+    unsigned mARFCN;
+    unsigned mNCC;
+    unsigned mBCC;
+public:
+    L3CellDescription(unsigned wARFCN = 0, unsigned wNCC = 0, unsigned wBCC = 0);
+    unsigned ARFCN() const { return mARFCN; }
+    unsigned NCC() const { return mNCC; }
+    unsigned BCC() const { return mBCC; }
+    size_t lengthV() const override { return 2; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Handover Reference (GSM 04.08 10.5.2.15) ──────────────────────────
+
+class L3HandoverReference : public L3ProtocolElement {
+private:
+    unsigned mValue;
+public:
+    explicit L3HandoverReference(unsigned wValue = 0);
+    unsigned value() const { return mValue; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Ciphering Mode Setting (GSM 04.08 10.5.2.9) ───────────────────────
+
+class L3CipheringModeSetting : public L3ProtocolElement {
+private:
+    bool mCiphering;
+    int mAlgorithm;
+public:
+    L3CipheringModeSetting(bool wCiphering = false, int wAlgorithm = 0);
+    bool ciphering() const { return mCiphering; }
+    int algorithm() const { return mAlgorithm; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Ciphering Mode Response (GSM 04.08 10.5.2.10) ─────────────────────
+
+class L3CipheringModeResponse : public L3ProtocolElement {
+private:
+    bool mIncludeIMEISV;
+public:
+    explicit L3CipheringModeResponse(bool wIncludeIMEISV = false);
+    bool includeIMEISV() const { return mIncludeIMEISV; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Synchronization Indication (GSM 04.08 10.5.2.39) ──────────────────
+
+class L3SynchronizationIndication : public L3ProtocolElement {
+private:
+    bool mNCI;
+    bool mROT;
+    int mSI;
+public:
+    L3SynchronizationIndication(bool wNCI = false, bool wROT = false, int wSI = 0);
+    bool NCI() const { return mNCI; }
+    bool ROT() const { return mROT; }
+    int SI() const { return mSI; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── NCC Permitted (GSM 04.08 10.5.2.27) ───────────────────────────────
+
+class L3NCCPermitted : public L3ProtocolElement {
+private:
+    unsigned mPermitted;
+public:
+    explicit L3NCCPermitted(unsigned wPermitted = 0xff);
+    unsigned permitted() const { return mPermitted; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Page Mode (GSM 04.08 10.5.2.26) ───────────────────────────────────
+
+class L3PageMode : public L3ProtocolElement {
+private:
+    unsigned mPageMode;
+public:
+    explicit L3PageMode(unsigned wPageMode = 0);
+    unsigned pageMode() const { return mPageMode; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Request Reference (GSM 04.08 10.5.2.30) ───────────────────────────
+
+class L3RequestReference : public L3ProtocolElement {
+private:
+    unsigned mRA;
+    unsigned mT1p;
+    unsigned mT2;
+    unsigned mT3;
+public:
+    L3RequestReference();
+    L3RequestReference(unsigned wRA, unsigned wT1p, unsigned wT2, unsigned wT3);
+    unsigned RA() const { return mRA; }
+    unsigned T1p() const { return mT1p; }
+    unsigned T2() const { return mT2; }
+    unsigned T3() const { return mT3; }
+    size_t lengthV() const override { return 3; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Wait Indication (GSM 04.08 10.5.2.43) ─────────────────────────────
+
+class L3WaitIndication : public L3ProtocolElement {
+private:
+    unsigned mValue;
+public:
+    explicit L3WaitIndication(unsigned seconds = 0);
+    unsigned value() const { return mValue; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── RRCause Element (GSM 04.08 10.5.2.31) ─────────────────────────────
+
+class L3RRCauseElement : public L3ProtocolElement {
+private:
+    RRCause mCauseValue;
+public:
+    explicit L3RRCauseElement(RRCause wValue = RRCause::Normal_Event);
+    RRCause causeValue() const { return mCauseValue; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Cell Options BCCH (GSM 04.08 10.5.2.3) ────────────────────────────
+
+class L3CellOptionsBCCH : public L3ProtocolElement {
+private:
+    unsigned mPWRC;
+    unsigned mDTX;
+    unsigned mRADIO_LINK_TIMEOUT;
+public:
+    L3CellOptionsBCCH();
+    unsigned PWRC() const { return mPWRC; }
+    unsigned DTX() const { return mDTX; }
+    unsigned RADIO_LINK_TIMEOUT() const { return mRADIO_LINK_TIMEOUT; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Cell Options SACCH (GSM 04.08 10.5.2.3a) ──────────────────────────
+
+class L3CellOptionsSACCH : public L3ProtocolElement {
+private:
+    unsigned mPWRC;
+    unsigned mDTX;
+    unsigned mRADIO_LINK_TIMEOUT;
+public:
+    L3CellOptionsSACCH();
+    unsigned PWRC() const { return mPWRC; }
+    unsigned DTX() const { return mDTX; }
+    unsigned RADIO_LINK_TIMEOUT() const { return mRADIO_LINK_TIMEOUT; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Cell Selection Parameters (GSM 04.08 10.5.2.4) ────────────────────
+
+class L3CellSelectionParameters : public L3ProtocolElement {
+private:
+    unsigned mACS;
+    unsigned mNECI;
+    unsigned mCELL_RESELECT_HYSTERESIS;
+    unsigned mMS_TXPWR_MAX_CCH;
+    unsigned mRXLEV_ACCESS_MIN;
+public:
+    L3CellSelectionParameters();
+    unsigned ACS() const { return mACS; }
+    unsigned NECI() const { return mNECI; }
+    unsigned CELL_RESELECT_HYSTERESIS() const { return mCELL_RESELECT_HYSTERESIS; }
+    unsigned MS_TXPWR_MAX_CCH() const { return mMS_TXPWR_MAX_CCH; }
+    unsigned RXLEV_ACCESS_MIN() const { return mRXLEV_ACCESS_MIN; }
+    size_t lengthV() const override { return 2; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Neighbor Cells Description (GSM 04.08 10.5.2.22) ──────────────────
+
+class L3NeighborCellsDescription : public L3ProtocolElement {
+private:
+    std::vector<unsigned> mARFCNs;
+public:
+    L3NeighborCellsDescription();
+    explicit L3NeighborCellsDescription(const std::vector<unsigned>& neighbors);
+    const std::vector<unsigned>& ARFCNs() const { return mARFCNs; }
+    size_t lengthV() const override;
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Measurement Results (GSM 04.08 10.5.2.20) ─────────────────────────
+
+class L3MeasurementResults : public L3ProtocolElement {
+private:
+    bool mBA_USED;
+    bool mDTX_USED;
+    bool mMEAS_VALID;
+    unsigned mRXLEV_FULL_SERVING_CELL;
+    unsigned mRXLEV_SUB_SERVING_CELL;
+    unsigned mRXQUAL_FULL_SERVING_CELL;
+    unsigned mRXQUAL_SUB_SERVING_CELL;
+    unsigned mNO_NCELL;
+    unsigned mRXLEV_NCELL[6];
+    unsigned mBCCH_FREQ_NCELL[6];
+    unsigned mBSIC_NCELL[6];
+public:
+    L3MeasurementResults();
+    bool BA_USED() const { return mBA_USED; }
+    bool DTX_USED() const { return mDTX_USED; }
+    bool isServingCellValid() const { return mMEAS_VALID == 0; }
+    unsigned RXLEV_FULL_SERVING_CELL_RAW() const { return mRXLEV_FULL_SERVING_CELL; }
+    unsigned RXLEV_SUB_SERVING_CELL_RAW() const { return mRXLEV_SUB_SERVING_CELL; }
+    unsigned RXQUAL_FULL_SERVING_CELL() const { return mRXQUAL_FULL_SERVING_CELL; }
+    unsigned RXQUAL_SUB_SERVING_CELL() const { return mRXQUAL_SUB_SERVING_CELL; }
+    unsigned NO_NCELL() const { return mNO_NCELL; }
+    unsigned RXLEV_NCELL_RAW(unsigned i) const { return mRXLEV_NCELL[i]; }
+    unsigned BCCH_FREQ_NCELL(unsigned i) const { return mBCCH_FREQ_NCELL[i]; }
+    unsigned BSIC_NCELL(unsigned i) const { return mBSIC_NCELL[i]; }
+    int decodeLevToDBm(unsigned lev) const;
+    float decodeQualToBER(unsigned qual) const;
+    size_t lengthV() const override { return 16; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Multi Rate Configuration (3GPP 44.018 10.5.2.21aa) ────────────────
+
+class L3MultiRateConfiguration : public L3ProtocolElement {
+public:
+    enum AmrCodecSet : uint8_t {
+        codec_set_AMR_FR = 0x80,
+        codec_set_AMR_HR = 0x10,
+        codec_set_UMTS_AMR = 0x85
+    };
+private:
+    unsigned mOptions;
+    AmrCodecSet mAmrCodecSet;
+public:
+    explicit L3MultiRateConfiguration(bool halfrate = false);
+    unsigned options() const { return mOptions; }
+    AmrCodecSet amrCodecSet() const { return mAmrCodecSet; }
+    size_t lengthV() const override { return 2; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── APDUID (GSM 04.08 10.5.2.48) ──────────────────────────────────────
+
+class L3APDUID : public L3ProtocolElement {
+private:
+    unsigned mProtocolIdentifier;
+public:
+    explicit L3APDUID(unsigned protocolIdentifier = 0);
+    unsigned protocolIdentifier() const { return mProtocolIdentifier; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── APDU Flags (GSM 04.08 10.5.2.49) ──────────────────────────────────
+
+class L3APDUFlags : public L3ProtocolElement {
+private:
+    unsigned mCR;
+    unsigned mFirstSegment;
+    unsigned mLastSegment;
+public:
+    L3APDUFlags(unsigned cr = 0, unsigned firstSegment = 0, unsigned lastSegment = 0);
+    unsigned CR() const { return mCR; }
+    unsigned firstSegment() const { return mFirstSegment; }
+    unsigned lastSegment() const { return mLastSegment; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── APDU Data (GSM 04.08 10.5.2.50) ───────────────────────────────────
+
+class L3APDUData : public L3ProtocolElement {
+private:
+    BitVector mData;
+public:
+    L3APDUData();
+    explicit L3APDUData(BitVector data);
+    const BitVector& data() const { return mData; }
+    size_t lengthV() const override;
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Dedicated Mode Or TBF (GSM 04.08 10.5.2.25b) ──────────────────────
+
+class L3DedicatedModeOrTBF : public L3ProtocolElement {
+private:
+    unsigned mDownlink;
+    unsigned mTMA;
+    unsigned mDMOrTBF;
+public:
+    L3DedicatedModeOrTBF(bool forTBF = false, bool wDownlink = false);
+    bool isDownlink() const { return mDownlink; }
+    bool isTBF() const { return mDMOrTBF; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
 } // namespace gsml3parser
 
 #endif // GSML3PARSER_COMMON_L3COMMON_H
