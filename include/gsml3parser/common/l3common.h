@@ -107,7 +107,7 @@ protected:
     unsigned mRFPowerCapability;
 public:
     size_t lengthV() const override { return 1; }
-    void writeV(L3Frame&, size_t&) const override { throw WriteError("writeV not implemented"); }
+    void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
     void parseV(const L3Frame&, size_t&, size_t) override { throw ParseError("parseV not valid"); }
     void text(std::ostream& os) const override;
@@ -135,7 +135,7 @@ protected:
     unsigned mCMSF;
 public:
     size_t lengthV() const override { return 3; }
-    void writeV(L3Frame&, size_t&) const override { throw WriteError("writeV not implemented"); }
+    void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
     void parseV(const L3Frame&, size_t&, size_t) override;
     void text(std::ostream& os) const override;
@@ -155,7 +155,7 @@ protected:
 public:
     L3MobileStationClassmark3();
     size_t lengthV() const override { return 14; }
-    void writeV(L3Frame&, size_t&) const override { throw WriteError("writeV not implemented"); }
+    void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame&, size_t&) override;
     void parseV(const L3Frame&, size_t&, size_t) override;
     void text(std::ostream& os) const override;
@@ -170,7 +170,7 @@ public:
     explicit L3CipheringKeySequenceNumber(unsigned wCIValue = 0) : mCIValue(wCIValue) {}
     size_t lengthV() const override { return 0; }
     void writeV(L3Frame&, size_t&) const override;
-    void parseV(const L3Frame&, size_t&) override { throw ParseError("parseV not valid"); }
+    void parseV(const L3Frame& src, size_t& rp) override { mCIValue = src.readField(rp, 4) & 0x0f; }
     void parseV(const L3Frame&, size_t&, size_t) override { throw ParseError("parseV not valid"); }
     void text(std::ostream& os) const override;
 };

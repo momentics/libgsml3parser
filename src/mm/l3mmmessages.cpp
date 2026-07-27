@@ -74,9 +74,17 @@ void L3LocationUpdatingRequest::parseBody(const L3Frame& src, size_t& rp) {
     mLAI.parseV(src, rp);
 }
 
+void L3LocationUpdatingRequest::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, mUpdateType, 4);
+    dest.writeField(wp, mCKSN, 4);
+    mClassmark.writeV(dest, wp);
+    mMobileIdentity.writeLV(dest, wp);
+    mLAI.writeV(dest, wp);
+}
+
 void L3LocationUpdatingRequest::text(std::ostream& os) const {
     os << "LocationUpdatingRequest: type=" << static_cast<int>(mUpdateType & 0x3)
-       << " CKSN=" << mCKSN;
+        << " CKSN=" << mCKSN;
     mMobileIdentity.text(os);
     os << " ";
     mLAI.text(os);
@@ -132,6 +140,11 @@ void L3IMSIDetachIndication::parseBody(const L3Frame& src, size_t& rp) {
     mMobileIdentity.parseV(src, rp, src.size() / 8 - rp / 8 - 1);
 }
 
+void L3IMSIDetachIndication::writeBody(L3Frame& dest, size_t& wp) const {
+    mClassmark.writeV(dest, wp);
+    mMobileIdentity.writeLV(dest, wp);
+}
+
 void L3IMSIDetachIndication::text(std::ostream& os) const {
     os << "IMSIDetachIndication: ";
     mMobileIdentity.text(os);
@@ -140,7 +153,17 @@ void L3IMSIDetachIndication::text(std::ostream& os) const {
 // ── L3CMServiceAbort ───────────────────────────────────────────────────
 
 void L3CMServiceAbort::parseBody(const L3Frame& src, size_t& rp) {
-    (void)src; (void)rp;
+    if (rp + 8 <= src.size()) {
+        mCause = static_cast<MMRejectCause>(src.readField(rp, 8));
+        mHaveCause = true;
+    }
+}
+
+void L3CMServiceAbort::text(std::ostream& os) const {
+    os << "CMServiceAbort";
+    if (mHaveCause) {
+        os << ": " << MMRejectCause2Str(mCause);
+    }
 }
 
 // ── L3CMServiceReject ──────────────────────────────────────────────────
@@ -165,6 +188,12 @@ void L3CMServiceRequest::parseBody(const L3Frame& src, size_t& rp) {
     mServiceType = src.readField(rp, 4);
 }
 
+void L3CMServiceRequest::writeBody(L3Frame& dest, size_t& wp) const {
+    mClassmark.writeV(dest, wp);
+    mMobileIdentity.writeLV(dest, wp);
+    dest.writeField(wp, mServiceType, 4);
+}
+
 void L3CMServiceRequest::text(std::ostream& os) const {
     os << "CMServiceRequest: type=" << mServiceType;
     mMobileIdentity.text(os);
@@ -181,6 +210,14 @@ void L3CMReestablishmentRequest::parseBody(const L3Frame& src, size_t& rp) {
     mMobileID.parseV(src, rp, src.size() / 8 - rp / 8 - 3);
 }
 
+void L3CMReestablishmentRequest::writeBody(L3Frame& dest, size_t& wp) const {
+    mClassmark.writeV(dest, wp);
+    mMobileID.writeLV(dest, wp);
+    if (mHaveLAI) {
+        mLAI.writeV(dest, wp);
+    }
+}
+
 void L3CMReestablishmentRequest::text(std::ostream& os) const {
     os << "CMReestablishmentRequest: ";
     mMobileID.text(os);
@@ -188,12 +225,27 @@ void L3CMReestablishmentRequest::text(std::ostream& os) const {
 
 // ── L3MMInformation ────────────────────────────────────────────────────
 
-size_t L3MMInformation::l2BodyLength() const { return 0; }
+size_t L3MMInformation::l2BodyLength() const { return mBodyData.size(); }
 
-void L3MMInformation::writeBody(L3Frame&, size_t&) const {}
+void L3MMInformation::parseBody(const L3Frame& src, size_t& rp) {
+    mBodyData.clear();
+    size_t remaining = src.size() - rp;
+    for (size_t i = 0; i < remaining; ++i) {
+        mBodyData.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
+    }
+}
+
+void L3MMInformation::writeBody(L3Frame& dest, size_t& wp) const {
+    for (size_t i = 0; i < mBodyData.size(); ++i) {
+        dest.writeField(wp, mBodyData[i], 8);
+    }
+}
 
 void L3MMInformation::text(std::ostream& os) const {
-    os << "MMInformation";
+    os << "MMInformation: ";
+    for (size_t i = 0; i < mBodyData.size(); ++i) {
+        os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mBodyData[i]);
+    }
 }
 
 // ── L3IdentityRequest ──────────────────────────────────────────────────
@@ -216,9 +268,19 @@ void L3IdentityResponse::parseBody(const L3Frame& src, size_t& rp) {
     mMobileID.parseV(src, rp, src.size() / 8 - rp / 8);
 }
 
+void L3IdentityResponse::writeBody(L3Frame& dest, size_t& wp) const {
+    mMobileID.writeLV(dest, wp);
+}
+
 void L3IdentityResponse::text(std::ostream& os) const {
     os << "IdentityResponse: ";
     mMobileID.text(os);
+}
+
+// ── L3CMServiceAccept ──────────────────────────────────────────────────
+
+void L3CMServiceAccept::text(std::ostream& os) const {
+    os << "CMServiceAccept";
 }
 
 // ── L3AuthenticationRequest ────────────────────────────────────────────
@@ -247,11 +309,50 @@ void L3AuthenticationResponse::parseBody(const L3Frame& src, size_t& rp) {
     mSRES = src.readField(rp, 32);
 }
 
+void L3AuthenticationResponse::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, mSRES, 32);
+}
+
 void L3AuthenticationResponse::text(std::ostream& os) const {
     os << "AuthenticationResponse: SRES=0x" << std::hex << mSRES;
 }
 
+// ── L3AuthenticationReject ─────────────────────────────────────────────
+
+void L3AuthenticationReject::text(std::ostream& os) const {
+    os << "AuthenticationReject";
+}
+
+// ── L3TMSIReallocationCommand ──────────────────────────────────────────
+
+L3TMSIReallocationCommand::L3TMSIReallocationCommand(const L3LocationAreaIdentity& wLAI, const L3MobileIdentity& wTMSI, bool wFollowOn)
+    : mLAI(wLAI), mTMSI(wTMSI), mFollowOnProceed(wFollowOn) {}
+
+void L3TMSIReallocationCommand::writeBody(L3Frame& dest, size_t& wp) const {
+    mLAI.writeV(dest, wp);
+    mTMSI.writeLV(dest, wp);
+    dest.writeField(wp, mFollowOnProceed ? 1 : 0, 1);
+    dest.writeField(wp, 0, 7);
+}
+
+void L3TMSIReallocationCommand::parseBody(const L3Frame& src, size_t& rp) {
+    mLAI.parseV(src, rp);
+    mTMSI.parseLV(src, rp);
+    mFollowOnProceed = src.readField(rp, 1);
+    src.readField(rp, 7);
+}
+
+void L3TMSIReallocationCommand::text(std::ostream& os) const {
+    os << "TMSIReallocationCommand: ";
+    mLAI.text(os);
+    os << " ";
+    mTMSI.text(os);
+    os << " followOn=" << (mFollowOnProceed ? "1" : "0");
+}
+
 // ── L3TMSIReallocationComplete ─────────────────────────────────────────
+
+void L3TMSIReallocationComplete::writeBody(L3Frame&, size_t&) const {}
 
 void L3TMSIReallocationComplete::text(std::ostream& os) const {
     os << "TMSIReallocationComplete";
@@ -261,6 +362,11 @@ void L3TMSIReallocationComplete::text(std::ostream& os) const {
 
 void L3MMStatus::parseBody(const L3Frame& src, size_t& rp) {
     mCause = static_cast<MMRejectCause>(src.readField(rp, 8));
+}
+
+void L3MMStatus::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
+    dest.writeField(wp, 0, 16);
 }
 
 void L3MMStatus::text(std::ostream& os) const {
@@ -283,6 +389,7 @@ L3MMMessage* L3MMFactory(int mti) {
         case L3MMMessage::LocationUpdatingAccept:   return new L3LocationUpdatingAccept(L3LocationAreaIdentity());
         case L3MMMessage::LocationUpdatingReject:   return new L3LocationUpdatingReject(MMRejectCause::Zero);
         case L3MMMessage::LocationUpdatingRequest:  return new L3LocationUpdatingRequest();
+        case L3MMMessage::TMSIReallocationCommand:  return new L3TMSIReallocationCommand(L3LocationAreaIdentity(), L3MobileIdentity());
         case L3MMMessage::TMSIReallocationComplete: return new L3TMSIReallocationComplete();
         case L3MMMessage::MMStatus:                 return new L3MMStatus();
         case L3MMMessage::AuthenticationRequest:    return new L3AuthenticationRequest(0, {});

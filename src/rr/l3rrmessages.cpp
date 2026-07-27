@@ -118,6 +118,16 @@ void L3PagingRequestType1::writeBody(L3Frame& dest, size_t& wp) const {
     }
 }
 
+void L3PagingRequestType1::parseBody(const L3Frame& src, size_t& rp) {
+    mChannelsNeeded[0] = static_cast<ChannelType>(src.readField(rp, 4));
+    mChannelsNeeded[1] = static_cast<ChannelType>(src.readField(rp, 4));
+    while (rp / 8 < src.size() / 8) {
+        L3MobileIdentity id;
+        id.parseLV(src, rp);
+        mMobileIDs.push_back(id);
+    }
+}
+
 void L3PagingRequestType1::text(std::ostream& os) const {
     os << "PagingRequestType1: ";
     for (const auto& id : mMobileIDs) {
@@ -145,15 +155,77 @@ void L3PagingResponse::text(std::ostream& os) const {
 
 // ── L3SystemInformationType1 ────────────────────────────────────────────
 
+L3SystemInformationType1::L3SystemInformationType1()
+    : mSpare(0), mRACHControlValue(0), mAccessBarredForRACH(0), mMaxDelay(0),
+      mInitialRepeat(0), mMaxRepetition(0), mRxLevAccessMin(0), mRxLevelAccessMin(0),
+      mMaxRxLev(0), mCellReselectionHysteresis(0), mCellReselectionOffset(0),
+      mCellReservedIndicator(0), mCellBarQualifier(0), mCellBarQualifierLength(0) {}
+
+size_t L3SystemInformationType1::l2BodyLength() const {
+    return 6 + mCellBarQualifierLength;
+}
+
+void L3SystemInformationType1::parseBody(const L3Frame& src, size_t& rp) {
+    mSpare = src.readField(rp, 2);
+    mRACHControlValue = src.readField(rp, 4);
+    mAccessBarredForRACH = src.readField(rp, 1);
+    mMaxDelay = src.readField(rp, 4);
+    mInitialRepeat = src.readField(rp, 2);
+    mMaxRepetition = src.readField(rp, 2);
+    mRxLevAccessMin = src.readField(rp, 5);
+    mRxLevelAccessMin = src.readField(rp, 1);
+    mMaxRxLev = src.readField(rp, 5);
+    mCellReselectionHysteresis = src.readField(rp, 3);
+    mCellReselectionOffset = src.readField(rp, 3);
+    mCellReservedIndicator = src.readField(rp, 2);
+    mCellBarQualifier = src.readField(rp, 4);
+    mCellBarQualifierLength = src.readField(rp, 4);
+    mCellBarQualifier.clear();
+    for (size_t i = 0; i < mCellBarQualifierLength; ++i) {
+        mCellBarQualifier.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
+    }
+}
+
 void L3SystemInformationType1::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0, 19 * 8);
+    dest.writeField(wp, mSpare, 2);
+    dest.writeField(wp, mRACHControlValue, 4);
+    dest.writeField(wp, mAccessBarredForRACH, 1);
+    dest.writeField(wp, mMaxDelay, 4);
+    dest.writeField(wp, mInitialRepeat, 2);
+    dest.writeField(wp, mMaxRepetition, 2);
+    dest.writeField(wp, mRxLevAccessMin, 5);
+    dest.writeField(wp, mRxLevelAccessMin, 1);
+    dest.writeField(wp, mMaxRxLev, 5);
+    dest.writeField(wp, mCellReselectionHysteresis, 3);
+    dest.writeField(wp, mCellReselectionOffset, 3);
+    dest.writeField(wp, mCellReservedIndicator, 2);
+    dest.writeField(wp, mCellBarQualifier, 4);
+    dest.writeField(wp, mCellBarQualifierLength, 4);
+    for (size_t i = 0; i < mCellBarQualifier.size(); ++i) {
+        dest.writeField(wp, mCellBarQualifier[i], 8);
+    }
 }
 
 void L3SystemInformationType1::text(std::ostream& os) const {
-    os << "SystemInformationType1";
+    os << "SystemInformationType1: RACHCtrl=" << mRACHControlValue
+       << " Barred=" << mAccessBarredForRACH
+       << " MaxDelay=" << mMaxDelay
+       << " InitRep=" << mInitialRepeat
+       << " MaxRep=" << mMaxRepetition
+       << " RxMin=" << mRxLevAccessMin
+       << " MaxRx=" << mMaxRxLev
+       << " Hyst=" << mCellReselectionHysteresis
+       << " Offset=" << mCellReselectionOffset
+       << " CBI=" << mCellReservedIndicator
+       << " CBQ=" << mCellBarQualifier
+       << " CBQLen=" << mCellBarQualifierLength;
 }
 
 // ── L3ChannelRelease ───────────────────────────────────────────────────
+
+void L3ChannelRelease::parseBody(const L3Frame& src, size_t& rp) {
+    mCause = static_cast<RRCause>(src.readField(rp, 8));
+}
 
 void L3ChannelRelease::writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mCause), 8);
@@ -169,26 +241,63 @@ void L3RRStatus::parseBody(const L3Frame& src, size_t& rp) {
     mCause = static_cast<RRCause>(src.readField(rp, 8));
 }
 
+void L3RRStatus::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
+}
+
 void L3RRStatus::text(std::ostream& os) const {
     os << "RRStatus: cause=" << RRCause2Str(mCause);
 }
 
 // ── L3AssignmentCommand ─────────────────────────────────────────────────
 
-size_t L3AssignmentCommand::l2BodyLength() const { return 3; }
+L3AssignmentCommand::L3AssignmentCommand()
+    : mHavePowerCommand(false) {}
+
+size_t L3AssignmentCommand::l2BodyLength() const {
+    size_t len = mChannel.lengthTV();
+    if (mHavePowerCommand) len += mPowerCommand.lengthTV();
+    return len;
+}
+
+void L3AssignmentCommand::parseBody(const L3Frame& src, size_t& rp) {
+    mChannel.parseTV(0x11, src, rp);
+    if (parseHasT(0x17, src, rp)) {
+        mHavePowerCommand = true;
+        mPowerCommand.parseTV(0x17, src, rp);
+    }
+}
 
 void L3AssignmentCommand::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0, 3 * 8);
+    mChannel.writeTV(0x11, dest, wp);
+    if (mHavePowerCommand) {
+        mPowerCommand.writeTV(0x17, dest, wp);
+    }
 }
 
 void L3AssignmentCommand::text(std::ostream& os) const {
-    os << "AssignmentCommand";
+    os << "AssignmentCommand: ";
+    mChannel.text(os);
+    if (mHavePowerCommand) {
+        os << " ";
+        mPowerCommand.text(os);
+    }
+}
+
+// ── L3ClassmarkEnquiry ──────────────────────────────────────────────────
+
+void L3ClassmarkEnquiry::text(std::ostream& os) const {
+    os << "ClassmarkEnquiry";
 }
 
 // ── L3AssignmentComplete ───────────────────────────────────────────────
 
 void L3AssignmentComplete::parseBody(const L3Frame& src, size_t& rp) {
     mCause = static_cast<RRCause>(src.readField(rp, 8));
+}
+
+void L3AssignmentComplete::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
 }
 
 void L3AssignmentComplete::text(std::ostream& os) const {
@@ -199,6 +308,10 @@ void L3AssignmentComplete::text(std::ostream& os) const {
 
 void L3AssignmentFailure::parseBody(const L3Frame& src, size_t& rp) {
     mCause = static_cast<RRCause>(src.readField(rp, 8));
+}
+
+void L3AssignmentFailure::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
 }
 
 void L3AssignmentFailure::text(std::ostream& os) const {
@@ -217,6 +330,13 @@ void L3ClassmarkChange::parseBody(const L3Frame& src, size_t& rp) {
     mClassmark.parseV(src, rp);
 }
 
+void L3ClassmarkChange::writeBody(L3Frame& dest, size_t& wp) const {
+    mClassmark.writeV(dest, wp);
+    if (mHaveAdditionalClassmark) {
+        mAdditionalClassmark.writeV(dest, wp);
+    }
+}
+
 void L3ClassmarkChange::text(std::ostream& os) const {
     os << "ClassmarkChange: ";
     mClassmark.text(os);
@@ -229,18 +349,33 @@ void L3ClassmarkChange::text(std::ostream& os) const {
 // ── L3MeasurementReport ────────────────────────────────────────────────
 
 void L3MeasurementReport::parseBody(const L3Frame& src, size_t& rp) {
-    for (size_t i = 0; i < 16 * 8; ++i) {
-        src.readField(rp, 1);
+    mMeasurementData.resize(16);
+    for (size_t i = 0; i < 16; ++i) {
+        mMeasurementData[i] = static_cast<uint8_t>(src.readField(rp, 8));
+    }
+}
+
+void L3MeasurementReport::writeBody(L3Frame& dest, size_t& wp) const {
+    for (size_t i = 0; i < mMeasurementData.size(); ++i) {
+        dest.writeField(wp, mMeasurementData[i], 8);
     }
 }
 
 void L3MeasurementReport::text(std::ostream& os) const {
-    os << "MeasurementReport";
+    os << "MeasurementReport: ";
+    for (size_t i = 0; i < mMeasurementData.size(); ++i) {
+        os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mMeasurementData[i]);
+    }
 }
 
 // ── L3CipheringModeCommand ─────────────────────────────────────────────
 
 int L3CipheringModeCommand::MTI() const { return CipheringModeCommand; }
+
+void L3CipheringModeCommand::parseBody(const L3Frame& src, size_t& rp) {
+    mCiphering = src.readField(rp, 1);
+    mAlgorithm = src.readField(rp, 7);
+}
 
 void L3CipheringModeCommand::writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, mCiphering ? 1 : 0, 1);
@@ -266,6 +401,10 @@ void L3HandoverComplete::parseBody(const L3Frame& src, size_t& rp) {
     mCause = static_cast<RRCause>(src.readField(rp, 8));
 }
 
+void L3HandoverComplete::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
+}
+
 void L3HandoverComplete::text(std::ostream& os) const {
     os << "HandoverComplete: cause=" << RRCause2Str(mCause);
 }
@@ -276,34 +415,60 @@ void L3HandoverFailure::parseBody(const L3Frame& src, size_t& rp) {
     mCause = static_cast<RRCause>(src.readField(rp, 8));
 }
 
+void L3HandoverFailure::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
+}
+
 void L3HandoverFailure::text(std::ostream& os) const {
     os << "HandoverFailure: cause=" << RRCause2Str(mCause);
 }
 
 // ── L3ChannelModeModify ────────────────────────────────────────────────
 
-size_t L3ChannelModeModify::l2BodyLength() const { return 4; }
+L3ChannelModeModify::L3ChannelModeModify(unsigned requested, unsigned acknowledged)
+    : mChannelModeRequested(requested), mChannelModeAcknowledged(acknowledged) {}
+
+void L3ChannelModeModify::parseBody(const L3Frame& src, size_t& rp) {
+    mChannelModeRequested = src.readField(rp, 4);
+    src.readField(rp, 4);
+    mChannelModeAcknowledged = src.readField(rp, 4);
+    src.readField(rp, 4);
+}
 
 void L3ChannelModeModify::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0, 4 * 8);
+    dest.writeField(wp, mChannelModeRequested, 4);
+    dest.writeField(wp, 0, 4);
+    dest.writeField(wp, mChannelModeAcknowledged, 4);
+    dest.writeField(wp, 0, 4);
 }
 
 void L3ChannelModeModify::text(std::ostream& os) const {
-    os << "ChannelModeModify";
+    os << "ChannelModeModify: requested=" << mChannelModeRequested
+       << " acknowledged=" << mChannelModeAcknowledged;
 }
 
 // ── L3ChannelModeModifyAcknowledge ─────────────────────────────────────
 
-size_t L3ChannelModeModifyAcknowledge::l2BodyLength() const { return 4; }
+L3ChannelModeModifyAcknowledge::L3ChannelModeModifyAcknowledge(unsigned requested, unsigned acknowledged)
+    : mChannelModeRequested(requested), mChannelModeAcknowledged(acknowledged) {}
 
 void L3ChannelModeModifyAcknowledge::parseBody(const L3Frame& src, size_t& rp) {
-    for (size_t i = 0; i < 4 * 8; ++i) {
-        src.readField(rp, 1);
-    }
+    mChannelModeRequested = src.readField(rp, 4);
+    src.readField(rp, 4);
+    mChannelModeAcknowledged = src.readField(rp, 4);
+    src.readField(rp, 4);
+}
+
+void L3ChannelModeModifyAcknowledge::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, mChannelModeRequested, 4);
+    dest.writeField(wp, 0, 4);
+    dest.writeField(wp, mChannelModeAcknowledged, 4);
+    dest.writeField(wp, 0, 4);
 }
 
 void L3ChannelModeModifyAcknowledge::text(std::ostream& os) const {
-    os << "ChannelModeModifyAcknowledge";
+    os << "ChannelModeModifyAcknowledge: requested=" << mChannelModeRequested
+       << " acknowledged=" << mChannelModeAcknowledged;
 }
 
 // ── L3GPRSSuspensionRequest ────────────────────────────────────────────
@@ -318,9 +483,18 @@ void L3GPRSSuspensionRequest::parseBody(const L3Frame& src, size_t& rp) {
     mServiceSupport = src.readField(rp, 8);
 }
 
+void L3GPRSSuspensionRequest::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, mTLLI, 32);
+    for (size_t i = 0; i < 6; ++i) {
+        dest.writeField(wp, mRaId[i], 8);
+    }
+    dest.writeField(wp, mSuspensionCause, 8);
+    dest.writeField(wp, mServiceSupport, 8);
+}
+
 void L3GPRSSuspensionRequest::text(std::ostream& os) const {
     os << "GPRSSuspensionRequest: TLLI=0x" << std::hex << mTLLI
-       << " cause=" << static_cast<int>(mSuspensionCause);
+        << " cause=" << static_cast<int>(mSuspensionCause);
 }
 
 // ── L3ApplicationInformation ───────────────────────────────────────────
@@ -514,6 +688,16 @@ void L3PagingRequestType2::writeBody(L3Frame& dest, size_t& wp) const {
     }
 }
 
+void L3PagingRequestType2::parseBody(const L3Frame& src, size_t& rp) {
+    mChannelsNeeded[0] = static_cast<ChannelType>(src.readField(rp, 4));
+    mChannelsNeeded[1] = static_cast<ChannelType>(src.readField(rp, 4));
+    while (rp / 8 < src.size() / 8) {
+        L3MobileIdentity id;
+        id.parseLV(src, rp);
+        mMobileIDs.push_back(id);
+    }
+}
+
 void L3PagingRequestType2::text(std::ostream& os) const {
     os << "PagingRequestType2: ";
     for (const auto& id : mMobileIDs) {
@@ -548,6 +732,16 @@ void L3PagingRequestType3::writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mChannelsNeeded[1]), 4);
     for (const auto& id : mMobileIDs) {
         id.writeLV(dest, wp);
+    }
+}
+
+void L3PagingRequestType3::parseBody(const L3Frame& src, size_t& rp) {
+    mChannelsNeeded[0] = static_cast<ChannelType>(src.readField(rp, 4));
+    mChannelsNeeded[1] = static_cast<ChannelType>(src.readField(rp, 4));
+    while (rp / 8 < src.size() / 8) {
+        L3MobileIdentity id;
+        id.parseLV(src, rp);
+        mMobileIDs.push_back(id);
     }
 }
 
@@ -1104,6 +1298,65 @@ void L3SystemInformationType17::text(std::ostream& os) const {
     os << " cells=" << mCellChannelDescriptions.size();
 }
 
+// ── L3SynchronizationChannelInformation ────────────────────────────────
+
+L3SynchronizationChannelInformation::L3SynchronizationChannelInformation() {}
+
+void L3SynchronizationChannelInformation::parseBody(const L3Frame& src, size_t& rp) {
+    mCellIdentity.parseV(src, rp);
+    mLocationAreaIdentity.parseV(src, rp);
+}
+
+void L3SynchronizationChannelInformation::writeBody(L3Frame& dest, size_t& wp) const {
+    mCellIdentity.writeV(dest, wp);
+    mLocationAreaIdentity.writeV(dest, wp);
+}
+
+void L3SynchronizationChannelInformation::text(std::ostream& os) const {
+    os << "SynchronizationChannelInformation: ";
+    mCellIdentity.text(os);
+    os << " ";
+    mLocationAreaIdentity.text(os);
+}
+
+// ── L3ChannelRequest ───────────────────────────────────────────────────
+
+L3ChannelRequest::L3ChannelRequest(unsigned wRef)
+    : mRequestReference(wRef) {}
+
+void L3ChannelRequest::parseBody(const L3Frame& src, size_t& rp) {
+    mRequestReference = src.readField(rp, 4);
+    src.readField(rp, 4);
+}
+
+void L3ChannelRequest::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, mRequestReference, 4);
+    dest.writeField(wp, 0, 4);
+}
+
+void L3ChannelRequest::text(std::ostream& os) const {
+    os << "ChannelRequest: RR=" << mRequestReference;
+}
+
+// ── L3HandoverAccess ───────────────────────────────────────────────────
+
+L3HandoverAccess::L3HandoverAccess(unsigned wNumber)
+    : mHandoverNumber(wNumber) {}
+
+void L3HandoverAccess::parseBody(const L3Frame& src, size_t& rp) {
+    mHandoverNumber = src.readField(rp, 27);
+    src.readField(rp, 5);
+}
+
+void L3HandoverAccess::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, mHandoverNumber, 27);
+    dest.writeField(wp, 0, 5);
+}
+
+void L3HandoverAccess::text(std::ostream& os) const {
+    os << "HandoverAccess: handoverNumber=" << mHandoverNumber;
+}
+
 // ── Factory ─────────────────────────────────────────────────────────────
 
 L3RRMessage* L3RRFactory(int mti) {
@@ -1150,6 +1403,9 @@ L3RRMessage* L3RRFactory(int mti) {
         case L3RRMessage::GPRSSuspensionRequest:       return new L3GPRSSuspensionRequest();
         case L3RRMessage::ApplicationInformation:      return new L3ApplicationInformation();
         case L3RRMessage::RRStatus:                    return new L3RRStatus();
+        case L3RRMessage::SynchronizationChannelInformation: return new L3SynchronizationChannelInformation();
+        case L3RRMessage::ChannelRequest:              return new L3ChannelRequest();
+        case L3RRMessage::HandoverAccess:              return new L3HandoverAccess();
         default:                                       return nullptr;
     }
 }

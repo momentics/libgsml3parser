@@ -223,6 +223,13 @@ void L3MobileIdentity::text(std::ostream& os) const {
 
 // ── L3MobileStationClassmark1 ───────────────────────────────────────────
 
+void L3MobileStationClassmark1::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, mRevisionLevel, 2);
+    dest.writeField(wp, mES_IND, 1);
+    dest.writeField(wp, mA5_1, 1);
+    dest.writeField(wp, mRFPowerCapability, 4);
+}
+
 void L3MobileStationClassmark1::parseV(const L3Frame& src, size_t& rp) {
     mRevisionLevel = src.readField(rp, 2);
     mES_IND        = src.readField(rp, 1);
@@ -236,6 +243,25 @@ void L3MobileStationClassmark1::text(std::ostream& os) const {
 }
 
 // ── L3MobileStationClassmark2 ───────────────────────────────────────────
+
+void L3MobileStationClassmark2::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, mRevisionLevel, 2);
+    dest.writeField(wp, mES_IND, 1);
+    dest.writeField(wp, mA5_1, 1);
+    dest.writeField(wp, mA5_3, 1);
+    dest.writeField(wp, mA5_2, 1);
+    dest.writeField(wp, mRFPowerCapability, 4);
+    dest.writeField(wp, mPSCapability, 1);
+    dest.writeField(wp, mSSScreenIndicator, 1);
+    dest.writeField(wp, mSMCapability, 1);
+    dest.writeField(wp, mVBS, 1);
+    dest.writeField(wp, mVGCS, 1);
+    dest.writeField(wp, mFC, 1);
+    dest.writeField(wp, mCM3, 1);
+    dest.writeField(wp, mLCSVACapability, 1);
+    dest.writeField(wp, mSoLSA, 1);
+    dest.writeField(wp, mCMSF, 1);
+}
 
 void L3MobileStationClassmark2::parseV(const L3Frame& src, size_t& rp) {
     mRevisionLevel      = src.readField(rp, 2);
@@ -279,6 +305,17 @@ int L3MobileStationClassmark2::getA5Bits() const {
 L3MobileStationClassmark3::L3MobileStationClassmark3()
     : mMultiband(0), mA5_4(0), mA5_5(0), mA5_6(0), mA5_7(0) {}
 
+void L3MobileStationClassmark3::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, mMultiband, 1);
+    dest.writeField(wp, mA5_4, 1);
+    dest.writeField(wp, mA5_5, 1);
+    dest.writeField(wp, mA5_6, 1);
+    dest.writeField(wp, mA5_7, 1);
+    for (int i = 0; i < 107; i++) {
+        dest.writeField(wp, 0, 1);
+    }
+}
+
 void L3MobileStationClassmark3::parseV(const L3Frame& src, size_t& rp) {
     mMultiband = src.readField(rp, 1);
     mA5_4      = src.readField(rp, 1);
@@ -298,7 +335,7 @@ void L3MobileStationClassmark3::text(std::ostream& os) const {
 
 // ── L3CipheringKeySequenceNumber ────────────────────────────────────────
 
-void L3CipheringKeySequenceNumber::writeV(L3Frame&, size_t&) const {}
+void L3CipheringKeySequenceNumber::writeV(L3Frame& dest, size_t& wp) const { dest.writeField(wp, mCIValue & 0x0f, 4); }
 
 void L3CipheringKeySequenceNumber::text(std::ostream& os) const {
     os << "CKSN=" << mCIValue;
@@ -432,19 +469,7 @@ void L3CellOptions::writeV(L3Frame& dest, size_t& wp) const {
 }
 
 void L3CellOptions::parseV(const L3Frame& src, size_t& rp) {
-    mRawData.clear();
-    size_t total = src.size() / 8 - rp / 8;
-    for (size_t i = 0; i < total; ++i) {
-        mRawData.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
-    }
-    if (mRawData.size() >= 1) {
-        mRevisionLevel = (mRawData[0] >> 6) & 3;
-        mCBCH = (mRawData[0] >> 5) & 1;
-        mEnhancedRACH = (mRawData[0] >> 4) & 1;
-    }
-    if (mRawData.size() >= 2) {
-        mCellReselectionPriority = mRawData[1] & 0x07;
-    }
+    throw ParseError("CellOptions requires expected length, use parseV with expectedLength");
 }
 
 void L3CellOptions::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {

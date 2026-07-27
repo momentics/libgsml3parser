@@ -167,6 +167,8 @@ void L3CallConfirmed::parseBody(const L3Frame& src, size_t& rp) {
     (void)src; (void)rp;
 }
 
+void L3CallConfirmed::writeBody(L3Frame&, size_t&) const {}
+
 size_t L3CallConfirmed::l2BodyLength() const { return 0; }
 
 void L3CallConfirmed::text(std::ostream& os) const {
@@ -259,6 +261,10 @@ void L3StartDTMF::parseBody(const L3Frame& src, size_t& rp) {
     mKey = static_cast<char>(src.readField(rp, 8));
 }
 
+void L3StartDTMF::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, static_cast<unsigned>(mKey), 8);
+}
+
 void L3StartDTMF::text(std::ostream& os) const {
     os << "StartDTMF: key=" << mKey;
 }
@@ -279,7 +285,23 @@ void L3StartDTMFReject::text(std::ostream& os) const {
     os << "StartDTMFReject: " << CCCause2Str(mCause);
 }
 
+void L3StopDTMF::writeBody(L3Frame&, size_t&) const {}
+
+void L3StopDTMF::text(std::ostream& os) const {
+    os << "StopDTMF";
+}
+
+void L3StopDTMFAcknowledge::parseBody(const L3Frame&, size_t&) {}
+
+void L3StopDTMFAcknowledge::text(std::ostream& os) const {
+    os << "StopDTMFAck";
+}
+
 // ── Hold ───────────────────────────────────────────────────────────────
+
+void L3Hold::text(std::ostream& os) const {
+    os << "Hold";
+}
 
 void L3HoldReject::writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mCause), 8);

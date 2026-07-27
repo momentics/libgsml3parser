@@ -161,6 +161,7 @@ public:
     explicit L3CallConfirmed(unsigned wTI = 7) : L3CCMessage(wTI) {}
     int MTI() const override { return CallConfirmed; }
     void parseBody(const L3Frame& src, size_t& rp) override;
+    void writeBody(L3Frame& dest, size_t& wp) const override;
     size_t l2BodyLength() const override;
     void text(std::ostream& os) const override;
 };
@@ -251,6 +252,7 @@ public:
     char key() const { return mKey; }
     int MTI() const override { return StartDTMF; }
     void parseBody(const L3Frame& src, size_t& rp) override;
+    void writeBody(L3Frame& dest, size_t& wp) const override;
     size_t l2BodyLength() const override { return 1; }
     void text(std::ostream& os) const override;
 };
@@ -282,7 +284,9 @@ public:
     explicit L3StopDTMF(unsigned wTI = 7) : L3CCMessage(wTI) {}
     int MTI() const override { return StopDTMF; }
     void parseBody(const L3Frame&, size_t&) override {}
+    void writeBody(L3Frame&, size_t&) const override {}
     size_t l2BodyLength() const override { return 0; }
+    void text(std::ostream& os) const override;
 };
 
 class L3StopDTMFAcknowledge : public L3CCMessage {
@@ -290,7 +294,9 @@ public:
     explicit L3StopDTMFAcknowledge(unsigned wTI) : L3CCMessage(wTI) {}
     int MTI() const override { return StopDTMFAcknowledge; }
     void writeBody(L3Frame&, size_t&) const override {}
+    void parseBody(const L3Frame&, size_t&) override {}
     size_t l2BodyLength() const override { return 0; }
+    void text(std::ostream& os) const override;
 };
 
 // ── Hold ───────────────────────────────────────────────────────────────
@@ -302,6 +308,7 @@ public:
     void writeBody(L3Frame&, size_t&) const override {}
     void parseBody(const L3Frame&, size_t&) override {}
     size_t l2BodyLength() const override { return 0; }
+    void text(std::ostream& os) const override;
 };
 
 class L3HoldReject : public L3CCMessage {

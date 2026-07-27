@@ -26,6 +26,7 @@
 #include <memory>
 #include <ostream>
 #include <string>
+#include <vector>
 
 #include "../l3message.h"
 #include "../l3frame.h"
@@ -91,6 +92,7 @@ public:
     size_t l2BodyLength() const override;
     LocationUpdateType getLocationUpdatingType() const;
     void parseBody(const L3Frame& src, size_t& rp) override;
+    void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -137,6 +139,7 @@ public:
     int MTI() const override { return IMSIDetachIndication; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
+    void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -147,16 +150,22 @@ public:
     int MTI() const override { return CMServiceAccept; }
     size_t l2BodyLength() const override { return 0; }
     void writeBody(L3Frame&, size_t&) const override {}
+    void text(std::ostream& os) const override;
 };
 
 // ── CM Service Abort (GSM 04.08 9.2.7) ────────────────────────────────
 
 class L3CMServiceAbort : public L3MMMessage {
+private:
+    MMRejectCause mCause;
+    bool mHaveCause;
 public:
+    L3CMServiceAbort() : mCause(MMRejectCause::Zero), mHaveCause(false) {}
     int MTI() const override { return CMServiceAbort; }
-    size_t l2BodyLength() const override { return 0; }
+    size_t l2BodyLength() const override { return mHaveCause ? 1 : 0; }
     void writeBody(L3Frame&, size_t&) const override {}
     void parseBody(const L3Frame& src, size_t& rp) override;
+    void text(std::ostream& os) const override;
 };
 
 // ── CM Service Reject (GSM 04.08 9.2.6) ───────────────────────────────
@@ -185,6 +194,7 @@ public:
     int MTI() const override { return CMServiceRequest; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
+    void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -201,6 +211,7 @@ public:
     int MTI() const override { return CMReestablishmentRequest; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
+    void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -208,11 +219,12 @@ public:
 
 class L3MMInformation : public L3MMMessage {
 private:
-    // Simplified
+    std::vector<uint8_t> mBodyData;
 public:
     int MTI() const override { return MMInformation; }
     size_t l2BodyLength() const override;
-    void writeBody(L3Frame&, size_t&) const override;
+    void writeBody(L3Frame& dest, size_t& wp) const override;
+    void parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;
 };
 
@@ -238,6 +250,7 @@ public:
     int MTI() const override { return IdentityResponse; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
+    void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
     const L3MobileIdentity& mobileID() const { return mMobileID; }
 };
@@ -266,6 +279,7 @@ public:
     int MTI() const override { return AuthenticationResponse; }
     size_t l2BodyLength() const override { return 4; }
     void parseBody(const L3Frame& src, size_t& rp) override;
+    void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -276,6 +290,26 @@ public:
     int MTI() const override { return AuthenticationReject; }
     size_t l2BodyLength() const override { return 0; }
     void writeBody(L3Frame&, size_t&) const override {}
+    void text(std::ostream& os) const override;
+};
+
+// ── TMSI Reallocation Command (GSM 04.08 9.2.17) ──────────────────────
+
+class L3TMSIReallocationCommand : public L3MMMessage {
+private:
+    L3LocationAreaIdentity mLAI;
+    L3MobileIdentity mTMSI;
+    bool mFollowOnProceed;
+public:
+    L3TMSIReallocationCommand(const L3LocationAreaIdentity& wLAI, const L3MobileIdentity& wTMSI, bool wFollowOn = false);
+    const L3LocationAreaIdentity& LAI() const { return mLAI; }
+    const L3MobileIdentity& TMSI() const { return mTMSI; }
+    bool followOnProceed() const { return mFollowOnProceed; }
+    int MTI() const override { return TMSIReallocationCommand; }
+    size_t l2BodyLength() const override { return 5 + mTMSI.lengthLV() + 1; }
+    void writeBody(L3Frame& dest, size_t& wp) const override;
+    void parseBody(const L3Frame& src, size_t& rp) override;
+    void text(std::ostream& os) const override;
 };
 
 // ── TMSI Reallocation Complete (GSM 04.08 9.2.18) ─────────────────────
@@ -285,6 +319,7 @@ public:
     int MTI() const override { return TMSIReallocationComplete; }
     size_t l2BodyLength() const override { return 0; }
     void parseBody(const L3Frame&, size_t&) override {}
+    void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -298,6 +333,7 @@ public:
     int MTI() const override { return MMStatus; }
     size_t l2BodyLength() const override { return 3; }
     void parseBody(const L3Frame& src, size_t& rp) override;
+    void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
