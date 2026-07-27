@@ -122,6 +122,7 @@ enum class CCCause : uint8_t {
     Requested_Facility_Not_Subscribed = 50,
     Bearer_Capability_Not_Authorized = 57,
     Bearer_Capability_Not_Available  = 58,
+    Incoming_Calls_Barred_Within_CUG = 55,
     Service_Or_Option_Not_Available  = 63,
     Bearer_Service_Not_Implemented   = 65,
     ACM_GE_Max                       = 68,
@@ -173,12 +174,18 @@ enum class BSSCause : uint8_t {
     Better_Cell                = 0xc,
     Traffic                    = 0xf,
     Reduce_Load_In_Serving_Cell = 0x10,
+    Traffic_Load_In_Target_Cell_Higher_Than_In_Source_Cell = 0x11,
+    Relocation_Triggered       = 0x12,
     Equipment_Failure          = 0x20,
     No_Radio_Resource_Available = 0x21,
     CCCH_Overload              = 0x23,
     Processor_Overload         = 0x24,
+    DTM_Handover_SGSN_Failure  = 0x2a,
+    DTM_Handover_PS_Allocation_Failure = 0x2b,
     Traffic_Load               = 0x28,
     Emergency_Preemption       = 0x29,
+    Transcoding_Mismatch       = 0x30,
+    Requested_Speech_Version_Unavailable = 0x33,
     Ciphering_Algorithm_Not_Supported = 0x40
 };
 

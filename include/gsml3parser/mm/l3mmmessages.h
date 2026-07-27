@@ -111,6 +111,7 @@ public:
 
     int MTI() const override { return LocationUpdatingAccept; }
     size_t l2BodyLength() const override;
+    void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
@@ -124,6 +125,7 @@ public:
     explicit L3LocationUpdatingReject(MMRejectCause cause) : mCause(cause) {}
     int MTI() const override { return LocationUpdatingReject; }
     size_t l2BodyLength() const override { return 1; }
+    void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
@@ -237,6 +239,7 @@ public:
     explicit L3IdentityRequest(MobileIDType type) : mType(type) {}
     int MTI() const override { return IdentityRequest; }
     size_t l2BodyLength() const override { return 1; }
+    void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
@@ -265,6 +268,7 @@ public:
     L3AuthenticationRequest(unsigned ckSN, const std::vector<uint8_t>& rand);
     int MTI() const override { return AuthenticationRequest; }
     size_t l2BodyLength() const override { return 17; }
+    void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame&, size_t&) const override;
     void text(std::ostream& os) const override;
 };

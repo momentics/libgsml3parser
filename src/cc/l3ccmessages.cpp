@@ -175,6 +175,12 @@ void L3CallConfirmed::text(std::ostream& os) const {
     os << "CallConfirmed";
 }
 
+// ── L3ConnectAcknowledge ───────────────────────────────────────────────
+
+void L3ConnectAcknowledge::text(std::ostream& os) const {
+    os << "ConnectAcknowledge";
+}
+
 // ── L3Disconnect ───────────────────────────────────────────────────────
 
 void L3Disconnect::writeBody(L3Frame& dest, size_t& wp) const {
@@ -277,6 +283,10 @@ void L3StartDTMFAcknowledge::text(std::ostream& os) const {
     os << "StartDTMFAck: key=" << mKey;
 }
 
+void L3StartDTMFReject::parseBody(const L3Frame& src, size_t& rp) {
+    mCause = static_cast<CCCause>(src.readField(rp, 8));
+}
+
 void L3StartDTMFReject::writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mCause), 8);
 }
@@ -301,6 +311,10 @@ void L3StopDTMFAcknowledge::text(std::ostream& os) const {
 
 void L3Hold::text(std::ostream& os) const {
     os << "Hold";
+}
+
+void L3HoldReject::parseBody(const L3Frame& src, size_t& rp) {
+    mCause = static_cast<CCCause>(src.readField(rp, 8));
 }
 
 void L3HoldReject::writeBody(L3Frame& dest, size_t& wp) const {

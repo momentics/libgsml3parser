@@ -103,6 +103,16 @@ size_t L3LocationUpdatingAccept::l2BodyLength() const {
     return 5 + (mHaveMobileIdentity ? mMobileIdentity.lengthLV() : 0);
 }
 
+void L3LocationUpdatingAccept::parseBody(const L3Frame& src, size_t& rp) {
+    mLAI.parseV(src, rp);
+    mFollowOnProceed = (src.readField(rp, 1) != 0);
+    src.readField(rp, 7);
+    if (rp < src.size()) {
+        mHaveMobileIdentity = true;
+        mMobileIdentity.parseLV(src, rp);
+    }
+}
+
 void L3LocationUpdatingAccept::writeBody(L3Frame& dest, size_t& wp) const {
     mLAI.writeV(dest, wp);
     if (mHaveMobileIdentity) {
@@ -120,6 +130,10 @@ void L3LocationUpdatingAccept::text(std::ostream& os) const {
 }
 
 // ── L3LocationUpdatingReject ───────────────────────────────────────────
+
+void L3LocationUpdatingReject::parseBody(const L3Frame& src, size_t& rp) {
+    mCause = static_cast<MMRejectCause>(src.readField(rp, 8));
+}
 
 void L3LocationUpdatingReject::writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mCause), 8);
@@ -250,6 +264,10 @@ void L3MMInformation::text(std::ostream& os) const {
 
 // ── L3IdentityRequest ──────────────────────────────────────────────────
 
+void L3IdentityRequest::parseBody(const L3Frame& src, size_t& rp) {
+    mType = static_cast<MobileIDType>(src.readField(rp, 2));
+}
+
 void L3IdentityRequest::writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mType), 2);
 }
@@ -287,6 +305,14 @@ void L3CMServiceAccept::text(std::ostream& os) const {
 
 L3AuthenticationRequest::L3AuthenticationRequest(unsigned ckSN, const std::vector<uint8_t>& rand)
     : mCKSN(ckSN), mRAND(rand) {}
+
+void L3AuthenticationRequest::parseBody(const L3Frame& src, size_t& rp) {
+    mCKSN = src.readField(rp, 4);
+    mRAND.resize(16);
+    for (size_t i = 0; i < 16; ++i) {
+        mRAND[i] = static_cast<uint8_t>(src.readField(rp, 8));
+    }
+}
 
 void L3AuthenticationRequest::writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, mCKSN, 4);

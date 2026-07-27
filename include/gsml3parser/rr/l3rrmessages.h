@@ -138,6 +138,7 @@ public:
     int MTI() const override { return PagingResponse; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& source, size_t& rp) override;
+    void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -441,6 +442,7 @@ public:
     int MTI() const override { return SystemInformationType3; }
     size_t l2BodyLength() const override { return 16; }
     size_t restOctetsLength() const override;
+    void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
@@ -454,6 +456,7 @@ public:
     int MTI() const override { return SystemInformationType13; }
     size_t l2BodyLength() const override { return 0; }
     size_t restOctetsLength() const override;
+    void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };

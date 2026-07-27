@@ -146,6 +146,11 @@ void L3PagingResponse::parseBody(const L3Frame& source, size_t& rp) {
     mMobileID.parseV(source, rp, source.size() / 8 - rp / 8 - 3);
 }
 
+void L3PagingResponse::writeBody(L3Frame& dest, size_t& wp) const {
+    mClassmark.writeV(dest, wp);
+    mMobileID.writeLV(dest, wp);
+}
+
 void L3PagingResponse::text(std::ostream& os) const {
     os << "PagingResponse: ";
     mClassmark.text(os);
@@ -547,6 +552,11 @@ void L3ApplicationInformation::text(std::ostream& os) const {
 
 size_t L3SystemInformationType3::restOctetsLength() const { return 0; }
 
+void L3SystemInformationType3::parseBody(const L3Frame& src, size_t& rp) {
+    mCI.parseTV(0x25, src, rp);
+    mLAI.parseTV(0x23, src, rp);
+}
+
 void L3SystemInformationType3::writeBody(L3Frame& dest, size_t& wp) const {
     mCI.writeV(dest, wp);
     mLAI.writeV(dest, wp);
@@ -562,6 +572,10 @@ void L3SystemInformationType3::text(std::ostream& os) const {
 // ── L3SystemInformationType13 ──────────────────────────────────────────
 
 size_t L3SystemInformationType13::restOctetsLength() const { return 0; }
+
+void L3SystemInformationType13::parseBody(const L3Frame& src, size_t& rp) {
+    (void)src; (void)rp;
+}
 
 void L3SystemInformationType13::writeBody(L3Frame&, size_t&) const {}
 

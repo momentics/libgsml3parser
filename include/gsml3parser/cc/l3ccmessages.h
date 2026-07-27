@@ -152,6 +152,7 @@ public:
     size_t l2BodyLength() const override { return 0; }
     void writeBody(L3Frame&, size_t&) const override {}
     void parseBody(const L3Frame&, size_t&) override {}
+    void text(std::ostream& os) const override;
 };
 
 // ── Call Confirmed (GSM 04.08 9.3.2) ──────────────────────────────────
@@ -274,6 +275,7 @@ private:
 public:
     L3StartDTMFReject(unsigned wTI, CCCause cause) : L3CCMessage(wTI), mCause(cause) {}
     int MTI() const override { return StartDTMFReject; }
+    void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     size_t l2BodyLength() const override { return 2; }
     void text(std::ostream& os) const override;
@@ -317,6 +319,7 @@ private:
 public:
     L3HoldReject(unsigned wTI, CCCause cause) : L3CCMessage(wTI), mCause(cause) {}
     int MTI() const override { return HoldReject; }
+    void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     size_t l2BodyLength() const override { return 2; }
     void text(std::ostream& os) const override;
