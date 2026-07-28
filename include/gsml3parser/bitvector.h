@@ -64,9 +64,6 @@ public:
     void writeField(size_t& wp, unsigned value, unsigned nbits) const;
     unsigned peekField(size_t rp, unsigned nbits) const;
 
-    unsigned readField(size_t& rp, unsigned nbits);
-    void writeField(size_t& wp, unsigned value, unsigned nbits);
-
     bool readBit(size_t& rp) const;
     void writeBit(size_t& wp, bool bit) const;
 

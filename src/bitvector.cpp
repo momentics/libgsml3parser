@@ -148,7 +148,17 @@ void BitVector::writeField(size_t& wp, unsigned value, unsigned nbits) const {
 }
 
 unsigned BitVector::peekField(size_t rp, unsigned nbits) const {
-    return readField(rp, nbits);
+    unsigned result = 0;
+    for (unsigned i = 0; i < nbits; ++i) {
+        result <<= 1;
+        if (rp < mSize) {
+            size_t byteIdx = rp / 8;
+            unsigned bitIdx = 7 - (rp % 8);
+            result |= (mStart[byteIdx] >> bitIdx) & 1;
+        }
+        ++rp;
+    }
+    return result;
 }
 
 unsigned BitVector::readBit(size_t& rp) const {

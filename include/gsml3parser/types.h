@@ -172,6 +172,28 @@ enum class GSMAlphabet : uint8_t {
     ALPHABET_UCS2
 };
 
+/**
+ * Type And Offset for L3ChannelDescription — GSM 04.08 10.5.2.5
+ * Encodes channel type (3 bits) and TDMA offset (2 bits).
+ */
+enum TypeAndOffset : uint8_t {
+    TDMA_SACCH = 0,
+    TDMA_SDCCH = 1,
+    TDMA_TCHF  = 2,
+    TDMA_TCHH  = 3,
+    TDMA_CBCH  = 4,
+    TDMA_PDTCH = 5,
+    TDMA_PACCCH = 6,
+    TDMA_PAGCH = 7,
+    TDMA_PCCCH = 8,
+    TDMA_PNCH  = 9,
+    TDMA_PRACH = 10,
+    TDMA_PTCCH = 11,
+    TDMA_PDCH  = 12,
+    TDMA_PACCH = 13,
+    TDMA_MISC  = 15
+};
+
 } // namespace gsml3parser
 
 #endif // GSML3PARSER_TYPES_H
