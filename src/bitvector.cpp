@@ -22,6 +22,7 @@
 #include "gsml3parser/bitvector.h"
 #include <cstring>
 #include <algorithm>
+#include <iomanip>
 
 namespace gsml3parser {
 

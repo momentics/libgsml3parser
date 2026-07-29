@@ -159,7 +159,7 @@ public:
     void writeTLV(unsigned IEI, L3Frame& dest, size_t& wp) const;
 
     /** Human-readable form. */
-    virtual void text(std::ostream& os) const { os << "(no text())";
+    virtual void text(std::ostream& os) const { os << "(no text())"; }
 
 protected:
     /** Skip extension octets. */

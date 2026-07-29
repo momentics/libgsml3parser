@@ -71,88 +71,156 @@ std::ostream& operator<<(std::ostream& os, L3CCMessage::MessageType mti) {
 
 // ── L3Setup ─────────────────────────────────────────────────────────────
 
-L3Setup::L3Setup(unsigned wTI) : L3CCMessage(wTI), mHaveCalledParty(false) {}
+L3Setup::L3Setup(unsigned wTI) : L3CCMessage(wTI), mHaveCalledParty(false), mHaveCallingParty(false), mHaveSignal(false) {}
 
-L3Setup::L3Setup(unsigned wTI, TypeOfNumber ton, NumberingPlan np, const std::string& digits)
-    : L3CCMessage(wTI), mHaveCalledParty(true), mTON(ton), mNP(np), mDigits(digits) {}
+L3Setup::L3Setup(unsigned wTI, const L3CalledPartyBCDNumber& wCalled)
+    : L3CCMessage(wTI), mHaveCalledParty(true), mCalledPartyBCDNumber(wCalled),
+      mHaveCallingParty(false), mHaveSignal(false) {}
 
 size_t L3Setup::l2BodyLength() const {
-    if (!mHaveCalledParty) return 0;
-    size_t len = 1; // TON/NP
-    size_t nDigits = mDigits.size();
-    len += (nDigits + 1) / 2; // BCD encoded
+    int len = 0;
+    if (mBearerCapability.mPresent) len += mBearerCapability.lengthTLV();
+    if (mHaveCalledParty) len += mCalledPartyBCDNumber.lengthTLV();
+    if (mHaveCallingParty) len += mCallingPartyBCDNumber.lengthTLV();
+    if (mHaveSignal) len += mSignal.lengthTV();
+    len += ccCommonLength();
     return len;
 }
 
 void L3Setup::writeBody(L3Frame& dest, size_t& wp) const {
-    if (!mHaveCalledParty) return;
-    dest.writeField(wp, static_cast<unsigned>(mTON), 3);
-    dest.writeField(wp, static_cast<unsigned>(mNP), 4);
-    // BCD encode
-    size_t nDigits = mDigits.size();
-    for (size_t i = 0; i < nDigits; i += 2) {
-        unsigned hi = mDigits[i] - '0';
-        unsigned lo = (i + 1 < nDigits) ? mDigits[i + 1] - '0' : 0xf;
-        dest.writeField(wp, hi * 10 + lo, 8);
-    }
+    if (mBearerCapability.mPresent) mBearerCapability.writeTLV(0x04, dest, wp);
+    if (mHaveCalledParty) mCalledPartyBCDNumber.writeTLV(0x5e, dest, wp);
+    if (mHaveCallingParty) mCallingPartyBCDNumber.writeTLV(0x5c, dest, wp);
+    if (mHaveSignal) mSignal.writeTV(0x34, dest, wp);
+    ccCommonWrite(dest, wp);
 }
 
 void L3Setup::parseBody(const L3Frame& src, size_t& rp) {
-    mTON = static_cast<TypeOfNumber>(src.readField(rp, 3));
-    mNP = static_cast<NumberingPlan>(src.readField(rp, 4));
-    // BCD decode
-    size_t remaining = (src.size() - rp) / 8;
-    for (size_t i = 0; i < remaining && i < 10; ++i) {
-        unsigned bcd = src.readField(rp, 8);
-        if (bcd == 0xf) break;
-        mDigits += static_cast<char>('0' + (bcd / 10));
-        unsigned lo = bcd % 10;
-        if (lo != 0xf) mDigits += static_cast<char>('0' + lo);
+    while (rp < src.size()) {
+        unsigned iei = src.readField(rp, 8);
+        if ((iei & 0xf0) == 0xd0) continue;
+        if ((iei & 0xf0) == 0x80) continue;
+        switch (iei) {
+        case 4:
+            mBearerCapability.parseLV(src, rp);
+            continue;
+        case 0x1c:
+            ccCommonParse(src, rp);
+            continue;
+        case 0x1e:
+            skipLV(src, rp);
+            continue;
+        case 0x34:
+            mHaveSignal = true;
+            mSignal.parseV(src, rp);
+            continue;
+        case 0x5c:
+            mHaveCallingParty = true;
+            mCallingPartyBCDNumber.parseLV(src, rp);
+            continue;
+        case 0x5d:
+            skipLV(src, rp);
+            continue;
+        case 0x5e:
+            mHaveCalledParty = true;
+            mCalledPartyBCDNumber.parseLV(src, rp);
+            continue;
+        case 0x6d:
+        case 0x74:
+        case 0x75:
+        case 0x7c:
+        case 0x7d:
+        case 0x7e:
+            skipLV(src, rp);
+            continue;
+        case 0x7f:
+            ccCommonParse(src, rp);
+            continue;
+        case 0xa1:
+        case 0xa2:
+            continue;
+        case 0x15:
+        case 0x1d:
+        case 0x1b:
+        case 0x2d:
+        case 0x2e:
+        case 0x19:
+        case 0x2f:
+        case 0x3a:
+        case 0x41:
+            skipLV(src, rp);
+            continue;
+        case 0x40:
+            mSupportedCodecs.parseLV(src, rp);
+            continue;
+        case 0xa3:
+            continue;
+        default:
+            skipLV(src, rp);
+            continue;
+        }
     }
-    mHaveCalledParty = true;
 }
 
 void L3Setup::text(std::ostream& os) const {
-    os << "Setup: ";
-    if (mHaveCalledParty) {
-        os << mDigits;
-    }
+    os << "Setup:";
+    if (mHaveCalledParty) os << " CalledParty=(" << mCalledPartyBCDNumber << ")";
+    if (mHaveCallingParty) os << " CallingParty=(" << mCallingPartyBCDNumber << ")";
+    if (mBearerCapability.mPresent) os << " BearerCapability=(" << mBearerCapability << ")";
+    if (mSupportedCodecs.mPresent) os << " SupportedCodecList=(" << mSupportedCodecs << ")";
+    if (mHaveSignal) { os << " "; mSignal.text(os); }
+    ccCommonText(os);
 }
 
 // ── L3CallProceeding ───────────────────────────────────────────────────
 
-void L3CallProceeding::writeBody(L3Frame&, size_t&) const {}
-
-void L3CallProceeding::parseBody(const L3Frame& src, size_t& rp) {
-    (void)src; (void)rp;
+void L3CallProceeding::writeBody(L3Frame& dest, size_t& wp) const {
+    if (mBearerCapability.mPresent) mBearerCapability.writeTLV(0x04, dest, wp);
 }
 
-size_t L3CallProceeding::l2BodyLength() const { return 0; }
+void L3CallProceeding::parseBody(const L3Frame& src, size_t& rp) {
+    skipTV(0x0d, 4, src, rp);
+    skipTLV(0x04, src, rp);
+    skipTLV(0x1c, src, rp);
+    mBearerCapability.parseLV(src, rp);
+}
+
+size_t L3CallProceeding::l2BodyLength() const {
+    size_t sum = 0;
+    if (mBearerCapability.mPresent) sum += mBearerCapability.lengthTLV();
+    return sum;
+}
 
 void L3CallProceeding::text(std::ostream& os) const {
     os << "CallProceeding";
+    if (mBearerCapability.mPresent) os << " BearerCapability=(" << mBearerCapability << ")";
 }
 
 // ── L3Alerting ─────────────────────────────────────────────────────────
 
-void L3Alerting::writeBody(L3Frame&, size_t&) const {}
-
-void L3Alerting::parseBody(const L3Frame& src, size_t& rp) {
-    (void)src; (void)rp;
+void L3Alerting::writeBody(L3Frame& dest, size_t& wp) const {
+    ccCommonWrite(dest, wp);
 }
 
-size_t L3Alerting::l2BodyLength() const { return 0; }
+void L3Alerting::parseBody(const L3Frame& src, size_t& rp) {
+    ccCommonParse(src, rp);
+}
+
+size_t L3Alerting::l2BodyLength() const { return ccCommonLength(); }
 
 void L3Alerting::text(std::ostream& os) const {
     os << "Alerting";
+    ccCommonText(os);
 }
 
 // ── L3Connect ──────────────────────────────────────────────────────────
 
-void L3Connect::writeBody(L3Frame&, size_t&) const {}
+void L3Connect::writeBody(L3Frame& dest, size_t& wp) const {
+    (void)dest; (void)wp;
+}
 
 void L3Connect::parseBody(const L3Frame& src, size_t& rp) {
-    (void)src; (void)rp;
+    skipTLV(0x1c, src, rp);
 }
 
 size_t L3Connect::l2BodyLength() const { return 0; }
@@ -164,15 +232,44 @@ void L3Connect::text(std::ostream& os) const {
 // ── L3CallConfirmed ────────────────────────────────────────────────────
 
 void L3CallConfirmed::parseBody(const L3Frame& src, size_t& rp) {
-    (void)src; (void)rp;
+    while (rp < src.size()) {
+        unsigned iei = src.readField(rp, 8);
+        if ((iei & 0xf0) == 0xd0) continue;
+        switch (iei) {
+        case 8:
+            mCause.parseLV(src, rp);
+            continue;
+        case 0x40:
+            mSupportedCodecs.parseLV(src, rp);
+            continue;
+        case 4:
+            mBearerCapability.parseLV(src, rp);
+            continue;
+        case 0x15:
+        case 0x2d:
+            skipLV(src, rp);
+            continue;
+        default:
+            skipLV(src, rp);
+            continue;
+        }
+    }
 }
 
-void L3CallConfirmed::writeBody(L3Frame&, size_t&) const {}
+void L3CallConfirmed::writeBody(L3Frame& dest, size_t& wp) const {
+    if (mBearerCapability.mPresent) mBearerCapability.writeTLV(0x04, dest, wp);
+}
 
-size_t L3CallConfirmed::l2BodyLength() const { return 0; }
+size_t L3CallConfirmed::l2BodyLength() const {
+    size_t sum = 0;
+    if (mBearerCapability.mPresent) sum += mBearerCapability.lengthTLV();
+    return sum;
+}
 
 void L3CallConfirmed::text(std::ostream& os) const {
     os << "CallConfirmed";
+    if (mBearerCapability.mPresent) os << " BearerCapability=(" << mBearerCapability << ")";
+    if (mSupportedCodecs.mPresent) os << " SupportedCodecList=(" << mSupportedCodecs << ")";
 }
 
 // ── L3ConnectAcknowledge ───────────────────────────────────────────────
@@ -184,77 +281,97 @@ void L3ConnectAcknowledge::text(std::ostream& os) const {
 // ── L3Disconnect ───────────────────────────────────────────────────────
 
 void L3Disconnect::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mLocation), 4);
-    dest.writeField(wp, static_cast<unsigned>(mCause), 7);
+    L3CauseElement cause(mCause, mLocation);
+    cause.writeLV(dest, wp);
 }
 
 void L3Disconnect::parseBody(const L3Frame& src, size_t& rp) {
-    mLocation = static_cast<CCCauseLocation>(src.readField(rp, 4));
-    mCause = static_cast<CCCause>(src.readField(rp, 7));
+    L3CauseElement cause;
+    cause.parseLV(src, rp);
+    mCause = cause.cause();
+    mLocation = cause.location();
 }
 
 void L3Disconnect::text(std::ostream& os) const {
-    os << "Disconnect: cause=" << CCCause2Str(mCause);
+    os << "Disconnect: cause=" << CCCause2Str(mCause) << " loc=" << static_cast<int>(mLocation);
 }
 
 // ── L3Release ──────────────────────────────────────────────────────────
 
 void L3Release::writeBody(L3Frame& dest, size_t& wp) const {
     if (mHaveCause) {
-        dest.writeField(wp, static_cast<unsigned>(mCause), 8);
+        L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
+        cause.writeTLV(0x08, dest, wp);
     }
+    ccCommonWrite(dest, wp);
 }
 
 void L3Release::parseBody(const L3Frame& src, size_t& rp) {
-    if (src.size() > rp / 8 + 2) {
-        mHaveCause = true;
-        mCause = static_cast<CCCause>(src.readField(rp, 8));
-    }
+    L3CauseElement cause;
+    mHaveCause = cause.parseTLV(0x08, src, rp);
+    if (mHaveCause) mCause = cause.cause();
+    ccCommonParse(src, rp);
 }
 
 size_t L3Release::l2BodyLength() const {
-    return mHaveCause ? 1 : 0;
+    size_t sum = 0;
+    if (mHaveCause) sum += L3CauseElement(mCause).lengthTLV();
+    sum += ccCommonLength();
+    return sum;
 }
 
 void L3Release::text(std::ostream& os) const {
     os << "Release";
-    if (mHaveCause) os << ": " << CCCause2Str(mCause);
+    if (mHaveCause) os << ": cause=" << CCCause2Str(mCause);
+    ccCommonText(os);
 }
 
 // ── L3ReleaseComplete ──────────────────────────────────────────────────
 
 void L3ReleaseComplete::writeBody(L3Frame& dest, size_t& wp) const {
     if (mHaveCause) {
-        dest.writeField(wp, static_cast<unsigned>(mCause), 8);
+        L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
+        cause.writeTLV(0x08, dest, wp);
     }
+    ccCommonWrite(dest, wp);
 }
 
 void L3ReleaseComplete::parseBody(const L3Frame& src, size_t& rp) {
-    if (src.size() > rp / 8 + 2) {
-        mHaveCause = true;
-        mCause = static_cast<CCCause>(src.readField(rp, 8));
-    }
+    L3CauseElement cause;
+    mHaveCause = cause.parseTLV(0x08, src, rp);
+    if (mHaveCause) mCause = cause.cause();
+    ccCommonParse(src, rp);
 }
 
 size_t L3ReleaseComplete::l2BodyLength() const {
-    return mHaveCause ? 1 : 0;
+    size_t sum = 0;
+    if (mHaveCause) sum += L3CauseElement(mCause).lengthTLV();
+    sum += ccCommonLength();
+    return sum;
 }
 
 void L3ReleaseComplete::text(std::ostream& os) const {
     os << "ReleaseComplete";
-    if (mHaveCause) os << ": " << CCCause2Str(mCause);
+    if (mHaveCause) os << ": cause=" << CCCause2Str(mCause);
+    ccCommonText(os);
 }
 
 // ── L3CCStatus ─────────────────────────────────────────────────────────
 
 void L3CCStatus::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
-    dest.writeField(wp, mCallState, 8);
+    L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
+    cause.writeLV(dest, wp);
+    L3CallState state(mCallState);
+    state.writeV(dest, wp);
 }
 
 void L3CCStatus::parseBody(const L3Frame& src, size_t& rp) {
-    mCause = static_cast<CCCause>(src.readField(rp, 8));
-    mCallState = src.readField(rp, 8);
+    L3CauseElement cause;
+    cause.parseLV(src, rp);
+    mCause = cause.cause();
+    L3CallState state;
+    state.parseV(src, rp);
+    mCallState = state.callState();
 }
 
 void L3CCStatus::text(std::ostream& os) const {
@@ -373,13 +490,15 @@ L3CCMessage* L3CCFactory(int mti) {
 std::unique_ptr<L3CCMessage> parseL3CC(const L3Frame& source) {
     if (source.size() < 16) return nullptr;
 
-    unsigned mti = source.MTI();
+    // Mask out bit 6 (0xbf), see GSM 04.08 Table 10.3/3
+    unsigned mti = source.MTI() & 0xbf;
     L3CCMessage* msg = L3CCFactory(static_cast<L3CCMessage::MessageType>(mti));
     if (!msg) {
         GSML3PARSER_LOG_WARN("Unknown CC MTI: 0x%02x", mti);
         return nullptr;
     }
     try {
+        msg->TI(source.TI());
         msg->parse(source);
     } catch (const ParseError&) {
         GSML3PARSER_LOG_WARN("CC parse failed for MTI=0x%02x", mti);

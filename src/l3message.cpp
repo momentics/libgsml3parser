@@ -21,6 +21,7 @@
 
 #include "gsml3parser/l3message.h"
 #include <sstream>
+#include <iomanip>
 
 namespace gsml3parser {
 

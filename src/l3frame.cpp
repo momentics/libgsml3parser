@@ -100,8 +100,7 @@ L3PD L3Frame::PD() const {
 
 unsigned L3Frame::MTI() const {
     if (size() < 16) return 0;
-    // Bit 6 (MSB-1) is "don't care" for MM and CC — mask it
-    return peekField(8, 8) & 0xbf;
+    return peekField(8, 8);
 }
 
 unsigned L3Frame::TI() const {

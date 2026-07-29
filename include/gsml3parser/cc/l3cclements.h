@@ -239,6 +239,7 @@ class L3CCCapabilities {
 public:
     L3BearerCapability mBearerCapability;
     L3SupportedCodecList mSupportedCodecs;
+    std::string getCodecSet() const;
 };
 
 } // namespace gsml3parser

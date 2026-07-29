@@ -161,6 +161,7 @@ std::unique_ptr<L3SupServMessage> parseL3SupServ(const L3Frame& source) {
         return nullptr;
     }
     try {
+        msg->setTI(source.TI());
         msg->parse(source);
     } catch (const ParseError&) {
         GSML3PARSER_LOG_WARN("SS parse failed for MTI=0x%02x", mti);

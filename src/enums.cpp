@@ -129,7 +129,7 @@ const char* CCCause2Str(CCCause cause) {
         case CCCause::Message_Not_Compatible_With_State:  return "Message_Incompatible_State";
         case CCCause::IE_Not_Implemented:                 return "IE_Not_Implemented";
         case CCCause::Conditional_IE_Error:               return "Conditional_IE_Error";
-        case CCCause::Message_Not_Compatible_With_State:  return "Message_Incompatible_State";
+        case CCCause::Message_Not_Compatible:             return "Message_Not_Compatible";
         case CCCause::Recovery_On_Timer_Expiry:           return "Recovery_Timer_Expiry";
         case CCCause::Protocol_Error_Unspecified:         return "Protocol_Error";
         case CCCause::Interworking_Unspecified:           return "Interworking_Unspecified";

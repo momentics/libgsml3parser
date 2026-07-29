@@ -64,7 +64,7 @@ public:
     void writeField(size_t& wp, unsigned value, unsigned nbits) const;
     unsigned peekField(size_t rp, unsigned nbits) const;
 
-    bool readBit(size_t& rp) const;
+    unsigned readBit(size_t& rp) const;
     void writeBit(size_t& wp, bool bit) const;
 
     // ── Byte access ─────────────────────────────────────────────────
@@ -89,6 +89,9 @@ private:
 
     void alloc(size_t nbits);
     void dealloc();
+
+    friend std::ostream& operator<<(std::ostream& os, const BitVector& bv);
+    friend class L3Frame;
 };
 
 inline size_t bitVectorByteSize(size_t nbits) {

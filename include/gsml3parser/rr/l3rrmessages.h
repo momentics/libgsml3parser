@@ -146,42 +146,17 @@ public:
 
 class L3SystemInformationType1 : public L3RRMessageNRO {
 private:
-    unsigned mSpare;
-    unsigned mRACHControlValue;
-    unsigned mAccessBarredForRACH;
-    unsigned mMaxDelay;
-    unsigned mInitialRepeat;
-    unsigned mMaxRepetition;
-    unsigned mRxLevAccessMin;
-    unsigned mRxLevelAccessMin;
-    unsigned mMaxRxLev;
-    unsigned mCellReselectionHysteresis;
-    unsigned mCellReselectionOffset;
-    unsigned mCellReservedIndicator;
-    unsigned mCellBarQualifier;
-    unsigned mCellBarQualifierLength;
-    std::vector<uint8_t> mCellBarQualifier;
+    L3FrequencyList mCellChannelDescription;
+    L3RACHControlParameters mRACHControlParameters;
 public:
     L3SystemInformationType1();
     int MTI() const override { return SystemInformationType1; }
-    size_t l2BodyLength() const override;
+    size_t l2BodyLength() const override { return 19; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;
-    unsigned RACHControlValue() const { return mRACHControlValue; }
-    unsigned AccessBarredForRACH() const { return mAccessBarredForRACH; }
-    unsigned MaxDelay() const { return mMaxDelay; }
-    unsigned InitialRepeat() const { return mInitialRepeat; }
-    unsigned MaxRepetition() const { return mMaxRepetition; }
-    unsigned RxLevAccessMin() const { return mRxLevAccessMin; }
-    unsigned RxLevelAccessMin() const { return mRxLevelAccessMin; }
-    unsigned MaxRxLev() const { return mMaxRxLev; }
-    unsigned CellReselectionHysteresis() const { return mCellReselectionHysteresis; }
-    unsigned CellReselectionOffset() const { return mCellReselectionOffset; }
-    unsigned CellReservedIndicator() const { return mCellReservedIndicator; }
-    unsigned CellBarQualifier() const { return mCellBarQualifier; }
-    unsigned CellBarQualifierLength() const { return mCellBarQualifierLength; }
-    const std::vector<uint8_t>& CellBarQualifierData() const { return mCellBarQualifier; }
+    const L3FrequencyList& cellChannelDescription() const { return mCellChannelDescription; }
+    const L3RACHControlParameters& rachaControl() const { return mRACHControlParameters; }
 };
 
 // ── Channel Release (GSM 04.08 9.1.7) ──────────────────────────────────

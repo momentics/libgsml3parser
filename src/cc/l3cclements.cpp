@@ -1,4 +1,5 @@
 #include "gsml3parser/cc/l3cclements.h"
+#include "gsml3parser/common/l3common.h"
 #include <cstring>
 #include <sstream>
 #include <iomanip>
@@ -27,16 +28,24 @@ void L3BearerCapability::parseV(const L3Frame& src, size_t& rp) {
     mPresent = true;
     mOctet3 = static_cast<uint8_t>(src.readField(rp, 8));
     mOctet3a.clear();
-    mOctet3a.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
+    while (rp + 8 <= src.size()) {
+        mOctet3a.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
+    }
 }
 
 void L3BearerCapability::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     mPresent = true;
-    mOctet3 = static_cast<uint8_t>(src.readField(rp, 8));
-    mOctet3a.clear();
-    for (size_t i = 1; i < expectedLength; ++i) {
-        mOctet3a.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
+    if (expectedLength == 0) return;
+    size_t end = rp + 8 * expectedLength;
+    unsigned octet3 = src.readField(rp, 8);
+    if ((octet3 & 7) == 0) {
+        mOctet3 = static_cast<uint8_t>(octet3);
+        mOctet3a.clear();
+        while (rp < end) {
+            mOctet3a.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
+        }
     }
+    rp = end;
 }
 
 void L3BearerCapability::text(std::ostream& os) const {
@@ -60,12 +69,14 @@ size_t L3SupportedCodecList::lengthV() const {
 void L3SupportedCodecList::writeV(L3Frame& dest, size_t& wp) const {
     if (mGsmPresent) {
         dest.writeField(wp, 0, 8);
+        dest.writeField(wp, static_cast<unsigned>(mGsmCodecs.size()), 8);
         for (const auto& b : mGsmCodecs) {
             dest.writeField(wp, b, 8);
         }
     }
     if (mUmtsPresent) {
         dest.writeField(wp, 4, 8);
+        dest.writeField(wp, static_cast<unsigned>(mUmtsCodecs.size()), 8);
         for (const auto& b : mUmtsCodecs) {
             dest.writeField(wp, b, 8);
         }
@@ -75,20 +86,15 @@ void L3SupportedCodecList::writeV(L3Frame& dest, size_t& wp) const {
 void L3SupportedCodecList::parseV(const L3Frame& src, size_t& rp) {
     mGsmCodecs.clear();
     mUmtsCodecs.clear();
-    while (rp < src.size()) {
+    while (rp + 16 <= src.size()) {
         unsigned sysId = src.readField(rp, 8);
-        if (sysId == 0) {
-            mGsmPresent = true;
-            for (size_t i = 0; i < 3 && rp < src.size(); ++i) {
-                mGsmCodecs.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
-            }
-        } else if (sysId == 4) {
-            mUmtsPresent = true;
-            for (size_t i = 0; i < 3 && rp < src.size(); ++i) {
-                mUmtsCodecs.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
-            }
-        } else {
-            rp += 24;
+        unsigned bitmapLen = src.readField(rp, 8);
+        unsigned fixedLen = bitmapLen;
+        if (fixedLen > (src.size() - rp) / 8) fixedLen = (src.size() - rp) / 8;
+        for (unsigned i = 0; i < fixedLen; ++i) {
+            unsigned byte = src.readField(rp, 8);
+            if (sysId == 0) mGsmCodecs.push_back(static_cast<uint8_t>(byte));
+            else if (sysId == 4) mUmtsCodecs.push_back(static_cast<uint8_t>(byte));
         }
     }
 }
@@ -97,20 +103,23 @@ void L3SupportedCodecList::parseV(const L3Frame& src, size_t& rp, size_t expecte
     mGsmCodecs.clear();
     mUmtsCodecs.clear();
     size_t end = rp + 8 * expectedLength;
-    while (rp < end) {
+    while (rp + 16 <= end) {
         unsigned sysId = src.readField(rp, 8);
+        unsigned bitmapLen = src.readField(rp, 8);
+        unsigned fixedLen = bitmapLen;
+        if (fixedLen > (end - rp) / 8) fixedLen = (end - rp) / 8;
         if (sysId == 0) {
             mGsmPresent = true;
-            for (size_t i = 0; i < 3 && rp < end; ++i) {
+            for (unsigned i = 0; i < fixedLen; ++i) {
                 mGsmCodecs.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
             }
         } else if (sysId == 4) {
             mUmtsPresent = true;
-            for (size_t i = 0; i < 3 && rp < end; ++i) {
+            for (unsigned i = 0; i < fixedLen; ++i) {
                 mUmtsCodecs.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
             }
         } else {
-            rp += 24;
+            rp += 8 * fixedLen;
         }
     }
 }
@@ -146,30 +155,45 @@ L3BCDDigits::L3BCDDigits(const L3BCDDigits& other) {
     memcpy(mDigits, other.mDigits, sizeof(mDigits));
 }
 
+static int bcdEncode(char c) {
+    if (c == '*') return 10;
+    if (c == '#') return 11;
+    if (c >= '0' && c <= '9') return c - '0';
+    return 0;
+}
+
+static char bcdDecode(int d) {
+    if (d == 10) return '*';
+    if (d == 11) return '#';
+    if (d >= 0 && d <= 9) return static_cast<char>('0' + d);
+    return '0';
+}
+
 void L3BCDDigits::parse(const L3Frame& src, size_t& rp, size_t numOctets, bool international) {
-    (void)international;
-    size_t maxDigits = numOctets * 2;
-    size_t idx = 0;
-    for (size_t i = 0; i < numOctets && idx < maxDigits; ++i) {
-        unsigned bcd = src.readField(rp, 8);
-        unsigned hi = bcd / 10;
-        unsigned lo = bcd % 10;
-        if (hi != 0xf && idx < maxDigits) {
-            mDigits[idx++] = static_cast<char>('0' + hi);
-        }
-        if (lo != 0xf && idx < maxDigits) {
-            mDigits[idx++] = static_cast<char>('0' + lo);
-        }
+    unsigned i = 0;
+    size_t readOctets = 0;
+    if (international) mDigits[i++] = '+';
+    while (readOctets < numOctets && i < maxDigits) {
+        unsigned d2 = src.readField(rp, 4);
+        unsigned d1 = src.readField(rp, 4);
+        readOctets++;
+        mDigits[i++] = bcdDecode(d1);
+        if (d2 != 0x0f && i < maxDigits) mDigits[i++] = bcdDecode(d2);
     }
-    mDigits[idx] = '\0';
+    mDigits[i] = '\0';
 }
 
 void L3BCDDigits::write(L3Frame& dest, size_t& wp) const {
-    size_t dlen = strlen(mDigits);
-    for (size_t i = 0; i < dlen; i += 2) {
-        unsigned hi = mDigits[i] - '0';
-        unsigned lo = (i + 1 < dlen) ? mDigits[i + 1] - '0' : 0xf;
-        dest.writeField(wp, hi * 10 + lo, 8);
+    unsigned index = 0;
+    unsigned numDigits = strlen(mDigits);
+    if (index < numDigits && mDigits[index] == '+') index++;
+    while (index < numDigits) {
+        if ((index + 1) < numDigits)
+            dest.writeField(wp, bcdEncode(mDigits[index + 1]), 4);
+        else
+            dest.writeField(wp, 0x0f, 4);
+        dest.writeField(wp, bcdEncode(mDigits[index]), 4);
+        index += 2;
     }
 }
 
@@ -197,25 +221,25 @@ size_t L3CalledPartyBCDNumber::lengthV() const {
 }
 
 void L3CalledPartyBCDNumber::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, 1, 1);
     dest.writeField(wp, static_cast<unsigned>(mType), 3);
     dest.writeField(wp, static_cast<unsigned>(mPlan), 4);
-    dest.writeField(wp, 0, 1);
     mDigits.write(dest, wp);
 }
 
 void L3CalledPartyBCDNumber::parseV(const L3Frame& src, size_t& rp) {
+    src.readField(rp, 1);
     mType = static_cast<TypeOfNumber>(src.readField(rp, 3));
     mPlan = static_cast<NumberingPlan>(src.readField(rp, 4));
-    src.readField(rp, 1);
     size_t remaining = (src.size() - rp) / 8;
-    mDigits.parse(src, rp, remaining);
+    mDigits.parse(src, rp, remaining, mType == TypeOfNumber::International);
 }
 
 void L3CalledPartyBCDNumber::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+    src.readField(rp, 1);
     mType = static_cast<TypeOfNumber>(src.readField(rp, 3));
     mPlan = static_cast<NumberingPlan>(src.readField(rp, 4));
-    src.readField(rp, 1);
-    mDigits.parse(src, rp, expectedLength - 1);
+    mDigits.parse(src, rp, expectedLength - 1, mType == TypeOfNumber::International);
 }
 
 void L3CalledPartyBCDNumber::text(std::ostream& os) const {
@@ -239,38 +263,49 @@ size_t L3CallingPartyBCDNumber::lengthV() const {
 }
 
 void L3CallingPartyBCDNumber::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, mHaveOctet3a ? 0 : 1, 1);
     dest.writeField(wp, static_cast<unsigned>(mType), 3);
     dest.writeField(wp, static_cast<unsigned>(mPlan), 4);
-    dest.writeField(wp, 0, 1);
-    mDigits.write(dest, wp);
     if (mHaveOctet3a) {
+        dest.writeField(wp, 1, 1);
         dest.writeField(wp, mPresentationIndicator, 2);
+        dest.writeField(wp, 0, 3);
         dest.writeField(wp, mScreeningIndicator, 2);
-        dest.writeField(wp, 0, 4);
+        dest.writeField(wp, 0, 1);
     }
+    mDigits.write(dest, wp);
 }
 
 void L3CallingPartyBCDNumber::parseV(const L3Frame& src, size_t& rp) {
+    mHaveOctet3a = !src.readField(rp, 1);
     mType = static_cast<TypeOfNumber>(src.readField(rp, 3));
     mPlan = static_cast<NumberingPlan>(src.readField(rp, 4));
-    src.readField(rp, 1);
+    if (mHaveOctet3a) {
+        src.readField(rp, 1);
+        mPresentationIndicator = src.readField(rp, 2);
+        src.readField(rp, 3);
+        mScreeningIndicator = src.readField(rp, 2);
+        src.readField(rp, 1);
+    }
     size_t remaining = (src.size() - rp) / 8;
-    mDigits.parse(src, rp, remaining);
+    mDigits.parse(src, rp, remaining, mType == TypeOfNumber::International);
 }
 
 void L3CallingPartyBCDNumber::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+    size_t remainingLength = expectedLength;
+    mHaveOctet3a = !src.readField(rp, 1);
     mType = static_cast<TypeOfNumber>(src.readField(rp, 3));
     mPlan = static_cast<NumberingPlan>(src.readField(rp, 4));
-    src.readField(rp, 1);
-    size_t digitOctets = expectedLength - 1;
-    if (digitOctets > 1 && (src.peekField(rp + mDigits.lengthV() * 8, 8) & 0x80)) {
-        mHaveOctet3a = true;
+    remainingLength -= 1;
+    if (mHaveOctet3a) {
+        src.readField(rp, 1);
         mPresentationIndicator = src.readField(rp, 2);
+        src.readField(rp, 3);
         mScreeningIndicator = src.readField(rp, 2);
-        src.readField(rp, 4);
-        digitOctets--;
+        src.readField(rp, 1);
+        remainingLength -= 1;
     }
-    mDigits.parse(src, rp, digitOctets);
+    mDigits.parse(src, rp, remainingLength, mType == TypeOfNumber::International);
 }
 
 void L3CallingPartyBCDNumber::text(std::ostream& os) const {
@@ -283,22 +318,26 @@ L3CauseElement::L3CauseElement(Cause wCause, Location wLocation)
     : mLocation(wLocation), mCause(wCause) {}
 
 void L3CauseElement::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, 0x0e, 4);
     dest.writeField(wp, static_cast<unsigned>(mLocation), 4);
+    dest.writeField(wp, 1, 1);
     dest.writeField(wp, static_cast<unsigned>(mCause), 7);
-    dest.writeField(wp, 0, 1);
 }
 
 void L3CauseElement::parseV(const L3Frame& src, size_t& rp) {
+    src.readField(rp, 4);
     mLocation = static_cast<Location>(src.readField(rp, 4));
-    mCause = static_cast<Cause>(src.readField(rp, 7));
     src.readField(rp, 1);
+    mCause = static_cast<Cause>(src.readField(rp, 7));
 }
 
 void L3CauseElement::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
-    (void)expectedLength;
-    mLocation = static_cast<Location>(src.readField(rp, 4));
-    mCause = static_cast<Cause>(src.readField(rp, 7));
-    src.readField(rp, 1);
+    size_t pos = rp;
+    rp += 8 * expectedLength;
+    src.readField(pos, 4);
+    mLocation = static_cast<Location>(src.readField(pos, 4));
+    src.readField(pos, 1);
+    mCause = static_cast<Cause>(src.readField(pos, 7));
 }
 
 void L3CauseElement::text(std::ostream& os) const {
@@ -310,16 +349,19 @@ void L3CauseElement::text(std::ostream& os) const {
 L3CallState::L3CallState(unsigned wCallState) : mCallState(wCallState) {}
 
 void L3CallState::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mCallState, 8);
+    dest.writeField(wp, 3, 2);
+    dest.writeField(wp, mCallState, 6);
 }
 
 void L3CallState::parseV(const L3Frame& src, size_t& rp) {
-    mCallState = src.readField(rp, 8);
+    rp += 2;
+    mCallState = src.readField(rp, 6);
 }
 
 void L3CallState::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     (void)expectedLength;
-    mCallState = src.readField(rp, 8);
+    rp += 2;
+    mCallState = src.readField(rp, 6);
 }
 
 void L3CallState::text(std::ostream& os) const {
@@ -332,22 +374,25 @@ L3ProgressIndicator::L3ProgressIndicator(Progress wProgress, Location wLocation)
     : mLocation(wLocation), mProgress(wProgress) {}
 
 void L3ProgressIndicator::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, 0x0e, 4);
     dest.writeField(wp, static_cast<unsigned>(mLocation), 4);
+    dest.writeField(wp, 1, 1);
     dest.writeField(wp, static_cast<unsigned>(mProgress), 7);
-    dest.writeField(wp, 0, 1);
 }
 
 void L3ProgressIndicator::parseV(const L3Frame& src, size_t& rp) {
+    src.readField(rp, 4);
     mLocation = static_cast<Location>(src.readField(rp, 4));
-    mProgress = static_cast<Progress>(src.readField(rp, 7));
     src.readField(rp, 1);
+    mProgress = static_cast<Progress>(src.readField(rp, 7));
 }
 
 void L3ProgressIndicator::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     (void)expectedLength;
+    src.readField(rp, 4);
     mLocation = static_cast<Location>(src.readField(rp, 4));
-    mProgress = static_cast<Progress>(src.readField(rp, 7));
     src.readField(rp, 1);
+    mProgress = static_cast<Progress>(src.readField(rp, 7));
 }
 
 void L3ProgressIndicator::text(std::ostream& os) const {
@@ -395,7 +440,22 @@ void L3Signal::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
 
 void L3Signal::text(std::ostream& os) const {
     os << "Signal[0x" << std::hex << std::setw(2) << std::setfill('0')
-       << static_cast<int>(mSignalValue) << "]";
+        << static_cast<int>(mSignalValue) << "]";
+}
+
+// ── L3CCCapabilities ───────────────────────────────────────────────────
+
+std::string L3CCCapabilities::getCodecSet() const {
+    std::ostringstream oss;
+    if (mBearerCapability.mPresent) {
+        oss << "Bearer:";
+        mBearerCapability.text(oss);
+    }
+    if (mSupportedCodecs.mPresent) {
+        oss << " Codecs:";
+        mSupportedCodecs.text(oss);
+    }
+    return oss.str();
 }
 
 } // namespace gsml3parser

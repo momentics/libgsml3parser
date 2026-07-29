@@ -139,7 +139,7 @@ enum class CCCause : uint8_t {
     Message_Not_Compatible_With_State = 98,
     IE_Not_Implemented               = 99,
     Conditional_IE_Error             = 100,
-    Message_Not_Compatible_With_State = 101,
+    Message_Not_Compatible = 101,
     Recovery_On_Timer_Expiry         = 102,
     Protocol_Error_Unspecified       = 111,
     Interworking_Unspecified         = 127

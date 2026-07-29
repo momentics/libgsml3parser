@@ -31,6 +31,8 @@
 #include "../l3frame.h"
 #include "../types.h"
 #include "../enums.h"
+#include "../common/l3common.h"
+#include "l3cclements.h"
 
 namespace gsml3parser {
 
@@ -76,20 +78,26 @@ std::ostream& operator<<(std::ostream& os, L3CCMessage::MessageType MTI);
 
 // ── Setup (GSM 04.08 9.3.19) ──────────────────────────────────────────
 
-class L3Setup : public L3CCMessage {
+class L3Setup : public L3CCMessage, public L3CCCapabilities, public L3CCCommonIEs {
 private:
     bool mHaveCalledParty;
-    TypeOfNumber mTON;
-    NumberingPlan mNP;
-    std::string mDigits;
+    L3CalledPartyBCDNumber mCalledPartyBCDNumber;
+    bool mHaveCallingParty;
+    L3CallingPartyBCDNumber mCallingPartyBCDNumber;
+    bool mHaveSignal;
+    L3Signal mSignal;
 public:
-    explicit L3Setup(unsigned wTI = 7);
-    L3Setup(unsigned wTI, TypeOfNumber ton, NumberingPlan np, const std::string& digits);
+    explicit L3Setup(unsigned wTI = 7)
+        : L3CCMessage(wTI), mHaveCalledParty(false), mHaveCallingParty(false), mHaveSignal(false) {}
+    L3Setup(unsigned wTI, const L3CalledPartyBCDNumber& wCalled)
+        : L3CCMessage(wTI), mHaveCalledParty(true), mCalledPartyBCDNumber(wCalled),
+          mHaveCallingParty(false), mHaveSignal(false) {}
 
     bool haveCalledParty() const { return mHaveCalledParty; }
-    TypeOfNumber typeOfNumber() const { return mTON; }
-    NumberingPlan numberingPlan() const { return mNP; }
-    const std::string& digits() const { return mDigits; }
+    const L3CalledPartyBCDNumber& calledPartyBCDNumber() const { return mCalledPartyBCDNumber; }
+    const std::string& digits() const { return mCalledPartyBCDNumber.digits(); }
+    TypeOfNumber typeOfNumber() const { return mCalledPartyBCDNumber.type(); }
+    NumberingPlan numberingPlan() const { return mCalledPartyBCDNumber.plan(); }
 
     int MTI() const override { return Setup; }
     void writeBody(L3Frame& dest, size_t& wp) const override;

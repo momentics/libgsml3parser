@@ -66,23 +66,19 @@ int L3LocationAreaIdentity::MCC() const {
 }
 
 int L3LocationAreaIdentity::MNC() const {
-    return mMNC[0] * 100 + mMNC[1] * 10 + mMNC[2];
+    int val = mMNC[0] * 10 + mMNC[1];
+    if (mMNC[2] < 15) val = val * 10 + mMNC[2];
+    return val;
 }
 
 void L3LocationAreaIdentity::parseV(const L3Frame& source, size_t& rp) {
-    // MCC: 3 BCD digits (12 bits)
-    unsigned mccBcd = source.readField(rp, 12);
-    mMCC[0] = mccBcd / 100;
-    mMCC[1] = (mccBcd / 10) % 10;
-    mMCC[2] = mccBcd % 10;
-
-    // MNC: 3 BCD digits (12 bits), last digit may be 15 for padding
-    unsigned mncBcd = source.readField(rp, 12);
-    mMNC[0] = mncBcd / 100;
-    mMNC[1] = (mncBcd / 10) % 10;
-    mMNC[2] = mncBcd % 10;
-
-    // LAC: 16 bits
+    // GSM 04.08 10.5.1.3: BCD swapped nibble order
+    mMCC[1] = source.readField(rp, 4);
+    mMCC[0] = source.readField(rp, 4);
+    mMNC[2] = source.readField(rp, 4);
+    mMCC[2] = source.readField(rp, 4);
+    mMNC[1] = source.readField(rp, 4);
+    mMNC[0] = source.readField(rp, 4);
     mLAC = source.readField(rp, 16);
 }
 
@@ -91,8 +87,13 @@ void L3LocationAreaIdentity::parseV(const L3Frame& src, size_t& rp, size_t) {
 }
 
 void L3LocationAreaIdentity::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mMCC[0] * 100 + mMCC[1] * 10 + mMCC[2], 12);
-    dest.writeField(wp, mMNC[0] * 100 + mMNC[1] * 10 + mMNC[2], 12);
+    // GSM 04.08 10.5.1.3: BCD swapped nibble order
+    dest.writeField(wp, mMCC[1], 4);
+    dest.writeField(wp, mMCC[0], 4);
+    dest.writeField(wp, mMNC[2], 4);
+    dest.writeField(wp, mMCC[2], 4);
+    dest.writeField(wp, mMNC[1], 4);
+    dest.writeField(wp, mMNC[0], 4);
     dest.writeField(wp, mLAC, 16);
 }
 
@@ -144,59 +145,79 @@ bool L3MobileIdentity::operator<(const L3MobileIdentity& other) const {
 }
 
 size_t L3MobileIdentity::lengthV() const {
-    switch (mType) {
-        case MobileIDType::TMSI:    return 4;
-        case MobileIDType::IMSI:    return (std::strlen(mDigits) + 1) / 2 + 1;
-        case MobileIDType::IMEI:    return (std::strlen(mDigits) + 1) / 2 + 1;
-        case MobileIDType::IMEISV:  return (std::strlen(mDigits) + 1) / 2 + 1;
-        default:                    return 0;
-    }
+    if (mType == MobileIDType::NoID) return 1;
+    if (mType == MobileIDType::TMSI) return 5;
+    // BCD: 1 byte (first digit + odd flag + type) + ceil(nDigits/2) bytes
+    size_t nDigits = std::strlen(mDigits);
+    return 1 + (nDigits + 1) / 2;
 }
 
 void L3MobileIdentity::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mType), 2);
-    switch (mType) {
-        case MobileIDType::TMSI:
-            dest.writeField(wp, mTMSI, 32);
-            break;
-        case MobileIDType::IMSI:
-        case MobileIDType::IMEI:
-        case MobileIDType::IMEISV: {
-            size_t len = lengthV();
-            dest.writeField(wp, static_cast<unsigned>(len), 8);
-            // BCD encode digits
-            size_t dlen = std::strlen(mDigits);
-            for (size_t i = 0; i < dlen; i += 2) {
-                unsigned hi = mDigits[i] - '0';
-                unsigned lo = (i + 1 < dlen) ? mDigits[i + 1] - '0' : 0xf;
-                dest.writeField(wp, hi * 10 + lo, 8);
-            }
-            break;
-        default: break;
+    // GSM 04.08 10.5.1.4
+    if (mType == MobileIDType::NoID) {
+        dest.writeField(wp, 0x0f0, 8);
+        return;
+    }
+    if (mType == MobileIDType::TMSI) {
+        dest.writeField(wp, 0x0f4, 8);
+        dest.writeField(wp, mTMSI, 32);
+        return;
+    }
+    size_t nDigits = std::strlen(mDigits);
+    if (nDigits == 0) {
+        dest.writeField(wp, 0x0f0, 8);
+        return;
+    }
+    // First byte: digit1(4) | oddCount(1) | type(3)
+    dest.writeField(wp, mDigits[0] - '0', 4);
+    dest.writeField(wp, nDigits % 2, 1);
+    dest.writeField(wp, static_cast<unsigned>(mType), 3);
+    // Remaining bytes: pairs of digits, swapped nibbles
+    size_t i = 1;
+    while (i < nDigits) {
+        if (i + 1 < nDigits)
+            dest.writeField(wp, mDigits[i + 1] - '0', 4);
+        else
+            dest.writeField(wp, 0x0f, 4);
+        dest.writeField(wp, mDigits[i] - '0', 4);
+        i += 2;
     }
 }
 
 void L3MobileIdentity::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
-    mType = static_cast<MobileIDType>(src.readField(rp, 2));
+    // GSM 04.08 10.5.1.4
+    size_t endCount = rp + expectedLength * 8;
+    int numDigits = 0;
+    mDigits[numDigits++] = static_cast<char>(src.readField(rp, 4) + '0');
+    bool oddCount = (src.readField(rp, 1) != 0);
+    mType = static_cast<MobileIDType>(src.readField(rp, 3));
+
     switch (mType) {
         case MobileIDType::TMSI:
-            mTMSI = src.readField(rp, 32);
             mDigits[0] = '\0';
+            mTMSI = src.readField(rp, 32);
             break;
         case MobileIDType::IMSI:
         case MobileIDType::IMEI:
-        case MobileIDType::IMEISV: {
-            size_t nDigits = (expectedLength - 1) * 2; // subtract length byte
-            if (nDigits > sizeof(mDigits) - 1) nDigits = sizeof(mDigits) - 1;
-            for (size_t i = 0; i < nDigits; ++i) {
-                unsigned bcd = src.readField(rp, 4);
-                if (bcd == 0xf) break; // padding
-                mDigits[i] = static_cast<char>('0' + bcd);
+        case MobileIDType::IMEISV:
+            while (rp < endCount && numDigits < 15) {
+                unsigned tmp = src.readField(rp, 4);
+                unsigned lo = src.readField(rp, 4);
+                if (lo != 0x0f) {
+                    mDigits[numDigits++] = static_cast<char>(lo + '0');
+                } else {
+                    break;
+                }
+                if (tmp != 0x0f && numDigits < 15) {
+                    mDigits[numDigits++] = static_cast<char>(tmp + '0');
+                }
             }
-            mDigits[nDigits] = '\0';
+            if (!oddCount && numDigits > 0) numDigits--;
+            mDigits[numDigits] = '\0';
             break;
         default:
             mDigits[0] = '\0';
+            mType = MobileIDType::NoID;
             break;
     }
 }
@@ -224,17 +245,19 @@ void L3MobileIdentity::text(std::ostream& os) const {
 // ── L3MobileStationClassmark1 ───────────────────────────────────────────
 
 void L3MobileStationClassmark1::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, 0, 1);  // spare
     dest.writeField(wp, mRevisionLevel, 2);
     dest.writeField(wp, mES_IND, 1);
     dest.writeField(wp, mA5_1, 1);
-    dest.writeField(wp, mRFPowerCapability, 4);
+    dest.writeField(wp, mRFPowerCapability, 3);
 }
 
 void L3MobileStationClassmark1::parseV(const L3Frame& src, size_t& rp) {
+    src.readField(rp, 1);  // spare
     mRevisionLevel = src.readField(rp, 2);
     mES_IND        = src.readField(rp, 1);
     mA5_1          = src.readField(rp, 1);
-    mRFPowerCapability = src.readField(rp, 4);
+    mRFPowerCapability = src.readField(rp, 3);
 }
 
 void L3MobileStationClassmark1::text(std::ostream& os) const {
@@ -245,41 +268,49 @@ void L3MobileStationClassmark1::text(std::ostream& os) const {
 // ── L3MobileStationClassmark2 ───────────────────────────────────────────
 
 void L3MobileStationClassmark2::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, 0, 1);  // spare
     dest.writeField(wp, mRevisionLevel, 2);
     dest.writeField(wp, mES_IND, 1);
     dest.writeField(wp, mA5_1, 1);
-    dest.writeField(wp, mA5_3, 1);
-    dest.writeField(wp, mA5_2, 1);
-    dest.writeField(wp, mRFPowerCapability, 4);
+    dest.writeField(wp, mRFPowerCapability, 3);
+    dest.writeField(wp, 0, 1);  // spare
     dest.writeField(wp, mPSCapability, 1);
-    dest.writeField(wp, mSSScreenIndicator, 1);
+    dest.writeField(wp, mSSScreenIndicator, 2);
     dest.writeField(wp, mSMCapability, 1);
     dest.writeField(wp, mVBS, 1);
     dest.writeField(wp, mVGCS, 1);
     dest.writeField(wp, mFC, 1);
     dest.writeField(wp, mCM3, 1);
+    dest.writeField(wp, 0, 1);  // spare
     dest.writeField(wp, mLCSVACapability, 1);
+    dest.writeField(wp, 0, 1);  // spare
     dest.writeField(wp, mSoLSA, 1);
     dest.writeField(wp, mCMSF, 1);
+    dest.writeField(wp, mA5_3, 1);
+    dest.writeField(wp, mA5_2, 1);
 }
 
 void L3MobileStationClassmark2::parseV(const L3Frame& src, size_t& rp) {
+    src.readField(rp, 1);  // spare
     mRevisionLevel      = src.readField(rp, 2);
     mES_IND             = src.readField(rp, 1);
     mA5_1               = src.readField(rp, 1);
-    mA5_3               = src.readField(rp, 1);
-    mA5_2               = src.readField(rp, 1);
-    mRFPowerCapability  = src.readField(rp, 4);
+    mRFPowerCapability  = src.readField(rp, 3);
+    src.readField(rp, 1);  // spare
     mPSCapability       = src.readField(rp, 1);
-    mSSScreenIndicator  = src.readField(rp, 1);
+    mSSScreenIndicator  = src.readField(rp, 2);
     mSMCapability       = src.readField(rp, 1);
     mVBS                = src.readField(rp, 1);
     mVGCS               = src.readField(rp, 1);
     mFC                 = src.readField(rp, 1);
     mCM3                = src.readField(rp, 1);
+    src.readField(rp, 1);  // spare
     mLCSVACapability    = src.readField(rp, 1);
+    src.readField(rp, 1);  // spare
     mSoLSA              = src.readField(rp, 1);
     mCMSF               = src.readField(rp, 1);
+    mA5_3               = src.readField(rp, 1);
+    mA5_2               = src.readField(rp, 1);
 }
 
 void L3MobileStationClassmark2::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -341,23 +372,93 @@ void L3CipheringKeySequenceNumber::text(std::ostream& os) const {
     os << "CKSN=" << mCIValue;
 }
 
+// ── L3FrequencyList ────────────────────────────────────────────────────
+
+L3FrequencyList::L3FrequencyList() {}
+
+L3FrequencyList::L3FrequencyList(const std::vector<unsigned>& wARFCNs)
+    : mARFCNs(wARFCNs) {}
+
+unsigned L3FrequencyList::base() const {
+    if (mARFCNs.empty()) return 0;
+    return mARFCNs[0];
+}
+
+unsigned L3FrequencyList::spread() const {
+    if (mARFCNs.size() < 2) return 0;
+    unsigned s = mARFCNs[1] - mARFCNs[0];
+    // Find spread index: 3,5,7,10,14,21,28,42,...
+    static const unsigned spreads[] = {3,5,7,10,14,21,28,42,7,10,14,21,28,42,42,42};
+    for (unsigned i = 0; i < 16; i++) {
+        if (spreads[i] == s) return i;
+    }
+    return 0;
+}
+
+bool L3FrequencyList::contains(unsigned wARFCN) const {
+    for (unsigned arfcn : mARFCNs) {
+        if (arfcn == wARFCN) return true;
+    }
+    return false;
+}
+
+void L3FrequencyList::writeV(L3Frame& dest, size_t& wp) const {
+    // GSM 04.08 10.5.2.13: base(10), spread(4), bitmap(128)
+    unsigned b = base();
+    unsigned s = spread();
+    dest.writeField(wp, b, 10);
+    dest.writeField(wp, s, 4);
+    // Build 128-bit bitmap
+    for (unsigned i = 0; i < 128; i++) {
+        unsigned arfcn = b + i * RACHSpreadSlots[s];
+        dest.writeField(wp, contains(arfcn) ? 1 : 0, 1);
+    }
+}
+
+void L3FrequencyList::parseV(const L3Frame& src, size_t& rp) {
+    unsigned b = src.readField(rp, 10);
+    unsigned s = src.readField(rp, 4);
+    mARFCNs.clear();
+    for (unsigned i = 0; i < 128; i++) {
+        if (src.readField(rp, 1)) {
+            mARFCNs.push_back(b + i * RACHSpreadSlots[s]);
+        }
+    }
+}
+
+void L3FrequencyList::parseV(const L3Frame& src, size_t& rp, size_t) {
+    parseV(src, rp);
+}
+
+void L3FrequencyList::text(std::ostream& os) const {
+    os << "FreqList[";
+    for (size_t i = 0; i < mARFCNs.size(); ++i) {
+        if (i) os << ",";
+        os << mARFCNs[i];
+    }
+    os << "]";
+}
+
 // ── L3CellChannelDescription ───────────────────────────────────────────
+
+L3CellChannelDescription::L3CellChannelDescription()
+    : mARfcn(0), mBSIC(0), mChannelSpacing(0) {}
 
 L3CellChannelDescription::L3CellChannelDescription(unsigned wARfcn, unsigned wBSIC, unsigned wSpacing)
     : mBSIC(wBSIC), mARfcn(wARfcn), mChannelSpacing(wSpacing) {}
 
 void L3CellChannelDescription::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mARfcn, 14);
+    dest.writeField(wp, mARfcn, 10);
     dest.writeField(wp, mBSIC, 6);
     dest.writeField(wp, mChannelSpacing, 1);
-    dest.writeField(wp, 0, 1);
+    dest.writeField(wp, 0, 1);  // spare
 }
 
 void L3CellChannelDescription::parseV(const L3Frame& src, size_t& rp) {
-    mARfcn = src.readField(rp, 14);
+    mARfcn = src.readField(rp, 10);
     mBSIC = src.readField(rp, 6);
     mChannelSpacing = src.readField(rp, 1);
-    src.readField(rp, 1);
+    src.readField(rp, 1);  // spare
 }
 
 void L3CellChannelDescription::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -377,23 +478,23 @@ L3ControlChannelDescription::L3ControlChannelDescription(unsigned wARfcn, unsign
       mCCCH(wCCCH), mSACCH(wSACCH), mCBCH(wCBCH) {}
 
 void L3ControlChannelDescription::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mARfcn, 14);
+    dest.writeField(wp, mARfcn, 10);
     dest.writeField(wp, mBSIC, 6);
     dest.writeField(wp, mChannelSpacing, 1);
     dest.writeField(wp, mCCCH, 1);
     dest.writeField(wp, mSACCH, 1);
     dest.writeField(wp, mCBCH, 1);
-    dest.writeField(wp, 0, 1);
+    dest.writeField(wp, 0, 1);  // spare
 }
 
 void L3ControlChannelDescription::parseV(const L3Frame& src, size_t& rp) {
-    mARfcn = src.readField(rp, 14);
+    mARfcn = src.readField(rp, 10);
     mBSIC = src.readField(rp, 6);
     mChannelSpacing = src.readField(rp, 1);
     mCCCH = src.readField(rp, 1);
     mSACCH = src.readField(rp, 1);
     mCBCH = src.readField(rp, 1);
-    src.readField(rp, 1);
+    src.readField(rp, 1);  // spare
 }
 
 void L3ControlChannelDescription::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -412,15 +513,18 @@ L3ChannelDescription::L3ChannelDescription(ChannelType wType, unsigned wARfcn, u
     : mChannelType(wType), mARfcn(wARfcn), mBSIC(wBSIC) {}
 
 void L3ChannelDescription::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mChannelType), 4);
-    dest.writeField(wp, mARfcn, 14);
+    // GSM 04.08 10.5.2.5: TypeAndOffset(5), TN(4), TSC(3), H(1), ARFCN(10), MAIO(3), HSN(3)
+    dest.writeField(wp, static_cast<unsigned>(mChannelType), 5);
+    dest.writeField(wp, mARfcn, 10);
     dest.writeField(wp, mBSIC, 6);
+    dest.writeField(wp, 0, 7);  // spare/padding to 3 bytes
 }
 
 void L3ChannelDescription::parseV(const L3Frame& src, size_t& rp) {
-    mChannelType = static_cast<ChannelType>(src.readField(rp, 4));
-    mARfcn = src.readField(rp, 14);
+    mChannelType = static_cast<ChannelType>(src.readField(rp, 5));
+    mARfcn = src.readField(rp, 10);
     mBSIC = src.readField(rp, 6);
+    src.readField(rp, 7);  // spare/padding
 }
 
 void L3ChannelDescription::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -429,13 +533,14 @@ void L3ChannelDescription::parseV(const L3Frame& src, size_t& rp, size_t) {
 
 void L3ChannelDescription::text(std::ostream& os) const {
     os << "Channel[Type=" << static_cast<int>(mChannelType)
-       << " ARfcn=" << mARfcn << " BSIC=" << mBSIC << "]";
+        << " ARfcn=" << mARfcn << " BSIC=" << mBSIC << "]";
 }
 
 // ── L3PowerCommand ─────────────────────────────────────────────────────
 
 void L3PowerCommand::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mPowerLevel & 0x7f, 7);
+    int mag = (mPowerLevel < 0) ? -mPowerLevel : mPowerLevel;
+    dest.writeField(wp, mag & 0x7f, 7);
     dest.writeField(wp, (mPowerLevel < 0) ? 1 : 0, 1);
 }
 
@@ -555,19 +660,20 @@ L3RACHControlParameters::L3RACHControlParameters(unsigned wMaxRep, unsigned wIni
       mAccessBarredforRACH(wBarred), mRACHControlValue(wRACHCtrl) {}
 
 void L3RACHControlParameters::writeV(L3Frame& dest, size_t& wp) const {
+    // GSM 04.08 10.5.2.29: maxRetrans(2), TxInteger(4), cellBarAccess(1), RE(1), AC(8)
     dest.writeField(wp, mMaxRepetition, 2);
-    dest.writeField(wp, mInitialRepeat, 2);
-    dest.writeField(wp, mMaxDelay, 4);
+    dest.writeField(wp, mRACHControlValue, 4);  // TxInteger
     dest.writeField(wp, mAccessBarredforRACH, 1);
-    dest.writeField(wp, mRACHControlValue, 7);
+    dest.writeField(wp, mInitialRepeat, 1);     // RE
+    dest.writeField(wp, mMaxDelay, 8);          // AC
 }
 
 void L3RACHControlParameters::parseV(const L3Frame& src, size_t& rp) {
     mMaxRepetition = src.readField(rp, 2);
-    mInitialRepeat = src.readField(rp, 2);
-    mMaxDelay = src.readField(rp, 4);
+    mRACHControlValue = src.readField(rp, 4);   // TxInteger
     mAccessBarredforRACH = src.readField(rp, 1);
-    mRACHControlValue = src.readField(rp, 7);
+    mInitialRepeat = src.readField(rp, 1);      // RE
+    mMaxDelay = src.readField(rp, 8);           // AC
 }
 
 void L3RACHControlParameters::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -576,10 +682,10 @@ void L3RACHControlParameters::parseV(const L3Frame& src, size_t& rp, size_t) {
 
 void L3RACHControlParameters::text(std::ostream& os) const {
     os << "RACHControl[MaxRep=" << mMaxRepetition
-       << " InitRep=" << mInitialRepeat
-       << " MaxDelay=" << mMaxDelay
-       << " Barred=" << mAccessBarredforRACH
-       << " RACHCtrl=" << mRACHControlValue << "]";
+        << " Tx=" << mRACHControlValue
+        << " Barred=" << mAccessBarredforRACH
+        << " RE=" << mInitialRepeat
+        << " AC=" << mMaxDelay << "]";
 }
 
 // ── L3ImmediateAssignmentInformation ───────────────────────────────────
@@ -627,15 +733,17 @@ L3AdditionalChannelDescription::L3AdditionalChannelDescription(ChannelType wType
     : mChannelType(wType), mARfcn(wARfcn), mBSIC(wBSIC) {}
 
 void L3AdditionalChannelDescription::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mChannelType), 4);
-    dest.writeField(wp, mARfcn, 14);
+    dest.writeField(wp, static_cast<unsigned>(mChannelType), 5);
+    dest.writeField(wp, mARfcn, 10);
     dest.writeField(wp, mBSIC, 6);
+    dest.writeField(wp, 0, 7);  // spare/padding to 3 bytes
 }
 
 void L3AdditionalChannelDescription::parseV(const L3Frame& src, size_t& rp) {
-    mChannelType = static_cast<ChannelType>(src.readField(rp, 4));
-    mARfcn = src.readField(rp, 14);
+    mChannelType = static_cast<ChannelType>(src.readField(rp, 5));
+    mARfcn = src.readField(rp, 10);
     mBSIC = src.readField(rp, 6);
+    src.readField(rp, 7);  // spare/padding
 }
 
 void L3AdditionalChannelDescription::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -674,12 +782,12 @@ void L3ChannelMode::text(std::ostream& os) const {
 L3TimingAdvance::L3TimingAdvance(unsigned wTA) : mTimingAdvance(wTA) {}
 
 void L3TimingAdvance::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0, 2);
+    dest.writeField(wp, 0, 2);  // spare
     dest.writeField(wp, mTimingAdvance, 6);
 }
 
 void L3TimingAdvance::parseV(const L3Frame& src, size_t& rp) {
-    src.readField(rp, 2);
+    src.readField(rp, 2);  // spare
     mTimingAdvance = src.readField(rp, 6);
 }
 
@@ -721,11 +829,13 @@ void L3CellDescription::text(std::ostream& os) const {
 L3HandoverReference::L3HandoverReference(unsigned wValue) : mValue(wValue) {}
 
 void L3HandoverReference::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mValue, 8);
+    dest.writeField(wp, mValue, 4);
+    dest.writeField(wp, 0, 4);  // spare
 }
 
 void L3HandoverReference::parseV(const L3Frame& src, size_t& rp) {
-    mValue = src.readField(rp, 8);
+    mValue = src.readField(rp, 4);
+    src.readField(rp, 4);  // spare
 }
 
 void L3HandoverReference::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -835,11 +945,15 @@ void L3NCCPermitted::text(std::ostream& os) const {
 L3PageMode::L3PageMode(unsigned wPageMode) : mPageMode(wPageMode) {}
 
 void L3PageMode::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mPageMode, 8);
+    dest.writeField(wp, 0, 2);  // spare
+    dest.writeField(wp, mPageMode, 2);
+    dest.writeField(wp, 0, 4);  // spare
 }
 
 void L3PageMode::parseV(const L3Frame& src, size_t& rp) {
-    mPageMode = src.readField(rp, 8);
+    src.readField(rp, 2);  // spare
+    mPageMode = src.readField(rp, 2);
+    src.readField(rp, 4);  // spare
 }
 
 void L3PageMode::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -885,11 +999,13 @@ void L3RequestReference::text(std::ostream& os) const {
 L3WaitIndication::L3WaitIndication(unsigned seconds) : mValue(seconds) {}
 
 void L3WaitIndication::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mValue, 8);
+    dest.writeField(wp, mValue, 4);
+    dest.writeField(wp, 0, 4);  // spare
 }
 
 void L3WaitIndication::parseV(const L3Frame& src, size_t& rp) {
-    mValue = src.readField(rp, 8);
+    mValue = src.readField(rp, 4);
+    src.readField(rp, 4);  // spare
 }
 
 void L3WaitIndication::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -1005,34 +1121,35 @@ void L3CellSelectionParameters::text(std::ostream& os) const {
        << " RXLEV=" << mRXLEV_ACCESS_MIN << "]";
 }
 
+// ── L3BCCHFrequencyList ────────────────────────────────────────────────
+
+L3BCCHFrequencyList::L3BCCHFrequencyList() {}
+
+L3BCCHFrequencyList::L3BCCHFrequencyList(const std::vector<unsigned>& wARFCNs)
+    : L3FrequencyList(wARFCNs) {}
+
+void L3BCCHFrequencyList::writeV(L3Frame& dest, size_t& wp) const {
+    L3FrequencyList::writeV(dest, wp);
+}
+
+void L3BCCHFrequencyList::text(std::ostream& os) const {
+    os << "BCCHFreqList[";
+    for (size_t i = 0; i < mARFCNs.size(); ++i) {
+        if (i) os << ",";
+        os << mARFCNs[i];
+    }
+    os << "]";
+}
+
 // ── L3NeighborCellsDescription ─────────────────────────────────────────
 
 L3NeighborCellsDescription::L3NeighborCellsDescription() {}
 
 L3NeighborCellsDescription::L3NeighborCellsDescription(const std::vector<unsigned>& neighbors)
-    : mARFCNs(neighbors) {}
-
-size_t L3NeighborCellsDescription::lengthV() const {
-    return 1 + mARFCNs.size();
-}
+    : L3FrequencyList(neighbors) {}
 
 void L3NeighborCellsDescription::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mARFCNs.size(), 8);
-    for (const auto& arfcn : mARFCNs) {
-        dest.writeField(wp, arfcn, 8);
-    }
-}
-
-void L3NeighborCellsDescription::parseV(const L3Frame& src, size_t& rp) {
-    unsigned count = src.readField(rp, 8);
-    mARFCNs.clear();
-    for (unsigned i = 0; i < count; ++i) {
-        mARFCNs.push_back(src.readField(rp, 8));
-    }
-}
-
-void L3NeighborCellsDescription::parseV(const L3Frame& src, size_t& rp, size_t) {
-    parseV(src, rp);
+    L3FrequencyList::writeV(dest, wp);
 }
 
 void L3NeighborCellsDescription::text(std::ostream& os) const {
@@ -1145,11 +1262,11 @@ L3APDUID::L3APDUID(unsigned protocolIdentifier)
     : mProtocolIdentifier(protocolIdentifier) {}
 
 void L3APDUID::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mProtocolIdentifier, 8);
+    dest.writeField(wp, mProtocolIdentifier, 4);
 }
 
 void L3APDUID::parseV(const L3Frame& src, size_t& rp) {
-    mProtocolIdentifier = src.readField(rp, 8);
+    mProtocolIdentifier = src.readField(rp, 4);
 }
 
 void L3APDUID::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -1166,17 +1283,17 @@ L3APDUFlags::L3APDUFlags(unsigned cr, unsigned firstSegment, unsigned lastSegmen
     : mCR(cr), mFirstSegment(firstSegment), mLastSegment(lastSegment) {}
 
 void L3APDUFlags::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, 0, 1);  // spare
     dest.writeField(wp, mCR, 1);
     dest.writeField(wp, mFirstSegment, 1);
     dest.writeField(wp, mLastSegment, 1);
-    dest.writeField(wp, 0, 5);
 }
 
 void L3APDUFlags::parseV(const L3Frame& src, size_t& rp) {
+    src.readField(rp, 1);  // spare
     mCR = src.readField(rp, 1);
     mFirstSegment = src.readField(rp, 1);
     mLastSegment = src.readField(rp, 1);
-    src.readField(rp, 5);
 }
 
 void L3APDUFlags::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -1236,17 +1353,17 @@ L3DedicatedModeOrTBF::L3DedicatedModeOrTBF(bool forTBF, bool wDownlink)
     : mDownlink(wDownlink), mTMA(0), mDMOrTBF(forTBF) {}
 
 void L3DedicatedModeOrTBF::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mDownlink, 1);
+    dest.writeField(wp, 0, 1);  // spare
     dest.writeField(wp, mTMA, 1);
+    dest.writeField(wp, mDownlink, 1);
     dest.writeField(wp, mDMOrTBF, 1);
-    dest.writeField(wp, 0, 5);
 }
 
 void L3DedicatedModeOrTBF::parseV(const L3Frame& src, size_t& rp) {
-    mDownlink = src.readField(rp, 1);
+    src.readField(rp, 1);  // spare
     mTMA = src.readField(rp, 1);
+    mDownlink = src.readField(rp, 1);
     mDMOrTBF = src.readField(rp, 1);
-    src.readField(rp, 5);
 }
 
 void L3DedicatedModeOrTBF::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -1255,6 +1372,39 @@ void L3DedicatedModeOrTBF::parseV(const L3Frame& src, size_t& rp, size_t) {
 
 void L3DedicatedModeOrTBF::text(std::ostream& os) const {
     os << "DedModeOrTBF[DL=" << mDownlink << " TBF=" << mDMOrTBF << "]";
+}
+
+// ── L3CCCommonIEs ──────────────────────────────────────────────────────
+
+L3CCCommonIEs::L3CCCommonIEs()
+    : mHaveFacility(false), mHaveSSVersion(false) {}
+
+void L3CCCommonIEs::ccCommonText(std::ostream& os) const {
+    if (mHaveFacility) os << " facility=(" << mFacility << ")";
+    if (mHaveSSVersion) os << " SSVersion=(" << mSSVersion << ")";
+}
+
+size_t L3CCCommonIEs::ccCommonLength() const {
+    size_t result = 0;
+    if (mHaveFacility) result += mFacility.lengthLV();
+    if (mHaveSSVersion) result += mSSVersion.lengthV();
+    return result;
+}
+
+void L3CCCommonIEs::ccCommonParse(const L3Frame& src, size_t& rp) {
+    while (rp + 8 <= src.size()) {
+        unsigned thisIEI = src.peekField(rp, 8);
+        switch (thisIEI) {
+            case 0x1c: mHaveFacility = mFacility.parseTLV(0x1c, src, rp); continue;
+            case 0x7f: mHaveSSVersion = mSSVersion.parseTLV(0x7f, src, rp); continue;
+            default: return;
+        }
+    }
+}
+
+void L3CCCommonIEs::ccCommonWrite(L3Frame& dest, size_t& wp) const {
+    if (mHaveFacility) mFacility.writeTLV(0x1c, dest, wp);
+    if (mHaveSSVersion) mSSVersion.writeTLV(0x7f, dest, wp);
 }
 
 } // namespace gsml3parser

@@ -26,6 +26,8 @@ set(CORE_SOURCES
     src/gsm_common.cpp
     src/logger.cpp
     src/parser.cpp
+    src/mm/l3mmlements.cpp
+    src/cc/l3cclements.cpp
 )
 
 set(RR_SOURCES

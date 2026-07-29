@@ -59,7 +59,8 @@ std::ostream& operator<<(std::ostream& os, L3MMMessage::MessageType val) {
 // ── L3LocationUpdatingRequest ──────────────────────────────────────────
 
 size_t L3LocationUpdatingRequest::l2BodyLength() const {
-    return 1 + 1 + mMobileIdentity.lengthLV() + 5; // updateType + CKSN + ID + LAI
+    // updateType(1/2) + CKSN(1/2) + classmark(1) + mobileID(LV) + LAI(5)
+    return 1 + 1 + mMobileIdentity.lengthLV() + 5;
 }
 
 LocationUpdateType L3LocationUpdatingRequest::getLocationUpdatingType() const {
@@ -67,16 +68,20 @@ LocationUpdateType L3LocationUpdatingRequest::getLocationUpdatingType() const {
 }
 
 void L3LocationUpdatingRequest::parseBody(const L3Frame& src, size_t& rp) {
-    mUpdateType = src.readField(rp, 4);
+    mUpdateType = src.readField(rp, 2);
+    src.readField(rp, 2);  // spare
     mCKSN = src.readField(rp, 4);
+    src.readField(rp, 4);  // spare
     mClassmark.parseV(src, rp);
-    mMobileIdentity.parseV(src, rp, src.size() / 8 - rp / 8 - 6);
+    mMobileIdentity.parseLV(src, rp);
     mLAI.parseV(src, rp);
 }
 
 void L3LocationUpdatingRequest::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mUpdateType, 4);
+    dest.writeField(wp, mUpdateType, 2);
+    dest.writeField(wp, 0, 2);  // spare
     dest.writeField(wp, mCKSN, 4);
+    dest.writeField(wp, 0, 4);  // spare
     mClassmark.writeV(dest, wp);
     mMobileIdentity.writeLV(dest, wp);
     mLAI.writeV(dest, wp);
@@ -151,7 +156,7 @@ size_t L3IMSIDetachIndication::l2BodyLength() const {
 
 void L3IMSIDetachIndication::parseBody(const L3Frame& src, size_t& rp) {
     mClassmark.parseV(src, rp);
-    mMobileIdentity.parseV(src, rp, src.size() / 8 - rp / 8 - 1);
+    mMobileIdentity.parseLV(src, rp);
 }
 
 void L3IMSIDetachIndication::writeBody(L3Frame& dest, size_t& wp) const {
@@ -193,19 +198,22 @@ void L3CMServiceReject::text(std::ostream& os) const {
 // ── L3CMServiceRequest ─────────────────────────────────────────────────
 
 size_t L3CMServiceRequest::l2BodyLength() const {
-    return 1 + 3 + mMobileIdentity.lengthLV();
+    // classmark(3) + mobileID(LV) + serviceType(1/2)
+    return 3 + mMobileIdentity.lengthLV() + 1;
 }
 
 void L3CMServiceRequest::parseBody(const L3Frame& src, size_t& rp) {
     mClassmark.parseV(src, rp);
-    mMobileIdentity.parseV(src, rp, src.size() / 8 - rp / 8 - 4);
+    mMobileIdentity.parseLV(src, rp);
     mServiceType = src.readField(rp, 4);
+    src.readField(rp, 4);  // spare
 }
 
 void L3CMServiceRequest::writeBody(L3Frame& dest, size_t& wp) const {
     mClassmark.writeV(dest, wp);
     mMobileIdentity.writeLV(dest, wp);
     dest.writeField(wp, mServiceType, 4);
+    dest.writeField(wp, 0, 4);  // spare
 }
 
 void L3CMServiceRequest::text(std::ostream& os) const {
@@ -283,7 +291,7 @@ size_t L3IdentityResponse::l2BodyLength() const {
 }
 
 void L3IdentityResponse::parseBody(const L3Frame& src, size_t& rp) {
-    mMobileID.parseV(src, rp, src.size() / 8 - rp / 8);
+    mMobileID.parseLV(src, rp);
 }
 
 void L3IdentityResponse::writeBody(L3Frame& dest, size_t& wp) const {
@@ -388,11 +396,12 @@ void L3TMSIReallocationComplete::text(std::ostream& os) const {
 
 void L3MMStatus::parseBody(const L3Frame& src, size_t& rp) {
     mCause = static_cast<MMRejectCause>(src.readField(rp, 8));
+    src.readField(rp, 16);  // spare
 }
 
 void L3MMStatus::writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mCause), 8);
-    dest.writeField(wp, 0, 16);
+    dest.writeField(wp, 0, 16);  // spare
 }
 
 void L3MMStatus::text(std::ostream& os) const {
@@ -430,7 +439,8 @@ L3MMMessage* L3MMFactory(int mti) {
 std::unique_ptr<L3MMMessage> parseL3MM(const L3Frame& source) {
     if (source.size() < 16) return nullptr;
 
-    unsigned mti = source.MTI();
+    // Bit 6 (MSB-1) is "don't care" for MM messages — mask it
+    unsigned mti = source.MTI() & 0xbf;
     L3MMMessage* msg = L3MMFactory(static_cast<L3MMMessage::MessageType>(mti));
     if (!msg) {
         GSML3PARSER_LOG_WARN("Unknown MM MTI: 0x%02x", mti);

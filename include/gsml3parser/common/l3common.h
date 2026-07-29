@@ -229,12 +229,20 @@ private:
 };
 
 // ── Cell Channel Description (GSM 04.08 10.5.2.1b) ────────────────────
-// Inherits L3FrequencyList, adds 3 spare bits before the bitmap.
+// Per-cell entry: ARFCN(10), BSIC(6), channelSpacing(1), spare(1) = 20 bits
 
-class L3CellChannelDescription : public L3FrequencyList {
+class L3CellChannelDescription : public L3ProtocolElement {
+private:
+    unsigned mARfcn;
+    unsigned mBSIC;
+    unsigned mChannelSpacing;
 public:
     L3CellChannelDescription();
-    explicit L3CellChannelDescription(const std::vector<unsigned>& wARFCNs);
+    L3CellChannelDescription(unsigned wARfcn, unsigned wBSIC, unsigned wSpacing);
+    unsigned ARFCN() const { return mARfcn; }
+    unsigned BSIC() const { return mBSIC; }
+    unsigned channelSpacing() const { return mChannelSpacing; }
+    size_t lengthV() const override { return 3; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
     void parseV(const L3Frame& src, size_t& rp, size_t) override;
@@ -242,7 +250,7 @@ public:
 };
 
 // ── BCCH Frequency List (GSM 04.08 10.5.2.22) ────────────────────────
-// Same encoding as L3FrequencyList, used in SI2/SI7/SI8.
+// Same bitmap encoding as L3FrequencyList, used in SI2/SI7/SI8.
 
 class L3BCCHFrequencyList : public L3FrequencyList {
 public:
@@ -253,7 +261,7 @@ public:
 };
 
 // ── Neighbor Cells Description (GSM 04.08 10.5.2.22) ──────────────────
-// Same encoding as L3FrequencyList, adds 3 bits for EXT-IND, BA-IND.
+// Same bitmap encoding as L3FrequencyList, adds EXT-IND and BA-IND bits.
 
 class L3NeighborCellsDescription : public L3FrequencyList {
 public:
@@ -490,7 +498,7 @@ private:
 public:
     explicit L3PageMode(unsigned wPageMode = 0);
     unsigned pageMode() const { return mPageMode; }
-    size_t lengthV() const override { return 0; }
+    size_t lengthV() const override { return 0; }  // 1/2 octet field
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
     void parseV(const L3Frame& src, size_t& rp, size_t) override;
@@ -810,9 +818,9 @@ private:
     unsigned mCellReselectionHysteresis;
     unsigned mCellReselectionOffset;
     unsigned mCellReservedIndicator;
-    unsigned mCellBarQualifier;
+    unsigned mCellBarQualifierValue;
     unsigned mCellBarQualifierLength;
-    std::vector<unsigned char> mCellBarQualifier;
+    std::vector<unsigned char> mCellBarQualifierData;
 public:
     L3CellSelection();
     unsigned RxLevAccessMin() const { return mRxLevAccessMin; }

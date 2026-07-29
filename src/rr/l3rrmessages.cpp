@@ -143,7 +143,7 @@ size_t L3PagingResponse::l2BodyLength() const {
 
 void L3PagingResponse::parseBody(const L3Frame& source, size_t& rp) {
     mClassmark.parseV(source, rp);
-    mMobileID.parseV(source, rp, source.size() / 8 - rp / 8 - 3);
+    mMobileID.parseLV(source, rp);
 }
 
 void L3PagingResponse::writeBody(L3Frame& dest, size_t& wp) const {
@@ -160,70 +160,23 @@ void L3PagingResponse::text(std::ostream& os) const {
 
 // ── L3SystemInformationType1 ────────────────────────────────────────────
 
-L3SystemInformationType1::L3SystemInformationType1()
-    : mSpare(0), mRACHControlValue(0), mAccessBarredForRACH(0), mMaxDelay(0),
-      mInitialRepeat(0), mMaxRepetition(0), mRxLevAccessMin(0), mRxLevelAccessMin(0),
-      mMaxRxLev(0), mCellReselectionHysteresis(0), mCellReselectionOffset(0),
-      mCellReservedIndicator(0), mCellBarQualifier(0), mCellBarQualifierLength(0) {}
-
-size_t L3SystemInformationType1::l2BodyLength() const {
-    return 6 + mCellBarQualifierLength;
-}
+L3SystemInformationType1::L3SystemInformationType1() {}
 
 void L3SystemInformationType1::parseBody(const L3Frame& src, size_t& rp) {
-    mSpare = src.readField(rp, 2);
-    mRACHControlValue = src.readField(rp, 4);
-    mAccessBarredForRACH = src.readField(rp, 1);
-    mMaxDelay = src.readField(rp, 4);
-    mInitialRepeat = src.readField(rp, 2);
-    mMaxRepetition = src.readField(rp, 2);
-    mRxLevAccessMin = src.readField(rp, 5);
-    mRxLevelAccessMin = src.readField(rp, 1);
-    mMaxRxLev = src.readField(rp, 5);
-    mCellReselectionHysteresis = src.readField(rp, 3);
-    mCellReselectionOffset = src.readField(rp, 3);
-    mCellReservedIndicator = src.readField(rp, 2);
-    mCellBarQualifier = src.readField(rp, 4);
-    mCellBarQualifierLength = src.readField(rp, 4);
-    mCellBarQualifier.clear();
-    for (size_t i = 0; i < mCellBarQualifierLength; ++i) {
-        mCellBarQualifier.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
-    }
+    mCellChannelDescription.parseV(src, rp);
+    mRACHControlParameters.parseV(src, rp);
 }
 
 void L3SystemInformationType1::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mSpare, 2);
-    dest.writeField(wp, mRACHControlValue, 4);
-    dest.writeField(wp, mAccessBarredForRACH, 1);
-    dest.writeField(wp, mMaxDelay, 4);
-    dest.writeField(wp, mInitialRepeat, 2);
-    dest.writeField(wp, mMaxRepetition, 2);
-    dest.writeField(wp, mRxLevAccessMin, 5);
-    dest.writeField(wp, mRxLevelAccessMin, 1);
-    dest.writeField(wp, mMaxRxLev, 5);
-    dest.writeField(wp, mCellReselectionHysteresis, 3);
-    dest.writeField(wp, mCellReselectionOffset, 3);
-    dest.writeField(wp, mCellReservedIndicator, 2);
-    dest.writeField(wp, mCellBarQualifier, 4);
-    dest.writeField(wp, mCellBarQualifierLength, 4);
-    for (size_t i = 0; i < mCellBarQualifier.size(); ++i) {
-        dest.writeField(wp, mCellBarQualifier[i], 8);
-    }
+    mCellChannelDescription.writeV(dest, wp);
+    mRACHControlParameters.writeV(dest, wp);
 }
 
 void L3SystemInformationType1::text(std::ostream& os) const {
-    os << "SystemInformationType1: RACHCtrl=" << mRACHControlValue
-       << " Barred=" << mAccessBarredForRACH
-       << " MaxDelay=" << mMaxDelay
-       << " InitRep=" << mInitialRepeat
-       << " MaxRep=" << mMaxRepetition
-       << " RxMin=" << mRxLevAccessMin
-       << " MaxRx=" << mMaxRxLev
-       << " Hyst=" << mCellReselectionHysteresis
-       << " Offset=" << mCellReselectionOffset
-       << " CBI=" << mCellReservedIndicator
-       << " CBQ=" << mCellBarQualifier
-       << " CBQLen=" << mCellBarQualifierLength;
+    os << "SystemInformationType1: ";
+    mCellChannelDescription.text(os);
+    os << " ";
+    mRACHControlParameters.text(os);
 }
 
 // ── L3ChannelRelease ───────────────────────────────────────────────────
@@ -517,10 +470,11 @@ size_t L3ApplicationInformation::l2BodyLength() const {
 }
 
 void L3ApplicationInformation::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mProtocolIdentifier, 8);
+    dest.writeField(wp, mProtocolIdentifier, 4);
     dest.writeField(wp, mCR, 1);
     dest.writeField(wp, mFirstSegment, 1);
     dest.writeField(wp, mLastSegment, 1);
+    dest.writeField(wp, 0, 1);  // spare
     size_t wp2 = 0;
     for (size_t i = 0; i < mData.size(); ++i) {
         unsigned bit = mData.readField(wp2, 1);
@@ -529,10 +483,11 @@ void L3ApplicationInformation::writeBody(L3Frame& dest, size_t& wp) const {
 }
 
 void L3ApplicationInformation::parseBody(const L3Frame& src, size_t& rp) {
-    mProtocolIdentifier = src.readField(rp, 8);
+    mProtocolIdentifier = src.readField(rp, 4);
     mCR = src.readField(rp, 1);
     mFirstSegment = src.readField(rp, 1);
     mLastSegment = src.readField(rp, 1);
+    src.readField(rp, 1);  // spare
     size_t remaining = src.size() - rp;
     mData = BitVector(remaining);
     size_t wp2 = 0;
