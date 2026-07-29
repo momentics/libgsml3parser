@@ -153,6 +153,7 @@ public:
     int MTI() const override { return CMServiceAccept; }
     size_t l2BodyLength() const override { return 0; }
     void writeBody(L3Frame&, size_t&) const override {}
+    void parseBody(const L3Frame&, size_t&) override {}
     void text(std::ostream& os) const override;
 };
 

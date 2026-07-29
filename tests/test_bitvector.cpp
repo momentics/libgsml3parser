@@ -182,11 +182,12 @@ TEST(BitVectorTest, CopyConstructor) {
 TEST(BitVectorTest, MoveConstructor) {
     BitVector orig(16);
     size_t wp = 0;
-    orig.writeField(wp, 0xFF, 8);
-    orig.writeField(wp, 0x00, 8);
+    orig.writeField(wp, 0xAB, 8);
+    orig.writeField(wp, 0xCD, 8);
 
     BitVector moved(std::move(orig));
     EXPECT_EQ(moved.size(), 16u);
     EXPECT_EQ(moved.data()[0], 0xAB);
     EXPECT_EQ(moved.data()[1], 0xCD);
+    EXPECT_EQ(orig.size(), 0u);
 }

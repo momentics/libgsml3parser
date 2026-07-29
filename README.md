@@ -129,12 +129,14 @@ libgsml3parser/
 │       ├── logger.h            # Simple logging
 │       ├── parser.h            # Main API entry point
 │       ├── common/
-│       │   └── l3common.h      # Common IEs (CellID, LAI, MobileIdentity)
+│       │   └── l3common.h      # Common IEs (CellID, LAI, MobileIdentity, ChannelDesc, etc.)
 │       ├── rr/
 │       │   └── l3rrmessages.h  # RR messages
 │       ├── mm/
+│       │   ├── l3mmlements.h   # MM IEs (CMServiceType, RAND, SRES, NetworkName, etc.)
 │       │   └── l3mmmessages.h  # MM messages
 │       ├── cc/
+│       │   ├── l3cclements.h   # CC IEs (BearerCapability, BCDNumbers, Cause, CCCommonIEs, etc.)
 │       │   └── l3ccmessages.h  # CC messages
 │       └── ss/
 │           └── l3ssmessages.h  # SS messages
@@ -214,6 +216,7 @@ libgsml3parser/
 | Authentication Request | DL | GSM 04.08 9.2.2 |
 | Authentication Response | UL | GSM 04.08 9.2.3 |
 | Authentication Reject | DL | GSM 04.08 9.2.1 |
+| TMSI Reallocation Command | DL | GSM 04.08 9.2.17 |
 | TMSI Reallocation Complete | UL | GSM 04.08 9.2.18 |
 | MM Status | UL | GSM 04.08 9.2.15 |
 

@@ -64,15 +64,22 @@ L3Frame::L3Frame(SAPI sapi, const BitVector& source, Primitive prim)
 L3Frame::L3Frame(SAPI sapi, const char* hexString)
     : BitVector(), mPrimitive(Primitive::L3_DATA), mSapi(sapi), mL2Length(0)
 {
-    std::istringstream iss(hexString);
-    std::string byteStr;
+    std::string clean;
+    for (const char* p = hexString; *p; ++p) {
+        if (std::isxdigit(static_cast<unsigned char>(*p))) {
+            clean += *p;
+        }
+    }
     std::vector<uint8_t> bytes;
-    while (iss >> std::setw(2) >> std::hex >> byteStr) {
+    for (size_t i = 0; i + 1 < clean.size(); i += 2) {
+        std::string byteStr = clean.substr(i, 2);
         bytes.push_back(static_cast<uint8_t>(std::stoi(byteStr, nullptr, 16)));
     }
-    resize(bytes.size() * 8);
-    std::memcpy(mStart, bytes.data(), bytes.size());
-    mL2Length = bytes.size();
+    if (!bytes.empty()) {
+        resize(bytes.size() * 8);
+        std::memcpy(mStart, bytes.data(), bytes.size());
+        mL2Length = bytes.size();
+    }
     init();
 }
 

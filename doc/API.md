@@ -975,6 +975,110 @@ public:
 
 **File:** `gsml3parser/mm/l3mmmessages.h` | **Spec:** GSM 04.08 9.2
 
+### 6.0 MM Information Elements
+
+**File:** `gsml3parser/mm/l3mmlements.h`
+
+#### L3CMServiceType
+
+**Spec:** GSM 04.08 10.5.3.3
+
+```cpp
+class L3CMServiceType : public L3ProtocolElement {
+public:
+    enum TypeCode : uint8_t {
+        UndefinedType = 0,
+        MobileOriginatedCall = 1,
+        EmergencyCall = 2,
+        ShortMessage = 4,
+        SupplementaryService = 8,
+        VoiceCallGroup = 9,
+        VoiceBroadcast = 10,
+        LocationService = 11
+    };
+    explicit L3CMServiceType(TypeCode wType = UndefinedType);
+    TypeCode type() const;
+    bool isCC() const;
+    bool isSMS() const;
+    bool isMM() const;
+    size_t lengthV() const override { return 0; }
+};
+```
+
+#### L3RejectCauseIE
+
+**Spec:** GSM 04.08 10.5.3.6
+
+```cpp
+class L3RejectCauseIE : public L3ProtocolElement {
+public:
+    explicit L3RejectCauseIE(MMRejectCause wCause = MMRejectCause::Zero);
+    MMRejectCause rejectCause() const;
+    size_t lengthV() const override { return 1; }
+};
+```
+
+#### L3NetworkName
+
+**Spec:** GSM 04.08 10.5.3.5a
+
+```cpp
+class L3NetworkName : public L3ProtocolElement {
+public:
+    L3NetworkName(const char* wName = "", GSMAlphabet alphabet = GSMAlphabet::ALPHABET_7BIT, int wCI = 0);
+    const char* name() const;
+    GSMAlphabet alphabet() const;
+    size_t lengthV() const override;
+};
+```
+
+#### L3TimeZoneAndTime
+
+**Spec:** GSM 04.08 10.5.3.9
+
+```cpp
+class L3TimeZoneAndTime : public L3ProtocolElement {
+public:
+    enum TimeType : uint8_t { LOCAL_TIME, UTC_TIME };
+    L3TimeZoneAndTime(TimeType type = UTC_TIME);
+    uint8_t year() const;
+    uint8_t month() const;
+    uint8_t day() const;
+    uint8_t hour() const;
+    uint8_t minute() const;
+    uint8_t timezone() const;
+    TimeType type() const;
+    size_t lengthV() const override { return 7; }
+};
+```
+
+#### L3RAND
+
+**Spec:** GSM 04.08 10.5.3.1
+
+```cpp
+class L3RAND : public L3ProtocolElement {
+public:
+    L3RAND();
+    explicit L3RAND(const std::vector<uint8_t>& rand);
+    const std::vector<uint8_t>& rand() const;
+    size_t lengthV() const override { return 16; }
+};
+```
+
+#### L3SRES
+
+**Spec:** GSM 04.08 10.5.3.2
+
+```cpp
+class L3SRES : public L3ProtocolElement {
+public:
+    explicit L3SRES(uint32_t wValue = 0);
+    uint32_t value() const;
+    size_t lengthV() const override { return 4; }
+};
+```
+
 ### 6.1 L3MMMessage
 
 Base class for all MM messages.
@@ -1236,6 +1340,141 @@ public:
 
 **File:** `gsml3parser/cc/l3ccmessages.h` | **Spec:** GSM 04.08 9.3 / ISDN Q.931
 
+### 7.0 CC Mixin Classes
+
+CC messages use mixin classes for shared functionality.
+
+**File:** `gsml3parser/cc/l3cclements.h`
+
+#### L3CCCapabilities
+
+Provides bearer capability and codec list IEs:
+
+```cpp
+class L3CCCapabilities {
+public:
+    L3BearerCapability mBearerCapability;
+    L3SupportedCodecList mSupportedCodecs;
+    std::string getCodecSet() const;
+};
+```
+
+#### L3CCCommonIEs
+
+Provides supplementary service facility and version indicator IEs:
+
+```cpp
+class L3CCCommonIEs {
+public:
+    bool mHaveFacility;
+    L3SupServFacilityIE mFacility;
+    bool mHaveSSVersion;
+    L3SupServVersionIndicator mSSVersion;
+    void ccCommonText(std::ostream&) const;
+    void ccCommonParse(const L3Frame& src, size_t& rp);
+    void ccCommonWrite(L3Frame& dest, size_t& wp) const;
+    size_t ccCommonLength() const;
+};
+```
+
+#### L3BearerCapability
+
+**Spec:** GSM 04.08 10.5.4.5
+
+```cpp
+class L3BearerCapability : public L3ProtocolElement {
+public:
+    L3BearerCapability();
+    bool isPresent() const;
+    uint8_t octet3() const;
+    const std::vector<uint8_t>& octet3a() const;
+    bool getHalfRateSupport() const;
+    size_t lengthV() const override;
+};
+```
+
+#### L3SupportedCodecList
+
+**Spec:** GSM 04.08 10.5.4.32
+
+```cpp
+class L3SupportedCodecList : public L3ProtocolElement {
+public:
+    L3SupportedCodecList();
+    bool isGsmPresent() const;
+    bool isUmtsPresent() const;
+    const std::vector<uint8_t>& gsmCodecs() const;
+    const std::vector<uint8_t>& umtsCodecs() const;
+    size_t lengthV() const override;
+};
+```
+
+#### L3CalledPartyBCDNumber
+
+**Spec:** GSM 04.08 10.5.4.7
+
+```cpp
+class L3CalledPartyBCDNumber : public L3ProtocolElement {
+public:
+    L3CalledPartyBCDNumber();
+    explicit L3CalledPartyBCDNumber(const char* wDigits);
+    TypeOfNumber type() const;
+    NumberingPlan plan() const;
+    const char* digits() const;
+    size_t lengthV() const override;
+};
+```
+
+#### L3CallingPartyBCDNumber
+
+**Spec:** GSM 04.08 10.5.4.9
+
+```cpp
+class L3CallingPartyBCDNumber : public L3ProtocolElement {
+public:
+    L3CallingPartyBCDNumber();
+    explicit L3CallingPartyBCDNumber(const char* wDigits);
+    TypeOfNumber type() const;
+    NumberingPlan plan() const;
+    const char* digits() const;
+    size_t lengthV() const override;
+};
+```
+
+#### L3CauseElement
+
+**Spec:** GSM 04.08 10.5.4.11
+
+```cpp
+class L3CauseElement : public L3ProtocolElement {
+public:
+    using Location = CCCauseLocation;
+    using Cause = CCCause;
+    L3CauseElement(Cause wCause = Cause::Normal_Call_Clearing,
+                   Location wLocation = Location::Private_Serving_Local);
+    Location location() const;
+    Cause cause() const;
+    size_t lengthV() const override { return 2; }
+};
+```
+
+#### L3ProgressIndicator
+
+**Spec:** GSM 04.08 10.5.4.21
+
+```cpp
+class L3ProgressIndicator : public L3ProtocolElement {
+public:
+    enum Location : uint8_t { User, PrivateServingLocal, PublicServingLocal, ... };
+    enum Progress : uint8_t { Unspecified, NotISDN, DestinationNotISDN, ... };
+    L3ProgressIndicator(Progress wProgress = Unspecified,
+                        Location wLocation = PrivateServingLocal);
+    Location location() const;
+    Progress progress() const;
+    size_t lengthV() const override { return 2; }
+};
+```
+
 ### 7.1 L3CCMessage
 
 Base class for all CC messages. Includes TI (Transaction Identifier) in header.
@@ -1277,15 +1516,15 @@ public:
 **Spec:** GSM 04.08 9.3.19
 
 ```cpp
-class L3Setup : public L3CCMessage {
+class L3Setup : public L3CCMessage, public L3CCCapabilities, public L3CCCommonIEs {
 public:
     explicit L3Setup(unsigned wTI = 7);
-    L3Setup(unsigned wTI, TypeOfNumber ton, NumberingPlan np, const std::string& digits);
+    L3Setup(unsigned wTI, const L3CalledPartyBCDNumber& wCalled);
 
     bool haveCalledParty() const;
     TypeOfNumber typeOfNumber() const;
     NumberingPlan numberingPlan() const;
-    const std::string& digits() const;
+    const char* digits() const;
     int MTI() const override { return Setup; }
 };
 ```
@@ -1311,6 +1550,8 @@ public:
 class L3CallProceeding : public L3CCMessage {
 public:
     explicit L3CallProceeding(unsigned wTI = 7);
+    bool hasProgress() const;
+    const L3ProgressIndicator& progress() const;
     int MTI() const override { return CallProceeding; }
     size_t l2BodyLength() const override;
 };
@@ -1321,9 +1562,11 @@ public:
 **Spec:** GSM 04.08 9.3.1
 
 ```cpp
-class L3Alerting : public L3CCMessage {
+class L3Alerting : public L3CCMessage, public L3CCCommonIEs {
 public:
     explicit L3Alerting(unsigned wTI = 7);
+    bool hasProgress() const;
+    const L3ProgressIndicator& progress() const;
     int MTI() const override { return Alerting; }
     size_t l2BodyLength() const override;
 };
@@ -1360,9 +1603,11 @@ public:
 **Spec:** GSM 04.08 9.3.2
 
 ```cpp
-class L3CallConfirmed : public L3CCMessage {
+class L3CallConfirmed : public L3CCMessage, public L3CCCapabilities {
 public:
     explicit L3CallConfirmed(unsigned wTI = 7);
+    bool hasCause() const;
+    const L3CauseElement& cause() const;
     int MTI() const override { return CallConfirmed; }
     size_t l2BodyLength() const override;
 };
@@ -1390,7 +1635,7 @@ public:
 **Spec:** GSM 04.08 9.3.19
 
 ```cpp
-class L3Release : public L3CCMessage {
+class L3Release : public L3CCMessage, public L3CCCommonIEs {
 public:
     explicit L3Release(unsigned wTI = 7);
     L3Release(unsigned wTI, CCCause cause);
@@ -1398,6 +1643,7 @@ public:
     bool haveCause() const;
     CCCause cause() const;
     int MTI() const override { return Release; }
+    size_t l2BodyLength() const override;
 };
 ```
 
@@ -1406,11 +1652,14 @@ public:
 **Spec:** GSM 04.08 9.3.19
 
 ```cpp
-class L3ReleaseComplete : public L3CCMessage {
+class L3ReleaseComplete : public L3CCMessage, public L3CCCommonIEs {
 public:
     explicit L3ReleaseComplete(unsigned wTI = 7);
     L3ReleaseComplete(unsigned wTI, CCCause cause);
+    bool haveCause() const;
+    CCCause cause() const;
     int MTI() const override { return ReleaseComplete; }
+    size_t l2BodyLength() const override;
 };
 ```
 

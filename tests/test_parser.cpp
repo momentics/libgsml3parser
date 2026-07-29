@@ -50,8 +50,8 @@ TEST(ParserTest, ParseRR_ChannelRelease) {
 }
 
 TEST(ParserTest, ParseCC_Disconnect) {
-    uint8_t data[] = {0x07, 0x03, 0x25, 0x10, 0x00};
-    auto msg = parseL3(data, 5);
+    uint8_t data[] = {0x03, 0x25, 0x10, 0x00};
+    auto msg = parseL3(data, 4);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::CallControl);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Disconnect);

@@ -90,6 +90,7 @@ BitVector& BitVector::operator=(BitVector&& other) noexcept {
 
 void BitVector::alloc(size_t nbits) {
     mAlloc = nbits;
+    mSize = nbits;
     mStart = static_cast<uint8_t*>(std::malloc(bitVectorByteSize(nbits)));
     if (!mStart) throw std::bad_alloc();
 }
@@ -113,6 +114,7 @@ void BitVector::resize(size_t nbits) {
     mStart = tmp.mStart;
     mSize = nbits;
     mAlloc = nbits;
+    tmp.mStart = nullptr;  // Prevent tmp destructor from freeing stolen buffer
 }
 
 void BitVector::clear() {

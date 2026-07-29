@@ -387,7 +387,7 @@ TEST(MessagesTest, Common_L3MobileIdentityIMSI) {
     L3MobileIdentity id("250011234567890");
     EXPECT_EQ(id.type(), MobileIDType::IMSI);
     EXPECT_TRUE(id.isIMSI());
-    EXPECT_EQ(id.digits(), "250011234567890");
+    EXPECT_STREQ(id.digits(), "250011234567890");
 }
 
 TEST(MessagesTest, Common_L3MobileIdentityEquality) {
@@ -408,21 +408,17 @@ TEST(MessagesTest, L3Frame_Constructor) {
 }
 
 TEST(MessagesTest, L3Frame_HexConstructor) {
-    L3Frame frame(SAPI::SAPI0, "061900");
+    L3Frame frame(SAPI::SAPI0, "06 19 00");
     EXPECT_EQ(frame.PD(), L3PD::RadioResource);
     EXPECT_EQ(frame.MTI(), 0x19);
 }
 
 TEST(MessagesTest, L3Frame_PD_MTI) {
-    BitVector bv(16);
-    size_t wp = 0;
-    bv.writeField(wp, 0x06, 4);
-    bv.writeField(wp, 0x0D, 8);
-
     L3Frame frame(Primitive::L3_DATA, 16);
-    size_t wp2 = 0;
-    frame.writeField(wp2, 0x06, 4);
-    frame.writeField(wp2, 0x0D, 8);
+    size_t wp = 0;
+    frame.writeField(wp, 0, 4);      // TI = 0
+    frame.writeField(wp, 0x06, 4);   // PD = RadioResource
+    frame.writeField(wp, 0x0D, 8);   // MTI = ChannelRelease
 
     EXPECT_EQ(frame.PD(), L3PD::RadioResource);
     EXPECT_EQ(frame.MTI(), 0x0D);
@@ -454,7 +450,7 @@ TEST(MessagesTest, SkipTLV) {
     L3Frame frame(Primitive::L3_DATA, 24, SAPI::SAPI3);
     size_t wp = 0;
     frame.writeField(wp, 0x11, 8);
-    frame.writeField(wp, 2, 8);
+    frame.writeField(wp, 1, 8);
     frame.writeField(wp, 0xAB, 8);
 
     size_t rp = 0;
