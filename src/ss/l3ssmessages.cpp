@@ -20,6 +20,7 @@
 // SOFTWARE.
 
 #include "gsml3parser/ss/l3ssmessages.h"
+#include "gsml3parser/cc/l3cclements.h"
 #include "gsml3parser/logger.h"
 #include <sstream>
 #include <iomanip>
@@ -77,20 +78,22 @@ L3SupServRegisterMessage::L3SupServRegisterMessage(unsigned wTI, const std::stri
     : L3SupServMessage(wTI), mFacility(facility), mHaveVersion(false), mVersionIndicator(0) {}
 
 size_t L3SupServRegisterMessage::l2BodyLength() const {
-    return mFacility.lengthLV() + (mHaveVersion ? 2 : 0);
+    return mFacility.lengthTLV() + (mHaveVersion ? 2 : 0);
 }
 
 void L3SupServRegisterMessage::writeBody(L3Frame& dest, size_t& wp) const {
-    mFacility.writeLV(dest, wp);
+    mFacility.writeTLV(0x1c, dest, wp);
     if (mHaveVersion) {
+        dest.writeField(wp, 0x7f, 8);
         dest.writeField(wp, mVersionIndicator, 8);
     }
 }
 
 void L3SupServRegisterMessage::parseBody(const L3Frame& src, size_t& rp) {
-    mFacility.parseLV(src, rp);
-    if (rp < src.size()) {
-        mHaveVersion = true;
+    mFacility.parseTLV(0x1c, src, rp);
+    mHaveVersion = (src.peekField(rp, 8) == 0x7f);
+    if (mHaveVersion) {
+        rp += 8;
         mVersionIndicator = src.readField(rp, 8);
     }
 }
@@ -113,21 +116,25 @@ L3SupServReleaseCompleteMessage::L3SupServReleaseCompleteMessage(unsigned wTI, C
     : L3SupServMessage(wTI), mHaveCause(true), mCause(cause) {}
 
 size_t L3SupServReleaseCompleteMessage::l2BodyLength() const {
-    return (mFacility.mExtant ? mFacility.lengthLV() : 0) + (mHaveCause ? 2 : 0);
+    size_t len = 0;
+    if (mFacility.mExtant) len += mFacility.lengthTLV();
+    if (mHaveCause) len += L3CauseElement(mCause).lengthTLV();
+    return len;
 }
 
 void L3SupServReleaseCompleteMessage::writeBody(L3Frame& dest, size_t& wp) const {
-    if (mFacility.mExtant) mFacility.writeLV(dest, wp);
     if (mHaveCause) {
-        dest.writeField(wp, static_cast<unsigned>(mCause), 8);
+        L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
+        cause.writeTLV(0x08, dest, wp);
     }
+    if (mFacility.mExtant) mFacility.writeTLV(0x1c, dest, wp);
 }
 
 void L3SupServReleaseCompleteMessage::parseBody(const L3Frame& src, size_t& rp) {
-    if (rp < src.size()) {
-        // Try to parse as facility or cause
-        mFacility.parseLV(src, rp);
-    }
+    L3CauseElement cause;
+    mHaveCause = cause.parseTLV(0x08, src, rp);
+    if (mHaveCause) mCause = cause.cause();
+    mFacility.parseTLV(0x1c, src, rp);
 }
 
 void L3SupServReleaseCompleteMessage::text(std::ostream& os) const {

@@ -332,34 +332,36 @@ public:
 
 class L3ChannelModeModify : public L3RRMessageNRO {
 private:
-    unsigned mChannelModeRequested;
-    unsigned mChannelModeAcknowledged;
+    L3ChannelDescription mDescription;
+    L3ChannelMode mMode;
+    L3MultiRateConfiguration mMultiRate;
 public:
-    L3ChannelModeModify(unsigned requested = 0, unsigned acknowledged = 0);
+    L3ChannelModeModify();
+    L3ChannelModeModify(const L3ChannelDescription& wDesc, const L3ChannelMode& wMode);
     int MTI() const override { return ChannelModeModify; }
-    size_t l2BodyLength() const override { return 2; }
+    bool isAMR() const { return mMode.isAMR(); }
+    size_t l2BodyLength() const override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;
-    unsigned channelModeRequested() const { return mChannelModeRequested; }
-    unsigned channelModeAcknowledged() const { return mChannelModeAcknowledged; }
+    const L3ChannelDescription& description() const { return mDescription; }
+    const L3ChannelMode& mode() const { return mMode; }
 };
 
 // ── Channel Mode Modify Acknowledge (GSM 04.08 9.1.6) ─────────────────
 
 class L3ChannelModeModifyAcknowledge : public L3RRMessageNRO {
 private:
-    unsigned mChannelModeRequested;
-    unsigned mChannelModeAcknowledged;
+    L3ChannelDescription mDescription;
+    L3ChannelMode mMode;
 public:
-    L3ChannelModeModifyAcknowledge(unsigned requested = 0, unsigned acknowledged = 0);
     int MTI() const override { return ChannelModeModifyAcknowledge; }
-    size_t l2BodyLength() const override { return 2; }
+    size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    unsigned channelModeRequested() const { return mChannelModeRequested; }
-    unsigned channelModeAcknowledged() const { return mChannelModeAcknowledged; }
+    const L3ChannelDescription& description() const { return mDescription; }
+    const L3ChannelMode& mode() const { return mMode; }
 };
 
 // ── GPRS Suspension Request (GSM 04.08 9.1.13b) ────────────────────────
@@ -412,25 +414,35 @@ class L3SystemInformationType3 : public L3RRMessageRO {
 private:
     L3CellIdentity mCI;
     L3LocationAreaIdentity mLAI;
-    // Simplified — full implementation in .cpp
+    L3ControlChannelDescription mControlChannelDescription;
+    L3CellOptionsBCCH mCellOptions;
+    L3CellSelectionParameters mCellSelectionParameters;
+    L3RACHControlParameters mRACHControlParameters;
+    L3SI3RestOctets mRestOctets;
 public:
     int MTI() const override { return SystemInformationType3; }
     size_t l2BodyLength() const override { return 16; }
-    size_t restOctetsLength() const override;
+    size_t restOctetsLength() const override { return mRestOctets.lengthV(); }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
+    const L3CellIdentity& CI() const { return mCI; }
+    const L3LocationAreaIdentity& LAI() const { return mLAI; }
+    const L3ControlChannelDescription& controlChannelDescription() const { return mControlChannelDescription; }
+    const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
+    const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
+    const L3RACHControlParameters& rachaControl() const { return mRACHControlParameters; }
 };
 
 // ── System Information Type 13 (GSM 04.08 9.1.43a) ────────────────────
 
 class L3SystemInformationType13 : public L3RRMessageRO {
 private:
-    // Simplified
+    L3SI13RestOctets mRestOctets;
 public:
     int MTI() const override { return SystemInformationType13; }
     size_t l2BodyLength() const override { return 0; }
-    size_t restOctetsLength() const override;
+    size_t restOctetsLength() const override { return mRestOctets.lengthV(); }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
@@ -440,9 +452,14 @@ public:
 
 class L3ImmediateAssignment : public L3RRMessageNRO {
 private:
-    L3ChannelDescription mChannel;
-    L3ImmediateAssignmentInformation mIAInfo;
-    L3MobileStationClassmark1 mClassmark;
+    L3PageMode mPageMode;
+    L3DedicatedModeOrTBF mDedicatedModeOrTBF;
+    L3RequestReference mRequestReference;
+    L3ChannelDescription mChannelDescription;
+    L3TimingAdvance mTimingAdvance;
+    std::vector<uint8_t> mMobileAllocation;
+    Bool_z mStartTimePresent;
+    uint32_t mStartTimeFrame;
 public:
     L3ImmediateAssignment();
     int MTI() const override { return ImmediateAssignment; }
@@ -450,17 +467,25 @@ public:
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    const L3ChannelDescription& channel() const { return mChannel; }
-    const L3ImmediateAssignmentInformation& iaInfo() const { return mIAInfo; }
+    const L3ChannelDescription& channelDescription() const { return mChannelDescription; }
+    const L3RequestReference& requestReference() const { return mRequestReference; }
+    const L3TimingAdvance& timingAdvance() const { return mTimingAdvance; }
+    bool hasStartTime() const { return mStartTimePresent; }
+    uint32_t startTimeFrame() const { return mStartTimeFrame; }
 };
 
 // ── Immediate Assignment Extended (GSM 04.08 9.1.18) ──────────────────
 
 class L3ImmediateAssignmentExtended : public L3RRMessageNRO {
 private:
-    L3ChannelDescription mChannel;
-    L3ImmediateAssignmentInformation mIAInfo;
-    L3MobileStationClassmark1 mClassmark;
+    L3PageMode mPageMode;
+    L3DedicatedModeOrTBF mDedicatedModeOrTBF;
+    L3RequestReference mRequestReference;
+    L3ChannelDescription mChannelDescription;
+    L3TimingAdvance mTimingAdvance;
+    std::vector<uint8_t> mMobileAllocation;
+    Bool_z mStartTimePresent;
+    uint32_t mStartTimeFrame;
     bool mHaveAdditionalChannel;
     L3AdditionalChannelDescription mAdditionalChannel;
 public:
@@ -470,7 +495,7 @@ public:
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    const L3ChannelDescription& channel() const { return mChannel; }
+    const L3ChannelDescription& channelDescription() const { return mChannelDescription; }
     bool hasAdditionalChannel() const { return mHaveAdditionalChannel; }
     const L3AdditionalChannelDescription& additionalChannel() const { return mAdditionalChannel; }
 };
@@ -479,15 +504,19 @@ public:
 
 class L3ImmediateAssignmentReject : public L3RRMessageNRO {
 private:
-    RRCause mCause;
+    L3PageMode mPageMode;
+    std::vector<L3RequestReference> mRequestReferences;
+    L3WaitIndication mWaitIndication;
 public:
-    explicit L3ImmediateAssignmentReject(RRCause wCause = RRCause::No_Cell_Available);
+    L3ImmediateAssignmentReject();
+    explicit L3ImmediateAssignmentReject(unsigned waitSeconds);
     int MTI() const override { return ImmediateAssignmentReject; }
-    size_t l2BodyLength() const override { return 1; }
+    size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    RRCause cause() const { return mCause; }
+    unsigned waitTime() const { return mWaitIndication.value(); }
+    const std::vector<L3RequestReference>& requestReferences() const { return mRequestReferences; }
 };
 
 // ── Paging Request Type 2 (GSM 04.08 9.1.23) ──────────────────────────
@@ -541,10 +570,11 @@ public:
 
 class L3HandoverCommand : public L3RRMessageNRO {
 private:
-    L3ChannelDescription mChannel;
-    L3MobileStationClassmark1 mClassmark;
-    bool mHavePowerCommand;
-    L3PowerCommand mPowerCommand;
+    L3CellDescription mCellDescription;
+    L3ChannelDescription2 mChannelDescriptionAfter;
+    L3HandoverReference mHandoverReference;
+    L3PowerCommandAndAccessType mPowerCommandAccessType;
+    L3SynchronizationIndication mSynchronizationIndication;
 public:
     L3HandoverCommand();
     int MTI() const override { return HandoverCommand; }
@@ -552,9 +582,11 @@ public:
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    const L3ChannelDescription& channel() const { return mChannel; }
-    bool hasPowerCommand() const { return mHavePowerCommand; }
-    const L3PowerCommand& powerCommand() const { return mPowerCommand; }
+    const L3CellDescription& cellDescription() const { return mCellDescription; }
+    const L3ChannelDescription2& channelDescriptionAfter() const { return mChannelDescriptionAfter; }
+    const L3HandoverReference& handoverReference() const { return mHandoverReference; }
+    const L3PowerCommandAndAccessType& powerCommandAccessType() const { return mPowerCommandAccessType; }
+    const L3SynchronizationIndication& syncIndication() const { return mSynchronizationIndication; }
 };
 
 // ── Additional Assignment (GSM 04.08 9.1.1) ───────────────────────────

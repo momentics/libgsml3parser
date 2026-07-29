@@ -157,10 +157,10 @@ TEST(MessagesTest, RR_ImmediateAssignmentExtended) {
 }
 
 TEST(MessagesTest, RR_ImmediateAssignmentReject) {
-    L3ImmediateAssignmentReject msg(RRCause::No_Cell_Available);
+    L3ImmediateAssignmentReject msg(30);
     EXPECT_EQ(msg.MTI(), L3RRMessage::ImmediateAssignmentReject);
-    EXPECT_EQ(msg.cause(), RRCause::No_Cell_Available);
-    EXPECT_EQ(msg.l2BodyLength(), 1u);
+    EXPECT_EQ(msg.waitTime(), 30u);
+    EXPECT_GE(msg.l2BodyLength(), 2u);
 }
 
 TEST(MessagesTest, RR_PhysicalInformation) {

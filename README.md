@@ -28,6 +28,8 @@ The library is a standalone, self-contained project with no external dependencie
 - **Fuzzing-ready** — Clean API suitable for libFuzzer integration
 - **90 unit tests** — Comprehensive test coverage for all protocols
 - **Spec-compliant** — Follows GSM 04.08 / 3GPP TS 24.008, GSM 04.07 / 3GPP TS 24.007
+- **V/TV/TLV/LV formats** — Correct handling of all GSM 04.07 IE formats per specification
+- **Bit-level parsing** — MSB-first bit ordering, half-octet field handling, H/L rest octet fill patterns
 
 ## Quick Start
 

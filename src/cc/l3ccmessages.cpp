@@ -399,11 +399,14 @@ void L3CCStatus::text(std::ostream& os) const {
 // ── DTMF ────────────────────────────────────────────────────────────────
 
 void L3StartDTMF::parseBody(const L3Frame& src, size_t& rp) {
-    mKey = static_cast<char>(src.readField(rp, 8));
+    L3KeypadFacility kf;
+    kf.parseTV(0x2c, src, rp);
+    mKey = kf.IA5();
 }
 
 void L3StartDTMF::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mKey), 8);
+    L3KeypadFacility kf(mKey);
+    kf.writeTV(0x2c, dest, wp);
 }
 
 void L3StartDTMF::text(std::ostream& os) const {
@@ -411,7 +414,8 @@ void L3StartDTMF::text(std::ostream& os) const {
 }
 
 void L3StartDTMFAcknowledge::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mKey), 8);
+    L3KeypadFacility kf(mKey);
+    kf.writeTV(0x2c, dest, wp);
 }
 
 void L3StartDTMFAcknowledge::text(std::ostream& os) const {
@@ -419,11 +423,14 @@ void L3StartDTMFAcknowledge::text(std::ostream& os) const {
 }
 
 void L3StartDTMFReject::parseBody(const L3Frame& src, size_t& rp) {
-    mCause = static_cast<CCCause>(src.readField(rp, 8));
+    L3CauseElement cause;
+    cause.parseLV(src, rp);
+    mCause = cause.cause();
 }
 
 void L3StartDTMFReject::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
+    L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
+    cause.writeLV(dest, wp);
 }
 
 void L3StartDTMFReject::text(std::ostream& os) const {
@@ -445,11 +452,14 @@ void L3Hold::text(std::ostream& os) const {
 }
 
 void L3HoldReject::parseBody(const L3Frame& src, size_t& rp) {
-    mCause = static_cast<CCCause>(src.readField(rp, 8));
+    L3CauseElement cause;
+    cause.parseLV(src, rp);
+    mCause = cause.cause();
 }
 
 void L3HoldReject::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
+    L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
+    cause.writeLV(dest, wp);
 }
 
 void L3HoldReject::text(std::ostream& os) const {
@@ -459,14 +469,18 @@ void L3HoldReject::text(std::ostream& os) const {
 // ── L3Progress ─────────────────────────────────────────────────────────
 
 void L3Progress::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mProgress, 8);
+    L3ProgressIndicator pi(static_cast<L3ProgressIndicator::Progress>(mProgress),
+                           L3ProgressIndicator::Location::PrivateServingLocal);
+    pi.writeLV(dest, wp);
 }
 
 void L3Progress::parseBody(const L3Frame& src, size_t& rp) {
-    mProgress = src.readField(rp, 8);
+    L3ProgressIndicator pi;
+    pi.parseLV(src, rp);
+    mProgress = static_cast<unsigned>(pi.progress());
 }
 
-size_t L3Progress::l2BodyLength() const { return 1; }
+size_t L3Progress::l2BodyLength() const { return 3; }
 
 void L3Progress::text(std::ostream& os) const {
     os << "Progress: " << mProgress;

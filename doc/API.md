@@ -850,7 +850,24 @@ public:
 };
 ```
 
-### 5.15 L3HandoverComplete
+### 5.15 L3HandoverCommand
+
+**Spec:** GSM 04.08 9.1.15 — V-format: CellDescription + ChannelDesc2 + HandoverRef + PowerCmd + SyncInd
+
+```cpp
+class L3HandoverCommand : public L3RRMessageNRO {
+public:
+    L3HandoverCommand();
+    const L3CellDescription& cellDescription() const;
+    const L3ChannelDescription2& channelDescriptionAfter() const;
+    const L3HandoverReference& handoverReference() const;
+    const L3PowerCommandAndAccessType& powerCommandAccessType() const;
+    const L3SynchronizationIndication& syncIndication() const;
+    int MTI() const override { return HandoverCommand; }
+};
+```
+
+### 5.16 L3HandoverComplete
 
 **Spec:** GSM 04.08 9.1.16
 
@@ -876,22 +893,29 @@ public:
 
 ### 5.17 L3ChannelModeModify
 
-**Spec:** GSM 04.08 9.1.5
+**Spec:** GSM 04.08 9.1.5 — V-format: ChannelDescription + ChannelMode [+ MultiRate for AMR]
 
 ```cpp
 class L3ChannelModeModify : public L3RRMessageNRO {
 public:
+    L3ChannelModeModify();
+    L3ChannelModeModify(const L3ChannelDescription& wDesc, const L3ChannelMode& wMode);
+    bool isAMR() const;
+    const L3ChannelDescription& description() const;
+    const L3ChannelMode& mode() const;
     int MTI() const override { return ChannelModeModify; }
 };
 ```
 
 ### 5.18 L3ChannelModeModifyAcknowledge
 
-**Spec:** GSM 04.08 9.1.6
+**Spec:** GSM 04.08 9.1.6 — V-format: ChannelDescription + ChannelMode
 
 ```cpp
 class L3ChannelModeModifyAcknowledge : public L3RRMessageNRO {
 public:
+    const L3ChannelDescription& description() const;
+    const L3ChannelMode& mode() const;
     int MTI() const override { return ChannelModeModifyAcknowledge; }
 };
 ```
@@ -931,7 +955,39 @@ public:
 };
 ```
 
-### 5.21 L3SystemInformationType1
+### 5.21 L3ImmediateAssignment
+
+**Spec:** GSM 04.08 9.1.19 — V-format: PageMode + DedicatedModeOrTBF + RequestReference + ChannelDescription + TimingAdvance + MobileAllocation
+
+```cpp
+class L3ImmediateAssignment : public L3RRMessageNRO {
+public:
+    L3ImmediateAssignment();
+    const L3ChannelDescription& channelDescription() const;
+    const L3RequestReference& requestReference() const;
+    const L3TimingAdvance& timingAdvance() const;
+    bool hasStartTime() const;
+    uint32_t startTimeFrame() const;
+    int MTI() const override { return ImmediateAssignment; }
+};
+```
+
+### 5.22 L3ImmediateAssignmentReject
+
+**Spec:** GSM 04.08 9.1.20 — V-format: PageMode + RequestReference(s) + WaitIndication
+
+```cpp
+class L3ImmediateAssignmentReject : public L3RRMessageNRO {
+public:
+    L3ImmediateAssignmentReject();
+    explicit L3ImmediateAssignmentReject(unsigned waitSeconds);
+    unsigned waitTime() const;
+    const std::vector<L3RequestReference>& requestReferences() const;
+    int MTI() const override { return ImmediateAssignmentReject; }
+};
+```
+
+### 5.23 L3SystemInformationType1
 
 **Spec:** GSM 04.08 9.1.31
 
@@ -1682,7 +1738,7 @@ public:
 
 ### 7.13 L3StartDTMF
 
-**Spec:** GSM 04.08 9.3.24
+**Spec:** GSM 04.08 9.3.24 — TV format: KeypadFacility (IEI=0x2c)
 
 ```cpp
 class L3StartDTMF : public L3CCMessage {
@@ -1696,7 +1752,7 @@ public:
 
 ### 7.14 L3StartDTMFAcknowledge
 
-**Spec:** GSM 04.08 9.3.25
+**Spec:** GSM 04.08 9.3.25 — TV format: KeypadFacility (IEI=0x2c)
 
 ```cpp
 class L3StartDTMFAcknowledge : public L3CCMessage {
@@ -1709,7 +1765,7 @@ public:
 
 ### 7.15 L3StartDTMFReject
 
-**Spec:** GSM 04.08 9.3.26
+**Spec:** GSM 04.08 9.3.26 — LV format: CauseElement
 
 ```cpp
 class L3StartDTMFReject : public L3CCMessage {
@@ -1761,7 +1817,7 @@ public:
 
 ### 7.19 L3HoldReject
 
-**Spec:** GSM 04.08 9.3.12
+**Spec:** GSM 04.08 9.3.12 — LV format: CauseElement
 
 ```cpp
 class L3HoldReject : public L3CCMessage {
@@ -1774,14 +1830,14 @@ public:
 
 ### 7.20 L3Progress
 
-**Spec:** GSM 04.08 9.3.17
+**Spec:** GSM 04.08 9.3.17 — LV format: ProgressIndicator (standalone). Note: when embedded inside Alerting/Connect/CallProceeding, the same IE uses TLV (IEI=0x1e).
 
 ```cpp
 class L3Progress : public L3CCMessage {
 public:
     explicit L3Progress(unsigned wTI);
     int MTI() const override { return Progress; }
-    size_t l2BodyLength() const override { return 1; }
+    size_t l2BodyLength() const override { return 3; }
 };
 ```
 
@@ -1828,7 +1884,7 @@ public:
 
 ### 8.3 L3SupServRegisterMessage
 
-**Spec:** GSM 04.80 2.4
+**Spec:** GSM 04.80 2.4 — TLV format: Facility (IEI=0x1c), SSVersion (IEI=0x7f)
 
 ```cpp
 class L3SupServRegisterMessage : public L3SupServMessage {
@@ -1845,7 +1901,7 @@ public:
 
 ### 8.4 L3SupServReleaseCompleteMessage
 
-**Spec:** GSM 04.80 2.5
+**Spec:** GSM 04.80 2.5 — TLV format: Cause (IEI=0x08), Facility (IEI=0x1c)
 
 ```cpp
 class L3SupServReleaseCompleteMessage : public L3SupServMessage {
@@ -1943,7 +1999,7 @@ Set `GSML3PARSER_LOG_LEVEL` to control the threshold (0–7). Default: 6 (INFO).
 
 ---
 
-## 12. Conformance Notes
+## 11. Conformance Notes
 
 ### 12.1 H/L Bit Fill Pattern
 
@@ -1972,7 +2028,23 @@ BCD digits follow GSM 04.07 11.2.1.1 encoding rules:
 - Last nibble is `0xF` filler for odd-length numbers
 - TMSI uses special 0xF4 header byte
 
-### 12.4 Paging Channel Needed Encoding
+### 11.4 IE Format Compliance
+
+The library strictly follows GSM 04.07 11.2.1.1.4 for IE formats:
+
+| Protocol | Format Used | Notes |
+|----------|-------------|-------|
+| RR messages | V (sequential) | Fields parsed in fixed order, no IEI prefixes |
+| RR Paging | LV for MobileIdentity | Second identity uses TLV (IEI=0x17) |
+| RR Classmark | LV + optional TLV | Classmark2 as LV, Classmark3 as TLV (IEI=0x20) |
+| CC messages | TLV/LV switch dispatch | IEI-based parsing, arbitrary order |
+| CC DTMF | TV (IEI=0x2c) | KeypadFacility with type prefix |
+| CC Progress | TLV (IEI=0x1e) | ProgressIndicator with type + length |
+| CC Cause | LV | CauseElement with length prefix |
+| SS Register | TLV | Facility (IEI=0x1c), SSVersion (IEI=0x7f) |
+| SS ReleaseComplete | TLV | Cause (IEI=0x08), Facility (IEI=0x1c) |
+
+### 11.5 Paging Channel Needed Encoding
 
 Paging Request messages (Type 1/2/3) encode Channel Needed as 2-bit codes
 (0=AnyDCCH, 1=SDCCH, 2=TCHF, 3=AnyTCH) in reversed half-octet order,

@@ -149,7 +149,9 @@ void L3PagingRequestType1::parseBody(const L3Frame& src, size_t& rp) {
     L3MobileIdentity id;
     id.parseLV(src, rp);
     mMobileIDs.push_back(id);
-    if (rp < src.size()) {
+    // Second mobile identity is TLV with IEI=0x17
+    if (rp + 16 <= src.size() && src.peekField(rp, 8) == 0x17) {
+        rp += 8;  // skip IEI
         L3MobileIdentity id2;
         id2.parseLV(src, rp);
         mMobileIDs.push_back(id2);
@@ -243,23 +245,23 @@ L3AssignmentCommand::L3AssignmentCommand()
     : mHavePowerCommand(false) {}
 
 size_t L3AssignmentCommand::l2BodyLength() const {
-    size_t len = mChannel.lengthTV();
-    if (mHavePowerCommand) len += mPowerCommand.lengthTV();
+    size_t len = mChannel.lengthV();
+    if (mHavePowerCommand) len += mPowerCommand.lengthV();
     return len;
 }
 
 void L3AssignmentCommand::parseBody(const L3Frame& src, size_t& rp) {
-    mChannel.parseTV(0x11, src, rp);
-    if (parseHasT(0x17, src, rp)) {
+    mChannel.parseV(src, rp);
+    if (rp + 8 <= src.size()) {
         mHavePowerCommand = true;
-        mPowerCommand.parseTV(0x17, src, rp);
+        mPowerCommand.parseV(src, rp);
     }
 }
 
 void L3AssignmentCommand::writeBody(L3Frame& dest, size_t& wp) const {
-    mChannel.writeTV(0x11, dest, wp);
+    mChannel.writeV(dest, wp);
     if (mHavePowerCommand) {
-        mPowerCommand.writeTV(0x17, dest, wp);
+        mPowerCommand.writeV(dest, wp);
     }
 }
 
@@ -408,50 +410,59 @@ void L3HandoverFailure::text(std::ostream& os) const {
 
 // ── L3ChannelModeModify ────────────────────────────────────────────────
 
-L3ChannelModeModify::L3ChannelModeModify(unsigned requested, unsigned acknowledged)
-    : mChannelModeRequested(requested), mChannelModeAcknowledged(acknowledged) {}
+L3ChannelModeModify::L3ChannelModeModify() {}
+
+L3ChannelModeModify::L3ChannelModeModify(const L3ChannelDescription& wDesc, const L3ChannelMode& wMode)
+    : mDescription(wDesc), mMode(wMode) {}
+
+size_t L3ChannelModeModify::l2BodyLength() const {
+    return mDescription.lengthV() + mMode.lengthV() + (isAMR() ? mMultiRate.lengthTLV() : 0);
+}
 
 void L3ChannelModeModify::parseBody(const L3Frame& src, size_t& rp) {
-    mChannelModeRequested = src.readField(rp, 4);
-    src.readField(rp, 4);
-    mChannelModeAcknowledged = src.readField(rp, 4);
-    src.readField(rp, 4);
+    mDescription.parseV(src, rp);
+    mMode.parseV(src, rp);
+    if (isAMR()) {
+        mMultiRate.parseTLV(0x15, src, rp);
+    }
 }
 
 void L3ChannelModeModify::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mChannelModeRequested, 4);
-    dest.writeField(wp, 0, 4);
-    dest.writeField(wp, mChannelModeAcknowledged, 4);
-    dest.writeField(wp, 0, 4);
+    mDescription.writeV(dest, wp);
+    mMode.writeV(dest, wp);
+    if (isAMR()) {
+        mMultiRate.writeTLV(0x15, dest, wp);
+    }
 }
 
 void L3ChannelModeModify::text(std::ostream& os) const {
-    os << "ChannelModeModify: requested=" << mChannelModeRequested
-       << " acknowledged=" << mChannelModeAcknowledged;
+    os << "ChannelModeModify: ";
+    mDescription.text(os);
+    os << " ";
+    mMode.text(os);
 }
 
 // ── L3ChannelModeModifyAcknowledge ─────────────────────────────────────
 
-L3ChannelModeModifyAcknowledge::L3ChannelModeModifyAcknowledge(unsigned requested, unsigned acknowledged)
-    : mChannelModeRequested(requested), mChannelModeAcknowledged(acknowledged) {}
-
 void L3ChannelModeModifyAcknowledge::parseBody(const L3Frame& src, size_t& rp) {
-    mChannelModeRequested = src.readField(rp, 4);
-    src.readField(rp, 4);
-    mChannelModeAcknowledged = src.readField(rp, 4);
-    src.readField(rp, 4);
+    mDescription.parseV(src, rp);
+    mMode.parseV(src, rp);
+}
+
+size_t L3ChannelModeModifyAcknowledge::l2BodyLength() const {
+    return mDescription.lengthV() + mMode.lengthV();
 }
 
 void L3ChannelModeModifyAcknowledge::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mChannelModeRequested, 4);
-    dest.writeField(wp, 0, 4);
-    dest.writeField(wp, mChannelModeAcknowledged, 4);
-    dest.writeField(wp, 0, 4);
+    mDescription.writeV(dest, wp);
+    mMode.writeV(dest, wp);
 }
 
 void L3ChannelModeModifyAcknowledge::text(std::ostream& os) const {
-    os << "ChannelModeModifyAcknowledge: requested=" << mChannelModeRequested
-       << " acknowledged=" << mChannelModeAcknowledged;
+    os << "ChannelModeModifyAcknowledge: ";
+    mDescription.text(os);
+    os << " ";
+    mMode.text(os);
 }
 
 // ── L3GPRSSuspensionRequest ────────────────────────────────────────────
@@ -477,7 +488,10 @@ void L3GPRSSuspensionRequest::writeBody(L3Frame& dest, size_t& wp) const {
         dest.writeField(wp, mRaId[i], 8);
     }
     dest.writeField(wp, mSuspensionCause, 8);
-    dest.writeField(wp, mServiceSupport, 8);
+    if (mServiceSupport) {
+        dest.writeField(wp, 0x01, 8);  // IEI for service support
+        dest.writeField(wp, mServiceSupport, 8);
+    }
 }
 
 void L3GPRSSuspensionRequest::text(std::ostream& os) const {
@@ -496,32 +510,45 @@ L3ApplicationInformation::L3ApplicationInformation(BitVector data, unsigned prot
       mLastSegment(last), mData(std::move(data)) {}
 
 size_t L3ApplicationInformation::l2BodyLength() const {
-    return 2 + (mData.size() + 7) / 8;
+    // APDU ID (4 bits) + APDU Flags (4 bits) + APDU Data (LV)
+    size_t dataLen = (mData.size() + 7) / 8;
+    return 1 + 1 + dataLen;  // 1 byte for ID+Flags, 1 byte for LV length, data
 }
 
 void L3ApplicationInformation::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mProtocolIdentifier, 4);
-    dest.writeField(wp, mCR, 1);
-    dest.writeField(wp, mFirstSegment, 1);
+    // Write APDU Flags first (half-octet reverse order), then APDU ID
     dest.writeField(wp, mLastSegment, 1);
+    dest.writeField(wp, mFirstSegment, 1);
+    dest.writeField(wp, mCR, 1);
     dest.writeField(wp, 0, 1);  // spare
+    dest.writeField(wp, mProtocolIdentifier, 4);
+    // Write APDU Data as LV
+    size_t dataLen = (mData.size() + 7) / 8;
+    dest.writeField(wp, dataLen, 8);  // length in bytes
     size_t wp2 = 0;
     for (size_t i = 0; i < mData.size(); ++i) {
         unsigned bit = mData.readField(wp2, 1);
         dest.writeField(wp, bit, 1);
     }
+    // Pad to byte boundary
+    while (wp % 8 != 0) {
+        dest.writeField(wp, 0, 1);
+    }
 }
 
 void L3ApplicationInformation::parseBody(const L3Frame& src, size_t& rp) {
-    mProtocolIdentifier = src.readField(rp, 4);
-    mCR = src.readField(rp, 1);
-    mFirstSegment = src.readField(rp, 1);
+    // Parse APDU Flags first (half-octet reverse order), then APDU ID
     mLastSegment = src.readField(rp, 1);
+    mFirstSegment = src.readField(rp, 1);
+    mCR = src.readField(rp, 1);
     src.readField(rp, 1);  // spare
-    size_t remaining = src.size() - rp;
-    mData = BitVector(remaining);
+    mProtocolIdentifier = src.readField(rp, 4);
+    // Parse APDU Data as LV
+    size_t dataLen = src.readField(rp, 8);  // length in bytes
+    size_t bitsLen = dataLen * 8;
+    mData = BitVector(bitsLen);
     size_t wp2 = 0;
-    for (size_t i = 0; i < remaining; ++i) {
+    for (size_t i = 0; i < bitsLen && rp + 1 <= src.size(); ++i) {
         unsigned bit = src.readField(rp, 1);
         mData.writeField(wp2, bit, 1);
     }
@@ -535,16 +562,23 @@ void L3ApplicationInformation::text(std::ostream& os) const {
 
 // ── L3SystemInformationType3 ───────────────────────────────────────────
 
-size_t L3SystemInformationType3::restOctetsLength() const { return 0; }
-
 void L3SystemInformationType3::parseBody(const L3Frame& src, size_t& rp) {
     mCI.parseV(src, rp);
     mLAI.parseV(src, rp);
+    mControlChannelDescription.parseV(src, rp);
+    mCellOptions.parseV(src, rp);
+    mCellSelectionParameters.parseV(src, rp);
+    mRACHControlParameters.parseV(src, rp);
 }
 
 void L3SystemInformationType3::writeBody(L3Frame& dest, size_t& wp) const {
     mCI.writeV(dest, wp);
     mLAI.writeV(dest, wp);
+    mControlChannelDescription.writeV(dest, wp);
+    mCellOptions.writeV(dest, wp);
+    mCellSelectionParameters.writeV(dest, wp);
+    mRACHControlParameters.writeV(dest, wp);
+    mRestOctets.writeV(dest, wp);
 }
 
 void L3SystemInformationType3::text(std::ostream& os) const {
@@ -552,88 +586,137 @@ void L3SystemInformationType3::text(std::ostream& os) const {
     mCI.text(os);
     os << " ";
     mLAI.text(os);
+    os << " ";
+    mControlChannelDescription.text(os);
+    os << " ";
+    mCellOptions.text(os);
+    os << " ";
+    mCellSelectionParameters.text(os);
+    os << " ";
+    mRACHControlParameters.text(os);
 }
 
 // ── L3SystemInformationType13 ──────────────────────────────────────────
 
-size_t L3SystemInformationType13::restOctetsLength() const { return 0; }
-
 void L3SystemInformationType13::parseBody(const L3Frame& src, size_t& rp) {
-    (void)src; (void)rp;
+    mRestOctets.parseV(src, rp);
 }
 
-void L3SystemInformationType13::writeBody(L3Frame&, size_t&) const {}
+void L3SystemInformationType13::writeBody(L3Frame& dest, size_t& wp) const {
+    mRestOctets.writeV(dest, wp);
+}
 
 void L3SystemInformationType13::text(std::ostream& os) const {
-    os << "SystemInformationType13";
+    os << "SystemInformationType13: ";
+    mRestOctets.text(os);
 }
 
 // ── L3ImmediateAssignment ──────────────────────────────────────────────
 
-L3ImmediateAssignment::L3ImmediateAssignment() {}
+L3ImmediateAssignment::L3ImmediateAssignment()
+    : mDedicatedModeOrTBF(false, false), mStartTimePresent(false), mStartTimeFrame(0) {}
 
 size_t L3ImmediateAssignment::l2BodyLength() const {
-    return mChannel.lengthTV() + mIAInfo.lengthTV() + mClassmark.lengthTV();
+    // PageMode(1/2) + DedicatedModeOrTBF(1/2) + RequestRef(3) + ChannelDesc(3) + TimingAdv(1) + MobileAlloc(var) + StartTime(opt,3)
+    size_t len = 1 + 3 + 3 + 1 + mMobileAllocation.size();
+    if (mStartTimePresent) len += 3;
+    return len;
 }
 
 void L3ImmediateAssignment::parseBody(const L3Frame& src, size_t& rp) {
-    mChannel.parseTV(0x11, src, rp);
-    mIAInfo.parseTV(0x19, src, rp);
-    mClassmark.parseTV(0x15, src, rp);
+    mPageMode.parseV(src, rp);
+    mDedicatedModeOrTBF.parseV(src, rp);
+    mRequestReference.parseV(src, rp);
+    mChannelDescription.parseV(src, rp);
+    mTimingAdvance.parseV(src, rp);
+    // Mobile Allocation - variable length, at least 1 byte
+    size_t remainingBytes = (src.size() - rp) / 8;
+    if (remainingBytes >= 1) {
+        mMobileAllocation.resize(remainingBytes);
+        for (size_t i = 0; i < remainingBytes; ++i) {
+            mMobileAllocation[i] = static_cast<uint8_t>(src.readField(rp, 8));
+        }
+    }
 }
 
 void L3ImmediateAssignment::writeBody(L3Frame& dest, size_t& wp) const {
-    mChannel.writeTV(0x11, dest, wp);
-    mIAInfo.writeTV(0x19, dest, wp);
-    mClassmark.writeTV(0x15, dest, wp);
+    mPageMode.writeV(dest, wp);
+    mDedicatedModeOrTBF.writeV(dest, wp);
+    mRequestReference.writeV(dest, wp);
+    mChannelDescription.writeV(dest, wp);
+    mTimingAdvance.writeV(dest, wp);
+    for (const auto& b : mMobileAllocation) {
+        dest.writeField(wp, b, 8);
+    }
+    if (mStartTimePresent) {
+        dest.writeField(wp, 1, 1);  // start time present
+        dest.writeField(wp, mStartTimeFrame, 23);
+    } else {
+        dest.writeField(wp, 0, 1);
+    }
 }
 
 void L3ImmediateAssignment::text(std::ostream& os) const {
     os << "ImmediateAssignment: ";
-    mChannel.text(os);
-    os << " ";
-    mIAInfo.text(os);
-    os << " ";
-    mClassmark.text(os);
+    mChannelDescription.text(os);
+    os << " TA=";
+    mTimingAdvance.text(os);
 }
 
 // ── L3ImmediateAssignmentExtended ──────────────────────────────────────
 
 L3ImmediateAssignmentExtended::L3ImmediateAssignmentExtended()
-    : mHaveAdditionalChannel(false) {}
+    : mDedicatedModeOrTBF(false, false), mStartTimePresent(false), mStartTimeFrame(0),
+      mHaveAdditionalChannel(false) {}
 
 size_t L3ImmediateAssignmentExtended::l2BodyLength() const {
-    size_t len = mChannel.lengthTV() + mIAInfo.lengthTV() + mClassmark.lengthTV();
-    if (mHaveAdditionalChannel) len += mAdditionalChannel.lengthTV();
+    size_t len = 1 + 3 + 3 + 1 + mMobileAllocation.size();
+    if (mStartTimePresent) len += 3;
+    if (mHaveAdditionalChannel) len += mAdditionalChannel.lengthV();
     return len;
 }
 
 void L3ImmediateAssignmentExtended::parseBody(const L3Frame& src, size_t& rp) {
-    mChannel.parseTV(0x11, src, rp);
-    mIAInfo.parseTV(0x19, src, rp);
-    mClassmark.parseTV(0x15, src, rp);
-    if (parseHasT(0x1a, src, rp)) {
-        mHaveAdditionalChannel = true;
-        mAdditionalChannel.parseTV(0x1a, src, rp);
+    mPageMode.parseV(src, rp);
+    mDedicatedModeOrTBF.parseV(src, rp);
+    mRequestReference.parseV(src, rp);
+    mChannelDescription.parseV(src, rp);
+    mTimingAdvance.parseV(src, rp);
+    // Mobile Allocation - variable length
+    size_t remainingBytes = (src.size() - rp) / 8;
+    if (remainingBytes >= 1) {
+        mMobileAllocation.resize(remainingBytes);
+        for (size_t i = 0; i < remainingBytes; ++i) {
+            mMobileAllocation[i] = static_cast<uint8_t>(src.readField(rp, 8));
+        }
     }
 }
 
 void L3ImmediateAssignmentExtended::writeBody(L3Frame& dest, size_t& wp) const {
-    mChannel.writeTV(0x11, dest, wp);
-    mIAInfo.writeTV(0x19, dest, wp);
-    mClassmark.writeTV(0x15, dest, wp);
+    mPageMode.writeV(dest, wp);
+    mDedicatedModeOrTBF.writeV(dest, wp);
+    mRequestReference.writeV(dest, wp);
+    mChannelDescription.writeV(dest, wp);
+    mTimingAdvance.writeV(dest, wp);
+    for (const auto& b : mMobileAllocation) {
+        dest.writeField(wp, b, 8);
+    }
+    if (mStartTimePresent) {
+        dest.writeField(wp, 1, 1);
+        dest.writeField(wp, mStartTimeFrame, 23);
+    } else {
+        dest.writeField(wp, 0, 1);
+    }
     if (mHaveAdditionalChannel) {
-        mAdditionalChannel.writeTV(0x1a, dest, wp);
+        mAdditionalChannel.writeV(dest, wp);
     }
 }
 
 void L3ImmediateAssignmentExtended::text(std::ostream& os) const {
     os << "ImmediateAssignmentExtended: ";
-    mChannel.text(os);
-    os << " ";
-    mIAInfo.text(os);
-    os << " ";
-    mClassmark.text(os);
+    mChannelDescription.text(os);
+    os << " TA=";
+    mTimingAdvance.text(os);
     if (mHaveAdditionalChannel) {
         os << " ";
         mAdditionalChannel.text(os);
@@ -642,19 +725,43 @@ void L3ImmediateAssignmentExtended::text(std::ostream& os) const {
 
 // ── L3ImmediateAssignmentReject ────────────────────────────────────────
 
-L3ImmediateAssignmentReject::L3ImmediateAssignmentReject(RRCause wCause)
-    : mCause(wCause) {}
+L3ImmediateAssignmentReject::L3ImmediateAssignmentReject()
+    : mPageMode(0), mWaitIndication(0) {}
+
+L3ImmediateAssignmentReject::L3ImmediateAssignmentReject(unsigned waitSeconds)
+    : mPageMode(0), mWaitIndication(waitSeconds) {}
+
+size_t L3ImmediateAssignmentReject::l2BodyLength() const {
+    // PageMode(1/2 octet) + RequestRef(3 bytes each) + WaitIndication(1 byte)
+    return 1 + mRequestReferences.size() * 3 + 1;
+}
 
 void L3ImmediateAssignmentReject::parseBody(const L3Frame& src, size_t& rp) {
-    mCause = static_cast<RRCause>(src.readField(rp, 8));
+    mPageMode.parseV(src, rp);
+    // Parse request references - at least one, up to remaining bytes / 3
+    size_t remaining = (src.size() - rp) / 8;
+    if (remaining >= 4) {
+        // At least 1 request ref (3 bytes) + wait indication (1 byte)
+        size_t numRefs = (remaining - 1) / 3;
+        for (size_t i = 0; i < numRefs; ++i) {
+            L3RequestReference rr;
+            rr.parseV(src, rp);
+            mRequestReferences.push_back(rr);
+        }
+    }
+    mWaitIndication.parseV(src, rp);
 }
 
 void L3ImmediateAssignmentReject::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
+    mPageMode.writeV(dest, wp);
+    for (const auto& rr : mRequestReferences) {
+        rr.writeV(dest, wp);
+    }
+    mWaitIndication.writeV(dest, wp);
 }
 
 void L3ImmediateAssignmentReject::text(std::ostream& os) const {
-    os << "ImmediateAssignmentReject: cause=" << RRCause2Str(mCause);
+    os << "ImmediateAssignmentReject: wait=" << mWaitIndication.value() << "s refs=" << mRequestReferences.size();
 }
 
 // ── L3PagingRequestType2 ───────────────────────────────────────────────
@@ -696,7 +803,8 @@ void L3PagingRequestType2::parseBody(const L3Frame& src, size_t& rp) {
     L3MobileIdentity id;
     id.parseLV(src, rp);
     mMobileIDs.push_back(id);
-    if (rp < src.size()) {
+    if (rp + 16 <= src.size() && src.peekField(rp, 8) == 0x17) {
+        rp += 8;
         L3MobileIdentity id2;
         id2.parseLV(src, rp);
         mMobileIDs.push_back(id2);
@@ -749,7 +857,8 @@ void L3PagingRequestType3::parseBody(const L3Frame& src, size_t& rp) {
     L3MobileIdentity id;
     id.parseLV(src, rp);
     mMobileIDs.push_back(id);
-    if (rp < src.size()) {
+    if (rp + 16 <= src.size() && src.peekField(rp, 8) == 0x17) {
+        rp += 8;
         L3MobileIdentity id2;
         id2.parseLV(src, rp);
         mMobileIDs.push_back(id2);
@@ -782,41 +891,41 @@ void L3PhysicalInformation::text(std::ostream& os) const {
 
 // ── L3HandoverCommand ──────────────────────────────────────────────────
 
-L3HandoverCommand::L3HandoverCommand()
-    : mHavePowerCommand(false) {}
+L3HandoverCommand::L3HandoverCommand() {}
 
 size_t L3HandoverCommand::l2BodyLength() const {
-    size_t len = mChannel.lengthTV() + mClassmark.lengthTV();
-    if (mHavePowerCommand) len += mPowerCommand.lengthTV();
-    return len;
+    return mCellDescription.lengthV() +
+           mChannelDescriptionAfter.lengthV() +
+           mHandoverReference.lengthV() +
+           mPowerCommandAccessType.lengthV() +
+           mSynchronizationIndication.lengthV();
 }
 
 void L3HandoverCommand::parseBody(const L3Frame& src, size_t& rp) {
-    mChannel.parseTV(0x11, src, rp);
-    if (parseHasT(0x15, src, rp)) {
-        mClassmark.parseTV(0x15, src, rp);
-    }
-    if (parseHasT(0x17, src, rp)) {
-        mHavePowerCommand = true;
-        mPowerCommand.parseTV(0x17, src, rp);
-    }
+    mCellDescription.parseV(src, rp);
+    mChannelDescriptionAfter.parseV(src, rp);
+    mHandoverReference.parseV(src, rp);
+    mPowerCommandAccessType.parseV(src, rp);
+    mSynchronizationIndication.parseV(src, rp);
 }
 
 void L3HandoverCommand::writeBody(L3Frame& dest, size_t& wp) const {
-    mChannel.writeTV(0x11, dest, wp);
-    mClassmark.writeTV(0x15, dest, wp);
-    if (mHavePowerCommand) {
-        mPowerCommand.writeTV(0x17, dest, wp);
-    }
+    mCellDescription.writeV(dest, wp);
+    mChannelDescriptionAfter.writeV(dest, wp);
+    mHandoverReference.writeV(dest, wp);
+    mPowerCommandAccessType.writeV(dest, wp);
+    mSynchronizationIndication.writeV(dest, wp);
 }
 
 void L3HandoverCommand::text(std::ostream& os) const {
     os << "HandoverCommand: ";
-    mChannel.text(os);
-    if (mHavePowerCommand) {
-        os << " ";
-        mPowerCommand.text(os);
-    }
+    mCellDescription.text(os);
+    os << " ";
+    mChannelDescriptionAfter.text(os);
+    os << " HORef=";
+    mHandoverReference.text(os);
+    os << " SyncInd=";
+    mSynchronizationIndication.text(os);
 }
 
 // ── L3AdditionalAssignment ─────────────────────────────────────────────
@@ -825,23 +934,23 @@ L3AdditionalAssignment::L3AdditionalAssignment()
     : mHavePowerCommand(false) {}
 
 size_t L3AdditionalAssignment::l2BodyLength() const {
-    size_t len = mAdditionalChannel.lengthTV();
-    if (mHavePowerCommand) len += mPowerCommand.lengthTV();
+    size_t len = mAdditionalChannel.lengthV();
+    if (mHavePowerCommand) len += mPowerCommand.lengthV();
     return len;
 }
 
 void L3AdditionalAssignment::parseBody(const L3Frame& src, size_t& rp) {
-    mAdditionalChannel.parseTV(0x1a, src, rp);
-    if (parseHasT(0x17, src, rp)) {
+    mAdditionalChannel.parseV(src, rp);
+    if (rp + 8 <= src.size()) {
         mHavePowerCommand = true;
-        mPowerCommand.parseTV(0x17, src, rp);
+        mPowerCommand.parseV(src, rp);
     }
 }
 
 void L3AdditionalAssignment::writeBody(L3Frame& dest, size_t& wp) const {
-    mAdditionalChannel.writeTV(0x1a, dest, wp);
+    mAdditionalChannel.writeV(dest, wp);
     if (mHavePowerCommand) {
-        mPowerCommand.writeTV(0x17, dest, wp);
+        mPowerCommand.writeV(dest, wp);
     }
 }
 
