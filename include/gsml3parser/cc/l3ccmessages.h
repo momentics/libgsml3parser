@@ -118,37 +118,52 @@ public:
 // ── Call Proceeding (GSM 04.08 9.3.3) ─────────────────────────────────
 
 class L3CallProceeding : public L3CCMessage {
+private:
+    bool mHaveProgress;
+    L3ProgressIndicator mProgress;
 public:
-    explicit L3CallProceeding(unsigned wTI = 7) : L3CCMessage(wTI) {}
+    explicit L3CallProceeding(unsigned wTI = 7) : L3CCMessage(wTI), mHaveProgress(false) {}
     int MTI() const override { return CallProceeding; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
     void text(std::ostream& os) const override;
+    bool hasProgress() const { return mHaveProgress; }
+    const L3ProgressIndicator& progress() const { return mProgress; }
 };
 
 // ── Alerting (GSM 04.08 9.3.1) ────────────────────────────────────────
 
 class L3Alerting : public L3CCMessage {
+private:
+    bool mHaveProgress;
+    L3ProgressIndicator mProgress;
 public:
-    explicit L3Alerting(unsigned wTI = 7) : L3CCMessage(wTI) {}
+    explicit L3Alerting(unsigned wTI = 7) : L3CCMessage(wTI), mHaveProgress(false) {}
     int MTI() const override { return Alerting; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
     void text(std::ostream& os) const override;
+    bool hasProgress() const { return mHaveProgress; }
+    const L3ProgressIndicator& progress() const { return mProgress; }
 };
 
 // ── Connect (GSM 04.08 9.3.5) ─────────────────────────────────────────
 
 class L3Connect : public L3CCMessage {
+private:
+    bool mHaveProgress;
+    L3ProgressIndicator mProgress;
 public:
-    explicit L3Connect(unsigned wTI = 7) : L3CCMessage(wTI) {}
+    explicit L3Connect(unsigned wTI = 7) : L3CCMessage(wTI), mHaveProgress(false) {}
     int MTI() const override { return Connect; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
     void text(std::ostream& os) const override;
+    bool hasProgress() const { return mHaveProgress; }
+    const L3ProgressIndicator& progress() const { return mProgress; }
 };
 
 // ── Connect Acknowledge (GSM 04.08 9.3.6) ─────────────────────────────

@@ -32,6 +32,7 @@
 #include "../l3frame.h"
 #include "../types.h"
 #include "../common/l3common.h"
+#include "l3mmlements.h"
 
 namespace gsml3parser {
 
@@ -221,13 +222,17 @@ public:
 
 class L3MMInformation : public L3MMMessage {
 private:
-    std::vector<uint8_t> mBodyData;
+    L3NetworkName mShortName;
+    L3TimeZoneAndTime mTime;
 public:
+    L3MMInformation();
     int MTI() const override { return MMInformation; }
     size_t l2BodyLength() const override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;
+    const L3NetworkName& shortName() const { return mShortName; }
+    const L3TimeZoneAndTime& time() const { return mTime; }
 };
 
 // ── Identity Request (GSM 04.08 9.2.10) ───────────────────────────────

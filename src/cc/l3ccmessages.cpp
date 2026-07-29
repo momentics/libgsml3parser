@@ -176,57 +176,79 @@ void L3Setup::text(std::ostream& os) const {
 
 void L3CallProceeding::writeBody(L3Frame& dest, size_t& wp) const {
     if (mBearerCapability.mPresent) mBearerCapability.writeTLV(0x04, dest, wp);
+    if (mHaveProgress) mProgress.writeTLV(0x1e, dest, wp);
 }
 
 void L3CallProceeding::parseBody(const L3Frame& src, size_t& rp) {
+    // GSM 04.08 9.3.3: skip repeat indicator, bearer capability x2, facility, parse progress
     skipTV(0x0d, 4, src, rp);
     skipTLV(0x04, src, rp);
+    skipTLV(0x04, src, rp);
     skipTLV(0x1c, src, rp);
-    mBearerCapability.parseLV(src, rp);
+    mHaveProgress = mProgress.parseTLV(0x1e, src, rp);
 }
 
 size_t L3CallProceeding::l2BodyLength() const {
     size_t sum = 0;
     if (mBearerCapability.mPresent) sum += mBearerCapability.lengthTLV();
+    if (mHaveProgress) sum += mProgress.lengthTLV();
     return sum;
 }
 
 void L3CallProceeding::text(std::ostream& os) const {
     os << "CallProceeding";
     if (mBearerCapability.mPresent) os << " BearerCapability=(" << mBearerCapability << ")";
+    if (mHaveProgress) os << " Progress=(" << mProgress << ")";
 }
 
 // ── L3Alerting ─────────────────────────────────────────────────────────
 
 void L3Alerting::writeBody(L3Frame& dest, size_t& wp) const {
+    if (mHaveProgress) mProgress.writeTLV(0x1e, dest, wp);
     ccCommonWrite(dest, wp);
 }
 
 void L3Alerting::parseBody(const L3Frame& src, size_t& rp) {
+    // GSM 04.08 9.3.1: ccCommon, progress(TLV 0x1E), ccCommon again
+    ccCommonParse(src, rp);
+    mHaveProgress = mProgress.parseTLV(0x1e, src, rp);
     ccCommonParse(src, rp);
 }
 
-size_t L3Alerting::l2BodyLength() const { return ccCommonLength(); }
+size_t L3Alerting::l2BodyLength() const {
+    size_t sum = 0;
+    if (mHaveProgress) sum += mProgress.lengthTLV();
+    sum += ccCommonLength();
+    return sum;
+}
 
 void L3Alerting::text(std::ostream& os) const {
     os << "Alerting";
+    if (mHaveProgress) os << " Progress=(" << mProgress << ")";
     ccCommonText(os);
 }
 
 // ── L3Connect ──────────────────────────────────────────────────────────
 
 void L3Connect::writeBody(L3Frame& dest, size_t& wp) const {
-    (void)dest; (void)wp;
+    if (mHaveProgress) mProgress.writeTLV(0x1e, dest, wp);
 }
 
 void L3Connect::parseBody(const L3Frame& src, size_t& rp) {
+    // GSM 04.08 9.3.5: skip facility, parse progress
     skipTLV(0x1c, src, rp);
+    mHaveProgress = mProgress.parseTLV(0x1e, src, rp);
 }
 
-size_t L3Connect::l2BodyLength() const { return 0; }
+size_t L3Connect::l2BodyLength() const {
+    size_t len = 0;
+    if (mHaveProgress) len += mProgress.lengthTLV();
+    return len;
+}
 
 void L3Connect::text(std::ostream& os) const {
     os << "Connect";
+    if (mHaveProgress) os << " Progress=(" << mProgress << ")";
 }
 
 // ── L3CallConfirmed ────────────────────────────────────────────────────

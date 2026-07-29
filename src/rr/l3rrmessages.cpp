@@ -279,19 +279,21 @@ void L3AssignmentFailure::text(std::ostream& os) const {
 // ── L3ClassmarkChange ──────────────────────────────────────────────────
 
 size_t L3ClassmarkChange::l2BodyLength() const {
-    size_t len = 3;
-    if (mHaveAdditionalClassmark) len += mAdditionalClassmark.lengthV();
+    size_t len = mClassmark.lengthLV();
+    if (mHaveAdditionalClassmark) len += mAdditionalClassmark.lengthTLV();
     return len;
 }
 
 void L3ClassmarkChange::parseBody(const L3Frame& src, size_t& rp) {
-    mClassmark.parseV(src, rp);
+    // GSM 04.08 9.1.11: classmark(LV), additionalClassmark(TLV 0x20)
+    mClassmark.parseLV(src, rp);
+    mHaveAdditionalClassmark = mAdditionalClassmark.parseTLV(0x20, src, rp);
 }
 
 void L3ClassmarkChange::writeBody(L3Frame& dest, size_t& wp) const {
-    mClassmark.writeV(dest, wp);
+    mClassmark.writeLV(dest, wp);
     if (mHaveAdditionalClassmark) {
-        mAdditionalClassmark.writeV(dest, wp);
+        mAdditionalClassmark.writeTLV(0x20, dest, wp);
     }
 }
 
@@ -432,13 +434,18 @@ void L3ChannelModeModifyAcknowledge::text(std::ostream& os) const {
 // ── L3GPRSSuspensionRequest ────────────────────────────────────────────
 
 void L3GPRSSuspensionRequest::parseBody(const L3Frame& src, size_t& rp) {
+    // GSM 04.08 9.1.13b: TLLI(32), RaId(48), suspensionCause(8), optional serviceSupport(TLV 0x01)
     mTLLI = src.readField(rp, 32);
     mRaId.resize(6);
     for (size_t i = 0; i < 6; ++i) {
         mRaId[i] = static_cast<uint8_t>(src.readField(rp, 8));
     }
     mSuspensionCause = src.readField(rp, 8);
-    mServiceSupport = src.readField(rp, 8);
+    // Optional service support, IEI=0x01
+    if (rp + 16 <= src.size() && src.peekField(rp, 8) == 0x01) {
+        rp += 8;  // skip IEI
+        mServiceSupport = src.readField(rp, 8);
+    }
 }
 
 void L3GPRSSuspensionRequest::writeBody(L3Frame& dest, size_t& wp) const {

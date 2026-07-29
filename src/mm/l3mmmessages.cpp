@@ -68,23 +68,21 @@ LocationUpdateType L3LocationUpdatingRequest::getLocationUpdatingType() const {
 }
 
 void L3LocationUpdatingRequest::parseBody(const L3Frame& src, size_t& rp) {
-    mUpdateType = src.readField(rp, 2);
-    src.readField(rp, 2);  // spare
+    // GSM 04.08 9.2.15: CKSN(4), UpdateType(4), LAI(5V), Classmark(1V), MobileIdentity(LV)
     mCKSN = src.readField(rp, 4);
-    src.readField(rp, 4);  // spare
+    mUpdateType = src.readField(rp, 4);
+    mLAI.parseV(src, rp);
     mClassmark.parseV(src, rp);
     mMobileIdentity.parseLV(src, rp);
-    mLAI.parseV(src, rp);
 }
 
 void L3LocationUpdatingRequest::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mUpdateType, 2);
-    dest.writeField(wp, 0, 2);  // spare
+    // GSM 04.08 9.2.15: CKSN(4), UpdateType(4), LAI(5V), Classmark(1V), MobileIdentity(LV)
     dest.writeField(wp, mCKSN, 4);
-    dest.writeField(wp, 0, 4);  // spare
+    dest.writeField(wp, mUpdateType, 4);
+    mLAI.writeV(dest, wp);
     mClassmark.writeV(dest, wp);
     mMobileIdentity.writeLV(dest, wp);
-    mLAI.writeV(dest, wp);
 }
 
 void L3LocationUpdatingRequest::text(std::ostream& os) const {
@@ -198,22 +196,23 @@ void L3CMServiceReject::text(std::ostream& os) const {
 // ── L3CMServiceRequest ─────────────────────────────────────────────────
 
 size_t L3CMServiceRequest::l2BodyLength() const {
-    // classmark(3) + mobileID(LV) + serviceType(1/2)
-    return 3 + mMobileIdentity.lengthLV() + 1;
+    // ciphering(4) + serviceType(4) + classmark(LV) + mobileID(LV)
+    return 1 + mClassmark.lengthLV() + mMobileIdentity.lengthLV();
 }
 
 void L3CMServiceRequest::parseBody(const L3Frame& src, size_t& rp) {
-    mClassmark.parseV(src, rp);
-    mMobileIdentity.parseLV(src, rp);
+    // GSM 04.08 9.2.9: skip ciphering(4), serviceType(4), classmark(LV), mobileID(LV)
+    src.readField(rp, 4);  // skip ciphering key sequence number
     mServiceType = src.readField(rp, 4);
-    src.readField(rp, 4);  // spare
+    mClassmark.parseLV(src, rp);
+    mMobileIdentity.parseLV(src, rp);
 }
 
 void L3CMServiceRequest::writeBody(L3Frame& dest, size_t& wp) const {
-    mClassmark.writeV(dest, wp);
-    mMobileIdentity.writeLV(dest, wp);
+    dest.writeField(wp, 0, 4);  // spare ciphering
     dest.writeField(wp, mServiceType, 4);
-    dest.writeField(wp, 0, 4);  // spare
+    mClassmark.writeLV(dest, wp);
+    mMobileIdentity.writeLV(dest, wp);
 }
 
 void L3CMServiceRequest::text(std::ostream& os) const {
@@ -224,19 +223,24 @@ void L3CMServiceRequest::text(std::ostream& os) const {
 // ── L3CMReestablishmentRequest ─────────────────────────────────────────
 
 size_t L3CMReestablishmentRequest::l2BodyLength() const {
-    return 3 + mMobileID.lengthLV() + (mHaveLAI ? 5 : 0);
+    // ciphering(8) + classmark(LV) + mobileID(LV) + optional LAI(TLV)
+    return 1 + mClassmark.lengthLV() + mMobileID.lengthLV() + (mHaveLAI ? mLAI.lengthTLV(0x13) : 0);
 }
 
 void L3CMReestablishmentRequest::parseBody(const L3Frame& src, size_t& rp) {
-    mClassmark.parseV(src, rp);
-    mMobileID.parseV(src, rp, src.size() / 8 - rp / 8 - 3);
+    // GSM 04.08 9.2.4: skip ciphering(8), classmark(LV), mobileID(LV), optional LAI(TLV 0x13)
+    src.readField(rp, 8);  // skip ciphering key sequence number + spare
+    mClassmark.parseLV(src, rp);
+    mMobileID.parseLV(src, rp);
+    mHaveLAI = mLAI.parseTLV(0x13, src, rp);
 }
 
 void L3CMReestablishmentRequest::writeBody(L3Frame& dest, size_t& wp) const {
-    mClassmark.writeV(dest, wp);
+    dest.writeField(wp, 0, 8);  // spare ciphering
+    mClassmark.writeLV(dest, wp);
     mMobileID.writeLV(dest, wp);
     if (mHaveLAI) {
-        mLAI.writeV(dest, wp);
+        mLAI.writeTLV(0x13, dest, wp);
     }
 }
 
@@ -247,41 +251,46 @@ void L3CMReestablishmentRequest::text(std::ostream& os) const {
 
 // ── L3MMInformation ────────────────────────────────────────────────────
 
-size_t L3MMInformation::l2BodyLength() const { return mBodyData.size(); }
+size_t L3MMInformation::l2BodyLength() const {
+    size_t len = 0;
+    if (mShortName.lengthV() > 1) len += mShortName.lengthTLV();
+    len += mTime.lengthTV();
+    return len;
+}
 
 void L3MMInformation::parseBody(const L3Frame& src, size_t& rp) {
-    mBodyData.clear();
-    size_t remaining = src.size() - rp;
-    for (size_t i = 0; i < remaining; ++i) {
-        mBodyData.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
-    }
+    // GSM 04.08 9.2.15a: shortName(TLV 0x45), time(TV 0x47)
+    mShortName.parseTLV(0x45, src, rp);
+    mTime.parseTV(0x47, src, rp);
 }
 
 void L3MMInformation::writeBody(L3Frame& dest, size_t& wp) const {
-    for (size_t i = 0; i < mBodyData.size(); ++i) {
-        dest.writeField(wp, mBodyData[i], 8);
-    }
+    if (mShortName.lengthV() > 1) mShortName.writeTLV(0x45, dest, wp);
+    mTime.writeTV(0x47, dest, wp);
 }
 
 void L3MMInformation::text(std::ostream& os) const {
-    os << "MMInformation: ";
-    for (size_t i = 0; i < mBodyData.size(); ++i) {
-        os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mBodyData[i]);
+    os << "MMInformation:";
+    if (mShortName.lengthV() > 1) {
+        os << " shortName=(" << mShortName << ")";
     }
+    os << " time=(" << mTime << ")";
 }
 
 // ── L3IdentityRequest ──────────────────────────────────────────────────
 
 void L3IdentityRequest::parseBody(const L3Frame& src, size_t& rp) {
-    mType = static_cast<MobileIDType>(src.readField(rp, 2));
+    src.readField(rp, 4);  // spare
+    mType = static_cast<MobileIDType>(src.readField(rp, 4));
 }
 
 void L3IdentityRequest::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mType), 2);
+    dest.writeField(wp, 0, 4);  // spare half octet
+    dest.writeField(wp, static_cast<unsigned>(mType), 4);
 }
 
 void L3IdentityRequest::text(std::ostream& os) const {
-    os << "IdentityRequest: type=" << mType;
+    os << "IdentityRequest: type=" << static_cast<int>(mType);
 }
 
 // ── L3IdentityResponse ─────────────────────────────────────────────────
@@ -323,6 +332,7 @@ void L3AuthenticationRequest::parseBody(const L3Frame& src, size_t& rp) {
 }
 
 void L3AuthenticationRequest::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, 0, 4);  // spare half octet
     dest.writeField(wp, mCKSN, 4);
     for (const auto& b : mRAND) {
         dest.writeField(wp, b, 8);
