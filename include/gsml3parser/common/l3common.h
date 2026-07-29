@@ -175,37 +175,6 @@ public:
     void text(std::ostream& os) const override;
 };
 
-// ── RAND (GSM 04.08 10.5.1.8) ─────────────────────────────────────────
-
-class L3RAND : public L3ProtocolElement {
-private:
-    std::vector<uint8_t> mRAND;
-public:
-    L3RAND();
-    explicit L3RAND(const std::vector<uint8_t>& wRAND);
-    const std::vector<uint8_t>& RAND() const { return mRAND; }
-    size_t lengthV() const override { return 16; }
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
-    void text(std::ostream& os) const override;
-};
-
-// ── SRES (GSM 04.08 10.5.1.9) ─────────────────────────────────────────
-
-class L3SRES : public L3ProtocolElement {
-private:
-    uint32_t mSRES;
-public:
-    explicit L3SRES(uint32_t wSRES = 0) : mSRES(wSRES) {}
-    uint32_t SRES() const { return mSRES; }
-    size_t lengthV() const override { return 4; }
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
-    void text(std::ostream& os) const override;
-};
-
 // ── Frequency List (GSM 04.08 10.5.2.13) ──────────────────────────────
 // Variable bit-map format, 16 bytes fixed.
 
@@ -326,6 +295,35 @@ public:
     L3ChannelDescription2(TypeAndOffset wTypeAndOffset, unsigned wTN,
                           unsigned wTSC, unsigned wARFCN);
     L3ChannelDescription2(const L3ChannelDescription& other);
+};
+
+// ── Additional Channel Description ─────────────────────────────────────
+
+class L3AdditionalChannelDescription : public L3ProtocolElement {
+private:
+    TypeAndOffset mTypeAndOffset;
+    unsigned mTN;
+    unsigned mTSC;
+    unsigned mHFlag;
+    unsigned mARFCN;
+    unsigned mMAIO;
+    unsigned mHSN;
+public:
+    L3AdditionalChannelDescription();
+    L3AdditionalChannelDescription(TypeAndOffset wTypeAndOffset, unsigned wTN,
+                                    unsigned wTSC, unsigned wARFCN);
+    bool initialized() const { return mTypeAndOffset != TDMA_MISC; }
+    TypeAndOffset typeAndOffset() const { return mTypeAndOffset; }
+    unsigned TN() const { return mTN; }
+    unsigned TSC() const { return mTSC; }
+    unsigned ARFCN() const { return mARFCN; }
+    unsigned MAIO() const { return mMAIO; }
+    unsigned HSN() const { return mHSN; }
+    size_t lengthV() const override { return 3; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
 };
 
 // ── Power Command (GSM 04.08 10.5.2.28) ───────────────────────────────
@@ -898,7 +896,7 @@ public:
 
 // ── SI13 Rest Octets (GSM 04.08 10.5.2.37b) ───────────────────────────
 
-class L3GPRSCellOptions : public L3ProtocolElement {
+class L3GPRSCellOptions : public GenericMessageElement {
 private:
     unsigned mNMO;
     unsigned mT3168;
@@ -910,18 +908,18 @@ private:
 public:
     L3GPRSCellOptions();
     size_t lengthBits() const;
-    void writeBits(L3Frame& dest, size_t& wp) const;
-    void text(std::ostream& os) const;
+    void writeBits(L3Frame& dest, size_t& wp) const override;
+    void text(std::ostream& os) const override;
 };
 
-class L3GPRSSI13PowerControlParameters : public L3ProtocolElement {
+class L3GPRSSI13PowerControlParameters : public GenericMessageElement {
 private:
     unsigned mALPHA;
 public:
     L3GPRSSI13PowerControlParameters();
     size_t lengthBits() const;
-    void writeBits(L3Frame& dest, size_t& wp) const;
-    void text(std::ostream& os) const;
+    void writeBits(L3Frame& dest, size_t& wp) const override;
+    void text(std::ostream& os) const override;
 };
 
 class L3SI13RestOctets : public L3RestOctets {
@@ -941,82 +939,6 @@ public:
     void text(std::ostream& os) const override;
 };
 
-// ── Network Name (GSM 04.08 10.5.3.1) ─────────────────────────────────
-
-class L3NetworkName : public L3ProtocolElement {
-private:
-    std::string mName;
-    bool mShortName;
-public:
-    L3NetworkName(const std::string& name, bool shortName = true);
-    const std::string& name() const { return mName; }
-    bool isShort() const { return mShortName; }
-    size_t lengthV() const override;
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
-    void text(std::ostream& os) const override;
-};
-
-// ── Time Zone And Time (GSM 04.08 10.5.3.2) ───────────────────────────
-
-class L3TimeZoneAndTime : public L3ProtocolElement {
-public:
-    enum TimeType : uint8_t {
-        UTC_TIME = 0,
-        LOCAL_TIME = 1
-    };
-private:
-    TimeType mType;
-    int mTimezone;
-    unsigned mHour;
-    unsigned mMinute;
-public:
-    L3TimeZoneAndTime();
-    void type(TimeType t) { mType = t; }
-    TimeType getType() const { return mType; }
-    int getTimezone() const { return mTimezone; }
-    unsigned getHour() const { return mHour; }
-    unsigned getMinute() const { return mMinute; }
-    size_t lengthV() const override { return 2; }
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
-    void text(std::ostream& os) const override;
-};
-
-// ── CM Service Type (GSM 04.08 10.5.3.3) ──────────────────────────────
-
-class L3CMServiceType : public L3ProtocolElement {
-private:
-    unsigned mServiceType;
-    bool mFollowOn;
-public:
-    L3CMServiceType();
-    unsigned serviceType() const { return mServiceType; }
-    bool followOn() const { return mFollowOn; }
-    size_t lengthV() const override { return 0; }
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
-    void text(std::ostream& os) const override;
-};
-
-// ── Reject Cause IE (GSM 04.08 10.5.3.6) ──────────────────────────────
-
-class L3RejectCauseIE : public L3ProtocolElement {
-private:
-    MMRejectCause mCause;
-public:
-    explicit L3RejectCauseIE(MMRejectCause cause = MMRejectCause::Zero);
-    MMRejectCause cause() const { return mCause; }
-    size_t lengthV() const override { return 1; }
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
-    void text(std::ostream& os) const override;
-};
-
 // ── Follow On Proceed (GSM 04.08) ─────────────────────────────────────
 
 class L3FollowOnProceed : public L3ProtocolElement {
@@ -1025,250 +947,6 @@ public:
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
     void parseV(const L3Frame& src, size_t& rp, size_t) override;
-};
-
-// ── CC Common IEs ──────────────────────────────────────────────────────
-
-class L3SupServFacilityIE : public L3ProtocolElement {
-private:
-    std::string mData;
-public:
-    L3SupServFacilityIE();
-    explicit L3SupServFacilityIE(const std::string& wData);
-    const std::string& data() const { return mData; }
-    size_t lengthV() const override;
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
-    void text(std::ostream& os) const override;
-};
-
-class L3SupServVersionIndicator : public L3ProtocolElement {
-private:
-    unsigned mVersion;
-public:
-    L3SupServVersionIndicator();
-    unsigned version() const { return mVersion; }
-    size_t lengthV() const override { return 1; }
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
-    void text(std::ostream& os) const override;
-};
-
-class L3CCCommonIEs {
-public:
-    bool mHaveFacility;
-    L3SupServFacilityIE mFacility;
-    bool mHaveSSVersion;
-    L3SupServVersionIndicator mSSVersion;
-    L3CCCommonIEs();
-    void ccCommonText(std::ostream&) const;
-    void ccCommonParse(const L3Frame& src, size_t& rp);
-    void ccCommonWrite(L3Frame& dest, size_t& wp) const;
-    size_t ccCommonLength() const;
-};
-
-// ── Keypad Facility (for CC) ───────────────────────────────────────────
-
-class L3KeypadFacility : public L3ProtocolElement {
-private:
-    char mIA5;
-public:
-    explicit L3KeypadFacility(char wIA5 = 0);
-    char IA5() const { return mIA5; }
-    size_t lengthV() const override { return 1; }
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
-    void text(std::ostream& os) const override;
-};
-
-// ── Progress Indicator (for CC) ────────────────────────────────────────
-
-class L3ProgressIndicator : public L3ProtocolElement {
-public:
-    enum Location : uint8_t {
-        User = 0,
-        PrivateServingLocal = 1,
-        PublicServingLocal = 2,
-        PublicServingRemote = 4,
-        PrivateServingRemote = 5,
-        BeyondInternetworking = 10
-    };
-    enum Progress : uint8_t {
-        Unspecified = 0,
-        NotISDN = 1,
-        DestinationNotISDN = 2,
-        OriginationNotISDN = 3,
-        ReturnedToISDN = 4,
-        InBandAvailable = 8,
-        EndToEndISDN = 0x20,
-        Queuing = 0x40
-    };
-private:
-    Location mLocation;
-    Progress mProgress;
-public:
-    L3ProgressIndicator(Progress wProgress = Unspecified,
-                        Location wLocation = PrivateServingLocal);
-    Location location() const { return mLocation; }
-    Progress progress() const { return mProgress; }
-    size_t lengthV() const override { return 2; }
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
-    void text(std::ostream& os) const override;
-};
-
-// ── Cause Element (for CC) ─────────────────────────────────────────────
-
-class L3CauseElement : public L3ProtocolElement {
-public:
-    using Location = CCCauseLocation;
-    using Cause = CCCause;
-private:
-    Location mLocation;
-    Cause mCause;
-public:
-    L3CauseElement(Cause wCause = Cause::Normal_Call_Clearing,
-                   Location wLocation = Location::Private_Serving_Local);
-    Location location() const { return mLocation; }
-    Cause cause() const { return mCause; }
-    size_t lengthV() const override { return 2; }
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
-    void text(std::ostream& os) const override;
-};
-
-// ── Call State (for CC) ────────────────────────────────────────────────
-
-class L3CallState : public L3ProtocolElement {
-private:
-    unsigned mCallState;
-public:
-    explicit L3CallState(unsigned wCallState = 0);
-    unsigned callState() const { return mCallState; }
-    size_t lengthV() const override { return 1; }
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
-    void text(std::ostream& os) const override;
-};
-
-// ── Bearer Capability (for CC) ─────────────────────────────────────────
-
-class L3BearerCapability : public L3ProtocolElement {
-private:
-    uint8_t mOctet3;
-    std::vector<uint8_t> mOctet3a;
-public:
-    bool mPresent;
-    L3BearerCapability();
-    size_t lengthV() const override;
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
-    void text(std::ostream& os) const override;
-    bool getHalfRateSupport() const { return mOctet3 & 0x40; }
-};
-
-// ── Supported Codec List (for CC) ──────────────────────────────────────
-
-class L3SupportedCodecList : public L3ProtocolElement {
-private:
-    bool mGsmPresent;
-    bool mUmtsPresent;
-    std::vector<uint8_t> mGsmCodecs;
-    std::vector<uint8_t> mUmtsCodecs;
-public:
-    bool mPresent;
-    L3SupportedCodecList();
-    size_t lengthV() const override;
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
-    void text(std::ostream& os) const override;
-};
-
-// ── Called Party BCD Number (for CC) ───────────────────────────────────
-
-class L3CalledPartyBCDNumber : public L3ProtocolElement {
-private:
-    TypeOfNumber mType;
-    NumberingPlan mPlan;
-    std::string mDigits;
-public:
-    L3CalledPartyBCDNumber();
-    explicit L3CalledPartyBCDNumber(const char* wDigits);
-    TypeOfNumber type() const { return mType; }
-    NumberingPlan plan() const { return mPlan; }
-    const std::string& digits() const { return mDigits; }
-    size_t lengthV() const override;
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
-    void text(std::ostream& os) const override;
-};
-
-// ── Calling Party BCD Number (for CC) ──────────────────────────────────
-
-class L3CallingPartyBCDNumber : public L3ProtocolElement {
-private:
-    TypeOfNumber mType;
-    NumberingPlan mPlan;
-    std::string mDigits;
-    bool mHaveOctet3a;
-    int mPresentationIndicator;
-    int mScreeningIndicator;
-public:
-    L3CallingPartyBCDNumber();
-    explicit L3CallingPartyBCDNumber(const char* wDigits);
-    TypeOfNumber type() const { return mType; }
-    NumberingPlan plan() const { return mPlan; }
-    const std::string& digits() const { return mDigits; }
-    size_t lengthV() const override;
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
-    void text(std::ostream& os) const override;
-};
-
-// ── Signal (for CC) ────────────────────────────────────────────────────
-
-class L3Signal : public L3ProtocolElement {
-public:
-    enum SignalValues : uint8_t {
-        SignalDialToneOn = 0,
-        SignalRingBackToneOn = 1,
-        SignalInterceptToneOn = 2,
-        SignalNetworkCongestionToneOn = 3,
-        SignalBusyToneOn = 4,
-        SignalConfirmToneOn = 5,
-        SignalAnswerToneOn = 6,
-        SignalCallWaitingToneOn = 7,
-        SignalTonesOff = 0x3f,
-        SignalAlertingOff = 0x4f
-    };
-private:
-    SignalValues mSignalValue;
-public:
-    explicit L3Signal(SignalValues tone = SignalRingBackToneOn);
-    size_t lengthV() const override { return 1; }
-    void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
-    void text(std::ostream& os) const override;
-};
-
-// ── CC Capabilities mixin ──────────────────────────────────────────────
-
-class L3CCCapabilities {
-public:
-    L3BearerCapability mBearerCapability;
-    L3SupportedCodecList mSupportedCodecs;
-    std::string getCodecSet() const;
 };
 
 } // namespace gsml3parser

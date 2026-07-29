@@ -35,7 +35,7 @@ const unsigned char gGSMAlphabet[] = {
     '-','.','/','0','1','2','3','4','5','6','7','8',
     '9',':',';','<','=','>','?',0xa1,'A','B','C',
     'E','H','I','J','K','M','N','Q','R','U','V',
-    'W','X','Y','0xc4',0xd6,0xd1,0xdc,0xa7,0xff,
+    'W','X','Y',0xc4,0xd6,0xd1,0xdc,0xa7,0xff,
     'a','b','c','d','e','f','g','h','i','j','k',
     'l','m','n','o','p','q','s','t','u','v','w',
     'x','y','z',0xe4,0xf6,0xf1,0xfc,0xe1
@@ -73,17 +73,17 @@ std::string data2hex(const char* data, unsigned nbytes) {
 
 const unsigned RACHSpreadSlots[16] = {
     3,  5,  7, 10, 14, 21, 28, 42,
-    7, 10, 14, 21, 28, 42, 42, 42, 42, 42, 42, 42
+    7, 10, 14, 21, 28, 42, 42, 42
 };
 
 const unsigned RACHWaitSParam[16] = {
     2, 3, 3, 3, 3, 3, 3, 3,
-    4, 4, 4, 4, 4, 4, 4, 4, 4, 4
+    4, 4, 4, 4, 4, 4, 4, 4
 };
 
 const unsigned RACHWaitSParamCombined[16] = {
     2, 3, 3, 3, 3, 3, 3, 3,
-    3, 3, 3, 3, 3, 3, 3, 3, 3, 3
+    3, 3, 3, 3, 3, 3, 3, 3
 };
 
 // ── Time ────────────────────────────────────────────────────────────────

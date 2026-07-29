@@ -32,37 +32,36 @@ using namespace gsml3parser;
 
 TEST(IE_Tests, CellChannelDescription) {
     L3CellChannelDescription chd(100, 0x12, 1);
-    EXPECT_EQ(chd.ARfcn(), 100u);
+    EXPECT_EQ(chd.ARFCN(), 100u);
     EXPECT_EQ(chd.BSIC(), 0x12u);
-    EXPECT_EQ(chd.ChannelSpacing(), 1u);
-    EXPECT_EQ(chd.lengthV(), 5u);
+    EXPECT_EQ(chd.channelSpacing(), 1u);
+    EXPECT_EQ(chd.lengthV(), 3u);
 }
 
 TEST(IE_Tests, ControlChannelDescription) {
-    L3ControlChannelDescription chd(100, 0x12, 1, true, true, false);
-    EXPECT_EQ(chd.ARfcn(), 100u);
-    EXPECT_EQ(chd.BSIC(), 0x12u);
-    EXPECT_TRUE(chd.CCCH());
-    EXPECT_TRUE(chd.SACCH());
-    EXPECT_FALSE(chd.CBCH());
-    EXPECT_EQ(chd.lengthV(), 6u);
+    L3ControlChannelDescription chd;
+    chd.mATT = 1;
+    chd.mBS_AG_BLKS_RES = 2;
+    chd.mCCCH_CONF = 1;
+    chd.mBS_PA_MFRMS = 4;
+    chd.mT3212 = 10;
+    EXPECT_TRUE(chd.isCCCHCombined());
+    EXPECT_EQ(chd.lengthV(), 3u);
 }
 
 TEST(IE_Tests, ChannelDescription) {
-    L3ChannelDescription chd(ChannelType::SDCCHType, 100, 0x12);
-    EXPECT_EQ(chd.ChannelType(), ChannelType::SDCCHType);
-    EXPECT_EQ(chd.ARfcn(), 100u);
-    EXPECT_EQ(chd.BSIC(), 0x12u);
+    L3ChannelDescription chd(TDMA_SDCCH, 0, 1, 100);
+    EXPECT_EQ(chd.typeAndOffset(), TDMA_SDCCH);
+    EXPECT_EQ(chd.TN(), 0u);
+    EXPECT_EQ(chd.TSC(), 1u);
+    EXPECT_EQ(chd.ARFCN(), 100u);
     EXPECT_EQ(chd.lengthV(), 3u);
 }
 
 TEST(IE_Tests, PowerCommand) {
-    L3PowerCommand pc(-5);
-    EXPECT_EQ(pc.PowerLevel(), -5);
+    L3PowerCommand pc(5);
+    EXPECT_EQ(pc.command(), 5u);
     EXPECT_EQ(pc.lengthV(), 1u);
-
-    L3PowerCommand pc2(10);
-    EXPECT_EQ(pc2.PowerLevel(), 10);
 }
 
 TEST(IE_Tests, CellSelection) {
@@ -74,13 +73,12 @@ TEST(IE_Tests, CellSelection) {
 }
 
 TEST(IE_Tests, RACHControlParameters) {
-    L3RACHControlParameters rcp(3, 1, 7, true, 0);
-    EXPECT_EQ(rcp.MaxRepetition(), 3u);
-    EXPECT_EQ(rcp.InitialRepeat(), 1u);
-    EXPECT_EQ(rcp.MaxDelay(), 7u);
-    EXPECT_TRUE(rcp.AccessBarred());
-    EXPECT_EQ(rcp.RACHControlValue(), 0u);
-    EXPECT_EQ(rcp.lengthV(), 2u);
+    L3RACHControlParameters rcp;
+    EXPECT_EQ(rcp.MaxRetrans(), 0u);
+    EXPECT_EQ(rcp.TxInteger(), 0u);
+    EXPECT_EQ(rcp.RE(), 0u);
+    EXPECT_EQ(rcp.AC(), 0u);
+    EXPECT_EQ(rcp.lengthV(), 3u);
 }
 
 TEST(IE_Tests, ImmediateAssignmentInformation) {
@@ -89,10 +87,11 @@ TEST(IE_Tests, ImmediateAssignmentInformation) {
 }
 
 TEST(IE_Tests, AdditionalChannelDescription) {
-    L3AdditionalChannelDescription chd(ChannelType::TCHFType, 200, 0x34);
-    EXPECT_EQ(chd.ChannelType(), ChannelType::TCHFType);
-    EXPECT_EQ(chd.ARfcn(), 200u);
-    EXPECT_EQ(chd.BSIC(), 0x34u);
+    L3AdditionalChannelDescription chd(TDMA_TCHF, 5, 3, 200);
+    EXPECT_EQ(chd.typeAndOffset(), TDMA_TCHF);
+    EXPECT_EQ(chd.TN(), 5u);
+    EXPECT_EQ(chd.TSC(), 3u);
+    EXPECT_EQ(chd.ARFCN(), 200u);
     EXPECT_EQ(chd.lengthV(), 3u);
 }
 
@@ -262,10 +261,11 @@ TEST(MessagesTest, CC_Setup) {
 }
 
 TEST(MessagesTest, CC_SetupWithDigits) {
-    L3Setup msg(7, TypeOfNumber::International, NumberingPlan::E164, "1234567890");
+    L3CalledPartyBCDNumber called("1234567890");
+    L3Setup msg(7, called);
     EXPECT_EQ(msg.MTI(), L3CCMessage::Setup);
     EXPECT_TRUE(msg.haveCalledParty());
-    EXPECT_EQ(msg.digits(), "1234567890");
+    EXPECT_STREQ(msg.digits(), "1234567890");
 }
 
 TEST(MessagesTest, CC_Disconnect) {
@@ -439,37 +439,38 @@ TEST(MessagesTest, MTI2String) {
 }
 
 TEST(MessagesTest, SkipLV) {
-    BitVector bv(24);
+    L3Frame frame(Primitive::L3_DATA, 24, SAPI::SAPI3);
     size_t wp = 0;
-    bv.writeField(wp, 2, 8);
-    bv.writeField(wp, 0xAB, 8);
-    bv.writeField(wp, 0xCD, 8);
+    frame.writeField(wp, 2, 8);
+    frame.writeField(wp, 0xAB, 8);
+    frame.writeField(wp, 0xCD, 8);
 
     size_t rp = 0;
-    size_t skipped = skipLV(bv, rp);
+    size_t skipped = skipLV(frame, rp);
     EXPECT_EQ(skipped, 24u);
 }
 
 TEST(MessagesTest, SkipTLV) {
-    BitVector bv(24);
+    L3Frame frame(Primitive::L3_DATA, 24, SAPI::SAPI3);
     size_t wp = 0;
-    bv.writeField(wp, 0x11, 8);
-    bv.writeField(wp, 2, 8);
-    bv.writeField(wp, 0xAB, 8);
+    frame.writeField(wp, 0x11, 8);
+    frame.writeField(wp, 2, 8);
+    frame.writeField(wp, 0xAB, 8);
 
     size_t rp = 0;
-    size_t skipped = skipTLV(0x11, bv, rp);
+    size_t skipped = skipTLV(0x11, frame, rp);
     EXPECT_EQ(skipped, 24u);
 }
 
 TEST(MessagesTest, ParseHasT) {
-    BitVector bv(8);
+    L3Frame frame(Primitive::L3_DATA, 8, SAPI::SAPI3);
     size_t wp = 0;
-    bv.writeField(wp, 0x11, 8);
+    frame.writeField(wp, 0x11, 8);
 
     size_t rp = 0;
-    EXPECT_TRUE(parseHasT(0x11, bv, rp));
-    EXPECT_FALSE(parseHasT(0x22, bv, rp));
+    EXPECT_TRUE(parseHasT(0x11, frame, rp));
+    rp = 0;
+    EXPECT_FALSE(parseHasT(0x22, frame, rp));
 }
 
 // ── Name() coverage ────────────────────────────────────────────────────

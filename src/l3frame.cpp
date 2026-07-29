@@ -129,7 +129,7 @@ void L3Frame::text(std::ostream& os) const {
     }
     os << " SAPI=" << static_cast<int>(mSapi);
     os << " len=" << mL2Length;
-    os << " " << *this;
+    os << " " << *static_cast<const BitVector*>(this);
 }
 
 std::ostream& operator<<(std::ostream& os, const L3Frame& frame) {

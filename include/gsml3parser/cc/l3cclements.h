@@ -242,6 +242,52 @@ public:
     std::string getCodecSet() const;
 };
 
+// ── Supplementary Service Facility IE (GSM 04.08 10.5.4.1) ─────────────
+
+class L3SupServFacilityIE : public L3ProtocolElement {
+private:
+    std::string mData;
+public:
+    L3SupServFacilityIE();
+    explicit L3SupServFacilityIE(const std::string& wData);
+    const std::string& data() const { return mData; }
+    size_t lengthV() const override;
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── Supplementary Service Version Indicator (24.008 10.5.4.24) ─────────
+
+class L3SupServVersionIndicator : public L3ProtocolElement {
+private:
+    unsigned mVersion;
+public:
+    L3SupServVersionIndicator();
+    unsigned version() const { return mVersion; }
+    size_t lengthV() const override { return 1; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
+// ── CC Common IEs mixin ────────────────────────────────────────────────
+
+class L3CCCommonIEs {
+public:
+    bool mHaveFacility;
+    L3SupServFacilityIE mFacility;
+    bool mHaveSSVersion;
+    L3SupServVersionIndicator mSSVersion;
+    L3CCCommonIEs();
+    void ccCommonText(std::ostream&) const;
+    void ccCommonParse(const L3Frame& src, size_t& rp);
+    void ccCommonWrite(L3Frame& dest, size_t& wp) const;
+    size_t ccCommonLength() const;
+};
+
 } // namespace gsml3parser
 
 #endif // GSML3PARSER_CC_L3CCELEMENTS_H

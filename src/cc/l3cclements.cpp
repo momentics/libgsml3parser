@@ -447,15 +447,106 @@ void L3Signal::text(std::ostream& os) const {
 
 std::string L3CCCapabilities::getCodecSet() const {
     std::ostringstream oss;
-    if (mBearerCapability.mPresent) {
+    if (mBearerCapability.isPresent()) {
         oss << "Bearer:";
         mBearerCapability.text(oss);
     }
-    if (mSupportedCodecs.mPresent) {
+    if (mSupportedCodecs.isGsmPresent() || mSupportedCodecs.isUmtsPresent()) {
         oss << " Codecs:";
         mSupportedCodecs.text(oss);
     }
     return oss.str();
+}
+
+// ── L3SupServFacilityIE ─────────────────────────────────────────────────
+
+L3SupServFacilityIE::L3SupServFacilityIE() {}
+
+L3SupServFacilityIE::L3SupServFacilityIE(const std::string& wData)
+    : mData(wData) {}
+
+size_t L3SupServFacilityIE::lengthV() const {
+    return mData.size();
+}
+
+void L3SupServFacilityIE::writeV(L3Frame& dest, size_t& wp) const {
+    for (size_t i = 0; i < mData.size(); ++i) {
+        dest.writeField(wp, static_cast<unsigned char>(mData[i]), 8);
+    }
+}
+
+void L3SupServFacilityIE::parseV(const L3Frame& src, size_t& rp) {
+    throw ParseError("parseV not valid for SupServFacilityIE, use expectedLength");
+}
+
+void L3SupServFacilityIE::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+    mData.clear();
+    for (size_t i = 0; i < expectedLength; ++i) {
+        mData.push_back(static_cast<char>(src.readField(rp, 8)));
+    }
+}
+
+void L3SupServFacilityIE::text(std::ostream& os) const {
+    os << "Facility[";
+    for (size_t i = 0; i < mData.size(); ++i) {
+        os << std::hex << std::setw(2) << std::setfill('0')
+           << static_cast<int>(static_cast<unsigned char>(mData[i]));
+    }
+    os << "]";
+}
+
+// ── L3SupServVersionIndicator ───────────────────────────────────────────
+
+L3SupServVersionIndicator::L3SupServVersionIndicator()
+    : mVersion(0) {}
+
+void L3SupServVersionIndicator::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, mVersion, 8);
+}
+
+void L3SupServVersionIndicator::parseV(const L3Frame& src, size_t& rp) {
+    mVersion = src.readField(rp, 8);
+}
+
+void L3SupServVersionIndicator::parseV(const L3Frame& src, size_t& rp, size_t) {
+    parseV(src, rp);
+}
+
+void L3SupServVersionIndicator::text(std::ostream& os) const {
+    os << "SSVersion[" << mVersion << "]";
+}
+
+// ── L3CCCommonIEs ──────────────────────────────────────────────────────
+
+L3CCCommonIEs::L3CCCommonIEs()
+    : mHaveFacility(false), mHaveSSVersion(false) {}
+
+void L3CCCommonIEs::ccCommonText(std::ostream& os) const {
+    if (mHaveFacility) os << " facility=(" << mFacility << ")";
+    if (mHaveSSVersion) os << " SSVersion=(" << mSSVersion << ")";
+}
+
+size_t L3CCCommonIEs::ccCommonLength() const {
+    size_t result = 0;
+    if (mHaveFacility) result += mFacility.lengthLV();
+    if (mHaveSSVersion) result += mSSVersion.lengthV();
+    return result;
+}
+
+void L3CCCommonIEs::ccCommonParse(const L3Frame& src, size_t& rp) {
+    while (rp + 8 <= src.size()) {
+        unsigned thisIEI = src.peekField(rp, 8);
+        switch (thisIEI) {
+            case 0x1c: mHaveFacility = mFacility.parseTLV(0x1c, src, rp); continue;
+            case 0x7f: mHaveSSVersion = mSSVersion.parseTLV(0x7f, src, rp); continue;
+            default: return;
+        }
+    }
+}
+
+void L3CCCommonIEs::ccCommonWrite(L3Frame& dest, size_t& wp) const {
+    if (mHaveFacility) mFacility.writeTLV(0x1c, dest, wp);
+    if (mHaveSSVersion) mSSVersion.writeTLV(0x7f, dest, wp);
 }
 
 } // namespace gsml3parser

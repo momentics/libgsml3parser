@@ -20,6 +20,7 @@
 // SOFTWARE.
 
 #include "gsml3parser/rr/l3rrmessages.h"
+#include "gsml3parser/logger.h"
 #include <sstream>
 #include <iomanip>
 

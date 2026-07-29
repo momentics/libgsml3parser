@@ -20,6 +20,7 @@
 // SOFTWARE.
 
 #include "gsml3parser/mm/l3mmmessages.h"
+#include "gsml3parser/logger.h"
 #include <sstream>
 #include <iomanip>
 
@@ -64,13 +65,13 @@ size_t L3LocationUpdatingRequest::l2BodyLength() const {
 }
 
 LocationUpdateType L3LocationUpdatingRequest::getLocationUpdatingType() const {
-    return static_cast<LocationUpdateType>(mUpdateType & 0x3);
+    return static_cast<LocationUpdateType>(static_cast<uint8_t>(mUpdateType) & 0x3);
 }
 
 void L3LocationUpdatingRequest::parseBody(const L3Frame& src, size_t& rp) {
     // GSM 04.08 9.2.15: CKSN(4), UpdateType(4), LAI(5V), Classmark(1V), MobileIdentity(LV)
     mCKSN = src.readField(rp, 4);
-    mUpdateType = src.readField(rp, 4);
+    mUpdateType = static_cast<LocationUpdateType>(src.readField(rp, 4));
     mLAI.parseV(src, rp);
     mClassmark.parseV(src, rp);
     mMobileIdentity.parseLV(src, rp);
@@ -79,14 +80,14 @@ void L3LocationUpdatingRequest::parseBody(const L3Frame& src, size_t& rp) {
 void L3LocationUpdatingRequest::writeBody(L3Frame& dest, size_t& wp) const {
     // GSM 04.08 9.2.15: CKSN(4), UpdateType(4), LAI(5V), Classmark(1V), MobileIdentity(LV)
     dest.writeField(wp, mCKSN, 4);
-    dest.writeField(wp, mUpdateType, 4);
+    dest.writeField(wp, static_cast<unsigned>(mUpdateType), 4);
     mLAI.writeV(dest, wp);
     mClassmark.writeV(dest, wp);
     mMobileIdentity.writeLV(dest, wp);
 }
 
 void L3LocationUpdatingRequest::text(std::ostream& os) const {
-    os << "LocationUpdatingRequest: type=" << static_cast<int>(mUpdateType & 0x3)
+    os << "LocationUpdatingRequest: type=" << static_cast<int>(static_cast<uint8_t>(mUpdateType) & 0x3)
         << " CKSN=" << mCKSN;
     mMobileIdentity.text(os);
     os << " ";
@@ -224,7 +225,7 @@ void L3CMServiceRequest::text(std::ostream& os) const {
 
 size_t L3CMReestablishmentRequest::l2BodyLength() const {
     // ciphering(8) + classmark(LV) + mobileID(LV) + optional LAI(TLV)
-    return 1 + mClassmark.lengthLV() + mMobileID.lengthLV() + (mHaveLAI ? mLAI.lengthTLV(0x13) : 0);
+    return 1 + mClassmark.lengthLV() + mMobileID.lengthLV() + (mHaveLAI ? mLAI.lengthTLV() : 0);
 }
 
 void L3CMReestablishmentRequest::parseBody(const L3Frame& src, size_t& rp) {
@@ -250,6 +251,8 @@ void L3CMReestablishmentRequest::text(std::ostream& os) const {
 }
 
 // ── L3MMInformation ────────────────────────────────────────────────────
+
+L3MMInformation::L3MMInformation() {}
 
 size_t L3MMInformation::l2BodyLength() const {
     size_t len = 0;

@@ -20,6 +20,7 @@
 // SOFTWARE.
 
 #include "gsml3parser/cc/l3ccmessages.h"
+#include "gsml3parser/logger.h"
 #include <sstream>
 #include <iomanip>
 
@@ -71,15 +72,9 @@ std::ostream& operator<<(std::ostream& os, L3CCMessage::MessageType mti) {
 
 // ── L3Setup ─────────────────────────────────────────────────────────────
 
-L3Setup::L3Setup(unsigned wTI) : L3CCMessage(wTI), mHaveCalledParty(false), mHaveCallingParty(false), mHaveSignal(false) {}
-
-L3Setup::L3Setup(unsigned wTI, const L3CalledPartyBCDNumber& wCalled)
-    : L3CCMessage(wTI), mHaveCalledParty(true), mCalledPartyBCDNumber(wCalled),
-      mHaveCallingParty(false), mHaveSignal(false) {}
-
 size_t L3Setup::l2BodyLength() const {
     int len = 0;
-    if (mBearerCapability.mPresent) len += mBearerCapability.lengthTLV();
+    if (mBearerCapability.isPresent()) len += mBearerCapability.lengthTLV();
     if (mHaveCalledParty) len += mCalledPartyBCDNumber.lengthTLV();
     if (mHaveCallingParty) len += mCallingPartyBCDNumber.lengthTLV();
     if (mHaveSignal) len += mSignal.lengthTV();
@@ -88,7 +83,7 @@ size_t L3Setup::l2BodyLength() const {
 }
 
 void L3Setup::writeBody(L3Frame& dest, size_t& wp) const {
-    if (mBearerCapability.mPresent) mBearerCapability.writeTLV(0x04, dest, wp);
+    if (mBearerCapability.isPresent()) mBearerCapability.writeTLV(0x04, dest, wp);
     if (mHaveCalledParty) mCalledPartyBCDNumber.writeTLV(0x5e, dest, wp);
     if (mHaveCallingParty) mCallingPartyBCDNumber.writeTLV(0x5c, dest, wp);
     if (mHaveSignal) mSignal.writeTV(0x34, dest, wp);
@@ -166,8 +161,8 @@ void L3Setup::text(std::ostream& os) const {
     os << "Setup:";
     if (mHaveCalledParty) os << " CalledParty=(" << mCalledPartyBCDNumber << ")";
     if (mHaveCallingParty) os << " CallingParty=(" << mCallingPartyBCDNumber << ")";
-    if (mBearerCapability.mPresent) os << " BearerCapability=(" << mBearerCapability << ")";
-    if (mSupportedCodecs.mPresent) os << " SupportedCodecList=(" << mSupportedCodecs << ")";
+    if (mBearerCapability.isPresent()) os << " BearerCapability=(" << mBearerCapability << ")";
+    if (mSupportedCodecs.isGsmPresent() || mSupportedCodecs.isUmtsPresent()) os << " SupportedCodecList=(" << mSupportedCodecs << ")";
     if (mHaveSignal) { os << " "; mSignal.text(os); }
     ccCommonText(os);
 }
@@ -175,7 +170,7 @@ void L3Setup::text(std::ostream& os) const {
 // ── L3CallProceeding ───────────────────────────────────────────────────
 
 void L3CallProceeding::writeBody(L3Frame& dest, size_t& wp) const {
-    if (mBearerCapability.mPresent) mBearerCapability.writeTLV(0x04, dest, wp);
+    if (mBearerCapability.isPresent()) mBearerCapability.writeTLV(0x04, dest, wp);
     if (mHaveProgress) mProgress.writeTLV(0x1e, dest, wp);
 }
 
@@ -190,14 +185,14 @@ void L3CallProceeding::parseBody(const L3Frame& src, size_t& rp) {
 
 size_t L3CallProceeding::l2BodyLength() const {
     size_t sum = 0;
-    if (mBearerCapability.mPresent) sum += mBearerCapability.lengthTLV();
+    if (mBearerCapability.isPresent()) sum += mBearerCapability.lengthTLV();
     if (mHaveProgress) sum += mProgress.lengthTLV();
     return sum;
 }
 
 void L3CallProceeding::text(std::ostream& os) const {
     os << "CallProceeding";
-    if (mBearerCapability.mPresent) os << " BearerCapability=(" << mBearerCapability << ")";
+    if (mBearerCapability.isPresent()) os << " BearerCapability=(" << mBearerCapability << ")";
     if (mHaveProgress) os << " Progress=(" << mProgress << ")";
 }
 
@@ -259,6 +254,7 @@ void L3CallConfirmed::parseBody(const L3Frame& src, size_t& rp) {
         if ((iei & 0xf0) == 0xd0) continue;
         switch (iei) {
         case 8:
+            mHaveCause = true;
             mCause.parseLV(src, rp);
             continue;
         case 0x40:
@@ -279,19 +275,19 @@ void L3CallConfirmed::parseBody(const L3Frame& src, size_t& rp) {
 }
 
 void L3CallConfirmed::writeBody(L3Frame& dest, size_t& wp) const {
-    if (mBearerCapability.mPresent) mBearerCapability.writeTLV(0x04, dest, wp);
+    if (mBearerCapability.isPresent()) mBearerCapability.writeTLV(0x04, dest, wp);
 }
 
 size_t L3CallConfirmed::l2BodyLength() const {
     size_t sum = 0;
-    if (mBearerCapability.mPresent) sum += mBearerCapability.lengthTLV();
+    if (mBearerCapability.isPresent()) sum += mBearerCapability.lengthTLV();
     return sum;
 }
 
 void L3CallConfirmed::text(std::ostream& os) const {
     os << "CallConfirmed";
-    if (mBearerCapability.mPresent) os << " BearerCapability=(" << mBearerCapability << ")";
-    if (mSupportedCodecs.mPresent) os << " SupportedCodecList=(" << mSupportedCodecs << ")";
+    if (mBearerCapability.isPresent()) os << " BearerCapability=(" << mBearerCapability << ")";
+    if (mSupportedCodecs.isGsmPresent() || mSupportedCodecs.isUmtsPresent()) os << " SupportedCodecList=(" << mSupportedCodecs << ")";
 }
 
 // ── L3ConnectAcknowledge ───────────────────────────────────────────────
@@ -434,13 +430,9 @@ void L3StartDTMFReject::text(std::ostream& os) const {
     os << "StartDTMFReject: " << CCCause2Str(mCause);
 }
 
-void L3StopDTMF::writeBody(L3Frame&, size_t&) const {}
-
 void L3StopDTMF::text(std::ostream& os) const {
     os << "StopDTMF";
 }
-
-void L3StopDTMFAcknowledge::parseBody(const L3Frame&, size_t&) {}
 
 void L3StopDTMFAcknowledge::text(std::ostream& os) const {
     os << "StopDTMFAck";

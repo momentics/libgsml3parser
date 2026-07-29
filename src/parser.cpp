@@ -24,6 +24,7 @@
 #include "gsml3parser/mm/l3mmmessages.h"
 #include "gsml3parser/cc/l3ccmessages.h"
 #include "gsml3parser/ss/l3ssmessages.h"
+#include "gsml3parser/logger.h"
 #include <iomanip>
 #include <sstream>
 #include <unordered_map>
@@ -123,7 +124,7 @@ std::unique_ptr<L3Message> parseL3Hex(const std::string& hex) {
 size_t writeL3(const L3Message& msg, uint8_t* out, size_t maxlen) {
     if (!out || maxlen < msg.fullLength()) return 0;
 
-    L3Frame frame(msg.bitsNeeded());
+    L3Frame frame(Primitive::L3_DATA, msg.bitsNeeded(), SAPI::SAPI3);
     msg.write(frame);
 
     std::memcpy(out, frame.data(), msg.fullLength());

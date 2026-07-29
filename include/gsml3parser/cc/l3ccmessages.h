@@ -95,7 +95,7 @@ public:
 
     bool haveCalledParty() const { return mHaveCalledParty; }
     const L3CalledPartyBCDNumber& calledPartyBCDNumber() const { return mCalledPartyBCDNumber; }
-    const std::string& digits() const { return mCalledPartyBCDNumber.digits(); }
+    const char* digits() const { return mCalledPartyBCDNumber.digits(); }
     TypeOfNumber typeOfNumber() const { return mCalledPartyBCDNumber.type(); }
     NumberingPlan numberingPlan() const { return mCalledPartyBCDNumber.plan(); }
 
@@ -119,6 +119,7 @@ public:
 
 class L3CallProceeding : public L3CCMessage {
 private:
+    L3BearerCapability mBearerCapability;
     bool mHaveProgress;
     L3ProgressIndicator mProgress;
 public:
@@ -134,7 +135,7 @@ public:
 
 // ── Alerting (GSM 04.08 9.3.1) ────────────────────────────────────────
 
-class L3Alerting : public L3CCMessage {
+class L3Alerting : public L3CCMessage, public L3CCCommonIEs {
 private:
     bool mHaveProgress;
     L3ProgressIndicator mProgress;
@@ -180,14 +181,19 @@ public:
 
 // ── Call Confirmed (GSM 04.08 9.3.2) ──────────────────────────────────
 
-class L3CallConfirmed : public L3CCMessage {
+class L3CallConfirmed : public L3CCMessage, public L3CCCapabilities {
+private:
+    bool mHaveCause;
+    L3CauseElement mCause;
 public:
-    explicit L3CallConfirmed(unsigned wTI = 7) : L3CCMessage(wTI) {}
+    explicit L3CallConfirmed(unsigned wTI = 7) : L3CCMessage(wTI), mHaveCause(false) {}
     int MTI() const override { return CallConfirmed; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     size_t l2BodyLength() const override;
     void text(std::ostream& os) const override;
+    bool hasCause() const { return mHaveCause; }
+    const L3CauseElement& cause() const { return mCause; }
 };
 
 // ── Disconnect (GSM 04.08 9.3.7) ──────────────────────────────────────
@@ -212,7 +218,7 @@ public:
 
 // ── Release (GSM 04.08 9.3.19) ────────────────────────────────────────
 
-class L3Release : public L3CCMessage {
+class L3Release : public L3CCMessage, public L3CCCommonIEs {
 private:
     bool mHaveCause;
     CCCause mCause;
@@ -231,7 +237,7 @@ public:
 
 // ── Release Complete (GSM 04.08 9.3.19) ───────────────────────────────
 
-class L3ReleaseComplete : public L3CCMessage {
+class L3ReleaseComplete : public L3CCMessage, public L3CCCommonIEs {
 private:
     bool mHaveCause;
     CCCause mCause;
