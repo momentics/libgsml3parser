@@ -131,7 +131,7 @@ public:
 
 class L3PagingResponse : public L3RRMessageNRO {
 private:
-    L3MobileStationClassmark2 mClassmark;
+    L3MobileStationClassmark1 mClassmark;
     L3MobileIdentity mMobileID;
 public:
     const L3MobileIdentity& mobileID() const { return mMobileID; }
@@ -264,14 +264,14 @@ public:
 
 class L3MeasurementReport : public L3RRMessageNRO {
 private:
-    std::vector<uint8_t> mMeasurementData;
+    L3MeasurementResults mMeasurementResults;
 public:
     int MTI() const override { return MeasurementReport; }
     size_t l2BodyLength() const override { return 16; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    const std::vector<uint8_t>& measurementData() const { return mMeasurementData; }
+    const L3MeasurementResults& measurementResults() const { return mMeasurementResults; }
 };
 
 // ── Ciphering Mode Command (GSM 04.08 9.1.9) ──────────────────────────

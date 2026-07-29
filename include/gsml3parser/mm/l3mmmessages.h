@@ -81,7 +81,7 @@ enum class LocationUpdateType : uint8_t {
 
 class L3LocationUpdatingRequest : public L3MMMessage {
 private:
-    LocationUpdateType mUpdateType;
+    unsigned mUpdateType;
     unsigned mCKSN;
     L3MobileStationClassmark1 mClassmark;
     L3MobileIdentity mMobileIdentity;
@@ -191,10 +191,10 @@ class L3CMServiceRequest : public L3MMMessage {
 private:
     L3MobileStationClassmark2 mClassmark;
     L3MobileIdentity mMobileIdentity;
-    unsigned mServiceType;
+    L3CMServiceType mServiceType;
 public:
     const L3MobileIdentity& mobileID() const { return mMobileIdentity; }
-    unsigned serviceType() const { return mServiceType; }
+    L3CMServiceType::TypeCode serviceType() const { return mServiceType.type(); }
     int MTI() const override { return CMServiceRequest; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;

@@ -155,7 +155,8 @@ L3SupServMessage* L3SupServFactory(int mti) {
 std::unique_ptr<L3SupServMessage> parseL3SupServ(const L3Frame& source) {
     if (source.size() < 16) return nullptr;
 
-    unsigned mti = source.MTI();
+    // Mask out bit 6 (0xbf), see GSM 04.08 Table 10.5
+    unsigned mti = source.MTI() & 0xbf;
     L3SupServMessage* msg = L3SupServFactory(static_cast<L3SupServMessage::MessageType>(mti));
     if (!msg) {
         GSML3PARSER_LOG_WARN("Unknown SS MTI: 0x%02x", mti);

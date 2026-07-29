@@ -26,6 +26,8 @@ The library is a standalone, self-contained project with no external dependencie
 - **Zero external dependencies** — No threading, no networking, no SIP, no radio
 - **Memory-safe** — `std::unique_ptr` ownership, no raw `new`/`delete` in the public API
 - **Fuzzing-ready** — Clean API suitable for libFuzzer integration
+- **90 unit tests** — Comprehensive test coverage for all protocols
+- **Spec-compliant** — Follows GSM 04.08 / 3GPP TS 24.008, GSM 04.07 / 3GPP TS 24.007
 
 ## Quick Start
 
@@ -123,25 +125,29 @@ libgsml3parser/
 │       ├── l3frame.h           # L3Frame — L3 message container
 │       ├── l3message.h         # L3Message, L3ProtocolElement
 │       ├── types.h             # L3PD, Primitive, SAPI, etc.
-│       ├── enums.h             # RRCause, CCCause, MMRejectCause
+│       ├── enums.h             # RRCause, CCCause, MMRejectCause, BSSCause
 │       ├── scalar_types.h      # Bool_z — initialized scalar types
-│       ├── gsm_common.h        # GSM constants, alphabet tables
+│       ├── gsm_common.h        # GSM constants, alphabet tables, timing
 │       ├── logger.h            # Simple logging
 │       ├── parser.h            # Main API entry point
 │       ├── common/
-│       │   └── l3common.h      # Common IEs (CellID, LAI, MobileIdentity, ChannelDesc, etc.)
+│       │   └── l3common.h      # Common IEs (CellID, LAI, MobileIdentity,
+│       │                       #   ChannelDesc, Classmarks, FrequencyList,
+│       │                       #   MeasurementResults, CellSelection, etc.)
 │       ├── rr/
-│       │   └── l3rrmessages.h  # RR messages
+│       │   └── l3rrmessages.h  # RR messages (Paging, SI1-17, Handover, etc.)
 │       ├── mm/
-│       │   ├── l3mmlements.h   # MM IEs (CMServiceType, RAND, SRES, NetworkName, etc.)
-│       │   └── l3mmmessages.h  # MM messages
+│       │   ├── l3mmlements.h   # MM IEs (CMServiceType, RAND, SRES,
+│       │   │                   #   NetworkName, TimeZoneAndTime)
+│       │   └── l3mmmessages.h  # MM messages (LocationUpdate, Auth, CM, etc.)
 │       ├── cc/
-│       │   ├── l3cclements.h   # CC IEs (BearerCapability, BCDNumbers, Cause, CCCommonIEs, etc.)
-│       │   └── l3ccmessages.h  # CC messages
+│       │   ├── l3cclements.h   # CC IEs (BearerCapability, BCDNumbers,
+│       │   │                   #   Cause, Progress, CCCommonIEs, etc.)
+│       │   └── l3ccmessages.h  # CC messages (Setup, Connect, Release, etc.)
 │       └── ss/
-│           └── l3ssmessages.h  # SS messages
+│           └── l3ssmessages.h  # SS messages (Facility, Register, etc.)
 ├── src/                        # Implementation
-├── tests/                      # Google Test unit tests
+├── tests/                      # Google Test unit tests (90 tests)
 ├── examples/
 │   └── example_parse_file.cpp  # Parse L3 messages from file
 └── doc/

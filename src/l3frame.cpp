@@ -107,7 +107,14 @@ L3PD L3Frame::PD() const {
 
 unsigned L3Frame::MTI() const {
     if (size() < 16) return 0;
-    return peekField(8, 8);
+    unsigned mti = peekField(8, 8);
+    L3PD pd = PD();
+    // Bit 6 of MTI is "don't care" for MM, CC, SS — GSM 04.08 10.4
+    if (pd == L3PD::MobilityManagement || pd == L3PD::CallControl ||
+        pd == L3PD::NonCallSS) {
+        return mti & 0xbf;
+    }
+    return mti;
 }
 
 unsigned L3Frame::TI() const {
@@ -119,12 +126,16 @@ bool L3Frame::isData() const {
     return mPrimitive == Primitive::L3_DATA || mPrimitive == Primitive::L3_UNIT_DATA;
 }
 
+static const unsigned fillPattern[8] = {0,0,1,0,1,0,1,1};
+
 void L3Frame::writeH(size_t& wp) const {
-    writeField(wp, 1, 1);
+    unsigned fillBit = fillPattern[wp % 8];
+    writeField(wp, !fillBit, 1);
 }
 
 void L3Frame::writeL(size_t& wp) const {
-    writeField(wp, 0, 1);
+    unsigned fillBit = fillPattern[wp % 8];
+    writeField(wp, fillBit, 1);
 }
 
 void L3Frame::text(std::ostream& os) const {

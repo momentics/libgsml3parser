@@ -104,28 +104,55 @@ L3PagingRequestType1::L3PagingRequestType1(const L3MobileIdentity& wId, ChannelT
 }
 
 size_t L3PagingRequestType1::l2BodyLength() const {
+    int sz = static_cast<int>(mMobileIDs.size());
     size_t len = 1;
-    for (const auto& id : mMobileIDs) {
-        len += id.lengthLV();
-    }
+    len += mMobileIDs[0].lengthLV();
+    if (sz > 1) len += mMobileIDs[1].lengthTLV();
     return len;
 }
 
-void L3PagingRequestType1::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mChannelsNeeded[0]), 4);
-    dest.writeField(wp, static_cast<unsigned>(mChannelsNeeded[1]), 4);
-    for (const auto& id : mMobileIDs) {
-        id.writeLV(dest, wp);
+static unsigned channelNeededCode(ChannelType wType) {
+    switch (wType) {
+        case ChannelType::AnyDCCHType: return 0;
+        case ChannelType::SDCCHType: return 1;
+        case ChannelType::TCHFType: return 2;
+        case ChannelType::AnyTCHType: return 3;
+        default: return 0;
     }
 }
 
+static ChannelType channelNeededType(unsigned code) {
+    switch (code) {
+        case 0: return ChannelType::AnyDCCHType;
+        case 1: return ChannelType::SDCCHType;
+        case 2: return ChannelType::TCHFType;
+        case 3: return ChannelType::AnyTCHType;
+        default: return ChannelType::AnyDCCHType;
+    }
+}
+
+void L3PagingRequestType1::writeBody(L3Frame& dest, size_t& wp) const {
+    // GSM 04.08 9.1.22: reverse order for half-octet fields
+    int sz = static_cast<int>(mMobileIDs.size());
+    dest.writeField(wp, channelNeededCode(mChannelsNeeded[sz > 1 ? 1 : 0]), 2);
+    dest.writeField(wp, channelNeededCode(mChannelsNeeded[0]), 2);
+    dest.writeField(wp, 0x0, 4);  // page mode: normal paging
+    mMobileIDs[0].writeLV(dest, wp);
+    if (sz > 1) mMobileIDs[1].writeTLV(0x17, dest, wp);
+}
+
 void L3PagingRequestType1::parseBody(const L3Frame& src, size_t& rp) {
-    mChannelsNeeded[0] = static_cast<ChannelType>(src.readField(rp, 4));
-    mChannelsNeeded[1] = static_cast<ChannelType>(src.readField(rp, 4));
-    while (rp / 8 < src.size() / 8) {
-        L3MobileIdentity id;
-        id.parseLV(src, rp);
-        mMobileIDs.push_back(id);
+    mChannelsNeeded[1] = channelNeededType(src.readField(rp, 2));
+    mChannelsNeeded[0] = channelNeededType(src.readField(rp, 2));
+    src.readField(rp, 4);  // page mode
+    mMobileIDs.clear();
+    L3MobileIdentity id;
+    id.parseLV(src, rp);
+    mMobileIDs.push_back(id);
+    if (rp < src.size()) {
+        L3MobileIdentity id2;
+        id2.parseLV(src, rp);
+        mMobileIDs.push_back(id2);
     }
 }
 
@@ -139,24 +166,26 @@ void L3PagingRequestType1::text(std::ostream& os) const {
 // ── L3PagingResponse ───────────────────────────────────────────────────
 
 size_t L3PagingResponse::l2BodyLength() const {
-    return 3 + mMobileID.lengthLV();
+    return 1 + mClassmark.lengthLV() + mMobileID.lengthLV();
 }
 
 void L3PagingResponse::parseBody(const L3Frame& source, size_t& rp) {
-    mClassmark.parseV(source, rp);
+    rp += 8;  // skip cipher key seq # (4) and spare (4)
+    mClassmark.parseLV(source, rp);
     mMobileID.parseLV(source, rp);
 }
 
 void L3PagingResponse::writeBody(L3Frame& dest, size_t& wp) const {
-    mClassmark.writeV(dest, wp);
+    dest.writeField(wp, 0, 8);  // spare cipher key seq # + spare
+    mClassmark.writeLV(dest, wp);
     mMobileID.writeLV(dest, wp);
 }
 
 void L3PagingResponse::text(std::ostream& os) const {
     os << "PagingResponse: ";
-    mClassmark.text(os);
-    os << " ";
     mMobileID.text(os);
+    os << " ";
+    mClassmark.text(os);
 }
 
 // ── L3SystemInformationType1 ────────────────────────────────────────────
@@ -310,23 +339,16 @@ void L3ClassmarkChange::text(std::ostream& os) const {
 // ── L3MeasurementReport ────────────────────────────────────────────────
 
 void L3MeasurementReport::parseBody(const L3Frame& src, size_t& rp) {
-    mMeasurementData.resize(16);
-    for (size_t i = 0; i < 16; ++i) {
-        mMeasurementData[i] = static_cast<uint8_t>(src.readField(rp, 8));
-    }
+    mMeasurementResults.parseV(src, rp);
 }
 
 void L3MeasurementReport::writeBody(L3Frame& dest, size_t& wp) const {
-    for (size_t i = 0; i < mMeasurementData.size(); ++i) {
-        dest.writeField(wp, mMeasurementData[i], 8);
-    }
+    mMeasurementResults.writeV(dest, wp);
 }
 
 void L3MeasurementReport::text(std::ostream& os) const {
     os << "MeasurementReport: ";
-    for (size_t i = 0; i < mMeasurementData.size(); ++i) {
-        os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mMeasurementData[i]);
-    }
+    mMeasurementResults.text(os);
 }
 
 // ── L3CipheringModeCommand ─────────────────────────────────────────────
@@ -516,8 +538,8 @@ void L3ApplicationInformation::text(std::ostream& os) const {
 size_t L3SystemInformationType3::restOctetsLength() const { return 0; }
 
 void L3SystemInformationType3::parseBody(const L3Frame& src, size_t& rp) {
-    mCI.parseTV(0x25, src, rp);
-    mLAI.parseTV(0x23, src, rp);
+    mCI.parseV(src, rp);
+    mLAI.parseV(src, rp);
 }
 
 void L3SystemInformationType3::writeBody(L3Frame& dest, size_t& wp) const {
@@ -650,28 +672,34 @@ L3PagingRequestType2::L3PagingRequestType2(const L3MobileIdentity& wId, ChannelT
 }
 
 size_t L3PagingRequestType2::l2BodyLength() const {
+    int sz = static_cast<int>(mMobileIDs.size());
     size_t len = 1;
-    for (const auto& id : mMobileIDs) {
-        len += id.lengthLV();
-    }
+    len += mMobileIDs[0].lengthLV();
+    if (sz > 1) len += mMobileIDs[1].lengthTLV();
     return len;
 }
 
 void L3PagingRequestType2::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mChannelsNeeded[0]), 4);
-    dest.writeField(wp, static_cast<unsigned>(mChannelsNeeded[1]), 4);
-    for (const auto& id : mMobileIDs) {
-        id.writeLV(dest, wp);
-    }
+    int sz = static_cast<int>(mMobileIDs.size());
+    dest.writeField(wp, channelNeededCode(mChannelsNeeded[sz > 1 ? 1 : 0]), 2);
+    dest.writeField(wp, channelNeededCode(mChannelsNeeded[0]), 2);
+    dest.writeField(wp, 0x0, 4);
+    mMobileIDs[0].writeLV(dest, wp);
+    if (sz > 1) mMobileIDs[1].writeTLV(0x17, dest, wp);
 }
 
 void L3PagingRequestType2::parseBody(const L3Frame& src, size_t& rp) {
-    mChannelsNeeded[0] = static_cast<ChannelType>(src.readField(rp, 4));
-    mChannelsNeeded[1] = static_cast<ChannelType>(src.readField(rp, 4));
-    while (rp / 8 < src.size() / 8) {
-        L3MobileIdentity id;
-        id.parseLV(src, rp);
-        mMobileIDs.push_back(id);
+    mChannelsNeeded[1] = channelNeededType(src.readField(rp, 2));
+    mChannelsNeeded[0] = channelNeededType(src.readField(rp, 2));
+    src.readField(rp, 4);
+    mMobileIDs.clear();
+    L3MobileIdentity id;
+    id.parseLV(src, rp);
+    mMobileIDs.push_back(id);
+    if (rp < src.size()) {
+        L3MobileIdentity id2;
+        id2.parseLV(src, rp);
+        mMobileIDs.push_back(id2);
     }
 }
 
@@ -697,28 +725,34 @@ L3PagingRequestType3::L3PagingRequestType3(const L3MobileIdentity& wId, ChannelT
 }
 
 size_t L3PagingRequestType3::l2BodyLength() const {
+    int sz = static_cast<int>(mMobileIDs.size());
     size_t len = 1;
-    for (const auto& id : mMobileIDs) {
-        len += id.lengthLV();
-    }
+    len += mMobileIDs[0].lengthLV();
+    if (sz > 1) len += mMobileIDs[1].lengthTLV();
     return len;
 }
 
 void L3PagingRequestType3::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mChannelsNeeded[0]), 4);
-    dest.writeField(wp, static_cast<unsigned>(mChannelsNeeded[1]), 4);
-    for (const auto& id : mMobileIDs) {
-        id.writeLV(dest, wp);
-    }
+    int sz = static_cast<int>(mMobileIDs.size());
+    dest.writeField(wp, channelNeededCode(mChannelsNeeded[sz > 1 ? 1 : 0]), 2);
+    dest.writeField(wp, channelNeededCode(mChannelsNeeded[0]), 2);
+    dest.writeField(wp, 0x0, 4);
+    mMobileIDs[0].writeLV(dest, wp);
+    if (sz > 1) mMobileIDs[1].writeTLV(0x17, dest, wp);
 }
 
 void L3PagingRequestType3::parseBody(const L3Frame& src, size_t& rp) {
-    mChannelsNeeded[0] = static_cast<ChannelType>(src.readField(rp, 4));
-    mChannelsNeeded[1] = static_cast<ChannelType>(src.readField(rp, 4));
-    while (rp / 8 < src.size() / 8) {
-        L3MobileIdentity id;
-        id.parseLV(src, rp);
-        mMobileIDs.push_back(id);
+    mChannelsNeeded[1] = channelNeededType(src.readField(rp, 2));
+    mChannelsNeeded[0] = channelNeededType(src.readField(rp, 2));
+    src.readField(rp, 4);
+    mMobileIDs.clear();
+    L3MobileIdentity id;
+    id.parseLV(src, rp);
+    mMobileIDs.push_back(id);
+    if (rp < src.size()) {
+        L3MobileIdentity id2;
+        id2.parseLV(src, rp);
+        mMobileIDs.push_back(id2);
     }
 }
 

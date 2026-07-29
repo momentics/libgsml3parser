@@ -570,7 +570,8 @@ void L3PowerCommand::writeV(L3Frame& dest, size_t& wp) const {
 }
 
 void L3PowerCommand::parseV(const L3Frame& src, size_t& rp) {
-    mCommand = src.readField(rp, 8);
+    src.readField(rp, 3);  // spare
+    mCommand = src.readField(rp, 5);
 }
 
 void L3PowerCommand::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -1438,7 +1439,7 @@ void L3DedicatedModeOrTBF::text(std::ostream& os) const {
 // ── L3FollowOnProceed ──────────────────────────────────────────────────
 
 void L3FollowOnProceed::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 1, 8);
+    dest.writeField(wp, 0xa1, 8);
 }
 
 void L3FollowOnProceed::parseV(const L3Frame& src, size_t& rp) {
@@ -1488,7 +1489,8 @@ void L3SI3RestOctets::writeV(L3Frame& dest, size_t& wp) const {
         dest.writeField(wp, 0, 1);
     }
     while (wp % 8 != 0) {
-        dest.writeField(wp, 0, 1);
+        dest.writeH(wp);
+        dest.writeL(wp);
     }
 }
 
@@ -1556,7 +1558,8 @@ void L3SIType4RestOctets::writeV(L3Frame& dest, size_t& wp) const {
     }
     dest.writeField(wp, 0, 2);
     while (wp % 8 != 0) {
-        dest.writeField(wp, 0, 1);
+        dest.writeH(wp);
+        dest.writeL(wp);
     }
 }
 
@@ -1675,7 +1678,8 @@ void L3SI13RestOctets::writeV(L3Frame& dest, size_t& wp) const {
     mCellOptions.writeBits(dest, wp);
     mPowerControlParameters.writeBits(dest, wp);
     while (wp % 8 != 0) {
-        dest.writeField(wp, 0, 1);
+        dest.writeH(wp);
+        dest.writeL(wp);
     }
 }
 

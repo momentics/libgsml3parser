@@ -1219,7 +1219,7 @@ public:
 class L3CMServiceRequest : public L3MMMessage {
 public:
     const L3MobileIdentity& mobileID() const;
-    unsigned serviceType() const;
+    L3CMServiceType::TypeCode serviceType() const;
     int MTI() const override { return CMServiceRequest; }
 };
 ```
@@ -1940,6 +1940,43 @@ GSML3PARSER_LOG_DEBUG(...)
 ### 10.4 Environment Variable
 
 Set `GSML3PARSER_LOG_LEVEL` to control the threshold (0–7). Default: 6 (INFO).
+
+---
+
+## 12. Conformance Notes
+
+### 12.1 H/L Bit Fill Pattern
+
+Per GSM 04.07 7.2, rest octets use an alternating H/L bit pattern based on
+position within the octet:
+
+```
+Bit position (mod 8):  0  1  2  3  4  5  6  7
+Pattern:                0  0  1  0  1  0  1  1
+H bit (inverted):       1  1  0  1  0  1  0  0
+L bit (pattern):        0  0  1  0  1  0  1  1
+```
+
+The library implements this pattern in `L3Frame::writeH()` and `L3Frame::writeL()`.
+
+### 12.2 MTI Bit 6 Masking
+
+Per GSM 04.08 Table 10.2/3/4/5, bit 6 (0x40) of the MTI is "don't care" for
+MM, CC, and SS protocols. The library masks this bit when parsing these protocols
+and in `L3Frame::MTI()`.
+
+### 12.3 BCD Encoding
+
+BCD digits follow GSM 04.07 11.2.1.1 encoding rules:
+- Nibbles are swapped within each byte (even nibble = higher digit)
+- Last nibble is `0xF` filler for odd-length numbers
+- TMSI uses special 0xF4 header byte
+
+### 12.4 Paging Channel Needed Encoding
+
+Paging Request messages (Type 1/2/3) encode Channel Needed as 2-bit codes
+(0=AnyDCCH, 1=SDCCH, 2=TCHF, 3=AnyTCH) in reversed half-octet order,
+followed by a 4-bit Page Mode field.
 
 ---
 
