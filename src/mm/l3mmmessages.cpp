@@ -63,10 +63,6 @@ size_t L3LocationUpdatingRequest::l2BodyLength() const {
     return 1 + mLAI.lengthV() + mClassmark.lengthV() + mMobileIdentity.lengthLV();
 }
 
-LocationUpdateType L3LocationUpdatingRequest::getLocationUpdatingType() const {
-    return static_cast<LocationUpdateType>(mUpdateType & 0x3);
-}
-
 void L3LocationUpdatingRequest::parseBody(const L3Frame& src, size_t& rp) {
     mCKSN = src.readField(rp, 4);
     mUpdateType = src.readField(rp, 4);

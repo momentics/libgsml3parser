@@ -131,7 +131,7 @@ public:
 
 class L3PagingResponse : public L3RRMessageNRO {
 private:
-    L3MobileStationClassmark1 mClassmark;
+    L3MobileStationClassmark2 mClassmark;
     L3MobileIdentity mMobileID;
 public:
     const L3MobileIdentity& mobileID() const { return mMobileID; }
@@ -280,14 +280,16 @@ class L3CipheringModeCommand : public L3RRMessageNRO {
 protected:
     bool mCiphering;
     int mAlgorithm;
+    L3CipheringModeResponse mCipheringModeResponse;
 public:
     L3CipheringModeCommand(bool ciphering, int algorithm)
-        : mCiphering(ciphering), mAlgorithm(algorithm) {}
+        : mCiphering(ciphering), mAlgorithm(algorithm), mCipheringModeResponse() {}
     int MTI() const override;
     size_t l2BodyLength() const override { return 1; }
     void writeBody(L3Frame&, size_t&) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;
+    bool includeIMEISV() const { return mCipheringModeResponse.includeIMEISV(); }
 };
 
 // ── Ciphering Mode Complete (GSM 04.08 9.1.10) ────────────────────────
@@ -506,7 +508,7 @@ class L3ImmediateAssignmentReject : public L3RRMessageNRO {
 private:
     L3PageMode mPageMode;
     std::vector<L3RequestReference> mRequestReferences;
-    L3WaitIndication mWaitIndication;
+    std::vector<L3WaitIndication> mWaitIndications;
 public:
     L3ImmediateAssignmentReject();
     explicit L3ImmediateAssignmentReject(unsigned waitSeconds);
@@ -515,8 +517,9 @@ public:
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    unsigned waitTime() const { return mWaitIndication.value(); }
+    unsigned waitTime() const { return mWaitIndications.empty() ? 0 : mWaitIndications[0].value(); }
     const std::vector<L3RequestReference>& requestReferences() const { return mRequestReferences; }
+    const std::vector<L3WaitIndication>& waitIndications() const { return mWaitIndications; }
 };
 
 // ── Paging Request Type 2 (GSM 04.08 9.1.23) ──────────────────────────

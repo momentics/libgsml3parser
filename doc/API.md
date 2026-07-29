@@ -2,8 +2,6 @@
 
 > Version 0.1.0 | C++17 | Thread-safe (read-only) | No external dependencies
 
----
-
 ## Table of Contents
 
 1. [Getting Started](#1-getting-started)
@@ -640,6 +638,57 @@ public:
 };
 ```
 
+### 4.8 L3CipheringModeSetting
+
+**File:** `gsml3parser/common/l3common.h` | **Spec:** GSM 04.08 10.5.2.11
+
+4-bit field: 3-bit ciphering algorithm + 1-bit ciphering mode flag.
+
+```cpp
+class L3CipheringModeSetting : public GenericMessageElement {
+public:
+    L3CipheringModeSetting();
+    explicit L3CipheringModeSetting(bool wCiphering, int wAlgorithm);
+    bool ciphering() const;
+    int algorithm() const;
+    size_t lengthBits() const override { return 4; }
+};
+```
+
+### 4.9 L3CipheringModeResponse
+
+**File:** `gsml3parser/common/l3common.h` | **Spec:** GSM 04.08 10.5.2.12
+
+4-bit field: 3 spare bits + 1-bit includeIMEISV flag.
+
+```cpp
+class L3CipheringModeResponse : public GenericMessageElement {
+public:
+    L3CipheringModeResponse();
+    explicit L3CipheringModeResponse(bool wIncludeIMEISV);
+    bool includeIMEISV() const;
+    size_t lengthBits() const override { return 4; }
+};
+```
+
+### 4.10 L3SI3RestOctets
+
+**File:** `gsml3parser/common/l3common.h` | **Spec:** GSM 04.08 10.5.2.24
+
+Rest octets for System Information Type 3, containing optional CellSelectionInfo and NeighbourCellDescription.
+
+```cpp
+class L3SI3RestOctets : public L3ProtocolElement {
+public:
+    L3SI3RestOctets();
+    bool hasCellSelection() const;
+    const L3CellSelectionInfo& cellSelection() const;
+    bool hasNeighbourCell() const;
+    const L3NeighbourCellDescription& neighbourCell() const;
+    size_t lengthV() const override;
+};
+```
+
 ---
 
 ## 5. Radio Resource Messages (PD=0x06)
@@ -721,12 +770,13 @@ public:
 
 ### 5.4 L3PagingResponse
 
-**Spec:** GSM 04.08 9.1.25
+**Spec:** GSM 04.08 9.1.25 — V-format: MobileIdentity [+ Classmark2/3]
 
 ```cpp
 class L3PagingResponse : public L3RRMessageNRO {
 public:
     const L3MobileIdentity& mobileID() const;
+    const L3MobileStationClassmark2& classmark() const;
     int MTI() const override { return PagingResponse; }
 };
 ```
@@ -828,12 +878,14 @@ public:
 
 ### 5.13 L3CipheringModeCommand
 
-**Spec:** GSM 04.08 9.1.9
+**Spec:** GSM 04.08 9.1.9 — V-format: L3CipheringModeSetting (4 bits: 3 algorithm + 1 ciphering flag) + L3CipheringModeResponse (4 bits: 3 spare + 1 includeIMEISV) + CipheringKeySequenceNumber
 
 ```cpp
 class L3CipheringModeCommand : public L3RRMessageNRO {
 public:
     L3CipheringModeCommand(bool ciphering, int algorithm);
+    const L3CipheringModeSetting& modeSetting() const;
+    const L3CipheringModeResponse& modeResponse() const;
     int MTI() const override;
 };
 ```
@@ -957,7 +1009,7 @@ public:
 
 ### 5.21 L3ImmediateAssignment
 
-**Spec:** GSM 04.08 9.1.19 — V-format: PageMode + DedicatedModeOrTBF + RequestReference + ChannelDescription + TimingAdvance + MobileAllocation
+**Spec:** GSM 04.08 9.1.19 — V-format: PageMode + DedicatedModeOrTBF + RequestReference + ChannelDescription + TimingAdvance [+ optional StartTime] + MobileAllocation (LV format)
 
 ```cpp
 class L3ImmediateAssignment : public L3RRMessageNRO {
@@ -966,6 +1018,7 @@ public:
     const L3ChannelDescription& channelDescription() const;
     const L3RequestReference& requestReference() const;
     const L3TimingAdvance& timingAdvance() const;
+    const L3MobileAllocation& mobileAllocation() const;
     bool hasStartTime() const;
     uint32_t startTimeFrame() const;
     int MTI() const override { return ImmediateAssignment; }
@@ -974,7 +1027,7 @@ public:
 
 ### 5.22 L3ImmediateAssignmentReject
 
-**Spec:** GSM 04.08 9.1.20 — V-format: PageMode + RequestReference(s) + WaitIndication
+**Spec:** GSM 04.08 9.1.20 — Fixed 17-byte body: PageMode(1 bit) + 4 paired (RequestReference + WaitIndication) entries
 
 ```cpp
 class L3ImmediateAssignmentReject : public L3RRMessageNRO {
@@ -1001,7 +1054,7 @@ public:
 
 ### 5.22 L3SystemInformationType3
 
-**Spec:** GSM 04.08 9.1.35
+**Spec:** GSM 04.08 9.1.35 — V-format + RestOctets (CellSelectionInfo, NeighbourCellDescription)
 
 ```cpp
 class L3SystemInformationType3 : public L3RRMessageRO {
@@ -1009,6 +1062,7 @@ public:
     int MTI() const override { return SystemInformationType3; }
     size_t l2BodyLength() const override { return 16; }
     size_t restOctetsLength() const override;
+    const L3SI3RestOctets& restOctets() const;
 };
 ```
 
@@ -1181,7 +1235,7 @@ enum class LocationUpdateType : uint8_t {
 
 ### 6.3 L3LocationUpdatingRequest
 
-**Spec:** GSM 04.08 9.2.15
+**Spec:** GSM 04.08 9.2.15 — V-format: MobileIdentity(LV) + LAI + FollowOnRequest(1 bit) + LocationUpdatingType(1 bit) + EMLPP(1 bit) + Rest
 
 ```cpp
 class L3LocationUpdatingRequest : public L3MMMessage {
@@ -1189,6 +1243,7 @@ public:
     const L3MobileIdentity& mobileID() const;
     const L3LocationAreaIdentity& LAI() const;
     LocationUpdateType getLocationUpdatingType() const;
+    bool getFollowOnRequest() const;
     int MTI() const override { return LocationUpdatingRequest; }
 };
 ```
@@ -1656,7 +1711,7 @@ public:
 
 ### 7.8 L3CallConfirmed
 
-**Spec:** GSM 04.08 9.3.2
+**Spec:** GSM 04.08 9.3.2 — TLV format: Cause (IEI=0x08), SupportedCodecList (IEI=0x40)
 
 ```cpp
 class L3CallConfirmed : public L3CCMessage, public L3CCCapabilities {
@@ -1664,6 +1719,8 @@ public:
     explicit L3CallConfirmed(unsigned wTI = 7);
     bool hasCause() const;
     const L3CauseElement& cause() const;
+    bool hasSupportedCodecs() const;
+    const L3SupportedCodecList& supportedCodecs() const;
     int MTI() const override { return CallConfirmed; }
     size_t l2BodyLength() const override;
 };

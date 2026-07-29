@@ -21,6 +21,7 @@
 
 #include "gsml3parser/rr/l3rrmessages.h"
 #include "gsml3parser/logger.h"
+#include <algorithm>
 #include <sstream>
 #include <iomanip>
 
@@ -358,18 +359,23 @@ void L3MeasurementReport::text(std::ostream& os) const {
 int L3CipheringModeCommand::MTI() const { return CipheringModeCommand; }
 
 void L3CipheringModeCommand::parseBody(const L3Frame& src, size_t& rp) {
-    mCiphering = src.readField(rp, 1);
-    mAlgorithm = src.readField(rp, 7);
+    L3CipheringModeSetting cms;
+    cms.parseV(src, rp);
+    mCiphering = cms.ciphering();
+    mAlgorithm = cms.algorithm();
+    mCipheringModeResponse.parseV(src, rp);
 }
 
 void L3CipheringModeCommand::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mCiphering ? 1 : 0, 1);
-    dest.writeField(wp, mAlgorithm, 7);
+    L3CipheringModeSetting cms(mCiphering, mAlgorithm);
+    cms.writeV(dest, wp);
+    mCipheringModeResponse.writeV(dest, wp);
 }
 
 void L3CipheringModeCommand::text(std::ostream& os) const {
     os << "CipheringModeCommand: ciphering=" << mCiphering
-       << " algorithm=A5/" << mAlgorithm;
+       << " algorithm=A5/" << mAlgorithm
+       << " includeIMEISV=" << mCipheringModeResponse.includeIMEISV();
 }
 
 // ── L3CipheringModeComplete ────────────────────────────────────────────
@@ -569,6 +575,7 @@ void L3SystemInformationType3::parseBody(const L3Frame& src, size_t& rp) {
     mCellOptions.parseV(src, rp);
     mCellSelectionParameters.parseV(src, rp);
     mRACHControlParameters.parseV(src, rp);
+    mRestOctets.parseV(src, rp);
 }
 
 void L3SystemInformationType3::writeBody(L3Frame& dest, size_t& wp) const {
@@ -594,6 +601,7 @@ void L3SystemInformationType3::text(std::ostream& os) const {
     mCellSelectionParameters.text(os);
     os << " ";
     mRACHControlParameters.text(os);
+    mRestOctets.text(os);
 }
 
 // ── L3SystemInformationType13 ──────────────────────────────────────────
@@ -617,8 +625,9 @@ L3ImmediateAssignment::L3ImmediateAssignment()
     : mDedicatedModeOrTBF(false, false), mStartTimePresent(false), mStartTimeFrame(0) {}
 
 size_t L3ImmediateAssignment::l2BodyLength() const {
-    // PageMode(1/2) + DedicatedModeOrTBF(1/2) + RequestRef(3) + ChannelDesc(3) + TimingAdv(1) + MobileAlloc(var) + StartTime(opt,3)
-    size_t len = 1 + 3 + 3 + 1 + mMobileAllocation.size();
+    // PageMode(1/2) + DedicatedModeOrTBF(1/2) + RequestRef(3) + ChannelDesc(3) + TimingAdv(1) + MobileAlloc(LV) + StartTime(opt)
+    size_t len = 1 + 3 + 3 + 1;
+    if (!mMobileAllocation.empty()) len += 1 + mMobileAllocation.size();
     if (mStartTimePresent) len += 3;
     return len;
 }
@@ -629,12 +638,23 @@ void L3ImmediateAssignment::parseBody(const L3Frame& src, size_t& rp) {
     mRequestReference.parseV(src, rp);
     mChannelDescription.parseV(src, rp);
     mTimingAdvance.parseV(src, rp);
-    // Mobile Allocation - variable length, at least 1 byte
-    size_t remainingBytes = (src.size() - rp) / 8;
-    if (remainingBytes >= 1) {
-        mMobileAllocation.resize(remainingBytes);
-        for (size_t i = 0; i < remainingBytes; ++i) {
-            mMobileAllocation[i] = static_cast<uint8_t>(src.readField(rp, 8));
+    // Mobile Allocation: LV format - length byte + data
+    if (rp + 8 <= src.size()) {
+        size_t maLen = src.readField(rp, 8);
+        if (maLen > 0 && rp + maLen * 8 <= src.size()) {
+            mMobileAllocation.resize(maLen);
+            for (size_t i = 0; i < maLen; ++i) {
+                mMobileAllocation[i] = static_cast<uint8_t>(src.readField(rp, 8));
+            }
+        }
+    }
+    // StartTime: 1 bit flag + 23 bits frame number
+    if (rp + 24 <= src.size()) {
+        mStartTimePresent = src.readField(rp, 1);
+        if (mStartTimePresent) {
+            mStartTimeFrame = src.readField(rp, 23);
+        } else {
+            rp += 7; // spare
         }
     }
 }
@@ -645,6 +665,8 @@ void L3ImmediateAssignment::writeBody(L3Frame& dest, size_t& wp) const {
     mRequestReference.writeV(dest, wp);
     mChannelDescription.writeV(dest, wp);
     mTimingAdvance.writeV(dest, wp);
+    // Mobile Allocation: LV format - length byte + data
+    dest.writeField(wp, static_cast<uint8_t>(mMobileAllocation.size()), 8);
     for (const auto& b : mMobileAllocation) {
         dest.writeField(wp, b, 8);
     }
@@ -670,7 +692,8 @@ L3ImmediateAssignmentExtended::L3ImmediateAssignmentExtended()
       mHaveAdditionalChannel(false) {}
 
 size_t L3ImmediateAssignmentExtended::l2BodyLength() const {
-    size_t len = 1 + 3 + 3 + 1 + mMobileAllocation.size();
+    size_t len = 1 + 3 + 3 + 1;
+    if (!mMobileAllocation.empty()) len += 1 + mMobileAllocation.size();
     if (mStartTimePresent) len += 3;
     if (mHaveAdditionalChannel) len += mAdditionalChannel.lengthV();
     return len;
@@ -682,12 +705,23 @@ void L3ImmediateAssignmentExtended::parseBody(const L3Frame& src, size_t& rp) {
     mRequestReference.parseV(src, rp);
     mChannelDescription.parseV(src, rp);
     mTimingAdvance.parseV(src, rp);
-    // Mobile Allocation - variable length
-    size_t remainingBytes = (src.size() - rp) / 8;
-    if (remainingBytes >= 1) {
-        mMobileAllocation.resize(remainingBytes);
-        for (size_t i = 0; i < remainingBytes; ++i) {
-            mMobileAllocation[i] = static_cast<uint8_t>(src.readField(rp, 8));
+    // Mobile Allocation: LV format - length byte + data
+    if (rp + 8 <= src.size()) {
+        size_t maLen = src.readField(rp, 8);
+        if (maLen > 0 && rp + maLen * 8 <= src.size()) {
+            mMobileAllocation.resize(maLen);
+            for (size_t i = 0; i < maLen; ++i) {
+                mMobileAllocation[i] = static_cast<uint8_t>(src.readField(rp, 8));
+            }
+        }
+    }
+    // StartTime: 1 bit flag + 23 bits frame number
+    if (rp + 24 <= src.size()) {
+        mStartTimePresent = src.readField(rp, 1);
+        if (mStartTimePresent) {
+            mStartTimeFrame = src.readField(rp, 23);
+        } else {
+            rp += 7; // spare
         }
     }
 }
@@ -698,6 +732,8 @@ void L3ImmediateAssignmentExtended::writeBody(L3Frame& dest, size_t& wp) const {
     mRequestReference.writeV(dest, wp);
     mChannelDescription.writeV(dest, wp);
     mTimingAdvance.writeV(dest, wp);
+    // Mobile Allocation: LV format - length byte + data
+    dest.writeField(wp, static_cast<uint8_t>(mMobileAllocation.size()), 8);
     for (const auto& b : mMobileAllocation) {
         dest.writeField(wp, b, 8);
     }
@@ -726,42 +762,49 @@ void L3ImmediateAssignmentExtended::text(std::ostream& os) const {
 // ── L3ImmediateAssignmentReject ────────────────────────────────────────
 
 L3ImmediateAssignmentReject::L3ImmediateAssignmentReject()
-    : mPageMode(0), mWaitIndication(0) {}
+    : mPageMode(0) {}
 
 L3ImmediateAssignmentReject::L3ImmediateAssignmentReject(unsigned waitSeconds)
-    : mPageMode(0), mWaitIndication(waitSeconds) {}
+    : mPageMode(0) {
+    mWaitIndications.resize(4, L3WaitIndication(waitSeconds));
+}
 
 size_t L3ImmediateAssignmentReject::l2BodyLength() const {
-    // PageMode(1/2 octet) + RequestRef(3 bytes each) + WaitIndication(1 byte)
-    return 1 + mRequestReferences.size() * 3 + 1;
+    return 17;  // Fixed: 1 byte PageMode + 4 * (3 bytes RequestRef + 1 byte WaitInd) = 17
 }
 
 void L3ImmediateAssignmentReject::parseBody(const L3Frame& src, size_t& rp) {
     mPageMode.parseV(src, rp);
-    // Parse request references - at least one, up to remaining bytes / 3
-    size_t remaining = (src.size() - rp) / 8;
-    if (remaining >= 4) {
-        // At least 1 request ref (3 bytes) + wait indication (1 byte)
-        size_t numRefs = (remaining - 1) / 3;
-        for (size_t i = 0; i < numRefs; ++i) {
+    // 4 pairs of (RequestReference + WaitIndication)
+    for (int i = 0; i < 4; ++i) {
+        if (rp + 32 <= src.size()) {
             L3RequestReference rr;
             rr.parseV(src, rp);
             mRequestReferences.push_back(rr);
+            L3WaitIndication wi;
+            wi.parseV(src, rp);
+            mWaitIndications.push_back(wi);
         }
     }
-    mWaitIndication.parseV(src, rp);
 }
 
 void L3ImmediateAssignmentReject::writeBody(L3Frame& dest, size_t& wp) const {
     mPageMode.writeV(dest, wp);
-    for (const auto& rr : mRequestReferences) {
-        rr.writeV(dest, wp);
+    // Write up to 4 pairs, padding with last entry if fewer
+    int count = static_cast<int>(mRequestReferences.size());
+    if (count <= 0) count = 1;
+    for (int i = 0; i < 4; ++i) {
+        int idx = std::min(i, count - 1);
+        mRequestReferences[idx].writeV(dest, wp);
+        mWaitIndications[idx].writeV(dest, wp);
     }
-    mWaitIndication.writeV(dest, wp);
 }
 
 void L3ImmediateAssignmentReject::text(std::ostream& os) const {
-    os << "ImmediateAssignmentReject: wait=" << mWaitIndication.value() << "s refs=" << mRequestReferences.size();
+    os << "ImmediateAssignmentReject: refs=" << mRequestReferences.size();
+    for (size_t i = 0; i < mWaitIndications.size(); ++i) {
+        os << " wait[" << i << "]=" << mWaitIndications[i].value() << "s";
+    }
 }
 
 // ── L3PagingRequestType2 ───────────────────────────────────────────────

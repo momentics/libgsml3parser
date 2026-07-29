@@ -91,7 +91,8 @@ public:
     const L3LocationAreaIdentity& LAI() const { return mLAI; }
     int MTI() const override { return LocationUpdatingRequest; }
     size_t l2BodyLength() const override;
-    LocationUpdateType getLocationUpdatingType() const;
+    LocationUpdateType getLocationUpdatingType() const { return static_cast<LocationUpdateType>(mUpdateType & 0x3); }
+    unsigned getFollowOnRequest() const { return mUpdateType & 0x8; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;

@@ -276,11 +276,15 @@ void L3CallConfirmed::parseBody(const L3Frame& src, size_t& rp) {
 
 void L3CallConfirmed::writeBody(L3Frame& dest, size_t& wp) const {
     if (mBearerCapability.isPresent()) mBearerCapability.writeTLV(0x04, dest, wp);
+    if (mHaveCause) mCause.writeTLV(0x08, dest, wp);
+    if (mSupportedCodecs.isGsmPresent() || mSupportedCodecs.isUmtsPresent()) mSupportedCodecs.writeTLV(0x40, dest, wp);
 }
 
 size_t L3CallConfirmed::l2BodyLength() const {
     size_t sum = 0;
     if (mBearerCapability.isPresent()) sum += mBearerCapability.lengthTLV();
+    if (mHaveCause) sum += mCause.lengthTLV();
+    if (mSupportedCodecs.isGsmPresent() || mSupportedCodecs.isUmtsPresent()) sum += mSupportedCodecs.lengthTLV();
     return sum;
 }
 
@@ -288,6 +292,7 @@ void L3CallConfirmed::text(std::ostream& os) const {
     os << "CallConfirmed";
     if (mBearerCapability.isPresent()) os << " BearerCapability=(" << mBearerCapability << ")";
     if (mSupportedCodecs.isGsmPresent() || mSupportedCodecs.isUmtsPresent()) os << " SupportedCodecList=(" << mSupportedCodecs << ")";
+    if (mHaveCause) os << " Cause=(" << mCause << ")";
 }
 
 // ── L3ConnectAcknowledge ───────────────────────────────────────────────
