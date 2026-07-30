@@ -521,7 +521,7 @@ class L3ImmediateAssignmentReject : public L3RRMessageNRO {
 private:
     L3PageMode mPageMode;
     std::vector<L3RequestReference> mRequestReferences;
-    std::vector<L3WaitIndication> mWaitIndications;
+    unsigned mWaitIndication;
 public:
     L3ImmediateAssignmentReject();
     explicit L3ImmediateAssignmentReject(unsigned waitSeconds);
@@ -530,9 +530,8 @@ public:
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    unsigned waitTime() const { return mWaitIndications.empty() ? 0 : mWaitIndications[0].value(); }
+    unsigned waitTime() const { return mWaitIndication; }
     const std::vector<L3RequestReference>& requestReferences() const { return mRequestReferences; }
-    const std::vector<L3WaitIndication>& waitIndications() const { return mWaitIndications; }
 };
 
 // ── Paging Request Type 2 (GSM 04.08 9.1.23) ──────────────────────────
@@ -627,7 +626,7 @@ public:
 // ── System Information Type 2 (GSM 04.08 9.1.32) ─────────────────────
 // V-format: BCCH Frequency List(16) + NCC Permitted(1) + RACH Control Parameters(3) = 20 bytes
 
-class L3SystemInformationType2 : public L3RRMessageRO {
+class L3SystemInformationType2 : public L3RRMessageNRO {
 private:
     L3BCCHFrequencyList mBCCHFrequencyList;
     L3NCCPermitted mNCCPermitted;
@@ -636,7 +635,6 @@ public:
     L3SystemInformationType2();
     int MTI() const override { return SystemInformationType2; }
     size_t l2BodyLength() const override { return 20; }
-    size_t restOctetsLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
@@ -648,7 +646,7 @@ public:
 // ── System Information Type 2bis (GSM 04.08 9.1.33) ──────────────────
 // V-format: BCCH Frequency List(16) + NCC Permitted(1) + RACH Control Parameters(3) = 20 bytes
 
-class L3SystemInformationType2bis : public L3RRMessageRO {
+class L3SystemInformationType2bis : public L3RRMessageNRO {
 private:
     L3BCCHFrequencyList mBCCHFrequencyList;
     L3NCCPermitted mNCCPermitted;
@@ -657,7 +655,6 @@ public:
     L3SystemInformationType2bis();
     int MTI() const override { return SystemInformationType2bis; }
     size_t l2BodyLength() const override { return 20; }
-    size_t restOctetsLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
@@ -669,7 +666,7 @@ public:
 // ── System Information Type 2ter (GSM 04.08 9.1.34) ──────────────────
 // V-format: BCCH Frequency List(16) + NCC Permitted(1) + RACH Control Parameters(3) = 20 bytes
 
-class L3SystemInformationType2ter : public L3RRMessageRO {
+class L3SystemInformationType2ter : public L3RRMessageNRO {
 private:
     L3BCCHFrequencyList mBCCHFrequencyList;
     L3NCCPermitted mNCCPermitted;
@@ -678,7 +675,6 @@ public:
     L3SystemInformationType2ter();
     int MTI() const override { return SystemInformationType2ter; }
     size_t l2BodyLength() const override { return 20; }
-    size_t restOctetsLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
@@ -688,15 +684,13 @@ public:
 };
 
 // ── System Information Type 4 (GSM 04.08 9.1.36) ─────────────────────
-// V-format: LAI(5) + CI(2) + Cell Selection Parameters(2) + Cell Options BCCH(1) + RACH Control Parameters(3) = 13 bytes
-// Rest octets: CBCH Channel Description (optional) + SI4 Rest Octets
+// V-format: LAI(5) + Cell Selection Parameters(2) + RACH Control Parameters(3) = 10 bytes
+// Rest octets: CBCH Channel Description (optional, TV 0x64) + SI4 Rest Octets
 
 class L3SystemInformationType4 : public L3RRMessageRO {
 private:
     L3LocationAreaIdentity mLAI;
-    L3CellIdentity mCI;
     L3CellSelectionParameters mCellSelectionParameters;
-    L3CellOptionsBCCH mCellOptions;
     L3RACHControlParameters mRACHControlParameters;
     bool mHaveCBCH;
     L3ChannelDescription mCBCHChannelDescription;
@@ -704,15 +698,13 @@ private:
 public:
     L3SystemInformationType4();
     int MTI() const override { return SystemInformationType4; }
-    size_t l2BodyLength() const override { return 13; }
+    size_t l2BodyLength() const override;
     size_t restOctetsLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
     const L3LocationAreaIdentity& LAI() const { return mLAI; }
-    const L3CellIdentity& CI() const { return mCI; }
     const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
-    const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
     const L3RACHControlParameters& rachaControl() const { return mRACHControlParameters; }
     bool hasCBCH() const { return mHaveCBCH; }
     const L3ChannelDescription& cbchChannelDescription() const { return mCBCHChannelDescription; }
@@ -721,14 +713,13 @@ public:
 // ── System Information Type 5 (GSM 04.08 9.1.37) ─────────────────────
 // V-format: BCCH Frequency List(16) = 16 bytes
 
-class L3SystemInformationType5 : public L3RRMessageRO {
+class L3SystemInformationType5 : public L3RRMessageNRO {
 private:
     L3BCCHFrequencyList mBCCHFrequencyList;
 public:
     L3SystemInformationType5();
     int MTI() const override { return SystemInformationType5; }
     size_t l2BodyLength() const override { return 16; }
-    size_t restOctetsLength() const override { return 0; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
@@ -738,14 +729,13 @@ public:
 // ── System Information Type 5bis (GSM 04.08 9.1.38) ──────────────────
 // V-format: BCCH Frequency List(16) = 16 bytes
 
-class L3SystemInformationType5bis : public L3RRMessageRO {
+class L3SystemInformationType5bis : public L3RRMessageNRO {
 private:
     L3BCCHFrequencyList mBCCHFrequencyList;
 public:
     L3SystemInformationType5bis();
     int MTI() const override { return SystemInformationType5bis; }
     size_t l2BodyLength() const override { return 16; }
-    size_t restOctetsLength() const override { return 0; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
@@ -755,14 +745,13 @@ public:
 // ── System Information Type 5ter (GSM 04.08 9.1.39) ──────────────────
 // V-format: BCCH Frequency List(16) = 16 bytes
 
-class L3SystemInformationType5ter : public L3RRMessageRO {
+class L3SystemInformationType5ter : public L3RRMessageNRO {
 private:
     L3BCCHFrequencyList mBCCHFrequencyList;
 public:
     L3SystemInformationType5ter();
     int MTI() const override { return SystemInformationType5ter; }
     size_t l2BodyLength() const override { return 16; }
-    size_t restOctetsLength() const override { return 0; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
@@ -772,7 +761,7 @@ public:
 // ── System Information Type 6 (GSM 04.08 9.1.40) ─────────────────────
 // V-format: CI(2) + LAI(5) + Cell Options SACCH(1) + NCC Permitted(1) = 9 bytes
 
-class L3SystemInformationType6 : public L3RRMessageRO {
+class L3SystemInformationType6 : public L3RRMessageNRO {
 private:
     L3CellIdentity mCI;
     L3LocationAreaIdentity mLAI;
@@ -782,7 +771,6 @@ public:
     L3SystemInformationType6();
     int MTI() const override { return SystemInformationType6; }
     size_t l2BodyLength() const override { return 9; }
-    size_t restOctetsLength() const override { return 0; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;

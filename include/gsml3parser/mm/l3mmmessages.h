@@ -161,15 +161,11 @@ public:
 // ── CM Service Abort (GSM 04.08 9.2.7) ────────────────────────────────
 
 class L3CMServiceAbort : public L3MMMessage {
-private:
-    MMRejectCause mCause;
-    bool mHaveCause;
 public:
-    L3CMServiceAbort() : mCause(MMRejectCause::Zero), mHaveCause(false) {}
     int MTI() const override { return CMServiceAbort; }
-    size_t l2BodyLength() const override { return mHaveCause ? 1 : 0; }
-    void writeBody(L3Frame& dest, size_t& wp) const override;
-    void parseBody(const L3Frame& src, size_t& rp) override;
+    size_t l2BodyLength() const override { return 0; }
+    void writeBody(L3Frame&, size_t&) const override {}
+    void parseBody(const L3Frame&, size_t&) override;
     void text(std::ostream& os) const override;
 };
 

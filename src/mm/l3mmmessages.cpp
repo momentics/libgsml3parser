@@ -164,24 +164,12 @@ void L3IMSIDetachIndication::text(std::ostream& os) const {
 
 // ── L3CMServiceAbort ───────────────────────────────────────────────────
 
-void L3CMServiceAbort::parseBody(const L3Frame& src, size_t& rp) {
-    if (rp + 8 <= src.size()) {
-        mCause = static_cast<MMRejectCause>(src.readField(rp, 8));
-        mHaveCause = true;
-    }
-}
-
-void L3CMServiceAbort::writeBody(L3Frame& dest, size_t& wp) const {
-    if (mHaveCause) {
-        dest.writeField(wp, static_cast<unsigned>(mCause), 8);
-    }
+void L3CMServiceAbort::parseBody(const L3Frame&, size_t&) {
+    // Nothing to parse - empty body per GSM 04.08 9.2.7
 }
 
 void L3CMServiceAbort::text(std::ostream& os) const {
     os << "CMServiceAbort";
-    if (mHaveCause) {
-        os << ": " << MMRejectCause2Str(mCause);
-    }
 }
 
 // ── L3CMServiceReject ──────────────────────────────────────────────────
@@ -329,8 +317,8 @@ L3AuthenticationRequest::L3AuthenticationRequest(unsigned ckSN, const std::vecto
     : mCKSN(ckSN), mRAND(rand) {}
 
 void L3AuthenticationRequest::parseBody(const L3Frame& src, size_t& rp) {
-    mCKSN = src.readField(rp, 4);
     src.readField(rp, 4);  // spare
+    mCKSN = src.readField(rp, 4);
     mRAND.resize(16);
     for (size_t i = 0; i < 16; ++i) {
         mRAND[i] = static_cast<uint8_t>(src.readField(rp, 8));
@@ -338,8 +326,8 @@ void L3AuthenticationRequest::parseBody(const L3Frame& src, size_t& rp) {
 }
 
 void L3AuthenticationRequest::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mCKSN, 4);
     dest.writeField(wp, 0, 4);  // spare half octet
+    dest.writeField(wp, mCKSN, 4);
     for (const auto& b : mRAND) {
         dest.writeField(wp, b, 8);
     }

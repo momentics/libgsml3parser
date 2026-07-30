@@ -23,16 +23,20 @@ public:
         SupplementaryService = 8,
         VoiceCallGroup = 9,
         VoiceBroadcast = 10,
-        LocationService = 11
+        LocationService = 11,
+        MobileTerminatedCall = 100,
+        MobileTerminatedShortMessage = 101,
+        HandoverCall = 103,
+        LocationUpdateRequest = 105
     };
 private:
     TypeCode mType;
 public:
     explicit L3CMServiceType(TypeCode wType = UndefinedType);
     TypeCode type() const { return mType; }
-    bool isCC() const { return mType == MobileOriginatedCall || mType == EmergencyCall; }
-    bool isSMS() const { return mType == ShortMessage; }
-    bool isMM() const { return mType == LocationService; }
+    bool isCC() const { return mType == MobileOriginatedCall || mType == EmergencyCall || mType == MobileTerminatedCall || mType == HandoverCall; }
+    bool isSMS() const { return mType == ShortMessage || mType == MobileTerminatedShortMessage; }
+    bool isMM() const { return mType == LocationUpdateRequest; }
     size_t lengthV() const override { return 0; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;

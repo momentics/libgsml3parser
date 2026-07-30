@@ -496,7 +496,7 @@ private:
 public:
     explicit L3PageMode(unsigned wPageMode = 0);
     unsigned pageMode() const { return mPageMode; }
-    size_t lengthV() const override { return 0; }  // 1/2 octet field
+    size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
     void parseV(const L3Frame& src, size_t& rp, size_t) override;
@@ -724,7 +724,7 @@ private:
 public:
     explicit L3APDUID(unsigned protocolIdentifier = 0);
     unsigned protocolIdentifier() const { return mProtocolIdentifier; }
-    size_t lengthV() const override { return 0; }
+    size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
     void parseV(const L3Frame& src, size_t& rp, size_t) override;
@@ -777,7 +777,7 @@ public:
     L3DedicatedModeOrTBF(bool forTBF = false, bool wDownlink = false);
     bool isDownlink() const { return mDownlink; }
     bool isTBF() const { return mDMOrTBF; }
-    size_t lengthV() const override { return 0; }
+    size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
     void parseV(const L3Frame& src, size_t& rp, size_t) override;

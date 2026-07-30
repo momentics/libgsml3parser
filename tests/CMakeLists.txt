@@ -13,6 +13,13 @@ add_executable(gsml3parser_tests
     test_bitvector.cpp
     test_parser.cpp
     test_messages.cpp
+    test_roundtrip.cpp
+    test_gsm_specs.cpp
+    test_mm_messages.cpp
+    test_cc_messages.cpp
+    test_ss_messages.cpp
+    test_l3frame.cpp
+    test_common_ie.cpp
 )
 
 target_link_libraries(gsml3parser_tests

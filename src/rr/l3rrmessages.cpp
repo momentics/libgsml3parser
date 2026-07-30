@@ -395,17 +395,19 @@ void L3MeasurementReport::text(std::ostream& os) const {
 int L3CipheringModeCommand::MTI() const { return CipheringModeCommand; }
 
 void L3CipheringModeCommand::parseBody(const L3Frame& src, size_t& rp) {
+    // Half-octet reverse order: Response first, then Setting
+    mCipheringModeResponse.parseV(src, rp);
     L3CipheringModeSetting cms;
     cms.parseV(src, rp);
     mCiphering = cms.ciphering();
     mAlgorithm = cms.algorithm();
-    mCipheringModeResponse.parseV(src, rp);
 }
 
 void L3CipheringModeCommand::writeBody(L3Frame& dest, size_t& wp) const {
+    // Half-octet reverse order: Response first, then Setting
+    mCipheringModeResponse.writeV(dest, wp);
     L3CipheringModeSetting cms(mCiphering, mAlgorithm);
     cms.writeV(dest, wp);
-    mCipheringModeResponse.writeV(dest, wp);
 }
 
 void L3CipheringModeCommand::text(std::ostream& os) const {
@@ -552,41 +554,40 @@ L3ApplicationInformation::L3ApplicationInformation(BitVector data, unsigned prot
       mLastSegment(last), mData(std::move(data)) {}
 
 size_t L3ApplicationInformation::l2BodyLength() const {
-    // APDU ID (4 bits) + APDU Flags (4 bits) + APDU Data (LV)
+    // APDU ID (4 bits) + APDU Flags (4 bits) = 1 byte, then APDU Data (LV)
     size_t dataLen = (mData.size() + 7) / 8;
-    return 1 + 1 + dataLen;  // 1 byte for ID+Flags, 1 byte for LV length, data
+    return 1 + 1 + dataLen;
 }
 
 void L3ApplicationInformation::writeBody(L3Frame& dest, size_t& wp) const {
-    // Write APDU Flags first (half-octet reverse order), then APDU ID
-    dest.writeField(wp, mLastSegment, 1);
-    dest.writeField(wp, mFirstSegment, 1);
+    // Half-octet reverse order: APDU Flags first, then APDU ID
+    dest.writeField(wp, 0, 1);
     dest.writeField(wp, mCR, 1);
-    dest.writeField(wp, 0, 1);  // spare
+    dest.writeField(wp, mFirstSegment, 1);
+    dest.writeField(wp, mLastSegment, 1);
     dest.writeField(wp, mProtocolIdentifier, 4);
-    // Write APDU Data as LV
+    // APDU Data as LV
     size_t dataLen = (mData.size() + 7) / 8;
-    dest.writeField(wp, dataLen, 8);  // length in bytes
+    dest.writeField(wp, dataLen, 8);
     size_t wp2 = 0;
     for (size_t i = 0; i < mData.size(); ++i) {
         unsigned bit = mData.readField(wp2, 1);
         dest.writeField(wp, bit, 1);
     }
-    // Pad to byte boundary
     while (wp % 8 != 0) {
         dest.writeField(wp, 0, 1);
     }
 }
 
 void L3ApplicationInformation::parseBody(const L3Frame& src, size_t& rp) {
-    // Parse APDU Flags first (half-octet reverse order), then APDU ID
-    mLastSegment = src.readField(rp, 1);
-    mFirstSegment = src.readField(rp, 1);
+    // Half-octet reverse order: APDU Flags first, then APDU ID
+    src.readField(rp, 1);
     mCR = src.readField(rp, 1);
-    src.readField(rp, 1);  // spare
+    mFirstSegment = src.readField(rp, 1);
+    mLastSegment = src.readField(rp, 1);
     mProtocolIdentifier = src.readField(rp, 4);
-    // Parse APDU Data as LV
-    size_t dataLen = src.readField(rp, 8);  // length in bytes
+    // APDU Data as LV
+    size_t dataLen = src.readField(rp, 8);
     size_t bitsLen = dataLen * 8;
     mData = BitVector(bitsLen);
     size_t wp2 = 0;
@@ -661,16 +662,17 @@ L3ImmediateAssignment::L3ImmediateAssignment()
     : mDedicatedModeOrTBF(false, false), mStartTimePresent(false), mStartTimeFrame(0) {}
 
 size_t L3ImmediateAssignment::l2BodyLength() const {
-    // PageMode(1/2) + DedicatedModeOrTBF(1/2) + RequestRef(3) + ChannelDesc(3) + TimingAdv(1) + MobileAlloc(LV) + StartTime(opt)
-    size_t len = 1 + 3 + 3 + 1;
+    // PageMode(1) + DedicatedModeOrTBF(1) + RequestRef(3) + ChannelDesc(3) + TimingAdv(1) + MobileAlloc(LV) + StartTime(opt)
+    size_t len = 1 + 1 + 3 + 3 + 1;
     if (!mMobileAllocation.empty()) len += 1 + mMobileAllocation.size();
     if (mStartTimePresent) len += 3;
     return len;
 }
 
 void L3ImmediateAssignment::parseBody(const L3Frame& src, size_t& rp) {
-    mPageMode.parseV(src, rp);
+    // Half-octet reverse order: DedicatedModeOrTBF first, then PageMode
     mDedicatedModeOrTBF.parseV(src, rp);
+    mPageMode.parseV(src, rp);
     mRequestReference.parseV(src, rp);
     mChannelDescription.parseV(src, rp);
     mTimingAdvance.parseV(src, rp);
@@ -684,20 +686,18 @@ void L3ImmediateAssignment::parseBody(const L3Frame& src, size_t& rp) {
             }
         }
     }
-    // StartTime: 1 bit flag + 23 bits frame number
-    if (rp + 24 <= src.size()) {
-        mStartTimePresent = src.readField(rp, 1);
-        if (mStartTimePresent) {
-            mStartTimeFrame = src.readField(rp, 23);
-        } else {
-            rp += 7; // spare
-        }
+    // StartTime: TLV format (IEI=0x7c)
+    if (rp + 8 <= src.size() && src.peekField(rp, 8) == 0x7c) {
+        rp += 8; // skip IEI
+        mStartTimePresent = true;
+        mStartTimeFrame = src.readField(rp, 23);
     }
 }
 
 void L3ImmediateAssignment::writeBody(L3Frame& dest, size_t& wp) const {
-    mPageMode.writeV(dest, wp);
+    // Half-octet reverse order: DedicatedModeOrTBF first, then PageMode
     mDedicatedModeOrTBF.writeV(dest, wp);
+    mPageMode.writeV(dest, wp);
     mRequestReference.writeV(dest, wp);
     mChannelDescription.writeV(dest, wp);
     mTimingAdvance.writeV(dest, wp);
@@ -707,10 +707,8 @@ void L3ImmediateAssignment::writeBody(L3Frame& dest, size_t& wp) const {
         dest.writeField(wp, b, 8);
     }
     if (mStartTimePresent) {
-        dest.writeField(wp, 1, 1);  // start time present
+        dest.writeField(wp, 0x7c, 8);  // IEI for StartTime
         dest.writeField(wp, mStartTimeFrame, 23);
-    } else {
-        dest.writeField(wp, 0, 1);
     }
 }
 
@@ -728,7 +726,8 @@ L3ImmediateAssignmentExtended::L3ImmediateAssignmentExtended()
       mHaveAdditionalChannel(false) {}
 
 size_t L3ImmediateAssignmentExtended::l2BodyLength() const {
-    size_t len = 1 + 3 + 3 + 1;
+    // PageMode(1) + DedicatedModeOrTBF(1) + RequestRef(3) + ChannelDesc(3) + TimingAdv(1) + MobileAlloc(LV) + StartTime(opt) + AdditionalChannel(opt)
+    size_t len = 1 + 1 + 3 + 3 + 1;
     if (!mMobileAllocation.empty()) len += 1 + mMobileAllocation.size();
     if (mStartTimePresent) len += 3;
     if (mHaveAdditionalChannel) len += mAdditionalChannel.lengthV();
@@ -736,8 +735,9 @@ size_t L3ImmediateAssignmentExtended::l2BodyLength() const {
 }
 
 void L3ImmediateAssignmentExtended::parseBody(const L3Frame& src, size_t& rp) {
-    mPageMode.parseV(src, rp);
+    // Half-octet reverse order: DedicatedModeOrTBF first, then PageMode
     mDedicatedModeOrTBF.parseV(src, rp);
+    mPageMode.parseV(src, rp);
     mRequestReference.parseV(src, rp);
     mChannelDescription.parseV(src, rp);
     mTimingAdvance.parseV(src, rp);
@@ -751,20 +751,23 @@ void L3ImmediateAssignmentExtended::parseBody(const L3Frame& src, size_t& rp) {
             }
         }
     }
-    // StartTime: 1 bit flag + 23 bits frame number
+    // StartTime: TLV format (IEI=0x7c)
+    if (rp + 8 <= src.size() && src.peekField(rp, 8) == 0x7c) {
+        rp += 8;
+        mStartTimePresent = true;
+        mStartTimeFrame = src.readField(rp, 23);
+    }
+    // Additional Channel Description (optional)
     if (rp + 24 <= src.size()) {
-        mStartTimePresent = src.readField(rp, 1);
-        if (mStartTimePresent) {
-            mStartTimeFrame = src.readField(rp, 23);
-        } else {
-            rp += 7; // spare
-        }
+        mHaveAdditionalChannel = true;
+        mAdditionalChannel.parseV(src, rp);
     }
 }
 
 void L3ImmediateAssignmentExtended::writeBody(L3Frame& dest, size_t& wp) const {
-    mPageMode.writeV(dest, wp);
+    // Half-octet reverse order: DedicatedModeOrTBF first, then PageMode
     mDedicatedModeOrTBF.writeV(dest, wp);
+    mPageMode.writeV(dest, wp);
     mRequestReference.writeV(dest, wp);
     mChannelDescription.writeV(dest, wp);
     mTimingAdvance.writeV(dest, wp);
@@ -774,10 +777,8 @@ void L3ImmediateAssignmentExtended::writeBody(L3Frame& dest, size_t& wp) const {
         dest.writeField(wp, b, 8);
     }
     if (mStartTimePresent) {
-        dest.writeField(wp, 1, 1);
+        dest.writeField(wp, 0x7c, 8);
         dest.writeField(wp, mStartTimeFrame, 23);
-    } else {
-        dest.writeField(wp, 0, 1);
     }
     if (mHaveAdditionalChannel) {
         mAdditionalChannel.writeV(dest, wp);
@@ -798,33 +799,31 @@ void L3ImmediateAssignmentExtended::text(std::ostream& os) const {
 // ── L3ImmediateAssignmentReject ────────────────────────────────────────
 
 L3ImmediateAssignmentReject::L3ImmediateAssignmentReject()
-    : mPageMode(0) {}
+    : mPageMode(0), mWaitIndication(0) {}
 
 L3ImmediateAssignmentReject::L3ImmediateAssignmentReject(unsigned waitSeconds)
-    : mPageMode(0) {
-    mWaitIndications.resize(4, L3WaitIndication(waitSeconds));
-}
+    : mPageMode(0), mWaitIndication(waitSeconds) {}
 
 size_t L3ImmediateAssignmentReject::l2BodyLength() const {
-    return 17;  // Fixed: 1 byte PageMode + 4 * (3 bytes RequestRef + 1 byte WaitInd) = 17
+    return 17;  // Fixed: 1/2 octet spare + PageMode + 4 * (3 bytes RequestRef + 1 byte WaitInd)
 }
 
 void L3ImmediateAssignmentReject::parseBody(const L3Frame& src, size_t& rp) {
+    src.readField(rp, 4);  // spare half-octet
     mPageMode.parseV(src, rp);
-    // 4 pairs of (RequestReference + WaitIndication)
+    // 4 pairs of (RequestReference + WaitIndication), same WaitIndication for all
     for (int i = 0; i < 4; ++i) {
         if (rp + 32 <= src.size()) {
             L3RequestReference rr;
             rr.parseV(src, rp);
             mRequestReferences.push_back(rr);
-            L3WaitIndication wi;
-            wi.parseV(src, rp);
-            mWaitIndications.push_back(wi);
+            mWaitIndication = src.readField(rp, 8);
         }
     }
 }
 
 void L3ImmediateAssignmentReject::writeBody(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, 0, 4);  // spare half-octet
     mPageMode.writeV(dest, wp);
     // Write up to 4 pairs, padding with last entry if fewer
     int count = static_cast<int>(mRequestReferences.size());
@@ -832,15 +831,14 @@ void L3ImmediateAssignmentReject::writeBody(L3Frame& dest, size_t& wp) const {
     for (int i = 0; i < 4; ++i) {
         int idx = std::min(i, count - 1);
         mRequestReferences[idx].writeV(dest, wp);
-        mWaitIndications[idx].writeV(dest, wp);
+        dest.writeField(wp, mWaitIndication, 8);
     }
 }
 
 void L3ImmediateAssignmentReject::text(std::ostream& os) const {
-    os << "ImmediateAssignmentReject: refs=" << mRequestReferences.size();
-    for (size_t i = 0; i < mWaitIndications.size(); ++i) {
-        os << " wait[" << i << "]=" << mWaitIndications[i].value() << "s";
-    }
+    os << "ImmediateAssignmentReject: pageMode=" << mPageMode.pageMode()
+       << " T3122=" << mWaitIndication;
+    os << " requestReferences=(" << mRequestReferences.size() << ")";
 }
 
 // ── L3PagingRequestType2 ───────────────────────────────────────────────
@@ -1046,8 +1044,6 @@ void L3AdditionalAssignment::text(std::ostream& os) const {
 
 L3SystemInformationType2::L3SystemInformationType2() {}
 
-size_t L3SystemInformationType2::restOctetsLength() const { return 0; }
-
 void L3SystemInformationType2::parseBody(const L3Frame& src, size_t& rp) {
     mBCCHFrequencyList.parseV(src, rp);
     mNCCPermitted.parseV(src, rp);
@@ -1072,8 +1068,6 @@ void L3SystemInformationType2::text(std::ostream& os) const {
 // ── L3SystemInformationType2bis ────────────────────────────────────────
 
 L3SystemInformationType2bis::L3SystemInformationType2bis() {}
-
-size_t L3SystemInformationType2bis::restOctetsLength() const { return 0; }
 
 void L3SystemInformationType2bis::parseBody(const L3Frame& src, size_t& rp) {
     mBCCHFrequencyList.parseV(src, rp);
@@ -1100,8 +1094,6 @@ void L3SystemInformationType2bis::text(std::ostream& os) const {
 
 L3SystemInformationType2ter::L3SystemInformationType2ter() {}
 
-size_t L3SystemInformationType2ter::restOctetsLength() const { return 0; }
-
 void L3SystemInformationType2ter::parseBody(const L3Frame& src, size_t& rp) {
     mBCCHFrequencyList.parseV(src, rp);
     mNCCPermitted.parseV(src, rp);
@@ -1127,38 +1119,34 @@ void L3SystemInformationType2ter::text(std::ostream& os) const {
 
 L3SystemInformationType4::L3SystemInformationType4() : mHaveCBCH(false) {}
 
-size_t L3SystemInformationType4::restOctetsLength() const {
-    size_t len = 0;
-    if (mHaveCBCH) len += mCBCHChannelDescription.lengthV();
-    len += mRestOctets.lengthV();
+size_t L3SystemInformationType4::l2BodyLength() const {
+    size_t len = mLAI.lengthV() + mCellSelectionParameters.lengthV() + mRACHControlParameters.lengthV();
+    if (mHaveCBCH) len += mCBCHChannelDescription.lengthTV();
     return len;
+}
+
+size_t L3SystemInformationType4::restOctetsLength() const {
+    return mRestOctets.lengthV();
 }
 
 void L3SystemInformationType4::parseBody(const L3Frame& src, size_t& rp) {
     mLAI.parseV(src, rp);
-    mCI.parseV(src, rp);
     mCellSelectionParameters.parseV(src, rp);
-    mCellOptions.parseV(src, rp);
     mRACHControlParameters.parseV(src, rp);
-    // Rest octets: optional CBCH Channel Description + SI4 Rest Octets
-    if (rp + 8 <= src.size() && (src.peekField(rp, 8) & 0xf0) == 0x20) {
+    // Optional CBCH Channel Description (TV, IEI=0x64)
+    if (rp + 8 <= src.size() && src.peekField(rp, 8) == 0x64) {
         mHaveCBCH = true;
-        rp += 8; // skip CBCH type
-        mCBCHChannelDescription.parseV(src, rp);
+        mCBCHChannelDescription.parseTV(0x64, src, rp);
     }
-    // Parse remaining as SI4 rest octets
     mRestOctets.parseV(src, rp);
 }
 
 void L3SystemInformationType4::writeBody(L3Frame& dest, size_t& wp) const {
     mLAI.writeV(dest, wp);
-    mCI.writeV(dest, wp);
     mCellSelectionParameters.writeV(dest, wp);
-    mCellOptions.writeV(dest, wp);
     mRACHControlParameters.writeV(dest, wp);
     if (mHaveCBCH) {
-        dest.writeField(wp, 0x22, 8);
-        mCBCHChannelDescription.writeV(dest, wp);
+        mCBCHChannelDescription.writeTV(0x64, dest, wp);
     }
     mRestOctets.writeV(dest, wp);
 }
@@ -1167,11 +1155,7 @@ void L3SystemInformationType4::text(std::ostream& os) const {
     os << "SystemInformationType4: ";
     mLAI.text(os);
     os << " ";
-    mCI.text(os);
-    os << " ";
     mCellSelectionParameters.text(os);
-    os << " ";
-    mCellOptions.text(os);
     os << " ";
     mRACHControlParameters.text(os);
 }

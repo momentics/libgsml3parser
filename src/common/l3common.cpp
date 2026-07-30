@@ -338,22 +338,24 @@ L3MobileStationClassmark3::L3MobileStationClassmark3()
     : mMultiband(0), mA5_4(0), mA5_5(0), mA5_6(0), mA5_7(0) {}
 
 void L3MobileStationClassmark3::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mMultiband, 1);
-    dest.writeField(wp, mA5_4, 1);
-    dest.writeField(wp, mA5_5, 1);
-    dest.writeField(wp, mA5_6, 1);
+    dest.writeField(wp, 0, 1);  // spare
+    dest.writeField(wp, mMultiband, 3);
     dest.writeField(wp, mA5_7, 1);
-    for (int i = 0; i < 107; i++) {
+    dest.writeField(wp, mA5_6, 1);
+    dest.writeField(wp, mA5_5, 1);
+    dest.writeField(wp, mA5_4, 1);
+    for (int i = 0; i < 106; i++) {
         dest.writeField(wp, 0, 1);
     }
 }
 
 void L3MobileStationClassmark3::parseV(const L3Frame& src, size_t& rp) {
-    mMultiband = src.readField(rp, 1);
-    mA5_4      = src.readField(rp, 1);
-    mA5_5      = src.readField(rp, 1);
-    mA5_6      = src.readField(rp, 1);
+    src.readField(rp, 1);  // spare
+    mMultiband = src.readField(rp, 3);
     mA5_7      = src.readField(rp, 1);
+    mA5_6      = src.readField(rp, 1);
+    mA5_5      = src.readField(rp, 1);
+    mA5_4      = src.readField(rp, 1);
 }
 
 void L3MobileStationClassmark3::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -914,17 +916,18 @@ L3CipheringModeSetting::L3CipheringModeSetting(bool wCiphering, int wAlgorithm)
     : mCiphering(wCiphering), mAlgorithm(wAlgorithm) {}
 
 void L3CipheringModeSetting::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, mAlgorithm & 7, 3);
     dest.writeField(wp, mCiphering ? 1 : 0, 1);
-    dest.writeField(wp, mAlgorithm, 7);
 }
 
 void L3CipheringModeSetting::parseV(const L3Frame& src, size_t& rp) {
+    mAlgorithm = src.readField(rp, 3);
     mCiphering = src.readField(rp, 1);
-    mAlgorithm = src.readField(rp, 7);
 }
 
 void L3CipheringModeSetting::parseV(const L3Frame& src, size_t& rp, size_t) {
-    parseV(src, rp);
+    mAlgorithm = src.readField(rp, 3);
+    mCiphering = src.readField(rp, 1);
 }
 
 void L3CipheringModeSetting::text(std::ostream& os) const {
@@ -937,17 +940,18 @@ L3CipheringModeResponse::L3CipheringModeResponse(bool wIncludeIMEISV)
     : mIncludeIMEISV(wIncludeIMEISV) {}
 
 void L3CipheringModeResponse::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, 0, 3);
     dest.writeField(wp, mIncludeIMEISV ? 1 : 0, 1);
-    dest.writeField(wp, 0, 7);
 }
 
 void L3CipheringModeResponse::parseV(const L3Frame& src, size_t& rp) {
+    src.readField(rp, 3);
     mIncludeIMEISV = src.readField(rp, 1);
-    src.readField(rp, 7);
 }
 
 void L3CipheringModeResponse::parseV(const L3Frame& src, size_t& rp, size_t) {
-    parseV(src, rp);
+    src.readField(rp, 3);
+    mIncludeIMEISV = src.readField(rp, 1);
 }
 
 void L3CipheringModeResponse::text(std::ostream& os) const {
@@ -1009,16 +1013,19 @@ L3PageMode::L3PageMode(unsigned wPageMode) : mPageMode(wPageMode) {}
 void L3PageMode::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, 0, 2);  // spare
     dest.writeField(wp, mPageMode, 2);
+    dest.writeField(wp, 0, 4);  // spare
 }
 
 void L3PageMode::parseV(const L3Frame& src, size_t& rp) {
     src.readField(rp, 2);  // spare
     mPageMode = src.readField(rp, 2);
+    src.readField(rp, 4);  // spare
 }
 
 void L3PageMode::parseV(const L3Frame& src, size_t& rp, size_t) {
     src.readField(rp, 2);  // spare
     mPageMode = src.readField(rp, 2);
+    src.readField(rp, 4);  // spare
 }
 
 void L3PageMode::text(std::ostream& os) const {
@@ -1103,15 +1110,17 @@ L3CellOptionsBCCH::L3CellOptionsBCCH()
     : mPWRC(0), mDTX(2), mRADIO_LINK_TIMEOUT(1) {}
 
 void L3CellOptionsBCCH::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, 0, 1);
     dest.writeField(wp, mPWRC, 1);
     dest.writeField(wp, mDTX, 2);
-    dest.writeField(wp, mRADIO_LINK_TIMEOUT, 5);
+    dest.writeField(wp, mRADIO_LINK_TIMEOUT, 4);
 }
 
 void L3CellOptionsBCCH::parseV(const L3Frame& src, size_t& rp) {
+    src.readField(rp, 1);
     mPWRC = src.readField(rp, 1);
     mDTX = src.readField(rp, 2);
-    mRADIO_LINK_TIMEOUT = src.readField(rp, 5);
+    mRADIO_LINK_TIMEOUT = src.readField(rp, 4);
 }
 
 void L3CellOptionsBCCH::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -1129,15 +1138,17 @@ L3CellOptionsSACCH::L3CellOptionsSACCH()
     : mPWRC(0), mDTX(2), mRADIO_LINK_TIMEOUT(1) {}
 
 void L3CellOptionsSACCH::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, (mDTX >> 2) & 0x01, 1);
     dest.writeField(wp, mPWRC, 1);
-    dest.writeField(wp, mDTX, 2);
-    dest.writeField(wp, mRADIO_LINK_TIMEOUT, 5);
+    dest.writeField(wp, mDTX & 0x03, 2);
+    dest.writeField(wp, mRADIO_LINK_TIMEOUT, 4);
 }
 
 void L3CellOptionsSACCH::parseV(const L3Frame& src, size_t& rp) {
+    mDTX = src.readField(rp, 1) << 2;
     mPWRC = src.readField(rp, 1);
-    mDTX = src.readField(rp, 2);
-    mRADIO_LINK_TIMEOUT = src.readField(rp, 5);
+    mDTX |= src.readField(rp, 2);
+    mRADIO_LINK_TIMEOUT = src.readField(rp, 4);
 }
 
 void L3CellOptionsSACCH::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -1156,19 +1167,19 @@ L3CellSelectionParameters::L3CellSelectionParameters()
       mMS_TXPWR_MAX_CCH(0), mRXLEV_ACCESS_MIN(0) {}
 
 void L3CellSelectionParameters::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mACS, 1);
-    dest.writeField(wp, mNECI, 4);
     dest.writeField(wp, mCELL_RESELECT_HYSTERESIS, 3);
-    dest.writeField(wp, mMS_TXPWR_MAX_CCH, 3);
-    dest.writeField(wp, mRXLEV_ACCESS_MIN, 5);
+    dest.writeField(wp, mMS_TXPWR_MAX_CCH, 5);
+    dest.writeField(wp, mACS, 1);
+    dest.writeField(wp, mNECI, 1);
+    dest.writeField(wp, mRXLEV_ACCESS_MIN, 6);
 }
 
 void L3CellSelectionParameters::parseV(const L3Frame& src, size_t& rp) {
-    mACS = src.readField(rp, 1);
-    mNECI = src.readField(rp, 4);
     mCELL_RESELECT_HYSTERESIS = src.readField(rp, 3);
-    mMS_TXPWR_MAX_CCH = src.readField(rp, 3);
-    mRXLEV_ACCESS_MIN = src.readField(rp, 5);
+    mMS_TXPWR_MAX_CCH = src.readField(rp, 5);
+    mACS = src.readField(rp, 1);
+    mNECI = src.readField(rp, 1);
+    mRXLEV_ACCESS_MIN = src.readField(rp, 6);
 }
 
 void L3CellSelectionParameters::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -1324,14 +1335,17 @@ L3APDUID::L3APDUID(unsigned protocolIdentifier)
 
 void L3APDUID::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, mProtocolIdentifier, 4);
+    dest.writeField(wp, 0, 4);  // spare
 }
 
 void L3APDUID::parseV(const L3Frame& src, size_t& rp) {
     mProtocolIdentifier = src.readField(rp, 4);
+    src.readField(rp, 4);  // spare
 }
 
 void L3APDUID::parseV(const L3Frame& src, size_t& rp, size_t) {
-    parseV(src, rp);
+    mProtocolIdentifier = src.readField(rp, 4);
+    src.readField(rp, 4);  // spare
 }
 
 void L3APDUID::text(std::ostream& os) const {
@@ -1414,17 +1428,19 @@ L3DedicatedModeOrTBF::L3DedicatedModeOrTBF(bool forTBF, bool wDownlink)
     : mDownlink(wDownlink), mTMA(0), mDMOrTBF(forTBF) {}
 
 void L3DedicatedModeOrTBF::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0, 1);  // spare
-    dest.writeField(wp, mTMA, 1);
-    dest.writeField(wp, mDownlink, 1);
     dest.writeField(wp, mDMOrTBF, 1);
+    dest.writeField(wp, mDownlink, 1);
+    dest.writeField(wp, mTMA, 1);
+    dest.writeField(wp, 0, 1);  // spare
+    dest.writeField(wp, 0, 4);  // spare
 }
 
 void L3DedicatedModeOrTBF::parseV(const L3Frame& src, size_t& rp) {
-    src.readField(rp, 1);  // spare
-    mTMA = src.readField(rp, 1);
-    mDownlink = src.readField(rp, 1);
     mDMOrTBF = src.readField(rp, 1);
+    mDownlink = src.readField(rp, 1);
+    mTMA = src.readField(rp, 1);
+    src.readField(rp, 1);  // spare
+    src.readField(rp, 4);  // spare
 }
 
 void L3DedicatedModeOrTBF::parseV(const L3Frame& src, size_t& rp, size_t) {
