@@ -178,6 +178,7 @@ public:
     explicit L3CMServiceReject(MMRejectCause cause) : mCause(cause) {}
     int MTI() const override { return CMServiceReject; }
     size_t l2BodyLength() const override { return 1; }
+    void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame&, size_t&) const override;
     void text(std::ostream& os) const override;
 };
@@ -296,6 +297,7 @@ class L3AuthenticationReject : public L3MMMessage {
 public:
     int MTI() const override { return AuthenticationReject; }
     size_t l2BodyLength() const override { return 0; }
+    void parseBody(const L3Frame&, size_t&) override {}
     void writeBody(L3Frame&, size_t&) const override {}
     void text(std::ostream& os) const override;
 };

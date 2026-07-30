@@ -442,6 +442,47 @@ void L3FrequencyList::text(std::ostream& os) const {
     os << "]";
 }
 
+// ── L3MobileAllocation ─────────────────────────────────────────────────
+
+L3MobileAllocation::L3MobileAllocation() {}
+
+L3MobileAllocation::L3MobileAllocation(const std::vector<uint8_t>& wData)
+    : mData(wData) {}
+
+size_t L3MobileAllocation::lengthV() const {
+    return mData.size();
+}
+
+void L3MobileAllocation::writeV(L3Frame& dest, size_t& wp) const {
+    for (size_t i = 0; i < mData.size(); ++i) {
+        dest.writeField(wp, mData[i], 8);
+    }
+}
+
+void L3MobileAllocation::parseV(const L3Frame& src, size_t& rp) {
+    size_t remaining = src.size() - rp;
+    size_t nbytes = remaining / 8;
+    mData.resize(nbytes);
+    for (size_t i = 0; i < nbytes; ++i) {
+        mData[i] = static_cast<uint8_t>(src.readField(rp, 8));
+    }
+}
+
+void L3MobileAllocation::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+    mData.resize(expectedLength);
+    for (size_t i = 0; i < expectedLength; ++i) {
+        mData[i] = static_cast<uint8_t>(src.readField(rp, 8));
+    }
+}
+
+void L3MobileAllocation::text(std::ostream& os) const {
+    os << "MobAlloc[" << mData.size() << "octets]";
+    for (size_t i = 0; i < mData.size(); ++i) {
+        os << " " << std::hex << std::uppercase << std::setw(2) << std::setfill('0') << (int)mData[i];
+    }
+    os << std::dec;
+}
+
 // ── L3CellChannelDescription ───────────────────────────────────────────
 
 L3CellChannelDescription::L3CellChannelDescription()

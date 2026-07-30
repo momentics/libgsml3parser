@@ -418,6 +418,12 @@ void L3StartDTMF::text(std::ostream& os) const {
     os << "StartDTMF: key=" << mKey;
 }
 
+void L3StartDTMFAcknowledge::parseBody(const L3Frame& src, size_t& rp) {
+    L3KeypadFacility kf;
+    kf.parseTV(0x2c, src, rp);
+    mKey = kf.IA5();
+}
+
 void L3StartDTMFAcknowledge::writeBody(L3Frame& dest, size_t& wp) const {
     L3KeypadFacility kf(mKey);
     kf.writeTV(0x2c, dest, wp);

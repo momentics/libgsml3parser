@@ -174,6 +174,10 @@ void L3CMServiceAbort::text(std::ostream& os) const {
 
 // ── L3CMServiceReject ──────────────────────────────────────────────────
 
+void L3CMServiceReject::parseBody(const L3Frame& src, size_t& rp) {
+    mCause = static_cast<MMRejectCause>(src.readField(rp, 8));
+}
+
 void L3CMServiceReject::writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mCause), 8);
 }

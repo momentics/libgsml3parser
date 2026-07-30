@@ -254,6 +254,7 @@ public:
     int MTI() const override { return ClassmarkEnquiry; }
     size_t l2BodyLength() const override { return 0; }
     void writeBody(L3Frame&, size_t&) const override {}
+    void parseBody(const L3Frame&, size_t&) override {}
     void text(std::ostream& os) const override;
 };
 
@@ -271,6 +272,8 @@ public:
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
     const L3MobileStationClassmark2& classmark() const { return mClassmark; }
+    bool hasAdditionalClassmark() const { return mHaveAdditionalClassmark; }
+    const L3MobileStationClassmark3& additionalClassmark() const { return mAdditionalClassmark; }
 };
 
 // ── Measurement Report (GSM 04.08 9.1.21) ─────────────────────────────
@@ -312,6 +315,7 @@ public:
     int MTI() const override;
     size_t l2BodyLength() const override { return 0; }
     void parseBody(const L3Frame&, size_t&) override {}
+    void writeBody(L3Frame&, size_t&) const override {}
     void text(std::ostream& os) const override;
 };
 

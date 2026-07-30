@@ -293,9 +293,11 @@ private:
 public:
     L3StartDTMFAcknowledge(unsigned wTI, char key) : L3CCMessage(wTI), mKey(key) {}
     int MTI() const override { return StartDTMFAcknowledge; }
+    void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     size_t l2BodyLength() const override { return 1; }
     void text(std::ostream& os) const override;
+    char key() const { return mKey; }
 };
 
 class L3StartDTMFReject : public L3CCMessage {

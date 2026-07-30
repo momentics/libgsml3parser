@@ -28,7 +28,8 @@ void L3BearerCapability::parseV(const L3Frame& src, size_t& rp) {
     mPresent = true;
     mOctet3 = static_cast<uint8_t>(src.readField(rp, 8));
     mOctet3a.clear();
-    while (rp + 8 <= src.size()) {
+    if (mOctet3 & 0x10) {
+        mOctet3a.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
         mOctet3a.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
     }
 }
@@ -441,6 +442,27 @@ void L3Signal::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
 void L3Signal::text(std::ostream& os) const {
     os << "Signal[0x" << std::hex << std::setw(2) << std::setfill('0')
         << static_cast<int>(mSignalValue) << "]";
+}
+
+// ── L3RepeatIndicator ─────────────────────────────────────────────────
+
+L3RepeatIndicator::L3RepeatIndicator(unsigned wValue) : mValue(wValue) {}
+
+void L3RepeatIndicator::writeV(L3Frame& dest, size_t& wp) const {
+    dest.writeField(wp, mValue, 4);
+}
+
+void L3RepeatIndicator::parseV(const L3Frame& src, size_t& rp) {
+    mValue = src.readField(rp, 4);
+}
+
+void L3RepeatIndicator::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+    (void)expectedLength;
+    mValue = src.readField(rp, 4);
+}
+
+void L3RepeatIndicator::text(std::ostream& os) const {
+    os << "RepeatIndicator: " << mValue;
 }
 
 // ── L3CCCapabilities ───────────────────────────────────────────────────

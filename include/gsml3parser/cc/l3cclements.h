@@ -233,6 +233,22 @@ public:
     void text(std::ostream& os) const override;
 };
 
+// ── Repeat Indicator (GSM 04.08 10.5.4.4) ──────────────────────────────
+// TV format: IEI=0x0d, Value=4 bits
+
+class L3RepeatIndicator : public L3ProtocolElement {
+private:
+    unsigned mValue;
+public:
+    explicit L3RepeatIndicator(unsigned wValue = 0);
+    unsigned value() const { return mValue; }
+    size_t lengthV() const override { return 0; }
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    void text(std::ostream& os) const override;
+};
+
 // ── CC Capabilities mixin ───────────────────────────────────────────────
 
 class L3CCCapabilities {

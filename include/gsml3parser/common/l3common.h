@@ -766,6 +766,23 @@ public:
     void text(std::ostream& os) const override;
 };
 
+// ── Mobile Allocation (GSM 04.08 10.5.2.14) ────────────────────────────
+// LV format: Length byte + bitmap octets
+
+class L3MobileAllocation : public L3ProtocolElement {
+private:
+    std::vector<uint8_t> mData;
+public:
+    L3MobileAllocation();
+    explicit L3MobileAllocation(const std::vector<uint8_t>& wData);
+    const std::vector<uint8_t>& data() const { return mData; }
+    size_t lengthV() const override;
+    void writeV(L3Frame& dest, size_t& wp) const override;
+    void parseV(const L3Frame& src, size_t& rp) override;
+    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
+    void text(std::ostream& os) const override;
+};
+
 // ── Dedicated Mode Or TBF (GSM 04.08 10.5.2.25b) ──────────────────────
 
 class L3DedicatedModeOrTBF : public L3ProtocolElement {
