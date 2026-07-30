@@ -92,6 +92,7 @@ private:
     uint8_t mDay;
     uint8_t mHour;
     uint8_t mMinute;
+    uint8_t mSecond;
     uint8_t mTimezone;
     TimeType mType;
 public:
@@ -101,6 +102,7 @@ public:
     uint8_t day() const { return mDay; }
     uint8_t hour() const { return mHour; }
     uint8_t minute() const { return mMinute; }
+    uint8_t second() const { return mSecond; }
     uint8_t timezone() const { return mTimezone; }
     TimeType type() const { return mType; }
     size_t lengthV() const override { return 7; }

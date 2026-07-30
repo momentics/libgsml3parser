@@ -199,7 +199,9 @@ void L3BCDDigits::write(L3Frame& dest, size_t& wp) const {
 }
 
 size_t L3BCDDigits::lengthV() const {
-    return (strlen(mDigits) + 1) / 2;
+    unsigned sz = strlen(mDigits);
+    if (sz > 0 && mDigits[0] == '+') sz--;
+    return (sz / 2) + (sz % 2);
 }
 
 std::ostream& operator<<(std::ostream& os, const L3BCDDigits& digits) {

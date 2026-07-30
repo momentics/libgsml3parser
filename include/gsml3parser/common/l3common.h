@@ -251,6 +251,7 @@ public:
     unsigned mT3212;
     L3ControlChannelDescription();
     bool isCCCHCombined() { return mCCCH_CONF == 1; }
+    void validate();
     size_t lengthV() const override { return 3; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -965,6 +966,11 @@ public:
     void parseV(const L3Frame& src, size_t& rp) override;
     void parseV(const L3Frame& src, size_t& rp, size_t) override;
 };
+
+// ── Utility functions ──────────────────────────────────────────────────
+
+/** Returns the number of beacon timeslots for a given CCCH configuration. */
+unsigned countBeaconTimeslots(int ccch_conf);
 
 } // namespace gsml3parser
 
