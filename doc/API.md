@@ -705,11 +705,20 @@ public:
     enum MessageType : int {
         SystemInformationType1  = 0x19,
         SystemInformationType2  = 0x1a,
+        SystemInformationType2bis = 0x1f,
+        SystemInformationType2ter = 0x14,
         SystemInformationType3  = 0x1b,
         SystemInformationType4  = 0x1c,
         SystemInformationType5  = 0x1d,
+        SystemInformationType5bis = 0x20,
+        SystemInformationType5ter = 0x23,
         SystemInformationType6  = 0x1e,
+        SystemInformationType7  = 0x15,
+        SystemInformationType8  = 0x16,
+        SystemInformationType9  = 0x17,
         SystemInformationType13 = 0x00,
+        SystemInformationType16 = 0x01,
+        SystemInformationType17 = 0x04,
         AssignmentCommand       = 0x2e,
         AssignmentComplete      = 0x29,
         AssignmentFailure       = 0x2f,
@@ -720,6 +729,7 @@ public:
         PagingRequestType2      = 0x22,
         PagingRequestType3      = 0x24,
         PagingResponse          = 0x27,
+        PhysicalInformation     = 0x26,
         HandoverCommand         = 0x2b,
         HandoverComplete        = 0x2c,
         HandoverFailure         = 0x28,
@@ -757,15 +767,22 @@ class L3RRMessageRO : public L3RRMessage {
 
 ### 5.3 L3PagingRequestType1
 
-**Spec:** GSM 04.08 9.1.22
+**Spec:** GSM 04.08 9.1.22 — V-format: PageMode(4 bits) + ChannelNeeded(2 bits) + MobileIdentity(LV) [+ second MobileIdentity(TLV)]
 
 ```cpp
 class L3PagingRequestType1 : public L3RRMessageNRO {
 public:
     L3PagingRequestType1();
     L3PagingRequestType1(const L3MobileIdentity& wId, ChannelType wType);
+    L3PagingRequestType1(const L3MobileIdentity& wId1, ChannelType wType1,
+                         const L3MobileIdentity& wId2, ChannelType wType2);
+    const L3MobileIdentity& mobileID() const;
+    ChannelType channelType() const;
     int MTI() const override { return PagingRequestType1; }
 };
+```
+
+PageMode is a 4-bit (half-octet) field. Two-ID constructor supports dual paging.
 ```
 
 ### 5.4 L3PagingResponse
@@ -783,14 +800,21 @@ public:
 
 ### 5.5 L3ChannelRelease
 
-**Spec:** GSM 04.08 9.1.7
+**Spec:** GSM 04.08 9.1.7 — V-format: Cause [+ GPRSResumption]
 
 ```cpp
 class L3ChannelRelease : public L3RRMessageNRO {
 public:
     explicit L3ChannelRelease(RRCause cause = RRCause::Normal_Event);
+    RRCause cause() const;
+    bool hasGprsResumption() const;
+    bool gprsResumption() const;
     int MTI() const override { return ChannelRelease; }
+    size_t l2BodyLength() const override;
 };
+```
+
+l2BodyLength is dynamic: 1 + (GPRS resumption ? 1 : 0).
 ```
 
 ### 5.6 L3RRStatus
@@ -807,13 +831,24 @@ public:
 
 ### 5.7 L3AssignmentCommand
 
-**Spec:** GSM 04.08 9.1.2
+**Spec:** GSM 04.08 9.1.2 — V-format: ChannelDescription + ChannelMode + PowerCommand [+ Mode1] + [+ MultiRate]
 
 ```cpp
 class L3AssignmentCommand : public L3RRMessageNRO {
 public:
+    L3AssignmentCommand();
+    const L3ChannelDescription& description() const;
+    const L3ChannelMode& mode() const;
+    const L3PowerCommand& powerCommand() const;
+    bool hasMode1() const;
+    const L3ChannelMode& mode1() const;
+    bool isAMR() const;
+    const L3MultiRateConfiguration& multiRate() const;
     int MTI() const override { return AssignmentCommand; }
 };
+```
+
+Power command is mandatory. Optional Mode1 and MultiRate fields supported for AMR.
 ```
 
 ### 5.8 L3AssignmentComplete
@@ -1040,7 +1075,7 @@ public:
 };
 ```
 
-### 5.23 L3SystemInformationType1
+### 5.21a L3SystemInformationType1
 
 **Spec:** GSM 04.08 9.1.31
 
@@ -1049,6 +1084,54 @@ class L3SystemInformationType1 : public L3RRMessageNRO {
 public:
     int MTI() const override { return SystemInformationType1; }
     size_t l2BodyLength() const override { return 19; }
+};
+```
+
+### 5.21b L3SystemInformationType2
+
+**Spec:** GSM 04.08 9.1.32 — V-format: BCCHFrequencyList + NCCPermitted + RACHControlParameters
+
+```cpp
+class L3SystemInformationType2 : public L3RRMessageNRO {
+public:
+    L3SystemInformationType2();
+    const L3BCCHFrequencyList& bcchFrequencyList() const;
+    const L3NCCPermitted& nccPermitted() const;
+    const L3RACHControlParameters& rachaControl() const;
+    int MTI() const override { return SystemInformationType2; }
+    size_t l2BodyLength() const override { return 20; }
+};
+```
+
+### 5.21c L3SystemInformationType2bis
+
+**Spec:** GSM 04.08 9.1.32a — V-format: BCCHFrequencyList + NCCPermitted + RACHControlParameters
+
+```cpp
+class L3SystemInformationType2bis : public L3RRMessageNRO {
+public:
+    L3SystemInformationType2bis();
+    const L3BCCHFrequencyList& bcchFrequencyList() const;
+    const L3NCCPermitted& nccPermitted() const;
+    const L3RACHControlParameters& rachaControl() const;
+    int MTI() const override { return SystemInformationType2bis; }
+    size_t l2BodyLength() const override { return 20; }
+};
+```
+
+### 5.21d L3SystemInformationType2ter
+
+**Spec:** GSM 04.08 9.1.32b — V-format: BCCHFrequencyList + NCCPermitted + RACHControlParameters
+
+```cpp
+class L3SystemInformationType2ter : public L3RRMessageNRO {
+public:
+    L3SystemInformationType2ter();
+    const L3BCCHFrequencyList& bcchFrequencyList() const;
+    const L3NCCPermitted& nccPermitted() const;
+    const L3RACHControlParameters& rachaControl() const;
+    int MTI() const override { return SystemInformationType2ter; }
+    size_t l2BodyLength() const override { return 20; }
 };
 ```
 
@@ -1066,7 +1149,129 @@ public:
 };
 ```
 
-### 5.23 L3SystemInformationType13
+### 5.22a L3SystemInformationType4
+
+**Spec:** GSM 04.08 9.1.36 — V-format: LAI + CI + CellSelectionParameters + CellOptionsBCCH + RACHControlParameters [+ CBCH + RestOctets]
+
+```cpp
+class L3SystemInformationType4 : public L3RRMessageRO {
+public:
+    L3SystemInformationType4();
+    const L3LocationAreaIdentity& LAI() const;
+    const L3CellIdentity& CI() const;
+    const L3CellSelectionParameters& cellSelectionParameters() const;
+    const L3CellOptionsBCCH& cellOptions() const;
+    const L3RACHControlParameters& rachaControl() const;
+    bool hasCBCH() const;
+    const L3CBCHChannelDescription& cbchChannelDescription() const;
+    const L3SIType4RestOctets& restOctets() const;
+    int MTI() const override { return SystemInformationType4; }
+    size_t l2BodyLength() const override { return 13; }
+    size_t restOctetsLength() const override;
+};
+```
+
+### 5.23 L3SystemInformationType5
+
+**Spec:** GSM 04.08 9.1.37 — V-format: BCCHFrequencyList
+
+```cpp
+class L3SystemInformationType5 : public L3RRMessageNRO {
+public:
+    L3SystemInformationType5();
+    const L3BCCHFrequencyList& bcchFrequencyList() const;
+    int MTI() const override { return SystemInformationType5; }
+    size_t l2BodyLength() const override { return 16; }
+};
+```
+
+### 5.23a L3SystemInformationType5bis
+
+**Spec:** GSM 04.08 9.1.37a — V-format: BCCHFrequencyList
+
+```cpp
+class L3SystemInformationType5bis : public L3RRMessageNRO {
+public:
+    L3SystemInformationType5bis();
+    const L3BCCHFrequencyList& bcchFrequencyList() const;
+    int MTI() const override { return SystemInformationType5bis; }
+    size_t l2BodyLength() const override { return 16; }
+};
+```
+
+### 5.23b L3SystemInformationType5ter
+
+**Spec:** GSM 04.08 9.1.37b — V-format: BCCHFrequencyList
+
+```cpp
+class L3SystemInformationType5ter : public L3RRMessageNRO {
+public:
+    L3SystemInformationType5ter();
+    const L3BCCHFrequencyList& bcchFrequencyList() const;
+    int MTI() const override { return SystemInformationType5ter; }
+    size_t l2BodyLength() const override { return 16; }
+};
+```
+
+### 5.23c L3SystemInformationType6
+
+**Spec:** GSM 04.08 9.1.38 — V-format: CI + LAI + CellOptionsSACCH + NCCPermitted
+
+```cpp
+class L3SystemInformationType6 : public L3RRMessageNRO {
+public:
+    L3SystemInformationType6();
+    const L3CellIdentity& CI() const;
+    const L3LocationAreaIdentity& LAI() const;
+    const L3CellOptionsSACCH& cellOptions() const;
+    const L3NCCPermitted& nccPermitted() const;
+    int MTI() const override { return SystemInformationType6; }
+    size_t l2BodyLength() const override { return 9; }
+};
+```
+
+### 5.23d L3SystemInformationType7
+
+**Spec:** GSM 04.08 9.1.39 — TV-format
+
+```cpp
+class L3SystemInformationType7 : public L3RRMessageNRO {
+public:
+    L3SystemInformationType7();
+    int MTI() const override { return SystemInformationType7; }
+};
+```
+
+### 5.23e L3SystemInformationType8
+
+**Spec:** GSM 04.08 9.1.40 — TV-format: NCCPermitted
+
+```cpp
+class L3SystemInformationType8 : public L3RRMessageNRO {
+public:
+    L3SystemInformationType8();
+    const L3NCCPermitted& nccPermitted() const;
+    int MTI() const override { return SystemInformationType8; }
+};
+```
+
+### 5.23f L3SystemInformationType9
+
+**Spec:** GSM 04.08 9.1.41 — V-format: CI + CellSelectionParameters + CellOptionsBCCH
+
+```cpp
+class L3SystemInformationType9 : public L3RRMessageNRO {
+public:
+    L3SystemInformationType9();
+    const L3CellIdentity& CI() const;
+    const L3CellSelectionParameters& cellSelectionParameters() const;
+    const L3CellOptionsBCCH& cellOptions() const;
+    int MTI() const override { return SystemInformationType9; }
+    size_t l2BodyLength() const override { return 5; }
+};
+```
+
+### 5.23g L3SystemInformationType13
 
 **Spec:** GSM 04.08 9.1.43a
 
@@ -1076,6 +1281,47 @@ public:
     int MTI() const override { return SystemInformationType13; }
     size_t l2BodyLength() const override { return 0; }
     size_t restOctetsLength() const override;
+};
+```
+
+### 5.23h L3SystemInformationType16
+
+**Spec:** GSM 04.08 9.1.43d — V-format: CI + CellSelectionParameters + CellOptionsBCCH
+
+```cpp
+class L3SystemInformationType16 : public L3RRMessageNRO {
+public:
+    L3SystemInformationType16();
+    const L3CellIdentity& CI() const;
+    const L3CellSelectionParameters& cellSelectionParameters() const;
+    const L3CellOptionsBCCH& cellOptions() const;
+    int MTI() const override { return SystemInformationType16; }
+    size_t l2BodyLength() const override { return 5; }
+};
+```
+
+### 5.23i L3SystemInformationType17
+
+**Spec:** GSM 04.08 9.1.43e — TV-format
+
+```cpp
+class L3SystemInformationType17 : public L3RRMessageNRO {
+public:
+    L3SystemInformationType17();
+    int MTI() const override { return SystemInformationType17; }
+};
+```
+
+### 5.24 L3PhysicalInformation
+
+**Spec:** GSM 04.08 9.1.26 — V-format: TimingAdvance
+
+```cpp
+class L3PhysicalInformation : public L3RRMessageNRO {
+public:
+    L3PhysicalInformation();
+    const L3TimingAdvance& timingAdvance() const;
+    int MTI() const override { return PhysicalInformation; }
 };
 ```
 
@@ -1300,13 +1546,18 @@ public:
 
 ### 6.8 L3CMServiceAbort
 
-**Spec:** GSM 04.08 9.2.7
+**Spec:** GSM 04.08 9.2.7 — V-format: CMServiceType [+ Cause(optional)]
 
 ```cpp
 class L3CMServiceAbort : public L3MMMessage {
 public:
+    L3CMServiceAbort();
+    L3CMServiceAbort(MMRejectCause cause);
+    L3CMServiceType::TypeCode serviceType() const;
+    bool hasCause() const;
+    MMRejectCause cause() const;
     int MTI() const override { return CMServiceAbort; }
-    size_t l2BodyLength() const override { return 0; }
+    size_t l2BodyLength() const override;
 };
 ```
 
@@ -1828,8 +2079,9 @@ public:
 class L3StartDTMFReject : public L3CCMessage {
 public:
     L3StartDTMFReject(unsigned wTI, CCCause cause);
+    CCCause cause() const;
     int MTI() const override { return StartDTMFReject; }
-    size_t l2BodyLength() const override { return 2; }
+    size_t l2BodyLength() const override { return 3; }
 };
 ```
 
@@ -1880,8 +2132,9 @@ public:
 class L3HoldReject : public L3CCMessage {
 public:
     L3HoldReject(unsigned wTI, CCCause cause);
+    CCCause cause() const;
     int MTI() const override { return HoldReject; }
-    size_t l2BodyLength() const override { return 2; }
+    size_t l2BodyLength() const override { return 3; }
 };
 ```
 
@@ -1941,7 +2194,7 @@ public:
 
 ### 8.3 L3SupServRegisterMessage
 
-**Spec:** GSM 04.80 2.4 — TLV format: Facility (IEI=0x1c), SSVersion (IEI=0x7f)
+**Spec:** GSM 04.80 2.4 — TLV format: Facility (IEI=0x1c), SSVersion (IEI=0x7f, TLV 3 bytes)
 
 ```cpp
 class L3SupServRegisterMessage : public L3SupServMessage {
@@ -1955,6 +2208,9 @@ public:
     int MTI() const override { return Register; }
 };
 ```
+
+Version indicator uses TLV format (3 bytes: IEI + Length + Value).
+
 
 ### 8.4 L3SupServReleaseCompleteMessage
 
@@ -2081,6 +2337,7 @@ and in `L3Frame::MTI()`.
 ### 12.3 BCD Encoding
 
 BCD digits follow GSM 04.07 11.2.1.1 encoding rules:
+
 - Nibbles are swapped within each byte (even nibble = higher digit)
 - Last nibble is `0xF` filler for odd-length numbers
 - TMSI uses special 0xF4 header byte
@@ -2091,21 +2348,37 @@ The library strictly follows GSM 04.07 11.2.1.1.4 for IE formats:
 
 | Protocol | Format Used | Notes |
 |----------|-------------|-------|
-| RR messages | V (sequential) | Fields parsed in fixed order, no IEI prefixes |
+| RR System Information Type 1 | V | Fixed 19-byte body |
+| RR System Information Type 2/2bis/2ter | V | Fixed 20-byte body: BCCHFrequencyList + NCCPermitted + RACHControlParameters |
+| RR System Information Type 3 | V + RestOctets | Fixed 16-byte body + variable rest octets |
+| RR System Information Type 4 | V + RestOctets | Fixed 13-byte body: LAI + CI + CellSelectionParameters + CellOptionsBCCH + RACHControlParameters |
+| RR System Information Type 5/5bis/5ter | V | Fixed 16-byte body: BCCHFrequencyList |
+| RR System Information Type 6 | V | Fixed 9-byte body: CI + LAI + CellOptionsSACCH + NCCPermitted |
+| RR System Information Type 7 | TV | No rest octets |
+| RR System Information Type 8 | TV | NCCPermitted field |
+| RR System Information Type 9/16 | V | Fixed 5-byte body: CI + CellSelectionParameters + CellOptionsBCCH |
+| RR System Information Type 13 | V + RestOctets | Variable rest octets |
+| RR System Information Type 17 | TV | No rest octets |
 | RR Paging | LV for MobileIdentity | Second identity uses TLV (IEI=0x17) |
 | RR Classmark | LV + optional TLV | Classmark2 as LV, Classmark3 as TLV (IEI=0x20) |
+| RR Assignment Command | V | Mandatory PowerCommand + optional Mode1/MultiRate |
+| RR Channel Release | V | Dynamic: Cause + optional GPRSResumption |
+| RR Physical Information | V | L3TimingAdvance object |
 | CC messages | TLV/LV switch dispatch | IEI-based parsing, arbitrary order |
 | CC DTMF | TV (IEI=0x2c) | KeypadFacility with type prefix |
+| CC DTMF Reject | LV | CauseElement, 3-byte body |
 | CC Progress | TLV (IEI=0x1e) | ProgressIndicator with type + length |
 | CC Cause | LV | CauseElement with length prefix |
-| SS Register | TLV | Facility (IEI=0x1c), SSVersion (IEI=0x7f) |
+| CC Hold Reject | LV | CauseElement, 3-byte body |
+| CC CM Service Abort | V | CMServiceType + optional Cause byte |
+| SS Register | TLV | Facility (IEI=0x1c), SSVersion (IEI=0x7f, 3-byte TLV) |
 | SS ReleaseComplete | TLV | Cause (IEI=0x08), Facility (IEI=0x1c) |
 
 ### 11.5 Paging Channel Needed Encoding
 
 Paging Request messages (Type 1/2/3) encode Channel Needed as 2-bit codes
 (0=AnyDCCH, 1=SDCCH, 2=TCHF, 3=AnyTCH) in reversed half-octet order,
-followed by a 4-bit Page Mode field.
+followed by a 4-bit Page Mode field. L3PageMode handles 4 bits (half-octet), not 8 bits.
 
 ---
 

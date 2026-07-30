@@ -306,7 +306,7 @@ public:
     int MTI() const override { return StartDTMFReject; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
-    size_t l2BodyLength() const override { return 2; }
+    size_t l2BodyLength() const override { return 3; }
     void text(std::ostream& os) const override;
 };
 
@@ -350,7 +350,7 @@ public:
     int MTI() const override { return HoldReject; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
-    size_t l2BodyLength() const override { return 2; }
+    size_t l2BodyLength() const override { return 3; }
     void text(std::ostream& os) const override;
 };
 

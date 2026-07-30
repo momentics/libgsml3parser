@@ -171,6 +171,12 @@ void L3CMServiceAbort::parseBody(const L3Frame& src, size_t& rp) {
     }
 }
 
+void L3CMServiceAbort::writeBody(L3Frame& dest, size_t& wp) const {
+    if (mHaveCause) {
+        dest.writeField(wp, static_cast<unsigned>(mCause), 8);
+    }
+}
+
 void L3CMServiceAbort::text(std::ostream& os) const {
     os << "CMServiceAbort";
     if (mHaveCause) {

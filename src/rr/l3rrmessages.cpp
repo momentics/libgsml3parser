@@ -104,6 +104,14 @@ L3PagingRequestType1::L3PagingRequestType1(const L3MobileIdentity& wId, ChannelT
     mChannelsNeeded[1] = ChannelType::AnyDCCHType;
 }
 
+L3PagingRequestType1::L3PagingRequestType1(const L3MobileIdentity& wId1, ChannelType wType1,
+                                           const L3MobileIdentity& wId2, ChannelType wType2) {
+    mMobileIDs.push_back(wId1);
+    mChannelsNeeded[0] = wType1;
+    mMobileIDs.push_back(wId2);
+    mChannelsNeeded[1] = wType2;
+}
+
 size_t L3PagingRequestType1::l2BodyLength() const {
     int sz = static_cast<int>(mMobileIDs.size());
     size_t len = 1;
@@ -216,14 +224,29 @@ void L3SystemInformationType1::text(std::ostream& os) const {
 
 void L3ChannelRelease::parseBody(const L3Frame& src, size_t& rp) {
     mCause = static_cast<RRCause>(src.readField(rp, 8));
+    // Optional GPRS Resumption IEI=0x01, 1 bit
+    if (rp + 8 <= src.size() && src.peekField(rp, 8) == 0x01) {
+        rp += 8; // skip IEI
+        mGprsResumptionPresent = true;
+        mGprsResumptionBit = src.readField(rp, 1);
+        src.readField(rp, 7); // spare
+    }
 }
 
 void L3ChannelRelease::writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mCause), 8);
+    if (mGprsResumptionPresent) {
+        dest.writeField(wp, 0x01, 8); // IEI
+        dest.writeField(wp, mGprsResumptionBit ? 1 : 0, 1);
+        dest.writeField(wp, 0, 7); // spare
+    }
 }
 
 void L3ChannelRelease::text(std::ostream& os) const {
     os << "ChannelRelease: cause=" << RRCause2Str(mCause);
+    if (mGprsResumptionPresent) {
+        os << " gprsResumption=" << (mGprsResumptionBit ? "on" : "off");
+    }
 }
 
 // ── L3RRStatus ──────────────────────────────────────────────────────────
@@ -243,35 +266,48 @@ void L3RRStatus::text(std::ostream& os) const {
 // ── L3AssignmentCommand ─────────────────────────────────────────────────
 
 L3AssignmentCommand::L3AssignmentCommand()
-    : mHavePowerCommand(false) {}
+    : mHaveMode1(false) {}
 
 size_t L3AssignmentCommand::l2BodyLength() const {
-    size_t len = mChannel.lengthV();
-    if (mHavePowerCommand) len += mPowerCommand.lengthV();
+    size_t len = mChannel.lengthV() + mPowerCommand.lengthV();
+    if (mHaveMode1) len += mMode1.lengthV();
+    if (isAMR()) len += mMultiRate.lengthTLV();
     return len;
 }
 
 void L3AssignmentCommand::parseBody(const L3Frame& src, size_t& rp) {
     mChannel.parseV(src, rp);
-    if (rp + 8 <= src.size()) {
-        mHavePowerCommand = true;
-        mPowerCommand.parseV(src, rp);
+    mPowerCommand.parseV(src, rp);
+    // Optional Mode 1
+    if (rp + 8 <= src.size() && (src.peekField(rp, 8) & 0xf8) == 0x08) {
+        mHaveMode1 = true;
+        mMode1.parseV(src, rp);
+        // Optional Multi Rate Configuration for AMR
+        if (isAMR() && rp + 16 <= src.size() && src.peekField(rp, 8) == 0x15) {
+            mMultiRate.parseTLV(0x15, src, rp);
+        }
     }
 }
 
 void L3AssignmentCommand::writeBody(L3Frame& dest, size_t& wp) const {
     mChannel.writeV(dest, wp);
-    if (mHavePowerCommand) {
-        mPowerCommand.writeV(dest, wp);
+    mPowerCommand.writeV(dest, wp);
+    if (mHaveMode1) {
+        mMode1.writeV(dest, wp);
+        if (isAMR()) {
+            mMultiRate.writeTLV(0x15, dest, wp);
+        }
     }
 }
 
 void L3AssignmentCommand::text(std::ostream& os) const {
     os << "AssignmentCommand: ";
     mChannel.text(os);
-    if (mHavePowerCommand) {
+    os << " ";
+    mPowerCommand.text(os);
+    if (mHaveMode1) {
         os << " ";
-        mPowerCommand.text(os);
+        mMode1.text(os);
     }
 }
 
@@ -917,19 +953,19 @@ void L3PagingRequestType3::text(std::ostream& os) const {
 
 // ── L3PhysicalInformation ──────────────────────────────────────────────
 
-L3PhysicalInformation::L3PhysicalInformation(unsigned wField)
-    : mPhysicalInformationField(wField) {}
+L3PhysicalInformation::L3PhysicalInformation() {}
 
 void L3PhysicalInformation::parseBody(const L3Frame& src, size_t& rp) {
-    mPhysicalInformationField = src.readField(rp, 8);
+    mTA.parseV(src, rp);
 }
 
 void L3PhysicalInformation::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mPhysicalInformationField, 8);
+    mTA.writeV(dest, wp);
 }
 
 void L3PhysicalInformation::text(std::ostream& os) const {
-    os << "PhysicalInformation: field=0x" << std::hex << mPhysicalInformationField;
+    os << "PhysicalInformation: ";
+    mTA.text(os);
 }
 
 // ── L3HandoverCommand ──────────────────────────────────────────────────
@@ -1010,151 +1046,121 @@ void L3AdditionalAssignment::text(std::ostream& os) const {
 
 L3SystemInformationType2::L3SystemInformationType2() {}
 
-size_t L3SystemInformationType2::l2BodyLength() const {
-    size_t len = mCellOptions.lengthTLV() + mRACHControl.lengthTV();
-    for (const auto& ch : mCellChannelDescriptions) {
-        len += ch.lengthTV();
-    }
-    return len;
-}
-
 size_t L3SystemInformationType2::restOctetsLength() const { return 0; }
 
 void L3SystemInformationType2::parseBody(const L3Frame& src, size_t& rp) {
-    if (parseHasT(0x26, src, rp)) {
-        mCellOptions.parseTLV(0x26, src, rp);
-    }
-    mRACHControl.parseTV(0x28, src, rp);
-    while (parseHasT(0x21, src, rp)) {
-        L3CellChannelDescription ch;
-        ch.parseTV(0x21, src, rp);
-        mCellChannelDescriptions.push_back(ch);
-    }
+    mBCCHFrequencyList.parseV(src, rp);
+    mNCCPermitted.parseV(src, rp);
+    mRACHControlParameters.parseV(src, rp);
 }
 
 void L3SystemInformationType2::writeBody(L3Frame& dest, size_t& wp) const {
-    mCellOptions.writeTLV(0x26, dest, wp);
-    mRACHControl.writeTV(0x28, dest, wp);
-    for (const auto& ch : mCellChannelDescriptions) {
-        ch.writeTV(0x21, dest, wp);
-    }
+    mBCCHFrequencyList.writeV(dest, wp);
+    mNCCPermitted.writeV(dest, wp);
+    mRACHControlParameters.writeV(dest, wp);
 }
 
 void L3SystemInformationType2::text(std::ostream& os) const {
     os << "SystemInformationType2: ";
-    mRACHControl.text(os);
-    os << " cells=" << mCellChannelDescriptions.size();
+    mBCCHFrequencyList.text(os);
+    os << " ";
+    mNCCPermitted.text(os);
+    os << " ";
+    mRACHControlParameters.text(os);
 }
 
 // ── L3SystemInformationType2bis ────────────────────────────────────────
 
 L3SystemInformationType2bis::L3SystemInformationType2bis() {}
 
-size_t L3SystemInformationType2bis::l2BodyLength() const {
-    size_t len = mRACHControl.lengthTV();
-    for (const auto& ch : mCellChannelDescriptions) {
-        len += ch.lengthTV();
-    }
-    return len;
-}
-
 size_t L3SystemInformationType2bis::restOctetsLength() const { return 0; }
 
 void L3SystemInformationType2bis::parseBody(const L3Frame& src, size_t& rp) {
-    mRACHControl.parseTV(0x28, src, rp);
-    while (parseHasT(0x21, src, rp)) {
-        L3CellChannelDescription ch;
-        ch.parseTV(0x21, src, rp);
-        mCellChannelDescriptions.push_back(ch);
-    }
+    mBCCHFrequencyList.parseV(src, rp);
+    mNCCPermitted.parseV(src, rp);
+    mRACHControlParameters.parseV(src, rp);
 }
 
 void L3SystemInformationType2bis::writeBody(L3Frame& dest, size_t& wp) const {
-    mRACHControl.writeTV(0x28, dest, wp);
-    for (const auto& ch : mCellChannelDescriptions) {
-        ch.writeTV(0x21, dest, wp);
-    }
+    mBCCHFrequencyList.writeV(dest, wp);
+    mNCCPermitted.writeV(dest, wp);
+    mRACHControlParameters.writeV(dest, wp);
 }
 
 void L3SystemInformationType2bis::text(std::ostream& os) const {
     os << "SystemInformationType2bis: ";
-    mRACHControl.text(os);
-    os << " cells=" << mCellChannelDescriptions.size();
+    mBCCHFrequencyList.text(os);
+    os << " ";
+    mNCCPermitted.text(os);
+    os << " ";
+    mRACHControlParameters.text(os);
 }
 
 // ── L3SystemInformationType2ter ────────────────────────────────────────
 
 L3SystemInformationType2ter::L3SystemInformationType2ter() {}
 
-size_t L3SystemInformationType2ter::l2BodyLength() const {
-    size_t len = mRACHControl.lengthTV();
-    for (const auto& ch : mCellChannelDescriptions) {
-        len += ch.lengthTV();
-    }
-    return len;
-}
-
 size_t L3SystemInformationType2ter::restOctetsLength() const { return 0; }
 
 void L3SystemInformationType2ter::parseBody(const L3Frame& src, size_t& rp) {
-    mRACHControl.parseTV(0x28, src, rp);
-    while (parseHasT(0x21, src, rp)) {
-        L3CellChannelDescription ch;
-        ch.parseTV(0x21, src, rp);
-        mCellChannelDescriptions.push_back(ch);
-    }
+    mBCCHFrequencyList.parseV(src, rp);
+    mNCCPermitted.parseV(src, rp);
+    mRACHControlParameters.parseV(src, rp);
 }
 
 void L3SystemInformationType2ter::writeBody(L3Frame& dest, size_t& wp) const {
-    mRACHControl.writeTV(0x28, dest, wp);
-    for (const auto& ch : mCellChannelDescriptions) {
-        ch.writeTV(0x21, dest, wp);
-    }
+    mBCCHFrequencyList.writeV(dest, wp);
+    mNCCPermitted.writeV(dest, wp);
+    mRACHControlParameters.writeV(dest, wp);
 }
 
 void L3SystemInformationType2ter::text(std::ostream& os) const {
     os << "SystemInformationType2ter: ";
-    mRACHControl.text(os);
-    os << " cells=" << mCellChannelDescriptions.size();
+    mBCCHFrequencyList.text(os);
+    os << " ";
+    mNCCPermitted.text(os);
+    os << " ";
+    mRACHControlParameters.text(os);
 }
 
 // ── L3SystemInformationType4 ───────────────────────────────────────────
 
-L3SystemInformationType4::L3SystemInformationType4() {}
+L3SystemInformationType4::L3SystemInformationType4() : mHaveCBCH(false) {}
 
-size_t L3SystemInformationType4::l2BodyLength() const {
-    size_t len = mLAI.lengthTV() + mCI.lengthTV() + mCellSelection.lengthTV();
-    len += mCellOptions.lengthTLV();
-    for (const auto& ch : mControlChannelDescriptions) {
-        len += ch.lengthTV();
-    }
+size_t L3SystemInformationType4::restOctetsLength() const {
+    size_t len = 0;
+    if (mHaveCBCH) len += mCBCHChannelDescription.lengthV();
+    len += mRestOctets.lengthV();
     return len;
 }
 
-size_t L3SystemInformationType4::restOctetsLength() const { return 0; }
-
 void L3SystemInformationType4::parseBody(const L3Frame& src, size_t& rp) {
-    mLAI.parseTV(0x23, src, rp);
-    mCI.parseTV(0x25, src, rp);
-    mCellSelection.parseTV(0x27, src, rp);
-    if (parseHasT(0x26, src, rp)) {
-        mCellOptions.parseTLV(0x26, src, rp);
+    mLAI.parseV(src, rp);
+    mCI.parseV(src, rp);
+    mCellSelectionParameters.parseV(src, rp);
+    mCellOptions.parseV(src, rp);
+    mRACHControlParameters.parseV(src, rp);
+    // Rest octets: optional CBCH Channel Description + SI4 Rest Octets
+    if (rp + 8 <= src.size() && (src.peekField(rp, 8) & 0xf0) == 0x20) {
+        mHaveCBCH = true;
+        rp += 8; // skip CBCH type
+        mCBCHChannelDescription.parseV(src, rp);
     }
-    while (parseHasT(0x22, src, rp)) {
-        L3ControlChannelDescription ch;
-        ch.parseTV(0x22, src, rp);
-        mControlChannelDescriptions.push_back(ch);
-    }
+    // Parse remaining as SI4 rest octets
+    mRestOctets.parseV(src, rp);
 }
 
 void L3SystemInformationType4::writeBody(L3Frame& dest, size_t& wp) const {
-    mLAI.writeTV(0x23, dest, wp);
-    mCI.writeTV(0x25, dest, wp);
-    mCellSelection.writeTV(0x27, dest, wp);
-    mCellOptions.writeTLV(0x26, dest, wp);
-    for (const auto& ch : mControlChannelDescriptions) {
-        ch.writeTV(0x22, dest, wp);
+    mLAI.writeV(dest, wp);
+    mCI.writeV(dest, wp);
+    mCellSelectionParameters.writeV(dest, wp);
+    mCellOptions.writeV(dest, wp);
+    mRACHControlParameters.writeV(dest, wp);
+    if (mHaveCBCH) {
+        dest.writeField(wp, 0x22, 8);
+        mCBCHChannelDescription.writeV(dest, wp);
     }
+    mRestOctets.writeV(dest, wp);
 }
 
 void L3SystemInformationType4::text(std::ostream& os) const {
@@ -1163,132 +1169,91 @@ void L3SystemInformationType4::text(std::ostream& os) const {
     os << " ";
     mCI.text(os);
     os << " ";
-    mCellSelection.text(os);
-    os << " ctrlCh=" << mControlChannelDescriptions.size();
+    mCellSelectionParameters.text(os);
+    os << " ";
+    mCellOptions.text(os);
+    os << " ";
+    mRACHControlParameters.text(os);
 }
 
 // ── L3SystemInformationType5 ───────────────────────────────────────────
 
 L3SystemInformationType5::L3SystemInformationType5() {}
 
-size_t L3SystemInformationType5::l2BodyLength() const {
-    return mCI.lengthTV() + mCellSelection.lengthTV() + mCellOptions.lengthTLV();
-}
-
-size_t L3SystemInformationType5::restOctetsLength() const { return 0; }
-
 void L3SystemInformationType5::parseBody(const L3Frame& src, size_t& rp) {
-    mCI.parseTV(0x25, src, rp);
-    mCellSelection.parseTV(0x27, src, rp);
-    if (parseHasT(0x26, src, rp)) {
-        mCellOptions.parseTLV(0x26, src, rp);
-    }
+    mBCCHFrequencyList.parseV(src, rp);
 }
 
 void L3SystemInformationType5::writeBody(L3Frame& dest, size_t& wp) const {
-    mCI.writeTV(0x25, dest, wp);
-    mCellSelection.writeTV(0x27, dest, wp);
-    mCellOptions.writeTLV(0x26, dest, wp);
+    mBCCHFrequencyList.writeV(dest, wp);
 }
 
 void L3SystemInformationType5::text(std::ostream& os) const {
     os << "SystemInformationType5: ";
-    mCI.text(os);
-    os << " ";
-    mCellSelection.text(os);
+    mBCCHFrequencyList.text(os);
 }
 
 // ── L3SystemInformationType5bis ────────────────────────────────────────
 
 L3SystemInformationType5bis::L3SystemInformationType5bis() {}
 
-size_t L3SystemInformationType5bis::l2BodyLength() const {
-    return mCI.lengthTV() + mCellSelection.lengthTV() + mCellOptions.lengthTLV();
-}
-
-size_t L3SystemInformationType5bis::restOctetsLength() const { return 0; }
-
 void L3SystemInformationType5bis::parseBody(const L3Frame& src, size_t& rp) {
-    mCI.parseTV(0x25, src, rp);
-    mCellSelection.parseTV(0x27, src, rp);
-    if (parseHasT(0x26, src, rp)) {
-        mCellOptions.parseTLV(0x26, src, rp);
-    }
+    mBCCHFrequencyList.parseV(src, rp);
 }
 
 void L3SystemInformationType5bis::writeBody(L3Frame& dest, size_t& wp) const {
-    mCI.writeTV(0x25, dest, wp);
-    mCellSelection.writeTV(0x27, dest, wp);
-    mCellOptions.writeTLV(0x26, dest, wp);
+    mBCCHFrequencyList.writeV(dest, wp);
 }
 
 void L3SystemInformationType5bis::text(std::ostream& os) const {
     os << "SystemInformationType5bis: ";
-    mCI.text(os);
-    os << " ";
-    mCellSelection.text(os);
+    mBCCHFrequencyList.text(os);
 }
 
 // ── L3SystemInformationType5ter ────────────────────────────────────────
 
 L3SystemInformationType5ter::L3SystemInformationType5ter() {}
 
-size_t L3SystemInformationType5ter::l2BodyLength() const {
-    return mCI.lengthTV() + mCellSelection.lengthTV() + mCellOptions.lengthTLV();
-}
-
-size_t L3SystemInformationType5ter::restOctetsLength() const { return 0; }
-
 void L3SystemInformationType5ter::parseBody(const L3Frame& src, size_t& rp) {
-    mCI.parseTV(0x25, src, rp);
-    mCellSelection.parseTV(0x27, src, rp);
-    if (parseHasT(0x26, src, rp)) {
-        mCellOptions.parseTLV(0x26, src, rp);
-    }
+    mBCCHFrequencyList.parseV(src, rp);
 }
 
 void L3SystemInformationType5ter::writeBody(L3Frame& dest, size_t& wp) const {
-    mCI.writeTV(0x25, dest, wp);
-    mCellSelection.writeTV(0x27, dest, wp);
-    mCellOptions.writeTLV(0x26, dest, wp);
+    mBCCHFrequencyList.writeV(dest, wp);
 }
 
 void L3SystemInformationType5ter::text(std::ostream& os) const {
     os << "SystemInformationType5ter: ";
-    mCI.text(os);
-    os << " ";
-    mCellSelection.text(os);
+    mBCCHFrequencyList.text(os);
 }
 
 // ── L3SystemInformationType6 ───────────────────────────────────────────
 
 L3SystemInformationType6::L3SystemInformationType6() {}
 
-size_t L3SystemInformationType6::l2BodyLength() const {
-    return mCI.lengthTV() + mCellSelection.lengthTV() + mCellOptions.lengthTLV();
-}
-
-size_t L3SystemInformationType6::restOctetsLength() const { return 0; }
-
 void L3SystemInformationType6::parseBody(const L3Frame& src, size_t& rp) {
-    mCI.parseTV(0x25, src, rp);
-    mCellSelection.parseTV(0x27, src, rp);
-    if (parseHasT(0x26, src, rp)) {
-        mCellOptions.parseTLV(0x26, src, rp);
-    }
+    mCI.parseV(src, rp);
+    mLAI.parseV(src, rp);
+    mCellOptions.parseV(src, rp);
+    mNCCPermitted.parseV(src, rp);
 }
 
 void L3SystemInformationType6::writeBody(L3Frame& dest, size_t& wp) const {
-    mCI.writeTV(0x25, dest, wp);
-    mCellSelection.writeTV(0x27, dest, wp);
-    mCellOptions.writeTLV(0x26, dest, wp);
+    mCI.writeV(dest, wp);
+    mLAI.writeV(dest, wp);
+    mCellOptions.writeV(dest, wp);
+    mNCCPermitted.writeV(dest, wp);
 }
 
 void L3SystemInformationType6::text(std::ostream& os) const {
     os << "SystemInformationType6: ";
     mCI.text(os);
     os << " ";
-    mCellSelection.text(os);
+    mLAI.text(os);
+    os << " ";
+    mCellOptions.text(os);
+    os << " ";
+    mNCCPermitted.text(os);
 }
 
 // ── L3SystemInformationType7 ───────────────────────────────────────────
@@ -1303,11 +1268,9 @@ size_t L3SystemInformationType7::l2BodyLength() const {
     return len;
 }
 
-size_t L3SystemInformationType7::restOctetsLength() const { return 0; }
-
 void L3SystemInformationType7::parseBody(const L3Frame& src, size_t& rp) {
     mRACHControl.parseTV(0x28, src, rp);
-    while (parseHasT(0x21, src, rp)) {
+    while (rp + 8 <= src.size() && parseHasT(0x21, src, rp)) {
         L3CellChannelDescription ch;
         ch.parseTV(0x21, src, rp);
         mCellChannelDescriptions.push_back(ch);
@@ -1332,18 +1295,17 @@ void L3SystemInformationType7::text(std::ostream& os) const {
 L3SystemInformationType8::L3SystemInformationType8() {}
 
 size_t L3SystemInformationType8::l2BodyLength() const {
-    size_t len = mRACHControl.lengthTV();
+    size_t len = mNCCPermitted.lengthTV() + mRACHControl.lengthTV();
     for (const auto& ch : mCellChannelDescriptions) {
         len += ch.lengthTV();
     }
     return len;
 }
 
-size_t L3SystemInformationType8::restOctetsLength() const { return 0; }
-
 void L3SystemInformationType8::parseBody(const L3Frame& src, size_t& rp) {
+    mNCCPermitted.parseTV(0x27, src, rp);
     mRACHControl.parseTV(0x28, src, rp);
-    while (parseHasT(0x21, src, rp)) {
+    while (rp + 8 <= src.size() && parseHasT(0x21, src, rp)) {
         L3CellChannelDescription ch;
         ch.parseTV(0x21, src, rp);
         mCellChannelDescriptions.push_back(ch);
@@ -1351,6 +1313,7 @@ void L3SystemInformationType8::parseBody(const L3Frame& src, size_t& rp) {
 }
 
 void L3SystemInformationType8::writeBody(L3Frame& dest, size_t& wp) const {
+    mNCCPermitted.writeTV(0x27, dest, wp);
     mRACHControl.writeTV(0x28, dest, wp);
     for (const auto& ch : mCellChannelDescriptions) {
         ch.writeTV(0x21, dest, wp);
@@ -1359,6 +1322,8 @@ void L3SystemInformationType8::writeBody(L3Frame& dest, size_t& wp) const {
 
 void L3SystemInformationType8::text(std::ostream& os) const {
     os << "SystemInformationType8: ";
+    mNCCPermitted.text(os);
+    os << " ";
     mRACHControl.text(os);
     os << " cells=" << mCellChannelDescriptions.size();
 }
@@ -1367,62 +1332,50 @@ void L3SystemInformationType8::text(std::ostream& os) const {
 
 L3SystemInformationType9::L3SystemInformationType9() {}
 
-size_t L3SystemInformationType9::l2BodyLength() const {
-    return mCI.lengthTV() + mCellSelection.lengthTV() + mCellOptions.lengthTLV();
-}
-
-size_t L3SystemInformationType9::restOctetsLength() const { return 0; }
-
 void L3SystemInformationType9::parseBody(const L3Frame& src, size_t& rp) {
-    mCI.parseTV(0x25, src, rp);
-    mCellSelection.parseTV(0x27, src, rp);
-    if (parseHasT(0x26, src, rp)) {
-        mCellOptions.parseTLV(0x26, src, rp);
-    }
+    mCI.parseV(src, rp);
+    mCellSelectionParameters.parseV(src, rp);
+    mCellOptions.parseV(src, rp);
 }
 
 void L3SystemInformationType9::writeBody(L3Frame& dest, size_t& wp) const {
-    mCI.writeTV(0x25, dest, wp);
-    mCellSelection.writeTV(0x27, dest, wp);
-    mCellOptions.writeTLV(0x26, dest, wp);
+    mCI.writeV(dest, wp);
+    mCellSelectionParameters.writeV(dest, wp);
+    mCellOptions.writeV(dest, wp);
 }
 
 void L3SystemInformationType9::text(std::ostream& os) const {
     os << "SystemInformationType9: ";
     mCI.text(os);
     os << " ";
-    mCellSelection.text(os);
+    mCellSelectionParameters.text(os);
+    os << " ";
+    mCellOptions.text(os);
 }
 
 // ── L3SystemInformationType16 ──────────────────────────────────────────
 
 L3SystemInformationType16::L3SystemInformationType16() {}
 
-size_t L3SystemInformationType16::l2BodyLength() const {
-    return mCI.lengthTV() + mCellSelection.lengthTV() + mCellOptions.lengthTLV();
-}
-
-size_t L3SystemInformationType16::restOctetsLength() const { return 0; }
-
 void L3SystemInformationType16::parseBody(const L3Frame& src, size_t& rp) {
-    mCI.parseTV(0x25, src, rp);
-    mCellSelection.parseTV(0x27, src, rp);
-    if (parseHasT(0x26, src, rp)) {
-        mCellOptions.parseTLV(0x26, src, rp);
-    }
+    mCI.parseV(src, rp);
+    mCellSelectionParameters.parseV(src, rp);
+    mCellOptions.parseV(src, rp);
 }
 
 void L3SystemInformationType16::writeBody(L3Frame& dest, size_t& wp) const {
-    mCI.writeTV(0x25, dest, wp);
-    mCellSelection.writeTV(0x27, dest, wp);
-    mCellOptions.writeTLV(0x26, dest, wp);
+    mCI.writeV(dest, wp);
+    mCellSelectionParameters.writeV(dest, wp);
+    mCellOptions.writeV(dest, wp);
 }
 
 void L3SystemInformationType16::text(std::ostream& os) const {
     os << "SystemInformationType16: ";
     mCI.text(os);
     os << " ";
-    mCellSelection.text(os);
+    mCellSelectionParameters.text(os);
+    os << " ";
+    mCellOptions.text(os);
 }
 
 // ── L3SystemInformationType17 ──────────────────────────────────────────
@@ -1437,11 +1390,9 @@ size_t L3SystemInformationType17::l2BodyLength() const {
     return len;
 }
 
-size_t L3SystemInformationType17::restOctetsLength() const { return 0; }
-
 void L3SystemInformationType17::parseBody(const L3Frame& src, size_t& rp) {
     mRACHControl.parseTV(0x28, src, rp);
-    while (parseHasT(0x21, src, rp)) {
+    while (rp + 8 <= src.size() && parseHasT(0x21, src, rp)) {
         L3CellChannelDescription ch;
         ch.parseTV(0x21, src, rp);
         mCellChannelDescriptions.push_back(ch);

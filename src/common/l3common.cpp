@@ -1009,17 +1009,16 @@ L3PageMode::L3PageMode(unsigned wPageMode) : mPageMode(wPageMode) {}
 void L3PageMode::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, 0, 2);  // spare
     dest.writeField(wp, mPageMode, 2);
-    dest.writeField(wp, 0, 4);  // spare
 }
 
 void L3PageMode::parseV(const L3Frame& src, size_t& rp) {
     src.readField(rp, 2);  // spare
     mPageMode = src.readField(rp, 2);
-    src.readField(rp, 4);  // spare
 }
 
 void L3PageMode::parseV(const L3Frame& src, size_t& rp, size_t) {
-    parseV(src, rp);
+    src.readField(rp, 2);  // spare
+    mPageMode = src.readField(rp, 2);
 }
 
 void L3PageMode::text(std::ostream& os) const {

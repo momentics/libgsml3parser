@@ -78,13 +78,14 @@ L3SupServRegisterMessage::L3SupServRegisterMessage(unsigned wTI, const std::stri
     : L3SupServMessage(wTI), mFacility(facility), mHaveVersion(false), mVersionIndicator(0) {}
 
 size_t L3SupServRegisterMessage::l2BodyLength() const {
-    return mFacility.lengthTLV() + (mHaveVersion ? 2 : 0);
+    return mFacility.lengthTLV() + (mHaveVersion ? 3 : 0);
 }
 
 void L3SupServRegisterMessage::writeBody(L3Frame& dest, size_t& wp) const {
     mFacility.writeTLV(0x1c, dest, wp);
     if (mHaveVersion) {
-        dest.writeField(wp, 0x7f, 8);
+        dest.writeField(wp, 0x7f, 8);  // IEI
+        dest.writeField(wp, 1, 8);       // Length
         dest.writeField(wp, mVersionIndicator, 8);
     }
 }
@@ -93,7 +94,8 @@ void L3SupServRegisterMessage::parseBody(const L3Frame& src, size_t& rp) {
     mFacility.parseTLV(0x1c, src, rp);
     mHaveVersion = (src.peekField(rp, 8) == 0x7f);
     if (mHaveVersion) {
-        rp += 8;
+        rp += 8;  // skip IEI
+        src.readField(rp, 8);  // skip length
         mVersionIndicator = src.readField(rp, 8);
     }
 }

@@ -164,9 +164,8 @@ TEST(MessagesTest, RR_ImmediateAssignmentReject) {
 }
 
 TEST(MessagesTest, RR_PhysicalInformation) {
-    L3PhysicalInformation msg(0x80);
+    L3PhysicalInformation msg;
     EXPECT_EQ(msg.MTI(), L3RRMessage::PhysicalInformation);
-    EXPECT_EQ(msg.PhysicalInformationField(), 0x80u);
     EXPECT_EQ(msg.l2BodyLength(), 1u);
 }
 
@@ -185,25 +184,25 @@ TEST(MessagesTest, RR_AdditionalAssignment) {
 TEST(MessagesTest, RR_SystemInformationType2) {
     L3SystemInformationType2 msg;
     EXPECT_EQ(msg.MTI(), L3RRMessage::SystemInformationType2);
-    EXPECT_EQ(msg.cellChannelDescriptions().size(), 0u);
+    EXPECT_EQ(msg.l2BodyLength(), 20u);
 }
 
 TEST(MessagesTest, RR_SystemInformationType2bis) {
     L3SystemInformationType2bis msg;
     EXPECT_EQ(msg.MTI(), L3RRMessage::SystemInformationType2bis);
-    EXPECT_EQ(msg.cellChannelDescriptions().size(), 0u);
+    EXPECT_EQ(msg.l2BodyLength(), 20u);
 }
 
 TEST(MessagesTest, RR_SystemInformationType2ter) {
     L3SystemInformationType2ter msg;
     EXPECT_EQ(msg.MTI(), L3RRMessage::SystemInformationType2ter);
-    EXPECT_EQ(msg.cellChannelDescriptions().size(), 0u);
+    EXPECT_EQ(msg.l2BodyLength(), 20u);
 }
 
 TEST(MessagesTest, RR_SystemInformationType4) {
     L3SystemInformationType4 msg;
     EXPECT_EQ(msg.MTI(), L3RRMessage::SystemInformationType4);
-    EXPECT_EQ(msg.controlChannelDescriptions().size(), 0u);
+    EXPECT_EQ(msg.l2BodyLength(), 13u);
 }
 
 TEST(MessagesTest, RR_SystemInformationType5) {

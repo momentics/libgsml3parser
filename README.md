@@ -30,6 +30,7 @@ The library is a standalone, self-contained project with no external dependencie
 - **Spec-compliant** — Follows GSM 04.08 / 3GPP TS 24.008, GSM 04.07 / 3GPP TS 24.007
 - **V/TV/TLV/LV formats** — Correct handling of all GSM 04.07 IE formats per specification
 - **Bit-level parsing** — MSB-first bit ordering, half-octet field handling, H/L rest octet fill patterns
+- **System Information V-format** — SI1-SI17 parsed per GSM 04.08 tables (9.29-9.43c), with proper rest octet handling
 
 ## Quick Start
 
