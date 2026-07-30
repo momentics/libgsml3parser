@@ -849,7 +849,6 @@ public:
 ```
 
 Power command is mandatory. Optional Mode1 and MultiRate fields supported for AMR.
-```
 
 ### 5.8 L3AssignmentComplete
 
