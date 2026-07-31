@@ -643,6 +643,7 @@ public:
     L3SystemInformationType2();
     int MTI() const override { return SystemInformationType2; }
     size_t l2BodyLength() const override { return 20; }
+    size_t fullBodyLength() const override { return 23; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
@@ -663,6 +664,7 @@ public:
     L3SystemInformationType2bis();
     int MTI() const override { return SystemInformationType2bis; }
     size_t l2BodyLength() const override { return 20; }
+    size_t fullBodyLength() const override { return 23; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
@@ -683,6 +685,7 @@ public:
     L3SystemInformationType2ter();
     int MTI() const override { return SystemInformationType2ter; }
     size_t l2BodyLength() const override { return 20; }
+    size_t fullBodyLength() const override { return 23; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;

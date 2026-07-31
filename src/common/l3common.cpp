@@ -51,7 +51,12 @@ L3LocationAreaIdentity::L3LocationAreaIdentity(const char* wMCC, const char* wMN
     : mLAC(wLAC)
 {
     for (int i = 0; i < 3; ++i) mMCC[i] = (wMCC[i] >= '0' && wMCC[i] <= '9') ? wMCC[i] - '0' : 0;
-    for (int i = 0; i < 3; ++i) mMNC[i] = (wMNC[i] >= '0' && wMNC[i] <= '9') ? wMNC[i] - '0' : 'f' - '0';
+    mMNC[0] = (wMNC[0] >= '0' && wMNC[0] <= '9') ? wMNC[0] - '0' : 0;
+    mMNC[1] = (wMNC[1] >= '0' && wMNC[1] <= '9') ? wMNC[1] - '0' : 0;
+    if (wMNC[2] >= '0' && wMNC[2] <= '9')
+        mMNC[2] = wMNC[2] - '0';
+    else
+        mMNC[2] = 0x0F;  // 2-digit MNC: filler nibble F
 }
 
 bool L3LocationAreaIdentity::operator==(const L3LocationAreaIdentity& other) const {
@@ -201,15 +206,13 @@ void L3MobileIdentity::parseV(const L3Frame& src, size_t& rp, size_t expectedLen
         case MobileIDType::IMSI:
         case MobileIDType::IMEI:
         case MobileIDType::IMEISV:
-            while (rp < endCount) {
+            while (rp < endCount && numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
                 unsigned tmp = src.readField(rp, 4);
                 mDigits[numDigits++] = static_cast<char>(src.readField(rp, 4) + '0');
-                mDigits[numDigits++] = static_cast<char>(tmp + '0');
-                if (numDigits > 16) {
-                    throw ParseError("MobileIdentity: too many digits");
+                if (tmp != 0x0F && numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
+                    mDigits[numDigits++] = static_cast<char>(tmp + '0');
                 }
             }
-            if (!oddCount) numDigits--;
             mDigits[numDigits] = '\0';
             break;
         default:
@@ -913,13 +916,11 @@ void L3ChannelMode::text(std::ostream& os) const {
 L3TimingAdvance::L3TimingAdvance(unsigned wTA) : mTimingAdvance(wTA) {}
 
 void L3TimingAdvance::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0, 2);  // spare
-    dest.writeField(wp, mTimingAdvance, 6);
+    dest.writeField(wp, mTimingAdvance, 8);
 }
 
 void L3TimingAdvance::parseV(const L3Frame& src, size_t& rp) {
-    src.readField(rp, 2);  // spare
-    mTimingAdvance = src.readField(rp, 6);
+    mTimingAdvance = src.readField(rp, 8);
 }
 
 void L3TimingAdvance::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -1311,7 +1312,7 @@ L3MeasurementResults::L3MeasurementResults()
 
 int L3MeasurementResults::decodeLevToDBm(unsigned lev) const {
     if (lev == 0) return -110;
-    if (lev >= 63) return -48;
+    if (lev >= 63) return -47;
     return -110 + (int)lev;
 }
 

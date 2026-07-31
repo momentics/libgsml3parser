@@ -28,14 +28,14 @@ namespace gsml3parser {
 // ── GSM 7-bit alphabet ──────────────────────────────────────────────────
 
 const unsigned char gGSMAlphabet[] = {
-    '@',0xa3,'$','%',0xe8,0xe9,0xf9,0xe4,0xf2,0xe7,
-    '\n',0xda,0xf8,'\r',0xc5,0xe5,'D','_','F','G',
-    'L','O','P','C','S','T','Z',' ',0xd6,0xe6,0xbf,
-    0xc9,'!','"','#',0xa4,'&','\'','(',')','*','+',
-    '-','.','/','0','1','2','3','4','5','6','7','8',
+    '@',0xa3,'$',0xa5,0xe8,0xe9,0xf9,0xe4,0xf2,0xe7,
+    '\n',0xd8,0xf0,'\r',0xc5,0xe5,'D','_','F','G',
+    'L','O','P','C','S','T','Z',' ',0xc6,0xe6,0xdf,
+    0xc9,'!','"','#',0xa4,'%','&','\'','(',')','*','+',
+    ',','-','.','/','0','1','2','3','4','5','6','7','8',
     '9',':',';','<','=','>','?',0xa1,'A','B','C',
     'E','H','I','J','K','M','N','Q','R','U','V',
-    'W','X','Y',0xc4,0xd6,0xd1,0xdc,0xa7,0xff,
+    'W','X','Y',0xc4,0xd6,0xd1,0xdc,0xa7,0xbf,
     'a','b','c','d','e','f','g','h','i','j','k',
     'l','m','n','o','p','q','s','t','u','v','w',
     'x','y','z',0xe4,0xf6,0xf1,0xfc,0xe1
@@ -59,8 +59,9 @@ char encodeBCDChar(char ascii) {
 
 std::string data2hex(const unsigned char* data, unsigned nbytes) {
     std::ostringstream os;
+    os << std::hex << std::uppercase;
     for (unsigned i = 0; i < nbytes; ++i) {
-        os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]);
+        os << std::setw(2) << std::setfill('0') << static_cast<int>(data[i]);
     }
     return os.str();
 }
@@ -90,8 +91,9 @@ const unsigned RACHWaitSParamCombined[16] = {
 
 int32_t FNDelta(int32_t v1, int32_t v2) {
     int32_t delta = v1 - v2;
-    if (delta > 0x400000) delta -= 0x800000;
-    if (delta < -0x400000) delta += 0x800000;
+    int32_t half = static_cast<int32_t>(gHyperframe / 2);
+    if (delta > half) delta -= static_cast<int32_t>(gHyperframe);
+    if (delta < -half) delta += static_cast<int32_t>(gHyperframe);
     return delta;
 }
 

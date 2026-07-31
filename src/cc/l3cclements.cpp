@@ -10,7 +10,6 @@ namespace gsml3parser {
 
 L3BearerCapability::L3BearerCapability()
     : mOctet3(0x0f), mPresent(false) {
-    mOctet3a.push_back(0x80);
 }
 
 size_t L3BearerCapability::lengthV() const {
@@ -318,26 +317,28 @@ L3CauseElement::L3CauseElement(Cause wCause, Location wLocation)
     : mLocation(wLocation), mCause(wCause) {}
 
 void L3CauseElement::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0x0e, 4);
     dest.writeField(wp, static_cast<unsigned>(mLocation), 4);
-    dest.writeField(wp, 1, 1);
+    dest.writeField(wp, 1, 1);  // extension
+    dest.writeField(wp, 0, 1);  // spare
     dest.writeField(wp, static_cast<unsigned>(mCause), 7);
+    dest.writeField(wp, 0, 1);  // spare
 }
 
 void L3CauseElement::parseV(const L3Frame& src, size_t& rp) {
-    src.readField(rp, 4);
     mLocation = static_cast<Location>(src.readField(rp, 4));
-    src.readField(rp, 1);
+    src.readField(rp, 1);  // extension
+    src.readField(rp, 1);  // spare
     mCause = static_cast<Cause>(src.readField(rp, 7));
+    src.readField(rp, 1);  // spare
 }
 
 void L3CauseElement::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
-    size_t pos = rp;
-    rp += 8 * expectedLength;
-    src.readField(pos, 4);
-    mLocation = static_cast<Location>(src.readField(pos, 4));
-    src.readField(pos, 1);
-    mCause = static_cast<Cause>(src.readField(pos, 7));
+    (void)expectedLength;
+    mLocation = static_cast<Location>(src.readField(rp, 4));
+    src.readField(rp, 1);  // extension
+    src.readField(rp, 1);  // spare
+    mCause = static_cast<Cause>(src.readField(rp, 7));
+    src.readField(rp, 1);  // spare
 }
 
 void L3CauseElement::text(std::ostream& os) const {
@@ -497,7 +498,11 @@ void L3SupServFacilityIE::writeV(L3Frame& dest, size_t& wp) const {
 }
 
 void L3SupServFacilityIE::parseV(const L3Frame& src, size_t& rp) {
-    throw ParseError("parseV not valid for SupServFacilityIE, use expectedLength");
+    size_t remaining = (src.size() - rp) / 8;
+    mData.clear();
+    for (size_t i = 0; i < remaining; ++i) {
+        mData.push_back(static_cast<char>(src.readField(rp, 8)));
+    }
 }
 
 void L3SupServFacilityIE::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {

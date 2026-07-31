@@ -106,6 +106,7 @@ protected:
     unsigned mA5_1;
     unsigned mRFPowerCapability;
 public:
+    L3MobileStationClassmark1() : mRevisionLevel(0), mES_IND(0), mA5_1(0), mRFPowerCapability(0) {}
     size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -134,6 +135,9 @@ protected:
     unsigned mSoLSA;
     unsigned mCMSF;
 public:
+    L3MobileStationClassmark2() : mRevisionLevel(0), mES_IND(0), mA5_1(0), mA5_3(0), mA5_2(0),
+        mRFPowerCapability(0), mPSCapability(0), mSSScreenIndicator(0), mSMCapability(0),
+        mVBS(0), mVGCS(0), mFC(0), mCM3(0), mLCSVACapability(0), mSoLSA(0), mCMSF(0) {}
     size_t lengthV() const override { return 3; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
