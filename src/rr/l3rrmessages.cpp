@@ -201,16 +201,25 @@ void L3PagingResponse::text(std::ostream& os) const {
 
 // ── L3SystemInformationType1 ────────────────────────────────────────────
 
-L3SystemInformationType1::L3SystemInformationType1() {}
+L3SystemInformationType1::L3SystemInformationType1()
+    : mHaveRestOctets(false), mRestOctet(0x2b) {}
 
 void L3SystemInformationType1::parseBody(const L3Frame& src, size_t& rp) {
     mCellChannelDescription.parseV(src, rp);
     mRACHControlParameters.parseV(src, rp);
+    // Optional Rest Octets (GSM 44.018 9.1.31, 10.5.2.32)
+    if (rp + 8 <= src.size()) {
+        mHaveRestOctets = true;
+        mRestOctet = static_cast<uint8_t>(src.readField(rp, 8));
+    }
 }
 
 void L3SystemInformationType1::writeBody(L3Frame& dest, size_t& wp) const {
     mCellChannelDescription.writeV(dest, wp);
     mRACHControlParameters.writeV(dest, wp);
+    if (mHaveRestOctets) {
+        dest.writeField(wp, mRestOctet, 8);
+    }
 }
 
 void L3SystemInformationType1::text(std::ostream& os) const {
@@ -218,6 +227,10 @@ void L3SystemInformationType1::text(std::ostream& os) const {
     mCellChannelDescription.text(os);
     os << " ";
     mRACHControlParameters.text(os);
+    if (mHaveRestOctets) {
+        os << " RestOctet=0x" << std::hex << std::setw(2) << std::setfill('0')
+           << static_cast<int>(mRestOctet) << std::dec;
+    }
 }
 
 // ── L3ChannelRelease ───────────────────────────────────────────────────
@@ -270,7 +283,7 @@ L3AssignmentCommand::L3AssignmentCommand()
 
 size_t L3AssignmentCommand::l2BodyLength() const {
     size_t len = mChannel.lengthV() + mPowerCommand.lengthV();
-    if (mHaveMode1) len += mMode1.lengthV();
+    if (mHaveMode1) len += mMode1.lengthTV();
     if (isAMR()) len += mMultiRate.lengthTLV();
     return len;
 }
@@ -278,14 +291,11 @@ size_t L3AssignmentCommand::l2BodyLength() const {
 void L3AssignmentCommand::parseBody(const L3Frame& src, size_t& rp) {
     mChannel.parseV(src, rp);
     mPowerCommand.parseV(src, rp);
-    // Optional Mode 1
-    if (rp + 8 <= src.size() && (src.peekField(rp, 8) & 0xf8) == 0x08) {
-        mHaveMode1 = true;
-        mMode1.parseV(src, rp);
-        // Optional Multi Rate Configuration for AMR
-        if (isAMR() && rp + 16 <= src.size() && src.peekField(rp, 8) == 0x15) {
-            mMultiRate.parseTLV(0x15, src, rp);
-        }
+    // Optional Mode 1 (TV, IEI=0x63)
+    mHaveMode1 = mMode1.parseTV(0x63, src, rp);
+    // Optional Multi Rate Configuration for AMR (TLV, IEI=0x15)
+    if (isAMR()) {
+        mMultiRate.parseTLV(0x15, src, rp);
     }
 }
 
@@ -293,10 +303,10 @@ void L3AssignmentCommand::writeBody(L3Frame& dest, size_t& wp) const {
     mChannel.writeV(dest, wp);
     mPowerCommand.writeV(dest, wp);
     if (mHaveMode1) {
-        mMode1.writeV(dest, wp);
-        if (isAMR()) {
-            mMultiRate.writeTLV(0x15, dest, wp);
-        }
+        mMode1.writeTV(0x63, dest, wp);
+    }
+    if (isAMR()) {
+        mMultiRate.writeTLV(0x15, dest, wp);
     }
 }
 
@@ -1120,6 +1130,8 @@ void L3SystemInformationType2ter::text(std::ostream& os) const {
 L3SystemInformationType4::L3SystemInformationType4() : mHaveCBCH(false) {}
 
 size_t L3SystemInformationType4::l2BodyLength() const {
+    // LAI(5) + CellSelectionParameters(2) + RACHControlParameters(3) = 10
+    // + optional CBCH Channel Description (TV, IEI=0x64, 4 bytes)
     size_t len = mLAI.lengthV() + mCellSelectionParameters.lengthV() + mRACHControlParameters.lengthV();
     if (mHaveCBCH) len += mCBCHChannelDescription.lengthTV();
     return len;

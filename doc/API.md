@@ -2213,7 +2213,7 @@ Version indicator uses TLV format (3 bytes: IEI + Length + Value).
 
 ### 8.4 L3SupServReleaseCompleteMessage
 
-**Spec:** GSM 04.80 2.5 — TLV format: Cause (IEI=0x08), Facility (IEI=0x1c)
+**Spec:** GSM 04.80 2.5 — TLV format: Facility (IEI=0x1c), Cause (IEI=0x08)
 
 ```cpp
 class L3SupServReleaseCompleteMessage : public L3SupServMessage {
@@ -2223,6 +2223,8 @@ public:
     L3SupServReleaseCompleteMessage(unsigned wTI, CCCause cause);
 
     bool haveFacility() const;
+    CCCause cause() const;
+    CCCauseLocation causeLocation() const;
     int MTI() const override { return ReleaseComplete; }
 };
 ```

@@ -315,7 +315,7 @@ public:
     const L3MobileIdentity& TMSI() const { return mTMSI; }
     bool followOnProceed() const { return mFollowOnProceed; }
     int MTI() const override { return TMSIReallocationCommand; }
-    size_t l2BodyLength() const override { return 5 + mTMSI.lengthLV() + 1; }
+    size_t l2BodyLength() const override { return mLAI.lengthV() + mTMSI.lengthLV() + 1; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;

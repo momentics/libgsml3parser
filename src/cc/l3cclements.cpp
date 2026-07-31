@@ -274,7 +274,6 @@ void L3CallingPartyBCDNumber::writeV(L3Frame& dest, size_t& wp) const {
         dest.writeField(wp, mPresentationIndicator, 2);
         dest.writeField(wp, 0, 3);
         dest.writeField(wp, mScreeningIndicator, 2);
-        dest.writeField(wp, 0, 1);
     }
     mDigits.write(dest, wp);
 }
@@ -288,7 +287,6 @@ void L3CallingPartyBCDNumber::parseV(const L3Frame& src, size_t& rp) {
         mPresentationIndicator = src.readField(rp, 2);
         src.readField(rp, 3);
         mScreeningIndicator = src.readField(rp, 2);
-        src.readField(rp, 1);
     }
     size_t remaining = (src.size() - rp) / 8;
     mDigits.parse(src, rp, remaining, mType == TypeOfNumber::International);
@@ -305,7 +303,6 @@ void L3CallingPartyBCDNumber::parseV(const L3Frame& src, size_t& rp, size_t expe
         mPresentationIndicator = src.readField(rp, 2);
         src.readField(rp, 3);
         mScreeningIndicator = src.readField(rp, 2);
-        src.readField(rp, 1);
         remainingLength -= 1;
     }
     mDigits.parse(src, rp, remainingLength, mType == TypeOfNumber::International);
@@ -552,8 +549,8 @@ void L3CCCommonIEs::ccCommonText(std::ostream& os) const {
 
 size_t L3CCCommonIEs::ccCommonLength() const {
     size_t result = 0;
-    if (mHaveFacility) result += mFacility.lengthLV();
-    if (mHaveSSVersion) result += mSSVersion.lengthV();
+    if (mHaveFacility) result += mFacility.lengthTLV();
+    if (mHaveSSVersion) result += mSSVersion.lengthTLV();
     return result;
 }
 

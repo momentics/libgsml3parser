@@ -109,10 +109,10 @@ void L3SupServRegisterMessage::text(std::ostream& os) const {
 // ── L3SupServReleaseCompleteMessage ────────────────────────────────────
 
 L3SupServReleaseCompleteMessage::L3SupServReleaseCompleteMessage()
-    : mHaveCause(false), mCause(CCCause::Unknown_L3_Cause) {}
+    : mHaveCause(false), mCause() {}
 
 L3SupServReleaseCompleteMessage::L3SupServReleaseCompleteMessage(unsigned wTI)
-    : L3SupServMessage(wTI), mHaveCause(false), mCause(CCCause::Unknown_L3_Cause) {}
+    : L3SupServMessage(wTI), mHaveCause(false), mCause() {}
 
 L3SupServReleaseCompleteMessage::L3SupServReleaseCompleteMessage(unsigned wTI, CCCause cause)
     : L3SupServMessage(wTI), mHaveCause(true), mCause(cause) {}
@@ -120,22 +120,17 @@ L3SupServReleaseCompleteMessage::L3SupServReleaseCompleteMessage(unsigned wTI, C
 size_t L3SupServReleaseCompleteMessage::l2BodyLength() const {
     size_t len = 0;
     if (mFacility.mExtant) len += mFacility.lengthTLV();
-    if (mHaveCause) len += L3CauseElement(mCause).lengthTLV();
+    if (mHaveCause) len += mCause.lengthTLV();
     return len;
 }
 
 void L3SupServReleaseCompleteMessage::writeBody(L3Frame& dest, size_t& wp) const {
-    if (mHaveCause) {
-        L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
-        cause.writeTLV(0x08, dest, wp);
-    }
     if (mFacility.mExtant) mFacility.writeTLV(0x1c, dest, wp);
+    if (mHaveCause) mCause.writeTLV(0x08, dest, wp);
 }
 
 void L3SupServReleaseCompleteMessage::parseBody(const L3Frame& src, size_t& rp) {
-    L3CauseElement cause;
-    mHaveCause = cause.parseTLV(0x08, src, rp);
-    if (mHaveCause) mCause = cause.cause();
+    mHaveCause = mCause.parseTLV(0x08, src, rp);
     mFacility.parseTLV(0x1c, src, rp);
 }
 
@@ -145,7 +140,7 @@ void L3SupServReleaseCompleteMessage::text(std::ostream& os) const {
         os << " ";
         mFacility.text(os);
     }
-    if (mHaveCause) os << ": " << CCCause2Str(mCause);
+    if (mHaveCause) os << ": " << CCCause2Str(mCause.cause());
 }
 
 // ── Factory ─────────────────────────────────────────────────────────────

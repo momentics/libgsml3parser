@@ -77,6 +77,8 @@ size_t L3Setup::l2BodyLength() const {
     if (mBearerCapability.isPresent()) len += mBearerCapability.lengthTLV();
     if (mHaveCalledParty) len += mCalledPartyBCDNumber.lengthTLV();
     if (mHaveCallingParty) len += mCallingPartyBCDNumber.lengthTLV();
+    if (mSupportedCodecs.isGsmPresent() || mSupportedCodecs.isUmtsPresent())
+        len += mSupportedCodecs.lengthTLV();
     if (mHaveSignal) len += mSignal.lengthTV();
     len += ccCommonLength();
     return len;
@@ -86,6 +88,8 @@ void L3Setup::writeBody(L3Frame& dest, size_t& wp) const {
     if (mBearerCapability.isPresent()) mBearerCapability.writeTLV(0x04, dest, wp);
     if (mHaveCalledParty) mCalledPartyBCDNumber.writeTLV(0x5e, dest, wp);
     if (mHaveCallingParty) mCallingPartyBCDNumber.writeTLV(0x5c, dest, wp);
+    if (mSupportedCodecs.isGsmPresent() || mSupportedCodecs.isUmtsPresent())
+        mSupportedCodecs.writeTLV(0x40, dest, wp);
     if (mHaveSignal) mSignal.writeTV(0x34, dest, wp);
     ccCommonWrite(dest, wp);
 }

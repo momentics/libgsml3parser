@@ -31,6 +31,7 @@
 #include "../l3frame.h"
 #include "../types.h"
 #include "../enums.h"
+#include "../cc/l3cclements.h"
 
 namespace gsml3parser {
 
@@ -101,13 +102,15 @@ class L3SupServReleaseCompleteMessage : public L3SupServMessage {
 private:
     L3OctetAlignedProtocolElement mFacility;
     bool mHaveCause;
-    CCCause mCause;
+    L3CauseElement mCause;
 public:
     L3SupServReleaseCompleteMessage();
     explicit L3SupServReleaseCompleteMessage(unsigned wTI);
     L3SupServReleaseCompleteMessage(unsigned wTI, CCCause cause);
 
     bool haveFacility() const { return mFacility.mExtant; }
+    CCCause cause() const { return mCause.cause(); }
+    CCCauseLocation causeLocation() const { return mCause.location(); }
     int MTI() const override { return ReleaseComplete; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;

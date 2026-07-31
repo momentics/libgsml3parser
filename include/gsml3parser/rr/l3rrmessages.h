@@ -150,15 +150,19 @@ class L3SystemInformationType1 : public L3RRMessageNRO {
 private:
     L3FrequencyList mCellChannelDescription;
     L3RACHControlParameters mRACHControlParameters;
+    Bool_z mHaveRestOctets;
+    uint8_t mRestOctet;
 public:
     L3SystemInformationType1();
     int MTI() const override { return SystemInformationType1; }
-    size_t l2BodyLength() const override { return 19; }
+    size_t l2BodyLength() const override { return 19 + (mHaveRestOctets ? 1 : 0); }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;
     const L3FrequencyList& cellChannelDescription() const { return mCellChannelDescription; }
     const L3RACHControlParameters& rachaControl() const { return mRACHControlParameters; }
+    bool hasRestOctets() const { return mHaveRestOctets; }
+    uint8_t restOctet() const { return mRestOctet; }
 };
 
 // ── Channel Release (GSM 04.08 9.1.7) ──────────────────────────────────
@@ -392,7 +396,7 @@ public:
     uint8_t mSuspensionCause;
     uint8_t mServiceSupport;
 
-    L3GPRSSuspensionRequest() : mServiceSupport(0) {}
+    L3GPRSSuspensionRequest() : mTLLI(0), mRaId(6, 0), mSuspensionCause(0), mServiceSupport(0) {}
     int MTI() const override { return GPRSSuspensionRequest; }
     size_t l2BodyLength() const override { return 11; }
     void parseBody(const L3Frame& src, size_t& rp) override;

@@ -201,19 +201,15 @@ void L3MobileIdentity::parseV(const L3Frame& src, size_t& rp, size_t expectedLen
         case MobileIDType::IMSI:
         case MobileIDType::IMEI:
         case MobileIDType::IMEISV:
-            while (rp < endCount && numDigits < 15) {
+            while (rp < endCount) {
                 unsigned tmp = src.readField(rp, 4);
-                unsigned lo = src.readField(rp, 4);
-                if (lo != 0x0f) {
-                    mDigits[numDigits++] = static_cast<char>(lo + '0');
-                } else {
-                    break;
-                }
-                if (tmp != 0x0f && numDigits < 15) {
-                    mDigits[numDigits++] = static_cast<char>(tmp + '0');
+                mDigits[numDigits++] = static_cast<char>(src.readField(rp, 4) + '0');
+                mDigits[numDigits++] = static_cast<char>(tmp + '0');
+                if (numDigits > 16) {
+                    throw ParseError("MobileIdentity: too many digits");
                 }
             }
-            if (!oddCount && numDigits > 0) numDigits--;
+            if (!oddCount) numDigits--;
             mDigits[numDigits] = '\0';
             break;
         default:
@@ -645,7 +641,8 @@ void L3PowerCommand::writeV(L3Frame& dest, size_t& wp) const {
 }
 
 void L3PowerCommand::parseV(const L3Frame& src, size_t& rp) {
-    mCommand = src.readField(rp, 8);
+    src.readField(rp, 3);  // spare
+    mCommand = src.readField(rp, 5);
 }
 
 void L3PowerCommand::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -1093,7 +1090,6 @@ void L3PageMode::parseV(const L3Frame& src, size_t& rp) {
 void L3PageMode::parseV(const L3Frame& src, size_t& rp, size_t) {
     src.readField(rp, 2);  // spare
     mPageMode = src.readField(rp, 2);
-    src.readField(rp, 4);  // spare
 }
 
 void L3PageMode::text(std::ostream& os) const {
@@ -1548,6 +1544,7 @@ size_t L3SI3RestOctets::lengthV() const {
     bits += 4;
     if (mHaveGPRS) bits += 1 + 3 + 1;
     else bits += 1;
+    // Round up to byte boundary
     return (bits + 7) / 8;
 }
 
@@ -1571,9 +1568,10 @@ void L3SI3RestOctets::writeV(L3Frame& dest, size_t& wp) const {
     } else {
         dest.writeField(wp, 0, 1);
     }
+    // Pad to byte boundary with H/L pattern
     while (wp % 8 != 0) {
-        dest.writeH(wp);
-        dest.writeL(wp);
+        unsigned fillBit = (wp % 8 == 1 || wp % 8 == 3 || wp % 8 == 6 || wp % 8 == 7) ? 1 : 0;
+        dest.writeField(wp, fillBit, 1);
     }
 }
 
@@ -1626,6 +1624,7 @@ size_t L3SIType4RestOctets::lengthV() const {
     if (mHaveGPRS) bits += 1 + 3 + 1;
     else bits += 1;
     bits += 2;
+    // Round up to byte boundary
     return (bits + 7) / 8;
 }
 
@@ -1640,9 +1639,10 @@ void L3SIType4RestOctets::writeV(L3Frame& dest, size_t& wp) const {
         dest.writeField(wp, 0, 1);
     }
     dest.writeField(wp, 0, 2);
+    // Pad to byte boundary with H/L pattern
     while (wp % 8 != 0) {
-        dest.writeH(wp);
-        dest.writeL(wp);
+        unsigned fillBit = (wp % 8 == 1 || wp % 8 == 3 || wp % 8 == 6 || wp % 8 == 7) ? 1 : 0;
+        dest.writeField(wp, fillBit, 1);
     }
 }
 
@@ -1745,6 +1745,7 @@ size_t L3SI13RestOctets::lengthV() const {
     int bits = 1 + 3 + 4 + 1 + 1 + 8 + 1 + 3 + 2;
     bits += mCellOptions.lengthBits();
     bits += mPowerControlParameters.lengthBits();
+    // Round up to byte boundary for padding
     return (bits + 7) / 8;
 }
 
@@ -1760,9 +1761,10 @@ void L3SI13RestOctets::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, mNETWORK_CONTROL_ORDER, 2);
     mCellOptions.writeBits(dest, wp);
     mPowerControlParameters.writeBits(dest, wp);
+    // Pad to byte boundary with H/L pattern
     while (wp % 8 != 0) {
-        dest.writeH(wp);
-        dest.writeL(wp);
+        unsigned fillBit = (wp % 8 == 1 || wp % 8 == 3 || wp % 8 == 6 || wp % 8 == 7) ? 1 : 0;
+        dest.writeField(wp, fillBit, 1);
     }
 }
 
