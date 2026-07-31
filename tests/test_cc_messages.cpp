@@ -65,8 +65,16 @@ TEST(CCRoundTripTest, Setup_WithCalledParty) {
 }
 
 TEST(CCRoundTripTest, Setup_Parse) {
-    // PD=0x03, TI=7 (TIF=0, TIO=7 → 0111), MTI=0x05 (Setup)
-    uint8_t data[] = {0x03, 0x75};
+    // Per L3_Templates.ttcn ts_ML3_MO_CC_SETUP:
+    //   discriminator = '0011'B (PD=3, CallControl)
+    //   transactionId.tio = int2bit(7, 3) = '111'B
+    //   transactionId.tiFlag = c_TIF_ORIG = '0'B
+    //   messageType = '000101'B (Setup)
+    //   nsd = '00'B
+    // Byte layout (library format: TI(4)|PD(4) | MTI(8)):
+    //   Byte 0: TI=7(high nibble) | PD=3(low nibble) = 0x73
+    //   Byte 1: MTI=5 = 0x05
+    uint8_t data[] = {0x73, 0x05};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::CallControl);
@@ -106,8 +114,15 @@ TEST(CCRoundTripTest, Alerting) {
 }
 
 TEST(CCRoundTripTest, Alerting_Parse) {
-    // PD=0x03, TI=7, MTI=0x01 (Alerting)
-    uint8_t data[] = {0x03, 0x71};
+    // Per L3_Templates.ttcn tr_ML3_MT_CC_ALERTING:
+    //   discriminator = '0011'B (PD=3, CallControl)
+    //   transactionId.tio = int2bit(7, 3) = '111'B
+    //   transactionId.tiFlag = ?
+    //   messageType = '000001'B (Alerting)
+    // Byte layout (library format: TI(4)|PD(4) | MTI(8)):
+    //   Byte 0: TI=7(high nibble) | PD=3(low nibble) = 0x73
+    //   Byte 1: MTI=1 = 0x01
+    uint8_t data[] = {0x73, 0x01};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Alerting);
@@ -166,28 +181,27 @@ TEST(CCRoundTripTest, Disconnect_UserBusy) {
 }
 
 TEST(CCRoundTripTest, Disconnect_Parse) {
-    // PD=0x03, TI=7 (0111), MTI=0x25 (Disconnect), Cause TLV
-    // Octet 3: IEI=0x08 (Cause)
-    // Octet 4: Length=2
-    // Octet 5: loc(4)=0001(priv_srv_local), cs(2)=11(3GPP), ext(1)=1, cause(7)=0010000(16)
-    // Octet 6: diag present(1)=0, spare(7)=0000000
-    uint8_t data[] = {
-        0x03, 0x75, // PD=CC, TI=7
-        0x03, 0x25, // Wait, let me recalculate
-        // Actually PD(4)=0x03, then TI is encoded in next nibble + MTI
-        // Let me use the proper format:
-    };
-    // PD=0x03, MTI=0x25, then TI is in the second octet high nibble
-    // Octet 0: PD(4)=0011, MTI high(4)=1001 → 0x39
-    // Octet 1: MTI low... no, let me just parse the known format
-    // From existing test: 0x03, 0x25, 0x10, 0x00 for Disconnect with TI=7, cause=Normal
-    uint8_t data2[] = {0x03, 0x25, 0x10, 0x00};
-    auto msg = parseL3(data2, sizeof(data2));
+    // Per L3_Templates.ttcn ts_ML3_MO_CC_DISC:
+    //   discriminator = '0011'B (PD=3, CallControl)
+    //   transactionId.tio = int2bit(7, 3) = '111'B
+    //   transactionId.tiFlag = c_TIF_ORIG = '0'B
+    //   messageType = '100101'B (Disconnect = 0x25)
+    //   nsd = '00'B
+    //   cause TLV: IEI=0x08, length=2, loc(4)=0001, cs(2)=11, ext(1)=1, cause(7)=0010000(16)
+    // Byte layout (library format: TI(4)|PD(4) | MTI(8) | cause LV):
+    //   Byte 0: TI=7(high nibble) | PD=3(low nibble) = 0x73
+    //   Byte 1: MTI=0x25 (Disconnect)
+    //   Byte 2: cause value = 16 (Normal_Call_Clearing)
+    //   Byte 3: cause location = 1 (Private_Serving_Local)
+    uint8_t data[] = {0x73, 0x25, 0x10, 0x01};
+    auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
+    EXPECT_EQ(msg->PD(), L3PD::CallControl);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Disconnect);
     auto* d = dynamic_cast<L3Disconnect*>(msg.get());
     ASSERT_TRUE(d);
     EXPECT_EQ(d->cause(), CCCause::Normal_Call_Clearing);
+    EXPECT_EQ(d->TI(), 7u);
 }
 
 // ── Release (GSM 04.08 9.3.19) ───────────────────────────────────────
@@ -468,16 +482,33 @@ TEST(CCRoundTripTest, TI_DifferentValues) {
 // ── Parse CC messages from hex ───────────────────────────────────────
 
 TEST(CCRoundTripTest, Parse_Setup_Hex) {
-    // PD=0x03, TI=7 (TIF=0), MTI=0x05
-    auto msg = parseL3Hex("0375");
+    // Per L3_Templates.ttcn ts_ML3_MO_CC_SETUP:
+    //   discriminator = '0011'B (PD=3, CallControl)
+    //   transactionId.tio = int2bit(7, 3) = '111'B
+    //   transactionId.tiFlag = c_TIF_ORIG = '0'B
+    //   messageType = '000101'B (Setup)
+    //   nsd = '00'B
+    // Library format: TI(4)|PD(4) | MTI(8)
+    //   Byte 0: TI=7(high nibble) | PD=3(low nibble) = 0x73
+    //   Byte 1: MTI=5 = 0x05
+    auto msg = parseL3Hex("7305");
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::CallControl);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Setup);
 }
 
 TEST(CCRoundTripTest, Parse_Release_Hex) {
-    // PD=0x03, TI=7, MTI=0x2D (Release)
-    auto msg = parseL3Hex("03752d");
-    // This may not parse as a valid Release since we need proper header format
-    // The TI is encoded in the second nibble of first byte + first nibble of second byte
+    // Per L3_Templates.ttcn ts_ML3_MO_CC_RELEASE:
+    //   discriminator = '0011'B (PD=3, CallControl)
+    //   transactionId.tio = int2bit(7, 3) = '111'B
+    //   transactionId.tiFlag = c_TIF_REPL = '1'B
+    //   messageType = '101101'B (Release = 0x2D)
+    //   nsd = '00'B
+    // Library format: TI(4)|PD(4) | MTI(8)
+    //   Byte 0: TI=7(high nibble) | PD=3(low nibble) = 0x73
+    //   Byte 1: MTI=0x2D (Release)
+    auto msg = parseL3Hex("732d");
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(msg->PD(), L3PD::CallControl);
+    EXPECT_EQ(msg->MTI(), L3CCMessage::Release);
 }
