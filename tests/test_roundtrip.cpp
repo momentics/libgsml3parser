@@ -89,10 +89,9 @@ TEST(RoundTripTest, PagingRequestType3) {
 // Structure: spare_half(4), CKSN(4), CM2 LV, MI LV, [addl_upd_par TV]
 
 TEST(RoundTripTest, PagingResponse) {
-    L3MobileIdentity id(0x12345678);
-    L3PagingRequestType1 orig(id, ChannelType::SDCCHType);
-    auto parsedReq = roundtrip(orig);
-    ASSERT_TRUE(parsedReq);
+    L3PagingResponse msg;
+    auto parsed = roundtrip(msg);
+    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::PagingResponse);
 }
 
 // ── System Information messages (GSM 04.08 9.1.31..9.1.43c) ──────────

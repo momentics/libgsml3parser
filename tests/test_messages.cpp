@@ -196,10 +196,9 @@ TEST(MessagesTest, RR_SystemInformationType2bis) {
 TEST(MessagesTest, RR_SystemInformationType2ter) {
     // Per GSM_SystemInformation.ttcn, SI2ter = extd_bcch_freq_list(16) + rest_octets(0..4)
     // Body is 16 bytes (no RachControlParameters, no NCCPermitted unlike SI2/SI2bis)
-    // Library returns 20 — documents library discrepancy with reference
     L3SystemInformationType2ter msg;
     EXPECT_EQ(msg.MTI(), L3RRMessage::SystemInformationType2ter);
-    EXPECT_EQ(msg.l2BodyLength(), 20u);  // Library value (reference says 16)
+    EXPECT_EQ(msg.l2BodyLength(), 16u);  // Reference: extd_bcch_freq_list(16) only
 }
 
 TEST(MessagesTest, RR_SystemInformationType4) {

@@ -209,8 +209,13 @@ TEST(MMRoundTripTest, IdentityRequest_Parse) {
     uint8_t data[] = {0x05, 0x18, 0x20};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
+    EXPECT_EQ(msg->MTI(), L3MMMessage::IdentityRequest);
     auto* ir = dynamic_cast<L3IdentityRequest*>(msg.get());
     ASSERT_TRUE(ir);
+    // Round-trip to verify serialization matches reference layout
+    auto rt = roundtrip(*ir);
+    ASSERT_TRUE(rt);
+    EXPECT_EQ(rt->MTI(), L3MMMessage::IdentityRequest);
 }
 
 // ── TMSI Reallocation Command (GSM 04.08 9.2.17) ────────────────────

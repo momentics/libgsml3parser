@@ -110,14 +110,16 @@ TEST(L3FrameTest, MTI_Extraction) {
 }
 
 TEST(L3FrameTest, TI_Extraction_CC) {
-    // L3Frame::TI() reads first 4 bits, which is PD for all messages.
-    // For CC messages, the actual TI (Transaction Identifier) is encoded
-    // in bits 4-6 of the first byte, but L3Frame::TI() doesn't decode that.
-    // The CC message class (L3CCMessage) stores TI as a member variable.
+    // Per reference, CC frame layout: PD(4)|skip(4) | MTI(6)+NSD(2)
+    // L3Frame::TI() reads low nibble of byte 0 (skip_indicator field, always 0 for CC)
+    // L3Frame::PD() reads high nibble of byte 0
+    // The actual TI for CC messages is stored in the CC message class, not in L3Frame.
     L3Frame frame(SAPI::SAPI0, "0375");
     EXPECT_EQ(frame.PD(), L3PD::CallControl);
-    // L3Frame::TI() returns first 4 bits = PD value (3 for CC)
-    EXPECT_EQ(frame.TI(), 3u);
+    // Low nibble of byte 0 = 3, but per reference this is PD=0, skip=3 (invalid for CC)
+    // Library encodes: TI(4 high) | PD(4 low), so byte 0x03 = TI=0, PD=3
+    // L3Frame::TI() reads first 4 bits (high nibble) = 0
+    EXPECT_EQ(frame.TI(), 0u);
 }
 
 // ── H/L Bit Writing (Rest Octets) ────────────────────────────────────
