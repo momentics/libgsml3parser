@@ -837,11 +837,18 @@ void L3ImmediateAssignmentReject::writeBody(L3Frame& dest, size_t& wp) const {
     mPageMode.writeV(dest, wp);
     // Write up to 4 pairs, padding with last entry if fewer
     int count = static_cast<int>(mRequestReferences.size());
-    if (count <= 0) count = 1;
-    for (int i = 0; i < 4; ++i) {
-        int idx = std::min(i, count - 1);
-        mRequestReferences[idx].writeV(dest, wp);
-        dest.writeField(wp, mWaitIndication, 8);
+    if (count <= 0) {
+        // No request references: write 4 default (zero) pairs
+        for (int i = 0; i < 4; ++i) {
+            L3RequestReference().writeV(dest, wp);
+            dest.writeField(wp, mWaitIndication, 8);
+        }
+    } else {
+        for (int i = 0; i < 4; ++i) {
+            int idx = std::min(i, count - 1);
+            mRequestReferences[idx].writeV(dest, wp);
+            dest.writeField(wp, mWaitIndication, 8);
+        }
     }
 }
 

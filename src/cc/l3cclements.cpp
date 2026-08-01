@@ -323,25 +323,31 @@ L3CauseElement::L3CauseElement(Cause wCause, Location wLocation)
     : mLocation(wLocation), mCause(wCause) {}
 
 void L3CauseElement::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0x0e, 4);       // coding standard: GSM
-    dest.writeField(wp, static_cast<unsigned>(mLocation), 4);
-    dest.writeField(wp, 1, 1);          // M bit = 1 (more data follows / extension)
-    dest.writeField(wp, static_cast<unsigned>(mCause), 7);
+    dest.writeField(wp, static_cast<unsigned>(mLocation), 4);  // location
+    dest.writeField(wp, 0, 1);                                  // spare
+    dest.writeField(wp, 0x3, 2);                                // coding standard: ITU-T E.164 (3)
+    dest.writeField(wp, 0, 1);                                  // ext = 0 (more follows)
+    dest.writeField(wp, static_cast<unsigned>(mCause), 7);      // cause value
+    dest.writeField(wp, 1, 1);                                  // ext = 1 (last octet)
 }
 
 void L3CauseElement::parseV(const L3Frame& src, size_t& rp) {
-    src.readField(rp, 4);                // coding standard (GSM = 0x0e)
-    mLocation = static_cast<Location>(src.readField(rp, 4));
-    src.readField(rp, 1);                // M bit
-    mCause = static_cast<Cause>(src.readField(rp, 7));
+    mLocation = static_cast<Location>(src.readField(rp, 4));    // location
+    src.readField(rp, 1);                                       // spare
+    src.readField(rp, 2);                                       // coding standard
+    src.readField(rp, 1);                                       // ext
+    mCause = static_cast<Cause>(src.readField(rp, 7));          // cause value
+    src.readField(rp, 1);                                       // ext
 }
 
 void L3CauseElement::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     (void)expectedLength;
-    src.readField(rp, 4);                // coding standard (GSM = 0x0e)
-    mLocation = static_cast<Location>(src.readField(rp, 4));
-    src.readField(rp, 1);                // M bit
-    mCause = static_cast<Cause>(src.readField(rp, 7));
+    mLocation = static_cast<Location>(src.readField(rp, 4));    // location
+    src.readField(rp, 1);                                       // spare
+    src.readField(rp, 2);                                       // coding standard
+    src.readField(rp, 1);                                       // ext
+    mCause = static_cast<Cause>(src.readField(rp, 7));          // cause value
+    src.readField(rp, 1);                                       // ext
 }
 
 void L3CauseElement::text(std::ostream& os) const {

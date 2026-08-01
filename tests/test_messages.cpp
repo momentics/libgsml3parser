@@ -276,7 +276,7 @@ TEST(MessagesTest, CC_Disconnect) {
     L3Disconnect msg(7, CCCause::Normal_Call_Clearing);
     EXPECT_EQ(msg.MTI(), L3CCMessage::Disconnect);
     EXPECT_EQ(msg.cause(), CCCause::Normal_Call_Clearing);
-    EXPECT_EQ(msg.l2BodyLength(), 2u);
+    EXPECT_EQ(msg.l2BodyLength(), 4u);  // Cause TLV: IEI(1) + length(1) + value(2)
 }
 
 TEST(MessagesTest, CC_Release) {

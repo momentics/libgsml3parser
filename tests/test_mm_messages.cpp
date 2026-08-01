@@ -157,9 +157,11 @@ TEST(MMRoundTripTest, DISABLED_AuthenticationRequest_Parse) {
 // Structure: PD=0x05, MTI=0x14, SRES(32 bits)
 
 TEST(MMRoundTripTest, AuthenticationResponse) {
-    // Library-format bytes: PD=0x05(low nibble), MTI=0x14, SRES = 0xABCD1234
-    // Reference format would be: PD=0x50(high nibble), messageType(6)<<2|NSD(2) = 0x30
-    uint8_t data[] = {0x05, 0x14, 0xAB, 0xCD, 0x12, 0x34};
+    // Reference format: PD=0x05(MM), skip=0, messageType=010100(AuthResponse=0x14), NSD=00
+    // Byte 0: PD(4) | skip(4) = 0101 0000 = 0x50
+    // Byte 1: messageType(6) | NSD(2) = 010100 00 = 0x50
+    // Bytes 2-5: SRES = 0xABCD1234
+    uint8_t data[] = {0x50, 0x50, 0xAB, 0xCD, 0x12, 0x34};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     auto* ar = dynamic_cast<L3AuthenticationResponse*>(msg.get());

@@ -32,9 +32,10 @@ void L3CCMessage::write(L3Frame& dest) const {
     size_t l3len = bitsNeeded();
     if (dest.size() != l3len) dest.resize(l3len);
     size_t wp = 0;
-    dest.writeField(wp, mTI, 4);
-    dest.writeField(wp, static_cast<unsigned>(PD()), 4);
-    dest.writeField(wp, MTI(), 8);
+    dest.writeField(wp, static_cast<unsigned>(PD()), 4);  // PD: high nibble
+    dest.writeField(wp, mTI, 3);                           // TIO: 3 bits
+    dest.writeField(wp, 0, 1);                             // TIF: 1 bit
+    dest.writeField(wp, MTI() << 2, 8);                    // messageType(6)|NSD(2)
     writeBody(dest, wp);
     dest.L2Length(l2Length());
 }
@@ -309,12 +310,12 @@ void L3ConnectAcknowledge::text(std::ostream& os) const {
 
 void L3Disconnect::writeBody(L3Frame& dest, size_t& wp) const {
     L3CauseElement cause(mCause, mLocation);
-    cause.writeLV(dest, wp);
+    cause.writeTLV(0x08, dest, wp);
 }
 
 void L3Disconnect::parseBody(const L3Frame& src, size_t& rp) {
     L3CauseElement cause;
-    cause.parseLV(src, rp);
+    cause.parseTLV(0x08, src, rp);
     mCause = cause.cause();
     mLocation = cause.location();
 }

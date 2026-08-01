@@ -33,9 +33,10 @@ void L3SupServMessage::write(L3Frame& dest) const {
     size_t l3len = bitsNeeded();
     if (dest.size() != l3len) dest.resize(l3len);
     size_t wp = 0;
-    dest.writeField(wp, mTI, 4);
-    dest.writeField(wp, static_cast<unsigned>(PD()), 4);
-    dest.writeField(wp, MTI(), 8);
+    dest.writeField(wp, static_cast<unsigned>(PD()), 4);  // PD: high nibble
+    dest.writeField(wp, mTI, 3);                           // TIO: 3 bits
+    dest.writeField(wp, 0, 1);                             // TIF: 1 bit
+    dest.writeField(wp, MTI() << 2, 8);                    // messageType(6)|NSD(2)
     writeBody(dest, wp);
     dest.L2Length(l2Length());
 }

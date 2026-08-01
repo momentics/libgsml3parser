@@ -102,24 +102,24 @@ L3Frame& L3Frame::operator=(const L3Frame& other) {
 
 L3PD L3Frame::PD() const {
     if (size() < 8) return L3PD::Undefined;
-    return static_cast<L3PD>(peekField(4, 4));
+    return static_cast<L3PD>(peekField(0, 4));
 }
 
 unsigned L3Frame::MTI() const {
     if (size() < 16) return 0;
     unsigned mti = peekField(8, 8);
     L3PD pd = PD();
-    // Bit 6 of MTI is "don't care" for MM, CC, SS — GSM 04.08 10.4
+    // MM, CC, SS: byte 1 = messageType(6)|NSD(2) — GSM 04.08 10.4
     if (pd == L3PD::MobilityManagement || pd == L3PD::CallControl ||
         pd == L3PD::NonCallSS) {
-        return mti & 0xbf;
+        return mti >> 2;
     }
     return mti;
 }
 
 unsigned L3Frame::TI() const {
-    if (size() < 4) return 0;
-    return peekField(0, 4);
+    if (size() < 8) return 0;
+    return peekField(4, 3);  // TIO: 3 bits (bits 4-6 of byte 0)
 }
 
 bool L3Frame::isData() const {

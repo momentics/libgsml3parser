@@ -208,14 +208,20 @@ void L3MobileIdentity::parseV(const L3Frame& src, size_t& rp, size_t expectedLen
         case MobileIDType::IMEI:
         case MobileIDType::IMEISV:
             while (rp < endCount && numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
-                unsigned tmp = src.readField(rp, 4);
-                if (numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
-                    mDigits[numDigits++] = static_cast<char>(src.readField(rp, 4) + '0');
+                unsigned highNibble = src.readField(rp, 4);
+                unsigned lowNibble = 0;
+                if (rp < endCount) {
+                    lowNibble = src.readField(rp, 4);
                 } else {
-                    rp += 4;
+                    break;
                 }
-                if (tmp != 0x0F && numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
-                    mDigits[numDigits++] = static_cast<char>(tmp + '0');
+                // writeV stores per byte: {digit[i+1] in high nibble, digit[i] in low nibble}
+                // So low nibble = digit[i] (earlier), high nibble = digit[i+1] (later)
+                if (lowNibble != 0x0F && numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
+                    mDigits[numDigits++] = static_cast<char>(lowNibble + '0');
+                }
+                if (numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
+                    mDigits[numDigits++] = static_cast<char>(highNibble + '0');
                 }
             }
             mDigits[numDigits] = '\0';
