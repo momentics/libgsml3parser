@@ -34,7 +34,8 @@ TEST(ParserTest, ParseNull) {
 }
 
 TEST(ParserTest, ParseTooShort) {
-    uint8_t data[] = {0x06};
+    // Reference format: PD=0x06(RR) in high nibble, skip=0 → byte 0 = 0x60
+    uint8_t data[] = {0x60};
     EXPECT_FALSE(parseL3(data, 1));
 }
 
@@ -62,8 +63,9 @@ TEST(ParserTest, DISABLED_ParseCC_Disconnect) {
     // Reference: PD=0x03(CC), TIO=0, TIF=0, messageType=100101(Disconnect), NSD=00
     // Byte 0: PD(high=3) | TIO+TIF(low=0) = 0x30
     // Byte 1: messageType(6)<<2 | NSD(2) = 0x25<<2 | 0 = 0x94
-    // Body: Cause TLV per GSM 04.08 10.5.4.11
-    uint8_t data[] = {0x30, 0x94, 0x08, 0x02, 0x10};
+    // Body: Cause TLV per GSM 04.08 10.5.4.11:
+    //   IEI=0x08, length=0x02, octet3=0x16, octet4=0x21 (Normal_Call_Clearing)
+    uint8_t data[] = {0x30, 0x94, 0x08, 0x02, 0x16, 0x21};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::CallControl);

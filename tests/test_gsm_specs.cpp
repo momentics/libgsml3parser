@@ -108,10 +108,12 @@ TEST(GSMSpecTest, MCCMNC_Ref_262_42) {
 
 TEST(GSMSpecTest, DISABLED_MCCMNC_RoundTrip) {
     // DISABLED: Library has symmetric nibble-swap bug in MNC byte 2.
-    // writeV encodes byte 2 as {mMNC[1], mMNC[0]} but reference GSM 24.008
-    // Fig 10.5.13 specifies {MNC_digit2, MNC_digit1} = {mMNC[0], mMNC[1]}.
-    // parseV mirrors the bug, so round-trip fails: e.g. MNC="01" serializes
-    // as 0x10, parses back as mMNC[1]=1,mMNC[0]=0 → MNC()=10 instead of 1.
+    // writeV encodes byte 2 as {mMNC[1], mMNC[0]} (high nibble = digit 2,
+    // low nibble = digit 1) but reference GSM_Types.ttcn TC_selftest_BcdMccMnc
+    // with HEXORDER(low) requires wire byte {mMNC[0], mMNC[1]} (nibbles swapped).
+    // e.g. MNC="42": library writes 0x42, reference wire byte is 0x24.
+    // parseV mirrors the same order, so round-trip is internally consistent but
+    // produces non-compliant wire bytes.
 }
 
 // ── BCD Number Encoding (GSM 24.008 10.5.4.7) ─────────────────────────
@@ -386,18 +388,21 @@ TEST(GSMSpecTest, RACHControlParameters) {
 }
 
 TEST(GSMSpecTest, DISABLED_RACHControlParameters_RefValues) {
-    // DISABLED: Library L3RACHControlParameters::parseV uses unknown/non-standard
-    // bit field order. Per BTS_Tests.ttcn ts_RachCtrl_default:
+    // DISABLED: Library L3RACHControlParameters::parseV bit field order matches
+    // GSM 04.08 10.5.2.29 per BTS_Tests.ttcn ts_RachCtrl_default:
+    //   max_retrans(2) + tx_integer(4) + cell_barr_access(1) + re_not_allowed(1) + acc(16)
+    // However, the reference byte layout requires PD in high nibble (0x60), and the
+    // library reads PD from low nibble. This test is DISABLED until the PD nibble
+    // swap bug is fixed. The RACHControlParameters parseV itself is correct.
+    // Reference values from BTS_Tests.ttcn ts_RachCtrl_default:
     //   max_retrans := RACH_MAX_RETRANS_7,  // '11'B = 3
     //   tx_integer := '1001'B,              // = 9 (→ 12 spread slots)
     //   cell_barr_access := false,          // 0
     //   re_not_allowed := true,             // 1
     //   acc := '0000010000000000'B          // ACC[4] barred
-    // Reference bit layout (MSB-first): max_retrans(2) + tx_integer(4) + cell_barr_access(1) + re_not_allowed(1) + acc(16)
     // Byte 0: 11 1001 01 = 0xE5
     // Byte 1: 00000100 = 0x04
     // Byte 2: 00000000 = 0x00
-    // Re-enable once library parseV matches GSM 04.08 10.5.2.29 field order.
 }
 
 // ── Cell Selection Parameters (GSM 04.08 10.5.2.4) ────────────────────
@@ -448,11 +453,13 @@ TEST(GSMSpecTest, ControlChannelDescription) {
 }
 
 TEST(GSMSpecTest, DISABLED_ControlChannelDescription_RefValues) {
-    // DISABLED: Library L3ControlChannelDescription parses only 16 bits, but
-    // reference GSM_SystemInformation.ttcn ControlChannelDescription is 24 bits:
+    // DISABLED: Library L3ControlChannelDescription reads all 24 bits but treats
+    // msc_r99, si22ind, and cbq3 as spare bits instead of named fields.
+    // Reference GSM_SystemInformation.ttcn ControlChannelDescription is 24 bits:
     // msc_r99(1) + att(1) + bs_ag_blks_res(3) + ccch_conf(3) + si22ind(1) +
     // cbq3(2) + spare(2) + bs_pa_mfrms(3) + t3212(8) = 24 bits.
-    // Library omits msc_r99, si22ind, cbq3 fields (parses 16 bits only).
+    // Library parseV skips msc_r99 (reads as spare), and skips si22ind+cbq3+spare
+    // (reads 5 bits as spare). Also, bs_pa_mfrms is offset by +2 in the library.
     // From BTS_Tests.ttcn ts_SI3_default ctrl_chan_desc:
     // msc_r99=true, att=true, bs_ag_blks_res=1, ccch_conf=1 (combined),
     // si22ind=false, cbq3=0, spare=0, bs_pa_mfrms=0, t3212=1
@@ -556,9 +563,10 @@ TEST(GSMSpecTest, RACHTables) {
 // ── data2hex utility ───────────────────────────────────────────────────
 
 TEST(GSMSpecTest, Data2Hex) {
-    uint8_t data[] = {0x06, 0x19, 0x0D};
+    // Reference format: PD=0x06(RR) high nibble, skip=0 → 0x60; MTI=0x19(SI1); body=0x0D
+    uint8_t data[] = {0x60, 0x19, 0x0D};
     std::string hex = data2hex(data, 3);
-    EXPECT_EQ(hex, "06190D");
+    EXPECT_EQ(hex, "60190D");
 }
 
 // ── Hex string parsing edge cases ──────────────────────────────────────

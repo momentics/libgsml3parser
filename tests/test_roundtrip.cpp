@@ -458,7 +458,9 @@ TEST(RoundTripTest, DISABLED_ChannelModeModifyAcknowledge) {
 }
 
 // ── GPRS Suspension Request (GSM 04.08 9.1.13b) ──────────────────────
-// BUG: vector subscript out of range in L3GPRSSuspensionRequest serialization
+// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
+// The constructor initializes mRaId(6, 0) correctly, so there is no vector
+// subscript out of range. Round-trip fails due to the PD nibble swap bug.
 
 TEST(RoundTripTest, DISABLED_GPRSSuspensionRequest) {
     L3GPRSSuspensionRequest msg;

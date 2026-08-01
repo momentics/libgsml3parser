@@ -157,7 +157,8 @@ TEST(MMRoundTripTest, DISABLED_AuthenticationRequest_Parse) {
 // Structure: PD=0x05, MTI=0x14, SRES(32 bits)
 
 TEST(MMRoundTripTest, AuthenticationResponse) {
-    // Parse from hex: PD=0x05, MTI=0x14, SRES = 0xABCD1234
+    // Library-format bytes: PD=0x05(low nibble), MTI=0x14, SRES = 0xABCD1234
+    // Reference format would be: PD=0x50(high nibble), messageType(6)<<2|NSD(2) = 0x30
     uint8_t data[] = {0x05, 0x14, 0xAB, 0xCD, 0x12, 0x34};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);

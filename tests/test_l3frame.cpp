@@ -242,7 +242,8 @@ TEST(L3FrameTest, IsData) {
 // ── Copy / Assignment ─────────────────────────────────────────────────
 
 TEST(L3FrameTest, CopyConstructor) {
-    L3Frame orig(SAPI::SAPI3, "061900");
+    // Reference format: PD=0x06(RR) high nibble, skip=0, MTI=0x19(SI1)
+    L3Frame orig(SAPI::SAPI3, "601900");
     orig.L2Length(20);
     orig.setTimestamp(100.0);
 
@@ -255,7 +256,8 @@ TEST(L3FrameTest, CopyConstructor) {
 }
 
 TEST(L3FrameTest, AssignmentOperator) {
-    L3Frame orig(SAPI::SAPI0, "0521");
+    // Reference format: PD=0x05(MM) high nibble, skip=0, MTI=0x21(CMServiceAccept)
+    L3Frame orig(SAPI::SAPI0, "5021");
     orig.L2Length(15);
 
     L3Frame assigned;
@@ -279,7 +281,8 @@ TEST(L3FrameTest, SetSAPI) {
 // ── text() output ─────────────────────────────────────────────────────
 
 TEST(L3FrameTest, TextOutput) {
-    L3Frame frame(SAPI::SAPI0, "061900");
+    // Reference format: PD=0x06(RR) high nibble, skip=0, MTI=0x19(SI1)
+    L3Frame frame(SAPI::SAPI0, "601900");
     std::ostringstream oss;
     frame.text(oss);
     // Just verify it doesn't crash and produces some output
