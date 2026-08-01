@@ -165,29 +165,34 @@ TEST(GSMSpecTest, RestOctetPaddingPattern) {
 }
 
 TEST(GSMSpecTest, SI2_RestOctets) {
-    // System Information Type 2 has 20 bytes fixed + rest octets padded to 23
-    // Reference: GSM_SystemInformation.ttcn enc_SystemInformation
-    // BCCH SACCH: pad to 23 octets (23 * 8 = 184 bits)
+    // Reference: GSM_SystemInformation.ttcn SystemInformationType2:
+    //   bcch_freq_list(16) + ncc_permitted(1) + rach_control(3) = 20 bytes fixed
+    // SI2 has NO rest_octets field — body is exactly 20 bytes.
     L3SystemInformationType2 msg;
     EXPECT_EQ(msg.l2BodyLength(), 20u);
-    // Total should be 23 bytes (20 fixed + 3 rest octets) for BCCH
-    EXPECT_EQ(msg.fullBodyLength(), 23u);
+    EXPECT_EQ(msg.fullBodyLength(), 20u); // No rest octets, body = 20
 }
 
 TEST(GSMSpecTest, SI2bis_RestOctets) {
-    // System Information Type 2bis: 20 bytes fixed + rest octets padded to 23
+    // Reference: GSM_SystemInformation.ttcn SystemInformationType2bis:
+    //   extd_bcch_freq_list(16) + rach_control(3) + rest_octets(0..1)
+    // SI2bis has NO ncc_permitted — only 19 bytes fixed.
+    // fullBodyLength = 19 fixed + 1 max rest = 20 bytes.
+    // Library l2BodyLength returns 20 (includes phantom ncc_permitted),
+    // but reference fixed body is 19 bytes.
     L3SystemInformationType2bis msg;
-    EXPECT_EQ(msg.l2BodyLength(), 20u);
-    EXPECT_EQ(msg.fullBodyLength(), 23u);
+    EXPECT_EQ(msg.l2BodyLength(), 19u);  // Reference: 16 + 3 = 19 (no ncc_permitted)
+    EXPECT_EQ(msg.fullBodyLength(), 20u); // 19 fixed + 1 max rest octet
 }
 
 TEST(GSMSpecTest, SI2ter_RestOctets) {
     // Reference: GSM_SystemInformation.ttcn SystemInformationType2ter:
     //   extd_bcch_freq_list(16) + rest_octets(0..4)
     // SI2ter has NO RachControlParameters and NO NCCPermitted — only 16 bytes fixed.
+    // fullBodyLength = 16 fixed + 4 max rest = 20 bytes.
     L3SystemInformationType2ter msg;
     EXPECT_EQ(msg.l2BodyLength(), 16u);  // Reference: extd_bcch_freq_list(16) only
-    EXPECT_EQ(msg.fullBodyLength(), 23u);
+    EXPECT_EQ(msg.fullBodyLength(), 20u); // 16 fixed + 4 max rest octets
 }
 
 // ── L/H Presence Bits (GSM 04.07 11.2.1.1.4) ──────────────────────────

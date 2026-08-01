@@ -190,7 +190,9 @@ TEST(MessagesTest, RR_SystemInformationType2) {
 TEST(MessagesTest, RR_SystemInformationType2bis) {
     L3SystemInformationType2bis msg;
     EXPECT_EQ(msg.MTI(), L3RRMessage::SystemInformationType2bis);
-    EXPECT_EQ(msg.l2BodyLength(), 20u);
+    // Reference: GSM_SystemInformation.ttcn SystemInformationType2bis:
+    //   extd_bcch_freq_list(16) + rach_control(3) = 19 bytes (no ncc_permitted)
+    EXPECT_EQ(msg.l2BodyLength(), 19u);
 }
 
 TEST(MessagesTest, RR_SystemInformationType2ter) {
