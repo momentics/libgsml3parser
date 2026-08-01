@@ -643,7 +643,6 @@ public:
     L3SystemInformationType2();
     int MTI() const override { return SystemInformationType2; }
     size_t l2BodyLength() const override { return 20; }
-    size_t fullBodyLength() const override { return 23; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
@@ -653,45 +652,39 @@ public:
 };
 
 // ── System Information Type 2bis (GSM 04.08 9.1.33) ──────────────────
-// V-format: BCCH Frequency List(16) + NCC Permitted(1) + RACH Control Parameters(3) = 20 bytes
+// V-format: extd_bcch_freq_list(16) + rach_control(3) = 19 bytes (no NCCPermitted)
 
-class L3SystemInformationType2bis : public L3RRMessageNRO {
+class L3SystemInformationType2bis : public L3RRMessageRO {
 private:
     L3BCCHFrequencyList mBCCHFrequencyList;
-    L3NCCPermitted mNCCPermitted;
     L3RACHControlParameters mRACHControlParameters;
 public:
     L3SystemInformationType2bis();
     int MTI() const override { return SystemInformationType2bis; }
-    size_t l2BodyLength() const override { return 20; }
-    size_t fullBodyLength() const override { return 23; }
+    size_t l2BodyLength() const override { return 19; }
+    size_t restOctetsLength() const override { return 1; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
     const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
-    const L3NCCPermitted& nccPermitted() const { return mNCCPermitted; }
     const L3RACHControlParameters& rachaControl() const { return mRACHControlParameters; }
 };
 
 // ── System Information Type 2ter (GSM 04.08 9.1.34) ──────────────────
-// V-format: BCCH Frequency List(16) + NCC Permitted(1) + RACH Control Parameters(3) = 20 bytes
+// V-format: extd_bcch_freq_list(16) = 16 bytes (no RACH control, no NCCPermitted)
 
-class L3SystemInformationType2ter : public L3RRMessageNRO {
+class L3SystemInformationType2ter : public L3RRMessageRO {
 private:
     L3BCCHFrequencyList mBCCHFrequencyList;
-    L3NCCPermitted mNCCPermitted;
-    L3RACHControlParameters mRACHControlParameters;
 public:
     L3SystemInformationType2ter();
     int MTI() const override { return SystemInformationType2ter; }
-    size_t l2BodyLength() const override { return 20; }
-    size_t fullBodyLength() const override { return 23; }
+    size_t l2BodyLength() const override { return 16; }
+    size_t restOctetsLength() const override { return 4; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
     const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
-    const L3NCCPermitted& nccPermitted() const { return mNCCPermitted; }
-    const L3RACHControlParameters& rachaControl() const { return mRACHControlParameters; }
 };
 
 // ── System Information Type 4 (GSM 04.08 9.1.36) ─────────────────────

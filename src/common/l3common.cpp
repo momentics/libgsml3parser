@@ -21,6 +21,7 @@
 
 #include "gsml3parser/common/l3common.h"
 #include "gsml3parser/gsm_common.h"
+#include <algorithm>
 #include <cstring>
 #include <sstream>
 #include <iomanip>
@@ -153,9 +154,9 @@ bool L3MobileIdentity::operator<(const L3MobileIdentity& other) const {
 size_t L3MobileIdentity::lengthV() const {
     if (mType == MobileIDType::NoID) return 1;
     if (mType == MobileIDType::TMSI) return 5;
-    // BCD: 1 byte (first digit + odd flag + type) + ceil(nDigits/2) bytes
+    // BCD: 1 byte (first digit + odd flag + type) + ceil((nDigits-1)/2) bytes for remaining
     size_t nDigits = std::strlen(mDigits);
-    return 1 + (nDigits + 1) / 2;
+    return 1 + nDigits / 2;
 }
 
 void L3MobileIdentity::writeV(L3Frame& dest, size_t& wp) const {
@@ -208,7 +209,11 @@ void L3MobileIdentity::parseV(const L3Frame& src, size_t& rp, size_t expectedLen
         case MobileIDType::IMEISV:
             while (rp < endCount && numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
                 unsigned tmp = src.readField(rp, 4);
-                mDigits[numDigits++] = static_cast<char>(src.readField(rp, 4) + '0');
+                if (numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
+                    mDigits[numDigits++] = static_cast<char>(src.readField(rp, 4) + '0');
+                } else {
+                    rp += 4;
+                }
                 if (tmp != 0x0F && numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
                     mDigits[numDigits++] = static_cast<char>(tmp + '0');
                 }
@@ -423,13 +428,18 @@ void L3FrequencyList::parseV(const L3Frame& src, size_t& rp) {
     src.readField(rp, 7);  // skip header
     unsigned baseARFCN = src.readField(rp, 10);
     mARFCNs.clear();
-    mARFCNs.push_back(baseARFCN);
     // Bitmap: remaining bits in the fixed 16-byte V field = 128 - 17 = 111 bits
     unsigned numBits = 8 * static_cast<unsigned>(lengthV()) - 17;
+    bool anySet = false;
     for (unsigned i = 0; i < numBits; i++) {
         if (src.readField(rp, 1)) {
             mARFCNs.push_back(baseARFCN + 1 + i);
+            anySet = true;
         }
+    }
+    if (anySet || baseARFCN != 0) {
+        mARFCNs.insert(mARFCNs.begin(), baseARFCN);
+        std::sort(mARFCNs.begin(), mARFCNs.end());
     }
 }
 
@@ -521,7 +531,7 @@ void L3CellChannelDescription::text(std::ostream& os) const {
 // ── L3ControlChannelDescription ────────────────────────────────────────
 
 L3ControlChannelDescription::L3ControlChannelDescription()
-    : mATT(0), mBS_AG_BLKS_RES(0), mCCCH_CONF(0), mBS_PA_MFRMS(0), mT3212(0) {}
+    : mATT(0), mBS_AG_BLKS_RES(0), mCCCH_CONF(0), mBS_PA_MFRMS(2), mT3212(0) {}
 
 void L3ControlChannelDescription::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, 0, 1);            // spare
@@ -989,17 +999,19 @@ void L3CipheringModeSetting::writeV(L3Frame& dest, size_t& wp) const {
 }
 
 void L3CipheringModeSetting::parseV(const L3Frame& src, size_t& rp) {
-    mAlgorithm = src.readField(rp, 3) + 1;
+    unsigned raw = src.readField(rp, 3);
     mCiphering = src.readField(rp, 1);
+    mAlgorithm = mCiphering ? raw + 1 : 0;
 }
 
 void L3CipheringModeSetting::parseV(const L3Frame& src, size_t& rp, size_t) {
-    mAlgorithm = src.readField(rp, 3) + 1;
+    unsigned raw = src.readField(rp, 3);
     mCiphering = src.readField(rp, 1);
+    mAlgorithm = mCiphering ? raw + 1 : 0;
 }
 
 void L3CipheringModeSetting::text(std::ostream& os) const {
-    os << "CipherMode[cipher=" << mCiphering << " algo=A5/" << mAlgorithm << "]";
+    os << "CipherMode[cipher=" << mCiphering << " algo=A5/" << (mCiphering ? mAlgorithm : 0) << "]";
 }
 
 // ── L3CipheringModeResponse ────────────────────────────────────────────
@@ -1268,6 +1280,15 @@ void L3BCCHFrequencyList::writeV(L3Frame& dest, size_t& wp) const {
     L3FrequencyList::writeV(dest, wp);
 }
 
+void L3BCCHFrequencyList::parseV(const L3Frame& src, size_t& rp) {
+    src.readField(rp, 3);  // skip BA-IND, EXT-IND, Spare
+    L3FrequencyList::parseV(src, rp);
+}
+
+void L3BCCHFrequencyList::parseV(const L3Frame& src, size_t& rp, size_t) {
+    parseV(src, rp);
+}
+
 void L3BCCHFrequencyList::text(std::ostream& os) const {
     os << "BCCHFreqList[";
     for (size_t i = 0; i < mARFCNs.size(); ++i) {
@@ -1287,6 +1308,15 @@ L3NeighborCellsDescription::L3NeighborCellsDescription(const std::vector<unsigne
 void L3NeighborCellsDescription::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, 0, 3);  // BA-IND, EXT-IND, Spare
     L3FrequencyList::writeV(dest, wp);
+}
+
+void L3NeighborCellsDescription::parseV(const L3Frame& src, size_t& rp) {
+    src.readField(rp, 3);  // skip BA-IND, EXT-IND, Spare
+    L3FrequencyList::parseV(src, rp);
+}
+
+void L3NeighborCellsDescription::parseV(const L3Frame& src, size_t& rp, size_t) {
+    parseV(src, rp);
 }
 
 void L3NeighborCellsDescription::text(std::ostream& os) const {
@@ -1466,7 +1496,9 @@ void L3APDUData::writeV(L3Frame& dest, size_t& wp) const {
 }
 
 void L3APDUData::parseV(const L3Frame& src, size_t& rp) {
-    size_t remaining = src.size() - rp;
+    size_t end = src.writeEnd();
+    if (end < rp) end = rp;
+    size_t remaining = end - rp;
     mData = BitVector(remaining);
     size_t wp2 = 0;
     for (size_t i = 0; i < remaining; ++i) {

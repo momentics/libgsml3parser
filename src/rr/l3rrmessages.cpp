@@ -1081,21 +1081,17 @@ L3SystemInformationType2bis::L3SystemInformationType2bis() {}
 
 void L3SystemInformationType2bis::parseBody(const L3Frame& src, size_t& rp) {
     mBCCHFrequencyList.parseV(src, rp);
-    mNCCPermitted.parseV(src, rp);
     mRACHControlParameters.parseV(src, rp);
 }
 
 void L3SystemInformationType2bis::writeBody(L3Frame& dest, size_t& wp) const {
     mBCCHFrequencyList.writeV(dest, wp);
-    mNCCPermitted.writeV(dest, wp);
     mRACHControlParameters.writeV(dest, wp);
 }
 
 void L3SystemInformationType2bis::text(std::ostream& os) const {
     os << "SystemInformationType2bis: ";
     mBCCHFrequencyList.text(os);
-    os << " ";
-    mNCCPermitted.text(os);
     os << " ";
     mRACHControlParameters.text(os);
 }
@@ -1106,23 +1102,15 @@ L3SystemInformationType2ter::L3SystemInformationType2ter() {}
 
 void L3SystemInformationType2ter::parseBody(const L3Frame& src, size_t& rp) {
     mBCCHFrequencyList.parseV(src, rp);
-    mNCCPermitted.parseV(src, rp);
-    mRACHControlParameters.parseV(src, rp);
 }
 
 void L3SystemInformationType2ter::writeBody(L3Frame& dest, size_t& wp) const {
     mBCCHFrequencyList.writeV(dest, wp);
-    mNCCPermitted.writeV(dest, wp);
-    mRACHControlParameters.writeV(dest, wp);
 }
 
 void L3SystemInformationType2ter::text(std::ostream& os) const {
     os << "SystemInformationType2ter: ";
     mBCCHFrequencyList.text(os);
-    os << " ";
-    mNCCPermitted.text(os);
-    os << " ";
-    mRACHControlParameters.text(os);
 }
 
 // ── L3SystemInformationType4 ───────────────────────────────────────────

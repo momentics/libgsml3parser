@@ -128,12 +128,12 @@ bool L3Frame::isData() const {
 
 static const unsigned fillPattern[8] = {0,0,1,0,1,0,1,1};
 
-void L3Frame::writeH(size_t& wp) const {
+void L3Frame::writeH(size_t& wp) {
     unsigned fillBit = fillPattern[wp % 8];
     writeField(wp, !fillBit, 1);
 }
 
-void L3Frame::writeL(size_t& wp) const {
+void L3Frame::writeL(size_t& wp) {
     unsigned fillBit = fillPattern[wp % 8];
     writeField(wp, fillBit, 1);
 }

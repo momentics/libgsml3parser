@@ -26,22 +26,22 @@
 
 namespace gsml3parser {
 
-BitVector::BitVector() : mStart(nullptr), mSize(0), mAlloc(0) {}
+BitVector::BitVector() : mStart(nullptr), mSize(0), mAlloc(0), mWriteEnd(0) {}
 
-BitVector::BitVector(size_t nbits) : mStart(nullptr), mSize(0), mAlloc(0) {
+BitVector::BitVector(size_t nbits) : mStart(nullptr), mSize(0), mAlloc(0), mWriteEnd(0) {
     alloc(nbits);
     std::memset(mStart, 0, bitVectorByteSize(nbits));
 }
 
 BitVector::BitVector(size_t nbits, unsigned char fill)
-    : mStart(nullptr), mSize(0), mAlloc(0)
+    : mStart(nullptr), mSize(0), mAlloc(0), mWriteEnd(0)
 {
     alloc(nbits);
     std::memset(mStart, fill, bitVectorByteSize(nbits));
 }
 
 BitVector::BitVector(const BitVector& other)
-    : mStart(nullptr), mSize(0), mAlloc(0)
+    : mStart(nullptr), mSize(0), mAlloc(0), mWriteEnd(0)
 {
     alloc(other.mSize);
     std::memcpy(mStart, other.mStart, bitVectorByteSize(other.mSize));
@@ -135,16 +135,21 @@ unsigned BitVector::readField(size_t& rp, unsigned nbits) const {
     return result;
 }
 
-void BitVector::writeField(size_t& wp, unsigned value, unsigned nbits) const {
+void BitVector::writeField(size_t& wp, unsigned value, unsigned nbits) {
+    size_t endBit = wp + nbits;
+    if (endBit > mSize) {
+        resize(endBit);
+    }
+    if (endBit > mWriteEnd) {
+        mWriteEnd = endBit;
+    }
     for (int i = nbits - 1; i >= 0; --i) {
-        if (wp < mSize) {
-            size_t byteIdx = wp / 8;
-            unsigned bitIdx = 7 - (wp % 8);
-            if ((value >> i) & 1) {
-                mStart[byteIdx] |= (1u << bitIdx);
-            } else {
-                mStart[byteIdx] &= ~(1u << bitIdx);
-            }
+        size_t byteIdx = wp / 8;
+        unsigned bitIdx = 7 - (wp % 8);
+        if ((value >> i) & 1) {
+            mStart[byteIdx] |= (1u << bitIdx);
+        } else {
+            mStart[byteIdx] &= ~(1u << bitIdx);
         }
         ++wp;
     }
@@ -172,15 +177,19 @@ unsigned BitVector::readBit(size_t& rp) const {
     return (mStart[byteIdx] >> bitIdx) & 1;
 }
 
-void BitVector::writeBit(size_t& wp, bool bit) const {
-    if (wp < mSize) {
-        size_t byteIdx = wp / 8;
-        unsigned bitIdx = 7 - (wp % 8);
-        if (bit) {
-            mStart[byteIdx] |= (1u << bitIdx);
-        } else {
-            mStart[byteIdx] &= ~(1u << bitIdx);
-        }
+void BitVector::writeBit(size_t& wp, bool bit) {
+    if (wp + 1 > mSize) {
+        resize(wp + 1);
+    }
+    if (wp + 1 > mWriteEnd) {
+        mWriteEnd = wp + 1;
+    }
+    size_t byteIdx = wp / 8;
+    unsigned bitIdx = 7 - (wp % 8);
+    if (bit) {
+        mStart[byteIdx] |= (1u << bitIdx);
+    } else {
+        mStart[byteIdx] &= ~(1u << bitIdx);
     }
     ++wp;
 }

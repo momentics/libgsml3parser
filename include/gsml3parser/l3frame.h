@@ -88,8 +88,8 @@ public:
 
     // ── H/L bit writing (for rest octets) ────────────────────────────
 
-    void writeH(size_t& wp) const;
-    void writeL(size_t& wp) const;
+    void writeH(size_t& wp);
+    void writeL(size_t& wp);
 
     void text(std::ostream& os) const;
 };

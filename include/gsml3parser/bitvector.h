@@ -57,15 +57,16 @@ public:
     bool empty() const { return mSize == 0; }
     void resize(size_t nbits);
     void clear();
+    size_t writeEnd() const { return mWriteEnd; }
 
     // ── Bit access ──────────────────────────────────────────────────
 
     unsigned readField(size_t& rp, unsigned nbits) const;
-    void writeField(size_t& wp, unsigned value, unsigned nbits) const;
+    void writeField(size_t& wp, unsigned value, unsigned nbits);
     unsigned peekField(size_t rp, unsigned nbits) const;
 
     unsigned readBit(size_t& rp) const;
-    void writeBit(size_t& wp, bool bit) const;
+    void writeBit(size_t& wp, bool bit);
 
     // ── Byte access ─────────────────────────────────────────────────
 
@@ -86,6 +87,7 @@ private:
     uint8_t* mStart;
     size_t mSize;    // number of bits
     size_t mAlloc;   // allocated bits
+    mutable size_t mWriteEnd; // tracks highest write position
 
     void alloc(size_t nbits);
     void dealloc();
