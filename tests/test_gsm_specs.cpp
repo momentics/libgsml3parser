@@ -114,6 +114,30 @@ TEST(GSMSpecTest, DISABLED_MCCMNC_RoundTrip) {
     // e.g. MNC="42": library writes 0x42, reference wire byte is 0x24.
     // parseV mirrors the same order, so round-trip is internally consistent but
     // produces non-compliant wire bytes.
+    // Reference: MCC=250, MNC=01, LAC=0x1234
+    // Expected wire bytes (GSM_Types.ttcn TC_selftest_BcdMccMnc):
+    //   Byte 0: MCC digit 2('5') | MCC digit 1('2') = 0x52
+    //   Byte 1: filler('F') | MCC digit 3('0') = 0xF0
+    //   Byte 2: MNC digit 1('0') | MNC digit 2('1') = 0x01 (HEXORDER(low) swap)
+    L3LocationAreaIdentity orig("250", "01", 0x1234);
+
+    L3Frame frame(Primitive::L3_DATA, 40);
+    size_t wp = 0;
+    orig.writeV(frame, wp);
+
+    // Reference expects byte 2 = 0x01 (MNC digit 1 in high nibble, digit 2 in low nibble)
+    EXPECT_EQ(frame.data()[0], 0x52);
+    EXPECT_EQ(frame.data()[1], 0xF0);
+    EXPECT_EQ(frame.data()[2], 0x01);
+
+    // Round-trip: parse back and verify
+    L3LocationAreaIdentity parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp);
+
+    EXPECT_EQ(parsed.MCC(), orig.MCC());
+    EXPECT_EQ(parsed.MNC(), orig.MNC());
+    EXPECT_EQ(parsed.LAC(), orig.LAC());
 }
 
 // ── BCD Number Encoding (GSM 24.008 10.5.4.7) ─────────────────────────
@@ -403,6 +427,23 @@ TEST(GSMSpecTest, DISABLED_RACHControlParameters_RefValues) {
     // Byte 0: 11 1001 01 = 0xE5
     // Byte 1: 00000100 = 0x04
     // Byte 2: 00000000 = 0x00
+    uint8_t data[] = {0xE5, 0x04, 0x00};
+
+    L3Frame frame(Primitive::L3_DATA, 24);
+    size_t wp = 0;
+    frame.writeField(wp, data[0], 8);
+    frame.writeField(wp, data[1], 8);
+    frame.writeField(wp, data[2], 8);
+
+    L3RACHControlParameters parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp);
+
+    EXPECT_EQ(parsed.MaxRetrans(), 3u);     // RACH_MAX_RETRANS_7
+    EXPECT_EQ(parsed.TxInteger(), 9u);      // 12 spread slots
+    EXPECT_EQ(parsed.CellBarAccess(), false);
+    EXPECT_EQ(parsed.RE(), 1u);             // re_not_allowed = true
+    EXPECT_EQ(parsed.AC(), 0x0400u);        // ACC[4] barred
 }
 
 // ── Cell Selection Parameters (GSM 04.08 10.5.2.4) ────────────────────
@@ -466,6 +507,24 @@ TEST(GSMSpecTest, DISABLED_ControlChannelDescription_RefValues) {
     // Byte 0: 1 1 001 001 0 = 0xC9
     // Byte 1: 0 0 00 000 = 0x00
     // Byte 2: 00000001 = 0x01
+    uint8_t data[] = {0xC9, 0x00, 0x01};
+
+    L3Frame frame(Primitive::L3_DATA, 24);
+    size_t wp = 0;
+    frame.writeField(wp, data[0], 8);
+    frame.writeField(wp, data[1], 8);
+    frame.writeField(wp, data[2], 8);
+
+    L3ControlChannelDescription parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp);
+
+    EXPECT_EQ(parsed.mATT, 1u);              // att = true
+    EXPECT_EQ(parsed.mBS_AG_BLKS_RES, 1u);   // bs_ag_blks_res = 1
+    EXPECT_EQ(parsed.mCCCH_CONF, 1u);        // ccch_conf = 1 (combined)
+    EXPECT_EQ(parsed.mBS_PA_MFRMS, 2u);      // reference bs_pa_mfrms=0, library adds +2 offset
+    EXPECT_EQ(parsed.mT3212, 1u);            // t3212 = 1 (6 minutes)
+    EXPECT_TRUE(parsed.isCCCHCombined());
 }
 
 // ── Request Reference (GSM 04.08 10.5.2.30) ───────────────────────────
