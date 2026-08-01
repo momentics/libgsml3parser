@@ -932,11 +932,13 @@ void L3ChannelMode::text(std::ostream& os) const {
 L3TimingAdvance::L3TimingAdvance(unsigned wTA) : mTimingAdvance(wTA) {}
 
 void L3TimingAdvance::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mTimingAdvance, 8);
+    dest.writeField(wp, 0, 2);  // spare
+    dest.writeField(wp, mTimingAdvance & 0x3f, 6);
 }
 
 void L3TimingAdvance::parseV(const L3Frame& src, size_t& rp) {
-    mTimingAdvance = src.readField(rp, 8);
+    src.readField(rp, 2);  // spare
+    mTimingAdvance = src.readField(rp, 6);
 }
 
 void L3TimingAdvance::parseV(const L3Frame& src, size_t& rp, size_t) {
