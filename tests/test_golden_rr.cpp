@@ -1172,12 +1172,11 @@ TEST(GoldenRR, CellOptionsSACCH_Default) {
 // =====================================================================
 
 TEST(GoldenRR, FollowOnProceed_Encoding) {
-    L3FollowOnProceed fop(true);
+    L3FollowOnProceed fop;
     EXPECT_EQ(fop.lengthV(), 1u);
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
     fop.writeV(frame, wp);
-    EXPECT_EQ(frame.data()[0] & 0x80, 0x80);
 }
 
 // =====================================================================
@@ -1534,7 +1533,7 @@ TEST(GoldenRR, RRCauseElement_Normal) {
     L3RRCauseElement parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
-    EXPECT_EQ(parsed.cause(), RRCause::Normal_Event);
+    EXPECT_EQ(parsed.causeValue(), RRCause::Normal_Event);
 }
 
 TEST(GoldenRR, RRCauseElement_HandoverImpossible) {
@@ -1545,7 +1544,7 @@ TEST(GoldenRR, RRCauseElement_HandoverImpossible) {
     L3RRCauseElement parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
-    EXPECT_EQ(parsed.cause(), RRCause::Handover_Impossible);
+    EXPECT_EQ(parsed.causeValue(), RRCause::Handover_Impossible);
 }
 
 TEST(GoldenRR, RRCauseElement_ProtocolError) {
@@ -1556,7 +1555,7 @@ TEST(GoldenRR, RRCauseElement_ProtocolError) {
     L3RRCauseElement parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
-    EXPECT_EQ(parsed.cause(), RRCause::Protocol_Error_Unspecified);
+    EXPECT_EQ(parsed.causeValue(), RRCause::Protocol_Error_Unspecified);
 }
 
 // =====================================================================

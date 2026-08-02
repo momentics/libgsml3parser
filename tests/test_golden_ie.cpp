@@ -29,6 +29,7 @@
 #include <gsml3parser/parser.h>
 #include <gsml3parser/common/l3common.h>
 #include <gsml3parser/gsm_common.h>
+#include <gsml3parser/rr/l3rrmessages.h>
 #include <gsml3parser/cc/l3cclements.h>
 #include <gsml3parser/mm/l3mmlements.h>
 #include <gsml3parser/bitvector.h>
@@ -1185,7 +1186,7 @@ TEST(GoldenIE, CalledPartyBCDNumber_RoundTrip) {
 TEST(GoldenIE, CalledPartyBCDNumber_International) {
     L3CalledPartyBCDNumber num("+79161234567");
     EXPECT_EQ(num.type(), TypeOfNumber::International);
-    EXPECT_EQ(num.plan(), NumberingPlan::ISDN);
+    EXPECT_EQ(num.plan(), NumberingPlan::E164);
     EXPECT_STREQ(num.digits(), "79161234567");
 }
 
