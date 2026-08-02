@@ -68,6 +68,9 @@ public:
     /** Transaction Identifier — GSM 04.07 11.2.3.1.3 */
     unsigned TI() const;
 
+    /** TIF flag — bit 7 of byte 0 (1 = short message) */
+    unsigned TIF() const;
+
     // ── Accessors ────────────────────────────────────────────────────
 
     Primitive primitive() const { return mPrimitive; }

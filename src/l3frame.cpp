@@ -114,12 +114,21 @@ unsigned L3Frame::MTI() const {
         pd == L3PD::NonCallSS) {
         return mti >> 2;
     }
+    // RR short messages: TIF=1 indicates MTI >= 0x100
+    if (pd == L3PD::RadioResource && size() >= 8 && peekField(7, 1)) {
+        return 0x100 + (mti & 0xFF);
+    }
     return mti;
 }
 
 unsigned L3Frame::TI() const {
     if (size() < 8) return 0;
     return peekField(4, 3);  // TIO: 3 bits (bits 4-6 of byte 0)
+}
+
+unsigned L3Frame::TIF() const {
+    if (size() < 8) return 0;
+    return peekField(7, 1);  // TIF: 1 bit (bit 7 of byte 0)
 }
 
 bool L3Frame::isData() const {

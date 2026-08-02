@@ -252,9 +252,12 @@ public:
 
 class L3ControlChannelDescription : public L3ProtocolElement {
 public:
+    unsigned mMSC_R99;
     unsigned mATT;
     unsigned mBS_AG_BLKS_RES;
     unsigned mCCCH_CONF;
+    unsigned mSI22IND;
+    unsigned mCBQ3;
     unsigned mBS_PA_MFRMS;
     unsigned mT3212;
     L3ControlChannelDescription();

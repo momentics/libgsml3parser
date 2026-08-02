@@ -36,12 +36,14 @@ void L3Message::write(L3Frame& dest) const {
     size_t wp = 0;
     dest.writeField(wp, static_cast<unsigned>(PD()), 4);  // PD: high nibble
     dest.writeField(wp, TI(), 3);                          // TIO: 3 bits
-    dest.writeField(wp, 0, 1);                             // TIF: 1 bit
     L3PD pd = PD();
+    int mti = MTI();
+    bool isShort = (pd == L3PD::RadioResource && mti >= 0x100);
+    dest.writeField(wp, isShort ? 1u : 0u, 1);            // TIF: 1 bit (1 = short message)
     if (pd == L3PD::RadioResource) {
-        dest.writeField(wp, MTI(), 8);                    // RR: full 8-bit MTI
+        dest.writeField(wp, isShort ? (mti & 0xFF) : mti, 8);  // RR: 8-bit MTI
     } else {
-        dest.writeField(wp, MTI() << 2, 8);               // MM/CC/SS: messageType(6)|NSD(2)
+        dest.writeField(wp, mti << 2, 8);               // MM/CC/SS: messageType(6)|NSD(2)
     }
     writeBody(dest, wp);
     dest.L2Length(l2Length());

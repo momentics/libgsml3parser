@@ -537,25 +537,30 @@ void L3CellChannelDescription::text(std::ostream& os) const {
 // ── L3ControlChannelDescription ────────────────────────────────────────
 
 L3ControlChannelDescription::L3ControlChannelDescription()
-    : mATT(0), mBS_AG_BLKS_RES(0), mCCCH_CONF(0), mBS_PA_MFRMS(2), mT3212(0) {}
+    : mMSC_R99(0), mATT(0), mBS_AG_BLKS_RES(0), mCCCH_CONF(0),
+      mSI22IND(0), mCBQ3(0), mBS_PA_MFRMS(0), mT3212(0) {}
 
 void L3ControlChannelDescription::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0, 1);            // spare
+    dest.writeField(wp, mMSC_R99, 1);
     dest.writeField(wp, mATT, 1);
     dest.writeField(wp, mBS_AG_BLKS_RES, 3);
     dest.writeField(wp, mCCCH_CONF, 3);
-    dest.writeField(wp, 0, 5);            // spare
-    dest.writeField(wp, mBS_PA_MFRMS - 2, 3);
+    dest.writeField(wp, mSI22IND, 1);
+    dest.writeField(wp, mCBQ3, 2);
+    dest.writeField(wp, 0, 2);            // spare
+    dest.writeField(wp, mBS_PA_MFRMS, 3);
     dest.writeField(wp, mT3212, 8);
 }
 
 void L3ControlChannelDescription::parseV(const L3Frame& src, size_t& rp) {
-    src.readField(rp, 1);                  // spare
+    mMSC_R99 = src.readField(rp, 1);
     mATT = src.readField(rp, 1);
     mBS_AG_BLKS_RES = src.readField(rp, 3);
     mCCCH_CONF = src.readField(rp, 3);
-    src.readField(rp, 5);                  // spare
-    mBS_PA_MFRMS = src.readField(rp, 3) + 2;
+    mSI22IND = src.readField(rp, 1);
+    mCBQ3 = src.readField(rp, 2);
+    src.readField(rp, 2);                  // spare
+    mBS_PA_MFRMS = src.readField(rp, 3);
     mT3212 = src.readField(rp, 8);
 }
 
@@ -564,16 +569,19 @@ void L3ControlChannelDescription::parseV(const L3Frame& src, size_t& rp, size_t)
 }
 
 void L3ControlChannelDescription::text(std::ostream& os) const {
-    os << "ControlChannel[ATT=" << mATT
+    os << "ControlChannel[msc_r99=" << mMSC_R99
+        << " ATT=" << mATT
         << " BS_AG_BLKS_RES=" << mBS_AG_BLKS_RES
         << " CCCH_CONF=" << mCCCH_CONF
+        << " si22ind=" << mSI22IND
+        << " cbq3=" << mCBQ3
         << " BS_PA_MFRMS=" << mBS_PA_MFRMS
         << " T3212=" << mT3212 << "]";
 }
 
 void L3ControlChannelDescription::validate() {
-    if (mBS_PA_MFRMS < 2 || mBS_PA_MFRMS > 9) {
-        mBS_PA_MFRMS = 2;
+    if (mBS_PA_MFRMS > 7) {
+        mBS_PA_MFRMS = 0;
     }
     switch (mCCCH_CONF) {
         case 1:
