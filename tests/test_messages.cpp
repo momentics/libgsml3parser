@@ -412,7 +412,7 @@ TEST(MessagesTest, L3Frame_Constructor) {
 }
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(MessagesTest, DISABLED_L3Frame_HexConstructor) {
+TEST(MessagesTest, L3Frame_HexConstructor) {
     // Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0x19(SI1)
     L3Frame frame(SAPI::SAPI0, "60 19 00");
     EXPECT_EQ(frame.PD(), L3PD::RadioResource);
@@ -420,7 +420,7 @@ TEST(MessagesTest, DISABLED_L3Frame_HexConstructor) {
 }
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(MessagesTest, DISABLED_L3Frame_PD_MTI) {
+TEST(MessagesTest, L3Frame_PD_MTI) {
     // Reference: PD(4 bits, high nibble) | skip(4 bits, low nibble) | MTI(8 bits)
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;

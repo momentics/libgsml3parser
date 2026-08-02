@@ -106,7 +106,7 @@ TEST(GSMSpecTest, MCCMNC_Ref_262_42) {
     EXPECT_EQ(frame.data()[2], 0x24);
 }
 
-TEST(GSMSpecTest, DISABLED_MCCMNC_RoundTrip) {
+TEST(GSMSpecTest, MCCMNC_RoundTrip) {
     // DISABLED: Library has symmetric nibble-swap bug in MNC byte 2.
     // writeV encodes byte 2 as {mMNC[1], mMNC[0]} (high nibble = digit 2,
     // low nibble = digit 1) but reference GSM_Types.ttcn TC_selftest_BcdMccMnc
@@ -411,7 +411,7 @@ TEST(GSMSpecTest, RACHControlParameters) {
     EXPECT_EQ(rcp.TxInteger(), 0u);
 }
 
-TEST(GSMSpecTest, DISABLED_RACHControlParameters_RefValues) {
+TEST(GSMSpecTest, RACHControlParameters_RefValues) {
     // DISABLED: Library L3RACHControlParameters::parseV bit field order matches
     // GSM 04.08 10.5.2.29 per BTS_Tests.ttcn ts_RachCtrl_default:
     //   max_retrans(2) + tx_integer(4) + cell_barr_access(1) + re_not_allowed(1) + acc(16)
@@ -493,7 +493,7 @@ TEST(GSMSpecTest, ControlChannelDescription) {
     EXPECT_EQ(ccd.lengthV(), 3u);
 }
 
-TEST(GSMSpecTest, DISABLED_ControlChannelDescription_RefValues) {
+TEST(GSMSpecTest, ControlChannelDescription_RefValues) {
     // DISABLED: Library L3ControlChannelDescription reads all 24 bits but treats
     // msc_r99, si22ind, and cbq3 as spare bits instead of named fields.
     // Reference GSM_SystemInformation.ttcn ControlChannelDescription is 24 bits:
@@ -631,7 +631,7 @@ TEST(GSMSpecTest, Data2Hex) {
 // ── Hex string parsing edge cases ──────────────────────────────────────
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(GSMSpecTest, DISABLED_ParseHexWithVariousFormats) {
+TEST(GSMSpecTest, ParseHexWithVariousFormats) {
     // Plain hex — Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0x19(SI1)
     auto msg1 = parseL3Hex("601900");
     ASSERT_TRUE(msg1);

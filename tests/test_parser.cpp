@@ -41,7 +41,7 @@ TEST(ParserTest, ParseTooShort) {
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble (bits 4-7) instead of
 // high nibble (bits 0-3) per GSM 04.08 10.2. Reference byte 0 = PD(4)|skip(4).
-TEST(ParserTest, DISABLED_ParseRR_ChannelRelease) {
+TEST(ParserTest, ParseRR_ChannelRelease) {
     // Reference: PD=0x06(RR), skip=0, MTI=0x0D(ChannelRelease), cause=0x00
     // Byte 0: PD(high nibble=6) | skip(low nibble=0) = 0x60
     // Byte 1: MTI = 0x0D (RR uses full 8-bit messageType)
@@ -59,7 +59,7 @@ TEST(ParserTest, DISABLED_ParseRR_ChannelRelease) {
 // DISABLED: Library L3 header format incompatible with GSM 04.08 10.3.
 // Library writes TI(4)|PD(4)|MTI(8), reference is PD(4)|TIO(3)+TIF(1)|messageType(6)+NSD(2).
 // Also library writes MTI as raw 8-bit value instead of messageType(6)<<2|NSD(2).
-TEST(ParserTest, DISABLED_ParseCC_Disconnect) {
+TEST(ParserTest, ParseCC_Disconnect) {
     // Reference: PD=0x03(CC), TIO=0, TIF=0, messageType=100101(Disconnect), NSD=00
     // Byte 0: PD(high=3) | TIO+TIF(low=0) = 0x30
     // Byte 1: messageType(6)<<2 | NSD(2) = 0x25<<2 | 0 = 0x94
@@ -74,7 +74,7 @@ TEST(ParserTest, DISABLED_ParseCC_Disconnect) {
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
 // Library writes MTI as raw 8-bit, reference encodes messageType(6)<<2|NSD(2).
-TEST(ParserTest, DISABLED_ParseMM_CMServiceAccept) {
+TEST(ParserTest, ParseMM_CMServiceAccept) {
     // Reference: PD=0x05(MM), skip=0, messageType=100001(CMServiceAccept), NSD=00
     // Byte 0: PD(high=5) | skip(low=0) = 0x50
     // Byte 1: messageType(6)<<2 | NSD(2) = 0x21<<2 | 0 = 0x84
@@ -87,7 +87,7 @@ TEST(ParserTest, DISABLED_ParseMM_CMServiceAccept) {
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
 // Library writes MTI as raw 8-bit, reference encodes messageType(6)<<2|NSD(2).
-TEST(ParserTest, DISABLED_ParseSS_Facility) {
+TEST(ParserTest, ParseSS_Facility) {
     // Reference: PD=0x0B(SS), TIO=0, TIF=0, messageType=111010(Facility), NSD=00
     // Byte 0: PD(high=0xB) | TIO+TIF(low=0) = 0xB0
     // Byte 1: messageType(6)<<2 | NSD(2) = 0x3A<<2 | 0 = 0xE8
@@ -99,7 +99,7 @@ TEST(ParserTest, DISABLED_ParseSS_Facility) {
 }
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08.
-TEST(ParserTest, DISABLED_ParseHex) {
+TEST(ParserTest, ParseHex) {
     // Reference: PD=0x05(MM), skip=0, messageType=100001(CMServiceAccept)<<2|NSD=00
     // "50" = PD|skip, "84" = messageType<<2|NSD
     auto msg = parseL3Hex("5084");
@@ -109,7 +109,7 @@ TEST(ParserTest, DISABLED_ParseHex) {
 }
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08.
-TEST(ParserTest, DISABLED_ParseHexWithSpaces) {
+TEST(ParserTest, ParseHexWithSpaces) {
     auto msg = parseL3Hex("50 84");
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::MobilityManagement);
@@ -123,7 +123,7 @@ TEST(ParserTest, ParseUnknownPD) {
 }
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(ParserTest, DISABLED_RegisterPDHandler) {
+TEST(ParserTest, RegisterPDHandler) {
     bool handlerCalled = false;
     registerPDHandler(L3PD::SMS, [&](const L3Frame&) {
         handlerCalled = true;
@@ -165,7 +165,7 @@ TEST(ParserTest, WriteHexRoundTrip) {
 }
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(ParserTest, DISABLED_UnknownMTI) {
+TEST(ParserTest, UnknownMTI) {
     // Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0xFF (unknown)
     uint8_t data[] = {0x60, 0xFF};
     auto msg = parseL3(data, 2);

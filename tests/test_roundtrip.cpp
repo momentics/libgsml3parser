@@ -59,7 +59,7 @@ TEST(RoundTripTest, PagingRequestType1_TMSI) {
 }
 
 // BUG: IMSI round-trip fails — library MobileIdentity parser truncates last 2 digits
-TEST(RoundTripTest, DISABLED_PagingRequestType1_IMSI) {
+TEST(RoundTripTest, PagingRequestType1_IMSI) {
     L3MobileIdentity id("250011234567890");
     L3PagingRequestType1 msg(id, ChannelType::TCHFType);
     auto parsed = roundtrip(msg);
@@ -98,116 +98,116 @@ TEST(RoundTripTest, PagingResponse) {
 // Reference: GSM_SystemInformation.ttcn, BTS_Tests.ttcn ts_SI*_default
 //
 // BUG: SI round-trip tests hang due to infinite loop in rest octet
-// parsing/serialization. Marked DISABLED_ until library is fixed.
+// parsing/serialization. Marked  until library is fixed.
 // These tests document known bugs that need fixing.
 
 // BUG: SI1 rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType1) {
+TEST(RoundTripTest, SystemInformationType1) {
     L3SystemInformationType1 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType1);
 }
 
 // BUG: SI2 rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType2) {
+TEST(RoundTripTest, SystemInformationType2) {
     L3SystemInformationType2 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType2);
 }
 
 // BUG: SI2bis rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType2bis) {
+TEST(RoundTripTest, SystemInformationType2bis) {
     L3SystemInformationType2bis msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType2bis);
 }
 
 // BUG: SI2ter rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType2ter) {
+TEST(RoundTripTest, SystemInformationType2ter) {
     L3SystemInformationType2ter msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType2ter);
 }
 
 // BUG: SI3 rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType3) {
+TEST(RoundTripTest, SystemInformationType3) {
     L3SystemInformationType3 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType3);
 }
 
 // BUG: SI4 rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType4) {
+TEST(RoundTripTest, SystemInformationType4) {
     L3SystemInformationType4 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType4);
 }
 
 // BUG: SI5 rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType5) {
+TEST(RoundTripTest, SystemInformationType5) {
     L3SystemInformationType5 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType5);
 }
 
 // BUG: SI5bis rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType5bis) {
+TEST(RoundTripTest, SystemInformationType5bis) {
     L3SystemInformationType5bis msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType5bis);
 }
 
 // BUG: SI5ter rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType5ter) {
+TEST(RoundTripTest, SystemInformationType5ter) {
     L3SystemInformationType5ter msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType5ter);
 }
 
 // BUG: SI6 rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType6) {
+TEST(RoundTripTest, SystemInformationType6) {
     L3SystemInformationType6 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType6);
 }
 
 // BUG: SI7 rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType7) {
+TEST(RoundTripTest, SystemInformationType7) {
     L3SystemInformationType7 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType7);
 }
 
 // BUG: SI8 rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType8) {
+TEST(RoundTripTest, SystemInformationType8) {
     L3SystemInformationType8 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType8);
 }
 
 // BUG: SI9 rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType9) {
+TEST(RoundTripTest, SystemInformationType9) {
     L3SystemInformationType9 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType9);
 }
 
 // BUG: SI13 rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType13) {
+TEST(RoundTripTest, SystemInformationType13) {
     L3SystemInformationType13 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType13);
 }
 
 // BUG: SI16 rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType16) {
+TEST(RoundTripTest, SystemInformationType16) {
     L3SystemInformationType16 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType16);
 }
 
 // BUG: SI17 rest octet loop
-TEST(RoundTripTest, DISABLED_SystemInformationType17) {
+TEST(RoundTripTest, SystemInformationType17) {
     L3SystemInformationType17 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType17);
@@ -237,7 +237,7 @@ TEST(RoundTripTest, ChannelRelease_Preemptive) {
 // ── RR Status (GSM 04.08 9.1.29) ─────────────────────────────────────
 // Reference: L3_Templates.ttcn tr_RRM_RR_STATUS
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(RoundTripTest, DISABLED_RRStatus) {
+TEST(RoundTripTest, RRStatus) {
     // Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0x12(RRStatus), cause=0x60
     // Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
     // Byte 1: MTI = 0x12
@@ -264,7 +264,7 @@ TEST(RoundTripTest, AssignmentCommand) {
 
 // ── Assignment Complete (GSM 04.08 9.1.3) ─────────────────────────────
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(RoundTripTest, DISABLED_AssignmentComplete) {
+TEST(RoundTripTest, AssignmentComplete) {
     // Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0x29(AssignmentComplete)
     // Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
     // Byte 1: MTI = 0x29 (RR uses 8-bit messageType)
@@ -282,7 +282,7 @@ TEST(RoundTripTest, DISABLED_AssignmentComplete) {
 
 // ── Assignment Failure (GSM 04.08 9.1.3) ──────────────────────────────
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(RoundTripTest, DISABLED_AssignmentFailure) {
+TEST(RoundTripTest, AssignmentFailure) {
     // Reference: PD=0x06(RR), skip=0, MTI=0x2F(AssignmentFailure)
     // Byte 0: 0x60, Byte 1: 0x2F, Byte 2: cause=0x09(Channel Mode Unacceptable)
     uint8_t data[] = {0x60, 0x2F, 0x09};
@@ -351,7 +351,7 @@ TEST(RoundTripTest, HandoverCommand) {
 
 // ── Handover Complete (GSM 04.08 9.1.16) ─────────────────────────────
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(RoundTripTest, DISABLED_HandoverComplete) {
+TEST(RoundTripTest, HandoverComplete) {
     // Reference: PD=0x06(RR), skip=0, MTI=0x2C(HandoverComplete), cause=Normal
     uint8_t data[] = {0x60, 0x2C, 0x00};
     auto msg = parseL3(data, sizeof(data));
@@ -366,7 +366,7 @@ TEST(RoundTripTest, DISABLED_HandoverComplete) {
 
 // ── Handover Failure (GSM 04.08 9.1.17) ──────────────────────────────
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(RoundTripTest, DISABLED_HandoverFailure) {
+TEST(RoundTripTest, HandoverFailure) {
     // Reference: PD=0x06(RR), skip=0, MTI=0x28(HandoverFailure), cause=Handover Impossible
     uint8_t data[] = {0x60, 0x28, 0x08};
     auto msg = parseL3(data, sizeof(data));
@@ -410,7 +410,7 @@ TEST(RoundTripTest, ImmediateAssignmentExtended) {
 // GSM_RestOctets.ttcn IARRestOctets
 // BUG: vector subscript out of range in L3ImmediateAssignmentReject serialization
 
-TEST(RoundTripTest, DISABLED_ImmediateAssignmentReject) {
+TEST(RoundTripTest, ImmediateAssignmentReject) {
     L3ImmediateAssignmentReject msg(30);
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::ImmediateAssignmentReject);
@@ -437,7 +437,7 @@ TEST(RoundTripTest, ChannelModeModify) {
 
 // ── Channel Mode Modify Acknowledge (GSM 04.08 9.1.6) ────────────────
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(RoundTripTest, DISABLED_ChannelModeModifyAcknowledge) {
+TEST(RoundTripTest, ChannelModeModifyAcknowledge) {
     // Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0x17(ChannelModeModifyAck)
     // Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
     // Byte 1: MTI = 0x17
@@ -462,7 +462,7 @@ TEST(RoundTripTest, DISABLED_ChannelModeModifyAcknowledge) {
 // The constructor initializes mRaId(6, 0) correctly, so there is no vector
 // subscript out of range. Round-trip fails due to the PD nibble swap bug.
 
-TEST(RoundTripTest, DISABLED_GPRSSuspensionRequest) {
+TEST(RoundTripTest, GPRSSuspensionRequest) {
     L3GPRSSuspensionRequest msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::GPRSSuspensionRequest);
@@ -483,7 +483,7 @@ TEST(RoundTripTest, ApplicationInformation) {
 // ── Synchronization Channel Information (GSM 04.08 9.1.30) ───────────
 // DISABLED: MTI=0x100 is a special internal code (RrShortDisc), not a standard
 // 8-bit RR messageType. Library parser cannot roundtrip non-standard MTI values.
-TEST(RoundTripTest, DISABLED_SynchronizationChannelInformation) {
+TEST(RoundTripTest, SynchronizationChannelInformation) {
     L3SynchronizationChannelInformation msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SynchronizationChannelInformation);
@@ -492,7 +492,7 @@ TEST(RoundTripTest, DISABLED_SynchronizationChannelInformation) {
 // ── Channel Request (GSM 04.08 9.1.13) ───────────────────────────────
 // DISABLED: MTI=0x101 is a special internal code (RrShortDisc), not a standard
 // 8-bit RR messageType. Library parser cannot roundtrip non-standard MTI values.
-TEST(RoundTripTest, DISABLED_ChannelRequest) {
+TEST(RoundTripTest, ChannelRequest) {
     L3ChannelRequest msg(0x42);
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::ChannelRequest);
@@ -501,7 +501,7 @@ TEST(RoundTripTest, DISABLED_ChannelRequest) {
 // ── Handover Access (GSM 04.08 9.1.14a) ──────────────────────────────
 // DISABLED: MTI=0x102 is a special internal code (RrShortDisc), not a standard
 // 8-bit RR messageType. Library parser cannot roundtrip non-standard MTI values.
-TEST(RoundTripTest, DISABLED_HandoverAccess) {
+TEST(RoundTripTest, HandoverAccess) {
     L3HandoverAccess msg(0x17);
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::HandoverAccess);
@@ -510,7 +510,7 @@ TEST(RoundTripTest, DISABLED_HandoverAccess) {
 // ── Classmark Change (GSM 04.08 9.1.11) ──────────────────────────────
 // Reference: L3_Templates.ttcn ts_RRM_CM_CHG
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(RoundTripTest, DISABLED_ClassmarkChange) {
+TEST(RoundTripTest, ClassmarkChange) {
     // Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0x16(ClassmarkChange)
     // Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
     // Byte 1: MTI = 0x16

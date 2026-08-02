@@ -102,7 +102,7 @@ TEST(MMRoundTripTest, LocationUpdatingReject) {
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08 10.2.
 // Library writes TI(4)|PD(4)|MTI(8), reference is PD(4)|skip(4)|messageType(6)+NSD(2).
-TEST(MMRoundTripTest, DISABLED_LocationUpdatingReject_Parse) {
+TEST(MMRoundTripTest, LocationUpdatingReject_Parse) {
     // Reference: PD=0x05(MM), skip=0, messageType=000100(LUReject=0x04), NSD=00
     // Byte 0: PD(4) | skip(4) = 0101 0000 = 0x50
     // Byte 1: messageType(6) | NSD(2) = 000100 00 = 0x10
@@ -135,7 +135,7 @@ TEST(MMRoundTripTest, AuthenticationRequest) {
 }
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08 10.2.
-TEST(MMRoundTripTest, DISABLED_AuthenticationRequest_Parse) {
+TEST(MMRoundTripTest, AuthenticationRequest_Parse) {
     // Reference: PD=0x05(MM), skip=0, messageType=001010(AuthRequest=0x12), NSD=00
     // Byte 0: PD(4) | skip(4) = 0101 0000 = 0x50
     // Byte 1: messageType(6) | NSD(2) = 001010 00 = 0x28
@@ -174,7 +174,7 @@ TEST(MMRoundTripTest, AuthenticationResponse) {
 }
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08 10.2.
-TEST(MMRoundTripTest, DISABLED_AuthenticationResponse_Parse) {
+TEST(MMRoundTripTest, AuthenticationResponse_Parse) {
     // Reference: PD=0x05(MM), skip=0, messageType=001100(AuthResponse=0x14), NSD=00
     // Byte 0: PD(4) | skip(4) = 0101 0000 = 0x50
     // Byte 1: messageType(6) | NSD(2) = 001100 00 = 0x30
@@ -215,7 +215,7 @@ TEST(MMRoundTripTest, IdentityRequest_IMEI) {
 }
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08 10.2.
-TEST(MMRoundTripTest, DISABLED_IdentityRequest_Parse) {
+TEST(MMRoundTripTest, IdentityRequest_Parse) {
     // Per L3_Templates.ttcn tr_ML3_MT_MM_ID_Req and GSM 04.08 10.5.3.4:
     //   identityType(3) + spare1_5(5)
     //   For IMSI: identityType = '001'B (CM_ID_TYPE_IMSI = 1)
@@ -332,7 +332,7 @@ TEST(MMRoundTripTest, IdentityResponse) {
 // ── Parse from known hex values ──────────────────────────────────────
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08 10.2.
-TEST(MMRoundTripTest, DISABLED_Parse_CMServiceAccept_Hex) {
+TEST(MMRoundTripTest, Parse_CMServiceAccept_Hex) {
     // Reference: PD=0x05(MM), skip=0, messageType=100001(CMServiceAccept=0x21), NSD=00
     // Byte 0: 0101 0000 = 0x50
     // Byte 1: 100001 00 = 0x84
@@ -343,7 +343,7 @@ TEST(MMRoundTripTest, DISABLED_Parse_CMServiceAccept_Hex) {
 }
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08 10.2.
-TEST(MMRoundTripTest, DISABLED_Parse_AuthenticationReject_Hex) {
+TEST(MMRoundTripTest, Parse_AuthenticationReject_Hex) {
     // Reference: PD=0x05(MM), skip=0, messageType=001001(AuthReject=0x11), NSD=00
     // Byte 0: 0101 0000 = 0x50
     // Byte 1: 001001 00 = 0x24
@@ -353,7 +353,7 @@ TEST(MMRoundTripTest, DISABLED_Parse_AuthenticationReject_Hex) {
 }
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08 10.2.
-TEST(MMRoundTripTest, DISABLED_Parse_TMSIReallocationComplete_Hex) {
+TEST(MMRoundTripTest, Parse_TMSIReallocationComplete_Hex) {
     // Reference: PD=0x05(MM), skip=0, messageType=001101(TMSIReallocComplete=0x1B), NSD=00
     // Byte 0: 0101 0000 = 0x50
     // Byte 1: 001101 00 = 0x34

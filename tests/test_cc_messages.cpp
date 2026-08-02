@@ -66,7 +66,7 @@ TEST(CCRoundTripTest, Setup_WithCalledParty) {
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08 10.3.
 // Library writes TI(4)|PD(4)|MTI(8), reference is PD(4)|TIO(3)+TIF(1)|messageType(6)+NSD(2).
-TEST(CCRoundTripTest, DISABLED_Setup_Parse) {
+TEST(CCRoundTripTest, Setup_Parse) {
     // Per L3_Templates.ttcn ts_ML3_MO_CC_SETUP:
     //   discriminator = '0011'B (PD=3, CallControl)
     //   transactionId.tio = int2bit(7, 3) = '111'B
@@ -116,7 +116,7 @@ TEST(CCRoundTripTest, Alerting) {
 }
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08 10.3.
-TEST(CCRoundTripTest, DISABLED_Alerting_Parse) {
+TEST(CCRoundTripTest, Alerting_Parse) {
     // Per L3_Templates.ttcn tr_ML3_MT_CC_ALERTING:
     //   discriminator = '0011'B (PD=3, CallControl)
     //   transactionId.tio = int2bit(7, 3) = '111'B
@@ -185,7 +185,7 @@ TEST(CCRoundTripTest, Disconnect_UserBusy) {
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08 10.3.
 // Library writes TI(4)|PD(4)|MTI(8)|causeLV, reference is PD(4)|TIO(3)+TIF(1)|messageType(6)+NSD(2)|causeTLV.
-TEST(CCRoundTripTest, DISABLED_Disconnect_Parse) {
+TEST(CCRoundTripTest, Disconnect_Parse) {
     // Per L3_Templates.ttcn ts_ML3_MO_CC_DISC:
     //   discriminator = '0011'B (PD=3, CallControl)
     //   transactionId.tio = int2bit(7, 3) = '111'B
@@ -489,7 +489,7 @@ TEST(CCRoundTripTest, TI_DifferentValues) {
 // ── Parse CC messages from hex ───────────────────────────────────────
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08 10.3.
-TEST(CCRoundTripTest, DISABLED_Parse_Setup_Hex) {
+TEST(CCRoundTripTest, Parse_Setup_Hex) {
     // Per L3_Templates.ttcn ts_ML3_MO_CC_SETUP:
     //   discriminator = '0011'B (PD=3, CallControl)
     //   transactionId.tio = int2bit(7, 3) = '111'B
@@ -506,7 +506,7 @@ TEST(CCRoundTripTest, DISABLED_Parse_Setup_Hex) {
 }
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08 10.3.
-TEST(CCRoundTripTest, DISABLED_Parse_Release_Hex) {
+TEST(CCRoundTripTest, Parse_Release_Hex) {
     // Per L3_Templates.ttcn ts_ML3_MO_CC_RELEASE:
     //   discriminator = '0011'B (PD=3, CallControl)
     //   transactionId.tio = int2bit(7, 3) = '111'B

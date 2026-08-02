@@ -58,7 +58,7 @@ TEST(L3FrameTest, SizedConstructor) {
 }
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(L3FrameTest, DISABLED_HexConstructor) {
+TEST(L3FrameTest, HexConstructor) {
     // Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0x19(SI1)
     L3Frame frame(SAPI::SAPI0, "601900");
     EXPECT_EQ(frame.PD(), L3PD::RadioResource);
@@ -67,14 +67,14 @@ TEST(L3FrameTest, DISABLED_HexConstructor) {
 }
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(L3FrameTest, DISABLED_HexConstructor_Spaces) {
+TEST(L3FrameTest, HexConstructor_Spaces) {
     L3Frame frame(SAPI::SAPI0, "60 19 00");
     EXPECT_EQ(frame.PD(), L3PD::RadioResource);
     EXPECT_EQ(frame.MTI(), 0x19);
 }
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(L3FrameTest, DISABLED_BitVectorSourceConstructor) {
+TEST(L3FrameTest, BitVectorSourceConstructor) {
     // Reference: PD(4 bits) at high nibble, then MTI(8 bits), then body
     BitVector bv(24);
     size_t wp = 0;
@@ -92,14 +92,14 @@ TEST(L3FrameTest, DISABLED_BitVectorSourceConstructor) {
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble (bits 4-7) instead of
 // high nibble (bits 0-3) per GSM 04.08 10.2.
-TEST(L3FrameTest, DISABLED_PD_RR) {
+TEST(L3FrameTest, PD_RR) {
     // Reference: PD=0x06 in high nibble, skip=0 in low nibble → byte 0 = 0x60
     L3Frame frame(SAPI::SAPI0, "601900");
     EXPECT_EQ(frame.PD(), L3PD::RadioResource);
 }
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(L3FrameTest, DISABLED_PD_MM) {
+TEST(L3FrameTest, PD_MM) {
     // Reference: PD=0x05 in high nibble, skip=0 → byte 0 = 0x50
     // Byte 1: messageType(6)<<2|NSD(2) = 0x21<<2 = 0x84 (CMServiceAccept)
     L3Frame frame(SAPI::SAPI0, "5084");
@@ -107,21 +107,21 @@ TEST(L3FrameTest, DISABLED_PD_MM) {
 }
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(L3FrameTest, DISABLED_PD_CC) {
+TEST(L3FrameTest, PD_CC) {
     // Reference: PD=0x03 in high nibble, TIO=0,TIF=0 in low nibble → byte 0 = 0x30
     L3Frame frame(SAPI::SAPI0, "3000");
     EXPECT_EQ(frame.PD(), L3PD::CallControl);
 }
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(L3FrameTest, DISABLED_PD_SS) {
+TEST(L3FrameTest, PD_SS) {
     // Reference: PD=0x0B in high nibble, TIO=0,TIF=0 in low nibble → byte 0 = 0xB0
     L3Frame frame(SAPI::SAPI0, "B000");
     EXPECT_EQ(frame.PD(), L3PD::NonCallSS);
 }
 
 // DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-TEST(L3FrameTest, DISABLED_MTI_Extraction) {
+TEST(L3FrameTest, MTI_Extraction) {
     // Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0x19(SI1)
     L3Frame frame(SAPI::SAPI0, "601900");
     EXPECT_EQ(frame.MTI(), 0x19);
@@ -129,7 +129,7 @@ TEST(L3FrameTest, DISABLED_MTI_Extraction) {
 
 // DISABLED: Library L3Frame::TI() reads high nibble (PD per reference) instead of
 // low nibble (TIO+TIF per reference). Library nibbles are swapped vs GSM 04.08 10.2.
-TEST(L3FrameTest, DISABLED_TI_Extraction_CC) {
+TEST(L3FrameTest, TI_Extraction_CC) {
     // Per GSM 04.08 10.2, CC L3 header:
     //   Byte 0: PD(4 bits, high nibble) | TIO(3 bits) + TIF(1 bit, low nibble)
     //   Byte 1: messageType(6 bits) | NSD(2 bits)

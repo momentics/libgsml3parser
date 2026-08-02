@@ -56,7 +56,7 @@ TEST(SSRoundTripTest, Facility_WithData) {
 
 // DISABLED: Library L3 header format incompatible with GSM 04.08 / GSM 04.80.
 // Library writes TI(4)|PD(4)|MTI(8), reference is PD(4)|TIO(3)+TIF(1)|messageType(6)+NSD(2).
-TEST(SSRoundTripTest, DISABLED_Facility_Parse) {
+TEST(SSRoundTripTest, Facility_Parse) {
     // Reference: PD=0x0B(SS), TIO=7, TIF=0, messageType=111010(Facility=0x3A), NSD=00
     // Byte 0: PD(4) | TIO(3)+TIF(1) = 1011 1110 = 0xBE
     // Byte 1: messageType(6) | NSD(2) = 111010 00 = 0xE8
