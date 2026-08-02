@@ -336,7 +336,7 @@ void L3MobileStationClassmark2::text(std::ostream& os) const {
 
 int L3MobileStationClassmark2::getA5Bits() const {
     int result = 0;
-    if (mA5_1 == 0) result |= 1;
+    if (mA5_1 != 0) result |= 1;
     if (mA5_2 != 0) result |= 2;
     if (mA5_3 != 0) result |= 4;
     return result;
@@ -418,6 +418,13 @@ bool L3FrequencyList::contains(unsigned wARFCN) const {
 }
 
 void L3FrequencyList::writeV(L3Frame& dest, size_t& wp) const {
+    if (mARFCNs.empty()) {
+        // Empty list: write 16 zero bytes
+        for (size_t i = 0; i < lengthV(); i++) {
+            dest.writeField(wp, 0, 8);
+        }
+        return;
+    }
     // GSM 04.08 10.5.2.13.7: variable bit map format
     dest.writeField(wp, 0x47, 7);  // header for variable bit map
     unsigned baseARFCN = base();
@@ -663,13 +670,13 @@ void L3ChannelDescription::text(std::ostream& os) const {
 L3PowerCommand::L3PowerCommand(unsigned wCommand) : mCommand(wCommand) {}
 
 void L3PowerCommand::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0, 3);  // spare
-    dest.writeField(wp, mCommand, 5);
+    dest.writeField(wp, mCommand, 5);  // power command (5 bits, MSB)
+    dest.writeField(wp, 0, 3);         // spare (3 bits, LSB)
 }
 
 void L3PowerCommand::parseV(const L3Frame& src, size_t& rp) {
-    src.readField(rp, 3);  // spare
-    mCommand = src.readField(rp, 5);
+    mCommand = src.readField(rp, 5);   // power command (5 bits)
+    src.readField(rp, 3);              // spare (3 bits)
 }
 
 void L3PowerCommand::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -940,13 +947,13 @@ void L3ChannelMode::text(std::ostream& os) const {
 L3TimingAdvance::L3TimingAdvance(unsigned wTA) : mTimingAdvance(wTA) {}
 
 void L3TimingAdvance::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0, 2);  // spare
-    dest.writeField(wp, mTimingAdvance & 0x3f, 6);
+    dest.writeField(wp, mTimingAdvance & 0x3f, 6);  // timing advance (6 bits, MSB)
+    dest.writeField(wp, 0, 2);                       // spare (2 bits, LSB)
 }
 
 void L3TimingAdvance::parseV(const L3Frame& src, size_t& rp) {
-    src.readField(rp, 2);  // spare
-    mTimingAdvance = src.readField(rp, 6);
+    mTimingAdvance = src.readField(rp, 6);          // timing advance (6 bits)
+    src.readField(rp, 2);                           // spare (2 bits)
 }
 
 void L3TimingAdvance::parseV(const L3Frame& src, size_t& rp, size_t) {
@@ -1010,19 +1017,19 @@ L3CipheringModeSetting::L3CipheringModeSetting(bool wCiphering, int wAlgorithm)
     : mCiphering(wCiphering), mAlgorithm(wAlgorithm) {}
 
 void L3CipheringModeSetting::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mCiphering ? mAlgorithm - 1 : 0, 3);
-    dest.writeField(wp, mCiphering ? 1 : 0, 1);
+    dest.writeField(wp, mCiphering ? mAlgorithm - 1 : 0, 3);  // algorithm (3 bits, MSB)
+    dest.writeField(wp, mCiphering ? 1 : 0, 1);                // ciphering flag (1 bit, LSB)
 }
 
 void L3CipheringModeSetting::parseV(const L3Frame& src, size_t& rp) {
-    unsigned raw = src.readField(rp, 3);
-    mCiphering = src.readField(rp, 1);
+    unsigned raw = src.readField(rp, 3);       // algorithm (3 bits)
+    mCiphering = src.readField(rp, 1) != 0;    // ciphering flag (1 bit)
     mAlgorithm = mCiphering ? raw + 1 : 0;
 }
 
 void L3CipheringModeSetting::parseV(const L3Frame& src, size_t& rp, size_t) {
-    unsigned raw = src.readField(rp, 3);
-    mCiphering = src.readField(rp, 1);
+    unsigned raw = src.readField(rp, 3);       // algorithm (3 bits)
+    mCiphering = src.readField(rp, 1) != 0;    // ciphering flag (1 bit)
     mAlgorithm = mCiphering ? raw + 1 : 0;
 }
 

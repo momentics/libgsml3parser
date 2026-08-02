@@ -534,8 +534,8 @@ L3CCMessage* L3CCFactory(int mti) {
 std::unique_ptr<L3CCMessage> parseL3CC(const L3Frame& source) {
     if (source.size() < 16) return nullptr;
 
-    // Mask out bit 6 (0xbf), see GSM 04.08 Table 10.3/3
-    unsigned mti = source.MTI() & 0xbf;
+    // MTI extraction already handles the don't-care bit in L3Frame::MTI()
+    unsigned mti = source.MTI();
     L3CCMessage* msg = L3CCFactory(static_cast<L3CCMessage::MessageType>(mti));
     if (!msg) {
         GSML3PARSER_LOG_WARN("Unknown CC MTI: 0x%02x", mti);

@@ -110,9 +110,10 @@ unsigned L3Frame::MTI() const {
     unsigned mti = peekField(8, 8);
     L3PD pd = PD();
     // MM, CC, SS: byte 1 = messageType(6)|NSD(2) — GSM 04.08 10.4
+    // Bit 7 of byte 1 is "don't care" (direction indicator), mask with 0xFC then shift
     if (pd == L3PD::MobilityManagement || pd == L3PD::CallControl ||
         pd == L3PD::NonCallSS) {
-        return mti >> 2;
+        return (mti & 0xFC) >> 2;
     }
     // RR short messages: TIF=1 indicates MTI >= 0x100
     if (pd == L3PD::RadioResource && size() >= 8 && peekField(7, 1)) {

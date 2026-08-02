@@ -447,8 +447,8 @@ L3MMMessage* L3MMFactory(int mti) {
 std::unique_ptr<L3MMMessage> parseL3MM(const L3Frame& source) {
     if (source.size() < 16) return nullptr;
 
-    // Bit 6 (MSB-1) is "don't care" for MM messages — mask it
-    unsigned mti = source.MTI() & 0xbf;
+    // MTI extraction already handles the don't-care bit in L3Frame::MTI()
+    unsigned mti = source.MTI();
     L3MMMessage* msg = L3MMFactory(static_cast<L3MMMessage::MessageType>(mti));
     if (!msg) {
         GSML3PARSER_LOG_WARN("Unknown MM MTI: 0x%02x", mti);
