@@ -125,7 +125,7 @@ TEST(GoldenCC, CallConfirmed_Parse) {
 
 TEST(GoldenCC, CCStatus_Parse) {
     // Byte 0: PD(4)=3|TI(3)=7+TIF(1)=0 = 0x3E
-    // Byte 1: messageType(6)=0x3d|NSD(2)=0 = 0xEC
+    // Byte 1: messageType(6)=0x3d|NSD(2)=0 = 0x3d<<2 = 0xEC
     // Byte 2: IEI = 0x08 (Cause)
     // Byte 3: Length = 2
     // Byte 4: location(4)=1, spare(1)=0, codingStd(2)=11, ext(1)=0 = 0x16

@@ -71,7 +71,7 @@ TEST(GoldenMM, MessageTypeValues) {
 
 TEST(GoldenMM, LocationUpdatingRequest_Parse) {
     // Byte 0: PD(4)=5|skip(4)=0 = 0x50
-    // Byte 1: MTI = 0x08 (LocationUpdatingRequest)
+    // Byte 1: messageType(6)=0x08|NSD(2)=0 = 0x08<<2 = 0x20
     // Byte 2: LU_Type(2)=0(Normal), spare(2)=0, CKSN(4)=0 = 0x00
     // Byte 3: CM1 length = 1
     // Byte 4: CM1 = 0x00
@@ -79,7 +79,7 @@ TEST(GoldenMM, LocationUpdatingRequest_Parse) {
     // Byte 6: spare(4)=0, type(3)=100(TMSI), oe(1)=0 = 0x0C
     // Bytes 7-10: TMSI = 0x12345678
     uint8_t data[] = {
-        0x50, 0x08, 0x00,
+        0x50, 0x20, 0x00,
         0x01, 0x00,
         0x05, 0x0C, 0x12, 0x34, 0x56, 0x78
     };
@@ -96,9 +96,9 @@ TEST(GoldenMM, LocationUpdatingRequest_Parse) {
 
 TEST(GoldenMM, LocationUpdatingAccept_Parse) {
     // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: MTI = 0x02 (LocationUpdatingAccept)
+    // Byte 1: messageType(6)=0x02|NSD(2)=0 = 0x02<<2 = 0x08
     // Bytes 2-6: LAI: MCC=250, MNC=01, LAC=0x1234
-    uint8_t data[] = {0x50, 0x02, 0x52, 0xF0, 0x10, 0x12, 0x34};
+    uint8_t data[] = {0x50, 0x08, 0x52, 0xF0, 0x10, 0x12, 0x34};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::LocationUpdatingAccept);
@@ -112,14 +112,14 @@ TEST(GoldenMM, LocationUpdatingAccept_Parse) {
 
 TEST(GoldenMM, TMSIReallocationCommand_Parse) {
     // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: MTI = 0x1a (TMSIReallocationCommand)
+    // Byte 1: messageType(6)=0x1a|NSD(2)=0 = 0x1a<<2 = 0x68
     // Bytes 2-6: LAI: MCC=250, MNC=01, LAC=0x1234
     // Byte 7: MI length = 5
     // Byte 8: spare(4)=0, type(3)=100(TMSI), oe(1)=0 = 0x0C
     // Bytes 9-12: TMSI = 0x87654321
     // Byte 13: FollowOnProceed(4)=0, spare(4)=0 = 0x00
     uint8_t data[] = {
-        0x50, 0x1a,
+        0x50, 0x68,
         0x52, 0xF0, 0x10, 0x12, 0x34,
         0x05, 0x0C, 0x87, 0x65, 0x43, 0x21,
         0x00
@@ -137,7 +137,7 @@ TEST(GoldenMM, TMSIReallocationCommand_Parse) {
 
 TEST(GoldenMM, CMServiceRequest_Parse) {
     // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: MTI = 0x24 (CMServiceRequest)
+    // Byte 1: messageType(6)=0x24|NSD(2)=0 = 0x24<<2 = 0x90
     // Byte 2: CM_ServiceType(4)=1(MO_Call), CKSN(4)=0 = 0x01
     // Byte 3: CM2 length = 3
     // Bytes 4-6: CM2 = 0x20, 0x00, 0x80
@@ -145,7 +145,7 @@ TEST(GoldenMM, CMServiceRequest_Parse) {
     // Byte 8: spare(4)=0, type(3)=100(TMSI), oe(1)=0 = 0x0C
     // Bytes 9-12: TMSI = 0x12345678
     uint8_t data[] = {
-        0x50, 0x24, 0x01,
+        0x50, 0x90, 0x01,
         0x03, 0x20, 0x00, 0x80,
         0x05, 0x0C, 0x12, 0x34, 0x56, 0x78
     };
@@ -163,7 +163,6 @@ TEST(GoldenMM, CMServiceRequest_Parse) {
 TEST(GoldenMM, CMServiceReject_Parse) {
     // Byte 0: PD(4)|skip(4) = 0x50
     // Byte 1: messageType(6)=0x22|NSD(2)=0 = 0x22<<2 = 0x88
-    //   Actually MTI=0x22, so byte 1 = 0x22<<2 = 0x88
     // Byte 2: reject_cause = 0x16 (Congestion)
     uint8_t data[] = {0x50, 0x88, 0x16};
     auto msg = parseL3(data, sizeof(data));
@@ -179,14 +178,14 @@ TEST(GoldenMM, CMServiceReject_Parse) {
 
 TEST(GoldenMM, IMSIDetachIndication_Parse) {
     // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: MTI = 0x01 (IMSIDetachIndication)
+    // Byte 1: messageType(6)=0x01|NSD(2)=0 = 0x01<<2 = 0x04
     // Byte 2: CM1 length = 1
     // Byte 3: CM1 = 0x00
     // Byte 4: MI length = 5
     // Byte 5: spare(4)=0, type(3)=100(TMSI), oe(1)=0 = 0x0C
     // Bytes 6-9: TMSI = 0x12345678
     uint8_t data[] = {
-        0x50, 0x01,
+        0x50, 0x04,
         0x01, 0x00,
         0x05, 0x0C, 0x12, 0x34, 0x56, 0x78
     };
@@ -203,11 +202,11 @@ TEST(GoldenMM, IMSIDetachIndication_Parse) {
 
 TEST(GoldenMM, MMStatus_Parse) {
     // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: MTI = 0x31 (MMStatus)
+    // Byte 1: messageType(6)=0x31|NSD(2)=0 = 0x31<<2 = 0xC4
     // Byte 2: cause = 0x60 (Invalid_Mandatory_Information)
     // Byte 3: spare = 0x00
     // Byte 4: spare = 0x00
-    uint8_t data[] = {0x50, 0x62, 0x60, 0x00, 0x00};
+    uint8_t data[] = {0x50, 0xC4, 0x60, 0x00, 0x00};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::MMStatus);
@@ -221,11 +220,11 @@ TEST(GoldenMM, MMStatus_Parse) {
 
 TEST(GoldenMM, IdentityResponse_Parse) {
     // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: MTI = 0x19 (IdentityResponse)
+    // Byte 1: messageType(6)=0x19|NSD(2)=0 = 0x19<<2 = 0x64
     // Byte 2: MI length = 5
     // Byte 3: spare(4)=0, type(3)=100(TMSI), oe(1)=0 = 0x0C
     // Bytes 4-7: TMSI = 0x12345678
-    uint8_t data[] = {0x50, 0x32, 0x05, 0x0C, 0x12, 0x34, 0x56, 0x78};
+    uint8_t data[] = {0x50, 0x64, 0x05, 0x0C, 0x12, 0x34, 0x56, 0x78};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::IdentityResponse);
@@ -239,14 +238,14 @@ TEST(GoldenMM, IdentityResponse_Parse) {
 
 TEST(GoldenMM, CMReestablishmentRequest_Parse) {
     // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: MTI = 0x28 (CMReestablishmentRequest)
+    // Byte 1: messageType(6)=0x28|NSD(2)=0 = 0x28<<2 = 0xA0
     // Byte 2: CM2 length = 3
     // Bytes 3-5: CM2 = 0x20, 0x00, 0x80
     // Byte 6: MI length = 5
     // Byte 7: spare(4)=0, type(3)=100(TMSI), oe(1)=0 = 0x0C
     // Bytes 8-11: TMSI = 0x12345678
     uint8_t data[] = {
-        0x50, 0x50,
+        0x50, 0xA0,
         0x03, 0x20, 0x00, 0x80,
         0x05, 0x0C, 0x12, 0x34, 0x56, 0x78
     };
