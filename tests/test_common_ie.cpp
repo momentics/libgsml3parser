@@ -316,12 +316,12 @@ TEST(CommonIETest, TimingAdvance_Default) {
 }
 
 TEST(CommonIETest, TimingAdvance_RoundTrip) {
-    L3TimingAdvance orig(100);
+    L3TimingAdvance orig(60); // within 6-bit range (0..63)
     ieRoundTrip(orig);
 }
 
 TEST(CommonIETest, TimingAdvance_MaxValue) {
-    L3TimingAdvance orig(219); // max per GSM spec
+    L3TimingAdvance orig(63); // max per GSM 04.08 10.5.2.40 (6 bits)
     ieRoundTrip(orig);
 }
 
