@@ -20,6 +20,10 @@ add_executable(gsml3parser_tests
     test_ss_messages.cpp
     test_l3frame.cpp
     test_common_ie.cpp
+    test_golden_rr.cpp
+    test_golden_mm.cpp
+    test_golden_cc.cpp
+    test_golden_ie.cpp
 )
 
 target_link_libraries(gsml3parser_tests

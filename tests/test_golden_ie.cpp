@@ -1,0 +1,1679 @@
+// Copyright 2026 momentics <momentics@gmail.com>
+// Copyright libgsml3parser contributors
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in all
+// copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+// SOFTWARE.
+
+// Comprehensive GSM Layer 3 IE (Information Element) Golden Tests.
+// Reference: osmo-ttcn3-hacks GSM_Types.ttcn, GSM_RR_Types.ttcn,
+// GSM_SystemInformation.ttcn, GSM_RestOctets.ttcn, L3_Templates.ttcn,
+// SS_Templates.ttcn, BTS_Tests.ttcn.
+// Spec: 3GPP TS 24.008 sections 10.5.1..10.5.5.
+
+#include <gtest/gtest.h>
+#include <gsml3parser/parser.h>
+#include <gsml3parser/common/l3common.h>
+#include <gsml3parser/gsm_common.h>
+#include <gsml3parser/cc/l3cclements.h>
+#include <gsml3parser/mm/l3mmlements.h>
+#include <gsml3parser/bitvector.h>
+
+using namespace gsml3parser;
+
+// Generic round-trip helper for L3ProtocolElement.
+template<typename T>
+static void ieRoundTrip(const T& orig) {
+    L3Frame frame(Primitive::L3_DATA, 256);
+    size_t wp = 0;
+    orig.writeV(frame, wp);
+    T parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp);
+    std::ostringstream os1, os2;
+    orig.text(os1);
+    parsed.text(os2);
+    EXPECT_EQ(os1.str(), os2.str());
+}
+
+// =====================================================================
+// Common IEs: L3CellIdentity (GSM 04.08 10.5.1.1)
+// Reference: GSM_SystemInformation.ttcn SysinfoCellIdentity
+// =====================================================================
+
+TEST(GoldenIE, CellIdentity_Default) {
+    L3CellIdentity ci;
+    EXPECT_EQ(ci.lengthV(), 2u);
+    EXPECT_EQ(ci.ID(), 0u);
+}
+
+TEST(GoldenIE, CellIdentity_RoundTrip) {
+    L3CellIdentity orig(0x1234);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, CellIdentity_MaxValue) {
+    L3CellIdentity orig(0xFFFF);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, CellIdentity_Encoding) {
+    L3CellIdentity ci(0x1234);
+    L3Frame frame(Primitive::L3_DATA, 16);
+    size_t wp = 0;
+    ci.writeV(frame, wp);
+    EXPECT_EQ(frame.data()[0], 0x12);
+    EXPECT_EQ(frame.data()[1], 0x34);
+}
+
+// =====================================================================
+// Common IEs: L3LocationAreaIdentity (GSM 04.08 10.5.1.3)
+// Reference: GSM_Types.ttcn f_build_BcdMccMnc, LocationAreaIdentification
+// =====================================================================
+
+TEST(GoldenIE, LAI_Default) {
+    L3LocationAreaIdentity lai;
+    EXPECT_EQ(lai.lengthV(), 5u);
+}
+
+TEST(GoldenIE, LAI_RoundTrip) {
+    L3LocationAreaIdentity orig("250", "01", 0x1234);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, LAI_3DigitMNC) {
+    L3LocationAreaIdentity orig("250", "012", 0x5678);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, LAI_Equality) {
+    L3LocationAreaIdentity a("250", "01", 0x1234);
+    L3LocationAreaIdentity b("250", "01", 0x1234);
+    L3LocationAreaIdentity c("250", "01", 0x5678);
+    EXPECT_TRUE(a == b);
+    EXPECT_FALSE(a == c);
+}
+
+TEST(GoldenIE, LAI_Ref_262_42) {
+    // Reference: GSM_Types.ttcn TC_selftest_BcdMccMnc:
+    //   match('62F224'O, decmatch BcdMccMnc:'262F42'H)
+    L3LocationAreaIdentity lai("262", "42", 0x002A);
+    EXPECT_EQ(lai.MCC(), 262);
+    EXPECT_EQ(lai.MNC(), 42);
+    L3Frame frame(Primitive::L3_DATA, 40);
+    size_t wp = 0;
+    lai.writeV(frame, wp);
+    EXPECT_EQ(frame.data()[0], 0x62);
+    EXPECT_EQ(frame.data()[1], 0xF2);
+    EXPECT_EQ(frame.data()[2], 0x24);
+}
+
+// =====================================================================
+// Common IEs: L3MobileIdentity (GSM 04.08 10.5.1.4)
+// Reference: L3_Templates.ttcn ts_MI_TMSI_LV, ts_MI_IMSI_LV, ts_MI_IMEI_LV
+// =====================================================================
+
+TEST(GoldenIE, MobileIdentity_TMSI) {
+    L3MobileIdentity orig(0xDEADBEEF);
+    EXPECT_EQ(orig.type(), MobileIDType::TMSI);
+    EXPECT_TRUE(orig.isTMSI());
+    EXPECT_FALSE(orig.isIMSI());
+    EXPECT_EQ(orig.TMSI(), 0xDEADBEEFu);
+}
+
+TEST(GoldenIE, MobileIdentity_IMSI) {
+    L3MobileIdentity orig("250011234567890");
+    EXPECT_EQ(orig.type(), MobileIDType::IMSI);
+    EXPECT_TRUE(orig.isIMSI());
+    EXPECT_STREQ(orig.digits(), "250011234567890");
+}
+
+TEST(GoldenIE, MobileIdentity_Equality) {
+    L3MobileIdentity a(0x12345678);
+    L3MobileIdentity b(0x12345678);
+    L3MobileIdentity c(0x87654321);
+    EXPECT_EQ(a, b);
+    EXPECT_NE(a, c);
+}
+
+TEST(GoldenIE, MobileIdentity_LessThan) {
+    L3MobileIdentity a(0x00000001);
+    L3MobileIdentity b(0x00000002);
+    EXPECT_LT(a, b);
+}
+
+TEST(GoldenIE, MobileIdentity_Default) {
+    L3MobileIdentity id;
+    EXPECT_EQ(id.type(), MobileIDType::NoID);
+}
+
+TEST(GoldenIE, MobileIdentity_TMSI_Encoding) {
+    L3MobileIdentity id(0xDEADBEEF);
+    L3Frame frame(Primitive::L3_DATA, 64);
+    size_t wp = 0;
+    id.writeV(frame, wp);
+    // Byte 0: spare(4)=0, type(3)=100(TMSI), oe(1)=0 = 0x0C
+    EXPECT_EQ(frame.data()[0], 0x0C);
+    EXPECT_EQ(frame.data()[1], 0xDE);
+    EXPECT_EQ(frame.data()[2], 0xAD);
+    EXPECT_EQ(frame.data()[3], 0xBE);
+    EXPECT_EQ(frame.data()[4], 0xEF);
+}
+
+TEST(GoldenIE, MobileIdentity_IMSI_Encoding) {
+    L3MobileIdentity id("250011234567890");
+    L3Frame frame(Primitive::L3_DATA, 64);
+    size_t wp = 0;
+    id.writeV(frame, wp);
+    // Byte 0: spare(4)=0, type(3)=001(IMSI), oe(1)=0(old) = 0x04
+    EXPECT_EQ(frame.data()[0], 0x04);
+}
+
+// =====================================================================
+// Common IEs: L3MobileStationClassmark1 (GSM 04.08 10.5.1.5)
+// Reference: L3_Templates.ttcn ts_CM1
+// 8 bits: revision(1)|spare(1)|ES_IND(1)|A5_1(1)|RF_Power(2)|spare(2)
+// =====================================================================
+
+TEST(GoldenIE, Classmark1_Default) {
+    L3MobileStationClassmark1 cm1;
+    EXPECT_EQ(cm1.lengthV(), 1u);
+}
+
+TEST(GoldenIE, Classmark1_RoundTrip) {
+    L3MobileStationClassmark1 orig;
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, Classmark1_Zero) {
+    L3MobileStationClassmark1 cm1;
+    L3Frame frame(Primitive::L3_DATA, 16);
+    size_t wp = 0;
+    cm1.writeV(frame, wp);
+    EXPECT_EQ(frame.data()[0], 0x00);
+}
+
+// =====================================================================
+// Common IEs: L3MobileStationClassmark2 (GSM 04.08 10.5.1.6)
+// Reference: L3_Templates.ttcn ts_CM2, ts_CM2_EGPRS
+// 24 bits: revision(1)|spare(1)|ES_IND(1)|A5_1(1)|A5_3(1)|A5_2(1)|
+//   RF_Power(2)|PS(1)|SS(1)|SM(1)|VBS(1)|VGCS(1)|FC(1)|CM3(1)|
+//   LCS(1)|SoLSA(1)|CMSF(1)|spare(1)|PS_class(8)
+// =====================================================================
+
+TEST(GoldenIE, Classmark2_Default) {
+    L3MobileStationClassmark2 cm2;
+    EXPECT_EQ(cm2.lengthV(), 3u);
+}
+
+TEST(GoldenIE, Classmark2_RoundTrip) {
+    L3MobileStationClassmark2 orig;
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, Classmark2_PowerClass) {
+    L3MobileStationClassmark2 cm2;
+    // Default RF power capability = 0 -> power class 1
+    EXPECT_EQ(cm2.powerClass(), 1);
+}
+
+TEST(GoldenIE, Classmark2_A5Bits) {
+    L3MobileStationClassmark2 cm2;
+    int bits = cm2.getA5Bits();
+    EXPECT_GE(bits, 0);
+}
+
+TEST(GoldenIE, Classmark2_Zero) {
+    L3MobileStationClassmark2 cm2;
+    L3Frame frame(Primitive::L3_DATA, 32);
+    size_t wp = 0;
+    cm2.writeV(frame, wp);
+    EXPECT_EQ(frame.data()[0], 0x00);
+    EXPECT_EQ(frame.data()[1], 0x00);
+    EXPECT_EQ(frame.data()[2], 0x00);
+}
+
+// =====================================================================
+// Common IEs: L3MobileStationClassmark3 (GSM 04.08 10.5.1.7)
+// =====================================================================
+
+TEST(GoldenIE, Classmark3_Default) {
+    L3MobileStationClassmark3 cm3;
+    EXPECT_EQ(cm3.lengthV(), 14u);
+}
+
+// =====================================================================
+// Common IEs: L3CipheringKeySequenceNumber (GSM 04.08 10.5.1.2)
+// Reference: L3_Templates.ttcn ts_CKSN
+// =====================================================================
+
+TEST(GoldenIE, CipheringKeySeqNr_Default) {
+    L3CipheringKeySequenceNumber cksn;
+    EXPECT_EQ(cksn.lengthV(), 0u);
+}
+
+TEST(GoldenIE, CipheringKeySeqNr_RoundTrip) {
+    L3CipheringKeySequenceNumber orig(5);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, CipheringKeySeqNr_MaxValue) {
+    L3CipheringKeySequenceNumber orig(7);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3ChannelDescription (GSM 04.08 10.5.2.5)
+// Reference: GSM_RR_Types.ttcn ChannelDescription, ts_ChanDescH0, ts_ChanDescH1
+// 24 bits: typeAndOffset(5) + TN(3) + TSC(3) + h(1) + spare(2) + ARFCN(10)
+// =====================================================================
+
+TEST(GoldenIE, ChannelDescription_Default) {
+    L3ChannelDescription chd;
+    EXPECT_FALSE(chd.initialized());
+    EXPECT_EQ(chd.lengthV(), 3u);
+}
+
+TEST(GoldenIE, ChannelDescription_SDCCH) {
+    L3ChannelDescription orig(TDMA_SDCCH, 2, 7, 100);
+    EXPECT_TRUE(orig.initialized());
+    EXPECT_EQ(orig.typeAndOffset(), TDMA_SDCCH);
+    EXPECT_EQ(orig.TN(), 2u);
+    EXPECT_EQ(orig.TSC(), 7u);
+    EXPECT_EQ(orig.ARFCN(), 100u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, ChannelDescription_TCHF) {
+    L3ChannelDescription orig(TDMA_TCHF, 5, 3, 200);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, ChannelDescription_TCHH) {
+    L3ChannelDescription orig(TDMA_TCHH, 0, 0, 1);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, ChannelDescription_CBCH) {
+    L3ChannelDescription orig(TDMA_CBCH, 1, 4, 50);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, ChannelDescription_RoundTrip) {
+    L3ChannelDescription orig(TDMA_TCHF, 3, 7, 100);
+    L3Frame frame(Primitive::L3_DATA, 32);
+    size_t wp = 0;
+    orig.writeV(frame, wp);
+    L3ChannelDescription parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp);
+    EXPECT_EQ(parsed.typeAndOffset(), orig.typeAndOffset());
+    EXPECT_EQ(parsed.TN(), orig.TN());
+    EXPECT_EQ(parsed.TSC(), orig.TSC());
+    EXPECT_EQ(parsed.ARFCN(), orig.ARFCN());
+}
+
+// =====================================================================
+// Common IEs: L3ChannelDescription2 (GSM 44.018 10.5.2.5a)
+// =====================================================================
+
+TEST(GoldenIE, ChannelDescription2_Default) {
+    L3ChannelDescription2 chd;
+    EXPECT_EQ(chd.lengthV(), 3u);
+}
+
+TEST(GoldenIE, ChannelDescription2_FromChannelDescription) {
+    L3ChannelDescription orig(TDMA_TCHF, 3, 7, 100);
+    L3ChannelDescription2 chd2(orig);
+    EXPECT_EQ(chd2.typeAndOffset(), TDMA_TCHF);
+    EXPECT_EQ(chd2.TN(), 3u);
+    EXPECT_EQ(chd2.TSC(), 7u);
+    EXPECT_EQ(chd2.ARFCN(), 100u);
+}
+
+// =====================================================================
+// Common IEs: L3AdditionalChannelDescription
+// =====================================================================
+
+TEST(GoldenIE, AdditionalChannelDescription_Default) {
+    L3AdditionalChannelDescription chd;
+    EXPECT_FALSE(chd.initialized());
+    EXPECT_EQ(chd.lengthV(), 3u);
+}
+
+TEST(GoldenIE, AdditionalChannelDescription_RoundTrip) {
+    L3AdditionalChannelDescription orig(TDMA_TCHF, 3, 5, 150);
+    L3Frame frame(Primitive::L3_DATA, 32);
+    size_t wp = 0;
+    orig.writeV(frame, wp);
+    L3AdditionalChannelDescription parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp);
+    EXPECT_EQ(parsed.typeAndOffset(), orig.typeAndOffset());
+    EXPECT_EQ(parsed.TN(), orig.TN());
+    EXPECT_EQ(parsed.TSC(), orig.TSC());
+    EXPECT_EQ(parsed.ARFCN(), orig.ARFCN());
+}
+
+// =====================================================================
+// Common IEs: L3PowerCommand (GSM 04.08 10.5.2.28)
+// Reference: BTS_Tests.ttcn ts_PowerCmd
+// 8 bits: power_command(5) | spare(3)
+// =====================================================================
+
+TEST(GoldenIE, PowerCommand_Default) {
+    L3PowerCommand pc;
+    EXPECT_EQ(pc.lengthV(), 1u);
+    EXPECT_EQ(pc.command(), 0u);
+}
+
+TEST(GoldenIE, PowerCommand_RoundTrip) {
+    L3PowerCommand orig(10);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, PowerCommand_MaxValue) {
+    L3PowerCommand orig(31);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, PowerCommand_Encoding) {
+    L3PowerCommand pc(15);
+    L3Frame frame(Primitive::L3_DATA, 16);
+    size_t wp = 0;
+    pc.writeV(frame, wp);
+    EXPECT_EQ(frame.data()[0], 0xF0); // 15 << 3 (MSB first, 5 bits)
+}
+
+// =====================================================================
+// Common IEs: L3PowerCommandAndAccessType (GSM 04.08 10.5.2.28a)
+// =====================================================================
+
+TEST(GoldenIE, PowerCommandAndAccessType_Default) {
+    L3PowerCommandAndAccessType pc;
+    EXPECT_EQ(pc.lengthV(), 1u);
+}
+
+TEST(GoldenIE, PowerCommandAndAccessType_RoundTrip) {
+    L3PowerCommandAndAccessType orig(15);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3ChannelMode (GSM 04.08 10.5.2.6)
+// Reference: L3_Templates.ttcn ts_ChanMode
+// 4 bits: speech_version(2) | signalling(1) | data(1)
+// =====================================================================
+
+TEST(GoldenIE, ChannelMode_Signalling) {
+    L3ChannelMode orig(L3ChannelMode::SignallingOnly);
+    EXPECT_FALSE(orig.isAMR());
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, ChannelMode_SpeechV1) {
+    L3ChannelMode orig(L3ChannelMode::SpeechV1);
+    EXPECT_FALSE(orig.isAMR());
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, ChannelMode_SpeechV2) {
+    L3ChannelMode orig(L3ChannelMode::SpeechV2);
+    EXPECT_FALSE(orig.isAMR());
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, ChannelMode_SpeechV3_AMR) {
+    L3ChannelMode orig(L3ChannelMode::SpeechV3);
+    EXPECT_TRUE(orig.isAMR());
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, ChannelMode_Equality) {
+    L3ChannelMode a(L3ChannelMode::SpeechV1);
+    L3ChannelMode b(L3ChannelMode::SpeechV1);
+    L3ChannelMode c(L3ChannelMode::SpeechV2);
+    EXPECT_EQ(a, b);
+    EXPECT_NE(a, c);
+}
+
+// =====================================================================
+// Common IEs: L3TimingAdvance (GSM 04.08 10.5.2.40)
+// Reference: GSM_RR_Types.ttcn TimingAdvance (0..219)
+// 8 bits: timing_advance(6) | spare(2)
+// =====================================================================
+
+TEST(GoldenIE, TimingAdvance_Default) {
+    L3TimingAdvance ta;
+    EXPECT_EQ(ta.lengthV(), 1u);
+    EXPECT_EQ(ta.timingAdvance(), 0u);
+}
+
+TEST(GoldenIE, TimingAdvance_RoundTrip) {
+    L3TimingAdvance orig(60);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, TimingAdvance_MaxValue) {
+    L3TimingAdvance orig(63);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, TimingAdvance_Encoding) {
+    L3TimingAdvance ta(42);
+    L3Frame frame(Primitive::L3_DATA, 16);
+    size_t wp = 0;
+    ta.writeV(frame, wp);
+    EXPECT_EQ(frame.data()[0], 0xA0); // 42 << 2 (6 bits)
+}
+
+// =====================================================================
+// Common IEs: L3CellDescription (GSM 04.08 10.5.2.2)
+// Reference: GSM_RR_Types.ttcn CellDescriptionV (LSB first: bcc(3), ncc(3), arfcn(10))
+// =====================================================================
+
+TEST(GoldenIE, CellDescription_Default) {
+    L3CellDescription cd;
+    EXPECT_EQ(cd.lengthV(), 2u);
+    EXPECT_EQ(cd.ARFCN(), 0u);
+    EXPECT_EQ(cd.NCC(), 0u);
+    EXPECT_EQ(cd.BCC(), 0u);
+}
+
+TEST(GoldenIE, CellDescription_RoundTrip) {
+    L3CellDescription orig(100, 5, 3);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3HandoverReference (GSM 04.08 10.5.2.15)
+// Reference: GSM_RR_Types.ttcn HandoverReference
+// 8 bits: handover_reference(5) | spare(3)
+// =====================================================================
+
+TEST(GoldenIE, HandoverReference_Default) {
+    L3HandoverReference hr;
+    EXPECT_EQ(hr.lengthV(), 1u);
+    EXPECT_EQ(hr.value(), 0u);
+}
+
+TEST(GoldenIE, HandoverReference_RoundTrip) {
+    L3HandoverReference orig(0x17);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3CipheringModeSetting (GSM 04.08 10.5.2.9)
+// Reference: L3_Templates.ttcn ts_CiphModeSetting
+// 4 bits: ciphering(1) | algorithm(3)
+// =====================================================================
+
+TEST(GoldenIE, CipheringModeSetting_Off) {
+    L3CipheringModeSetting orig(false, 0);
+    EXPECT_EQ(orig.lengthV(), 0u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, CipheringModeSetting_A5_3) {
+    L3CipheringModeSetting orig(true, 3);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, CipheringModeSetting_Encoding) {
+    L3CipheringModeSetting cms(true, 3);
+    L3Frame frame(Primitive::L3_DATA, 16);
+    size_t wp = 0;
+    cms.writeV(frame, wp);
+    EXPECT_EQ(frame.data()[0] & 0x0F, 0x07);
+}
+
+// =====================================================================
+// Common IEs: L3CipheringModeResponse (GSM 04.08 10.5.2.10)
+// Reference: L3_Templates.ttcn ts_CiphModeResp
+// 2 bits: include_IMEISV(1) | spare(1)
+// =====================================================================
+
+TEST(GoldenIE, CipheringModeResponse_Default) {
+    L3CipheringModeResponse orig;
+    EXPECT_EQ(orig.lengthV(), 0u);
+    EXPECT_FALSE(orig.includeIMEISV());
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3SynchronizationIndication (GSM 04.08 10.5.2.39)
+// Reference: GSM_RR_Types.ttcn SynchronizationIndication
+// 8 bits: NCI(1) | ROT(1) | SI(6)
+// =====================================================================
+
+TEST(GoldenIE, SynchronizationIndication_Default) {
+    L3SynchronizationIndication orig;
+    EXPECT_EQ(orig.lengthV(), 1u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, SynchronizationIndication_Values) {
+    L3SynchronizationIndication orig(true, true, 3);
+    EXPECT_TRUE(orig.NCI());
+    EXPECT_TRUE(orig.ROT());
+    EXPECT_EQ(orig.SI(), 3);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3NCCPermitted (GSM 04.08 10.5.2.27)
+// Reference: GSM_SystemInformation.ttcn NCCPermitted
+// 8 bits: ncc_permitted(8) - bitmask
+// =====================================================================
+
+TEST(GoldenIE, NCCPermitted_Default) {
+    L3NCCPermitted orig;
+    EXPECT_EQ(orig.permitted(), 0xFFu);
+    EXPECT_EQ(orig.lengthV(), 1u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, NCCPermitted_Custom) {
+    L3NCCPermitted orig(0x7F); // all except NCC=7
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3PageMode (GSM 04.08 10.5.2.26)
+// Reference: GSM_RR_Types.ttcn PageMode
+// 2 bits: Normal(0), Extended(1), Reorganization(2), SameAsBefore(3)
+// =====================================================================
+
+TEST(GoldenIE, PageMode_Normal) {
+    L3PageMode orig(0);
+    EXPECT_EQ(orig.lengthV(), 0u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, PageMode_Extended) {
+    L3PageMode orig(1);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, PageMode_Reorganization) {
+    L3PageMode orig(2);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, PageMode_SameAsBefore) {
+    L3PageMode orig(3);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3RequestReference (GSM 04.08 10.5.2.30)
+// Reference: GSM_RR_Types.ttcn RequestReference, f_compute_ReqRef
+// 24 bits: RA(8) + T1p(5) + T3(6) + T2(5)
+// =====================================================================
+
+TEST(GoldenIE, RequestReference_Default) {
+    L3RequestReference orig;
+    EXPECT_EQ(orig.lengthV(), 3u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, RequestReference_Custom) {
+    L3RequestReference orig(0xAB, 5, 12, 20);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, RequestReference_Compute) {
+    // From GSM_RR_Types.ttcn f_compute_ReqRef:
+    // t1p = (fn / 1326) mod 32, t2 = fn mod 26, t3 = fn mod 51
+    unsigned fn = 1326;
+    unsigned ra = 0x42;
+    unsigned expected_t1p = (fn / 1326) % 32;
+    unsigned expected_t2 = fn % 26;
+    unsigned expected_t3 = fn % 51;
+    L3RequestReference rr(ra, expected_t1p, expected_t2, expected_t3);
+    EXPECT_EQ(rr.RA(), ra);
+    EXPECT_EQ(rr.T1p(), expected_t1p);
+    EXPECT_EQ(rr.T2(), expected_t2);
+    EXPECT_EQ(rr.T3(), expected_t3);
+}
+
+// =====================================================================
+// Common IEs: L3WaitIndication (GSM 04.08 10.5.2.43)
+// Reference: GSM_RR_Types.ttcn WaitIndication
+// =====================================================================
+
+TEST(GoldenIE, WaitIndication_Default) {
+    L3WaitIndication orig;
+    EXPECT_EQ(orig.lengthV(), 1u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, WaitIndication_Value) {
+    L3WaitIndication orig(60);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3RRCauseElement (GSM 04.08 10.5.2.31)
+// =====================================================================
+
+TEST(GoldenIE, RRCauseElement_Normal) {
+    L3RRCauseElement orig(RRCause::Normal_Event);
+    EXPECT_EQ(orig.lengthV(), 1u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, RRCauseElement_HandoverImpossible) {
+    L3RRCauseElement orig(RRCause::Handover_Impossible);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, RRCauseElement_ProtocolError) {
+    L3RRCauseElement orig(RRCause::Protocol_Error_Unspecified);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3CellOptionsBCCH (GSM 04.08 10.5.2.3)
+// Reference: GSM_SystemInformation.ttcn CellOptions
+// 8 bits: dn_ind(1) | pwrc(1) | dtx(2) | radio_link_tout(4)
+// =====================================================================
+
+TEST(GoldenIE, CellOptionsBCCH_Default) {
+    L3CellOptionsBCCH orig;
+    EXPECT_EQ(orig.lengthV(), 1u);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3CellOptionsSACCH (GSM 04.08 10.5.2.3a)
+// Reference: GSM_SystemInformation.ttcn CellOptionsSacch
+// 8 bits: dtx_ext(1) | pwrc(1) | dtx(2) | radio_link_timeout(4)
+// =====================================================================
+
+TEST(GoldenIE, CellOptionsSACCH_Default) {
+    L3CellOptionsSACCH orig;
+    EXPECT_EQ(orig.lengthV(), 1u);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3CellSelectionParameters (GSM 04.08 10.5.2.4)
+// Reference: BTS_Tests.ttcn ts_CellSelPar_default
+// 17 bits: cell_resel_hyst(3) + ms_txpwr_max(5) + acs(1) + neci(1) + rxlev_access_min(6)
+// =====================================================================
+
+TEST(GoldenIE, CellSelectionParameters_Default) {
+    L3CellSelectionParameters orig;
+    EXPECT_EQ(orig.lengthV(), 2u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, CellSelectionParameters_RefValues) {
+    // From BTS_Tests.ttcn ts_CellSelPar_default:
+    // cell_resel_hyst_2dB=2, ms_txpwr_max_cch=7, acs=0, neci=true, rxlev_access_min=0
+    uint8_t data[] = {0x47, 0x40};
+    L3Frame frame(Primitive::L3_DATA, 16);
+    size_t wp = 0;
+    frame.writeField(wp, data[0], 8);
+    frame.writeField(wp, data[1], 8);
+    L3CellSelectionParameters parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp);
+    EXPECT_EQ(parsed.CELL_RESELECT_HYSTERESIS(), 2u);
+    EXPECT_EQ(parsed.MS_TXPWR_MAX_CCH(), 7u);
+    EXPECT_EQ(parsed.ACS(), 0u);
+    EXPECT_EQ(parsed.NECI(), 1u);
+    EXPECT_EQ(parsed.RXLEV_ACCESS_MIN(), 0u);
+}
+
+// =====================================================================
+// Common IEs: L3RACHControlParameters (GSM 04.08 10.5.2.29)
+// Reference: BTS_Tests.ttcn ts_RachCtrl_default
+// 24 bits: max_retrans(2) + tx_integer(4) + cell_barr_access(1) + re_not_allowed(1) + ACC(16)
+// =====================================================================
+
+TEST(GoldenIE, RACHControlParameters_Default) {
+    L3RACHControlParameters orig;
+    EXPECT_EQ(orig.lengthV(), 3u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, RACHControlParameters_RefValues) {
+    // From BTS_Tests.ttcn ts_RachCtrl_default:
+    // max_retrans=RACH_MAX_RETRANS_7(3), tx_integer=9, cell_barr_access=false,
+    // re_not_allowed=true, acc=0x0400 (ACC[4] barred)
+    uint8_t data[] = {0xE5, 0x04, 0x00};
+    L3Frame frame(Primitive::L3_DATA, 24);
+    size_t wp = 0;
+    frame.writeField(wp, data[0], 8);
+    frame.writeField(wp, data[1], 8);
+    frame.writeField(wp, data[2], 8);
+    L3RACHControlParameters parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp);
+    EXPECT_EQ(parsed.MaxRetrans(), 3u);
+    EXPECT_EQ(parsed.TxInteger(), 9u);
+    EXPECT_EQ(parsed.CellBarAccess(), false);
+    EXPECT_EQ(parsed.RE(), 1u);
+    EXPECT_EQ(parsed.AC(), 0x0400u);
+}
+
+// =====================================================================
+// Common IEs: L3ControlChannelDescription (GSM 04.08 10.5.2.11)
+// Reference: GSM_SystemInformation.ttcn ControlChannelDescription
+// 24 bits: msc_r99(1) + att(1) + bs_ag_blks_res(3) + ccch_conf(3) + si22ind(1) +
+//   cbq3(2) + spare(2) + bs_pa_mfrms(3) + t3212(8)
+// =====================================================================
+
+TEST(GoldenIE, ControlChannelDescription_Default) {
+    L3ControlChannelDescription orig;
+    EXPECT_EQ(orig.lengthV(), 3u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, ControlChannelDescription_RefValues) {
+    // From BTS_Tests.ttcn ts_SI3_default ctrl_chan_desc:
+    // msc_r99=true, att=true, bs_ag_blks_res=1, ccch_conf=1/combined,
+    // si22ind=false, cbq3=0, spare=0, bs_pa_mfrms=0, t3212=1
+    uint8_t data[] = {0xC9, 0x00, 0x01};
+    L3Frame frame(Primitive::L3_DATA, 24);
+    size_t wp = 0;
+    frame.writeField(wp, data[0], 8);
+    frame.writeField(wp, data[1], 8);
+    frame.writeField(wp, data[2], 8);
+    L3ControlChannelDescription parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp);
+    EXPECT_EQ(parsed.mATT, 1u);
+    EXPECT_EQ(parsed.mBS_AG_BLKS_RES, 1u);
+    EXPECT_EQ(parsed.mCCCH_CONF, 1u);
+    EXPECT_EQ(parsed.mBS_PA_MFRMS, 0u);
+    EXPECT_EQ(parsed.mT3212, 1u);
+    EXPECT_TRUE(parsed.isCCCHCombined());
+}
+
+// =====================================================================
+// Common IEs: L3CellChannelDescription (GSM 04.08 10.5.2.1b)
+// 20 bits: ARFCN(10) + BSIC(6) + channelSpacing(1) + spare(1)
+// =====================================================================
+
+TEST(GoldenIE, CellChannelDescription_Default) {
+    L3CellChannelDescription orig;
+    EXPECT_EQ(orig.lengthV(), 3u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, CellChannelDescription_Custom) {
+    L3CellChannelDescription orig(100, 0x1F, 1);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, CellChannelDescription_IE) {
+    L3CellChannelDescription chd(100, 0x12, 1);
+    EXPECT_EQ(chd.ARFCN(), 100u);
+    EXPECT_EQ(chd.BSIC(), 0x12u);
+    EXPECT_EQ(chd.channelSpacing(), 1u);
+    EXPECT_EQ(chd.lengthV(), 3u);
+}
+
+// =====================================================================
+// Common IEs: L3FrequencyList (GSM 04.08 10.5.2.13)
+// Reference: GSM_SystemInformation.ttcn BCCHFrequencyList
+// 16 bytes, variable bitmap format
+// =====================================================================
+
+TEST(GoldenIE, FrequencyList_Default) {
+    L3FrequencyList orig;
+    EXPECT_EQ(orig.lengthV(), 16u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, FrequencyList_WithARFCNs) {
+    std::vector<unsigned> arfcns = {100, 101, 102, 200};
+    L3FrequencyList orig(arfcns);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, FrequencyList_Empty) {
+    L3FrequencyList fl;
+    EXPECT_EQ(fl.lengthV(), 16u);
+    EXPECT_TRUE(fl.ARFCNs().empty());
+    L3Frame frame(Primitive::L3_DATA, 128);
+    size_t wp = 0;
+    fl.writeV(frame, wp);
+    for (int i = 0; i < 16; i++) {
+        EXPECT_EQ(frame.data()[i], 0x00);
+    }
+}
+
+TEST(GoldenIE, FrequencyList_SingleARFCN) {
+    std::vector<unsigned> arfcns = {100};
+    L3FrequencyList fl(arfcns);
+    L3Frame frame(Primitive::L3_DATA, 128);
+    size_t wp = 0;
+    fl.writeV(frame, wp);
+    L3FrequencyList parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp);
+    EXPECT_EQ(parsed.ARFCNs(), arfcns);
+}
+
+// =====================================================================
+// Common IEs: L3BCCHFrequencyList (GSM 04.08 10.5.2.22)
+// =====================================================================
+
+TEST(GoldenIE, BCCHFrequencyList_Default) {
+    L3BCCHFrequencyList orig;
+    EXPECT_EQ(orig.lengthV(), 16u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, BCCHFrequencyList_WithARFCNs) {
+    std::vector<unsigned> arfcns = {50, 100, 150};
+    L3BCCHFrequencyList orig(arfcns);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3NeighborCellsDescription (GSM 04.08 10.5.2.22)
+// =====================================================================
+
+TEST(GoldenIE, NeighborCellsDescription_Default) {
+    L3NeighborCellsDescription orig;
+    EXPECT_EQ(orig.lengthV(), 16u);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3MeasurementResults (GSM 04.08 10.5.2.20)
+// Reference: GSM_RR_Types.ttcn MeasurementResults, ts_MeasurementResults
+// 128 bits: ba_used(1) + dtx_used(1) + rxlev_full(6) + 3g_ba(1) +
+//   meas_valid(1) + rxlev_sub(6) + si23_ba(1) + rxqual_full(3) +
+//   rxqual_sub(3) + no_ncell(3) + [ncell reports]
+// =====================================================================
+
+TEST(GoldenIE, MeasurementResults_Default) {
+    L3MeasurementResults orig;
+    EXPECT_EQ(orig.lengthV(), 16u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, MeasurementResults_Zero) {
+    L3MeasurementResults mr;
+    EXPECT_EQ(mr.lengthV(), 16u);
+    L3Frame frame(Primitive::L3_DATA, 128);
+    size_t wp = 0;
+    mr.writeV(frame, wp);
+    for (int i = 0; i < 16; i++) {
+        EXPECT_EQ(frame.data()[i], 0x00);
+    }
+}
+
+// =====================================================================
+// Common IEs: L3MultiRateConfiguration (3GPP 44.018 10.5.2.21aa)
+// Reference: BTS_Tests.ttcn ts_MultiRate
+// 16 bits: spare(4) | half_rate(1) | spare(3) | rate_set(8)
+// =====================================================================
+
+TEST(GoldenIE, MultiRateConfiguration_FR) {
+    L3MultiRateConfiguration orig(false);
+    EXPECT_EQ(orig.lengthV(), 2u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, MultiRateConfiguration_HR) {
+    L3MultiRateConfiguration orig(true);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3ImmediateAssignmentInformation
+// =====================================================================
+
+TEST(GoldenIE, ImmediateAssignmentInformation_Default) {
+    L3ImmediateAssignmentInformation orig;
+    EXPECT_EQ(orig.PowerOffset(), 0u);
+}
+
+// =====================================================================
+// Common IEs: L3DedicatedModeOrTBF (GSM 04.08 10.5.2.25b)
+// Reference: GSM_RR_Types.ttcn DedicatedModeOrTBF
+// 4 bits: tbf(1) | downlink(1) | spare(2)
+// =====================================================================
+
+TEST(GoldenIE, DedicatedModeOrTBF_Dedicated) {
+    L3DedicatedModeOrTBF orig(false, false);
+    EXPECT_EQ(orig.lengthV(), 0u);
+    EXPECT_FALSE(orig.isTBF());
+    EXPECT_FALSE(orig.isDownlink());
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, DedicatedModeOrTBF_TBF) {
+    L3DedicatedModeOrTBF orig(true, true);
+    EXPECT_TRUE(orig.isTBF());
+    EXPECT_TRUE(orig.isDownlink());
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3APDUID (GSM 04.08 10.5.2.48)
+// =====================================================================
+
+TEST(GoldenIE, APDUID_Default) {
+    L3APDUID orig;
+    EXPECT_EQ(orig.lengthV(), 0u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, APDUID_Value) {
+    L3APDUID orig(3);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3APDUFlags (GSM 04.08 10.5.2.49)
+// =====================================================================
+
+TEST(GoldenIE, APDUFlags_Default) {
+    L3APDUFlags orig;
+    EXPECT_EQ(orig.lengthV(), 0u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, APDUFlags_Full) {
+    L3APDUFlags orig(1, 1, 1);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3APDUData (GSM 04.08 10.5.2.50)
+// =====================================================================
+
+TEST(GoldenIE, APDUData_Empty) {
+    L3APDUData orig;
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, APDUData_WithData) {
+    BitVector data(16);
+    size_t wp = 0;
+    data.writeField(wp, 0xAB, 8);
+    data.writeField(wp, 0xCD, 8);
+    L3APDUData orig(data);
+    EXPECT_EQ(orig.lengthV(), 2u);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3MobileAllocation (GSM 04.08 10.5.2.14)
+// =====================================================================
+
+TEST(GoldenIE, MobileAllocation_Empty) {
+    L3MobileAllocation orig;
+    EXPECT_EQ(orig.lengthV(), 0u);
+}
+
+TEST(GoldenIE, MobileAllocation_WithData) {
+    std::vector<uint8_t> data = {0xFF, 0x00, 0xFF};
+    L3MobileAllocation orig(data);
+    EXPECT_EQ(orig.lengthV(), 3u);
+}
+
+// =====================================================================
+// Common IEs: L3CellOptions (GSM 04.08 10.5.2.6)
+// =====================================================================
+
+TEST(GoldenIE, CellOptions_Default) {
+    L3CellOptions orig;
+    EXPECT_EQ(orig.RevisionLevel(), 0u);
+    EXPECT_FALSE(orig.CBCH());
+    EXPECT_FALSE(orig.EnhancedRACH());
+}
+
+// =====================================================================
+// Common IEs: L3CellSelection
+// =====================================================================
+
+TEST(GoldenIE, CellSelection_Default) {
+    L3CellSelection cs;
+    EXPECT_EQ(cs.RxLevAccessMin(), 0u);
+    EXPECT_EQ(cs.MaxRxLev(), 0u);
+    EXPECT_EQ(cs.CellReselectionHysteresis(), 0u);
+    EXPECT_EQ(cs.CellReselectionOffset(), 0u);
+}
+
+// =====================================================================
+// Common IEs: L3SI3RestOctets (GSM 04.08 10.5.2.34)
+// Reference: GSM_RestOctets.ttcn SI3RestOctets
+// =====================================================================
+
+TEST(GoldenIE, SI3RestOctets_Default) {
+    L3SI3RestOctets orig;
+    EXPECT_FALSE(orig.hasSI3RestOctets());
+    EXPECT_FALSE(orig.hasGPRS());
+}
+
+// =====================================================================
+// Common IEs: L3SIType4RestOctets
+// =====================================================================
+
+TEST(GoldenIE, SI4RestOctets_Default) {
+    L3SIType4RestOctets orig;
+}
+
+// =====================================================================
+// Common IEs: L3SI13RestOctets (GSM 04.08 10.5.2.37b)
+// Reference: GSM_RestOctets.ttcn SI13RestOctets
+// =====================================================================
+
+TEST(GoldenIE, SI13RestOctets_Default) {
+    L3SI13RestOctets orig;
+}
+
+// =====================================================================
+// Common IEs: L3GPRSCellOptions
+// =====================================================================
+
+TEST(GoldenIE, GPRSCellOptions_Default) {
+    L3GPRSCellOptions orig;
+}
+
+// =====================================================================
+// Common IEs: L3GPRSSI13PowerControlParameters
+// =====================================================================
+
+TEST(GoldenIE, GPRSSI13PowerControlParameters_Default) {
+    L3GPRSSI13PowerControlParameters orig;
+}
+
+// =====================================================================
+// Common IEs: L3IARestOctets
+// =====================================================================
+
+TEST(GoldenIE, IARestOctets_Default) {
+    L3IARestOctets orig;
+}
+
+// =====================================================================
+// Common IEs: L3FollowOnProceed (GSM 04.08 10.5.2.38)
+// Reference: GSM_RR_Types.ttcn FollowOnProceed
+// =====================================================================
+
+TEST(GoldenIE, FollowOnProceed_Default) {
+    L3FollowOnProceed orig;
+    EXPECT_EQ(orig.lengthV(), 1u);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3RestOctets base
+// Reference: GSM_RestOctets.ttcn RestOctets
+// =====================================================================
+
+TEST(GoldenIE, RestOctets_Base) {
+    L3RestOctets orig;
+    EXPECT_EQ(orig.lengthV(), 0u);
+}
+
+// =====================================================================
+// Common IEs: L3OctetAlignedProtocolElement
+// =====================================================================
+
+TEST(GoldenIE, OctetAlignedProtocolElement) {
+    L3OctetAlignedProtocolElement orig(std::string("\xAB\xCD\xEF", 3));
+    EXPECT_EQ(orig.lengthV(), 3u);
+    EXPECT_TRUE(orig.mExtant);
+}
+
+// =====================================================================
+// CC IEs: L3BearerCapability (GSM 04.08 10.5.4.5)
+// Reference: L3_Templates.ttcn ts_Bcap_voice, ts_Bcap_voice_mt, ts_Bcap_csd
+// =====================================================================
+
+TEST(GoldenIE, BearerCapability_Default) {
+    L3BearerCapability orig;
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, BearerCapability_IE) {
+    L3BearerCapability bc;
+    EXPECT_EQ(bc.lengthV(), 1u);
+}
+
+// =====================================================================
+// CC IEs: L3SupportedCodecList (GSM 04.08 10.5.4.32)
+// =====================================================================
+
+TEST(GoldenIE, SupportedCodecList_Default) {
+    L3SupportedCodecList orig;
+    EXPECT_FALSE(orig.isGsmPresent());
+    EXPECT_FALSE(orig.isUmtsPresent());
+}
+
+// =====================================================================
+// CC IEs: L3CalledPartyBCDNumber (GSM 04.08 10.5.4.7)
+// Reference: L3_Templates.ttcn ts_Called, tr_Called
+// =====================================================================
+
+TEST(GoldenIE, CalledPartyBCDNumber_RoundTrip) {
+    L3CalledPartyBCDNumber orig("1234567890");
+    L3Frame frame(Primitive::L3_DATA, 64);
+    size_t wp = 0;
+    orig.writeV(frame, wp);
+    L3CalledPartyBCDNumber parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp, orig.lengthV());
+    EXPECT_STREQ(parsed.digits(), "1234567890");
+}
+
+TEST(GoldenIE, CalledPartyBCDNumber_International) {
+    L3CalledPartyBCDNumber num("+79161234567");
+    EXPECT_EQ(num.type(), TypeOfNumber::International);
+    EXPECT_EQ(num.plan(), NumberingPlan::ISDN);
+    EXPECT_STREQ(num.digits(), "79161234567");
+}
+
+TEST(GoldenIE, CalledPartyBCDNumber_ShortNumber) {
+    L3CalledPartyBCDNumber num("112");
+    EXPECT_STREQ(num.digits(), "112");
+}
+
+TEST(GoldenIE, CalledPartyBCDNumber_National) {
+    L3CalledPartyBCDNumber num("1234567890");
+    EXPECT_EQ(num.type(), TypeOfNumber::Unknown);
+    EXPECT_EQ(num.plan(), NumberingPlan::Unknown);
+}
+
+// =====================================================================
+// CC IEs: L3CallingPartyBCDNumber (GSM 04.08 10.5.4.9)
+// Reference: L3_Templates.ttcn ts_Calling
+// =====================================================================
+
+TEST(GoldenIE, CallingPartyBCDNumber_RoundTrip) {
+    L3CallingPartyBCDNumber orig("1234567890");
+    L3Frame frame(Primitive::L3_DATA, 64);
+    size_t wp = 0;
+    orig.writeV(frame, wp);
+    L3CallingPartyBCDNumber parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp, orig.lengthV());
+    EXPECT_STREQ(parsed.digits(), "1234567890");
+}
+
+// =====================================================================
+// CC IEs: L3CauseElement (GSM 04.08 10.5.4.11)
+// Reference: L3_Templates.ttcn ML3_Cause_TLV
+// =====================================================================
+
+TEST(GoldenIE, CauseElement_RoundTrip) {
+    L3CauseElement orig(CCCause::User_Busy, CCCauseLocation::Transit);
+    EXPECT_EQ(orig.lengthV(), 2u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, CauseElement_NormalClearing) {
+    L3CauseElement orig(CCCause::Normal_Call_Clearing, CCCauseLocation::Private_Serving_Local);
+    L3Frame frame(Primitive::L3_DATA, 32);
+    size_t wp = 0;
+    orig.writeV(frame, wp);
+    L3CauseElement parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp);
+    EXPECT_EQ(parsed.cause(), CCCause::Normal_Call_Clearing);
+    EXPECT_EQ(parsed.location(), CCCauseLocation::Private_Serving_Local);
+}
+
+// =====================================================================
+// CC IEs: L3CallState (GSM 04.08 10.5.4.6)
+// Reference: L3_Templates.ttcn ts_CallState
+// =====================================================================
+
+TEST(GoldenIE, CallState_RoundTrip) {
+    L3CallState orig(0x05);
+    EXPECT_EQ(orig.lengthV(), 1u);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// CC IEs: L3ProgressIndicator (GSM 04.08 10.5.4.21)
+// Reference: L3_Templates.ttcn ts_Progress
+// =====================================================================
+
+TEST(GoldenIE, ProgressIndicator_RoundTrip) {
+    L3ProgressIndicator orig(L3ProgressIndicator::InBandAvailable,
+                              L3ProgressIndicator::PrivateServingLocal);
+    EXPECT_EQ(orig.lengthV(), 2u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, ProgressIndicator_Encoding) {
+    L3ProgressIndicator pi(L3ProgressIndicator::InBandAvailable,
+                           L3ProgressIndicator::PrivateServingLocal);
+    L3Frame frame(Primitive::L3_DATA, 32);
+    size_t wp = 0;
+    pi.writeV(frame, wp);
+    L3ProgressIndicator parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp);
+    EXPECT_EQ(parsed.progress(), L3ProgressIndicator::InBandAvailable);
+    EXPECT_EQ(parsed.location(), L3ProgressIndicator::PrivateServingLocal);
+}
+
+// =====================================================================
+// CC IEs: L3KeypadFacility (GSM 04.08 10.5.4.17)
+// Reference: L3_Templates.ttcn ts_KeyPad
+// =====================================================================
+
+TEST(GoldenIE, KeypadFacility_RoundTrip) {
+    L3KeypadFacility orig('A');
+    EXPECT_EQ(orig.lengthV(), 1u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, KeypadFacility_Digit) {
+    L3KeypadFacility kp('5');
+    EXPECT_EQ(kp.IA5(), '5');
+    EXPECT_EQ(kp.lengthV(), 1u);
+    L3Frame frame(Primitive::L3_DATA, 16);
+    size_t wp = 0;
+    kp.writeV(frame, wp);
+    L3KeypadFacility parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp);
+    EXPECT_EQ(parsed.IA5(), '5');
+}
+
+// =====================================================================
+// CC IEs: L3Signal (GSM 04.08 10.5.4.23)
+// Reference: L3_Templates.ttcn ts_Signal
+// =====================================================================
+
+TEST(GoldenIE, Signal_RoundTrip) {
+    L3Signal orig(L3Signal::SignalRingBackToneOn);
+    EXPECT_EQ(orig.lengthV(), 1u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, Signal_Values) {
+    L3Signal s1(L3Signal::SignalRingBackToneOn);
+    EXPECT_EQ(s1.lengthV(), 1u);
+    L3Signal s2(L3Signal::SignalTonesOff);
+    EXPECT_EQ(s2.lengthV(), 1u);
+}
+
+// =====================================================================
+// CC IEs: L3RepeatIndicator (GSM 04.08 10.5.4.4)
+// =====================================================================
+
+TEST(GoldenIE, RepeatIndicator_Default) {
+    L3RepeatIndicator orig;
+    EXPECT_EQ(orig.lengthV(), 0u);
+    EXPECT_EQ(orig.value(), 0u);
+}
+
+TEST(GoldenIE, RepeatIndicator_Value) {
+    L3RepeatIndicator orig(5);
+    EXPECT_EQ(orig.value(), 5u);
+}
+
+// =====================================================================
+// CC IEs: L3SupServFacilityIE (GSM 04.08 10.5.4.1)
+// Reference: SS_Templates.ttcn ts_SS_FACILITY_INVOKE
+// =====================================================================
+
+TEST(GoldenIE, SupServFacilityIE_RoundTrip) {
+    L3SupServFacilityIE orig(std::string("\x81\x01\x13", 3));
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// CC IEs: L3SupServVersionIndicator (24.008 10.5.4.24)
+// Reference: SS_Templates.ttcn ts_SS_Version
+// =====================================================================
+
+TEST(GoldenIE, SupServVersionIndicator_RoundTrip) {
+    L3SupServVersionIndicator orig;
+    EXPECT_EQ(orig.lengthV(), 1u);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// CC IEs: L3BCDDigits utility (GSM 04.08 10.5.4.7)
+// Reference: L3_Templates.ttcn ts_Called
+// =====================================================================
+
+TEST(GoldenIE, BCDDigits_Even) {
+    L3BCDDigits orig("1234567890");
+    EXPECT_STREQ(orig.digits(), "1234567890");
+    EXPECT_EQ(orig.size(), 10u);
+    EXPECT_EQ(orig.lengthV(), 5u);
+}
+
+TEST(GoldenIE, BCDDigits_Odd) {
+    L3BCDDigits orig("12345");
+    EXPECT_STREQ(orig.digits(), "12345");
+    EXPECT_EQ(orig.size(), 5u);
+    EXPECT_EQ(orig.lengthV(), 3u);
+}
+
+// =====================================================================
+// MM IEs: L3CMServiceType (GSM 04.08 10.5.3.3)
+// Reference: L3_Templates.ttcn CmServiceType
+// =====================================================================
+
+TEST(GoldenIE, CMServiceType_MO_Call) {
+    L3CMServiceType orig(L3CMServiceType::MobileOriginatedCall);
+    EXPECT_TRUE(orig.isCC());
+    EXPECT_FALSE(orig.isSMS());
+    EXPECT_EQ(orig.lengthV(), 0u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, CMServiceType_SMS) {
+    L3CMServiceType orig(L3CMServiceType::ShortMessage);
+    EXPECT_TRUE(orig.isSMS());
+    EXPECT_FALSE(orig.isCC());
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, CMServiceType_Emergency) {
+    L3CMServiceType orig(L3CMServiceType::EmergencyCall);
+    EXPECT_TRUE(orig.isCC());
+    EXPECT_FALSE(orig.isSMS());
+}
+
+TEST(GoldenIE, CMServiceType_SS) {
+    L3CMServiceType orig(L3CMServiceType::SupplementaryService);
+    EXPECT_FALSE(orig.isCC());
+    EXPECT_FALSE(orig.isSMS());
+}
+
+TEST(GoldenIE, CMServiceType_LocationService) {
+    L3CMServiceType orig(L3CMServiceType::LocationService);
+    EXPECT_FALSE(orig.isCC());
+}
+
+// =====================================================================
+// MM IEs: L3RejectCauseIE (GSM 04.08 10.5.3.6)
+// Reference: L3_Templates.ttcn tr_ML3_MT_LU_Rej
+// =====================================================================
+
+TEST(GoldenIE, RejectCauseIE) {
+    L3RejectCauseIE orig(MMRejectCause::Congestion);
+    EXPECT_EQ(orig.lengthV(), 1u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, RejectCauseIE_IMSI_Unknown) {
+    L3RejectCauseIE orig(MMRejectCause::IMSI_Unknown_In_HLR);
+    EXPECT_EQ(orig.lengthV(), 1u);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// MM IEs: L3RAND (GSM 04.08 10.5.3.1)
+// =====================================================================
+
+TEST(GoldenIE, RAND_RoundTrip) {
+    std::vector<uint8_t> randBytes(16);
+    for (int i = 0; i < 16; i++) randBytes[i] = static_cast<uint8_t>(i * 17);
+    L3RAND orig(randBytes);
+    EXPECT_EQ(orig.lengthV(), 16u);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// MM IEs: L3SRES (GSM 04.08 10.5.3.2)
+// =====================================================================
+
+TEST(GoldenIE, SRES_RoundTrip) {
+    L3SRES orig(0xDEADBEEFu);
+    EXPECT_EQ(orig.lengthV(), 4u);
+    ieRoundTrip(orig);
+}
+
+// =====================================================================
+// MM IEs: L3NetworkName (GSM 04.08 10.5.3.5a)
+// Reference: L3_Templates.ttcn ts_NetworkName
+// =====================================================================
+
+TEST(GoldenIE, NetworkName_RoundTrip) {
+    L3NetworkName orig("TestNetwork", GSMAlphabet::ALPHABET_7BIT, 1);
+    EXPECT_STREQ(orig.name(), "TestNetwork");
+    EXPECT_EQ(orig.alphabet(), GSMAlphabet::ALPHABET_7BIT);
+}
+
+TEST(GoldenIE, NetworkName_Encoding) {
+    L3NetworkName nn("TestNet", GSMAlphabet::ALPHABET_7BIT, 1);
+    EXPECT_STREQ(nn.name(), "TestNet");
+    EXPECT_EQ(nn.alphabet(), GSMAlphabet::ALPHABET_7BIT);
+}
+
+// =====================================================================
+// MM IEs: L3TimeZoneAndTime (GSM 04.08 10.5.3.9)
+// Reference: L3_Templates.ttcn ts_TimeZoneAndTime
+// =====================================================================
+
+TEST(GoldenIE, TimeZoneAndTime_RoundTrip) {
+    L3TimeZoneAndTime orig(L3TimeZoneAndTime::UTC_TIME);
+    EXPECT_EQ(orig.lengthV(), 7u);
+    ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, TimeZoneAndTime_UTC) {
+    L3TimeZoneAndTime tzt(L3TimeZoneAndTime::UTC_TIME);
+    EXPECT_EQ(tzt.lengthV(), 7u);
+    EXPECT_EQ(tzt.type(), L3TimeZoneAndTime::UTC_TIME);
+}
+
+TEST(GoldenIE, TimeZoneAndTime_Local) {
+    L3TimeZoneAndTime tzt(L3TimeZoneAndTime::LOCAL_TIME);
+    EXPECT_EQ(tzt.type(), L3TimeZoneAndTime::LOCAL_TIME);
+}
+
+// =====================================================================
+// GSM Alphabet (GSM 03.38 Table 1)
+// =====================================================================
+
+TEST(GoldenIE, GSMAlphabet_Decode) {
+    EXPECT_EQ(decodeGSMChar(0), '@');
+    EXPECT_EQ(decodeGSMChar(2), '$');
+    EXPECT_EQ(decodeGSMChar(44), '0');
+    EXPECT_EQ(decodeGSMChar(48), '4');
+    EXPECT_EQ(decodeGSMChar(84), 'a');
+    EXPECT_EQ(decodeGSMChar(85), 'b');
+    EXPECT_EQ(decodeGSMChar(86), 'c');
+}
+
+// =====================================================================
+// RACH Tables (GSM 04.08 10.5.2.29)
+// Reference: BTS_Tests.ttcn RACHSpreadSlots, RACHWaitSParam
+// =====================================================================
+
+TEST(GoldenIE, RACHTables) {
+    for (int i = 0; i < 16; i++) {
+        EXPECT_GT(RACHSpreadSlots[i], 0u);
+        EXPECT_GT(RACHWaitSParam[i], 0u);
+    }
+}
+
+// =====================================================================
+// RxLev / RxQual Conversion (GSM 05.02 / GSM 04.08)
+// Reference: GSM_Types.ttcn dbm2rxlev, rxlev2dbm, ber2rxqual, rxqual2ber
+// =====================================================================
+
+TEST(GoldenIE, RxLev_Conversion) {
+    L3MeasurementResults mr;
+    EXPECT_EQ(mr.decodeLevToDBm(0), -110);
+    EXPECT_EQ(mr.decodeLevToDBm(31), -79);
+    EXPECT_EQ(mr.decodeLevToDBm(63), -47);
+}
+
+TEST(GoldenIE, RxQual_Conversion) {
+    L3MeasurementResults mr;
+    float ber0 = mr.decodeQualToBER(0);
+    float ber7 = mr.decodeQualToBER(7);
+    EXPECT_LT(ber0, ber7);
+}
+
+// =====================================================================
+// GSM Timing Constants
+// Reference: GSM_Types.ttcn GSM_FRAME_DURATION, GsmMaxFrameNumber
+// =====================================================================
+
+TEST(GoldenIE, FrameDuration) {
+    EXPECT_EQ(gFrameMicroseconds, 4615u);
+}
+
+TEST(GoldenIE, Hyperframe) {
+    EXPECT_EQ(gHyperframe, 2715648u);
+}
+
+TEST(GoldenIE, TimeComponents) {
+    Time t(1326, 5);
+    EXPECT_EQ(t.T1(), 1u);
+    EXPECT_EQ(t.T2(), 0u);
+    EXPECT_EQ(t.T3(), 0u);
+    EXPECT_EQ(t.T1p(), 1u);
+}
+
+TEST(GoldenIE, FNDelta) {
+    int32_t delta = FNDelta(100, 50);
+    EXPECT_EQ(delta, 50);
+    delta = FNDelta(50, 100);
+    EXPECT_EQ(delta, -50);
+}
+
+TEST(GoldenIE, FNCompare) {
+    EXPECT_GT(FNCompare(100, 50), 0);
+    EXPECT_LT(FNCompare(50, 100), 0);
+    EXPECT_EQ(FNCompare(100, 100), 0);
+}
+
+// =====================================================================
+// BCD Number Encoding (GSM 04.08 10.5.4.7)
+// Reference: L3_Templates.ttcn ts_Called, tr_Called
+// =====================================================================
+
+TEST(GoldenIE, BCD_EvenDigits) {
+    L3CalledPartyBCDNumber num("1234567890");
+    EXPECT_STREQ(num.digits(), "1234567890");
+    EXPECT_EQ(num.lengthV(), 6u);
+}
+
+TEST(GoldenIE, BCD_OddDigits) {
+    L3CalledPartyBCDNumber num("123456789");
+    EXPECT_STREQ(num.digits(), "123456789");
+    EXPECT_EQ(num.lengthV(), 6u);
+}
+
+TEST(GoldenIE, BCD_RoundTrip) {
+    L3CalledPartyBCDNumber orig("1234567890");
+    L3Frame frame(Primitive::L3_DATA, 64);
+    size_t wp = 0;
+    orig.writeV(frame, wp);
+    L3CalledPartyBCDNumber parsed;
+    size_t rp = 0;
+    parsed.parseV(frame, rp, orig.lengthV());
+    EXPECT_STREQ(parsed.digits(), "1234567890");
+}
+
+// =====================================================================
+// Rest Octet Padding (GSM 04.08)
+// Reference: GSM_RR_Types.ttcn RestOctets, PADDING_PATTERN('00101011'B)
+// =====================================================================
+
+TEST(GoldenIE, RestOctetPaddingPattern) {
+    constexpr uint8_t GSM_REST_OCTET_PAD = 0x2B;
+    EXPECT_EQ(GSM_REST_OCTET_PAD, 0x2B);
+    BitVector bv(8);
+    size_t wp = 0;
+    bv.writeField(wp, GSM_REST_OCTET_PAD, 8);
+    EXPECT_EQ(bv.data()[0], 0x2B);
+}
+
+// =====================================================================
+// L/H Presence Bits (GSM 04.07 11.2.1.1.4)
+// Reference: GSM_RestOctets.ttcn CSN.1 L/H encoding
+// =====================================================================
+
+TEST(GoldenIE, L_H_Bits) {
+    L3Frame frame(Primitive::L3_DATA, 16);
+    size_t wp = 0;
+    frame.writeL(wp);
+    frame.writeH(wp);
+    size_t rp = 0;
+    EXPECT_EQ(frame.readField(rp, 1), 0u);
+    EXPECT_EQ(frame.readField(rp, 1), 1u);
+}
+
+// =====================================================================
+// SI2 body length (GSM 04.08 9.1.32)
+// Reference: GSM_SystemInformation.ttcn SystemInformationType2
+// bcch_freq_list(16) + ncc_permitted(1) + rach_control(3) = 20 bytes
+// =====================================================================
+
+TEST(GoldenIE, SI2_BodyLength) {
+    L3SystemInformationType2 msg;
+    EXPECT_EQ(msg.l2BodyLength(), 20u);
+    EXPECT_EQ(msg.fullBodyLength(), 20u);
+}
+
+// =====================================================================
+// SI2bis body length (GSM 04.08 9.1.33)
+// Reference: GSM_SystemInformation.ttcn SystemInformationType2bis
+// extd_bcch_freq_list(16) + rach_control(3) = 19 bytes
+// =====================================================================
+
+TEST(GoldenIE, SI2bis_BodyLength) {
+    L3SystemInformationType2bis msg;
+    EXPECT_EQ(msg.l2BodyLength(), 19u);
+    EXPECT_EQ(msg.fullBodyLength(), 20u);
+}
+
+// =====================================================================
+// SI2ter body length (GSM 04.08 9.1.34)
+// Reference: GSM_SystemInformation.ttcn SystemInformationType2ter
+// extd_bcch_freq_list(16) = 16 bytes
+// =====================================================================
+
+TEST(GoldenIE, SI2ter_BodyLength) {
+    L3SystemInformationType2ter msg;
+    EXPECT_EQ(msg.l2BodyLength(), 16u);
+    EXPECT_EQ(msg.fullBodyLength(), 20u);
+}
+
+// =====================================================================
+// data2hex utility
+// =====================================================================
+
+TEST(GoldenIE, Data2Hex) {
+    uint8_t data[] = {0x60, 0x19, 0x0D};
+    std::string hex = data2hex(data, 3);
+    EXPECT_EQ(hex, "60190D");
+}
+
+// =====================================================================
+// countBeaconTimeslots utility
+// =====================================================================
+
+TEST(GoldenIE, BeaconTimeslots) {
+    // ccch_conf=0 (1CCCH not combined) -> 1 beacon
+    EXPECT_GT(countBeaconTimeslots(0), 0u);
+}
