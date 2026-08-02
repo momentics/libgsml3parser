@@ -39,13 +39,12 @@ TEST(ParserTest, ParseTooShort) {
     EXPECT_FALSE(parseL3(data, 1));
 }
 
-// DISABLED: Library L3Frame::PD() reads PD from low nibble (bits 4-7) instead of
-// high nibble (bits 0-3) per GSM 04.08 10.2. Reference byte 0 = PD(4)|skip(4).
+// GSM 04.08 10.2: PD=0x06(RR) in high nibble, skip=0, MTI=0x0D(ChannelRelease), cause=0x00
+// Reference: GSM_RR_Types.ttcn CHANNEL_RELEASE = '00001101'B = 0x0D
+// Byte 0: PD(high=6) | skip(low=0) = 0x60
+// Byte 1: MTI = 0x0D (RR uses full 8-bit messageType)
+// Byte 2: cause = 0x00 (Normal_Event)
 TEST(ParserTest, ParseRR_ChannelRelease) {
-    // Reference: PD=0x06(RR), skip=0, MTI=0x0D(ChannelRelease), cause=0x00
-    // Byte 0: PD(high nibble=6) | skip(low nibble=0) = 0x60
-    // Byte 1: MTI = 0x0D (RR uses full 8-bit messageType)
-    // Byte 2: cause value = 0x00 (Normal)
     uint8_t data[] = {0x60, 0x0D, 0x00};
     auto msg = parseL3(data, 3);
     ASSERT_TRUE(msg);
@@ -56,15 +55,12 @@ TEST(ParserTest, ParseRR_ChannelRelease) {
     ASSERT_TRUE(chRelease);
 }
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08 10.3.
-// Library writes TI(4)|PD(4)|MTI(8), reference is PD(4)|TIO(3)+TIF(1)|messageType(6)+NSD(2).
-// Also library writes MTI as raw 8-bit value instead of messageType(6)<<2|NSD(2).
+// GSM 04.08 10.3: PD=0x03(CC), TIO=0, TIF=0, messageType=100101(Disconnect=0x25), NSD=00
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_DISC, GSM_RR_Types.ttcn RrHeader
+// Byte 0: PD(high=3) | TIO+TIF(low=0) = 0x30
+// Byte 1: messageType(6)<<2 | NSD(2) = 0x25<<2 | 0 = 0x94
+// Cause TLV: GSM 04.08 10.5.4.11, IEI=0x08, length=0x02, octet3=0x16, octet4=0x21 (Normal_Call_Clearing)
 TEST(ParserTest, ParseCC_Disconnect) {
-    // Reference: PD=0x03(CC), TIO=0, TIF=0, messageType=100101(Disconnect), NSD=00
-    // Byte 0: PD(high=3) | TIO+TIF(low=0) = 0x30
-    // Byte 1: messageType(6)<<2 | NSD(2) = 0x25<<2 | 0 = 0x94
-    // Body: Cause TLV per GSM 04.08 10.5.4.11:
-    //   IEI=0x08, length=0x02, octet3=0x16, octet4=0x21 (Normal_Call_Clearing)
     uint8_t data[] = {0x30, 0x94, 0x08, 0x02, 0x16, 0x21};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -72,12 +68,11 @@ TEST(ParserTest, ParseCC_Disconnect) {
     EXPECT_EQ(msg->MTI(), L3CCMessage::Disconnect);
 }
 
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-// Library writes MTI as raw 8-bit, reference encodes messageType(6)<<2|NSD(2).
+// GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=100001(CMServiceAccept=0x21), NSD=00
+// Reference: L3_Templates.ttcn tr_CM_SERV_ACC (discriminator='0101'B, messageType='100001'B)
+// Byte 0: PD(high=5) | skip(low=0) = 0x50
+// Byte 1: messageType(6)<<2 | NSD(2) = 0x21<<2 | 0 = 0x84
 TEST(ParserTest, ParseMM_CMServiceAccept) {
-    // Reference: PD=0x05(MM), skip=0, messageType=100001(CMServiceAccept), NSD=00
-    // Byte 0: PD(high=5) | skip(low=0) = 0x50
-    // Byte 1: messageType(6)<<2 | NSD(2) = 0x21<<2 | 0 = 0x84
     uint8_t data[] = {0x50, 0x84};
     auto msg = parseL3(data, 2);
     ASSERT_TRUE(msg);
@@ -85,12 +80,11 @@ TEST(ParserTest, ParseMM_CMServiceAccept) {
     EXPECT_EQ(msg->MTI(), L3MMMessage::CMServiceAccept);
 }
 
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-// Library writes MTI as raw 8-bit, reference encodes messageType(6)<<2|NSD(2).
+// GSM 04.08 10.2: PD=0x0B(NonCallSS), TIO=0, TIF=0, messageType=111010(Facility=0x3A), NSD=00
+// Reference: GSML3SSMessages.h Facility=0x3A, SS_Templates.ttcn
+// Byte 0: PD(high=0xB) | TIO+TIF(low=0) = 0xB0
+// Byte 1: messageType(6)<<2 | NSD(2) = 0x3A<<2 | 0 = 0xE8
 TEST(ParserTest, ParseSS_Facility) {
-    // Reference: PD=0x0B(SS), TIO=0, TIF=0, messageType=111010(Facility), NSD=00
-    // Byte 0: PD(high=0xB) | TIO+TIF(low=0) = 0xB0
-    // Byte 1: messageType(6)<<2 | NSD(2) = 0x3A<<2 | 0 = 0xE8
     uint8_t data[] = {0xB0, 0xE8};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -98,17 +92,18 @@ TEST(ParserTest, ParseSS_Facility) {
     EXPECT_EQ(msg->MTI(), L3SupServMessage::Facility);
 }
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08.
+// GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=100001(CMServiceAccept=0x21)<<2|NSD=00
+// Reference: L3_Templates.ttcn tr_CM_SERV_ACC
+// "50" = PD(high=5)|skip(low=0), "84" = messageType(6)<<2|NSD(2)
 TEST(ParserTest, ParseHex) {
-    // Reference: PD=0x05(MM), skip=0, messageType=100001(CMServiceAccept)<<2|NSD=00
-    // "50" = PD|skip, "84" = messageType<<2|NSD
     auto msg = parseL3Hex("5084");
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::MobilityManagement);
     EXPECT_EQ(msg->MTI(), L3MMMessage::CMServiceAccept);
 }
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08.
+// GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=CMServiceAccept
+// Reference: L3_Templates.ttcn tr_CM_SERV_ACC
 TEST(ParserTest, ParseHexWithSpaces) {
     auto msg = parseL3Hex("50 84");
     ASSERT_TRUE(msg);
@@ -122,7 +117,8 @@ TEST(ParserTest, ParseUnknownPD) {
     EXPECT_FALSE(msg);
 }
 
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
+// GSM 04.08 10.2: PD=0x09(SMS) in high nibble, skip=0
+// Reference: GSMCommon.h L3SMSPD=0x09
 TEST(ParserTest, RegisterPDHandler) {
     bool handlerCalled = false;
     registerPDHandler(L3PD::SMS, [&](const L3Frame&) {
@@ -130,7 +126,7 @@ TEST(ParserTest, RegisterPDHandler) {
         return std::make_unique<L3CMServiceAccept>();
     });
 
-    // Reference: PD=0x09(SMS) in high nibble, skip=0
+    // Byte 0: PD(high=9) | skip(low=0) = 0x90
     uint8_t data[] = {0x90, 0x01};
     auto msg = parseL3(data, 2);
     EXPECT_TRUE(handlerCalled);
@@ -164,9 +160,9 @@ TEST(ParserTest, WriteHexRoundTrip) {
     EXPECT_EQ(msg->MTI(), L3RRMessage::ChannelRelease);
 }
 
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
+// GSM 04.08 10.2: PD=0x06(RR) in high nibble, skip=0, MTI=0xFF (unknown)
+// Reference: GSM_RR_Types.ttcn RrMessageType -- 0xFF not defined
 TEST(ParserTest, UnknownMTI) {
-    // Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0xFF (unknown)
     uint8_t data[] = {0x60, 0xFF};
     auto msg = parseL3(data, 2);
     EXPECT_FALSE(msg);

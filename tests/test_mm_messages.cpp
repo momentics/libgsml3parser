@@ -100,13 +100,12 @@ TEST(MMRoundTripTest, LocationUpdatingReject) {
     EXPECT_EQ(parsed->MTI(), L3MMMessage::LocationUpdatingReject);
 }
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08 10.2.
-// Library writes TI(4)|PD(4)|MTI(8), reference is PD(4)|skip(4)|messageType(6)+NSD(2).
+// GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=000100(LUReject=0x04), NSD=00
+// Reference: L3_Templates.ttcn tr_ML3_MT_LU_Rej, GSML3MMMessages.h LocationUpdatingReject=0x04
+// Byte 0: PD(4,high) | skip(4,low) = 0101 0000 = 0x50
+// Byte 1: messageType(6)<<2 | NSD(2) = 0x04<<2 | 0 = 0x10
+// Byte 2: reject_cause = 0x02 (IMSI_Unknown_In_HLR, GSM 04.08 10.5.3.6)
 TEST(MMRoundTripTest, LocationUpdatingReject_Parse) {
-    // Reference: PD=0x05(MM), skip=0, messageType=000100(LUReject=0x04), NSD=00
-    // Byte 0: PD(4) | skip(4) = 0101 0000 = 0x50
-    // Byte 1: messageType(6) | NSD(2) = 000100 00 = 0x10
-    // Byte 2: reject_cause = 0x02 (IMSI Unknown In HLR)
     uint8_t data[] = {0x50, 0x10, 0x02};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -134,13 +133,13 @@ TEST(MMRoundTripTest, AuthenticationRequest) {
     EXPECT_EQ(parsed->MTI(), L3MMMessage::AuthenticationRequest);
 }
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08 10.2.
+// GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=010010(AuthenticationRequest=0x12), NSD=00
+// Reference: L3_Templates.ttcn tr_ML3_MT_MM_AUTH_REQ, GSML3MMMessages.h AuthenticationRequest=0x12
+// Byte 0: PD(4,high) | skip(4,low) = 0101 0000 = 0x50
+// Byte 1: messageType(6)<<2 | NSD(2) = 0x12<<2 | 0 = 0x48
+// Byte 2: CKSN(4)=0, spare(4)=0 = 0x00
+// Bytes 3-18: RAND (16 bytes, GSM 04.08 10.5.3.1)
 TEST(MMRoundTripTest, AuthenticationRequest_Parse) {
-    // Library MTI for AuthenticationRequest = 0x12 (bit 4 set per OpenBTS)
-    // Byte 0: PD(4) | skip(4) = 0101 0000 = 0x50
-    // Byte 1: messageType(6) | NSD(2) = 010010 00 = 0x48
-    // Byte 2: CKSN(4)=0, spare(4)=0 = 0x00
-    // Bytes 3-18: RAND (16 bytes)
     uint8_t data[] = {
         0x50, 0x48, 0x00,
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
@@ -173,12 +172,12 @@ TEST(MMRoundTripTest, AuthenticationResponse) {
     EXPECT_EQ(parsed->MTI(), L3MMMessage::AuthenticationResponse);
 }
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08 10.2.
+// GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=010100(AuthenticationResponse=0x14), NSD=00
+// Reference: L3_Templates.ttcn ts_ML3_MT_MM_AUTH_RESP_2G, GSML3MMMessages.h AuthenticationResponse=0x14
+// Byte 0: PD(4,high) | skip(4,low) = 0101 0000 = 0x50
+// Byte 1: messageType(6)<<2 | NSD(2) = 0x14<<2 | 0 = 0x50
+// Bytes 2-5: SRES = 0xABCD1234 (GSM 04.08 10.5.3.2, 32 bits)
 TEST(MMRoundTripTest, AuthenticationResponse_Parse) {
-    // Library MTI for AuthenticationResponse = 0x14 (bit 4 set per OpenBTS)
-    // Byte 0: PD(4) | skip(4) = 0101 0000 = 0x50
-    // Byte 1: messageType(6) | NSD(2) = 010100 00 = 0x50
-    // Bytes 2-5: SRES = 0xABCD1234
     uint8_t data[] = {0x50, 0x50, 0xAB, 0xCD, 0x12, 0x34};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -214,12 +213,12 @@ TEST(MMRoundTripTest, IdentityRequest_IMEI) {
     EXPECT_EQ(parsed->MTI(), L3MMMessage::IdentityRequest);
 }
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08 10.2.
+// GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=011000(IdentityRequest=0x18), NSD=00
+// Reference: L3_Templates.ttcn tr_ML3_MT_MM_ID_Req, GSML3MMMessages.h IdentityRequest=0x18
+// Byte 0: PD(4,high) | skip(4,low) = 0101 0000 = 0x50
+// Byte 1: messageType(6)<<2 | NSD(2) = 0x18<<2 | 0 = 0x60
+// Byte 2: spare(4) | identityType(4) = 0000 0001 = 0x01 (IMSI per GSM 04.08 10.5.3.4)
 TEST(MMRoundTripTest, IdentityRequest_Parse) {
-    // Library MTI for IdentityRequest = 0x18 (bit 4 set per OpenBTS)
-    // Byte 0: PD(4) | skip(4) = 0101 0000 = 0x50
-    // Byte 1: messageType(6) | NSD(2) = 011000 00 = 0x60
-    // Byte 2: spare(4) | identityType(4) = 0000 0001 = 0x01 (library format)
     uint8_t data[] = {0x50, 0x60, 0x01};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -325,32 +324,32 @@ TEST(MMRoundTripTest, IdentityResponse) {
 
 // ── Parse from known hex values ──────────────────────────────────────
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08 10.2.
+// GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=100001(CMServiceAccept=0x21), NSD=00
+// Reference: L3_Templates.ttcn tr_CM_SERV_ACC (discriminator='0101'B, messageType='100001'B)
+// Byte 0: PD(high=5)|skip(low=0) = 0x50
+// Byte 1: messageType(6)<<2|NSD(2) = 0x21<<2|0 = 0x84
 TEST(MMRoundTripTest, Parse_CMServiceAccept_Hex) {
-    // Reference: PD=0x05(MM), skip=0, messageType=100001(CMServiceAccept=0x21), NSD=00
-    // Byte 0: 0101 0000 = 0x50
-    // Byte 1: 100001 00 = 0x84
     auto msg = parseL3Hex("5084");
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::MobilityManagement);
     EXPECT_EQ(msg->MTI(), L3MMMessage::CMServiceAccept);
 }
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08 10.2.
+// GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=010001(AuthenticationReject=0x11), NSD=00
+// Reference: L3_Templates.ttcn ts_ML3_MT_MM_AUTH_REJ, GSML3MMMessages.h AuthenticationReject=0x11
+// Byte 0: PD(high=5)|skip(low=0) = 0x50
+// Byte 1: messageType(6)<<2|NSD(2) = 0x11<<2|0 = 0x44
 TEST(MMRoundTripTest, Parse_AuthenticationReject_Hex) {
-    // Library MTI for AuthenticationReject = 0x11 (bit 4 set per OpenBTS)
-    // Byte 0: 0101 0000 = 0x50
-    // Byte 1: 010001 00 = 0x44
     auto msg = parseL3Hex("5044");
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::AuthenticationReject);
 }
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08 10.2.
+// GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=011011(TMSIReallocationComplete=0x1B), NSD=00
+// Reference: GSML3MMMessages.h TMSIReallocationComplete=0x1B
+// Byte 0: PD(high=5)|skip(low=0) = 0x50
+// Byte 1: messageType(6)<<2|NSD(2) = 0x1B<<2|0 = 0x6C
 TEST(MMRoundTripTest, Parse_TMSIReallocationComplete_Hex) {
-    // Library MTI for TMSIReallocationComplete = 0x1B (bit 4 set per OpenBTS)
-    // Byte 0: 0101 0000 = 0x50
-    // Byte 1: 011011 00 = 0x6C
     auto msg = parseL3Hex("506C");
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::TMSIReallocationComplete);

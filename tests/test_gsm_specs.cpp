@@ -406,19 +406,16 @@ TEST(GSMSpecTest, RACHControlParameters) {
 }
 
 TEST(GSMSpecTest, RACHControlParameters_RefValues) {
-    // DISABLED: Library L3RACHControlParameters::parseV bit field order matches
-    // GSM 04.08 10.5.2.29 per BTS_Tests.ttcn ts_RachCtrl_default:
-    //   max_retrans(2) + tx_integer(4) + cell_barr_access(1) + re_not_allowed(1) + acc(16)
-    // However, the reference byte layout requires PD in high nibble (0x60), and the
-    // library reads PD from low nibble. This test is DISABLED until the PD nibble
-    // swap bug is fixed. The RACHControlParameters parseV itself is correct.
-    // Reference values from BTS_Tests.ttcn ts_RachCtrl_default:
+    // Reference: GSM_SystemInformation.ttcn RachControlParameters (24 bits):
+    // max_retrans(2) + tx_integer(4) + cell_barr_access(1) + re_not_allowed(1) + acc(16)
+    // Values from BTS_Tests.ttcn ts_RachCtrl_default:
     //   max_retrans := RACH_MAX_RETRANS_7,  // '11'B = 3
-    //   tx_integer := '1001'B,              // = 9 (→ 12 spread slots)
+    //   tx_integer := '1001'B,              // = 9 (12 spread slots)
     //   cell_barr_access := false,          // 0
     //   re_not_allowed := true,             // 1
     //   acc := '0000010000000000'B          // ACC[4] barred
-    // Byte 0: 11 1001 01 = 0xE5
+    // Bit layout (MSB-first): 11 1001 0 1 0000010000000000
+    // Byte 0: 11100101 = 0xE5
     // Byte 1: 00000100 = 0x04
     // Byte 2: 00000000 = 0x00
     uint8_t data[] = {0xE5, 0x04, 0x00};
@@ -488,18 +485,15 @@ TEST(GSMSpecTest, ControlChannelDescription) {
 }
 
 TEST(GSMSpecTest, ControlChannelDescription_RefValues) {
-    // DISABLED: Library L3ControlChannelDescription reads all 24 bits but treats
-    // msc_r99, si22ind, and cbq3 as spare bits instead of named fields.
-    // Reference GSM_SystemInformation.ttcn ControlChannelDescription is 24 bits:
+    // Reference: GSM_SystemInformation.ttcn ControlChannelDescription (24 bits):
     // msc_r99(1) + att(1) + bs_ag_blks_res(3) + ccch_conf(3) + si22ind(1) +
-    // cbq3(2) + spare(2) + bs_pa_mfrms(3) + t3212(8) = 24 bits.
-    // Library parseV skips msc_r99 (reads as spare), and skips si22ind+cbq3+spare
-    // (reads 5 bits as spare). Also, bs_pa_mfrms is offset by +2 in the library.
+    // cbq3(2) + spare(2) + bs_pa_mfrms(3) + t3212(8) = 24 bits
     // From BTS_Tests.ttcn ts_SI3_default ctrl_chan_desc:
-    // msc_r99=true, att=true, bs_ag_blks_res=1, ccch_conf=1 (combined),
-    // si22ind=false, cbq3=0, spare=0, bs_pa_mfrms=0, t3212=1
-    // Byte 0: 1 1 001 001 0 = 0xC9
-    // Byte 1: 0 0 00 000 = 0x00
+    // msc_r99=true(1), att=true(1), bs_ag_blks_res=1(3), ccch_conf=1/combined(3),
+    // si22ind=false(1), cbq3=0(2), spare=0(2), bs_pa_mfrms=0(3), t3212=1(8)
+    // Bit layout (MSB-first): 1 1 001 001 0 0 00 000 000 00000001
+    // Byte 0: 11001001 = 0xC9
+    // Byte 1: 00000000 = 0x00
     // Byte 2: 00000001 = 0x01
     uint8_t data[] = {0xC9, 0x00, 0x01};
 
@@ -515,8 +509,8 @@ TEST(GSMSpecTest, ControlChannelDescription_RefValues) {
 
     EXPECT_EQ(parsed.mATT, 1u);              // att = true
     EXPECT_EQ(parsed.mBS_AG_BLKS_RES, 1u);   // bs_ag_blks_res = 1
-    EXPECT_EQ(parsed.mCCCH_CONF, 1u);        // ccch_conf = 1 (combined)
-    EXPECT_EQ(parsed.mBS_PA_MFRMS, 2u);      // reference bs_pa_mfrms=0, library adds +2 offset
+    EXPECT_EQ(parsed.mCCCH_CONF, 1u);        // ccch_conf = 1 (CCHAN_DESC_1CCCH_COMBINED)
+    EXPECT_EQ(parsed.mBS_PA_MFRMS, 0u);      // bs_pa_mfrms = 0 (reference value)
     EXPECT_EQ(parsed.mT3212, 1u);            // t3212 = 1 (6 minutes)
     EXPECT_TRUE(parsed.isCCCHCombined());
 }
@@ -624,9 +618,9 @@ TEST(GSMSpecTest, Data2Hex) {
 
 // ── Hex string parsing edge cases ──────────────────────────────────────
 
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
+// GSM 04.08 10.2: PD=0x06(RR) in high nibble, skip=0, MTI=0x19(SystemInformationType1)
+// Reference: GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_1 = '00011001'B
 TEST(GSMSpecTest, ParseHexWithVariousFormats) {
-    // Plain hex — Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0x19(SI1)
     auto msg1 = parseL3Hex("601900");
     ASSERT_TRUE(msg1);
     EXPECT_EQ(msg1->PD(), L3PD::RadioResource);

@@ -58,7 +58,8 @@ TEST(RoundTripTest, PagingRequestType1_TMSI) {
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::PagingRequestType1);
 }
 
-// BUG: IMSI round-trip fails — library MobileIdentity parser truncates last 2 digits
+// GSM 04.08 9.1.22: PagingRequestType1 with IMSI MobileIdentity
+// Reference: L3_Templates.ttcn ts_MI_IMSI_LV (IMSI BCD encoding with HEXORDER low nibble swap)
 TEST(RoundTripTest, PagingRequestType1_IMSI) {
     L3MobileIdentity id("250011234567890");
     L3PagingRequestType1 msg(id, ChannelType::TCHFType);
@@ -95,118 +96,137 @@ TEST(RoundTripTest, PagingResponse) {
 }
 
 // ── System Information messages (GSM 04.08 9.1.31..9.1.43c) ──────────
-// Reference: GSM_SystemInformation.ttcn, BTS_Tests.ttcn ts_SI*_default
-//
-// BUG: SI round-trip tests hang due to infinite loop in rest octet
-// parsing/serialization. Marked  until library is fixed.
-// These tests document known bugs that need fixing.
+// Reference: GSM_SystemInformation.ttcn SystemInformationType1..Type17,
+// BTS_Tests.ttcn ts_SI*_default, GSM_RestOctets.ttcn
 
-// BUG: SI1 rest octet loop
 TEST(RoundTripTest, SystemInformationType1) {
     L3SystemInformationType1 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType1);
 }
 
-// BUG: SI2 rest octet loop
+// GSM 04.08 9.1.32: BCCHFrequencyList(16) + NCCPermitted(1) + RACHControlParameters(3) = 20 bytes
+// Reference: GSM_SystemInformation.ttcn SystemInformationType2 (no rest_octets)
 TEST(RoundTripTest, SystemInformationType2) {
     L3SystemInformationType2 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType2);
 }
 
-// BUG: SI2bis rest octet loop
+// GSM 04.08 9.1.33: ExtdBCCHFrequencyList(16) + RACHControlParameters(3) + rest_octets(0..1)
+// Reference: GSM_SystemInformation.ttcn SystemInformationType2bis
 TEST(RoundTripTest, SystemInformationType2bis) {
     L3SystemInformationType2bis msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType2bis);
 }
 
-// BUG: SI2ter rest octet loop
+// GSM 04.08 9.1.34: ExtdBCCHFrequencyList(16) + rest_octets(0..4)
+// Reference: GSM_SystemInformation.ttcn SystemInformationType2ter
 TEST(RoundTripTest, SystemInformationType2ter) {
     L3SystemInformationType2ter msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType2ter);
 }
 
-// BUG: SI3 rest octet loop
+// GSM 04.08 9.1.35: CellIdentity(2) + LAI(5) + ControlChannelDesc(3) + CellOptions(1) +
+//   CellSelectionParameters(2) + RACHControlParameters(3) + SI3RestOctets
+// Reference: GSM_SystemInformation.ttcn SystemInformationType3
 TEST(RoundTripTest, SystemInformationType3) {
     L3SystemInformationType3 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType3);
 }
 
-// BUG: SI4 rest octet loop
+// GSM 04.08 9.1.36: LAI(5) + CellSelectionParameters(2) + RACHControlParameters(3) +
+//   [CBCH ChannelDesc TLV] + [CBCH MobileAlloc TLV] + SI4RestOctets
+// Reference: GSM_SystemInformation.ttcn SystemInformationType4
 TEST(RoundTripTest, SystemInformationType4) {
     L3SystemInformationType4 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType4);
 }
 
-// BUG: SI5 rest octet loop
+// GSM 04.08 9.1.37: BCCHFrequencyList(16)
+// Reference: GSM_SystemInformation.ttcn SystemInformationType5
 TEST(RoundTripTest, SystemInformationType5) {
     L3SystemInformationType5 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType5);
 }
 
-// BUG: SI5bis rest octet loop
+// GSM 04.08 9.1.38: ExtdBCCHFrequencyList(16)
+// Reference: GSM_SystemInformation.ttcn SystemInformationType5bis
 TEST(RoundTripTest, SystemInformationType5bis) {
     L3SystemInformationType5bis msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType5bis);
 }
 
-// BUG: SI5ter rest octet loop
+// GSM 04.08 9.1.39: ExtdBCCHFrequencyList(16)
+// Reference: GSM_SystemInformation.ttcn SystemInformationType5ter
 TEST(RoundTripTest, SystemInformationType5ter) {
     L3SystemInformationType5ter msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType5ter);
 }
 
-// BUG: SI6 rest octet loop
+// GSM 04.08 9.1.40: CellIdentity(2) + LAI(5) + CellOptionsSacch(1) + NCCPermitted(1) +
+//   SI6RestOctets
+// Reference: GSM_SystemInformation.ttcn SystemInformationType6
 TEST(RoundTripTest, SystemInformationType6) {
     L3SystemInformationType6 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType6);
 }
 
-// BUG: SI7 rest octet loop
+// GSM 04.08 9.1.41: CellIdentity(2) + LAI(5) + CellOptionsSacch(1) + NCCPermitted(1) +
+//   NeighborCellDescription(16) + SI7RestOctets
+// Reference: GSM_SystemInformation.ttcn SystemInformationType7
 TEST(RoundTripTest, SystemInformationType7) {
     L3SystemInformationType7 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType7);
 }
 
-// BUG: SI8 rest octet loop
+// GSM 04.08 9.1.42: CellChannelDescription(16) + CellOptionsSacch(1) + NCCPermitted(1) +
+//   SI8RestOctets
+// Reference: GSM_SystemInformation.ttcn SystemInformationType8
 TEST(RoundTripTest, SystemInformationType8) {
     L3SystemInformationType8 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType8);
 }
 
-// BUG: SI9 rest octet loop
+// GSM 04.08 9.1.43: CellIdentity(2) + LAI(5) + CellOptionsSacch(1) + NCCPermitted(1) +
+//   NeighborCellDescription(16) + SI9RestOctets
+// Reference: GSM_SystemInformation.ttcn SystemInformationType9
 TEST(RoundTripTest, SystemInformationType9) {
     L3SystemInformationType9 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType9);
 }
 
-// BUG: SI13 rest octet loop
+// GSM 04.08 9.1.43a: SI13RestOctets (GPRSCellOptions, etc.)
+// Reference: GSM_SystemInformation.ttcn SystemInformationType13
 TEST(RoundTripTest, SystemInformationType13) {
     L3SystemInformationType13 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType13);
 }
 
-// BUG: SI16 rest octet loop
+// GSM 04.08 9.1.43b: TDDCellDescription + TDDCellOptions + TDDCellSelectionParameters +
+//   TDDRACHControlParameters + SI16RestOctets
+// Reference: GSM_SystemInformation.ttcn SystemInformationType16
 TEST(RoundTripTest, SystemInformationType16) {
     L3SystemInformationType16 msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType16);
 }
 
-// BUG: SI17 rest octet loop
+// GSM 04.08 9.1.43c: TDDCellIdentity + TD德拉LocationAreaIdentification + TDDCellOptionsSacch +
+//   TDDNCCPermitted + TDDNeighborCellDescription + SI17RestOctets
+// Reference: GSM_SystemInformation.ttcn SystemInformationType17
 TEST(RoundTripTest, SystemInformationType17) {
     L3SystemInformationType17 msg;
     auto parsed = roundtrip(msg);
@@ -235,13 +255,12 @@ TEST(RoundTripTest, ChannelRelease_Preemptive) {
 }
 
 // ── RR Status (GSM 04.08 9.1.29) ─────────────────────────────────────
-// Reference: L3_Templates.ttcn tr_RRM_RR_STATUS
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
+// Reference: L3_Templates.ttcn tr_RRM_RR_STATUS, GSM_RR_Types.ttcn RR_STATUS='00010010'B
+// GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x12(RRStatus), cause=0x60
+// Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
+// Byte 1: MTI = 0x12
+// Byte 2: cause = 0x60 (Invalid_Mandatory_Information)
 TEST(RoundTripTest, RRStatus) {
-    // Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0x12(RRStatus), cause=0x60
-    // Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
-    // Byte 1: MTI = 0x12
-    // Byte 2: cause = 0x60 (Invalid Mandatory Information)
     uint8_t data[] = {0x60, 0x12, 0x60};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -263,12 +282,12 @@ TEST(RoundTripTest, AssignmentCommand) {
 }
 
 // ── Assignment Complete (GSM 04.08 9.1.3) ─────────────────────────────
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
+// Reference: GSM_RR_Types.ttcn ASSIGNMENT_COMPLETE='00101001'B = 0x29
+// GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x29(AssignmentComplete)
+// Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
+// Byte 1: MTI = 0x29
+// Byte 2: cause = 0x00 (Normal_Event)
 TEST(RoundTripTest, AssignmentComplete) {
-    // Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0x29(AssignmentComplete)
-    // Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
-    // Byte 1: MTI = 0x29 (RR uses 8-bit messageType)
-    // Byte 2: cause = 0x00 (Normal)
     uint8_t data[] = {0x60, 0x29, 0x00};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -281,10 +300,10 @@ TEST(RoundTripTest, AssignmentComplete) {
 }
 
 // ── Assignment Failure (GSM 04.08 9.1.3) ──────────────────────────────
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
+// Reference: GSM_RR_Types.ttcn ASSIGNMENT_FAILURE='00101111'B = 0x2F
+// GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x2F(AssignmentFailure)
+// Byte 0: 0x60, Byte 1: 0x2F, Byte 2: cause=0x09(Channel_Mode_Unacceptable)
 TEST(RoundTripTest, AssignmentFailure) {
-    // Reference: PD=0x06(RR), skip=0, MTI=0x2F(AssignmentFailure)
-    // Byte 0: 0x60, Byte 1: 0x2F, Byte 2: cause=0x09(Channel Mode Unacceptable)
     uint8_t data[] = {0x60, 0x2F, 0x09};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -350,9 +369,9 @@ TEST(RoundTripTest, HandoverCommand) {
 }
 
 // ── Handover Complete (GSM 04.08 9.1.16) ─────────────────────────────
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
+// Reference: GSM_RR_Types.ttcn HANDOVER_COMPLETE='00101100'B = 0x2C
+// GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x2C(HandoverComplete), cause=Normal
 TEST(RoundTripTest, HandoverComplete) {
-    // Reference: PD=0x06(RR), skip=0, MTI=0x2C(HandoverComplete), cause=Normal
     uint8_t data[] = {0x60, 0x2C, 0x00};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -365,9 +384,9 @@ TEST(RoundTripTest, HandoverComplete) {
 }
 
 // ── Handover Failure (GSM 04.08 9.1.17) ──────────────────────────────
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
+// Reference: GSM_RR_Types.ttcn HANDOVER_FAILURE='00101000'B = 0x28
+// GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x28(HandoverFailure), cause=Handover_Impossible
 TEST(RoundTripTest, HandoverFailure) {
-    // Reference: PD=0x06(RR), skip=0, MTI=0x28(HandoverFailure), cause=Handover Impossible
     uint8_t data[] = {0x60, 0x28, 0x08};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -406,10 +425,8 @@ TEST(RoundTripTest, ImmediateAssignmentExtended) {
 }
 
 // ── Immediate Assignment Reject (GSM 04.08 9.1.20) ───────────────────
-// Reference: GSM_RR_Types.ttcn ImmediateAssignmentReject
+// Reference: GSM_RR_Types.ttcn IMMEDIATE_ASSIGNMENT_REJECT='00111010'B = 0x3A
 // GSM_RestOctets.ttcn IARRestOctets
-// BUG: vector subscript out of range in L3ImmediateAssignmentReject serialization
-
 TEST(RoundTripTest, ImmediateAssignmentReject) {
     L3ImmediateAssignmentReject msg(30);
     auto parsed = roundtrip(msg);
@@ -436,11 +453,11 @@ TEST(RoundTripTest, ChannelModeModify) {
 }
 
 // ── Channel Mode Modify Acknowledge (GSM 04.08 9.1.6) ────────────────
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
+// Reference: GSM_RR_Types.ttcn CHANNEL_MODE_MODIFY_ACKNOWLEDGE='00010111'B = 0x17
+// GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x17(ChannelModeModifyAcknowledge)
+// Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
+// Byte 1: MTI = 0x17
 TEST(RoundTripTest, ChannelModeModifyAcknowledge) {
-    // Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0x17(ChannelModeModifyAck)
-    // Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
-    // Byte 1: MTI = 0x17
     uint8_t data[] = {0x60, 0x17,
         // ChanDesc: typeAndOffset(5)=TDMA_TCHF(2), TN(3)=1, TSC(3)=7, h(1)=0, spare(2)=0, ARFCN(10)=100
         // Bits: 00010 001 111 0 00 0001100100
@@ -462,10 +479,8 @@ TEST(RoundTripTest, ChannelModeModifyAcknowledge) {
 }
 
 // ── GPRS Suspension Request (GSM 04.08 9.1.13b) ──────────────────────
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
-// The constructor initializes mRaId(6, 0) correctly, so there is no vector
-// subscript out of range. Round-trip fails due to the PD nibble swap bug.
-
+// Reference: GSM_RR_Types.ttcn GPRS_SUSPENSION_REQUEST='00110100'B = 0x34
+// 3GPP 44.018 3.4.25: GPRS Suspension procedure, TLLI + RA_ID + SuspensionCause
 TEST(RoundTripTest, GPRSSuspensionRequest) {
     L3GPRSSuspensionRequest msg;
     auto parsed = roundtrip(msg);
@@ -485,41 +500,41 @@ TEST(RoundTripTest, ApplicationInformation) {
 }
 
 // ── Synchronization Channel Information (GSM 04.08 9.1.30) ───────────
-// DISABLED: MTI=0x100 is a special internal code (RrShortDisc), not a standard
-// 8-bit RR messageType. Library parser cannot roundtrip non-standard MTI values.
-TEST(RoundTripTest, DISABLED_SynchronizationChannelInformation) {
+// SynchronizationChannelInformation uses MTI=0x100 (internal RrShortDisc code),
+// not a standard 8-bit RR messageType. Reference: GSM_RR_Types.ttcn RrShortDisc.
+// These are sent on SCH and use a different encoding path.
+TEST(RoundTripTest, SynchronizationChannelInformation) {
     L3SynchronizationChannelInformation msg;
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SynchronizationChannelInformation);
 }
 
 // ── Channel Request (GSM 04.08 9.1.13) ───────────────────────────────
-// DISABLED: MTI=0x101 is a special internal code (RrShortDisc), not a standard
-// 8-bit RR messageType. Library parser cannot roundtrip non-standard MTI values.
-TEST(RoundTripTest, DISABLED_ChannelRequest) {
+// ChannelRequest uses MTI=0x101 (internal RrShortDisc code).
+// Reference: GSM_RR_Types.ttcn RrShortDisc. Sent on RACH, encoded differently.
+TEST(RoundTripTest, ChannelRequest) {
     L3ChannelRequest msg(0x42);
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::ChannelRequest);
 }
 
 // ── Handover Access (GSM 04.08 9.1.14a) ──────────────────────────────
-// DISABLED: MTI=0x102 is a special internal code (RrShortDisc), not a standard
-// 8-bit RR messageType. Library parser cannot roundtrip non-standard MTI values.
-TEST(RoundTripTest, DISABLED_HandoverAccess) {
+// HandoverAccess uses MTI=0x102 (internal RrShortDisc code).
+// Reference: GSM_RR_Types.ttcn RrShortDisc. Sent on HO access timeslot.
+TEST(RoundTripTest, HandoverAccess) {
     L3HandoverAccess msg(0x17);
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::HandoverAccess);
 }
 
 // ── Classmark Change (GSM 04.08 9.1.11) ──────────────────────────────
-// Reference: L3_Templates.ttcn ts_RRM_CM_CHG
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
+// Reference: L3_Templates.ttcn ts_RRM_CM_CHG, GSM_RR_Types.ttcn CLASSMARK_CHANGE='00010110'B
+// GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x16(ClassmarkChange)
+// Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
+// Byte 1: MTI = 0x16
+// Byte 2: CM2 length = 3 (L3MobileStationClassmark2 is 24 bits = 3 bytes)
+// Bytes 3-5: CM2 value
 TEST(RoundTripTest, ClassmarkChange) {
-    // Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0x16(ClassmarkChange)
-    // Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
-    // Byte 1: MTI = 0x16
-    // Byte 2: CM2 length = 3 (L3MobileStationClassmark2 is 24 bits = 3 bytes)
-    // Bytes 3-5: CM2 value
     uint8_t data[] = {
         0x60, 0x16, // PD + MTI
         0x03,       // CM2 length = 3

@@ -64,18 +64,11 @@ TEST(CCRoundTripTest, Setup_WithCalledParty) {
     EXPECT_STREQ(s->digits(), "1234567890");
 }
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08 10.3.
-// Library writes TI(4)|PD(4)|MTI(8), reference is PD(4)|TIO(3)+TIF(1)|messageType(6)+NSD(2).
+// GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=000101(Setup=0x05), NSD=00
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_SETUP, GSML3CCMessages.h Setup=0x05
+// Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
+// Byte 1: messageType(6)<<2 | NSD(2) = 0x05<<2 | 0 = 0x14
 TEST(CCRoundTripTest, Setup_Parse) {
-    // Per L3_Templates.ttcn ts_ML3_MO_CC_SETUP:
-    //   discriminator = '0011'B (PD=3, CallControl)
-    //   transactionId.tio = int2bit(7, 3) = '111'B
-    //   transactionId.tiFlag = c_TIF_ORIG = '0'B
-    //   messageType = '000101'B (Setup = 0x05)
-    //   nsd = '00'B
-    // Reference byte layout (GSM 04.08 10.3):
-    //   Byte 0: PD(4) | TIO(3)+TIF(1) = 0011 1110 = 0x3E
-    //   Byte 1: messageType(6) | NSD(2) = 000101 00 = 0x14
     uint8_t data[] = {0x3E, 0x14};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -115,16 +108,11 @@ TEST(CCRoundTripTest, Alerting) {
     EXPECT_EQ(parsed->MTI(), L3CCMessage::Alerting);
 }
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08 10.3.
+// GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=000001(Alerting=0x01), NSD=00
+// Reference: L3_Templates.ttcn tr_ML3_MT_CC_ALERTING, GSML3CCMessages.h Alerting=0x01
+// Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
+// Byte 1: messageType(6)<<2 | NSD(2) = 0x01<<2 | 0 = 0x04
 TEST(CCRoundTripTest, Alerting_Parse) {
-    // Per L3_Templates.ttcn tr_ML3_MT_CC_ALERTING:
-    //   discriminator = '0011'B (PD=3, CallControl)
-    //   transactionId.tio = int2bit(7, 3) = '111'B
-    //   transactionId.tiFlag = ?
-    //   messageType = '000001'B (Alerting = 0x01)
-    // Reference byte layout (GSM 04.08 10.3):
-    //   Byte 0: PD(4) | TIO(3)+TIF(1) = 0011 1110 = 0x3E
-    //   Byte 1: messageType(6) | NSD(2) = 000001 00 = 0x04
     uint8_t data[] = {0x3E, 0x04};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -183,23 +171,14 @@ TEST(CCRoundTripTest, Disconnect_UserBusy) {
     EXPECT_EQ(d->TI(), 3u);
 }
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08 10.3.
-// Library writes TI(4)|PD(4)|MTI(8)|causeLV, reference is PD(4)|TIO(3)+TIF(1)|messageType(6)+NSD(2)|causeTLV.
+// GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=100101(Disconnect=0x25), NSD=00
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_DISC, GSML3CCMessages.h Disconnect=0x25
+// Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
+// Byte 1: messageType(6)<<2 | NSD(2) = 0x25<<2 | 0 = 0x94
+// Cause TLV: GSM 04.08 10.5.4.11, IEI=0x08, length=2
+//   octet3: location(4)=0001 | spare(1)=0 | codingStd(2)=11 | ext(1)=0 = 0x16
+//   octet4: causeValue(7)=0010000(Normal_Call_Clearing=16) | ext(1)=1 = 0x21
 TEST(CCRoundTripTest, Disconnect_Parse) {
-    // Per L3_Templates.ttcn ts_ML3_MO_CC_DISC:
-    //   discriminator = '0011'B (PD=3, CallControl)
-    //   transactionId.tio = int2bit(7, 3) = '111'B
-    //   transactionId.tiFlag = c_TIF_ORIG = '0'B
-    //   messageType = '100101'B (Disconnect = 0x25)
-    //   nsd = '00'B
-    //   cause TLV: IEI=0x08, length=2, octet3(location+codingStandard+ext), octet4(causeValue+ext)
-    // Reference byte layout (GSM 04.08 10.3 + 10.5.4.11):
-    //   Byte 0: PD(4) | TIO(3)+TIF(1) = 0011 1110 = 0x3E
-    //   Byte 1: messageType(6) | NSD(2) = 100101 00 = 0x94
-    //   Byte 2: Cause IEI = 0x08
-    //   Byte 3: Cause length = 0x02
-    //   Byte 4: octet3 = location(4)=0001 | spare(1)=0 | codingStd(2)=11 | ext(1)=0 = 0x16
-    //   Byte 5: octet4 = causeValue(7)=0010000(Normal=16) | ext(1)=1 = 0x21
     uint8_t data[] = {0x3E, 0x94, 0x08, 0x02, 0x16, 0x21};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -488,34 +467,22 @@ TEST(CCRoundTripTest, TI_DifferentValues) {
 
 // ── Parse CC messages from hex ───────────────────────────────────────
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08 10.3.
+// GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=000101(Setup=0x05), NSD=00
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_SETUP, GSML3CCMessages.h Setup=0x05
+// Byte 0: PD(4,high)|TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
+// Byte 1: messageType(6)<<2|NSD(2) = 0x05<<2|0 = 0x14
 TEST(CCRoundTripTest, Parse_Setup_Hex) {
-    // Per L3_Templates.ttcn ts_ML3_MO_CC_SETUP:
-    //   discriminator = '0011'B (PD=3, CallControl)
-    //   transactionId.tio = int2bit(7, 3) = '111'B
-    //   transactionId.tiFlag = c_TIF_ORIG = '0'B
-    //   messageType = '000101'B (Setup = 0x05)
-    //   nsd = '00'B
-    // Reference: PD(4)|TIO(3)+TIF(1) | messageType(6)|NSD(2)
-    //   Byte 0: 0011 1110 = 0x3E
-    //   Byte 1: 000101 00 = 0x14
     auto msg = parseL3Hex("3E14");
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::CallControl);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Setup);
 }
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08 10.3.
+// GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=1(REPL), messageType=101101(Release=0x2D), NSD=00
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_RELEASE, GSML3CCMessages.h Release=0x2D
+// Byte 0: PD(4,high)|TIO(3)+TIF(1,low) = 0011 1111 = 0x3F
+// Byte 1: messageType(6)<<2|NSD(2) = 0x2D<<2|0 = 0xB4
 TEST(CCRoundTripTest, Parse_Release_Hex) {
-    // Per L3_Templates.ttcn ts_ML3_MO_CC_RELEASE:
-    //   discriminator = '0011'B (PD=3, CallControl)
-    //   transactionId.tio = int2bit(7, 3) = '111'B
-    //   transactionId.tiFlag = c_TIF_REPL = '1'B
-    //   messageType = '101101'B (Release = 0x2D)
-    //   nsd = '00'B
-    // Reference: PD(4)|TIO(3)+TIF(1) | messageType(6)|NSD(2)
-    //   Byte 0: 0011 1111 = 0x3F (TIO=7, TIF=1)
-    //   Byte 1: 101101 00 = 0xB4
     auto msg = parseL3Hex("3FB4");
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::CallControl);

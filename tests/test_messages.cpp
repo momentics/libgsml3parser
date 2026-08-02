@@ -411,17 +411,17 @@ TEST(MessagesTest, L3Frame_Constructor) {
     EXPECT_EQ(frame.getSAPI(), SAPI::SAPI0);
 }
 
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
+// GSM 04.08 10.2: PD=0x06(RR) in high nibble, skip=0, MTI=0x19(SystemInformationType1)
+// Reference: GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_1 = '00011001'B
 TEST(MessagesTest, L3Frame_HexConstructor) {
-    // Reference: PD=0x06(RR) in high nibble, skip=0, MTI=0x19(SI1)
     L3Frame frame(SAPI::SAPI0, "60 19 00");
     EXPECT_EQ(frame.PD(), L3PD::RadioResource);
     EXPECT_EQ(frame.MTI(), 0x19);
 }
 
-// DISABLED: Library L3Frame::PD() reads PD from low nibble instead of high nibble.
+// GSM 04.08 10.2: PD(4 bits, high nibble) | skip(4 bits, low nibble) | MTI(8 bits)
+// Reference: GSM_RR_Types.ttcn RrHeader (skip_indicator + rr_protocol_discriminator + message_type)
 TEST(MessagesTest, L3Frame_PD_MTI) {
-    // Reference: PD(4 bits, high nibble) | skip(4 bits, low nibble) | MTI(8 bits)
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
     frame.writeField(wp, 0x06, 4);   // PD = RadioResource (high nibble)

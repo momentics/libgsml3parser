@@ -54,12 +54,11 @@ TEST(SSRoundTripTest, Facility_WithData) {
     EXPECT_EQ(parsed->MTI(), L3SupServMessage::Facility);
 }
 
-// DISABLED: Library L3 header format incompatible with GSM 04.08 / GSM 04.80.
-// Library writes TI(4)|PD(4)|MTI(8), reference is PD(4)|TIO(3)+TIF(1)|messageType(6)+NSD(2).
+// GSM 04.08 10.2: PD=0x0B(NonCallSS), TIO=7, TIF=0, messageType=111010(Facility=0x3A), NSD=00
+// Reference: GSML3SSMessages.h Facility=0x3A, SS_Templates.ttcn ts_SS_FACILITY_INVOKE
+// Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 1011 1110 = 0xBE
+// Byte 1: messageType(6)<<2 | NSD(2) = 0x3A<<2 | 0 = 0xE8
 TEST(SSRoundTripTest, Facility_Parse) {
-    // Reference: PD=0x0B(SS), TIO=7, TIF=0, messageType=111010(Facility=0x3A), NSD=00
-    // Byte 0: PD(4) | TIO(3)+TIF(1) = 1011 1110 = 0xBE
-    // Byte 1: messageType(6) | NSD(2) = 111010 00 = 0xE8
     uint8_t data[] = {0xBE, 0xE8};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
