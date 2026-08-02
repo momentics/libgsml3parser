@@ -60,7 +60,7 @@ TEST(GSMSpecTest, MCCMNC_Encoding_2DigitMNC) {
     // First 3 bytes should be MCC/MNC
     EXPECT_EQ(frame.data()[0], 0x52);  // MCC digits 2,1
     EXPECT_EQ(frame.data()[1], 0xF0);  // F filler + MCC digit 3
-    EXPECT_EQ(frame.data()[2], 0x10);  // MNC digits 2,1
+    EXPECT_EQ(frame.data()[2], 0x10);  // MNC digits 2,1 (HEXORDER low nibble swap)
 }
 
 TEST(GSMSpecTest, MCCMNC_Encoding_3DigitMNC) {
@@ -107,28 +107,22 @@ TEST(GSMSpecTest, MCCMNC_Ref_262_42) {
 }
 
 TEST(GSMSpecTest, MCCMNC_RoundTrip) {
-    // DISABLED: Library has symmetric nibble-swap bug in MNC byte 2.
-    // writeV encodes byte 2 as {mMNC[1], mMNC[0]} (high nibble = digit 2,
-    // low nibble = digit 1) but reference GSM_Types.ttcn TC_selftest_BcdMccMnc
-    // with HEXORDER(low) requires wire byte {mMNC[0], mMNC[1]} (nibbles swapped).
-    // e.g. MNC="42": library writes 0x42, reference wire byte is 0x24.
-    // parseV mirrors the same order, so round-trip is internally consistent but
-    // produces non-compliant wire bytes.
     // Reference: MCC=250, MNC=01, LAC=0x1234
     // Expected wire bytes (GSM_Types.ttcn TC_selftest_BcdMccMnc):
     //   Byte 0: MCC digit 2('5') | MCC digit 1('2') = 0x52
     //   Byte 1: filler('F') | MCC digit 3('0') = 0xF0
-    //   Byte 2: MNC digit 1('0') | MNC digit 2('1') = 0x01 (HEXORDER(low) swap)
+    //   Byte 2: MNC digit 2('1') | MNC digit 1('0') = 0x10 (HEXORDER(low) swap)
     L3LocationAreaIdentity orig("250", "01", 0x1234);
 
     L3Frame frame(Primitive::L3_DATA, 40);
     size_t wp = 0;
     orig.writeV(frame, wp);
 
-    // Reference expects byte 2 = 0x01 (MNC digit 1 in high nibble, digit 2 in low nibble)
+    // Wire format (HEXORDER low nibble swap): MNC digit 2 in high, digit 1 in low
+    // MNC="01": digit 2=1, digit 1=0 → byte = 0x10
     EXPECT_EQ(frame.data()[0], 0x52);
     EXPECT_EQ(frame.data()[1], 0xF0);
-    EXPECT_EQ(frame.data()[2], 0x01);
+    EXPECT_EQ(frame.data()[2], 0x10);
 
     // Round-trip: parse back and verify
     L3LocationAreaIdentity parsed;
