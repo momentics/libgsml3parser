@@ -26,11 +26,12 @@ The library is a standalone, self-contained project with no external dependencie
 - **Zero external dependencies** — No threading, no networking, no SIP, no radio
 - **Memory-safe** — `std::unique_ptr` ownership, no raw `new`/`delete` in the public API
 - **Fuzzing-ready** — Clean API suitable for libFuzzer integration
-- **90+ unit tests** — Comprehensive test coverage for all protocols
+- **794 unit tests** — Comprehensive test coverage for all protocols
 - **Spec-compliant** — Follows GSM 04.08 / 3GPP TS 24.008, GSM 04.07 / 3GPP TS 24.007
 - **V/TV/TLV/LV formats** — Correct handling of all GSM 04.07 IE formats per specification
 - **Bit-level parsing** — MSB-first bit ordering, half-octet field handling, H/L rest octet fill patterns
 - **System Information V-format** — SI1-SI17 parsed per GSM 04.08 tables (9.29-9.43c), with proper rest octet handling
+- **Short messages** — Synchronization Channel Information, Channel Request, Handover Access
 
 ## Quick Start
 
@@ -150,7 +151,7 @@ libgsml3parser/
 │       └── ss/
 │           └── l3ssmessages.h  # SS messages (Facility, Register, etc.)
 ├── src/                        # Implementation
-├── tests/                      # Google Test unit tests (90 tests)
+├── tests/                      # Google Test unit tests (794 tests)
 ├── examples/
 │   └── example_parse_file.cpp  # Parse L3 messages from file
 └── doc/
@@ -205,6 +206,9 @@ libgsml3parser/
 | Channel Mode Modify Ack | UL | GSM 04.08 9.1.6 |
 | GPRS Suspension Request | UL | GSM 04.08 9.1.13b |
 | Application Information | DL/UL | GSM 04.08 9.1.53 |
+| Synchronization Channel Info | DL | GSM 04.08 9.1.30 |
+| Channel Request | UL | GSM 04.08 9.1.13 |
+| Handover Access | UL | GSM 04.08 9.1.14a |
 
 ### Mobility Management (PD=0x05)
 
