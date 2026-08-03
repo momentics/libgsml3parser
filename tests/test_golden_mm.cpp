@@ -38,46 +38,58 @@ static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
 }
 
 // =====================================================================
-// MM MESSAGE TYPE VALUES (GSM 04.08 Table 10.5.3)
-// Reference: L3_Templates.ttcn MM message type constants
+// MM MESSAGE TYPE VALUES (GSM 24.008 Table 10.5.3 / GSM 04.08 Table 10.5.3)
+// Reference: L3_Templates.ttcn MM message templates, verified against:
+//   tr_CM_SERV_ACC: messageType := '100001'B    -> CMServiceAccept = 0x21
+//   tr_CM_SERV_REJ: messageType := '100010'B    -> CMServiceReject = 0x22
+//   ts_LU_ACCEPT: messageType := '000010'B      -> LocationUpdatingAccept = 0x02
+//   ts_LU_REQ: messageType := '001000'B         -> LocationUpdatingRequest = 0x08
+//   tr_MT_MM_AUTH_REQ: messageType := '010010'B -> AuthenticationRequest = 0x12
+//   ts_ML3_MT_MM_AUTH_RESP: messageType := '010100'B -> AuthenticationResponse = 0x14
+// GSM 24.008 Table 10.5.3 specifies all MM MTI values (6-bit field)
 // =====================================================================
 
 TEST(GoldenMM, MessageTypeValues) {
-    EXPECT_EQ(L3MMMessage::IMSIDetachIndication, 0x01);
-    EXPECT_EQ(L3MMMessage::LocationUpdatingAccept, 0x02);
-    EXPECT_EQ(L3MMMessage::LocationUpdatingReject, 0x04);
-    EXPECT_EQ(L3MMMessage::LocationUpdatingRequest, 0x08);
-    EXPECT_EQ(L3MMMessage::AuthenticationRequest, 0x12);
-    EXPECT_EQ(L3MMMessage::AuthenticationResponse, 0x14);
-    EXPECT_EQ(L3MMMessage::AuthenticationReject, 0x11);
-    EXPECT_EQ(L3MMMessage::IdentityRequest, 0x18);
-    EXPECT_EQ(L3MMMessage::IdentityResponse, 0x19);
-    EXPECT_EQ(L3MMMessage::TMSIReallocationCommand, 0x1a);
-    EXPECT_EQ(L3MMMessage::TMSIReallocationComplete, 0x1b);
-    EXPECT_EQ(L3MMMessage::CMServiceAccept, 0x21);
-    EXPECT_EQ(L3MMMessage::CMServiceReject, 0x22);
-    EXPECT_EQ(L3MMMessage::CMServiceAbort, 0x23);
-    EXPECT_EQ(L3MMMessage::CMServiceRequest, 0x24);
-    EXPECT_EQ(L3MMMessage::CMReestablishmentRequest, 0x28);
-    EXPECT_EQ(L3MMMessage::MMInformation, 0x32);
-    EXPECT_EQ(L3MMMessage::MMStatus, 0x31);
+    // Spec-verified: GSM 24.008 Table 10.5.3 MM message type identifier values
+    EXPECT_EQ(L3MMMessage::IMSIDetachIndication, 0x01);      // '000001'B - GSM 24.008 9.2.15
+    EXPECT_EQ(L3MMMessage::LocationUpdatingAccept, 0x02);    // '000010'B - GSM 24.008 9.2.13
+    EXPECT_EQ(L3MMMessage::LocationUpdatingReject, 0x04);    // '000100'B - GSM 24.008 9.2.14
+    EXPECT_EQ(L3MMMessage::LocationUpdatingRequest, 0x08);   // '001000'B - GSM 24.008 9.2.15
+    EXPECT_EQ(L3MMMessage::AuthenticationRequest, 0x12);     // '010010'B - GSM 24.008 9.2.1
+    EXPECT_EQ(L3MMMessage::AuthenticationResponse, 0x14);    // '010100'B - GSM 24.008 9.2.1
+    EXPECT_EQ(L3MMMessage::AuthenticationReject, 0x11);      // '010001'B - GSM 24.008 9.2.1
+    EXPECT_EQ(L3MMMessage::IdentityRequest, 0x18);           // '011000'B - GSM 24.008 9.2.10
+    EXPECT_EQ(L3MMMessage::IdentityResponse, 0x19);          // '011001'B - GSM 24.008 9.2.11
+    EXPECT_EQ(L3MMMessage::TMSIReallocationCommand, 0x1a);   // '011010'B - GSM 24.008 9.2.17
+    EXPECT_EQ(L3MMMessage::TMSIReallocationComplete, 0x1b);  // '011011'B - GSM 24.008 9.2.18
+    EXPECT_EQ(L3MMMessage::CMServiceAccept, 0x21);           // '100001'B - GSM 24.008 9.2.5
+    EXPECT_EQ(L3MMMessage::CMServiceReject, 0x22);           // '100010'B - GSM 24.008 9.2.6
+    EXPECT_EQ(L3MMMessage::CMServiceAbort, 0x23);            // '100011'B - GSM 24.008 9.2.7
+    EXPECT_EQ(L3MMMessage::CMServiceRequest, 0x24);          // '100100'B - GSM 24.008 9.2.9
+    EXPECT_EQ(L3MMMessage::CMReestablishmentRequest, 0x28);  // '101000'B - GSM 24.008 9.2.4
+    EXPECT_EQ(L3MMMessage::MMInformation, 0x32);             // '110010'B - GSM 24.008 9.2.15
+    EXPECT_EQ(L3MMMessage::MMStatus, 0x31);                  // '110001'B - GSM 24.008 9.2.15
 }
 
 // =====================================================================
-// MM PARSE FROM HEX: Location Updating Request (GSM 04.08 9.2.15)
-// Reference: L3_Templates.ttcn ts_LU_REQ, ts_ML3_MO_LU_Req
+// MM PARSE FROM HEX: Location Updating Request (GSM 24.008 9.2.15)
+// Reference: L3_Templates.ttcn ts_LU_REQ (line 356):
+//   discriminator := '0101'B (PD=5=MM), messageType := overwritten
+//   locationUpdatingType := lu_type, cipheringKeySequenceNumber
+//   mobileStationClassmark1 := ts_CM1, mobileIdentityLV := mi_lv
 // Structure: LU_Type(2)|spare(2)|CKSN(4), CM1 LV, MI LV, [LAI LV]
+// Spec-verified: PD=5(MM), MTI=0x08(LocationUpdatingRequest) per GSM 24.008 Table 10.5.3
 // =====================================================================
 
 TEST(GoldenMM, LocationUpdatingRequest_Parse) {
-    // Byte 0: PD(4)=5|skip(4)=0 = 0x50
-    // Byte 1: messageType(6)=0x08|NSD(2)=0 = 0x08<<2 = 0x20
-    // Byte 2: LU_Type(2)=0(Normal), spare(2)=0, CKSN(4)=0 = 0x00
-    // Byte 3: CM1 length = 1
-    // Byte 4: CM1 = 0x00
-    // Byte 5: MI length = 5
-    // Byte 6: spare(4)=0, type(3)=100(TMSI), oe(1)=0 = 0x0C
-    // Bytes 7-10: TMSI = 0x12345678
+    // Byte 0: PD(4)=5(MM)|skip(4)=0 = 0x50 [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x08(LocationUpdatingRequest)|NSD(2)=0 = 0x20 [GSM 24.008 Table 10.5.3]
+    // Byte 2: LU_Type(2)=00(Normal)|spare(2)=0|CKSN(4)=0 = 0x00 [L3_Templates.ttcn LU_Type_Normal line 329]
+    // Byte 3: CM1 LV length = 1 (Classmark 1 is 1 octet, GSM 24.008 10.5.1.5)
+    // Byte 4: CM1 value = 0x00 (default classmark)
+    // Byte 5: MI LV length = 5 (1 type octet + 4 TMSI octets, GSM 24.008 10.5.1.4)
+    // Byte 6: spare(4)=0|type(3)=100(TMSI)|oe(1)=0(old) = 0x0C [GSM 24.008 10.5.1.4]
+    // Bytes 7-10: TMSI = 0x12345678 (4 octets, MSB first)
     uint8_t data[] = {
         0x50, 0x20, 0x00,
         0x01, 0x00,
@@ -89,15 +101,22 @@ TEST(GoldenMM, LocationUpdatingRequest_Parse) {
 }
 
 // =====================================================================
-// MM PARSE FROM HEX: Location Updating Accept (GSM 04.08 9.2.13)
-// Reference: L3_Templates.ttcn ts_LU_ACCEPT
-// Structure: LAI(5), [MI TLV], [FOP TV]
+// MM PARSE FROM HEX: Location Updating Accept (GSM 24.008 9.2.13)
+// Reference: L3_Templates.ttcn ts_LU_ACCEPT (line 385):
+//   discriminator := '0101'B (PD=5=MM), messageType := overwritten
+//   locationAreaIdentification := {mcc_mnc, lac}
+// Structure: LAI(5 octets, GSM 24.008 10.5.1.3), [MI TLV], [FOP TV]
+// Spec-verified: PD=5(MM), MTI=0x02(LocationUpdatingAccept) per GSM 24.008 Table 10.5.3
+// LAI encoding: GSM_Types.ttcn f_build_BcdMccMnc (line 470):
+//   MCC=250, MNC=01 -> '250F01'H (MNC padded with F) -> nibble-swapped -> 0x52, 0xF0, 0x10
 // =====================================================================
 
 TEST(GoldenMM, LocationUpdatingAccept_Parse) {
-    // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: messageType(6)=0x02|NSD(2)=0 = 0x02<<2 = 0x08
-    // Bytes 2-6: LAI: MCC=250, MNC=01, LAC=0x1234
+    // Byte 0: PD(4)=5(MM)|skip(4)=0 = 0x50 [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x02(LocationUpdatingAccept)|NSD(2)=0 = 0x08 [GSM 24.008 Table 10.5.3]
+    // Bytes 2-4: LAI MCC/MNC BCD: MCC=250, MNC=01 -> '250F01'H nibble-swapped = {0x52, 0xF0, 0x10}
+    //   [GSM 24.008 10.5.1.3: digit2/digit1 pairs, LSB-first nibble order]
+    // Bytes 5-6: LAI LAC = 0x1234 (MSB first)
     uint8_t data[] = {0x50, 0x08, 0x52, 0xF0, 0x10, 0x12, 0x34};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -105,19 +124,21 @@ TEST(GoldenMM, LocationUpdatingAccept_Parse) {
 }
 
 // =====================================================================
-// MM PARSE FROM HEX: TMSI Reallocation Command (GSM 04.08 9.2.17)
-// Reference: L3_Templates.ttcn ts_TMSI_REALLOC_CM
-// Structure: LAI(5), MI LV, FollowOnProceed(4)|spare(4)
+// MM PARSE FROM HEX: TMSI Reallocation Command (GSM 24.008 9.2.17)
+// Reference: L3_Templates.ttcn ts_TMSI_REALLOC_CM template
+// Structure: LAI(5 octets), MI LV (length + MobileIdentity), FollowOnProceed(4)|spare(4)
+// Spec-verified: PD=5(MM), MTI=0x1A(TMSIReallocationCommand) per GSM 24.008 Table 10.5.3
 // =====================================================================
 
 TEST(GoldenMM, TMSIReallocationCommand_Parse) {
-    // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: messageType(6)=0x1a|NSD(2)=0 = 0x1a<<2 = 0x68
-    // Bytes 2-6: LAI: MCC=250, MNC=01, LAC=0x1234
-    // Byte 7: MI length = 5
-    // Byte 8: spare(4)=0, type(3)=100(TMSI), oe(1)=0 = 0x0C
-    // Bytes 9-12: TMSI = 0x87654321
-    // Byte 13: FollowOnProceed(4)=0, spare(4)=0 = 0x00
+    // Byte 0: PD(4)=5(MM)|skip(4)=0 = 0x50 [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x1A(TMSIReallocationCommand)|NSD(2)=0 = 0x68 [GSM 24.008 Table 10.5.3]
+    // Bytes 2-4: LAI MCC/MNC BCD: MCC=250, MNC=01 -> {0x52, 0xF0, 0x10} [GSM 24.008 10.5.1.3]
+    // Bytes 5-6: LAI LAC = 0x1234
+    // Byte 7: MI LV length = 5 (1 type octet + 4 TMSI octets) [GSM 24.008 10.5.1.4]
+    // Byte 8: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x0C
+    // Bytes 9-12: TMSI = 0x87654321 (new TMSI assigned by network)
+    // Byte 13: FollowOnProceed(4)=0|spare(4)=0 = 0x00 [GSM 24.008 10.5.2.38]
     uint8_t data[] = {
         0x50, 0x68,
         0x52, 0xF0, 0x10, 0x12, 0x34,
@@ -130,19 +151,24 @@ TEST(GoldenMM, TMSIReallocationCommand_Parse) {
 }
 
 // =====================================================================
-// MM PARSE FROM HEX: CM Service Request (GSM 04.08 9.2.9)
-// Reference: L3_Templates.ttcn ts_CM_SERV_REQ
-// Structure: CM_ServiceType(4)|CKSN(4), CM2 LV, MI LV
+// MM PARSE FROM HEX: CM Service Request (GSM 24.008 9.2.9)
+// Reference: L3_Templates.ttcn ts_CM_SERV_REQ (line 411):
+//   cm_ServiceType := int2bit(enum2int(serv_type), 4)
+//   cipheringKeySequenceNumber, mobileStationClassmark2, mobileIdentity
+// Structure: CM_ServiceType(4)|CKSN(4), CM2 LV (3 octets), MI LV
+// Spec-verified: PD=5(MM), MTI=0x24(CMServiceRequest) per GSM 24.008 Table 10.5.3
+// CmServiceType: L3_Templates.ttcn line 28: CM_TYPE_MO_CALL = '0001'B (value=1)
 // =====================================================================
 
 TEST(GoldenMM, CMServiceRequest_Parse) {
-    // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: messageType(6)=0x24|NSD(2)=0 = 0x24<<2 = 0x90
-    // Byte 2: CM_ServiceType(4)=1(MO_Call), CKSN(4)=0 = 0x01
-    // Byte 3: CM2 length = 3
-    // Bytes 4-6: CM2 = 0x20, 0x00, 0x80
-    // Byte 7: MI length = 5
-    // Byte 8: spare(4)=0, type(3)=100(TMSI), oe(1)=0 = 0x0C
+    // Byte 0: PD(4)=5(MM)|skip(4)=0 = 0x50 [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x24(CMServiceRequest)|NSD(2)=0 = 0x90 [GSM 24.008 Table 10.5.3]
+    // Byte 2: CM_ServiceType(4)=1(MobileOriginatedCall)|CKSN(4)=0 = 0x01 [GSM 24.008 10.5.3.3]
+    //   L3_Templates.ttcn CmServiceType: CM_TYPE_MO_CALL = '0001'B (line 29)
+    // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets, GSM 24.008 10.5.1.6)
+    // Bytes 4-6: CM2 value (24 bits of capability flags)
+    // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
+    // Byte 8: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x0C
     // Bytes 9-12: TMSI = 0x12345678
     uint8_t data[] = {
         0x50, 0x90, 0x01,
@@ -155,15 +181,18 @@ TEST(GoldenMM, CMServiceRequest_Parse) {
 }
 
 // =====================================================================
-// MM PARSE FROM HEX: CM Service Reject (GSM 04.08 9.2.6)
-// Reference: L3_Templates.ttcn ts_CM_SERV_REJ
-// Structure: reject_cause(8)
+// MM PARSE FROM HEX: CM Service Reject (GSM 24.008 9.2.6)
+// Reference: L3_Templates.ttcn tr_CM_SERV_REJ (line 524):
+//   messageType := '100010'B (MTI=0x22), rejectCause := rej_cause
+// Structure: reject_cause(8 bits, GSM 24.008 10.5.3.6)
+// Spec-verified: PD=5(MM), MTI=0x22(CMServiceReject) per GSM 24.008 Table 10.5.3
+// reject_cause=0x16 = Congestion (GSM 24.008 10.5.3.6 Table)
 // =====================================================================
 
 TEST(GoldenMM, CMServiceReject_Parse) {
-    // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: messageType(6)=0x22|NSD(2)=0 = 0x22<<2 = 0x88
-    // Byte 2: reject_cause = 0x16 (Congestion)
+    // Byte 0: PD(4)=5(MM)|skip(4)=0 = 0x50 [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x22(CMServiceReject)|NSD(2)=0 = 0x88 [GSM 24.008 Table 10.5.3]
+    // Byte 2: reject_cause = 0x16 (Congestion) [GSM 24.008 10.5.3.6]
     uint8_t data[] = {0x50, 0x88, 0x16};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -171,18 +200,19 @@ TEST(GoldenMM, CMServiceReject_Parse) {
 }
 
 // =====================================================================
-// MM PARSE FROM HEX: IMSI Detach Indication (GSM 04.08 9.2.15)
-// Reference: L3_Templates.ttcn ts_ML3_MO_MM_IMSI_DET_Ind
-// Structure: CM1 LV, MI LV
+// MM PARSE FROM HEX: IMSI Detach Indication (GSM 24.008 9.2.15)
+// Reference: L3_Templates.ttcn ts_ML3_MO_MM_IMSI_DET_Ind template
+// Structure: CM1 LV (Classmark 1, length-prefixed), MI LV (Mobile Identity, length-prefixed)
+// Spec-verified: PD=5(MM), MTI=0x01(IMSIDetachIndication) per GSM 24.008 Table 10.5.3
 // =====================================================================
 
 TEST(GoldenMM, IMSIDetachIndication_Parse) {
-    // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: messageType(6)=0x01|NSD(2)=0 = 0x01<<2 = 0x04
-    // Byte 2: CM1 length = 1
-    // Byte 3: CM1 = 0x00
-    // Byte 4: MI length = 5
-    // Byte 5: spare(4)=0, type(3)=100(TMSI), oe(1)=0 = 0x0C
+    // Byte 0: PD(4)=5(MM)|skip(4)=0 = 0x50 [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x01(IMSIDetachIndication)|NSD(2)=0 = 0x04 [GSM 24.008 Table 10.5.3]
+    // Byte 2: CM1 LV length = 1 (Classmark 1 is 1 octet, GSM 24.008 10.5.1.5)
+    // Byte 3: CM1 value = 0x00 (default classmark)
+    // Byte 4: MI LV length = 5 [GSM 24.008 10.5.1.4]
+    // Byte 5: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x0C
     // Bytes 6-9: TMSI = 0x12345678
     uint8_t data[] = {
         0x50, 0x04,
@@ -195,15 +225,17 @@ TEST(GoldenMM, IMSIDetachIndication_Parse) {
 }
 
 // =====================================================================
-// MM PARSE FROM HEX: MM Status (GSM 04.08 9.2.15)
-// Reference: L3_Templates.ttcn tr_ML3_MT_MM_STATUS
-// Structure: cause(8), spare(8), spare(8)
+// MM PARSE FROM HEX: MM Status (GSM 24.008 9.2.15)
+// Reference: L3_Templates.ttcn tr_ML3_MT_MM_STATUS template
+// Structure: cause(8 bits, GSM 24.008 10.5.3.6), spare(8), spare(8)
+// Spec-verified: PD=5(MM), MTI=0x31(MMStatus) per GSM 24.008 Table 10.5.3
+// cause=0x60 = Invalid_Mandatory_Information (GSM 24.008 10.5.3.6 Table)
 // =====================================================================
 
 TEST(GoldenMM, MMStatus_Parse) {
-    // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: messageType(6)=0x31|NSD(2)=0 = 0x31<<2 = 0xC4
-    // Byte 2: cause = 0x60 (Invalid_Mandatory_Information)
+    // Byte 0: PD(4)=5(MM)|skip(4)=0 = 0x50 [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x31(MMStatus)|NSD(2)=0 = 0xC4 [GSM 24.008 Table 10.5.3]
+    // Byte 2: cause = 0x60 (Invalid_Mandatory_Information) [GSM 24.008 10.5.3.6]
     // Byte 3: spare = 0x00
     // Byte 4: spare = 0x00
     uint8_t data[] = {0x50, 0xC4, 0x60, 0x00, 0x00};
@@ -213,16 +245,17 @@ TEST(GoldenMM, MMStatus_Parse) {
 }
 
 // =====================================================================
-// MM PARSE FROM HEX: Identity Response (GSM 04.08 9.2.11)
-// Reference: L3_Templates.ttcn ts_ML3_MO_MM_ID_Rsp
-// Structure: MI LV
+// MM PARSE FROM HEX: Identity Response (GSM 24.008 9.2.11)
+// Reference: L3_Templates.ttcn ts_ML3_MO_MM_ID_Rsp template
+// Structure: MI LV (Mobile Identity, length-prefixed, GSM 24.008 10.5.1.4)
+// Spec-verified: PD=5(MM), MTI=0x19(IdentityResponse) per GSM 24.008 Table 10.5.3
 // =====================================================================
 
 TEST(GoldenMM, IdentityResponse_Parse) {
-    // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: messageType(6)=0x19|NSD(2)=0 = 0x19<<2 = 0x64
-    // Byte 2: MI length = 5
-    // Byte 3: spare(4)=0, type(3)=100(TMSI), oe(1)=0 = 0x0C
+    // Byte 0: PD(4)=5(MM)|skip(4)=0 = 0x50 [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x19(IdentityResponse)|NSD(2)=0 = 0x64 [GSM 24.008 Table 10.5.3]
+    // Byte 2: MI LV length = 5 (1 type octet + 4 TMSI octets) [GSM 24.008 10.5.1.4]
+    // Byte 3: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x0C
     // Bytes 4-7: TMSI = 0x12345678
     uint8_t data[] = {0x50, 0x64, 0x05, 0x0C, 0x12, 0x34, 0x56, 0x78};
     auto msg = parseL3(data, sizeof(data));
@@ -231,18 +264,20 @@ TEST(GoldenMM, IdentityResponse_Parse) {
 }
 
 // =====================================================================
-// MM PARSE FROM HEX: CM Reestablishment Request (GSM 04.08 9.2.4)
-// Reference: L3_Templates.ttcn ts_CM_REESTABL_REQ
-// Structure: CM2 LV, MI LV, [LAI LV]
+// MM PARSE FROM HEX: CM Reestablishment Request (GSM 24.008 9.2.4)
+// Reference: L3_Templates.ttcn ts_CM_REESTABL_REQ (line 450):
+//   cipheringKeySequenceNumber, mobileStationClassmark2, mobileIdentityLV
+// Structure: CKSN(4)|spare(4), CM2 LV (3 octets), MI LV, [LAI LV]
+// Spec-verified: PD=5(MM), MTI=0x28(CMReestablishmentRequest) per GSM 24.008 Table 10.5.3
 // =====================================================================
 
 TEST(GoldenMM, CMReestablishmentRequest_Parse) {
-    // Byte 0: PD(4)|skip(4) = 0x50
-    // Byte 1: messageType(6)=0x28|NSD(2)=0 = 0x28<<2 = 0xA0
-    // Byte 2: CM2 length = 3
-    // Bytes 3-5: CM2 = 0x20, 0x00, 0x80
-    // Byte 6: MI length = 5
-    // Byte 7: spare(4)=0, type(3)=100(TMSI), oe(1)=0 = 0x0C
+    // Byte 0: PD(4)=5(MM)|skip(4)=0 = 0x50 [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x28(CMReestablishmentRequest)|NSD(2)=0 = 0xA0 [GSM 24.008 Table 10.5.3]
+    // Byte 2: CM2 LV length = 3 (Classmark 2 is 3 octets, GSM 24.008 10.5.1.6)
+    // Bytes 3-5: CM2 value (24 bits of capability flags)
+    // Byte 6: MI LV length = 5 [GSM 24.008 10.5.1.4]
+    // Byte 7: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x0C
     // Bytes 8-11: TMSI = 0x12345678
     uint8_t data[] = {
         0x50, 0xA0,
@@ -411,39 +446,43 @@ TEST(GoldenMM, LocationUpdatingRequest_RoundTrip) {
 }
 
 // =====================================================================
-// MMRejectCause values (GSM 04.08 10.5.3.6)
-// Reference: L3_Templates.ttcn c_MM_CAUSE_IMSI_UNKNOWN_IN_HLR
+// MMRejectCause values (GSM 24.008 10.5.3.6 / GSM 04.08 10.5.3.6)
+// Reference: L3_Templates.ttcn line 57: c_MM_CAUSE_IMSI_UNKNOWN_IN_HLR := '02'O
+// Reference: 3GPP TS 24.008 Table 10.5.3.6 (MM cause values)
+// Spec-verified: All MM cause values per GSM 24.008 Recommendation
+//   IMSI unknown in HLR(0x02), Illegal MS(0x03), Congestion(0x16), etc.
 // =====================================================================
 
 TEST(GoldenMM, RejectCauseValues) {
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Zero), 0x00);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::IMSI_Unknown_In_HLR), 0x02);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Illegal_MS), 0x03);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::IMSI_Unknown_In_VLR), 0x04);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::IMEI_Not_Accepted), 0x05);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Illegal_ME), 0x06);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::PLMN_Not_Allowed), 0x0b);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Location_Area_Not_Allowed), 0x0c);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Roaming_Not_Allowed_In_LA), 0x0d);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::No_Suitable_Cells_In_LA), 0x0f);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Network_Failure), 0x11);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::MAC_Failure), 0x14);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Synch_Failure), 0x15);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Congestion), 0x16);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::GSM_Authentication_Unacceptable), 0x17);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Not_Authorized_In_CSG), 0x19);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Service_Option_Not_Supported), 0x20);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Requested_Service_Not_Subscribed), 0x21);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Service_Option_Out_Of_Order), 0x22);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Call_Cannot_Be_Identified), 0x26);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Semantically_Incorrect_Message), 0x5f);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Invalid_Mandatory_Information), 0x60);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Message_Type_Invalid), 0x61);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Message_Type_Not_Compatible), 0x62);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::IE_Invalid), 0x63);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Conditional_IE_Error), 0x64);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Message_Not_Compatible), 0x65);
-    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Protocol_Error_Unspecified), 0x6f);
+    // Spec-verified: GSM 24.008 Table 10.5.3.6 MM cause values
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Zero), 0x00);                           // Unspecified
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::IMSI_Unknown_In_HLR), 0x02);           // IMSI unknown in HLR
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Illegal_MS), 0x03);                    // Illegal MS
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::IMSI_Unknown_In_VLR), 0x04);          // IMSI unknown in VLR
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::IMEI_Not_Accepted), 0x05);            // IMEI not accepted
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Illegal_ME), 0x06);                   // Illegal ME
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::PLMN_Not_Allowed), 0x0b);             // PLMN not allowed
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Location_Area_Not_Allowed), 0x0c);    // Location area not allowed
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Roaming_Not_Allowed_In_LA), 0x0d);    // Roaming not allowed in LA
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::No_Suitable_Cells_In_LA), 0x0f);      // No suitable cells in LA
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Network_Failure), 0x11);              // Network failure
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::MAC_Failure), 0x14);                  // MAC failure
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Synch_Failure), 0x15);                // Synch failure
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Congestion), 0x16);                   // Congestion
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::GSM_Authentication_Unacceptable), 0x17);// GSM auth unacceptable
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Not_Authorized_In_CSG), 0x19);        // Not authorized in CSG
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Service_Option_Not_Supported), 0x20); // Service option not supported
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Requested_Service_Not_Subscribed), 0x21);// Requested service not subscribed
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Service_Option_Out_Of_Order), 0x22);  // Service option out of order
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Call_Cannot_Be_Identified), 0x26);    // Call cannot be identified
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Semantically_Incorrect_Message), 0x5f);// Semantically incorrect msg
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Invalid_Mandatory_Information), 0x60);// Invalid mandatory info
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Message_Type_Invalid), 0x61);         // Message type invalid
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Message_Type_Not_Compatible), 0x62);  // Message type not compatible
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::IE_Invalid), 0x63);                   // IE invalid
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Conditional_IE_Error), 0x64);         // Conditional IE error
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Message_Not_Compatible), 0x65);       // Message not compatible
+    EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::Protocol_Error_Unspecified), 0x6f);   // Protocol error, unspecified
 }
 
 // =====================================================================

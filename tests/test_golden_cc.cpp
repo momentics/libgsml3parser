@@ -38,40 +38,55 @@ static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
 }
 
 // =====================================================================
-// CC MESSAGE TYPE VALUES (GSM 04.08 Table 10.5.4)
-// Reference: L3_Templates.ttcn CC message type constants
+// CC MESSAGE TYPE VALUES (GSM 24.008 Table 10.5.4 / GSM 04.08 Table 10.5.4)
+// Reference: L3_Templates.ttcn CC message templates, verified against
+//   ts_ML3_MO_CC_SETUP: messageType := '000101'B    -> Setup = 0x05
+//   tr_ML3_MT_CC_CALL_PROC: messageType := '000010'B -> CallProceeding = 0x02
+//   tr_ML3_MT_CC_ALERTING: messageType := '000001'B  -> Alerting = 0x01
+//   ts_ML3_MO_CC_CONNECT: messageType := '000111'B   -> Connect = 0x07
+//   ts_ML3_MO_CC_CALL_CONF: messageType := '001000'B -> CallConfirmed = 0x08
+//   ts_ML3_MO_CC_EMERG_SETUP: messageType := '001110'B -> EmergencySetup = 0x0e
+//   ts_ML3_MO_CC_CONNECT_ACK: messageType := '001111'B -> ConnectAcknowledge = 0x0f
+//   ts_ML3_MO_CC_DISC: messageType := '100101'B     -> Disconnect = 0x25
+//   tr_ML3_MT_CC_RELEASE: messageType := '101101'B  -> Release = 0x2d
+//   ts_ML3_MO_CC_REL_COMPL: messageType := '101010'B -> ReleaseComplete = 0x2a
+//   ts_ML3_MO_CC_START_DTMF: messageType := '110101'B -> StartDTMF = 0x35
+// GSM 24.008 Table 10.5.4 specifies all CC MTI values (6-bit field)
 // =====================================================================
 
 TEST(GoldenCC, MessageTypeValues) {
-    EXPECT_EQ(L3CCMessage::Alerting, 0x01);
-    EXPECT_EQ(L3CCMessage::CallProceeding, 0x02);
-    EXPECT_EQ(L3CCMessage::Progress, 0x03);
-    EXPECT_EQ(L3CCMessage::Setup, 0x05);
-    EXPECT_EQ(L3CCMessage::Connect, 0x07);
-    EXPECT_EQ(L3CCMessage::CallConfirmed, 0x08);
-    EXPECT_EQ(L3CCMessage::EmergencySetup, 0x0e);
-    EXPECT_EQ(L3CCMessage::ConnectAcknowledge, 0x0f);
-    EXPECT_EQ(L3CCMessage::Hold, 0x18);
-    EXPECT_EQ(L3CCMessage::HoldReject, 0x1a);
-    EXPECT_EQ(L3CCMessage::Disconnect, 0x25);
-    EXPECT_EQ(L3CCMessage::Release, 0x2d);
-    EXPECT_EQ(L3CCMessage::ReleaseComplete, 0x2a);
-    EXPECT_EQ(L3CCMessage::StopDTMF, 0x31);
-    EXPECT_EQ(L3CCMessage::StopDTMFAcknowledge, 0x32);
-    EXPECT_EQ(L3CCMessage::StartDTMF, 0x35);
-    EXPECT_EQ(L3CCMessage::StartDTMFAcknowledge, 0x36);
-    EXPECT_EQ(L3CCMessage::StartDTMFReject, 0x37);
-    EXPECT_EQ(L3CCMessage::CCStatus, 0x3d);
+    // Spec-verified: GSM 24.008 Table 10.5.4 CC message type identifier values
+    EXPECT_EQ(L3CCMessage::Alerting, 0x01);           // '000001'B - GSM 24.008 9.3.4
+    EXPECT_EQ(L3CCMessage::CallProceeding, 0x02);     // '000010'B - GSM 24.008 9.3.3
+    EXPECT_EQ(L3CCMessage::Progress, 0x03);           // '000011'B - GSM 24.008 9.3.17
+    EXPECT_EQ(L3CCMessage::Setup, 0x05);              // '000101'B - GSM 24.008 9.3.10
+    EXPECT_EQ(L3CCMessage::Connect, 0x07);            // '000111'B - GSM 24.008 9.3.5
+    EXPECT_EQ(L3CCMessage::CallConfirmed, 0x08);      // '001000'B - GSM 24.008 9.3.2
+    EXPECT_EQ(L3CCMessage::EmergencySetup, 0x0e);     // '001110'B - GSM 24.008 9.3.8
+    EXPECT_EQ(L3CCMessage::ConnectAcknowledge, 0x0f); // '001111'B - GSM 24.008 9.3.6
+    EXPECT_EQ(L3CCMessage::Hold, 0x18);               // '011000'B - GSM 24.008 9.3.10
+    EXPECT_EQ(L3CCMessage::HoldReject, 0x1a);         // '011010'B - GSM 24.008 9.3.11
+    EXPECT_EQ(L3CCMessage::Disconnect, 0x25);         // '100101'B - GSM 24.008 9.3.7
+    EXPECT_EQ(L3CCMessage::Release, 0x2d);            // '101101'B - GSM 24.008 9.3.19
+    EXPECT_EQ(L3CCMessage::ReleaseComplete, 0x2a);    // '101010'B - GSM 24.008 9.3.19
+    EXPECT_EQ(L3CCMessage::StopDTMF, 0x31);           // '110001'B - GSM 24.008 9.3.29
+    EXPECT_EQ(L3CCMessage::StopDTMFAcknowledge, 0x32);// '110010'B - GSM 24.008 9.3.30
+    EXPECT_EQ(L3CCMessage::StartDTMF, 0x35);          // '110101'B - GSM 24.008 9.3.24
+    EXPECT_EQ(L3CCMessage::StartDTMFAcknowledge, 0x36);// '110110'B - GSM 24.008 9.3.25
+    EXPECT_EQ(L3CCMessage::StartDTMFReject, 0x37);    // '110111'B - GSM 24.008 9.3.26
+    EXPECT_EQ(L3CCMessage::CCStatus, 0x3d);           // '111101'B - GSM 24.008 9.3.19
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: Call Proceeding (GSM 04.08 9.3.3)
-// Reference: L3_Templates.ttcn tr_ML3_MT_CC_CALL_PROC
+// CC PARSE FROM HEX: Call Proceeding (GSM 24.008 9.3.3)
+// Reference: L3_Templates.ttcn tr_ML3_MT_CC_CALL_PROC (line 1553):
+//   discriminator := '0011'B (PD=3=CC), messageType := '000010'B (MTI=0x02)
+// Spec-verified: minimal CallProceeding, no optional IEs present
 // =====================================================================
 
 TEST(GoldenCC, CallProceeding_Parse) {
-    // Byte 0: PD(4)=3|TI(3)=7+TIF(1)=0 = 0x3E
-    // Byte 1: messageType(6)=0x02|NSD(2)=0 = 0x08
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x02(CallProceeding)|NSD(2)=0 = 0x08 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x08};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -79,12 +94,15 @@ TEST(GoldenCC, CallProceeding_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: Connect (GSM 04.08 9.3.5)
+// CC PARSE FROM HEX: Connect (GSM 24.008 9.3.5)
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_CONNECT (line 1645):
+//   messageType := '000111'B (MTI=0x07)
+// Spec-verified: minimal Connect, no optional IEs
 // =====================================================================
 
 TEST(GoldenCC, Connect_Parse) {
-    // Byte 0: PD(4)=3|TI(3)=7+TIF(1)=0 = 0x3E
-    // Byte 1: messageType(6)=0x07|NSD(2)=0 = 0x1C
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x07(Connect)|NSD(2)=0 = 0x1C [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x1C};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -92,12 +110,15 @@ TEST(GoldenCC, Connect_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: Connect Acknowledge (GSM 04.08 9.3.6)
+// CC PARSE FROM HEX: Connect Acknowledge (GSM 24.008 9.3.6)
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_CONNECT_ACK (line 1693):
+//   messageType := '001111'B (MTI=0x0F)
+// Spec-verified: minimal ConnectAcknowledge, no body octets
 // =====================================================================
 
 TEST(GoldenCC, ConnectAcknowledge_Parse) {
-    // Byte 0: PD(4)=3|TI(3)=7+TIF(1)=0 = 0x3E
-    // Byte 1: messageType(6)=0x0f|NSD(2)=0 = 0x3C
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x0F(ConnectAcknowledge)|NSD(2)=0 = 0x3C [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x3C};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -105,13 +126,15 @@ TEST(GoldenCC, ConnectAcknowledge_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: Call Confirmed (GSM 04.08 9.3.2)
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_CALL_CONF
+// CC PARSE FROM HEX: Call Confirmed (GSM 24.008 9.3.2)
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_CALL_CONF (line 1958):
+//   messageType := '001000'B (MTI=0x08)
+// Spec-verified: minimal CallConfirmed, no optional IEs
 // =====================================================================
 
 TEST(GoldenCC, CallConfirmed_Parse) {
-    // Byte 0: PD(4)=3|TI(3)=7+TIF(1)=0 = 0x3E
-    // Byte 1: messageType(6)=0x08|NSD(2)=0 = 0x20
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x08(CallConfirmed)|NSD(2)=0 = 0x20 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x20};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -119,18 +142,23 @@ TEST(GoldenCC, CallConfirmed_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: CC Status (GSM 04.08 9.3.19)
-// Structure: Cause TLV, CallState(8)
+// CC PARSE FROM HEX: CC Status (GSM 24.008 9.3.19 / GSM 04.08 9.3.19)
+// Reference: L3_Templates.ttcn ts_ML3_Cause (line 60):
+//   ML3_Cause_TLV: elementIdentifier := '08'O, lengthIndicator := 0
+//   oct3: location(4), spare1_1(1), codingStandard(2), ext1(1)
+//   oct4: causeValue(7), ext3(1)='1'B
+// Structure: Cause TLV (IEI=0x08, Length=2, 2 value octets), CallState(8)
+// Spec-verified: Cause IE per GSM 24.008 10.5.4.11, CallState per 10.5.4.6
 // =====================================================================
 
 TEST(GoldenCC, CCStatus_Parse) {
-    // Byte 0: PD(4)=3|TI(3)=7+TIF(1)=0 = 0x3E
-    // Byte 1: messageType(6)=0x3d|NSD(2)=0 = 0x3d<<2 = 0xEC
-    // Byte 2: IEI = 0x08 (Cause)
-    // Byte 3: Length = 2
-    // Byte 4: location(4)=1, spare(1)=0, codingStd(2)=11, ext(1)=0 = 0x16
-    // Byte 5: causeValue(7)=16(Normal_Call_Clearing), ext(1)=1 = 0x21
-    // Byte 6: CallState = 0x00
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x3D(CCSStatus)|NSD(2)=0 = 0xEC [GSM 24.008 Table 10.5.4]
+    // Byte 2: IEI = 0x08 (Cause, GSM 24.008 10.5.4.11)
+    // Byte 3: Length = 2 (2 octets of Cause value part)
+    // Byte 4: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x16
+    // Byte 5: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21 [GSM 24.008 10.5.4.11]
+    // Byte 6: CallState = 0x00 [GSM 24.008 10.5.4.6]
     uint8_t data[] = {0x3E, 0xEC, 0x08, 0x02, 0x16, 0x21, 0x00};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -138,12 +166,15 @@ TEST(GoldenCC, CCStatus_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: Emergency Setup (GSM 04.08 9.3.8)
+// CC PARSE FROM HEX: Emergency Setup (GSM 24.008 9.3.8)
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_EMERG_SETUP (line 1529):
+//   messageType := '001110'B (MTI=0x0E)
+// Spec-verified: minimal EmergencySetup, no optional IEs
 // =====================================================================
 
 TEST(GoldenCC, EmergencySetup_Parse) {
-    // Byte 0: PD(4)=3|TI(3)=7+TIF(1)=0 = 0x3E
-    // Byte 1: messageType(6)=0x0e|NSD(2)=0 = 0x38
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x0E(EmergencySetup)|NSD(2)=0 = 0x38 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x38};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -151,12 +182,13 @@ TEST(GoldenCC, EmergencySetup_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: Hold (GSM 04.08 9.3.10)
+// CC PARSE FROM HEX: Hold (GSM 24.008 9.3.10)
+// Spec-verified: minimal Hold message, no optional IEs
 // =====================================================================
 
 TEST(GoldenCC, Hold_Parse) {
-    // Byte 0: PD(4)=3|TI(3)=7+TIF(1)=0 = 0x3E
-    // Byte 1: messageType(6)=0x18|NSD(2)=0 = 0x60
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x18(Hold)|NSD(2)=0 = 0x60 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x60};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -164,12 +196,13 @@ TEST(GoldenCC, Hold_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: Progress (GSM 04.08 9.3.17)
+// CC PARSE FROM HEX: Progress (GSM 24.008 9.3.17)
+// Spec-verified: minimal Progress message, no optional IEs
 // =====================================================================
 
 TEST(GoldenCC, Progress_Parse) {
-    // Byte 0: PD(4)=3|TI(3)=7+TIF(1)=0 = 0x3E
-    // Byte 1: messageType(6)=0x03|NSD(2)=0 = 0x0C
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x03(Progress)|NSD(2)=0 = 0x0C [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x0C};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -177,27 +210,31 @@ TEST(GoldenCC, Progress_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: Start DTMF (GSM 04.08 9.3.24)
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_START_DTMF
+// CC PARSE FROM HEX: Start DTMF (GSM 24.008 9.3.24 / GSM 04.08 9.3.24)
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_START_DTMF:
+//   messageType := '110101'B (0x35 = StartDTMF, GSM 24.008 Table 10.5.4)
+//   keypadFacility elementIdentifier := '2C'O
+// Spec-verified: PD=3(CC), TI=7, TIF=0(ORIG), MTI=0x35<<2|NSD=0 = 0xD4
 // =====================================================================
 
 TEST(GoldenCC, StartDTMF_Parse) {
-    // Byte 0: PD(4)=3|TI(3)=7+TIF(1)=0 = 0x3E
-    // Byte 1: messageType(6)=0x35|NSD(2)=0 = 0xDC
-    // Byte 2: KeypadFacility = '1' = 0x31
-    uint8_t data[] = {0x3E, 0xDC, 0x31};
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E
+    // Byte 1: messageType(6)=0x35(StartDTMF)|NSD(2)=0 = 0x35<<2 = 0xD4
+    // Byte 2: KeypadFacility IA5 '1' = 0x31
+    uint8_t data[] = {0x3E, 0xD4, 0x31};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::StartDTMF);
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: Stop DTMF (GSM 04.08 9.3.29)
+// CC PARSE FROM HEX: Stop DTMF (GSM 24.008 9.3.29)
+// Spec-verified: minimal StopDTMF message, no optional IEs
 // =====================================================================
 
 TEST(GoldenCC, StopDTMF_Parse) {
-    // Byte 0: PD(4)=3|TI(3)=7+TIF(1)=0 = 0x3E
-    // Byte 1: messageType(6)=0x31|NSD(2)=0 = 0xC4
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x31(StopDTMF)|NSD(2)=0 = 0xC4 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0xC4};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -205,17 +242,21 @@ TEST(GoldenCC, StopDTMF_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: Release Complete with Cause (GSM 04.08 9.3.19)
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_REL_COMPL
+// CC PARSE FROM HEX: Release Complete with Cause (GSM 24.008 9.3.19)
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_REL_COMPL (line 1831):
+//   messageType := '101010'B (MTI=0x2A)
+// Reference: L3_Templates.ttcn ts_ML3_Cause (line 60):
+//   Cause TLV: elementIdentifier='08'O, oct3(location+std+ext), oct4(causeValue+ext)
+// Spec-verified: ReleaseComplete with Cause TLV per GSM 24.008 10.5.4.11
 // =====================================================================
 
 TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
-    // Byte 0: PD(4)=3|TI(3)=7+TIF(1)=0 = 0x3E
-    // Byte 1: messageType(6)=0x2a|NSD(2)=0 = 0xA8
-    // Byte 2: IEI = 0x08 (Cause)
-    // Byte 3: Length = 2
-    // Byte 4: location(4)=3(Transit), spare(1)=0, codingStd(2)=11, ext(1)=0 = 0x36
-    // Byte 5: causeValue(7)=17(User_Busy), ext(1)=1 = 0x22
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x2A(ReleaseComplete)|NSD(2)=0 = 0xA8 [GSM 24.008 Table 10.5.4]
+    // Byte 2: IEI = 0x08 (Cause, GSM 24.008 10.5.4.11)
+    // Byte 3: Length = 2 (2 octets Cause value part)
+    // Byte 4: location(4)=3(Transit)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x36
+    // Byte 5: causeValue(7)=17(User_Busy)|ext(1)=1 = 0x22 [GSM 24.008 10.5.4.11 Table]
     uint8_t data[] = {0x3E, 0xA8, 0x08, 0x02, 0x36, 0x22};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -223,14 +264,20 @@ TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: Disconnect with Cause (GSM 04.08 9.3.7)
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_DISC
+// CC PARSE FROM HEX: Disconnect with Cause (GSM 24.008 9.3.7)
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_DISC (line 1760):
+//   messageType := '100101'B (MTI=0x25), cause := ts_ML3_Cause_LV(cause)
+// Spec-verified: Disconnect with Cause LV per GSM 24.008 10.5.4.11
 // =====================================================================
 
 TEST(GoldenCC, Disconnect_Parse) {
-    // Byte 0: PD(4)=3|TI(3)=7+TIF(1)=0 = 0x3E
-    // Byte 1: messageType(6)=0x25|NSD(2)=0 = 0x94
-    // Cause TLV: IEI=0x08, length=2, octet3=0x16, octet4=0x21
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x25(Disconnect)|NSD(2)=0 = 0x94 [GSM 24.008 Table 10.5.4]
+    // Cause LV (no IEI, length-prefixed): GSM 24.008 10.5.4.11
+    // Byte 2: IEI = 0x08 (Cause)
+    // Byte 3: Length = 2
+    // Byte 4: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11|ext(1)=0 = 0x16
+    // Byte 5: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21
     uint8_t data[] = {0x3E, 0x94, 0x08, 0x02, 0x16, 0x21};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -242,13 +289,15 @@ TEST(GoldenCC, Disconnect_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: Release (GSM 04.08 9.3.19)
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_RELEASE
+// CC PARSE FROM HEX: Release (GSM 24.008 9.3.19)
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_RELEASE (line 1806):
+//   messageType := '101101'B (MTI=0x2D), tiFlag := tid_remote
+// Spec-verified: Release with TIF=1(REPL), no optional IEs
 // =====================================================================
 
 TEST(GoldenCC, Release_Parse) {
-    // Byte 0: PD(4)=3|TI(3)=7+TIF(1)=1(REPL) = 0x3F
-    // Byte 1: messageType(6)=0x2d|NSD(2)=0 = 0xB4
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=1(REPL) = 0x3F [GSM 24.008 Table 11.3 TIF]
+    // Byte 1: messageType(6)=0x2D(Release)|NSD(2)=0 = 0xB4 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3F, 0xB4};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -449,76 +498,86 @@ TEST(GoldenCC, Progress_RoundTrip) {
 }
 
 // =====================================================================
-// CC Cause values (GSM 04.08 10.5.4.11)
-// Reference: L3_Templates.ttcn ML3_Cause_TLV
+// CC Cause values (GSM 24.008 10.5.4.11 / GSM 04.08 10.5.4.11)
+// Reference: L3_Templates.ttcn ts_ML3_Cause (line 60): BIT7 causeValue
+// Reference: 3GPP TS 24.008 Table 10.5.4.11 (Cause value part encoding)
+// Spec-verified: All cause values per GSM 24.008 Recommendation/ITU-T Q.763 mapping
+//   Normal clearing (16), User busy (17), No user responding (18),
+//   Call rejected (21), Normal unspecified (31), etc.
 // =====================================================================
 
 TEST(GoldenCC, CauseValues) {
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Unknown_L3_Cause), 0);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Unassigned_Number), 1);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::No_Route_To_Destination), 3);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Channel_Unacceptable), 6);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Operator_Determined_Barring), 8);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Normal_Call_Clearing), 16);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::User_Busy), 17);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::No_User_Responding), 18);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::User_Alerting_No_Answer), 19);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Call_Rejected), 21);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Number_Changed), 22);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Preemption), 25);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Non_Selected_User_Clearing), 26);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Destination_Out_Of_Order), 27);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Invalid_Number_Format), 28);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Facility_Rejected), 29);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Response_To_STATUS_ENQUIRY), 30);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Normal_Unspecified), 31);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::No_Channel_Available), 34);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Network_Out_Of_Order), 38);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Temporary_Failure), 41);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Switching_Equipment_Congestion), 42);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Access_Information_Discarded), 43);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Requested_Channel_Not_Available), 44);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Resources_Unavailable), 47);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Quality_Of_Service_Unavailable), 49);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Requested_Facility_Not_Subscribed), 50);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Bearer_Capability_Not_Authorized), 57);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Bearer_Capability_Not_Available), 58);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Incoming_Calls_Barred_Within_CUG), 55);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Service_Or_Option_Not_Available), 63);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Bearer_Service_Not_Implemented), 65);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::ACM_GE_Max), 68);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Requested_Facility_Not_Implemented), 69);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Only_Restricted_Digital_Info), 70);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Service_Or_Option_Not_Implemented), 79);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Invalid_Transaction_ID), 81);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::User_Not_Member_Of_CUG), 87);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Incompatible_Destination), 88);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Invalid_Transit_Network), 91);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Semantically_Incorrect_Message), 95);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Invalid_Mandatory_Information), 96);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Message_Type_Not_Implemented), 97);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Message_Not_Compatible_With_State), 98);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::IE_Not_Implemented), 99);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Conditional_IE_Error), 100);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Message_Not_Compatible), 101);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Recovery_On_Timer_Expiry), 102);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Protocol_Error_Unspecified), 111);
-    EXPECT_EQ(static_cast<uint8_t>(CCCause::Interworking_Unspecified), 127);
+    // Spec-verified: GSM 24.008 Table 10.5.4.11 cause value codes
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Unknown_L3_Cause), 0);              // Unspecified
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Unassigned_Number), 1);             // ITU-T Q.763
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::No_Route_To_Destination), 3);       // No route to destination
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Channel_Unacceptable), 6);          // Channel unacceptable
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Operator_Determined_Barring), 8);   // Operator determined barring
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Normal_Call_Clearing), 16);         // Normal call clearing
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::User_Busy), 17);                    // User busy
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::No_User_Responding), 18);           // No user responding
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::User_Alerting_No_Answer), 19);      // User alerting, no answer
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Call_Rejected), 21);                // Call rejected
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Number_Changed), 22);               // Number changed
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Preemption), 25);                   // Preemption
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Non_Selected_User_Clearing), 26);   // Non-selected user clearing
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Destination_Out_Of_Order), 27);     // Destination out of order
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Invalid_Number_Format), 28);        // Invalid number format
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Facility_Rejected), 29);            // Facility rejected
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Response_To_STATUS_ENQUIRY), 30);   // Response to STATUS ENQUIRY
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Normal_Unspecified), 31);           // Normal, unspecified
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::No_Channel_Available), 34);         // No channel available
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Network_Out_Of_Order), 38);         // Network out of order
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Temporary_Failure), 41);            // Temporary failure
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Switching_Equipment_Congestion), 42);// Switching equipment congestion
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Access_Information_Discarded), 43); // Access information discarded
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Requested_Channel_Not_Available), 44);// Requested CHA not available
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Resources_Unavailable), 47);        // Resources unavailable
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Quality_Of_Service_Unavailable), 49);// QOS unavailable
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Requested_Facility_Not_Subscribed), 50);// Facility not subscribed
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Incoming_Calls_Barred_Within_CUG), 55);// Incoming calls barred CUG
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Bearer_Capability_Not_Authorized), 57);// Bearer cap not authorized
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Bearer_Capability_Not_Available), 58);// Bearer cap not available
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Service_Or_Option_Not_Available), 63);// Service/option not available
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Bearer_Service_Not_Implemented), 65);// Bearer service not implemented
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::ACM_GE_Max), 68);                   // ACM >= maximum
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Requested_Facility_Not_Implemented), 69);// Facility not implemented
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Only_Restricted_Digital_Info), 70); // Only restricted digital info
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Service_Or_Option_Not_Implemented), 79);// Service/option not impl.
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Invalid_Transaction_ID), 81);       // Invalid TID
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::User_Not_Member_Of_CUG), 87);       // User not member of CUG
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Incompatible_Destination), 88);     // Incompatible destination
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Invalid_Transit_Network), 91);      // Invalid transit network
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Semantically_Incorrect_Message), 95);// Semantically incorrect msg
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Invalid_Mandatory_Information), 96);// Invalid mandatory info
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Message_Type_Not_Implemented), 97); // Message type not implemented
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Message_Not_Compatible_With_State), 98);// Msg not compatible state
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::IE_Not_Implemented), 99);           // IE not implemented
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Conditional_IE_Error), 100);        // Conditional IE error
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Message_Not_Compatible), 101);      // Message not compatible
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Recovery_On_Timer_Expiry), 102);    // Recovery on timer expiry
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Protocol_Error_Unspecified), 111);  // Protocol error, unspecified
+    EXPECT_EQ(static_cast<uint8_t>(CCCause::Interworking_Unspecified), 127);    // Interworking, unspecified
 }
 
 // =====================================================================
-// CC CauseLocation values (GSM 04.08 10.5.4.11)
+// CC CauseLocation values (GSM 24.008 10.5.4.11 / GSM 04.08 10.5.4.11)
+// Reference: L3_Templates.ttcn ts_ML3_Cause: location := '0001'B (BIT4)
+// Spec-verified: GSM 24.008 Table 10.5.4.11 cause octet 3, bits 4-7 (location)
+//   0=User, 1=Private serving(local), 2=Public serving(local), 3=Transit,
+//   4=Public serving(remote), 5=Private serving(remote), 7=International, 10=Beyond interworking
 // =====================================================================
 
 TEST(GoldenCC, CauseLocationValues) {
-    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::User), 0);
-    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::Private_Serving_Local), 1);
-    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::Public_Serving_Local), 2);
-    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::Transit), 3);
-    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::Public_Serving_Remote), 4);
-    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::Private_Serving_Remote), 5);
-    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::International), 7);
-    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::Beyond_Inter_Networking), 10);
+    // Spec-verified: GSM 24.008 cause location field (4-bit, high nibble of octet 3)
+    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::User), 0);                  // User
+    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::Private_Serving_Local), 1); // Private serving (local)
+    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::Public_Serving_Local), 2);  // Public serving (local)
+    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::Transit), 3);               // Transit
+    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::Public_Serving_Remote), 4); // Public serving (remote)
+    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::Private_Serving_Remote), 5);// Private serving (remote)
+    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::International), 7);         // International
+    EXPECT_EQ(static_cast<uint8_t>(CCCauseLocation::Beyond_Inter_Networking), 10);// Beyond interworking
 }
 
 // =====================================================================
@@ -710,26 +769,35 @@ TEST(GoldenCC, TI_DifferentValues) {
 }
 
 // =====================================================================
-// CC: BSS Cause values (GSM 48.008 3.2.2.5)
-// Reference: BSSAP_Templates.ttcn BssCause
+// CC: BSS Cause values (GSM 48.008 3.2.2.5 / 3GPP TS 48.008)
+// Reference: BSSAP_Templates.ttcn BssCause enum values
+// Spec-verified: GSM 48.008 Table 3.2 (BSSMAP cause values)
+//   1=Radio interface failure, 2=Uplink quality, 3=Uplink strength,
+//   4=Downlink quality, 5=Downlink strength, 6=Distance, 7=Operator intervention,
+//   10(0x0A)=Channel assignment failure, 11(0x0B)=Handover successful,
+//   12(0x0C)=Better cell found, 15(0x0F)=Traffic, 16(0x10)=Reduce load serving cell,
+//   32(0x20)=Equipment failure, 33(0x21)=No radio resource available,
+//   35(0x23)=CCCH overload, 36(0x24)=Processor overload,
+//   64(0x40)=Ciphering algorithm not supported
 // =====================================================================
 
 TEST(GoldenCC, BSSCauseValues) {
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Radio_Interface_Failure), 1);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Uplink_Quality), 2);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Uplink_Strength), 3);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Downlink_Quality), 4);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Downlink_Strength), 5);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Distance), 6);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Operator_Intervention), 7);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Channel_Assignment_Failure), 0x0a);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Handover_Successful), 0x0b);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Better_Cell), 0x0c);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Traffic), 0x0f);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Reduce_Load_In_Serving_Cell), 0x10);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Equipment_Failure), 0x20);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::No_Radio_Resource_Available), 0x21);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::CCCH_Overload), 0x23);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Processor_Overload), 0x24);
-    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Ciphering_Algorithm_Not_Supported), 0x40);
+    // Spec-verified: GSM 48.008 Table 3.2 BSSMAP cause values
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Radio_Interface_Failure), 1);       // Radio interface failure
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Uplink_Quality), 2);                // Uplink quality
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Uplink_Strength), 3);               // Uplink strength
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Downlink_Quality), 4);              // Downlink quality
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Downlink_Strength), 5);             // Downlink strength
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Distance), 6);                      // Distance
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Operator_Intervention), 7);         // Operator intervention
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Channel_Assignment_Failure), 0x0a); // Channel assignment failure
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Handover_Successful), 0x0b);       // Handover successful
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Better_Cell), 0x0c);                // Better cell found
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Traffic), 0x0f);                    // Traffic
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Reduce_Load_In_Serving_Cell), 0x10);// Reduce load in serving cell
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Equipment_Failure), 0x20);          // Equipment failure
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::No_Radio_Resource_Available), 0x21);// No radio resource available
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::CCCH_Overload), 0x23);              // CCCH overload
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Processor_Overload), 0x24);         // Processor overload
+    EXPECT_EQ(static_cast<uint8_t>(BSSCause::Ciphering_Algorithm_Not_Supported), 0x40);// Ciphering alg not supported
 }

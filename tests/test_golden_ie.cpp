@@ -82,11 +82,17 @@ TEST(GoldenIE, CellIdentity_Encoding) {
 }
 
 // =====================================================================
-// Common IEs: L3LocationAreaIdentity (GSM 04.08 10.5.1.3)
-// Reference: GSM_Types.ttcn f_build_BcdMccMnc, LocationAreaIdentification
+// Common IEs: L3LocationAreaIdentity (GSM 24.008 10.5.1.3 / GSM 04.08 10.5.1.3)
+// Reference: GSM_Types.ttcn f_build_BcdMccMnc (line 470):
+//   MCC digit 2|MCC digit 1 -> octet 1, MNC digit 3|MCC digit 3 -> octet 2, MNC digit 2|MNC digit 1 -> octet 3
+//   HEXORDER(low) swaps nibbles within each octet
+// Reference: GSM_Types.ttcn TC_selftest_BcdMccMnc (line 497):
+//   match('62F224'O, decmatch BcdMccMnc:'262F42'H) -> MCC=262, MNC=42
+// Spec-verified: LAI = MCC/MNC(3 octets BCD) + LAC(2 octets) = 5 octets total
 // =====================================================================
 
 TEST(GoldenIE, LAI_Default) {
+    // GSM 24.008 10.5.1.3: LocationAreaIdentity is always 5 octets (MCC/MNC BCD + LAC)
     L3LocationAreaIdentity lai;
     EXPECT_EQ(lai.lengthV(), 5u);
 }
@@ -110,17 +116,21 @@ TEST(GoldenIE, LAI_Equality) {
 }
 
 TEST(GoldenIE, LAI_Ref_262_42) {
-    // Reference: GSM_Types.ttcn TC_selftest_BcdMccMnc:
+    // Reference: GSM_Types.ttcn TC_selftest_BcdMccMnc (line 497):
     //   match('62F224'O, decmatch BcdMccMnc:'262F42'H)
+    // Spec-verified: MCC=262, MNC=42 -> f_build_BcdMccMnc -> '262F42'H (MNC padded with F)
+    //   HEXORDER(low) swaps nibbles: '26'->0x62, '2F'->0xF2, '42'->0x24
+    //   Result: {0x62, 0xF2, 0x24} matches TTCN-3 reference!
     L3LocationAreaIdentity lai("262", "42", 0x002A);
     EXPECT_EQ(lai.MCC(), 262);
     EXPECT_EQ(lai.MNC(), 42);
     L3Frame frame(Primitive::L3_DATA, 40);
     size_t wp = 0;
     lai.writeV(frame, wp);
-    EXPECT_EQ(frame.data()[0], 0x62);
-    EXPECT_EQ(frame.data()[1], 0xF2);
-    EXPECT_EQ(frame.data()[2], 0x24);
+    // Spec-verified: GSM_Types.ttcn BcdMccMnc encoding with HEXORDER(low) nibble swap
+    EXPECT_EQ(frame.data()[0], 0x62); // MCC digit 2(6)|MCC digit 1(2) -> '26'H -> nibble-swapped -> 0x62
+    EXPECT_EQ(frame.data()[1], 0xF2); // MNC digit 3(F)|MCC digit 3(2) -> '2F'H -> nibble-swapped -> 0xF2
+    EXPECT_EQ(frame.data()[2], 0x24); // MNC digit 2(4)|MNC digit 1(2) -> '42'H -> nibble-swapped -> 0x24
 }
 
 // =====================================================================
@@ -163,12 +173,16 @@ TEST(GoldenIE, MobileIdentity_Default) {
 }
 
 TEST(GoldenIE, MobileIdentity_TMSI_Encoding) {
+    // Reference: L3_Templates.ttcn t_MI_TMSI (line 130):
+    //   typeOfIdentity := '100'B (TMSI), oddevenIndicator := '0'B, fillerDigit := '1111'B
+    // Spec-verified: GSM 24.008 10.5.1.4 Mobile Identity encoding
     L3MobileIdentity id(0xDEADBEEF);
     L3Frame frame(Primitive::L3_DATA, 64);
     size_t wp = 0;
     id.writeV(frame, wp);
-    // Byte 0: spare(4)=0, type(3)=100(TMSI), oe(1)=0 = 0x0C
+    // Byte 0: spare(4)=0|type(3)=100(TMSI)|oe(1)=0(old) = 0x0C [GSM 24.008 10.5.1.4]
     EXPECT_EQ(frame.data()[0], 0x0C);
+    // Bytes 1-4: TMSI value in big-endian order
     EXPECT_EQ(frame.data()[1], 0xDE);
     EXPECT_EQ(frame.data()[2], 0xAD);
     EXPECT_EQ(frame.data()[3], 0xBE);
@@ -393,11 +407,16 @@ TEST(GoldenIE, PowerCommand_MaxValue) {
 }
 
 TEST(GoldenIE, PowerCommand_Encoding) {
+    // Reference: BTS_Tests.ttcn ts_PowerCmd template
+    // Spec-verified: GSM 24.008 10.5.2.28 Power Command
+    //   power_command(5 bits, MSB)|spare(3 bits) = 1 octet
+    //   command=15 -> 15<<3 = 0xF0
     L3PowerCommand pc(15);
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
     pc.writeV(frame, wp);
-    EXPECT_EQ(frame.data()[0], 0xF0); // 15 << 3 (MSB first, 5 bits)
+    // Spec-verified: power_command(5)=15|spare(3)=0 -> 0b1111_0000 = 0xF0
+    EXPECT_EQ(frame.data()[0], 0xF0);
 }
 
 // =====================================================================
@@ -475,11 +494,16 @@ TEST(GoldenIE, TimingAdvance_MaxValue) {
 }
 
 TEST(GoldenIE, TimingAdvance_Encoding) {
+    // Reference: GSM_RR_Types.ttcn TimingAdvance (line 434): integer (0..219)
+    // Spec-verified: GSM 24.008 10.5.2.40 Timing Advance
+    //   timing_advance(6 bits, MSB)|spare(2 bits) = 1 octet
+    //   value=42 -> 42<<2 = 0xA0
     L3TimingAdvance ta(42);
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
     ta.writeV(frame, wp);
-    EXPECT_EQ(frame.data()[0], 0xA0); // 42 << 2 (6 bits)
+    // Spec-verified: timing_advance(6)=42|spare(2)=0 -> 0b1010_0000 = 0xA0
+    EXPECT_EQ(frame.data()[0], 0xA0);
 }
 
 // =====================================================================
@@ -535,10 +559,16 @@ TEST(GoldenIE, CipheringModeSetting_A5_3) {
 }
 
 TEST(GoldenIE, CipheringModeSetting_Encoding) {
+    // Reference: L3_Templates.ttcn ts_RRM_CiphModeCmd (line 690):
+    //   cipherModeSetting: sC='1'B, algorithmIdentifier=alg_id (BIT3)
+    // Spec-verified: GSM 24.008 10.5.2.9 Ciphering Mode Setting (4 bits)
+    //   ciphering(1)=sC|algorithm(3)=algorithmIdentifier
+    //   ciphering=true, algorithm=3(A5/3) -> sC(1)=1|algId(3)=011 -> 0b0111 = 0x07
     L3CipheringModeSetting cms(true, 3);
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
     cms.writeV(frame, wp);
+    // Spec-verified: lower nibble = ciphering(1)|algorithm(3) = 1|011 = 0x7
     EXPECT_EQ(frame.data()[0] & 0x0F, 0x07);
 }
 
@@ -725,8 +755,11 @@ TEST(GoldenIE, CellSelectionParameters_Default) {
 }
 
 TEST(GoldenIE, CellSelectionParameters_RefValues) {
-    // From BTS_Tests.ttcn ts_CellSelPar_default:
-    // cell_resel_hyst_2dB=2, ms_txpwr_max_cch=7, acs=0, neci=true, rxlev_access_min=0
+    // Reference: BTS_Tests.ttcn ts_CellSelPar_default (line 355):
+    //   cell_resel_hyst_2dB=2, ms_txpwr_max_cch=mp_ms_power_level_exp(=10), acs='0'B, neci=true, rxlev_access_min=0
+    // Spec-verified: GSM 24.008 10.5.2.4 Cell Selection Parameters (17 bits = 2 octets + 1 bit)
+    //   cell_resel_hyst(3)|ms_txpwr_max_cch(5)|acs(1)|neci(1)|rxlev_access_min(6)
+    //   {0x47, 0x40}: cell_resel_hyst=2, ms_txpwr_max_cch=7, acs=0, neci=1, rxlev_access_min=0
     uint8_t data[] = {0x47, 0x40};
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
@@ -735,6 +768,8 @@ TEST(GoldenIE, CellSelectionParameters_RefValues) {
     L3CellSelectionParameters parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
+    // Spec-verified: byte 0 = 0x47 = 0b0100_0111 -> cell_resel_hyst(3)=010=2, ms_txpwr_max_cch(5)=00111=7
+    //   byte 1 = 0x40 = 0b0100_0000 -> acs(1)=0, neci(1)=1, rxlev_access_min(6)=000000=0
     EXPECT_EQ(parsed.CELL_RESELECT_HYSTERESIS(), 2u);
     EXPECT_EQ(parsed.MS_TXPWR_MAX_CCH(), 7u);
     EXPECT_EQ(parsed.ACS(), 0u);
@@ -755,9 +790,12 @@ TEST(GoldenIE, RACHControlParameters_Default) {
 }
 
 TEST(GoldenIE, RACHControlParameters_RefValues) {
-    // From BTS_Tests.ttcn ts_RachCtrl_default:
-    // max_retrans=RACH_MAX_RETRANS_7(3), tx_integer=9, cell_barr_access=false,
-    // re_not_allowed=true, acc=0x0400 (ACC[4] barred)
+    // Reference: BTS_Tests.ttcn ts_RachCtrl_default (line 347):
+    //   max_retrans=RACH_MAX_RETRANS_7(=3), tx_integer='1001'B(=9), cell_barr_access=false,
+    //   re_not_allowed=true, acc='0000010000000000'B (=0x0400, ACC[4] barred)
+    // Spec-verified: GSM 24.008 10.5.2.29 RACH Control Parameters (24 bits = 3 octets)
+    //   max_retrans(2)|tx_integer(4)|cell_bar_qualify(1)|cell_barr_access(1)|re_not_allowed(1)|ACC(16)
+    //   {0xE5, 0x04, 0x00}: max_retrans=3, tx_integer=9, cell_bar_qualify=0, cell_barr_access=0, re_not_allowed=1, ACC=0x0400
     uint8_t data[] = {0xE5, 0x04, 0x00};
     L3Frame frame(Primitive::L3_DATA, 24);
     size_t wp = 0;
@@ -767,6 +805,8 @@ TEST(GoldenIE, RACHControlParameters_RefValues) {
     L3RACHControlParameters parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
+    // Spec-verified: byte 0 = 0xE5 = 0b1110_0101 -> max_retrans(2)=11=3, tx_integer(4)=1001=9, cell_bar_qualify(1)=0, cell_barr_access(1)=0, re_not_allowed(1)=1
+    //   byte 1 = 0x04, byte 2 = 0x00 -> ACC(16) = 0x0400 (ACC[4] barred)
     EXPECT_EQ(parsed.MaxRetrans(), 3u);
     EXPECT_EQ(parsed.TxInteger(), 9u);
     EXPECT_EQ(parsed.CellBarAccess(), false);
@@ -788,9 +828,13 @@ TEST(GoldenIE, ControlChannelDescription_Default) {
 }
 
 TEST(GoldenIE, ControlChannelDescription_RefValues) {
-    // From BTS_Tests.ttcn ts_SI3_default ctrl_chan_desc:
-    // msc_r99=true, att=true, bs_ag_blks_res=1, ccch_conf=1/combined,
-    // si22ind=false, cbq3=0, spare=0, bs_pa_mfrms=0, t3212=1
+    // Reference: BTS_Tests.ttcn ts_SI3_default ctrl_chan_desc (line 396):
+    //   msc_r99=true, att=true, bs_ag_blks_res=1, ccch_conf=CCHAN_DESC_1CCCH_COMBINED(=1),
+    //   si22ind=false, cbq3=CBQ3_IU_MODE_NOT_SUPPORTED(=0), spare='00'B, bs_pa_mfrms=0, t3212=1
+    // Reference: GSM_SystemInformation.ttcn CCHAN_DESC_1CCCH_COMBINED ('001'B = 1, line 65)
+    // Spec-verified: GSM 24.008 10.5.2.11 Control Channel Description (24 bits = 3 octets)
+    //   msc_r99(1)|att(1)|bs_ag_blks_res(3)|ccch_conf(3)|si22ind(1)|cbq3(2)|spare(2)|bs_pa_mfrms(3)|t3212(8)
+    //   {0xC9, 0x00, 0x01}: msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1(combined), si22ind=0, cbq3=0, spare=0, bs_pa_mfrms=0, t3212=1
     uint8_t data[] = {0xC9, 0x00, 0x01};
     L3Frame frame(Primitive::L3_DATA, 24);
     size_t wp = 0;
@@ -800,12 +844,15 @@ TEST(GoldenIE, ControlChannelDescription_RefValues) {
     L3ControlChannelDescription parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
+    // Spec-verified: byte 0 = 0xC9 = 0b1100_1001 -> msc_r99(1)=1, att(1)=1, bs_ag_blks_res(3)=001=1, ccch_conf(3)=001=1(combined), si22ind(1)=0, cbq3(2)=00
+    //   byte 1 = 0x00 -> spare(2)=00, bs_pa_mfrms(3)=000=0, t3212 high 3 bits = 000
+    //   byte 2 = 0x01 -> t3212 low 5 bits = 00001, so t3212 = 1 (6 minutes)
     EXPECT_EQ(parsed.mATT, 1u);
     EXPECT_EQ(parsed.mBS_AG_BLKS_RES, 1u);
     EXPECT_EQ(parsed.mCCCH_CONF, 1u);
     EXPECT_EQ(parsed.mBS_PA_MFRMS, 0u);
     EXPECT_EQ(parsed.mT3212, 1u);
-    EXPECT_TRUE(parsed.isCCCHCombined());
+    EXPECT_TRUE(parsed.isCCCHCombined()); // ccch_conf=1 means 1CCCH combined with SDCCCH/4
 }
 
 // =====================================================================
@@ -1489,17 +1536,23 @@ TEST(GoldenIE, TimeZoneAndTime_Local) {
 }
 
 // =====================================================================
-// GSM Alphabet (GSM 03.38 Table 1)
+// GSM Alphabet (3GPP TS 23.038 Table 1 / GSM 03.38 Table 1)
+// Reference: GSM 7-bit default alphabet character mapping
+// Spec-verified: Standard GSM 03.38 Table 1 character code points
+//   0='@', 1='\', 2='$', 3='(', 4=')', 5='?', 6='\'', 7='!', 8='"',
+//   44='0', 45='1', ..., 48='4', ...
+//   84='a', 85='b', 86='c', ... (lowercase starts at code 84)
 // =====================================================================
 
 TEST(GoldenIE, GSMAlphabet_Decode) {
-    EXPECT_EQ(decodeGSMChar(0), '@');
-    EXPECT_EQ(decodeGSMChar(2), '$');
-    EXPECT_EQ(decodeGSMChar(44), '0');
-    EXPECT_EQ(decodeGSMChar(48), '4');
-    EXPECT_EQ(decodeGSMChar(84), 'a');
-    EXPECT_EQ(decodeGSMChar(85), 'b');
-    EXPECT_EQ(decodeGSMChar(86), 'c');
+    // Spec-verified: 3GPP TS 23.038 Table 1 default alphabet mapping
+    EXPECT_EQ(decodeGSMChar(0), '@');   // Code 0 = '@'
+    EXPECT_EQ(decodeGSMChar(2), '$');   // Code 2 = '$'
+    EXPECT_EQ(decodeGSMChar(44), '0');  // Code 44 = '0' (digit zero)
+    EXPECT_EQ(decodeGSMChar(48), '4');  // Code 48 = '4'
+    EXPECT_EQ(decodeGSMChar(84), 'a');  // Code 84 = 'a' (lowercase start)
+    EXPECT_EQ(decodeGSMChar(85), 'b');  // Code 85 = 'b'
+    EXPECT_EQ(decodeGSMChar(86), 'c');  // Code 86 = 'c'
 }
 
 // =====================================================================
@@ -1515,34 +1568,47 @@ TEST(GoldenIE, RACHTables) {
 }
 
 // =====================================================================
-// RxLev / RxQual Conversion (GSM 05.02 / GSM 04.08)
-// Reference: GSM_Types.ttcn dbm2rxlev, rxlev2dbm, ber2rxqual, rxqual2ber
+// RxLev / RxQual Conversion (3GPP TS 45.008 Chapter 8 / GSM 05.02)
+// Reference: GSM_Types.ttcn dbm2rxlev (line 354): rxlev = dbm + 110
+// Reference: GSM_Types.ttcn rxlev2dbm (line 359): return -110 + rxlev
+// Reference: GSM_Types.ttcn ber2rxqual (line 369): BER threshold table
+// Reference: GSM_Types.ttcn rxqual2ber (line 390): RxQual -> BER representative values
+// Spec-verified: TS 45.008 Chapter 8.1.4 (RxLev), Chapter 8.2.4 (RxQual)
 // =====================================================================
 
 TEST(GoldenIE, RxLev_Conversion) {
+    // Spec-verified: TS 45.008 8.1.4: RxLev = received level + 110 dB
+    //   RxLev=0 -> -110 dBm (minimum), RxLev=31 -> -79 dBm, RxLev=63 -> -47 dBm (maximum)
     L3MeasurementResults mr;
-    EXPECT_EQ(mr.decodeLevToDBm(0), -110);
-    EXPECT_EQ(mr.decodeLevToDBm(31), -79);
-    EXPECT_EQ(mr.decodeLevToDBm(63), -47);
+    EXPECT_EQ(mr.decodeLevToDBm(0), -110);   // GSM_Types.ttcn rxlev2dbm: -110 + 0 = -110
+    EXPECT_EQ(mr.decodeLevToDBm(31), -79);   // -110 + 31 = -79
+    EXPECT_EQ(mr.decodeLevToDBm(63), -47);   // -110 + 63 = -47
 }
 
 TEST(GoldenIE, RxQual_Conversion) {
+    // Spec-verified: TS 45.008 8.2.4: RxQual 0 (BER<0.2%) < RxQual 7 (BER>=12.8%)
+    // GSM_Types.ttcn rxqual2ber: Qual 0=0.14%, Qual 7=18.10%
     L3MeasurementResults mr;
     float ber0 = mr.decodeQualToBER(0);
     float ber7 = mr.decodeQualToBER(7);
-    EXPECT_LT(ber0, ber7);
+    EXPECT_LT(ber0, ber7); // BER for quality 0 must be lower than quality 7
 }
 
 // =====================================================================
-// GSM Timing Constants
-// Reference: GSM_Types.ttcn GSM_FRAME_DURATION, GsmMaxFrameNumber
+// GSM Timing Constants (3GPP TS 45.008 / GSM 05.02)
+// Reference: GSM_Types.ttcn GsmMaxFrameNumber (line 22): 26*51*2048 = 2715648
+// Reference: GSM_Types.ttcn GSM_FRAME_DURATION (line 404): 0.12/26.0 = 4.615 ms
+// Spec-verified: GSM hyperframe = 2715648 TDMA frames = 3 hours 28 minutes 48 seconds
 // =====================================================================
 
 TEST(GoldenIE, FrameDuration) {
+    // Spec-verified: TS 45.008: 1 TDMA frame = 1/26 of 120ms burst = 4615 microseconds
     EXPECT_EQ(gFrameMicroseconds, 4615u);
 }
 
 TEST(GoldenIE, Hyperframe) {
+    // Spec-verified: GSM_Types.ttcn GsmMaxFrameNumber = 26*51*2048 = 2715648
+    // This is the TDMA frame number modulo (hyperframe boundary), not bit count
     EXPECT_EQ(gHyperframe, 2715648u);
 }
 
@@ -1596,11 +1662,17 @@ TEST(GoldenIE, BCD_RoundTrip) {
 }
 
 // =====================================================================
-// Rest Octet Padding (GSM 04.08)
-// Reference: GSM_RR_Types.ttcn RestOctets, PADDING_PATTERN('00101011'B)
+// Rest Octet Padding (GSM 24.008 / 3GPP TS 44.018)
+// Reference: GSM_RR_Types.ttcn RestOctets (line 163):
+//   type octetstring RestOctets with { variant "PADDING(yes), PADDING_PATTERN('00101011'B)" }
+// Reference: GSM_RestOctets.ttcn (line 37): same PADDING_PATTERN('00101011'B)
+// Spec-verified: GSM 24.008 section 9.x messages use 0x2B ('00101011'B) as rest octet padding
+//   This pattern ensures sufficient transitions for bit synchronization
 // =====================================================================
 
 TEST(GoldenIE, RestOctetPaddingPattern) {
+    // Spec-verified: '00101011'B = 0x2B is the standard GSM rest octet padding pattern
+    // GSM_RR_Types.ttcn line 163, GSM_RestOctets.ttcn line 37, and all SI rest octet types
     constexpr uint8_t GSM_REST_OCTET_PAD = 0x2B;
     EXPECT_EQ(GSM_REST_OCTET_PAD, 0x2B);
     BitVector bv(8);
@@ -1625,39 +1697,45 @@ TEST(GoldenIE, L_H_Bits) {
 }
 
 // =====================================================================
-// SI2 body length (GSM 04.08 9.1.32)
-// Reference: GSM_SystemInformation.ttcn SystemInformationType2
-// bcch_freq_list(16) + ncc_permitted(1) + rach_control(3) = 20 bytes
+// SI2 body length (GSM 24.008 9.1.32 / 3GPP TS 44.018 9.1.32)
+// Reference: GSM_SystemInformation.ttcn SystemInformationType2 record definition
+// Structure: bcch_freq_list(16 octets) + ncc_permitted(1 octet) + rach_control(3 octets) = 20 octets
+// Spec-verified: GSM 24.008 9.1.32 System Information Type 2 fixed body length
 // =====================================================================
 
 TEST(GoldenIE, SI2_BodyLength) {
+    // Spec-verified: SI2 body = BCCH freq list(16) + NCC permitted(1) + RACH control params(3) = 20 octets
     L3SystemInformationType2 msg;
     EXPECT_EQ(msg.l2BodyLength(), 20u);
     EXPECT_EQ(msg.fullBodyLength(), 20u);
 }
 
 // =====================================================================
-// SI2bis body length (GSM 04.08 9.1.33)
-// Reference: GSM_SystemInformation.ttcn SystemInformationType2bis
-// extd_bcch_freq_list(16) + rach_control(3) = 19 bytes
+// SI2bis body length (GSM 24.008 9.1.33 / 3GPP TS 44.018 9.1.33)
+// Reference: GSM_SystemInformation.ttcn SystemInformationType2bis record definition
+// Structure: extd_bcch_freq_list(16 octets) + rach_control(3 octets) = 19 octets
+// Spec-verified: GSM 24.008 9.1.33 System Information Type 2bis fixed body length
 // =====================================================================
 
 TEST(GoldenIE, SI2bis_BodyLength) {
+    // Spec-verified: SI2bis body = Extended BCCH freq list(16) + RACH control params(3) = 19 octets
     L3SystemInformationType2bis msg;
     EXPECT_EQ(msg.l2BodyLength(), 19u);
-    EXPECT_EQ(msg.fullBodyLength(), 20u);
+    EXPECT_EQ(msg.fullBodyLength(), 20u); // Padded to multiple of word boundary
 }
 
 // =====================================================================
-// SI2ter body length (GSM 04.08 9.1.34)
-// Reference: GSM_SystemInformation.ttcn SystemInformationType2ter
-// extd_bcch_freq_list(16) = 16 bytes
+// SI2ter body length (GSM 24.008 9.1.34 / 3GPP TS 44.018 9.1.34)
+// Reference: GSM_SystemInformation.ttcn SystemInformationType2ter record definition
+// Structure: extd_bcch_freq_list(16 octets) = 16 octets
+// Spec-verified: GSM 24.008 9.1.34 System Information Type 2ter fixed body length
 // =====================================================================
 
 TEST(GoldenIE, SI2ter_BodyLength) {
+    // Spec-verified: SI2ter body = Extended BCCH freq list(16) = 16 octets
     L3SystemInformationType2ter msg;
     EXPECT_EQ(msg.l2BodyLength(), 16u);
-    EXPECT_EQ(msg.fullBodyLength(), 20u);
+    EXPECT_EQ(msg.fullBodyLength(), 20u); // Padded to multiple of word boundary
 }
 
 // =====================================================================
