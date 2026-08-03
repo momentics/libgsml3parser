@@ -214,8 +214,16 @@ L3CalledPartyBCDNumber::L3CalledPartyBCDNumber()
     : mType(TypeOfNumber::Unknown), mPlan(NumberingPlan::Unknown) {}
 
 L3CalledPartyBCDNumber::L3CalledPartyBCDNumber(const char* wDigits)
-    : mPlan(NumberingPlan::E164), mDigits(wDigits) {
-    mType = (wDigits[0] == '+') ? TypeOfNumber::International : TypeOfNumber::National;
+    : mPlan(NumberingPlan::E164), mDigits() {
+    if (wDigits[0] == '+') {
+        mType = TypeOfNumber::International;
+        // Store digits without the '+' prefix
+        mDigits = L3BCDDigits(wDigits + 1);
+    } else {
+        mType = TypeOfNumber::Unknown;
+        mPlan = NumberingPlan::Unknown;
+        mDigits = L3BCDDigits(wDigits);
+    }
 }
 
 size_t L3CalledPartyBCDNumber::lengthV() const {

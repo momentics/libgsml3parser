@@ -154,49 +154,55 @@ bool L3MobileIdentity::operator<(const L3MobileIdentity& other) const {
 size_t L3MobileIdentity::lengthV() const {
     if (mType == MobileIDType::NoID) return 1;
     if (mType == MobileIDType::TMSI) return 5;
-    // BCD: 1 byte (first digit + odd flag + type) + ceil((nDigits-1)/2) bytes for remaining
+    // BCD: 1 byte (spare + type + oe) + ceil(nDigits/2) bytes for all digits
     size_t nDigits = std::strlen(mDigits);
-    return 1 + nDigits / 2;
+    return 1 + (nDigits + 1) / 2;
 }
 
 void L3MobileIdentity::writeV(L3Frame& dest, size_t& wp) const {
-    // GSM 04.08 10.5.1.4
+    // GSM 04.08 10.5.1.4: spare(4) | oe(1) | type(3) for first byte
     if (mType == MobileIDType::NoID) {
-        dest.writeField(wp, 0x0f0, 8);
+        dest.writeField(wp, 0, 4);     // spare
+        dest.writeField(wp, 1, 1);     // oe: new format
+        dest.writeField(wp, 0, 3);     // type: NoID
         return;
     }
     if (mType == MobileIDType::TMSI) {
-        dest.writeField(wp, 0x0f4, 8);
+        dest.writeField(wp, 0, 4);     // spare
+        dest.writeField(wp, 0, 1);     // oe: old format (TMSI is old format)
+        dest.writeField(wp, 4, 3);     // type: TMSI = 4
         dest.writeField(wp, mTMSI, 32);
         return;
     }
     size_t nDigits = std::strlen(mDigits);
     if (nDigits == 0) {
-        dest.writeField(wp, 0x0f0, 8);
+        dest.writeField(wp, 0, 4);     // spare
+        dest.writeField(wp, 1, 1);     // oe: new format
+        dest.writeField(wp, 0, 3);     // type: NoID
         return;
     }
-    // First byte: digit1(4) | oddCount(1) | type(3)
-    dest.writeField(wp, mDigits[0] - '0', 4);
-    dest.writeField(wp, nDigits % 2, 1);
-    dest.writeField(wp, static_cast<unsigned>(mType), 3);
-    // Remaining bytes: pairs of digits, swapped nibbles
-    size_t i = 1;
+    // First byte: spare(4) | oe(1) | type(3)
+    // oe=0 means odd number of remaining digits (new format), so all digits encoded
+    dest.writeField(wp, 0, 4);         // spare
+    dest.writeField(wp, 0, 1);         // oe: 0=odd count (new format for BCD)
+    dest.writeField(wp, static_cast<unsigned>(mType), 3);  // type
+    // All digits in swapped BCD pairs (high=digit[i+1], low=digit[i])
+    size_t i = 0;
     while (i < nDigits) {
         if (i + 1 < nDigits)
             dest.writeField(wp, mDigits[i + 1] - '0', 4);
         else
-            dest.writeField(wp, 0x0f, 4);
+            dest.writeField(wp, 0x0f, 4);  // filler for odd count
         dest.writeField(wp, mDigits[i] - '0', 4);
         i += 2;
     }
 }
 
 void L3MobileIdentity::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
-    // GSM 04.08 10.5.1.4
+    // GSM 04.08 10.5.1.4: spare(4) | oe(1) | type(3), then digits in swapped BCD
     size_t endCount = rp + expectedLength * 8;
-    int numDigits = 0;
-    mDigits[numDigits++] = static_cast<char>(src.readField(rp, 4) + '0');
-    bool oddCount = (src.readField(rp, 1) != 0);
+    src.readField(rp, 4);  // spare
+    src.readField(rp, 1);  // oe
     mType = static_cast<MobileIDType>(src.readField(rp, 3));
 
     switch (mType) {
@@ -206,26 +212,22 @@ void L3MobileIdentity::parseV(const L3Frame& src, size_t& rp, size_t expectedLen
             break;
         case MobileIDType::IMSI:
         case MobileIDType::IMEI:
-        case MobileIDType::IMEISV:
+        case MobileIDType::IMEISV: {
+            int numDigits = 0;
             while (rp < endCount && numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
-                unsigned highNibble = src.readField(rp, 4);
-                unsigned lowNibble = 0;
-                if (rp < endCount) {
-                    lowNibble = src.readField(rp, 4);
-                } else {
-                    break;
-                }
-                // writeV stores per byte: {digit[i+1] in high nibble, digit[i] in low nibble}
-                // So low nibble = digit[i] (earlier), high nibble = digit[i+1] (later)
+                unsigned highNibble = src.readField(rp, 4);  // digit[i+1] or filler
+                if (rp >= endCount) break;
+                unsigned lowNibble = src.readField(rp, 4);   // digit[i]
                 if (lowNibble != 0x0F && numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
                     mDigits[numDigits++] = static_cast<char>(lowNibble + '0');
                 }
-                if (numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
+                if (highNibble != 0x0F && numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
                     mDigits[numDigits++] = static_cast<char>(highNibble + '0');
                 }
             }
             mDigits[numDigits] = '\0';
             break;
+        }
         default:
             mDigits[0] = '\0';
             mType = MobileIDType::NoID;
@@ -271,9 +273,13 @@ void L3MobileStationClassmark1::parseV(const L3Frame& src, size_t& rp) {
     mRFPowerCapability = src.readField(rp, 3);
 }
 
+void L3MobileStationClassmark1::parseV(const L3Frame& src, size_t& rp, size_t) {
+    parseV(src, rp);
+}
+
 void L3MobileStationClassmark1::text(std::ostream& os) const {
     os << "CM1[rev=" << mRevisionLevel << " ES=" << mES_IND
-       << " A5_1=" << mA5_1 << " PWR=" << mRFPowerCapability;
+        << " A5_1=" << mA5_1 << " PWR=" << mRFPowerCapability;
 }
 
 // ── L3MobileStationClassmark2 ───────────────────────────────────────────
@@ -1017,19 +1023,22 @@ L3CipheringModeSetting::L3CipheringModeSetting(bool wCiphering, int wAlgorithm)
     : mCiphering(wCiphering), mAlgorithm(wAlgorithm) {}
 
 void L3CipheringModeSetting::writeV(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mCiphering ? mAlgorithm - 1 : 0, 3);  // algorithm (3 bits, MSB)
-    dest.writeField(wp, mCiphering ? 1 : 0, 1);                // ciphering flag (1 bit, LSB)
+    // GSM 04.08 10.5.2.9: ciphering(1) | algorithm(3), written in low nibble
+    // High nibble is spare (0), then ciphering + algorithm in low nibble
+    dest.writeField(wp, 0, 4);                              // spare high nibble
+    dest.writeField(wp, mCiphering ? 1 : 0, 1);             // ciphering flag (1 bit)
+    dest.writeField(wp, mCiphering ? mAlgorithm - 1 : 0, 3); // algorithm (3 bits)
 }
 
 void L3CipheringModeSetting::parseV(const L3Frame& src, size_t& rp) {
-    unsigned raw = src.readField(rp, 3);       // algorithm (3 bits)
     mCiphering = src.readField(rp, 1) != 0;    // ciphering flag (1 bit)
+    unsigned raw = src.readField(rp, 3);       // algorithm (3 bits)
     mAlgorithm = mCiphering ? raw + 1 : 0;
 }
 
 void L3CipheringModeSetting::parseV(const L3Frame& src, size_t& rp, size_t) {
-    unsigned raw = src.readField(rp, 3);       // algorithm (3 bits)
     mCiphering = src.readField(rp, 1) != 0;    // ciphering flag (1 bit)
+    unsigned raw = src.readField(rp, 3);       // algorithm (3 bits)
     mAlgorithm = mCiphering ? raw + 1 : 0;
 }
 

@@ -110,7 +110,7 @@ public:
     size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame&, size_t&, size_t) override { throw ParseError("parseV not valid"); }
+    void parseV(const L3Frame& src, size_t& rp, size_t) override;
     void text(std::ostream& os) const override;
 };
 

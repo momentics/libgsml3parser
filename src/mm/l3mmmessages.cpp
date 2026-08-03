@@ -60,23 +60,28 @@ std::ostream& operator<<(std::ostream& os, L3MMMessage::MessageType val) {
 // ── L3LocationUpdatingRequest ──────────────────────────────────────────
 
 size_t L3LocationUpdatingRequest::l2BodyLength() const {
-    return 1 + mLAI.lengthV() + mClassmark.lengthV() + mMobileIdentity.lengthLV();
+    return 1 + mClassmark.lengthLV() + mMobileIdentity.lengthLV();
 }
 
 void L3LocationUpdatingRequest::parseBody(const L3Frame& src, size_t& rp) {
+    // GSM 04.08 9.2.15: LU_Type(2) | spare(2) | CKSN(4)
+    mUpdateType = src.readField(rp, 2);
+    src.readField(rp, 2);  // spare
     mCKSN = src.readField(rp, 4);
-    mUpdateType = src.readField(rp, 4);
-    mLAI.parseV(src, rp);
-    mClassmark.parseV(src, rp);
+    // classmark(LV) + mobileIdentity(LV), optional LAI(TLV 0x13)
+    mClassmark.parseLV(src, rp);
     mMobileIdentity.parseLV(src, rp);
+    mLAI.parseTLV(0x13, src, rp);
 }
 
 void L3LocationUpdatingRequest::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mCKSN, 4);
-    dest.writeField(wp, mUpdateType, 4);
-    mLAI.writeV(dest, wp);
-    mClassmark.writeV(dest, wp);
+    // GSM 04.08 9.2.15: LU_Type(2) | spare(2) | CKSN(4)
+    dest.writeField(wp, mUpdateType & 0x03, 2);
+    dest.writeField(wp, 0, 2);  // spare
+    dest.writeField(wp, mCKSN & 0x0F, 4);
+    mClassmark.writeLV(dest, wp);
     mMobileIdentity.writeLV(dest, wp);
+    if (mLAI.lengthV() > 0) mLAI.writeTLV(0x13, dest, wp);
 }
 
 void L3LocationUpdatingRequest::text(std::ostream& os) const {
@@ -218,20 +223,18 @@ void L3CMServiceRequest::text(std::ostream& os) const {
 // ── L3CMReestablishmentRequest ─────────────────────────────────────────
 
 size_t L3CMReestablishmentRequest::l2BodyLength() const {
-    // ciphering(8) + classmark(LV) + mobileID(LV) + optional LAI(TLV)
-    return 1 + mClassmark.lengthLV() + mMobileID.lengthLV() + (mHaveLAI ? mLAI.lengthTLV() : 0);
+    // classmark(LV) + mobileID(LV) + optional LAI(TLV)
+    return mClassmark.lengthLV() + mMobileID.lengthLV() + (mHaveLAI ? mLAI.lengthTLV() : 0);
 }
 
 void L3CMReestablishmentRequest::parseBody(const L3Frame& src, size_t& rp) {
-    // GSM 04.08 9.2.4: skip ciphering(8), classmark(LV), mobileID(LV), optional LAI(TLV 0x13)
-    src.readField(rp, 8);  // skip ciphering key sequence number + spare
+    // GSM 04.08 9.2.4: classmark(LV), mobileID(LV), optional LAI(TLV 0x13)
     mClassmark.parseLV(src, rp);
     mMobileID.parseLV(src, rp);
     mHaveLAI = mLAI.parseTLV(0x13, src, rp);
 }
 
 void L3CMReestablishmentRequest::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0, 8);  // spare ciphering
     mClassmark.writeLV(dest, wp);
     mMobileID.writeLV(dest, wp);
     if (mHaveLAI) {

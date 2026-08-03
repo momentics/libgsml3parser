@@ -388,14 +388,14 @@ void L3ReleaseComplete::text(std::ostream& os) const {
 
 void L3CCStatus::writeBody(L3Frame& dest, size_t& wp) const {
     L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
-    cause.writeLV(dest, wp);
+    cause.writeTLV(0x08, dest, wp);
     L3CallState state(mCallState);
     state.writeV(dest, wp);
 }
 
 void L3CCStatus::parseBody(const L3Frame& src, size_t& rp) {
     L3CauseElement cause;
-    cause.parseLV(src, rp);
+    cause.parseTLV(0x08, src, rp);
     mCause = cause.cause();
     L3CallState state;
     state.parseV(src, rp);
@@ -409,14 +409,11 @@ void L3CCStatus::text(std::ostream& os) const {
 // ── DTMF ────────────────────────────────────────────────────────────────
 
 void L3StartDTMF::parseBody(const L3Frame& src, size_t& rp) {
-    L3KeypadFacility kf;
-    kf.parseTV(0x2c, src, rp);
-    mKey = kf.IA5();
+    mKey = static_cast<char>(src.readField(rp, 8));
 }
 
 void L3StartDTMF::writeBody(L3Frame& dest, size_t& wp) const {
-    L3KeypadFacility kf(mKey);
-    kf.writeTV(0x2c, dest, wp);
+    dest.writeField(wp, static_cast<unsigned>(mKey), 8);
 }
 
 void L3StartDTMF::text(std::ostream& os) const {

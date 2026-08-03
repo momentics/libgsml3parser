@@ -815,13 +815,14 @@ L3ImmediateAssignmentReject::L3ImmediateAssignmentReject(unsigned waitSeconds)
     : mPageMode(0), mWaitIndication(waitSeconds) {}
 
 size_t L3ImmediateAssignmentReject::l2BodyLength() const {
-    return 17;  // Fixed: 1/2 octet spare + PageMode + 4 * (3 bytes RequestRef + 1 byte WaitInd)
+    return 1 + static_cast<size_t>(mRequestReferences.size()) * 4;
 }
 
 void L3ImmediateAssignmentReject::parseBody(const L3Frame& src, size_t& rp) {
-    src.readField(rp, 4);  // spare half-octet
+    // GSM 04.08 9.1.20: PageMode(4) + WaitIndication(4), then optional RequestReferences
     mPageMode.parseV(src, rp);
-    // 4 pairs of (RequestReference + WaitIndication), same WaitIndication for all
+    mWaitIndication = src.readField(rp, 4);
+    // Optional: up to 4 pairs of (RequestReference + WaitIndication)
     for (int i = 0; i < 4; ++i) {
         if (rp + 32 <= src.size()) {
             L3RequestReference rr;
@@ -833,22 +834,13 @@ void L3ImmediateAssignmentReject::parseBody(const L3Frame& src, size_t& rp) {
 }
 
 void L3ImmediateAssignmentReject::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0, 4);  // spare half-octet
     mPageMode.writeV(dest, wp);
-    // Write up to 4 pairs, padding with last entry if fewer
-    int count = static_cast<int>(mRequestReferences.size());
-    if (count <= 0) {
-        // No request references: write 4 default (zero) pairs
-        for (int i = 0; i < 4; ++i) {
-            L3RequestReference().writeV(dest, wp);
-            dest.writeField(wp, mWaitIndication, 8);
-        }
-    } else {
-        for (int i = 0; i < 4; ++i) {
-            int idx = std::min(i, count - 1);
-            mRequestReferences[idx].writeV(dest, wp);
-            dest.writeField(wp, mWaitIndication, 8);
-        }
+    // Write WaitIndication as 4-bit value in low nibble of first byte
+    dest.writeField(wp, mWaitIndication & 0x0F, 4);
+    // Write request reference pairs
+    for (size_t i = 0; i < mRequestReferences.size(); ++i) {
+        mRequestReferences[i].writeV(dest, wp);
+        dest.writeField(wp, mWaitIndication, 8);
     }
 }
 
