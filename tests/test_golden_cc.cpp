@@ -254,8 +254,8 @@ TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
     // Byte 1: messageType(6)=0x2A(ReleaseComplete)|NSD(2)=0 = 0xA8 [GSM 24.008 Table 10.5.4]
     // Byte 2: Length = 2 (2 octets Cause value part, LV format, no IEI)
     // Byte 3: location(4)=3(Transit)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x36
-    // Byte 4: causeValue(7)=17(User_Busy)|ext(1)=1 = 0x22 [GSM 24.008 10.5.4.11 Table]
-    uint8_t data[] = {0x3E, 0xA8, 0x02, 0x36, 0x22};
+    // Byte 4: ext(1)=1|causeValue(7)=17(User_Busy) = 0b1_0010001 = 0x21 [GSM 24.008 10.5.4.11]
+    uint8_t data[] = {0x3E, 0xA8, 0x02, 0x36, 0x21};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::ReleaseComplete);

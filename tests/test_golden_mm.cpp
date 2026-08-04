@@ -97,13 +97,13 @@ TEST(GoldenMM, LocationUpdatingRequest_Parse) {
     // Byte 8: CM1 LV length = 1 (Classmark 1 is 1 octet, GSM 24.008 10.5.1.5)
     // Byte 9: CM1 value = 0x00 (default classmark)
     // Byte 10: MI LV length = 5 (1 type octet + 4 TMSI octets, GSM 24.008 10.5.1.4)
-    // Byte 11: spare(4)=0|type(3)=100(TMSI)|oe(1)=0(old) = 0x0C [GSM 24.008 10.5.1.4]
+    // Byte 11: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
     // Bytes 12-15: TMSI = 0x12345678 (4 octets, MSB first)
     uint8_t data[] = {
         0x50, 0x20, 0x00,
         0x52, 0xF0, 0x10, 0x17, 0x2A,
         0x01, 0x00,
-        0x05, 0x0C, 0x12, 0x34, 0x56, 0x78
+        0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -146,13 +146,13 @@ TEST(GoldenMM, TMSIReallocationCommand_Parse) {
     // Bytes 2-4: LAI MCC/MNC BCD: MCC=250, MNC=01 -> {0x52, 0xF0, 0x10} [GSM 24.008 10.5.1.3]
     // Bytes 5-6: LAI LAC = 0x1234
     // Byte 7: MI LV length = 5 (1 type octet + 4 TMSI octets) [GSM 24.008 10.5.1.4]
-    // Byte 8: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x0C
+    // Byte 8: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
     // Bytes 9-12: TMSI = 0x87654321 (new TMSI assigned by network)
     // Byte 13: FollowOnProceed(4)=0|spare(4)=0 = 0x00 [GSM 24.008 10.5.2.38]
     uint8_t data[] = {
         0x50, 0x68,
         0x52, 0xF0, 0x10, 0x12, 0x34,
-        0x05, 0x0C, 0x87, 0x65, 0x43, 0x21,
+        0x05, 0x08, 0x87, 0x65, 0x43, 0x21,
         0x00
     };
     auto msg = parseL3(data, sizeof(data));
@@ -178,12 +178,12 @@ TEST(GoldenMM, CMServiceRequest_Parse) {
     // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets, GSM 24.008 10.5.1.6)
     // Bytes 4-6: CM2 value (24 bits of capability flags)
     // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
-    // Byte 8: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x0C
+    // Byte 8: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
     // Bytes 9-12: TMSI = 0x12345678
     uint8_t data[] = {
         0x50, 0x90, 0x01,
         0x03, 0x20, 0x00, 0x80,
-        0x05, 0x0C, 0x12, 0x34, 0x56, 0x78
+        0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -222,12 +222,12 @@ TEST(GoldenMM, IMSIDetachIndication_Parse) {
     // Byte 2: CM1 LV length = 1 (Classmark 1 is 1 octet, GSM 24.008 10.5.1.5)
     // Byte 3: CM1 value = 0x00 (default classmark)
     // Byte 4: MI LV length = 5 [GSM 24.008 10.5.1.4]
-    // Byte 5: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x0C
+    // Byte 5: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
     // Bytes 6-9: TMSI = 0x12345678
     uint8_t data[] = {
         0x50, 0x04,
         0x01, 0x00,
-        0x05, 0x0C, 0x12, 0x34, 0x56, 0x78
+        0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -263,9 +263,9 @@ TEST(GoldenMM, IdentityResponse_Parse) {
     // Byte 0: PD(4)=5(MM)|skip(4)=0 = 0x50 [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x19(IdentityResponse)|NSD(2)=0 = 0x64 [GSM 24.008 Table 10.5.3]
     // Byte 2: MI LV length = 5 (1 type octet + 4 TMSI octets) [GSM 24.008 10.5.1.4]
-    // Byte 3: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x0C
+    // Byte 3: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
     // Bytes 4-7: TMSI = 0x12345678
-    uint8_t data[] = {0x50, 0x64, 0x05, 0x0C, 0x12, 0x34, 0x56, 0x78};
+    uint8_t data[] = {0x50, 0x64, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::IdentityResponse);
@@ -285,12 +285,12 @@ TEST(GoldenMM, CMReestablishmentRequest_Parse) {
     // Byte 2: CM2 LV length = 3 (Classmark 2 is 3 octets, GSM 24.008 10.5.1.6)
     // Bytes 3-5: CM2 value (24 bits of capability flags)
     // Byte 6: MI LV length = 5 [GSM 24.008 10.5.1.4]
-    // Byte 7: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x0C
+    // Byte 7: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
     // Bytes 8-11: TMSI = 0x12345678
     uint8_t data[] = {
         0x50, 0xA0,
         0x03, 0x20, 0x00, 0x80,
-        0x05, 0x0C, 0x12, 0x34, 0x56, 0x78
+        0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);

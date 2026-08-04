@@ -120,10 +120,10 @@ TEST(GoldenRR, PagingRequestType1_Parse) {
     // Byte 2: ChanNeeded(4)=1(SDCCH)|PageMode(4)=0(Normal) = 0x10 [GSM 24.008 10.5.2.26]
     //   GSM_Types.ttcn ChannelNeeded: CHAN_NEED_SDCCH(1), PageMode: PAGE_MODE_NORMAL(0)
     // Byte 3: MI LV length = 5 (1 type octet + 4 TMSI octets) [GSM 24.008 10.5.1.4]
-    // Byte 4: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x0C [GSM_RR_Types.ttcn MobileIdentityType]
+    // Byte 4: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
     // Bytes 5-8: TMSI = 0x12345678 (4 octets, MSB first)
     uint8_t data[] = {
-        0x60, 0x21, 0x10, 0x05, 0x0C, 0x12, 0x34, 0x56, 0x78
+        0x60, 0x21, 0x10, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -211,12 +211,12 @@ TEST(GoldenRR, PagingResponse_Parse) {
     // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets) [GSM 24.008 10.5.1.6]
     // Bytes 4-6: CM2 value (24 bits of capability flags)
     // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
-    // Byte 8: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x0C
+    // Byte 8: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
     // Bytes 9-12: TMSI = 0x12345678 (MSB first)
     uint8_t data[] = {
         0x60, 0x27, 0x00,
         0x03, 0x20, 0x00, 0x80,
-        0x05, 0x0C, 0x12, 0x34, 0x56, 0x78
+        0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -508,9 +508,10 @@ TEST(GoldenRR, HandoverAccess_Parse) {
 TEST(GoldenRR, CipheringModeCommand_Parse) {
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x35 (CipheringModeCommand) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: ciphering(1)=1(on)|algorithm(3)=3(A5/3)|cipherModeResponse(4)=0 = 0x13
-    //   GSM 24.008 10.5.2.9: sC(1)+algorithmIdentifier(3), L3_Templates.ttcn line 699-701
-    uint8_t data[] = {0x60, 0x35, 0x13};
+    // Byte 2: cipherModeResponse(4)=0(cR=0,no IMEISV)|cipherModeSetting(4)=sC(1)=1(on)|algorithmIdentifier(3)=3(A5/3) = 0x0B
+    //   GSM 24.008 10.5.2.9: cipheringModeSetting is 4 bits sC(1)|algorithmIdentifier(3), MSB-first
+    //   L3_Templates.ttcn ts_RRM_CiphModeCmd: sC='1'B, algorithmIdentifier=alg_id(BIT3)
+    uint8_t data[] = {0x60, 0x35, 0x0B};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::CipheringModeCommand);
@@ -544,8 +545,8 @@ TEST(GoldenRR, RRStatus_Parse_ProtocolError) {
 TEST(GoldenRR, PhysicalInformation_Parse) {
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x2D (PhysicalInformation) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: TA = 60<<2 = 0x3C [GSM 24.008 10.5.2.40: timing_advance(6)|spare(2)]
-    uint8_t data[] = {0x60, 0x2d, 0x3C};
+    // Byte 2: TA = 60<<2 = 0xFC [GSM 24.008 10.5.2.40: timing_advance(6)|spare(2)]
+    uint8_t data[] = {0x60, 0x2d, 0xFC};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::PhysicalInformation);
@@ -1053,8 +1054,8 @@ TEST(GoldenRR, PowerCommand_Encoding) {
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
     pc.writeV(frame, wp);
-    // GSM 24.008 10.5.2.28: power_command(5 bits, MSB)|spare(3 bits, LSB) = 1 octet
-    // power_command=15 -> 0b01111_000 = 0x78 (15 in high 5 bits, spare 0 in low 3 bits)
+    // GSM 24.008 10.5.2.28: power_command(5 bits MSB)|spare(3 bits LSB) = 1 octet
+    // power_command=15 -> 15<<3 = 0x78 (0b01111_000, 15 in high 5 bits, spare 0 in low 3 bits)
     EXPECT_EQ(frame.data()[0], 0x78);
 }
 
@@ -1071,8 +1072,8 @@ TEST(GoldenRR, TimingAdvance_Encoding) {
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
     ta.writeV(frame, wp);
-    // GSM 24.008 10.5.2.40: timing_advance(6 bits, MSB)|spare(2 bits, LSB) = 1 octet
-    // timing_advance=42 -> 0b101010_00 = 0xA8 (42 in high 6 bits, spare 0 in low 2 bits)
+    // GSM 24.008 10.5.2.40: timing_advance(6 bits MSB)|spare(2 bits LSB) = 1 octet
+    // timing_advance=42 -> 42<<2 = 0xA8 (0b101010_00, 42 in high 6 bits, spare 0 in low 2 bits)
     EXPECT_EQ(frame.data()[0], 0xA8);
 }
 
@@ -1231,7 +1232,7 @@ TEST(GoldenRR, CipheringModeSetting_A5_3) {
     cms.writeV(frame, wp);
     // GSM 24.008 10.5.2.9: cipheringModeSetting is 4 bits: sC(1)|algorithmIdentifier(3)
     // ciphering=true -> sC=1, algorithm=3(A5/3) -> algorithmIdentifier=011
-    // 4-bit value = 0b1_011 = 0x0B. Library places this in low nibble after spare(4).
+    // 4-bit value = 0b1_011 = 0x0B. Library places this in low nibble of the octet.
     EXPECT_EQ(frame.data()[0] & 0x0F, 0x0B);
 }
 

@@ -173,16 +173,13 @@ TEST(GoldenIE, MobileIdentity_Default) {
 }
 
 TEST(GoldenIE, MobileIdentity_TMSI_Encoding) {
-    // Reference: L3_Templates.ttcn t_MI_TMSI (line 130):
-    //   typeOfIdentity := '100'B (TMSI), oddevenIndicator := '0'B, fillerDigit := '1111'B
     // Spec-verified: GSM 24.008 10.5.1.4 Mobile Identity encoding
     L3MobileIdentity id(0xDEADBEEF);
     L3Frame frame(Primitive::L3_DATA, 64);
     size_t wp = 0;
     id.writeV(frame, wp);
-    // GSM 24.008 10.5.1.4: spare(4)|oe(1)|type(3)
-    // TMSI: spare=0, oe=0 (old format), type=100(TMSI) -> 0b0000_0100 = 0x04
-    EXPECT_EQ(frame.data()[0], 0x04);
+    // GSM 24.008 10.5.1.4: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 -> 0b0000_1000 = 0x08
+    EXPECT_EQ(frame.data()[0], 0x08);
     // Bytes 1-4: TMSI value in big-endian order
     EXPECT_EQ(frame.data()[1], 0xDE);
     EXPECT_EQ(frame.data()[2], 0xAD);
@@ -195,9 +192,8 @@ TEST(GoldenIE, MobileIdentity_IMSI_Encoding) {
     L3Frame frame(Primitive::L3_DATA, 64);
     size_t wp = 0;
     id.writeV(frame, wp);
-    // GSM 24.008 10.5.1.4: spare(4)|oe(1)|type(3)
-    // IMSI "250011234567890" has 15 digits (odd), oe=1, type=001(IMSI) -> 0b0000_1001 = 0x09
-    EXPECT_EQ(frame.data()[0], 0x09);
+    // GSM 24.008 10.5.1.4: spare(4)=0|typeOfIdentity(3)=001(IMSI)|oddevenIndicator(1)=1(odd) -> 0b0000_0011 = 0x03
+    EXPECT_EQ(frame.data()[0], 0x03);
 }
 
 // =====================================================================
@@ -560,25 +556,24 @@ TEST(GoldenIE, CipheringModeSetting_Off) {
 TEST(GoldenIE, CipheringModeSetting_A5_3) {
     // GSM 24.008 10.5.2.9: cipheringModeSetting is 4 bits: sC(1)|algorithmIdentifier(3)
     // ciphering=true, algorithm=3(A5/3) -> sC=1, algId=011 -> 4-bit value = 0b1011 = 0x0B
-    // Reference: L3_Templates.ttcn ts_RRM_CiphModeCmd (line 690): cipherModeSetting: sC='1'B, algorithmIdentifier
-    // Spec-verified round-trip: construct(true, 3) -> serialize -> parse -> should yield (true, 3)
+    // Reference: L3_Templates.ttcn ts_RRM_CiphModeCmd: cipherModeSetting: sC='1'B, algorithmIdentifier
+    // Spec-verified round-trip per GSM 24.008 10.5.2.9
     L3CipheringModeSetting orig(true, 3);
     ieRoundTrip(orig);
 }
 
 TEST(GoldenIE, CipheringModeSetting_Encoding) {
-    // Reference: L3_Templates.ttcn ts_RRM_CiphModeCmd (line 690):
-    //   cipherModeSetting: sC='1'B, algorithmIdentifier=alg_id (BIT3)
+    // Reference: L3_Templates.ttcn ts_RRM_CiphModeCmd: cipherModeSetting: sC='1'B, algorithmIdentifier=alg_id (BIT3)
     // Spec-verified: GSM 24.008 10.5.2.9 Ciphering Mode Setting (4 bits)
     //   ciphering(1)=sC|algorithm(3)=algorithmIdentifier
-    //   ciphering=true, algorithm=3(A5/3) -> sC(1)=1|algId(3)=011 -> 0b0111 = 0x07
+    //   ciphering=true, algorithm=3(A5/3) -> sC(1)=1|algId(3)=011 -> 4-bit value = 0b1011 = 0x0B
     L3CipheringModeSetting cms(true, 3);
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
     cms.writeV(frame, wp);
     // GSM 24.008 10.5.2.9: cipheringModeSetting is 4 bits: sC(1)|algorithmIdentifier(3)
     // ciphering=true -> sC=1, algorithm=3(A5/3) -> algorithmIdentifier=011
-    // 4-bit value = 0b1_011 = 0x0B. Library places this in low nibble after spare(4).
+    // 4-bit value = 0b1_011 = 0x0B. Placed in low nibble of the octet (spare(4)=0).
     EXPECT_EQ(frame.data()[0] & 0x0F, 0x0B);
 }
 
