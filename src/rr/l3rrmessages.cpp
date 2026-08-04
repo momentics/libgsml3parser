@@ -177,17 +177,23 @@ void L3PagingRequestType1::text(std::ostream& os) const {
 // ── L3PagingResponse ───────────────────────────────────────────────────
 
 size_t L3PagingResponse::l2BodyLength() const {
-    return 1 + mClassmark.lengthLV() + mMobileID.lengthLV();
+    return 2 + mClassmark.lengthLV() + mMobileID.lengthLV();
 }
 
 void L3PagingResponse::parseBody(const L3Frame& source, size_t& rp) {
-    rp += 8;  // skip cipher key seq # (4) and spare (4)
+    // GSM 04.08 9.1.25: spare(4)|CKSN(4), spare1_4(4)|spare(4), CM2 LV, MI LV
+    // Reference: ts_PAG_RESP has cipheringKeySequenceNumber + spare1_4
+    mCKSN = source.readField(rp, 4);  // spare half octet (high 4 bits)
+    rp += 4;  // CKSN low 4 bits
+    rp += 8;  // spare1_4 (mandatory per GSM 24.008 9.1.25)
     mClassmark.parseLV(source, rp);
     mMobileID.parseLV(source, rp);
 }
 
 void L3PagingResponse::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0, 8);  // spare cipher key seq # + spare
+    dest.writeField(wp, 0, 4);   // spare half octet
+    dest.writeField(wp, mCKSN & 0x0F, 4);  // CKSN
+    dest.writeField(wp, 0, 8);    // spare1_4
     mClassmark.writeLV(dest, wp);
     mMobileID.writeLV(dest, wp);
 }
@@ -809,43 +815,49 @@ void L3ImmediateAssignmentExtended::text(std::ostream& os) const {
 // ── L3ImmediateAssignmentReject ────────────────────────────────────────
 
 L3ImmediateAssignmentReject::L3ImmediateAssignmentReject()
-    : mPageMode(0), mWaitIndication(0) {}
+    : mFeatureIndicator(0), mPageMode(0), mWaitIndication(0) {}
 
 L3ImmediateAssignmentReject::L3ImmediateAssignmentReject(unsigned waitSeconds)
-    : mPageMode(0), mWaitIndication(waitSeconds) {}
+    : mFeatureIndicator(0), mPageMode(0), mWaitIndication(waitSeconds) {}
 
 size_t L3ImmediateAssignmentReject::l2BodyLength() const {
     return 1 + static_cast<size_t>(mRequestReferences.size()) * 4;
 }
 
 void L3ImmediateAssignmentReject::parseBody(const L3Frame& src, size_t& rp) {
-    // GSM 04.08 9.1.20: PageMode(4) + WaitIndication(4), then optional RequestReferences
-    mPageMode.parseV(src, rp);
-    mWaitIndication = src.readField(rp, 4);
-    // Optional: up to 4 pairs of (RequestReference + WaitIndication)
+    // GSM 04.08 9.1.20: FeatureIndicator(4)|PageMode(4), then optional ReqRefWaitInd4
+    // Reference: GSM_RR_Types.ttcn ImmediateAssignmentReject {
+    //   FeatureIndicator feature_ind, PageMode page_mode, ReqRefWaitInd4 payload }
+    mFeatureIndicator = src.readField(rp, 4);
+    mPageMode = src.readField(rp, 4);
+    // Optional: up to 4 pairs of (RequestReference(24 bits) + WaitIndication(8 bits))
     for (int i = 0; i < 4; ++i) {
         if (rp + 32 <= src.size()) {
             L3RequestReference rr;
             rr.parseV(src, rp);
             mRequestReferences.push_back(rr);
-            mWaitIndication = src.readField(rp, 8);
+            unsigned waitInd = src.readField(rp, 8);
+            mWaitIndications.push_back(waitInd);
         }
+    }
+    if (mRequestReferences.empty()) {
+        mWaitIndication = 0;
+    } else {
+        mWaitIndication = mWaitIndications.empty() ? 0 : mWaitIndications.back();
     }
 }
 
 void L3ImmediateAssignmentReject::writeBody(L3Frame& dest, size_t& wp) const {
-    mPageMode.writeV(dest, wp);
-    // Write WaitIndication as 4-bit value in low nibble of first byte
-    dest.writeField(wp, mWaitIndication & 0x0F, 4);
-    // Write request reference pairs
+    dest.writeField(wp, mFeatureIndicator & 0x0F, 4);
+    dest.writeField(wp, mPageMode & 0x0F, 4);
     for (size_t i = 0; i < mRequestReferences.size(); ++i) {
         mRequestReferences[i].writeV(dest, wp);
-        dest.writeField(wp, mWaitIndication, 8);
+        dest.writeField(wp, i < mWaitIndications.size() ? mWaitIndications[i] : mWaitIndication, 8);
     }
 }
 
 void L3ImmediateAssignmentReject::text(std::ostream& os) const {
-    os << "ImmediateAssignmentReject: pageMode=" << mPageMode.pageMode()
+    os << "ImmediateAssignmentReject: pageMode=" << mPageMode
        << " T3122=" << mWaitIndication;
     os << " requestReferences=(" << mRequestReferences.size() << ")";
 }
@@ -853,108 +865,112 @@ void L3ImmediateAssignmentReject::text(std::ostream& os) const {
 // ── L3PagingRequestType2 ───────────────────────────────────────────────
 
 L3PagingRequestType2::L3PagingRequestType2() {
-    mMobileIDs.emplace_back();
+    mTMSIs.push_back(0);
+    mTMSIs.push_back(0);
     mChannelsNeeded[0] = ChannelType::AnyDCCHType;
     mChannelsNeeded[1] = ChannelType::AnyDCCHType;
 }
 
 L3PagingRequestType2::L3PagingRequestType2(const L3MobileIdentity& wId, ChannelType wType) {
-    mMobileIDs.push_back(wId);
+    mTMSIs.push_back(wId.TMSI());
+    mTMSIs.push_back(0);
     mChannelsNeeded[0] = wType;
     mChannelsNeeded[1] = ChannelType::AnyDCCHType;
 }
 
 size_t L3PagingRequestType2::l2BodyLength() const {
-    int sz = static_cast<int>(mMobileIDs.size());
-    size_t len = 1;
-    len += mMobileIDs[0].lengthLV();
-    if (sz > 1) len += mMobileIDs[1].lengthTLV();
-    return len;
+    // ChannelNeeded(4)|PageMode(4) + GsmTmsi mi1(4) + GsmTmsi mi2(4) = 9 bytes
+    // Reference: GSM_RR_Types.ttcn: GsmTmsi = uint32_t (raw, NOT LV!)
+    return 1 + mTMSIs.size() * 4;
 }
 
 void L3PagingRequestType2::writeBody(L3Frame& dest, size_t& wp) const {
-    int sz = static_cast<int>(mMobileIDs.size());
-    dest.writeField(wp, channelNeededCode(mChannelsNeeded[sz > 1 ? 1 : 0]), 2);
+    dest.writeField(wp, channelNeededCode(mChannelsNeeded[1]), 2);
     dest.writeField(wp, channelNeededCode(mChannelsNeeded[0]), 2);
     dest.writeField(wp, 0x0, 4);
-    mMobileIDs[0].writeLV(dest, wp);
-    if (sz > 1) mMobileIDs[1].writeTLV(0x17, dest, wp);
+    // Raw GsmTmsi values (4 bytes each, MSB first)
+    for (const auto& tmsi : mTMSIs) {
+        dest.writeField(wp, tmsi, 32);
+    }
 }
 
 void L3PagingRequestType2::parseBody(const L3Frame& src, size_t& rp) {
     mChannelsNeeded[1] = channelNeededType(src.readField(rp, 2));
     mChannelsNeeded[0] = channelNeededType(src.readField(rp, 2));
-    src.readField(rp, 4);
-    mMobileIDs.clear();
-    L3MobileIdentity id;
-    id.parseLV(src, rp);
-    mMobileIDs.push_back(id);
-    if (rp + 16 <= src.size() && src.peekField(rp, 8) == 0x17) {
-        rp += 8;
-        L3MobileIdentity id2;
-        id2.parseLV(src, rp);
-        mMobileIDs.push_back(id2);
+    src.readField(rp, 4);  // page mode
+    mTMSIs.clear();
+    // Two raw GsmTmsi (uint32_t each, NOT LV-prefixed!)
+    // Reference: GSM_RR_Types.ttcn PagingRequestType2 { GsmTmsi mi1, GsmTmsi mi2 }
+    for (int i = 0; i < 2; ++i) {
+        if (rp + 32 <= src.size()) {
+            uint32_t tmsi = static_cast<uint32_t>(src.readField(rp, 32));
+            mTMSIs.push_back(tmsi);
+        }
     }
 }
 
 void L3PagingRequestType2::text(std::ostream& os) const {
     os << "PagingRequestType2: ";
-    for (const auto& id : mMobileIDs) {
-        id.text(os);
+    for (const auto& tmsi : mTMSIs) {
+        os << "TMSI=0x" << std::hex << tmsi << std::dec;
     }
 }
 
 // ── L3PagingRequestType3 ───────────────────────────────────────────────
 
 L3PagingRequestType3::L3PagingRequestType3() {
-    mMobileIDs.emplace_back();
+    mTMSIs.push_back(0);
+    mTMSIs.push_back(0);
+    mTMSIs.push_back(0);
+    mTMSIs.push_back(0);
     mChannelsNeeded[0] = ChannelType::AnyDCCHType;
     mChannelsNeeded[1] = ChannelType::AnyDCCHType;
 }
 
 L3PagingRequestType3::L3PagingRequestType3(const L3MobileIdentity& wId, ChannelType wType) {
-    mMobileIDs.push_back(wId);
+    mTMSIs.push_back(wId.TMSI());
+    mTMSIs.push_back(0);
+    mTMSIs.push_back(0);
+    mTMSIs.push_back(0);
     mChannelsNeeded[0] = wType;
     mChannelsNeeded[1] = ChannelType::AnyDCCHType;
 }
 
 size_t L3PagingRequestType3::l2BodyLength() const {
-    int sz = static_cast<int>(mMobileIDs.size());
-    size_t len = 1;
-    len += mMobileIDs[0].lengthLV();
-    if (sz > 1) len += mMobileIDs[1].lengthTLV();
-    return len;
+    // ChannelNeeded(4)|PageMode(4) + 4x GsmTmsi(4 each) = 17 bytes
+    // Reference: GSM_RR_Types.ttcn: GsmTmsi4 = record length(4) of GsmTmsi (raw!)
+    return 1 + mTMSIs.size() * 4;
 }
 
 void L3PagingRequestType3::writeBody(L3Frame& dest, size_t& wp) const {
-    int sz = static_cast<int>(mMobileIDs.size());
-    dest.writeField(wp, channelNeededCode(mChannelsNeeded[sz > 1 ? 1 : 0]), 2);
+    dest.writeField(wp, channelNeededCode(mChannelsNeeded[1]), 2);
     dest.writeField(wp, channelNeededCode(mChannelsNeeded[0]), 2);
     dest.writeField(wp, 0x0, 4);
-    mMobileIDs[0].writeLV(dest, wp);
-    if (sz > 1) mMobileIDs[1].writeTLV(0x17, dest, wp);
+    // Raw GsmTmsi values (4 bytes each, MSB first)
+    for (const auto& tmsi : mTMSIs) {
+        dest.writeField(wp, tmsi, 32);
+    }
 }
 
 void L3PagingRequestType3::parseBody(const L3Frame& src, size_t& rp) {
     mChannelsNeeded[1] = channelNeededType(src.readField(rp, 2));
     mChannelsNeeded[0] = channelNeededType(src.readField(rp, 2));
-    src.readField(rp, 4);
-    mMobileIDs.clear();
-    L3MobileIdentity id;
-    id.parseLV(src, rp);
-    mMobileIDs.push_back(id);
-    if (rp + 16 <= src.size() && src.peekField(rp, 8) == 0x17) {
-        rp += 8;
-        L3MobileIdentity id2;
-        id2.parseLV(src, rp);
-        mMobileIDs.push_back(id2);
+    src.readField(rp, 4);  // page mode
+    mTMSIs.clear();
+    // Four raw GsmTmsi (uint32_t each, NOT LV-prefixed!)
+    // Reference: GSM_RR_Types.ttcn PagingRequestType3 { GsmTmsi4 mi }
+    for (int i = 0; i < 4; ++i) {
+        if (rp + 32 <= src.size()) {
+            uint32_t tmsi = static_cast<uint32_t>(src.readField(rp, 32));
+            mTMSIs.push_back(tmsi);
+        }
     }
 }
 
 void L3PagingRequestType3::text(std::ostream& os) const {
     os << "PagingRequestType3: ";
-    for (const auto& id : mMobileIDs) {
-        id.text(os);
+    for (const auto& tmsi : mTMSIs) {
+        os << "TMSI=0x" << std::hex << tmsi << std::dec;
     }
 }
 

@@ -160,32 +160,32 @@ size_t L3MobileIdentity::lengthV() const {
 }
 
 void L3MobileIdentity::writeV(L3Frame& dest, size_t& wp) const {
-    // GSM 04.08 10.5.1.4: spare(4) | oe(1) | type(3) for first byte
+    // GSM 04.08 10.5.1.4: spare(4) | typeOfIdentity(3) | oddevenIndicator(1) for first byte
     if (mType == MobileIDType::NoID) {
         dest.writeField(wp, 0, 4);     // spare
-        dest.writeField(wp, 1, 1);     // oe: new format
         dest.writeField(wp, 0, 3);     // type: NoID
+        dest.writeField(wp, 1, 1);     // oe: new format
         return;
     }
     if (mType == MobileIDType::TMSI) {
         dest.writeField(wp, 0, 4);     // spare
-        dest.writeField(wp, 0, 1);     // oe: old format (TMSI is old format)
         dest.writeField(wp, 4, 3);     // type: TMSI = 4
+        dest.writeField(wp, 0, 1);     // oe: 0=even (TMSI has 4 digits, even count)
         dest.writeField(wp, mTMSI, 32);
         return;
     }
     size_t nDigits = std::strlen(mDigits);
     if (nDigits == 0) {
         dest.writeField(wp, 0, 4);     // spare
-        dest.writeField(wp, 1, 1);     // oe: new format
         dest.writeField(wp, 0, 3);     // type: NoID
+        dest.writeField(wp, 1, 1);     // oe: new format
         return;
     }
-    // First byte: spare(4) | oe(1) | type(3)
-    // oe=0 means odd number of remaining digits (new format), so all digits encoded
+    // First byte: spare(4) | typeOfIdentity(3) | oddevenIndicator(1)
+    // oe=1 means odd number of remaining digits (new format), so all digits encoded
     dest.writeField(wp, 0, 4);         // spare
-    dest.writeField(wp, 0, 1);         // oe: 0=odd count (new format for BCD)
     dest.writeField(wp, static_cast<unsigned>(mType), 3);  // type
+    dest.writeField(wp, 1, 1);         // oe: 1=odd count (new format for BCD)
     // All digits in swapped BCD pairs (high=digit[i+1], low=digit[i])
     size_t i = 0;
     while (i < nDigits) {
@@ -199,11 +199,11 @@ void L3MobileIdentity::writeV(L3Frame& dest, size_t& wp) const {
 }
 
 void L3MobileIdentity::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
-    // GSM 04.08 10.5.1.4: spare(4) | oe(1) | type(3), then digits in swapped BCD
+    // GSM 04.08 10.5.1.4: spare(4) | typeOfIdentity(3) | oddevenIndicator(1), then digits in swapped BCD
     size_t endCount = rp + expectedLength * 8;
     src.readField(rp, 4);  // spare
-    src.readField(rp, 1);  // oe
-    mType = static_cast<MobileIDType>(src.readField(rp, 3));
+    mType = static_cast<MobileIDType>(src.readField(rp, 3));  // typeOfIdentity
+    src.readField(rp, 1);  // oddevenIndicator
 
     switch (mType) {
         case MobileIDType::TMSI:

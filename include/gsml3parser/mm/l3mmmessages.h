@@ -204,12 +204,15 @@ public:
 
 class L3CMReestablishmentRequest : public L3MMMessage {
 private:
+    unsigned mCKSN;
     L3MobileStationClassmark2 mClassmark;
     L3MobileIdentity mMobileID;
     bool mHaveLAI;
     L3LocationAreaIdentity mLAI;
 public:
+    L3CMReestablishmentRequest() : mCKSN(0), mHaveLAI(false) {}
     const L3MobileIdentity& mobileID() const { return mMobileID; }
+    unsigned cksn() const { return mCKSN; }
     int MTI() const override { return CMReestablishmentRequest; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;

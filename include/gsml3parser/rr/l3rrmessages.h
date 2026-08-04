@@ -133,10 +133,12 @@ public:
 
 class L3PagingResponse : public L3RRMessageNRO {
 private:
+    unsigned mCKSN;
     L3MobileStationClassmark2 mClassmark;
     L3MobileIdentity mMobileID;
 public:
     const L3MobileIdentity& mobileID() const { return mMobileID; }
+    unsigned cksn() const { return mCKSN; }
     int MTI() const override { return PagingResponse; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& source, size_t& rp) override;
@@ -527,8 +529,10 @@ public:
 
 class L3ImmediateAssignmentReject : public L3RRMessageNRO {
 private:
-    L3PageMode mPageMode;
+    unsigned mFeatureIndicator;
+    unsigned mPageMode;
     std::vector<L3RequestReference> mRequestReferences;
+    std::vector<unsigned> mWaitIndications;
     unsigned mWaitIndication;
 public:
     L3ImmediateAssignmentReject();
@@ -538,16 +542,18 @@ public:
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    unsigned pageMode() const { return mPageMode.pageMode(); }
+    unsigned pageMode() const { return mPageMode; }
+    unsigned featureIndicator() const { return mFeatureIndicator; }
     unsigned waitTime() const { return mWaitIndication; }
     const std::vector<L3RequestReference>& requestReferences() const { return mRequestReferences; }
 };
 
 // ── Paging Request Type 2 (GSM 04.08 9.1.23) ──────────────────────────
+// Reference: GSM_RR_Types.ttcn: GsmTmsi mi1, GsmTmsi mi2 (raw uint32_t, NOT LV!)
 
 class L3PagingRequestType2 : public L3RRMessageNRO {
 private:
-    std::vector<L3MobileIdentity> mMobileIDs;
+    std::vector<uint32_t> mTMSIs;
     ChannelType mChannelsNeeded[2];
 public:
     L3PagingRequestType2();
@@ -557,13 +563,15 @@ public:
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;
+    const std::vector<uint32_t>& tmsis() const { return mTMSIs; }
 };
 
 // ── Paging Request Type 3 (GSM 04.08 9.1.24) ──────────────────────────
+// Reference: GSM_RR_Types.ttcn: GsmTmsi4 mi (4x raw uint32_t, NOT LV!)
 
 class L3PagingRequestType3 : public L3RRMessageNRO {
 private:
-    std::vector<L3MobileIdentity> mMobileIDs;
+    std::vector<uint32_t> mTMSIs;
     ChannelType mChannelsNeeded[2];
 public:
     L3PagingRequestType3();
@@ -573,6 +581,7 @@ public:
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;
+    const std::vector<uint32_t>& tmsis() const { return mTMSIs; }
 };
 
 // ── Physical Information (GSM 04.08 9.1.12) ───────────────────────────
