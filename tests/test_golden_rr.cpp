@@ -117,8 +117,10 @@ TEST(GoldenRR, MessageTypeValues) {
 TEST(GoldenRR, PagingRequestType1_Parse) {
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x21 (PagingRequestType1) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: ChanNeeded(4)=1(SDCCH)|PageMode(4)=0(Normal) = 0x10 [GSM 24.008 10.5.2.26]
-    //   GSM_Types.ttcn ChannelNeeded: CHAN_NEED_SDCCH(1), PageMode: PAGE_MODE_NORMAL(0)
+    // Byte 2: ChannelNeeded12(4)|PageMode(4) = 0x10 [GSM_Types.ttcn ChannelNeeded12: second(2)|first(2)]
+    //   ChannelNeeded12: second=00(ANY), first=01(SDCCH) -> high nibble = 0b0001 = 0x1
+    //   PageMode: PAGE_MODE_NORMAL(0) [GSM_RR_Types.ttcn line 382] -> low nibble = 0x0
+    //   Combined: 0x10. Spec-verified against tr_PAGING_REQ1 (L3_Templates.ttcn line 541)
     // Byte 3: MI LV length = 5 (1 type octet + 4 TMSI octets) [GSM 24.008 10.5.1.4]
     // Byte 4: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
     // Bytes 5-8: TMSI = 0x12345678 (4 octets, MSB first)
@@ -147,7 +149,8 @@ TEST(GoldenRR, PagingRequestType2_Parse) {
     //   GsmTmsi = type uint32_t GsmTmsi; (GSM_Types.ttcn line 26) - raw 4-byte TMSI, NOT length-prefixed!
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x22 (PagingRequestType2) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: ChanNeeded(4)=1(SDCCH)|PageMode(4)=0(Normal) = 0x10
+    // Byte 2: ChannelNeeded12(4)=0x1|PageMode(4)=0(Normal) = 0x10
+    //   GSM_Types.ttcn ChannelNeeded12: second(2)=00(ANY)|first(2)=01(SDCCH) -> 0b0001 = 0x1
     // Bytes 3-6: GsmTmsi mi1 = 0x12345678 (raw 4 octets, MSB first, no length prefix)
     // Bytes 7-10: GsmTmsi mi2 = 0xDEADBEEF (raw 4 octets, MSB first, no length prefix)
     uint8_t data[] = {
@@ -176,7 +179,8 @@ TEST(GoldenRR, PagingRequestType3_Parse) {
     //   GsmTmsi4 = type record length(4) of GsmTmsi; -> 4 raw uint32_t TMSIs, NOT length-prefixed!
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x24 (PagingRequestType3) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: ChanNeeded(4)=1(SDCCH)|PageMode(4)=0(Normal) = 0x10
+    // Byte 2: ChannelNeeded12(4)=0x1|PageMode(4)=0(Normal) = 0x10
+    //   GSM_Types.ttcn ChannelNeeded12: second(2)=00(ANY)|first(2)=01(SDCCH) -> 0b0001 = 0x1
     // Bytes 3-6: GsmTmsi mi[0] = 0x12345678 (raw 4 octets, MSB first, no length prefix)
     // Bytes 7-10: GsmTmsi mi[1] = 0xDEADBEEF (raw 4 octets, MSB first, no length prefix)
     // Bytes 11-14: GsmTmsi mi[2] = 0xABCDEF01 (raw 4 octets, MSB first, no length prefix)
@@ -207,14 +211,18 @@ TEST(GoldenRR, PagingRequestType3_Parse) {
 TEST(GoldenRR, PagingResponse_Parse) {
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x27 (PagingResponse) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: spare(4)=0|CKSN(4)=0 = 0x00 [GSM 24.008 10.5.1.2]
-    // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets) [GSM 24.008 10.5.1.6]
-    // Bytes 4-6: CM2 value (24 bits of capability flags)
-    // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
-    // Byte 8: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
-    // Bytes 9-12: TMSI = 0x12345678 (MSB first)
+    // Byte 2: spare(4)=0|CKSN(3)=0|spare(1)=0 = 0x00
+    //   GSM 24.008 10.5.1.2: cipheringKeySequenceNumber is 4 bits (keySequence 3 + spare 1)
+    //   L3_Templates.ttcn ts_PAG_RESP (line 619): cipheringKeySequenceNumber := { '000'B, '0'B }
+    // Byte 3: spare1_4 = 0x00 [L3_Templates.ttcn line 620: spare1_4 := '0000'B]
+    //   GSM 24.008 9.1.25: mandatory 4-bit spare field after CKSN, before CM2
+    // Byte 4: CM2 LV length = 3 (Classmark 2 is 3 octets) [GSM 24.008 10.5.1.6]
+    // Bytes 5-7: CM2 value (24 bits of capability flags)
+    // Byte 8: MI LV length = 5 [GSM 24.008 10.5.1.4]
+    // Byte 9: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
+    // Bytes 10-13: TMSI = 0x12345678 (MSB first)
     uint8_t data[] = {
-        0x60, 0x27, 0x00,
+        0x60, 0x27, 0x00, 0x00,
         0x03, 0x20, 0x00, 0x80,
         0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
@@ -374,14 +382,18 @@ TEST(GoldenRR, ImmediateAssignment_Parse) {
 TEST(GoldenRR, ImmediateAssignmentReject_Parse) {
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x3A (ImmediateAssignmentReject) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: PageMode(4)=0(Normal)|WaitIndication(4)=3 = 0x03 [GSM 24.008 10.5.2.43]
+    // Byte 2: FeatureIndicator(4)=0|PageMode(4)=3(SameAsBefore) = 0x03
+    //   FeatureIndicator: peo_bcch_change_mark(2)=0, cs_ir(1)=0, ps_ir(1)=0 [GSM_RR_Types.ttcn line 440]
+    //   PageMode: PAGE_MODE_SAME_AS_BEFORE(3) [GSM_RR_Types.ttcn line 382, FIELDLENGTH(4)]
+    //   WaitIndication is a separate IE in ReqRefWaitInd4 payload (absent here, minimal message)
     uint8_t data[] = {0x60, 0x3a, 0x03};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::ImmediateAssignmentReject);
     auto* iar = dynamic_cast<L3ImmediateAssignmentReject*>(msg.get());
     ASSERT_TRUE(iar);
-    EXPECT_EQ(iar->waitTime(), 3u);
+    // PageMode=3(SameAsBefore) from low nibble of byte 2. Spec-verified: GSM_RR_Types.ttcn PageMode enum (line 382)
+    EXPECT_EQ(iar->pageMode(), 3u);
 }
 
 // =====================================================================

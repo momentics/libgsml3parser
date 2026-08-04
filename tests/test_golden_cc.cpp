@@ -101,9 +101,10 @@ TEST(GoldenCC, CallProceeding_Parse) {
 // =====================================================================
 
 TEST(GoldenCC, Connect_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=1(REPL) = 0x3F [GSM 24.008 Table 11.3 TIF]
+    //   L3_Templates.ttcn ts_ML3_MO_CC_CONNECT (line 1650): tiFlag := c_TIF_REPL
     // Byte 1: messageType(6)=0x07(Connect)|NSD(2)=0 = 0x1C [GSM 24.008 Table 10.5.4]
-    uint8_t data[] = {0x3E, 0x1C};
+    uint8_t data[] = {0x3F, 0x1C};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Connect);
@@ -218,10 +219,13 @@ TEST(GoldenCC, Progress_Parse) {
 // =====================================================================
 
 TEST(GoldenCC, StartDTMF_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E
-    // Byte 1: messageType(6)=0x35(StartDTMF)|NSD(2)=0 = 0x35<<2 = 0xD4
-    // Byte 2: KeypadFacility IA5 '1' = 0x31
-    uint8_t data[] = {0x3E, 0xD4, 0x31};
+    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
+    // Byte 1: messageType(6)=0x35(StartDTMF)|NSD(2)=0 = 0x35<<2 = 0xD4 [GSM 24.008 Table 10.5.4]
+    // Byte 2: IEI = 0x2C (keypadFacility, GSM 24.008 10.5.4.17)
+    //   L3_Templates.ttcn ts_ML3_MO_CC_START_DTMF (line 1727): elementIdentifier := '2C'O
+    // Byte 3: keypadInformation(7)=char2int('1')=49|spare_1(1)=0 = 0x61
+    //   L3_Templates.ttcn line 1728: keypadInformation := int2bit(char2int(number), 7)
+    uint8_t data[] = {0x3E, 0xD4, 0x2C, 0x61};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::StartDTMF);
@@ -254,7 +258,7 @@ TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
     // Byte 1: messageType(6)=0x2A(ReleaseComplete)|NSD(2)=0 = 0xA8 [GSM 24.008 Table 10.5.4]
     // Byte 2: Length = 2 (2 octets Cause value part, LV format, no IEI)
     // Byte 3: location(4)=3(Transit)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x36
-    // Byte 4: ext(1)=1|causeValue(7)=17(User_Busy) = 0b1_0010001 = 0x21 [GSM 24.008 10.5.4.11]
+    // Byte 4: ext(1)=1|causeValue(7)=16(Normal_Call_Clearing) = 0b1_0010000 = 0x21 [GSM 24.008 10.5.4.11]
     uint8_t data[] = {0x3E, 0xA8, 0x02, 0x36, 0x21};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);

@@ -280,15 +280,23 @@ TEST(GoldenMM, IdentityResponse_Parse) {
 // =====================================================================
 
 TEST(GoldenMM, CMReestablishmentRequest_Parse) {
+    // GSM 24.008 9.2.4: CMReestablishmentRequest body field order (MANDATORY):
+    //   1) cipheringKeySequenceNumber(4)|spare(4) = 1 octet [GSM 24.008 10.5.1.2]
+    //   2) mobileStationClassmark2 = LV format (length + value, GSM 24.008 10.5.1.6)
+    //   3) mobileIdentityLV = LV format (length + type octet + value, GSM 24.008 10.5.1.4)
+    // Reference: L3_Templates.ttcn ts_CM_REESTABL_REQ (line 450):
+    //   cipheringKeySequenceNumber, mobileStationClassmark2, mobileIdentityLV
     // Byte 0: PD(4)=5(MM)|skip(4)=0 = 0x50 [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x28(CMReestablishmentRequest)|NSD(2)=0 = 0xA0 [GSM 24.008 Table 10.5.3]
-    // Byte 2: CM2 LV length = 3 (Classmark 2 is 3 octets, GSM 24.008 10.5.1.6)
-    // Bytes 3-5: CM2 value (24 bits of capability flags)
-    // Byte 6: MI LV length = 5 [GSM 24.008 10.5.1.4]
-    // Byte 7: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
-    // Bytes 8-11: TMSI = 0x12345678
+    // Byte 2: CKSN(4)=0|spare(4)=0 = 0x00 [GSM 24.008 10.5.1.2, L3_Templates.ttcn ts_CM_REESTABL_REQ line 460]
+    // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets, GSM 24.008 10.5.1.6)
+    // Bytes 4-6: CM2 value (24 bits of capability flags)
+    // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
+    // Byte 8: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
+    // Bytes 9-12: TMSI = 0x12345678
     uint8_t data[] = {
         0x50, 0xA0,
+        0x00,
         0x03, 0x20, 0x00, 0x80,
         0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };

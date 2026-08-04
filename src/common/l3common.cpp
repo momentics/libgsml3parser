@@ -1023,23 +1023,24 @@ L3CipheringModeSetting::L3CipheringModeSetting(bool wCiphering, int wAlgorithm)
     : mCiphering(wCiphering), mAlgorithm(wAlgorithm) {}
 
 void L3CipheringModeSetting::writeV(L3Frame& dest, size_t& wp) const {
-    // GSM 04.08 10.5.2.9: ciphering(1) | algorithm(3), written in low nibble
-    // High nibble is spare (0), then ciphering + algorithm in low nibble
-    dest.writeField(wp, 0, 4);                              // spare high nibble
-    dest.writeField(wp, mCiphering ? 1 : 0, 1);             // ciphering flag (1 bit)
-    dest.writeField(wp, mCiphering ? mAlgorithm - 1 : 0, 3); // algorithm (3 bits)
+    // GSM 04.08 10.5.2.9: spare(4) | sC(1) | algorithmIdentifier(3) = 8 bits
+    dest.writeField(wp, 0, 4);                                    // spare high nibble
+    dest.writeField(wp, mCiphering ? 1 : 0, 1);                   // sC: ciphering flag (1 bit)
+    dest.writeField(wp, mAlgorithm & 0x07, 3);                    // algorithm identifier (3 bits)
 }
 
 void L3CipheringModeSetting::parseV(const L3Frame& src, size_t& rp) {
-    mCiphering = src.readField(rp, 1) != 0;    // ciphering flag (1 bit)
-    unsigned raw = src.readField(rp, 3);       // algorithm (3 bits)
-    mAlgorithm = mCiphering ? raw + 1 : 0;
+    src.readField(rp, 4);                                         // skip spare high nibble
+    mCiphering = src.readField(rp, 1) != 0;                       // sC: ciphering flag (1 bit)
+    mAlgorithm = src.readField(rp, 3);                            // algorithm identifier (3 bits)
+    if (!mCiphering) mAlgorithm = 0;
 }
 
 void L3CipheringModeSetting::parseV(const L3Frame& src, size_t& rp, size_t) {
-    mCiphering = src.readField(rp, 1) != 0;    // ciphering flag (1 bit)
-    unsigned raw = src.readField(rp, 3);       // algorithm (3 bits)
-    mAlgorithm = mCiphering ? raw + 1 : 0;
+    src.readField(rp, 4);                                         // skip spare high nibble
+    mCiphering = src.readField(rp, 1) != 0;                       // sC: ciphering flag (1 bit)
+    mAlgorithm = src.readField(rp, 3);                            // algorithm identifier (3 bits)
+    if (!mCiphering) mAlgorithm = 0;
 }
 
 void L3CipheringModeSetting::text(std::ostream& os) const {

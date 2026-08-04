@@ -79,7 +79,9 @@ L3SupServRegisterMessage::L3SupServRegisterMessage(unsigned wTI, const std::stri
     : L3SupServMessage(wTI), mFacility(facility), mHaveVersion(false), mVersionIndicator(0) {}
 
 size_t L3SupServRegisterMessage::l2BodyLength() const {
-    return mFacility.lengthTLV() + (mHaveVersion ? 3 : 0);
+    size_t len = 1; // IEI tag always present
+    if (mFacility.mExtant) len += mFacility.lengthLV();
+    return len + (mHaveVersion ? 3 : 0);
 }
 
 void L3SupServRegisterMessage::writeBody(L3Frame& dest, size_t& wp) const {

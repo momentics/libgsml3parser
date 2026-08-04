@@ -407,8 +407,8 @@ TEST(GoldenIE, PowerCommand_MaxValue) {
 TEST(GoldenIE, PowerCommand_Encoding) {
     // Reference: BTS_Tests.ttcn ts_PowerCmd template
     // Spec-verified: GSM 24.008 10.5.2.28 Power Command
-    //   power_command(5 bits, MSB)|spare(3 bits) = 1 octet
-    //   command=15 -> 15<<3 = 0xF0
+    //   power_command(5 bits MSB)|spare(3 bits LSB) = 1 octet
+    //   command=15 -> 0b01111_000 = 0x78 (15 in high 5 bits, spare 0 in low 3 bits)
     L3PowerCommand pc(15);
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
@@ -495,8 +495,8 @@ TEST(GoldenIE, TimingAdvance_MaxValue) {
 TEST(GoldenIE, TimingAdvance_Encoding) {
     // Reference: GSM_RR_Types.ttcn TimingAdvance (line 434): integer (0..219)
     // Spec-verified: GSM 24.008 10.5.2.40 Timing Advance
-    //   timing_advance(6 bits, MSB)|spare(2 bits) = 1 octet
-    //   value=42 -> 42<<2 = 0xA0
+    //   timing_advance(6 bits MSB)|spare(2 bits LSB) = 1 octet
+    //   value=42 -> 0b101010_00 = 0xA8 (42 in high 6 bits, spare 0 in low 2 bits)
     L3TimingAdvance ta(42);
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;

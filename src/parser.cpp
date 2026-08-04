@@ -90,21 +90,21 @@ std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len) {
 
     // Handle short RR messages that don't have PD/MTI headers (GSM 04.08 9.1)
     // These are sent on RACH without standard L3 header
-    // PD values: RR=6, MM=5, CC=3, SS=7. If first nibble doesn't match any known PD,
+    // PD values: RR=6, MM=5, CC=3, NonCallSS=0x0B. If first nibble doesn't match any known PD,
     // it's likely a short message.
     unsigned firstNibble = (data[0] >> 4) & 0x0F;
 
-    if (len == 1 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 7) {
+    if (len == 1 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
         // Channel Request: single byte = RequestReference(8)
         auto msg = std::make_unique<L3ChannelRequest>(data[0]);
         return std::unique_ptr<L3Message>(static_cast<L3Message*>(msg.release()));
     }
-    if (len == 4 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 7) {
+    if (len == 4 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
         // Handover Access: HO number(8), HO ref(8), TA(8), spare(8)
         auto msg = std::make_unique<L3HandoverAccess>(data[0]);
         return std::unique_ptr<L3Message>(static_cast<L3Message*>(msg.release()));
     }
-    if (len == 7 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 7) {
+    if (len == 7 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
         // Synchronization Channel Information: CI(16) + LAI(40)
         L3Frame frame(Primitive::L3_DATA, len * 8);
         std::memcpy(frame.data(), data, len);

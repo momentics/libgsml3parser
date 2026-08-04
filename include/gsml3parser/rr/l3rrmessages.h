@@ -538,6 +538,7 @@ public:
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
+    unsigned pageMode() const { return mPageMode.pageMode(); }
     unsigned waitTime() const { return mWaitIndication; }
     const std::vector<L3RequestReference>& requestReferences() const { return mRequestReferences; }
 };
