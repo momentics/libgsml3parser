@@ -244,20 +244,18 @@ TEST(GoldenCC, StopDTMF_Parse) {
 // =====================================================================
 // CC PARSE FROM HEX: Release Complete with Cause (GSM 24.008 9.3.19)
 // Reference: L3_Templates.ttcn ts_ML3_MO_CC_REL_COMPL (line 1831):
-//   messageType := '101010'B (MTI=0x2A)
-// Reference: L3_Templates.ttcn ts_ML3_Cause (line 60):
-//   Cause TLV: elementIdentifier='08'O, oct3(location+std+ext), oct4(causeValue+ext)
-// Spec-verified: ReleaseComplete with Cause TLV per GSM 24.008 10.5.4.11
+//   messageType := '101010'B (MTI=0x2A), cause := omit by default
+// Reference: L3_Templates.ttcn ts_ML3_Cause_LV (line 78): LV format, no IEI
+// Spec-verified: ReleaseComplete with Cause LV per GSM 24.008 10.5.4.11
 // =====================================================================
 
 TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
     // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x2A(ReleaseComplete)|NSD(2)=0 = 0xA8 [GSM 24.008 Table 10.5.4]
-    // Byte 2: IEI = 0x08 (Cause, GSM 24.008 10.5.4.11)
-    // Byte 3: Length = 2 (2 octets Cause value part)
-    // Byte 4: location(4)=3(Transit)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x36
-    // Byte 5: causeValue(7)=17(User_Busy)|ext(1)=1 = 0x22 [GSM 24.008 10.5.4.11 Table]
-    uint8_t data[] = {0x3E, 0xA8, 0x08, 0x02, 0x36, 0x22};
+    // Byte 2: Length = 2 (2 octets Cause value part, LV format, no IEI)
+    // Byte 3: location(4)=3(Transit)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x36
+    // Byte 4: causeValue(7)=17(User_Busy)|ext(1)=1 = 0x22 [GSM 24.008 10.5.4.11 Table]
+    uint8_t data[] = {0x3E, 0xA8, 0x02, 0x36, 0x22};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::ReleaseComplete);
@@ -274,11 +272,10 @@ TEST(GoldenCC, Disconnect_Parse) {
     // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x25(Disconnect)|NSD(2)=0 = 0x94 [GSM 24.008 Table 10.5.4]
     // Cause LV (no IEI, length-prefixed): GSM 24.008 10.5.4.11
-    // Byte 2: IEI = 0x08 (Cause)
-    // Byte 3: Length = 2
-    // Byte 4: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11|ext(1)=0 = 0x16
-    // Byte 5: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21
-    uint8_t data[] = {0x3E, 0x94, 0x08, 0x02, 0x16, 0x21};
+    // Byte 2: Length = 2 (2 octets Cause value part)
+    // Byte 3: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11|ext(1)=0 = 0x16
+    // Byte 4: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21
+    uint8_t data[] = {0x3E, 0x94, 0x02, 0x16, 0x21};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Disconnect);

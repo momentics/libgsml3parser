@@ -84,14 +84,18 @@ TEST(GoldenMM, MessageTypeValues) {
 TEST(GoldenMM, LocationUpdatingRequest_Parse) {
     // Byte 0: PD(4)=5(MM)|skip(4)=0 = 0x50 [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x08(LocationUpdatingRequest)|NSD(2)=0 = 0x20 [GSM 24.008 Table 10.5.3]
-    // Byte 2: LU_Type(2)=00(Normal)|spare(2)=0|CKSN(4)=0 = 0x00 [L3_Templates.ttcn LU_Type_Normal line 329]
-    // Byte 3: CM1 LV length = 1 (Classmark 1 is 1 octet, GSM 24.008 10.5.1.5)
-    // Byte 4: CM1 value = 0x00 (default classmark)
-    // Byte 5: MI LV length = 5 (1 type octet + 4 TMSI octets, GSM 24.008 10.5.1.4)
-    // Byte 6: spare(4)=0|type(3)=100(TMSI)|oe(1)=0(old) = 0x0C [GSM 24.008 10.5.1.4]
-    // Bytes 7-10: TMSI = 0x12345678 (4 octets, MSB first)
+    // Byte 2: LU_Type(2)=00(Normal)|spare(2)=0|CKSN(4)=0 = 0x00 [L3_Templates.ttcn ts_LU_REQ line 368-369]
+    // Bytes 3-7: LAI (mandatory per GSM 24.008 9.2.15): MCC=250, MNC=01, LAC=0x172A
+    //   [L3_Templates.ttcn ts_LU_REQ: mcc_mnc='123456'O is OCT3, but here we use BCD nibble-swapped]
+    //   MCC=250, MNC=01 -> '250F01'H nibble-swapped = {0x52, 0xF0, 0x10}, LAC = {0x17, 0x2A}
+    // Byte 8: CM1 LV length = 1 (Classmark 1 is 1 octet, GSM 24.008 10.5.1.5)
+    // Byte 9: CM1 value = 0x00 (default classmark)
+    // Byte 10: MI LV length = 5 (1 type octet + 4 TMSI octets, GSM 24.008 10.5.1.4)
+    // Byte 11: spare(4)=0|type(3)=100(TMSI)|oe(1)=0(old) = 0x0C [GSM 24.008 10.5.1.4]
+    // Bytes 12-15: TMSI = 0x12345678 (4 octets, MSB first)
     uint8_t data[] = {
         0x50, 0x20, 0x00,
+        0x52, 0xF0, 0x10, 0x17, 0x2A,
         0x01, 0x00,
         0x05, 0x0C, 0x12, 0x34, 0x56, 0x78
     };
@@ -227,7 +231,7 @@ TEST(GoldenMM, IMSIDetachIndication_Parse) {
 // =====================================================================
 // MM PARSE FROM HEX: MM Status (GSM 24.008 9.2.15)
 // Reference: L3_Templates.ttcn tr_ML3_MT_MM_STATUS template
-// Structure: cause(8 bits, GSM 24.008 10.5.3.6), spare(8), spare(8)
+// Structure: cause(8 bits, GSM 24.008 10.5.3.6) — only one mandatory IE
 // Spec-verified: PD=5(MM), MTI=0x31(MMStatus) per GSM 24.008 Table 10.5.3
 // cause=0x60 = Invalid_Mandatory_Information (GSM 24.008 10.5.3.6 Table)
 // =====================================================================
@@ -236,9 +240,7 @@ TEST(GoldenMM, MMStatus_Parse) {
     // Byte 0: PD(4)=5(MM)|skip(4)=0 = 0x50 [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x31(MMStatus)|NSD(2)=0 = 0xC4 [GSM 24.008 Table 10.5.3]
     // Byte 2: cause = 0x60 (Invalid_Mandatory_Information) [GSM 24.008 10.5.3.6]
-    // Byte 3: spare = 0x00
-    // Byte 4: spare = 0x00
-    uint8_t data[] = {0x50, 0xC4, 0x60, 0x00, 0x00};
+    uint8_t data[] = {0x50, 0xC4, 0x60};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::MMStatus);
@@ -267,7 +269,7 @@ TEST(GoldenMM, IdentityResponse_Parse) {
 // MM PARSE FROM HEX: CM Reestablishment Request (GSM 24.008 9.2.4)
 // Reference: L3_Templates.ttcn ts_CM_REESTABL_REQ (line 450):
 //   cipheringKeySequenceNumber, mobileStationClassmark2, mobileIdentityLV
-// Structure: CKSN(4)|spare(4), CM2 LV (3 octets), MI LV, [LAI LV]
+// Structure: [CKSN(4)|spare(4) omitted when CKSN=0 per GSM 24.008], CM2 LV (3 octets), MI LV, [LAI LV]
 // Spec-verified: PD=5(MM), MTI=0x28(CMReestablishmentRequest) per GSM 24.008 Table 10.5.3
 // =====================================================================
 

@@ -144,11 +144,14 @@ TEST(GoldenRR, PagingRequestType2_Parse) {
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x22 (PagingRequestType2) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: ChanNeeded(4)=1(SDCCH)|PageMode(4)=0(Normal) = 0x10
-    // Byte 3: MI length = 5 (TMSI type + 4 octets)
-    // Byte 4: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x0C
-    // Bytes 5-8: TMSI = 0xDEADBEEF (MSB first)
+    // Bytes 3-6: mobile_identity_1: raw TMSI = 0x12345678 (4 octets, MSB first) [GSM 24.008 9.1.23]
+    //   Note: PagingRequestType2 uses raw 4-byte TMSI, NOT length-prefixed MobileIdentityLV
+    //   Reference: L3_Templates.ttcn tr_PAGING_REQ2 (line 561): TMSIP_TMSI_V mi1, TMSIP_TMSI_V mi2
+    // Bytes 7-10: mobile_identity_2: raw TMSI = 0xDEADBEEF (4 octets, MSB first)
     uint8_t data[] = {
-        0x60, 0x22, 0x10, 0x05, 0x0C, 0xDE, 0xAD, 0xBE, 0xEF
+        0x60, 0x22, 0x10,
+        0x12, 0x34, 0x56, 0x78,
+        0xDE, 0xAD, 0xBE, 0xEF
     };
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -168,11 +171,18 @@ TEST(GoldenRR, PagingRequestType3_Parse) {
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x24 (PagingRequestType3) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: ChanNeeded(4)=1(SDCCH)|PageMode(4)=0(Normal) = 0x10
-    // Byte 3: MI length = 5 (TMSI type + 4 octets)
-    // Byte 4: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x0C
-    // Bytes 5-8: TMSI = 0xABCDEF01 (MSB first)
+    // Bytes 3-6: mobile_identity_1: raw TMSI = 0x12345678 (4 octets, MSB first) [GSM 24.008 9.1.24]
+    //   Note: PagingRequestType3 uses 4 raw 4-byte TMSI values, NOT length-prefixed MobileIdentityLV
+    //   Reference: L3_Templates.ttcn tr_PAGING_REQ3 (line 583): TMSIP_TMSI_V mi1..mi4
+    // Bytes 7-10: mobile_identity_2: raw TMSI = 0xDEADBEEF (4 octets, MSB first)
+    // Bytes 11-14: mobile_identity_3: raw TMSI = 0xABCDEF01 (4 octets, MSB first)
+    // Bytes 15-18: mobile_identity_4: raw TMSI = 0x11223344 (4 octets, MSB first)
     uint8_t data[] = {
-        0x60, 0x24, 0x10, 0x05, 0x0C, 0xAB, 0xCD, 0xEF, 0x01
+        0x60, 0x24, 0x10,
+        0x12, 0x34, 0x56, 0x78,
+        0xDE, 0xAD, 0xBE, 0xEF,
+        0xAB, 0xCD, 0xEF, 0x01,
+        0x11, 0x22, 0x33, 0x44
     };
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -279,7 +289,7 @@ TEST(GoldenRR, HandoverCommand_Parse) {
     //   bcc(3)=011, ncc(3)=101, arfcn(10)=0001100100
     //   LSB-first: 011|101|00 = 0x74, 00011001|00xxxxxx = 0x19 (arfcn=100=0x64, high 2 bits in byte 1)
     // Bytes 4-6: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), spare(2), ARFCN(10) [GSM 24.008 10.5.2.5]
-    //   GSM_RR_Types.ttcn ChannelDescription (line 313): chan_nr(5), tsc(3), h(1), arfcn(12)
+    //   {0x11, 0xE0, 0x64}: typeAndOffset=2(TDMA_TCHF), TN=1, TSC=7, h=0, ARFCN=100
     // Byte 7: HORef = 0x17 [GSM 24.008 10.5.2.15, 5-bit handover reference]
     // Byte 8: PowerCmdAccType = 0x00 [GSM 24.008 10.5.2.28a]
     // Byte 9: SyncInd = 0x00 [GSM 24.008 10.5.2.39]
@@ -308,7 +318,7 @@ TEST(GoldenRR, AssignmentCommand_Parse) {
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x2E (AssignmentCommand) [3GPP TS 44.018 Table 10.4.1]
     // Bytes 2-4: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), spare(2), ARFCN(10) [GSM 24.008 10.5.2.5]
-    //   GSM_RR_Types.ttcn ChannelDescription (line 313): chan_nr + tsc + h + arfcn
+    //   {0x10, 0xE0, 0x64}: typeAndOffset=2(TDMA_TCHF), TN=0, TSC=7, h=0, ARFCN=100
     // Byte 5: PowerCmd = 0x00 [GSM 24.008 10.5.2.28, 5-bit power_command << 3]
     uint8_t data[] = {0x60, 0x2e, 0x10, 0xE0, 0x64, 0x00};
     auto msg = parseL3(data, sizeof(data));
@@ -332,7 +342,7 @@ TEST(GoldenRR, ImmediateAssignment_Parse) {
     //   GSM_RR_Types.ttcn DedicatedModeOrTbf (line 374): spare+tma+downlink+tbf
     //   GSM_RR_Types.ttcn PageMode (line 382): PAGE_MODE_NORMAL(0)
     // Bytes 3-5: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), spare(2), ARFCN(10) [GSM 24.008 10.5.2.5]
-    //   SDCCH, TN=0, TSC=0, h=0, ARFCN=100
+    //   {0x00, 0x00, 0x64}: typeAndOffset=0(TDMA_SACCH), TN=0, TSC=0, h=0, ARFCN=100
     // Bytes 6-8: ReqRef: RA(8)=0x42, T1p(5)=0, T3(6)=0, T2(5)=0 [GSM 24.008 10.5.2.30]
     //   GSM_RR_Types.ttcn RequestReference (line 390): ra(8), t1p(5), t3(6), t2(5)
     // Byte 9: TA = 0x00 [GSM 24.008 10.5.2.40, 6-bit timing_advance << 2]
@@ -383,7 +393,7 @@ TEST(GoldenRR, ChannelModeModify_Parse) {
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x10 (ChannelModeModify) [3GPP TS 44.018 Table 10.4.1]
     // Bytes 2-4: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), spare(2), ARFCN(10) [GSM 24.008 10.5.2.5]
-    //   TDMA_TCHF, TN=1, TSC=7, h=0, ARFCN=100
+    //   {0x11, 0xE0, 0x64}: typeAndOffset=2(TDMA_TCHF), TN=1, TSC=7, h=0, ARFCN=100
     // Byte 5: ChanMode(4)=1(SpeechV1)|spare(4)=0 = 0x01 [GSM 24.008 10.5.2.6]
     uint8_t data[] = {0x60, 0x10, 0x11, 0xE0, 0x64, 0x01};
     auto msg = parseL3(data, sizeof(data));
@@ -548,7 +558,7 @@ TEST(GoldenRR, AdditionalAssignment_Parse) {
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x3B (AdditionalAssignment) [3GPP TS 44.018 Table 10.4.1]
     // Bytes 2-4: AdditionalChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), spare(2), ARFCN(10)
-    //   TDMA_TCHF, TN=2, TSC=5, h=0, ARFCN=150 [GSM 24.008 10.5.2.5]
+    //   {0x12, 0xA0, 0x56}: typeAndOffset=2, TN=2, TSC=5, h=0, ARFCN=86 [GSM 24.008 10.5.2.5]
     uint8_t data[] = {0x60, 0x3b, 0x12, 0xA0, 0x56};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);

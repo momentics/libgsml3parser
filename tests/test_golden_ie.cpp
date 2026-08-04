@@ -756,7 +756,7 @@ TEST(GoldenIE, CellSelectionParameters_Default) {
 
 TEST(GoldenIE, CellSelectionParameters_RefValues) {
     // Reference: BTS_Tests.ttcn ts_CellSelPar_default (line 355):
-    //   cell_resel_hyst_2dB=2, ms_txpwr_max_cch=mp_ms_power_level_exp(=10), acs='0'B, neci=true, rxlev_access_min=0
+    //   cell_resel_hyst_2dB=2, ms_txpwr_max_cch=mp_ms_power_level_exp(=7, see line 115), acs='0'B, neci=true, rxlev_access_min=0
     // Spec-verified: GSM 24.008 10.5.2.4 Cell Selection Parameters (17 bits = 2 octets + 1 bit)
     //   cell_resel_hyst(3)|ms_txpwr_max_cch(5)|acs(1)|neci(1)|rxlev_access_min(6)
     //   {0x47, 0x40}: cell_resel_hyst=2, ms_txpwr_max_cch=7, acs=0, neci=1, rxlev_access_min=0
@@ -792,7 +792,7 @@ TEST(GoldenIE, RACHControlParameters_Default) {
 TEST(GoldenIE, RACHControlParameters_RefValues) {
     // Reference: BTS_Tests.ttcn ts_RachCtrl_default (line 347):
     //   max_retrans=RACH_MAX_RETRANS_7(=3), tx_integer='1001'B(=9), cell_barr_access=false,
-    //   re_not_allowed=true, acc='0000010000000000'B (=0x0400, ACC[4] barred)
+    //   re_not_allowed=true, acc='0000010000000000'B (=0x0400, ACC[6] barred, bit 6 from MSB)
     // Spec-verified: GSM 24.008 10.5.2.29 RACH Control Parameters (24 bits = 3 octets)
     //   max_retrans(2)|tx_integer(4)|cell_bar_qualify(1)|cell_barr_access(1)|re_not_allowed(1)|ACC(16)
     //   {0xE5, 0x04, 0x00}: max_retrans=3, tx_integer=9, cell_bar_qualify=0, cell_barr_access=0, re_not_allowed=1, ACC=0x0400
@@ -805,8 +805,8 @@ TEST(GoldenIE, RACHControlParameters_RefValues) {
     L3RACHControlParameters parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
-    // Spec-verified: byte 0 = 0xE5 = 0b1110_0101 -> max_retrans(2)=11=3, tx_integer(4)=1001=9, cell_bar_qualify(1)=0, cell_barr_access(1)=0, re_not_allowed(1)=1
-    //   byte 1 = 0x04, byte 2 = 0x00 -> ACC(16) = 0x0400 (ACC[4] barred)
+    // Spec-verified: byte 0 = 0xE5 = 0b1110_0101 -> max_retrans(2)=11=3, tx_integer(4)=1001=9, cell_bar_qualify(1)=0, cell_bar_access(1)=0, re_not_allowed(1)=1
+    //   byte 1 = 0x04, byte 2 = 0x00 -> ACC(16) = 0x0400 (ACC[6] barred, bit 6 from MSB per GSM convention)
     EXPECT_EQ(parsed.MaxRetrans(), 3u);
     EXPECT_EQ(parsed.TxInteger(), 9u);
     EXPECT_EQ(parsed.CellBarAccess(), false);
