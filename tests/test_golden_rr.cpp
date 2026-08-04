@@ -141,13 +141,15 @@ TEST(GoldenRR, PagingRequestType1_Parse) {
 // =====================================================================
 
 TEST(GoldenRR, PagingRequestType2_Parse) {
+    // GSM 24.008 9.1.23: PagingRequestType2 structure:
+    //   ChannelNeeded(4 bits)|PageMode(4 bits) + GsmTmsi mi1(4 octets) + GsmTmsi mi2(4 octets) + [optional MobileIdentityTLV]
+    // Reference: GSM_RR_Types.ttcn PagingRequestType2 (line 577): GsmTmsi mi1, GsmTmsi mi2
+    //   GsmTmsi = type uint32_t GsmTmsi; (GSM_Types.ttcn line 26) - raw 4-byte TMSI, NOT length-prefixed!
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x22 (PagingRequestType2) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: ChanNeeded(4)=1(SDCCH)|PageMode(4)=0(Normal) = 0x10
-    // Bytes 3-6: mobile_identity_1: raw TMSI = 0x12345678 (4 octets, MSB first) [GSM 24.008 9.1.23]
-    //   Note: PagingRequestType2 uses raw 4-byte TMSI, NOT length-prefixed MobileIdentityLV
-    //   Reference: L3_Templates.ttcn tr_PAGING_REQ2 (line 561): TMSIP_TMSI_V mi1, TMSIP_TMSI_V mi2
-    // Bytes 7-10: mobile_identity_2: raw TMSI = 0xDEADBEEF (4 octets, MSB first)
+    // Bytes 3-6: GsmTmsi mi1 = 0x12345678 (raw 4 octets, MSB first, no length prefix)
+    // Bytes 7-10: GsmTmsi mi2 = 0xDEADBEEF (raw 4 octets, MSB first, no length prefix)
     uint8_t data[] = {
         0x60, 0x22, 0x10,
         0x12, 0x34, 0x56, 0x78,
@@ -168,15 +170,17 @@ TEST(GoldenRR, PagingRequestType2_Parse) {
 // =====================================================================
 
 TEST(GoldenRR, PagingRequestType3_Parse) {
+    // GSM 24.008 9.1.24: PagingRequestType3 structure:
+    //   ChannelNeeded(4 bits)|PageMode(4 bits) + GsmTmsi4 mi (4x raw 4-octet TMSIs) + [optional RestOctets]
+    // Reference: GSM_RR_Types.ttcn PagingRequestType3 (line 587): GsmTmsi4 mi
+    //   GsmTmsi4 = type record length(4) of GsmTmsi; -> 4 raw uint32_t TMSIs, NOT length-prefixed!
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x24 (PagingRequestType3) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: ChanNeeded(4)=1(SDCCH)|PageMode(4)=0(Normal) = 0x10
-    // Bytes 3-6: mobile_identity_1: raw TMSI = 0x12345678 (4 octets, MSB first) [GSM 24.008 9.1.24]
-    //   Note: PagingRequestType3 uses 4 raw 4-byte TMSI values, NOT length-prefixed MobileIdentityLV
-    //   Reference: L3_Templates.ttcn tr_PAGING_REQ3 (line 583): TMSIP_TMSI_V mi1..mi4
-    // Bytes 7-10: mobile_identity_2: raw TMSI = 0xDEADBEEF (4 octets, MSB first)
-    // Bytes 11-14: mobile_identity_3: raw TMSI = 0xABCDEF01 (4 octets, MSB first)
-    // Bytes 15-18: mobile_identity_4: raw TMSI = 0x11223344 (4 octets, MSB first)
+    // Bytes 3-6: GsmTmsi mi[0] = 0x12345678 (raw 4 octets, MSB first, no length prefix)
+    // Bytes 7-10: GsmTmsi mi[1] = 0xDEADBEEF (raw 4 octets, MSB first, no length prefix)
+    // Bytes 11-14: GsmTmsi mi[2] = 0xABCDEF01 (raw 4 octets, MSB first, no length prefix)
+    // Bytes 15-18: GsmTmsi mi[3] = 0x11223344 (raw 4 octets, MSB first, no length prefix)
     uint8_t data[] = {
         0x60, 0x24, 0x10,
         0x12, 0x34, 0x56, 0x78,
@@ -1049,7 +1053,9 @@ TEST(GoldenRR, PowerCommand_Encoding) {
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
     pc.writeV(frame, wp);
-    EXPECT_EQ(frame.data()[0], 0xF0); // 15 << 3 (MSB first, 5 bits)
+    // GSM 24.008 10.5.2.28: power_command(5 bits, MSB)|spare(3 bits, LSB) = 1 octet
+    // power_command=15 -> 0b01111_000 = 0x78 (15 in high 5 bits, spare 0 in low 3 bits)
+    EXPECT_EQ(frame.data()[0], 0x78);
 }
 
 // =====================================================================
@@ -1065,7 +1071,9 @@ TEST(GoldenRR, TimingAdvance_Encoding) {
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
     ta.writeV(frame, wp);
-    EXPECT_EQ(frame.data()[0], 0xA0); // 42 << 2 (6 bits)
+    // GSM 24.008 10.5.2.40: timing_advance(6 bits, MSB)|spare(2 bits, LSB) = 1 octet
+    // timing_advance=42 -> 0b101010_00 = 0xA8 (42 in high 6 bits, spare 0 in low 2 bits)
+    EXPECT_EQ(frame.data()[0], 0xA8);
 }
 
 // =====================================================================
@@ -1221,7 +1229,10 @@ TEST(GoldenRR, CipheringModeSetting_A5_3) {
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
     cms.writeV(frame, wp);
-    EXPECT_EQ(frame.data()[0] & 0x0F, 0x07);
+    // GSM 24.008 10.5.2.9: cipheringModeSetting is 4 bits: sC(1)|algorithmIdentifier(3)
+    // ciphering=true -> sC=1, algorithm=3(A5/3) -> algorithmIdentifier=011
+    // 4-bit value = 0b1_011 = 0x0B. Library places this in low nibble after spare(4).
+    EXPECT_EQ(frame.data()[0] & 0x0F, 0x0B);
 }
 
 // =====================================================================

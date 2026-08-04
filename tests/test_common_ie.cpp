@@ -363,6 +363,10 @@ TEST(CommonIETest, CipheringModeSetting_Off) {
 }
 
 TEST(CommonIETest, CipheringModeSetting_A5_3) {
+    // GSM 24.008 10.5.2.9: cipheringModeSetting is 4 bits: sC(1)|algorithmIdentifier(3)
+    // ciphering=true, algorithm=3(A5/3) -> sC=1, algId=011 -> 4-bit value = 0b1011 = 0x0B
+    // Reference: L3_Templates.ttcn ts_RRM_CiphModeCmd (line 690): cipherModeSetting: sC='1'B, algorithmIdentifier
+    // Spec-verified round-trip: construct(true, 3) -> serialize -> parse -> should yield (true, 3)
     L3CipheringModeSetting orig(true, 3);
     ieRoundTrip(orig);
 }

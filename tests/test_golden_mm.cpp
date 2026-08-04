@@ -82,12 +82,18 @@ TEST(GoldenMM, MessageTypeValues) {
 // =====================================================================
 
 TEST(GoldenMM, LocationUpdatingRequest_Parse) {
+    // GSM 24.008 9.2.15: LocationUpdatingRequest body field order (MANDATORY):
+    //   1) locationUpdatingType(2)|spare(2)|CKSN(4) = 1 octet
+    //   2) locationAreaIdentification = MCC/MNC BCD(3 octets) + LAC(2 octets) = 5 octets RAW (NOT LV!)
+    //   3) mobileStationClassmark1 = LV format (length + value)
+    //   4) mobileIdentity = LV format (length + type octet + value)
+    // Reference: L3_Templates.ttcn ts_LU_REQ (line 356): locationAreaIdentification is raw LAI, then CM1 LV, then MI LV
     // Byte 0: PD(4)=5(MM)|skip(4)=0 = 0x50 [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x08(LocationUpdatingRequest)|NSD(2)=0 = 0x20 [GSM 24.008 Table 10.5.3]
     // Byte 2: LU_Type(2)=00(Normal)|spare(2)=0|CKSN(4)=0 = 0x00 [L3_Templates.ttcn ts_LU_REQ line 368-369]
-    // Bytes 3-7: LAI (mandatory per GSM 24.008 9.2.15): MCC=250, MNC=01, LAC=0x172A
+    // Bytes 3-7: LAI (mandatory per GSM 24.008 9.2.15, RAW not LV): MCC=250, MNC=01, LAC=0x172A
     //   [L3_Templates.ttcn ts_LU_REQ: mcc_mnc='123456'O is OCT3, but here we use BCD nibble-swapped]
-    //   MCC=250, MNC=01 -> '250F01'H nibble-swapped = {0x52, 0xF0, 0x10}, LAC = {0x17, 0x2A}
+    //   MCC=250, MNC=01 -> '250F01'H nibble-swapped = {0x52, 0xF0, 0x10}, LAC = {0x17,  0x2A}
     // Byte 8: CM1 LV length = 1 (Classmark 1 is 1 octet, GSM 24.008 10.5.1.5)
     // Byte 9: CM1 value = 0x00 (default classmark)
     // Byte 10: MI LV length = 5 (1 type octet + 4 TMSI octets, GSM 24.008 10.5.1.4)

@@ -66,10 +66,14 @@ TEST(SSRoundTripTest, Facility_Parse) {
     EXPECT_EQ(msg->MTI(), L3SupServMessage::Facility);
 }
 
-// ── Register Message (GSM 04.80 2.4) ─────────────────────────────────
-// Reference: SS_Templates.ttcn ts_SS_FACILITY_INVOKE with REGISTER_SS opcode
+// ── Register Message (GSM 04.80 2.4 / 3GPP TS 24.080) ────────────────
+// Reference: SS_Templates.ttcn ts_SS_REGISTER, REGISTER=0x3B
+// GSM 24.008 Table 11.2: PD=0x0B(NonCallSS), discriminator = PD(4)|TI(3)|TIF(1)
+// Message type octet: messageType(6)=0x3B(Register)|NSD(2)=0 -> 0xEC
+// Spec-verified: Register message carries Facility TLV (IEI=0x1C) + optional VersionIndicator TV
 
 TEST(SSRoundTripTest, Register_Empty) {
+    // Construct default Register (TI=7), serialize -> parse -> verify MTI survives round-trip
     L3SupServRegisterMessage msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
@@ -77,6 +81,7 @@ TEST(SSRoundTripTest, Register_Empty) {
 }
 
 TEST(SSRoundTripTest, Register_WithData) {
+    // Register with TI=5 and 3-byte Facility data (TCAP INVOKE: opcode 0x81, length 1, value 0x0A)
     L3SupServRegisterMessage msg(5, std::string("\x81\x01\x0A", 3));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);

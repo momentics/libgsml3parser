@@ -153,13 +153,13 @@ TEST(GoldenCC, CallConfirmed_Parse) {
 
 TEST(GoldenCC, CCStatus_Parse) {
     // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
-    // Byte 1: messageType(6)=0x3D(CCSStatus)|NSD(2)=0 = 0xEC [GSM 24.008 Table 10.5.4]
+    // Byte 1: messageType(6)=0x3D(CCSStatus)|NSD(2)=0 -> 0x3D<<2 | 0 = 0xF4 [GSM 24.008 Table 10.5.4]
     // Byte 2: IEI = 0x08 (Cause, GSM 24.008 10.5.4.11)
     // Byte 3: Length = 2 (2 octets of Cause value part)
     // Byte 4: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x16
     // Byte 5: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21 [GSM 24.008 10.5.4.11]
     // Byte 6: CallState = 0x00 [GSM 24.008 10.5.4.6]
-    uint8_t data[] = {0x3E, 0xEC, 0x08, 0x02, 0x16, 0x21, 0x00};
+    uint8_t data[] = {0x3E, 0xF4, 0x08, 0x02, 0x16, 0x21, 0x00};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::CCStatus);
