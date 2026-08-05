@@ -26,57 +26,52 @@
 #include <cstdint>
 
 // Initialized scalar types that are guaranteed to be zero-initialized.
+// Replaces the old macro-based _DECLARE_SCALAR_TYPE with C++20 templates.
 // Part of libgsml3parser.
 
-#define _INITIALIZED_SCALAR_BASE_FUNCS(Classname, Basetype, Init) \
-    Classname() : value(Init) {} \
-    Classname(Basetype wvalue) { value = wvalue; } \
-    operator Basetype() const { return value; } \
-    Basetype operator=(Basetype wvalue) { return value = wvalue; } \
-    Basetype* operator&() { return &value; }
+namespace gsml3parser {
 
-#define _INITIALIZED_SCALAR_ARITH_FUNCS(Basetype) \
-    Basetype operator++() { return ++value; } \
-    Basetype operator++(int) { return value++; } \
-    Basetype operator--() { return --value; } \
-    Basetype operator-=(Basetype wvalue) { return value = value - wvalue; }
+// ── Generic integer scalar wrapper ───────────────────────────────────────
 
-#define _INITIALIZED_SCALAR_FUNCS(Classname, Basetype, Init) \
-    _INITIALIZED_SCALAR_BASE_FUNCS(Classname, Basetype, Init) \
-    _INITIALIZED_SCALAR_ARITH_FUNCS(Basetype)
+template <typename T, T Init = T{0}>
+struct Scalar_i {
+    T value = Init;
 
-#define _DECLARE_SCALAR_TYPE(Classname_i, Classname_z, Basetype) \
-    template <Basetype Init> \
-    struct Classname_i { \
-        Basetype value; \
-        _INITIALIZED_SCALAR_FUNCS(Classname_i, Basetype, Init) \
-    }; \
-    typedef Classname_i<0> Classname_z;
+    constexpr Scalar_i() = default;
+    constexpr explicit Scalar_i(T v) : value(v) {}
 
-_DECLARE_SCALAR_TYPE(Int_i, Int_z, int)
-_DECLARE_SCALAR_TYPE(Char_i, Char_z, signed char)
-_DECLARE_SCALAR_TYPE(Int16_i, Int16_z, int16_t)
-_DECLARE_SCALAR_TYPE(Int32_i, Int32_z, int32_t)
-_DECLARE_SCALAR_TYPE(UInt_i, UInt_z, unsigned)
-_DECLARE_SCALAR_TYPE(UChar_i, UChar_z, unsigned char)
-_DECLARE_SCALAR_TYPE(UInt16_i, UInt16_z, uint16_t)
-_DECLARE_SCALAR_TYPE(UInt32_i, UInt32_z, uint32_t)
-_DECLARE_SCALAR_TYPE(Size_t_i, Size_t_z, size_t)
+    constexpr operator T() const { return value; }
+    constexpr Scalar_i& operator=(T v) & { value = v; return *this; }
+};
 
-template <bool Init>
+// ── Boolean scalar wrapper ───────────────────────────────────────────────
+
+template <bool Init = false>
 struct Bool_i {
-    bool value;
-    _INITIALIZED_SCALAR_BASE_FUNCS(Bool_i, bool, Init)
-};
-typedef Bool_i<0> Bool_z;
+    bool value = Init;
 
-struct Float_z {
-    float value;
-    _INITIALIZED_SCALAR_FUNCS(Float_z, float, 0)
+    constexpr Bool_i() = default;
+    constexpr explicit Bool_i(bool v) : value(v) {}
+
+    constexpr operator bool() const noexcept { return value; }
+    constexpr Bool_i& operator=(bool v) & { value = v; return *this; }
 };
-struct Double_z {
-    double value;
-    _INITIALIZED_SCALAR_FUNCS(Double_z, double, 0)
-};
+
+// ── Zero-initialized typedefs ────────────────────────────────────────────
+
+using Int_z     = Scalar_i<int, 0>;
+using Char_z    = Scalar_i<signed char, 0>;
+using Int16_z   = Scalar_i<int16_t, 0>;
+using Int32_z   = Scalar_i<int32_t, 0>;
+using UInt_z    = Scalar_i<unsigned, 0>;
+using UChar_z   = Scalar_i<unsigned char, 0>;
+using UInt16_z  = Scalar_i<uint16_t, 0>;
+using UInt32_z  = Scalar_i<uint32_t, 0>;
+using Size_t_z  = Scalar_i<size_t, 0>;
+using Bool_z    = Bool_i<false>;
+using Float_z   = Scalar_i<float, 0.f>;
+using Double_z  = Scalar_i<double, 0.0>;
+
+} // namespace gsml3parser
 
 #endif // GSML3PARSER_SCALAR_TYPES_H
