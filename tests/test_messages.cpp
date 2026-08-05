@@ -124,19 +124,19 @@ TEST(MessagesTest, RR_CipheringModeComplete) {
 
 TEST(MessagesTest, RR_PagingRequestType1) {
     L3MobileIdentity id(0x12345678);
-    L3PagingRequestType1 msg = std::move(L3PagingRequestType1::builder().addMobileId(id, ChannelType::SDCCHType)).build();
+    L3PagingRequestType1 msg = L3PagingRequestType1::builder().addMobileId(id, ChannelType::SDCCHType).build();
     EXPECT_EQ(msg.mti(), L3RRMessage::PagingRequestType1);
     EXPECT_GT(msg.l2BodyLength(), 0u);
 }
 
 TEST(MessagesTest, RR_PagingRequestType2) {
-    L3PagingRequestType2 msg = std::move(L3PagingRequestType2::builder().addTMSI(0x12345678, ChannelType::SDCCHType)).build();
+    L3PagingRequestType2 msg = L3PagingRequestType2::builder().addTMSI(0x12345678, ChannelType::SDCCHType).build();
     EXPECT_EQ(msg.mti(), L3RRMessage::PagingRequestType2);
     EXPECT_GT(msg.l2BodyLength(), 0u);
 }
 
 TEST(MessagesTest, RR_PagingRequestType3) {
-    L3PagingRequestType3 msg = std::move(L3PagingRequestType3::builder().addTMSI(0x12345678, ChannelType::SDCCHType)).build();
+    L3PagingRequestType3 msg = L3PagingRequestType3::builder().addTMSI(0x12345678, ChannelType::SDCCHType).build();
     EXPECT_EQ(msg.mti(), L3RRMessage::PagingRequestType3);
     EXPECT_GT(msg.l2BodyLength(), 0u);
 }
@@ -267,7 +267,7 @@ TEST(MessagesTest, CC_Setup) {
 
 TEST(MessagesTest, CC_SetupWithDigits) {
     L3CalledPartyBCDNumber called("1234567890");
-    L3Setup msg = std::move(L3Setup::builder(7).calledParty(called)).build();
+    L3Setup msg = L3Setup::builder(7).calledParty(called).build();
     EXPECT_EQ(msg.mti(), L3CCMessage::Setup);
     EXPECT_TRUE(msg.haveCalledParty());
     EXPECT_STREQ(msg.digits(), "1234567890");
@@ -285,7 +285,7 @@ TEST(MessagesTest, CC_Release) {
     EXPECT_EQ(msg.mti(), L3CCMessage::Release);
     EXPECT_FALSE(msg.haveCause());
 
-    L3Release msg2 = std::move(L3Release::builder(7).cause(CCCause::User_Busy)).build();
+    L3Release msg2 = L3Release::builder(7).cause(CCCause::User_Busy).build();
     EXPECT_TRUE(msg2.haveCause());
     EXPECT_EQ(msg2.cause(), CCCause::User_Busy);
 }
@@ -317,7 +317,7 @@ TEST(MessagesTest, CC_Connect) {
 
 TEST(MessagesTest, MM_LocationUpdatingAccept) {
     L3LocationAreaIdentity lai("250", "01", 0x0001);
-    L3LocationUpdatingAccept msg = std::move(L3LocationUpdatingAccept::builder().lai(lai)).build();
+    L3LocationUpdatingAccept msg = L3LocationUpdatingAccept::builder().lai(lai).build();
     EXPECT_EQ(msg.mti(), L3MMMessage::LocationUpdatingAccept);
 }
 
