@@ -29,6 +29,7 @@
 
 #include "l3message.h"
 #include "l3frame.h"
+#include "context.h"
 
 namespace gsml3parser {
 
@@ -38,39 +39,61 @@ class L3MMMessage;
 class L3CCMessage;
 class L3SupServMessage;
 
+// ── Primary API: context-aware parsers ──────────────────────────────────
+
 /**
- * Callback type for parsing messages of a specific Protocol Discriminator
- * that the library does not handle by default (e.g. SMS, GPRS).
+ * Parse a complete L3 message from an L3Frame using the given context.
+ *
+ * @param frame  The L3 frame to parse.
+ * @param ctx    Parser configuration (PD handlers, log level).
+ * @return       A unique_ptr to the parsed message, or nullptr on failure.
  */
-using PDHandler = std::function<std::unique_ptr<L3Message>(const L3Frame&)>;
+std::unique_ptr<L3Message> parseL3(const L3Frame& frame, const ParserContext& ctx);
+
+/**
+ * Parse a complete L3 message from raw bytes using the given context.
+ *
+ * @param data   Pointer to raw L3 message bytes.
+ * @param len    Number of bytes.
+ * @param ctx    Parser configuration (PD handlers, log level).
+ * @return       A unique_ptr to the parsed message, or nullptr on failure.
+ */
+std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len, const ParserContext& ctx);
+
+/**
+ * Parse a complete L3 message from a hex string using the given context.
+ *
+ * @param hex    Hex-encoded L3 message (e.g. "061900...").
+ * @param ctx    Parser configuration (PD handlers, log level).
+ * @return       A unique_ptr to the parsed message, or nullptr on failure.
+ */
+std::unique_ptr<L3Message> parseL3Hex(const std::string& hex, const ParserContext& ctx);
+
+// ── Legacy API: backward-compatible (uses thread-local default context) ──
 
 /**
  * Parse a complete L3 message from an L3Frame.
+ * Uses a thread-local default context for custom PD handlers.
  *
- * This is the primary entry point for the library.
- *
- * @param frame  The L3 frame to parse.
- * @return       A unique_ptr to the parsed message, or nullptr on failure.
- *
- * The caller owns the returned object.
+ * @deprecated Use `parseL3(frame, ctx)` with an explicit ParserContext.
  */
+[[deprecated("Use parseL3(frame, ctx) with an explicit ParserContext")]]
 std::unique_ptr<L3Message> parseL3(const L3Frame& frame);
 
 /**
  * Parse a complete L3 message from raw bytes.
  *
- * @param data   Pointer to raw L3 message bytes.
- * @param len    Number of bytes.
- * @return       A unique_ptr to the parsed message, or nullptr on failure.
+ * @deprecated Use `parseL3(data, len, ctx)` with an explicit ParserContext.
  */
+[[deprecated("Use parseL3(data, len, ctx) with an explicit ParserContext")]]
 std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len);
 
 /**
  * Parse a complete L3 message from a hex string.
  *
- * @param hex    Hex-encoded L3 message (e.g. "061900...").
- * @return       A unique_ptr to the parsed message, or nullptr on failure.
+ * @deprecated Use `parseL3Hex(hex, ctx)` with an explicit ParserContext.
  */
+[[deprecated("Use parseL3Hex(hex, ctx) with an explicit ParserContext")]]
 std::unique_ptr<L3Message> parseL3Hex(const std::string& hex);
 
 /**
@@ -79,15 +102,20 @@ std::unique_ptr<L3Message> parseL3Hex(const std::string& hex);
  * By default, the library handles PD values for RR, MM, CC, and SS.
  * SMS (PD=0x09) and GPRS (PD=0x08, 0x0a) require external handlers.
  *
- * @param pd       The Protocol Discriminator to handle.
- * @param handler  Callback that returns a parsed message, or nullptr.
+ * @deprecated Use `ParserContext::registerPDHandler()` instead.
  */
+[[deprecated("Use ParserContext::registerPDHandler() instead")]]
 void registerPDHandler(L3PD pd, PDHandler handler);
 
 /**
  * Remove a previously registered handler for a PD.
+ *
+ * @deprecated Use `ParserContext::unregisterPDHandler()` instead.
  */
+[[deprecated("Use ParserContext::unregisterPDHandler() instead")]]
 void unregisterPDHandler(L3PD pd);
+
+// ── Serializers (stateless, no context needed) ──────────────────────────
 
 /**
  * Write an L3Message to raw bytes.
@@ -107,7 +135,7 @@ size_t writeL3(const L3Message& msg, uint8_t* out, size_t maxlen);
  */
 std::string writeL3Hex(const L3Message& msg);
 
-// ── RR parser ───────────────────────────────────────────────────────────
+// ── Domain parsers (internal) ───────────────────────────────────────────
 
 /** Parse a complete L3 radio resource message. */
 std::unique_ptr<L3RRMessage> parseL3RR(const L3Frame& source);
@@ -115,23 +143,17 @@ std::unique_ptr<L3RRMessage> parseL3RR(const L3Frame& source);
 /** Factory: create an RR message by MTI. Returns nullptr if unsupported. */
 L3RRMessage* L3RRFactory(int mti);
 
-// ── MM parser ───────────────────────────────────────────────────────────
-
 /** Parse a complete L3 mobility management message. */
 std::unique_ptr<L3MMMessage> parseL3MM(const L3Frame& source);
 
 /** Factory: create an MM message by MTI. Returns nullptr if unsupported. */
 L3MMMessage* L3MMFactory(int mti);
 
-// ── CC parser ───────────────────────────────────────────────────────────
-
 /** Parse a complete L3 call control message. */
 std::unique_ptr<L3CCMessage> parseL3CC(const L3Frame& source);
 
 /** Factory: create a CC message by MTI. Returns nullptr if unsupported. */
 L3CCMessage* L3CCFactory(int mti);
-
-// ── SS parser ───────────────────────────────────────────────────────────
 
 /** Parse a complete L3 supplementary service message. */
 std::unique_ptr<L3SupServMessage> parseL3SupServ(const L3Frame& source);

@@ -98,6 +98,12 @@ protected:
     virtual void parseBody(const L3Frame& source, size_t& rp);
 };
 
+/**
+ * Callback type for parsing messages of a specific Protocol Discriminator
+ * that the library does not handle by default (e.g. SMS, GPRS).
+ */
+using PDHandler = std::function<std::unique_ptr<L3Message>(const L3Frame&)>;
+
 // ── Utility functions ───────────────────────────────────────────────────
 
 /** Skip an unused LV element while parsing. Returns bits skipped. */

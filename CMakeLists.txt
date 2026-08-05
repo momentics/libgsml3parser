@@ -19,6 +19,7 @@ option(ENABLE_FUZZING "Build fuzzing target" OFF)
 
 set(CORE_SOURCES
     src/bitvector.cpp
+    src/context.cpp
     src/l3frame.cpp
     src/l3message.cpp
     src/common/l3common.cpp
@@ -51,6 +52,7 @@ set(SS_SOURCES
 set(PUBLIC_HEADERS
     include/gsml3parser/arena.h
     include/gsml3parser/bitvector.h
+    include/gsml3parser/context.h
     include/gsml3parser/l3frame.h
     include/gsml3parser/l3message.h
     include/gsml3parser/types.h

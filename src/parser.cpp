@@ -27,25 +27,40 @@
 #include "gsml3parser/logger.h"
 #include <iomanip>
 #include <sstream>
-#include <unordered_map>
 
 namespace gsml3parser {
 
-// ── PD handler registry ────────────────────────────────────────────────
+// ── Thread-local default context (backward compatibility) ───────────────
 
-static std::unordered_map<int, PDHandler> gPDHandlers;
+static thread_local ParserContext defaultContext;
+
+// ── Legacy wrappers ─────────────────────────────────────────────────────
 
 void registerPDHandler(L3PD pd, PDHandler handler) {
-    gPDHandlers[static_cast<int>(pd)] = std::move(handler);
+    defaultContext.registerPDHandler(pd, std::move(handler));
 }
 
 void unregisterPDHandler(L3PD pd) {
-    gPDHandlers.erase(static_cast<int>(pd));
+    defaultContext.unregisterPDHandler(pd);
 }
 
-// ── Main parser ─────────────────────────────────────────────────────────
-
 std::unique_ptr<L3Message> parseL3(const L3Frame& frame) {
+    return parseL3(frame, defaultContext);
+}
+
+std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len) {
+    return parseL3(data, len, defaultContext);
+}
+
+std::unique_ptr<L3Message> parseL3Hex(const std::string& hex) {
+    return parseL3Hex(hex, defaultContext);
+}
+
+// ── Internal: dispatch to domain parsers + custom handlers ──────────────
+
+static std::unique_ptr<L3Message> parseL3WithPDHandler(
+    const L3Frame& frame, const ParserContext& ctx)
+{
     if (frame.size() < 16) return nullptr;
 
     L3PD pd = frame.PD();
@@ -75,23 +90,27 @@ std::unique_ptr<L3Message> parseL3(const L3Frame& frame) {
             break;
     }
 
-    // Check for custom handler
-    auto it = gPDHandlers.find(static_cast<int>(pd));
-    if (it != gPDHandlers.end()) {
-        return it->second(frame);
+    // Check for custom handler in context
+    std::optional<PDHandler> handlerOpt = ctx.getPDHandler(pd);
+    if (handlerOpt && *handlerOpt) {
+        return (*handlerOpt)(frame);
     }
 
     GSML3PARSER_LOG_WARN("Unsupported PD: 0x%02x", static_cast<int>(pd));
     return nullptr;
 }
 
-std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len) {
+// ── Context-aware parsers ───────────────────────────────────────────────
+
+std::unique_ptr<L3Message> parseL3(const L3Frame& frame, const ParserContext& ctx) {
+    return parseL3WithPDHandler(frame, ctx);
+}
+
+std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len, const ParserContext& ctx) {
     if (!data || len == 0) return nullptr;
 
     // Handle short RR messages that don't have PD/MTI headers (GSM 04.08 9.1)
     // These are sent on RACH without standard L3 header
-    // PD values: RR=6, MM=5, CC=3, NonCallSS=0x0B. If first nibble doesn't match any known PD,
-    // it's likely a short message.
     unsigned firstNibble = (data[0] >> 4) & 0x0F;
 
     if (len == 1 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
@@ -116,14 +135,15 @@ std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len) {
 
     L3Frame frame(Primitive::L3_DATA, len * 8);
     std::memcpy(frame.data(), data, len);
-    return parseL3(frame);
+    return parseL3WithPDHandler(frame, ctx);
 }
 
-std::unique_ptr<L3Message> parseL3Hex(const std::string& hex) {
+std::unique_ptr<L3Message> parseL3Hex(const std::string& hex, const ParserContext& ctx) {
     if (hex.empty()) return nullptr;
 
     // Remove whitespace
     std::string clean;
+    clean.reserve(hex.size());
     for (char c : hex) {
         if (std::isxdigit(static_cast<unsigned char>(c))) {
             clean += c;
@@ -133,6 +153,7 @@ std::unique_ptr<L3Message> parseL3Hex(const std::string& hex) {
     if (clean.size() % 2 != 0) return nullptr;
 
     std::vector<uint8_t> bytes;
+    bytes.reserve(clean.size() / 2);
     for (size_t i = 0; i < clean.size(); i += 2) {
         std::string byteStr = clean.substr(i, 2);
         try {
@@ -142,10 +163,10 @@ std::unique_ptr<L3Message> parseL3Hex(const std::string& hex) {
         }
     }
 
-    return parseL3(bytes.data(), bytes.size());
+    return parseL3(bytes.data(), bytes.size(), ctx);
 }
 
-// ── Serializers ─────────────────────────────────────────────────────────
+// ── Serializers (stateless) ─────────────────────────────────────────────
 
 size_t writeL3(const L3Message& msg, uint8_t* out, size_t maxlen) {
     if (!out || maxlen < msg.fullLength()) return 0;
