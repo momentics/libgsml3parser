@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef GSML3PARSER_RR_L3RRMESSAGES_H
-#define GSML3PARSER_RR_L3RRMESSAGES_H
+#pragma once
 
 #include <array>
 #include <cstdint>
@@ -163,7 +162,7 @@ public:
     void parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;
     const L3FrequencyList& cellChannelDescription() const { return mCellChannelDescription; }
-    const L3RACHControlParameters& rachaControl() const { return mRACHControlParameters; }
+    const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
     bool hasRestOctets() const { return mHaveRestOctets; }
     uint8_t restOctet() const { return mRestOctet; }
 };
@@ -457,7 +456,7 @@ public:
     const L3ControlChannelDescription& controlChannelDescription() const { return mControlChannelDescription; }
     const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
     const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
-    const L3RACHControlParameters& rachaControl() const { return mRACHControlParameters; }
+    const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
 };
 
 // ── System Information Type 13 (GSM 04.08 9.1.43a) ────────────────────
@@ -659,7 +658,7 @@ public:
     void text(std::ostream& os) const override;
     const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
     const L3NCCPermitted& nccPermitted() const { return mNCCPermitted; }
-    const L3RACHControlParameters& rachaControl() const { return mRACHControlParameters; }
+    const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
 };
 
 // ── System Information Type 2bis (GSM 04.08 9.1.33) ──────────────────
@@ -678,7 +677,7 @@ public:
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
     const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
-    const L3RACHControlParameters& rachaControl() const { return mRACHControlParameters; }
+    const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
 };
 
 // ── System Information Type 2ter (GSM 04.08 9.1.34) ──────────────────
@@ -720,7 +719,7 @@ public:
     void text(std::ostream& os) const override;
     const L3LocationAreaIdentity& LAI() const { return mLAI; }
     const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
-    const L3RACHControlParameters& rachaControl() const { return mRACHControlParameters; }
+    const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
     bool hasCBCH() const { return mHaveCBCH; }
     const L3ChannelDescription& cbchChannelDescription() const { return mCBCHChannelDescription; }
 };
@@ -809,7 +808,7 @@ public:
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    const L3RACHControlParameters& rachaControl() const { return mRACHControl; }
+    const L3RACHControlParameters& rachControl() const { return mRACHControl; }
     const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
 };
 
@@ -829,7 +828,7 @@ public:
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
     const L3NCCPermitted& nccPermitted() const { return mNCCPermitted; }
-    const L3RACHControlParameters& rachaControl() const { return mRACHControl; }
+    const L3RACHControlParameters& rachControl() const { return mRACHControl; }
     const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
 };
 
@@ -887,7 +886,7 @@ public:
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    const L3RACHControlParameters& rachaControl() const { return mRACHControl; }
+    const L3RACHControlParameters& rachControl() const { return mRACHControl; }
     const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
 };
 
@@ -940,4 +939,4 @@ public:
 
 } // namespace gsml3parser
 
-#endif // GSML3PARSER_RR_L3RRMESSAGES_H
+

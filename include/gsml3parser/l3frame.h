@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef GSML3PARSER_L3FRAME_H
-#define GSML3PARSER_L3FRAME_H
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -101,4 +100,4 @@ std::ostream& operator<<(std::ostream& os, const L3Frame& frame);
 
 } // namespace gsml3parser
 
-#endif // GSML3PARSER_L3FRAME_H
+

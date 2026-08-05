@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef GSML3PARSER_LOGGER_H
-#define GSML3PARSER_LOGGER_H
+#pragma once
 
 #include <cstddef>
 #include <cstdio>
@@ -98,4 +97,4 @@ void logMessage(LogLevel level, const char* file, int line, const char* fmt, ...
 #define GSML3PARSER_LOG_INFO(...)   GSML3PARSER_LOG(gsml3parser::LogLevel::INFO, __VA_ARGS__)
 #define GSML3PARSER_LOG_DEBUG(...)  GSML3PARSER_LOG(gsml3parser::LogLevel::DEBUG, __VA_ARGS__)
 
-#endif // GSML3PARSER_LOGGER_H
+

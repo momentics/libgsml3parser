@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef GSML3PARSER_COMMON_L3COMMON_H
-#define GSML3PARSER_COMMON_L3COMMON_H
+#pragma once
 
 #include <array>
 #include <cstdint>
@@ -993,4 +992,4 @@ inline constexpr unsigned countBeaconTimeslots(int ccch_conf) {
 
 } // namespace gsml3parser
 
-#endif // GSML3PARSER_COMMON_L3COMMON_H
+

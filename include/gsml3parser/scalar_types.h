@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef GSML3PARSER_SCALAR_TYPES_H
-#define GSML3PARSER_SCALAR_TYPES_H
+#pragma once
 
 #include <cstddef>
 #include <cstdint>
@@ -74,4 +73,4 @@ using Double_z  = Scalar_i<double, 0.0>;
 
 } // namespace gsml3parser
 
-#endif // GSML3PARSER_SCALAR_TYPES_H
+

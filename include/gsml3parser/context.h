@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef GSML3PARSER_CONTEXT_H
-#define GSML3PARSER_CONTEXT_H
+#pragma once
 
 #include <cstddef>
 #include <memory>
@@ -69,4 +68,4 @@ private:
 
 } // namespace gsml3parser
 
-#endif // GSML3PARSER_CONTEXT_H
+

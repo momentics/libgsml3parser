@@ -1270,7 +1270,7 @@ public:
     L3SystemInformationType2();
     const L3BCCHFrequencyList& bcchFrequencyList() const;
     const L3NCCPermitted& nccPermitted() const;
-    const L3RACHControlParameters& rachaControl() const;
+    const L3RACHControlParameters& rachControl() const;
     int MTI() const override { return SystemInformationType2; }
     size_t l2BodyLength() const override { return 20; }
 };
@@ -1286,7 +1286,7 @@ public:
     L3SystemInformationType2bis();
     const L3BCCHFrequencyList& bcchFrequencyList() const;
     const L3NCCPermitted& nccPermitted() const;
-    const L3RACHControlParameters& rachaControl() const;
+    const L3RACHControlParameters& rachControl() const;
     int MTI() const override { return SystemInformationType2bis; }
     size_t l2BodyLength() const override { return 20; }
 };
@@ -1302,7 +1302,7 @@ public:
     L3SystemInformationType2ter();
     const L3BCCHFrequencyList& bcchFrequencyList() const;
     const L3NCCPermitted& nccPermitted() const;
-    const L3RACHControlParameters& rachaControl() const;
+    const L3RACHControlParameters& rachControl() const;
     int MTI() const override { return SystemInformationType2ter; }
     size_t l2BodyLength() const override { return 20; }
 };
@@ -1334,7 +1334,7 @@ public:
     const L3CellIdentity& CI() const;
     const L3CellSelectionParameters& cellSelectionParameters() const;
     const L3CellOptionsBCCH& cellOptions() const;
-    const L3RACHControlParameters& rachaControl() const;
+    const L3RACHControlParameters& rachControl() const;
     bool hasCBCH() const;
     const L3CBCHChannelDescription& cbchChannelDescription() const;
     const L3SIType4RestOctets& restOctets() const;

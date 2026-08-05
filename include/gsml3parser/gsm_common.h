@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef GSML3PARSER_GSM_COMMON_H
-#define GSML3PARSER_GSM_COMMON_H
+#pragma once
 
 #include <cstdint>
 #include <ostream>
@@ -105,4 +104,4 @@ extern const unsigned RACHWaitSParamCombined[16];
 
 } // namespace gsml3parser
 
-#endif // GSML3PARSER_GSM_COMMON_H
+

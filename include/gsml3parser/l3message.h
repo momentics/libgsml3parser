@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef GSML3PARSER_L3MESSAGE_H
-#define GSML3PARSER_L3MESSAGE_H
+#pragma once
 
 #include <cstddef>
 #include <functional>
@@ -215,4 +214,4 @@ std::ostream& operator<<(std::ostream& os, const GenericMessageElement& elem);
 
 } // namespace gsml3parser
 
-#endif // GSML3PARSER_L3MESSAGE_H
+

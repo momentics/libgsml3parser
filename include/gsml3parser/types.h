@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef GSML3PARSER_TYPES_H
-#define GSML3PARSER_TYPES_H
+#pragma once
 
 #include <iosfwd>
 
@@ -196,4 +195,4 @@ enum TypeAndOffset : uint8_t {
 
 } // namespace gsml3parser
 
-#endif // GSML3PARSER_TYPES_H
+

@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef GSML3PARSER_PARSER_H
-#define GSML3PARSER_PARSER_H
+#pragma once
 
 #include <cstdint>
 #include <functional>
@@ -118,4 +117,4 @@ std::unique_ptr<L3SupServMessage> L3SupServFactory(int mti);
 
 } // namespace gsml3parser
 
-#endif // GSML3PARSER_PARSER_H
+

@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef GSML3PARSER_BITVECTOR_H
-#define GSML3PARSER_BITVECTOR_H
+#pragma once
 
 #include <algorithm>
 #include <cstddef>
@@ -175,4 +174,4 @@ std::ostream& operator<<(std::ostream& os, const BitVector& bv);
 
 } // namespace gsml3parser
 
-#endif // GSML3PARSER_BITVECTOR_H
+

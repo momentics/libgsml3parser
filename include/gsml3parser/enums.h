@@ -19,8 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#ifndef GSML3PARSER_ENUMS_H
-#define GSML3PARSER_ENUMS_H
+#pragma once
 
 #include <cstdint>
 #include <map>
@@ -193,4 +192,4 @@ const char* BSSCause2Str(BSSCause cause);
 
 } // namespace gsml3parser
 
-#endif // GSML3PARSER_ENUMS_H
+
