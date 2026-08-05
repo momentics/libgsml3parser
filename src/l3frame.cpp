@@ -77,7 +77,7 @@ L3Frame::L3Frame(SAPI sapi, const char* hexString)
     }
     if (!bytes.empty()) {
         resize(bytes.size() * 8);
-        std::memcpy(mStart, bytes.data(), bytes.size());
+        std::memcpy(data(), bytes.data(), bytes.size());
         mL2Length = bytes.size();
     }
     init();

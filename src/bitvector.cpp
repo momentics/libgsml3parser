@@ -20,119 +20,185 @@
 // SOFTWARE.
 
 #include "gsml3parser/bitvector.h"
-#include <cstring>
+#include "gsml3parser/arena.h"
 #include <algorithm>
 #include <iomanip>
 
 namespace gsml3parser {
 
-BitVector::BitVector() : mStart(nullptr), mSize(0), mAlloc(0), mWriteEnd(0) {}
+// ── Shared bit-access helpers ───────────────────────────────────────────
 
-BitVector::BitVector(size_t nbits) : mStart(nullptr), mSize(0), mAlloc(0), mWriteEnd(0) {
-    alloc(nbits);
-    std::memset(mStart, 0, bitVectorByteSize(nbits));
+unsigned readBitsImpl(const uint8_t* buf, size_t& rp, unsigned nbits, size_t sz) {
+    unsigned result = 0;
+    for (unsigned i = 0; i < nbits; ++i) {
+        result <<= 1;
+        if (rp < sz) {
+            size_t byteIdx = rp / 8;
+            unsigned bitIdx = 7 - (rp % 8);
+            result |= (buf[byteIdx] >> bitIdx) & 1;
+        }
+        ++rp;
+    }
+    return result;
+}
+
+unsigned peekBitsImpl(const uint8_t* buf, size_t rp, unsigned nbits, size_t sz) {
+    unsigned result = 0;
+    for (unsigned i = 0; i < nbits; ++i) {
+        result <<= 1;
+        if (rp < sz) {
+            size_t byteIdx = rp / 8;
+            unsigned bitIdx = 7 - (rp % 8);
+            result |= (buf[byteIdx] >> bitIdx) & 1;
+        }
+        ++rp;
+    }
+    return result;
+}
+
+unsigned BitView::readField(size_t& rp, unsigned nbits) const {
+    return ::gsml3parser::readBitsImpl(mData, rp, nbits, mSize);
+}
+
+unsigned BitView::peekField(size_t rp, unsigned nbits) const {
+    return ::gsml3parser::peekBitsImpl(mData, rp, nbits, mSize);
+}
+
+unsigned BitView::readBit(size_t& rp) const {
+    if (rp >= mSize) return 0;
+    size_t byteIdx = rp / 8;
+    unsigned bitIdx = 7 - (rp % 8);
+    ++rp;
+    return (mData[byteIdx] >> bitIdx) & 1;
+}
+
+// ── BitVector: constructors ────────────────────────────────────────────
+
+BitVector::BitVector() : mRawPtr(nullptr), mSize(0), mWriteEnd(0), mOwned(true) {}
+
+BitVector::BitVector(size_t nbits) : mRawPtr(nullptr), mSize(nbits), mWriteEnd(0), mOwned(true) {
+    if (nbits) {
+        mBuffer.resize(bitVectorByteSize(nbits), 0);
+    }
 }
 
 BitVector::BitVector(size_t nbits, unsigned char fill)
-    : mStart(nullptr), mSize(0), mAlloc(0), mWriteEnd(0)
+    : mRawPtr(nullptr), mSize(nbits), mWriteEnd(0), mOwned(true)
 {
-    alloc(nbits);
-    std::memset(mStart, fill, bitVectorByteSize(nbits));
-}
-
-BitVector::BitVector(const BitVector& other)
-    : mStart(nullptr), mSize(0), mAlloc(0), mWriteEnd(0)
-{
-    alloc(other.mSize);
-    std::memcpy(mStart, other.mStart, bitVectorByteSize(other.mSize));
-}
-
-BitVector::BitVector(BitVector&& other) noexcept
-    : mStart(other.mStart), mSize(other.mSize), mAlloc(other.mAlloc)
-{
-    other.mStart = nullptr;
-    other.mSize = 0;
-    other.mAlloc = 0;
+    if (nbits) {
+        mBuffer.resize(bitVectorByteSize(nbits), fill);
+    }
 }
 
 BitVector::BitVector(const std::vector<uint8_t>& bytes)
-    : mStart(nullptr), mSize(bytes.size() * 8), mAlloc(0)
+    : mBuffer(bytes), mRawPtr(nullptr), mSize(bytes.size() * 8), mWriteEnd(0), mOwned(true)
 {
-    alloc(bytes.size() * 8);
-    std::memcpy(mStart, bytes.data(), bytes.size());
 }
 
-BitVector::~BitVector() {
-    dealloc();
+BitVector::BitVector(std::span<const uint8_t> bytes)
+    : mBuffer(bytes.begin(), bytes.end()), mRawPtr(nullptr), mSize(bytes.size() * 8), mWriteEnd(0), mOwned(true)
+{
+}
+
+BitVector::BitVector(Arena& arena, size_t nbits)
+    : mSize(nbits), mWriteEnd(0), mOwned(false)
+{
+    if (nbits) {
+        size_t nbytes = bitVectorByteSize(nbits);
+        mRawPtr = static_cast<uint8_t*>(arena.allocate(nbytes, alignof(uint8_t)));
+        std::memset(mRawPtr, 0, nbytes);
+    } else {
+        mRawPtr = nullptr;
+    }
+}
+
+BitVector::BitVector(const BitVector& other)
+    : mSize(other.mSize), mWriteEnd(other.mWriteEnd), mOwned(true)
+{
+    if (other.mSize) {
+        size_t nbytes = bitVectorByteSize(other.mSize);
+        mBuffer.resize(nbytes);
+        std::memcpy(mBuffer.data(), other.data(), nbytes);
+    }
+}
+
+BitVector::BitVector(BitVector&& other) noexcept
+    : mBuffer(std::move(other.mBuffer)), mRawPtr(other.mRawPtr), mSize(other.mSize),
+      mWriteEnd(other.mWriteEnd), mOwned(other.mOwned)
+{
+    other.mRawPtr = nullptr;
+    other.mSize = 0;
+    other.mWriteEnd = 0;
+    other.mOwned = true;
+    other.mBuffer.clear();
 }
 
 BitVector& BitVector::operator=(const BitVector& other) {
     if (this != &other) {
-        dealloc();
-        alloc(other.mSize);
-        std::memcpy(mStart, other.mStart, bitVectorByteSize(other.mSize));
+        // Free owned resources
+        mBuffer.clear();
+        mRawPtr = nullptr;
+        mOwned = true;
+        mSize = other.mSize;
+        mWriteEnd = other.mWriteEnd;
+        if (other.mSize) {
+            size_t nbytes = bitVectorByteSize(other.mSize);
+            mBuffer.resize(nbytes);
+            std::memcpy(mBuffer.data(), other.data(), nbytes);
+        }
     }
     return *this;
 }
 
 BitVector& BitVector::operator=(BitVector&& other) noexcept {
     if (this != &other) {
-        dealloc();
-        mStart = other.mStart;
+        mBuffer = std::move(other.mBuffer);
+        mRawPtr = other.mRawPtr;
         mSize = other.mSize;
-        mAlloc = other.mAlloc;
-        other.mStart = nullptr;
+        mWriteEnd = other.mWriteEnd;
+        mOwned = other.mOwned;
+        other.mRawPtr = nullptr;
         other.mSize = 0;
-        other.mAlloc = 0;
+        other.mWriteEnd = 0;
+        other.mOwned = true;
+        other.mBuffer.clear();
     }
     return *this;
 }
 
-void BitVector::alloc(size_t nbits) {
-    mAlloc = nbits;
-    mSize = nbits;
-    mStart = static_cast<uint8_t*>(std::malloc(bitVectorByteSize(nbits)));
-    if (!mStart) throw std::bad_alloc();
+BitVector::~BitVector() {
+    // Arena-allocated buffers are NOT freed (arena owns them).
+    // std::vector frees itself automatically.
 }
 
-void BitVector::dealloc() {
-    if (mStart) {
-        std::free(mStart);
-        mStart = nullptr;
-    }
-    mSize = 0;
-    mAlloc = 0;
-}
+// ── BitVector: resize ──────────────────────────────────────────────────
 
 void BitVector::resize(size_t nbits) {
-    BitVector tmp(nbits);
-    size_t copyBits = std::min(nbits, mSize);
-    if (copyBits > 0 && mStart) {
-        std::memcpy(tmp.mStart, mStart, bitVectorByteSize(copyBits));
+    if (mOwned) {
+        size_t oldBytes = mBuffer.size();
+        size_t newBytes = bitVectorByteSize(nbits);
+        if (newBytes != oldBytes) {
+            mBuffer.resize(newBytes, 0);
+        }
+        if (newBytes > oldBytes) {
+            std::memset(mBuffer.data() + oldBytes, 0, newBytes - oldBytes);
+        }
+    } else {
+        // Arena-allocated: cannot resize (fixed block). Truncate or pad.
+        // For safety, just clamp the size to what we allocated.
+        // In practice, writeField handles expansion for owned vectors only.
     }
-    dealloc();
-    mStart = tmp.mStart;
     mSize = nbits;
-    mAlloc = nbits;
-    tmp.mStart = nullptr;  // Prevent tmp destructor from freeing stolen buffer
 }
 
 void BitVector::clear() {
     mSize = 0;
 }
 
+// ── BitVector: bit access ──────────────────────────────────────────────
+
 unsigned BitVector::readField(size_t& rp, unsigned nbits) const {
-    unsigned result = 0;
-    for (unsigned i = 0; i < nbits; ++i) {
-        result <<= 1;
-        if (rp < mSize) {
-            size_t byteIdx = rp / 8;
-            unsigned bitIdx = 7 - (rp % 8);
-            result |= (mStart[byteIdx] >> bitIdx) & 1;
-        }
-        ++rp;
-    }
-    return result;
+    return readBitsImpl(data(), rp, nbits, mSize);
 }
 
 void BitVector::writeField(size_t& wp, unsigned value, unsigned nbits) {
@@ -143,38 +209,30 @@ void BitVector::writeField(size_t& wp, unsigned value, unsigned nbits) {
     if (endBit > mWriteEnd) {
         mWriteEnd = endBit;
     }
+    uint8_t* buf = data();
     for (int i = nbits - 1; i >= 0; --i) {
         size_t byteIdx = wp / 8;
         unsigned bitIdx = 7 - (wp % 8);
         if ((value >> i) & 1) {
-            mStart[byteIdx] |= (1u << bitIdx);
+            buf[byteIdx] |= (1u << bitIdx);
         } else {
-            mStart[byteIdx] &= ~(1u << bitIdx);
+            buf[byteIdx] &= ~(1u << bitIdx);
         }
         ++wp;
     }
 }
 
 unsigned BitVector::peekField(size_t rp, unsigned nbits) const {
-    unsigned result = 0;
-    for (unsigned i = 0; i < nbits; ++i) {
-        result <<= 1;
-        if (rp < mSize) {
-            size_t byteIdx = rp / 8;
-            unsigned bitIdx = 7 - (rp % 8);
-            result |= (mStart[byteIdx] >> bitIdx) & 1;
-        }
-        ++rp;
-    }
-    return result;
+    return peekBitsImpl(data(), rp, nbits, mSize);
 }
 
 unsigned BitVector::readBit(size_t& rp) const {
     if (rp >= mSize) return 0;
+    const uint8_t* buf = data();
     size_t byteIdx = rp / 8;
     unsigned bitIdx = 7 - (rp % 8);
     ++rp;
-    return (mStart[byteIdx] >> bitIdx) & 1;
+    return (buf[byteIdx] >> bitIdx) & 1;
 }
 
 void BitVector::writeBit(size_t& wp, bool bit) {
@@ -184,15 +242,18 @@ void BitVector::writeBit(size_t& wp, bool bit) {
     if (wp + 1 > mWriteEnd) {
         mWriteEnd = wp + 1;
     }
+    uint8_t* buf = data();
     size_t byteIdx = wp / 8;
     unsigned bitIdx = 7 - (wp % 8);
     if (bit) {
-        mStart[byteIdx] |= (1u << bitIdx);
+        buf[byteIdx] |= (1u << bitIdx);
     } else {
-        mStart[byteIdx] &= ~(1u << bitIdx);
+        buf[byteIdx] &= ~(1u << bitIdx);
     }
     ++wp;
 }
+
+// ── BitVector: segment / clone ─────────────────────────────────────────
 
 BitVector BitVector::segment(size_t offset, size_t nbits) const {
     BitVector result(nbits);
@@ -207,20 +268,47 @@ BitVector BitVector::segment(size_t offset, size_t nbits) const {
 }
 
 BitVector BitVector::clone() const {
-    return BitVector(*this);
+    return *this;
 }
+
+// ── BitVector: comparison ──────────────────────────────────────────────
 
 bool BitVector::operator==(const BitVector& other) const {
     if (mSize != other.mSize) return false;
-    return std::memcmp(mStart, other.mStart, bitVectorByteSize(mSize)) == 0;
+    size_t nbytes = bitVectorByteSize(mSize);
+    return std::memcmp(data(), other.data(), nbytes) == 0;
 }
 
+// ── Stream output ──────────────────────────────────────────────────────
+
 std::ostream& operator<<(std::ostream& os, const BitVector& bv) {
+    const uint8_t* buf = bv.data();
     for (size_t i = 0; i < bitVectorByteSize(bv.mSize); ++i) {
         os << std::hex << std::setw(2) << std::setfill('0')
-           << static_cast<int>(bv.mStart[i]);
+           << static_cast<int>(buf[i]);
     }
     return os;
+}
+
+// ── Arena ──────────────────────────────────────────────────────────────
+
+Arena::Arena(size_t initialCapacity) : mBuffer(initialCapacity), mOffset(0) {}
+
+void* Arena::allocate(size_t bytes, size_t alignment) {
+    // Align current offset up to `alignment`
+    size_t aligned = (mOffset + alignment - 1) & ~(alignment - 1);
+    if (aligned + bytes > mBuffer.size()) {
+        // Grow the buffer
+        size_t newCap = std::max(mBuffer.size() * 2, aligned + bytes);
+        mBuffer.resize(newCap);
+    }
+    void* ptr = mBuffer.data() + aligned;
+    mOffset = aligned + bytes;
+    return ptr;
+}
+
+void Arena::reset() {
+    mOffset = 0;
 }
 
 } // namespace gsml3parser

@@ -49,6 +49,7 @@ set(SS_SOURCES
 # ── Public headers ────────────────────────────────────────────────────
 
 set(PUBLIC_HEADERS
+    include/gsml3parser/arena.h
     include/gsml3parser/bitvector.h
     include/gsml3parser/l3frame.h
     include/gsml3parser/l3message.h
