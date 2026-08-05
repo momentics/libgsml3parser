@@ -1,20 +1,23 @@
 # libgsml3parser — Full API Reference
 
-> Version 0.1.0 | C++17 | Thread-safe (read-only) | No external dependencies
+> Version 0.4.0 | C++20 | Thread-safe | HPL-compliant memory | No external dependencies
 
 ## Table of Contents
 
 1. [Getting Started](#1-getting-started)
 2. [Core API](#2-core-api)
-3. [Data Types](#3-data-types)
-4. [Information Elements](#4-information-elements)
-5. [Radio Resource Messages (PD=0x06)](#5-radio-resource-messages-pd0x06)
-6. [Mobility Management Messages (PD=0x05)](#6-mobility-management-messages-pd0x05)
-7. [Call Control Messages (PD=0x03)](#7-call-control-messages-pd0x03)
-8. [Supplementary Services (PD=0x0b)](#8-supplementary-services-pd0x0b)
-9. [Error Handling](#9-error-handling)
-10. [Logging](#10-logging)
-11. [Appendix: GSM Specifications](#11-appendix-gsm-specifications)
+3. [ParserContext — Thread-Safe Configuration](#3-parsercontext-thread-safe-configuration)
+4. [Memory Management — Arena and BitView](#4-memory-management-arena-and-bitview)
+5. [Data Types](#5-data-types)
+6. [Information Elements](#6-information-elements)
+7. [Radio Resource Messages (PD=0x06)](#7-radio-resource-messages-pd0x06)
+8. [Mobility Management Messages (PD=0x05)](#8-mobility-management-messages-pd0x05)
+9. [Call Control Messages (PD=0x03)](#9-call-control-messages-pd0x03)
+10. [Supplementary Services (PD=0x0b)](#10-supplementary-services-pd0x0b)
+11. [Error Handling](#11-error-handling)
+12. [Logging](#12-logging)
+13. [Conformance Notes](#13-conformance-notes)
+14. [Appendix: GSM Specifications](#14-appendix-gsm-specifications)
 
 ---
 
@@ -24,8 +27,9 @@
 
 | Requirement | Minimum Version |
 |-------------|-----------------|
-| C++ Compiler | GCC 7+, Clang 5+, MSVC 2017+ |
-| CMake | 3.16+ |
+| C++ Compiler | GCC 11+, Clang 10+, MSVC 2022 17.3+ |
+| CMake | 3.20+ |
+| Standard Library | C++20 (libstdc++ or libc++) |
 | Make / Ninja | Any |
 | Google Test (optional) | 1.14+ |
 
@@ -78,42 +82,37 @@ Parse a complete L3 message from binary data. The library dispatches to the corr
 sub-parser based on the Protocol Discriminator (PD) field.
 
 ```cpp
-std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len);
+std::unique_ptr<L3Message> parseL3(const L3Frame& frame, const ParserContext& ctx);
+std::unique_ptr<L3Message> parseL3(std::span<const uint8_t> data, const ParserContext& ctx);
+std::unique_ptr<L3Message> parseL3Hex(std::string_view hex, const ParserContext& ctx);
 ```
 
 | Parameter | Description |
 |-----------|-------------|
-| `data` | Pointer to raw L3 message bytes (PD + MTI + body). |
-| `len` | Number of bytes in `data`. |
+| `frame` | An L3 frame with PD + MTI + body. |
+| `data` | `std::span` of raw L3 message bytes. |
+| `hex` | Hex-encoded string (`std::string_view`). Whitespace is ignored. |
+| `ctx` | Parser configuration (PD handlers, log level). See [§3](#3-parsercontext-thread-safe-configuration). |
 
 **Returns:** `std::unique_ptr<L3Message>` — the parsed message, or `nullptr` on failure.
 
 **Example:**
 
 ```cpp
-uint8_t data[] = { 0x06, 0x27, /* PagingResponse body */ };
-auto msg = gsml3parser::parseL3(data, sizeof(data));
+#include <gsml3parser/parser.h>
+#include <gsml3parser/context.h>
+
+gsml3parser::ParserContext ctx;
+
+std::span<const uint8_t> data{0x06, 0x27, /* PagingResponse body */};
+auto msg = gsml3parser::parseL3(data, ctx);
 
 if (msg) {
     std::cout << msg->text() << std::endl;
 }
 ```
 
-### 2.2 Parse from L3Frame
-
-```cpp
-std::unique_ptr<L3Message> parseL3(const L3Frame& frame);
-```
-
-### 2.3 Parse from Hex String
-
-```cpp
-std::unique_ptr<L3Message> parseL3Hex(const std::string& hex);
-```
-
-Accepts a hex-encoded string (e.g. `"0627..."`). Whitespace is ignored.
-
-### 2.4 Serialize Message to Bytes
+### 2.2 Serialize Message to Bytes
 
 ```cpp
 size_t writeL3(const L3Message& msg, uint8_t* out, size_t maxlen);
@@ -121,54 +120,36 @@ size_t writeL3(const L3Message& msg, uint8_t* out, size_t maxlen);
 
 **Returns:** Number of bytes written, or `0` if `out` is too small.
 
-### 2.5 Serialize Message to Hex
+### 2.3 Serialize Message to Hex
 
 ```cpp
 std::string writeL3Hex(const L3Message& msg);
 ```
 
-### 2.6 Register Custom PD Handler
+### 2.4 Domain Parsers and Factories
 
-For Protocol Discriminators not handled by the library (SMS, GPRS), register a callback:
-
-```cpp
-using PDHandler = std::function<std::unique_ptr<L3Message>(const L3Frame&)>;
-void registerPDHandler(L3PD pd, PDHandler handler);
-void unregisterPDHandler(L3PD pd);
-```
-
-**Example:**
-
-```cpp
-gsml3parser::registerPDHandler(gsml3parser::L3PD::SMS,
-    [](const gsml3parser::L3Frame& frame) {
-        return parseMySMS(frame);
-    });
-```
-
-### 2.7 Downcast Helpers
-
-Each PD has its own parser and factory:
+Each PD domain has a dedicated parser and factory. All factories return
+`std::unique_ptr` (no raw `new`/`delete`):
 
 ```cpp
 // RR
 std::unique_ptr<L3RRMessage> parseL3RR(const L3Frame& source);
-L3RRMessage* L3RRFactory(int mti);
+std::unique_ptr<L3RRMessage> L3RRFactory(int mti);
 
 // MM
 std::unique_ptr<L3MMMessage> parseL3MM(const L3Frame& source);
-L3MMMessage* L3MMFactory(int mti);
+std::unique_ptr<L3MMMessage> L3MMFactory(int mti);
 
 // CC
 std::unique_ptr<L3CCMessage> parseL3CC(const L3Frame& source);
-L3CCMessage* L3CCFactory(int mti);
+std::unique_ptr<L3CCMessage> L3CCFactory(int mti);
 
 // SS
 std::unique_ptr<L3SupServMessage> parseL3SupServ(const L3Frame& source);
-L3SupServMessage* L3SupServFactory(int mti);
+std::unique_ptr<L3SupServMessage> L3SupServFactory(int mti);
 ```
 
-### 2.8 MTI to String
+### 2.5 MTI to String
 
 ```cpp
 std::string mti2string(L3PD pd, unsigned mti);
@@ -178,45 +159,230 @@ Converts a PD + MTI pair to a human-readable name.
 
 ---
 
-## 3. Data Types
+## 3. ParserContext — Thread-Safe Configuration
 
-### 3.1 BitVector
+**File:** `gsml3parser/context.h`
+
+`ParserContext` replaces the legacy global PD handler registry. Each context
+maintains its own handler map and log level, making it safe to share across
+threads for read-only access.
+
+```cpp
+class ParserContext {
+public:
+    ParserContext() = default;
+
+    void registerPDHandler(L3PD pd, PDHandler handler);
+    void unregisterPDHandler(L3PD pd);
+    std::optional<PDHandler> getPDHandler(L3PD pd) const;
+
+    LogLevel logLevel() const;
+    void setLogLevel(LogLevel level);
+};
+```
+
+### Thread-Safety Guarantees
+
+| Operation | Lock type | Safe to call concurrently? |
+|-----------|-----------|---------------------------|
+| `parseL3(..., ctx)` | Shared read lock | Yes — multiple threads can parse with the same context |
+| `getPDHandler(pd)` | Shared read lock | Yes |
+| `logLevel()` | Lock-free | Yes |
+| `registerPDHandler(pd, handler)` | Exclusive write lock | Yes — but blocks concurrent reads briefly |
+| `unregisterPDHandler(pd)` | Exclusive write lock | Yes — but blocks concurrent reads briefly |
+| `setLogLevel(level)` | Lock-free | Yes |
+
+### Usage Pattern
+
+```cpp
+// Create once at program startup, share read-only across threads
+gsml3parser::ParserContext globalCtx;
+globalCtx.registerPDHandler(gsml3parser::L3PD::SMS, mySmsHandler);
+
+// Each thread parses independently
+void workerThread(std::span<const uint8_t> frames) {
+    for (auto frame : frames) {
+        auto msg = gsml3parser::parseL3(frame, globalCtx);
+        // ... process ...
+    }
+}
+```
+
+For isolated per-thread contexts (no shared state at all):
+
+```cpp
+void isolatedThread() {
+    gsml3parser::ParserContext ctx;  // completely independent
+    ctx.registerPDHandler(gsml3parser::L3PD::SMS, mySmsHandler);
+    // ... parse with ctx ...
+}
+```
+
+---
+
+## 4. Memory Management — Arena and BitView
+
+### 4.1 Arena Allocator
+
+**File:** `gsml3parser/arena.h`
+
+A simple bump allocator for high-throughput parsing scenarios. Avoids per-object
+allocation overhead by allocating from a single growable buffer.
+
+```cpp
+class Arena {
+public:
+    explicit Arena(size_t initialCapacity = 4096);
+
+    void* allocate(size_t bytes, size_t alignment = alignof(std::max_align_t));
+    void reset();
+    size_t used() const;
+    size_t capacity() const;
+};
+```
+
+| Method | Description |
+|--------|-------------|
+| `allocate(bytes, alignment)` | Bump-allocate `bytes` with the given alignment. Returns `nullptr` on failure. |
+| `reset()` | Reclaim all memory. All previously returned pointers become invalid. |
+| `used()` | Bytes consumed since last `reset()`. |
+| `capacity()` | Total allocated buffer size. |
+
+**Thread-safety:** NOT thread-safe. Each thread must use its own Arena instance.
+
+**Example — batch parsing:**
+
+```cpp
+gsml3parser::Arena arena(65536);  // 64 KB
+
+for (const auto& batch : messageBatches) {
+    arena.reset();  // free all allocations from previous batch
+
+    for (auto frame : batch) {
+        gsml3parser::BitVector bv(arena, frame.size_bytes() * 8);
+        // ... parse using bv ...
+        // No individual free needed — arena.reset() handles it
+    }
+}
+```
+
+### 4.2 BitView — Zero-Copy Read-Only View
 
 **File:** `gsml3parser/bitvector.h`
 
-A resizable bit vector with MSB-first bit ordering within each octet.
+A non-owning, read-only view over an external byte buffer. Useful for parsing
+data you do not own (network buffers, DMA rings, shared memory).
+
+```cpp
+class BitView {
+public:
+    BitView();
+    BitView(const uint8_t* data, size_t nbits);
+    explicit BitView(std::span<const uint8_t> bytes);
+
+    size_t size() const;
+    bool empty() const;
+
+    unsigned readField(size_t& rp, unsigned nbits) const;
+    unsigned peekField(size_t rp, unsigned nbits) const;
+    unsigned readBit(size_t& rp) const;
+    const uint8_t* data() const;
+};
+```
+
+| Method | Description |
+|--------|-------------|
+| `readField(rp, nbits)` | Read `nbits` from position `rp`, advance `rp`. |
+| `peekField(rp, nbits)` | Read without advancing. |
+| `readBit(rp)` | Read single bit, advance `rp`. |
+
+**Ownership:** The caller guarantees the underlying buffer outlives the BitView.
+
+**Example — parsing socket data without copying:**
+
+```cpp
+extern uint8_t socketBuffer[256];  // filled by network layer
+
+gsml3parser::BitView view(std::span<const uint8_t>{socketBuffer, 256});
+size_t rp = 0;
+unsigned pd = view.readField(rp, 8);
+unsigned mti = view.readField(rp, 7);
+```
+
+### 4.3 BitVector Memory Modes
+
+The `BitVector` class supports three memory modes:
+
+| Mode | Constructor | Ownership | Destructor frees? |
+|------|-----------|-----------|-------------------|
+| Default (vector) | `BitVector(nbits)` | Library-owned (`std::vector`) | Yes |
+| Arena | `BitVector(arena, nbits)` | Arena-owned | **No** — call `Arena::reset()` |
+| Copy from span | `BitVector(span<const uint8_t>)` | Library-owned (copy) | Yes |
+
+### 4.4 Memory Ownership Diagram
+
+```
+Client code
+  ├── ParserContext (per-thread or shared read-only)
+  │     └── PD handlers (unordered_map, mutex-protected)
+  │
+  ├── Arena (per-thread, NOT shared)
+  │     └── BitVector (bump-allocated, no individual free)
+  │           └── L3Frame → parseL3() → unique_ptr<L3Message>
+  │
+  └── BitView (zero-copy, read-only)
+        └── External buffer (caller-owned, e.g. socket, DMA ring)
+```
+
+---
+
+## 5. Data Types
+
+### 5.1 BitVector
+
+**File:** `gsml3parser/bitvector.h`
+
+A resizable bit vector with MSB-first bit ordering within each octet.  Supports
+three memory modes: default (owned `std::vector`), arena-allocated, and copy from
+`std::span`.
 
 ```cpp
 class BitVector {
 public:
+    // Default (vector-owned) constructors
     BitVector();
     explicit BitVector(size_t nbits);
     BitVector(size_t nbits, unsigned char fill);
+    BitVector(const std::vector<uint8_t>& bytes);
+    explicit BitVector(std::span<const uint8_t> bytes);  // makes a copy
+
+    // Arena-allocated (non-owning)
+    BitVector(Arena& arena, size_t nbits);
+
     BitVector(const BitVector& other);
     BitVector(BitVector&& other) noexcept;
-    BitVector(const std::vector<uint8_t>& bytes);
-    ~BitVector();
-
     BitVector& operator=(const BitVector& other);
     BitVector& operator=(BitVector&& other) noexcept;
+    ~BitVector();
 
     size_t size() const;
     bool empty() const;
     void resize(size_t nbits);
     void clear();
+    void reset();  // size → 0, keeps capacity (arena-like reuse)
 
     unsigned readField(size_t& rp, unsigned nbits) const;
-    void writeField(size_t& wp, unsigned value, unsigned nbits) const;
+    void writeField(size_t& wp, unsigned value, unsigned nbits);
     unsigned peekField(size_t rp, unsigned nbits) const;
-
-    bool readBit(size_t& rp) const;
-    void writeBit(size_t& wp, bool bit) const;
+    unsigned readBit(size_t& rp) const;
+    void writeBit(size_t& wp, bool bit);
 
     const uint8_t* data() const;
     uint8_t*       data();
 
     BitVector segment(size_t offset, size_t nbits) const;
     BitVector clone() const;
+    BitView view() const;  // non-owning read-only view
 
     bool operator==(const BitVector& other) const;
     bool operator!=(const BitVector& other) const;
@@ -232,10 +398,18 @@ public:
 | `peekField(rp, nbits)` | Read without advancing `rp` |
 | `segment(offset, nbits)` | Extract a sub-segment as a new BitVector |
 | `clone()` | Create a deep copy |
+| `reset()` | Reset size to 0 but keep allocated capacity for reuse |
+| `view()` | Create a non-owning `BitView` over the current buffer |
+
+**Memory modes:** See [§4.3](#43-bitvector-memory-modes).
 
 **Bit ordering:** Within each octet, bit 7 (MSB) is read first.
 
-### 3.2 L3Frame
+### 5.2 BitView
+
+A non-owning, zero-copy, read-only view over external bytes.  See [§4.2](#42-bitview-zero-copy-read-only-view).
+
+### 5.3 L3Frame
 
 **File:** `gsml3parser/l3frame.h`
 
@@ -278,7 +452,7 @@ public:
 | `MTI()` | Message Type Indicator | GSM 04.08 10.4 |
 | `TI()` | Transaction Identifier | GSM 04.07 11.2.3.1.3 |
 
-### 3.3 L3Message
+### 5.4 L3Message
 
 **File:** `gsml3parser/l3message.h`
 
@@ -314,7 +488,7 @@ public:
 | `fullLength()` | Total length including L3 header and rest octets |
 | `bitsNeeded()` | Total bits needed for serialization |
 
-### 3.4 L3ProtocolElement
+### 5.5 L3ProtocolElement
 
 **File:** `gsml3parser/l3message.h`
 
@@ -353,7 +527,7 @@ public:
 | TLV | Type + Length + Value | BCD Numbers |
 | LV | Length + Value (variable) | MobileIdentity |
 
-### 3.5 L3OctetAlignedProtocolElement
+### 5.6 L3OctetAlignedProtocolElement
 
 Convenience class for raw TLV/LV elements:
 
@@ -371,7 +545,7 @@ public:
 };
 ```
 
-### 3.6 GenericMessageElement
+### 5.7 GenericMessageElement
 
 For non-TLV bit-level elements (used in rest octets):
 
@@ -385,7 +559,7 @@ public:
 };
 ```
 
-### 3.7 Utility Functions
+### 5.8 Utility Functions
 
 **File:** `gsml3parser/l3message.h`
 
@@ -403,7 +577,7 @@ size_t skipTV(unsigned IEI, size_t numBits, const L3Frame& source, size_t& rp);
 bool parseHasT(unsigned IEI, const L3Frame& source, size_t& rp);
 ```
 
-### 3.8 Scalar Types
+### 5.9 Scalar Types
 
 **File:** `gsml3parser/scalar_types.h`
 
@@ -424,7 +598,7 @@ Initialized scalar types that guarantee zero-initialization:
 | `Float_z` | `float` | Zero-initialized float |
 | `Double_z` | `double` | Zero-initialized double |
 
-### 3.9 Protocol Types
+### 5.10 Protocol Types
 
 **File:** `gsml3parser/types.h`
 
@@ -535,9 +709,9 @@ enum class ChannelType : uint8_t {
 
 ---
 
-## 4. Information Elements
+## 6. Information Elements
 
-### 4.1 L3CellIdentity
+### 6.1 L3CellIdentity
 
 **File:** `gsml3parser/common/l3common.h` | **Spec:** GSM 04.08 10.5.1.1
 
@@ -550,7 +724,7 @@ public:
 };
 ```
 
-### 4.2 L3LocationAreaIdentity
+### 6.2 L3LocationAreaIdentity
 
 **File:** `gsml3parser/common/l3common.h` | **Spec:** GSM 04.08 10.5.1.3
 
@@ -566,7 +740,7 @@ public:
 };
 ```
 
-### 4.3 L3MobileIdentity
+### 6.3 L3MobileIdentity
 
 **File:** `gsml3parser/common/l3common.h` | **Spec:** GSM 04.08 10.5.1.4
 
@@ -590,7 +764,7 @@ public:
 };
 ```
 
-### 4.4 L3MobileStationClassmark1
+### 6.4 L3MobileStationClassmark1
 
 **File:** `gsml3parser/common/l3common.h` | **Spec:** GSM 04.08 10.5.1.5
 
@@ -601,7 +775,7 @@ public:
 };
 ```
 
-### 4.5 L3MobileStationClassmark2
+### 6.5 L3MobileStationClassmark2
 
 **File:** `gsml3parser/common/l3common.h` | **Spec:** GSM 04.08 10.5.1.5
 
@@ -614,7 +788,7 @@ public:
 };
 ```
 
-### 4.6 L3MobileStationClassmark3
+### 6.6 L3MobileStationClassmark3
 
 **File:** `gsml3parser/common/l3common.h` | **Spec:** GSM 04.08 10.5.1.7
 
@@ -626,7 +800,7 @@ public:
 };
 ```
 
-### 4.7 L3CipheringKeySequenceNumber
+### 6.7 L3CipheringKeySequenceNumber
 
 **File:** `gsml3parser/common/l3common.h`
 
@@ -638,7 +812,7 @@ public:
 };
 ```
 
-### 4.8 L3CipheringModeSetting
+### 6.8 L3CipheringModeSetting
 
 **File:** `gsml3parser/common/l3common.h` | **Spec:** GSM 04.08 10.5.2.11
 
@@ -655,7 +829,7 @@ public:
 };
 ```
 
-### 4.9 L3CipheringModeResponse
+### 6.9 L3CipheringModeResponse
 
 **File:** `gsml3parser/common/l3common.h` | **Spec:** GSM 04.08 10.5.2.12
 
@@ -671,7 +845,7 @@ public:
 };
 ```
 
-### 4.10 L3SI3RestOctets
+### 6.10 L3SI3RestOctets
 
 **File:** `gsml3parser/common/l3common.h` | **Spec:** GSM 04.08 10.5.2.24
 
@@ -691,11 +865,11 @@ public:
 
 ---
 
-## 5. Radio Resource Messages (PD=0x06)
+## 7. Radio Resource Messages (PD=0x06)
 
 **File:** `gsml3parser/rr/l3rrmessages.h` | **Spec:** GSM 04.08 9.1
 
-### 5.1 L3RRMessage
+### 7.1 L3RRMessage
 
 Base class for all RR messages.
 
@@ -750,7 +924,7 @@ public:
 };
 ```
 
-### 5.2 L3RRMessageNRO / L3RRMessageRO
+### 7.2 L3RRMessageNRO / L3RRMessageRO
 
 ```cpp
 class L3RRMessageNRO : public L3RRMessage {
@@ -765,7 +939,7 @@ class L3RRMessageRO : public L3RRMessage {
 };
 ```
 
-### 5.3 L3PagingRequestType1
+### 7.3 L3PagingRequestType1
 
 **Spec:** GSM 04.08 9.1.22 — V-format: PageMode(4 bits) + ChannelNeeded(2 bits) + MobileIdentity(LV) [+ second MobileIdentity(TLV)]
 
@@ -785,7 +959,7 @@ public:
 PageMode is a 4-bit (half-octet) field. Two-ID constructor supports dual paging.
 ```
 
-### 5.4 L3PagingResponse
+### 7.4 L3PagingResponse
 
 **Spec:** GSM 04.08 9.1.25 — V-format: MobileIdentity [+ Classmark2/3]
 
@@ -798,7 +972,7 @@ public:
 };
 ```
 
-### 5.5 L3ChannelRelease
+### 7.5 L3ChannelRelease
 
 **Spec:** GSM 04.08 9.1.7 — V-format: Cause [+ GPRSResumption]
 
@@ -817,7 +991,7 @@ public:
 l2BodyLength is dynamic: 1 + (GPRS resumption ? 1 : 0).
 ```
 
-### 5.6 L3RRStatus
+### 7.6 L3RRStatus
 
 **Spec:** GSM 04.08 9.1.29
 
@@ -829,7 +1003,7 @@ public:
 };
 ```
 
-### 5.7 L3AssignmentCommand
+### 7.7 L3AssignmentCommand
 
 **Spec:** GSM 04.08 9.1.2 — V-format: ChannelDescription + ChannelMode + PowerCommand [+ Mode1] + [+ MultiRate]
 
@@ -850,7 +1024,7 @@ public:
 
 Power command is mandatory. Optional Mode1 and MultiRate fields supported for AMR.
 
-### 5.8 L3AssignmentComplete
+### 7.8 L3AssignmentComplete
 
 **Spec:** GSM 04.08 9.1.3
 
@@ -862,7 +1036,7 @@ public:
 };
 ```
 
-### 5.9 L3AssignmentFailure
+### 7.9 L3AssignmentFailure
 
 **Spec:** GSM 04.08 9.1.3
 
@@ -874,7 +1048,7 @@ public:
 };
 ```
 
-### 5.10 L3ClassmarkEnquiry
+### 7.10 L3ClassmarkEnquiry
 
 **Spec:** GSM 04.08 9.1.14
 
@@ -886,7 +1060,7 @@ public:
 };
 ```
 
-### 5.11 L3ClassmarkChange
+### 7.11 L3ClassmarkChange
 
 **Spec:** GSM 04.08 9.1.11
 
@@ -898,7 +1072,7 @@ public:
 };
 ```
 
-### 5.12 L3MeasurementReport
+### 7.12 L3MeasurementReport
 
 **Spec:** GSM 04.08 9.1.21
 
@@ -910,7 +1084,7 @@ public:
 };
 ```
 
-### 5.13 L3CipheringModeCommand
+### 7.13 L3CipheringModeCommand
 
 **Spec:** GSM 04.08 9.1.9 — V-format: L3CipheringModeSetting (4 bits: 3 algorithm + 1 ciphering flag) + L3CipheringModeResponse (4 bits: 3 spare + 1 includeIMEISV) + CipheringKeySequenceNumber
 
@@ -924,7 +1098,7 @@ public:
 };
 ```
 
-### 5.14 L3CipheringModeComplete
+### 7.14 L3CipheringModeComplete
 
 **Spec:** GSM 04.08 9.1.10
 
@@ -936,7 +1110,7 @@ public:
 };
 ```
 
-### 5.15 L3HandoverCommand
+### 7.15 L3HandoverCommand
 
 **Spec:** GSM 04.08 9.1.15 — V-format: CellDescription + ChannelDesc2 + HandoverRef + PowerCmd + SyncInd
 
@@ -953,7 +1127,7 @@ public:
 };
 ```
 
-### 5.16 L3HandoverComplete
+### 7.16 L3HandoverComplete
 
 **Spec:** GSM 04.08 9.1.16
 
@@ -1326,7 +1500,7 @@ public:
 
 ---
 
-## 6. Mobility Management Messages (PD=0x05)
+## 8. Mobility Management Messages (PD=0x05)
 
 **File:** `gsml3parser/mm/l3mmmessages.h` | **Spec:** GSM 04.08 9.2
 
@@ -1697,7 +1871,7 @@ public:
 
 ---
 
-## 7. Call Control Messages (PD=0x03)
+## 9. Call Control Messages (PD=0x03)
 
 **File:** `gsml3parser/cc/l3ccmessages.h` | **Spec:** GSM 04.08 9.3 / ISDN Q.931
 
@@ -2152,7 +2326,7 @@ public:
 
 ---
 
-## 8. Supplementary Services (PD=0x0b)
+## 10. Supplementary Services (PD=0x0b)
 
 **File:** `gsml3parser/ss/l3ssmessages.h` | **Spec:** GSM 04.80
 
@@ -2231,7 +2405,7 @@ public:
 
 ---
 
-## 9. Error Handling
+## 11. Error Handling
 
 ### 9.1 Exception Classes
 
@@ -2267,7 +2441,7 @@ exceptions and return `nullptr` instead. Internal `parseBody()` methods may thro
 
 ---
 
-## 10. Logging
+## 12. Logging
 
 **File:** `gsml3parser/logger.h`
 
@@ -2313,9 +2487,9 @@ Set `GSML3PARSER_LOG_LEVEL` to control the threshold (0–7). Default: 6 (INFO).
 
 ---
 
-## 11. Conformance Notes
+## 13. Conformance Notes
 
-### 12.1 H/L Bit Fill Pattern
+### 13.1 H/L Bit Fill Pattern
 
 Per GSM 04.07 7.2, rest octets use an alternating H/L bit pattern based on
 position within the octet:
@@ -2329,13 +2503,13 @@ L bit (pattern):        0  0  1  0  1  0  1  1
 
 The library implements this pattern in `L3Frame::writeH()` and `L3Frame::writeL()`.
 
-### 12.2 MTI Bit 6 Masking
+### 13.2 MTI Bit 6 Masking
 
 Per GSM 04.08 Table 10.2/3/4/5, bit 6 (0x40) of the MTI is "don't care" for
 MM, CC, and SS protocols. The library masks this bit when parsing these protocols
 and in `L3Frame::MTI()`.
 
-### 12.3 BCD Encoding
+### 13.3 BCD Encoding
 
 BCD digits follow GSM 04.07 11.2.1.1 encoding rules:
 
@@ -2343,7 +2517,7 @@ BCD digits follow GSM 04.07 11.2.1.1 encoding rules:
 - Last nibble is `0xF` filler for odd-length numbers
 - TMSI uses special 0xF4 header byte
 
-### 11.4 IE Format Compliance
+### 13.4 IE Format Compliance
 
 The library strictly follows GSM 04.07 11.2.1.1.4 for IE formats:
 
@@ -2375,7 +2549,7 @@ The library strictly follows GSM 04.07 11.2.1.1.4 for IE formats:
 | SS Register | TLV | Facility (IEI=0x1c), SSVersion (IEI=0x7f, 3-byte TLV) |
 | SS ReleaseComplete | TLV | Cause (IEI=0x08), Facility (IEI=0x1c) |
 
-### 11.5 Paging Channel Needed Encoding
+### 13.5 Paging Channel Needed Encoding
 
 Paging Request messages (Type 1/2/3) encode Channel Needed as 2-bit codes
 (0=AnyDCCH, 1=SDCCH, 2=TCHF, 3=AnyTCH) in reversed half-octet order,
@@ -2383,9 +2557,9 @@ followed by a 4-bit Page Mode field. L3PageMode handles 4 bits (half-octet), not
 
 ---
 
-## 11. Appendix: GSM Specifications
+## 14. Appendix: GSM Specifications
 
-### 11.1 Protocol Discriminators
+### 14.1 Protocol Discriminators
 
 | PD | Value | Protocol | Status |
 |----|-------|----------|--------|
@@ -2402,7 +2576,7 @@ followed by a 4-bit Page Mode field. L3PageMode handles 4 bits (half-octet), not
 | Extended | 0x0e | Reserved | Not implemented |
 | TestProcedure | 0x0f | Reserved | Not implemented |
 
-### 11.2 Cause Code References
+### 14.2 Cause Code References
 
 | Enum | Spec Section | Description |
 |------|-------------|-------------|
@@ -2412,7 +2586,7 @@ followed by a 4-bit Page Mode field. L3PageMode handles 4 bits (half-octet), not
 | `CCCauseLocation` | GSM 04.08 10.5.4.11 | CC cause location |
 | `BSSCause` | GSM 48.008 3.2.2.5 | BSS cause codes |
 
-### 11.3 Key GSM Specifications
+### 14.3 Key GSM Specifications
 
 | Spec | Title |
 |------|-------|

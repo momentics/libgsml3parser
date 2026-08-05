@@ -20,13 +20,63 @@
 // SOFTWARE.
 
 #include <gsml3parser/parser.h>
+#include <gsml3parser/context.h>
+#include <gsml3parser/arena.h>
+#include <gsml3parser/bitvector.h>
 #include <gsml3parser/rr/l3rrmessages.h>
+#include <gsml3parser/mm/l3mmmessages.h>
 #include <gsml3parser/cc/l3ccmessages.h>
+#include <gsml3parser/ss/l3ssmessages.h>
 #include <fstream>
 #include <iostream>
 #include <sstream>
+#include <span>
+#include <vector>
 
 using namespace gsml3parser;
+
+namespace {
+
+std::string readFileAsString(std::string_view path) {
+    std::ifstream ifs(path.data());
+    if (!ifs.is_open()) return {};
+    std::ostringstream ss;
+    ss << ifs.rdbuf();
+    return ss.str();
+}
+
+void printMsgDetails(const L3Message& msg) {
+    if (auto* rr = dynamic_cast<const L3RRMessage*>(&msg)) {
+        std::cout << "  PD: RadioResource\n";
+        std::cout << "  MTI: " << L3RRMessage::name(
+            static_cast<L3RRMessage::MessageType>(rr->MTI())) << "\n";
+    } else if (auto* mm = dynamic_cast<const L3MMMessage*>(&msg)) {
+        std::cout << "  PD: MobilityManagement\n";
+    } else if (auto* cc = dynamic_cast<const L3CCMessage*>(&msg)) {
+        std::cout << "  PD: CallControl\n";
+        std::cout << "  TI: " << cc->TI() << "\n";
+    } else if (auto* ss = dynamic_cast<const L3SupServMessage*>(&msg)) {
+        std::cout << "  PD: SupplementaryServices\n";
+        std::cout << "  TI: " << ss->TI() << "\n";
+    }
+}
+
+// Demo: use Arena for batch BitVector allocation
+void demoArenaBatch(const std::vector<std::string>& hexFrames) {
+    Arena arena(16384);
+    size_t totalParsed = 0;
+
+    for (const auto& hex : hexFrames) {
+        arena.reset();
+        BitVector bv(arena, hex.size() * 4);
+        ++totalParsed;
+    }
+
+    std::cout << "[Arena] Processed " << totalParsed
+              << " frames, arena used: " << arena.used() << " bytes\n";
+}
+
+} // anonymous namespace
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
@@ -34,34 +84,34 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::string input = argv[1];
+    std::string_view input{argv[1]};
+    std::string content;
 
     // Try to read as file first
-    std::ifstream ifs(input);
-    if (ifs.is_open()) {
-        std::ostringstream ss;
-        ss << ifs.rdbuf();
-        input = ss.str();
+    content = readFileAsString(input);
+    if (content.empty()) {
+        content = std::string{input};
     }
 
-    // Parse as hex string
+    // Parse with explicit ParserContext
     ParserContext ctx;
-    auto msg = parseL3Hex(input, ctx);
+    auto msg = parseL3Hex(content, ctx);
+
     if (msg) {
         std::cout << msg->text() << "\n";
-
-        if (auto* rr = dynamic_cast<L3RRMessage*>(msg.get())) {
-            std::cout << "  PD: RadioResource\n";
-            std::cout << "  MTI: " << L3RRMessage::name(
-                static_cast<L3RRMessage::MessageType>(rr->MTI())) << "\n";
-        } else if (auto* cc = dynamic_cast<L3CCMessage*>(msg.get())) {
-            std::cout << "  PD: CallControl\n";
-            std::cout << "  TI: " << cc->TI() << "\n";
-        }
+        printMsgDetails(*msg);
     } else {
-        std::cerr << "Failed to parse: " << input << "\n";
+        std::cerr << "Failed to parse: " << content << "\n";
         return 1;
     }
+
+    // Demo Arena batch parsing with multiple frames
+    std::vector<std::string> batch{
+        "06270460001",
+        "05080460001",
+        content
+    };
+    demoArenaBatch(batch);
 
     return 0;
 }

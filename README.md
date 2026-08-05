@@ -75,22 +75,28 @@ target_link_libraries(myapp PRIVATE gsml3parser::parser)
 
 ```cpp
 #include <gsml3parser/parser.h>
+#include <gsml3parser/context.h>
 #include <iostream>
 
 int main() {
-    // Parse from raw bytes
-    uint8_t data[] = { 0x60, 0x21, 0x10, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78 };
-    auto msg = gsml3parser::parseL3(data, sizeof(data));
+    // Parse from raw bytes using std::span (C++20)
+    std::span<const uint8_t> data{
+        0x60, 0x21, 0x10, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78
+    };
+
+    // Use a ParserContext for thread-safe configuration
+    gsml3parser::ParserContext ctx;
+    auto msg = gsml3parser::parseL3(data, ctx);
 
     if (msg) {
         std::cout << msg->text() << std::endl;
     }
 
-    // Parse from hex string
-    auto msg2 = gsml3parser::parseL3Hex("6021100508012345678");
+    // Parse from hex string (std::string_view)
+    auto msg2 = gsml3parser::parseL3Hex("6021100508012345678", ctx);
 
     // Downcast to specific type
-    if (auto rrMsg = dynamic_cast<gsml3parser::L3PagingRequestType1*>(msg.get())) {
+    if (auto* rrMsg = dynamic_cast<gsml3parser::L3PagingRequestType1*>(msg.get())) {
         const auto& id = rrMsg->mobileID();
         std::cout << "Paged: " << id << std::endl;
     }
@@ -118,12 +124,58 @@ size_t n = gsml3parser::writeL3(disconnect, buf.data(), buf.size());
 
 ```cpp
 #include <gsml3parser/parser.h>
+#include <gsml3parser/context.h>
 
-gsml3parser::registerPDHandler(gsml3parser::L3PD::SMS,
+// Create a dedicated context and register handlers on it
+gsml3parser::ParserContext ctx;
+ctx.registerPDHandler(gsml3parser::L3PD::SMS,
     [](const gsml3parser::L3Frame& frame) {
         // Your SMS parsing logic here
         return std::make_unique<MySMSMessage>();
     });
+
+// Parse with the configured context
+auto msg = gsml3parser::parseL3(data, ctx);
+```
+
+### Using Arena Allocator for Batch Parsing
+
+```cpp
+#include <gsml3parser/parser.h>
+#include <gsml3parser/context.h>
+#include <gsml3parser/arena.h>
+#include <gsml3parser/bitvector.h>
+
+// Create a thread-local arena for high-throughput parsing
+gsml3parser::Arena arena(65536);  // 64 KB initial capacity
+
+// Parse many messages, resetting the arena between batches
+for (const auto& batch : messageBatches) {
+    arena.reset();  // reclaim all memory from previous batch
+
+    for (std::span<const uint8_t> frame : batch) {
+        // BitVector allocated from arena — no individual free needed
+        gsml3parser::BitVector bv(arena, frame.size_bytes() * 8);
+        // ... process or parse ...
+    }
+}
+```
+
+### Zero-Copy Parsing with BitView
+
+```cpp
+#include <gsml3parser/bitvector.h>
+
+// External buffer you do not own (e.g. from a network socket)
+extern uint8_t socketBuffer[256];
+
+// Create a non-owning read-only view — no allocation
+gsml3parser::BitView view(socketBuffer, 2048);  // 256 bytes = 2048 bits
+
+// Read fields from the view without copying data
+size_t rp = 0;
+unsigned pd = view.readField(rp, 8);
+unsigned mti = view.readField(rp, 7);
 ```
 
 ## Supported Messages
@@ -282,7 +334,9 @@ libgsml3parser/
 │   ├── scalar_types.h                # Zero-initialized scalar wrapper types
 │   ├── gsm_common.h                  # GSM constants, alphabet tables, timing, RACH params
 │   ├── logger.h                      # Configurable logging (env: GSML3PARSER_LOG_LEVEL)
-│   ├── parser.h                      # Main API: parseL3(), writeL3(), registerPDHandler()
+│   ├── context.h                     # ParserContext — thread-safe PD handler registry
+│   ├── arena.h                       # Arena bump allocator for high-throughput parsing
+│   ├── parser.h                      # Main API: parseL3(), writeL3()
 │   ├── common/
 │   │   └── l3common.h                # Common IEs (CellID, LAI, MobileIdentity,
 │   │                                 #   ChannelDesc, Classmarks, FrequencyList, etc.)
@@ -329,6 +383,57 @@ ctest --output-on-failure
 - [ ] Fuzzing target (libFuzzer integration)
 - [ ] C API wrapper for FFI
 - [ ] Python bindings (pybind11)
+
+## Thread Safety
+
+The library is designed for multi-threaded use:
+
+- **`ParserContext`** — Isolates PD handler registries per instance. Multiple threads can share a read-only `ParserContext` safely (protected by `std::shared_mutex`). Write operations (register/unregister handlers) acquire an exclusive lock.
+- **Logger** — Each thread maintains its own `LogLevel` via `thread_local`. The stderr backend is mutex-protected. Custom `LogCallback` instances are also thread-local.
+- **`BitView`** — A non-owning, read-only view that can be shared across threads as long as the underlying buffer remains valid.
+- **Arena** — NOT thread-safe. Each thread must use its own `Arena` instance. Allocations from one arena must not be accessed concurrently from another thread after a `reset()`.
+
+For maximum performance in multi-threaded parsers, create one `ParserContext` and one `Arena` per thread:
+
+```cpp
+void parseThread(std::span<const uint8_t> frames) {
+    gsml3parser::ParserContext ctx;
+    gsml3parser::Arena arena(65536);
+
+    for (auto frame : frames) {
+        arena.reset();
+        auto msg = gsml3parser::parseL3(frame, ctx);
+        // ... process msg ...
+    }
+}
+```
+
+## Memory Management (HPL)
+
+The library follows High-Performance Library (HPL) memory conventions:
+
+| Component | Ownership | Lifetime |
+|-----------|-----------|----------|
+| `std::vector<uint8_t>` (default BitVector) | Library-owned | Automatic (RAII) |
+| Arena-allocated `BitVector` | Arena-owned | Until `Arena::reset()` |
+| `BitView` | Non-owning | Caller ensures underlying buffer outlives the view |
+| `parseL3()` return value | Caller-owned (`std::unique_ptr`) | Automatic (RAII) |
+| `LogCallback` | Library-held copy | Thread-local, cleared on thread exit |
+
+### Memory Ownership Diagram
+
+```
+Client code
+  ├── ParserContext (per-thread or shared read-only)
+  │     └── PD handlers (unordered_map, mutex-protected)
+  │
+  ├── Arena (per-thread, NOT shared)
+  │     └── BitVector (bump-allocated, no individual free)
+  │           └── L3Frame → parseL3() → unique_ptr<L3Message>
+  │
+  └── BitView (zero-copy, read-only)
+        └── External buffer (caller-owned, e.g. socket, DMA ring)
+```
 
 ## License
 
