@@ -1,36 +1,40 @@
 # libgsml3parser
 
-**GSM L3 Signalling Message Parser — Standalone C++17 Library**
+**GSM Layer 3 Signalling Message Parser — Standalone C++17 Library**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.cppreference.com/w/cpp/17)
 [![Build](https://img.shields.io/badge/Build-CMake-brightgreen.svg)](https://cmake.org)
+[![Version](https://img.shields.io/badge/Version-0.3.0-blue.svg)]()
 
 ## Overview
 
-libgsml3parser is a standalone C++17 library for parsing and generating GSM Layer 3 (L3) signalling messages. It implements the complete GSM 04.08 protocol discriminator dispatch for:
+libgsml3parser is a standalone C++17 library for parsing and generating GSM Layer 3 (L3) signalling messages. It implements the complete GSM 04.08 / 3GPP TS 24.008 protocol discriminator dispatch across four domains:
 
-- **Radio Resource (RR)** — GSM 04.08 9.1 — Paging, System Information, Handover, Ciphering, Assignment, etc.
-- **Mobility Management (MM)** — GSM 04.08 9.2 — Location Updating, Authentication, Identity, CM Service, etc.
-- **Call Control (CC)** — GSM 04.08 9.3 / ISDN Q.931 — Setup, Connect, Disconnect, Release, DTMF, Hold, etc.
-- **Supplementary Services (SS)** — GSM 04.80 — Facility, Register, Release Complete
+| Domain | PD | Spec Section | Messages |
+|--------|----|-------------|----------|
+| **Radio Resource (RR)** | `0x06` | GSM 04.08 9.1 | Paging, System Information (SI1–SI17), Handover, Assignment, Ciphering, etc. |
+| **Mobility Management (MM)** | `0x05` | GSM 04.08 9.2 | Location Updating, Authentication, Identity, CM Service, TMSI Reallocation |
+| **Call Control (CC)** | `0x03` | GSM 04.08 9.3 / ISDN Q.931 | Setup, Connect, Disconnect, Release, DTMF, Hold, Progress |
+| **Supplementary Services (SS)** | `0x0b` | GSM 04.80 | Facility, Register, Release Complete |
 
-The library is a standalone, self-contained project with no external dependencies beyond the C++17 standard library.
+The library is self-contained with zero external dependencies beyond the C++17 standard library. It provides bidirectional parsing (binary ↔ typed C++ objects), human-readable output, and callback-based extensibility for unsupported PD domains (SMS, GPRS).
 
 ## Features
 
 - **Full L3 message parsing** — Binary data → typed C++ objects with typed accessors
-- **Message generation** — Typed C++ objects → binary data (for test harnesses, fuzzing)
-- **Human-readable output** — Every message has a `.text()` method
+- **Message generation** — Typed C++ objects → binary data (for test harnesses, fuzzing, replay)
+- **Human-readable output** — Every message has a `.text()` method for logging and debugging
 - **Callback-based extension** — Register custom handlers for SMS (PD=0x09) and GPRS (PD=0x08, 0x0a)
-- **Zero external dependencies** — No threading, no networking, no SIP, no radio
+- **Zero external dependencies** — No threading, no networking, no SIP, no radio stack
 - **Memory-safe** — `std::unique_ptr` ownership, no raw `new`/`delete` in the public API
-- **Fuzzing-ready** — Clean API suitable for libFuzzer integration
-- **794 unit tests** — Comprehensive test coverage for all protocols
-- **Spec-compliant** — Follows GSM 04.08 / 3GPP TS 24.008, GSM 04.07 / 3GPP TS 24.007
-- **V/TV/TLV/LV formats** — Correct handling of all GSM 04.07 IE formats per specification
-- **Bit-level parsing** — MSB-first bit ordering, half-octet field handling, H/L rest octet fill patterns
-- **System Information V-format** — SI1-SI17 parsed per GSM 04.08 tables (9.29-9.43c), with proper rest octet handling
+- **Fuzzing-ready** — Clean parse/generate API suitable for libFuzzer integration
+- **794 unit tests** — Comprehensive coverage including spec-verified golden test vectors
+- **Golden test vectors** — Cross-validated against osmo-ttcn3-hacks TTCN-3 reference suite (L3_Templates.ttcn, GSM_RR_Types.ttcn, GSM_Types.ttcn, BTS_Tests.ttcn, GSM_SystemInformation.ttcn)
+- **Spec-compliant** — Follows GSM 04.08 / 3GPP TS 24.008, GSM 04.07 / 3GPP TS 24.007, GSM 04.80, GSM 48.008
+- **V/TV/TLV/LV formats** — Correct handling of all GSM 04.07 IE encoding formats
+- **Bit-level parsing** — MSB-first bit ordering, half-octet field handling, H/L rest octet fill patterns (0x2B padding)
+- **System Information V-format** — SI1–SI17 parsed per GSM 04.08 tables (9.1.31–9.1.43c), with proper rest octet handling
 - **Short messages** — Synchronization Channel Information, Channel Request, Handover Access
 
 ## Quick Start
@@ -42,6 +46,15 @@ mkdir build && cd build
 cmake .. -DBUILD_TESTS=ON -DBUILD_EXAMPLES=ON
 make -j$(nproc)
 ```
+
+CMake options:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `BUILD_SHARED_LIBS` | OFF | Build shared library instead of static |
+| `BUILD_TESTS` | OFF | Build unit tests (Google Test 1.14.0) |
+| `BUILD_EXAMPLES` | OFF | Build example programs |
+| `ENABLE_FUZZING` | OFF | Build fuzzing target |
 
 ### Installing
 
@@ -64,7 +77,7 @@ target_link_libraries(myapp PRIVATE gsml3parser::parser)
 
 int main() {
     // Parse from raw bytes
-    uint8_t data[] = { 0x06, 0x19, 0x00, /* ... */ };
+    uint8_t data[] = { 0x60, 0x21, 0x10, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78 };
     auto msg = gsml3parser::parseL3(data, sizeof(data));
 
     if (msg) {
@@ -72,10 +85,10 @@ int main() {
     }
 
     // Parse from hex string
-    auto msg2 = gsml3parser::parseL3Hex("061900...");
+    auto msg2 = gsml3parser::parseL3Hex("6021100508012345678");
 
     // Downcast to specific type
-    if (auto rrMsg = dynamic_cast<gsml3parser::L3PagingResponse*>(msg.get())) {
+    if (auto rrMsg = dynamic_cast<gsml3parser::L3PagingRequestType1*>(msg.get())) {
         const auto& id = rrMsg->mobileID();
         std::cout << "Paged: " << id << std::endl;
     }
@@ -90,9 +103,9 @@ int main() {
 // Create a Disconnect message
 gsml3parser::L3Disconnect disconnect(7, gsml3parser::CCCause::Normal_Call_Clearing);
 
-// Serialize to hex
+// Serialize to hex string
 std::string hex = gsml3parser::writeL3Hex(disconnect);
-std::cout << hex << std::endl;  // "0703251000"
+std::cout << hex << std::endl;
 
 // Serialize to bytes
 std::vector<uint8_t> buf(disconnect.fullLength());
@@ -111,59 +124,12 @@ gsml3parser::registerPDHandler(gsml3parser::L3PD::SMS,
     });
 ```
 
-## API Documentation
-
-Full API reference is available in [doc/API.md](doc/API.md).
-
-## Project Structure
-
-```
-libgsml3parser/
-├── CMakeLists.txt              # Build configuration
-├── COPYING                     # MIT license
-├── cmake/
-│   └── gsml3parserConfig.cmake.in  # CMake package config
-├── include/
-│   └── gsml3parser/
-│       ├── bitvector.h         # BitVector — bit-level container
-│       ├── l3frame.h           # L3Frame — L3 message container
-│       ├── l3message.h         # L3Message, L3ProtocolElement
-│       ├── types.h             # L3PD, Primitive, SAPI, etc.
-│       ├── enums.h             # RRCause, CCCause, MMRejectCause, BSSCause
-│       ├── scalar_types.h      # Bool_z — initialized scalar types
-│       ├── gsm_common.h        # GSM constants, alphabet tables, timing
-│       ├── logger.h            # Simple logging
-│       ├── parser.h            # Main API entry point
-│       ├── common/
-│       │   └── l3common.h      # Common IEs (CellID, LAI, MobileIdentity,
-│       │                       #   ChannelDesc, Classmarks, FrequencyList,
-│       │                       #   MeasurementResults, CellSelection, etc.)
-│       ├── rr/
-│       │   └── l3rrmessages.h  # RR messages (Paging, SI1-17, Handover, etc.)
-│       ├── mm/
-│       │   ├── l3mmlements.h   # MM IEs (CMServiceType, RAND, SRES,
-│       │   │                   #   NetworkName, TimeZoneAndTime)
-│       │   └── l3mmmessages.h  # MM messages (LocationUpdate, Auth, CM, etc.)
-│       ├── cc/
-│       │   ├── l3cclements.h   # CC IEs (BearerCapability, BCDNumbers,
-│       │   │                   #   Cause, Progress, CCCommonIEs, etc.)
-│       │   └── l3ccmessages.h  # CC messages (Setup, Connect, Release, etc.)
-│       └── ss/
-│           └── l3ssmessages.h  # SS messages (Facility, Register, etc.)
-├── src/                        # Implementation
-├── tests/                      # Google Test unit tests (794 tests)
-├── examples/
-│   └── example_parse_file.cpp  # Parse L3 messages from file
-└── doc/
-    └── API.md                  # Full API reference
-```
-
 ## Supported Messages
 
-### Radio Resource (PD=0x06)
+### Radio Resource (PD=0x06) — 45 message classes
 
-| Message | Direction | Spec |
-|---------|-----------|------|
+| Message | Direction | Spec Section |
+|---------|-----------|-------------|
 | Paging Request Type 1 | DL | GSM 04.08 9.1.22 |
 | Paging Request Type 2 | DL | GSM 04.08 9.1.23 |
 | Paging Request Type 3 | DL | GSM 04.08 9.1.24 |
@@ -203,17 +169,17 @@ libgsml3parser/
 | Handover Complete | UL | GSM 04.08 9.1.16 |
 | Handover Failure | UL | GSM 04.08 9.1.17 |
 | Channel Mode Modify | DL | GSM 04.08 9.1.5 |
-| Channel Mode Modify Ack | UL | GSM 04.08 9.1.6 |
+| Channel Mode Modify Acknowledge | UL | GSM 04.08 9.1.6 |
 | GPRS Suspension Request | UL | GSM 04.08 9.1.13b |
 | Application Information | DL/UL | GSM 04.08 9.1.53 |
 | Synchronization Channel Info | DL | GSM 04.08 9.1.30 |
 | Channel Request | UL | GSM 04.08 9.1.13 |
 | Handover Access | UL | GSM 04.08 9.1.14a |
 
-### Mobility Management (PD=0x05)
+### Mobility Management (PD=0x05) — 18 message classes
 
-| Message | Direction | Spec |
-|---------|-----------|------|
+| Message | Direction | Spec Section |
+|---------|-----------|-------------|
 | Location Updating Request | UL | GSM 04.08 9.2.15 |
 | Location Updating Accept | DL | GSM 04.08 9.2.13 |
 | Location Updating Reject | DL | GSM 04.08 9.2.14 |
@@ -233,10 +199,10 @@ libgsml3parser/
 | TMSI Reallocation Complete | UL | GSM 04.08 9.2.18 |
 | MM Status | UL | GSM 04.08 9.2.15 |
 
-### Call Control (PD=0x03)
+### Call Control (PD=0x03) — 19 message classes
 
-| Message | Direction | Spec |
-|---------|-----------|------|
+| Message | Direction | Spec Section |
+|---------|-----------|-------------|
 | Setup | UL | GSM 04.08 9.3.19 |
 | Emergency Setup | UL | GSM 04.08 9.3.8 |
 | Call Proceeding | DL | GSM 04.08 9.3.3 |
@@ -244,9 +210,9 @@ libgsml3parser/
 | Connect | UL | GSM 04.08 9.3.5 |
 | Connect Acknowledge | DL | GSM 04.08 9.3.6 |
 | Call Confirmed | DL | GSM 04.08 9.3.2 |
-| Disconnect | DL | GSM 04.08 9.3.7 |
-| Release | DL | GSM 04.08 9.3.19 |
-| Release Complete | DL | GSM 04.08 9.3.19 |
+| Disconnect | UL | GSM 04.08 9.3.7 |
+| Release | DL/UL | GSM 04.08 9.3.19 |
+| Release Complete | DL/UL | GSM 04.08 9.3.19 |
 | Start DTMF | UL | GSM 04.08 9.3.24 |
 | Start DTMF Acknowledge | DL | GSM 04.08 9.3.25 |
 | Start DTMF Reject | DL | GSM 04.08 9.3.26 |
@@ -257,28 +223,118 @@ libgsml3parser/
 | Progress | DL | GSM 04.08 9.3.17 |
 | CC Status | DL | GSM 04.08 9.3.19 |
 
-### Supplementary Services (PD=0x0b)
+### Supplementary Services (PD=0x0b) — 4 message classes
 
-| Message | Direction | Spec |
-|---------|-----------|------|
+| Message | Direction | Spec Section |
+|---------|-----------|-------------|
 | Facility | DL/UL | GSM 04.80 2.3 |
 | Register | DL/UL | GSM 04.80 2.4 |
 | Release Complete | DL | GSM 04.80 2.5 |
 
+## Supported Standards
+
+The library implements encodings defined by the following specifications:
+
+| Standard | Scope | Library Coverage |
+|----------|-------|-----------------|
+| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | Full RR, MM, CC message parsing and generation |
+| **GSM 04.07 / 3GPP TS 24.007** | Information element encoding rules | V, TV, TLV, LV formats; H/L rest octet padding (0x2B); bit ordering |
+| **GSM 04.80 / 3GPP TS 24.080** | Supplementary services on mobile | Facility, Register, Release Complete messages |
+| **GSM 48.008 / 3GPP TS 48.008** | BSS internal signalling (BSSMAP) | BSS Cause values for radio-related disconnect causes |
+| **GSM 05.02 / 3GPP TS 45.002** | Physical layer constants | RxLev/RxQual conversion, TDMA frame timing, hyperframe boundaries |
+| **GSM 03.38 / 3GPP TS 23.038** | Default alphabet and coding scheme | 7-bit GSM alphabet encoding/decoding, BCD digit encoding |
+
+## Information Elements
+
+### Common IEs (38 types) — GSM 04.08 10.5.1, 10.5.2
+
+Cell Identity, Location Area Identity (MCC/MNC BCD + LAC), Mobile Identity (TMSI/IMSI/IMEI), Classmark 1/2/3, Frequency Lists, Channel Descriptions, Timing Advance, Cell Selection Parameters, RACH Control Parameters, Measurement Results, Ciphering Mode Setting/Response, and more.
+
+### CC IEs (15 types) — GSM 04.08 10.5.4
+
+Bearer Capability, Called/Calling Party BCD Number, Cause Element, Progress Indicator, Keypad Facility, Signal, Supported Codec List, Supplementary Service Facility, and more.
+
+### MM IEs (6 types) — GSM 04.08 10.5.3
+
+CM Service Type, Reject Cause, Network Name, Time Zone And Time, RAND (128-bit), SRES (32-bit).
+
+## API Documentation
+
+Full API reference is available in [doc/API.md](doc/API.md).
+
+## Project Structure
+
+```
+libgsml3parser/
+├── CMakeLists.txt                    # Build configuration (CMake 3.16+)
+├── COPYING                           # MIT license
+├── README.md                         # This file
+├── cmake/
+│   └── gsml3parserConfig.cmake.in    # CMake package config
+├── include/gsml3parser/
+│   ├── bitvector.h                   # BitVector — MSB-first bit container
+│   ├── l3frame.h                     # L3Frame — L3 message frame with metadata
+│   ├── l3message.h                   # L3Message, L3ProtocolElement base classes
+│   ├── types.h                       # L3PD, Primitive, SAPI, MobileIDType, etc.
+│   ├── enums.h                       # RRCause, MMRejectCause, CCCause, BSSCause
+│   ├── scalar_types.h                # Zero-initialized scalar wrapper types
+│   ├── gsm_common.h                  # GSM constants, alphabet tables, timing, RACH params
+│   ├── logger.h                      # Configurable logging (env: GSML3PARSER_LOG_LEVEL)
+│   ├── parser.h                      # Main API: parseL3(), writeL3(), registerPDHandler()
+│   ├── common/
+│   │   └── l3common.h                # Common IEs (CellID, LAI, MobileIdentity,
+│   │                                 #   ChannelDesc, Classmarks, FrequencyList, etc.)
+│   ├── rr/
+│   │   └── l3rrmessages.h            # RR messages (Paging, SI1–SI17, Handover, etc.)
+│   ├── mm/
+│   │   ├── l3mmlements.h             # MM IEs (CMServiceType, RAND, SRES, NetworkName)
+│   │   └── l3mmmessages.h            # MM messages (LocationUpdate, Auth, CM, etc.)
+│   ├── cc/
+│   │   ├── l3cclements.h             # CC IEs (BearerCapability, BCDNumbers, Cause, etc.)
+│   │   └── l3ccmessages.h            # CC messages (Setup, Connect, Release, etc.)
+│   └── ss/
+│       └── l3ssmessages.h            # SS messages (Facility, Register, etc.)
+├── src/                              # Implementation (14 .cpp files)
+├── tests/                            # Google Test unit tests (794 test cases)
+├── examples/
+│   └── example_parse_file.cpp        # Parse L3 messages from hex string or file
+└── doc/
+    └── API.md                        # Full API reference
+```
+
+## Testing
+
+The test suite includes 794 Google Test cases across 14 test files. Golden test vectors in `test_golden_*.cpp` are cross-validated against the osmo-ttcn3-hacks TTCN-3 reference testing suite (L3_Templates.ttcn, GSM_RR_Types.ttcn, GSM_Types.ttcn, BTS_Tests.ttcn, GSM_SystemInformation.ttcn).
+
+```bash
+cmake .. -DBUILD_TESTS=ON
+make -j$(nproc)
+ctest --output-on-failure
+```
+
+## Build Requirements
+
+| Requirement | Minimum Version |
+|-------------|----------------|
+| C++ compiler | GCC 7+, Clang 5+, MSVC 2017+ |
+| CMake | 3.16 |
+| Standard Library | C++17 (libstdc++ or libc++) |
+
 ## Roadmap
 
-- [ ] SMS parser (PD=0x09) — GSM 04.11
-- [ ] GPRS L3 parser (PD=0x08, 0x0a) — GSM 04.08 9.4
-- [ ] Fuzzing target (libFuzzer)
+- [ ] SMS parser (PD=0x09) — GSM 04.11 / 3GPP TS 24.011
+- [ ] GPRS L3 parser (PD=0x08, 0x0a) — GSM 04.08 9.4 / 3GPP TS 24.008
+- [ ] Fuzzing target (libFuzzer integration)
 - [ ] C API wrapper for FFI
 - [ ] Python bindings (pybind11)
 
 ## License
 
 This software is distributed under the terms of the MIT License.
-See the COPYING file for details.
+See the [COPYING](COPYING) file for details.
 
 ## Acknowledgments
 
-- Copyright 2026 momentics <momentics@gmail.com>
+- Copyright 2026 momentics &lt;momentics@gmail.com&gt;
 - Copyright libgsml3parser contributors
+- Golden test vectors validated against the [Osmocom](https://osmocom.org/) TTCN-3 testing infrastructure

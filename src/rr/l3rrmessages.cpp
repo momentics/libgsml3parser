@@ -177,23 +177,22 @@ void L3PagingRequestType1::text(std::ostream& os) const {
 // ── L3PagingResponse ───────────────────────────────────────────────────
 
 size_t L3PagingResponse::l2BodyLength() const {
-    return 2 + mClassmark.lengthLV() + mMobileID.lengthLV();
+    return 1 + mClassmark.lengthLV() + mMobileID.lengthLV();
 }
 
 void L3PagingResponse::parseBody(const L3Frame& source, size_t& rp) {
-    // GSM 04.08 9.1.25: spare(4)|CKSN(4), spare1_4(4)|spare(4), CM2 LV, MI LV
-    // Reference: ts_PAG_RESP has cipheringKeySequenceNumber + spare1_4
-    mCKSN = source.readField(rp, 4);  // spare half octet (high 4 bits)
-    rp += 4;  // CKSN low 4 bits
-    rp += 8;  // spare1_4 (mandatory per GSM 24.008 9.1.25)
+    // GSM 24.008 9.1.25: cipheringKeySequenceNumber(4)|spare1_4(4) = 1 octet, then CM2 LV, MI LV
+    // Reference: L3_Templates.ttcn ts_PAG_RESP: cipheringKeySequenceNumber + spare1_4 pack into 1 octet
+    // CKSN is high nibble (keySequence 3 bits + spare 1 bit), spare1_4 is low nibble
+    mCKSN = source.readField(rp, 4);  // cipheringKeySequenceNumber (high 4 bits)
+    rp += 4;  // spare1_4 (low 4 bits)
     mClassmark.parseLV(source, rp);
     mMobileID.parseLV(source, rp);
 }
 
 void L3PagingResponse::writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, 0, 4);   // spare half octet
-    dest.writeField(wp, mCKSN & 0x0F, 4);  // CKSN
-    dest.writeField(wp, 0, 8);    // spare1_4
+    dest.writeField(wp, mCKSN & 0x0F, 4);  // cipheringKeySequenceNumber (high nibble)
+    dest.writeField(wp, 0, 4);              // spare1_4 (low nibble)
     mClassmark.writeLV(dest, wp);
     mMobileID.writeLV(dest, wp);
 }

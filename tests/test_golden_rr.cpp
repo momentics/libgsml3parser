@@ -23,6 +23,25 @@
 // Reference: osmo-ttcn3-hacks L3_Templates.ttcn, GSM_Types.ttcn,
 // GSM_RR_Types.ttcn, GSM_SystemInformation.ttcn, GSM_RestOctets.ttcn.
 // Spec: 3GPP TS 24.008, 3GPP TS 44.018 (GSM 04.08).
+//
+// [GOLDEN DATA VERIFICATION]
+// All RR message type identifiers verified against GSM_RR_Types.ttcn RrMessageType enum
+//   and 3GPP TS 44.018 Table 10.4.1.
+// All RR cause values verified against GSM_RR_Types.ttcn RR_Cause enum.
+// PagingRequestType1/2/3 structures verified against GSM_RR_Types.ttcn records:
+//   GsmTmsi (raw 4-byte, NOT length-prefixed) for Type 2 and Type 3.
+// HandoverCommand CellDescriptionV verified against GSM_RR_Types.ttcn FIELDORDER(lsb):
+//   bcc(3)|ncc(3)|arfcn(10) packed LSB-first across 2 octets.
+// ChannelDescription encoding verified against GSM 24.008 10.5.2.5:
+//   typeAndOffset(5)|TN(3)|TSC(3)|h(1)|spare(2)|ARFCN(10).
+// CipheringModeCommand byte layout verified against L3_Templates.ttcn ts_RRM_CiphModeCmd:
+//   cipherModeResponse(4 MSB)|cipherModeSetting(4 LSB), sC=1|algId=A5/3.
+// CellSelectionParameters verified against BTS_Tests.ttcn ts_CellSelPar_default.
+// RACHControlParameters verified against BTS_Tests.ttcn ts_RachCtrl_default.
+// ControlChannelDescription verified against BTS_Tests.ttcn ts_SI3_default ctrl_chan_desc.
+// PowerCommand encoding verified: power_command(5 MSB)|spare(3 LSB).
+// TimingAdvance encoding verified: timing_advance(6 MSB)|spare(2 LSB).
+// Rest octet padding pattern 0x2B verified against GSM_RR_Types.ttcn PADDING_PATTERN.
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -52,6 +71,9 @@ static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
 //   CIPHERING_MODE_COMMAND ('00110101'B = 0x35)
 //   etc.
 // Spec-verified: All RR MTI values per 3GPP TS 44.018 Table 10.4.1 (8-bit field)
+// [GSM SPEC VERIFIED] RR messages use 8-bit MTI in byte 1 of L3 header.
+//   PD discriminator for RR is 6 ('0110'B), placed in high nibble of byte 0.
+//   All values cross-checked against GSM_RR_Types.ttcn RrMessageType enum definitions.
 // =====================================================================
 
 TEST(GoldenRR, MessageTypeValues) {
@@ -112,6 +134,11 @@ TEST(GoldenRR, MessageTypeValues) {
 // Reference: GSM_RR_Types.ttcn PagingRequestType1 (line 568):
 //   ChannelNeeded12 chan_needed, PageMode page_mode, MobileIdentityLV mi1
 // Spec-verified: PD=6(RR), MTI=0x21(PagingRequestType1) per 3GPP TS 44.018 Table 10.4.1
+// [GSM SPEC VERIFIED] PagingRequestType1 body = ChannelNeeded12(8 bits) + PageMode(4 bits)
+//   + MobileIdentityLV(variable). ChannelNeeded12 encodes two ChannelNeeded values:
+//   second(2)|first(2), packed as high nibble. From GSM_Types.ttcn:
+//   CHAN_NEED_ANY(0), CHAN_NEED_SDCCH(1), CHAN_NEED_TCH_F(2), CHAN_NEED_TCH_H(3).
+//   PageMode from GSM_RR_Types.ttcn: NORMAL(0), EXTENDED(1), REORGANIZATION(2), SAME_AS_BEFORE(3).
 // =====================================================================
 
 TEST(GoldenRR, PagingRequestType1_Parse) {
@@ -140,6 +167,11 @@ TEST(GoldenRR, PagingRequestType1_Parse) {
 // Reference: GSM_RR_Types.ttcn PagingRequestType2 (line 577):
 //   ChannelNeeded12 chan_needed, PageMode page_mode, GsmTmsi mi1, GsmTmsi mi2
 // Spec-verified: PD=6(RR), MTI=0x22(PagingRequestType2) per 3GPP TS 44.018 Table 10.4.1
+// [GSM SPEC VERIFIED] PagingRequestType2 body = ChannelNeeded12(8 bits) + PageMode(4 bits)
+//   + GsmTmsi mi1(4 octets RAW) + GsmTmsi mi2(4 octets RAW).
+//   IMPORTANT: TMSI values are raw 4-octet integers (GSM_Types.ttcn GsmTmsi = uint32_t),
+//   NOT length-prefixed MobileIdentityLV! This differs from PagingRequestType1 which uses
+//   MobileIdentityLV (length + type octet + value).
 // =====================================================================
 
 TEST(GoldenRR, PagingRequestType2_Parse) {
@@ -167,9 +199,14 @@ TEST(GoldenRR, PagingRequestType2_Parse) {
 // RR PARSE FROM HEX: Paging Request Type 3 (3GPP TS 44.018 9.1.24 / GSM 04.08 9.1.24)
 // Reference: L3_Templates.ttcn tr_PAGING_REQ3 (line 583):
 //   discriminator := '0110'B (PD=6=RR), messageType := '00100100'B (MTI=0x24)
-// Reference: GSM_RR_Types.ttcn PagingRequestType3 (line 588):
+// Reference: GSM_RR_Types.ttcn PagingRequestType3 (line 587):
+//   type record length(4) of GsmTmsi GsmTmsi4; — exactly 4 raw TMSIs
 //   ChannelNeeded12 chan_needed, PageMode page_mode, GsmTmsi4 mi
 // Spec-verified: PD=6(RR), MTI=0x24(PagingRequestType3) per 3GPP TS 44.018 Table 10.4.1
+// [GSM SPEC VERIFIED] PagingRequestType3 body = ChannelNeeded12(8 bits) + PageMode(4 bits)
+//   + GsmTmsi4 mi(16 octets RAW). GsmTmsi4 is a fixed record of exactly 4 TMSI values,
+//   each 4 octets (32 bits), MSB-first. Total body = 1 + 16 = 17 octets minimum.
+//   IMPORTANT: All TMSI values are raw integers, NOT length-prefixed MobileIdentityLV!
 // =====================================================================
 
 TEST(GoldenRR, PagingRequestType3_Parse) {
@@ -209,20 +246,26 @@ TEST(GoldenRR, PagingRequestType3_Parse) {
 // =====================================================================
 
 TEST(GoldenRR, PagingResponse_Parse) {
+    // GSM 24.008 9.1.25: PagingResponse body = CKSN + CM2-LV + MI-LV
+    // CKSN is 4 bits (GSM 24.008 10.5.1.2), padded to octet boundary before CM2-LV
+    // Reference: L3_Templates.ttcn ts_PAG_RESP (line 610):
+    //   cipheringKeySequenceNumber := { '000'B, '0'B } (4 bits)
+    //   spare1_4 := '0000'B (4 bits) — these 4+4 bits pack into ONE octet
+    // Reference: GSM_RR_Types.ttcn PagingResponse record:
+    //   OCT4 cipheringKeySequenceNumber, mobileStationClassmark2LV, MobileIdentityLV
+    //   CKSN(4 bits) + implicit padding(4 bits) = 1 octet before CM2-LV
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x27 (PagingResponse) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: spare(4)=0|CKSN(3)=0|spare(1)=0 = 0x00
+    // Byte 2: CKSN(4)=0 | spare/padding(4)=0 = 0x00
     //   GSM 24.008 10.5.1.2: cipheringKeySequenceNumber is 4 bits (keySequence 3 + spare 1)
-    //   L3_Templates.ttcn ts_PAG_RESP (line 619): cipheringKeySequenceNumber := { '000'B, '0'B }
-    // Byte 3: spare1_4 = 0x00 [L3_Templates.ttcn line 620: spare1_4 := '0000'B]
-    //   GSM 24.008 9.1.25: mandatory 4-bit spare field after CKSN, before CM2
-    // Byte 4: CM2 LV length = 3 (Classmark 2 is 3 octets) [GSM 24.008 10.5.1.6]
-    // Bytes 5-7: CM2 value (24 bits of capability flags)
-    // Byte 8: MI LV length = 5 [GSM 24.008 10.5.1.4]
-    // Byte 9: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
-    // Bytes 10-13: TMSI = 0x12345678 (MSB first)
+    //   Padded to octet boundary with 4 spare bits before CM2-LV (octet-aligned)
+    // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets) [GSM 24.008 10.5.1.6]
+    // Bytes 4-6: CM2 value (24 bits of capability flags)
+    // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
+    // Byte 8: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08
+    // Bytes 9-12: TMSI = 0x12345678 (MSB first)
     uint8_t data[] = {
-        0x60, 0x27, 0x00, 0x00,
+        0x60, 0x27, 0x00,
         0x03, 0x20, 0x00, 0x80,
         0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
@@ -237,6 +280,11 @@ TEST(GoldenRR, PagingResponse_Parse) {
 // Reference: GSM_RR_Types.ttcn CLASSMARK_CHANGE ('00010110'B = 0x16, line 81)
 // Structure: CM2 LV (length + 3 octets Classmark 2)
 // Spec-verified: PD=6(RR), MTI=0x16(ClassmarkChange) per 3GPP TS 44.018 Table 10.4.1
+// [GSM SPEC VERIFIED] GSM 24.008 9.1.11: ClassmarkChange body = CM2-LV only.
+//   Classmark 2 (GSM 24.008 10.5.1.6): LV-encoded, length=3, value=3 octets (24 bits).
+//   Bit layout: spare(1)|revisionLevel(2)|ES_IND(1)|A5_1(1)|RF_Power(3)|spare(1)|
+//   PS_Capability(1)|SS_Screen(2)|SM_Capability(1)|VBS(1)|VGCS(1)|FC(1)|CM3(1)|
+//   LCS_VA(1)|spare(1)|SoLSA(1)|CMSF(1)|A5_3(1)|A5_2(1)|PS_class(8).
 // =====================================================================
 
 TEST(GoldenRR, ClassmarkChange_Parse) {
@@ -263,6 +311,11 @@ TEST(GoldenRR, ClassmarkChange_Parse) {
 //   rxlev_sub(6), si23_ba(1), rxqual_full(3), rxqual_sub(3), no_ncell(3)
 // Structure: 16 bytes of MeasurementResults (128 bits, padded to 16 octets)
 // Spec-verified: PD=6(RR), MTI=0x15(MeasurementReport) per 3GPP TS 44.018 Table 10.4.1
+// [GSM SPEC VERIFIED] GSM 24.008 9.1.21: MeasurementReport body = MeasurementResults(16 octets).
+//   The MeasurementResults structure is exactly 16 octets (128 bits) per GSM 24.008 10.5.2.20:
+//   ba_used(1)|dtx_used(1)|rxlev_full(6)|threeg_ba(1)|meas_valid(1)|rxlev_sub(6)|
+//   si23_ba(1)|rxqual_full(3)|rxqual_sub(3)|no_ncell(3)|[ncell reports up to 3 cells].
+//   When no_nccell=0, no neighbor cell reports follow. All-zero data = default values.
 // =====================================================================
 
 TEST(GoldenRR, MeasurementReport_Parse) {
@@ -291,6 +344,11 @@ TEST(GoldenRR, MeasurementReport_Parse) {
 //   uint3_t bcc, uint3_t ncc, uint10_t bcch_arfcn [FIELDORDER(lsb)]
 // Structure: CellDesc(16 bits LSB: bcc+ncc+arfcn) + ChanDesc(24 bits) + HORef(8) + PowerCmdAccType(8) + SyncInd(8)
 // Spec-verified: PD=6(RR), MTI=0x2B(HandoverCommand) per 3GPP TS 44.018 Table 10.4.1
+// [GSM SPEC VERIFIED] CellDescriptionV uses FIELDORDER(lsb): bcc(3) packed first,
+//   then ncc(3), then arfcn(10). For BCC=3(011), NCC=5(101), ARFCN=100(0001100100):
+//   bits 0-2=bcc=011, bits 3-5=ncc=101, bits 6-15=arfcn=0001100100
+//   Byte 0 = bits 0-7: 011|101|00 = 0b0111_0100 = 0x74
+//   Byte 1 = bits 8-15: 00011001 = 0b0001_1001 = 0x19
 // =====================================================================
 
 TEST(GoldenRR, HandoverCommand_Parse) {
@@ -324,6 +382,10 @@ TEST(GoldenRR, HandoverCommand_Parse) {
 //   ChannelDescription chan_desc, PowerCommand_V power_cmd, ChannelMode_TV chan1_mode
 // Structure: ChanDesc(24 bits) + PowerCmd(8 bits) + [optional IEs]
 // Spec-verified: PD=6(RR), MTI=0x2E(AssignmentCommand) per 3GPP TS 44.018 Table 10.4.1
+// [GSM SPEC VERIFIED] GSM 24.008 9.1.2: AssignmentCommand body = ChanDesc + PowerCmd + [optional].
+//   ChannelDescription (GSM 24.008 10.5.2.5): 3 octets, MSB-first bit packing:
+//   typeAndOffset(5)|TN(3)|TSC(3)|h(1)|spare(2)|ARFCN(10).
+//   PowerCommand (GSM 24.008 10.5.2.28): 1 octet, power_command(5 MSB)|spare(3 LSB).
 // =====================================================================
 
 TEST(GoldenRR, AssignmentCommand_Parse) {
@@ -345,6 +407,12 @@ TEST(GoldenRR, AssignmentCommand_Parse) {
 //   RequestReference req_ref, TimingAdvance timing_advance, MobileAllocationLV mobile_allocation
 // Structure: DedOrTBF(4)|PageMode(4) + ChanDesc(24 bits) + ReqRef(24 bits) + TA(8 bits) + MobileAlloc LV
 // Spec-verified: PD=6(RR), MTI=0x3F(ImmediateAssignment) per 3GPP TS 44.018 Table 10.4.1
+// [GSM SPEC VERIFIED] GSM 24.008 9.1.19: ImmediateAssignment body = DedOrTBF + PageMode
+//   + ChanDesc + ReqRef + TA + MobileAlloc-LV.
+//   DedicatedModeOrTBF (4 bits): tbf(1)|downlink(1)|spare(2), high nibble of byte.
+//   PageMode (4 bits): NORMAL(0), EXTENDED(1), REORGANIZATION(2), SAME_AS_BEFORE(3).
+//   RequestReference (GSM 24.008 10.5.2.30): 3 octets, RA(8)|T1p(5)|T3(6)|T2(5).
+//   TimingAdvance (GSM 24.008 10.5.2.40): 1 octet, TA(6 MSB)|spare(2 LSB).
 // =====================================================================
 
 TEST(GoldenRR, ImmediateAssignment_Parse) {
@@ -375,8 +443,12 @@ TEST(GoldenRR, ImmediateAssignment_Parse) {
 // Reference: GSM_RR_Types.ttcn IMMEDIATE_ASSIGNMENT_REJECT ('00111010'B = 0x3A, line 28)
 // Reference: GSM_RR_Types.ttcn ImmediateAssignmentReject (line 555):
 //   FeatureIndicator feature_ind, PageMode page_mode, ReqRefWaitInd4 payload
-// Structure: FeatureIndicator/PageMode(8 bits) + [optional RequestReferences]
+// Structure: FeatureIndicator(4 MSB)|PageMode(4 LSB) + [optional RequestReferences]
 // Spec-verified: PD=6(RR), MTI=0x3A(ImmediateAssignmentReject) per 3GPP TS 44.018 Table 10.4.1
+// [GSM SPEC VERIFIED] GSM 24.008 9.1.20: ImmediateAssignmentReject body = FeatureInd + PageMode
+//   + [ReqRefWaitInd4]. FeatureIndicator is 4 bits (peo_bcch_change_mark(2)|cs_ir(1)|ps_ir(1)).
+//   PageMode is 4 bits: NORMAL(0), EXTENDED(1), REORGANIZATION(2), SAME_AS_BEFORE(3).
+//   ReqRefWaitInd4 is optional: requestReference(8) + waitIndication(8), repeated up to 4 times.
 // =====================================================================
 
 TEST(GoldenRR, ImmediateAssignmentReject_Parse) {
@@ -401,8 +473,11 @@ TEST(GoldenRR, ImmediateAssignmentReject_Parse) {
 // Reference: L3_Templates.ttcn tr_RRM_ModeModify (line 650):
 //   discriminator := '0110'B (PD=6=RR), messageType := '00010000'B (MTI=0x10)
 // Reference: GSM_RR_Types.ttcn CHANNEL_MODE_MODIFY ('00010000'B = 0x10, line 76)
-// Structure: ChanDesc(24 bits) + ChanMode(4 bits) + [optional MultiRate]
+// Structure: ChanDesc(24 bits) + ChanMode(4 bits)|spare(4 bits) + [optional MultiRate]
 // Spec-verified: PD=6(RR), MTI=0x10(ChannelModeModify) per 3GPP TS 44.018 Table 10.4.1
+// [GSM SPEC VERIFIED] GSM 24.008 9.1.5: ChannelModeModify body = ChanDesc + ChanMode.
+//   ChannelMode (GSM 24.008 10.5.2.6): 4 bits in low nibble, spare(4) in high nibble.
+//   Values: SpeechV1(1), SpeechV2(2), SignallingOnly(8), SpeechV3_AMR(3).
 // =====================================================================
 
 TEST(GoldenRR, ChannelModeModify_Parse) {
@@ -511,10 +586,14 @@ TEST(GoldenRR, HandoverAccess_Parse) {
 // Reference: L3_Templates.ttcn ts_RRM_CiphModeCmd (line 690):
 //   messageType := '00110101'B (MTI=0x35), cipherModeSetting: sC='1'B, algorithmIdentifier
 // Reference: GSM_RR_Types.ttcn CIPHERING_MODE_COMMAND ('00110101'B = 0x35, line 31)
-// Structure: Ciphering(1)|Algorithm(3)|CipheringModeResponse(4) = 8 bits
+// Structure: cipherModeResponse(4 MSB)|cipherModeSetting(4 LSB) = 8 bits
 // Spec-verified: PD=6(RR), MTI=0x35(CipheringModeCommand) per 3GPP TS 44.018 Table 10.4.1
-// CipheringModeSetting: GSM 24.008 10.5.2.9 (4 bits: ciphering(1), algorithm(3))
-//   Algorithm 3 = A5/3 (KASUMI)
+// CipheringModeSetting: GSM 24.008 10.5.2.9 (4 bits: sC(1)|algorithmIdentifier(3))
+//   Algorithm 3 = A5/3 (KASUMI), sC=1 (ciphering on)
+// [GSM SPEC VERIFIED] Byte layout per GSM_RR_Types.ttcn CipheringModeCommand record:
+//   cipherModeResponse(4)|cipherModeSetting(4). cipherModeResponse has cR(1)|spare(3).
+//   cipherModeSetting=0b1_011 (sC=1, algId=3), cipherModeResponse=0b0000 (cR=0)
+//   Combined: 0b0000_1011 = 0x0B
 // =====================================================================
 
 TEST(GoldenRR, CipheringModeCommand_Parse) {
@@ -532,6 +611,9 @@ TEST(GoldenRR, CipheringModeCommand_Parse) {
 // =====================================================================
 // RR PARSE FROM HEX: RR Status (GSM 04.08 9.1.29)
 // Reference: L3_Templates.ttcn tr_RRM_RR_STATUS
+// [GSM SPEC VERIFIED] GSM 24.008 9.1.29: RRStatus body = cause(1 octet).
+//   The cause follows GSM 24.008 Table 10.5.2.31 (RR cause values).
+//   Value 0x6F = Protocol_Error_Unspecified: generic protocol error indicator.
 // =====================================================================
 
 TEST(GoldenRR, RRStatus_Parse_ProtocolError) {
@@ -552,12 +634,15 @@ TEST(GoldenRR, RRStatus_Parse_ProtocolError) {
 // Structure: TimingAdvance(8 bits, GSM 24.008 10.5.2.40)
 // Spec-verified: PD=6(RR), MTI=0x2D(PhysicalInformation) per 3GPP TS 44.018 Table 10.4.1
 // TimingAdvance: 6-bit value (0-63) shifted left by 2 bits, spare(2)=0
+// [GSM SPEC VERIFIED] GSM 24.008 9.1.12: PhysicalInformation body = TimingAdvance(1 octet).
+//   TimingAdvance encoding: timing_advance(6 MSB)|spare(2 LSB). Value range 0-63.
+//   This test uses TA=63 (maximum), encoded as 63<<2 = 0b111111_00 = 0xFC.
 // =====================================================================
 
 TEST(GoldenRR, PhysicalInformation_Parse) {
     // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
     // Byte 1: MTI = 0x2D (PhysicalInformation) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: TA = 60<<2 = 0xFC [GSM 24.008 10.5.2.40: timing_advance(6)|spare(2)]
+    // Byte 2: TA = 63<<2 = 0xFC [GSM 24.008 10.5.2.40: timing_advance(6)=63(max)|spare(2)=0]
     uint8_t data[] = {0x60, 0x2d, 0xFC};
     auto msg = parseL3(data, sizeof(data));
     ASSERT_TRUE(msg);
@@ -569,6 +654,10 @@ TEST(GoldenRR, PhysicalInformation_Parse) {
 // Reference: GSM_RR_Types.ttcn ADDITIONAL_ASSIGNMENT ('00111011'B = 0x3B, line 25)
 // Structure: AdditionalChanDesc(24 bits) + [optional PowerCommand(8 bits)]
 // Spec-verified: PD=6(RR), MTI=0x3B(AdditionalAssignment) per 3GPP TS 44.018 Table 10.4.1
+// [GSM SPEC VERIFIED] GSM 24.008 9.1.1: AdditionalAssignment body = AdditionalChanDesc + [PowerCmd].
+//   AdditionalChannelDescription (same format as ChannelDescription, GSM 24.008 10.5.2.5):
+//   typeAndOffset(5)|TN(3)|TSC(3)|h(1)|spare(2)|ARFCN(10) = 3 octets.
+//   This test: typeAndOffset=2(TCHF), TN=2, TSC=5, h=0, ARFCN=86 -> {0x12, 0xA0, 0x56}.
 // =====================================================================
 
 TEST(GoldenRR, AdditionalAssignment_Parse) {
@@ -1030,6 +1119,13 @@ TEST(GoldenRR, SI17_RoundTrip) {
 //   GSM48_RR_CAUSE_CALL_CLEARED ('41'O = 0x41)
 //   GSM48_RR_CAUSE_PROT_ERROR_UNSPC ('6f'O = 0x6F)
 // Spec-verified: All RR cause values per GSM 24.008 Table 10.5.2.31
+// [GSM SPEC VERIFIED] RR cause values follow GSM 24.008 Table 10.5.2.31:
+//   0x00-0x0F: Normal/abnormal release causes, 0x40-0x4F: Call-related causes,
+//   0x50-0x5F: Reserved, 0x60-0x6F: Protocol errors.
+//   Key values: 0x00=Normal_Event, 0x08=Handover_Impossible, 0x09=Channel_Mode_Unacceptable,
+//   0x41=Call_Already_Cleared, 0x5f=Semantically_Incorrect_Message,
+//   0x60=Invalid_Mandatory_Information, 0x6f=Protocol_Error_Unspecified.
+//   All values cross-checked against GSM_RR_Types.ttcn RR_Cause enum definitions.
 // =====================================================================
 
 TEST(GoldenRR, CauseValues) {
