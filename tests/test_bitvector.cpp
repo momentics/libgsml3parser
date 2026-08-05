@@ -269,7 +269,7 @@ TEST(BitVectorTest, ArenaMemoryReuse) {
 
 TEST(BitVectorTest, BitViewZeroCopy) {
     std::vector<uint8_t> externalBuffer = {0xAB, 0xCD, 0xEF, 0x01};
-    BitView view(std::span<const uint8_t>(externalBuffer.data(), externalBuffer.size()));
+    BitSpan view(std::span<const uint8_t>(externalBuffer.data(), externalBuffer.size()));
 
     EXPECT_EQ(view.size(), 32u);
     EXPECT_FALSE(view.empty());
@@ -283,7 +283,7 @@ TEST(BitVectorTest, BitViewZeroCopy) {
 
 TEST(BitVectorTest, BitViewReadBit) {
     std::vector<uint8_t> externalBuffer = {0b10110011};
-    BitView view(externalBuffer.data(), 8);
+    BitSpan view(externalBuffer.data(), 8);
 
     size_t rp = 0;
     EXPECT_EQ(view.readBit(rp), 1u);
@@ -298,7 +298,7 @@ TEST(BitVectorTest, BitViewReadBit) {
 
 TEST(BitVectorTest, BitViewPeekField) {
     std::vector<uint8_t> externalBuffer = {0x55, 0xAA};
-    BitView view(externalBuffer.data(), 16);
+    BitSpan view(externalBuffer.data(), 16);
 
     size_t rp = 0;
     EXPECT_EQ(view.peekField(rp, 8), 0x55);
@@ -313,7 +313,7 @@ TEST(BitVectorTest, BitViewPeekField) {
 }
 
 TEST(BitVectorTest, BitViewEmpty) {
-    BitView view;
+    BitSpan view;
     EXPECT_EQ(view.size(), 0u);
     EXPECT_TRUE(view.empty());
 }
@@ -326,7 +326,7 @@ TEST(BitVectorTest, BitVectorcreateView) {
     bv.writeField(wp, 0x56, 8);
     bv.writeField(wp, 0x78, 8);
 
-    BitView view = bv.view();
+    BitSpan view = bv.span();
     EXPECT_EQ(view.size(), 32u);
 
     size_t rp = 0;
@@ -338,7 +338,7 @@ TEST(BitVectorTest, BitVectorcreateView) {
 
 TEST(BitVectorTest, BitViewDataPointer) {
     std::vector<uint8_t> externalBuffer = {0xDE, 0xAD};
-    BitView view(externalBuffer.data(), 16);
+    BitSpan view(externalBuffer.data(), 16);
 
     // data() returns the same pointer as the underlying buffer (zero-copy)
     EXPECT_EQ(view.data(), externalBuffer.data());
@@ -429,7 +429,7 @@ TEST(BitVectorTest, MultipleArenaAllocations) {
 
 TEST(BitVectorTest, BitViewFromExternalArray) {
     uint8_t arr[] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB, 0xCD, 0xEF};
-    BitView view(arr, 64);
+    BitSpan view(arr, 64);
 
     size_t rp = 0;
     for (int i = 0; i < 8; ++i) {

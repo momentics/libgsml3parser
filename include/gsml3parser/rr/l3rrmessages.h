@@ -89,7 +89,7 @@ public:
 
     static const char* name(MessageType mt);
 
-    L3PD PD() const override { return L3PD::RadioResource; }
+    L3PD pd() const override { return L3PD::RadioResource; }
     void text(std::ostream& os) const override;
 };
 
@@ -122,7 +122,7 @@ public:
     L3PagingRequestType1(const L3MobileIdentity& wId1, ChannelType wType1,
                          const L3MobileIdentity& wId2, ChannelType wType2);
 
-    int MTI() const override { return PagingRequestType1; }
+    int mti() const override { return PagingRequestType1; }
     size_t l2BodyLength() const override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
@@ -137,9 +137,9 @@ private:
     L3MobileStationClassmark2 mClassmark;
     L3MobileIdentity mMobileID;
 public:
-    const L3MobileIdentity& mobileID() const { return mMobileID; }
+    const L3MobileIdentity& mobileId() const { return mMobileID; }
     unsigned cksn() const { return mCKSN; }
-    int MTI() const override { return PagingResponse; }
+    int mti() const override { return PagingResponse; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& source, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -152,11 +152,11 @@ class L3SystemInformationType1 : public L3RRMessageNRO {
 private:
     L3FrequencyList mCellChannelDescription;
     L3RACHControlParameters mRACHControlParameters;
-    Bool_z mHaveRestOctets;
+    bool mHaveRestOctets{};
     uint8_t mRestOctet;
 public:
     L3SystemInformationType1();
-    int MTI() const override { return SystemInformationType1; }
+    int mti() const override { return SystemInformationType1; }
     size_t l2BodyLength() const override { return 19 + (mHaveRestOctets ? 1 : 0); }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
@@ -177,7 +177,7 @@ private:
 public:
     explicit L3ChannelRelease(RRCause cause = RRCause::Normal_Event)
         : mCause(cause), mGprsResumptionPresent(false), mGprsResumptionBit(false) {}
-    int MTI() const override { return ChannelRelease; }
+    int mti() const override { return ChannelRelease; }
     size_t l2BodyLength() const override { return 1 + (mGprsResumptionPresent ? 1 : 0); }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
@@ -194,7 +194,7 @@ private:
     RRCause mCause;
 public:
     RRCause cause() const { return mCause; }
-    int MTI() const override { return RRStatus; }
+    int mti() const override { return RRStatus; }
     size_t l2BodyLength() const override { return 1; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -212,7 +212,7 @@ private:
     L3MultiRateConfiguration mMultiRate;
 public:
     L3AssignmentCommand();
-    int MTI() const override { return AssignmentCommand; }
+    int mti() const override { return AssignmentCommand; }
     size_t l2BodyLength() const override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
@@ -232,7 +232,7 @@ private:
     RRCause mCause;
 public:
     RRCause cause() const { return mCause; }
-    int MTI() const override { return AssignmentComplete; }
+    int mti() const override { return AssignmentComplete; }
     size_t l2BodyLength() const override { return 1; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -246,7 +246,7 @@ private:
     RRCause mCause;
 public:
     RRCause cause() const { return mCause; }
-    int MTI() const override { return AssignmentFailure; }
+    int mti() const override { return AssignmentFailure; }
     size_t l2BodyLength() const override { return 1; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -257,7 +257,7 @@ public:
 
 class L3ClassmarkEnquiry : public L3RRMessageNRO {
 public:
-    int MTI() const override { return ClassmarkEnquiry; }
+    int mti() const override { return ClassmarkEnquiry; }
     size_t l2BodyLength() const override { return 0; }
     void writeBody(L3Frame&, size_t&) const override {}
     void parseBody(const L3Frame&, size_t&) override {}
@@ -272,7 +272,7 @@ protected:
     bool mHaveAdditionalClassmark;
     L3MobileStationClassmark3 mAdditionalClassmark;
 public:
-    int MTI() const override { return ClassmarkChange; }
+    int mti() const override { return ClassmarkChange; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -288,7 +288,7 @@ class L3MeasurementReport : public L3RRMessageNRO {
 private:
     L3MeasurementResults mMeasurementResults;
 public:
-    int MTI() const override { return MeasurementReport; }
+    int mti() const override { return MeasurementReport; }
     size_t l2BodyLength() const override { return 16; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -306,7 +306,7 @@ protected:
 public:
     L3CipheringModeCommand(bool ciphering, int algorithm)
         : mCiphering(ciphering), mAlgorithm(algorithm), mCipheringModeResponse() {}
-    int MTI() const override;
+    int mti() const override;
     size_t l2BodyLength() const override { return 1; }
     void writeBody(L3Frame&, size_t&) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
@@ -318,7 +318,7 @@ public:
 
 class L3CipheringModeComplete : public L3RRMessageNRO {
 public:
-    int MTI() const override;
+    int mti() const override;
     size_t l2BodyLength() const override { return 0; }
     void parseBody(const L3Frame&, size_t&) override {}
     void writeBody(L3Frame&, size_t&) const override {}
@@ -331,7 +331,7 @@ class L3HandoverComplete : public L3RRMessageNRO {
 protected:
     RRCause mCause;
 public:
-    int MTI() const override { return HandoverComplete; }
+    int mti() const override { return HandoverComplete; }
     size_t l2BodyLength() const override { return 1; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -345,7 +345,7 @@ class L3HandoverFailure : public L3RRMessageNRO {
 protected:
     RRCause mCause;
 public:
-    int MTI() const override { return HandoverFailure; }
+    int mti() const override { return HandoverFailure; }
     size_t l2BodyLength() const override { return 1; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -363,7 +363,7 @@ private:
 public:
     L3ChannelModeModify();
     L3ChannelModeModify(const L3ChannelDescription& wDesc, const L3ChannelMode& wMode);
-    int MTI() const override { return ChannelModeModify; }
+    int mti() const override { return ChannelModeModify; }
     bool isAMR() const { return mMode.isAMR(); }
     size_t l2BodyLength() const override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -380,7 +380,7 @@ private:
     L3ChannelDescription mDescription;
     L3ChannelMode mMode;
 public:
-    int MTI() const override { return ChannelModeModifyAcknowledge; }
+    int mti() const override { return ChannelModeModifyAcknowledge; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -399,7 +399,7 @@ public:
     uint8_t mServiceSupport;
 
     L3GPRSSuspensionRequest() : mTLLI(0), mRaId(6, 0), mSuspensionCause(0), mServiceSupport(0) {}
-    int MTI() const override { return GPRSSuspensionRequest; }
+    int mti() const override { return GPRSSuspensionRequest; }
     size_t l2BodyLength() const override { return 11; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -421,12 +421,12 @@ public:
                               unsigned cr = 0, unsigned first = 0, unsigned last = 0);
 
     unsigned protocolIdentifier() const { return mProtocolIdentifier; }
-    unsigned CR() const { return mCR; }
+    unsigned cr() const { return mCR; }
     unsigned firstSegment() const { return mFirstSegment; }
     unsigned lastSegment() const { return mLastSegment; }
     const BitVector& data() const { return mData; }
 
-    int MTI() const override { return ApplicationInformation; }
+    int mti() const override { return ApplicationInformation; }
     size_t l2BodyLength() const override;
     void writeBody(L3Frame&, size_t&) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
@@ -445,14 +445,14 @@ private:
     L3RACHControlParameters mRACHControlParameters;
     L3SI3RestOctets mRestOctets;
 public:
-    int MTI() const override { return SystemInformationType3; }
+    int mti() const override { return SystemInformationType3; }
     size_t l2BodyLength() const override { return 16; }
     size_t restOctetsLength() const override { return mRestOctets.lengthV(); }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    const L3CellIdentity& CI() const { return mCI; }
-    const L3LocationAreaIdentity& LAI() const { return mLAI; }
+    const L3CellIdentity& ci() const { return mCI; }
+    const L3LocationAreaIdentity& lai() const { return mLAI; }
     const L3ControlChannelDescription& controlChannelDescription() const { return mControlChannelDescription; }
     const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
     const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
@@ -465,7 +465,7 @@ class L3SystemInformationType13 : public L3RRMessageRO {
 private:
     L3SI13RestOctets mRestOctets;
 public:
-    int MTI() const override { return SystemInformationType13; }
+    int mti() const override { return SystemInformationType13; }
     size_t l2BodyLength() const override { return 0; }
     size_t restOctetsLength() const override { return mRestOctets.lengthV(); }
     void parseBody(const L3Frame& src, size_t& rp) override;
@@ -483,11 +483,11 @@ private:
     L3ChannelDescription mChannelDescription;
     L3TimingAdvance mTimingAdvance;
     std::vector<uint8_t> mMobileAllocation;
-    Bool_z mStartTimePresent;
-    uint32_t mStartTimeFrame;
+    bool mStartTimePresent{};
+    uint32_t mStartTimeFrame{};
 public:
     L3ImmediateAssignment();
-    int MTI() const override { return ImmediateAssignment; }
+    int mti() const override { return ImmediateAssignment; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -509,13 +509,13 @@ private:
     L3ChannelDescription mChannelDescription;
     L3TimingAdvance mTimingAdvance;
     std::vector<uint8_t> mMobileAllocation;
-    Bool_z mStartTimePresent;
-    uint32_t mStartTimeFrame;
-    bool mHaveAdditionalChannel;
+    bool mStartTimePresent{};
+    uint32_t mStartTimeFrame{};
+    bool mHaveAdditionalChannel{};
     L3AdditionalChannelDescription mAdditionalChannel;
 public:
     L3ImmediateAssignmentExtended();
-    int MTI() const override { return ImmediateAssignmentExtended; }
+    int mti() const override { return ImmediateAssignmentExtended; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -537,7 +537,7 @@ private:
 public:
     L3ImmediateAssignmentReject();
     explicit L3ImmediateAssignmentReject(unsigned waitSeconds);
-    int MTI() const override { return ImmediateAssignmentReject; }
+    int mti() const override { return ImmediateAssignmentReject; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -558,7 +558,7 @@ private:
 public:
     L3PagingRequestType2();
     L3PagingRequestType2(const L3MobileIdentity& wId, ChannelType wType);
-    int MTI() const override { return PagingRequestType2; }
+    int mti() const override { return PagingRequestType2; }
     size_t l2BodyLength() const override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
@@ -576,7 +576,7 @@ private:
 public:
     L3PagingRequestType3();
     L3PagingRequestType3(const L3MobileIdentity& wId, ChannelType wType);
-    int MTI() const override { return PagingRequestType3; }
+    int mti() const override { return PagingRequestType3; }
     size_t l2BodyLength() const override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
@@ -591,7 +591,7 @@ private:
     L3TimingAdvance mTA;
 public:
     L3PhysicalInformation();
-    int MTI() const override { return PhysicalInformation; }
+    int mti() const override { return PhysicalInformation; }
     size_t l2BodyLength() const override { return mTA.lengthV(); }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -610,7 +610,7 @@ private:
     L3SynchronizationIndication mSynchronizationIndication;
 public:
     L3HandoverCommand();
-    int MTI() const override { return HandoverCommand; }
+    int mti() const override { return HandoverCommand; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -631,7 +631,7 @@ private:
     L3PowerCommand mPowerCommand;
 public:
     L3AdditionalAssignment();
-    int MTI() const override { return AdditionalAssignment; }
+    int mti() const override { return AdditionalAssignment; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -651,7 +651,7 @@ private:
     L3RACHControlParameters mRACHControlParameters;
 public:
     L3SystemInformationType2();
-    int MTI() const override { return SystemInformationType2; }
+    int mti() const override { return SystemInformationType2; }
     size_t l2BodyLength() const override { return 20; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -670,7 +670,7 @@ private:
     L3RACHControlParameters mRACHControlParameters;
 public:
     L3SystemInformationType2bis();
-    int MTI() const override { return SystemInformationType2bis; }
+    int mti() const override { return SystemInformationType2bis; }
     size_t l2BodyLength() const override { return 19; }
     size_t restOctetsLength() const override { return 1; }
     void parseBody(const L3Frame& src, size_t& rp) override;
@@ -688,7 +688,7 @@ private:
     L3BCCHFrequencyList mBCCHFrequencyList;
 public:
     L3SystemInformationType2ter();
-    int MTI() const override { return SystemInformationType2ter; }
+    int mti() const override { return SystemInformationType2ter; }
     size_t l2BodyLength() const override { return 16; }
     size_t restOctetsLength() const override { return 4; }
     void parseBody(const L3Frame& src, size_t& rp) override;
@@ -711,13 +711,13 @@ private:
     L3SIType4RestOctets mRestOctets;
 public:
     L3SystemInformationType4();
-    int MTI() const override { return SystemInformationType4; }
+    int mti() const override { return SystemInformationType4; }
     size_t l2BodyLength() const override;
     size_t restOctetsLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    const L3LocationAreaIdentity& LAI() const { return mLAI; }
+    const L3LocationAreaIdentity& lai() const { return mLAI; }
     const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
     const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
     bool hasCBCH() const { return mHaveCBCH; }
@@ -732,7 +732,7 @@ private:
     L3BCCHFrequencyList mBCCHFrequencyList;
 public:
     L3SystemInformationType5();
-    int MTI() const override { return SystemInformationType5; }
+    int mti() const override { return SystemInformationType5; }
     size_t l2BodyLength() const override { return 16; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -748,7 +748,7 @@ private:
     L3BCCHFrequencyList mBCCHFrequencyList;
 public:
     L3SystemInformationType5bis();
-    int MTI() const override { return SystemInformationType5bis; }
+    int mti() const override { return SystemInformationType5bis; }
     size_t l2BodyLength() const override { return 16; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -764,7 +764,7 @@ private:
     L3BCCHFrequencyList mBCCHFrequencyList;
 public:
     L3SystemInformationType5ter();
-    int MTI() const override { return SystemInformationType5ter; }
+    int mti() const override { return SystemInformationType5ter; }
     size_t l2BodyLength() const override { return 16; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -783,13 +783,13 @@ private:
     L3NCCPermitted mNCCPermitted;
 public:
     L3SystemInformationType6();
-    int MTI() const override { return SystemInformationType6; }
+    int mti() const override { return SystemInformationType6; }
     size_t l2BodyLength() const override { return 9; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    const L3CellIdentity& CI() const { return mCI; }
-    const L3LocationAreaIdentity& LAI() const { return mLAI; }
+    const L3CellIdentity& ci() const { return mCI; }
+    const L3LocationAreaIdentity& lai() const { return mLAI; }
     const L3CellOptionsSACCH& cellOptions() const { return mCellOptions; }
     const L3NCCPermitted& nccPermitted() const { return mNCCPermitted; }
 };
@@ -803,7 +803,7 @@ private:
     std::vector<L3CellChannelDescription> mCellChannelDescriptions;
 public:
     L3SystemInformationType7();
-    int MTI() const override { return SystemInformationType7; }
+    int mti() const override { return SystemInformationType7; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -822,7 +822,7 @@ private:
     std::vector<L3CellChannelDescription> mCellChannelDescriptions;
 public:
     L3SystemInformationType8();
-    int MTI() const override { return SystemInformationType8; }
+    int mti() const override { return SystemInformationType8; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -842,12 +842,12 @@ private:
     L3CellOptionsBCCH mCellOptions;
 public:
     L3SystemInformationType9();
-    int MTI() const override { return SystemInformationType9; }
+    int mti() const override { return SystemInformationType9; }
     size_t l2BodyLength() const override { return 5; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    const L3CellIdentity& CI() const { return mCI; }
+    const L3CellIdentity& ci() const { return mCI; }
     const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
     const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
 };
@@ -862,12 +862,12 @@ private:
     L3CellOptionsBCCH mCellOptions;
 public:
     L3SystemInformationType16();
-    int MTI() const override { return SystemInformationType16; }
+    int mti() const override { return SystemInformationType16; }
     size_t l2BodyLength() const override { return 5; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    const L3CellIdentity& CI() const { return mCI; }
+    const L3CellIdentity& ci() const { return mCI; }
     const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
     const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
 };
@@ -881,7 +881,7 @@ private:
     std::vector<L3CellChannelDescription> mCellChannelDescriptions;
 public:
     L3SystemInformationType17();
-    int MTI() const override { return SystemInformationType17; }
+    int mti() const override { return SystemInformationType17; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -898,7 +898,7 @@ private:
     L3LocationAreaIdentity mLocationAreaIdentity;
 public:
     L3SynchronizationChannelInformation();
-    int MTI() const override { return SynchronizationChannelInformation; }
+    int mti() const override { return SynchronizationChannelInformation; }
     size_t l2BodyLength() const override { return 7; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -914,7 +914,7 @@ private:
     unsigned mRequestReference;
 public:
     L3ChannelRequest(unsigned wRef = 0);
-    int MTI() const override { return ChannelRequest; }
+    int mti() const override { return ChannelRequest; }
     size_t l2BodyLength() const override { return 1; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -929,7 +929,7 @@ private:
     unsigned mHandoverNumber;
 public:
     L3HandoverAccess(unsigned wNumber = 0);
-    int MTI() const override { return HandoverAccess; }
+    int mti() const override { return HandoverAccess; }
     size_t l2BodyLength() const override { return 4; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;

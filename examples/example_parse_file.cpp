@@ -49,15 +49,15 @@ void printMsgDetails(const L3Message& msg) {
     if (auto* rr = dynamic_cast<const L3RRMessage*>(&msg)) {
         std::cout << "  PD: RadioResource\n";
         std::cout << "  MTI: " << L3RRMessage::name(
-            static_cast<L3RRMessage::MessageType>(rr->MTI())) << "\n";
+            static_cast<L3RRMessage::MessageType>(rr->mti())) << "\n";
     } else if (auto* mm = dynamic_cast<const L3MMMessage*>(&msg)) {
         std::cout << "  PD: MobilityManagement\n";
     } else if (auto* cc = dynamic_cast<const L3CCMessage*>(&msg)) {
         std::cout << "  PD: CallControl\n";
-        std::cout << "  TI: " << cc->TI() << "\n";
+        std::cout << "  TI: " << cc->ti() << "\n";
     } else if (auto* ss = dynamic_cast<const L3SupServMessage*>(&msg)) {
         std::cout << "  PD: SupplementaryServices\n";
-        std::cout << "  TI: " << ss->TI() << "\n";
+        std::cout << "  TI: " << ss->ti() << "\n";
     }
 }
 

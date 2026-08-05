@@ -59,16 +59,16 @@ public:
     // ── Protocol fields ──────────────────────────────────────────────
 
     /** Protocol Discriminator — GSM 04.08 10.2 */
-    L3PD PD() const;
+    L3PD pd() const;
 
     /** Message Type Indicator — GSM 04.08 10.4 */
-    unsigned MTI() const;
+    unsigned mti() const;
 
     /** Transaction Identifier — GSM 04.07 11.2.3.1.3 */
-    unsigned TI() const;
+    unsigned ti() const;
 
     /** TIF flag — bit 7 of byte 0 (1 = short message) */
-    unsigned TIF() const;
+    unsigned tif() const;
 
     // ── Accessors ────────────────────────────────────────────────────
 
@@ -79,11 +79,11 @@ public:
     size_t length() const { return size() / 8; }
 
     /** L2 length / pseudo-length */
-    size_t L2Length() const { return mL2Length; }
-    void L2Length(size_t len) { mL2Length = len; }
+    size_t l2Length() const { return mL2Length; }
+    void l2Length(size_t len) { mL2Length = len; }
 
-    SAPI getSAPI() const { return mSapi; }
-    void setSAPI(SAPI sapi) { mSapi = sapi; }
+    SAPI sapi() const { return mSapi; }
+    void sapi(SAPI s) { mSapi = s; }
 
     double timestamp() const { return mTimestamp; }
     void setTimestamp(double ts) { mTimestamp = ts; }

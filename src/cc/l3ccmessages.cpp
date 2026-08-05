@@ -32,12 +32,12 @@ void L3CCMessage::write(L3Frame& dest) const {
     size_t l3len = bitsNeeded();
     if (dest.size() != l3len) dest.resize(l3len);
     size_t wp = 0;
-    dest.writeField(wp, static_cast<unsigned>(PD()), 4);  // PD: high nibble
+    dest.writeField(wp, static_cast<unsigned>(pd()), 4);  // PD: high nibble
     dest.writeField(wp, mTI, 3);                           // TIO: 3 bits
     dest.writeField(wp, 0, 1);                             // TIF: 1 bit
-    dest.writeField(wp, MTI() << 2, 8);                    // messageType(6)|NSD(2)
+    dest.writeField(wp, mti() << 2, 8);                    // messageType(6)|NSD(2)
     writeBody(dest, wp);
-    dest.L2Length(l2Length());
+    dest.l2Length(l2Length());
 }
 
 void L3CCMessage::text(std::ostream& os) const {
@@ -423,7 +423,7 @@ void L3StartDTMF::text(std::ostream& os) const {
 void L3StartDTMFAcknowledge::parseBody(const L3Frame& src, size_t& rp) {
     L3KeypadFacility kf;
     kf.parseTV(0x2c, src, rp);
-    mKey = kf.IA5();
+    mKey = kf.ia5();
 }
 
 void L3StartDTMFAcknowledge::writeBody(L3Frame& dest, size_t& wp) const {
@@ -531,17 +531,17 @@ std::unique_ptr<L3CCMessage> L3CCFactory(int mti) {
 std::unique_ptr<L3CCMessage> parseL3CC(const L3Frame& source) {
     if (source.size() < 16) return nullptr;
 
-    // MTI extraction already handles the don't-care bit in L3Frame::MTI()
-    unsigned mti = source.MTI();
+    // MTI extraction already handles the don't-care bit in L3Frame::mti()
+    unsigned mti = source.mti();
     auto msg = L3CCFactory(static_cast<L3CCMessage::MessageType>(mti));
     if (!msg) {
         GSML3PARSER_LOG_WARN("Unknown CC MTI: 0x%02x", mti);
         return nullptr;
     }
     try {
-        msg->TI(source.TI());
+        msg->ti(source.ti());
         msg->parse(source);
-    } catch (const ParseError&) {
+    } catch (const detail::ParseError&) {
         GSML3PARSER_LOG_WARN("CC parse failed for MTI=0x%02x", mti);
         return nullptr;
     }

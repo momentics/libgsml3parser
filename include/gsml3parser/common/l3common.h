@@ -40,7 +40,7 @@ private:
     unsigned mID;
 public:
     explicit L3CellIdentity(unsigned wID = 0) : mID(wID) {}
-    unsigned ID() const { return mID; }
+    unsigned id() const { return mID; }
     size_t lengthV() const override { return 2; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -58,9 +58,9 @@ private:
 public:
     L3LocationAreaIdentity(const char* wMCC = "250", const char* wMNC = "01", unsigned wLAC = 1);
     bool operator==(const L3LocationAreaIdentity&) const;
-    int MCC() const;
-    int MNC() const;
-    int LAC() const { return mLAC; }
+    int mcc() const;
+    int mnc() const;
+    int lac() const { return mLAC; }
     size_t lengthV() const override { return 5; }
     void parseV(const L3Frame& source, size_t& rp) override;
     void parseV(const L3Frame&, size_t&, size_t) override;
@@ -82,7 +82,7 @@ public:
 
     MobileIDType type() const { return mType; }
     const char* digits() const;
-    uint32_t TMSI() const;
+    uint32_t tmsi() const;
     bool isIMSI() const { return mType == MobileIDType::IMSI; }
     bool isTMSI() const { return mType == MobileIDType::TMSI; }
 
@@ -93,7 +93,7 @@ public:
     size_t lengthV() const override;
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
-    void parseV(const L3Frame&, size_t&) override { throw ParseError("parseV not valid for MobileIdentity"); }
+    void parseV(const L3Frame&, size_t&) override { throw detail::ParseError("parseV not valid for MobileIdentity"); }
     void text(std::ostream& os) const override;
 };
 
@@ -175,7 +175,7 @@ public:
     size_t lengthV() const override { return 0; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override { mCIValue = src.readField(rp, 4) & 0x0f; }
-    void parseV(const L3Frame&, size_t&, size_t) override { throw ParseError("parseV not valid"); }
+    void parseV(const L3Frame&, size_t&, size_t) override { throw detail::ParseError("parseV not valid"); }
     void text(std::ostream& os) const override;
 };
 
@@ -188,8 +188,8 @@ protected:
 public:
     L3FrequencyList();
     explicit L3FrequencyList(const std::vector<unsigned>& wARFCNs);
-    void ARFCNs(const std::vector<unsigned>& wARFCNs) { mARFCNs = wARFCNs; }
-    const std::vector<unsigned>& ARFCNs() const { return mARFCNs; }
+    void arfcns(const std::vector<unsigned>& wARFCNs) { mARFCNs = wARFCNs; }
+    const std::vector<unsigned>& arfcns() const { return mARFCNs; }
     size_t lengthV() const override { return 16; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -212,8 +212,8 @@ private:
 public:
     L3CellChannelDescription();
     L3CellChannelDescription(unsigned wARfcn, unsigned wBSIC, unsigned wSpacing);
-    unsigned ARFCN() const { return mARfcn; }
-    unsigned BSIC() const { return mBSIC; }
+    unsigned arfcn() const { return mARfcn; }
+    unsigned bsic() const { return mBSIC; }
     unsigned channelSpacing() const { return mChannelSpacing; }
     size_t lengthV() const override { return 3; }
     void writeV(L3Frame& dest, size_t& wp) const override;
@@ -287,11 +287,11 @@ public:
                          unsigned wTSC, unsigned wARFCN);
     bool initialized() const { return mTypeAndOffset != TDMA_MISC; }
     TypeAndOffset typeAndOffset() const { return mTypeAndOffset; }
-    unsigned TN() const { return mTN; }
-    unsigned TSC() const { return mTSC; }
-    unsigned ARFCN() const { return mARFCN; }
-    unsigned MAIO() const { return mMAIO; }
-    unsigned HSN() const { return mHSN; }
+    unsigned tn() const { return mTN; }
+    unsigned tsc() const { return mTSC; }
+    unsigned arfcn() const { return mARFCN; }
+    unsigned maio() const { return mMAIO; }
+    unsigned hsn() const { return mHSN; }
     size_t lengthV() const override { return 3; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -326,11 +326,11 @@ public:
                                     unsigned wTSC, unsigned wARFCN);
     bool initialized() const { return mTypeAndOffset != TDMA_MISC; }
     TypeAndOffset typeAndOffset() const { return mTypeAndOffset; }
-    unsigned TN() const { return mTN; }
-    unsigned TSC() const { return mTSC; }
-    unsigned ARFCN() const { return mARFCN; }
-    unsigned MAIO() const { return mMAIO; }
-    unsigned HSN() const { return mHSN; }
+    unsigned tn() const { return mTN; }
+    unsigned tsc() const { return mTSC; }
+    unsigned arfcn() const { return mARFCN; }
+    unsigned maio() const { return mMAIO; }
+    unsigned hsn() const { return mHSN; }
     size_t lengthV() const override { return 3; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -409,9 +409,9 @@ private:
     unsigned mBCC;
 public:
     L3CellDescription(unsigned wARFCN = 0, unsigned wNCC = 0, unsigned wBCC = 0);
-    unsigned ARFCN() const { return mARFCN; }
-    unsigned NCC() const { return mNCC; }
-    unsigned BCC() const { return mBCC; }
+    unsigned arfcn() const { return mARFCN; }
+    unsigned ncc() const { return mNCC; }
+    unsigned bcc() const { return mBCC; }
     size_t lengthV() const override { return 2; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -475,9 +475,9 @@ private:
     int mSI;
 public:
     L3SynchronizationIndication(bool wNCI = false, bool wROT = false, int wSI = 0);
-    bool NCI() const { return mNCI; }
-    bool ROT() const { return mROT; }
-    int SI() const { return mSI; }
+    bool nci() const { return mNCI; }
+    bool rot() const { return mROT; }
+    int syncIndicator() const { return mSI; }
     size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -526,10 +526,10 @@ private:
 public:
     L3RequestReference();
     L3RequestReference(unsigned wRA, unsigned wT1p, unsigned wT2, unsigned wT3);
-    unsigned RA() const { return mRA; }
-    unsigned T1p() const { return mT1p; }
-    unsigned T2() const { return mT2; }
-    unsigned T3() const { return mT3; }
+    unsigned ra() const { return mRA; }
+    unsigned t1p() const { return mT1p; }
+    unsigned t2() const { return mT2; }
+    unsigned t3() const { return mT3; }
     size_t lengthV() const override { return 3; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -576,9 +576,9 @@ private:
     unsigned mRADIO_LINK_TIMEOUT;
 public:
     L3CellOptionsBCCH();
-    unsigned PWRC() const { return mPWRC; }
-    unsigned DTX() const { return mDTX; }
-    unsigned RADIO_LINK_TIMEOUT() const { return mRADIO_LINK_TIMEOUT; }
+    unsigned pwrc() const { return mPWRC; }
+    unsigned dtx() const { return mDTX; }
+    unsigned radioLinkTimeout() const { return mRADIO_LINK_TIMEOUT; }
     size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -595,9 +595,9 @@ private:
     unsigned mRADIO_LINK_TIMEOUT;
 public:
     L3CellOptionsSACCH();
-    unsigned PWRC() const { return mPWRC; }
-    unsigned DTX() const { return mDTX; }
-    unsigned RADIO_LINK_TIMEOUT() const { return mRADIO_LINK_TIMEOUT; }
+    unsigned pwrc() const { return mPWRC; }
+    unsigned dtx() const { return mDTX; }
+    unsigned radioLinkTimeout() const { return mRADIO_LINK_TIMEOUT; }
     size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -616,11 +616,11 @@ private:
     unsigned mRXLEV_ACCESS_MIN;
 public:
     L3CellSelectionParameters();
-    unsigned ACS() const { return mACS; }
-    unsigned NECI() const { return mNECI; }
-    unsigned CELL_RESELECT_HYSTERESIS() const { return mCELL_RESELECT_HYSTERESIS; }
-    unsigned MS_TXPWR_MAX_CCH() const { return mMS_TXPWR_MAX_CCH; }
-    unsigned RXLEV_ACCESS_MIN() const { return mRXLEV_ACCESS_MIN; }
+    unsigned acs() const { return mACS; }
+    unsigned neci() const { return mNECI; }
+    unsigned cellReselectHysteresis() const { return mCELL_RESELECT_HYSTERESIS; }
+    unsigned msTxpwrMaxCch() const { return mMS_TXPWR_MAX_CCH; }
+    unsigned rxlevAccessMin() const { return mRXLEV_ACCESS_MIN; }
     size_t lengthV() const override { return 2; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -639,11 +639,11 @@ private:
     uint16_t mAC;
 public:
     L3RACHControlParameters();
-    unsigned MaxRetrans() const { return mMaxRetrans; }
-    unsigned TxInteger() const { return mTxInteger; }
-    bool CellBarAccess() const { return mCellBarAccess; }
-    unsigned RE() const { return mRE; }
-    uint16_t AC() const { return mAC; }
+    unsigned maxRetrans() const { return mMaxRetrans; }
+    unsigned txInteger() const { return mTxInteger; }
+    bool cellBarAccess() const { return mCellBarAccess; }
+    unsigned re() const { return mRE; }
+    uint16_t ac() const { return mAC; }
     size_t lengthV() const override { return 3; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -660,7 +660,7 @@ private:
     std::vector<unsigned char> mPowerOffsetData;
 public:
     L3ImmediateAssignmentInformation();
-    unsigned PowerOffset() const { return mPowerOffset; }
+    unsigned powerOffset() const { return mPowerOffset; }
     size_t lengthV() const override;
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -685,17 +685,17 @@ private:
     std::array<unsigned, 6> mBSIC_NCELL;
 public:
     L3MeasurementResults();
-    bool BA_USED() const { return mBA_USED; }
-    bool DTX_USED() const { return mDTX_USED; }
+    bool baUsed() const { return mBA_USED; }
+    bool dtxUsed() const { return mDTX_USED; }
     bool isServingCellValid() const { return mMEAS_VALID == 0; }
-    unsigned RXLEV_FULL_SERVING_CELL_RAW() const { return mRXLEV_FULL_SERVING_CELL; }
-    unsigned RXLEV_SUB_SERVING_CELL_RAW() const { return mRXLEV_SUB_SERVING_CELL; }
-    unsigned RXQUAL_FULL_SERVING_CELL() const { return mRXQUAL_FULL_SERVING_CELL; }
-    unsigned RXQUAL_SUB_SERVING_CELL() const { return mRXQUAL_SUB_SERVING_CELL; }
-    unsigned NO_NCELL() const { return mNO_NCELL; }
-    unsigned RXLEV_NCELL_RAW(unsigned i) const { return mRXLEV_NCELL[i]; }
-    unsigned BCCH_FREQ_NCELL(unsigned i) const { return mBCCH_FREQ_NCELL[i]; }
-    unsigned BSIC_NCELL(unsigned i) const { return mBSIC_NCELL[i]; }
+    unsigned rxlevFullServingCellRaw() const { return mRXLEV_FULL_SERVING_CELL; }
+    unsigned rxlevSubServingCellRaw() const { return mRXLEV_SUB_SERVING_CELL; }
+    unsigned rxqualFullServingCell() const { return mRXQUAL_FULL_SERVING_CELL; }
+    unsigned rxqualSubServingCell() const { return mRXQUAL_SUB_SERVING_CELL; }
+    unsigned noNcell() const { return mNO_NCELL; }
+    unsigned rxlevNcellRaw(unsigned i) const { return mRXLEV_NCELL[i]; }
+    unsigned bcchFreqNcell(unsigned i) const { return mBCCH_FREQ_NCELL[i]; }
+    unsigned bsicNcell(unsigned i) const { return mBSIC_NCELL[i]; }
     int decodeLevToDBm(unsigned lev) const;
     float decodeQualToBER(unsigned qual) const;
     size_t lengthV() const override { return 16; }
@@ -752,7 +752,7 @@ private:
     unsigned mLastSegment;
 public:
     L3APDUFlags(unsigned cr = 0, unsigned firstSegment = 0, unsigned lastSegment = 0);
-    unsigned CR() const { return mCR; }
+    unsigned cr() const { return mCR; }
     unsigned firstSegment() const { return mFirstSegment; }
     unsigned lastSegment() const { return mLastSegment; }
     size_t lengthV() const override { return 0; }
@@ -824,10 +824,10 @@ private:
     std::vector<uint8_t> mRawData;
 public:
     L3CellOptions();
-    unsigned RevisionLevel() const { return mRevisionLevel; }
-    bool CBCH() const { return mCBCH; }
-    bool EnhancedRACH() const { return mEnhancedRACH; }
-    unsigned CellReselectionPriority() const { return mCellReselectionPriority; }
+    unsigned revisionLevel() const { return mRevisionLevel; }
+    bool cbch() const { return mCBCH; }
+    bool enhancedRach() const { return mEnhancedRACH; }
+    unsigned cellReselectionPriority() const { return mCellReselectionPriority; }
     size_t lengthV() const override;
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -850,10 +850,10 @@ private:
     std::vector<unsigned char> mCellBarQualifierData;
 public:
     L3CellSelection();
-    unsigned RxLevAccessMin() const { return mRxLevAccessMin; }
-    unsigned MaxRxLev() const { return mMaxRxLev; }
-    unsigned CellReselectionHysteresis() const { return mCellReselectionHysteresis; }
-    unsigned CellReselectionOffset() const { return mCellReselectionOffset; }
+    unsigned rxLevAccessMin() const { return mRxLevAccessMin; }
+    unsigned maxRxLev() const { return mMaxRxLev; }
+    unsigned cellReselectionHysteresis() const { return mCellReselectionHysteresis; }
+    unsigned cellReselectionOffset() const { return mCellReselectionOffset; }
     size_t lengthV() const override;
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;

@@ -459,8 +459,8 @@ std::unique_ptr<L3MMMessage> L3MMFactory(int mti) {
 std::unique_ptr<L3MMMessage> parseL3MM(const L3Frame& source) {
     if (source.size() < 16) return nullptr;
 
-    // MTI extraction already handles the don't-care bit in L3Frame::MTI()
-    unsigned mti = source.MTI();
+    // MTI extraction already handles the don't-care bit in L3Frame::mti()
+    unsigned mti = source.mti();
     auto msg = L3MMFactory(static_cast<L3MMMessage::MessageType>(mti));
     if (!msg) {
         GSML3PARSER_LOG_WARN("Unknown MM MTI: 0x%02x", mti);
@@ -468,7 +468,7 @@ std::unique_ptr<L3MMMessage> parseL3MM(const L3Frame& source) {
     }
     try {
         msg->parse(source);
-    } catch (const ParseError&) {
+    } catch (const detail::ParseError&) {
         GSML3PARSER_LOG_WARN("MM parse failed for MTI=0x%02x", mti);
         return nullptr;
     }

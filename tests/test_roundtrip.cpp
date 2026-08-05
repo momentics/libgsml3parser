@@ -44,8 +44,8 @@ static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
 // Helper: verify PD + MTI survived round-trip.
 static void checkHeader(std::unique_ptr<L3Message>& parsed, L3PD expectPD, int expectMTI) {
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->PD(), expectPD);
-    EXPECT_EQ(parsed->MTI(), expectMTI);
+    EXPECT_EQ(parsed->pd(), expectPD);
+    EXPECT_EQ(parsed->mti(), expectMTI);
 }
 
 // ── Paging Request Type 1 (GSM 04.08 9.1.22) ───────────────────────────
@@ -266,8 +266,8 @@ TEST(RoundTripTest, RRStatus) {
     uint8_t data[] = {0x60, 0x12, 0x60};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->PD(), L3PD::RadioResource);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::RRStatus);
+    EXPECT_EQ(msg->pd(), L3PD::RadioResource);
+    EXPECT_EQ(msg->mti(), L3RRMessage::RRStatus);
     auto* rs = dynamic_cast<L3RRStatus*>(msg.get());
     ASSERT_TRUE(rs);
     EXPECT_EQ(rs->cause(), RRCause::Invalid_Mandatory_Information);
@@ -544,5 +544,5 @@ TEST(RoundTripTest, ClassmarkChange) {
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::ClassmarkChange);
+    EXPECT_EQ(msg->mti(), L3RRMessage::ClassmarkChange);
 }

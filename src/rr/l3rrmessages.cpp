@@ -82,7 +82,7 @@ const char* L3RRMessage::name(MessageType mt) {
 
 void L3RRMessage::text(std::ostream& os) const {
     L3Message::text(os);
-    os << " (" << name(static_cast<MessageType>(MTI())) << ")";
+    os << " (" << name(static_cast<MessageType>(mti())) << ")";
 }
 
 std::ostream& operator<<(std::ostream& os, L3RRMessage::MessageType mt) {
@@ -407,7 +407,7 @@ void L3MeasurementReport::text(std::ostream& os) const {
 
 // ── L3CipheringModeCommand ─────────────────────────────────────────────
 
-int L3CipheringModeCommand::MTI() const { return CipheringModeCommand; }
+int L3CipheringModeCommand::mti() const { return CipheringModeCommand; }
 
 void L3CipheringModeCommand::parseBody(const L3Frame& src, size_t& rp) {
     // Half-octet reverse order: Response first, then Setting
@@ -433,7 +433,7 @@ void L3CipheringModeCommand::text(std::ostream& os) const {
 
 // ── L3CipheringModeComplete ────────────────────────────────────────────
 
-int L3CipheringModeComplete::MTI() const { return CipheringModeComplete; }
+int L3CipheringModeComplete::mti() const { return CipheringModeComplete; }
 
 void L3CipheringModeComplete::text(std::ostream& os) const {
     os << "CipheringModeComplete";
@@ -871,7 +871,7 @@ L3PagingRequestType2::L3PagingRequestType2() {
 }
 
 L3PagingRequestType2::L3PagingRequestType2(const L3MobileIdentity& wId, ChannelType wType) {
-    mTMSIs.push_back(wId.TMSI());
+    mTMSIs.push_back(wId.tmsi());
     mTMSIs.push_back(0);
     mChannelsNeeded[0] = wType;
     mChannelsNeeded[1] = ChannelType::AnyDCCHType;
@@ -927,7 +927,7 @@ L3PagingRequestType3::L3PagingRequestType3() {
 }
 
 L3PagingRequestType3::L3PagingRequestType3(const L3MobileIdentity& wId, ChannelType wType) {
-    mTMSIs.push_back(wId.TMSI());
+    mTMSIs.push_back(wId.tmsi());
     mTMSIs.push_back(0);
     mTMSIs.push_back(0);
     mTMSIs.push_back(0);
@@ -1527,7 +1527,7 @@ std::unique_ptr<L3RRMessage> L3RRFactory(int mti) {
 std::unique_ptr<L3RRMessage> parseL3RR(const L3Frame& source) {
     if (source.size() < 16) return nullptr;
 
-    unsigned mti = source.MTI();
+    unsigned mti = source.mti();
     auto msg = L3RRFactory(static_cast<L3RRMessage::MessageType>(mti));
     if (!msg) {
         GSML3PARSER_LOG_WARN("Unknown RR MTI: 0x%02x", mti);
@@ -1535,7 +1535,7 @@ std::unique_ptr<L3RRMessage> parseL3RR(const L3Frame& source) {
     }
     try {
         msg->parse(source);
-    } catch (const ParseError&) {
+    } catch (const detail::ParseError&) {
         GSML3PARSER_LOG_WARN("RR parse failed for MTI=0x%02x", mti);
         return nullptr;
     }

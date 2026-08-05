@@ -34,19 +34,19 @@ void L3Message::write(L3Frame& dest) const {
     size_t l3len = bitsNeeded();
     if (dest.size() != l3len) dest.resize(l3len);
     size_t wp = 0;
-    dest.writeField(wp, static_cast<unsigned>(PD()), 4);  // PD: high nibble
-    dest.writeField(wp, TI(), 3);                          // TIO: 3 bits
-    L3PD pd = PD();
-    int mti = MTI();
-    bool isShort = (pd == L3PD::RadioResource && mti >= 0x100);
+    dest.writeField(wp, static_cast<unsigned>(pd()), 4);  // PD: high nibble
+    dest.writeField(wp, ti(), 3);                          // TIO: 3 bits
+    L3PD pdVal = pd();
+    int mtiVal = mti();
+    bool isShort = (pdVal == L3PD::RadioResource && mtiVal >= 0x100);
     dest.writeField(wp, isShort ? 1u : 0u, 1);            // TIF: 1 bit (1 = short message)
-    if (pd == L3PD::RadioResource) {
-        dest.writeField(wp, isShort ? (mti & 0xFF) : mti, 8);  // RR: 8-bit MTI
+    if (pdVal == L3PD::RadioResource) {
+        dest.writeField(wp, isShort ? (mtiVal & 0xFF) : mtiVal, 8);  // RR: 8-bit MTI
     } else {
-        dest.writeField(wp, mti << 2, 8);               // MM/CC/SS: messageType(6)|NSD(2)
+        dest.writeField(wp, mtiVal << 2, 8);               // MM/CC/SS: messageType(6)|NSD(2)
     }
     writeBody(dest, wp);
-    dest.L2Length(l2Length());
+    dest.l2Length(l2Length());
 }
 
 std::unique_ptr<L3Frame> L3Message::frame(Primitive prim) const {
@@ -56,7 +56,7 @@ std::unique_ptr<L3Frame> L3Message::frame(Primitive prim) const {
 }
 
 void L3Message::text(std::ostream& os) const {
-    os << "PD=" << PD() << " MTI=" << MTI();
+    os << "PD=" << pd() << " MTI=" << mti();
 }
 
 std::string L3Message::text() const {
@@ -66,11 +66,11 @@ std::string L3Message::text() const {
 }
 
 void L3Message::writeBody(L3Frame&, size_t&) const {
-    throw WriteError("writeBody not implemented");
+    throw detail::WriteError("writeBody not implemented");
 }
 
 void L3Message::parseBody(const L3Frame&, size_t&) {
-    throw ParseError("parseBody not implemented");
+    throw detail::ParseError("parseBody not implemented");
 }
 
 // ── Utility functions ───────────────────────────────────────────────────
@@ -119,7 +119,7 @@ void L3ProtocolElement::parseLV(const L3Frame& source, size_t& rp) {
     size_t rpEnd = rp + 8 * expectedLength;
     parseV(source, rp, expectedLength);
     if (rpEnd != rp) {
-        throw ParseError("LV element length mismatch: " + std::to_string(rpEnd) + "!=" + std::to_string(rp));
+        throw detail::ParseError("LV element length mismatch: " + std::to_string(rpEnd) + "!=" + std::to_string(rp));
     }
 }
 

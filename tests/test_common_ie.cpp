@@ -54,7 +54,7 @@ static void ieRoundTrip(const T& orig) {
 TEST(CommonIETest, CellIdentity_Default) {
     L3CellIdentity ci;
     EXPECT_EQ(ci.lengthV(), 2u);
-    EXPECT_EQ(ci.ID(), 0u);
+    EXPECT_EQ(ci.id(), 0u);
 }
 
 TEST(CommonIETest, CellIdentity_RoundTrip) {
@@ -101,7 +101,7 @@ TEST(CommonIETest, MobileIdentity_TMSI) {
     EXPECT_EQ(orig.type(), MobileIDType::TMSI);
     EXPECT_TRUE(orig.isTMSI());
     EXPECT_FALSE(orig.isIMSI());
-    EXPECT_EQ(orig.TMSI(), 0xDEADBEEFu);
+    EXPECT_EQ(orig.tmsi(), 0xDEADBEEFu);
 }
 
 TEST(CommonIETest, MobileIdentity_IMSI) {
@@ -208,9 +208,9 @@ TEST(CommonIETest, ChannelDescription_SDCCH) {
     L3ChannelDescription orig(TDMA_SDCCH, 2, 7, 100);
     EXPECT_TRUE(orig.initialized());
     EXPECT_EQ(orig.typeAndOffset(), TDMA_SDCCH);
-    EXPECT_EQ(orig.TN(), 2u);
-    EXPECT_EQ(orig.TSC(), 7u);
-    EXPECT_EQ(orig.ARFCN(), 100u);
+    EXPECT_EQ(orig.tn(), 2u);
+    EXPECT_EQ(orig.tsc(), 7u);
+    EXPECT_EQ(orig.arfcn(), 100u);
     ieRoundTrip(orig);
 }
 
@@ -331,9 +331,9 @@ TEST(CommonIETest, TimingAdvance_MaxValue) {
 TEST(CommonIETest, CellDescription_Default) {
     L3CellDescription cd;
     EXPECT_EQ(cd.lengthV(), 2u);
-    EXPECT_EQ(cd.ARFCN(), 0u);
-    EXPECT_EQ(cd.NCC(), 0u);
-    EXPECT_EQ(cd.BCC(), 0u);
+    EXPECT_EQ(cd.arfcn(), 0u);
+    EXPECT_EQ(cd.ncc(), 0u);
+    EXPECT_EQ(cd.bcc(), 0u);
 }
 
 TEST(CommonIETest, CellDescription_RoundTrip) {
@@ -390,9 +390,9 @@ TEST(CommonIETest, SynchronizationIndication_Default) {
 
 TEST(CommonIETest, SynchronizationIndication_Values) {
     L3SynchronizationIndication orig(true, true, 3);
-    EXPECT_TRUE(orig.NCI());
-    EXPECT_TRUE(orig.ROT());
-    EXPECT_EQ(orig.SI(), 3);
+    EXPECT_TRUE(orig.nci());
+    EXPECT_TRUE(orig.rot());
+    EXPECT_EQ(orig.syncIndicator(), 3);
     ieRoundTrip(orig);
 }
 
@@ -599,7 +599,7 @@ TEST(CommonIETest, MultiRateConfiguration_HR) {
 
 TEST(CommonIETest, ImmediateAssignmentInformation_Default) {
     L3ImmediateAssignmentInformation orig;
-    EXPECT_EQ(orig.PowerOffset(), 0u);
+    EXPECT_EQ(orig.powerOffset(), 0u);
 }
 
 // ── L3DedicatedModeOrTBF (GSM 04.08 10.5.2.25b) ─────────────────────
@@ -842,9 +842,9 @@ TEST(CommonIETest, ChannelDescription2_FromChannelDescription) {
     L3ChannelDescription orig(TDMA_TCHF, 3, 7, 100);
     L3ChannelDescription2 chd2(orig);
     EXPECT_EQ(chd2.typeAndOffset(), TDMA_TCHF);
-    EXPECT_EQ(chd2.TN(), 3u);
-    EXPECT_EQ(chd2.TSC(), 7u);
-    EXPECT_EQ(chd2.ARFCN(), 100u);
+    EXPECT_EQ(chd2.tn(), 3u);
+    EXPECT_EQ(chd2.tsc(), 7u);
+    EXPECT_EQ(chd2.arfcn(), 100u);
 }
 
 // ── L3RestOctets base ────────────────────────────────────────────────

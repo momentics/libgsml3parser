@@ -35,17 +35,17 @@ namespace gsml3parser {
 
 class Arena;
 
-// ── BitView: non-owning read-only view over external bytes ──────────────
+// ── BitSpan: non-owning read-only view over external bytes ──────────────
 
 /**
- * BitView — a zero-copy, read-only view over an external byte buffer.
- * The caller must ensure the underlying buffer outlives the BitView.
+ * BitSpan — a zero-copy, read-only view over an external byte buffer.
+ * The caller must ensure the underlying buffer outlives the BitSpan.
  */
-class BitView {
+class BitSpan {
 public:
-    BitView() : mData(nullptr), mSize(0) {}
-    BitView(const uint8_t* data, size_t nbits) : mData(data), mSize(nbits) {}
-    explicit BitView(std::span<const uint8_t> bytes)
+    BitSpan() = default;
+    BitSpan(const uint8_t* data, size_t nbits) : mData(data), mSize(nbits) {}
+    explicit BitSpan(std::span<const uint8_t> bytes)
         : mData(bytes.data()), mSize(bytes.size() * 8) {}
 
     size_t size() const { return mSize; }
@@ -58,8 +58,8 @@ public:
     const uint8_t* data() const { return mData; }
 
 private:
-    const uint8_t* mData;
-    size_t mSize;
+    const uint8_t* mData{};
+    size_t mSize{};
 };
 
 // ── Shared bit-access helpers ───────────────────────────────────────────
@@ -75,8 +75,9 @@ unsigned peekBitsImpl(const uint8_t* buf, size_t rp, unsigned nbits, size_t sz);
  *
  * Memory modes:
  *   - Default: std::vector<uint8_t> owns the buffer (HPL-compliant).
- *   - Arena:   arena-allocated raw buffer; BitVector does NOT free it.
- *   - View:    use BitView for zero-copy read-only access.
+ *   - Arena:   arena-allocated buffer stored in mBuffer with custom
+ *              deallocator semantics (dtor is no-op when mArenaAllocated).
+ *   - View:    use BitSpan for zero-copy read-only access.
  *
  * Part of libgsml3parser.
  */
@@ -94,13 +95,14 @@ public:
     // Copy from std::span<const uint8_t> (owning — makes a copy)
     explicit BitVector(std::span<const uint8_t> bytes);
 
-    // Arena-allocated (non-owning — Arena manages lifetime).
-    // The arena block is sized to hold `nbits` bits.
+    // Arena-allocated: memory managed by arena, not freed in dtor.
+    // Arena-allocated BitVectors are NOT movable or copyable.
     BitVector(Arena& arena, size_t nbits);
 
-    // Default copy/move — vector handles them automatically for owned buffers.
-    // Arena-allocated BitVectors are NOT copyable/movable (would break ownership).
+    // Copy constructor — always creates owned copy (even from arena source).
     BitVector(const BitVector& other);
+
+    // Move constructor — deleted for arena-allocated BitVectors.
     BitVector(BitVector&& other) noexcept;
     BitVector& operator=(const BitVector& other);
     BitVector& operator=(BitVector&& other) noexcept;
@@ -126,8 +128,8 @@ public:
 
     // ── Byte access ─────────────────────────────────────────────────
 
-    const uint8_t* data() const { return mOwned ? mBuffer.data() : mRawPtr; }
-    uint8_t*       data()       { return mOwned ? mBuffer.data() : mRawPtr; }
+    const uint8_t* data() const { return mBuffer.data(); }
+    uint8_t*       data()       { return mBuffer.data(); }
 
     // ── Segment / clone ─────────────────────────────────────────────
 
@@ -139,30 +141,20 @@ public:
     bool operator==(const BitVector& other) const;
     bool operator!=(const BitVector& other) const { return !(*this == other); }
 
-    // ── Create a non-owning read-only view ──────────────────────────
+    // ── Create a non-owning read-only span ──────────────────────────
 
-    BitView view() const { return BitView(data(), mSize); }
+    BitSpan span() const { return BitSpan(data(), mSize); }
 
     // ── Reuse: reset size to 0 but keep capacity (arena-like reuse) ──
 
-    void reset() {
-        mSize = 0;
-        mWriteEnd = 0;
-        if (mOwned && !mBuffer.empty()) {
-            std::memset(mBuffer.data(), 0, mBuffer.size());
-        } else if (!mOwned && mRawPtr) {
-            // Can't clear without knowing allocation size; caller's responsibility.
-        }
-    }
+    void reset();
 
 private:
-    std::vector<uint8_t> mBuffer;  // used when mOwned == true
-    uint8_t* mRawPtr;              // used when mOwned == false (arena)
-    size_t mSize;                  // number of bits
-    mutable size_t mWriteEnd;      // tracks highest write position
-    bool mOwned;                   // true = vector owns, false = arena/raw
+    std::vector<uint8_t> mBuffer{};
+    size_t mSize{};
+    size_t mWriteEnd{};
+    bool mArenaAllocated{};  // true = arena owns memory, dtor is no-op
 
-    friend class L3Frame;
     friend std::ostream& operator<<(std::ostream& os, const BitVector& bv);
 };
 
@@ -173,5 +165,3 @@ private:
 std::ostream& operator<<(std::ostream& os, const BitVector& bv);
 
 } // namespace gsml3parser
-
-

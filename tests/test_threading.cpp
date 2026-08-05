@@ -393,14 +393,14 @@ TEST(ThreadingTest, HeavyConcurrentParse) {
     EXPECT_LE(successCount.load(), static_cast<int>(expectedSuccess + 2));
 }
 
-// ── Test: BitView zero-copy concurrency ────────────────────────────────
+// ── Test: BitSpan zero-copy concurrency ────────────────────────────────
 
-TEST(ThreadingTest, ConcurrentBitView) {
+TEST(ThreadingTest, ConcurrentBitSpan) {
     constexpr int NumThreads = 4;
     std::atomic<int> errorCount{0};
     std::vector<std::thread> threads;
 
-    // Shared read-only buffer — BitView is non-owning, reads should be safe
+    // Shared read-only buffer — BitSpan is non-owning, reads should be safe
     std::vector<uint8_t> sharedBuffer(256);
     size_t wp = 0;
     BitVector writer(2048);
@@ -409,7 +409,7 @@ TEST(ThreadingTest, ConcurrentBitView) {
     }
     std::copy(writer.data(), writer.data() + 256, sharedBuffer.begin());
 
-    BitView view(sharedBuffer.data(), 2048);
+    BitSpan view(sharedBuffer.data(), 2048);
 
     for (int t = 0; t < NumThreads; ++t) {
         threads.emplace_back([&view, &errorCount]() {

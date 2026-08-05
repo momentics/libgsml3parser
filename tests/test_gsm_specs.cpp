@@ -50,9 +50,9 @@ TEST(GSMSpecTest, MCCMNC_Encoding_2DigitMNC) {
     //   Octet 2: 'F'<<4 | '0' = 0xF0  (F filler for 2-digit MNC)
     //   Octet 3: '1'<<4 | '0' = 0x10
     L3LocationAreaIdentity lai("250", "01", 0x0001);
-    EXPECT_EQ(lai.MCC(), 250);
-    EXPECT_EQ(lai.MNC(), 1);
-    EXPECT_EQ(lai.LAC(), 1);
+    EXPECT_EQ(lai.mcc(), 250);
+    EXPECT_EQ(lai.mnc(), 1);
+    EXPECT_EQ(lai.lac(), 1);
 
     // Verify serialization produces correct byte order
     L3Frame frame(Primitive::L3_DATA, 40);
@@ -71,9 +71,9 @@ TEST(GSMSpecTest, MCCMNC_Encoding_3DigitMNC) {
     //   Octet 2: '2'<<4 | '0' = 0x20  (MNC digit 3 + MCC digit 3)
     //   Octet 3: '1'<<4 | '0' = 0x10
     L3LocationAreaIdentity lai("250", "012", 0x0001);
-    EXPECT_EQ(lai.MCC(), 250);
-    EXPECT_EQ(lai.MNC(), 12);
-    EXPECT_EQ(lai.LAC(), 1);
+    EXPECT_EQ(lai.mcc(), 250);
+    EXPECT_EQ(lai.mnc(), 12);
+    EXPECT_EQ(lai.lac(), 1);
 
     L3Frame frame(Primitive::L3_DATA, 40);
     size_t wp = 0;
@@ -93,8 +93,8 @@ TEST(GSMSpecTest, MCCMNC_Ref_262_42) {
     //   Byte 1: filler('F') | MCC digit 3('2') = 0xF2
     //   Byte 2: MNC digit 2('4') | MNC digit 1('2') = 0x24
     L3LocationAreaIdentity lai("262", "42", 0x002A);
-    EXPECT_EQ(lai.MCC(), 262);
-    EXPECT_EQ(lai.MNC(), 42);
+    EXPECT_EQ(lai.mcc(), 262);
+    EXPECT_EQ(lai.mnc(), 42);
 
     L3Frame frame(Primitive::L3_DATA, 40);
     size_t wp = 0;
@@ -131,9 +131,9 @@ TEST(GSMSpecTest, MCCMNC_RoundTrip) {
     size_t rp = 0;
     parsed.parseV(frame, rp);
 
-    EXPECT_EQ(parsed.MCC(), orig.MCC());
-    EXPECT_EQ(parsed.MNC(), orig.MNC());
-    EXPECT_EQ(parsed.LAC(), orig.LAC());
+    EXPECT_EQ(parsed.mcc(), orig.mcc());
+    EXPECT_EQ(parsed.mnc(), orig.mnc());
+    EXPECT_EQ(parsed.lac(), orig.lac());
 }
 
 // ── BCD Number Encoding (GSM 24.008 10.5.4.7) ─────────────────────────
@@ -283,10 +283,10 @@ TEST(GSMSpecTest, TimeComponents) {
     // Reference: GSM_Types.ttcn f_gsm_compute_tc
     // T1 = SFN mod 2048, T2 = FN mod 26, T3 = FN mod 51
     Time t(1326, 5); // FN = 1326 = 26*51*1, TN = 5
-    EXPECT_EQ(t.T1(), 1u);   // SFN = 1326 / (26*51) = 1, 1 mod 2048 = 1
-    EXPECT_EQ(t.T2(), 0u);   // 1326 mod 26 = 0
-    EXPECT_EQ(t.T3(), 0u);   // 1326 mod 51 = 0
-    EXPECT_EQ(t.T1p(), 1u);  // 1 mod 32 = 1
+    EXPECT_EQ(t.t1(), 1u);   // SFN = 1326 / (26*51) = 1, 1 mod 2048 = 1
+    EXPECT_EQ(t.t2(), 0u);   // 1326 mod 26 = 0
+    EXPECT_EQ(t.t3(), 0u);   // 1326 mod 51 = 0
+    EXPECT_EQ(t.t1p(), 1u);  // 1 mod 32 = 1
 }
 
 TEST(GSMSpecTest, FNDelta) {
@@ -316,7 +316,7 @@ TEST(GSMSpecTest, MobileIdentity_TMSI) {
     EXPECT_EQ(id.type(), MobileIDType::TMSI);
     EXPECT_TRUE(id.isTMSI());
     EXPECT_FALSE(id.isIMSI());
-    EXPECT_EQ(id.TMSI(), 0xDEADBEEFu);
+    EXPECT_EQ(id.tmsi(), 0xDEADBEEFu);
 }
 
 TEST(GSMSpecTest, MobileIdentity_IMSI) {
@@ -364,7 +364,7 @@ TEST(GSMSpecTest, MobileIdentity_TMSI_RoundTrip) {
     parsed.parseV(frame, rp, readLen);
 
     EXPECT_EQ(parsed.type(), MobileIDType::TMSI);
-    EXPECT_EQ(parsed.TMSI(), 0x12345678u);
+    EXPECT_EQ(parsed.tmsi(), 0x12345678u);
 }
 
 // ── Channel Description (GSM 04.08 10.5.2.5) ──────────────────────────
@@ -374,9 +374,9 @@ TEST(GSMSpecTest, ChannelDescription_NoHopping) {
     // h=0: type&offset(5) + TN(3) + TSC(3) + h(1) + ARFCN(10) = 23 bits
     L3ChannelDescription chd(TDMA_SDCCH, 2, 7, 100);
     EXPECT_EQ(chd.typeAndOffset(), TDMA_SDCCH);
-    EXPECT_EQ(chd.TN(), 2u);
-    EXPECT_EQ(chd.TSC(), 7u);
-    EXPECT_EQ(chd.ARFCN(), 100u);
+    EXPECT_EQ(chd.tn(), 2u);
+    EXPECT_EQ(chd.tsc(), 7u);
+    EXPECT_EQ(chd.arfcn(), 100u);
 }
 
 TEST(GSMSpecTest, ChannelDescription_RoundTrip) {
@@ -391,9 +391,9 @@ TEST(GSMSpecTest, ChannelDescription_RoundTrip) {
     parsed.parseV(frame, rp);
 
     EXPECT_EQ(parsed.typeAndOffset(), orig.typeAndOffset());
-    EXPECT_EQ(parsed.TN(), orig.TN());
-    EXPECT_EQ(parsed.TSC(), orig.TSC());
-    EXPECT_EQ(parsed.ARFCN(), orig.ARFCN());
+    EXPECT_EQ(parsed.tn(), orig.tn());
+    EXPECT_EQ(parsed.tsc(), orig.tsc());
+    EXPECT_EQ(parsed.arfcn(), orig.arfcn());
 }
 
 // ── RACH Control Parameters (GSM 04.08 10.5.2.29) ─────────────────────
@@ -403,8 +403,8 @@ TEST(GSMSpecTest, ChannelDescription_RoundTrip) {
 TEST(GSMSpecTest, RACHControlParameters) {
     L3RACHControlParameters rcp;
     EXPECT_EQ(rcp.lengthV(), 3u);
-    EXPECT_EQ(rcp.MaxRetrans(), 0u);
-    EXPECT_EQ(rcp.TxInteger(), 0u);
+    EXPECT_EQ(rcp.maxRetrans(), 0u);
+    EXPECT_EQ(rcp.txInteger(), 0u);
 }
 
 TEST(GSMSpecTest, RACHControlParameters_RefValues) {
@@ -432,11 +432,11 @@ TEST(GSMSpecTest, RACHControlParameters_RefValues) {
     size_t rp = 0;
     parsed.parseV(frame, rp);
 
-    EXPECT_EQ(parsed.MaxRetrans(), 3u);     // RACH_MAX_RETRANS_7
-    EXPECT_EQ(parsed.TxInteger(), 9u);      // 12 spread slots
-    EXPECT_EQ(parsed.CellBarAccess(), false);
-    EXPECT_EQ(parsed.RE(), 1u);             // re_not_allowed = true
-    EXPECT_EQ(parsed.AC(), 0x0400u);        // ACC[4] barred
+    EXPECT_EQ(parsed.maxRetrans(), 3u);     // RACH_MAX_RETRANS_7
+    EXPECT_EQ(parsed.txInteger(), 9u);      // 12 spread slots
+    EXPECT_EQ(parsed.cellBarAccess(), false);
+    EXPECT_EQ(parsed.re(), 1u);             // re_not_allowed = true
+    EXPECT_EQ(parsed.ac(), 0x0400u);        // ACC[4] barred
 }
 
 // ── Cell Selection Parameters (GSM 04.08 10.5.2.4) ────────────────────
@@ -470,11 +470,11 @@ TEST(GSMSpecTest, CellSelectionParameters_RefValues) {
     size_t rp = 0;
     parsed.parseV(frame, rp);
 
-    EXPECT_EQ(parsed.CELL_RESELECT_HYSTERESIS(), 2u);
-    EXPECT_EQ(parsed.MS_TXPWR_MAX_CCH(), 7u);
-    EXPECT_EQ(parsed.ACS(), 0u);
-    EXPECT_EQ(parsed.NECI(), 1u);
-    EXPECT_EQ(parsed.RXLEV_ACCESS_MIN(), 0u);
+    EXPECT_EQ(parsed.cellReselectHysteresis(), 2u);
+    EXPECT_EQ(parsed.msTxpwrMaxCch(), 7u);
+    EXPECT_EQ(parsed.acs(), 0u);
+    EXPECT_EQ(parsed.neci(), 1u);
+    EXPECT_EQ(parsed.rxLevAccessMin(), 0u);
 }
 
 // ── Control Channel Description (GSM 04.08 10.5.2.11) ─────────────────
@@ -532,10 +532,10 @@ TEST(GSMSpecTest, RequestReference_Compute) {
     unsigned expected_t3 = fn % 51;             // 0
 
     L3RequestReference rr(ra, expected_t1p, expected_t2, expected_t3);
-    EXPECT_EQ(rr.RA(), ra);
-    EXPECT_EQ(rr.T1p(), expected_t1p);
-    EXPECT_EQ(rr.T2(), expected_t2);
-    EXPECT_EQ(rr.T3(), expected_t3);
+    EXPECT_EQ(rr.ra(), ra);
+    EXPECT_EQ(rr.t1p(), expected_t1p);
+    EXPECT_EQ(rr.t2(), expected_t2);
+    EXPECT_EQ(rr.t3(), expected_t3);
 }
 
 TEST(GSMSpecTest, RequestReference_RoundTrip) {
@@ -549,10 +549,10 @@ TEST(GSMSpecTest, RequestReference_RoundTrip) {
     size_t rp = 0;
     parsed.parseV(frame, rp);
 
-    EXPECT_EQ(parsed.RA(), orig.RA());
-    EXPECT_EQ(parsed.T1p(), orig.T1p());
-    EXPECT_EQ(parsed.T2(), orig.T2());
-    EXPECT_EQ(parsed.T3(), orig.T3());
+    EXPECT_EQ(parsed.ra(), orig.ra());
+    EXPECT_EQ(parsed.t1p(), orig.t1p());
+    EXPECT_EQ(parsed.t2(), orig.t2());
+    EXPECT_EQ(parsed.t3(), orig.t3());
 }
 
 // ── Measurement Results (GSM 04.08 10.5.2.20) ─────────────────────────
@@ -577,8 +577,8 @@ TEST(GSMSpecTest, MeasurementResults_RoundTrip) {
     size_t rp = 0;
     parsed.parseV(frame, rp);
 
-    EXPECT_EQ(parsed.NO_NCELL(), orig.NO_NCELL());
-    EXPECT_EQ(parsed.RXLEV_FULL_SERVING_CELL_RAW(), orig.RXLEV_FULL_SERVING_CELL_RAW());
+    EXPECT_EQ(parsed.noNcell(), orig.noNcell());
+    EXPECT_EQ(parsed.rxlevFullServingCellRaw(), orig.rxlevFullServingCellRaw());
 }
 
 // ── GSM Alphabet ───────────────────────────────────────────────────────
@@ -625,12 +625,12 @@ TEST(GSMSpecTest, Data2Hex) {
 TEST(GSMSpecTest, ParseHexWithVariousFormats) {
     auto msg1 = parseL3Hex("601900", ctx);
     ASSERT_TRUE(msg1);
-    EXPECT_EQ(msg1->PD(), L3PD::RadioResource);
+    EXPECT_EQ(msg1->pd(), L3PD::RadioResource);
 
     // Spaces between bytes
     auto msg2 = parseL3Hex("60 19 00", ctx);
     ASSERT_TRUE(msg2);
-    EXPECT_EQ(msg2->PD(), L3PD::RadioResource);
+    EXPECT_EQ(msg2->pd(), L3PD::RadioResource);
 
     // Empty string
     auto msg3 = parseL3Hex("", ctx);

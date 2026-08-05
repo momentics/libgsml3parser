@@ -82,7 +82,7 @@ static void ieRoundTrip(const T& orig) {
 TEST(GoldenIE, CellIdentity_Default) {
     L3CellIdentity ci;
     EXPECT_EQ(ci.lengthV(), 2u);
-    EXPECT_EQ(ci.ID(), 0u);
+    EXPECT_EQ(ci.id(), 0u);
 }
 
 TEST(GoldenIE, CellIdentity_RoundTrip) {
@@ -151,8 +151,8 @@ TEST(GoldenIE, LAI_Ref_262_42) {
     //   HEXORDER(low) swaps nibbles: '26'->0x62, '2F'->0xF2, '42'->0x24
     //   Result: {0x62, 0xF2, 0x24} matches TTCN-3 reference!
     L3LocationAreaIdentity lai("262", "42", 0x002A);
-    EXPECT_EQ(lai.MCC(), 262);
-    EXPECT_EQ(lai.MNC(), 42);
+    EXPECT_EQ(lai.mcc(), 262);
+    EXPECT_EQ(lai.mnc(), 42);
     L3Frame frame(Primitive::L3_DATA, 40);
     size_t wp = 0;
     lai.writeV(frame, wp);
@@ -177,7 +177,7 @@ TEST(GoldenIE, MobileIdentity_TMSI) {
     EXPECT_EQ(orig.type(), MobileIDType::TMSI);
     EXPECT_TRUE(orig.isTMSI());
     EXPECT_FALSE(orig.isIMSI());
-    EXPECT_EQ(orig.TMSI(), 0xDEADBEEFu);
+    EXPECT_EQ(orig.tmsi(), 0xDEADBEEFu);
 }
 
 TEST(GoldenIE, MobileIdentity_IMSI) {
@@ -339,9 +339,9 @@ TEST(GoldenIE, ChannelDescription_SDCCH) {
     L3ChannelDescription orig(TDMA_SDCCH, 2, 7, 100);
     EXPECT_TRUE(orig.initialized());
     EXPECT_EQ(orig.typeAndOffset(), TDMA_SDCCH);
-    EXPECT_EQ(orig.TN(), 2u);
-    EXPECT_EQ(orig.TSC(), 7u);
-    EXPECT_EQ(orig.ARFCN(), 100u);
+    EXPECT_EQ(orig.tn(), 2u);
+    EXPECT_EQ(orig.tsc(), 7u);
+    EXPECT_EQ(orig.arfcn(), 100u);
     ieRoundTrip(orig);
 }
 
@@ -369,9 +369,9 @@ TEST(GoldenIE, ChannelDescription_RoundTrip) {
     size_t rp = 0;
     parsed.parseV(frame, rp);
     EXPECT_EQ(parsed.typeAndOffset(), orig.typeAndOffset());
-    EXPECT_EQ(parsed.TN(), orig.TN());
-    EXPECT_EQ(parsed.TSC(), orig.TSC());
-    EXPECT_EQ(parsed.ARFCN(), orig.ARFCN());
+    EXPECT_EQ(parsed.tn(), orig.tn());
+    EXPECT_EQ(parsed.tsc(), orig.tsc());
+    EXPECT_EQ(parsed.arfcn(), orig.arfcn());
 }
 
 // =====================================================================
@@ -387,9 +387,9 @@ TEST(GoldenIE, ChannelDescription2_FromChannelDescription) {
     L3ChannelDescription orig(TDMA_TCHF, 3, 7, 100);
     L3ChannelDescription2 chd2(orig);
     EXPECT_EQ(chd2.typeAndOffset(), TDMA_TCHF);
-    EXPECT_EQ(chd2.TN(), 3u);
-    EXPECT_EQ(chd2.TSC(), 7u);
-    EXPECT_EQ(chd2.ARFCN(), 100u);
+    EXPECT_EQ(chd2.tn(), 3u);
+    EXPECT_EQ(chd2.tsc(), 7u);
+    EXPECT_EQ(chd2.arfcn(), 100u);
 }
 
 // =====================================================================
@@ -411,9 +411,9 @@ TEST(GoldenIE, AdditionalChannelDescription_RoundTrip) {
     size_t rp = 0;
     parsed.parseV(frame, rp);
     EXPECT_EQ(parsed.typeAndOffset(), orig.typeAndOffset());
-    EXPECT_EQ(parsed.TN(), orig.TN());
-    EXPECT_EQ(parsed.TSC(), orig.TSC());
-    EXPECT_EQ(parsed.ARFCN(), orig.ARFCN());
+    EXPECT_EQ(parsed.tn(), orig.tn());
+    EXPECT_EQ(parsed.tsc(), orig.tsc());
+    EXPECT_EQ(parsed.arfcn(), orig.arfcn());
 }
 
 // =====================================================================
@@ -548,9 +548,9 @@ TEST(GoldenIE, TimingAdvance_Encoding) {
 TEST(GoldenIE, CellDescription_Default) {
     L3CellDescription cd;
     EXPECT_EQ(cd.lengthV(), 2u);
-    EXPECT_EQ(cd.ARFCN(), 0u);
-    EXPECT_EQ(cd.NCC(), 0u);
-    EXPECT_EQ(cd.BCC(), 0u);
+    EXPECT_EQ(cd.arfcn(), 0u);
+    EXPECT_EQ(cd.ncc(), 0u);
+    EXPECT_EQ(cd.bcc(), 0u);
 }
 
 TEST(GoldenIE, CellDescription_RoundTrip) {
@@ -638,9 +638,9 @@ TEST(GoldenIE, SynchronizationIndication_Default) {
 
 TEST(GoldenIE, SynchronizationIndication_Values) {
     L3SynchronizationIndication orig(true, true, 3);
-    EXPECT_TRUE(orig.NCI());
-    EXPECT_TRUE(orig.ROT());
-    EXPECT_EQ(orig.SI(), 3);
+    EXPECT_TRUE(orig.nci());
+    EXPECT_TRUE(orig.rot());
+    EXPECT_EQ(orig.syncIndicator(), 3);
     ieRoundTrip(orig);
 }
 
@@ -715,10 +715,10 @@ TEST(GoldenIE, RequestReference_Compute) {
     unsigned expected_t2 = fn % 26;
     unsigned expected_t3 = fn % 51;
     L3RequestReference rr(ra, expected_t1p, expected_t2, expected_t3);
-    EXPECT_EQ(rr.RA(), ra);
-    EXPECT_EQ(rr.T1p(), expected_t1p);
-    EXPECT_EQ(rr.T2(), expected_t2);
-    EXPECT_EQ(rr.T3(), expected_t3);
+    EXPECT_EQ(rr.ra(), ra);
+    EXPECT_EQ(rr.t1p(), expected_t1p);
+    EXPECT_EQ(rr.t2(), expected_t2);
+    EXPECT_EQ(rr.t3(), expected_t3);
 }
 
 // =====================================================================
@@ -815,11 +815,11 @@ TEST(GoldenIE, CellSelectionParameters_RefValues) {
     parsed.parseV(frame, rp);
     // Spec-verified: byte 0 = 0x47 = 0b0100_0111 -> cell_resel_hyst(3)=010=2, ms_txpwr_max_cch(5)=00111=7
     //   byte 1 = 0x40 = 0b0100_0000 -> acs(1)=0, neci(1)=1, rxlev_access_min(6)=000000=0
-    EXPECT_EQ(parsed.CELL_RESELECT_HYSTERESIS(), 2u);
-    EXPECT_EQ(parsed.MS_TXPWR_MAX_CCH(), 7u);
-    EXPECT_EQ(parsed.ACS(), 0u);
-    EXPECT_EQ(parsed.NECI(), 1u);
-    EXPECT_EQ(parsed.RXLEV_ACCESS_MIN(), 0u);
+    EXPECT_EQ(parsed.cellReselectHysteresis(), 2u);
+    EXPECT_EQ(parsed.msTxpwrMaxCch(), 7u);
+    EXPECT_EQ(parsed.acs(), 0u);
+    EXPECT_EQ(parsed.neci(), 1u);
+    EXPECT_EQ(parsed.rxLevAccessMin(), 0u);
 }
 
 // =====================================================================
@@ -860,11 +860,11 @@ TEST(GoldenIE, RACHControlParameters_RefValues) {
     parsed.parseV(frame, rp);
     // Spec-verified: byte 0 = 0xE5 = 0b1110_0101 -> max_retrans(2)=11=3, tx_integer(4)=1001=9, cell_bar_qualify(1)=0, cell_bar_access(1)=0, re_not_allowed(1)=1
     //   byte 1 = 0x04, byte 2 = 0x00 -> ACC(16) = 0x0400 (ACC[6] barred, bit 6 from MSB per GSM convention)
-    EXPECT_EQ(parsed.MaxRetrans(), 3u);
-    EXPECT_EQ(parsed.TxInteger(), 9u);
-    EXPECT_EQ(parsed.CellBarAccess(), false);
-    EXPECT_EQ(parsed.RE(), 1u);
-    EXPECT_EQ(parsed.AC(), 0x0400u);
+    EXPECT_EQ(parsed.maxRetrans(), 3u);
+    EXPECT_EQ(parsed.txInteger(), 9u);
+    EXPECT_EQ(parsed.cellBarAccess(), false);
+    EXPECT_EQ(parsed.re(), 1u);
+    EXPECT_EQ(parsed.ac(), 0x0400u);
 }
 
 // =====================================================================
@@ -933,8 +933,8 @@ TEST(GoldenIE, CellChannelDescription_Custom) {
 
 TEST(GoldenIE, CellChannelDescription_IE) {
     L3CellChannelDescription chd(100, 0x12, 1);
-    EXPECT_EQ(chd.ARFCN(), 100u);
-    EXPECT_EQ(chd.BSIC(), 0x12u);
+    EXPECT_EQ(chd.arfcn(), 100u);
+    EXPECT_EQ(chd.bsic(), 0x12u);
     EXPECT_EQ(chd.channelSpacing(), 1u);
     EXPECT_EQ(chd.lengthV(), 3u);
 }
@@ -960,7 +960,7 @@ TEST(GoldenIE, FrequencyList_WithARFCNs) {
 TEST(GoldenIE, FrequencyList_Empty) {
     L3FrequencyList fl;
     EXPECT_EQ(fl.lengthV(), 16u);
-    EXPECT_TRUE(fl.ARFCNs().empty());
+    EXPECT_TRUE(fl.arfcns().empty());
     L3Frame frame(Primitive::L3_DATA, 128);
     size_t wp = 0;
     fl.writeV(frame, wp);
@@ -978,7 +978,7 @@ TEST(GoldenIE, FrequencyList_SingleARFCN) {
     L3FrequencyList parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
-    EXPECT_EQ(parsed.ARFCNs(), arfcns);
+    EXPECT_EQ(parsed.arfcns(), arfcns);
 }
 
 // =====================================================================
@@ -1055,7 +1055,7 @@ TEST(GoldenIE, MultiRateConfiguration_HR) {
 
 TEST(GoldenIE, ImmediateAssignmentInformation_Default) {
     L3ImmediateAssignmentInformation orig;
-    EXPECT_EQ(orig.PowerOffset(), 0u);
+    EXPECT_EQ(orig.powerOffset(), 0u);
 }
 
 // =====================================================================
@@ -1149,9 +1149,9 @@ TEST(GoldenIE, MobileAllocation_WithData) {
 
 TEST(GoldenIE, CellOptions_Default) {
     L3CellOptions orig;
-    EXPECT_EQ(orig.RevisionLevel(), 0u);
-    EXPECT_FALSE(orig.CBCH());
-    EXPECT_FALSE(orig.EnhancedRACH());
+    EXPECT_EQ(orig.revisionLevel(), 0u);
+    EXPECT_FALSE(orig.cbch());
+    EXPECT_FALSE(orig.enhancedRach());
 }
 
 // =====================================================================
@@ -1160,10 +1160,10 @@ TEST(GoldenIE, CellOptions_Default) {
 
 TEST(GoldenIE, CellSelection_Default) {
     L3CellSelection cs;
-    EXPECT_EQ(cs.RxLevAccessMin(), 0u);
-    EXPECT_EQ(cs.MaxRxLev(), 0u);
-    EXPECT_EQ(cs.CellReselectionHysteresis(), 0u);
-    EXPECT_EQ(cs.CellReselectionOffset(), 0u);
+    EXPECT_EQ(cs.rxLevAccessMin(), 0u);
+    EXPECT_EQ(cs.maxRxLev(), 0u);
+    EXPECT_EQ(cs.cellReselectionHysteresis(), 0u);
+    EXPECT_EQ(cs.cellReselectionOffset(), 0u);
 }
 
 // =====================================================================
@@ -1396,7 +1396,7 @@ TEST(GoldenIE, KeypadFacility_RoundTrip) {
 
 TEST(GoldenIE, KeypadFacility_Digit) {
     L3KeypadFacility kp('5');
-    EXPECT_EQ(kp.IA5(), '5');
+    EXPECT_EQ(kp.ia5(), '5');
     EXPECT_EQ(kp.lengthV(), 1u);
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
@@ -1404,7 +1404,7 @@ TEST(GoldenIE, KeypadFacility_Digit) {
     L3KeypadFacility parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
-    EXPECT_EQ(parsed.IA5(), '5');
+    EXPECT_EQ(parsed.ia5(), '5');
 }
 
 // =====================================================================
@@ -1696,10 +1696,10 @@ TEST(GoldenIE, Hyperframe) {
 
 TEST(GoldenIE, TimeComponents) {
     Time t(1326, 5);
-    EXPECT_EQ(t.T1(), 1u);
-    EXPECT_EQ(t.T2(), 0u);
-    EXPECT_EQ(t.T3(), 0u);
-    EXPECT_EQ(t.T1p(), 1u);
+    EXPECT_EQ(t.t1(), 1u);
+    EXPECT_EQ(t.t2(), 0u);
+    EXPECT_EQ(t.t3(), 0u);
+    EXPECT_EQ(t.t1p(), 1u);
 }
 
 TEST(GoldenIE, FNDelta) {

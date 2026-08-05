@@ -100,34 +100,34 @@ L3Frame& L3Frame::operator=(const L3Frame& other) {
     return *this;
 }
 
-L3PD L3Frame::PD() const {
+L3PD L3Frame::pd() const {
     if (size() < 8) return L3PD::Undefined;
     return static_cast<L3PD>(peekField(0, 4));
 }
 
-unsigned L3Frame::MTI() const {
+unsigned L3Frame::mti() const {
     if (size() < 16) return 0;
-    unsigned mti = peekField(8, 8);
-    L3PD pd = PD();
+    unsigned mtiVal = peekField(8, 8);
+    L3PD pd = this->pd();
     // MM, CC, SS: byte 1 = messageType(6)|NSD(2) — GSM 04.08 10.4
     // Bit 7 of byte 1 is "don't care" (direction indicator), mask with 0xFC then shift
     if (pd == L3PD::MobilityManagement || pd == L3PD::CallControl ||
         pd == L3PD::NonCallSS) {
-        return (mti & 0xFC) >> 2;
+        return (mtiVal & 0xFC) >> 2;
     }
     // RR short messages: TIF=1 indicates MTI >= 0x100
     if (pd == L3PD::RadioResource && size() >= 8 && peekField(7, 1)) {
-        return 0x100 + (mti & 0xFF);
+        return 0x100 + (mtiVal & 0xFF);
     }
-    return mti;
+    return mtiVal;
 }
 
-unsigned L3Frame::TI() const {
+unsigned L3Frame::ti() const {
     if (size() < 8) return 0;
     return peekField(4, 3);  // TIO: 3 bits (bits 4-6 of byte 0)
 }
 
-unsigned L3Frame::TIF() const {
+unsigned L3Frame::tif() const {
     if (size() < 8) return 0;
     return peekField(7, 1);  // TIF: 1 bit (bit 7 of byte 0)
 }

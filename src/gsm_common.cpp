@@ -109,7 +109,7 @@ int FNCompare(int32_t v1, int32_t v2) {
 }
 
 std::ostream& operator<<(std::ostream& os, const Time& ts) {
-    os << "FN=" << ts.FN() << " TN=" << ts.TN();
+    os << "FN=" << ts.fn() << " TN=" << ts.tn();
     return os;
 }
 

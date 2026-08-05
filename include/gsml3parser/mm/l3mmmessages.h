@@ -62,7 +62,7 @@ public:
     };
 
     size_t fullBodyLength() const override { return l2BodyLength(); }
-    L3PD PD() const override { return L3PD::MobilityManagement; }
+    L3PD pd() const override { return L3PD::MobilityManagement; }
     void text(std::ostream& os) const override;
 };
 
@@ -86,9 +86,9 @@ private:
     L3MobileIdentity mMobileIdentity;
     L3LocationAreaIdentity mLAI;
 public:
-    const L3MobileIdentity& mobileID() const { return mMobileIdentity; }
-    const L3LocationAreaIdentity& LAI() const { return mLAI; }
-    int MTI() const override { return LocationUpdatingRequest; }
+    const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
+    const L3LocationAreaIdentity& lai() const { return mLAI; }
+    int mti() const override { return LocationUpdatingRequest; }
     size_t l2BodyLength() const override;
     LocationUpdateType getLocationUpdatingType() const { return static_cast<LocationUpdateType>(mUpdateType & 0x3); }
     unsigned getFollowOnRequest() const { return mUpdateType & 0x8; }
@@ -110,7 +110,7 @@ public:
     L3LocationUpdatingAccept(const L3LocationAreaIdentity& wLAI,
                              const L3MobileIdentity& wID, bool wFollowOn = false);
 
-    int MTI() const override { return LocationUpdatingAccept; }
+    int mti() const override { return LocationUpdatingAccept; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -124,7 +124,7 @@ private:
     MMRejectCause mCause;
 public:
     explicit L3LocationUpdatingReject(MMRejectCause cause) : mCause(cause) {}
-    int MTI() const override { return LocationUpdatingReject; }
+    int mti() const override { return LocationUpdatingReject; }
     size_t l2BodyLength() const override { return 1; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -138,8 +138,8 @@ private:
     L3MobileStationClassmark1 mClassmark;
     L3MobileIdentity mMobileIdentity;
 public:
-    const L3MobileIdentity& mobileID() const { return mMobileIdentity; }
-    int MTI() const override { return IMSIDetachIndication; }
+    const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
+    int mti() const override { return IMSIDetachIndication; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -150,7 +150,7 @@ public:
 
 class L3CMServiceAccept : public L3MMMessage {
 public:
-    int MTI() const override { return CMServiceAccept; }
+    int mti() const override { return CMServiceAccept; }
     size_t l2BodyLength() const override { return 0; }
     void writeBody(L3Frame&, size_t&) const override {}
     void parseBody(const L3Frame&, size_t&) override {}
@@ -161,7 +161,7 @@ public:
 
 class L3CMServiceAbort : public L3MMMessage {
 public:
-    int MTI() const override { return CMServiceAbort; }
+    int mti() const override { return CMServiceAbort; }
     size_t l2BodyLength() const override { return 0; }
     void writeBody(L3Frame&, size_t&) const override {}
     void parseBody(const L3Frame&, size_t&) override;
@@ -175,7 +175,7 @@ private:
     MMRejectCause mCause;
 public:
     explicit L3CMServiceReject(MMRejectCause cause) : mCause(cause) {}
-    int MTI() const override { return CMServiceReject; }
+    int mti() const override { return CMServiceReject; }
     size_t l2BodyLength() const override { return 1; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame&, size_t&) const override;
@@ -190,9 +190,9 @@ private:
     L3MobileIdentity mMobileIdentity;
     L3CMServiceType mServiceType;
 public:
-    const L3MobileIdentity& mobileID() const { return mMobileIdentity; }
+    const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
     L3CMServiceType::TypeCode serviceType() const { return mServiceType.type(); }
-    int MTI() const override { return CMServiceRequest; }
+    int mti() const override { return CMServiceRequest; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -210,9 +210,9 @@ private:
     L3LocationAreaIdentity mLAI;
 public:
     L3CMReestablishmentRequest() : mCKSN(0), mHaveLAI(false) {}
-    const L3MobileIdentity& mobileID() const { return mMobileID; }
+    const L3MobileIdentity& mobileId() const { return mMobileID; }
     unsigned cksn() const { return mCKSN; }
-    int MTI() const override { return CMReestablishmentRequest; }
+    int mti() const override { return CMReestablishmentRequest; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -227,7 +227,7 @@ private:
     L3TimeZoneAndTime mTime;
 public:
     L3MMInformation();
-    int MTI() const override { return MMInformation; }
+    int mti() const override { return MMInformation; }
     size_t l2BodyLength() const override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
@@ -243,7 +243,7 @@ private:
     MobileIDType mType;
 public:
     explicit L3IdentityRequest(MobileIDType type) : mType(type) {}
-    int MTI() const override { return IdentityRequest; }
+    int mti() const override { return IdentityRequest; }
     size_t l2BodyLength() const override { return 1; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -256,12 +256,12 @@ class L3IdentityResponse : public L3MMMessage {
 private:
     L3MobileIdentity mMobileID;
 public:
-    int MTI() const override { return IdentityResponse; }
+    int mti() const override { return IdentityResponse; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
-    const L3MobileIdentity& mobileID() const { return mMobileID; }
+    const L3MobileIdentity& mobileId() const { return mMobileID; }
 };
 
 // ── Authentication Request (GSM 04.08 9.2.2) ──────────────────────────
@@ -272,7 +272,7 @@ private:
     std::vector<uint8_t> mRAND; // 128 bits
 public:
     L3AuthenticationRequest(unsigned ckSN, const std::vector<uint8_t>& rand);
-    int MTI() const override { return AuthenticationRequest; }
+    int mti() const override { return AuthenticationRequest; }
     size_t l2BodyLength() const override { return 17; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame&, size_t&) const override;
@@ -285,8 +285,8 @@ class L3AuthenticationResponse : public L3MMMessage {
 private:
     uint32_t mSRES;
 public:
-    uint32_t SRES() const { return mSRES; }
-    int MTI() const override { return AuthenticationResponse; }
+    uint32_t sres() const { return mSRES; }
+    int mti() const override { return AuthenticationResponse; }
     size_t l2BodyLength() const override { return 4; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -297,7 +297,7 @@ public:
 
 class L3AuthenticationReject : public L3MMMessage {
 public:
-    int MTI() const override { return AuthenticationReject; }
+    int mti() const override { return AuthenticationReject; }
     size_t l2BodyLength() const override { return 0; }
     void parseBody(const L3Frame&, size_t&) override {}
     void writeBody(L3Frame&, size_t&) const override {}
@@ -313,10 +313,10 @@ private:
     bool mFollowOnProceed;
 public:
     L3TMSIReallocationCommand(const L3LocationAreaIdentity& wLAI, const L3MobileIdentity& wTMSI, bool wFollowOn = false);
-    const L3LocationAreaIdentity& LAI() const { return mLAI; }
-    const L3MobileIdentity& TMSI() const { return mTMSI; }
+    const L3LocationAreaIdentity& lai() const { return mLAI; }
+    const L3MobileIdentity& tmsi() const { return mTMSI; }
     bool followOnProceed() const { return mFollowOnProceed; }
-    int MTI() const override { return TMSIReallocationCommand; }
+    int mti() const override { return TMSIReallocationCommand; }
     size_t l2BodyLength() const override { return mLAI.lengthV() + mTMSI.lengthLV() + 1; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
@@ -327,7 +327,7 @@ public:
 
 class L3TMSIReallocationComplete : public L3MMMessage {
 public:
-    int MTI() const override { return TMSIReallocationComplete; }
+    int mti() const override { return TMSIReallocationComplete; }
     size_t l2BodyLength() const override { return 0; }
     void parseBody(const L3Frame&, size_t&) override {}
     void writeBody(L3Frame& dest, size_t& wp) const override;
@@ -341,7 +341,7 @@ private:
     MMRejectCause mCause;
 public:
     MMRejectCause cause() const { return mCause; }
-    int MTI() const override { return MMStatus; }
+    int mti() const override { return MMStatus; }
     size_t l2BodyLength() const override { return 3; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;

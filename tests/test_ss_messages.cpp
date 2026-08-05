@@ -45,15 +45,15 @@ TEST(SSRoundTripTest, Facility_Empty) {
     L3SupServFacilityMessage msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->PD(), L3PD::NonCallSS);
-    EXPECT_EQ(parsed->MTI(), L3SupServMessage::Facility);
+    EXPECT_EQ(parsed->pd(), L3PD::NonCallSS);
+    EXPECT_EQ(parsed->mti(), L3SupServMessage::Facility);
 }
 
 TEST(SSRoundTripTest, Facility_WithData) {
     L3SupServFacilityMessage msg(7, std::string("\x81\x01\x13", 3));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3SupServMessage::Facility);
+    EXPECT_EQ(parsed->mti(), L3SupServMessage::Facility);
 }
 
 // GSM 04.08 10.2: PD=0x0B(NonCallSS), TIO=7, TIF=0, messageType=111010(Facility=0x3A), NSD=00
@@ -64,8 +64,8 @@ TEST(SSRoundTripTest, Facility_Parse) {
     uint8_t data[] = {0xBE, 0xE8};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->PD(), L3PD::NonCallSS);
-    EXPECT_EQ(msg->MTI(), L3SupServMessage::Facility);
+    EXPECT_EQ(msg->pd(), L3PD::NonCallSS);
+    EXPECT_EQ(msg->mti(), L3SupServMessage::Facility);
 }
 
 // ── Register Message (GSM 04.80 2.4 / 3GPP TS 24.080) ────────────────
@@ -79,7 +79,7 @@ TEST(SSRoundTripTest, Register_Empty) {
     L3SupServRegisterMessage msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3SupServMessage::Register);
+    EXPECT_EQ(parsed->mti(), L3SupServMessage::Register);
 }
 
 TEST(SSRoundTripTest, Register_WithData) {
@@ -87,7 +87,7 @@ TEST(SSRoundTripTest, Register_WithData) {
     L3SupServRegisterMessage msg(5, std::string("\x81\x01\x0A", 3));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3SupServMessage::Register);
+    EXPECT_EQ(parsed->mti(), L3SupServMessage::Register);
 }
 
 // ── Release Complete (GSM 04.80 2.5) ─────────────────────────────────
@@ -96,7 +96,7 @@ TEST(SSRoundTripTest, ReleaseComplete_Empty) {
     L3SupServReleaseCompleteMessage msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3SupServMessage::ReleaseComplete);
+    EXPECT_EQ(parsed->mti(), L3SupServMessage::ReleaseComplete);
 }
 
 TEST(SSRoundTripTest, ReleaseComplete_WithCause) {
@@ -125,7 +125,7 @@ TEST(SSRoundTripTest, TI_DifferentValues) {
         ASSERT_TRUE(parsed);
         auto* s = dynamic_cast<L3SupServFacilityMessage*>(parsed.get());
         ASSERT_TRUE(s);
-        EXPECT_EQ(s->TI(), ti);
+        EXPECT_EQ(s->ti(), ti);
     }
 }
 

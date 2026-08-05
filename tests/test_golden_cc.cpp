@@ -108,7 +108,7 @@ TEST(GoldenCC, CallProceeding_Parse) {
     uint8_t data[] = {0x3E, 0x08};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::CallProceeding);
+    EXPECT_EQ(msg->mti(), L3CCMessage::CallProceeding);
 }
 
 // =====================================================================
@@ -127,7 +127,7 @@ TEST(GoldenCC, Connect_Parse) {
     uint8_t data[] = {0x3F, 0x1C};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::Connect);
+    EXPECT_EQ(msg->mti(), L3CCMessage::Connect);
 }
 
 // =====================================================================
@@ -145,7 +145,7 @@ TEST(GoldenCC, ConnectAcknowledge_Parse) {
     uint8_t data[] = {0x3E, 0x3C};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::ConnectAcknowledge);
+    EXPECT_EQ(msg->mti(), L3CCMessage::ConnectAcknowledge);
 }
 
 // =====================================================================
@@ -163,7 +163,7 @@ TEST(GoldenCC, CallConfirmed_Parse) {
     uint8_t data[] = {0x3E, 0x20};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::CallConfirmed);
+    EXPECT_EQ(msg->mti(), L3CCMessage::CallConfirmed);
 }
 
 // =====================================================================
@@ -190,7 +190,7 @@ TEST(GoldenCC, CCStatus_Parse) {
     uint8_t data[] = {0x3E, 0xF4, 0x08, 0x02, 0x16, 0x21, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::CCStatus);
+    EXPECT_EQ(msg->mti(), L3CCMessage::CCStatus);
 }
 
 // =====================================================================
@@ -209,7 +209,7 @@ TEST(GoldenCC, EmergencySetup_Parse) {
     uint8_t data[] = {0x3E, 0x38};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::EmergencySetup);
+    EXPECT_EQ(msg->mti(), L3CCMessage::EmergencySetup);
 }
 
 // =====================================================================
@@ -225,7 +225,7 @@ TEST(GoldenCC, Hold_Parse) {
     uint8_t data[] = {0x3E, 0x60};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::Hold);
+    EXPECT_EQ(msg->mti(), L3CCMessage::Hold);
 }
 
 // =====================================================================
@@ -241,7 +241,7 @@ TEST(GoldenCC, Progress_Parse) {
     uint8_t data[] = {0x3E, 0x0C};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::Progress);
+    EXPECT_EQ(msg->mti(), L3CCMessage::Progress);
 }
 
 // =====================================================================
@@ -268,7 +268,7 @@ TEST(GoldenCC, StartDTMF_Parse) {
     uint8_t data[] = {0x3E, 0xD4, 0x2C, 0x31};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::StartDTMF);
+    EXPECT_EQ(msg->mti(), L3CCMessage::StartDTMF);
 }
 
 // =====================================================================
@@ -284,7 +284,7 @@ TEST(GoldenCC, StopDTMF_Parse) {
     uint8_t data[] = {0x3E, 0xC4};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::StopDTMF);
+    EXPECT_EQ(msg->mti(), L3CCMessage::StopDTMF);
 }
 
 // =====================================================================
@@ -308,7 +308,7 @@ TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
     uint8_t data[] = {0x3E, 0xA8, 0x02, 0x36, 0x21};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::ReleaseComplete);
+    EXPECT_EQ(msg->mti(), L3CCMessage::ReleaseComplete);
 }
 
 // =====================================================================
@@ -333,11 +333,11 @@ TEST(GoldenCC, Disconnect_Parse) {
     uint8_t data[] = {0x3E, 0x94, 0x02, 0x16, 0x21};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::Disconnect);
+    EXPECT_EQ(msg->mti(), L3CCMessage::Disconnect);
     auto* d = dynamic_cast<L3Disconnect*>(msg.get());
     ASSERT_TRUE(d);
     EXPECT_EQ(d->cause(), CCCause::Normal_Call_Clearing);
-    EXPECT_EQ(d->TI(), 7u);
+    EXPECT_EQ(d->ti(), 7u);
 }
 
 // =====================================================================
@@ -356,7 +356,7 @@ TEST(GoldenCC, Release_Parse) {
     uint8_t data[] = {0x3F, 0xB4};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::Release);
+    EXPECT_EQ(msg->mti(), L3CCMessage::Release);
 }
 
 // =====================================================================
@@ -367,10 +367,10 @@ TEST(GoldenCC, Setup_NoDigits_RoundTrip) {
     L3Setup msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::Setup);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::Setup);
     auto* s = dynamic_cast<L3Setup*>(parsed.get());
     ASSERT_TRUE(s);
-    EXPECT_EQ(s->TI(), 7u);
+    EXPECT_EQ(s->ti(), 7u);
     EXPECT_FALSE(s->haveCalledParty());
 }
 
@@ -389,42 +389,42 @@ TEST(GoldenCC, EmergencySetup_RoundTrip) {
     L3EmergencySetup msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::EmergencySetup);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::EmergencySetup);
 }
 
 TEST(GoldenCC, CallProceeding_RoundTrip) {
     L3CallProceeding msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::CallProceeding);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::CallProceeding);
 }
 
 TEST(GoldenCC, Alerting_RoundTrip) {
     L3Alerting msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::Alerting);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::Alerting);
 }
 
 TEST(GoldenCC, Connect_RoundTrip) {
     L3Connect msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::Connect);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::Connect);
 }
 
 TEST(GoldenCC, ConnectAcknowledge_RoundTrip) {
     L3ConnectAcknowledge msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::ConnectAcknowledge);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::ConnectAcknowledge);
 }
 
 TEST(GoldenCC, CallConfirmed_RoundTrip) {
     L3CallConfirmed msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::CallConfirmed);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::CallConfirmed);
 }
 
 TEST(GoldenCC, Disconnect_NormalClearing_RoundTrip) {
@@ -434,7 +434,7 @@ TEST(GoldenCC, Disconnect_NormalClearing_RoundTrip) {
     auto* d = dynamic_cast<L3Disconnect*>(parsed.get());
     ASSERT_TRUE(d);
     EXPECT_EQ(d->cause(), CCCause::Normal_Call_Clearing);
-    EXPECT_EQ(d->TI(), 7u);
+    EXPECT_EQ(d->ti(), 7u);
 }
 
 TEST(GoldenCC, Disconnect_UserBusy_RoundTrip) {
@@ -444,7 +444,7 @@ TEST(GoldenCC, Disconnect_UserBusy_RoundTrip) {
     auto* d = dynamic_cast<L3Disconnect*>(parsed.get());
     ASSERT_TRUE(d);
     EXPECT_EQ(d->cause(), CCCause::User_Busy);
-    EXPECT_EQ(d->TI(), 3u);
+    EXPECT_EQ(d->ti(), 3u);
 }
 
 TEST(GoldenCC, Release_NoCause_RoundTrip) {
@@ -470,7 +470,7 @@ TEST(GoldenCC, ReleaseComplete_NoCause_RoundTrip) {
     L3ReleaseComplete msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::ReleaseComplete);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::ReleaseComplete);
 }
 
 TEST(GoldenCC, ReleaseComplete_WithCause_RoundTrip) {
@@ -493,63 +493,63 @@ TEST(GoldenCC, CCStatus_RoundTrip) {
     L3CCStatus msg(7, CCCause::Normal_Unspecified, 0x00);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::CCStatus);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::CCStatus);
 }
 
 TEST(GoldenCC, StartDTMF_RoundTrip) {
     L3StartDTMF msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::StartDTMF);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::StartDTMF);
 }
 
 TEST(GoldenCC, StartDTMFAcknowledge_RoundTrip) {
     L3StartDTMFAcknowledge msg(7, '1');
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::StartDTMFAcknowledge);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::StartDTMFAcknowledge);
 }
 
 TEST(GoldenCC, StartDTMFReject_RoundTrip) {
     L3StartDTMFReject msg(7, CCCause::Normal_Unspecified);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::StartDTMFReject);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::StartDTMFReject);
 }
 
 TEST(GoldenCC, StopDTMF_RoundTrip) {
     L3StopDTMF msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::StopDTMF);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::StopDTMF);
 }
 
 TEST(GoldenCC, StopDTMFAcknowledge_RoundTrip) {
     L3StopDTMFAcknowledge msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::StopDTMFAcknowledge);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::StopDTMFAcknowledge);
 }
 
 TEST(GoldenCC, Hold_RoundTrip) {
     L3Hold msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::Hold);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::Hold);
 }
 
 TEST(GoldenCC, HoldReject_RoundTrip) {
     L3HoldReject msg(7, CCCause::Normal_Unspecified);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::HoldReject);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::HoldReject);
 }
 
 TEST(GoldenCC, Progress_RoundTrip) {
     L3Progress msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::Progress);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::Progress);
 }
 
 // =====================================================================
@@ -730,7 +730,7 @@ TEST(GoldenCC, ProgressIndicator_RoundTrip) {
 
 TEST(GoldenCC, KeypadFacility_RoundTrip) {
     L3KeypadFacility orig('5');
-    EXPECT_EQ(orig.IA5(), '5');
+    EXPECT_EQ(orig.ia5(), '5');
     EXPECT_EQ(orig.lengthV(), 1u);
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
@@ -738,7 +738,7 @@ TEST(GoldenCC, KeypadFacility_RoundTrip) {
     L3KeypadFacility parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
-    EXPECT_EQ(parsed.IA5(), '5');
+    EXPECT_EQ(parsed.ia5(), '5');
 }
 
 // =====================================================================
@@ -825,7 +825,7 @@ TEST(GoldenCC, TI_DifferentValues) {
         ASSERT_TRUE(parsed);
         auto* d = dynamic_cast<L3Disconnect*>(parsed.get());
         ASSERT_TRUE(d);
-        EXPECT_EQ(d->TI(), ti);
+        EXPECT_EQ(d->ti(), ti);
     }
 }
 

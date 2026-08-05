@@ -131,7 +131,7 @@ TEST(GoldenMM, LocationUpdatingRequest_Parse) {
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3MMMessage::LocationUpdatingRequest);
+    EXPECT_EQ(msg->mti(), L3MMMessage::LocationUpdatingRequest);
 }
 
 // =====================================================================
@@ -159,7 +159,7 @@ TEST(GoldenMM, LocationUpdatingAccept_Parse) {
     uint8_t data[] = {0x50, 0x08, 0x52, 0xF0, 0x10, 0x12, 0x34};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3MMMessage::LocationUpdatingAccept);
+    EXPECT_EQ(msg->mti(), L3MMMessage::LocationUpdatingAccept);
 }
 
 // =====================================================================
@@ -191,7 +191,7 @@ TEST(GoldenMM, TMSIReallocationCommand_Parse) {
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3MMMessage::TMSIReallocationCommand);
+    EXPECT_EQ(msg->mti(), L3MMMessage::TMSIReallocationCommand);
 }
 
 // =====================================================================
@@ -226,7 +226,7 @@ TEST(GoldenMM, CMServiceRequest_Parse) {
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3MMMessage::CMServiceRequest);
+    EXPECT_EQ(msg->mti(), L3MMMessage::CMServiceRequest);
 }
 
 // =====================================================================
@@ -248,7 +248,7 @@ TEST(GoldenMM, CMServiceReject_Parse) {
     uint8_t data[] = {0x50, 0x88, 0x16};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3MMMessage::CMServiceReject);
+    EXPECT_EQ(msg->mti(), L3MMMessage::CMServiceReject);
 }
 
 // =====================================================================
@@ -277,7 +277,7 @@ TEST(GoldenMM, IMSIDetachIndication_Parse) {
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3MMMessage::IMSIDetachIndication);
+    EXPECT_EQ(msg->mti(), L3MMMessage::IMSIDetachIndication);
 }
 
 // =====================================================================
@@ -299,7 +299,7 @@ TEST(GoldenMM, MMStatus_Parse) {
     uint8_t data[] = {0x50, 0xC4, 0x60};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3MMMessage::MMStatus);
+    EXPECT_EQ(msg->mti(), L3MMMessage::MMStatus);
 }
 
 // =====================================================================
@@ -321,7 +321,7 @@ TEST(GoldenMM, IdentityResponse_Parse) {
     uint8_t data[] = {0x50, 0x64, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3MMMessage::IdentityResponse);
+    EXPECT_EQ(msg->mti(), L3MMMessage::IdentityResponse);
 }
 
 // =====================================================================
@@ -360,7 +360,7 @@ TEST(GoldenMM, CMReestablishmentRequest_Parse) {
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3MMMessage::CMReestablishmentRequest);
+    EXPECT_EQ(msg->mti(), L3MMMessage::CMReestablishmentRequest);
 }
 
 // =====================================================================
@@ -371,21 +371,21 @@ TEST(GoldenMM, CMServiceAccept_RoundTrip) {
     L3CMServiceAccept msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::CMServiceAccept);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::CMServiceAccept);
 }
 
 TEST(GoldenMM, CMServiceAbort_RoundTrip) {
     L3CMServiceAbort msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::CMServiceAbort);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::CMServiceAbort);
 }
 
 TEST(GoldenMM, CMServiceReject_RoundTrip) {
     L3CMServiceReject msg(MMRejectCause::Congestion);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::CMServiceReject);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::CMServiceReject);
 }
 
 TEST(GoldenMM, LocationUpdatingAccept_RoundTrip) {
@@ -393,7 +393,7 @@ TEST(GoldenMM, LocationUpdatingAccept_RoundTrip) {
     L3LocationUpdatingAccept msg(lai);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::LocationUpdatingAccept);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::LocationUpdatingAccept);
 }
 
 TEST(GoldenMM, LocationUpdatingAccept_WithMI_RoundTrip) {
@@ -402,14 +402,14 @@ TEST(GoldenMM, LocationUpdatingAccept_WithMI_RoundTrip) {
     L3LocationUpdatingAccept msg(lai, mi, true);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::LocationUpdatingAccept);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::LocationUpdatingAccept);
 }
 
 TEST(GoldenMM, LocationUpdatingReject_RoundTrip) {
     L3LocationUpdatingReject msg(MMRejectCause::IMSI_Unknown_In_HLR);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::LocationUpdatingReject);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::LocationUpdatingReject);
 }
 
 TEST(GoldenMM, AuthenticationRequest_RoundTrip) {
@@ -418,7 +418,7 @@ TEST(GoldenMM, AuthenticationRequest_RoundTrip) {
     L3AuthenticationRequest msg(0, rand);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::AuthenticationRequest);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::AuthenticationRequest);
 }
 
 TEST(GoldenMM, AuthenticationResponse_RoundTrip) {
@@ -430,35 +430,35 @@ TEST(GoldenMM, AuthenticationResponse_RoundTrip) {
     EXPECT_EQ(ar->SRES(), 0xABCD1234u);
     auto parsed = roundtrip(*ar);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::AuthenticationResponse);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::AuthenticationResponse);
 }
 
 TEST(GoldenMM, AuthenticationReject_RoundTrip) {
     L3AuthenticationReject msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::AuthenticationReject);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::AuthenticationReject);
 }
 
 TEST(GoldenMM, IdentityRequest_IMSI_RoundTrip) {
     L3IdentityRequest msg(MobileIDType::IMSI);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::IdentityRequest);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::IdentityRequest);
 }
 
 TEST(GoldenMM, IdentityRequest_IMEI_RoundTrip) {
     L3IdentityRequest msg(MobileIDType::IMEI);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::IdentityRequest);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::IdentityRequest);
 }
 
 TEST(GoldenMM, IdentityResponse_RoundTrip) {
     L3IdentityResponse msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::IdentityResponse);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::IdentityResponse);
 }
 
 TEST(GoldenMM, TMSIReallocationCommand_RoundTrip) {
@@ -467,56 +467,56 @@ TEST(GoldenMM, TMSIReallocationCommand_RoundTrip) {
     L3TMSIReallocationCommand msg(lai, tmsi, false);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::TMSIReallocationCommand);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::TMSIReallocationCommand);
 }
 
 TEST(GoldenMM, TMSIReallocationComplete_RoundTrip) {
     L3TMSIReallocationComplete msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::TMSIReallocationComplete);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::TMSIReallocationComplete);
 }
 
 TEST(GoldenMM, MMStatus_RoundTrip) {
     L3MMStatus msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::MMStatus);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::MMStatus);
 }
 
 TEST(GoldenMM, CMServiceRequest_RoundTrip) {
     L3CMServiceRequest msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::CMServiceRequest);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::CMServiceRequest);
 }
 
 TEST(GoldenMM, CMReestablishmentRequest_RoundTrip) {
     L3CMReestablishmentRequest msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::CMReestablishmentRequest);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::CMReestablishmentRequest);
 }
 
 TEST(GoldenMM, IMSIDetachIndication_RoundTrip) {
     L3IMSIDetachIndication msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::IMSIDetachIndication);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::IMSIDetachIndication);
 }
 
 TEST(GoldenMM, MMInformation_RoundTrip) {
     L3MMInformation msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::MMInformation);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::MMInformation);
 }
 
 TEST(GoldenMM, LocationUpdatingRequest_RoundTrip) {
     L3LocationUpdatingRequest msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3MMMessage::LocationUpdatingRequest);
+    EXPECT_EQ(parsed->mti(), L3MMMessage::LocationUpdatingRequest);
 }
 
 // =====================================================================

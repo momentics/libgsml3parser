@@ -31,6 +31,7 @@
 #include "l3message.h"
 #include "l3frame.h"
 #include "context.h"
+#include "result.h"
 
 namespace gsml3parser {
 
@@ -47,27 +48,27 @@ class L3SupServMessage;
  *
  * @param frame  The L3 frame to parse.
  * @param ctx    Parser configuration (PD handlers, log level).
- * @return       A unique_ptr to the parsed message, or nullptr on failure.
+ * @return       ParseResult with unique_ptr to the parsed message, or error on failure.
  */
-std::unique_ptr<L3Message> parseL3(const L3Frame& frame, const ParserContext& ctx);
+ParseResult<std::unique_ptr<L3Message>> parseL3(const L3Frame& frame, const ParserContext& ctx);
 
 /**
-  * Parse a complete L3 message from a byte span using the given context.
-  *
-  * @param data   Span of raw L3 message bytes.
-  * @param ctx    Parser configuration (PD handlers, log level).
-  * @return       A unique_ptr to the parsed message, or nullptr on failure.
-  */
-std::unique_ptr<L3Message> parseL3(std::span<const uint8_t> data, const ParserContext& ctx);
+   * Parse a complete L3 message from a byte span using the given context.
+   *
+   * @param data   Span of raw L3 message bytes.
+   * @param ctx    Parser configuration (PD handlers, log level).
+   * @return       ParseResult with unique_ptr to the parsed message, or error on failure.
+   */
+ParseResult<std::unique_ptr<L3Message>> parseL3(std::span<const uint8_t> data, const ParserContext& ctx);
 
 /**
-  * Parse a complete L3 message from a hex string using the given context.
-  *
-  * @param hex    Hex-encoded L3 message (e.g. "061900...").
-  * @param ctx    Parser configuration (PD handlers, log level).
-  * @return       A unique_ptr to the parsed message, or nullptr on failure.
-  */
-std::unique_ptr<L3Message> parseL3Hex(std::string_view hex, const ParserContext& ctx);
+   * Parse a complete L3 message from a hex string using the given context.
+   *
+   * @param hex    Hex-encoded L3 message (e.g. "061900...").
+   * @param ctx    Parser configuration (PD handlers, log level).
+   * @return       ParseResult with unique_ptr to the parsed message, or error on failure.
+   */
+ParseResult<std::unique_ptr<L3Message>> parseL3Hex(std::string_view hex, const ParserContext& ctx);
 
 // ── Serializers (stateless, no context needed) ──────────────────────────
 

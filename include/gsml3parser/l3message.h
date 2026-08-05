@@ -29,11 +29,13 @@
 
 #include "bitvector.h"
 #include "l3frame.h"
-#include "scalar_types.h"
+
 
 namespace gsml3parser {
 
-// ── Exceptions ──────────────────────────────────────────────────────────
+// ── Internal exceptions (caught at public API boundary) ────────────────
+
+namespace detail {
 
 class ParseError : public std::runtime_error {
 public:
@@ -54,6 +56,8 @@ public:
 private:
     size_t mBitPos = 0;
 };
+
+} // namespace detail
 
 // ── L3Message ───────────────────────────────────────────────────────────
 
@@ -90,13 +94,13 @@ public:
     std::unique_ptr<L3Frame> frame(Primitive prim = Primitive::L3_DATA) const;
 
     /** Return the L3 protocol discriminator. */
-    virtual L3PD PD() const = 0;
+    virtual L3PD pd() const = 0;
 
     /** Return the message type indicator. */
-    virtual int MTI() const = 0;
+    virtual int mti() const = 0;
 
     /** Return the transaction identifier (only valid for CC, SMS, SS). */
-    virtual unsigned TI() const { return 0; }
+    virtual unsigned ti() const { return 0; }
 
     /** Generate a human-readable representation. */
     virtual void text(std::ostream& os) const;
@@ -185,12 +189,12 @@ protected:
 class L3OctetAlignedProtocolElement : public L3ProtocolElement {
 public:
     std::string mData;
-    Bool_z mExtant;
+    bool mExtant{};
     const unsigned char* peData() const { return reinterpret_cast<const unsigned char*>(mData.data()); }
     size_t lengthV() const override { return mData.size(); }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
-    void parseV(const L3Frame&, size_t&) override { throw ParseError("parseV not valid for TLV"); }
+    void parseV(const L3Frame&, size_t&) override { throw detail::ParseError("parseV not valid for TLV"); }
     void text(std::ostream&) const override;
     L3OctetAlignedProtocolElement() : mExtant(false) {}
     explicit L3OctetAlignedProtocolElement(std::string wData) : mData(std::move(wData)), mExtant(true) {}

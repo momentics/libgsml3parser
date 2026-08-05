@@ -68,11 +68,11 @@ bool L3LocationAreaIdentity::operator==(const L3LocationAreaIdentity& other) con
     return mLAC == other.mLAC;
 }
 
-int L3LocationAreaIdentity::MCC() const {
+int L3LocationAreaIdentity::mcc() const {
     return mMCC[0] * 100 + mMCC[1] * 10 + mMCC[2];
 }
 
-int L3LocationAreaIdentity::MNC() const {
+int L3LocationAreaIdentity::mnc() const {
     int val = mMNC[0] * 10 + mMNC[1];
     if (mMNC[2] < 15) val = val * 10 + mMNC[2];
     return val;
@@ -137,7 +137,7 @@ const char* L3MobileIdentity::digits() const {
     return mDigits.data();
 }
 
-uint32_t L3MobileIdentity::TMSI() const {
+uint32_t L3MobileIdentity::tmsi() const {
     return mTMSI;
 }
 
@@ -703,7 +703,7 @@ void L3CellOptions::writeV(L3Frame& dest, size_t& wp) const {
 }
 
 void L3CellOptions::parseV(const L3Frame& src, size_t& rp) {
-    throw ParseError("CellOptions requires expected length, use parseV with expectedLength");
+    throw detail::ParseError("CellOptions requires expected length, use parseV with expectedLength");
 }
 
 void L3CellOptions::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
@@ -915,7 +915,7 @@ L3ChannelDescription2::L3ChannelDescription2(TypeAndOffset wTypeAndOffset, unsig
     : L3ChannelDescription(wTypeAndOffset, wTN, wTSC, wARFCN) {}
 
 L3ChannelDescription2::L3ChannelDescription2(const L3ChannelDescription& other)
-    : L3ChannelDescription(other.typeAndOffset(), other.TN(), other.TSC(), other.ARFCN()) {}
+    : L3ChannelDescription(other.typeAndOffset(), other.tn(), other.tsc(), other.arfcn()) {}
 
 // ── L3PowerCommandAndAccessType ────────────────────────────────────────
 

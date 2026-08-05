@@ -32,112 +32,153 @@ namespace gsml3parser {
 
 // ── Internal: dispatch to domain parsers + custom handlers ──────────────
 
-static std::unique_ptr<L3Message> parseL3WithPDHandler(
+static ParseResult<std::unique_ptr<L3Message>> parseL3WithPDHandler(
     const L3Frame& frame, const ParserContext& ctx)
 {
-    if (frame.size() < 16) return nullptr;
+    try {
+        if (frame.size() < 16) {
+            return ParseResult<std::unique_ptr<L3Message>>(
+                ParseErrorCode::TruncatedInput, "Frame too short for L3 header");
+        }
 
-    L3PD pd = frame.PD();
+        L3PD pd = frame.pd();
 
-    switch (pd) {
-        case L3PD::RadioResource: {
-            auto msg = parseL3RR(frame);
-            if (msg) return static_cast<std::unique_ptr<L3Message>>(std::move(msg));
-            break;
+        switch (pd) {
+            case L3PD::RadioResource: {
+                auto msg = parseL3RR(frame);
+                if (msg) return ParseResult<std::unique_ptr<L3Message>>(
+                    static_cast<std::unique_ptr<L3Message>>(std::move(msg)));
+                break;
+            }
+            case L3PD::MobilityManagement: {
+                auto msg = parseL3MM(frame);
+                if (msg) return ParseResult<std::unique_ptr<L3Message>>(
+                    static_cast<std::unique_ptr<L3Message>>(std::move(msg)));
+                break;
+            }
+            case L3PD::CallControl: {
+                auto msg = parseL3CC(frame);
+                if (msg) return ParseResult<std::unique_ptr<L3Message>>(
+                    static_cast<std::unique_ptr<L3Message>>(std::move(msg)));
+                break;
+            }
+            case L3PD::NonCallSS: {
+                auto msg = parseL3SupServ(frame);
+                if (msg) return ParseResult<std::unique_ptr<L3Message>>(
+                    static_cast<std::unique_ptr<L3Message>>(std::move(msg)));
+                break;
+            }
+            default:
+                break;
         }
-        case L3PD::MobilityManagement: {
-            auto msg = parseL3MM(frame);
-            if (msg) return static_cast<std::unique_ptr<L3Message>>(std::move(msg));
-            break;
+
+        // Check for custom handler in context
+        std::optional<PDHandler> handlerOpt = ctx.getPDHandler(pd);
+        if (handlerOpt && *handlerOpt) {
+            return ParseResult<std::unique_ptr<L3Message>>((*handlerOpt)(frame));
         }
-        case L3PD::CallControl: {
-            auto msg = parseL3CC(frame);
-            if (msg) return static_cast<std::unique_ptr<L3Message>>(std::move(msg));
-            break;
-        }
-        case L3PD::NonCallSS: {
-            auto msg = parseL3SupServ(frame);
-            if (msg) return static_cast<std::unique_ptr<L3Message>>(std::move(msg));
-            break;
-        }
-        default:
-            break;
+
+        GSML3PARSER_LOG_WARN("Unsupported PD: 0x{:02x}", static_cast<int>(pd));
+        return ParseResult<std::unique_ptr<L3Message>>(
+            ParseErrorCode::InvalidPD, "Unsupported protocol discriminator");
+    } catch (const detail::ParseError& e) {
+        return ParseResult<std::unique_ptr<L3Message>>(
+            ParseErrorCode::InvalidIE, std::string(e.what()), e.bitPosition());
+    } catch (const std::exception& e) {
+        return ParseResult<std::unique_ptr<L3Message>>(
+            ParseErrorCode::InvalidIE, std::string(e.what()));
     }
-
-    // Check for custom handler in context
-    std::optional<PDHandler> handlerOpt = ctx.getPDHandler(pd);
-    if (handlerOpt && *handlerOpt) {
-        return (*handlerOpt)(frame);
-    }
-
-    GSML3PARSER_LOG_WARN("Unsupported PD: 0x%02x", static_cast<int>(pd));
-    return nullptr;
 }
 
 // ── Context-aware parsers ───────────────────────────────────────────────
 
-std::unique_ptr<L3Message> parseL3(const L3Frame& frame, const ParserContext& ctx) {
+ParseResult<std::unique_ptr<L3Message>> parseL3(const L3Frame& frame, const ParserContext& ctx) {
     return parseL3WithPDHandler(frame, ctx);
 }
 
-std::unique_ptr<L3Message> parseL3(std::span<const uint8_t> data, const ParserContext& ctx) {
-    if (data.empty()) return nullptr;
+ParseResult<std::unique_ptr<L3Message>> parseL3(std::span<const uint8_t> data, const ParserContext& ctx) {
+    try {
+        if (data.empty()) {
+            return ParseResult<std::unique_ptr<L3Message>>(
+                ParseErrorCode::TruncatedInput, "Empty input");
+        }
 
-    // Handle short RR messages that don't have PD/MTI headers (GSM 04.08 9.1)
-    // These are sent on RACH without standard L3 header
-    unsigned firstNibble = (data[0] >> 4) & 0x0F;
+        // Handle short RR messages that don't have PD/MTI headers (GSM 04.08 9.1)
+        // These are sent on RACH without standard L3 header
+        unsigned firstNibble = (data[0] >> 4) & 0x0F;
 
-    if (data.size() == 1 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
-        // Channel Request: single byte = RequestReference(8)
-        auto msg = std::make_unique<L3ChannelRequest>(data[0]);
-        return std::unique_ptr<L3Message>(static_cast<L3Message*>(msg.release()));
-    }
-    if (data.size() == 4 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
-        // Handover Access: HO number(8), HO ref(8), TA(8), spare(8)
-        auto msg = std::make_unique<L3HandoverAccess>(data[0]);
-        return std::unique_ptr<L3Message>(static_cast<L3Message*>(msg.release()));
-    }
-    if (data.size() == 7 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
-        // Synchronization Channel Information: CI(16) + LAI(40)
+        if (data.size() == 1 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
+            // Channel Request: single byte = RequestReference(8)
+            auto msg = std::make_unique<L3ChannelRequest>(data[0]);
+            return ParseResult<std::unique_ptr<L3Message>>(
+                std::unique_ptr<L3Message>(static_cast<L3Message*>(msg.release())));
+        }
+        if (data.size() == 4 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
+            // Handover Access: HO number(8), HO ref(8), TA(8), spare(8)
+            auto msg = std::make_unique<L3HandoverAccess>(data[0]);
+            return ParseResult<std::unique_ptr<L3Message>>(
+                std::unique_ptr<L3Message>(static_cast<L3Message*>(msg.release())));
+        }
+        if (data.size() == 7 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
+            // Synchronization Channel Information: CI(16) + LAI(40)
+            L3Frame frame(Primitive::L3_DATA, static_cast<size_t>(data.size()) * 8);
+            std::memcpy(frame.data(), data.data(), data.size());
+            auto sch = std::make_unique<L3SynchronizationChannelInformation>();
+            sch->parse(frame);
+            return ParseResult<std::unique_ptr<L3Message>>(
+                std::unique_ptr<L3Message>(static_cast<L3Message*>(sch.release())));
+        }
+
         L3Frame frame(Primitive::L3_DATA, static_cast<size_t>(data.size()) * 8);
         std::memcpy(frame.data(), data.data(), data.size());
-        auto sch = std::make_unique<L3SynchronizationChannelInformation>();
-        size_t rp = 0;
-        sch->parse(frame);
-        return std::unique_ptr<L3Message>(static_cast<L3Message*>(sch.release()));
+        return parseL3WithPDHandler(frame, ctx);
+    } catch (const detail::ParseError& e) {
+        return ParseResult<std::unique_ptr<L3Message>>(
+            ParseErrorCode::InvalidIE, std::string(e.what()), e.bitPosition());
+    } catch (const std::exception& e) {
+        return ParseResult<std::unique_ptr<L3Message>>(
+            ParseErrorCode::InvalidIE, std::string(e.what()));
     }
-
-    L3Frame frame(Primitive::L3_DATA, static_cast<size_t>(data.size()) * 8);
-    std::memcpy(frame.data(), data.data(), data.size());
-    return parseL3WithPDHandler(frame, ctx);
 }
 
-std::unique_ptr<L3Message> parseL3Hex(std::string_view hex, const ParserContext& ctx) {
-    if (hex.empty()) return nullptr;
-
-    // Remove whitespace
-    std::string clean;
-    clean.reserve(hex.size());
-    for (char c : hex) {
-        if (std::isxdigit(static_cast<unsigned char>(c))) {
-            clean += c;
+ParseResult<std::unique_ptr<L3Message>> parseL3Hex(std::string_view hex, const ParserContext& ctx) {
+    try {
+        if (hex.empty()) {
+            return ParseResult<std::unique_ptr<L3Message>>(
+                ParseErrorCode::TruncatedInput, "Empty hex string");
         }
-    }
 
-    if (clean.size() % 2 != 0) return nullptr;
-
-    std::vector<uint8_t> bytes;
-    bytes.reserve(clean.size() / 2);
-    for (size_t i = 0; i < clean.size(); i += 2) {
-        std::string byteStr = clean.substr(i, 2);
-        try {
-            bytes.push_back(static_cast<uint8_t>(std::stoi(byteStr, nullptr, 16)));
-        } catch (...) {
-            return nullptr;
+        // Remove whitespace
+        std::string clean;
+        clean.reserve(hex.size());
+        for (char c : hex) {
+            if (std::isxdigit(static_cast<unsigned char>(c))) {
+                clean += c;
+            }
         }
-    }
 
-    return parseL3(std::span<const uint8_t>(bytes), ctx);
+        if (clean.size() % 2 != 0) {
+            return ParseResult<std::unique_ptr<L3Message>>(
+                ParseErrorCode::TruncatedInput, "Odd-length hex string");
+        }
+
+        std::vector<uint8_t> bytes;
+        bytes.reserve(clean.size() / 2);
+        for (size_t i = 0; i < clean.size(); i += 2) {
+            std::string byteStr = clean.substr(i, 2);
+            try {
+                bytes.push_back(static_cast<uint8_t>(std::stoi(byteStr, nullptr, 16)));
+            } catch (...) {
+                return ParseResult<std::unique_ptr<L3Message>>(
+                    ParseErrorCode::InvalidValue, "Invalid hex character");
+            }
+        }
+
+        return parseL3(std::span<const uint8_t>(bytes), ctx);
+    } catch (const std::exception& e) {
+        return ParseResult<std::unique_ptr<L3Message>>(
+            ParseErrorCode::InvalidIE, std::string(e.what()));
+    }
 }
 
 // ── Serializers (stateless) ─────────────────────────────────────────────

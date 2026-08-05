@@ -25,7 +25,6 @@
 #include <ostream>
 #include <string>
 
-#include "scalar_types.h"
 #include "types.h"
 
 namespace gsml3parser {
@@ -49,16 +48,16 @@ private:
 public:
     Time(int wFN = 0, int wTN = 0) : mFN(wFN), mTN(wTN) {}
 
-    int FN() const { return mFN; }
-    void FN(int wFN) { mFN = wFN; }
-    unsigned TN() const { return mTN; }
-    void TN(unsigned wTN) { mTN = wTN; }
+    int fn() const { return mFN; }
+    void fn(int wFN) { mFN = wFN; }
+    unsigned tn() const { return mTN; }
+    void tn(unsigned wTN) { mTN = wTN; }
 
-    unsigned SFN() const { return mFN / (26 * 51); }
-    unsigned T1()  const { return SFN() % 2048; }
-    unsigned T2()  const { return mFN % 26; }
-    unsigned T3()  const { return mFN % 51; }
-    unsigned T1p() const { return SFN() % 32; }
+    unsigned sfn() const { return mFN / (26 * 51); }
+    unsigned t1()  const { return sfn() % 2048; }
+    unsigned t2()  const { return mFN % 26; }
+    unsigned t3()  const { return mFN % 51; }
+    unsigned t1p() const { return sfn() % 32; }
 };
 
 std::ostream& operator<<(std::ostream& os, const Time& ts);

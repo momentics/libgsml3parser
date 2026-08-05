@@ -37,7 +37,7 @@ class L3BearerCapability : public L3ProtocolElement {
 private:
     uint8_t mOctet3;
     std::vector<uint8_t> mOctet3a;
-    Bool_z mPresent;
+    bool mPresent{};
 public:
     L3BearerCapability();
     size_t lengthV() const override;
@@ -55,8 +55,8 @@ public:
 
 class L3SupportedCodecList : public L3ProtocolElement {
 private:
-    Bool_z mGsmPresent;
-    Bool_z mUmtsPresent;
+    bool mGsmPresent{};
+    bool mUmtsPresent{};
     std::vector<uint8_t> mGsmCodecs;
     std::vector<uint8_t> mUmtsCodecs;
 public:
@@ -120,7 +120,7 @@ private:
     TypeOfNumber mType;
     NumberingPlan mPlan;
     L3BCDDigits mDigits;
-    Bool_z mHaveOctet3a;
+    bool mHaveOctet3a{};
     int mPresentationIndicator;
     int mScreeningIndicator;
 public:
@@ -218,7 +218,7 @@ private:
     char mIA5;
 public:
     explicit L3KeypadFacility(char wIA5 = 0);
-    char IA5() const { return mIA5; }
+    char ia5() const { return mIA5; }
     size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;

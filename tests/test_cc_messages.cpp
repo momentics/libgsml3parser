@@ -47,11 +47,11 @@ TEST(CCRoundTripTest, Setup_NoDigits) {
     L3Setup msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->PD(), L3PD::CallControl);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::Setup);
+    EXPECT_EQ(parsed->pd(), L3PD::CallControl);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::Setup);
     auto* s = dynamic_cast<L3Setup*>(parsed.get());
     ASSERT_TRUE(s);
-    EXPECT_EQ(s->TI(), 7u);
+    EXPECT_EQ(s->ti(), 7u);
     EXPECT_FALSE(s->haveCalledParty());
 }
 
@@ -74,11 +74,11 @@ TEST(CCRoundTripTest, Setup_Parse) {
     uint8_t data[] = {0x3E, 0x14};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->PD(), L3PD::CallControl);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::Setup);
+    EXPECT_EQ(msg->pd(), L3PD::CallControl);
+    EXPECT_EQ(msg->mti(), L3CCMessage::Setup);
     auto* s = dynamic_cast<L3Setup*>(msg.get());
     ASSERT_TRUE(s);
-    EXPECT_EQ(s->TI(), 7u);
+    EXPECT_EQ(s->ti(), 7u);
 }
 
 // ── Emergency Setup (GSM 04.08 9.3.8) ────────────────────────────────
@@ -87,7 +87,7 @@ TEST(CCRoundTripTest, EmergencySetup) {
     L3EmergencySetup msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::EmergencySetup);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::EmergencySetup);
 }
 
 // ── Call Proceeding (GSM 04.08 9.3.3) ────────────────────────────────
@@ -97,7 +97,7 @@ TEST(CCRoundTripTest, CallProceeding) {
     L3CallProceeding msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::CallProceeding);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::CallProceeding);
 }
 
 // ── Alerting (GSM 04.08 9.3.1) ───────────────────────────────────────
@@ -107,7 +107,7 @@ TEST(CCRoundTripTest, Alerting) {
     L3Alerting msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::Alerting);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::Alerting);
 }
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=000001(Alerting=0x01), NSD=00
@@ -118,7 +118,7 @@ TEST(CCRoundTripTest, Alerting_Parse) {
     uint8_t data[] = {0x3E, 0x04};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::Alerting);
+    EXPECT_EQ(msg->mti(), L3CCMessage::Alerting);
 }
 
 // ── Connect (GSM 04.08 9.3.5) ────────────────────────────────────────
@@ -127,7 +127,7 @@ TEST(CCRoundTripTest, Connect) {
     L3Connect msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::Connect);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::Connect);
 }
 
 // ── Connect Acknowledge (GSM 04.08 9.3.6) ────────────────────────────
@@ -136,7 +136,7 @@ TEST(CCRoundTripTest, ConnectAcknowledge) {
     L3ConnectAcknowledge msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::ConnectAcknowledge);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::ConnectAcknowledge);
 }
 
 // ── Call Confirmed (GSM 04.08 9.3.2) ─────────────────────────────────
@@ -146,7 +146,7 @@ TEST(CCRoundTripTest, CallConfirmed) {
     L3CallConfirmed msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::CallConfirmed);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::CallConfirmed);
 }
 
 // ── Disconnect (GSM 04.08 9.3.7) ─────────────────────────────────────
@@ -160,7 +160,7 @@ TEST(CCRoundTripTest, Disconnect_NormalClearing) {
     auto* d = dynamic_cast<L3Disconnect*>(parsed.get());
     ASSERT_TRUE(d);
     EXPECT_EQ(d->cause(), CCCause::Normal_Call_Clearing);
-    EXPECT_EQ(d->TI(), 7u);
+    EXPECT_EQ(d->ti(), 7u);
 }
 
 TEST(CCRoundTripTest, Disconnect_UserBusy) {
@@ -170,7 +170,7 @@ TEST(CCRoundTripTest, Disconnect_UserBusy) {
     auto* d = dynamic_cast<L3Disconnect*>(parsed.get());
     ASSERT_TRUE(d);
     EXPECT_EQ(d->cause(), CCCause::User_Busy);
-    EXPECT_EQ(d->TI(), 3u);
+    EXPECT_EQ(d->ti(), 3u);
 }
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=100101(Disconnect=0x25), NSD=00
@@ -184,12 +184,12 @@ TEST(CCRoundTripTest, Disconnect_Parse) {
     uint8_t data[] = {0x3E, 0x94, 0x08, 0x02, 0x16, 0x21};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->PD(), L3PD::CallControl);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::Disconnect);
+    EXPECT_EQ(msg->pd(), L3PD::CallControl);
+    EXPECT_EQ(msg->mti(), L3CCMessage::Disconnect);
     auto* d = dynamic_cast<L3Disconnect*>(msg.get());
     ASSERT_TRUE(d);
     EXPECT_EQ(d->cause(), CCCause::Normal_Call_Clearing);
-    EXPECT_EQ(d->TI(), 7u);
+    EXPECT_EQ(d->ti(), 7u);
 }
 
 // ── Release (GSM 04.08 9.3.19) ───────────────────────────────────────
@@ -221,7 +221,7 @@ TEST(CCRoundTripTest, ReleaseComplete_NoCause) {
     L3ReleaseComplete msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::ReleaseComplete);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::ReleaseComplete);
 }
 
 TEST(CCRoundTripTest, ReleaseComplete_WithCause) {
@@ -247,7 +247,7 @@ TEST(CCRoundTripTest, CCStatus) {
     L3CCStatus msg(7, CCCause::Normal_Unspecified, 0x00);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::CCStatus);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::CCStatus);
 }
 
 // ── Start DTMF (GSM 04.08 9.3.24) ────────────────────────────────────
@@ -257,7 +257,7 @@ TEST(CCRoundTripTest, StartDTMF) {
     L3StartDTMF msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::StartDTMF);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::StartDTMF);
 }
 
 // ── Start DTMF Acknowledge (GSM 04.08 9.3.25) ────────────────────────
@@ -266,7 +266,7 @@ TEST(CCRoundTripTest, StartDTMFAcknowledge) {
     L3StartDTMFAcknowledge msg(7, '1');
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::StartDTMFAcknowledge);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::StartDTMFAcknowledge);
 }
 
 // ── Start DTMF Reject (GSM 04.08 9.3.26) ─────────────────────────────
@@ -275,7 +275,7 @@ TEST(CCRoundTripTest, StartDTMFReject) {
     L3StartDTMFReject msg(7, CCCause::Normal_Unspecified);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::StartDTMFReject);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::StartDTMFReject);
 }
 
 // ── Stop DTMF (GSM 04.08 9.3.29) ─────────────────────────────────────
@@ -284,7 +284,7 @@ TEST(CCRoundTripTest, StopDTMF) {
     L3StopDTMF msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::StopDTMF);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::StopDTMF);
 }
 
 // ── Stop DTMF Acknowledge (GSM 04.08 9.3.30) ─────────────────────────
@@ -293,7 +293,7 @@ TEST(CCRoundTripTest, StopDTMFAcknowledge) {
     L3StopDTMFAcknowledge msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::StopDTMFAcknowledge);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::StopDTMFAcknowledge);
 }
 
 // ── Hold (GSM 04.08 9.3.10) ──────────────────────────────────────────
@@ -302,7 +302,7 @@ TEST(CCRoundTripTest, Hold) {
     L3Hold msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::Hold);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::Hold);
 }
 
 // ── Hold Reject (GSM 04.08 9.3.12) ───────────────────────────────────
@@ -311,7 +311,7 @@ TEST(CCRoundTripTest, HoldReject) {
     L3HoldReject msg(7, CCCause::Normal_Unspecified);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::HoldReject);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::HoldReject);
 }
 
 // ── Progress (GSM 04.08 9.3.17) ──────────────────────────────────────
@@ -320,7 +320,7 @@ TEST(CCRoundTripTest, Progress) {
     L3Progress msg(7);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3CCMessage::Progress);
+    EXPECT_EQ(parsed->mti(), L3CCMessage::Progress);
 }
 
 // ── CC Cause values (GSM 04.08 10.5.4.11) ────────────────────────────
@@ -416,7 +416,7 @@ TEST(CCRoundTripTest, ProgressIndicator_RoundTrip) {
 
 TEST(CCRoundTripTest, KeypadFacility) {
     L3KeypadFacility orig('5');
-    EXPECT_EQ(orig.IA5(), '5');
+    EXPECT_EQ(orig.ia5(), '5');
     EXPECT_EQ(orig.lengthV(), 1u);
 
     L3Frame frame(Primitive::L3_DATA, 16);
@@ -427,7 +427,7 @@ TEST(CCRoundTripTest, KeypadFacility) {
     size_t rp = 0;
     parsed.parseV(frame, rp);
 
-    EXPECT_EQ(parsed.IA5(), '5');
+    EXPECT_EQ(parsed.ia5(), '5');
 }
 
 // ── L3Signal (GSM 04.08 10.5.4.23) ──────────────────────────────────
@@ -463,7 +463,7 @@ TEST(CCRoundTripTest, TI_DifferentValues) {
         ASSERT_TRUE(parsed);
         auto* d = dynamic_cast<L3Disconnect*>(parsed.get());
         ASSERT_TRUE(d);
-        EXPECT_EQ(d->TI(), ti);
+        EXPECT_EQ(d->ti(), ti);
     }
 }
 
@@ -476,8 +476,8 @@ TEST(CCRoundTripTest, TI_DifferentValues) {
 TEST(CCRoundTripTest, Parse_Setup_Hex) {
     auto msg = parseL3Hex("3E14", ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->PD(), L3PD::CallControl);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::Setup);
+    EXPECT_EQ(msg->pd(), L3PD::CallControl);
+    EXPECT_EQ(msg->mti(), L3CCMessage::Setup);
 }
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=1(REPL), messageType=101101(Release=0x2D), NSD=00
@@ -487,6 +487,6 @@ TEST(CCRoundTripTest, Parse_Setup_Hex) {
 TEST(CCRoundTripTest, Parse_Release_Hex) {
     auto msg = parseL3Hex("3FB4", ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->PD(), L3PD::CallControl);
-    EXPECT_EQ(msg->MTI(), L3CCMessage::Release);
+    EXPECT_EQ(msg->pd(), L3PD::CallControl);
+    EXPECT_EQ(msg->mti(), L3CCMessage::Release);
 }

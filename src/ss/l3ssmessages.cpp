@@ -33,12 +33,12 @@ void L3SupServMessage::write(L3Frame& dest) const {
     size_t l3len = bitsNeeded();
     if (dest.size() != l3len) dest.resize(l3len);
     size_t wp = 0;
-    dest.writeField(wp, static_cast<unsigned>(PD()), 4);  // PD: high nibble
+    dest.writeField(wp, static_cast<unsigned>(pd()), 4);  // PD: high nibble
     dest.writeField(wp, mTI, 3);                           // TIO: 3 bits
     dest.writeField(wp, 0, 1);                             // TIF: 1 bit
-    dest.writeField(wp, MTI() << 2, 8);                    // messageType(6)|NSD(2)
+    dest.writeField(wp, mti() << 2, 8);                    // messageType(6)|NSD(2)
     writeBody(dest, wp);
-    dest.L2Length(l2Length());
+    dest.l2Length(l2Length());
 }
 
 void L3SupServMessage::text(std::ostream& os) const {
@@ -163,16 +163,16 @@ std::unique_ptr<L3SupServMessage> parseL3SupServ(const L3Frame& source) {
     if (source.size() < 16) return nullptr;
 
     // Mask out bit 6 (0xbf), see GSM 04.08 Table 10.5
-    unsigned mti = source.MTI() & 0xbf;
+    unsigned mti = source.mti() & 0xbf;
     auto msg = L3SupServFactory(static_cast<L3SupServMessage::MessageType>(mti));
     if (!msg) {
         GSML3PARSER_LOG_WARN("Unknown SS MTI: 0x%02x", mti);
         return nullptr;
     }
     try {
-        msg->setTI(source.TI());
+        msg->ti(source.ti());
         msg->parse(source);
-    } catch (const ParseError&) {
+    } catch (const detail::ParseError&) {
         GSML3PARSER_LOG_WARN("SS parse failed for MTI=0x%02x", mti);
         return nullptr;
     }

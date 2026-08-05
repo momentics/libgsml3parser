@@ -158,8 +158,8 @@ TEST(GoldenRR, PagingRequestType1_Parse) {
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->PD(), L3PD::RadioResource);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::PagingRequestType1);
+    EXPECT_EQ(msg->pd(), L3PD::RadioResource);
+    EXPECT_EQ(msg->mti(), L3RRMessage::PagingRequestType1);
 }
 
 // =====================================================================
@@ -194,7 +194,7 @@ TEST(GoldenRR, PagingRequestType2_Parse) {
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::PagingRequestType2);
+    EXPECT_EQ(msg->mti(), L3RRMessage::PagingRequestType2);
 }
 
 // =====================================================================
@@ -233,7 +233,7 @@ TEST(GoldenRR, PagingRequestType3_Parse) {
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::PagingRequestType3);
+    EXPECT_EQ(msg->mti(), L3RRMessage::PagingRequestType3);
 }
 
 // =====================================================================
@@ -273,7 +273,7 @@ TEST(GoldenRR, PagingResponse_Parse) {
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::PagingResponse);
+    EXPECT_EQ(msg->mti(), L3RRMessage::PagingResponse);
 }
 
 // =====================================================================
@@ -297,12 +297,12 @@ TEST(GoldenRR, ClassmarkChange_Parse) {
     uint8_t data[] = {0x60, 0x16, 0x03, 0x20, 0x00, 0x80};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::ClassmarkChange);
+    EXPECT_EQ(msg->mti(), L3RRMessage::ClassmarkChange);
     auto* cm = dynamic_cast<L3ClassmarkChange*>(msg.get());
     ASSERT_TRUE(cm);
     auto rt = roundtrip(*cm);
     ASSERT_TRUE(rt);
-    EXPECT_EQ(rt->MTI(), L3RRMessage::ClassmarkChange);
+    EXPECT_EQ(rt->mti(), L3RRMessage::ClassmarkChange);
 }
 
 // =====================================================================
@@ -332,7 +332,7 @@ TEST(GoldenRR, MeasurementReport_Parse) {
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::MeasurementReport);
+    EXPECT_EQ(msg->mti(), L3RRMessage::MeasurementReport);
 }
 
 // =====================================================================
@@ -373,7 +373,7 @@ TEST(GoldenRR, HandoverCommand_Parse) {
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::HandoverCommand);
+    EXPECT_EQ(msg->mti(), L3RRMessage::HandoverCommand);
 }
 
 // =====================================================================
@@ -399,7 +399,7 @@ TEST(GoldenRR, AssignmentCommand_Parse) {
     uint8_t data[] = {0x60, 0x2e, 0x10, 0xE0, 0x64, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::AssignmentCommand);
+    EXPECT_EQ(msg->mti(), L3RRMessage::AssignmentCommand);
 }
 
 // =====================================================================
@@ -437,7 +437,7 @@ TEST(GoldenRR, ImmediateAssignment_Parse) {
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::ImmediateAssignment);
+    EXPECT_EQ(msg->mti(), L3RRMessage::ImmediateAssignment);
 }
 
 // =====================================================================
@@ -463,7 +463,7 @@ TEST(GoldenRR, ImmediateAssignmentReject_Parse) {
     uint8_t data[] = {0x60, 0x3a, 0x03};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::ImmediateAssignmentReject);
+    EXPECT_EQ(msg->mti(), L3RRMessage::ImmediateAssignmentReject);
     auto* iar = dynamic_cast<L3ImmediateAssignmentReject*>(msg.get());
     ASSERT_TRUE(iar);
     // PageMode=3(SameAsBefore) from low nibble of byte 2. Spec-verified: GSM_RR_Types.ttcn PageMode enum (line 382)
@@ -491,7 +491,7 @@ TEST(GoldenRR, ChannelModeModify_Parse) {
     uint8_t data[] = {0x60, 0x10, 0x11, 0xE0, 0x64, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::ChannelModeModify);
+    EXPECT_EQ(msg->mti(), L3RRMessage::ChannelModeModify);
 }
 
 // =====================================================================
@@ -515,7 +515,7 @@ TEST(GoldenRR, GPRSSuspensionRequest_Parse) {
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::GPRSSuspensionRequest);
+    EXPECT_EQ(msg->mti(), L3RRMessage::GPRSSuspensionRequest);
 }
 
 // =====================================================================
@@ -533,7 +533,7 @@ TEST(GoldenRR, ApplicationInformation_Parse) {
     uint8_t data[] = {0x60, 0x38, 0x00, 0xAB, 0xCD};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::ApplicationInformation);
+    EXPECT_EQ(msg->mti(), L3RRMessage::ApplicationInformation);
 }
 
 // =====================================================================
@@ -550,7 +550,7 @@ TEST(GoldenRR, SynchronizationChannelInformation_Parse) {
     uint8_t data[] = {0x12, 0x34, 0x52, 0xF0, 0x10, 0x00, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::SynchronizationChannelInformation);
+    EXPECT_EQ(msg->mti(), L3RRMessage::SynchronizationChannelInformation);
 }
 
 // =====================================================================
@@ -565,7 +565,7 @@ TEST(GoldenRR, ChannelRequest_Parse) {
     uint8_t data[] = {0x42};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::ChannelRequest);
+    EXPECT_EQ(msg->mti(), L3RRMessage::ChannelRequest);
 }
 
 // =====================================================================
@@ -580,7 +580,7 @@ TEST(GoldenRR, HandoverAccess_Parse) {
     uint8_t data[] = {0x17, 0x00, 0x00, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::HandoverAccess);
+    EXPECT_EQ(msg->mti(), L3RRMessage::HandoverAccess);
 }
 
 // =====================================================================
@@ -607,7 +607,7 @@ TEST(GoldenRR, CipheringModeCommand_Parse) {
     uint8_t data[] = {0x60, 0x35, 0x0B};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::CipheringModeCommand);
+    EXPECT_EQ(msg->mti(), L3RRMessage::CipheringModeCommand);
 }
 
 // =====================================================================
@@ -648,7 +648,7 @@ TEST(GoldenRR, PhysicalInformation_Parse) {
     uint8_t data[] = {0x60, 0x2d, 0xFC};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::PhysicalInformation);
+    EXPECT_EQ(msg->mti(), L3RRMessage::PhysicalInformation);
 }
 
 // =====================================================================
@@ -670,7 +670,7 @@ TEST(GoldenRR, AdditionalAssignment_Parse) {
     uint8_t data[] = {0x60, 0x3b, 0x12, 0xA0, 0x56};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
-    EXPECT_EQ(msg->MTI(), L3RRMessage::AdditionalAssignment);
+    EXPECT_EQ(msg->mti(), L3RRMessage::AdditionalAssignment);
 }
 
 // =====================================================================
@@ -682,7 +682,7 @@ TEST(GoldenRR, AssignmentCommand_RoundTrip) {
     L3AssignmentCommand msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::AssignmentCommand);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::AssignmentCommand);
 }
 
 // =====================================================================
@@ -694,7 +694,7 @@ TEST(GoldenRR, ImmediateAssignment_RoundTrip) {
     L3ImmediateAssignment msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::ImmediateAssignment);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::ImmediateAssignment);
 }
 
 // =====================================================================
@@ -706,7 +706,7 @@ TEST(GoldenRR, ImmediateAssignmentExtended_RoundTrip) {
     L3ImmediateAssignmentExtended msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::ImmediateAssignmentExtended);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::ImmediateAssignmentExtended);
     EXPECT_FALSE(msg.hasAdditionalChannel());
 }
 
@@ -720,7 +720,7 @@ TEST(GoldenRR, ImmediateAssignmentReject_RoundTrip) {
     EXPECT_EQ(msg.waitTime(), 30u);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::ImmediateAssignmentReject);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::ImmediateAssignmentReject);
 }
 
 // =====================================================================
@@ -732,7 +732,7 @@ TEST(GoldenRR, AdditionalAssignment_RoundTrip) {
     L3AdditionalAssignment msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::AdditionalAssignment);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::AdditionalAssignment);
 }
 
 // =====================================================================
@@ -746,7 +746,7 @@ TEST(GoldenRR, ChannelModeModify_RoundTrip) {
     L3ChannelModeModify msg(chd, mode);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::ChannelModeModify);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::ChannelModeModify);
 }
 
 // =====================================================================
@@ -764,7 +764,7 @@ TEST(GoldenRR, ChannelModeModifyAcknowledge_RoundTrip) {
     EXPECT_EQ(cma->mode().mode(), L3ChannelMode::SpeechV1);
     auto parsed = roundtrip(*cma);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::ChannelModeModifyAcknowledge);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::ChannelModeModifyAcknowledge);
 }
 
 // =====================================================================
@@ -776,7 +776,7 @@ TEST(GoldenRR, MeasurementReport_RoundTrip) {
     L3MeasurementReport msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::MeasurementReport);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::MeasurementReport);
 }
 
 // =====================================================================
@@ -788,7 +788,7 @@ TEST(GoldenRR, ClassmarkEnquiry_RoundTrip) {
     L3ClassmarkEnquiry msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::ClassmarkEnquiry);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::ClassmarkEnquiry);
 }
 
 // =====================================================================
@@ -804,7 +804,7 @@ TEST(GoldenRR, ClassmarkChange_RoundTrip) {
     ASSERT_TRUE(cm);
     auto parsed = roundtrip(*cm);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::ClassmarkChange);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::ClassmarkChange);
 }
 
 // =====================================================================
@@ -816,7 +816,7 @@ TEST(GoldenRR, HandoverCommand_RoundTrip) {
     L3HandoverCommand msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::HandoverCommand);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::HandoverCommand);
 }
 
 // =====================================================================
@@ -828,7 +828,7 @@ TEST(GoldenRR, PagingResponse_RoundTrip) {
     L3PagingResponse msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::PagingResponse);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::PagingResponse);
 }
 
 // =====================================================================
@@ -840,7 +840,7 @@ TEST(GoldenRR, PhysicalInformation_RoundTrip) {
     L3PhysicalInformation msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::PhysicalInformation);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::PhysicalInformation);
 }
 
 // =====================================================================
@@ -857,7 +857,7 @@ TEST(GoldenRR, RRStatus_RoundTrip) {
     EXPECT_EQ(rs->cause(), RRCause::Invalid_Mandatory_Information);
     auto parsed = roundtrip(*rs);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::RRStatus);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::RRStatus);
 }
 
 // =====================================================================
@@ -874,7 +874,7 @@ TEST(GoldenRR, AssignmentComplete_RoundTrip) {
     EXPECT_EQ(ac->cause(), RRCause::Normal_Event);
     auto parsed = roundtrip(*ac);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::AssignmentComplete);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::AssignmentComplete);
 }
 
 // =====================================================================
@@ -891,7 +891,7 @@ TEST(GoldenRR, AssignmentFailure_RoundTrip) {
     EXPECT_EQ(af->cause(), RRCause::Channel_Mode_Unacceptable);
     auto parsed = roundtrip(*af);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::AssignmentFailure);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::AssignmentFailure);
 }
 
 // =====================================================================
@@ -908,7 +908,7 @@ TEST(GoldenRR, HandoverComplete_RoundTrip) {
     EXPECT_EQ(hc->cause(), RRCause::Normal_Event);
     auto parsed = roundtrip(*hc);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::HandoverComplete);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::HandoverComplete);
 }
 
 // =====================================================================
@@ -925,7 +925,7 @@ TEST(GoldenRR, HandoverFailure_RoundTrip) {
     EXPECT_EQ(hf->cause(), RRCause::Handover_Impossible);
     auto parsed = roundtrip(*hf);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::HandoverFailure);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::HandoverFailure);
 }
 
 // =====================================================================
@@ -937,7 +937,7 @@ TEST(GoldenRR, GPRSSuspensionRequest_RoundTrip) {
     L3GPRSSuspensionRequest msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::GPRSSuspensionRequest);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::GPRSSuspensionRequest);
 }
 
 // =====================================================================
@@ -953,7 +953,7 @@ TEST(GoldenRR, ApplicationInformation_RoundTrip) {
     L3ApplicationInformation msg(data);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::ApplicationInformation);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::ApplicationInformation);
 }
 
 // =====================================================================
@@ -966,7 +966,7 @@ TEST(GoldenRR, ChannelRequest_RoundTrip) {
     EXPECT_EQ(msg.requestReference(), 0x42u);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::ChannelRequest);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::ChannelRequest);
 }
 
 // =====================================================================
@@ -979,7 +979,7 @@ TEST(GoldenRR, HandoverAccess_RoundTrip) {
     EXPECT_EQ(msg.handoverNumber(), 0x17u);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::HandoverAccess);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::HandoverAccess);
 }
 
 // =====================================================================
@@ -991,7 +991,7 @@ TEST(GoldenRR, SynchronizationChannelInformation_RoundTrip) {
     L3SynchronizationChannelInformation msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SynchronizationChannelInformation);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SynchronizationChannelInformation);
 }
 
 // =====================================================================
@@ -1003,91 +1003,91 @@ TEST(GoldenRR, SI1_RoundTrip) {
     L3SystemInformationType1 msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType1);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType1);
 }
 
 TEST(GoldenRR, SI2_RoundTrip) {
     L3SystemInformationType2 msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType2);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType2);
 }
 
 TEST(GoldenRR, SI2bis_RoundTrip) {
     L3SystemInformationType2bis msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType2bis);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType2bis);
 }
 
 TEST(GoldenRR, SI2ter_RoundTrip) {
     L3SystemInformationType2ter msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType2ter);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType2ter);
 }
 
 TEST(GoldenRR, SI3_RoundTrip) {
     L3SystemInformationType3 msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType3);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType3);
 }
 
 TEST(GoldenRR, SI4_RoundTrip) {
     L3SystemInformationType4 msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType4);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType4);
 }
 
 TEST(GoldenRR, SI5_RoundTrip) {
     L3SystemInformationType5 msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType5);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType5);
 }
 
 TEST(GoldenRR, SI5bis_RoundTrip) {
     L3SystemInformationType5bis msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType5bis);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType5bis);
 }
 
 TEST(GoldenRR, SI5ter_RoundTrip) {
     L3SystemInformationType5ter msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType5ter);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType5ter);
 }
 
 TEST(GoldenRR, SI6_RoundTrip) {
     L3SystemInformationType6 msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType6);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType6);
 }
 
 TEST(GoldenRR, SI7_RoundTrip) {
     L3SystemInformationType7 msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType7);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType7);
 }
 
 TEST(GoldenRR, SI8_RoundTrip) {
     L3SystemInformationType8 msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType8);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType8);
 }
 
 TEST(GoldenRR, SI9_RoundTrip) {
     L3SystemInformationType9 msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType9);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType9);
     EXPECT_EQ(msg.l2BodyLength(), 5u);
 }
 
@@ -1095,21 +1095,21 @@ TEST(GoldenRR, SI13_RoundTrip) {
     L3SystemInformationType13 msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType13);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType13);
 }
 
 TEST(GoldenRR, SI16_RoundTrip) {
     L3SystemInformationType16 msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType16);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType16);
 }
 
 TEST(GoldenRR, SI17_RoundTrip) {
     L3SystemInformationType17 msg;
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->MTI(), L3RRMessage::SystemInformationType17);
+    EXPECT_EQ(parsed->mti(), L3RRMessage::SystemInformationType17);
 }
 
 // =====================================================================
@@ -1219,7 +1219,7 @@ TEST(GoldenRR, ChannelMode_Encoding) {
 TEST(GoldenRR, FrequencyList_Empty) {
     L3FrequencyList fl;
     EXPECT_EQ(fl.lengthV(), 16u);
-    EXPECT_TRUE(fl.ARFCNs().empty());
+    EXPECT_TRUE(fl.arfcns().empty());
     L3Frame frame(Primitive::L3_DATA, 128);
     size_t wp = 0;
     fl.writeV(frame, wp);
@@ -1237,7 +1237,7 @@ TEST(GoldenRR, FrequencyList_SingleARFCN) {
     L3FrequencyList parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
-    EXPECT_EQ(parsed.ARFCNs(), arfcns);
+    EXPECT_EQ(parsed.arfcns(), arfcns);
 }
 
 // =====================================================================
@@ -1354,9 +1354,9 @@ TEST(GoldenRR, CipheringModeSetting_A5_3) {
 
 TEST(GoldenRR, SynchronizationIndication_Encoding) {
     L3SynchronizationIndication si(true, true, 3);
-    EXPECT_TRUE(si.NCI());
-    EXPECT_TRUE(si.ROT());
-    EXPECT_EQ(si.SI(), 3);
+    EXPECT_TRUE(si.nci());
+    EXPECT_TRUE(si.rot());
+    EXPECT_EQ(si.syncIndicator(), 3);
     EXPECT_EQ(si.lengthV(), 1u);
 }
 
@@ -1479,18 +1479,18 @@ TEST(GoldenRR, APDUData_WithData) {
 
 TEST(GoldenRR, CellDescription_RoundTrip) {
     L3CellDescription orig(100, 5, 3);
-    EXPECT_EQ(orig.ARFCN(), 100u);
-    EXPECT_EQ(orig.NCC(), 5u);
-    EXPECT_EQ(orig.BCC(), 3u);
+    EXPECT_EQ(orig.arfcn(), 100u);
+    EXPECT_EQ(orig.ncc(), 5u);
+    EXPECT_EQ(orig.bcc(), 3u);
     L3Frame frame(Primitive::L3_DATA, 32);
     size_t wp = 0;
     orig.writeV(frame, wp);
     L3CellDescription parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
-    EXPECT_EQ(parsed.ARFCN(), orig.ARFCN());
-    EXPECT_EQ(parsed.NCC(), orig.NCC());
-    EXPECT_EQ(parsed.BCC(), orig.BCC());
+    EXPECT_EQ(parsed.arfcn(), orig.arfcn());
+    EXPECT_EQ(parsed.ncc(), orig.ncc());
+    EXPECT_EQ(parsed.bcc(), orig.bcc());
 }
 
 // =====================================================================
@@ -1500,7 +1500,7 @@ TEST(GoldenRR, CellDescription_RoundTrip) {
 
 TEST(GoldenRR, CellIdentity_Encoding) {
     L3CellIdentity ci(0x1234);
-    EXPECT_EQ(ci.ID(), 0x1234u);
+    EXPECT_EQ(ci.id(), 0x1234u);
     EXPECT_EQ(ci.lengthV(), 2u);
     L3Frame frame(Primitive::L3_DATA, 16);
     size_t wp = 0;
@@ -1522,10 +1522,10 @@ TEST(GoldenRR, RequestReference_RoundTrip) {
     L3RequestReference parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
-    EXPECT_EQ(parsed.RA(), orig.RA());
-    EXPECT_EQ(parsed.T1p(), orig.T1p());
-    EXPECT_EQ(parsed.T2(), orig.T2());
-    EXPECT_EQ(parsed.T3(), orig.T3());
+    EXPECT_EQ(parsed.ra(), orig.ra());
+    EXPECT_EQ(parsed.t1p(), orig.t1p());
+    EXPECT_EQ(parsed.t2(), orig.t2());
+    EXPECT_EQ(parsed.t3(), orig.t3());
 }
 
 // =====================================================================
@@ -1537,9 +1537,9 @@ TEST(GoldenRR, ChannelDescription_SDCCH) {
     L3ChannelDescription orig(TDMA_SDCCH, 2, 7, 100);
     EXPECT_TRUE(orig.initialized());
     EXPECT_EQ(orig.typeAndOffset(), TDMA_SDCCH);
-    EXPECT_EQ(orig.TN(), 2u);
-    EXPECT_EQ(orig.TSC(), 7u);
-    EXPECT_EQ(orig.ARFCN(), 100u);
+    EXPECT_EQ(orig.tn(), 2u);
+    EXPECT_EQ(orig.tsc(), 7u);
+    EXPECT_EQ(orig.arfcn(), 100u);
     L3Frame frame(Primitive::L3_DATA, 32);
     size_t wp = 0;
     orig.writeV(frame, wp);
@@ -1547,9 +1547,9 @@ TEST(GoldenRR, ChannelDescription_SDCCH) {
     size_t rp = 0;
     parsed.parseV(frame, rp);
     EXPECT_EQ(parsed.typeAndOffset(), orig.typeAndOffset());
-    EXPECT_EQ(parsed.TN(), orig.TN());
-    EXPECT_EQ(parsed.TSC(), orig.TSC());
-    EXPECT_EQ(parsed.ARFCN(), orig.ARFCN());
+    EXPECT_EQ(parsed.tn(), orig.tn());
+    EXPECT_EQ(parsed.tsc(), orig.tsc());
+    EXPECT_EQ(parsed.arfcn(), orig.arfcn());
 }
 
 // =====================================================================
@@ -1565,9 +1565,9 @@ TEST(GoldenRR, AdditionalChannelDescription_RoundTrip) {
     size_t rp = 0;
     parsed.parseV(frame, rp);
     EXPECT_EQ(parsed.typeAndOffset(), orig.typeAndOffset());
-    EXPECT_EQ(parsed.TN(), orig.TN());
-    EXPECT_EQ(parsed.TSC(), orig.TSC());
-    EXPECT_EQ(parsed.ARFCN(), orig.ARFCN());
+    EXPECT_EQ(parsed.tn(), orig.tn());
+    EXPECT_EQ(parsed.tsc(), orig.tsc());
+    EXPECT_EQ(parsed.arfcn(), orig.arfcn());
 }
 
 // =====================================================================
@@ -1597,8 +1597,8 @@ TEST(GoldenRR, CellChannelDescription_RoundTrip) {
     L3CellChannelDescription parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
-    EXPECT_EQ(parsed.ARFCN(), orig.ARFCN());
-    EXPECT_EQ(parsed.BSIC(), orig.BSIC());
+    EXPECT_EQ(parsed.arfcn(), orig.arfcn());
+    EXPECT_EQ(parsed.bsic(), orig.bsic());
     EXPECT_EQ(parsed.channelSpacing(), orig.channelSpacing());
 }
 
@@ -1646,8 +1646,8 @@ TEST(GoldenRR, RACHControlParameters_RoundTrip) {
     L3RACHControlParameters parsed;
     size_t rp = 0;
     parsed.parseV(frame, rp);
-    EXPECT_EQ(parsed.MaxRetrans(), orig.MaxRetrans());
-    EXPECT_EQ(parsed.TxInteger(), orig.TxInteger());
+    EXPECT_EQ(parsed.maxRetrans(), orig.maxRetrans());
+    EXPECT_EQ(parsed.txInteger(), orig.txInteger());
 }
 
 // =====================================================================
@@ -1791,9 +1791,9 @@ TEST(GoldenRR, ChannelDescription2_FromChannelDescription) {
     L3ChannelDescription orig(TDMA_TCHF, 3, 7, 100);
     L3ChannelDescription2 chd2(orig);
     EXPECT_EQ(chd2.typeAndOffset(), TDMA_TCHF);
-    EXPECT_EQ(chd2.TN(), 3u);
-    EXPECT_EQ(chd2.TSC(), 7u);
-    EXPECT_EQ(chd2.ARFCN(), 100u);
+    EXPECT_EQ(chd2.tn(), 3u);
+    EXPECT_EQ(chd2.tsc(), 7u);
+    EXPECT_EQ(chd2.arfcn(), 100u);
 }
 
 // =====================================================================
@@ -1802,7 +1802,7 @@ TEST(GoldenRR, ChannelDescription2_FromChannelDescription) {
 
 TEST(GoldenRR, ImmediateAssignmentInformation_Default) {
     L3ImmediateAssignmentInformation iai;
-    EXPECT_EQ(iai.PowerOffset(), 0u);
+    EXPECT_EQ(iai.powerOffset(), 0u);
 }
 
 // =====================================================================

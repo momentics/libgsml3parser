@@ -35,19 +35,19 @@ using namespace gsml3parser;
 TEST(L3FrameTest, DefaultConstructor) {
     L3Frame frame;
     EXPECT_EQ(frame.primitive(), Primitive::L3_DATA);
-    EXPECT_EQ(frame.getSAPI(), SAPI::SAPI0);
+    EXPECT_EQ(frame.sapi(), SAPI::SAPI0);
     EXPECT_EQ(frame.length(), 0u);
 }
 
 TEST(L3FrameTest, PrimitiveConstructor) {
     L3Frame frame(Primitive::L3_DATA);
     EXPECT_EQ(frame.primitive(), Primitive::L3_DATA);
-    EXPECT_EQ(frame.getSAPI(), SAPI::SAPI0);
+    EXPECT_EQ(frame.sapi(), SAPI::SAPI0);
 }
 
 TEST(L3FrameTest, SAPI_PrimitiveConstructor) {
     L3Frame frame(SAPI::SAPI3, Primitive::L3_DATA);
-    EXPECT_EQ(frame.getSAPI(), SAPI::SAPI3);
+    EXPECT_EQ(frame.sapi(), SAPI::SAPI3);
     EXPECT_EQ(frame.primitive(), Primitive::L3_DATA);
 }
 
@@ -61,8 +61,8 @@ TEST(L3FrameTest, SizedConstructor) {
 // Reference: GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_1 = '00011001'B = 0x19
 TEST(L3FrameTest, HexConstructor) {
     L3Frame frame(SAPI::SAPI0, "601900");
-    EXPECT_EQ(frame.PD(), L3PD::RadioResource);
-    EXPECT_EQ(frame.MTI(), 0x19);
+    EXPECT_EQ(frame.pd(), L3PD::RadioResource);
+    EXPECT_EQ(frame.mti(), 0x19);
     EXPECT_EQ(frame.length(), 3u);
 }
 
@@ -70,8 +70,8 @@ TEST(L3FrameTest, HexConstructor) {
 // Reference: GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_1 = 0x19
 TEST(L3FrameTest, HexConstructor_Spaces) {
     L3Frame frame(SAPI::SAPI0, "60 19 00");
-    EXPECT_EQ(frame.PD(), L3PD::RadioResource);
-    EXPECT_EQ(frame.MTI(), 0x19);
+    EXPECT_EQ(frame.pd(), L3PD::RadioResource);
+    EXPECT_EQ(frame.mti(), 0x19);
 }
 
 // GSM 04.08 10.2: PD(4 bits) at high nibble, skip(4 bits) at low nibble, MTI(8 bits), body
@@ -85,8 +85,8 @@ TEST(L3FrameTest, BitVectorSourceConstructor) {
     bv.writeField(wp, 0x00, 8);  // body
 
     L3Frame frame(SAPI::SAPI0, bv);
-    EXPECT_EQ(frame.PD(), L3PD::RadioResource);
-    EXPECT_EQ(frame.MTI(), 0x19);
+    EXPECT_EQ(frame.pd(), L3PD::RadioResource);
+    EXPECT_EQ(frame.mti(), 0x19);
 }
 
 // ── PD/MTI/TI Extraction ─────────────────────────────────────────────
@@ -95,7 +95,7 @@ TEST(L3FrameTest, BitVectorSourceConstructor) {
 // Reference: GSMCommon.h L3RadioResourcePD=0x06
 TEST(L3FrameTest, PD_RR) {
     L3Frame frame(SAPI::SAPI0, "601900");
-    EXPECT_EQ(frame.PD(), L3PD::RadioResource);
+    EXPECT_EQ(frame.pd(), L3PD::RadioResource);
 }
 
 // GSM 04.08 10.2: PD=0x05(MobilityManagement) in high nibble, skip=0 → byte 0 = 0x50
@@ -103,28 +103,28 @@ TEST(L3FrameTest, PD_RR) {
 // Reference: GSMCommon.h L3MobilityManagementPD=0x05
 TEST(L3FrameTest, PD_MM) {
     L3Frame frame(SAPI::SAPI0, "5084");
-    EXPECT_EQ(frame.PD(), L3PD::MobilityManagement);
+    EXPECT_EQ(frame.pd(), L3PD::MobilityManagement);
 }
 
 // GSM 04.08 10.2: PD=0x03(CallControl) in high nibble, TIO=0,TIF=0 in low nibble → byte 0 = 0x30
 // Reference: GSMCommon.h L3CallControlPD=0x03
 TEST(L3FrameTest, PD_CC) {
     L3Frame frame(SAPI::SAPI0, "3000");
-    EXPECT_EQ(frame.PD(), L3PD::CallControl);
+    EXPECT_EQ(frame.pd(), L3PD::CallControl);
 }
 
 // GSM 04.08 10.2: PD=0x0B(NonCallSS) in high nibble, TIO=0,TIF=0 in low nibble → byte 0 = 0xB0
 // Reference: GSMCommon.h L3NonCallSSPD=0x0B
 TEST(L3FrameTest, PD_SS) {
     L3Frame frame(SAPI::SAPI0, "B000");
-    EXPECT_EQ(frame.PD(), L3PD::NonCallSS);
+    EXPECT_EQ(frame.pd(), L3PD::NonCallSS);
 }
 
 // GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x19(SystemInformationType1)
 // Reference: GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_1 = '00011001'B
 TEST(L3FrameTest, MTI_Extraction) {
     L3Frame frame(SAPI::SAPI0, "601900");
-    EXPECT_EQ(frame.MTI(), 0x19);
+    EXPECT_EQ(frame.mti(), 0x19);
 }
 
 // GSM 04.08 10.2: CC L3 header Byte 0 = PD(4,high) | TIO(3)+TIF(1,low)
@@ -132,8 +132,8 @@ TEST(L3FrameTest, MTI_Extraction) {
 // Reference: GSMCommon.h L3CallControlPD=0x03, L3_Templates.ttcn c_TIF_ORIG
 TEST(L3FrameTest, TI_Extraction_CC) {
     L3Frame frame(SAPI::SAPI0, "3000");
-    EXPECT_EQ(frame.PD(), L3PD::CallControl);
-    EXPECT_EQ(frame.TI(), 0u);
+    EXPECT_EQ(frame.pd(), L3PD::CallControl);
+    EXPECT_EQ(frame.ti(), 0u);
 }
 
 // ── H/L Bit Writing (Rest Octets) ────────────────────────────────────
@@ -215,8 +215,8 @@ TEST(L3FrameTest, HLCrossOctet) {
 
 TEST(L3FrameTest, L2Length) {
     L3Frame frame(Primitive::L3_DATA, 64);
-    frame.L2Length(10);
-    EXPECT_EQ(frame.L2Length(), 10u);
+    frame.l2Length(10);
+    EXPECT_EQ(frame.l2Length(), 10u);
 }
 
 TEST(L3FrameTest, Timestamp) {
@@ -240,38 +240,38 @@ TEST(L3FrameTest, IsData) {
 TEST(L3FrameTest, CopyConstructor) {
     // Reference format: PD=0x06(RR) high nibble, skip=0, MTI=0x19(SI1)
     L3Frame orig(SAPI::SAPI3, "601900");
-    orig.L2Length(20);
+    orig.l2Length(20);
     orig.setTimestamp(100.0);
 
     L3Frame copy(orig);
-    EXPECT_EQ(copy.PD(), orig.PD());
-    EXPECT_EQ(copy.MTI(), orig.MTI());
-    EXPECT_EQ(copy.getSAPI(), orig.getSAPI());
-    EXPECT_EQ(copy.L2Length(), orig.L2Length());
+    EXPECT_EQ(copy.pd(), orig.pd());
+    EXPECT_EQ(copy.mti(), orig.mti());
+    EXPECT_EQ(copy.sapi(), orig.sapi());
+    EXPECT_EQ(copy.l2Length(), orig.l2Length());
     EXPECT_EQ(copy.timestamp(), orig.timestamp());
 }
 
 TEST(L3FrameTest, AssignmentOperator) {
     // Reference format: PD=0x05(MM) high nibble, skip=0, MTI=0x21(CMServiceAccept)
     L3Frame orig(SAPI::SAPI0, "5021");
-    orig.L2Length(15);
+    orig.l2Length(15);
 
     L3Frame assigned;
     assigned = orig;
-    EXPECT_EQ(assigned.PD(), orig.PD());
-    EXPECT_EQ(assigned.MTI(), orig.MTI());
-    EXPECT_EQ(assigned.L2Length(), orig.L2Length());
+    EXPECT_EQ(assigned.pd(), orig.pd());
+    EXPECT_EQ(assigned.mti(), orig.mti());
+    EXPECT_EQ(assigned.l2Length(), orig.l2Length());
 }
 
 // ── SAPI Setting ──────────────────────────────────────────────────────
 
 TEST(L3FrameTest, SetSAPI) {
     L3Frame frame;
-    frame.setSAPI(SAPI::SAPI3);
-    EXPECT_EQ(frame.getSAPI(), SAPI::SAPI3);
+    frame.sapi(SAPI::SAPI3);
+    EXPECT_EQ(frame.sapi(), SAPI::SAPI3);
 
-    frame.setSAPI(SAPI::SAPI0_Sacch);
-    EXPECT_EQ(frame.getSAPI(), SAPI::SAPI0_Sacch);
+    frame.sapi(SAPI::SAPI0_Sacch);
+    EXPECT_EQ(frame.sapi(), SAPI::SAPI0_Sacch);
 }
 
 // ── text() output ─────────────────────────────────────────────────────

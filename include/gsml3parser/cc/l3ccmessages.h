@@ -67,9 +67,9 @@ public:
 
     size_t fullBodyLength() const override { return l2BodyLength(); }
     void write(L3Frame& dest) const override;
-    L3PD PD() const override { return L3PD::CallControl; }
-    unsigned TI() const override { return mTI; }
-    void TI(unsigned wTI) { mTI = wTI; }
+    L3PD pd() const override { return L3PD::CallControl; }
+    unsigned ti() const override { return mTI; }
+    void ti(unsigned wTI) { mTI = wTI; }
     void text(std::ostream& os) const override;
 };
 
@@ -98,7 +98,7 @@ public:
     TypeOfNumber typeOfNumber() const { return mCalledPartyBCDNumber.type(); }
     NumberingPlan numberingPlan() const { return mCalledPartyBCDNumber.plan(); }
 
-    int MTI() const override { return Setup; }
+    int mti() const override { return Setup; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
@@ -110,7 +110,7 @@ public:
 class L3EmergencySetup : public L3Setup {
 public:
     explicit L3EmergencySetup(unsigned wTI = 7) : L3Setup(wTI) {}
-    int MTI() const override { return EmergencySetup; }
+    int mti() const override { return EmergencySetup; }
     size_t l2BodyLength() const override { return 0; }
 };
 
@@ -123,7 +123,7 @@ private:
     L3ProgressIndicator mProgress;
 public:
     explicit L3CallProceeding(unsigned wTI = 7) : L3CCMessage(wTI), mHaveProgress(false) {}
-    int MTI() const override { return CallProceeding; }
+    int mti() const override { return CallProceeding; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
@@ -140,7 +140,7 @@ private:
     L3ProgressIndicator mProgress;
 public:
     explicit L3Alerting(unsigned wTI = 7) : L3CCMessage(wTI), mHaveProgress(false) {}
-    int MTI() const override { return Alerting; }
+    int mti() const override { return Alerting; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
@@ -157,7 +157,7 @@ private:
     L3ProgressIndicator mProgress;
 public:
     explicit L3Connect(unsigned wTI = 7) : L3CCMessage(wTI), mHaveProgress(false) {}
-    int MTI() const override { return Connect; }
+    int mti() const override { return Connect; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
@@ -171,7 +171,7 @@ public:
 class L3ConnectAcknowledge : public L3CCMessage {
 public:
     explicit L3ConnectAcknowledge(unsigned wTI = 7) : L3CCMessage(wTI) {}
-    int MTI() const override { return ConnectAcknowledge; }
+    int mti() const override { return ConnectAcknowledge; }
     size_t l2BodyLength() const override { return 0; }
     void writeBody(L3Frame&, size_t&) const override {}
     void parseBody(const L3Frame&, size_t&) override {}
@@ -186,7 +186,7 @@ private:
     L3CauseElement mCause;
 public:
     explicit L3CallConfirmed(unsigned wTI = 7) : L3CCMessage(wTI), mHaveCause(false) {}
-    int MTI() const override { return CallConfirmed; }
+    int mti() const override { return CallConfirmed; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     size_t l2BodyLength() const override;
@@ -208,7 +208,7 @@ public:
 
     CCCause cause() const { return mCause; }
     CCCauseLocation location() const { return mLocation; }
-    int MTI() const override { return Disconnect; }
+    int mti() const override { return Disconnect; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override { return 4; }
@@ -228,7 +228,7 @@ public:
 
     bool haveCause() const { return mHaveCause; }
     CCCause cause() const { return mCause; }
-    int MTI() const override { return Release; }
+    int mti() const override { return Release; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
@@ -245,7 +245,7 @@ public:
     explicit L3ReleaseComplete(unsigned wTI = 7) : L3CCMessage(wTI), mHaveCause(false) {}
     L3ReleaseComplete(unsigned wTI, CCCause cause) : L3CCMessage(wTI), mHaveCause(true), mCause(cause) {}
 
-    int MTI() const override { return ReleaseComplete; }
+    int mti() const override { return ReleaseComplete; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
@@ -265,7 +265,7 @@ public:
 
     CCCause cause() const { return mCause; }
     unsigned callState() const { return mCallState; }
-    int MTI() const override { return CCStatus; }
+    int mti() const override { return CCStatus; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override { return 4; }
@@ -280,7 +280,7 @@ private:
 public:
     explicit L3StartDTMF(unsigned wTI = 7) : L3CCMessage(wTI), mKey(0) {}
     char key() const { return mKey; }
-    int MTI() const override { return StartDTMF; }
+    int mti() const override { return StartDTMF; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     size_t l2BodyLength() const override { return 1; }
@@ -292,7 +292,7 @@ private:
     char mKey;
 public:
     L3StartDTMFAcknowledge(unsigned wTI, char key) : L3CCMessage(wTI), mKey(key) {}
-    int MTI() const override { return StartDTMFAcknowledge; }
+    int mti() const override { return StartDTMFAcknowledge; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     size_t l2BodyLength() const override { return 1; }
@@ -305,7 +305,7 @@ private:
     CCCause mCause;
 public:
     L3StartDTMFReject(unsigned wTI, CCCause cause) : L3CCMessage(wTI), mCause(cause) {}
-    int MTI() const override { return StartDTMFReject; }
+    int mti() const override { return StartDTMFReject; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     size_t l2BodyLength() const override { return 3; }
@@ -315,7 +315,7 @@ public:
 class L3StopDTMF : public L3CCMessage {
 public:
     explicit L3StopDTMF(unsigned wTI = 7) : L3CCMessage(wTI) {}
-    int MTI() const override { return StopDTMF; }
+    int mti() const override { return StopDTMF; }
     void parseBody(const L3Frame&, size_t&) override {}
     void writeBody(L3Frame&, size_t&) const override {}
     size_t l2BodyLength() const override { return 0; }
@@ -325,7 +325,7 @@ public:
 class L3StopDTMFAcknowledge : public L3CCMessage {
 public:
     explicit L3StopDTMFAcknowledge(unsigned wTI) : L3CCMessage(wTI) {}
-    int MTI() const override { return StopDTMFAcknowledge; }
+    int mti() const override { return StopDTMFAcknowledge; }
     void writeBody(L3Frame&, size_t&) const override {}
     void parseBody(const L3Frame&, size_t&) override {}
     size_t l2BodyLength() const override { return 0; }
@@ -337,7 +337,7 @@ public:
 class L3Hold : public L3CCMessage {
 public:
     explicit L3Hold(unsigned wTI = 7) : L3CCMessage(wTI) {}
-    int MTI() const override { return Hold; }
+    int mti() const override { return Hold; }
     void writeBody(L3Frame&, size_t&) const override {}
     void parseBody(const L3Frame&, size_t&) override {}
     size_t l2BodyLength() const override { return 0; }
@@ -349,7 +349,7 @@ private:
     CCCause mCause;
 public:
     L3HoldReject(unsigned wTI, CCCause cause) : L3CCMessage(wTI), mCause(cause) {}
-    int MTI() const override { return HoldReject; }
+    int mti() const override { return HoldReject; }
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     size_t l2BodyLength() const override { return 3; }
@@ -363,7 +363,7 @@ private:
     unsigned mProgress;
 public:
     explicit L3Progress(unsigned wTI) : L3CCMessage(wTI), mProgress(0) {}
-    int MTI() const override { return Progress; }
+    int mti() const override { return Progress; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
