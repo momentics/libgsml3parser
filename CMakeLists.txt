@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 project(gsml3parser
-    VERSION 0.4.0
+    VERSION 0.5.0
     DESCRIPTION "GSM L3 Signalling Message Parser — standalone C++20 library"
     LANGUAGES CXX
     HOMEPAGE_URL "https://github.com/momentics/libgsml3parser"
