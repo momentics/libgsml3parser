@@ -430,26 +430,26 @@ void L3MMStatus::text(std::ostream& os) const {
 
 // ── Factory ─────────────────────────────────────────────────────────────
 
-L3MMMessage* L3MMFactory(int mti) {
+std::unique_ptr<L3MMMessage> L3MMFactory(int mti) {
     switch (mti) {
-        case L3MMMessage::IMSIDetachIndication:     return new L3IMSIDetachIndication();
-        case L3MMMessage::CMServiceAccept:          return new L3CMServiceAccept();
-        case L3MMMessage::CMServiceAbort:           return new L3CMServiceAbort();
-        case L3MMMessage::CMServiceReject:          return new L3CMServiceReject(MMRejectCause::Zero);
-        case L3MMMessage::CMServiceRequest:         return new L3CMServiceRequest();
-        case L3MMMessage::CMReestablishmentRequest: return new L3CMReestablishmentRequest();
-        case L3MMMessage::IdentityResponse:         return new L3IdentityResponse();
-        case L3MMMessage::IdentityRequest:          return new L3IdentityRequest(MobileIDType::NoID);
-        case L3MMMessage::MMInformation:            return new L3MMInformation();
-        case L3MMMessage::LocationUpdatingAccept:   return new L3LocationUpdatingAccept(L3LocationAreaIdentity());
-        case L3MMMessage::LocationUpdatingReject:   return new L3LocationUpdatingReject(MMRejectCause::Zero);
-        case L3MMMessage::LocationUpdatingRequest:  return new L3LocationUpdatingRequest();
-        case L3MMMessage::TMSIReallocationCommand:  return new L3TMSIReallocationCommand(L3LocationAreaIdentity(), L3MobileIdentity());
-        case L3MMMessage::TMSIReallocationComplete: return new L3TMSIReallocationComplete();
-        case L3MMMessage::MMStatus:                 return new L3MMStatus();
-        case L3MMMessage::AuthenticationRequest:    return new L3AuthenticationRequest(0, {});
-        case L3MMMessage::AuthenticationResponse:   return new L3AuthenticationResponse();
-        case L3MMMessage::AuthenticationReject:     return new L3AuthenticationReject();
+        case L3MMMessage::IMSIDetachIndication:     return std::make_unique<L3IMSIDetachIndication>();
+        case L3MMMessage::CMServiceAccept:          return std::make_unique<L3CMServiceAccept>();
+        case L3MMMessage::CMServiceAbort:           return std::make_unique<L3CMServiceAbort>();
+        case L3MMMessage::CMServiceReject:          return std::make_unique<L3CMServiceReject>(MMRejectCause::Zero);
+        case L3MMMessage::CMServiceRequest:         return std::make_unique<L3CMServiceRequest>();
+        case L3MMMessage::CMReestablishmentRequest: return std::make_unique<L3CMReestablishmentRequest>();
+        case L3MMMessage::IdentityResponse:         return std::make_unique<L3IdentityResponse>();
+        case L3MMMessage::IdentityRequest:          return std::make_unique<L3IdentityRequest>(MobileIDType::NoID);
+        case L3MMMessage::MMInformation:            return std::make_unique<L3MMInformation>();
+        case L3MMMessage::LocationUpdatingAccept:   return std::make_unique<L3LocationUpdatingAccept>(L3LocationAreaIdentity());
+        case L3MMMessage::LocationUpdatingReject:   return std::make_unique<L3LocationUpdatingReject>(MMRejectCause::Zero);
+        case L3MMMessage::LocationUpdatingRequest:  return std::make_unique<L3LocationUpdatingRequest>();
+        case L3MMMessage::TMSIReallocationCommand:  return std::make_unique<L3TMSIReallocationCommand>(L3LocationAreaIdentity(), L3MobileIdentity());
+        case L3MMMessage::TMSIReallocationComplete: return std::make_unique<L3TMSIReallocationComplete>();
+        case L3MMMessage::MMStatus:                 return std::make_unique<L3MMStatus>();
+        case L3MMMessage::AuthenticationRequest:    return std::make_unique<L3AuthenticationRequest>(0, std::vector<uint8_t>());
+        case L3MMMessage::AuthenticationResponse:   return std::make_unique<L3AuthenticationResponse>();
+        case L3MMMessage::AuthenticationReject:     return std::make_unique<L3AuthenticationReject>();
         default:                                    return nullptr;
     }
 }
@@ -461,7 +461,7 @@ std::unique_ptr<L3MMMessage> parseL3MM(const L3Frame& source) {
 
     // MTI extraction already handles the don't-care bit in L3Frame::MTI()
     unsigned mti = source.MTI();
-    L3MMMessage* msg = L3MMFactory(static_cast<L3MMMessage::MessageType>(mti));
+    auto msg = L3MMFactory(static_cast<L3MMMessage::MessageType>(mti));
     if (!msg) {
         GSML3PARSER_LOG_WARN("Unknown MM MTI: 0x%02x", mti);
         return nullptr;
@@ -470,10 +470,9 @@ std::unique_ptr<L3MMMessage> parseL3MM(const L3Frame& source) {
         msg->parse(source);
     } catch (const ParseError&) {
         GSML3PARSER_LOG_WARN("MM parse failed for MTI=0x%02x", mti);
-        delete msg;
         return nullptr;
     }
-    return std::unique_ptr<L3MMMessage>(msg);
+    return msg;
 }
 
 } // namespace gsml3parser

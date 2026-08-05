@@ -22,6 +22,7 @@
 #ifndef GSML3PARSER_RR_L3RRMESSAGES_H
 #define GSML3PARSER_RR_L3RRMESSAGES_H
 
+#include <array>
 #include <cstdint>
 #include <memory>
 #include <ostream>
@@ -115,7 +116,7 @@ public:
 class L3PagingRequestType1 : public L3RRMessageNRO {
 private:
     std::vector<L3MobileIdentity> mMobileIDs;
-    ChannelType mChannelsNeeded[2];
+    std::array<ChannelType, 2> mChannelsNeeded;
 public:
     L3PagingRequestType1();
     L3PagingRequestType1(const L3MobileIdentity& wId, ChannelType wType);
@@ -554,7 +555,7 @@ public:
 class L3PagingRequestType2 : public L3RRMessageNRO {
 private:
     std::vector<uint32_t> mTMSIs;
-    ChannelType mChannelsNeeded[2];
+    std::array<ChannelType, 2> mChannelsNeeded;
 public:
     L3PagingRequestType2();
     L3PagingRequestType2(const L3MobileIdentity& wId, ChannelType wType);
@@ -572,7 +573,7 @@ public:
 class L3PagingRequestType3 : public L3RRMessageNRO {
 private:
     std::vector<uint32_t> mTMSIs;
-    ChannelType mChannelsNeeded[2];
+    std::array<ChannelType, 2> mChannelsNeeded;
 public:
     L3PagingRequestType3();
     L3PagingRequestType3(const L3MobileIdentity& wId, ChannelType wType);

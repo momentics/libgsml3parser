@@ -52,7 +52,11 @@ std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len) {
     return parseL3(data, len, defaultContext);
 }
 
-std::unique_ptr<L3Message> parseL3Hex(const std::string& hex) {
+std::unique_ptr<L3Message> parseL3(std::span<const uint8_t> data) {
+    return parseL3(data, defaultContext);
+}
+
+std::unique_ptr<L3Message> parseL3Hex(std::string_view hex) {
     return parseL3Hex(hex, defaultContext);
 }
 
@@ -68,22 +72,22 @@ static std::unique_ptr<L3Message> parseL3WithPDHandler(
     switch (pd) {
         case L3PD::RadioResource: {
             auto msg = parseL3RR(frame);
-            if (msg) return std::unique_ptr<L3Message>(msg.release());
+            if (msg) return static_cast<std::unique_ptr<L3Message>>(std::move(msg));
             break;
         }
         case L3PD::MobilityManagement: {
             auto msg = parseL3MM(frame);
-            if (msg) return std::unique_ptr<L3Message>(msg.release());
+            if (msg) return static_cast<std::unique_ptr<L3Message>>(std::move(msg));
             break;
         }
         case L3PD::CallControl: {
             auto msg = parseL3CC(frame);
-            if (msg) return std::unique_ptr<L3Message>(msg.release());
+            if (msg) return static_cast<std::unique_ptr<L3Message>>(std::move(msg));
             break;
         }
         case L3PD::NonCallSS: {
             auto msg = parseL3SupServ(frame);
-            if (msg) return std::unique_ptr<L3Message>(msg.release());
+            if (msg) return static_cast<std::unique_ptr<L3Message>>(std::move(msg));
             break;
         }
         default:
@@ -107,38 +111,42 @@ std::unique_ptr<L3Message> parseL3(const L3Frame& frame, const ParserContext& ct
 }
 
 std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len, const ParserContext& ctx) {
-    if (!data || len == 0) return nullptr;
+    return parseL3(std::span<const uint8_t>(data, len), ctx);
+}
+
+std::unique_ptr<L3Message> parseL3(std::span<const uint8_t> data, const ParserContext& ctx) {
+    if (data.empty()) return nullptr;
 
     // Handle short RR messages that don't have PD/MTI headers (GSM 04.08 9.1)
     // These are sent on RACH without standard L3 header
     unsigned firstNibble = (data[0] >> 4) & 0x0F;
 
-    if (len == 1 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
+    if (data.size() == 1 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
         // Channel Request: single byte = RequestReference(8)
         auto msg = std::make_unique<L3ChannelRequest>(data[0]);
         return std::unique_ptr<L3Message>(static_cast<L3Message*>(msg.release()));
     }
-    if (len == 4 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
+    if (data.size() == 4 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
         // Handover Access: HO number(8), HO ref(8), TA(8), spare(8)
         auto msg = std::make_unique<L3HandoverAccess>(data[0]);
         return std::unique_ptr<L3Message>(static_cast<L3Message*>(msg.release()));
     }
-    if (len == 7 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
+    if (data.size() == 7 && firstNibble != 6 && firstNibble != 5 && firstNibble != 3 && firstNibble != 0x0B) {
         // Synchronization Channel Information: CI(16) + LAI(40)
-        L3Frame frame(Primitive::L3_DATA, len * 8);
-        std::memcpy(frame.data(), data, len);
+        L3Frame frame(Primitive::L3_DATA, static_cast<size_t>(data.size()) * 8);
+        std::memcpy(frame.data(), data.data(), data.size());
         auto sch = std::make_unique<L3SynchronizationChannelInformation>();
         size_t rp = 0;
         sch->parse(frame);
         return std::unique_ptr<L3Message>(static_cast<L3Message*>(sch.release()));
     }
 
-    L3Frame frame(Primitive::L3_DATA, len * 8);
-    std::memcpy(frame.data(), data, len);
+    L3Frame frame(Primitive::L3_DATA, static_cast<size_t>(data.size()) * 8);
+    std::memcpy(frame.data(), data.data(), data.size());
     return parseL3WithPDHandler(frame, ctx);
 }
 
-std::unique_ptr<L3Message> parseL3Hex(const std::string& hex, const ParserContext& ctx) {
+std::unique_ptr<L3Message> parseL3Hex(std::string_view hex, const ParserContext& ctx) {
     if (hex.empty()) return nullptr;
 
     // Remove whitespace
@@ -163,7 +171,7 @@ std::unique_ptr<L3Message> parseL3Hex(const std::string& hex, const ParserContex
         }
     }
 
-    return parseL3(bytes.data(), bytes.size(), ctx);
+    return parseL3(std::span<const uint8_t>(bytes), ctx);
 }
 
 // ── Serializers (stateless) ─────────────────────────────────────────────

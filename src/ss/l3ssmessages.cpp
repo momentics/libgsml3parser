@@ -148,11 +148,11 @@ void L3SupServReleaseCompleteMessage::text(std::ostream& os) const {
 
 // ── Factory ─────────────────────────────────────────────────────────────
 
-L3SupServMessage* L3SupServFactory(int mti) {
+std::unique_ptr<L3SupServMessage> L3SupServFactory(int mti) {
     switch (mti) {
-        case L3SupServMessage::Facility:      return new L3SupServFacilityMessage();
-        case L3SupServMessage::Register:      return new L3SupServRegisterMessage();
-        case L3SupServMessage::ReleaseComplete: return new L3SupServReleaseCompleteMessage();
+        case L3SupServMessage::Facility:      return std::make_unique<L3SupServFacilityMessage>();
+        case L3SupServMessage::Register:      return std::make_unique<L3SupServRegisterMessage>();
+        case L3SupServMessage::ReleaseComplete: return std::make_unique<L3SupServReleaseCompleteMessage>();
         default:                              return nullptr;
     }
 }
@@ -164,7 +164,7 @@ std::unique_ptr<L3SupServMessage> parseL3SupServ(const L3Frame& source) {
 
     // Mask out bit 6 (0xbf), see GSM 04.08 Table 10.5
     unsigned mti = source.MTI() & 0xbf;
-    L3SupServMessage* msg = L3SupServFactory(static_cast<L3SupServMessage::MessageType>(mti));
+    auto msg = L3SupServFactory(static_cast<L3SupServMessage::MessageType>(mti));
     if (!msg) {
         GSML3PARSER_LOG_WARN("Unknown SS MTI: 0x%02x", mti);
         return nullptr;
@@ -174,10 +174,9 @@ std::unique_ptr<L3SupServMessage> parseL3SupServ(const L3Frame& source) {
         msg->parse(source);
     } catch (const ParseError&) {
         GSML3PARSER_LOG_WARN("SS parse failed for MTI=0x%02x", mti);
-        delete msg;
         return nullptr;
     }
-    return std::unique_ptr<L3SupServMessage>(msg);
+    return msg;
 }
 
 } // namespace gsml3parser

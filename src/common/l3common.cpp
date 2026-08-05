@@ -113,25 +113,28 @@ void L3LocationAreaIdentity::text(std::ostream& os) const {
 // ── L3MobileIdentity ────────────────────────────────────────────────────
 
 L3MobileIdentity::L3MobileIdentity() : mType(MobileIDType::NoID), mTMSI(0) {
-    mDigits[0] = '\0';
+    mDigits.fill('\0');
 }
 
 L3MobileIdentity::L3MobileIdentity(uint32_t wTMSI)
     : mType(MobileIDType::TMSI), mTMSI(wTMSI)
 {
-    mDigits[0] = '\0';
+    mDigits.fill('\0');
 }
 
 L3MobileIdentity::L3MobileIdentity(const char* wDigits)
     : mType(MobileIDType::IMSI), mTMSI(0)
 {
-    std::strncpy(mDigits, wDigits, sizeof(mDigits) - 1);
-    mDigits[sizeof(mDigits) - 1] = '\0';
+    mDigits.fill('\0');
+    size_t maxLen = mDigits.size() - 1;
+    size_t len = std::strlen(wDigits);
+    if (len > maxLen) len = maxLen;
+    for (size_t i = 0; i < len; ++i) mDigits[i] = wDigits[i];
 }
 
 const char* L3MobileIdentity::digits() const {
     if (mType == MobileIDType::TMSI) return nullptr;
-    return mDigits;
+    return mDigits.data();
 }
 
 uint32_t L3MobileIdentity::TMSI() const {
@@ -141,21 +144,21 @@ uint32_t L3MobileIdentity::TMSI() const {
 bool L3MobileIdentity::operator==(const L3MobileIdentity& other) const {
     if (mType != other.mType) return false;
     if (mType == MobileIDType::TMSI) return mTMSI == other.mTMSI;
-    return std::strcmp(mDigits, other.mDigits) == 0;
+    return std::strcmp(mDigits.data(), other.mDigits.data()) == 0;
 }
 
 bool L3MobileIdentity::operator<(const L3MobileIdentity& other) const {
     if (mType < other.mType) return true;
     if (mType > other.mType) return false;
     if (mType == MobileIDType::TMSI) return mTMSI < other.mTMSI;
-    return std::strcmp(mDigits, other.mDigits) < 0;
+    return std::strcmp(mDigits.data(), other.mDigits.data()) < 0;
 }
 
 size_t L3MobileIdentity::lengthV() const {
     if (mType == MobileIDType::NoID) return 1;
     if (mType == MobileIDType::TMSI) return 5;
     // BCD: 1 byte (spare + type + oe) + ceil(nDigits/2) bytes for all digits
-    size_t nDigits = std::strlen(mDigits);
+    size_t nDigits = std::strlen(mDigits.data());
     return 1 + (nDigits + 1) / 2;
 }
 
@@ -174,7 +177,7 @@ void L3MobileIdentity::writeV(L3Frame& dest, size_t& wp) const {
         dest.writeField(wp, mTMSI, 32);
         return;
     }
-    size_t nDigits = std::strlen(mDigits);
+    size_t nDigits = std::strlen(mDigits.data());
     if (nDigits == 0) {
         dest.writeField(wp, 0, 4);     // spare
         dest.writeField(wp, 0, 3);     // type: NoID
@@ -214,14 +217,14 @@ void L3MobileIdentity::parseV(const L3Frame& src, size_t& rp, size_t expectedLen
         case MobileIDType::IMEI:
         case MobileIDType::IMEISV: {
             int numDigits = 0;
-            while (rp < endCount && numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
+            while (rp < endCount && numDigits < static_cast<int>(mDigits.size()) - 1) {
                 unsigned highNibble = src.readField(rp, 4);  // digit[i+1] or filler
                 if (rp >= endCount) break;
                 unsigned lowNibble = src.readField(rp, 4);   // digit[i]
-                if (lowNibble != 0x0F && numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
+                if (lowNibble != 0x0F && numDigits < static_cast<int>(mDigits.size()) - 1) {
                     mDigits[numDigits++] = static_cast<char>(lowNibble + '0');
                 }
-                if (highNibble != 0x0F && numDigits < static_cast<int>(sizeof(mDigits)) - 1) {
+                if (highNibble != 0x0F && numDigits < static_cast<int>(mDigits.size()) - 1) {
                     mDigits[numDigits++] = static_cast<char>(highNibble + '0');
                 }
             }
@@ -241,13 +244,13 @@ void L3MobileIdentity::text(std::ostream& os) const {
             os << "TMSI=" << std::hex << mTMSI;
             break;
         case MobileIDType::IMSI:
-            os << "IMSI=" << mDigits;
+            os << "IMSI=" << mDigits.data();
             break;
         case MobileIDType::IMEI:
-            os << "IMEI=" << mDigits;
+            os << "IMEI=" << mDigits.data();
             break;
         case MobileIDType::IMEISV:
-            os << "IMEISV=" << mDigits;
+            os << "IMEISV=" << mDigits.data();
             break;
         default:
             os << "NoID";
@@ -607,15 +610,6 @@ void L3ControlChannelDescription::validate() {
         default:
             mCCCH_CONF = 1;
             break;
-    }
-}
-
-unsigned countBeaconTimeslots(int ccch_conf) {
-    switch (ccch_conf) {
-        case 2: return 2;
-        case 4: return 3;
-        case 6: return 4;
-        default: return 1;
     }
 }
 
@@ -1367,11 +1361,10 @@ L3MeasurementResults::L3MeasurementResults()
     : mBA_USED(false), mDTX_USED(false), mMEAS_VALID(false),
       mRXLEV_FULL_SERVING_CELL(0), mRXLEV_SUB_SERVING_CELL(0),
       mRXQUAL_FULL_SERVING_CELL(0), mRXQUAL_SUB_SERVING_CELL(0),
-      mNO_NCELL(0) {
-    memset(mRXLEV_NCELL, 0, sizeof(mRXLEV_NCELL));
-    memset(mBCCH_FREQ_NCELL, 0, sizeof(mBCCH_FREQ_NCELL));
-    memset(mBSIC_NCELL, 0, sizeof(mBSIC_NCELL));
-}
+      mNO_NCELL(0),
+      mRXLEV_NCELL{0, 0, 0, 0, 0, 0},
+      mBCCH_FREQ_NCELL{0, 0, 0, 0, 0, 0},
+      mBSIC_NCELL{0, 0, 0, 0, 0, 0} {}
 
 int L3MeasurementResults::decodeLevToDBm(unsigned lev) const {
     if (lev == 0) return -110;

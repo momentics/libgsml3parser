@@ -120,7 +120,7 @@ size_t L3PagingRequestType1::l2BodyLength() const {
     return len;
 }
 
-static unsigned channelNeededCode(ChannelType wType) {
+constexpr unsigned channelNeededCode(ChannelType wType) {
     switch (wType) {
         case ChannelType::AnyDCCHType: return 0;
         case ChannelType::SDCCHType: return 1;
@@ -130,7 +130,7 @@ static unsigned channelNeededCode(ChannelType wType) {
     }
 }
 
-static ChannelType channelNeededType(unsigned code) {
+constexpr ChannelType channelNeededType(unsigned code) {
     switch (code) {
         case 0: return ChannelType::AnyDCCHType;
         case 1: return ChannelType::SDCCHType;
@@ -1471,53 +1471,53 @@ void L3HandoverAccess::text(std::ostream& os) const {
 
 // ── Factory ─────────────────────────────────────────────────────────────
 
-L3RRMessage* L3RRFactory(int mti) {
+std::unique_ptr<L3RRMessage> L3RRFactory(int mti) {
     switch (mti) {
-        case L3RRMessage::PagingRequestType1:          return new L3PagingRequestType1();
-        case L3RRMessage::PagingRequestType2:          return new L3PagingRequestType2();
-        case L3RRMessage::PagingRequestType3:          return new L3PagingRequestType3();
-        case L3RRMessage::PagingResponse:              return new L3PagingResponse();
-        case L3RRMessage::SystemInformationType1:      return new L3SystemInformationType1();
-        case L3RRMessage::SystemInformationType2:      return new L3SystemInformationType2();
-        case L3RRMessage::SystemInformationType2bis:   return new L3SystemInformationType2bis();
-        case L3RRMessage::SystemInformationType2ter:   return new L3SystemInformationType2ter();
-        case L3RRMessage::SystemInformationType3:      return new L3SystemInformationType3();
-        case L3RRMessage::SystemInformationType4:      return new L3SystemInformationType4();
-        case L3RRMessage::SystemInformationType5:      return new L3SystemInformationType5();
-        case L3RRMessage::SystemInformationType5bis:   return new L3SystemInformationType5bis();
-        case L3RRMessage::SystemInformationType5ter:   return new L3SystemInformationType5ter();
-        case L3RRMessage::SystemInformationType6:      return new L3SystemInformationType6();
-        case L3RRMessage::SystemInformationType7:      return new L3SystemInformationType7();
-        case L3RRMessage::SystemInformationType8:      return new L3SystemInformationType8();
-        case L3RRMessage::SystemInformationType9:      return new L3SystemInformationType9();
-        case L3RRMessage::SystemInformationType13:     return new L3SystemInformationType13();
-        case L3RRMessage::SystemInformationType16:     return new L3SystemInformationType16();
-        case L3RRMessage::SystemInformationType17:     return new L3SystemInformationType17();
-        case L3RRMessage::ChannelRelease:              return new L3ChannelRelease();
-        case L3RRMessage::ImmediateAssignment:         return new L3ImmediateAssignment();
-        case L3RRMessage::ImmediateAssignmentExtended: return new L3ImmediateAssignmentExtended();
-        case L3RRMessage::ImmediateAssignmentReject:   return new L3ImmediateAssignmentReject();
-        case L3RRMessage::AdditionalAssignment:        return new L3AdditionalAssignment();
-        case L3RRMessage::PhysicalInformation:         return new L3PhysicalInformation();
-        case L3RRMessage::HandoverCommand:             return new L3HandoverCommand();
-        case L3RRMessage::HandoverComplete:            return new L3HandoverComplete();
-        case L3RRMessage::HandoverFailure:             return new L3HandoverFailure();
-        case L3RRMessage::AssignmentCommand:           return new L3AssignmentCommand();
-        case L3RRMessage::AssignmentComplete:          return new L3AssignmentComplete();
-        case L3RRMessage::AssignmentFailure:           return new L3AssignmentFailure();
-        case L3RRMessage::ClassmarkEnquiry:            return new L3ClassmarkEnquiry();
-        case L3RRMessage::ClassmarkChange:             return new L3ClassmarkChange();
-        case L3RRMessage::MeasurementReport:           return new L3MeasurementReport();
-        case L3RRMessage::CipheringModeCommand:        return new L3CipheringModeCommand(false, 0);
-        case L3RRMessage::CipheringModeComplete:       return new L3CipheringModeComplete();
-        case L3RRMessage::ChannelModeModify:           return new L3ChannelModeModify();
-        case L3RRMessage::ChannelModeModifyAcknowledge: return new L3ChannelModeModifyAcknowledge();
-        case L3RRMessage::GPRSSuspensionRequest:       return new L3GPRSSuspensionRequest();
-        case L3RRMessage::ApplicationInformation:      return new L3ApplicationInformation();
-        case L3RRMessage::RRStatus:                    return new L3RRStatus();
-        case L3RRMessage::SynchronizationChannelInformation: return new L3SynchronizationChannelInformation();
-        case L3RRMessage::ChannelRequest:              return new L3ChannelRequest();
-        case L3RRMessage::HandoverAccess:              return new L3HandoverAccess();
+        case L3RRMessage::PagingRequestType1:          return std::make_unique<L3PagingRequestType1>();
+        case L3RRMessage::PagingRequestType2:          return std::make_unique<L3PagingRequestType2>();
+        case L3RRMessage::PagingRequestType3:          return std::make_unique<L3PagingRequestType3>();
+        case L3RRMessage::PagingResponse:              return std::make_unique<L3PagingResponse>();
+        case L3RRMessage::SystemInformationType1:      return std::make_unique<L3SystemInformationType1>();
+        case L3RRMessage::SystemInformationType2:      return std::make_unique<L3SystemInformationType2>();
+        case L3RRMessage::SystemInformationType2bis:   return std::make_unique<L3SystemInformationType2bis>();
+        case L3RRMessage::SystemInformationType2ter:   return std::make_unique<L3SystemInformationType2ter>();
+        case L3RRMessage::SystemInformationType3:      return std::make_unique<L3SystemInformationType3>();
+        case L3RRMessage::SystemInformationType4:      return std::make_unique<L3SystemInformationType4>();
+        case L3RRMessage::SystemInformationType5:      return std::make_unique<L3SystemInformationType5>();
+        case L3RRMessage::SystemInformationType5bis:   return std::make_unique<L3SystemInformationType5bis>();
+        case L3RRMessage::SystemInformationType5ter:   return std::make_unique<L3SystemInformationType5ter>();
+        case L3RRMessage::SystemInformationType6:      return std::make_unique<L3SystemInformationType6>();
+        case L3RRMessage::SystemInformationType7:      return std::make_unique<L3SystemInformationType7>();
+        case L3RRMessage::SystemInformationType8:      return std::make_unique<L3SystemInformationType8>();
+        case L3RRMessage::SystemInformationType9:      return std::make_unique<L3SystemInformationType9>();
+        case L3RRMessage::SystemInformationType13:     return std::make_unique<L3SystemInformationType13>();
+        case L3RRMessage::SystemInformationType16:     return std::make_unique<L3SystemInformationType16>();
+        case L3RRMessage::SystemInformationType17:     return std::make_unique<L3SystemInformationType17>();
+        case L3RRMessage::ChannelRelease:              return std::make_unique<L3ChannelRelease>();
+        case L3RRMessage::ImmediateAssignment:         return std::make_unique<L3ImmediateAssignment>();
+        case L3RRMessage::ImmediateAssignmentExtended: return std::make_unique<L3ImmediateAssignmentExtended>();
+        case L3RRMessage::ImmediateAssignmentReject:   return std::make_unique<L3ImmediateAssignmentReject>();
+        case L3RRMessage::AdditionalAssignment:        return std::make_unique<L3AdditionalAssignment>();
+        case L3RRMessage::PhysicalInformation:         return std::make_unique<L3PhysicalInformation>();
+        case L3RRMessage::HandoverCommand:             return std::make_unique<L3HandoverCommand>();
+        case L3RRMessage::HandoverComplete:            return std::make_unique<L3HandoverComplete>();
+        case L3RRMessage::HandoverFailure:             return std::make_unique<L3HandoverFailure>();
+        case L3RRMessage::AssignmentCommand:           return std::make_unique<L3AssignmentCommand>();
+        case L3RRMessage::AssignmentComplete:          return std::make_unique<L3AssignmentComplete>();
+        case L3RRMessage::AssignmentFailure:           return std::make_unique<L3AssignmentFailure>();
+        case L3RRMessage::ClassmarkEnquiry:            return std::make_unique<L3ClassmarkEnquiry>();
+        case L3RRMessage::ClassmarkChange:             return std::make_unique<L3ClassmarkChange>();
+        case L3RRMessage::MeasurementReport:           return std::make_unique<L3MeasurementReport>();
+        case L3RRMessage::CipheringModeCommand:        return std::make_unique<L3CipheringModeCommand>(false, 0);
+        case L3RRMessage::CipheringModeComplete:       return std::make_unique<L3CipheringModeComplete>();
+        case L3RRMessage::ChannelModeModify:           return std::make_unique<L3ChannelModeModify>();
+        case L3RRMessage::ChannelModeModifyAcknowledge: return std::make_unique<L3ChannelModeModifyAcknowledge>();
+        case L3RRMessage::GPRSSuspensionRequest:       return std::make_unique<L3GPRSSuspensionRequest>();
+        case L3RRMessage::ApplicationInformation:      return std::make_unique<L3ApplicationInformation>();
+        case L3RRMessage::RRStatus:                    return std::make_unique<L3RRStatus>();
+        case L3RRMessage::SynchronizationChannelInformation: return std::make_unique<L3SynchronizationChannelInformation>();
+        case L3RRMessage::ChannelRequest:              return std::make_unique<L3ChannelRequest>();
+        case L3RRMessage::HandoverAccess:              return std::make_unique<L3HandoverAccess>();
         default:                                       return nullptr;
     }
 }
@@ -1528,7 +1528,7 @@ std::unique_ptr<L3RRMessage> parseL3RR(const L3Frame& source) {
     if (source.size() < 16) return nullptr;
 
     unsigned mti = source.MTI();
-    L3RRMessage* msg = L3RRFactory(static_cast<L3RRMessage::MessageType>(mti));
+    auto msg = L3RRFactory(static_cast<L3RRMessage::MessageType>(mti));
     if (!msg) {
         GSML3PARSER_LOG_WARN("Unknown RR MTI: 0x%02x", mti);
         return nullptr;
@@ -1537,10 +1537,9 @@ std::unique_ptr<L3RRMessage> parseL3RR(const L3Frame& source) {
         msg->parse(source);
     } catch (const ParseError&) {
         GSML3PARSER_LOG_WARN("RR parse failed for MTI=0x%02x", mti);
-        delete msg;
         return nullptr;
     }
-    return std::unique_ptr<L3RRMessage>(msg);
+    return msg;
 }
 
 } // namespace gsml3parser

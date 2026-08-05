@@ -25,7 +25,9 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <span>
 #include <string>
+#include <string_view>
 
 #include "l3message.h"
 #include "l3frame.h"
@@ -57,8 +59,19 @@ std::unique_ptr<L3Message> parseL3(const L3Frame& frame, const ParserContext& ct
  * @param len    Number of bytes.
  * @param ctx    Parser configuration (PD handlers, log level).
  * @return       A unique_ptr to the parsed message, or nullptr on failure.
+ * @deprecated   Use `parseL3(std::span<const uint8_t>, ctx)` instead.
  */
+[[deprecated("Use std::span<const uint8_t> overload")]]
 std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len, const ParserContext& ctx);
+
+/**
+ * Parse a complete L3 message from a byte span using the given context.
+ *
+ * @param data   Span of raw L3 message bytes.
+ * @param ctx    Parser configuration (PD handlers, log level).
+ * @return       A unique_ptr to the parsed message, or nullptr on failure.
+ */
+std::unique_ptr<L3Message> parseL3(std::span<const uint8_t> data, const ParserContext& ctx);
 
 /**
  * Parse a complete L3 message from a hex string using the given context.
@@ -67,7 +80,7 @@ std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len, const Parser
  * @param ctx    Parser configuration (PD handlers, log level).
  * @return       A unique_ptr to the parsed message, or nullptr on failure.
  */
-std::unique_ptr<L3Message> parseL3Hex(const std::string& hex, const ParserContext& ctx);
+std::unique_ptr<L3Message> parseL3Hex(std::string_view hex, const ParserContext& ctx);
 
 // ── Legacy API: backward-compatible (uses thread-local default context) ──
 
@@ -83,18 +96,28 @@ std::unique_ptr<L3Message> parseL3(const L3Frame& frame);
 /**
  * Parse a complete L3 message from raw bytes.
  *
- * @deprecated Use `parseL3(data, len, ctx)` with an explicit ParserContext.
+ * @deprecated Use `parseL3(std::span<const uint8_t>, ctx)` with an explicit ParserContext.
  */
 [[deprecated("Use parseL3(data, len, ctx) with an explicit ParserContext")]]
 std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len);
 
 /**
+ * Parse a complete L3 message from a byte span.
+ * Uses a thread-local default context for custom PD handlers.
+ *
+ * @deprecated Use `parseL3(std::span<const uint8_t>, ctx)` with an explicit ParserContext.
+ */
+[[deprecated("Use parseL3(span, ctx) with an explicit ParserContext")]]
+std::unique_ptr<L3Message> parseL3(std::span<const uint8_t> data);
+
+/**
  * Parse a complete L3 message from a hex string.
+ * Uses a thread-local default context for custom PD handlers.
  *
  * @deprecated Use `parseL3Hex(hex, ctx)` with an explicit ParserContext.
  */
 [[deprecated("Use parseL3Hex(hex, ctx) with an explicit ParserContext")]]
-std::unique_ptr<L3Message> parseL3Hex(const std::string& hex);
+std::unique_ptr<L3Message> parseL3Hex(std::string_view hex);
 
 /**
  * Register a custom handler for an unsupported Protocol Discriminator.
@@ -141,25 +164,25 @@ std::string writeL3Hex(const L3Message& msg);
 std::unique_ptr<L3RRMessage> parseL3RR(const L3Frame& source);
 
 /** Factory: create an RR message by MTI. Returns nullptr if unsupported. */
-L3RRMessage* L3RRFactory(int mti);
+std::unique_ptr<L3RRMessage> L3RRFactory(int mti);
 
 /** Parse a complete L3 mobility management message. */
 std::unique_ptr<L3MMMessage> parseL3MM(const L3Frame& source);
 
 /** Factory: create an MM message by MTI. Returns nullptr if unsupported. */
-L3MMMessage* L3MMFactory(int mti);
+std::unique_ptr<L3MMMessage> L3MMFactory(int mti);
 
 /** Parse a complete L3 call control message. */
 std::unique_ptr<L3CCMessage> parseL3CC(const L3Frame& source);
 
 /** Factory: create a CC message by MTI. Returns nullptr if unsupported. */
-L3CCMessage* L3CCFactory(int mti);
+std::unique_ptr<L3CCMessage> L3CCFactory(int mti);
 
 /** Parse a complete L3 supplementary service message. */
 std::unique_ptr<L3SupServMessage> parseL3SupServ(const L3Frame& source);
 
 /** Factory: create an SS message by MTI. Returns nullptr if unsupported. */
-L3SupServMessage* L3SupServFactory(int mti);
+std::unique_ptr<L3SupServMessage> L3SupServFactory(int mti);
 
 } // namespace gsml3parser
 

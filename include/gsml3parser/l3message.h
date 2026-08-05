@@ -38,12 +38,22 @@ namespace gsml3parser {
 
 class ParseError : public std::runtime_error {
 public:
-    explicit ParseError(const std::string& what) : std::runtime_error(what) {}
+    explicit ParseError(std::string msg) : std::runtime_error(std::move(msg)) {}
+    ParseError(std::string msg, size_t bitPosition)
+        : std::runtime_error(std::move(msg)), mBitPos(bitPosition) {}
+    size_t bitPosition() const { return mBitPos; }
+private:
+    size_t mBitPos = 0;
 };
 
 class WriteError : public std::runtime_error {
 public:
-    explicit WriteError(const std::string& what) : std::runtime_error(what) {}
+    explicit WriteError(std::string msg) : std::runtime_error(std::move(msg)) {}
+    WriteError(std::string msg, size_t bitPosition)
+        : std::runtime_error(std::move(msg)), mBitPos(bitPosition) {}
+    size_t bitPosition() const { return mBitPos; }
+private:
+    size_t mBitPos = 0;
 };
 
 // ── L3Message ───────────────────────────────────────────────────────────

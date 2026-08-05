@@ -22,6 +22,7 @@
 #ifndef GSML3PARSER_COMMON_L3COMMON_H
 #define GSML3PARSER_COMMON_L3COMMON_H
 
+#include <array>
 #include <cstdint>
 #include <ostream>
 #include <string>
@@ -52,8 +53,8 @@ public:
 
 class L3LocationAreaIdentity : public L3ProtocolElement {
 private:
-    unsigned mMCC[3];
-    unsigned mMNC[3];
+    std::array<unsigned, 3> mMCC;
+    std::array<unsigned, 3> mMNC;
     unsigned mLAC;
 public:
     L3LocationAreaIdentity(const char* wMCC = "250", const char* wMNC = "01", unsigned wLAC = 1);
@@ -73,7 +74,7 @@ public:
 class L3MobileIdentity : public L3ProtocolElement {
 private:
     MobileIDType mType;
-    char mDigits[20];
+    std::array<char, 20> mDigits;
     uint32_t mTMSI;
 public:
     L3MobileIdentity();
@@ -680,9 +681,9 @@ private:
     unsigned mRXQUAL_FULL_SERVING_CELL;
     unsigned mRXQUAL_SUB_SERVING_CELL;
     unsigned mNO_NCELL;
-    unsigned mRXLEV_NCELL[6];
-    unsigned mBCCH_FREQ_NCELL[6];
-    unsigned mBSIC_NCELL[6];
+    std::array<unsigned, 6> mRXLEV_NCELL;
+    std::array<unsigned, 6> mBCCH_FREQ_NCELL;
+    std::array<unsigned, 6> mBSIC_NCELL;
 public:
     L3MeasurementResults();
     bool BA_USED() const { return mBA_USED; }
@@ -981,7 +982,14 @@ public:
 // ── Utility functions ──────────────────────────────────────────────────
 
 /** Returns the number of beacon timeslots for a given CCCH configuration. */
-unsigned countBeaconTimeslots(int ccch_conf);
+inline constexpr unsigned countBeaconTimeslots(int ccch_conf) {
+    switch (ccch_conf) {
+        case 2: return 2;
+        case 4: return 3;
+        case 6: return 4;
+        default: return 1;
+    }
+}
 
 } // namespace gsml3parser
 

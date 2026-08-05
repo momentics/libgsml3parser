@@ -501,27 +501,27 @@ void L3Progress::text(std::ostream& os) const {
 
 // ── Factory ─────────────────────────────────────────────────────────────
 
-L3CCMessage* L3CCFactory(int mti) {
+std::unique_ptr<L3CCMessage> L3CCFactory(int mti) {
     switch (mti) {
-        case L3CCMessage::Alerting:            return new L3Alerting();
-        case L3CCMessage::CallConfirmed:       return new L3CallConfirmed();
-        case L3CCMessage::CallProceeding:      return new L3CallProceeding();
-        case L3CCMessage::Connect:             return new L3Connect();
-        case L3CCMessage::Setup:               return new L3Setup();
-        case L3CCMessage::EmergencySetup:      return new L3EmergencySetup();
-        case L3CCMessage::ConnectAcknowledge:  return new L3ConnectAcknowledge();
-        case L3CCMessage::Progress:            return new L3Progress(0);
-        case L3CCMessage::Disconnect:          return new L3Disconnect();
-        case L3CCMessage::Release:             return new L3Release();
-        case L3CCMessage::ReleaseComplete:     return new L3ReleaseComplete();
-        case L3CCMessage::StartDTMF:           return new L3StartDTMF();
-        case L3CCMessage::StopDTMF:            return new L3StopDTMF();
-        case L3CCMessage::StopDTMFAcknowledge: return new L3StopDTMFAcknowledge(0);
-        case L3CCMessage::StartDTMFAcknowledge: return new L3StartDTMFAcknowledge(0, 0);
-        case L3CCMessage::StartDTMFReject:     return new L3StartDTMFReject(0, CCCause::Unknown_L3_Cause);
-        case L3CCMessage::Hold:                return new L3Hold();
-        case L3CCMessage::HoldReject:          return new L3HoldReject(0, CCCause::Unknown_L3_Cause);
-        case L3CCMessage::CCStatus:            return new L3CCStatus();
+        case L3CCMessage::Alerting:            return std::make_unique<L3Alerting>();
+        case L3CCMessage::CallConfirmed:       return std::make_unique<L3CallConfirmed>();
+        case L3CCMessage::CallProceeding:      return std::make_unique<L3CallProceeding>();
+        case L3CCMessage::Connect:             return std::make_unique<L3Connect>();
+        case L3CCMessage::Setup:               return std::make_unique<L3Setup>();
+        case L3CCMessage::EmergencySetup:      return std::make_unique<L3EmergencySetup>();
+        case L3CCMessage::ConnectAcknowledge:  return std::make_unique<L3ConnectAcknowledge>();
+        case L3CCMessage::Progress:            return std::make_unique<L3Progress>(0);
+        case L3CCMessage::Disconnect:          return std::make_unique<L3Disconnect>();
+        case L3CCMessage::Release:             return std::make_unique<L3Release>();
+        case L3CCMessage::ReleaseComplete:     return std::make_unique<L3ReleaseComplete>();
+        case L3CCMessage::StartDTMF:           return std::make_unique<L3StartDTMF>();
+        case L3CCMessage::StopDTMF:            return std::make_unique<L3StopDTMF>();
+        case L3CCMessage::StopDTMFAcknowledge: return std::make_unique<L3StopDTMFAcknowledge>(0);
+        case L3CCMessage::StartDTMFAcknowledge: return std::make_unique<L3StartDTMFAcknowledge>(0, 0);
+        case L3CCMessage::StartDTMFReject:     return std::make_unique<L3StartDTMFReject>(0, CCCause::Unknown_L3_Cause);
+        case L3CCMessage::Hold:                return std::make_unique<L3Hold>();
+        case L3CCMessage::HoldReject:          return std::make_unique<L3HoldReject>(0, CCCause::Unknown_L3_Cause);
+        case L3CCMessage::CCStatus:            return std::make_unique<L3CCStatus>();
         default:                               return nullptr;
     }
 }
@@ -533,7 +533,7 @@ std::unique_ptr<L3CCMessage> parseL3CC(const L3Frame& source) {
 
     // MTI extraction already handles the don't-care bit in L3Frame::MTI()
     unsigned mti = source.MTI();
-    L3CCMessage* msg = L3CCFactory(static_cast<L3CCMessage::MessageType>(mti));
+    auto msg = L3CCFactory(static_cast<L3CCMessage::MessageType>(mti));
     if (!msg) {
         GSML3PARSER_LOG_WARN("Unknown CC MTI: 0x%02x", mti);
         return nullptr;
@@ -543,10 +543,9 @@ std::unique_ptr<L3CCMessage> parseL3CC(const L3Frame& source) {
         msg->parse(source);
     } catch (const ParseError&) {
         GSML3PARSER_LOG_WARN("CC parse failed for MTI=0x%02x", mti);
-        delete msg;
         return nullptr;
     }
-    return std::unique_ptr<L3CCMessage>(msg);
+    return msg;
 }
 
 } // namespace gsml3parser
