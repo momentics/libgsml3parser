@@ -29,11 +29,13 @@
 
 using namespace gsml3parser;
 
+static ParserContext ctx;
+
 static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     std::vector<uint8_t> buf(msg.fullLength());
     size_t n = writeL3(msg, buf.data(), buf.size());
     if (n == 0) return nullptr;
-    auto result = parseL3(buf.data(), n);
+    auto result = parseL3(std::span<const uint8_t>(buf), ctx);
     return result;
 }
 
@@ -70,7 +72,7 @@ TEST(CCRoundTripTest, Setup_WithCalledParty) {
 // Byte 1: messageType(6)<<2 | NSD(2) = 0x05<<2 | 0 = 0x14
 TEST(CCRoundTripTest, Setup_Parse) {
     uint8_t data[] = {0x3E, 0x14};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::CallControl);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Setup);
@@ -114,7 +116,7 @@ TEST(CCRoundTripTest, Alerting) {
 // Byte 1: messageType(6)<<2 | NSD(2) = 0x01<<2 | 0 = 0x04
 TEST(CCRoundTripTest, Alerting_Parse) {
     uint8_t data[] = {0x3E, 0x04};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Alerting);
 }
@@ -180,7 +182,7 @@ TEST(CCRoundTripTest, Disconnect_UserBusy) {
 //   octet4: causeValue(7)=0010000(Normal_Call_Clearing=16) | ext(1)=1 = 0x21
 TEST(CCRoundTripTest, Disconnect_Parse) {
     uint8_t data[] = {0x3E, 0x94, 0x08, 0x02, 0x16, 0x21};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::CallControl);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Disconnect);
@@ -472,7 +474,7 @@ TEST(CCRoundTripTest, TI_DifferentValues) {
 // Byte 0: PD(4,high)|TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
 // Byte 1: messageType(6)<<2|NSD(2) = 0x05<<2|0 = 0x14
 TEST(CCRoundTripTest, Parse_Setup_Hex) {
-    auto msg = parseL3Hex("3E14");
+    auto msg = parseL3Hex("3E14", ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::CallControl);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Setup);
@@ -483,7 +485,7 @@ TEST(CCRoundTripTest, Parse_Setup_Hex) {
 // Byte 0: PD(4,high)|TIO(3)+TIF(1,low) = 0011 1111 = 0x3F
 // Byte 1: messageType(6)<<2|NSD(2) = 0x2D<<2|0 = 0xB4
 TEST(CCRoundTripTest, Parse_Release_Hex) {
-    auto msg = parseL3Hex("3FB4");
+    auto msg = parseL3Hex("3FB4", ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::CallControl);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Release);

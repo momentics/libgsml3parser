@@ -29,11 +29,13 @@
 
 using namespace gsml3parser;
 
+static ParserContext ctx;
+
 static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     std::vector<uint8_t> buf(msg.fullLength());
     size_t n = writeL3(msg, buf.data(), buf.size());
     if (n == 0) return nullptr;
-    auto result = parseL3(buf.data(), n);
+    auto result = parseL3(std::span<const uint8_t>(buf), ctx);
     return result;
 }
 
@@ -107,7 +109,7 @@ TEST(MMRoundTripTest, LocationUpdatingReject) {
 // Byte 2: reject_cause = 0x02 (IMSI_Unknown_In_HLR, GSM 04.08 10.5.3.6)
 TEST(MMRoundTripTest, LocationUpdatingReject_Parse) {
     uint8_t data[] = {0x50, 0x10, 0x02};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* lur = dynamic_cast<L3LocationUpdatingReject*>(msg.get());
     ASSERT_TRUE(lur);
@@ -145,7 +147,7 @@ TEST(MMRoundTripTest, AuthenticationRequest_Parse) {
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
         0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::MobilityManagement);
     EXPECT_EQ(msg->MTI(), L3MMMessage::AuthenticationRequest);
@@ -161,7 +163,7 @@ TEST(MMRoundTripTest, AuthenticationResponse) {
     // Byte 1: messageType(6) | NSD(2) = 010100 00 = 0x50
     // Bytes 2-5: SRES = 0xABCD1234
     uint8_t data[] = {0x50, 0x50, 0xAB, 0xCD, 0x12, 0x34};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* ar = dynamic_cast<L3AuthenticationResponse*>(msg.get());
     ASSERT_TRUE(ar);
@@ -179,7 +181,7 @@ TEST(MMRoundTripTest, AuthenticationResponse) {
 // Bytes 2-5: SRES = 0xABCD1234 (GSM 04.08 10.5.3.2, 32 bits)
 TEST(MMRoundTripTest, AuthenticationResponse_Parse) {
     uint8_t data[] = {0x50, 0x50, 0xAB, 0xCD, 0x12, 0x34};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* ar = dynamic_cast<L3AuthenticationResponse*>(msg.get());
     ASSERT_TRUE(ar);
@@ -220,7 +222,7 @@ TEST(MMRoundTripTest, IdentityRequest_IMEI) {
 // Byte 2: spare(4) | identityType(4) = 0000 0001 = 0x01 (IMSI per GSM 04.08 10.5.3.4)
 TEST(MMRoundTripTest, IdentityRequest_Parse) {
     uint8_t data[] = {0x50, 0x60, 0x01};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::IdentityRequest);
     auto* ir = dynamic_cast<L3IdentityRequest*>(msg.get());
@@ -329,7 +331,7 @@ TEST(MMRoundTripTest, IdentityResponse) {
 // Byte 0: PD(high=5)|skip(low=0) = 0x50
 // Byte 1: messageType(6)<<2|NSD(2) = 0x21<<2|0 = 0x84
 TEST(MMRoundTripTest, Parse_CMServiceAccept_Hex) {
-    auto msg = parseL3Hex("5084");
+    auto msg = parseL3Hex("5084", ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::MobilityManagement);
     EXPECT_EQ(msg->MTI(), L3MMMessage::CMServiceAccept);
@@ -340,7 +342,7 @@ TEST(MMRoundTripTest, Parse_CMServiceAccept_Hex) {
 // Byte 0: PD(high=5)|skip(low=0) = 0x50
 // Byte 1: messageType(6)<<2|NSD(2) = 0x11<<2|0 = 0x44
 TEST(MMRoundTripTest, Parse_AuthenticationReject_Hex) {
-    auto msg = parseL3Hex("5044");
+    auto msg = parseL3Hex("5044", ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::AuthenticationReject);
 }
@@ -350,7 +352,7 @@ TEST(MMRoundTripTest, Parse_AuthenticationReject_Hex) {
 // Byte 0: PD(high=5)|skip(low=0) = 0x50
 // Byte 1: messageType(6)<<2|NSD(2) = 0x1B<<2|0 = 0x6C
 TEST(MMRoundTripTest, Parse_TMSIReallocationComplete_Hex) {
-    auto msg = parseL3Hex("506C");
+    auto msg = parseL3Hex("506C", ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::TMSIReallocationComplete);
 }

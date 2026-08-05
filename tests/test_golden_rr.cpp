@@ -52,12 +52,14 @@
 
 using namespace gsml3parser;
 
+static ParserContext ctx;
+
 // ── Helper: serialize → parse → return ─────────────────────────────────
 static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     std::vector<uint8_t> buf(msg.fullLength());
     size_t n = writeL3(msg, buf.data(), buf.size());
     if (n == 0) return nullptr;
-    return parseL3(buf.data(), n);
+    return parseL3(std::span<const uint8_t>(buf), ctx);
 }
 
 // =====================================================================
@@ -154,7 +156,7 @@ TEST(GoldenRR, PagingRequestType1_Parse) {
     uint8_t data[] = {
         0x60, 0x21, 0x10, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::RadioResource);
     EXPECT_EQ(msg->MTI(), L3RRMessage::PagingRequestType1);
@@ -190,7 +192,7 @@ TEST(GoldenRR, PagingRequestType2_Parse) {
         0x12, 0x34, 0x56, 0x78,
         0xDE, 0xAD, 0xBE, 0xEF
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::PagingRequestType2);
 }
@@ -229,7 +231,7 @@ TEST(GoldenRR, PagingRequestType3_Parse) {
         0xAB, 0xCD, 0xEF, 0x01,
         0x11, 0x22, 0x33, 0x44
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::PagingRequestType3);
 }
@@ -269,7 +271,7 @@ TEST(GoldenRR, PagingResponse_Parse) {
         0x03, 0x20, 0x00, 0x80,
         0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::PagingResponse);
 }
@@ -293,7 +295,7 @@ TEST(GoldenRR, ClassmarkChange_Parse) {
     // Byte 2: CM2 LV length = 3 (Classmark 2 is 3 octets) [GSM 24.008 10.5.1.6]
     // Bytes 3-5: CM2 value (24 bits of capability flags)
     uint8_t data[] = {0x60, 0x16, 0x03, 0x20, 0x00, 0x80};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::ClassmarkChange);
     auto* cm = dynamic_cast<L3ClassmarkChange*>(msg.get());
@@ -328,7 +330,7 @@ TEST(GoldenRR, MeasurementReport_Parse) {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::MeasurementReport);
 }
@@ -369,7 +371,7 @@ TEST(GoldenRR, HandoverCommand_Parse) {
         0x11, 0xE0, 0x64,
         0x17, 0x00, 0x00
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::HandoverCommand);
 }
@@ -395,7 +397,7 @@ TEST(GoldenRR, AssignmentCommand_Parse) {
     //   {0x10, 0xE0, 0x64}: typeAndOffset=2(TDMA_TCHF), TN=0, TSC=7, h=0, ARFCN=100
     // Byte 5: PowerCmd = 0x00 [GSM 24.008 10.5.2.28, 5-bit power_command << 3]
     uint8_t data[] = {0x60, 0x2e, 0x10, 0xE0, 0x64, 0x00};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::AssignmentCommand);
 }
@@ -433,7 +435,7 @@ TEST(GoldenRR, ImmediateAssignment_Parse) {
         0x42, 0x00, 0x00,
         0x00, 0x00
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::ImmediateAssignment);
 }
@@ -459,7 +461,7 @@ TEST(GoldenRR, ImmediateAssignmentReject_Parse) {
     //   PageMode: PAGE_MODE_SAME_AS_BEFORE(3) [GSM_RR_Types.ttcn line 382, FIELDLENGTH(4)]
     //   WaitIndication is a separate IE in ReqRefWaitInd4 payload (absent here, minimal message)
     uint8_t data[] = {0x60, 0x3a, 0x03};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::ImmediateAssignmentReject);
     auto* iar = dynamic_cast<L3ImmediateAssignmentReject*>(msg.get());
@@ -487,7 +489,7 @@ TEST(GoldenRR, ChannelModeModify_Parse) {
     //   {0x11, 0xE0, 0x64}: typeAndOffset=2(TDMA_TCHF), TN=1, TSC=7, h=0, ARFCN=100
     // Byte 5: ChanMode(4)=1(SpeechV1)|spare(4)=0 = 0x01 [GSM 24.008 10.5.2.6]
     uint8_t data[] = {0x60, 0x10, 0x11, 0xE0, 0x64, 0x01};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::ChannelModeModify);
 }
@@ -511,7 +513,7 @@ TEST(GoldenRR, GPRSSuspensionRequest_Parse) {
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::GPRSSuspensionRequest);
 }
@@ -529,7 +531,7 @@ TEST(GoldenRR, ApplicationInformation_Parse) {
     // Byte 3: FirstSeg(1)=0, LastSeg(1)=0, spare(2)=0, data(4) = 0xAB
     // Byte 4: data continued = 0xCD
     uint8_t data[] = {0x60, 0x38, 0x00, 0xAB, 0xCD};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::ApplicationInformation);
 }
@@ -546,7 +548,7 @@ TEST(GoldenRR, SynchronizationChannelInformation_Parse) {
     // Byte 2-4: MCC/MNC (BCD, nibble-swapped) for MCC=250, MNC=01
     // Byte 5-6: LAC = 0x0001
     uint8_t data[] = {0x12, 0x34, 0x52, 0xF0, 0x10, 0x00, 0x01};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::SynchronizationChannelInformation);
 }
@@ -561,7 +563,7 @@ TEST(GoldenRR, ChannelRequest_Parse) {
     // Channel Request uses internal MTI=0x101, no standard L3 header
     // Byte 0: RequestReference = 0x42
     uint8_t data[] = {0x42};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::ChannelRequest);
 }
@@ -576,7 +578,7 @@ TEST(GoldenRR, HandoverAccess_Parse) {
     // Handover Access uses internal MTI=0x102, no standard L3 header
     // Bytes 0-3: HO number(8), HO ref(8), TA(8), spare(8)
     uint8_t data[] = {0x17, 0x00, 0x00, 0x00};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::HandoverAccess);
 }
@@ -603,7 +605,7 @@ TEST(GoldenRR, CipheringModeCommand_Parse) {
     //   GSM 24.008 10.5.2.9: cipheringModeSetting is 4 bits sC(1)|algorithmIdentifier(3), MSB-first
     //   L3_Templates.ttcn ts_RRM_CiphModeCmd: sC='1'B, algorithmIdentifier=alg_id(BIT3)
     uint8_t data[] = {0x60, 0x35, 0x0B};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::CipheringModeCommand);
 }
@@ -621,7 +623,7 @@ TEST(GoldenRR, RRStatus_Parse_ProtocolError) {
     // Byte 1: MTI = 0x12 (RRStatus)
     // Byte 2: cause = 0x6f (Protocol_Error_Unspecified)
     uint8_t data[] = {0x60, 0x12, 0x6f};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* rs = dynamic_cast<L3RRStatus*>(msg.get());
     ASSERT_TRUE(rs);
@@ -644,7 +646,7 @@ TEST(GoldenRR, PhysicalInformation_Parse) {
     // Byte 1: MTI = 0x2D (PhysicalInformation) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: TA = 63<<2 = 0xFC [GSM 24.008 10.5.2.40: timing_advance(6)=63(max)|spare(2)=0]
     uint8_t data[] = {0x60, 0x2d, 0xFC};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::PhysicalInformation);
 }
@@ -666,7 +668,7 @@ TEST(GoldenRR, AdditionalAssignment_Parse) {
     // Bytes 2-4: AdditionalChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), spare(2), ARFCN(10)
     //   {0x12, 0xA0, 0x56}: typeAndOffset=2, TN=2, TSC=5, h=0, ARFCN=86 [GSM 24.008 10.5.2.5]
     uint8_t data[] = {0x60, 0x3b, 0x12, 0xA0, 0x56};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::AdditionalAssignment);
 }
@@ -754,7 +756,7 @@ TEST(GoldenRR, ChannelModeModify_RoundTrip) {
 
 TEST(GoldenRR, ChannelModeModifyAcknowledge_RoundTrip) {
     uint8_t data[] = {0x60, 0x17, 0x11, 0xE0, 0x64, 0x01};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* cma = dynamic_cast<L3ChannelModeModifyAcknowledge*>(msg.get());
     ASSERT_TRUE(cma);
@@ -796,7 +798,7 @@ TEST(GoldenRR, ClassmarkEnquiry_RoundTrip) {
 
 TEST(GoldenRR, ClassmarkChange_RoundTrip) {
     uint8_t data[] = {0x60, 0x16, 0x03, 0x20, 0x00, 0x80};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* cm = dynamic_cast<L3ClassmarkChange*>(msg.get());
     ASSERT_TRUE(cm);
@@ -848,7 +850,7 @@ TEST(GoldenRR, PhysicalInformation_RoundTrip) {
 
 TEST(GoldenRR, RRStatus_RoundTrip) {
     uint8_t data[] = {0x60, 0x12, 0x60};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* rs = dynamic_cast<L3RRStatus*>(msg.get());
     ASSERT_TRUE(rs);
@@ -865,7 +867,7 @@ TEST(GoldenRR, RRStatus_RoundTrip) {
 
 TEST(GoldenRR, AssignmentComplete_RoundTrip) {
     uint8_t data[] = {0x60, 0x29, 0x00};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* ac = dynamic_cast<L3AssignmentComplete*>(msg.get());
     ASSERT_TRUE(ac);
@@ -882,7 +884,7 @@ TEST(GoldenRR, AssignmentComplete_RoundTrip) {
 
 TEST(GoldenRR, AssignmentFailure_RoundTrip) {
     uint8_t data[] = {0x60, 0x2f, 0x09};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* af = dynamic_cast<L3AssignmentFailure*>(msg.get());
     ASSERT_TRUE(af);
@@ -899,7 +901,7 @@ TEST(GoldenRR, AssignmentFailure_RoundTrip) {
 
 TEST(GoldenRR, HandoverComplete_RoundTrip) {
     uint8_t data[] = {0x60, 0x2c, 0x00};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* hc = dynamic_cast<L3HandoverComplete*>(msg.get());
     ASSERT_TRUE(hc);
@@ -916,7 +918,7 @@ TEST(GoldenRR, HandoverComplete_RoundTrip) {
 
 TEST(GoldenRR, HandoverFailure_RoundTrip) {
     uint8_t data[] = {0x60, 0x28, 0x08};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* hf = dynamic_cast<L3HandoverFailure*>(msg.get());
     ASSERT_TRUE(hf);

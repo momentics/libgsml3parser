@@ -32,6 +32,8 @@
 
 using namespace gsml3parser;
 
+static ParserContext ctx;
+
 // ── MCC/MNC Encoding (GSM 24.008 10.5.13) ──────────────────────────────
 // Reference: GSM_Types.ttcn f_build_BcdMccMnc, TC_selftest_BcdMccMnc
 //
@@ -621,20 +623,20 @@ TEST(GSMSpecTest, Data2Hex) {
 // GSM 04.08 10.2: PD=0x06(RR) in high nibble, skip=0, MTI=0x19(SystemInformationType1)
 // Reference: GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_1 = '00011001'B
 TEST(GSMSpecTest, ParseHexWithVariousFormats) {
-    auto msg1 = parseL3Hex("601900");
+    auto msg1 = parseL3Hex("601900", ctx);
     ASSERT_TRUE(msg1);
     EXPECT_EQ(msg1->PD(), L3PD::RadioResource);
 
     // Spaces between bytes
-    auto msg2 = parseL3Hex("60 19 00");
+    auto msg2 = parseL3Hex("60 19 00", ctx);
     ASSERT_TRUE(msg2);
     EXPECT_EQ(msg2->PD(), L3PD::RadioResource);
 
     // Empty string
-    auto msg3 = parseL3Hex("");
+    auto msg3 = parseL3Hex("", ctx);
     EXPECT_FALSE(msg3);
 
     // Single byte (too short)
-    auto msg4 = parseL3Hex("60");
+    auto msg4 = parseL3Hex("60", ctx);
     EXPECT_FALSE(msg4);
 }

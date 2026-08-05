@@ -28,11 +28,13 @@
 
 using namespace gsml3parser;
 
+static ParserContext ctx;
+
 static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     std::vector<uint8_t> buf(msg.fullLength());
     size_t n = writeL3(msg, buf.data(), buf.size());
     if (n == 0) return nullptr;
-    auto result = parseL3(buf.data(), n);
+    auto result = parseL3(std::span<const uint8_t>(buf), ctx);
     return result;
 }
 
@@ -60,7 +62,7 @@ TEST(SSRoundTripTest, Facility_WithData) {
 // Byte 1: messageType(6)<<2 | NSD(2) = 0x3A<<2 | 0 = 0xE8
 TEST(SSRoundTripTest, Facility_Parse) {
     uint8_t data[] = {0xBE, 0xE8};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::NonCallSS);
     EXPECT_EQ(msg->MTI(), L3SupServMessage::Facility);

@@ -45,7 +45,8 @@ int main(int argc, char* argv[]) {
     }
 
     // Parse as hex string
-    auto msg = parseL3Hex(input);
+    ParserContext ctx;
+    auto msg = parseL3Hex(input, ctx);
     if (msg) {
         std::cout << msg->text() << "\n";
 

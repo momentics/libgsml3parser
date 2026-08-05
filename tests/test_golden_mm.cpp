@@ -43,11 +43,13 @@
 
 using namespace gsml3parser;
 
+static ParserContext ctx;
+
 static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     std::vector<uint8_t> buf(msg.fullLength());
     size_t n = writeL3(msg, buf.data(), buf.size());
     if (n == 0) return nullptr;
-    return parseL3(buf.data(), n);
+    return parseL3(std::span<const uint8_t>(buf), ctx);
 }
 
 // =====================================================================
@@ -127,7 +129,7 @@ TEST(GoldenMM, LocationUpdatingRequest_Parse) {
         0x01, 0x00,
         0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::LocationUpdatingRequest);
 }
@@ -155,7 +157,7 @@ TEST(GoldenMM, LocationUpdatingAccept_Parse) {
     //   [GSM 24.008 10.5.1.3: digit2/digit1 pairs, LSB-first nibble order]
     // Bytes 5-6: LAI LAC = 0x1234 (MSB first)
     uint8_t data[] = {0x50, 0x08, 0x52, 0xF0, 0x10, 0x12, 0x34};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::LocationUpdatingAccept);
 }
@@ -187,7 +189,7 @@ TEST(GoldenMM, TMSIReallocationCommand_Parse) {
         0x05, 0x08, 0x87, 0x65, 0x43, 0x21,
         0x00
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::TMSIReallocationCommand);
 }
@@ -222,7 +224,7 @@ TEST(GoldenMM, CMServiceRequest_Parse) {
         0x03, 0x20, 0x00, 0x80,
         0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::CMServiceRequest);
 }
@@ -244,7 +246,7 @@ TEST(GoldenMM, CMServiceReject_Parse) {
     // Byte 1: messageType(6)=0x22(CMServiceReject)|NSD(2)=0 = 0x88 [GSM 24.008 Table 10.5.3]
     // Byte 2: reject_cause = 0x16 (Congestion) [GSM 24.008 10.5.3.6]
     uint8_t data[] = {0x50, 0x88, 0x16};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::CMServiceReject);
 }
@@ -273,7 +275,7 @@ TEST(GoldenMM, IMSIDetachIndication_Parse) {
         0x01, 0x00,
         0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::IMSIDetachIndication);
 }
@@ -295,7 +297,7 @@ TEST(GoldenMM, MMStatus_Parse) {
     // Byte 1: messageType(6)=0x31(MMStatus)|NSD(2)=0 = 0xC4 [GSM 24.008 Table 10.5.3]
     // Byte 2: cause = 0x60 (Invalid_Mandatory_Information) [GSM 24.008 10.5.3.6]
     uint8_t data[] = {0x50, 0xC4, 0x60};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::MMStatus);
 }
@@ -317,7 +319,7 @@ TEST(GoldenMM, IdentityResponse_Parse) {
     // Byte 3: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
     // Bytes 4-7: TMSI = 0x12345678
     uint8_t data[] = {0x50, 0x64, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::IdentityResponse);
 }
@@ -356,7 +358,7 @@ TEST(GoldenMM, CMReestablishmentRequest_Parse) {
         0x03, 0x20, 0x00, 0x80,
         0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3MMMessage::CMReestablishmentRequest);
 }
@@ -421,7 +423,7 @@ TEST(GoldenMM, AuthenticationRequest_RoundTrip) {
 
 TEST(GoldenMM, AuthenticationResponse_RoundTrip) {
     uint8_t data[] = {0x50, 0x50, 0xAB, 0xCD, 0x12, 0x34};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* ar = dynamic_cast<L3AuthenticationResponse*>(msg.get());
     ASSERT_TRUE(ar);

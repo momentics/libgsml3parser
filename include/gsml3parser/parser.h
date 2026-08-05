@@ -53,90 +53,22 @@ class L3SupServMessage;
 std::unique_ptr<L3Message> parseL3(const L3Frame& frame, const ParserContext& ctx);
 
 /**
- * Parse a complete L3 message from raw bytes using the given context.
- *
- * @param data   Pointer to raw L3 message bytes.
- * @param len    Number of bytes.
- * @param ctx    Parser configuration (PD handlers, log level).
- * @return       A unique_ptr to the parsed message, or nullptr on failure.
- * @deprecated   Use `parseL3(std::span<const uint8_t>, ctx)` instead.
- */
-[[deprecated("Use std::span<const uint8_t> overload")]]
-std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len, const ParserContext& ctx);
-
-/**
- * Parse a complete L3 message from a byte span using the given context.
- *
- * @param data   Span of raw L3 message bytes.
- * @param ctx    Parser configuration (PD handlers, log level).
- * @return       A unique_ptr to the parsed message, or nullptr on failure.
- */
+  * Parse a complete L3 message from a byte span using the given context.
+  *
+  * @param data   Span of raw L3 message bytes.
+  * @param ctx    Parser configuration (PD handlers, log level).
+  * @return       A unique_ptr to the parsed message, or nullptr on failure.
+  */
 std::unique_ptr<L3Message> parseL3(std::span<const uint8_t> data, const ParserContext& ctx);
 
 /**
- * Parse a complete L3 message from a hex string using the given context.
- *
- * @param hex    Hex-encoded L3 message (e.g. "061900...").
- * @param ctx    Parser configuration (PD handlers, log level).
- * @return       A unique_ptr to the parsed message, or nullptr on failure.
- */
+  * Parse a complete L3 message from a hex string using the given context.
+  *
+  * @param hex    Hex-encoded L3 message (e.g. "061900...").
+  * @param ctx    Parser configuration (PD handlers, log level).
+  * @return       A unique_ptr to the parsed message, or nullptr on failure.
+  */
 std::unique_ptr<L3Message> parseL3Hex(std::string_view hex, const ParserContext& ctx);
-
-// ── Legacy API: backward-compatible (uses thread-local default context) ──
-
-/**
- * Parse a complete L3 message from an L3Frame.
- * Uses a thread-local default context for custom PD handlers.
- *
- * @deprecated Use `parseL3(frame, ctx)` with an explicit ParserContext.
- */
-[[deprecated("Use parseL3(frame, ctx) with an explicit ParserContext")]]
-std::unique_ptr<L3Message> parseL3(const L3Frame& frame);
-
-/**
- * Parse a complete L3 message from raw bytes.
- *
- * @deprecated Use `parseL3(std::span<const uint8_t>, ctx)` with an explicit ParserContext.
- */
-[[deprecated("Use parseL3(data, len, ctx) with an explicit ParserContext")]]
-std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len);
-
-/**
- * Parse a complete L3 message from a byte span.
- * Uses a thread-local default context for custom PD handlers.
- *
- * @deprecated Use `parseL3(std::span<const uint8_t>, ctx)` with an explicit ParserContext.
- */
-[[deprecated("Use parseL3(span, ctx) with an explicit ParserContext")]]
-std::unique_ptr<L3Message> parseL3(std::span<const uint8_t> data);
-
-/**
- * Parse a complete L3 message from a hex string.
- * Uses a thread-local default context for custom PD handlers.
- *
- * @deprecated Use `parseL3Hex(hex, ctx)` with an explicit ParserContext.
- */
-[[deprecated("Use parseL3Hex(hex, ctx) with an explicit ParserContext")]]
-std::unique_ptr<L3Message> parseL3Hex(std::string_view hex);
-
-/**
- * Register a custom handler for an unsupported Protocol Discriminator.
- *
- * By default, the library handles PD values for RR, MM, CC, and SS.
- * SMS (PD=0x09) and GPRS (PD=0x08, 0x0a) require external handlers.
- *
- * @deprecated Use `ParserContext::registerPDHandler()` instead.
- */
-[[deprecated("Use ParserContext::registerPDHandler() instead")]]
-void registerPDHandler(L3PD pd, PDHandler handler);
-
-/**
- * Remove a previously registered handler for a PD.
- *
- * @deprecated Use `ParserContext::unregisterPDHandler()` instead.
- */
-[[deprecated("Use ParserContext::unregisterPDHandler() instead")]]
-void unregisterPDHandler(L3PD pd);
 
 // ── Serializers (stateless, no context needed) ──────────────────────────
 

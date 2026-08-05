@@ -30,12 +30,14 @@
 
 using namespace gsml3parser;
 
+static ParserContext ctx;
+
 // Helper: serialize msg → parse → return result.
 static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     std::vector<uint8_t> buf(msg.fullLength());
     size_t n = writeL3(msg, buf.data(), buf.size());
     if (n == 0) return nullptr;
-    auto result = parseL3(buf.data(), n);
+    auto result = parseL3(std::span<const uint8_t>(buf), ctx);
     return result;
 }
 
@@ -262,7 +264,7 @@ TEST(RoundTripTest, ChannelRelease_Preemptive) {
 // Byte 2: cause = 0x60 (Invalid_Mandatory_Information)
 TEST(RoundTripTest, RRStatus) {
     uint8_t data[] = {0x60, 0x12, 0x60};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->PD(), L3PD::RadioResource);
     EXPECT_EQ(msg->MTI(), L3RRMessage::RRStatus);
@@ -289,7 +291,7 @@ TEST(RoundTripTest, AssignmentCommand) {
 // Byte 2: cause = 0x00 (Normal_Event)
 TEST(RoundTripTest, AssignmentComplete) {
     uint8_t data[] = {0x60, 0x29, 0x00};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* ac = dynamic_cast<L3AssignmentComplete*>(msg.get());
     ASSERT_TRUE(ac);
@@ -305,7 +307,7 @@ TEST(RoundTripTest, AssignmentComplete) {
 // Byte 0: 0x60, Byte 1: 0x2F, Byte 2: cause=0x09(Channel_Mode_Unacceptable)
 TEST(RoundTripTest, AssignmentFailure) {
     uint8_t data[] = {0x60, 0x2F, 0x09};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* af = dynamic_cast<L3AssignmentFailure*>(msg.get());
     ASSERT_TRUE(af);
@@ -373,7 +375,7 @@ TEST(RoundTripTest, HandoverCommand) {
 // GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x2C(HandoverComplete), cause=Normal
 TEST(RoundTripTest, HandoverComplete) {
     uint8_t data[] = {0x60, 0x2C, 0x00};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* hc = dynamic_cast<L3HandoverComplete*>(msg.get());
     ASSERT_TRUE(hc);
@@ -388,7 +390,7 @@ TEST(RoundTripTest, HandoverComplete) {
 // GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x28(HandoverFailure), cause=Handover_Impossible
 TEST(RoundTripTest, HandoverFailure) {
     uint8_t data[] = {0x60, 0x28, 0x08};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* hf = dynamic_cast<L3HandoverFailure*>(msg.get());
     ASSERT_TRUE(hf);
@@ -467,7 +469,7 @@ TEST(RoundTripTest, ChannelModeModifyAcknowledge) {
         0x11, 0xE0, 0x64,
         // ChanMode: SpeechV1 = 1
         0x01};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     auto* cma = dynamic_cast<L3ChannelModeModifyAcknowledge*>(msg.get());
     ASSERT_TRUE(cma);
@@ -540,7 +542,7 @@ TEST(RoundTripTest, ClassmarkChange) {
         0x03,       // CM2 length = 3
         0x20, 0x00, 0x80 // CM2 value (24 bits)
     };
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3RRMessage::ClassmarkChange);
 }

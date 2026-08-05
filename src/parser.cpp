@@ -30,36 +30,6 @@
 
 namespace gsml3parser {
 
-// ── Thread-local default context (backward compatibility) ───────────────
-
-static thread_local ParserContext defaultContext;
-
-// ── Legacy wrappers ─────────────────────────────────────────────────────
-
-void registerPDHandler(L3PD pd, PDHandler handler) {
-    defaultContext.registerPDHandler(pd, std::move(handler));
-}
-
-void unregisterPDHandler(L3PD pd) {
-    defaultContext.unregisterPDHandler(pd);
-}
-
-std::unique_ptr<L3Message> parseL3(const L3Frame& frame) {
-    return parseL3(frame, defaultContext);
-}
-
-std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len) {
-    return parseL3(data, len, defaultContext);
-}
-
-std::unique_ptr<L3Message> parseL3(std::span<const uint8_t> data) {
-    return parseL3(data, defaultContext);
-}
-
-std::unique_ptr<L3Message> parseL3Hex(std::string_view hex) {
-    return parseL3Hex(hex, defaultContext);
-}
-
 // ── Internal: dispatch to domain parsers + custom handlers ──────────────
 
 static std::unique_ptr<L3Message> parseL3WithPDHandler(
@@ -108,10 +78,6 @@ static std::unique_ptr<L3Message> parseL3WithPDHandler(
 
 std::unique_ptr<L3Message> parseL3(const L3Frame& frame, const ParserContext& ctx) {
     return parseL3WithPDHandler(frame, ctx);
-}
-
-std::unique_ptr<L3Message> parseL3(const uint8_t* data, size_t len, const ParserContext& ctx) {
-    return parseL3(std::span<const uint8_t>(data, len), ctx);
 }
 
 std::unique_ptr<L3Message> parseL3(std::span<const uint8_t> data, const ParserContext& ctx) {

@@ -39,11 +39,13 @@
 
 using namespace gsml3parser;
 
+static ParserContext ctx;
+
 static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     std::vector<uint8_t> buf(msg.fullLength());
     size_t n = writeL3(msg, buf.data(), buf.size());
     if (n == 0) return nullptr;
-    return parseL3(buf.data(), n);
+    return parseL3(std::span<const uint8_t>(buf), ctx);
 }
 
 // =====================================================================
@@ -104,7 +106,7 @@ TEST(GoldenCC, CallProceeding_Parse) {
     // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x02(CallProceeding)|NSD(2)=0 = 0x08 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x08};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::CallProceeding);
 }
@@ -123,7 +125,7 @@ TEST(GoldenCC, Connect_Parse) {
     //   L3_Templates.ttcn ts_ML3_MO_CC_CONNECT (line 1650): tiFlag := c_TIF_REPL
     // Byte 1: messageType(6)=0x07(Connect)|NSD(2)=0 = 0x1C [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3F, 0x1C};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Connect);
 }
@@ -141,7 +143,7 @@ TEST(GoldenCC, ConnectAcknowledge_Parse) {
     // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x0F(ConnectAcknowledge)|NSD(2)=0 = 0x3C [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x3C};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::ConnectAcknowledge);
 }
@@ -159,7 +161,7 @@ TEST(GoldenCC, CallConfirmed_Parse) {
     // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x08(CallConfirmed)|NSD(2)=0 = 0x20 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x20};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::CallConfirmed);
 }
@@ -186,7 +188,7 @@ TEST(GoldenCC, CCStatus_Parse) {
     // Byte 5: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21 [GSM 24.008 10.5.4.11]
     // Byte 6: CallState = 0x00 [GSM 24.008 10.5.4.6]
     uint8_t data[] = {0x3E, 0xF4, 0x08, 0x02, 0x16, 0x21, 0x00};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::CCStatus);
 }
@@ -205,7 +207,7 @@ TEST(GoldenCC, EmergencySetup_Parse) {
     // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x0E(EmergencySetup)|NSD(2)=0 = 0x38 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x38};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::EmergencySetup);
 }
@@ -221,7 +223,7 @@ TEST(GoldenCC, Hold_Parse) {
     // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x18(Hold)|NSD(2)=0 = 0x60 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x60};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Hold);
 }
@@ -237,7 +239,7 @@ TEST(GoldenCC, Progress_Parse) {
     // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x03(Progress)|NSD(2)=0 = 0x0C [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x0C};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Progress);
 }
@@ -264,7 +266,7 @@ TEST(GoldenCC, StartDTMF_Parse) {
     //   and deviates from GSM 24.008 10.5.4.17. Golden test uses correct
     //   IA5 value 0x31 per spec.
     uint8_t data[] = {0x3E, 0xD4, 0x2C, 0x31};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::StartDTMF);
 }
@@ -280,7 +282,7 @@ TEST(GoldenCC, StopDTMF_Parse) {
     // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x31(StopDTMF)|NSD(2)=0 = 0xC4 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0xC4};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::StopDTMF);
 }
@@ -304,7 +306,7 @@ TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
     // Byte 3: location(4)=3(Transit)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x36
     // Byte 4: ext(1)=1|causeValue(7)=16(Normal_Call_Clearing) = 0b1_0010000 = 0x21 [GSM 24.008 10.5.4.11]
     uint8_t data[] = {0x3E, 0xA8, 0x02, 0x36, 0x21};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::ReleaseComplete);
 }
@@ -329,7 +331,7 @@ TEST(GoldenCC, Disconnect_Parse) {
     // Byte 3: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11|ext(1)=0 = 0x16
     // Byte 4: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21
     uint8_t data[] = {0x3E, 0x94, 0x02, 0x16, 0x21};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Disconnect);
     auto* d = dynamic_cast<L3Disconnect*>(msg.get());
@@ -352,7 +354,7 @@ TEST(GoldenCC, Release_Parse) {
     // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=1(REPL) = 0x3F [GSM 24.008 Table 11.3 TIF]
     // Byte 1: messageType(6)=0x2D(Release)|NSD(2)=0 = 0xB4 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3F, 0xB4};
-    auto msg = parseL3(data, sizeof(data));
+    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
     ASSERT_TRUE(msg);
     EXPECT_EQ(msg->MTI(), L3CCMessage::Release);
 }
