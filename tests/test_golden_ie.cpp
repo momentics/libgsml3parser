@@ -819,7 +819,7 @@ TEST(GoldenIE, CellSelectionParameters_RefValues) {
     EXPECT_EQ(parsed.msTxpwrMaxCch(), 7u);
     EXPECT_EQ(parsed.acs(), 0u);
     EXPECT_EQ(parsed.neci(), 1u);
-    EXPECT_EQ(parsed.rxLevAccessMin(), 0u);
+    EXPECT_EQ(parsed.rxlevAccessMin(), 0u);
 }
 
 // =====================================================================

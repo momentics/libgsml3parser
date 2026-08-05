@@ -49,7 +49,9 @@ static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     std::vector<uint8_t> buf(msg.fullLength());
     size_t n = writeL3(msg, buf.data(), buf.size());
     if (n == 0) return nullptr;
-    return parseL3(std::span<const uint8_t>(buf), ctx);
+    auto result = parseL3(std::span<const uint8_t>(buf), ctx);
+    if (!result.has_value()) return nullptr;
+    return std::move(result).value();
 }
 
 // =====================================================================
@@ -390,7 +392,7 @@ TEST(GoldenMM, CMServiceReject_RoundTrip) {
 
 TEST(GoldenMM, LocationUpdatingAccept_RoundTrip) {
     L3LocationAreaIdentity lai("250", "01", 0x1234);
-    L3LocationUpdatingAccept msg(lai);
+    L3LocationUpdatingAccept msg = L3LocationUpdatingAccept::builder().lai(lai).build();
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(parsed->mti(), L3MMMessage::LocationUpdatingAccept);
@@ -399,7 +401,7 @@ TEST(GoldenMM, LocationUpdatingAccept_RoundTrip) {
 TEST(GoldenMM, LocationUpdatingAccept_WithMI_RoundTrip) {
     L3LocationAreaIdentity lai("250", "01", 0x1234);
     L3MobileIdentity mi(0xDEADBEEF);
-    L3LocationUpdatingAccept msg(lai, mi, true);
+    L3LocationUpdatingAccept msg = L3LocationUpdatingAccept::builder().lai(lai).mobileIdentity(mi).followOn(true).build();
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(parsed->mti(), L3MMMessage::LocationUpdatingAccept);
@@ -427,7 +429,7 @@ TEST(GoldenMM, AuthenticationResponse_RoundTrip) {
     ASSERT_TRUE(msg);
     auto* ar = dynamic_cast<L3AuthenticationResponse*>(msg.get());
     ASSERT_TRUE(ar);
-    EXPECT_EQ(ar->SRES(), 0xABCD1234u);
+    EXPECT_EQ(ar->sres(), 0xABCD1234u);
     auto parsed = roundtrip(*ar);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(parsed->mti(), L3MMMessage::AuthenticationResponse);
@@ -464,7 +466,7 @@ TEST(GoldenMM, IdentityResponse_RoundTrip) {
 TEST(GoldenMM, TMSIReallocationCommand_RoundTrip) {
     L3LocationAreaIdentity lai("250", "01", 0x1234);
     L3MobileIdentity tmsi(0x12345678);
-    L3TMSIReallocationCommand msg(lai, tmsi, false);
+    L3TMSIReallocationCommand msg = L3TMSIReallocationCommand::builder().lai(lai).tmsi(tmsi).build();
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(parsed->mti(), L3MMMessage::TMSIReallocationCommand);

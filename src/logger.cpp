@@ -24,6 +24,8 @@
 #include <cstdio>
 #include <ctime>
 #include <mutex>
+#include <string>
+#include <vector>
 
 namespace gsml3parser {
 
@@ -60,62 +62,92 @@ static const char* levelName(LogLevel level) {
     }
 }
 
-static void emitStderr(LogLevel level, const char* file, int line, const char* fmt, va_list ap) {
+// Thread-local buffer for batching log messages.
+// Each thread accumulates formatted lines and flushes periodically.
+static constexpr size_t MaxBufEntries = 64;
+
+struct LogEntry {
+    LogLevel level;
+    const char* file;
+    int line;
+    std::string msg;
+};
+
+static thread_local std::vector<LogEntry> tlsBuffer;
+static thread_local std::once_flag tlsInitFlag;
+
+static void flushBuffer() {
+    if (tlsBuffer.empty()) return;
+
     static std::mutex logMutex;
     std::lock_guard<std::mutex> lock(logMutex);
 
-    time_t now = time(nullptr);
-    struct tm tmBuf;
+    for (const auto& e : tlsBuffer) {
+        time_t now = time(nullptr);
+        struct tm tmBuf;
 #ifdef _WIN32
-    localtime_s(&tmBuf, &now);
+        localtime_s(&tmBuf, &now);
 #else
-    localtime_r(&now, &tmBuf);
+        localtime_r(&now, &tmBuf);
 #endif
+        fprintf(stderr, "[%04d-%02d-%02dT%02d:%02d:%02d] [%s] [%s:%d] %s\n",
+                tmBuf.tm_year + 1900, tmBuf.tm_mon + 1, tmBuf.tm_mday,
+                tmBuf.tm_hour, tmBuf.tm_min, tmBuf.tm_sec,
+                levelName(e.level), e.file ? e.file : "?", e.line, e.msg.c_str());
+    }
+    tlsBuffer.clear();
+}
 
-    fprintf(stderr, "[%04d-%02d-%02dT%02d:%02d:%02d] [%s] [%s:%d] ",
-            tmBuf.tm_year + 1900, tmBuf.tm_mon + 1, tmBuf.tm_mday,
-            tmBuf.tm_hour, tmBuf.tm_min, tmBuf.tm_sec,
-            levelName(level), file ? file : "?", line);
-
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
+static void initLogFromEnv() {
+    const char* env = getenv("GSML3PARSER_LOG_LEVEL");
+    if (env) {
+        int lvl = atoi(env);
+        if (lvl >= 0 && lvl <= 7) {
+            tlsLogLevel = static_cast<LogLevel>(lvl);
+        }
+    }
 }
 
 // ── Public API ──────────────────────────────────────────────────────────
 
 void logMessage(LogLevel level, const char* file, int line, const char* fmt, ...) {
+    std::call_once(tlsInitFlag, initLogFromEnv);
+
     if (static_cast<int>(level) > static_cast<int>(tlsLogLevel)) return;
 
     va_list ap;
     va_start(ap, fmt);
 
-    // Buffer the formatted message so we can pass it to the callback.
-    char buf[1024];
+    // Buffer the formatted message.
+    char buf[512];
     int n = vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
 
-    const char* msg;
-    std::string heapMsg;
+    std::string msg;
     if (n < 0 || static_cast<size_t>(n) >= sizeof(buf)) {
-        // Message too long for inline buffer — allocate on heap.
         va_start(ap, fmt);
-        heapMsg.resize(static_cast<size_t>(n) + 1);
-        vsnprintf(heapMsg.data(), heapMsg.size(), fmt, ap);
+        msg.resize(static_cast<size_t>(n) + 1);
+        vsnprintf(msg.data(), msg.size(), fmt, ap);
         va_end(ap);
-        msg = heapMsg.c_str();
+        msg.resize(n);
     } else {
         msg = buf;
     }
 
     if (tlsLogCallback) {
-        tlsLogCallback(level, file, line, msg);
+        tlsLogCallback(level, file, line, msg.c_str());
     } else {
-        // Re-open va_list for stderr output.
-        va_list ap2;
-        va_start(ap2, fmt);
-        emitStderr(level, file, line, fmt, ap2);
-        va_end(ap2);
+        // Accumulate in thread-local buffer, flush periodically.
+        tlsBuffer.push_back({level, file, line, std::move(msg)});
+        if (tlsBuffer.size() >= MaxBufEntries) {
+            flushBuffer();
+        }
     }
+}
+
+// Explicit flush for all thread-local buffers (called from destructors or manually).
+void flushLogs() {
+    flushBuffer();
 }
 
 } // namespace gsml3parser

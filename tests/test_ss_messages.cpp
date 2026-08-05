@@ -35,7 +35,8 @@ static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     size_t n = writeL3(msg, buf.data(), buf.size());
     if (n == 0) return nullptr;
     auto result = parseL3(std::span<const uint8_t>(buf), ctx);
-    return result;
+    if (!result.has_value()) return nullptr;
+    return std::move(result).value();
 }
 
 // ── Facility Message (GSM 04.80 2.3) ─────────────────────────────────

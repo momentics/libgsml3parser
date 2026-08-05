@@ -98,18 +98,27 @@ L3PagingRequestType1::L3PagingRequestType1() {
     mChannelsNeeded[1] = ChannelType::AnyDCCHType;
 }
 
-L3PagingRequestType1::L3PagingRequestType1(const L3MobileIdentity& wId, ChannelType wType) {
-    mMobileIDs.push_back(wId);
-    mChannelsNeeded[0] = wType;
-    mChannelsNeeded[1] = ChannelType::AnyDCCHType;
+// ── Builder ────────────────────────────────────────────────────────────
+
+L3PagingRequestType1::Builder L3PagingRequestType1::builder() { return Builder{}; }
+
+L3PagingRequestType1::Builder& L3PagingRequestType1::Builder::addMobileId(const L3MobileIdentity& id, ChannelType type) {
+    mMobileIds.push_back(id);
+    if (mMobileIds.size() <= 2) {
+        mChannelsNeeded[mMobileIds.size() - 1] = type;
+    }
+    return *this;
 }
 
-L3PagingRequestType1::L3PagingRequestType1(const L3MobileIdentity& wId1, ChannelType wType1,
-                                           const L3MobileIdentity& wId2, ChannelType wType2) {
-    mMobileIDs.push_back(wId1);
-    mChannelsNeeded[0] = wType1;
-    mMobileIDs.push_back(wId2);
-    mChannelsNeeded[1] = wType2;
+L3PagingRequestType1 L3PagingRequestType1::Builder::build() {
+    L3PagingRequestType1 msg;
+    if (mMobileIds.empty()) {
+        msg.mMobileIDs.emplace_back();
+    } else {
+        msg.mMobileIDs = std::move(mMobileIds);
+    }
+    msg.mChannelsNeeded = mChannelsNeeded;
+    return msg;
 }
 
 size_t L3PagingRequestType1::l2BodyLength() const {
@@ -324,6 +333,41 @@ void L3AssignmentCommand::text(std::ostream& os) const {
         os << " ";
         mMode1.text(os);
     }
+}
+
+// ── L3AssignmentCommand Builder ────────────────────────────────────────
+
+L3AssignmentCommand::Builder L3AssignmentCommand::builder() { return Builder{}; }
+
+L3AssignmentCommand::Builder& L3AssignmentCommand::Builder::channel(const L3ChannelDescription& ch) {
+    mChannel = ch;
+    return *this;
+}
+
+L3AssignmentCommand::Builder& L3AssignmentCommand::Builder::powerCommand(const L3PowerCommand& pc) {
+    mPowerCommand = pc;
+    return *this;
+}
+
+L3AssignmentCommand::Builder& L3AssignmentCommand::Builder::mode1(const L3ChannelMode& mode) {
+    mHaveMode1 = true;
+    mMode1 = mode;
+    return *this;
+}
+
+L3AssignmentCommand::Builder& L3AssignmentCommand::Builder::multiRate(const L3MultiRateConfiguration& mr) {
+    mMultiRate = mr;
+    return *this;
+}
+
+L3AssignmentCommand L3AssignmentCommand::Builder::build() {
+    L3AssignmentCommand msg;
+    msg.mChannel = mChannel;
+    msg.mPowerCommand = mPowerCommand;
+    msg.mHaveMode1 = mHaveMode1;
+    msg.mMode1 = mMode1;
+    msg.mMultiRate = mMultiRate;
+    return msg;
 }
 
 // ── L3ClassmarkEnquiry ──────────────────────────────────────────────────
@@ -870,11 +914,29 @@ L3PagingRequestType2::L3PagingRequestType2() {
     mChannelsNeeded[1] = ChannelType::AnyDCCHType;
 }
 
-L3PagingRequestType2::L3PagingRequestType2(const L3MobileIdentity& wId, ChannelType wType) {
-    mTMSIs.push_back(wId.tmsi());
-    mTMSIs.push_back(0);
-    mChannelsNeeded[0] = wType;
-    mChannelsNeeded[1] = ChannelType::AnyDCCHType;
+// ── L3PagingRequestType2 Builder ───────────────────────────────────────
+
+L3PagingRequestType2::Builder L3PagingRequestType2::builder() { return Builder{}; }
+
+L3PagingRequestType2::Builder& L3PagingRequestType2::Builder::addTMSI(uint32_t tmsi, ChannelType type) {
+    mTMSIs.push_back(tmsi);
+    if (mTMSIs.size() <= 2) {
+        mChannelsNeeded[mTMSIs.size() - 1] = type;
+    }
+    return *this;
+}
+
+L3PagingRequestType2 L3PagingRequestType2::Builder::build() {
+    L3PagingRequestType2 msg;
+    if (mTMSIs.empty()) {
+        msg.mTMSIs.push_back(0);
+        msg.mTMSIs.push_back(0);
+    } else {
+        msg.mTMSIs = std::move(mTMSIs);
+        while (msg.mTMSIs.size() < 2) msg.mTMSIs.push_back(0);
+    }
+    msg.mChannelsNeeded = mChannelsNeeded;
+    return msg;
 }
 
 size_t L3PagingRequestType2::l2BodyLength() const {
@@ -926,13 +988,28 @@ L3PagingRequestType3::L3PagingRequestType3() {
     mChannelsNeeded[1] = ChannelType::AnyDCCHType;
 }
 
-L3PagingRequestType3::L3PagingRequestType3(const L3MobileIdentity& wId, ChannelType wType) {
-    mTMSIs.push_back(wId.tmsi());
-    mTMSIs.push_back(0);
-    mTMSIs.push_back(0);
-    mTMSIs.push_back(0);
-    mChannelsNeeded[0] = wType;
-    mChannelsNeeded[1] = ChannelType::AnyDCCHType;
+// ── L3PagingRequestType3 Builder ───────────────────────────────────────
+
+L3PagingRequestType3::Builder L3PagingRequestType3::builder() { return Builder{}; }
+
+L3PagingRequestType3::Builder& L3PagingRequestType3::Builder::addTMSI(uint32_t tmsi, ChannelType type) {
+    mTMSIs.push_back(tmsi);
+    if (mTMSIs.size() <= 2) {
+        mChannelsNeeded[mTMSIs.size() - 1] = type;
+    }
+    return *this;
+}
+
+L3PagingRequestType3 L3PagingRequestType3::Builder::build() {
+    L3PagingRequestType3 msg;
+    if (mTMSIs.empty()) {
+        for (int i = 0; i < 4; i++) msg.mTMSIs.push_back(0);
+    } else {
+        msg.mTMSIs = std::move(mTMSIs);
+        while (msg.mTMSIs.size() < 4) msg.mTMSIs.push_back(0);
+    }
+    msg.mChannelsNeeded = mChannelsNeeded;
+    return msg;
 }
 
 size_t L3PagingRequestType3::l2BodyLength() const {
@@ -1027,6 +1104,45 @@ void L3HandoverCommand::text(std::ostream& os) const {
     mHandoverReference.text(os);
     os << " SyncInd=";
     mSynchronizationIndication.text(os);
+}
+
+// ── L3HandoverCommand Builder ──────────────────────────────────────────
+
+L3HandoverCommand::Builder L3HandoverCommand::builder() { return Builder{}; }
+
+L3HandoverCommand::Builder& L3HandoverCommand::Builder::cellDescription(const L3CellDescription& cd) {
+    mCellDescription = cd;
+    return *this;
+}
+
+L3HandoverCommand::Builder& L3HandoverCommand::Builder::channelDescriptionAfter(const L3ChannelDescription2& cda) {
+    mChannelDescriptionAfter = cda;
+    return *this;
+}
+
+L3HandoverCommand::Builder& L3HandoverCommand::Builder::handoverReference(const L3HandoverReference& hr) {
+    mHandoverReference = hr;
+    return *this;
+}
+
+L3HandoverCommand::Builder& L3HandoverCommand::Builder::powerCommandAccessType(const L3PowerCommandAndAccessType& pcat) {
+    mPowerCommandAccessType = pcat;
+    return *this;
+}
+
+L3HandoverCommand::Builder& L3HandoverCommand::Builder::syncIndication(const L3SynchronizationIndication& si) {
+    mSynchronizationIndication = si;
+    return *this;
+}
+
+L3HandoverCommand L3HandoverCommand::Builder::build() {
+    L3HandoverCommand msg;
+    msg.mCellDescription = mCellDescription;
+    msg.mChannelDescriptionAfter = mChannelDescriptionAfter;
+    msg.mHandoverReference = mHandoverReference;
+    msg.mPowerCommandAccessType = mPowerCommandAccessType;
+    msg.mSynchronizationIndication = mSynchronizationIndication;
+    return msg;
 }
 
 // ── L3AdditionalAssignment ─────────────────────────────────────────────

@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
 
     if (msg) {
         std::cout << msg->text() << "\n";
-        printMsgDetails(*msg);
+        printMsgDetails(**msg);
     } else {
         std::cerr << "Failed to parse: " << content << "\n";
         return 1;

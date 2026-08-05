@@ -106,15 +106,28 @@ private:
     bool mHaveMobileIdentity;
     L3MobileIdentity mMobileIdentity;
 public:
-    L3LocationUpdatingAccept(const L3LocationAreaIdentity& wLAI, bool wFollowOn = false);
-    L3LocationUpdatingAccept(const L3LocationAreaIdentity& wLAI,
-                             const L3MobileIdentity& wID, bool wFollowOn = false);
+    L3LocationUpdatingAccept();
 
     int mti() const override { return LocationUpdatingAccept; }
     size_t l2BodyLength() const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
+
+    class Builder {
+    public:
+        Builder& lai(const L3LocationAreaIdentity& lai);
+        Builder& mobileIdentity(const L3MobileIdentity& id);
+        Builder& followOn(bool fo);
+        L3LocationUpdatingAccept build();
+    private:
+        L3LocationAreaIdentity mLAI;
+        bool mFollowOnProceed{false};
+        bool mHaveMobileIdentity{false};
+        L3MobileIdentity mMobileIdentity;
+    };
+
+    static Builder builder();
 };
 
 // ── Location Updating Reject (GSM 04.08 9.2.14) ───────────────────────
@@ -312,7 +325,7 @@ private:
     L3MobileIdentity mTMSI;
     bool mFollowOnProceed;
 public:
-    L3TMSIReallocationCommand(const L3LocationAreaIdentity& wLAI, const L3MobileIdentity& wTMSI, bool wFollowOn = false);
+    L3TMSIReallocationCommand();
     const L3LocationAreaIdentity& lai() const { return mLAI; }
     const L3MobileIdentity& tmsi() const { return mTMSI; }
     bool followOnProceed() const { return mFollowOnProceed; }
@@ -321,6 +334,20 @@ public:
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;
+
+    class Builder {
+    public:
+        Builder& lai(const L3LocationAreaIdentity& lai);
+        Builder& tmsi(const L3MobileIdentity& t);
+        Builder& followOn(bool fo);
+        L3TMSIReallocationCommand build();
+    private:
+        L3LocationAreaIdentity mLAI;
+        L3MobileIdentity mTMSI;
+        bool mFollowOnProceed{false};
+    };
+
+    static Builder builder();
 };
 
 // ── TMSI Reallocation Complete (GSM 04.08 9.2.18) ─────────────────────

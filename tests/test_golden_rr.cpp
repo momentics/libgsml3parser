@@ -59,7 +59,9 @@ static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     std::vector<uint8_t> buf(msg.fullLength());
     size_t n = writeL3(msg, buf.data(), buf.size());
     if (n == 0) return nullptr;
-    return parseL3(std::span<const uint8_t>(buf), ctx);
+    auto result = parseL3(std::span<const uint8_t>(buf), ctx);
+    if (!result.has_value()) return nullptr;
+    return std::move(result).value();
 }
 
 // =====================================================================

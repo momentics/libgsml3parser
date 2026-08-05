@@ -31,17 +31,21 @@
 namespace gsml3parser {
 
 /**
- * L3Frame — a GSM L3 message in a bit vector, with metadata.
+ * L3Frame — a GSM L3 message backed by an owned BitVector, with metadata.
+ *
+ * Composition over inheritance: L3Frame contains a BitVector (mPayload)
+ * rather than deriving from it.  All bit-level access is delegated to mPayload.
  *
  * Bit ordering is MSB-first within each octet.
  * Part of libgsml3parser.
  */
-class L3Frame : public BitVector {
+class L3Frame {
 private:
+    BitVector  mPayload;         // owned bit buffer (composition)
     Primitive  mPrimitive;
     SAPI       mSapi;
-    size_t     mL2Length;  // length or L2 pseudo-length in bytes
-    double     mTimestamp; // creation timestamp (seconds since epoch)
+    size_t     mL2Length;        // length or L2 pseudo-length in bytes
+    double     mTimestamp;       // creation timestamp (seconds since epoch)
 
     void init();
 
@@ -54,7 +58,9 @@ public:
     L3Frame(SAPI sapi, const char* hexString);
 
     L3Frame(const L3Frame& other);
+    L3Frame(L3Frame&& other) noexcept;
     L3Frame& operator=(const L3Frame& other);
+    L3Frame& operator=(L3Frame&& other) noexcept;
 
     // ── Protocol fields ──────────────────────────────────────────────
 
@@ -76,7 +82,7 @@ public:
     bool isData() const;
 
     /** Frame length in bytes */
-    size_t length() const { return size() / 8; }
+    size_t length() const { return mPayload.size() / 8; }
 
     /** L2 length / pseudo-length */
     size_t l2Length() const { return mL2Length; }
@@ -87,6 +93,31 @@ public:
 
     double timestamp() const { return mTimestamp; }
     void setTimestamp(double ts) { mTimestamp = ts; }
+
+    // ── Delegated bit-level access → mPayload ────────────────────────
+
+    size_t size() const { return mPayload.size(); }
+    bool empty() const { return mPayload.empty(); }
+
+    unsigned readField(size_t& rp, unsigned nbits) const { return mPayload.readField(rp, nbits); }
+    void writeField(size_t& wp, unsigned value, unsigned nbits) { mPayload.writeField(wp, value, nbits); }
+    unsigned peekField(size_t rp, unsigned nbits) const { return mPayload.peekField(rp, nbits); }
+
+    unsigned readBit(size_t& rp) const { return mPayload.readBit(rp); }
+    void writeBit(size_t& wp, bool bit) { mPayload.writeBit(wp, bit); }
+
+    // ── Delegated byte access → mPayload ─────────────────────────────
+
+    const uint8_t* data() const { return mPayload.data(); }
+    uint8_t* data() { return mPayload.data(); }
+
+    void resize(size_t nbits) { mPayload.resize(nbits); }
+    size_t writeEnd() const { return mPayload.writeEnd(); }
+
+    // ── Delegated segment / clone → mPayload ─────────────────────────
+
+    BitVector segment(size_t offset, size_t nbits) const { return mPayload.segment(offset, nbits); }
+    BitVector clone() const { return mPayload.clone(); }
 
     // ── H/L bit writing (for rest octets) ────────────────────────────
 

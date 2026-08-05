@@ -474,7 +474,7 @@ TEST(GSMSpecTest, CellSelectionParameters_RefValues) {
     EXPECT_EQ(parsed.msTxpwrMaxCch(), 7u);
     EXPECT_EQ(parsed.acs(), 0u);
     EXPECT_EQ(parsed.neci(), 1u);
-    EXPECT_EQ(parsed.rxLevAccessMin(), 0u);
+    EXPECT_EQ(parsed.rxlevAccessMin(), 0u);
 }
 
 // ── Control Channel Description (GSM 04.08 10.5.2.11) ─────────────────

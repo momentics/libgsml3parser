@@ -88,9 +88,6 @@ private:
 public:
     explicit L3Setup(unsigned wTI = 7)
         : L3CCMessage(wTI), mHaveCalledParty(false), mHaveCallingParty(false), mHaveSignal(false) {}
-    L3Setup(unsigned wTI, const L3CalledPartyBCDNumber& wCalled)
-        : L3CCMessage(wTI), mHaveCalledParty(true), mCalledPartyBCDNumber(wCalled),
-          mHaveCallingParty(false), mHaveSignal(false) {}
 
     bool haveCalledParty() const { return mHaveCalledParty; }
     const L3CalledPartyBCDNumber& calledPartyBCDNumber() const { return mCalledPartyBCDNumber; }
@@ -103,6 +100,29 @@ public:
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
     void text(std::ostream& os) const override;
+
+    class Builder {
+    public:
+        explicit Builder(unsigned wTI = 7);
+        Builder& calledParty(const L3CalledPartyBCDNumber& cp);
+        Builder& callingParty(const L3CallingPartyBCDNumber& cp);
+        Builder& signal(const L3Signal& sig);
+        Builder& bearerCapability(const L3BearerCapability& bc);
+        Builder& supportedCodecs(const L3SupportedCodecList& sc);
+        L3Setup build();
+    private:
+        unsigned mTI{7};
+        bool mHaveCalledParty{false};
+        L3CalledPartyBCDNumber mCalledPartyBCDNumber;
+        bool mHaveCallingParty{false};
+        L3CallingPartyBCDNumber mCallingPartyBCDNumber;
+        bool mHaveSignal{false};
+        L3Signal mSignal;
+        L3BearerCapability mBearerCapability;
+        L3SupportedCodecList mSupportedCodecs;
+    };
+
+    static Builder builder(unsigned wTI = 7) { return Builder(wTI); }
 };
 
 // ── Emergency Setup (GSM 04.08 9.3.8) ─────────────────────────────────
@@ -224,7 +244,6 @@ private:
     CCCause mCause;
 public:
     explicit L3Release(unsigned wTI = 7) : L3CCMessage(wTI), mHaveCause(false) {}
-    L3Release(unsigned wTI, CCCause cause) : L3CCMessage(wTI), mHaveCause(true), mCause(cause) {}
 
     bool haveCause() const { return mHaveCause; }
     CCCause cause() const { return mCause; }
@@ -233,6 +252,19 @@ public:
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
     void text(std::ostream& os) const override;
+
+    class Builder {
+    public:
+        explicit Builder(unsigned wTI = 7);
+        Builder& cause(CCCause c);
+        L3Release build();
+    private:
+        unsigned mTI{7};
+        bool mHaveCause{false};
+        CCCause mCause{CCCause::Normal_Call_Clearing};
+    };
+
+    static Builder builder(unsigned wTI = 7) { return Builder(wTI); }
 };
 
 // ── Release Complete (GSM 04.08 9.3.19) ───────────────────────────────
@@ -243,13 +275,25 @@ private:
     CCCause mCause;
 public:
     explicit L3ReleaseComplete(unsigned wTI = 7) : L3CCMessage(wTI), mHaveCause(false) {}
-    L3ReleaseComplete(unsigned wTI, CCCause cause) : L3CCMessage(wTI), mHaveCause(true), mCause(cause) {}
 
     int mti() const override { return ReleaseComplete; }
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
     void text(std::ostream& os) const override;
+
+    class Builder {
+    public:
+        explicit Builder(unsigned wTI = 7);
+        Builder& cause(CCCause c);
+        L3ReleaseComplete build();
+    private:
+        unsigned mTI{7};
+        bool mHaveCause{false};
+        CCCause mCause{CCCause::Normal_Call_Clearing};
+    };
+
+    static Builder builder(unsigned wTI = 7) { return Builder(wTI); }
 };
 
 // ── CC Status (GSM 04.08 9.3.19) ──────────────────────────────────────
@@ -260,8 +304,6 @@ private:
     unsigned mCallState;
 public:
     explicit L3CCStatus(unsigned wTI = 7) : L3CCMessage(wTI) {}
-    L3CCStatus(unsigned wTI, CCCause cause, unsigned callState)
-        : L3CCMessage(wTI), mCause(cause), mCallState(callState) {}
 
     CCCause cause() const { return mCause; }
     unsigned callState() const { return mCallState; }
@@ -270,6 +312,20 @@ public:
     void parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override { return 4; }
     void text(std::ostream& os) const override;
+
+    class Builder {
+    public:
+        explicit Builder(unsigned wTI = 7);
+        Builder& cause(CCCause c);
+        Builder& callState(unsigned cs);
+        L3CCStatus build();
+    private:
+        unsigned mTI{7};
+        CCCause mCause{CCCause::Normal_Call_Clearing};
+        unsigned mCallState{0};
+    };
+
+    static Builder builder(unsigned wTI = 7) { return Builder(wTI); }
 };
 
 // ── DTMF messages ──────────────────────────────────────────────────────

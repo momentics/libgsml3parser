@@ -30,6 +30,7 @@
 #include "../l3message.h"
 #include "../types.h"
 #include "../enums.h"
+#include "../protocol_types.h"
 
 namespace gsml3parser {
 
@@ -37,10 +38,10 @@ namespace gsml3parser {
 
 class L3CellIdentity : public L3ProtocolElement {
 private:
-    unsigned mID;
+    CellIdentity mID;
 public:
     explicit L3CellIdentity(unsigned wID = 0) : mID(wID) {}
-    unsigned id() const { return mID; }
+    CellIdentity id() const { return mID; }
     size_t lengthV() const override { return 2; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -54,7 +55,7 @@ class L3LocationAreaIdentity : public L3ProtocolElement {
 private:
     std::array<unsigned, 3> mMCC;
     std::array<unsigned, 3> mMNC;
-    unsigned mLAC;
+    Lac mLAC;
 public:
     L3LocationAreaIdentity(const char* wMCC = "250", const char* wMNC = "01", unsigned wLAC = 1);
     bool operator==(const L3LocationAreaIdentity&) const;
@@ -169,7 +170,7 @@ public:
 
 class L3CipheringKeySequenceNumber : public L3ProtocolElement {
 protected:
-    unsigned mCIValue;
+    CiValue mCIValue;
 public:
     explicit L3CipheringKeySequenceNumber(unsigned wCIValue = 0) : mCIValue(wCIValue) {}
     size_t lengthV() const override { return 0; }
@@ -206,14 +207,14 @@ private:
 
 class L3CellChannelDescription : public L3ProtocolElement {
 private:
-    unsigned mARfcn;
-    unsigned mBSIC;
+    Arfcn mARfcn;
+    Bsic mBSIC;
     unsigned mChannelSpacing;
 public:
     L3CellChannelDescription();
     L3CellChannelDescription(unsigned wARfcn, unsigned wBSIC, unsigned wSpacing);
-    unsigned arfcn() const { return mARfcn; }
-    unsigned bsic() const { return mBSIC; }
+    Arfcn arfcn() const { return mARfcn; }
+    Bsic bsic() const { return mBSIC; }
     unsigned channelSpacing() const { return mChannelSpacing; }
     size_t lengthV() const override { return 3; }
     void writeV(L3Frame& dest, size_t& wp) const override;
@@ -275,23 +276,23 @@ public:
 class L3ChannelDescription : public L3ProtocolElement {
 private:
     TypeAndOffset mTypeAndOffset;
-    unsigned mTN;
-    unsigned mTSC;
+    TimeslotNumber mTN;
+    Tsc mTSC;
     unsigned mHFlag;
-    unsigned mARFCN;
-    unsigned mMAIO;
-    unsigned mHSN;
+    Arfcn mARFCN;
+    Maio mMAIO;
+    Hsn mHSN;
 public:
     L3ChannelDescription();
     L3ChannelDescription(TypeAndOffset wTypeAndOffset, unsigned wTN,
-                         unsigned wTSC, unsigned wARFCN);
+                          unsigned wTSC, unsigned wARFCN);
     bool initialized() const { return mTypeAndOffset != TDMA_MISC; }
     TypeAndOffset typeAndOffset() const { return mTypeAndOffset; }
-    unsigned tn() const { return mTN; }
-    unsigned tsc() const { return mTSC; }
-    unsigned arfcn() const { return mARFCN; }
-    unsigned maio() const { return mMAIO; }
-    unsigned hsn() const { return mHSN; }
+    TimeslotNumber tn() const { return mTN; }
+    Tsc tsc() const { return mTSC; }
+    Arfcn arfcn() const { return mARFCN; }
+    Maio maio() const { return mMAIO; }
+    Hsn hsn() const { return mHSN; }
     size_t lengthV() const override { return 3; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -389,10 +390,10 @@ public:
 
 class L3TimingAdvance : public L3ProtocolElement {
 private:
-    unsigned mTimingAdvance;
+    TimingAdvanceValue mTimingAdvance;
 public:
     explicit L3TimingAdvance(unsigned wTA = 0);
-    unsigned timingAdvance() const { return mTimingAdvance; }
+    TimingAdvanceValue timingAdvance() const { return mTimingAdvance; }
     size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;
@@ -404,14 +405,14 @@ public:
 
 class L3CellDescription : public L3ProtocolElement {
 private:
-    unsigned mARFCN;
-    unsigned mNCC;
-    unsigned mBCC;
+    Arfcn mARFCN;
+    Ncc mNCC;
+    Bcc mBCC;
 public:
     L3CellDescription(unsigned wARFCN = 0, unsigned wNCC = 0, unsigned wBCC = 0);
-    unsigned arfcn() const { return mARFCN; }
-    unsigned ncc() const { return mNCC; }
-    unsigned bcc() const { return mBCC; }
+    Arfcn arfcn() const { return mARFCN; }
+    Ncc ncc() const { return mNCC; }
+    Bcc bcc() const { return mBCC; }
     size_t lengthV() const override { return 2; }
     void writeV(L3Frame& dest, size_t& wp) const override;
     void parseV(const L3Frame& src, size_t& rp) override;

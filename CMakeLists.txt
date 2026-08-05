@@ -62,6 +62,7 @@ set(PUBLIC_HEADERS
     include/gsml3parser/logger.h
     include/gsml3parser/parser.h
     include/gsml3parser/result.h
+    include/gsml3parser/protocol_types.h
     include/gsml3parser/common/l3common.h
     include/gsml3parser/rr/l3rrmessages.h
     include/gsml3parser/mm/l3mmmessages.h

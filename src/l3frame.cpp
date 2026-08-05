@@ -35,34 +35,36 @@ void L3Frame::init() {
     mTimestamp = nowSeconds();
 }
 
-L3Frame::L3Frame() : BitVector(), mPrimitive(Primitive::L3_DATA), mSapi(SAPI::SAPI0), mL2Length(0) {
+L3Frame::L3Frame()
+    : mPrimitive(Primitive::L3_DATA), mSapi(SAPI::SAPI0), mL2Length(0), mTimestamp(0) {
     init();
 }
 
-L3Frame::L3Frame(Primitive prim) : BitVector(), mPrimitive(prim), mSapi(SAPI::SAPI0), mL2Length(0) {
+L3Frame::L3Frame(Primitive prim)
+    : mPrimitive(prim), mSapi(SAPI::SAPI0), mL2Length(0), mTimestamp(0) {
     init();
 }
 
-L3Frame::L3Frame(SAPI sapi, Primitive prim) : BitVector(), mPrimitive(prim), mSapi(sapi), mL2Length(0) {
+L3Frame::L3Frame(SAPI sapi, Primitive prim)
+    : mPrimitive(prim), mSapi(sapi), mL2Length(0), mTimestamp(0) {
     init();
 }
 
 L3Frame::L3Frame(Primitive prim, size_t nbits, SAPI sapi)
-    : BitVector(nbits), mPrimitive(prim), mSapi(sapi), mL2Length(nbits)
-{
+    : mPayload(nbits), mPrimitive(prim), mSapi(sapi), mL2Length(nbits), mTimestamp(0) {
     init();
 }
 
 L3Frame::L3Frame(SAPI sapi, const BitVector& source, Primitive prim)
-    : BitVector(source), mPrimitive(prim), mSapi(sapi),
-      mL2Length(source.size() / 8)
+    : mPayload(source), mPrimitive(prim), mSapi(sapi),
+      mL2Length(source.size() / 8), mTimestamp(0)
 {
     if (source.size() % 8) mL2Length++;
     init();
 }
 
 L3Frame::L3Frame(SAPI sapi, const char* hexString)
-    : BitVector(), mPrimitive(Primitive::L3_DATA), mSapi(sapi), mL2Length(0)
+    : mPrimitive(Primitive::L3_DATA), mSapi(sapi), mL2Length(0), mTimestamp(0)
 {
     std::string clean;
     for (const char* p = hexString; *p; ++p) {
@@ -76,22 +78,39 @@ L3Frame::L3Frame(SAPI sapi, const char* hexString)
         bytes.push_back(static_cast<uint8_t>(std::stoi(byteStr, nullptr, 16)));
     }
     if (!bytes.empty()) {
-        resize(bytes.size() * 8);
-        std::memcpy(data(), bytes.data(), bytes.size());
+        mPayload.resize(bytes.size() * 8);
+        std::memcpy(mPayload.data(), bytes.data(), bytes.size());
         mL2Length = bytes.size();
     }
     init();
 }
 
 L3Frame::L3Frame(const L3Frame& other)
-    : BitVector(other), mPrimitive(other.mPrimitive), mSapi(other.mSapi),
+    : mPayload(other.mPayload), mPrimitive(other.mPrimitive), mSapi(other.mSapi),
+      mL2Length(other.mL2Length), mTimestamp(other.mTimestamp)
+{
+}
+
+L3Frame::L3Frame(L3Frame&& other) noexcept
+    : mPayload(std::move(other.mPayload)), mPrimitive(other.mPrimitive), mSapi(other.mSapi),
       mL2Length(other.mL2Length), mTimestamp(other.mTimestamp)
 {
 }
 
 L3Frame& L3Frame::operator=(const L3Frame& other) {
     if (this != &other) {
-        BitVector::operator=(other);
+        mPayload = other.mPayload;
+        mPrimitive = other.mPrimitive;
+        mSapi = other.mSapi;
+        mL2Length = other.mL2Length;
+        mTimestamp = other.mTimestamp;
+    }
+    return *this;
+}
+
+L3Frame& L3Frame::operator=(L3Frame&& other) noexcept {
+    if (this != &other) {
+        mPayload = std::move(other.mPayload);
         mPrimitive = other.mPrimitive;
         mSapi = other.mSapi;
         mL2Length = other.mL2Length;
@@ -101,13 +120,13 @@ L3Frame& L3Frame::operator=(const L3Frame& other) {
 }
 
 L3PD L3Frame::pd() const {
-    if (size() < 8) return L3PD::Undefined;
-    return static_cast<L3PD>(peekField(0, 4));
+    if (mPayload.size() < 8) return L3PD::Undefined;
+    return static_cast<L3PD>(mPayload.peekField(0, 4));
 }
 
 unsigned L3Frame::mti() const {
-    if (size() < 16) return 0;
-    unsigned mtiVal = peekField(8, 8);
+    if (mPayload.size() < 16) return 0;
+    unsigned mtiVal = mPayload.peekField(8, 8);
     L3PD pd = this->pd();
     // MM, CC, SS: byte 1 = messageType(6)|NSD(2) — GSM 04.08 10.4
     // Bit 7 of byte 1 is "don't care" (direction indicator), mask with 0xFC then shift
@@ -116,20 +135,20 @@ unsigned L3Frame::mti() const {
         return (mtiVal & 0xFC) >> 2;
     }
     // RR short messages: TIF=1 indicates MTI >= 0x100
-    if (pd == L3PD::RadioResource && size() >= 8 && peekField(7, 1)) {
+    if (pd == L3PD::RadioResource && mPayload.size() >= 8 && mPayload.peekField(7, 1)) {
         return 0x100 + (mtiVal & 0xFF);
     }
     return mtiVal;
 }
 
 unsigned L3Frame::ti() const {
-    if (size() < 8) return 0;
-    return peekField(4, 3);  // TIO: 3 bits (bits 4-6 of byte 0)
+    if (mPayload.size() < 8) return 0;
+    return mPayload.peekField(4, 3);  // TIO: 3 bits (bits 4-6 of byte 0)
 }
 
 unsigned L3Frame::tif() const {
-    if (size() < 8) return 0;
-    return peekField(7, 1);  // TIF: 1 bit (bit 7 of byte 0)
+    if (mPayload.size() < 8) return 0;
+    return mPayload.peekField(7, 1);  // TIF: 1 bit (bit 7 of byte 0)
 }
 
 bool L3Frame::isData() const {
@@ -140,12 +159,12 @@ static const unsigned fillPattern[8] = {0,0,1,0,1,0,1,1};
 
 void L3Frame::writeH(size_t& wp) {
     unsigned fillBit = fillPattern[wp % 8];
-    writeField(wp, !fillBit, 1);
+    mPayload.writeField(wp, !fillBit, 1);
 }
 
 void L3Frame::writeL(size_t& wp) {
     unsigned fillBit = fillPattern[wp % 8];
-    writeField(wp, fillBit, 1);
+    mPayload.writeField(wp, fillBit, 1);
 }
 
 void L3Frame::text(std::ostream& os) const {
@@ -157,7 +176,7 @@ void L3Frame::text(std::ostream& os) const {
     }
     os << " SAPI=" << static_cast<int>(mSapi);
     os << " len=" << mL2Length;
-    os << " " << *static_cast<const BitVector*>(this);
+    os << " " << mPayload;
 }
 
 std::ostream& operator<<(std::ostream& os, const L3Frame& frame) {

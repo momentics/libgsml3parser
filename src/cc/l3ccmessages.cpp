@@ -172,6 +172,51 @@ void L3Setup::text(std::ostream& os) const {
     ccCommonText(os);
 }
 
+// ── L3Setup Builder ────────────────────────────────────────────────────
+
+L3Setup::Builder::Builder(unsigned wTI) : mTI(wTI) {}
+
+L3Setup::Builder& L3Setup::Builder::calledParty(const L3CalledPartyBCDNumber& cp) {
+    mHaveCalledParty = true;
+    mCalledPartyBCDNumber = cp;
+    return *this;
+}
+
+L3Setup::Builder& L3Setup::Builder::callingParty(const L3CallingPartyBCDNumber& cp) {
+    mHaveCallingParty = true;
+    mCallingPartyBCDNumber = cp;
+    return *this;
+}
+
+L3Setup::Builder& L3Setup::Builder::signal(const L3Signal& sig) {
+    mHaveSignal = true;
+    mSignal = sig;
+    return *this;
+}
+
+L3Setup::Builder& L3Setup::Builder::bearerCapability(const L3BearerCapability& bc) {
+    mBearerCapability = bc;
+    return *this;
+}
+
+L3Setup::Builder& L3Setup::Builder::supportedCodecs(const L3SupportedCodecList& sc) {
+    mSupportedCodecs = sc;
+    return *this;
+}
+
+L3Setup L3Setup::Builder::build() {
+    L3Setup msg(mTI);
+    msg.mHaveCalledParty = mHaveCalledParty;
+    msg.mCalledPartyBCDNumber = mCalledPartyBCDNumber;
+    msg.mHaveCallingParty = mHaveCallingParty;
+    msg.mCallingPartyBCDNumber = mCallingPartyBCDNumber;
+    msg.mHaveSignal = mHaveSignal;
+    msg.mSignal = mSignal;
+    msg.mBearerCapability = mBearerCapability;
+    msg.mSupportedCodecs = mSupportedCodecs;
+    return msg;
+}
+
 // ── L3CallProceeding ───────────────────────────────────────────────────
 
 void L3CallProceeding::writeBody(L3Frame& dest, size_t& wp) const {
@@ -354,6 +399,23 @@ void L3Release::text(std::ostream& os) const {
     ccCommonText(os);
 }
 
+// ── L3Release Builder ──────────────────────────────────────────────────
+
+L3Release::Builder::Builder(unsigned wTI) : mTI(wTI) {}
+
+L3Release::Builder& L3Release::Builder::cause(CCCause c) {
+    mHaveCause = true;
+    mCause = c;
+    return *this;
+}
+
+L3Release L3Release::Builder::build() {
+    L3Release msg(mTI);
+    msg.mHaveCause = mHaveCause;
+    msg.mCause = mCause;
+    return msg;
+}
+
 // ── L3ReleaseComplete ──────────────────────────────────────────────────
 
 void L3ReleaseComplete::writeBody(L3Frame& dest, size_t& wp) const {
@@ -384,6 +446,23 @@ void L3ReleaseComplete::text(std::ostream& os) const {
     ccCommonText(os);
 }
 
+// ── L3ReleaseComplete Builder ──────────────────────────────────────────
+
+L3ReleaseComplete::Builder::Builder(unsigned wTI) : mTI(wTI) {}
+
+L3ReleaseComplete::Builder& L3ReleaseComplete::Builder::cause(CCCause c) {
+    mHaveCause = true;
+    mCause = c;
+    return *this;
+}
+
+L3ReleaseComplete L3ReleaseComplete::Builder::build() {
+    L3ReleaseComplete msg(mTI);
+    msg.mHaveCause = mHaveCause;
+    msg.mCause = mCause;
+    return msg;
+}
+
 // ── L3CCStatus ─────────────────────────────────────────────────────────
 
 void L3CCStatus::writeBody(L3Frame& dest, size_t& wp) const {
@@ -404,6 +483,27 @@ void L3CCStatus::parseBody(const L3Frame& src, size_t& rp) {
 
 void L3CCStatus::text(std::ostream& os) const {
     os << "CCStatus: cause=" << CCCause2Str(mCause) << " state=" << mCallState;
+}
+
+// ── L3CCStatus Builder ─────────────────────────────────────────────────
+
+L3CCStatus::Builder::Builder(unsigned wTI) : mTI(wTI) {}
+
+L3CCStatus::Builder& L3CCStatus::Builder::cause(CCCause c) {
+    mCause = c;
+    return *this;
+}
+
+L3CCStatus::Builder& L3CCStatus::Builder::callState(unsigned cs) {
+    mCallState = cs;
+    return *this;
+}
+
+L3CCStatus L3CCStatus::Builder::build() {
+    L3CCStatus msg(mTI);
+    msg.mCause = mCause;
+    msg.mCallState = mCallState;
+    return msg;
 }
 
 // ── DTMF ────────────────────────────────────────────────────────────────

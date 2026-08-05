@@ -118,9 +118,17 @@ private:
     std::array<ChannelType, 2> mChannelsNeeded;
 public:
     L3PagingRequestType1();
-    L3PagingRequestType1(const L3MobileIdentity& wId, ChannelType wType);
-    L3PagingRequestType1(const L3MobileIdentity& wId1, ChannelType wType1,
-                         const L3MobileIdentity& wId2, ChannelType wType2);
+
+    class Builder {
+    public:
+        Builder& addMobileId(const L3MobileIdentity& id, ChannelType type);
+        L3PagingRequestType1 build();
+    private:
+        std::vector<L3MobileIdentity> mMobileIds;
+        std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
+    };
+
+    static Builder builder();
 
     int mti() const override { return PagingRequestType1; }
     size_t l2BodyLength() const override;
@@ -223,6 +231,23 @@ public:
     const L3ChannelMode& mode1() const { return mMode1; }
     bool isAMR() const { return mHaveMode1 && mMode1.isAMR(); }
     const L3MultiRateConfiguration& multiRate() const { return mMultiRate; }
+
+    class Builder {
+    public:
+        Builder& channel(const L3ChannelDescription& ch);
+        Builder& powerCommand(const L3PowerCommand& pc);
+        Builder& mode1(const L3ChannelMode& mode);
+        Builder& multiRate(const L3MultiRateConfiguration& mr);
+        L3AssignmentCommand build();
+    private:
+        L3ChannelDescription mChannel;
+        L3PowerCommand mPowerCommand;
+        bool mHaveMode1{false};
+        L3ChannelMode mMode1;
+        L3MultiRateConfiguration mMultiRate;
+    };
+
+    static Builder builder();
 };
 
 // ── Assignment Complete (GSM 04.08 9.1.3) ──────────────────────────────
@@ -557,13 +582,23 @@ private:
     std::array<ChannelType, 2> mChannelsNeeded;
 public:
     L3PagingRequestType2();
-    L3PagingRequestType2(const L3MobileIdentity& wId, ChannelType wType);
     int mti() const override { return PagingRequestType2; }
     size_t l2BodyLength() const override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;
     const std::vector<uint32_t>& tmsis() const { return mTMSIs; }
+
+    class Builder {
+    public:
+        Builder& addTMSI(uint32_t tmsi, ChannelType type);
+        L3PagingRequestType2 build();
+    private:
+        std::vector<uint32_t> mTMSIs;
+        std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
+    };
+
+    static Builder builder();
 };
 
 // ── Paging Request Type 3 (GSM 04.08 9.1.24) ──────────────────────────
@@ -575,13 +610,23 @@ private:
     std::array<ChannelType, 2> mChannelsNeeded;
 public:
     L3PagingRequestType3();
-    L3PagingRequestType3(const L3MobileIdentity& wId, ChannelType wType);
     int mti() const override { return PagingRequestType3; }
     size_t l2BodyLength() const override;
     void writeBody(L3Frame& dest, size_t& wp) const override;
     void parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;
     const std::vector<uint32_t>& tmsis() const { return mTMSIs; }
+
+    class Builder {
+    public:
+        Builder& addTMSI(uint32_t tmsi, ChannelType type);
+        L3PagingRequestType3 build();
+    private:
+        std::vector<uint32_t> mTMSIs;
+        std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
+    };
+
+    static Builder builder();
 };
 
 // ── Physical Information (GSM 04.08 9.1.12) ───────────────────────────
@@ -620,6 +665,24 @@ public:
     const L3HandoverReference& handoverReference() const { return mHandoverReference; }
     const L3PowerCommandAndAccessType& powerCommandAccessType() const { return mPowerCommandAccessType; }
     const L3SynchronizationIndication& syncIndication() const { return mSynchronizationIndication; }
+
+    class Builder {
+    public:
+        Builder& cellDescription(const L3CellDescription& cd);
+        Builder& channelDescriptionAfter(const L3ChannelDescription2& cda);
+        Builder& handoverReference(const L3HandoverReference& hr);
+        Builder& powerCommandAccessType(const L3PowerCommandAndAccessType& pcat);
+        Builder& syncIndication(const L3SynchronizationIndication& si);
+        L3HandoverCommand build();
+    private:
+        L3CellDescription mCellDescription;
+        L3ChannelDescription2 mChannelDescriptionAfter;
+        L3HandoverReference mHandoverReference;
+        L3PowerCommandAndAccessType mPowerCommandAccessType;
+        L3SynchronizationIndication mSynchronizationIndication;
+    };
+
+    static Builder builder();
 };
 
 // ── Additional Assignment (GSM 04.08 9.1.1) ───────────────────────────

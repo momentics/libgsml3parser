@@ -100,12 +100,37 @@ void L3LocationUpdatingRequest::text(std::ostream& os) const {
 
 // ── L3LocationUpdatingAccept ───────────────────────────────────────────
 
-L3LocationUpdatingAccept::L3LocationUpdatingAccept(const L3LocationAreaIdentity& wLAI, bool wFollowOn)
-    : mLAI(wLAI), mFollowOnProceed(wFollowOn), mHaveMobileIdentity(false) {}
+L3LocationUpdatingAccept::L3LocationUpdatingAccept()
+    : mFollowOnProceed(false), mHaveMobileIdentity(false) {}
 
-L3LocationUpdatingAccept::L3LocationUpdatingAccept(const L3LocationAreaIdentity& wLAI,
-                                                    const L3MobileIdentity& wID, bool wFollowOn)
-    : mLAI(wLAI), mFollowOnProceed(wFollowOn), mHaveMobileIdentity(true), mMobileIdentity(wID) {}
+// ── L3LocationUpdatingAccept Builder ───────────────────────────────────
+
+L3LocationUpdatingAccept::Builder L3LocationUpdatingAccept::builder() { return Builder{}; }
+
+L3LocationUpdatingAccept::Builder& L3LocationUpdatingAccept::Builder::lai(const L3LocationAreaIdentity& lai) {
+    mLAI = lai;
+    return *this;
+}
+
+L3LocationUpdatingAccept::Builder& L3LocationUpdatingAccept::Builder::mobileIdentity(const L3MobileIdentity& id) {
+    mHaveMobileIdentity = true;
+    mMobileIdentity = id;
+    return *this;
+}
+
+L3LocationUpdatingAccept::Builder& L3LocationUpdatingAccept::Builder::followOn(bool fo) {
+    mFollowOnProceed = fo;
+    return *this;
+}
+
+L3LocationUpdatingAccept L3LocationUpdatingAccept::Builder::build() {
+    L3LocationUpdatingAccept msg;
+    msg.mLAI = mLAI;
+    msg.mFollowOnProceed = mFollowOnProceed;
+    msg.mHaveMobileIdentity = mHaveMobileIdentity;
+    msg.mMobileIdentity = mMobileIdentity;
+    return msg;
+}
 
 size_t L3LocationUpdatingAccept::l2BodyLength() const {
     size_t result = mLAI.lengthV();
@@ -379,8 +404,35 @@ void L3AuthenticationReject::text(std::ostream& os) const {
 
 // ── L3TMSIReallocationCommand ──────────────────────────────────────────
 
-L3TMSIReallocationCommand::L3TMSIReallocationCommand(const L3LocationAreaIdentity& wLAI, const L3MobileIdentity& wTMSI, bool wFollowOn)
-    : mLAI(wLAI), mTMSI(wTMSI), mFollowOnProceed(wFollowOn) {}
+L3TMSIReallocationCommand::L3TMSIReallocationCommand()
+    : mFollowOnProceed(false) {}
+
+// ── L3TMSIReallocationCommand Builder ──────────────────────────────────
+
+L3TMSIReallocationCommand::Builder L3TMSIReallocationCommand::builder() { return Builder{}; }
+
+L3TMSIReallocationCommand::Builder& L3TMSIReallocationCommand::Builder::lai(const L3LocationAreaIdentity& lai) {
+    mLAI = lai;
+    return *this;
+}
+
+L3TMSIReallocationCommand::Builder& L3TMSIReallocationCommand::Builder::tmsi(const L3MobileIdentity& t) {
+    mTMSI = t;
+    return *this;
+}
+
+L3TMSIReallocationCommand::Builder& L3TMSIReallocationCommand::Builder::followOn(bool fo) {
+    mFollowOnProceed = fo;
+    return *this;
+}
+
+L3TMSIReallocationCommand L3TMSIReallocationCommand::Builder::build() {
+    L3TMSIReallocationCommand msg;
+    msg.mLAI = mLAI;
+    msg.mTMSI = mTMSI;
+    msg.mFollowOnProceed = mFollowOnProceed;
+    return msg;
+}
 
 void L3TMSIReallocationCommand::writeBody(L3Frame& dest, size_t& wp) const {
     mLAI.writeV(dest, wp);
@@ -441,10 +493,10 @@ std::unique_ptr<L3MMMessage> L3MMFactory(int mti) {
         case L3MMMessage::IdentityResponse:         return std::make_unique<L3IdentityResponse>();
         case L3MMMessage::IdentityRequest:          return std::make_unique<L3IdentityRequest>(MobileIDType::NoID);
         case L3MMMessage::MMInformation:            return std::make_unique<L3MMInformation>();
-        case L3MMMessage::LocationUpdatingAccept:   return std::make_unique<L3LocationUpdatingAccept>(L3LocationAreaIdentity());
+        case L3MMMessage::LocationUpdatingAccept:   return std::make_unique<L3LocationUpdatingAccept>();
         case L3MMMessage::LocationUpdatingReject:   return std::make_unique<L3LocationUpdatingReject>(MMRejectCause::Zero);
         case L3MMMessage::LocationUpdatingRequest:  return std::make_unique<L3LocationUpdatingRequest>();
-        case L3MMMessage::TMSIReallocationCommand:  return std::make_unique<L3TMSIReallocationCommand>(L3LocationAreaIdentity(), L3MobileIdentity());
+        case L3MMMessage::TMSIReallocationCommand:  return std::make_unique<L3TMSIReallocationCommand>();
         case L3MMMessage::TMSIReallocationComplete: return std::make_unique<L3TMSIReallocationComplete>();
         case L3MMMessage::MMStatus:                 return std::make_unique<L3MMStatus>();
         case L3MMMessage::AuthenticationRequest:    return std::make_unique<L3AuthenticationRequest>(0, std::vector<uint8_t>());

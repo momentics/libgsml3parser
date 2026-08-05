@@ -36,7 +36,8 @@ static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     size_t n = writeL3(msg, buf.data(), buf.size());
     if (n == 0) return nullptr;
     auto result = parseL3(std::span<const uint8_t>(buf), ctx);
-    return result;
+    if (!result.has_value()) return nullptr;
+    return std::move(result).value();
 }
 
 // ── CM Service Accept (GSM 04.08 9.2.5) ───────────────────────────────
@@ -76,7 +77,7 @@ TEST(MMRoundTripTest, CMServiceReject) {
 
 TEST(MMRoundTripTest, LocationUpdatingAccept) {
     L3LocationAreaIdentity lai("250", "01", 0x1234);
-    L3LocationUpdatingAccept msg(lai);
+    L3LocationUpdatingAccept msg = L3LocationUpdatingAccept::builder().lai(lai).build();
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(parsed->pd(), L3PD::MobilityManagement);
@@ -86,7 +87,7 @@ TEST(MMRoundTripTest, LocationUpdatingAccept) {
 TEST(MMRoundTripTest, LocationUpdatingAccept_WithMI) {
     L3LocationAreaIdentity lai("250", "01", 0x1234);
     L3MobileIdentity mi(0xDEADBEEF);
-    L3LocationUpdatingAccept msg(lai, mi, true);
+    L3LocationUpdatingAccept msg = L3LocationUpdatingAccept::builder().lai(lai).mobileIdentity(mi).followOn(true).build();
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(parsed->mti(), L3MMMessage::LocationUpdatingAccept);
@@ -167,7 +168,7 @@ TEST(MMRoundTripTest, AuthenticationResponse) {
     ASSERT_TRUE(msg);
     auto* ar = dynamic_cast<L3AuthenticationResponse*>(msg.get());
     ASSERT_TRUE(ar);
-    EXPECT_EQ(ar->SRES(), 0xABCD1234u);
+    EXPECT_EQ(ar->sres(), 0xABCD1234u);
 
     auto parsed = roundtrip(*ar);
     ASSERT_TRUE(parsed);
@@ -185,7 +186,7 @@ TEST(MMRoundTripTest, AuthenticationResponse_Parse) {
     ASSERT_TRUE(msg);
     auto* ar = dynamic_cast<L3AuthenticationResponse*>(msg.get());
     ASSERT_TRUE(ar);
-    EXPECT_EQ(ar->SRES(), 0xABCD1234u);
+    EXPECT_EQ(ar->sres(), 0xABCD1234u);
 }
 
 // ── Authentication Reject (GSM 04.08 9.2.1) ──────────────────────────
@@ -238,7 +239,7 @@ TEST(MMRoundTripTest, IdentityRequest_Parse) {
 TEST(MMRoundTripTest, TMSIReallocationCommand) {
     L3LocationAreaIdentity lai("250", "01", 0x1234);
     L3MobileIdentity tmsi(0x12345678);
-    L3TMSIReallocationCommand msg(lai, tmsi, false);
+    L3TMSIReallocationCommand msg = L3TMSIReallocationCommand::builder().lai(lai).tmsi(tmsi).build();
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(parsed->mti(), L3MMMessage::TMSIReallocationCommand);

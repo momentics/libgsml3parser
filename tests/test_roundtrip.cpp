@@ -38,7 +38,8 @@ static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     size_t n = writeL3(msg, buf.data(), buf.size());
     if (n == 0) return nullptr;
     auto result = parseL3(std::span<const uint8_t>(buf), ctx);
-    return result;
+    if (!result.has_value()) return nullptr;
+    return std::move(result).value();
 }
 
 // Helper: verify PD + MTI survived round-trip.
@@ -55,7 +56,8 @@ static void checkHeader(std::unique_ptr<L3Message>& parsed, L3PD expectPD, int e
 
 TEST(RoundTripTest, PagingRequestType1_TMSI) {
     L3MobileIdentity id(0x12345678);
-    L3PagingRequestType1 msg(id, ChannelType::SDCCHType);
+    L3PagingRequestType1 msg = L3PagingRequestType1::builder()
+        .addMobileId(id, ChannelType::SDCCHType).build();
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::PagingRequestType1);
 }
@@ -64,7 +66,8 @@ TEST(RoundTripTest, PagingRequestType1_TMSI) {
 // Reference: L3_Templates.ttcn ts_MI_IMSI_LV (IMSI BCD encoding with HEXORDER low nibble swap)
 TEST(RoundTripTest, PagingRequestType1_IMSI) {
     L3MobileIdentity id("250011234567890");
-    L3PagingRequestType1 msg(id, ChannelType::TCHFType);
+    L3PagingRequestType1 msg = L3PagingRequestType1::builder()
+        .addMobileId(id, ChannelType::TCHFType).build();
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::PagingRequestType1);
 }
@@ -72,8 +75,8 @@ TEST(RoundTripTest, PagingRequestType1_IMSI) {
 // ── Paging Request Type 2 (GSM 04.08 9.1.23) ───────────────────────────
 
 TEST(RoundTripTest, PagingRequestType2) {
-    L3MobileIdentity id(0xDEADBEEF);
-    L3PagingRequestType2 msg(id, ChannelType::SDCCHType);
+    L3PagingRequestType2 msg = L3PagingRequestType2::builder()
+        .addTMSI(0xDEADBEEF, ChannelType::SDCCHType).build();
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::PagingRequestType2);
 }
@@ -81,8 +84,8 @@ TEST(RoundTripTest, PagingRequestType2) {
 // ── Paging Request Type 3 (GSM 04.08 9.1.24) ───────────────────────────
 
 TEST(RoundTripTest, PagingRequestType3) {
-    L3MobileIdentity id(0xABCDEF01);
-    L3PagingRequestType3 msg(id, ChannelType::TCHHType);
+    L3PagingRequestType3 msg = L3PagingRequestType3::builder()
+        .addTMSI(0xABCDEF01, ChannelType::TCHHType).build();
     auto parsed = roundtrip(msg);
     checkHeader(parsed, L3PD::RadioResource, L3RRMessage::PagingRequestType3);
 }

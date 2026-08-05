@@ -74,9 +74,15 @@ void setLogCallback(LogCallback cb);
 
 /**
  * Log a message at the given level.  Disabled if level exceeds the current
- * thread's threshold.  Thread-safe (mutex-protected for stderr output).
+ * thread's threshold.  Thread-safe (thread-local buffering, no mutex on hot path).
  */
 void logMessage(LogLevel level, const char* file, int line, const char* fmt, ...);
+
+/**
+ * Flush all thread-local log buffers. Call explicitly before program exit
+ * or when synchronous output is required.
+ */
+void flushLogs();
 
 } // namespace gsml3parser
 
@@ -96,5 +102,3 @@ void logMessage(LogLevel level, const char* file, int line, const char* fmt, ...
 #define GSML3PARSER_LOG_NOTICE(...) GSML3PARSER_LOG(gsml3parser::LogLevel::NOTICE, __VA_ARGS__)
 #define GSML3PARSER_LOG_INFO(...)   GSML3PARSER_LOG(gsml3parser::LogLevel::INFO, __VA_ARGS__)
 #define GSML3PARSER_LOG_DEBUG(...)  GSML3PARSER_LOG(gsml3parser::LogLevel::DEBUG, __VA_ARGS__)
-
-

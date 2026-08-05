@@ -36,7 +36,8 @@ static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     size_t n = writeL3(msg, buf.data(), buf.size());
     if (n == 0) return nullptr;
     auto result = parseL3(std::span<const uint8_t>(buf), ctx);
-    return result;
+    if (!result.has_value()) return nullptr;
+    return std::move(result).value();
 }
 
 // ── Setup (GSM 04.08 9.3.19) ──────────────────────────────────────────
@@ -57,7 +58,7 @@ TEST(CCRoundTripTest, Setup_NoDigits) {
 
 TEST(CCRoundTripTest, Setup_WithCalledParty) {
     L3CalledPartyBCDNumber called("1234567890");
-    L3Setup msg(7, called);
+    L3Setup msg = L3Setup::builder(7).calledParty(called).build();
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     auto* s = dynamic_cast<L3Setup*>(parsed.get());
@@ -205,7 +206,7 @@ TEST(CCRoundTripTest, Release_NoCause) {
 }
 
 TEST(CCRoundTripTest, Release_WithCause) {
-    L3Release msg(7, CCCause::User_Busy);
+    L3Release msg = L3Release::builder(7).cause(CCCause::User_Busy).build();
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     auto* r = dynamic_cast<L3Release*>(parsed.get());
@@ -225,7 +226,7 @@ TEST(CCRoundTripTest, ReleaseComplete_NoCause) {
 }
 
 TEST(CCRoundTripTest, ReleaseComplete_WithCause) {
-    L3ReleaseComplete msg(5, CCCause::Normal_Call_Clearing);
+    L3ReleaseComplete msg = L3ReleaseComplete::builder(5).cause(CCCause::Normal_Call_Clearing).build();
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     auto* rc = dynamic_cast<L3ReleaseComplete*>(parsed.get());
@@ -244,7 +245,7 @@ TEST(CCRoundTripTest, ReleaseComplete_WithCause) {
 // ── CC Status (GSM 04.08 9.3.19) ─────────────────────────────────────
 
 TEST(CCRoundTripTest, CCStatus) {
-    L3CCStatus msg(7, CCCause::Normal_Unspecified, 0x00);
+    L3CCStatus msg = L3CCStatus::builder(7).cause(CCCause::Normal_Unspecified).callState(0x00).build();
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(parsed->mti(), L3CCMessage::CCStatus);
