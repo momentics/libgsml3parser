@@ -1,12 +1,12 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.20)
 project(gsml3parser
-    VERSION 0.3.0
-    DESCRIPTION "GSM L3 Signalling Message Parser — standalone C++17 library"
+    VERSION 0.4.0
+    DESCRIPTION "GSM L3 Signalling Message Parser — standalone C++20 library"
     LANGUAGES CXX
     HOMEPAGE_URL "https://github.com/momentics/libgsml3parser"
 )
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -83,7 +83,7 @@ target_include_directories(gsml3parser
         $<INSTALL_INTERFACE:include>
 )
 
-target_compile_features(gsml3parser PUBLIC cxx_std_17)
+target_compile_features(gsml3parser PUBLIC cxx_std_20)
 
 target_compile_definitions(gsml3parser PRIVATE
     GSML3PARSER_EXPORTS

@@ -1,15 +1,15 @@
 # libgsml3parser
 
-**GSM Layer 3 Signalling Message Parser — Standalone C++17 Library**
+**GSM Layer 3 Signalling Message Parser — Standalone C++20 Library**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![C++17](https://img.shields.io/badge/C%2B%2B-17-blue.svg)](https://en.cppreference.com/w/cpp/17)
+[![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![Build](https://img.shields.io/badge/Build-CMake-brightgreen.svg)](https://cmake.org)
-[![Version](https://img.shields.io/badge/Version-0.3.0-blue.svg)]()
+[![Version](https://img.shields.io/badge/Version-0.4.0-blue.svg)]()
 
 ## Overview
 
-libgsml3parser is a standalone C++17 library for parsing and generating GSM Layer 3 (L3) signalling messages. It implements the complete GSM 04.08 / 3GPP TS 24.008 protocol discriminator dispatch across four domains:
+libgsml3parser is a standalone C++20 library for parsing and generating GSM Layer 3 (L3) signalling messages. It implements the complete GSM 04.08 / 3GPP TS 24.008 protocol discriminator dispatch across four domains:
 
 | Domain | PD | Spec Section | Messages |
 |--------|----|-------------|----------|
@@ -18,7 +18,7 @@ libgsml3parser is a standalone C++17 library for parsing and generating GSM Laye
 | **Call Control (CC)** | `0x03` | GSM 04.08 9.3 / ISDN Q.931 | Setup, Connect, Disconnect, Release, DTMF, Hold, Progress |
 | **Supplementary Services (SS)** | `0x0b` | GSM 04.80 | Facility, Register, Release Complete |
 
-The library is self-contained with zero external dependencies beyond the C++17 standard library. It provides bidirectional parsing (binary ↔ typed C++ objects), human-readable output, and callback-based extensibility for unsupported PD domains (SMS, GPRS).
+The library is self-contained with zero external dependencies beyond the C++20 standard library. It provides bidirectional parsing (binary ↔ typed C++ objects), human-readable output, and callback-based extensibility for unsupported PD domains (SMS, GPRS).
 
 ## Features
 
@@ -26,7 +26,9 @@ The library is self-contained with zero external dependencies beyond the C++17 s
 - **Message generation** — Typed C++ objects → binary data (for test harnesses, fuzzing, replay)
 - **Human-readable output** — Every message has a `.text()` method for logging and debugging
 - **Callback-based extension** — Register custom handlers for SMS (PD=0x09) and GPRS (PD=0x08, 0x0a)
-- **Zero external dependencies** — No threading, no networking, no SIP, no radio stack
+- **Thread-safe** — `ParserContext` isolates PD handlers per caller; no global mutable state
+- **HPL-compliant memory** — Arena allocator, client-owned buffers, zero-copy `BitView`
+- **Zero external dependencies** — No networking, no SIP, no radio stack
 - **Memory-safe** — `std::unique_ptr` ownership, no raw `new`/`delete` in the public API
 - **Fuzzing-ready** — Clean parse/generate API suitable for libFuzzer integration
 - **794 unit tests** — Comprehensive coverage including spec-verified golden test vectors
@@ -316,9 +318,9 @@ ctest --output-on-failure
 
 | Requirement | Minimum Version |
 |-------------|----------------|
-| C++ compiler | GCC 7+, Clang 5+, MSVC 2017+ |
-| CMake | 3.16 |
-| Standard Library | C++17 (libstdc++ or libc++) |
+| C++ compiler | GCC 11+, Clang 10+, MSVC 2022 17.3+ |
+| CMake | 3.20 |
+| Standard Library | C++20 (libstdc++ or libc++) |
 
 ## Roadmap
 
