@@ -22,41 +22,60 @@
 #ifndef GSML3PARSER_LOGGER_H
 #define GSML3PARSER_LOGGER_H
 
+#include <cstddef>
 #include <cstdio>
-#include <cstdlib>
-#include <iostream>
+#include <functional>
 #include <string>
 
 namespace gsml3parser {
 
 /**
  * Simple logging levels.  Set GSML3PARSER_LOG_LEVEL environment variable
- * to control the threshold (0=EMERG … 7=TRACE).  Default: 4 (INFO).
+ * to control the threshold (0=EMERG … 7=DEBUG).  Default: 6 (INFO).
+ *
+ * Each thread maintains its own log level (thread_local).
  */
 enum class LogLevel : int {
-    EMERG  = 0,
-    ALERT  = 1,
-    CRIT   = 2,
-    ERR    = 3,
+    EMERG   = 0,
+    ALERT   = 1,
+    CRIT    = 2,
+    ERR     = 3,
     WARNING = 4,
-    NOTICE = 5,
-    INFO   = 6,
-    DEBUG  = 7
+    NOTICE  = 5,
+    INFO    = 6,
+    DEBUG   = 7
 };
 
 /**
- * Return the current log level threshold.
+ * Return the current thread's log level threshold.
  */
 LogLevel getLogLevel();
 
 /**
- * Set the log level threshold.
+ * Set the current thread's log level threshold.
  */
 void setLogLevel(LogLevel level);
 
 /**
- * Log a message at the given level.  Disabled if level is above the
- * current threshold.
+ * Callback signature for custom log backends.
+ *
+ * @param level  Log severity.
+ * @param file   Source file (may be nullptr).
+ * @param line   Source line number (0 if unknown).
+ * @param msg    Formatted message string (null-terminated).
+ */
+using LogCallback = std::function<void(LogLevel level, const char* file, int line, const char* msg)>;
+
+/**
+ * Install a custom log callback for the current thread.
+ * When set, logMessage() invokes the callback instead of writing to stderr.
+ * Pass nullptr to revert to the default stderr backend.
+ */
+void setLogCallback(LogCallback cb);
+
+/**
+ * Log a message at the given level.  Disabled if level exceeds the current
+ * thread's threshold.  Thread-safe (mutex-protected for stderr output).
  */
 void logMessage(LogLevel level, const char* file, int line, const char* fmt, ...);
 

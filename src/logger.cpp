@@ -22,21 +22,29 @@
 #include "gsml3parser/logger.h"
 #include <cstdarg>
 #include <cstdio>
-#include <cstdlib>
 #include <ctime>
 #include <mutex>
 
 namespace gsml3parser {
 
-static LogLevel gLogLevel = LogLevel::INFO;
+// ── Thread-local state ──────────────────────────────────────────────────
+
+static thread_local LogLevel tlsLogLevel = LogLevel::INFO;
+static thread_local LogCallback tlsLogCallback;
 
 LogLevel getLogLevel() {
-    return gLogLevel;
+    return tlsLogLevel;
 }
 
 void setLogLevel(LogLevel level) {
-    gLogLevel = level;
+    tlsLogLevel = level;
 }
+
+void setLogCallback(LogCallback cb) {
+    tlsLogCallback = std::move(cb);
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────
 
 static const char* levelName(LogLevel level) {
     switch (level) {
@@ -52,9 +60,7 @@ static const char* levelName(LogLevel level) {
     }
 }
 
-void logMessage(LogLevel level, const char* file, int line, const char* fmt, ...) {
-    if (static_cast<int>(level) > static_cast<int>(gLogLevel)) return;
-
+static void emitStderr(LogLevel level, const char* file, int line, const char* fmt, va_list ap) {
     static std::mutex logMutex;
     std::lock_guard<std::mutex> lock(logMutex);
 
@@ -69,14 +75,47 @@ void logMessage(LogLevel level, const char* file, int line, const char* fmt, ...
     fprintf(stderr, "[%04d-%02d-%02dT%02d:%02d:%02d] [%s] [%s:%d] ",
             tmBuf.tm_year + 1900, tmBuf.tm_mon + 1, tmBuf.tm_mday,
             tmBuf.tm_hour, tmBuf.tm_min, tmBuf.tm_sec,
-            levelName(level), file, line);
+            levelName(level), file ? file : "?", line);
+
+    vfprintf(stderr, fmt, ap);
+    fprintf(stderr, "\n");
+}
+
+// ── Public API ──────────────────────────────────────────────────────────
+
+void logMessage(LogLevel level, const char* file, int line, const char* fmt, ...) {
+    if (static_cast<int>(level) > static_cast<int>(tlsLogLevel)) return;
 
     va_list ap;
     va_start(ap, fmt);
-    vfprintf(stderr, fmt, ap);
+
+    // Buffer the formatted message so we can pass it to the callback.
+    char buf[1024];
+    int n = vsnprintf(buf, sizeof(buf), fmt, ap);
     va_end(ap);
 
-    fprintf(stderr, "\n");
+    const char* msg;
+    std::string heapMsg;
+    if (n < 0 || static_cast<size_t>(n) >= sizeof(buf)) {
+        // Message too long for inline buffer — allocate on heap.
+        va_start(ap, fmt);
+        heapMsg.resize(static_cast<size_t>(n) + 1);
+        vsnprintf(heapMsg.data(), heapMsg.size(), fmt, ap);
+        va_end(ap);
+        msg = heapMsg.c_str();
+    } else {
+        msg = buf;
+    }
+
+    if (tlsLogCallback) {
+        tlsLogCallback(level, file, line, msg);
+    } else {
+        // Re-open va_list for stderr output.
+        va_list ap2;
+        va_start(ap2, fmt);
+        emitStderr(level, file, line, fmt, ap2);
+        va_end(ap2);
+    }
 }
 
 } // namespace gsml3parser
