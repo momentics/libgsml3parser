@@ -31,7 +31,7 @@ The library is self-contained with zero external dependencies beyond the C++20 s
 - **Zero external dependencies** — No networking, no SIP, no radio stack
 - **Memory-safe** — `std::unique_ptr` ownership, no raw `new`/`delete` in the public API
 - **Fuzzing-ready** — Clean parse/generate API suitable for libFuzzer integration
-- **794 unit tests** — Comprehensive coverage including spec-verified golden test vectors
+- **819 unit tests** — Comprehensive coverage including spec-verified golden test vectors, threading safety, and HPL API
 - **Golden test vectors** — Cross-validated against osmo-ttcn3-hacks TTCN-3 reference suite (L3_Templates.ttcn, GSM_RR_Types.ttcn, GSM_Types.ttcn, BTS_Tests.ttcn, GSM_SystemInformation.ttcn)
 - **Spec-compliant** — Follows GSM 04.08 / 3GPP TS 24.008, GSM 04.07 / 3GPP TS 24.007, GSM 04.80, GSM 48.008
 - **V/TV/TLV/LV formats** — Correct handling of all GSM 04.07 IE encoding formats
@@ -351,7 +351,7 @@ libgsml3parser/
 │   └── ss/
 │       └── l3ssmessages.h            # SS messages (Facility, Register, etc.)
 ├── src/                              # Implementation (14 .cpp files)
-├── tests/                            # Google Test unit tests (794 test cases)
+├── tests/                            # Google Test unit tests (819 test cases)
 ├── examples/
 │   └── example_parse_file.cpp        # Parse L3 messages from hex string or file
 └── doc/
@@ -360,7 +360,7 @@ libgsml3parser/
 
 ## Testing
 
-The test suite includes 794 Google Test cases across 14 test files. Golden test vectors in `test_golden_*.cpp` are cross-validated against the osmo-ttcn3-hacks TTCN-3 reference testing suite (L3_Templates.ttcn, GSM_RR_Types.ttcn, GSM_Types.ttcn, BTS_Tests.ttcn, GSM_SystemInformation.ttcn).
+The test suite includes 819 Google Test cases across 15 test files. Golden test vectors in `test_golden_*.cpp` are cross-validated against the osmo-ttcn3-hacks TTCN-3 reference testing suite (L3_Templates.ttcn, GSM_RR_Types.ttcn, GSM_Types.ttcn, BTS_Tests.ttcn, GSM_SystemInformation.ttcn).
 
 ```bash
 cmake .. -DBUILD_TESTS=ON

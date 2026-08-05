@@ -24,12 +24,16 @@ add_executable(gsml3parser_tests
     test_golden_mm.cpp
     test_golden_cc.cpp
     test_golden_ie.cpp
+    test_threading.cpp
 )
+
+find_package(Threads REQUIRED)
 
 target_link_libraries(gsml3parser_tests
     PRIVATE
         gsml3parser
         GTest::gtest_main
+        Threads::Threads
 )
 
 add_test(NAME gsml3parser_tests COMMAND gsml3parser_tests)
