@@ -131,44 +131,57 @@ BitVector::BitVector(const BitVector& other)
 }
 
 BitVector::BitVector(BitVector&& other) noexcept
-    : mBuffer(std::move(other.mBuffer)), mSize(other.mSize),
-      mWriteEnd(other.mWriteEnd), mArenaAllocated(other.mArenaAllocated)
+    : mSize(other.mSize), mWriteEnd(other.mWriteEnd), mArenaAllocated(other.mArenaAllocated)
 {
     if (other.mArenaAllocated) {
-        // Arena-allocated objects cannot be moved.
-        throw std::runtime_error("Cannot move arena-allocated BitVector");
+        // Arena-allocated: fall back to copy (owned). No throw — we're noexcept.
+        mBuffer = other.mBuffer;
+        mArenaAllocated = false;
+    } else {
+        mBuffer = std::move(other.mBuffer);
+        other.mSize = 0;
+        other.mWriteEnd = 0;
     }
-    other.mSize = 0;
-    other.mWriteEnd = 0;
 }
 
 BitVector& BitVector::operator=(const BitVector& other) {
     if (this != &other) {
         if (mArenaAllocated) {
-            throw std::runtime_error("Cannot assign to arena-allocated BitVector");
+            // Arena-allocated: can't resize buffer, but we can overwrite in-place.
+            // Copy as many bytes as fit.
+            size_t copyBytes = std::min(mBuffer.size(), other.mBuffer.size());
+            if (copyBytes) {
+                std::memcpy(mBuffer.data(), other.mBuffer.data(), copyBytes);
+            }
+            mSize = other.mSize;
+            mWriteEnd = other.mWriteEnd;
+        } else {
+            mBuffer = other.mBuffer;
+            mSize = other.mSize;
+            mWriteEnd = other.mWriteEnd;
+            mArenaAllocated = false;
         }
-        mBuffer = other.mBuffer;
-        mSize = other.mSize;
-        mWriteEnd = other.mWriteEnd;
-        mArenaAllocated = false;  // assignment always creates owned copy
     }
     return *this;
 }
 
 BitVector& BitVector::operator=(BitVector&& other) noexcept {
     if (this != &other) {
-        if (mArenaAllocated || other.mArenaAllocated) {
-            // Cannot move arena-allocated objects.
-            // Fall back to copy for safety, but this is logically an error.
-            // For now, just swap non-arena state.
-            if (!mArenaAllocated && !other.mArenaAllocated) {
-                mBuffer = std::move(other.mBuffer);
-                mSize = other.mSize;
-                mWriteEnd = other.mWriteEnd;
-                mArenaAllocated = false;
-                other.mSize = 0;
-                other.mWriteEnd = 0;
-            }
+        if (mArenaAllocated) {
+            // Can't move into arena-allocated: copy instead.
+            mBuffer = other.mBuffer;
+            mSize = other.mSize;
+            mWriteEnd = other.mWriteEnd;
+            // mArenaAllocated stays true — we still can't free on dtor,
+            // but the data is now a separate owned copy in mBuffer.
+            // Mark as not arena-allocated since mBuffer owns its memory now.
+            mArenaAllocated = false;
+        } else if (other.mArenaAllocated) {
+            // Source is arena-allocated: copy instead of move.
+            mBuffer = other.mBuffer;
+            mSize = other.mSize;
+            mWriteEnd = other.mWriteEnd;
+            mArenaAllocated = false;
         } else {
             mBuffer = std::move(other.mBuffer);
             mSize = other.mSize;
