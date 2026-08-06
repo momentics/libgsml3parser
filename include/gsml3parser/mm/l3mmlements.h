@@ -59,8 +59,8 @@ public:
     bool isMM() const { return mType == LocationUpdateRequest; }
     size_t lengthV() const override { return 0; }
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
 };
 
@@ -74,8 +74,8 @@ public:
     MMRejectCause rejectCause() const { return mRejectCause; }
     size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
 };
 
@@ -91,8 +91,8 @@ public:
     L3NetworkName(const char* wName = "", GSMAlphabet alphabet = GSMAlphabet::ALPHABET_7BIT, int wCI = 0);
     size_t lengthV() const override;
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
     const char* name() const { return mName; }
     GSMAlphabet alphabet() const { return mAlphabet; }
@@ -127,8 +127,8 @@ public:
     TimeType type() const { return mType; }
     size_t lengthV() const override { return 7; }
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
 };
 
@@ -143,8 +143,8 @@ public:
     const std::vector<uint8_t>& rand() const { return mRAND; }
     size_t lengthV() const override { return 16; }
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
 };
 
@@ -158,8 +158,8 @@ public:
     uint32_t value() const { return mValue; }
     size_t lengthV() const override { return 4; }
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
 };
 

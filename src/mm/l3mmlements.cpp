@@ -37,12 +37,13 @@ void L3CMServiceType::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mType), 4);
 }
 
-void L3CMServiceType::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3CMServiceType::try_parseV(const L3Frame& src, size_t& rp) {
     mType = static_cast<TypeCode>(src.readField(rp, 4));
+    return ParseResult<void>();
 }
 
-void L3CMServiceType::parseV(const L3Frame& src, size_t& rp, size_t) {
-    parseV(src, rp);
+ParseResult<void> L3CMServiceType::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+    return try_parseV(src, rp);
 }
 
 void L3CMServiceType::text(std::ostream& os) const {
@@ -67,12 +68,13 @@ void L3RejectCauseIE::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mRejectCause), 8);
 }
 
-void L3RejectCauseIE::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3RejectCauseIE::try_parseV(const L3Frame& src, size_t& rp) {
     mRejectCause = static_cast<MMRejectCause>(src.readField(rp, 8));
+    return ParseResult<void>();
 }
 
-void L3RejectCauseIE::parseV(const L3Frame& src, size_t& rp, size_t) {
-    parseV(src, rp);
+ParseResult<void> L3RejectCauseIE::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+    return try_parseV(src, rp);
 }
 
 void L3RejectCauseIE::text(std::ostream& os) const {
@@ -163,7 +165,7 @@ void L3NetworkName::writeV(L3Frame& dest, size_t& wp) const {
     }
 }
 
-void L3NetworkName::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3NetworkName::try_parseV(const L3Frame& src, size_t& rp) {
     unsigned ext = src.readField(rp, 1);
     (void)ext;
     unsigned coding = src.readField(rp, 3);
@@ -186,7 +188,7 @@ void L3NetworkName::parseV(const L3Frame& src, size_t& rp) {
         size_t remainingBits = src.size() - rp;
         size_t remainingBytes = remainingBits / 8;
         if (mCI) remainingBytes -= 2;
-        if (remainingBytes == 0) { mName[0] = '\0'; return; }
+        if (remainingBytes == 0) { mName[0] = '\0'; return ParseResult<void>(); }
 
         // Read bytes and undo LSB8MSB
         std::vector<uint8_t> buffer(remainingBytes);
@@ -216,9 +218,10 @@ void L3NetworkName::parseV(const L3Frame& src, size_t& rp) {
     if (mCI && rp + 16 <= src.size()) {
         mCI = src.readField(rp, 16);
     }
+    return ParseResult<void>();
 }
 
-void L3NetworkName::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+ParseResult<void> L3NetworkName::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     unsigned ext = src.readField(rp, 1);
     (void)ext;
     unsigned coding = src.readField(rp, 3);
@@ -242,7 +245,7 @@ void L3NetworkName::parseV(const L3Frame& src, size_t& rp, size_t expectedLength
         mAlphabet = GSMAlphabet::ALPHABET_7BIT;
         size_t ciBytes = mCI ? 2 : 0;
         size_t nameBytes = dataBytes - ciBytes;
-        if (nameBytes == 0) { mName[0] = '\0'; return; }
+        if (nameBytes == 0) { mName[0] = '\0'; return ParseResult<void>(); }
 
         std::vector<uint8_t> buffer(nameBytes);
         for (size_t i = 0; i < nameBytes; i++) {
@@ -270,6 +273,7 @@ void L3NetworkName::parseV(const L3Frame& src, size_t& rp, size_t expectedLength
     if (mCI && rp + 16 <= src.size()) {
         mCI = src.readField(rp, 16);
     }
+    return ParseResult<void>();
 }
 
 void L3NetworkName::text(std::ostream& os) const {
@@ -311,7 +315,7 @@ void L3TimeZoneAndTime::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, tz / 10, 3);
 }
 
-void L3TimeZoneAndTime::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3TimeZoneAndTime::try_parseV(const L3Frame& src, size_t& rp) {
     // GSM 03.40 9.2.3.11: BCD encoding, low nibble first
     unsigned yLo = src.readField(rp, 4);
     unsigned yHi = src.readField(rp, 4);
@@ -337,10 +341,11 @@ void L3TimeZoneAndTime::parseV(const L3Frame& src, size_t& rp) {
     tz += src.readField(rp, 3) * 10;
     if (tzSign) tz = (tz | 0x80) & 0xFF;
     mTimezone = static_cast<uint8_t>(tz);
+    return ParseResult<void>();
 }
 
-void L3TimeZoneAndTime::parseV(const L3Frame& src, size_t& rp, size_t) {
-    parseV(src, rp);
+ParseResult<void> L3TimeZoneAndTime::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+    return try_parseV(src, rp);
 }
 
 void L3TimeZoneAndTime::text(std::ostream& os) const {
@@ -370,15 +375,16 @@ void L3RAND::writeV(L3Frame& dest, size_t& wp) const {
     }
 }
 
-void L3RAND::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3RAND::try_parseV(const L3Frame& src, size_t& rp) {
     mRAND.resize(16);
     for (size_t i = 0; i < 16; ++i) {
         mRAND[i] = static_cast<uint8_t>(src.readField(rp, 8));
     }
+    return ParseResult<void>();
 }
 
-void L3RAND::parseV(const L3Frame& src, size_t& rp, size_t) {
-    parseV(src, rp);
+ParseResult<void> L3RAND::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+    return try_parseV(src, rp);
 }
 
 void L3RAND::text(std::ostream& os) const {
@@ -398,12 +404,13 @@ void L3SRES::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, mValue, 32);
 }
 
-void L3SRES::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3SRES::try_parseV(const L3Frame& src, size_t& rp) {
     mValue = src.readField(rp, 32);
+    return ParseResult<void>();
 }
 
-void L3SRES::parseV(const L3Frame& src, size_t& rp, size_t) {
-    parseV(src, rp);
+ParseResult<void> L3SRES::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+    return try_parseV(src, rp);
 }
 
 void L3SRES::text(std::ostream& os) const {

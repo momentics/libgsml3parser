@@ -42,8 +42,8 @@ public:
     L3BearerCapability();
     size_t lengthV() const override;
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
     bool isPresent() const { return mPresent; }
     uint8_t octet3() const { return mOctet3; }
@@ -63,8 +63,8 @@ public:
     L3SupportedCodecList();
     size_t lengthV() const override;
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
     bool isGsmPresent() const { return mGsmPresent; }
     bool isUmtsPresent() const { return mUmtsPresent; }
@@ -108,8 +108,8 @@ public:
 
     size_t lengthV() const override;
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
 };
 
@@ -133,8 +133,8 @@ public:
 
     size_t lengthV() const override;
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
 };
 
@@ -154,8 +154,8 @@ public:
     Cause cause() const { return mCause; }
     size_t lengthV() const override { return 2; }
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
 };
 
@@ -169,8 +169,8 @@ public:
     unsigned callState() const { return mCallState; }
     size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
 };
 
@@ -206,8 +206,8 @@ public:
     Progress progress() const { return mProgress; }
     size_t lengthV() const override { return 2; }
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
 };
 
@@ -221,8 +221,8 @@ public:
     char ia5() const { return mIA5; }
     size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
 };
 
@@ -248,8 +248,8 @@ public:
     explicit L3Signal(SignalValues tone = SignalRingBackToneOn);
     size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
 };
 
@@ -264,8 +264,8 @@ public:
     unsigned value() const { return mValue; }
     size_t lengthV() const override { return 0; }
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t) override;
     void text(std::ostream& os) const override;
 };
 
@@ -289,8 +289,8 @@ public:
     const std::string& data() const { return mData; }
     size_t lengthV() const override;
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
     void text(std::ostream& os) const override;
 };
 
@@ -304,8 +304,8 @@ public:
     unsigned version() const { return mVersion; }
     size_t lengthV() const override { return 1; }
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp) override;
-    void parseV(const L3Frame& src, size_t& rp, size_t) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t) override;
     void text(std::ostream& os) const override;
 };
 

@@ -23,7 +23,7 @@ void L3BearerCapability::writeV(L3Frame& dest, size_t& wp) const {
     }
 }
 
-void L3BearerCapability::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3BearerCapability::try_parseV(const L3Frame& src, size_t& rp) {
     mPresent = true;
     mOctet3 = static_cast<uint8_t>(src.readField(rp, 8));
     mOctet3a.clear();
@@ -31,11 +31,12 @@ void L3BearerCapability::parseV(const L3Frame& src, size_t& rp) {
         mOctet3a.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
         mOctet3a.push_back(static_cast<uint8_t>(src.readField(rp, 8)));
     }
+    return ParseResult<void>();
 }
 
-void L3BearerCapability::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+ParseResult<void> L3BearerCapability::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     mPresent = true;
-    if (expectedLength == 0) return;
+    if (expectedLength == 0) return ParseResult<void>();
     size_t end = rp + 8 * expectedLength;
     unsigned octet3 = src.readField(rp, 8);
     if ((octet3 & 7) == 0) {
@@ -46,6 +47,7 @@ void L3BearerCapability::parseV(const L3Frame& src, size_t& rp, size_t expectedL
         }
     }
     rp = end;
+    return ParseResult<void>();
 }
 
 void L3BearerCapability::text(std::ostream& os) const {
@@ -83,7 +85,7 @@ void L3SupportedCodecList::writeV(L3Frame& dest, size_t& wp) const {
     }
 }
 
-void L3SupportedCodecList::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3SupportedCodecList::try_parseV(const L3Frame& src, size_t& rp) {
     mGsmCodecs.clear();
     mUmtsCodecs.clear();
     while (rp + 16 <= src.size()) {
@@ -97,9 +99,10 @@ void L3SupportedCodecList::parseV(const L3Frame& src, size_t& rp) {
             else if (sysId == 4) mUmtsCodecs.push_back(static_cast<uint8_t>(byte));
         }
     }
+    return ParseResult<void>();
 }
 
-void L3SupportedCodecList::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+ParseResult<void> L3SupportedCodecList::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     mGsmCodecs.clear();
     mUmtsCodecs.clear();
     size_t end = rp + 8 * expectedLength;
@@ -122,6 +125,7 @@ void L3SupportedCodecList::parseV(const L3Frame& src, size_t& rp, size_t expecte
             rp += 8 * fixedLen;
         }
     }
+    return ParseResult<void>();
 }
 
 void L3SupportedCodecList::text(std::ostream& os) const {
@@ -237,7 +241,7 @@ void L3CalledPartyBCDNumber::writeV(L3Frame& dest, size_t& wp) const {
     mDigits.write(dest, wp);
 }
 
-void L3CalledPartyBCDNumber::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3CalledPartyBCDNumber::try_parseV(const L3Frame& src, size_t& rp) {
     src.readField(rp, 1);
     mType = static_cast<TypeOfNumber>(src.readField(rp, 3));
     mPlan = static_cast<NumberingPlan>(src.readField(rp, 4));
@@ -246,13 +250,15 @@ void L3CalledPartyBCDNumber::parseV(const L3Frame& src, size_t& rp) {
     size_t remaining = (end - rp) / 8;
     if (remaining > 10) remaining = 10;
     mDigits.parse(src, rp, remaining, mType == TypeOfNumber::International);
+    return ParseResult<void>();
 }
 
-void L3CalledPartyBCDNumber::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+ParseResult<void> L3CalledPartyBCDNumber::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     src.readField(rp, 1);
     mType = static_cast<TypeOfNumber>(src.readField(rp, 3));
     mPlan = static_cast<NumberingPlan>(src.readField(rp, 4));
     mDigits.parse(src, rp, expectedLength - 1, mType == TypeOfNumber::International);
+    return ParseResult<void>();
 }
 
 void L3CalledPartyBCDNumber::text(std::ostream& os) const {
@@ -288,7 +294,7 @@ void L3CallingPartyBCDNumber::writeV(L3Frame& dest, size_t& wp) const {
     mDigits.write(dest, wp);
 }
 
-void L3CallingPartyBCDNumber::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3CallingPartyBCDNumber::try_parseV(const L3Frame& src, size_t& rp) {
     mHaveOctet3a = !src.readField(rp, 1);
     mType = static_cast<TypeOfNumber>(src.readField(rp, 3));
     mPlan = static_cast<NumberingPlan>(src.readField(rp, 4));
@@ -303,9 +309,10 @@ void L3CallingPartyBCDNumber::parseV(const L3Frame& src, size_t& rp) {
     size_t remaining = (end - rp) / 8;
     if (remaining > 10) remaining = 10;
     mDigits.parse(src, rp, remaining, mType == TypeOfNumber::International);
+    return ParseResult<void>();
 }
 
-void L3CallingPartyBCDNumber::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+ParseResult<void> L3CallingPartyBCDNumber::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     size_t remainingLength = expectedLength;
     mHaveOctet3a = !src.readField(rp, 1);
     mType = static_cast<TypeOfNumber>(src.readField(rp, 3));
@@ -319,6 +326,7 @@ void L3CallingPartyBCDNumber::parseV(const L3Frame& src, size_t& rp, size_t expe
         remainingLength -= 1;
     }
     mDigits.parse(src, rp, remainingLength, mType == TypeOfNumber::International);
+    return ParseResult<void>();
 }
 
 void L3CallingPartyBCDNumber::text(std::ostream& os) const {
@@ -339,16 +347,17 @@ void L3CauseElement::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, 1, 1);                                  // ext = 1 (last octet)
 }
 
-void L3CauseElement::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3CauseElement::try_parseV(const L3Frame& src, size_t& rp) {
     mLocation = static_cast<Location>(src.readField(rp, 4));    // location
     src.readField(rp, 1);                                       // spare
     src.readField(rp, 2);                                       // coding standard
     src.readField(rp, 1);                                       // ext
     mCause = static_cast<Cause>(src.readField(rp, 7));          // cause value
     src.readField(rp, 1);                                       // ext
+    return ParseResult<void>();
 }
 
-void L3CauseElement::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+ParseResult<void> L3CauseElement::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     (void)expectedLength;
     mLocation = static_cast<Location>(src.readField(rp, 4));    // location
     src.readField(rp, 1);                                       // spare
@@ -356,6 +365,7 @@ void L3CauseElement::parseV(const L3Frame& src, size_t& rp, size_t expectedLengt
     src.readField(rp, 1);                                       // ext
     mCause = static_cast<Cause>(src.readField(rp, 7));          // cause value
     src.readField(rp, 1);                                       // ext
+    return ParseResult<void>();
 }
 
 void L3CauseElement::text(std::ostream& os) const {
@@ -371,15 +381,17 @@ void L3CallState::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, mCallState, 6);
 }
 
-void L3CallState::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3CallState::try_parseV(const L3Frame& src, size_t& rp) {
     rp += 2;
     mCallState = src.readField(rp, 6);
+    return ParseResult<void>();
 }
 
-void L3CallState::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+ParseResult<void> L3CallState::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     (void)expectedLength;
     rp += 2;
     mCallState = src.readField(rp, 6);
+    return ParseResult<void>();
 }
 
 void L3CallState::text(std::ostream& os) const {
@@ -398,19 +410,21 @@ void L3ProgressIndicator::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mProgress), 7);
 }
 
-void L3ProgressIndicator::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3ProgressIndicator::try_parseV(const L3Frame& src, size_t& rp) {
     src.readField(rp, 4);
     mLocation = static_cast<Location>(src.readField(rp, 4));
     src.readField(rp, 1);
     mProgress = static_cast<Progress>(src.readField(rp, 7));
+    return ParseResult<void>();
 }
 
-void L3ProgressIndicator::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+ParseResult<void> L3ProgressIndicator::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     (void)expectedLength;
     src.readField(rp, 4);
     mLocation = static_cast<Location>(src.readField(rp, 4));
     src.readField(rp, 1);
     mProgress = static_cast<Progress>(src.readField(rp, 7));
+    return ParseResult<void>();
 }
 
 void L3ProgressIndicator::text(std::ostream& os) const {
@@ -426,13 +440,15 @@ void L3KeypadFacility::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mIA5), 8);
 }
 
-void L3KeypadFacility::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3KeypadFacility::try_parseV(const L3Frame& src, size_t& rp) {
     mIA5 = static_cast<char>(src.readField(rp, 8));
+    return ParseResult<void>();
 }
 
-void L3KeypadFacility::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+ParseResult<void> L3KeypadFacility::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     (void)expectedLength;
     mIA5 = static_cast<char>(src.readField(rp, 8));
+    return ParseResult<void>();
 }
 
 void L3KeypadFacility::text(std::ostream& os) const {
@@ -447,13 +463,15 @@ void L3Signal::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mSignalValue), 8);
 }
 
-void L3Signal::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3Signal::try_parseV(const L3Frame& src, size_t& rp) {
     mSignalValue = static_cast<SignalValues>(src.readField(rp, 8));
+    return ParseResult<void>();
 }
 
-void L3Signal::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+ParseResult<void> L3Signal::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     (void)expectedLength;
     mSignalValue = static_cast<SignalValues>(src.readField(rp, 8));
+    return ParseResult<void>();
 }
 
 void L3Signal::text(std::ostream& os) const {
@@ -469,13 +487,15 @@ void L3RepeatIndicator::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, mValue, 4);
 }
 
-void L3RepeatIndicator::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3RepeatIndicator::try_parseV(const L3Frame& src, size_t& rp) {
     mValue = src.readField(rp, 4);
+    return ParseResult<void>();
 }
 
-void L3RepeatIndicator::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+ParseResult<void> L3RepeatIndicator::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     (void)expectedLength;
     mValue = src.readField(rp, 4);
+    return ParseResult<void>();
 }
 
 void L3RepeatIndicator::text(std::ostream& os) const {
@@ -514,7 +534,7 @@ void L3SupServFacilityIE::writeV(L3Frame& dest, size_t& wp) const {
     }
 }
 
-void L3SupServFacilityIE::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3SupServFacilityIE::try_parseV(const L3Frame& src, size_t& rp) {
     size_t end = src.writeEnd();
     if (end <= rp) end = src.size();
     size_t remaining = (end - rp) / 8;
@@ -522,13 +542,15 @@ void L3SupServFacilityIE::parseV(const L3Frame& src, size_t& rp) {
     for (size_t i = 0; i < remaining; ++i) {
         mData.push_back(static_cast<char>(src.readField(rp, 8)));
     }
+    return ParseResult<void>();
 }
 
-void L3SupServFacilityIE::parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
+ParseResult<void> L3SupServFacilityIE::try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) {
     mData.clear();
     for (size_t i = 0; i < expectedLength; ++i) {
         mData.push_back(static_cast<char>(src.readField(rp, 8)));
     }
+    return ParseResult<void>();
 }
 
 void L3SupServFacilityIE::text(std::ostream& os) const {
@@ -549,12 +571,13 @@ void L3SupServVersionIndicator::writeV(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, mVersion, 8);
 }
 
-void L3SupServVersionIndicator::parseV(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3SupServVersionIndicator::try_parseV(const L3Frame& src, size_t& rp) {
     mVersion = src.readField(rp, 8);
+    return ParseResult<void>();
 }
 
-void L3SupServVersionIndicator::parseV(const L3Frame& src, size_t& rp, size_t) {
-    parseV(src, rp);
+ParseResult<void> L3SupServVersionIndicator::try_parseV(const L3Frame& src, size_t& rp, size_t) {
+    return try_parseV(src, rp);
 }
 
 void L3SupServVersionIndicator::text(std::ostream& os) const {
@@ -578,15 +601,26 @@ size_t L3CCCommonIEs::ccCommonLength() const {
     return result;
 }
 
-void L3CCCommonIEs::ccCommonParse(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3CCCommonIEs::try_ccCommonParse(const L3Frame& src, size_t& rp) {
     while (rp + 8 <= src.size()) {
         unsigned thisIEI = src.peekField(rp, 8);
         switch (thisIEI) {
-            case 0x1c: mHaveFacility = mFacility.parseTLV(0x1c, src, rp); continue;
-            case 0x7f: mHaveSSVersion = mSSVersion.parseTLV(0x7f, src, rp); continue;
-            default: return;
+            case 0x1c: {
+                auto res = mFacility.try_parseTLV(0x1c, src, rp);
+                if (!res.has_value()) return res.transform([](auto){ return ParseResult<void>(); });
+                mHaveFacility = res.value();
+                continue;
+            }
+            case 0x7f: {
+                auto res = mSSVersion.try_parseTLV(0x7f, src, rp);
+                if (!res.has_value()) return res.transform([](auto){ return ParseResult<void>(); });
+                mHaveSSVersion = res.value();
+                continue;
+            }
+            default: return ParseResult<void>();
         }
     }
+    return ParseResult<void>();
 }
 
 void L3CCCommonIEs::ccCommonWrite(L3Frame& dest, size_t& wp) const {

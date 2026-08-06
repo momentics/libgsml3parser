@@ -29,6 +29,7 @@
 
 #include "bitvector.h"
 #include "l3frame.h"
+#include "result.h"
 
 
 namespace gsml3parser {
@@ -85,10 +86,10 @@ public:
     size_t bitsNeeded() const { return 8 * fullLength(); }
 
     /** Parse from an L3Frame (header already read). */
-    virtual void parse(const L3Frame& source);
+    virtual ParseResult<void> parse(const L3Frame& source);
 
     /** Write message PD, MTI and data bits into a BitVector. */
-    virtual void write(L3Frame& dest) const;
+    virtual ParseResult<void> write(L3Frame& dest) const;
 
     /** Generate an L3Frame for this message. */
     std::unique_ptr<L3Frame> frame(Primitive prim = Primitive::L3_DATA) const;
@@ -107,8 +108,8 @@ public:
     std::string text() const;
 
 protected:
-    virtual void writeBody(L3Frame& dest, size_t& wp) const;
-    virtual void parseBody(const L3Frame& source, size_t& rp);
+    virtual ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const;
+    virtual ParseResult<void> try_parseBody(const L3Frame& source, size_t& rp);
 };
 
 /**
@@ -151,19 +152,19 @@ public:
     size_t lengthTLV() const { return lengthLV() + 1; }
 
     /** Parse fixed-length value part. */
-    virtual void parseV(const L3Frame& src, size_t& rp) = 0;
+    virtual ParseResult<void> try_parseV(const L3Frame& src, size_t& rp) = 0;
 
     /** Parse variable-length value part. */
-    virtual void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) = 0;
+    virtual ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) = 0;
 
     /** Parse LV format. */
-    void parseLV(const L3Frame& src, size_t& rp);
+    ParseResult<void> try_parseLV(const L3Frame& src, size_t& rp);
 
-    /** Parse TV format. Returns true if IEI matched. */
-    bool parseTV(unsigned IEI, const L3Frame& src, size_t& rp);
+    /** Parse TV format. Returns ParseResult<bool>: true if IEI matched. */
+    ParseResult<bool> try_parseTV(unsigned IEI, const L3Frame& src, size_t& rp);
 
-    /** Parse TLV format. Returns true if IEI matched. */
-    bool parseTLV(unsigned IEI, const L3Frame& src, size_t& rp);
+    /** Parse TLV format. Returns ParseResult<bool>: true if IEI matched. */
+    ParseResult<bool> try_parseTLV(unsigned IEI, const L3Frame& src, size_t& rp);
 
     /** Write the V format. */
     virtual void writeV(L3Frame& dest, size_t& wp) const = 0;
@@ -193,8 +194,10 @@ public:
     const unsigned char* peData() const { return reinterpret_cast<const unsigned char*>(mData.data()); }
     size_t lengthV() const override { return mData.size(); }
     void writeV(L3Frame& dest, size_t& wp) const override;
-    void parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
-    void parseV(const L3Frame&, size_t&) override { throw detail::ParseError("parseV not valid for TLV"); }
+    ParseResult<void> try_parseV(const L3Frame& src, size_t& rp, size_t expectedLength) override;
+    ParseResult<void> try_parseV(const L3Frame&, size_t&) override {
+        return ParseResult<void>(ParseErrorCode::InvalidIE, "try_parseV not valid for TLV, use try_parseV with expectedLength");
+    }
     void text(std::ostream&) const override;
     L3OctetAlignedProtocolElement() : mExtant(false) {}
     explicit L3OctetAlignedProtocolElement(std::string wData) : mData(std::move(wData)), mExtant(true) {}
@@ -217,5 +220,3 @@ std::ostream& operator<<(std::ostream& os, const L3ProtocolElement& elem);
 std::ostream& operator<<(std::ostream& os, const GenericMessageElement& elem);
 
 } // namespace gsml3parser
-
-
