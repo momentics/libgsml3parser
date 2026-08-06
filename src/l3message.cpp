@@ -31,28 +31,24 @@ ParseResult<void> L3Message::parse(const L3Frame& source) {
 }
 
 ParseResult<void> L3Message::write(L3Frame& dest) const {
-    try {
-        size_t l3len = bitsNeeded();
-        if (dest.size() != l3len) dest.resize(l3len);
-        size_t wp = 0;
-        dest.writeField(wp, static_cast<unsigned>(pd()), 4);  // PD: high nibble
-        dest.writeField(wp, ti(), 3);                          // TIO: 3 bits
-        L3PD pdVal = pd();
-        int mtiVal = mti();
-        bool isShort = (pdVal == L3PD::RadioResource && mtiVal >= 0x100);
-        dest.writeField(wp, isShort ? 1u : 0u, 1);            // TIF: 1 bit (1 = short message)
-        if (pdVal == L3PD::RadioResource) {
-            dest.writeField(wp, isShort ? (mtiVal & 0xFF) : mtiVal, 8);  // RR: 8-bit MTI
-        } else {
-            dest.writeField(wp, mtiVal << 2, 8);               // MM/CC/SS: messageType(6)|NSD(2)
-        }
-        auto res = try_writeBody(dest, wp);
-        if (!res.has_value()) return res;
-        dest.l2Length(l2Length());
-        return ParseResult<void>();
-    } catch (const detail::WriteError& e) {
-        return ParseResult<void>(ParseErrorCode::InvalidValue, std::string(e.what()), e.bitPosition());
+    size_t l3len = bitsNeeded();
+    if (dest.size() != l3len) dest.resize(l3len);
+    size_t wp = 0;
+    dest.writeField(wp, static_cast<unsigned>(pd()), 4);  // PD: high nibble
+    dest.writeField(wp, ti(), 3);                          // TIO: 3 bits
+    L3PD pdVal = pd();
+    int mtiVal = mti();
+    bool isShort = (pdVal == L3PD::RadioResource && mtiVal >= 0x100);
+    dest.writeField(wp, isShort ? 1u : 0u, 1);            // TIF: 1 bit (1 = short message)
+    if (pdVal == L3PD::RadioResource) {
+        dest.writeField(wp, isShort ? (mtiVal & 0xFF) : mtiVal, 8);  // RR: 8-bit MTI
+    } else {
+        dest.writeField(wp, mtiVal << 2, 8);               // MM/CC/SS: messageType(6)|NSD(2)
     }
+    auto res = try_writeBody(dest, wp);
+    if (!res.has_value()) return res;
+    dest.l2Length(l2Length());
+    return ParseResult<void>();
 }
 
 std::unique_ptr<L3Frame> L3Message::frame(Primitive prim) const {
@@ -139,14 +135,14 @@ ParseResult<bool> L3ProtocolElement::try_parseTV(unsigned IEI, const L3Frame& so
         if (thisIEI != IEI) return ParseResult<bool>(false);
         rp += 4;
         auto res = try_parseV(source, rp);
-        if (!res.has_value()) return res.transform([](auto){ return true; });
+        if (!res.has_value()) return ParseResult<bool>(res.error());
         return ParseResult<bool>(true);
     }
     unsigned thisIEI = source.peekField(rp, 8);
     if (thisIEI != IEI) return ParseResult<bool>(false);
     rp += 8;
     auto res = try_parseV(source, rp);
-    if (!res.has_value()) return res.transform([](auto){ return true; });
+    if (!res.has_value()) return ParseResult<bool>(res.error());
     return ParseResult<bool>(true);
 }
 
@@ -156,7 +152,7 @@ ParseResult<bool> L3ProtocolElement::try_parseTLV(unsigned IEI, const L3Frame& s
     if (thisIEI != IEI) return ParseResult<bool>(false);
     rp += 8;
     auto res = try_parseLV(source, rp);
-    if (!res.has_value()) return res.transform([](auto){ return true; });
+    if (!res.has_value()) return ParseResult<bool>(res.error());
     return ParseResult<bool>(true);
 }
 

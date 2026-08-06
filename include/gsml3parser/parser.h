@@ -78,9 +78,9 @@ ParseResult<std::unique_ptr<L3Message>> parseL3Hex(std::string_view hex, const P
  * @param msg     The message to serialize.
  * @param out     Output buffer (must be at least msg.fullLength() bytes).
  * @param maxlen  Maximum number of bytes to write.
- * @return        Number of bytes written, or 0 on error.
+ * @return        ParseResult with number of bytes written, or error on failure.
  */
-size_t writeL3(const L3Message& msg, uint8_t* out, size_t maxlen);
+ParseResult<size_t> writeL3(const L3Message& msg, uint8_t* out, size_t maxlen);
 
 /**
  * Write an L3Message to a hex string.
@@ -90,31 +90,21 @@ size_t writeL3(const L3Message& msg, uint8_t* out, size_t maxlen);
  */
 std::string writeL3Hex(const L3Message& msg);
 
-// ── Domain parsers (internal) ───────────────────────────────────────────
+// ── Domain parsers and factories (internal) ─────────────────────────────
 
-/** Parse a complete L3 radio resource message. */
-std::unique_ptr<L3RRMessage> parseL3RR(const L3Frame& source);
+namespace detail {
 
-/** Factory: create an RR message by MTI. Returns nullptr if unsupported. */
-std::unique_ptr<L3RRMessage> L3RRFactory(int mti);
+ParseResult<std::unique_ptr<L3RRMessage>> L3RRFactory(int mti);
+ParseResult<std::unique_ptr<L3MMMessage>> L3MMFactory(int mti);
+ParseResult<std::unique_ptr<L3CCMessage>> L3CCFactory(int mti);
+ParseResult<std::unique_ptr<L3SupServMessage>> L3SupServFactory(int mti);
 
-/** Parse a complete L3 mobility management message. */
-std::unique_ptr<L3MMMessage> parseL3MM(const L3Frame& source);
+ParseResult<std::unique_ptr<L3RRMessage>> parseL3RR(const L3Frame& source);
+ParseResult<std::unique_ptr<L3MMMessage>> parseL3MM(const L3Frame& source);
+ParseResult<std::unique_ptr<L3CCMessage>> parseL3CC(const L3Frame& source);
+ParseResult<std::unique_ptr<L3SupServMessage>> parseL3SupServ(const L3Frame& source);
 
-/** Factory: create an MM message by MTI. Returns nullptr if unsupported. */
-std::unique_ptr<L3MMMessage> L3MMFactory(int mti);
-
-/** Parse a complete L3 call control message. */
-std::unique_ptr<L3CCMessage> parseL3CC(const L3Frame& source);
-
-/** Factory: create a CC message by MTI. Returns nullptr if unsupported. */
-std::unique_ptr<L3CCMessage> L3CCFactory(int mti);
-
-/** Parse a complete L3 supplementary service message. */
-std::unique_ptr<L3SupServMessage> parseL3SupServ(const L3Frame& source);
-
-/** Factory: create an SS message by MTI. Returns nullptr if unsupported. */
-std::unique_ptr<L3SupServMessage> L3SupServFactory(int mti);
+} // namespace detail
 
 } // namespace gsml3parser
 

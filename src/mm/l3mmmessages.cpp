@@ -64,7 +64,7 @@ size_t L3LocationUpdatingRequest::l2BodyLength() const {
     return 1 + mLAI.lengthV() + mClassmark.lengthLV() + mMobileIdentity.lengthLV();
 }
 
-void L3LocationUpdatingRequest::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3LocationUpdatingRequest::try_parseBody(const L3Frame& src, size_t& rp) {
     // GSM 04.08 9.2.15: LU_Type(2)|spare(2)|CKSN(4), LAI(5 raw), CM1 LV, MI LV
     // Reference: ts_LU_REQ has locationUpdatingType, cipheringKeySequenceNumber,
     //   locationAreaIdentification (RAW, not LV!), mobileStationClassmark1 (LV), mobileIdentityLV (LV)
@@ -72,13 +72,17 @@ void L3LocationUpdatingRequest::parseBody(const L3Frame& src, size_t& rp) {
     src.readField(rp, 2);  // spare
     mCKSN = src.readField(rp, 4);
     // LAI is mandatory and raw (NOT LV-prefixed!) per GSM 24.008 9.2.15
-    mLAI.parseV(src, rp);
+    auto res = mLAI.try_parseV(src, rp);
+    if (!res.has_value()) return res;
     // classmark(LV) + mobileIdentity(LV)
-    mClassmark.parseLV(src, rp);
-    mMobileIdentity.parseLV(src, rp);
+    res = mClassmark.try_parseLV(src, rp);
+    if (!res.has_value()) return res;
+    res = mMobileIdentity.try_parseLV(src, rp);
+    if (!res.has_value()) return res;
+    return ParseResult<void>();
 }
 
-void L3LocationUpdatingRequest::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3LocationUpdatingRequest::try_writeBody(L3Frame& dest, size_t& wp) const {
     // GSM 04.08 9.2.15: LU_Type(2)|spare(2)|CKSN(4), LAI(raw), CM1 LV, MI LV
     dest.writeField(wp, mUpdateType & 0x03, 2);
     dest.writeField(wp, 0, 2);  // spare
@@ -86,6 +90,7 @@ void L3LocationUpdatingRequest::writeBody(L3Frame& dest, size_t& wp) const {
     mLAI.writeV(dest, wp);
     mClassmark.writeLV(dest, wp);
     mMobileIdentity.writeLV(dest, wp);
+    return ParseResult<void>();
 }
 
 void L3LocationUpdatingRequest::text(std::ostream& os) const {
@@ -139,17 +144,22 @@ size_t L3LocationUpdatingAccept::l2BodyLength() const {
     return result;
 }
 
-void L3LocationUpdatingAccept::parseBody(const L3Frame& src, size_t& rp) {
-    mLAI.parseV(src, rp);
-    mHaveMobileIdentity = mMobileIdentity.parseTLV(0x17, src, rp);
+ParseResult<void> L3LocationUpdatingAccept::try_parseBody(const L3Frame& src, size_t& rp) {
+    auto res = mLAI.try_parseV(src, rp);
+    if (!res.has_value()) return res;
+    auto tlRes = mMobileIdentity.try_parseTLV(0x17, src, rp);
+    if (!tlRes.has_value()) return tlRes;
+    mHaveMobileIdentity = tlRes.value();
     mFollowOnProceed = (src.peekField(rp, 8) == 0xa1);
     if (mFollowOnProceed) rp += 8;
+    return ParseResult<void>();
 }
 
-void L3LocationUpdatingAccept::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3LocationUpdatingAccept::try_writeBody(L3Frame& dest, size_t& wp) const {
     mLAI.writeV(dest, wp);
     if (mHaveMobileIdentity) mMobileIdentity.writeTLV(0x17, dest, wp);
     if (mFollowOnProceed) dest.writeField(wp, 0xa1, 8);
+    return ParseResult<void>();
 }
 
 void L3LocationUpdatingAccept::text(std::ostream& os) const {
@@ -163,12 +173,14 @@ void L3LocationUpdatingAccept::text(std::ostream& os) const {
 
 // ── L3LocationUpdatingReject ───────────────────────────────────────────
 
-void L3LocationUpdatingReject::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3LocationUpdatingReject::try_parseBody(const L3Frame& src, size_t& rp) {
     mCause = static_cast<MMRejectCause>(src.readField(rp, 8));
+    return ParseResult<void>();
 }
 
-void L3LocationUpdatingReject::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3LocationUpdatingReject::try_writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mCause), 8);
+    return ParseResult<void>();
 }
 
 void L3LocationUpdatingReject::text(std::ostream& os) const {
@@ -181,14 +193,18 @@ size_t L3IMSIDetachIndication::l2BodyLength() const {
     return 1 + mMobileIdentity.lengthLV();
 }
 
-void L3IMSIDetachIndication::parseBody(const L3Frame& src, size_t& rp) {
-    mClassmark.parseV(src, rp);
-    mMobileIdentity.parseLV(src, rp);
+ParseResult<void> L3IMSIDetachIndication::try_parseBody(const L3Frame& src, size_t& rp) {
+    auto res = mClassmark.try_parseV(src, rp);
+    if (!res.has_value()) return res;
+    res = mMobileIdentity.try_parseLV(src, rp);
+    if (!res.has_value()) return res;
+    return ParseResult<void>();
 }
 
-void L3IMSIDetachIndication::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3IMSIDetachIndication::try_writeBody(L3Frame& dest, size_t& wp) const {
     mClassmark.writeV(dest, wp);
     mMobileIdentity.writeLV(dest, wp);
+    return ParseResult<void>();
 }
 
 void L3IMSIDetachIndication::text(std::ostream& os) const {
@@ -198,8 +214,9 @@ void L3IMSIDetachIndication::text(std::ostream& os) const {
 
 // ── L3CMServiceAbort ───────────────────────────────────────────────────
 
-void L3CMServiceAbort::parseBody(const L3Frame&, size_t&) {
+ParseResult<void> L3CMServiceAbort::try_parseBody(const L3Frame&, size_t&) {
     // Nothing to parse - empty body per GSM 04.08 9.2.7
+    return ParseResult<void>();
 }
 
 void L3CMServiceAbort::text(std::ostream& os) const {
@@ -208,12 +225,14 @@ void L3CMServiceAbort::text(std::ostream& os) const {
 
 // ── L3CMServiceReject ──────────────────────────────────────────────────
 
-void L3CMServiceReject::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3CMServiceReject::try_parseBody(const L3Frame& src, size_t& rp) {
     mCause = static_cast<MMRejectCause>(src.readField(rp, 8));
+    return ParseResult<void>();
 }
 
-void L3CMServiceReject::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3CMServiceReject::try_writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mCause), 8);
+    return ParseResult<void>();
 }
 
 void L3CMServiceReject::text(std::ostream& os) const {
@@ -227,19 +246,24 @@ size_t L3CMServiceRequest::l2BodyLength() const {
     return 1 + mClassmark.lengthLV() + mMobileIdentity.lengthLV();
 }
 
-void L3CMServiceRequest::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3CMServiceRequest::try_parseBody(const L3Frame& src, size_t& rp) {
     // GSM 04.08 9.2.9: skip ciphering(4), serviceType(4), classmark(LV), mobileID(LV)
     src.readField(rp, 4);  // skip ciphering key sequence number
-    mServiceType.parseV(src, rp);
-    mClassmark.parseLV(src, rp);
-    mMobileIdentity.parseLV(src, rp);
+    auto res = mServiceType.try_parseV(src, rp);
+    if (!res.has_value()) return res;
+    res = mClassmark.try_parseLV(src, rp);
+    if (!res.has_value()) return res;
+    res = mMobileIdentity.try_parseLV(src, rp);
+    if (!res.has_value()) return res;
+    return ParseResult<void>();
 }
 
-void L3CMServiceRequest::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3CMServiceRequest::try_writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, 0, 4);  // spare ciphering
     mServiceType.writeV(dest, wp);
     mClassmark.writeLV(dest, wp);
     mMobileIdentity.writeLV(dest, wp);
+    return ParseResult<void>();
 }
 
 void L3CMServiceRequest::text(std::ostream& os) const {
@@ -256,17 +280,22 @@ size_t L3CMReestablishmentRequest::l2BodyLength() const {
     return 1 + mClassmark.lengthLV() + mMobileID.lengthLV() + (mHaveLAI ? mLAI.lengthTLV() : 0);
 }
 
-void L3CMReestablishmentRequest::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3CMReestablishmentRequest::try_parseBody(const L3Frame& src, size_t& rp) {
     // GSM 04.08 9.2.4: CKSN(4)|spare(4), CM2 LV, MI LV, optional LAI(TLV 0x13)
     // Reference: ts_CM_REESTABL_REQ has cipheringKeySequenceNumber, mobileStationClassmark2, mobileIdentityLV
     mCKSN = src.readField(rp, 4);
     src.readField(rp, 4);  // spare
-    mClassmark.parseLV(src, rp);
-    mMobileID.parseLV(src, rp);
-    mHaveLAI = mLAI.parseTLV(0x13, src, rp);
+    auto res = mClassmark.try_parseLV(src, rp);
+    if (!res.has_value()) return res;
+    res = mMobileID.try_parseLV(src, rp);
+    if (!res.has_value()) return res;
+    auto tlRes = mLAI.try_parseTLV(0x13, src, rp);
+    if (!tlRes.has_value()) return tlRes;
+    mHaveLAI = tlRes.value();
+    return ParseResult<void>();
 }
 
-void L3CMReestablishmentRequest::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3CMReestablishmentRequest::try_writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, mCKSN & 0x0F, 4);
     dest.writeField(wp, 0, 4);  // spare
     mClassmark.writeLV(dest, wp);
@@ -274,6 +303,7 @@ void L3CMReestablishmentRequest::writeBody(L3Frame& dest, size_t& wp) const {
     if (mHaveLAI) {
         mLAI.writeTLV(0x13, dest, wp);
     }
+    return ParseResult<void>();
 }
 
 void L3CMReestablishmentRequest::text(std::ostream& os) const {
@@ -292,15 +322,19 @@ size_t L3MMInformation::l2BodyLength() const {
     return len;
 }
 
-void L3MMInformation::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3MMInformation::try_parseBody(const L3Frame& src, size_t& rp) {
     // GSM 04.08 9.2.15a: shortName(TLV 0x45), time(TV 0x47)
-    mShortName.parseTLV(0x45, src, rp);
-    mTime.parseTV(0x47, src, rp);
+    auto tlRes = mShortName.try_parseTLV(0x45, src, rp);
+    if (!tlRes.has_value()) return tlRes;
+    auto tvRes = mTime.try_parseTV(0x47, src, rp);
+    if (!tvRes.has_value()) return tvRes;
+    return ParseResult<void>();
 }
 
-void L3MMInformation::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3MMInformation::try_writeBody(L3Frame& dest, size_t& wp) const {
     if (mShortName.lengthV() > 1) mShortName.writeTLV(0x45, dest, wp);
     mTime.writeTV(0x47, dest, wp);
+    return ParseResult<void>();
 }
 
 void L3MMInformation::text(std::ostream& os) const {
@@ -313,14 +347,16 @@ void L3MMInformation::text(std::ostream& os) const {
 
 // ── L3IdentityRequest ──────────────────────────────────────────────────
 
-void L3IdentityRequest::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3IdentityRequest::try_parseBody(const L3Frame& src, size_t& rp) {
     src.readField(rp, 4);  // spare
     mType = static_cast<MobileIDType>(src.readField(rp, 4));
+    return ParseResult<void>();
 }
 
-void L3IdentityRequest::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3IdentityRequest::try_writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, 0, 4);  // spare half octet
     dest.writeField(wp, static_cast<unsigned>(mType), 4);
+    return ParseResult<void>();
 }
 
 void L3IdentityRequest::text(std::ostream& os) const {
@@ -333,12 +369,15 @@ size_t L3IdentityResponse::l2BodyLength() const {
     return mMobileID.lengthLV();
 }
 
-void L3IdentityResponse::parseBody(const L3Frame& src, size_t& rp) {
-    mMobileID.parseLV(src, rp);
+ParseResult<void> L3IdentityResponse::try_parseBody(const L3Frame& src, size_t& rp) {
+    auto res = mMobileID.try_parseLV(src, rp);
+    if (!res.has_value()) return res;
+    return ParseResult<void>();
 }
 
-void L3IdentityResponse::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3IdentityResponse::try_writeBody(L3Frame& dest, size_t& wp) const {
     mMobileID.writeLV(dest, wp);
+    return ParseResult<void>();
 }
 
 void L3IdentityResponse::text(std::ostream& os) const {
@@ -357,21 +396,23 @@ void L3CMServiceAccept::text(std::ostream& os) const {
 L3AuthenticationRequest::L3AuthenticationRequest(unsigned ckSN, const std::vector<uint8_t>& rand)
     : mCKSN(ckSN), mRAND(rand) {}
 
-void L3AuthenticationRequest::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3AuthenticationRequest::try_parseBody(const L3Frame& src, size_t& rp) {
     src.readField(rp, 4);  // spare
     mCKSN = src.readField(rp, 4);
     mRAND.resize(16);
     for (size_t i = 0; i < 16; ++i) {
         mRAND[i] = static_cast<uint8_t>(src.readField(rp, 8));
     }
+    return ParseResult<void>();
 }
 
-void L3AuthenticationRequest::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3AuthenticationRequest::try_writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, 0, 4);  // spare half octet
     dest.writeField(wp, mCKSN, 4);
     for (const auto& b : mRAND) {
         dest.writeField(wp, b, 8);
     }
+    return ParseResult<void>();
 }
 
 void L3AuthenticationRequest::text(std::ostream& os) const {
@@ -384,12 +425,14 @@ void L3AuthenticationRequest::text(std::ostream& os) const {
 
 // ── L3AuthenticationResponse ───────────────────────────────────────────
 
-void L3AuthenticationResponse::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3AuthenticationResponse::try_parseBody(const L3Frame& src, size_t& rp) {
     mSRES = src.readField(rp, 32);
+    return ParseResult<void>();
 }
 
-void L3AuthenticationResponse::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3AuthenticationResponse::try_writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, mSRES, 32);
+    return ParseResult<void>();
 }
 
 void L3AuthenticationResponse::text(std::ostream& os) const {
@@ -434,18 +477,22 @@ L3TMSIReallocationCommand L3TMSIReallocationCommand::Builder::build() {
     return msg;
 }
 
-void L3TMSIReallocationCommand::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3TMSIReallocationCommand::try_writeBody(L3Frame& dest, size_t& wp) const {
     mLAI.writeV(dest, wp);
     mTMSI.writeLV(dest, wp);
     dest.writeField(wp, mFollowOnProceed ? 1 : 0, 1);
     dest.writeField(wp, 0, 7);
+    return ParseResult<void>();
 }
 
-void L3TMSIReallocationCommand::parseBody(const L3Frame& src, size_t& rp) {
-    mLAI.parseV(src, rp);
-    mTMSI.parseLV(src, rp);
+ParseResult<void> L3TMSIReallocationCommand::try_parseBody(const L3Frame& src, size_t& rp) {
+    auto res = mLAI.try_parseV(src, rp);
+    if (!res.has_value()) return res;
+    res = mTMSI.try_parseLV(src, rp);
+    if (!res.has_value()) return res;
     mFollowOnProceed = src.readField(rp, 1);
     src.readField(rp, 7);
+    return ParseResult<void>();
 }
 
 void L3TMSIReallocationCommand::text(std::ostream& os) const {
@@ -458,7 +505,7 @@ void L3TMSIReallocationCommand::text(std::ostream& os) const {
 
 // ── L3TMSIReallocationComplete ─────────────────────────────────────────
 
-void L3TMSIReallocationComplete::writeBody(L3Frame&, size_t&) const {}
+ParseResult<void> L3TMSIReallocationComplete::try_writeBody(L3Frame&, size_t&) const { return ParseResult<void>(); }
 
 void L3TMSIReallocationComplete::text(std::ostream& os) const {
     os << "TMSIReallocationComplete";
@@ -466,23 +513,27 @@ void L3TMSIReallocationComplete::text(std::ostream& os) const {
 
 // ── L3MMStatus ─────────────────────────────────────────────────────────
 
-void L3MMStatus::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3MMStatus::try_parseBody(const L3Frame& src, size_t& rp) {
     mCause = static_cast<MMRejectCause>(src.readField(rp, 8));
     src.readField(rp, 16);  // spare
+    return ParseResult<void>();
 }
 
-void L3MMStatus::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3MMStatus::try_writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mCause), 8);
     dest.writeField(wp, 0, 16);  // spare
+    return ParseResult<void>();
 }
 
 void L3MMStatus::text(std::ostream& os) const {
     os << "MMStatus: " << MMRejectCause2Str(mCause);
 }
 
-// ── Factory ─────────────────────────────────────────────────────────────
+// ── Factory & Parser (internal) ────────────────────────────────────────
 
-std::unique_ptr<L3MMMessage> L3MMFactory(int mti) {
+namespace detail {
+
+ParseResult<std::unique_ptr<L3MMMessage>> L3MMFactory(int mti) {
     switch (mti) {
         case L3MMMessage::IMSIDetachIndication:     return std::make_unique<L3IMSIDetachIndication>();
         case L3MMMessage::CMServiceAccept:          return std::make_unique<L3CMServiceAccept>();
@@ -502,29 +553,35 @@ std::unique_ptr<L3MMMessage> L3MMFactory(int mti) {
         case L3MMMessage::AuthenticationRequest:    return std::make_unique<L3AuthenticationRequest>(0, std::vector<uint8_t>());
         case L3MMMessage::AuthenticationResponse:   return std::make_unique<L3AuthenticationResponse>();
         case L3MMMessage::AuthenticationReject:     return std::make_unique<L3AuthenticationReject>();
-        default:                                    return nullptr;
+        default:
+            return ParseResult<std::unique_ptr<L3MMMessage>>(
+                ParseErrorCode::InvalidMTI, "Unknown MM message type: 0x" + std::to_string(mti & 0xFF));
     }
 }
 
-// ── Parser ──────────────────────────────────────────────────────────────
+ParseResult<std::unique_ptr<L3MMMessage>> parseL3MM(const L3Frame& source) {
+    if (source.size() < 16) {
+        return ParseResult<std::unique_ptr<L3MMMessage>>(
+            ParseErrorCode::TruncatedInput, "Frame too short for L3 header");
+    }
 
-std::unique_ptr<L3MMMessage> parseL3MM(const L3Frame& source) {
-    if (source.size() < 16) return nullptr;
-
-    // MTI extraction already handles the don't-care bit in L3Frame::mti()
     unsigned mti = source.mti();
-    auto msg = L3MMFactory(static_cast<L3MMMessage::MessageType>(mti));
-    if (!msg) {
+    auto factoryResult = L3MMFactory(static_cast<L3MMMessage::MessageType>(mti));
+    if (!factoryResult.has_value()) {
         GSML3PARSER_LOG_WARN("Unknown MM MTI: 0x%02x", mti);
-        return nullptr;
+        return ParseResult<std::unique_ptr<L3MMMessage>>(factoryResult.error());
     }
-    try {
-        msg->parse(source);
-    } catch (const detail::ParseError&) {
+
+    auto& msg = factoryResult.value();
+    auto parseResult = msg->parse(source);
+    if (!parseResult.has_value()) {
         GSML3PARSER_LOG_WARN("MM parse failed for MTI=0x%02x", mti);
-        return nullptr;
+        return ParseResult<std::unique_ptr<L3MMMessage>>(parseResult.error());
     }
-    return msg;
+
+    return ParseResult<std::unique_ptr<L3MMMessage>>(std::move(msg));
 }
+
+} // namespace detail
 
 } // namespace gsml3parser

@@ -49,7 +49,7 @@ public:
     explicit L3SupServMessage(unsigned wTI = 7) : mTI(wTI) {}
 
     size_t fullBodyLength() const override { return l2BodyLength(); }
-    void write(L3Frame& dest) const override;
+    ParseResult<void> write(L3Frame& dest) const override;
     L3PD pd() const override { return L3PD::NonCallSS; }
     unsigned ti() const override { return mTI; }
     void ti(unsigned wTI) { mTI = wTI; }
@@ -67,8 +67,8 @@ public:
 
     std::string getMapComponents() const { return mFacility.mData; }
     int mti() const override { return Facility; }
-    void writeBody(L3Frame& dest, size_t& wp) const override;
-    void parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
     void text(std::ostream& os) const override;
 };
@@ -89,8 +89,8 @@ public:
     std::string getMapComponents() const { return mFacility.mData; }
 
     int mti() const override { return Register; }
-    void writeBody(L3Frame& dest, size_t& wp) const override;
-    void parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
     void text(std::ostream& os) const override;
 };
@@ -111,8 +111,8 @@ public:
     CCCause cause() const { return mCause.cause(); }
     CCCauseLocation causeLocation() const { return mCause.location(); }
     int mti() const override { return ReleaseComplete; }
-    void writeBody(L3Frame& dest, size_t& wp) const override;
-    void parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
     size_t l2BodyLength() const override;
     void text(std::ostream& os) const override;
 };

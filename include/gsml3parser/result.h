@@ -91,9 +91,10 @@ public:
         return has_value() ? std::move(value()) : std::move(defaultVal);
     }
 
-    // Implicit conversion to T for rvalues (allows auto msg = parseL3(...); pattern)
-    [[nodiscard]] operator T() && {
-        if (!has_value()) return T{};
+    // Implicit conversion to T for rvalues — excluded for bool to avoid conflict with operator bool()
+    template <typename U = T>
+    [[nodiscard]] operator U() && requires (!std::is_same_v<U, bool>) {
+        if (!has_value()) return U{};
         return std::move(value());
     }
 
@@ -220,6 +221,17 @@ public:
     {
         if (has_value()) {
             return std::invoke(std::forward<F>(f));
+        }
+        return ParseResult<std::invoke_result_t<F>>(std::get<ParseError>(mData));
+    }
+
+    // transform: map success to a new value type (e.g. void -> bool)
+    template <typename F>
+    [[nodiscard]] auto transform(F&& f) -> ParseResult<std::invoke_result_t<F>>
+        requires std::is_invocable_v<F>
+    {
+        if (has_value()) {
+            return ParseResult<std::invoke_result_t<F>>(std::invoke(std::forward<F>(f)));
         }
         return ParseResult<std::invoke_result_t<F>>(std::get<ParseError>(mData));
     }

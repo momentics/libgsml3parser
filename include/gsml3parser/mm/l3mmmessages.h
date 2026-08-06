@@ -92,8 +92,8 @@ public:
     size_t l2BodyLength() const override;
     LocationUpdateType getLocationUpdatingType() const { return static_cast<LocationUpdateType>(mUpdateType & 0x3); }
     unsigned getFollowOnRequest() const { return mUpdateType & 0x8; }
-    void parseBody(const L3Frame& src, size_t& rp) override;
-    void writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -110,8 +110,8 @@ public:
 
     int mti() const override { return LocationUpdatingAccept; }
     size_t l2BodyLength() const override;
-    void parseBody(const L3Frame& src, size_t& rp) override;
-    void writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 
     class Builder {
@@ -139,8 +139,8 @@ public:
     explicit L3LocationUpdatingReject(MMRejectCause cause) : mCause(cause) {}
     int mti() const override { return LocationUpdatingReject; }
     size_t l2BodyLength() const override { return 1; }
-    void parseBody(const L3Frame& src, size_t& rp) override;
-    void writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -154,8 +154,8 @@ public:
     const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
     int mti() const override { return IMSIDetachIndication; }
     size_t l2BodyLength() const override;
-    void parseBody(const L3Frame& src, size_t& rp) override;
-    void writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -165,8 +165,8 @@ class L3CMServiceAccept : public L3MMMessage {
 public:
     int mti() const override { return CMServiceAccept; }
     size_t l2BodyLength() const override { return 0; }
-    void writeBody(L3Frame&, size_t&) const override {}
-    void parseBody(const L3Frame&, size_t&) override {}
+    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override { return {}; }
+    ParseResult<void> try_parseBody(const L3Frame&, size_t&) override { return {}; }
     void text(std::ostream& os) const override;
 };
 
@@ -176,8 +176,8 @@ class L3CMServiceAbort : public L3MMMessage {
 public:
     int mti() const override { return CMServiceAbort; }
     size_t l2BodyLength() const override { return 0; }
-    void writeBody(L3Frame&, size_t&) const override {}
-    void parseBody(const L3Frame&, size_t&) override;
+    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override { return {}; }
+    ParseResult<void> try_parseBody(const L3Frame&, size_t&) override;
     void text(std::ostream& os) const override;
 };
 
@@ -190,8 +190,8 @@ public:
     explicit L3CMServiceReject(MMRejectCause cause) : mCause(cause) {}
     int mti() const override { return CMServiceReject; }
     size_t l2BodyLength() const override { return 1; }
-    void parseBody(const L3Frame& src, size_t& rp) override;
-    void writeBody(L3Frame&, size_t&) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -207,8 +207,8 @@ public:
     L3CMServiceType::TypeCode serviceType() const { return mServiceType.type(); }
     int mti() const override { return CMServiceRequest; }
     size_t l2BodyLength() const override;
-    void parseBody(const L3Frame& src, size_t& rp) override;
-    void writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -227,8 +227,8 @@ public:
     unsigned cksn() const { return mCKSN; }
     int mti() const override { return CMReestablishmentRequest; }
     size_t l2BodyLength() const override;
-    void parseBody(const L3Frame& src, size_t& rp) override;
-    void writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -242,8 +242,8 @@ public:
     L3MMInformation();
     int mti() const override { return MMInformation; }
     size_t l2BodyLength() const override;
-    void writeBody(L3Frame& dest, size_t& wp) const override;
-    void parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;
     const L3NetworkName& shortName() const { return mShortName; }
     const L3TimeZoneAndTime& time() const { return mTime; }
@@ -258,8 +258,8 @@ public:
     explicit L3IdentityRequest(MobileIDType type) : mType(type) {}
     int mti() const override { return IdentityRequest; }
     size_t l2BodyLength() const override { return 1; }
-    void parseBody(const L3Frame& src, size_t& rp) override;
-    void writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -271,8 +271,8 @@ private:
 public:
     int mti() const override { return IdentityResponse; }
     size_t l2BodyLength() const override;
-    void parseBody(const L3Frame& src, size_t& rp) override;
-    void writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
     const L3MobileIdentity& mobileId() const { return mMobileID; }
 };
@@ -287,8 +287,8 @@ public:
     L3AuthenticationRequest(unsigned ckSN, const std::vector<uint8_t>& rand);
     int mti() const override { return AuthenticationRequest; }
     size_t l2BodyLength() const override { return 17; }
-    void parseBody(const L3Frame& src, size_t& rp) override;
-    void writeBody(L3Frame&, size_t&) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -301,8 +301,8 @@ public:
     uint32_t sres() const { return mSRES; }
     int mti() const override { return AuthenticationResponse; }
     size_t l2BodyLength() const override { return 4; }
-    void parseBody(const L3Frame& src, size_t& rp) override;
-    void writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -312,8 +312,8 @@ class L3AuthenticationReject : public L3MMMessage {
 public:
     int mti() const override { return AuthenticationReject; }
     size_t l2BodyLength() const override { return 0; }
-    void parseBody(const L3Frame&, size_t&) override {}
-    void writeBody(L3Frame&, size_t&) const override {}
+    ParseResult<void> try_parseBody(const L3Frame&, size_t&) override { return {}; }
+    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override { return {}; }
     void text(std::ostream& os) const override;
 };
 
@@ -331,8 +331,8 @@ public:
     bool followOnProceed() const { return mFollowOnProceed; }
     int mti() const override { return TMSIReallocationCommand; }
     size_t l2BodyLength() const override { return mLAI.lengthV() + mTMSI.lengthLV() + 1; }
-    void writeBody(L3Frame& dest, size_t& wp) const override;
-    void parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
     void text(std::ostream& os) const override;
 
     class Builder {
@@ -356,8 +356,8 @@ class L3TMSIReallocationComplete : public L3MMMessage {
 public:
     int mti() const override { return TMSIReallocationComplete; }
     size_t l2BodyLength() const override { return 0; }
-    void parseBody(const L3Frame&, size_t&) override {}
-    void writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame&, size_t&) override { return {}; }
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 
@@ -370,8 +370,8 @@ public:
     MMRejectCause cause() const { return mCause; }
     int mti() const override { return MMStatus; }
     size_t l2BodyLength() const override { return 3; }
-    void parseBody(const L3Frame& src, size_t& rp) override;
-    void writeBody(L3Frame& dest, size_t& wp) const override;
+    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
+    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
     void text(std::ostream& os) const override;
 };
 

@@ -143,8 +143,9 @@ TEST(ParserTest, WriteAndParseRoundTrip) {
     L3ChannelRelease chRelease(RRCause::Normal_Event);
 
     std::vector<uint8_t> buf(chRelease.fullLength());
-    size_t n = writeL3(chRelease, buf.data(), buf.size());
-    EXPECT_GT(n, 0u);
+    auto res = writeL3(chRelease, buf.data(), buf.size());
+    ASSERT_TRUE(res.has_value());
+    EXPECT_GT(res.value(), 0u);
 
     auto msg = parseL3(std::span<const uint8_t>(buf), ctx);
     ASSERT_TRUE(msg);

@@ -319,7 +319,7 @@ public:
     L3SupServVersionIndicator mSSVersion;
     L3CCCommonIEs();
     void ccCommonText(std::ostream&) const;
-    void ccCommonParse(const L3Frame& src, size_t& rp);
+    ParseResult<void> try_ccCommonParse(const L3Frame& src, size_t& rp);
     void ccCommonWrite(L3Frame& dest, size_t& wp) const;
     size_t ccCommonLength() const;
 };

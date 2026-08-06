@@ -29,16 +29,18 @@ namespace gsml3parser {
 
 // ── L3SupServMessage ────────────────────────────────────────────────────
 
-void L3SupServMessage::write(L3Frame& dest) const {
+ParseResult<void> L3SupServMessage::write(L3Frame& dest) const {
     size_t l3len = bitsNeeded();
     if (dest.size() != l3len) dest.resize(l3len);
     size_t wp = 0;
-    dest.writeField(wp, static_cast<unsigned>(pd()), 4);  // PD: high nibble
-    dest.writeField(wp, mTI, 3);                           // TIO: 3 bits
-    dest.writeField(wp, 0, 1);                             // TIF: 1 bit
-    dest.writeField(wp, mti() << 2, 8);                    // messageType(6)|NSD(2)
-    writeBody(dest, wp);
+    dest.writeField(wp, static_cast<unsigned>(pd()), 4);
+    dest.writeField(wp, mTI, 3);
+    dest.writeField(wp, 0, 1);
+    dest.writeField(wp, mti() << 2, 8);
+    auto res = try_writeBody(dest, wp);
+    if (!res.has_value()) return res;
     dest.l2Length(l2Length());
+    return ParseResult<void>();
 }
 
 void L3SupServMessage::text(std::ostream& os) const {
@@ -57,12 +59,15 @@ size_t L3SupServFacilityMessage::l2BodyLength() const {
     return mFacility.lengthLV();
 }
 
-void L3SupServFacilityMessage::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3SupServFacilityMessage::try_writeBody(L3Frame& dest, size_t& wp) const {
     mFacility.writeLV(dest, wp);
+    return ParseResult<void>();
 }
 
-void L3SupServFacilityMessage::parseBody(const L3Frame& src, size_t& rp) {
-    mFacility.parseLV(src, rp);
+ParseResult<void> L3SupServFacilityMessage::try_parseBody(const L3Frame& src, size_t& rp) {
+    auto res = mFacility.try_parseLV(src, rp);
+    if (!res.has_value()) return res;
+    return ParseResult<void>();
 }
 
 void L3SupServFacilityMessage::text(std::ostream& os) const {
@@ -84,23 +89,26 @@ size_t L3SupServRegisterMessage::l2BodyLength() const {
     return len + (mHaveVersion ? 3 : 0);
 }
 
-void L3SupServRegisterMessage::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3SupServRegisterMessage::try_writeBody(L3Frame& dest, size_t& wp) const {
     mFacility.writeTLV(0x1c, dest, wp);
     if (mHaveVersion) {
         dest.writeField(wp, 0x7f, 8);  // IEI
         dest.writeField(wp, 1, 8);       // Length
         dest.writeField(wp, mVersionIndicator, 8);
     }
+    return ParseResult<void>();
 }
 
-void L3SupServRegisterMessage::parseBody(const L3Frame& src, size_t& rp) {
-    mFacility.parseTLV(0x1c, src, rp);
+ParseResult<void> L3SupServRegisterMessage::try_parseBody(const L3Frame& src, size_t& rp) {
+    auto tlRes = mFacility.try_parseTLV(0x1c, src, rp);
+    if (!tlRes.has_value()) return tlRes;
     mHaveVersion = (src.peekField(rp, 8) == 0x7f);
     if (mHaveVersion) {
         rp += 8;  // skip IEI
         src.readField(rp, 8);  // skip length
         mVersionIndicator = src.readField(rp, 8);
     }
+    return ParseResult<void>();
 }
 
 void L3SupServRegisterMessage::text(std::ostream& os) const {
@@ -127,14 +135,19 @@ size_t L3SupServReleaseCompleteMessage::l2BodyLength() const {
     return len;
 }
 
-void L3SupServReleaseCompleteMessage::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3SupServReleaseCompleteMessage::try_writeBody(L3Frame& dest, size_t& wp) const {
     if (mFacility.mExtant) mFacility.writeTLV(0x1c, dest, wp);
     if (mHaveCause) mCause.writeTLV(0x08, dest, wp);
+    return ParseResult<void>();
 }
 
-void L3SupServReleaseCompleteMessage::parseBody(const L3Frame& src, size_t& rp) {
-    mHaveCause = mCause.parseTLV(0x08, src, rp);
-    mFacility.parseTLV(0x1c, src, rp);
+ParseResult<void> L3SupServReleaseCompleteMessage::try_parseBody(const L3Frame& src, size_t& rp) {
+    auto tlRes = mCause.try_parseTLV(0x08, src, rp);
+    if (!tlRes.has_value()) return tlRes;
+    mHaveCause = tlRes.value();
+    auto facRes = mFacility.try_parseTLV(0x1c, src, rp);
+    if (!facRes.has_value()) return facRes;
+    return ParseResult<void>();
 }
 
 void L3SupServReleaseCompleteMessage::text(std::ostream& os) const {
@@ -146,37 +159,45 @@ void L3SupServReleaseCompleteMessage::text(std::ostream& os) const {
     if (mHaveCause) os << ": " << CCCause2Str(mCause.cause());
 }
 
-// ── Factory ─────────────────────────────────────────────────────────────
+// ── Factory & Parser (internal) ────────────────────────────────────────
 
-std::unique_ptr<L3SupServMessage> L3SupServFactory(int mti) {
+namespace detail {
+
+ParseResult<std::unique_ptr<L3SupServMessage>> L3SupServFactory(int mti) {
     switch (mti) {
         case L3SupServMessage::Facility:      return std::make_unique<L3SupServFacilityMessage>();
         case L3SupServMessage::Register:      return std::make_unique<L3SupServRegisterMessage>();
         case L3SupServMessage::ReleaseComplete: return std::make_unique<L3SupServReleaseCompleteMessage>();
-        default:                              return nullptr;
+        default:
+            return ParseResult<std::unique_ptr<L3SupServMessage>>(
+                ParseErrorCode::InvalidMTI, "Unknown SS message type: 0x" + std::to_string(mti & 0xFF));
     }
 }
 
-// ── Parser ──────────────────────────────────────────────────────────────
+ParseResult<std::unique_ptr<L3SupServMessage>> parseL3SupServ(const L3Frame& source) {
+    if (source.size() < 16) {
+        return ParseResult<std::unique_ptr<L3SupServMessage>>(
+            ParseErrorCode::TruncatedInput, "Frame too short for L3 header");
+    }
 
-std::unique_ptr<L3SupServMessage> parseL3SupServ(const L3Frame& source) {
-    if (source.size() < 16) return nullptr;
-
-    // Mask out bit 6 (0xbf), see GSM 04.08 Table 10.5
     unsigned mti = source.mti() & 0xbf;
-    auto msg = L3SupServFactory(static_cast<L3SupServMessage::MessageType>(mti));
-    if (!msg) {
+    auto factoryResult = L3SupServFactory(static_cast<L3SupServMessage::MessageType>(mti));
+    if (!factoryResult.has_value()) {
         GSML3PARSER_LOG_WARN("Unknown SS MTI: 0x%02x", mti);
-        return nullptr;
+        return ParseResult<std::unique_ptr<L3SupServMessage>>(factoryResult.error());
     }
-    try {
-        msg->ti(source.ti());
-        msg->parse(source);
-    } catch (const detail::ParseError&) {
+
+    auto& msg = factoryResult.value();
+    msg->ti(source.ti());
+    auto parseResult = msg->parse(source);
+    if (!parseResult.has_value()) {
         GSML3PARSER_LOG_WARN("SS parse failed for MTI=0x%02x", mti);
-        return nullptr;
+        return ParseResult<std::unique_ptr<L3SupServMessage>>(parseResult.error());
     }
-    return msg;
+
+    return ParseResult<std::unique_ptr<L3SupServMessage>>(std::move(msg));
 }
+
+} // namespace detail
 
 } // namespace gsml3parser

@@ -33,8 +33,9 @@ static ParserContext ctx;
 
 static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     std::vector<uint8_t> buf(msg.fullLength());
-    size_t n = writeL3(msg, buf.data(), buf.size());
-    if (n == 0) return nullptr;
+    auto wr = writeL3(msg, buf.data(), buf.size());
+    if (!wr.has_value()) return nullptr;
+    if (wr.value() == 0) return nullptr;
     auto result = parseL3(std::span<const uint8_t>(buf), ctx);
     if (!result.has_value()) return nullptr;
     return std::move(result).value();
@@ -234,9 +235,10 @@ TEST(CCRoundTripTest, ReleaseComplete_WithCause) {
     // Verify round-trip preserves cause by comparing serialized bytes
     std::vector<uint8_t> buf1(msg.fullLength());
     std::vector<uint8_t> buf2(rc->fullLength());
-    size_t n1 = writeL3(msg, buf1.data(), buf1.size());
-    size_t n2 = writeL3(*rc, buf2.data(), buf2.size());
-    EXPECT_EQ(n1, n2);
+    auto r1 = writeL3(msg, buf1.data(), buf1.size());
+    auto r2 = writeL3(*rc, buf2.data(), buf2.size());
+    ASSERT_TRUE(r1.has_value() && r2.has_value());
+    EXPECT_EQ(r1.value(), r2.value());
     for (size_t i = 0; i < n1; i++) {
         EXPECT_EQ(buf1[i], buf2[i]);
     }

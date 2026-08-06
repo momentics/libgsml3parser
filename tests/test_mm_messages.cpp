@@ -33,8 +33,9 @@ static ParserContext ctx;
 
 static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
     std::vector<uint8_t> buf(msg.fullLength());
-    size_t n = writeL3(msg, buf.data(), buf.size());
-    if (n == 0) return nullptr;
+    auto wr = writeL3(msg, buf.data(), buf.size());
+    if (!wr.has_value()) return nullptr;
+    if (wr.value() == 0) return nullptr;
     auto result = parseL3(std::span<const uint8_t>(buf), ctx);
     if (!result.has_value()) return nullptr;
     return std::move(result).value();
@@ -116,8 +117,9 @@ TEST(MMRoundTripTest, LocationUpdatingReject_Parse) {
     ASSERT_TRUE(lur);
     // Verify via round-trip: re-serialize and compare bytes
     std::vector<uint8_t> buf(lur->fullLength());
-    size_t n = writeL3(*lur, buf.data(), buf.size());
-    EXPECT_EQ(n, sizeof(data));
+    auto wr = writeL3(*lur, buf.data(), buf.size());
+    ASSERT_TRUE(wr.has_value());
+    EXPECT_EQ(wr.value(), sizeof(data));
     for (size_t i = 0; i < sizeof(data); i++) {
         EXPECT_EQ(buf[i], data[i]);
     }

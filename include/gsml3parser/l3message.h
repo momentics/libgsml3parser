@@ -34,32 +34,6 @@
 
 namespace gsml3parser {
 
-// ── Internal exceptions (caught at public API boundary) ────────────────
-
-namespace detail {
-
-class ParseError : public std::runtime_error {
-public:
-    explicit ParseError(std::string msg) : std::runtime_error(std::move(msg)) {}
-    ParseError(std::string msg, size_t bitPosition)
-        : std::runtime_error(std::move(msg)), mBitPos(bitPosition) {}
-    size_t bitPosition() const { return mBitPos; }
-private:
-    size_t mBitPos = 0;
-};
-
-class WriteError : public std::runtime_error {
-public:
-    explicit WriteError(std::string msg) : std::runtime_error(std::move(msg)) {}
-    WriteError(std::string msg, size_t bitPosition)
-        : std::runtime_error(std::move(msg)), mBitPos(bitPosition) {}
-    size_t bitPosition() const { return mBitPos; }
-private:
-    size_t mBitPos = 0;
-};
-
-} // namespace detail
-
 // ── L3Message ───────────────────────────────────────────────────────────
 
 /**

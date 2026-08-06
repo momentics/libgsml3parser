@@ -28,16 +28,18 @@ namespace gsml3parser {
 
 // ── L3CCMessage ─────────────────────────────────────────────────────────
 
-void L3CCMessage::write(L3Frame& dest) const {
+ParseResult<void> L3CCMessage::write(L3Frame& dest) const {
     size_t l3len = bitsNeeded();
     if (dest.size() != l3len) dest.resize(l3len);
     size_t wp = 0;
-    dest.writeField(wp, static_cast<unsigned>(pd()), 4);  // PD: high nibble
-    dest.writeField(wp, mTI, 3);                           // TIO: 3 bits
-    dest.writeField(wp, 0, 1);                             // TIF: 1 bit
-    dest.writeField(wp, mti() << 2, 8);                    // messageType(6)|NSD(2)
-    writeBody(dest, wp);
+    dest.writeField(wp, static_cast<unsigned>(pd()), 4);
+    dest.writeField(wp, mTI, 3);
+    dest.writeField(wp, 0, 1);
+    dest.writeField(wp, mti() << 2, 8);
+    auto res = try_writeBody(dest, wp);
+    if (!res.has_value()) return res;
     dest.l2Length(l2Length());
+    return ParseResult<void>();
 }
 
 void L3CCMessage::text(std::ostream& os) const {
@@ -85,7 +87,7 @@ size_t L3Setup::l2BodyLength() const {
     return len;
 }
 
-void L3Setup::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3Setup::try_writeBody(L3Frame& dest, size_t& wp) const {
     if (mBearerCapability.isPresent()) mBearerCapability.writeTLV(0x04, dest, wp);
     if (mHaveCalledParty) mCalledPartyBCDNumber.writeTLV(0x5e, dest, wp);
     if (mHaveCallingParty) mCallingPartyBCDNumber.writeTLV(0x5c, dest, wp);
@@ -93,38 +95,49 @@ void L3Setup::writeBody(L3Frame& dest, size_t& wp) const {
         mSupportedCodecs.writeTLV(0x40, dest, wp);
     if (mHaveSignal) mSignal.writeTV(0x34, dest, wp);
     ccCommonWrite(dest, wp);
+    return ParseResult<void>();
 }
 
-void L3Setup::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3Setup::try_parseBody(const L3Frame& src, size_t& rp) {
     while (rp < src.size()) {
         unsigned iei = src.readField(rp, 8);
         if ((iei & 0xf0) == 0xd0) continue;
         if ((iei & 0xf0) == 0x80) continue;
         switch (iei) {
-        case 4:
-            mBearerCapability.parseLV(src, rp);
+        case 4: {
+            auto res = mBearerCapability.try_parseLV(src, rp);
+            if (!res.has_value()) return res;
             continue;
-        case 0x1c:
-            ccCommonParse(src, rp);
+        }
+        case 0x1c: {
+            auto res = try_ccCommonParse(src, rp);
+            if (!res.has_value()) return res;
             continue;
+        }
         case 0x1e:
             skipLV(src, rp);
             continue;
-        case 0x34:
+        case 0x34: {
             mHaveSignal = true;
-            mSignal.parseV(src, rp);
+            auto res = mSignal.try_parseV(src, rp);
+            if (!res.has_value()) return res;
             continue;
-        case 0x5c:
+        }
+        case 0x5c: {
             mHaveCallingParty = true;
-            mCallingPartyBCDNumber.parseLV(src, rp);
+            auto res = mCallingPartyBCDNumber.try_parseLV(src, rp);
+            if (!res.has_value()) return res;
             continue;
+        }
         case 0x5d:
             skipLV(src, rp);
             continue;
-        case 0x5e:
+        case 0x5e: {
             mHaveCalledParty = true;
-            mCalledPartyBCDNumber.parseLV(src, rp);
+            auto res = mCalledPartyBCDNumber.try_parseLV(src, rp);
+            if (!res.has_value()) return res;
             continue;
+        }
         case 0x6d:
         case 0x74:
         case 0x75:
@@ -133,9 +146,11 @@ void L3Setup::parseBody(const L3Frame& src, size_t& rp) {
         case 0x7e:
             skipLV(src, rp);
             continue;
-        case 0x7f:
-            ccCommonParse(src, rp);
+        case 0x7f: {
+            auto res = try_ccCommonParse(src, rp);
+            if (!res.has_value()) return res;
             continue;
+        }
         case 0xa1:
         case 0xa2:
             continue;
@@ -150,9 +165,11 @@ void L3Setup::parseBody(const L3Frame& src, size_t& rp) {
         case 0x41:
             skipLV(src, rp);
             continue;
-        case 0x40:
-            mSupportedCodecs.parseLV(src, rp);
+        case 0x40: {
+            auto res = mSupportedCodecs.try_parseLV(src, rp);
+            if (!res.has_value()) return res;
             continue;
+        }
         case 0xa3:
             continue;
         default:
@@ -160,6 +177,7 @@ void L3Setup::parseBody(const L3Frame& src, size_t& rp) {
             continue;
         }
     }
+    return ParseResult<void>();
 }
 
 void L3Setup::text(std::ostream& os) const {
@@ -219,18 +237,22 @@ L3Setup L3Setup::Builder::build() {
 
 // ── L3CallProceeding ───────────────────────────────────────────────────
 
-void L3CallProceeding::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3CallProceeding::try_writeBody(L3Frame& dest, size_t& wp) const {
     if (mBearerCapability.isPresent()) mBearerCapability.writeTLV(0x04, dest, wp);
     if (mHaveProgress) mProgress.writeTLV(0x1e, dest, wp);
+    return ParseResult<void>();
 }
 
-void L3CallProceeding::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3CallProceeding::try_parseBody(const L3Frame& src, size_t& rp) {
     // GSM 04.08 9.3.3: skip repeat indicator, bearer capability x2, facility, parse progress
     skipTV(0x0d, 4, src, rp);
     skipTLV(0x04, src, rp);
     skipTLV(0x04, src, rp);
     skipTLV(0x1c, src, rp);
-    mHaveProgress = mProgress.parseTLV(0x1e, src, rp);
+    auto tlRes = mProgress.try_parseTLV(0x1e, src, rp);
+    if (!tlRes.has_value()) return tlRes;
+    mHaveProgress = tlRes.value();
+    return ParseResult<void>();
 }
 
 size_t L3CallProceeding::l2BodyLength() const {
@@ -248,16 +270,22 @@ void L3CallProceeding::text(std::ostream& os) const {
 
 // ── L3Alerting ─────────────────────────────────────────────────────────
 
-void L3Alerting::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3Alerting::try_writeBody(L3Frame& dest, size_t& wp) const {
     if (mHaveProgress) mProgress.writeTLV(0x1e, dest, wp);
     ccCommonWrite(dest, wp);
+    return ParseResult<void>();
 }
 
-void L3Alerting::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3Alerting::try_parseBody(const L3Frame& src, size_t& rp) {
     // GSM 04.08 9.3.1: ccCommon, progress(TLV 0x1E), ccCommon again
-    ccCommonParse(src, rp);
-    mHaveProgress = mProgress.parseTLV(0x1e, src, rp);
-    ccCommonParse(src, rp);
+    auto res = try_ccCommonParse(src, rp);
+    if (!res.has_value()) return res;
+    auto tlRes = mProgress.try_parseTLV(0x1e, src, rp);
+    if (!tlRes.has_value()) return tlRes;
+    mHaveProgress = tlRes.value();
+    res = try_ccCommonParse(src, rp);
+    if (!res.has_value()) return res;
+    return ParseResult<void>();
 }
 
 size_t L3Alerting::l2BodyLength() const {
@@ -275,14 +303,18 @@ void L3Alerting::text(std::ostream& os) const {
 
 // ── L3Connect ──────────────────────────────────────────────────────────
 
-void L3Connect::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3Connect::try_writeBody(L3Frame& dest, size_t& wp) const {
     if (mHaveProgress) mProgress.writeTLV(0x1e, dest, wp);
+    return ParseResult<void>();
 }
 
-void L3Connect::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3Connect::try_parseBody(const L3Frame& src, size_t& rp) {
     // GSM 04.08 9.3.5: skip facility, parse progress
     skipTLV(0x1c, src, rp);
-    mHaveProgress = mProgress.parseTLV(0x1e, src, rp);
+    auto tlRes = mProgress.try_parseTLV(0x1e, src, rp);
+    if (!tlRes.has_value()) return tlRes;
+    mHaveProgress = tlRes.value();
+    return ParseResult<void>();
 }
 
 size_t L3Connect::l2BodyLength() const {
@@ -298,21 +330,27 @@ void L3Connect::text(std::ostream& os) const {
 
 // ── L3CallConfirmed ────────────────────────────────────────────────────
 
-void L3CallConfirmed::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3CallConfirmed::try_parseBody(const L3Frame& src, size_t& rp) {
     while (rp < src.size()) {
         unsigned iei = src.readField(rp, 8);
         if ((iei & 0xf0) == 0xd0) continue;
         switch (iei) {
-        case 8:
+        case 8: {
             mHaveCause = true;
-            mCause.parseLV(src, rp);
+            auto res = mCause.try_parseLV(src, rp);
+            if (!res.has_value()) return res;
             continue;
-        case 0x40:
-            mSupportedCodecs.parseLV(src, rp);
+        }
+        case 0x40: {
+            auto res = mSupportedCodecs.try_parseLV(src, rp);
+            if (!res.has_value()) return res;
             continue;
-        case 4:
-            mBearerCapability.parseLV(src, rp);
+        }
+        case 4: {
+            auto res = mBearerCapability.try_parseLV(src, rp);
+            if (!res.has_value()) return res;
             continue;
+        }
         case 0x15:
         case 0x2d:
             skipLV(src, rp);
@@ -322,12 +360,14 @@ void L3CallConfirmed::parseBody(const L3Frame& src, size_t& rp) {
             continue;
         }
     }
+    return ParseResult<void>();
 }
 
-void L3CallConfirmed::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3CallConfirmed::try_writeBody(L3Frame& dest, size_t& wp) const {
     if (mBearerCapability.isPresent()) mBearerCapability.writeTLV(0x04, dest, wp);
     if (mHaveCause) mCause.writeTLV(0x08, dest, wp);
     if (mSupportedCodecs.isGsmPresent() || mSupportedCodecs.isUmtsPresent()) mSupportedCodecs.writeTLV(0x40, dest, wp);
+    return ParseResult<void>();
 }
 
 size_t L3CallConfirmed::l2BodyLength() const {
@@ -353,16 +393,19 @@ void L3ConnectAcknowledge::text(std::ostream& os) const {
 
 // ── L3Disconnect ───────────────────────────────────────────────────────
 
-void L3Disconnect::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3Disconnect::try_writeBody(L3Frame& dest, size_t& wp) const {
     L3CauseElement cause(mCause, mLocation);
     cause.writeTLV(0x08, dest, wp);
+    return ParseResult<void>();
 }
 
-void L3Disconnect::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3Disconnect::try_parseBody(const L3Frame& src, size_t& rp) {
     L3CauseElement cause;
-    cause.parseTLV(0x08, src, rp);
+    auto tlRes = cause.try_parseTLV(0x08, src, rp);
+    if (!tlRes.has_value()) return tlRes;
     mCause = cause.cause();
     mLocation = cause.location();
+    return ParseResult<void>();
 }
 
 void L3Disconnect::text(std::ostream& os) const {
@@ -371,19 +414,24 @@ void L3Disconnect::text(std::ostream& os) const {
 
 // ── L3Release ──────────────────────────────────────────────────────────
 
-void L3Release::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3Release::try_writeBody(L3Frame& dest, size_t& wp) const {
     if (mHaveCause) {
         L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
         cause.writeTLV(0x08, dest, wp);
     }
     ccCommonWrite(dest, wp);
+    return ParseResult<void>();
 }
 
-void L3Release::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3Release::try_parseBody(const L3Frame& src, size_t& rp) {
     L3CauseElement cause;
-    mHaveCause = cause.parseTLV(0x08, src, rp);
+    auto tlRes = cause.try_parseTLV(0x08, src, rp);
+    if (!tlRes.has_value()) return tlRes;
+    mHaveCause = tlRes.value();
     if (mHaveCause) mCause = cause.cause();
-    ccCommonParse(src, rp);
+    auto res = try_ccCommonParse(src, rp);
+    if (!res.has_value()) return res;
+    return ParseResult<void>();
 }
 
 size_t L3Release::l2BodyLength() const {
@@ -418,19 +466,24 @@ L3Release L3Release::Builder::build() {
 
 // ── L3ReleaseComplete ──────────────────────────────────────────────────
 
-void L3ReleaseComplete::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3ReleaseComplete::try_writeBody(L3Frame& dest, size_t& wp) const {
     if (mHaveCause) {
         L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
         cause.writeTLV(0x08, dest, wp);
     }
     ccCommonWrite(dest, wp);
+    return ParseResult<void>();
 }
 
-void L3ReleaseComplete::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3ReleaseComplete::try_parseBody(const L3Frame& src, size_t& rp) {
     L3CauseElement cause;
-    mHaveCause = cause.parseTLV(0x08, src, rp);
+    auto tlRes = cause.try_parseTLV(0x08, src, rp);
+    if (!tlRes.has_value()) return tlRes;
+    mHaveCause = tlRes.value();
     if (mHaveCause) mCause = cause.cause();
-    ccCommonParse(src, rp);
+    auto res = try_ccCommonParse(src, rp);
+    if (!res.has_value()) return res;
+    return ParseResult<void>();
 }
 
 size_t L3ReleaseComplete::l2BodyLength() const {
@@ -465,20 +518,24 @@ L3ReleaseComplete L3ReleaseComplete::Builder::build() {
 
 // ── L3CCStatus ─────────────────────────────────────────────────────────
 
-void L3CCStatus::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3CCStatus::try_writeBody(L3Frame& dest, size_t& wp) const {
     L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
     cause.writeTLV(0x08, dest, wp);
     L3CallState state(mCallState);
     state.writeV(dest, wp);
+    return ParseResult<void>();
 }
 
-void L3CCStatus::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3CCStatus::try_parseBody(const L3Frame& src, size_t& rp) {
     L3CauseElement cause;
-    cause.parseTLV(0x08, src, rp);
+    auto tlRes = cause.try_parseTLV(0x08, src, rp);
+    if (!tlRes.has_value()) return tlRes;
     mCause = cause.cause();
     L3CallState state;
-    state.parseV(src, rp);
+    auto res = state.try_parseV(src, rp);
+    if (!res.has_value()) return res;
     mCallState = state.callState();
+    return ParseResult<void>();
 }
 
 void L3CCStatus::text(std::ostream& os) const {
@@ -508,42 +565,50 @@ L3CCStatus L3CCStatus::Builder::build() {
 
 // ── DTMF ────────────────────────────────────────────────────────────────
 
-void L3StartDTMF::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3StartDTMF::try_parseBody(const L3Frame& src, size_t& rp) {
     mKey = static_cast<char>(src.readField(rp, 8));
+    return ParseResult<void>();
 }
 
-void L3StartDTMF::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3StartDTMF::try_writeBody(L3Frame& dest, size_t& wp) const {
     dest.writeField(wp, static_cast<unsigned>(mKey), 8);
+    return ParseResult<void>();
 }
 
 void L3StartDTMF::text(std::ostream& os) const {
     os << "StartDTMF: key=" << mKey;
 }
 
-void L3StartDTMFAcknowledge::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3StartDTMFAcknowledge::try_parseBody(const L3Frame& src, size_t& rp) {
     L3KeypadFacility kf;
-    kf.parseTV(0x2c, src, rp);
+    auto tvRes = kf.try_parseTV(0x2c, src, rp);
+    if (!tvRes.has_value()) return tvRes;
     mKey = kf.ia5();
+    return ParseResult<void>();
 }
 
-void L3StartDTMFAcknowledge::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3StartDTMFAcknowledge::try_writeBody(L3Frame& dest, size_t& wp) const {
     L3KeypadFacility kf(mKey);
     kf.writeTV(0x2c, dest, wp);
+    return ParseResult<void>();
 }
 
 void L3StartDTMFAcknowledge::text(std::ostream& os) const {
     os << "StartDTMFAck: key=" << mKey;
 }
 
-void L3StartDTMFReject::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3StartDTMFReject::try_parseBody(const L3Frame& src, size_t& rp) {
     L3CauseElement cause;
-    cause.parseLV(src, rp);
+    auto res = cause.try_parseLV(src, rp);
+    if (!res.has_value()) return res;
     mCause = cause.cause();
+    return ParseResult<void>();
 }
 
-void L3StartDTMFReject::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3StartDTMFReject::try_writeBody(L3Frame& dest, size_t& wp) const {
     L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
     cause.writeLV(dest, wp);
+    return ParseResult<void>();
 }
 
 void L3StartDTMFReject::text(std::ostream& os) const {
@@ -564,15 +629,18 @@ void L3Hold::text(std::ostream& os) const {
     os << "Hold";
 }
 
-void L3HoldReject::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3HoldReject::try_parseBody(const L3Frame& src, size_t& rp) {
     L3CauseElement cause;
-    cause.parseLV(src, rp);
+    auto res = cause.try_parseLV(src, rp);
+    if (!res.has_value()) return res;
     mCause = cause.cause();
+    return ParseResult<void>();
 }
 
-void L3HoldReject::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3HoldReject::try_writeBody(L3Frame& dest, size_t& wp) const {
     L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
     cause.writeLV(dest, wp);
+    return ParseResult<void>();
 }
 
 void L3HoldReject::text(std::ostream& os) const {
@@ -581,16 +649,19 @@ void L3HoldReject::text(std::ostream& os) const {
 
 // ── L3Progress ─────────────────────────────────────────────────────────
 
-void L3Progress::writeBody(L3Frame& dest, size_t& wp) const {
+ParseResult<void> L3Progress::try_writeBody(L3Frame& dest, size_t& wp) const {
     L3ProgressIndicator pi(static_cast<L3ProgressIndicator::Progress>(mProgress),
-                           L3ProgressIndicator::Location::PrivateServingLocal);
+                            L3ProgressIndicator::Location::PrivateServingLocal);
     pi.writeLV(dest, wp);
+    return ParseResult<void>();
 }
 
-void L3Progress::parseBody(const L3Frame& src, size_t& rp) {
+ParseResult<void> L3Progress::try_parseBody(const L3Frame& src, size_t& rp) {
     L3ProgressIndicator pi;
-    pi.parseLV(src, rp);
+    auto res = pi.try_parseLV(src, rp);
+    if (!res.has_value()) return res;
     mProgress = static_cast<unsigned>(pi.progress());
+    return ParseResult<void>();
 }
 
 size_t L3Progress::l2BodyLength() const { return 3; }
@@ -599,9 +670,11 @@ void L3Progress::text(std::ostream& os) const {
     os << "Progress: " << mProgress;
 }
 
-// ── Factory ─────────────────────────────────────────────────────────────
+// ── Factory & Parser (internal) ────────────────────────────────────────
 
-std::unique_ptr<L3CCMessage> L3CCFactory(int mti) {
+namespace detail {
+
+ParseResult<std::unique_ptr<L3CCMessage>> L3CCFactory(int mti) {
     switch (mti) {
         case L3CCMessage::Alerting:            return std::make_unique<L3Alerting>();
         case L3CCMessage::CallConfirmed:       return std::make_unique<L3CallConfirmed>();
@@ -622,30 +695,36 @@ std::unique_ptr<L3CCMessage> L3CCFactory(int mti) {
         case L3CCMessage::Hold:                return std::make_unique<L3Hold>();
         case L3CCMessage::HoldReject:          return std::make_unique<L3HoldReject>(0, CCCause::Unknown_L3_Cause);
         case L3CCMessage::CCStatus:            return std::make_unique<L3CCStatus>();
-        default:                               return nullptr;
+        default:
+            return ParseResult<std::unique_ptr<L3CCMessage>>(
+                ParseErrorCode::InvalidMTI, "Unknown CC message type: 0x" + std::to_string(mti & 0xFF));
     }
 }
 
-// ── Parser ──────────────────────────────────────────────────────────────
+ParseResult<std::unique_ptr<L3CCMessage>> parseL3CC(const L3Frame& source) {
+    if (source.size() < 16) {
+        return ParseResult<std::unique_ptr<L3CCMessage>>(
+            ParseErrorCode::TruncatedInput, "Frame too short for L3 header");
+    }
 
-std::unique_ptr<L3CCMessage> parseL3CC(const L3Frame& source) {
-    if (source.size() < 16) return nullptr;
-
-    // MTI extraction already handles the don't-care bit in L3Frame::mti()
     unsigned mti = source.mti();
-    auto msg = L3CCFactory(static_cast<L3CCMessage::MessageType>(mti));
-    if (!msg) {
+    auto factoryResult = L3CCFactory(static_cast<L3CCMessage::MessageType>(mti));
+    if (!factoryResult.has_value()) {
         GSML3PARSER_LOG_WARN("Unknown CC MTI: 0x%02x", mti);
-        return nullptr;
+        return ParseResult<std::unique_ptr<L3CCMessage>>(factoryResult.error());
     }
-    try {
-        msg->ti(source.ti());
-        msg->parse(source);
-    } catch (const detail::ParseError&) {
+
+    auto& msg = factoryResult.value();
+    msg->ti(source.ti());
+    auto parseResult = msg->parse(source);
+    if (!parseResult.has_value()) {
         GSML3PARSER_LOG_WARN("CC parse failed for MTI=0x%02x", mti);
-        return nullptr;
+        return ParseResult<std::unique_ptr<L3CCMessage>>(parseResult.error());
     }
-    return msg;
+
+    return ParseResult<std::unique_ptr<L3CCMessage>>(std::move(msg));
 }
+
+} // namespace detail
 
 } // namespace gsml3parser
