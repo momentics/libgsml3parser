@@ -46,28 +46,28 @@ static ParseResult<std::unique_ptr<L3Message>> parseL3WithPDHandler(
         case L3PD::RadioResource: {
             auto res = detail::parseL3RR(frame);
             if (!res.has_value()) return ParseResult<std::unique_ptr<L3Message>>(res.error());
-            auto ptr = std::move(res.value());
+            auto ptr = std::move(res).value();
             return ParseResult<std::unique_ptr<L3Message>>(
                 static_cast<std::unique_ptr<L3Message>>(ptr.release()));
         }
         case L3PD::MobilityManagement: {
             auto res = detail::parseL3MM(frame);
             if (!res.has_value()) return ParseResult<std::unique_ptr<L3Message>>(res.error());
-            auto ptr = std::move(res.value());
+            auto ptr = std::move(res).value();
             return ParseResult<std::unique_ptr<L3Message>>(
                 static_cast<std::unique_ptr<L3Message>>(ptr.release()));
         }
         case L3PD::CallControl: {
             auto res = detail::parseL3CC(frame);
             if (!res.has_value()) return ParseResult<std::unique_ptr<L3Message>>(res.error());
-            auto ptr = std::move(res.value());
+            auto ptr = std::move(res).value();
             return ParseResult<std::unique_ptr<L3Message>>(
                 static_cast<std::unique_ptr<L3Message>>(ptr.release()));
         }
         case L3PD::NonCallSS: {
             auto res = detail::parseL3SupServ(frame);
             if (!res.has_value()) return ParseResult<std::unique_ptr<L3Message>>(res.error());
-            auto ptr = std::move(res.value());
+            auto ptr = std::move(res).value();
             return ParseResult<std::unique_ptr<L3Message>>(
                 static_cast<std::unique_ptr<L3Message>>(ptr.release()));
         }

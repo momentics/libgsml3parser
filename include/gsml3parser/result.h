@@ -58,6 +58,11 @@ public:
     ParseResult(T value)
         : mData(std::in_place_type_t<T>{}, std::move(value)) {}
 
+    // Accept convertible types (e.g. unique_ptr<Derived> → ParseResult<unique_ptr<Base>>)
+    template <typename U>
+    ParseResult(U&& value) requires (std::is_convertible_v<U&&, T> && !std::is_same_v<std::decay_t<U>, T>)
+        : mData(std::in_place_type_t<T>{}, std::forward<U>(value)) {}
+
     ParseResult(ParseErrorCode code, std::string msg, size_t bitPos = 0)
         : mData(std::in_place_type_t<ParseError>{}, ParseError{code, std::move(msg), bitPos}) {}
 
@@ -209,6 +214,16 @@ public:
     explicit ParseResult(const ParseError& err) : mData(err) {}
     ParseResult(ParseErrorCode code, std::string msg, size_t bitPos = 0)
         : mData(ParseError{code, std::move(msg), bitPos}) {}
+
+    // Convert from ParseResult<U> - propagates error, discards value
+    template <typename U>
+    ParseResult(const ParseResult<U>& other) {
+        if (other.has_value()) {
+            mData = ParseOk{};
+        } else {
+            mData = other.error();
+        }
+    }
 
     constexpr explicit operator bool() const { return has_value(); }
     [[nodiscard]] constexpr bool has_value() const { return std::holds_alternative<ParseOk>(mData); }

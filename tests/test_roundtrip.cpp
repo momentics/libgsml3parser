@@ -269,7 +269,7 @@ TEST(RoundTripTest, ChannelRelease_Preemptive) {
 TEST(RoundTripTest, RRStatus) {
     uint8_t data[] = {0x60, 0x12, 0x60};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::RadioResource);
     EXPECT_EQ(msg->mti(), L3RRMessage::RRStatus);
     auto* rs = dynamic_cast<L3RRStatus*>(msg.get());
@@ -296,7 +296,7 @@ TEST(RoundTripTest, AssignmentCommand) {
 TEST(RoundTripTest, AssignmentComplete) {
     uint8_t data[] = {0x60, 0x29, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     auto* ac = dynamic_cast<L3AssignmentComplete*>(msg.get());
     ASSERT_TRUE(ac);
     EXPECT_EQ(ac->cause(), RRCause::Normal_Event);
@@ -312,7 +312,7 @@ TEST(RoundTripTest, AssignmentComplete) {
 TEST(RoundTripTest, AssignmentFailure) {
     uint8_t data[] = {0x60, 0x2F, 0x09};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     auto* af = dynamic_cast<L3AssignmentFailure*>(msg.get());
     ASSERT_TRUE(af);
     EXPECT_EQ(af->cause(), RRCause::Channel_Mode_Unacceptable);
@@ -380,7 +380,7 @@ TEST(RoundTripTest, HandoverCommand) {
 TEST(RoundTripTest, HandoverComplete) {
     uint8_t data[] = {0x60, 0x2C, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     auto* hc = dynamic_cast<L3HandoverComplete*>(msg.get());
     ASSERT_TRUE(hc);
     EXPECT_EQ(hc->cause(), RRCause::Normal_Event);
@@ -395,7 +395,7 @@ TEST(RoundTripTest, HandoverComplete) {
 TEST(RoundTripTest, HandoverFailure) {
     uint8_t data[] = {0x60, 0x28, 0x08};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     auto* hf = dynamic_cast<L3HandoverFailure*>(msg.get());
     ASSERT_TRUE(hf);
     EXPECT_EQ(hf->cause(), RRCause::Handover_Impossible);
@@ -474,7 +474,7 @@ TEST(RoundTripTest, ChannelModeModifyAcknowledge) {
         // ChanMode: SpeechV1 = 1
         0x01};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     auto* cma = dynamic_cast<L3ChannelModeModifyAcknowledge*>(msg.get());
     ASSERT_TRUE(cma);
     EXPECT_EQ(cma->description().typeAndOffset(), TDMA_TCHF);
@@ -547,6 +547,6 @@ TEST(RoundTripTest, ClassmarkChange) {
         0x20, 0x00, 0x80 // CM2 value (24 bits)
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3RRMessage::ClassmarkChange);
 }

@@ -67,7 +67,7 @@ static void ieRoundTrip(const T& orig) {
     orig.writeV(frame, wp);
     T parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     std::ostringstream os1, os2;
     orig.text(os1);
     parsed.text(os2);
@@ -367,7 +367,7 @@ TEST(GoldenIE, ChannelDescription_RoundTrip) {
     orig.writeV(frame, wp);
     L3ChannelDescription parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     EXPECT_EQ(parsed.typeAndOffset(), orig.typeAndOffset());
     EXPECT_EQ(parsed.tn(), orig.tn());
     EXPECT_EQ(parsed.tsc(), orig.tsc());
@@ -409,7 +409,7 @@ TEST(GoldenIE, AdditionalChannelDescription_RoundTrip) {
     orig.writeV(frame, wp);
     L3AdditionalChannelDescription parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     EXPECT_EQ(parsed.typeAndOffset(), orig.typeAndOffset());
     EXPECT_EQ(parsed.tn(), orig.tn());
     EXPECT_EQ(parsed.tsc(), orig.tsc());
@@ -812,7 +812,7 @@ TEST(GoldenIE, CellSelectionParameters_RefValues) {
     frame.writeField(wp, data[1], 8);
     L3CellSelectionParameters parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     // Spec-verified: byte 0 = 0x47 = 0b0100_0111 -> cell_resel_hyst(3)=010=2, ms_txpwr_max_cch(5)=00111=7
     //   byte 1 = 0x40 = 0b0100_0000 -> acs(1)=0, neci(1)=1, rxlev_access_min(6)=000000=0
     EXPECT_EQ(parsed.cellReselectHysteresis(), 2u);
@@ -857,7 +857,7 @@ TEST(GoldenIE, RACHControlParameters_RefValues) {
     frame.writeField(wp, data[2], 8);
     L3RACHControlParameters parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     // Spec-verified: byte 0 = 0xE5 = 0b1110_0101 -> max_retrans(2)=11=3, tx_integer(4)=1001=9, cell_bar_qualify(1)=0, cell_bar_access(1)=0, re_not_allowed(1)=1
     //   byte 1 = 0x04, byte 2 = 0x00 -> ACC(16) = 0x0400 (ACC[6] barred, bit 6 from MSB per GSM convention)
     EXPECT_EQ(parsed.maxRetrans(), 3u);
@@ -903,7 +903,7 @@ TEST(GoldenIE, ControlChannelDescription_RefValues) {
     frame.writeField(wp, data[2], 8);
     L3ControlChannelDescription parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     // Spec-verified: byte 0 = 0xC9 = 0b1100_1001 -> msc_r99(1)=1, att(1)=1, bs_ag_blks_res(3)=001=1, ccch_conf(3)=001=1(combined), si22ind(1)=0, cbq3(2)=00
     //   byte 1 = 0x00 -> spare(2)=00, bs_pa_mfrms(3)=000=0, t3212 high 3 bits = 000
     //   byte 2 = 0x01 -> t3212 low 5 bits = 00001, so t3212 = 1 (6 minutes)
@@ -977,7 +977,7 @@ TEST(GoldenIE, FrequencyList_SingleARFCN) {
     fl.writeV(frame, wp);
     L3FrequencyList parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     EXPECT_EQ(parsed.arfcns(), arfcns);
 }
 
@@ -1286,7 +1286,7 @@ TEST(GoldenIE, CalledPartyBCDNumber_RoundTrip) {
     orig.writeV(frame, wp);
     L3CalledPartyBCDNumber parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp, orig.lengthV());
+    { auto _res = parsed.try_parseV(frame, rp, orig.lengthV()); ASSERT_TRUE(_res.has_value()); }
     EXPECT_STREQ(parsed.digits(), "1234567890");
 }
 
@@ -1320,7 +1320,7 @@ TEST(GoldenIE, CallingPartyBCDNumber_RoundTrip) {
     orig.writeV(frame, wp);
     L3CallingPartyBCDNumber parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp, orig.lengthV());
+    { auto _res = parsed.try_parseV(frame, rp, orig.lengthV()); ASSERT_TRUE(_res.has_value()); }
     EXPECT_STREQ(parsed.digits(), "1234567890");
 }
 
@@ -1342,7 +1342,7 @@ TEST(GoldenIE, CauseElement_NormalClearing) {
     orig.writeV(frame, wp);
     L3CauseElement parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     EXPECT_EQ(parsed.cause(), CCCause::Normal_Call_Clearing);
     EXPECT_EQ(parsed.location(), CCCauseLocation::Private_Serving_Local);
 }
@@ -1378,7 +1378,7 @@ TEST(GoldenIE, ProgressIndicator_Encoding) {
     pi.writeV(frame, wp);
     L3ProgressIndicator parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     EXPECT_EQ(parsed.progress(), L3ProgressIndicator::InBandAvailable);
     EXPECT_EQ(parsed.location(), L3ProgressIndicator::PrivateServingLocal);
 }
@@ -1403,7 +1403,7 @@ TEST(GoldenIE, KeypadFacility_Digit) {
     kp.writeV(frame, wp);
     L3KeypadFacility parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     EXPECT_EQ(parsed.ia5(), '5');
 }
 
@@ -1739,7 +1739,7 @@ TEST(GoldenIE, BCD_RoundTrip) {
     orig.writeV(frame, wp);
     L3CalledPartyBCDNumber parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp, orig.lengthV());
+    { auto _res = parsed.try_parseV(frame, rp, orig.lengthV()); ASSERT_TRUE(_res.has_value()); }
     EXPECT_STREQ(parsed.digits(), "1234567890");
 }
 

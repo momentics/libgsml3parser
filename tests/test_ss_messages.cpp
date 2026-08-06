@@ -65,7 +65,7 @@ TEST(SSRoundTripTest, Facility_WithData) {
 TEST(SSRoundTripTest, Facility_Parse) {
     uint8_t data[] = {0xBE, 0xE8};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::NonCallSS);
     EXPECT_EQ(msg->mti(), L3SupServMessage::Facility);
 }
@@ -114,7 +114,7 @@ TEST(SSRoundTripTest, ReleaseComplete_WithCause) {
     auto r2 = writeL3(*rc, buf2.data(), buf2.size());
     ASSERT_TRUE(r1.has_value() && r2.has_value());
     EXPECT_EQ(r1.value(), r2.value());
-    for (size_t i = 0; i < n1; i++) {
+    for (size_t i = 0; i < r1.value(); i++) {
         EXPECT_EQ(buf1[i], buf2[i]);
     }
 }

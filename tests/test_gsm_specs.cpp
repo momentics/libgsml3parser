@@ -129,7 +129,7 @@ TEST(GSMSpecTest, MCCMNC_RoundTrip) {
     // Round-trip: parse back and verify
     L3LocationAreaIdentity parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_EQ(parsed.mcc(), orig.mcc());
     EXPECT_EQ(parsed.mnc(), orig.mnc());
@@ -164,7 +164,7 @@ TEST(GSMSpecTest, BCD_RoundTrip) {
 
     L3CalledPartyBCDNumber parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp, orig.lengthV());
+    { auto _res = parsed.try_parseV(frame, rp, orig.lengthV()); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_STREQ(parsed.digits(), "1234567890");
 }
@@ -342,7 +342,7 @@ TEST(GSMSpecTest, MobileIdentity_RoundTrip) {
     L3MobileIdentity parsed;
     size_t rp = 0;
     uint8_t readLen = frame.readField(rp, 8);
-    parsed.parseV(frame, rp, readLen);
+    { auto _res = parsed.try_parseV(frame, rp, readLen); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_EQ(parsed.type(), orig.type());
     EXPECT_STREQ(parsed.digits(), orig.digits());
@@ -361,7 +361,7 @@ TEST(GSMSpecTest, MobileIdentity_TMSI_RoundTrip) {
     L3MobileIdentity parsed;
     size_t rp = 0;
     uint8_t readLen = frame.readField(rp, 8);
-    parsed.parseV(frame, rp, readLen);
+    { auto _res = parsed.try_parseV(frame, rp, readLen); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_EQ(parsed.type(), MobileIDType::TMSI);
     EXPECT_EQ(parsed.tmsi(), 0x12345678u);
@@ -388,7 +388,7 @@ TEST(GSMSpecTest, ChannelDescription_RoundTrip) {
 
     L3ChannelDescription parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_EQ(parsed.typeAndOffset(), orig.typeAndOffset());
     EXPECT_EQ(parsed.tn(), orig.tn());
@@ -430,7 +430,7 @@ TEST(GSMSpecTest, RACHControlParameters_RefValues) {
 
     L3RACHControlParameters parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_EQ(parsed.maxRetrans(), 3u);     // RACH_MAX_RETRANS_7
     EXPECT_EQ(parsed.txInteger(), 9u);      // 12 spread slots
@@ -468,7 +468,7 @@ TEST(GSMSpecTest, CellSelectionParameters_RefValues) {
 
     L3CellSelectionParameters parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_EQ(parsed.cellReselectHysteresis(), 2u);
     EXPECT_EQ(parsed.msTxpwrMaxCch(), 7u);
@@ -507,7 +507,7 @@ TEST(GSMSpecTest, ControlChannelDescription_RefValues) {
 
     L3ControlChannelDescription parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_EQ(parsed.mATT, 1u);              // att = true
     EXPECT_EQ(parsed.mBS_AG_BLKS_RES, 1u);   // bs_ag_blks_res = 1
@@ -547,7 +547,7 @@ TEST(GSMSpecTest, RequestReference_RoundTrip) {
 
     L3RequestReference parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_EQ(parsed.ra(), orig.ra());
     EXPECT_EQ(parsed.t1p(), orig.t1p());
@@ -575,7 +575,7 @@ TEST(GSMSpecTest, MeasurementResults_RoundTrip) {
 
     L3MeasurementResults parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_EQ(parsed.noNcell(), orig.noNcell());
     EXPECT_EQ(parsed.rxlevFullServingCellRaw(), orig.rxlevFullServingCellRaw());
@@ -624,12 +624,12 @@ TEST(GSMSpecTest, Data2Hex) {
 // Reference: GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_1 = '00011001'B
 TEST(GSMSpecTest, ParseHexWithVariousFormats) {
     auto msg1 = parseL3Hex("601900", ctx);
-    ASSERT_TRUE(msg1);
+    ASSERT_TRUE(msg1.has_value());
     EXPECT_EQ(msg1->pd(), L3PD::RadioResource);
 
     // Spaces between bytes
     auto msg2 = parseL3Hex("60 19 00", ctx);
-    ASSERT_TRUE(msg2);
+    ASSERT_TRUE(msg2.has_value());
     EXPECT_EQ(msg2->pd(), L3PD::RadioResource);
 
     // Empty string

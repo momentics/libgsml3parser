@@ -75,7 +75,7 @@ TEST(CCRoundTripTest, Setup_WithCalledParty) {
 TEST(CCRoundTripTest, Setup_Parse) {
     uint8_t data[] = {0x3E, 0x14};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::CallControl);
     EXPECT_EQ(msg->mti(), L3CCMessage::Setup);
     auto* s = dynamic_cast<L3Setup*>(msg.get());
@@ -119,7 +119,7 @@ TEST(CCRoundTripTest, Alerting) {
 TEST(CCRoundTripTest, Alerting_Parse) {
     uint8_t data[] = {0x3E, 0x04};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3CCMessage::Alerting);
 }
 
@@ -185,7 +185,7 @@ TEST(CCRoundTripTest, Disconnect_UserBusy) {
 TEST(CCRoundTripTest, Disconnect_Parse) {
     uint8_t data[] = {0x3E, 0x94, 0x08, 0x02, 0x16, 0x21};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::CallControl);
     EXPECT_EQ(msg->mti(), L3CCMessage::Disconnect);
     auto* d = dynamic_cast<L3Disconnect*>(msg.get());
@@ -239,7 +239,7 @@ TEST(CCRoundTripTest, ReleaseComplete_WithCause) {
     auto r2 = writeL3(*rc, buf2.data(), buf2.size());
     ASSERT_TRUE(r1.has_value() && r2.has_value());
     EXPECT_EQ(r1.value(), r2.value());
-    for (size_t i = 0; i < n1; i++) {
+    for (size_t i = 0; i < r1.value(); i++) {
         EXPECT_EQ(buf1[i], buf2[i]);
     }
 }
@@ -364,7 +364,7 @@ TEST(CCRoundTripTest, CauseElement_RoundTrip) {
 
     L3CauseElement parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_EQ(parsed.cause(), CCCause::User_Busy);
     EXPECT_EQ(parsed.location(), CCCauseLocation::Transit);
@@ -409,7 +409,7 @@ TEST(CCRoundTripTest, ProgressIndicator_RoundTrip) {
 
     L3ProgressIndicator parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_EQ(parsed.progress(), L3ProgressIndicator::InBandAvailable);
     EXPECT_EQ(parsed.location(), L3ProgressIndicator::PrivateServingLocal);
@@ -428,7 +428,7 @@ TEST(CCRoundTripTest, KeypadFacility) {
 
     L3KeypadFacility parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_EQ(parsed.ia5(), '5');
 }
@@ -478,7 +478,7 @@ TEST(CCRoundTripTest, TI_DifferentValues) {
 // Byte 1: messageType(6)<<2|NSD(2) = 0x05<<2|0 = 0x14
 TEST(CCRoundTripTest, Parse_Setup_Hex) {
     auto msg = parseL3Hex("3E14", ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::CallControl);
     EXPECT_EQ(msg->mti(), L3CCMessage::Setup);
 }
@@ -489,7 +489,7 @@ TEST(CCRoundTripTest, Parse_Setup_Hex) {
 // Byte 1: messageType(6)<<2|NSD(2) = 0x2D<<2|0 = 0xB4
 TEST(CCRoundTripTest, Parse_Release_Hex) {
     auto msg = parseL3Hex("3FB4", ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::CallControl);
     EXPECT_EQ(msg->mti(), L3CCMessage::Release);
 }

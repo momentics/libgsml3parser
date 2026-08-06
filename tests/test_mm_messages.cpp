@@ -112,7 +112,7 @@ TEST(MMRoundTripTest, LocationUpdatingReject) {
 TEST(MMRoundTripTest, LocationUpdatingReject_Parse) {
     uint8_t data[] = {0x50, 0x10, 0x02};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     auto* lur = dynamic_cast<L3LocationUpdatingReject*>(msg.get());
     ASSERT_TRUE(lur);
     // Verify via round-trip: re-serialize and compare bytes
@@ -151,7 +151,7 @@ TEST(MMRoundTripTest, AuthenticationRequest_Parse) {
         0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::MobilityManagement);
     EXPECT_EQ(msg->mti(), L3MMMessage::AuthenticationRequest);
 }
@@ -167,7 +167,7 @@ TEST(MMRoundTripTest, AuthenticationResponse) {
     // Bytes 2-5: SRES = 0xABCD1234
     uint8_t data[] = {0x50, 0x50, 0xAB, 0xCD, 0x12, 0x34};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     auto* ar = dynamic_cast<L3AuthenticationResponse*>(msg.get());
     ASSERT_TRUE(ar);
     EXPECT_EQ(ar->sres(), 0xABCD1234u);
@@ -185,7 +185,7 @@ TEST(MMRoundTripTest, AuthenticationResponse) {
 TEST(MMRoundTripTest, AuthenticationResponse_Parse) {
     uint8_t data[] = {0x50, 0x50, 0xAB, 0xCD, 0x12, 0x34};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     auto* ar = dynamic_cast<L3AuthenticationResponse*>(msg.get());
     ASSERT_TRUE(ar);
     EXPECT_EQ(ar->sres(), 0xABCD1234u);
@@ -226,7 +226,7 @@ TEST(MMRoundTripTest, IdentityRequest_IMEI) {
 TEST(MMRoundTripTest, IdentityRequest_Parse) {
     uint8_t data[] = {0x50, 0x60, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3MMMessage::IdentityRequest);
     auto* ir = dynamic_cast<L3IdentityRequest*>(msg.get());
     ASSERT_TRUE(ir);
@@ -335,7 +335,7 @@ TEST(MMRoundTripTest, IdentityResponse) {
 // Byte 1: messageType(6)<<2|NSD(2) = 0x21<<2|0 = 0x84
 TEST(MMRoundTripTest, Parse_CMServiceAccept_Hex) {
     auto msg = parseL3Hex("5084", ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::MobilityManagement);
     EXPECT_EQ(msg->mti(), L3MMMessage::CMServiceAccept);
 }
@@ -346,7 +346,7 @@ TEST(MMRoundTripTest, Parse_CMServiceAccept_Hex) {
 // Byte 1: messageType(6)<<2|NSD(2) = 0x11<<2|0 = 0x44
 TEST(MMRoundTripTest, Parse_AuthenticationReject_Hex) {
     auto msg = parseL3Hex("5044", ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3MMMessage::AuthenticationReject);
 }
 
@@ -356,7 +356,7 @@ TEST(MMRoundTripTest, Parse_AuthenticationReject_Hex) {
 // Byte 1: messageType(6)<<2|NSD(2) = 0x1B<<2|0 = 0x6C
 TEST(MMRoundTripTest, Parse_TMSIReallocationComplete_Hex) {
     auto msg = parseL3Hex("506C", ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3MMMessage::TMSIReallocationComplete);
 }
 
@@ -398,7 +398,7 @@ TEST(MMRoundTripTest, RAND_RoundTrip) {
 
     L3RAND parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_EQ(parsed.rand(), randBytes);
 }
@@ -416,7 +416,7 @@ TEST(MMRoundTripTest, SRES_RoundTrip) {
 
     L3SRES parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 
     EXPECT_EQ(parsed.value(), 0x12345678u);
 }

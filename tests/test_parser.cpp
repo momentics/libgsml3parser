@@ -32,7 +32,7 @@ static ParserContext ctx;
 
 TEST(ParserTest, ParseNull) {
     EXPECT_FALSE(parseL3(std::span<const uint8_t>(), ctx));
-    EXPECT_FALSE(parseL3Hex("", ctx));
+    EXPECT_FALSE(parseL3Hex("", ctx).has_value());
 }
 
 TEST(ParserTest, ParseTooShort) {
@@ -49,7 +49,7 @@ TEST(ParserTest, ParseTooShort) {
 TEST(ParserTest, ParseRR_ChannelRelease) {
     uint8_t data[] = {0x60, 0x0D, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::RadioResource);
     EXPECT_EQ(msg->mti(), L3RRMessage::ChannelRelease);
 
@@ -65,7 +65,7 @@ TEST(ParserTest, ParseRR_ChannelRelease) {
 TEST(ParserTest, ParseCC_Disconnect) {
     uint8_t data[] = {0x30, 0x94, 0x08, 0x02, 0x16, 0x21};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::CallControl);
     EXPECT_EQ(msg->mti(), L3CCMessage::Disconnect);
 }
@@ -77,7 +77,7 @@ TEST(ParserTest, ParseCC_Disconnect) {
 TEST(ParserTest, ParseMM_CMServiceAccept) {
     uint8_t data[] = {0x50, 0x84};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::MobilityManagement);
     EXPECT_EQ(msg->mti(), L3MMMessage::CMServiceAccept);
 }
@@ -89,7 +89,7 @@ TEST(ParserTest, ParseMM_CMServiceAccept) {
 TEST(ParserTest, ParseSS_Facility) {
     uint8_t data[] = {0xB0, 0xE8};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::NonCallSS);
     EXPECT_EQ(msg->mti(), L3SupServMessage::Facility);
 }
@@ -99,7 +99,7 @@ TEST(ParserTest, ParseSS_Facility) {
 // "50" = PD(high=5)|skip(low=0), "84" = messageType(6)<<2|NSD(2)
 TEST(ParserTest, ParseHex) {
     auto msg = parseL3Hex("5084", ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::MobilityManagement);
     EXPECT_EQ(msg->mti(), L3MMMessage::CMServiceAccept);
 }
@@ -108,7 +108,7 @@ TEST(ParserTest, ParseHex) {
 // Reference: L3_Templates.ttcn tr_CM_SERV_ACC
 TEST(ParserTest, ParseHexWithSpaces) {
     auto msg = parseL3Hex("50 84", ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::MobilityManagement);
 }
 
@@ -116,7 +116,7 @@ TEST(ParserTest, ParseUnknownPD) {
     // Reference: PD=0x0F(TestProcedure) in high nibble, skip=0
     uint8_t data[] = {0xF0, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    EXPECT_FALSE(msg);
+    EXPECT_FALSE(msg.has_value());
 }
 
 // GSM 04.08 10.2: PD=0x09(SMS) in high nibble, skip=0
@@ -133,7 +133,7 @@ TEST(ParserTest, RegisterPDHandler) {
     uint8_t data[] = {0x90, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data), localCtx);
     EXPECT_TRUE(handlerCalled);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::MobilityManagement);
 
     localCtx.unregisterPDHandler(L3PD::SMS);
@@ -148,7 +148,7 @@ TEST(ParserTest, WriteAndParseRoundTrip) {
     EXPECT_GT(res.value(), 0u);
 
     auto msg = parseL3(std::span<const uint8_t>(buf), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::RadioResource);
     EXPECT_EQ(msg->mti(), L3RRMessage::ChannelRelease);
 }
@@ -159,7 +159,7 @@ TEST(ParserTest, WriteHexRoundTrip) {
     EXPECT_FALSE(hex.empty());
 
     auto msg = parseL3Hex(hex, ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->pd(), L3PD::RadioResource);
     EXPECT_EQ(msg->mti(), L3RRMessage::ChannelRelease);
 }
@@ -169,5 +169,5 @@ TEST(ParserTest, WriteHexRoundTrip) {
 TEST(ParserTest, UnknownMTI) {
     uint8_t data[] = {0x60, 0xFF};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    EXPECT_FALSE(msg);
+    EXPECT_FALSE(msg.has_value());
 }

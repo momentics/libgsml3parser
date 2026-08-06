@@ -1,4 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
+
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
+
 project(gsml3parser
     VERSION 0.5.0
     DESCRIPTION "GSM L3 Signalling Message Parser — standalone C++20 library"

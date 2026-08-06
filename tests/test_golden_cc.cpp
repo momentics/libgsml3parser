@@ -110,7 +110,7 @@ TEST(GoldenCC, CallProceeding_Parse) {
     // Byte 1: messageType(6)=0x02(CallProceeding)|NSD(2)=0 = 0x08 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x08};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3CCMessage::CallProceeding);
 }
 
@@ -129,7 +129,7 @@ TEST(GoldenCC, Connect_Parse) {
     // Byte 1: messageType(6)=0x07(Connect)|NSD(2)=0 = 0x1C [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3F, 0x1C};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3CCMessage::Connect);
 }
 
@@ -147,7 +147,7 @@ TEST(GoldenCC, ConnectAcknowledge_Parse) {
     // Byte 1: messageType(6)=0x0F(ConnectAcknowledge)|NSD(2)=0 = 0x3C [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x3C};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3CCMessage::ConnectAcknowledge);
 }
 
@@ -165,7 +165,7 @@ TEST(GoldenCC, CallConfirmed_Parse) {
     // Byte 1: messageType(6)=0x08(CallConfirmed)|NSD(2)=0 = 0x20 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x20};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3CCMessage::CallConfirmed);
 }
 
@@ -192,7 +192,7 @@ TEST(GoldenCC, CCStatus_Parse) {
     // Byte 6: CallState = 0x00 [GSM 24.008 10.5.4.6]
     uint8_t data[] = {0x3E, 0xF4, 0x08, 0x02, 0x16, 0x21, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3CCMessage::CCStatus);
 }
 
@@ -211,7 +211,7 @@ TEST(GoldenCC, EmergencySetup_Parse) {
     // Byte 1: messageType(6)=0x0E(EmergencySetup)|NSD(2)=0 = 0x38 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x38};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3CCMessage::EmergencySetup);
 }
 
@@ -227,7 +227,7 @@ TEST(GoldenCC, Hold_Parse) {
     // Byte 1: messageType(6)=0x18(Hold)|NSD(2)=0 = 0x60 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x60};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3CCMessage::Hold);
 }
 
@@ -243,7 +243,7 @@ TEST(GoldenCC, Progress_Parse) {
     // Byte 1: messageType(6)=0x03(Progress)|NSD(2)=0 = 0x0C [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0x0C};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3CCMessage::Progress);
 }
 
@@ -270,7 +270,7 @@ TEST(GoldenCC, StartDTMF_Parse) {
     //   IA5 value 0x31 per spec.
     uint8_t data[] = {0x3E, 0xD4, 0x2C, 0x31};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3CCMessage::StartDTMF);
 }
 
@@ -286,7 +286,7 @@ TEST(GoldenCC, StopDTMF_Parse) {
     // Byte 1: messageType(6)=0x31(StopDTMF)|NSD(2)=0 = 0xC4 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3E, 0xC4};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3CCMessage::StopDTMF);
 }
 
@@ -310,7 +310,7 @@ TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
     // Byte 4: ext(1)=1|causeValue(7)=16(Normal_Call_Clearing) = 0b1_0010000 = 0x21 [GSM 24.008 10.5.4.11]
     uint8_t data[] = {0x3E, 0xA8, 0x02, 0x36, 0x21};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3CCMessage::ReleaseComplete);
 }
 
@@ -335,7 +335,7 @@ TEST(GoldenCC, Disconnect_Parse) {
     // Byte 4: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21
     uint8_t data[] = {0x3E, 0x94, 0x02, 0x16, 0x21};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3CCMessage::Disconnect);
     auto* d = dynamic_cast<L3Disconnect*>(msg.get());
     ASSERT_TRUE(d);
@@ -358,7 +358,7 @@ TEST(GoldenCC, Release_Parse) {
     // Byte 1: messageType(6)=0x2D(Release)|NSD(2)=0 = 0xB4 [GSM 24.008 Table 10.5.4]
     uint8_t data[] = {0x3F, 0xB4};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3CCMessage::Release);
 }
 
@@ -488,7 +488,7 @@ TEST(GoldenCC, ReleaseComplete_WithCause_RoundTrip) {
     auto r2 = writeL3(*rc, buf2.data(), buf2.size());
     ASSERT_TRUE(r1.has_value() && r2.has_value());
     EXPECT_EQ(r1.value(), r2.value());
-    for (size_t i = 0; i < n1; i++) {
+    for (size_t i = 0; i < r1.value(); i++) {
         EXPECT_EQ(buf1[i], buf2[i]);
     }
 }
@@ -656,7 +656,7 @@ TEST(GoldenCC, CauseElement_RoundTrip) {
     orig.writeV(frame, wp);
     L3CauseElement parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     EXPECT_EQ(parsed.cause(), CCCause::User_Busy);
     EXPECT_EQ(parsed.location(), CCCauseLocation::Transit);
 }
@@ -692,7 +692,7 @@ TEST(GoldenCC, CalledPartyBCDNumber_RoundTrip) {
     orig.writeV(frame, wp);
     L3CalledPartyBCDNumber parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp, orig.lengthV());
+    { auto _res = parsed.try_parseV(frame, rp, orig.lengthV()); ASSERT_TRUE(_res.has_value()); }
     EXPECT_STREQ(parsed.digits(), "1234567890");
 }
 
@@ -707,7 +707,7 @@ TEST(GoldenCC, CallingPartyBCDNumber_RoundTrip) {
     orig.writeV(frame, wp);
     L3CallingPartyBCDNumber parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp, orig.lengthV());
+    { auto _res = parsed.try_parseV(frame, rp, orig.lengthV()); ASSERT_TRUE(_res.has_value()); }
     EXPECT_STREQ(parsed.digits(), "1234567890");
 }
 
@@ -723,7 +723,7 @@ TEST(GoldenCC, ProgressIndicator_RoundTrip) {
     orig.writeV(frame, wp);
     L3ProgressIndicator parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     EXPECT_EQ(parsed.progress(), L3ProgressIndicator::InBandAvailable);
     EXPECT_EQ(parsed.location(), L3ProgressIndicator::PrivateServingLocal);
 }
@@ -741,7 +741,7 @@ TEST(GoldenCC, KeypadFacility_RoundTrip) {
     orig.writeV(frame, wp);
     L3KeypadFacility parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     EXPECT_EQ(parsed.ia5(), '5');
 }
 
@@ -768,7 +768,7 @@ TEST(GoldenCC, CallState_RoundTrip) {
     orig.writeV(frame, wp);
     L3CallState parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 }
 
 // =====================================================================
@@ -800,7 +800,7 @@ TEST(GoldenCC, SupServFacilityIE_RoundTrip) {
     orig.writeV(frame, wp);
     L3SupServFacilityIE parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 }
 
 // =====================================================================
@@ -815,7 +815,7 @@ TEST(GoldenCC, SupServVersionIndicator_RoundTrip) {
     orig.writeV(frame, wp);
     L3SupServVersionIndicator parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 }
 
 // =====================================================================

@@ -722,7 +722,7 @@ ParseResult<std::unique_ptr<L3CCMessage>> parseL3CC(const L3Frame& source) {
         return ParseResult<std::unique_ptr<L3CCMessage>>(parseResult.error());
     }
 
-    return ParseResult<std::unique_ptr<L3CCMessage>>(std::move(msg));
+    return ParseResult<std::unique_ptr<L3CCMessage>>(std::move(factoryResult).value());
 }
 
 } // namespace detail

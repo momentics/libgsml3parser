@@ -572,14 +572,13 @@ ParseResult<std::unique_ptr<L3MMMessage>> parseL3MM(const L3Frame& source) {
         return ParseResult<std::unique_ptr<L3MMMessage>>(factoryResult.error());
     }
 
-    auto& msg = factoryResult.value();
-    auto parseResult = msg->parse(source);
+    auto parseResult = factoryResult.value()->parse(source);
     if (!parseResult.has_value()) {
         GSML3PARSER_LOG_WARN("MM parse failed for MTI=0x%02x", mti);
         return ParseResult<std::unique_ptr<L3MMMessage>>(parseResult.error());
     }
 
-    return ParseResult<std::unique_ptr<L3MMMessage>>(std::move(msg));
+    return ParseResult<std::unique_ptr<L3MMMessage>>(std::move(factoryResult).value());
 }
 
 } // namespace detail

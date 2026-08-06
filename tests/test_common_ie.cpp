@@ -41,7 +41,7 @@ static void ieRoundTrip(const T& orig) {
 
     T parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     // If the type has a text() that we can compare, use it as a sanity check.
     std::ostringstream os1, os2;
     orig.text(os1);

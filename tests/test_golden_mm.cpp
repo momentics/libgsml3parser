@@ -133,7 +133,7 @@ TEST(GoldenMM, LocationUpdatingRequest_Parse) {
         0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3MMMessage::LocationUpdatingRequest);
 }
 
@@ -161,7 +161,7 @@ TEST(GoldenMM, LocationUpdatingAccept_Parse) {
     // Bytes 5-6: LAI LAC = 0x1234 (MSB first)
     uint8_t data[] = {0x50, 0x08, 0x52, 0xF0, 0x10, 0x12, 0x34};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3MMMessage::LocationUpdatingAccept);
 }
 
@@ -193,7 +193,7 @@ TEST(GoldenMM, TMSIReallocationCommand_Parse) {
         0x00
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3MMMessage::TMSIReallocationCommand);
 }
 
@@ -228,7 +228,7 @@ TEST(GoldenMM, CMServiceRequest_Parse) {
         0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3MMMessage::CMServiceRequest);
 }
 
@@ -250,7 +250,7 @@ TEST(GoldenMM, CMServiceReject_Parse) {
     // Byte 2: reject_cause = 0x16 (Congestion) [GSM 24.008 10.5.3.6]
     uint8_t data[] = {0x50, 0x88, 0x16};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3MMMessage::CMServiceReject);
 }
 
@@ -279,7 +279,7 @@ TEST(GoldenMM, IMSIDetachIndication_Parse) {
         0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3MMMessage::IMSIDetachIndication);
 }
 
@@ -301,7 +301,7 @@ TEST(GoldenMM, MMStatus_Parse) {
     // Byte 2: cause = 0x60 (Invalid_Mandatory_Information) [GSM 24.008 10.5.3.6]
     uint8_t data[] = {0x50, 0xC4, 0x60};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3MMMessage::MMStatus);
 }
 
@@ -323,7 +323,7 @@ TEST(GoldenMM, IdentityResponse_Parse) {
     // Bytes 4-7: TMSI = 0x12345678
     uint8_t data[] = {0x50, 0x64, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3MMMessage::IdentityResponse);
 }
 
@@ -362,7 +362,7 @@ TEST(GoldenMM, CMReestablishmentRequest_Parse) {
         0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     EXPECT_EQ(msg->mti(), L3MMMessage::CMReestablishmentRequest);
 }
 
@@ -427,7 +427,7 @@ TEST(GoldenMM, AuthenticationRequest_RoundTrip) {
 TEST(GoldenMM, AuthenticationResponse_RoundTrip) {
     uint8_t data[] = {0x50, 0x50, 0xAB, 0xCD, 0x12, 0x34};
     auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg);
+    ASSERT_TRUE(msg.has_value());
     auto* ar = dynamic_cast<L3AuthenticationResponse*>(msg.get());
     ASSERT_TRUE(ar);
     EXPECT_EQ(ar->sres(), 0xABCD1234u);
@@ -623,7 +623,7 @@ TEST(GoldenMM, RAND_RoundTrip) {
     orig.writeV(frame, wp);
     L3RAND parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     EXPECT_EQ(parsed.rand(), randBytes);
 }
 
@@ -639,7 +639,7 @@ TEST(GoldenMM, SRES_RoundTrip) {
     orig.writeV(frame, wp);
     L3SRES parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
     EXPECT_EQ(parsed.value(), 0x12345678u);
 }
 
@@ -677,7 +677,7 @@ TEST(GoldenMM, RejectCauseIE_Encoding) {
     rc.writeV(frame, wp);
     L3RejectCauseIE parsed;
     size_t rp = 0;
-    parsed.parseV(frame, rp);
+    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
 }
 
 // =====================================================================

@@ -195,7 +195,7 @@ ParseResult<std::unique_ptr<L3SupServMessage>> parseL3SupServ(const L3Frame& sou
         return ParseResult<std::unique_ptr<L3SupServMessage>>(parseResult.error());
     }
 
-    return ParseResult<std::unique_ptr<L3SupServMessage>>(std::move(msg));
+    return ParseResult<std::unique_ptr<L3SupServMessage>>(std::move(factoryResult).value());
 }
 
 } // namespace detail
