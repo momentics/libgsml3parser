@@ -138,35 +138,23 @@ public:
 
     // operator-> for unique_ptr<T>: returns raw T*
     template <typename U = std::remove_cv_t<T>>
-    [[nodiscard]] auto operator->() -> typename std::enable_if_t<
-        std::is_same_v<U, std::unique_ptr<typename std::remove_cv_t<U>::element_type>>,
-        typename std::remove_cv_t<U>::element_type*>
-    {
+    [[nodiscard]] auto operator->() -> decltype(std::declval<U>().get()) requires requires { std::declval<U>().get(); } {
         return std::get<T>(mData).get();
     }
 
     template <typename U = std::remove_cv_t<T>>
-    [[nodiscard]] auto operator->() const -> typename std::enable_if_t<
-        std::is_same_v<U, std::unique_ptr<typename std::remove_cv_t<U>::element_type>>,
-        const typename std::remove_cv_t<U>::element_type*>
-    {
+    [[nodiscard]] auto operator->() const -> decltype(std::declval<const U>().get()) requires requires { std::declval<const U>().get(); } {
         return std::get<T>(mData).get();
     }
 
     // operator-> for non-unique_ptr types: returns pointer to contained value
     template <typename U = std::remove_cv_t<T>>
-    [[nodiscard]] auto operator->() -> typename std::enable_if_t<
-        !std::is_same_v<U, std::unique_ptr<typename std::remove_cv_t<U>::element_type>>,
-        U*>
-    {
+    [[nodiscard]] auto operator->() -> U* requires (!std::is_same_v<U, void> && !requires { std::declval<U>().get(); }) {
         return &std::get<T>(mData);
     }
 
     template <typename U = std::remove_cv_t<T>>
-    [[nodiscard]] auto operator->() const -> typename std::enable_if_t<
-        !std::is_same_v<U, std::unique_ptr<typename std::remove_cv_t<U>::element_type>>,
-        const U*>
-    {
+    [[nodiscard]] auto operator->() const -> const U* requires (!std::is_same_v<U, void> && !requires { std::declval<const U>().get(); }) {
         return &std::get<T>(mData);
     }
 
@@ -180,18 +168,12 @@ public:
 
     // get() for unique_ptr<T>: returns raw T*
     template <typename U = std::remove_cv_t<T>>
-    [[nodiscard]] auto get() -> typename std::enable_if_t<
-        std::is_same_v<U, std::unique_ptr<typename std::remove_cv_t<U>::element_type>>,
-        typename std::remove_cv_t<U>::element_type*>
-    {
+    [[nodiscard]] auto get() -> decltype(std::declval<U>().get()) requires requires { std::declval<U>().get(); } {
         return std::get<T>(mData).get();
     }
 
     template <typename U = std::remove_cv_t<T>>
-    [[nodiscard]] auto get() const -> typename std::enable_if_t<
-        std::is_same_v<U, std::unique_ptr<typename std::remove_cv_t<U>::element_type>>,
-        const typename std::remove_cv_t<U>::element_type*>
-    {
+    [[nodiscard]] auto get() const -> decltype(std::declval<const U>().get()) requires requires { std::declval<const U>().get(); } {
         return std::get<T>(mData).get();
     }
 
