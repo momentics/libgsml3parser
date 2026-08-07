@@ -322,25 +322,4 @@ std::ostream& operator<<(std::ostream& os, const BitVector& bv) {
     return os;
 }
 
-// ── Arena ──────────────────────────────────────────────────────────────
-
-Arena::Arena(size_t initialCapacity) : mBuffer(initialCapacity), mOffset(0) {}
-
-void* Arena::allocate(size_t bytes, size_t alignment) {
-    // Align current offset up to `alignment`
-    size_t aligned = (mOffset + alignment - 1) & ~(alignment - 1);
-    if (aligned + bytes > mBuffer.size()) {
-        // Grow the buffer
-        size_t newCap = std::max(mBuffer.size() * 2, aligned + bytes);
-        mBuffer.resize(newCap);
-    }
-    void* ptr = mBuffer.data() + aligned;
-    mOffset = aligned + bytes;
-    return ptr;
-}
-
-void Arena::reset() {
-    mOffset = 0;
-}
-
 } // namespace gsml3parser

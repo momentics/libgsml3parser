@@ -102,5 +102,3 @@ extern const unsigned RACHWaitSParam[16];
 extern const unsigned RACHWaitSParamCombined[16];
 
 } // namespace gsml3parser
-
-

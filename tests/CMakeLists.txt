@@ -11,6 +11,10 @@ FetchContent_MakeAvailable(googletest)
 
 add_executable(gsml3parser_tests
     test_bitvector.cpp
+    test_expected.cpp
+    test_bitreader.cpp
+    test_parser_config.cpp
+    test_l3header.cpp
     test_parser.cpp
     test_messages.cpp
     test_roundtrip.cpp

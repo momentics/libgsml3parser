@@ -19,29 +19,41 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#pragma once
-
-#include <cstddef>
-#include <cstdint>
-#include <vector>
+#include "gsml3parser/arena.h"
 
 namespace gsml3parser {
 
-class Arena {
-public:
-    explicit Arena(size_t initialCapacity = 4096);
+Arena::Arena(size_t initialCapacity)
+    : mBuffer(initialCapacity, 0)
+{
+}
 
-    void* allocate(size_t bytes, size_t alignment = alignof(std::max_align_t));
+void* Arena::allocate(size_t bytes, size_t alignment)
+{
+    if (bytes == 0) return nullptr;
 
-    void reset();
+    size_t alignedOffset = (mOffset + alignment - 1) & ~(alignment - 1);
 
-    size_t used() const { return mOffset; }
+    if (alignedOffset + bytes > mBuffer.size()) {
+        size_t newCapacity = mBuffer.size() * 2;
+        if (newCapacity < alignedOffset + bytes) {
+            newCapacity = alignedOffset + bytes;
+        }
+        try {
+            mBuffer.resize(newCapacity, 0);
+        } catch (...) {
+            return nullptr;
+        }
+    }
 
-    size_t capacity() const { return mBuffer.size(); }
+    void* ptr = mBuffer.data() + alignedOffset;
+    mOffset = alignedOffset + bytes;
+    return ptr;
+}
 
-private:
-    std::vector<uint8_t> mBuffer;
-    size_t mOffset = 0;
-};
+void Arena::reset()
+{
+    mOffset = 0;
+}
 
 } // namespace gsml3parser

@@ -21,27 +21,28 @@
 
 #pragma once
 
+#include <span>
 #include <cstddef>
 #include <cstdint>
-#include <vector>
+
+#include "types.h"
+#include "expected.h"
 
 namespace gsml3parser {
 
-class Arena {
-public:
-    explicit Arena(size_t initialCapacity = 4096);
+/** Decoded L3 protocol header — PD, MTI, TI, TIF. */
+struct L3Header {
+    L3PD pd;
+    int mti{};
+    unsigned ti{};
+    bool tif{};
 
-    void* allocate(size_t bytes, size_t alignment = alignof(std::max_align_t));
-
-    void reset();
-
-    size_t used() const { return mOffset; }
-
-    size_t capacity() const { return mBuffer.size(); }
-
-private:
-    std::vector<uint8_t> mBuffer;
-    size_t mOffset = 0;
+    [[nodiscard]] bool isValid() const noexcept {
+        return pd != L3PD::Undefined;
+    }
 };
+
+/** Parse a 2-byte L3 header from the first two bytes of @p data. */
+Expected<L3Header> parseL3Header(std::span<const uint8_t> data);
 
 } // namespace gsml3parser

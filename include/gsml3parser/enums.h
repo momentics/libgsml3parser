@@ -22,13 +22,10 @@
 #pragma once
 
 #include <cstdint>
-#include <map>
-#include <string>
 
 namespace gsml3parser {
 
-// ── RR Cause (GSM 04.08 10.5.2.31) ─────────────────────────────────────
-
+// RR Cause (GSM 04.08 10.5.2.31)
 enum class RRCause : uint8_t {
     Normal_Event                     = 0,
     Unspecified                      = 1,
@@ -54,8 +51,7 @@ enum class RRCause : uint8_t {
 
 const char* RRCause2Str(RRCause cause);
 
-// ── MM Reject Cause (GSM 04.08 10.5.3.6) ──────────────────────────────
-
+// MM Reject Cause (GSM 04.08 10.5.3.6)
 enum class MMRejectCause : uint8_t {
     Zero                            = 0,
     IMSI_Unknown_In_HLR             = 2,
@@ -89,8 +85,7 @@ enum class MMRejectCause : uint8_t {
 
 const char* MMRejectCause2Str(MMRejectCause cause);
 
-// ── CC Cause (GSM 04.08 10.5.4.11) ─────────────────────────────────────
-
+// CC Cause (GSM 04.08 10.5.4.11)
 enum class CCCause : uint8_t {
     Unknown_L3_Cause                 = 0,
     Unassigned_Number                = 1,
@@ -138,7 +133,7 @@ enum class CCCause : uint8_t {
     Message_Not_Compatible_With_State = 98,
     IE_Not_Implemented               = 99,
     Conditional_IE_Error             = 100,
-    Message_Not_Compatible = 101,
+    Message_Not_Compatible           = 101,
     Recovery_On_Timer_Expiry         = 102,
     Protocol_Error_Unspecified       = 111,
     Interworking_Unspecified         = 127
@@ -146,7 +141,7 @@ enum class CCCause : uint8_t {
 
 const char* CCCause2Str(CCCause cause);
 
-/** CC cause location */
+// CC cause location
 enum class CCCauseLocation : uint8_t {
     User                      = 0,
     Private_Serving_Local     = 1,
@@ -158,8 +153,7 @@ enum class CCCauseLocation : uint8_t {
     Beyond_Inter_Networking   = 10
 };
 
-// ── BSS Cause (GSM 48.008 3.2.2.5) ─────────────────────────────────────
-
+// BSS Cause (GSM 48.008 3.2.2.5)
 enum class BSSCause : uint8_t {
     Radio_Interface_Failure     = 1,
     Uplink_Quality             = 2,
@@ -191,5 +185,3 @@ enum class BSSCause : uint8_t {
 const char* BSSCause2Str(BSSCause cause);
 
 } // namespace gsml3parser
-
-

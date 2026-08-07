@@ -26,19 +26,19 @@
 
 namespace gsml3parser {
 
-template <typename Base, Base MinVal, Base MaxVal>
+template <typename T, T Min, T Max>
 struct Bounded {
-    Base value{MinVal};
+    T value{Min};
 
     constexpr Bounded() = default;
-    constexpr explicit Bounded(Base v) : value(v) {}
+    constexpr explicit Bounded(T v) : value(v) {}
 
-    constexpr operator Base() const noexcept { return value; }
-    constexpr Base get() const noexcept { return value; }
-    constexpr Bounded& operator=(Base v) & noexcept { value = v; return *this; }
+    constexpr operator T() const noexcept { return value; }
+    constexpr T get() const noexcept { return value; }
+    constexpr Bounded& operator=(T v) & noexcept { value = v; return *this; }
 
-    static constexpr Base min() { return MinVal; }
-    static constexpr Base max() { return MaxVal; }
+    static constexpr T min() { return Min; }
+    static constexpr T max() { return Max; }
 };
 
 // GSM protocol field types with bounded ranges

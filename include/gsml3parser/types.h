@@ -21,13 +21,12 @@
 
 #pragma once
 
+#include <cstdint>
 #include <iosfwd>
 
 namespace gsml3parser {
 
-/**
- * L3 Protocol Discriminator — GSM 04.08 10.2, GSM 04.07 11.2.3.1.1
- */
+// L3 Protocol Discriminator — GSM 04.08 10.2, GSM 04.07 11.2.3.1.1
 enum class L3PD : int8_t {
     GroupCallControl     = 0x00,
     BroadcastCallControl = 0x01,
@@ -46,9 +45,7 @@ enum class L3PD : int8_t {
 
 std::ostream& operator<<(std::ostream& os, L3PD pd);
 
-/**
- * Interlayer primitives — GSM 04.04, GSM 04.06, GSM 04.07
- */
+// Interlayer primitives — GSM 04.04, GSM 04.06, GSM 04.07
 enum class Primitive : uint8_t {
     L2_DATA = 1,
     L3_DATA,
@@ -68,9 +65,7 @@ enum class Primitive : uint8_t {
 
 std::ostream& operator<<(std::ostream& os, Primitive prim);
 
-/**
- * SAPI — Service Access Point Indicator, GSM 04.06
- */
+// SAPI — Service Access Point Indicator, GSM 04.06
 enum class SAPI : uint8_t {
     SAPI0 = 0,
     SAPI3 = 3,
@@ -81,22 +76,18 @@ enum class SAPI : uint8_t {
 
 std::ostream& operator<<(std::ostream& os, SAPI sapi);
 
-/**
- * Mobile identity types — GSM 04.08 10.5.1.4
- */
+// Mobile identity types — GSM 04.08 10.5.1.4
 enum class MobileIDType : uint8_t {
-    NoID  = 0,
-    IMSI  = 1,
-    IMEI  = 2,
+    NoID   = 0,
+    IMSI   = 1,
+    IMEI   = 2,
     IMEISV = 3,
-    TMSI  = 4
+    TMSI   = 4
 };
 
 std::ostream& operator<<(std::ostream& os, MobileIDType type);
 
-/**
- * Type of Number — GSM 04.08 Table 10.5.118
- */
+// Type of Number — GSM 04.08 Table 10.5.118
 enum class TypeOfNumber : uint8_t {
     Unknown         = 0,
     International   = 1,
@@ -109,24 +100,20 @@ enum class TypeOfNumber : uint8_t {
 
 std::ostream& operator<<(std::ostream& os, TypeOfNumber ton);
 
-/**
- * Numbering Plan — GSM 04.08 Table 10.5.118
- */
+// Numbering Plan — GSM 04.08 Table 10.5.118
 enum class NumberingPlan : uint8_t {
-    Unknown = 0,
-    E164    = 1,
-    X121    = 3,
-    F69     = 4,
+    Unknown  = 0,
+    E164     = 1,
+    X121     = 3,
+    F69      = 4,
     National = 8,
-    Private = 9,
-    ERMES   = 10
+    Private  = 9,
+    ERMES    = 10
 };
 
 std::ostream& operator<<(std::ostream& os, NumberingPlan np);
 
-/**
- * GSM band types — GSM 05.05 2
- */
+// GSM band types — GSM 05.05 2
 enum class GSMBand : uint16_t {
     GSM850  = 850,
     EGSM900 = 900,
@@ -134,9 +121,7 @@ enum class GSMBand : uint16_t {
     PCS1900 = 1900
 };
 
-/**
- * GSM logical channel types
- */
+// GSM logical channel types
 enum class ChannelType : uint8_t {
     SCHType,
     FCCHType,
@@ -162,37 +147,31 @@ enum class ChannelType : uint8_t {
 
 std::ostream& operator<<(std::ostream& os, ChannelType ch);
 
-/**
- * GSM 7-bit alphabet — GSM 03.38 6.2.1
- */
+// GSM 7-bit alphabet — GSM 03.38 6.2.1
 enum class GSMAlphabet : uint8_t {
     ALPHABET_7BIT,
     ALPHABET_8BIT,
     ALPHABET_UCS2
 };
 
-/**
- * Type And Offset for L3ChannelDescription — GSM 04.08 10.5.2.5
- * Encodes channel type (3 bits) and TDMA offset (2 bits).
- */
+// Type And Offset for L3ChannelDescription — GSM 04.08 10.5.2.5
+// Encodes channel type (3 bits) and TDMA offset (2 bits).
 enum TypeAndOffset : uint8_t {
-    TDMA_SACCH = 0,
-    TDMA_SDCCH = 1,
-    TDMA_TCHF  = 2,
-    TDMA_TCHH  = 3,
-    TDMA_CBCH  = 4,
-    TDMA_PDTCH = 5,
+    TDMA_SACCH  = 0,
+    TDMA_SDCCH  = 1,
+    TDMA_TCHF   = 2,
+    TDMA_TCHH   = 3,
+    TDMA_CBCH   = 4,
+    TDMA_PDTCH  = 5,
     TDMA_PACCCH = 6,
-    TDMA_PAGCH = 7,
-    TDMA_PCCCH = 8,
-    TDMA_PNCH  = 9,
-    TDMA_PRACH = 10,
-    TDMA_PTCCH = 11,
-    TDMA_PDCH  = 12,
-    TDMA_PACCH = 13,
-    TDMA_MISC  = 15
+    TDMA_PAGCH  = 7,
+    TDMA_PCCCH  = 8,
+    TDMA_PNCH   = 9,
+    TDMA_PRACH  = 10,
+    TDMA_PTCCH  = 11,
+    TDMA_PDCH   = 12,
+    TDMA_PACCH  = 13,
+    TDMA_MISC   = 15
 };
 
 } // namespace gsml3parser
-
-
