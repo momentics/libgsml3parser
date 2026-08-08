@@ -38,6 +38,9 @@ set(CORE_SOURCES
     src/mm/l3mmelements.cpp
     src/cc/l3ccelements.cpp
     src/visitor.cpp
+    src/bitstream/byte_source.cpp
+    src/bitstream/framer.cpp
+    src/bitstream/stream_processor.cpp
 )
 
 set(RR_SOURCES
@@ -87,6 +90,9 @@ set(PUBLIC_HEADERS
     include/gsml3parser/message_types.h
     include/gsml3parser/visitor.h
     include/gsml3parser/gsml3parser.hpp
+    include/gsml3parser/bitstream/byte_source.h
+    include/gsml3parser/bitstream/framer.h
+    include/gsml3parser/bitstream/stream_processor.h
 )
 
 # ── Library target ────────────────────────────────────────────────────

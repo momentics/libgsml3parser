@@ -15,6 +15,9 @@ add_executable(gsml3parser_tests
     test_bitreader.cpp
     test_parser_config.cpp
     test_l3header.cpp
+    test_byte_source.cpp
+    test_framer.cpp
+    test_stream_processor.cpp
 )
 
 find_package(Threads REQUIRED)
