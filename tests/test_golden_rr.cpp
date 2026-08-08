@@ -704,7 +704,7 @@ TEST(GoldenRR, ImmediateAssignmentExtended_RoundTrip) {
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3ImmediateAssignmentExtended::MTI);
-    auto* iaext = tryGet<L3ImmediateAssignmentExtended>(*msg);
+    auto* iaext = tryGet<L3ImmediateAssignmentExtended>(*parsed);
     ASSERT_TRUE(iaext);
     EXPECT_FALSE(iaext->hasAdditionalChannel());
 }

@@ -79,6 +79,7 @@ class L3Setup {
     L3SupServFacilityIE mFacility;
     bool mHaveSSVersion{false};
     L3SupServVersionIndicator mSSVersion;
+    friend struct Builder;
 
 public:
     static constexpr int MTI = 0x05;
@@ -113,10 +114,23 @@ public:
     bool haveSSVersion() const { return mHaveSSVersion; }
     const L3SupServVersionIndicator& ssVersion() const { return mSSVersion; }
 
+    struct Builder {
+        unsigned m_ti;
+        bool m_haveCalled{false};
+        L3CalledPartyBCDNumber m_called;
+        Builder(unsigned ti) : m_ti(ti) {}
+        Builder& calledParty(const L3CalledPartyBCDNumber& v) { m_called = v; m_haveCalled = true; return *this; }
+        [[nodiscard]] L3Setup build() const;
+    };
+    static Builder builder(unsigned ti);
+
     [[nodiscard]] static Expected<L3Setup> parse(BitReader& br);
     void write(BitWriter& bw) const;
     size_t bodyLength() const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Emergency Setup (GSM 04.08 9.3.8) ─────────────────────────────────
@@ -136,6 +150,9 @@ public:
     void write(BitWriter&) const;
     size_t bodyLength() const { return 0; }
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Call Proceeding (GSM 04.08 9.3.3) ─────────────────────────────────
@@ -166,6 +183,9 @@ public:
     void write(BitWriter& bw) const;
     size_t bodyLength() const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Alerting (GSM 04.08 9.3.1) ────────────────────────────────────────
@@ -201,6 +221,9 @@ public:
     void write(BitWriter& bw) const;
     size_t bodyLength() const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Connect (GSM 04.08 9.3.5) ─────────────────────────────────────────
@@ -226,6 +249,9 @@ public:
     void write(BitWriter& bw) const;
     size_t bodyLength() const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Connect Acknowledge (GSM 04.08 9.3.6) ─────────────────────────────
@@ -245,6 +271,9 @@ public:
     void write(BitWriter&) const;
     size_t bodyLength() const { return 0; }
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Call Confirmed (GSM 04.08 9.3.2) ──────────────────────────────────
@@ -280,6 +309,9 @@ public:
     void write(BitWriter& bw) const;
     size_t bodyLength() const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Disconnect (GSM 04.08 9.3.7) ──────────────────────────────────────
@@ -293,6 +325,9 @@ public:
     static constexpr int MTI = 0x25;
 
     L3Disconnect() = default;
+    explicit L3Disconnect(unsigned ti) : mTI(ti) {}
+    L3Disconnect(unsigned ti, CCCause cause)
+        : mTI(ti), mCause(cause) {}
     L3Disconnect(unsigned ti, CCCause cause, CCCauseLocation loc)
         : mTI(ti), mCause(cause), mLocation(loc) {}
 
@@ -306,6 +341,9 @@ public:
     void write(BitWriter& bw) const;
     size_t bodyLength() const { return 2; }
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Release (GSM 04.08 9.3.19) ────────────────────────────────────────
@@ -318,6 +356,7 @@ class L3Release {
     L3SupServFacilityIE mFacility;
     bool mHaveSSVersion{false};
     L3SupServVersionIndicator mSSVersion;
+    friend struct Builder;
 
 public:
     static constexpr int MTI = 0x2d;
@@ -337,10 +376,23 @@ public:
     bool haveSSVersion() const { return mHaveSSVersion; }
     const L3SupServVersionIndicator& ssVersion() const { return mSSVersion; }
 
+    struct Builder {
+        unsigned m_ti;
+        bool m_haveCause{false};
+        CCCause m_cause{CCCause::Unknown_L3_Cause};
+        Builder(unsigned ti) : m_ti(ti) {}
+        Builder& cause(CCCause v) { m_cause = v; m_haveCause = true; return *this; }
+        [[nodiscard]] L3Release build() const;
+    };
+    static Builder builder(unsigned ti);
+
     [[nodiscard]] static Expected<L3Release> parse(BitReader& br);
     void write(BitWriter& bw) const;
     size_t bodyLength() const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Release Complete (GSM 04.08 9.3.19) ───────────────────────────────
@@ -353,6 +405,7 @@ class L3ReleaseComplete {
     L3SupServFacilityIE mFacility;
     bool mHaveSSVersion{false};
     L3SupServVersionIndicator mSSVersion;
+    friend struct Builder;
 
 public:
     static constexpr int MTI = 0x2a;
@@ -372,10 +425,23 @@ public:
     bool haveSSVersion() const { return mHaveSSVersion; }
     const L3SupServVersionIndicator& ssVersion() const { return mSSVersion; }
 
+    struct Builder {
+        unsigned m_ti;
+        bool m_haveCause{false};
+        CCCause m_cause{CCCause::Unknown_L3_Cause};
+        Builder(unsigned ti) : m_ti(ti) {}
+        Builder& cause(CCCause v) { m_cause = v; m_haveCause = true; return *this; }
+        [[nodiscard]] L3ReleaseComplete build() const;
+    };
+    static Builder builder(unsigned ti);
+
     [[nodiscard]] static Expected<L3ReleaseComplete> parse(BitReader& br);
     void write(BitWriter& bw) const;
     size_t bodyLength() const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── CC Status (GSM 04.08 9.3.19) ──────────────────────────────────────
@@ -384,6 +450,22 @@ class L3CCStatus {
     unsigned mTI{7};
     CCCause mCause{CCCause::Normal_Call_Clearing};
     unsigned mCallState{0};
+
+public:
+    struct Builder {
+        unsigned m_ti;
+        bool m_haveCause{false};
+        CCCause m_cause{CCCause::Unknown_L3_Cause};
+        unsigned m_callState{0};
+        Builder(unsigned ti) : m_ti(ti) {}
+        Builder& cause(CCCause v) { m_cause = v; m_haveCause = true; return *this; }
+        Builder& callState(unsigned v) { m_callState = v; return *this; }
+        [[nodiscard]] L3CCStatus build() const;
+    };
+    static Builder builder(unsigned ti);
+
+private:
+    friend struct Builder;
 
 public:
     static constexpr int MTI = 0x3d;
@@ -401,6 +483,9 @@ public:
     void write(BitWriter& bw) const;
     size_t bodyLength() const { return 3; }
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── DTMF messages ──────────────────────────────────────────────────────
@@ -423,6 +508,9 @@ public:
     void write(BitWriter& bw) const;
     size_t bodyLength() const { return 1; }
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 class L3StopDTMF {
@@ -440,6 +528,9 @@ public:
     void write(BitWriter&) const;
     size_t bodyLength() const { return 0; }
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 class L3StopDTMFAcknowledge {
@@ -457,6 +548,9 @@ public:
     void write(BitWriter&) const;
     size_t bodyLength() const { return 0; }
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 class L3StartDTMFAcknowledge {
@@ -467,6 +561,7 @@ public:
 
     L3StartDTMFAcknowledge() = default;
     explicit L3StartDTMFAcknowledge(unsigned ti) : mTI(ti) {}
+    L3StartDTMFAcknowledge(unsigned ti, char keypad) : mTI(ti), mKey(keypad) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -477,6 +572,9 @@ public:
     void write(BitWriter& bw) const;
     size_t bodyLength() const { return 2; }
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 class L3StartDTMFReject {
@@ -497,6 +595,9 @@ public:
     void write(BitWriter& bw) const;
     size_t bodyLength() const { return 3; }
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Hold ───────────────────────────────────────────────────────────────
@@ -516,6 +617,9 @@ public:
     void write(BitWriter&) const;
     size_t bodyLength() const { return 0; }
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 class L3HoldReject {
@@ -536,6 +640,9 @@ public:
     void write(BitWriter& bw) const;
     size_t bodyLength() const { return 3; }
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Progress (GSM 04.08 9.3.17) ───────────────────────────────────────
@@ -558,6 +665,9 @@ public:
     void write(BitWriter& bw) const;
     size_t bodyLength() const { return 2; }
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 } // namespace gsml3parser

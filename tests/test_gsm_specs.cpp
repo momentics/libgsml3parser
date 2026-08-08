@@ -31,6 +31,7 @@
 #include <gsml3parser/cc/l3ccelements.h>
 #include <gsml3parser/bitreader.h>
 #include <gsml3parser/bitwriter.h>
+#include <gsml3parser/visitor.h>
 
 using namespace gsml3parser;
 
@@ -325,7 +326,7 @@ TEST(GSMSpecTest, MobileIdentity_IMSI) {
     EXPECT_EQ(id.type(), MobileIDType::IMSI);
     EXPECT_TRUE(id.isIMSI());
     EXPECT_FALSE(id.isTMSI());
-    EXPECT_STREQ(id.digits(), "250011234567890");
+    EXPECT_EQ(std::string(id.digits()), "250011234567890");
 }
 
 TEST(GSMSpecTest, MobileIdentity_RoundTrip) {
@@ -348,7 +349,7 @@ TEST(GSMSpecTest, MobileIdentity_RoundTrip) {
     ASSERT_TRUE(parsedResult);
 
     EXPECT_EQ((*parsedResult).type(), orig.type());
-    EXPECT_STREQ((*parsedResult).digits(), orig.digits());
+    EXPECT_EQ(std::string((*parsedResult).digits()), std::string(orig.digits()));
 }
 
 TEST(GSMSpecTest, MobileIdentity_TMSI_RoundTrip) {

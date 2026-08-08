@@ -160,6 +160,8 @@ protected:
     void skipExtendedOctets(const L3Frame& src, size_t& rp);
 };
 
+#ifndef GSML3PARSER_L3OCTETALIGNEDPROTOCOL_ELEMENT_DEFINED
+#define GSML3PARSER_L3OCTETALIGNEDPROTOCOL_ELEMENT_DEFINED
 /** Generic LV or TLV element (raw octets). */
 class L3OctetAlignedProtocolElement : public L3ProtocolElement {
 public:
@@ -176,7 +178,7 @@ public:
     L3OctetAlignedProtocolElement() : mExtant(false) {}
     explicit L3OctetAlignedProtocolElement(std::string wData) : mData(std::move(wData)), mExtant(true) {}
 };
-#define GSML3PARSER_L3OCTETALIGNEDPROTOCOL_ELEMENT_DEFINED
+#endif
 
 /** Non-aligned message element (bit-level, not TLV). */
 class GenericMessageElement {

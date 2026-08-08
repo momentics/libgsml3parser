@@ -101,11 +101,9 @@ L3MobileIdentity::L3MobileIdentity(std::string_view wDigits)
     for (size_t i = 0; i < len; ++i) mDigits[i] = static_cast<char>(wDigits[i]);
 }
 
-std::string_view L3MobileIdentity::digits() const {
-    if (mType == MobileIDType::TMSI) return {};
-    size_t len = 0;
-    while (len < mDigits.size() && mDigits[len] != '\0') ++len;
-    return std::string_view(mDigits.data(), len);
+const char* L3MobileIdentity::digits() const {
+    if (mType == MobileIDType::TMSI) return "";
+    return mDigits.data();
 }
 
 bool L3MobileIdentity::operator==(const L3MobileIdentity& other) const {

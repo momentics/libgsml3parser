@@ -439,6 +439,12 @@ Expected<L3SupServFacilityIE> L3SupServFacilityIE::parse(BitReader& br, size_t l
     return Expected<L3SupServFacilityIE>::hold(L3SupServFacilityIE(data));
 }
 
+Expected<L3SupServFacilityIE> L3SupServFacilityIE::parse(BitReader& br) {
+    size_t remainingBits = br.remainingBits();
+    size_t lengthBytes = remainingBits / 8;
+    return parse(br, lengthBytes);
+}
+
 void L3SupServFacilityIE::write(BitWriter& bw) const {
     for (size_t i = 0; i < mData.size(); ++i) {
         bw.writeField(static_cast<uint32_t>(static_cast<unsigned char>(mData[i])), 8);

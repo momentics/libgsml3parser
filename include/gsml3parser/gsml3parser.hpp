@@ -20,4 +20,8 @@
 #include "gsml3parser/cc/l3ccmessages.h"
 #include "gsml3parser/ss/l3ssmessages.h"
 #include "gsml3parser/message_types.h"
+#include "gsml3parser/parser.h"
 #include "gsml3parser/visitor.h"
+#include "gsml3parser/bitstream/byte_source.h"
+#include "gsml3parser/bitstream/framer.h"
+#include "gsml3parser/bitstream/stream_processor.h"

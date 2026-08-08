@@ -407,6 +407,19 @@ void L3MMInformation::text(std::ostream& os) const {
 
 // ── L3LocationUpdatingAccept (MTI=0x02) ────────────────────────────────
 
+L3LocationUpdatingAccept::Builder L3LocationUpdatingAccept::builder() {
+    return Builder{};
+}
+
+L3LocationUpdatingAccept L3LocationUpdatingAccept::Builder::build() const {
+    L3LocationUpdatingAccept msg;
+    msg.mLAI = m_lai;
+    msg.mFollowOnProceed = m_followOn;
+    msg.mHaveMobileIdentity = m_haveMI;
+    msg.mMobileIdentity = m_mi;
+    return msg;
+}
+
 size_t L3LocationUpdatingAccept::bodyLength() const {
     size_t result = mLAI.lengthV();
     if (mHaveMobileIdentity) result += tlvLen(mMobileIdentity.lengthV());
@@ -535,6 +548,18 @@ void L3LocationUpdatingRequest::text(std::ostream& os) const {
 }
 
 // ── L3TMSIReallocationCommand (MTI=0x1a) ───────────────────────────────
+
+L3TMSIReallocationCommand::Builder L3TMSIReallocationCommand::builder() {
+    return Builder{};
+}
+
+L3TMSIReallocationCommand L3TMSIReallocationCommand::Builder::build() const {
+    L3TMSIReallocationCommand msg;
+    msg.mLAI = m_lai;
+    msg.mTMSI = m_tmsi;
+    msg.mFollowOnProceed = m_followOn;
+    return msg;
+}
 
 size_t L3TMSIReallocationCommand::bodyLength() const {
     return mLAI.lengthV() + lvLen(mTMSI.lengthV()) + 1;

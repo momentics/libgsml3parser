@@ -473,7 +473,7 @@ TEST(GoldenCC, ReleaseComplete_NoCause_RoundTrip) {
 
 TEST(GoldenCC, ReleaseComplete_WithCause_RoundTrip) {
     L3ReleaseComplete orig = L3ReleaseComplete::builder(5).cause(CCCause::Normal_Call_Clearing).build();
-    ParsedMessage msg(CCM(orig));
+    ParsedMessage msg{CCM{orig}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     auto* rc = tryGet<L3ReleaseComplete>(*parsed);

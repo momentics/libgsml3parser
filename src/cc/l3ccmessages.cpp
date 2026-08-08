@@ -246,6 +246,19 @@ std::ostream& operator<<(std::ostream& os, CCMessageType mti) {
 
 // ── L3Setup ─────────────────────────────────────────────────────────────
 
+L3Setup::Builder L3Setup::builder(unsigned ti) {
+    return Builder{ti};
+}
+
+L3Setup L3Setup::Builder::build() const {
+    L3Setup msg(m_ti);
+    if (m_haveCalled) {
+        msg.mHaveCalledParty = true;
+        msg.mCalledParty = m_called;
+    }
+    return msg;
+}
+
 Expected<L3Setup> L3Setup::parse(BitReader& br) {
     L3Setup msg;
 
@@ -778,6 +791,19 @@ void L3Disconnect::text(std::ostream& os) const {
 
 // ── L3Release ──────────────────────────────────────────────────────────
 
+L3Release::Builder L3Release::builder(unsigned ti) {
+    return Builder{ti};
+}
+
+L3Release L3Release::Builder::build() const {
+    L3Release msg(m_ti);
+    if (m_haveCause) {
+        msg.mHaveCause = true;
+        msg.mCause = m_cause;
+    }
+    return msg;
+}
+
 Expected<L3Release> L3Release::parse(BitReader& br) {
     L3Release msg;
 
@@ -829,6 +855,19 @@ void L3Release::text(std::ostream& os) const {
 
 // ── L3ReleaseComplete ──────────────────────────────────────────────────
 
+L3ReleaseComplete::Builder L3ReleaseComplete::builder(unsigned ti) {
+    return Builder{ti};
+}
+
+L3ReleaseComplete L3ReleaseComplete::Builder::build() const {
+    L3ReleaseComplete msg(m_ti);
+    if (m_haveCause) {
+        msg.mHaveCause = true;
+        msg.mCause = m_cause;
+    }
+    return msg;
+}
+
 Expected<L3ReleaseComplete> L3ReleaseComplete::parse(BitReader& br) {
     L3ReleaseComplete msg;
 
@@ -878,6 +917,20 @@ void L3ReleaseComplete::text(std::ostream& os) const {
 }
 
 // ── L3CCStatus ─────────────────────────────────────────────────────────
+
+L3CCStatus::Builder L3CCStatus::builder(unsigned ti) {
+    return Builder{ti};
+}
+
+L3CCStatus L3CCStatus::Builder::build() const {
+    L3CCStatus msg;
+    msg.mTI = m_ti;
+    if (m_haveCause) {
+        msg.mCause = m_cause;
+    }
+    msg.mCallState = m_callState;
+    return msg;
+}
 
 Expected<L3CCStatus> L3CCStatus::parse(BitReader& br) {
     L3CCStatus msg;

@@ -39,7 +39,7 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 // Reference: SS_Templates.ttcn ts_SS_FACILITY_INVOKE, ts_SS_USSD_FACILITY_INVOKE
 
 TEST(SSRoundTripTest, Facility_Empty) {
-    ParsedMessage msg(SSM(L3SupServFacilityMessage()));
+    ParsedMessage msg{SSM{L3SupServFacilityMessage{}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messagePD(*parsed), L3PD::NonCallSS);
@@ -73,7 +73,7 @@ TEST(SSRoundTripTest, Facility_Parse) {
 
 TEST(SSRoundTripTest, Register_Empty) {
     // Construct default Register (TI=7), serialize -> parse -> verify MTI survives round-trip
-    ParsedMessage msg(SSM(L3SupServRegisterMessage()));
+    ParsedMessage msg{SSM{L3SupServRegisterMessage{}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3SupServRegisterMessage::MTI);
@@ -90,7 +90,7 @@ TEST(SSRoundTripTest, Register_WithData) {
 // ── Release Complete (GSM 04.80 2.5) ─────────────────────────────────
 
 TEST(SSRoundTripTest, ReleaseComplete_Empty) {
-    ParsedMessage msg(SSM(L3SupServReleaseCompleteMessage()));
+    ParsedMessage msg{SSM{L3SupServReleaseCompleteMessage{}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3SupServReleaseCompleteMessage::MTI);
@@ -98,7 +98,7 @@ TEST(SSRoundTripTest, ReleaseComplete_Empty) {
 
 TEST(SSRoundTripTest, ReleaseComplete_WithCause) {
     L3SupServReleaseCompleteMessage orig(7, CCCause::Normal_Call_Clearing);
-    ParsedMessage msg(SSM(orig));
+    ParsedMessage msg{SSM{orig}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     auto* rc = tryGet<L3SupServReleaseCompleteMessage>(*parsed);

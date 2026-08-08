@@ -380,7 +380,7 @@ TEST(GoldenMM, CMServiceAbort_RoundTrip) {
 }
 
 TEST(GoldenMM, CMServiceReject_RoundTrip) {
-    ParsedMessage msg(MMM(L3CMServiceReject(MMRejectCause::Congestion)));
+    ParsedMessage msg{MMM{L3CMServiceReject{MMRejectCause::Congestion}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3CMServiceReject::MTI);
@@ -404,7 +404,7 @@ TEST(GoldenMM, LocationUpdatingAccept_WithMI_RoundTrip) {
 }
 
 TEST(GoldenMM, LocationUpdatingReject_RoundTrip) {
-    ParsedMessage msg(MMM(L3LocationUpdatingReject(MMRejectCause::IMSI_Unknown_In_HLR)));
+    ParsedMessage msg{MMM{L3LocationUpdatingReject{MMRejectCause::IMSI_Unknown_In_HLR}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3LocationUpdatingReject::MTI);
@@ -439,14 +439,14 @@ TEST(GoldenMM, AuthenticationReject_RoundTrip) {
 }
 
 TEST(GoldenMM, IdentityRequest_IMSI_RoundTrip) {
-    ParsedMessage msg(MMM(L3IdentityRequest(MobileIDType::IMSI)));
+    ParsedMessage msg{MMM{L3IdentityRequest{MobileIDType::IMSI}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3IdentityRequest::MTI);
 }
 
 TEST(GoldenMM, IdentityRequest_IMEI_RoundTrip) {
-    ParsedMessage msg(MMM(L3IdentityRequest(MobileIDType::IMEI)));
+    ParsedMessage msg{MMM{L3IdentityRequest{MobileIDType::IMEI}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3IdentityRequest::MTI);
@@ -620,7 +620,7 @@ TEST(GoldenMM, RAND_RoundTrip) {
         BitReader reader(buf.data(), writer.position());
         auto parsed = L3RAND::parse(reader);
         ASSERT_TRUE(parsed);
-        EXPECT_EQ((*parsed).rand(), randBytes);
+        EXPECT_EQ(*parsed, orig);
     }
 }
 

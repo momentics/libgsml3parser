@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <cstring>
 #include <ostream>
+#include <vector>
 
 #include "../expected.h"
 #include "../bitreader.h"
@@ -164,6 +165,7 @@ private:
 public:
     L3RAND() = default;
     explicit L3RAND(const std::array<uint8_t, 16>& rand) : mRAND(rand) {}
+    explicit L3RAND(const std::vector<uint8_t>& rand);
 
     const std::array<uint8_t, 16>& rand() const { return mRAND; }
     static constexpr size_t lengthV() { return 16; }

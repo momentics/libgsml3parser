@@ -63,6 +63,9 @@ public:
     const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3PagingRequestType1> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -92,6 +95,9 @@ public:
     const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3PagingRequestType2> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -121,6 +127,9 @@ public:
     const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3PagingRequestType3> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -140,6 +149,9 @@ public:
     const L3MobileStationClassmark2& classmark() const { return mClassmark; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3PagingResponse> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -162,6 +174,9 @@ public:
     bool gprsResumption() const { return mGprsResumptionBit; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3ChannelRelease> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -177,6 +192,9 @@ public:
     RRCause cause() const { return mCause; }
 
     size_t bodyLength() const { return 1; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3RRStatus> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -219,6 +237,9 @@ public:
     static Builder builder();
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3AssignmentCommand> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -234,6 +255,9 @@ public:
     RRCause cause() const { return mCause; }
 
     size_t bodyLength() const { return 1; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3AssignmentComplete> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -249,6 +273,9 @@ public:
     RRCause cause() const { return mCause; }
 
     size_t bodyLength() const { return 1; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3AssignmentFailure> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -261,6 +288,9 @@ public:
     static constexpr int MTI = 0x13;
 
     size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3ClassmarkEnquiry> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
@@ -280,6 +310,9 @@ public:
     const L3MobileStationClassmark3& additionalClassmark() const { return mAdditionalClassmark; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3ClassmarkChange> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -295,6 +328,9 @@ public:
     const L3MeasurementResults& measurementResults() const { return mMeasurementResults; }
 
     size_t bodyLength() const { return 16; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 16; }
     [[nodiscard]] static Expected<L3MeasurementReport> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -319,6 +355,9 @@ public:
     const L3CipheringModeResponse& cipheringModeResponse() const { return mCipheringModeResponse; }
 
     size_t bodyLength() const { return 1; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3CipheringModeCommand> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -331,6 +370,9 @@ public:
     static constexpr int MTI = 0x32;
 
     size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3CipheringModeComplete> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
@@ -346,6 +388,9 @@ public:
     RRCause cause() const { return mCause; }
 
     size_t bodyLength() const { return 1; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3HandoverComplete> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -361,6 +406,9 @@ public:
     RRCause cause() const { return mCause; }
 
     size_t bodyLength() const { return 1; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3HandoverFailure> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -384,6 +432,9 @@ public:
     const L3ChannelMode& mode() const { return mMode; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3ChannelModeModify> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -401,6 +452,9 @@ public:
     const L3ChannelMode& mode() const { return mMode; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3ChannelModeModifyAcknowledge> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -420,6 +474,9 @@ public:
     L3GPRSSuspensionRequest() : mRaId(6, 0) {}
 
     size_t bodyLength() const { return 11; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 11; }
     [[nodiscard]] static Expected<L3GPRSSuspensionRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -449,6 +506,9 @@ public:
     const std::vector<uint8_t>& data() const { return mData; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3ApplicationInformation> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -472,6 +532,9 @@ public:
     uint8_t restOctet() const { return mRestOctet; }
 
     size_t bodyLength() const { return 19 + (mHaveRestOctets ? 1 : 0); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     size_t restOctetsLength() const { return mHaveRestOctets ? 1 : 0; }
     [[nodiscard]] static Expected<L3SystemInformationType1> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -494,6 +557,10 @@ public:
     const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
 
     size_t bodyLength() const { return 20; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 20; }
+    [[nodiscard]] size_t fullBodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3SystemInformationType2> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -513,6 +580,10 @@ public:
     const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
 
     size_t bodyLength() const { return 19; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 19; }
+    [[nodiscard]] size_t fullBodyLength() const { return 20; }
     size_t restOctetsLength() const { return 1; }
     [[nodiscard]] static Expected<L3SystemInformationType2bis> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -531,6 +602,10 @@ public:
     const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
 
     size_t bodyLength() const { return 16; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 16; }
+    [[nodiscard]] size_t fullBodyLength() const { return 20; }
     size_t restOctetsLength() const { return 4; }
     [[nodiscard]] static Expected<L3SystemInformationType2ter> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -561,6 +636,9 @@ public:
     L3SystemInformationType3() = default;
 
     size_t bodyLength() const { return 16; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 16; }
     size_t restOctetsLength() const { return mRestOctets.lengthV(); }
     [[nodiscard]] static Expected<L3SystemInformationType3> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -589,6 +667,9 @@ public:
     const L3SIType4RestOctets& restOctets() const { return mRestOctets; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     size_t restOctetsLength() const;
     [[nodiscard]] static Expected<L3SystemInformationType4> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -607,6 +688,9 @@ public:
     const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
 
     size_t bodyLength() const { return 16; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 16; }
     [[nodiscard]] static Expected<L3SystemInformationType5> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -624,6 +708,9 @@ public:
     const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
 
     size_t bodyLength() const { return 16; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 16; }
     [[nodiscard]] static Expected<L3SystemInformationType5bis> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -641,6 +728,9 @@ public:
     const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
 
     size_t bodyLength() const { return 16; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 16; }
     [[nodiscard]] static Expected<L3SystemInformationType5ter> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -664,6 +754,9 @@ public:
     const L3NCCPermitted& nccPermitted() const { return mNCCPermitted; }
 
     size_t bodyLength() const { return 9; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 9; }
     [[nodiscard]] static Expected<L3SystemInformationType6> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -683,6 +776,9 @@ public:
     const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3SystemInformationType7> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -704,6 +800,9 @@ public:
     const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3SystemInformationType8> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -725,6 +824,9 @@ public:
     const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
 
     size_t bodyLength() const { return 5; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 5; }
     [[nodiscard]] static Expected<L3SystemInformationType9> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -740,6 +842,9 @@ public:
     const L3SI13RestOctets& restOctets() const { return mRestOctets; }
 
     size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
     size_t restOctetsLength() const { return mRestOctets.lengthV(); }
     [[nodiscard]] static Expected<L3SystemInformationType13> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -762,6 +867,9 @@ public:
     const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
 
     size_t bodyLength() const { return 5; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 5; }
     [[nodiscard]] static Expected<L3SystemInformationType16> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -781,6 +889,9 @@ public:
     const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3SystemInformationType17> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -809,6 +920,9 @@ public:
     uint32_t startTimeFrame() const { return mStartTimeFrame; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3ImmediateAssignment> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -837,6 +951,9 @@ public:
     const L3AdditionalChannelDescription& additionalChannel() const { return mAdditionalChannel; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3ImmediateAssignmentExtended> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -862,6 +979,9 @@ public:
     const std::vector<L3RequestReference>& requestReferences() const { return mRequestReferences; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3ImmediateAssignmentReject> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -883,6 +1003,9 @@ public:
     const L3PowerCommand& powerCommand() const { return mPowerCommand; }
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3AdditionalAssignment> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -900,6 +1023,9 @@ public:
     const L3TimingAdvance& timingAdvance() const { return mTA; }
 
     size_t bodyLength() const { return mTA.lengthV(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3PhysicalInformation> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -942,6 +1068,9 @@ public:
     static Builder builder();
 
     size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3HandoverCommand> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -962,6 +1091,9 @@ public:
     const L3LocationAreaIdentity& locationAreaIdentity() const { return mLocationAreaIdentity; }
 
     size_t bodyLength() const { return 7; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 7; }
     [[nodiscard]] static Expected<L3SynchronizationChannelInformation> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -981,6 +1113,9 @@ public:
     unsigned requestReference() const { return mRequestReference; }
 
     size_t bodyLength() const { return 1; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3ChannelRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -1000,6 +1135,9 @@ public:
     unsigned handoverNumber() const { return mHandoverNumber; }
 
     size_t bodyLength() const { return 4; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 4; }
     [[nodiscard]] static Expected<L3HandoverAccess> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;

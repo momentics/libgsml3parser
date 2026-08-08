@@ -56,22 +56,42 @@ public:
     [[nodiscard]] static Expected<L3IMSIDetachIndication> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Location Updating Accept (GSM 04.08 9.2.13) ───────────────────────
 
 class L3LocationUpdatingAccept {
+public:
+    struct Builder {
+        L3LocationAreaIdentity m_lai;
+        bool m_followOn{false};
+        bool m_haveMI{false};
+        L3MobileIdentity m_mi;
+        Builder& lai(const L3LocationAreaIdentity& v) { m_lai = v; return *this; }
+        Builder& followOn(bool v) { m_followOn = v; return *this; }
+        Builder& mobileIdentity(const L3MobileIdentity& v) { m_mi = v; m_haveMI = true; return *this; }
+        [[nodiscard]] L3LocationUpdatingAccept build() const;
+    };
+    static Builder builder();
 private:
+    friend struct Builder;
     L3LocationAreaIdentity mLAI;
     bool mFollowOnProceed{false};
     bool mHaveMobileIdentity{false};
     L3MobileIdentity mMobileIdentity;
 public:
+    L3LocationUpdatingAccept() = default;
     static constexpr int MTI = 0x02;
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3LocationUpdatingAccept> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Location Updating Reject (GSM 04.08 9.2.14) ───────────────────────
@@ -86,6 +106,9 @@ public:
     [[nodiscard]] static Expected<L3LocationUpdatingReject> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Location Updating Request (GSM 04.08 9.2.15) ──────────────────────
@@ -107,6 +130,9 @@ public:
     [[nodiscard]] static Expected<L3LocationUpdatingRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Authentication Reject (GSM 04.08 9.2.1) ───────────────────────────
@@ -118,6 +144,9 @@ public:
     [[nodiscard]] static Expected<L3AuthenticationReject> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Authentication Request (GSM 04.08 9.2.2) ──────────────────────────
@@ -134,6 +163,9 @@ public:
     [[nodiscard]] static Expected<L3AuthenticationRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Authentication Response (GSM 04.08 9.2.3) ─────────────────────────
@@ -150,6 +182,9 @@ public:
     [[nodiscard]] static Expected<L3AuthenticationResponse> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── CM Service Accept (GSM 04.08 9.2.5) ───────────────────────────────
@@ -161,6 +196,9 @@ public:
     [[nodiscard]] static Expected<L3CMServiceAccept> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── CM Service Reject (GSM 04.08 9.2.6) ───────────────────────────────
@@ -175,6 +213,9 @@ public:
     [[nodiscard]] static Expected<L3CMServiceReject> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── CM Service Abort (GSM 04.08 9.2.7) ────────────────────────────────
@@ -186,6 +227,9 @@ public:
     [[nodiscard]] static Expected<L3CMServiceAbort> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── CM Service Request (GSM 04.08 9.2.9) ──────────────────────────────
@@ -203,6 +247,9 @@ public:
     [[nodiscard]] static Expected<L3CMServiceRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── MM Status (GSM 04.08 9.2.15) ──────────────────────────────────────
@@ -217,6 +264,9 @@ public:
     [[nodiscard]] static Expected<L3MMStatus> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── MM Information (GSM 04.08 9.2.15a) ────────────────────────────────
@@ -233,6 +283,9 @@ public:
     [[nodiscard]] static Expected<L3MMInformation> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Identity Request (GSM 04.08 9.2.10) ───────────────────────────────
@@ -247,6 +300,9 @@ public:
     [[nodiscard]] static Expected<L3IdentityRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── Identity Response (GSM 04.08 9.2.11) ──────────────────────────────
@@ -261,16 +317,32 @@ public:
     [[nodiscard]] static Expected<L3IdentityResponse> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── TMSI Reallocation Command (GSM 04.08 9.2.17) ──────────────────────
 
 class L3TMSIReallocationCommand {
+public:
+    struct Builder {
+        L3LocationAreaIdentity m_lai;
+        L3MobileIdentity m_tmsi;
+        bool m_followOn{false};
+        Builder& lai(const L3LocationAreaIdentity& v) { m_lai = v; return *this; }
+        Builder& tmsi(const L3MobileIdentity& v) { m_tmsi = v; return *this; }
+        Builder& followOn(bool v) { m_followOn = v; return *this; }
+        [[nodiscard]] L3TMSIReallocationCommand build() const;
+    };
+    static Builder builder();
 private:
+    friend struct Builder;
     L3LocationAreaIdentity mLAI;
     L3MobileIdentity mTMSI;
     bool mFollowOnProceed{false};
 public:
+    L3TMSIReallocationCommand() = default;
     static constexpr int MTI = 0x1a;
     const L3LocationAreaIdentity& lai() const { return mLAI; }
     const L3MobileIdentity& tmsi() const { return mTMSI; }
@@ -279,6 +351,9 @@ public:
     [[nodiscard]] static Expected<L3TMSIReallocationCommand> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── TMSI Reallocation Complete (GSM 04.08 9.2.18) ─────────────────────
@@ -290,6 +365,9 @@ public:
     [[nodiscard]] static Expected<L3TMSIReallocationComplete> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 // ── CM Reestablishment Request (GSM 04.08 9.2.4) ──────────────────────
@@ -309,6 +387,9 @@ public:
     [[nodiscard]] static Expected<L3CMReestablishmentRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
 } // namespace gsml3parser

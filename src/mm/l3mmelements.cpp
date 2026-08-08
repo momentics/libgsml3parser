@@ -382,6 +382,12 @@ void L3TimeZoneAndTime::text(std::ostream& os) const {
 
 // ── L3RAND (GSM 04.08 10.5.3.1) ────────────────────────────────────────
 
+L3RAND::L3RAND(const std::vector<uint8_t>& rand) {
+    for (size_t i = 0; i < 16 && i < rand.size(); ++i) {
+        mRAND[i] = rand[i];
+    }
+}
+
 Expected<L3RAND> L3RAND::parse(BitReader& br) {
     L3RAND result;
     for (size_t i = 0; i < 16; ++i) {

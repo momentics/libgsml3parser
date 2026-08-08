@@ -74,7 +74,7 @@ public:
     explicit L3MobileIdentity(std::string_view wDigits);
 
     MobileIDType type() const { return mType; }
-    std::string_view digits() const;
+    const char* digits() const;
     uint32_t tmsi() const { return mTMSI; }
     bool isIMSI() const { return mType == MobileIDType::IMSI; }
     bool isTMSI() const { return mType == MobileIDType::TMSI; }

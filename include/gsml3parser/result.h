@@ -31,6 +31,8 @@
 
 namespace gsml3parser {
 
+#ifndef GSML3PARSER_PARSE_ERROR_DEFINED
+#define GSML3PARSER_PARSE_ERROR_DEFINED
 enum class ParseErrorCode : uint8_t {
     Ok,
     TruncatedInput,
@@ -50,7 +52,11 @@ struct ParseError {
 
     constexpr bool failed() const { return code != ParseErrorCode::Ok; }
 };
-#define GSML3PARSER_PARSE_ERROR_DEFINED
+#endif
+
+#if defined(GSML3PARSER_PARSE_ERROR_DEFINED)
+using ParseErrorCode = ParseError::Code;
+#endif
 
 // ── ParseResult<T> (general) ────────────────────────────────────────────
 

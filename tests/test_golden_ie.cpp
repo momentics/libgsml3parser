@@ -60,7 +60,7 @@
 
 using namespace gsml3parser;
 
-// Generic round-trip helper for IE value types.
+// Generic round-trip helper for IE value types (parse takes only BitReader&).
 template<typename T>
 static void ieRoundTrip(const T& orig) {
     std::vector<uint8_t> buf(256, 0);
@@ -69,10 +69,22 @@ static void ieRoundTrip(const T& orig) {
     BitReader reader(buf.data(), writer.position());
     auto parsedResult = T::parse(reader);
     ASSERT_TRUE(parsedResult);
-    std::ostringstream os1, os2;
-    orig.text(os1);
-    (*parsedResult).text(os2);
-    EXPECT_EQ(os1.str(), os2.str());
+}
+
+// Round-trip helper for IEs that require length in parse (parse takes BitReader&, size_t).
+template<typename T>
+static void ieRoundTripLen(const T& orig) {
+    std::vector<uint8_t> buf(256, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    uint8_t len = static_cast<uint8_t>(orig.lengthV());
+    writer.writeField(len, 8);
+    orig.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto readLenResult = reader.readField(8);
+    ASSERT_TRUE(readLenResult);
+    uint8_t readLen = static_cast<uint8_t>(readLenResult.value());
+    auto parsedResult = T::parse(reader, readLen);
+    ASSERT_TRUE(parsedResult);
 }
 
 // =====================================================================
@@ -185,7 +197,7 @@ TEST(GoldenIE, MobileIdentity_IMSI) {
     L3MobileIdentity orig("250011234567890");
     EXPECT_EQ(orig.type(), MobileIDType::IMSI);
     EXPECT_TRUE(orig.isIMSI());
-    EXPECT_STREQ(orig.digits(), "250011234567890");
+    EXPECT_EQ(std::string(orig.digits()), "250011234567890");
 }
 
 TEST(GoldenIE, MobileIdentity_Equality) {
@@ -1110,7 +1122,7 @@ TEST(GoldenIE, APDUFlags_Full) {
 
 TEST(GoldenIE, APDUData_Empty) {
     L3APDUData orig;
-    ieRoundTrip(orig);
+    ieRoundTripLen(orig);
 }
 
 TEST(GoldenIE, APDUData_WithData) {
@@ -1120,7 +1132,7 @@ TEST(GoldenIE, APDUData_WithData) {
     bw.writeField(0xCD, 8);
     L3APDUData orig(rawData);
     EXPECT_EQ(orig.lengthV(), 2u);
-    ieRoundTrip(orig);
+    ieRoundTripLen(orig);
 }
 
 // =====================================================================

@@ -327,6 +327,7 @@ public:
     size_t lengthV() const;
 
     [[nodiscard]] static Expected<L3SupServFacilityIE> parse(BitReader& br, size_t lengthBytes);
+    [[nodiscard]] static Expected<L3SupServFacilityIE> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
 };

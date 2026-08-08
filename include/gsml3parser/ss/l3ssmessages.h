@@ -53,6 +53,7 @@ public:
     void ti(unsigned wTI) { mTI = wTI; }
     static constexpr L3PD pd() { return L3PD::NonCallSS; }
     int mti() const { return MTI; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 
     const std::string& getMapComponents() const { return mFacility.mData; }
 
@@ -81,6 +82,7 @@ public:
     void ti(unsigned wTI) { mTI = wTI; }
     static constexpr L3PD pd() { return L3PD::NonCallSS; }
     int mti() const { return MTI; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 
     bool haveVersionIndicator() const { return mHaveVersion; }
     uint8_t versionIndicator() const { return mVersionIndicator; }
@@ -112,6 +114,7 @@ public:
     void ti(unsigned wTI) { mTI = wTI; }
     static constexpr L3PD pd() { return L3PD::NonCallSS; }
     int mti() const { return MTI; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 
     bool haveFacility() const { return mFacility.mExtant; }
     CCCause cause() const { return mCause.cause(); }
