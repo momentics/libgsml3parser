@@ -25,37 +25,32 @@
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
 #include <gsml3parser/ss/l3ssmessages.h>
+#include <gsml3parser/visitor.h>
 
 using namespace gsml3parser;
 
-static ParserContext ctx;
-
-static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
-    std::vector<uint8_t> buf(msg.fullLength());
-    auto wr = writeL3(msg, buf.data(), buf.size());
-    if (!wr.has_value()) return nullptr;
-    if (wr.value() == 0) return nullptr;
-    auto result = parseL3(std::span<const uint8_t>(buf), ctx);
-    if (!result.has_value()) return nullptr;
-    return std::move(result).value();
+static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
+    auto hex = writeL3Hex(msg);
+    if (!hex) return Expected<ParsedMessage>::error(hex.error());
+    return parseL3Hex(hex.value());
 }
 
 // ── Facility Message (GSM 04.80 2.3) ─────────────────────────────────
 // Reference: SS_Templates.ttcn ts_SS_FACILITY_INVOKE, ts_SS_USSD_FACILITY_INVOKE
 
 TEST(SSRoundTripTest, Facility_Empty) {
-    L3SupServFacilityMessage msg;
+    ParsedMessage msg(SSM(L3SupServFacilityMessage()));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->pd(), L3PD::NonCallSS);
-    EXPECT_EQ(parsed->mti(), L3SupServMessage::Facility);
+    EXPECT_EQ(messagePD(*parsed), L3PD::NonCallSS);
+    EXPECT_EQ(messageMTI(*parsed), L3SupServFacilityMessage::MTI);
 }
 
 TEST(SSRoundTripTest, Facility_WithData) {
-    L3SupServFacilityMessage msg(7, std::string("\x81\x01\x13", 3));
+    ParsedMessage msg(SSM(L3SupServFacilityMessage(7, std::string("\x81\x01\x13", 3))));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->mti(), L3SupServMessage::Facility);
+    EXPECT_EQ(messageMTI(*parsed), L3SupServFacilityMessage::MTI);
 }
 
 // GSM 04.08 10.2: PD=0x0B(NonCallSS), TIO=7, TIF=0, messageType=111010(Facility=0x3A), NSD=00
@@ -64,10 +59,10 @@ TEST(SSRoundTripTest, Facility_WithData) {
 // Byte 1: messageType(6)<<2 | NSD(2) = 0x3A<<2 | 0 = 0xE8
 TEST(SSRoundTripTest, Facility_Parse) {
     uint8_t data[] = {0xBE, 0xE8};
-    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg.has_value());
-    EXPECT_EQ(msg->pd(), L3PD::NonCallSS);
-    EXPECT_EQ(msg->mti(), L3SupServMessage::Facility);
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messagePD(*msg), L3PD::NonCallSS);
+    EXPECT_EQ(messageMTI(*msg), L3SupServFacilityMessage::MTI);
 }
 
 // ── Register Message (GSM 04.80 2.4 / 3GPP TS 24.080) ────────────────
@@ -78,55 +73,51 @@ TEST(SSRoundTripTest, Facility_Parse) {
 
 TEST(SSRoundTripTest, Register_Empty) {
     // Construct default Register (TI=7), serialize -> parse -> verify MTI survives round-trip
-    L3SupServRegisterMessage msg;
+    ParsedMessage msg(SSM(L3SupServRegisterMessage()));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->mti(), L3SupServMessage::Register);
+    EXPECT_EQ(messageMTI(*parsed), L3SupServRegisterMessage::MTI);
 }
 
 TEST(SSRoundTripTest, Register_WithData) {
     // Register with TI=5 and 3-byte Facility data (TCAP INVOKE: opcode 0x81, length 1, value 0x0A)
-    L3SupServRegisterMessage msg(5, std::string("\x81\x01\x0A", 3));
+    ParsedMessage msg(SSM(L3SupServRegisterMessage(5, std::string("\x81\x01\x0A", 3))));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->mti(), L3SupServMessage::Register);
+    EXPECT_EQ(messageMTI(*parsed), L3SupServRegisterMessage::MTI);
 }
 
 // ── Release Complete (GSM 04.80 2.5) ─────────────────────────────────
 
 TEST(SSRoundTripTest, ReleaseComplete_Empty) {
-    L3SupServReleaseCompleteMessage msg;
+    ParsedMessage msg(SSM(L3SupServReleaseCompleteMessage()));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->mti(), L3SupServMessage::ReleaseComplete);
+    EXPECT_EQ(messageMTI(*parsed), L3SupServReleaseCompleteMessage::MTI);
 }
 
 TEST(SSRoundTripTest, ReleaseComplete_WithCause) {
-    L3SupServReleaseCompleteMessage msg(7, CCCause::Normal_Call_Clearing);
+    L3SupServReleaseCompleteMessage orig(7, CCCause::Normal_Call_Clearing);
+    ParsedMessage msg(SSM(orig));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    auto* rc = dynamic_cast<L3SupServReleaseCompleteMessage*>(parsed.get());
+    auto* rc = tryGet<L3SupServReleaseCompleteMessage>(*parsed);
     ASSERT_TRUE(rc);
     // Verify round-trip preserves cause by comparing serialized bytes
-    std::vector<uint8_t> buf1(msg.fullLength());
-    std::vector<uint8_t> buf2(rc->fullLength());
-    auto r1 = writeL3(msg, buf1.data(), buf1.size());
-    auto r2 = writeL3(*rc, buf2.data(), buf2.size());
-    ASSERT_TRUE(r1.has_value() && r2.has_value());
-    EXPECT_EQ(r1.value(), r2.value());
-    for (size_t i = 0; i < r1.value(); i++) {
-        EXPECT_EQ(buf1[i], buf2[i]);
-    }
+    auto hex1 = writeL3Hex(msg);
+    auto hex2 = writeL3Hex(*parsed);
+    ASSERT_TRUE(hex1 && hex2);
+    EXPECT_EQ(hex1.value(), hex2.value());
 }
 
 // ── SS Message TI handling ───────────────────────────────────────────
 
 TEST(SSRoundTripTest, TI_DifferentValues) {
     for (unsigned ti = 0; ti < 8; ti++) {
-        L3SupServFacilityMessage msg(ti, std::string());
+        ParsedMessage msg(SSM(L3SupServFacilityMessage(ti, std::string())));
         auto parsed = roundtrip(msg);
         ASSERT_TRUE(parsed);
-        auto* s = dynamic_cast<L3SupServFacilityMessage*>(parsed.get());
+        auto* s = tryGet<L3SupServFacilityMessage>(*parsed);
         ASSERT_TRUE(s);
         EXPECT_EQ(s->ti(), ti);
     }
@@ -139,7 +130,7 @@ TEST(SSRoundTripTest, SSOpcodes_Exist) {
     // These are TCAP opcodes defined in SS_Templates.ttcn
     // Our library doesn't parse TCAP internally, but the Facility IE carries raw data
     // Verify that the facility data can carry arbitrary TCAP content
-    L3SupServFacilityMessage msg(7, std::string("\x81\x03\x3B\x01\x00", 5));
+    ParsedMessage msg(SSM(L3SupServFacilityMessage(7, std::string("\x81\x03\x3B\x01\x00", 5))));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
 }

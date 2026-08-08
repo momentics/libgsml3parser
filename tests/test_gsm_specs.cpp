@@ -28,11 +28,11 @@
 #include <gsml3parser/common/l3common.h>
 #include <gsml3parser/gsm_common.h>
 #include <gsml3parser/rr/l3rrmessages.h>
-#include <gsml3parser/cc/l3cclements.h>
+#include <gsml3parser/cc/l3ccelements.h>
+#include <gsml3parser/bitreader.h>
+#include <gsml3parser/bitwriter.h>
 
 using namespace gsml3parser;
-
-static ParserContext ctx;
 
 // ── MCC/MNC Encoding (GSM 24.008 10.5.13) ──────────────────────────────
 // Reference: GSM_Types.ttcn f_build_BcdMccMnc, TC_selftest_BcdMccMnc
@@ -55,14 +55,14 @@ TEST(GSMSpecTest, MCCMNC_Encoding_2DigitMNC) {
     EXPECT_EQ(lai.lac(), 1);
 
     // Verify serialization produces correct byte order
-    L3Frame frame(Primitive::L3_DATA, 40);
-    size_t wp = 0;
-    lai.writeV(frame, wp);
+    std::vector<uint8_t> buf(10, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    lai.write(writer);
 
     // First 3 bytes should be MCC/MNC
-    EXPECT_EQ(frame.data()[0], 0x52);  // MCC digits 2,1
-    EXPECT_EQ(frame.data()[1], 0xF0);  // F filler + MCC digit 3
-    EXPECT_EQ(frame.data()[2], 0x10);  // MNC digits 2,1 (HEXORDER low nibble swap)
+    EXPECT_EQ(buf[0], 0x52);
+    EXPECT_EQ(buf[1], 0xF0);
+    EXPECT_EQ(buf[2], 0x10);
 }
 
 TEST(GSMSpecTest, MCCMNC_Encoding_3DigitMNC) {
@@ -75,13 +75,13 @@ TEST(GSMSpecTest, MCCMNC_Encoding_3DigitMNC) {
     EXPECT_EQ(lai.mnc(), 12);
     EXPECT_EQ(lai.lac(), 1);
 
-    L3Frame frame(Primitive::L3_DATA, 40);
-    size_t wp = 0;
-    lai.writeV(frame, wp);
+    std::vector<uint8_t> buf(10, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    lai.write(writer);
 
-    EXPECT_EQ(frame.data()[0], 0x52);
-    EXPECT_EQ(frame.data()[1], 0x20);
-    EXPECT_EQ(frame.data()[2], 0x10);
+    EXPECT_EQ(buf[0], 0x52);
+    EXPECT_EQ(buf[1], 0x20);
+    EXPECT_EQ(buf[2], 0x10);
 }
 
 TEST(GSMSpecTest, MCCMNC_Ref_262_42) {
@@ -96,16 +96,16 @@ TEST(GSMSpecTest, MCCMNC_Ref_262_42) {
     EXPECT_EQ(lai.mcc(), 262);
     EXPECT_EQ(lai.mnc(), 42);
 
-    L3Frame frame(Primitive::L3_DATA, 40);
-    size_t wp = 0;
-    lai.writeV(frame, wp);
+    std::vector<uint8_t> buf(10, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    lai.write(writer);
 
-    EXPECT_EQ(frame.data()[0], 0x62);
-    EXPECT_EQ(frame.data()[1], 0xF2);
+    EXPECT_EQ(buf[0], 0x62);
+    EXPECT_EQ(buf[1], 0xF2);
     // GSM 24.008 Fig 10.5.13: raw BCD = MNC_digit2('4')<<4 | MNC_digit1('2') = 0x42
     // Wire format applies HEXORDER(low) nibble-swap: 0x42 → 0x24
     // Reference GSM_Types.ttcn TC_selftest_BcdMccMnc: '262F42'H → '62F224'O
-    EXPECT_EQ(frame.data()[2], 0x24);
+    EXPECT_EQ(buf[2], 0x24);
 }
 
 TEST(GSMSpecTest, MCCMNC_RoundTrip) {
@@ -116,24 +116,24 @@ TEST(GSMSpecTest, MCCMNC_RoundTrip) {
     //   Byte 2: MNC digit 2('1') | MNC digit 1('0') = 0x10 (HEXORDER(low) swap)
     L3LocationAreaIdentity orig("250", "01", 0x1234);
 
-    L3Frame frame(Primitive::L3_DATA, 40);
-    size_t wp = 0;
-    orig.writeV(frame, wp);
+    std::vector<uint8_t> buf(10, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
 
     // Wire format (HEXORDER low nibble swap): MNC digit 2 in high, digit 1 in low
     // MNC="01": digit 2=1, digit 1=0 → byte = 0x10
-    EXPECT_EQ(frame.data()[0], 0x52);
-    EXPECT_EQ(frame.data()[1], 0xF0);
-    EXPECT_EQ(frame.data()[2], 0x10);
+    EXPECT_EQ(buf[0], 0x52);
+    EXPECT_EQ(buf[1], 0xF0);
+    EXPECT_EQ(buf[2], 0x10);
 
     // Round-trip: parse back and verify
-    L3LocationAreaIdentity parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3LocationAreaIdentity::parse(reader);
+    ASSERT_TRUE(parsedResult);
 
-    EXPECT_EQ(parsed.mcc(), orig.mcc());
-    EXPECT_EQ(parsed.mnc(), orig.mnc());
-    EXPECT_EQ(parsed.lac(), orig.lac());
+    EXPECT_EQ((*parsedResult).mcc(), orig.mcc());
+    EXPECT_EQ((*parsedResult).mnc(), orig.mnc());
+    EXPECT_EQ((*parsedResult).lac(), orig.lac());
 }
 
 // ── BCD Number Encoding (GSM 24.008 10.5.4.7) ─────────────────────────
@@ -145,28 +145,28 @@ TEST(GSMSpecTest, BCD_EvenDigits) {
     // "1234567890" → bytes: 12, 34, 56, 78, 90
     L3CalledPartyBCDNumber num("1234567890");
     EXPECT_STREQ(num.digits(), "1234567890");
-    EXPECT_EQ(num.lengthV(), 6u); // 1 byte octet3 + 5 bytes digits
+    EXPECT_EQ(num.lengthV(), 6u);
 }
 
 TEST(GSMSpecTest, BCD_OddDigits) {
     // "123456789" → bytes: 12, 34, 56, 78, 9F (F padding nibble)
     L3CalledPartyBCDNumber num("123456789");
     EXPECT_STREQ(num.digits(), "123456789");
-    EXPECT_EQ(num.lengthV(), 6u); // 1 byte octet3 + 5 bytes digits (padded)
+    EXPECT_EQ(num.lengthV(), 6u);
 }
 
 TEST(GSMSpecTest, BCD_RoundTrip) {
     L3CalledPartyBCDNumber orig("1234567890");
 
-    L3Frame frame(Primitive::L3_DATA, 64);
-    size_t wp = 0;
-    orig.writeV(frame, wp);
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
 
-    L3CalledPartyBCDNumber parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp, orig.lengthV()); ASSERT_TRUE(_res.has_value()); }
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3CalledPartyBCDNumber::parse(reader, orig.lengthV());
+    ASSERT_TRUE(parsedResult);
 
-    EXPECT_STREQ(parsed.digits(), "1234567890");
+    EXPECT_STREQ((*parsedResult).digits(), "1234567890");
 }
 
 // ── Rest Octet Padding (GSM 04.08) ────────────────────────────────────
@@ -180,10 +180,10 @@ TEST(GSMSpecTest, RestOctetPaddingPattern) {
     EXPECT_EQ(GSM_REST_OCTET_PAD, 0x2B);
 
     // Verify bit pattern: 0b00101011
-    BitVector bv(8);
-    size_t wp = 0;
-    bv.writeField(wp, GSM_REST_OCTET_PAD, 8);
-    EXPECT_EQ(bv.data()[0], 0x2B);
+    std::vector<uint8_t> buf(1, 0);
+    BitWriter writer(buf.data(), 8);
+    writer.writeField(GSM_REST_OCTET_PAD, 8);
+    EXPECT_EQ(buf[0], 0x2B);
 }
 
 TEST(GSMSpecTest, SI2_RestOctets) {
@@ -192,7 +192,7 @@ TEST(GSMSpecTest, SI2_RestOctets) {
     // SI2 has NO rest_octets field — body is exactly 20 bytes.
     L3SystemInformationType2 msg;
     EXPECT_EQ(msg.l2BodyLength(), 20u);
-    EXPECT_EQ(msg.fullBodyLength(), 20u); // No rest octets, body = 20
+    EXPECT_EQ(msg.fullBodyLength(), 20u);
 }
 
 TEST(GSMSpecTest, SI2bis_RestOctets) {
@@ -203,8 +203,8 @@ TEST(GSMSpecTest, SI2bis_RestOctets) {
     // Library l2BodyLength returns 20 (includes phantom ncc_permitted),
     // but reference fixed body is 19 bytes.
     L3SystemInformationType2bis msg;
-    EXPECT_EQ(msg.l2BodyLength(), 19u);  // Reference: 16 + 3 = 19 (no ncc_permitted)
-    EXPECT_EQ(msg.fullBodyLength(), 20u); // 19 fixed + 1 max rest octet
+    EXPECT_EQ(msg.l2BodyLength(), 19u);
+    EXPECT_EQ(msg.fullBodyLength(), 20u);
 }
 
 TEST(GSMSpecTest, SI2ter_RestOctets) {
@@ -213,8 +213,8 @@ TEST(GSMSpecTest, SI2ter_RestOctets) {
     // SI2ter has NO RachControlParameters and NO NCCPermitted — only 16 bytes fixed.
     // fullBodyLength = 16 fixed + 4 max rest = 20 bytes.
     L3SystemInformationType2ter msg;
-    EXPECT_EQ(msg.l2BodyLength(), 16u);  // Reference: extd_bcch_freq_list(16) only
-    EXPECT_EQ(msg.fullBodyLength(), 20u); // 16 fixed + 4 max rest octets
+    EXPECT_EQ(msg.l2BodyLength(), 16u);
+    EXPECT_EQ(msg.fullBodyLength(), 20u);
 }
 
 // ── L/H Presence Bits (GSM 04.07 11.2.1.1.4) ──────────────────────────
@@ -222,18 +222,18 @@ TEST(GSMSpecTest, SI2ter_RestOctets) {
 // L = field not present, H = field present (and more follows)
 
 TEST(GSMSpecTest, L_H_Bits) {
-    L3Frame frame(Primitive::L3_DATA, 16);
-    size_t wp = 0;
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
 
     // Write L bit (0)
-    frame.writeL(wp);
+    writer.writeField(0, 1);
     // Write H bit (1)
-    frame.writeH(wp);
+    writer.writeField(1, 1);
 
     // Read back
-    size_t rp = 0;
-    EXPECT_EQ(frame.readField(rp, 1), 0u); // L
-    EXPECT_EQ(frame.readField(rp, 1), 1u); // H
+    BitReader reader(buf.data(), 2);
+    EXPECT_EQ(reader.readField(1).value(), 0u);
+    EXPECT_EQ(reader.readField(1).value(), 1u);
 }
 
 // ── RxLev / RxQual Conversion (GSM 05.02 / GSM 04.08) ─────────────────
@@ -282,11 +282,11 @@ TEST(GSMSpecTest, Hyperframe) {
 TEST(GSMSpecTest, TimeComponents) {
     // Reference: GSM_Types.ttcn f_gsm_compute_tc
     // T1 = SFN mod 2048, T2 = FN mod 26, T3 = FN mod 51
-    Time t(1326, 5); // FN = 1326 = 26*51*1, TN = 5
-    EXPECT_EQ(t.t1(), 1u);   // SFN = 1326 / (26*51) = 1, 1 mod 2048 = 1
-    EXPECT_EQ(t.t2(), 0u);   // 1326 mod 26 = 0
-    EXPECT_EQ(t.t3(), 0u);   // 1326 mod 51 = 0
-    EXPECT_EQ(t.t1p(), 1u);  // 1 mod 32 = 1
+    Time t(1326, 5);
+    EXPECT_EQ(t.t1(), 1u);
+    EXPECT_EQ(t.t2(), 0u);
+    EXPECT_EQ(t.t3(), 0u);
+    EXPECT_EQ(t.t1p(), 1u);
 }
 
 TEST(GSMSpecTest, FNDelta) {
@@ -331,40 +331,46 @@ TEST(GSMSpecTest, MobileIdentity_IMSI) {
 TEST(GSMSpecTest, MobileIdentity_RoundTrip) {
     L3MobileIdentity orig("250011234567890");
 
-    L3Frame frame(Primitive::L3_DATA, 64);
-    size_t wp = 0;
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
 
     // Write as LV: length byte + value
     uint8_t len = static_cast<uint8_t>(orig.lengthV());
-    frame.writeField(wp, len, 8);
-    orig.writeV(frame, wp);
+    writer.writeField(len, 8);
+    orig.write(writer);
 
-    L3MobileIdentity parsed;
-    size_t rp = 0;
-    uint8_t readLen = frame.readField(rp, 8);
-    { auto _res = parsed.try_parseV(frame, rp, readLen); ASSERT_TRUE(_res.has_value()); }
+    BitReader reader(buf.data(), writer.position());
+    auto readLenResult = reader.readField(8);
+    ASSERT_TRUE(readLenResult);
+    uint8_t readLen = static_cast<uint8_t>(readLenResult.value());
 
-    EXPECT_EQ(parsed.type(), orig.type());
-    EXPECT_STREQ(parsed.digits(), orig.digits());
+    auto parsedResult = L3MobileIdentity::parse(reader, readLen);
+    ASSERT_TRUE(parsedResult);
+
+    EXPECT_EQ((*parsedResult).type(), orig.type());
+    EXPECT_STREQ((*parsedResult).digits(), orig.digits());
 }
 
 TEST(GSMSpecTest, MobileIdentity_TMSI_RoundTrip) {
     L3MobileIdentity orig(0x12345678);
 
-    L3Frame frame(Primitive::L3_DATA, 64);
-    size_t wp = 0;
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
 
     uint8_t len = static_cast<uint8_t>(orig.lengthV());
-    frame.writeField(wp, len, 8);
-    orig.writeV(frame, wp);
+    writer.writeField(len, 8);
+    orig.write(writer);
 
-    L3MobileIdentity parsed;
-    size_t rp = 0;
-    uint8_t readLen = frame.readField(rp, 8);
-    { auto _res = parsed.try_parseV(frame, rp, readLen); ASSERT_TRUE(_res.has_value()); }
+    BitReader reader(buf.data(), writer.position());
+    auto readLenResult = reader.readField(8);
+    ASSERT_TRUE(readLenResult);
+    uint8_t readLen = static_cast<uint8_t>(readLenResult.value());
 
-    EXPECT_EQ(parsed.type(), MobileIDType::TMSI);
-    EXPECT_EQ(parsed.tmsi(), 0x12345678u);
+    auto parsedResult = L3MobileIdentity::parse(reader, readLen);
+    ASSERT_TRUE(parsedResult);
+
+    EXPECT_EQ((*parsedResult).type(), MobileIDType::TMSI);
+    EXPECT_EQ((*parsedResult).tmsi(), 0x12345678u);
 }
 
 // ── Channel Description (GSM 04.08 10.5.2.5) ──────────────────────────
@@ -382,18 +388,18 @@ TEST(GSMSpecTest, ChannelDescription_NoHopping) {
 TEST(GSMSpecTest, ChannelDescription_RoundTrip) {
     L3ChannelDescription orig(TDMA_TCHF, 5, 3, 200);
 
-    L3Frame frame(Primitive::L3_DATA, 32);
-    size_t wp = 0;
-    orig.writeV(frame, wp);
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
 
-    L3ChannelDescription parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3ChannelDescription::parse(reader);
+    ASSERT_TRUE(parsedResult);
 
-    EXPECT_EQ(parsed.typeAndOffset(), orig.typeAndOffset());
-    EXPECT_EQ(parsed.tn(), orig.tn());
-    EXPECT_EQ(parsed.tsc(), orig.tsc());
-    EXPECT_EQ(parsed.arfcn(), orig.arfcn());
+    EXPECT_EQ((*parsedResult).typeAndOffset(), orig.typeAndOffset());
+    EXPECT_EQ((*parsedResult).tn(), orig.tn());
+    EXPECT_EQ((*parsedResult).tsc(), orig.tsc());
+    EXPECT_EQ((*parsedResult).arfcn(), orig.arfcn());
 }
 
 // ── RACH Control Parameters (GSM 04.08 10.5.2.29) ─────────────────────
@@ -420,23 +426,20 @@ TEST(GSMSpecTest, RACHControlParameters_RefValues) {
     // Byte 0: 11100101 = 0xE5
     // Byte 1: 00000100 = 0x04
     // Byte 2: 00000000 = 0x00
-    uint8_t data[] = {0xE5, 0x04, 0x00};
+    std::vector<uint8_t> buf(4, 0);
+    buf[0] = 0xE5;
+    buf[1] = 0x04;
+    buf[2] = 0x00;
 
-    L3Frame frame(Primitive::L3_DATA, 24);
-    size_t wp = 0;
-    frame.writeField(wp, data[0], 8);
-    frame.writeField(wp, data[1], 8);
-    frame.writeField(wp, data[2], 8);
+    BitReader reader(buf.data(), 24);
+    auto parsedResult = L3RACHControlParameters::parse(reader);
+    ASSERT_TRUE(parsedResult);
 
-    L3RACHControlParameters parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
-
-    EXPECT_EQ(parsed.maxRetrans(), 3u);     // RACH_MAX_RETRANS_7
-    EXPECT_EQ(parsed.txInteger(), 9u);      // 12 spread slots
-    EXPECT_EQ(parsed.cellBarAccess(), false);
-    EXPECT_EQ(parsed.re(), 1u);             // re_not_allowed = true
-    EXPECT_EQ(parsed.ac(), 0x0400u);        // ACC[4] barred
+    EXPECT_EQ((*parsedResult).maxRetrans(), 3u);
+    EXPECT_EQ((*parsedResult).txInteger(), 9u);
+    EXPECT_EQ((*parsedResult).cellBarAccess(), false);
+    EXPECT_EQ((*parsedResult).re(), 1u);
+    EXPECT_EQ((*parsedResult).ac(), 0x0400u);
 }
 
 // ── Cell Selection Parameters (GSM 04.08 10.5.2.4) ────────────────────
@@ -459,22 +462,19 @@ TEST(GSMSpecTest, CellSelectionParameters_RefValues) {
     // = 010 00111 0 1 000000
     // Byte 0: 01000111 = 0x47
     // Byte 1: 01000000 = 0x40
-    uint8_t data[] = {0x47, 0x40};
+    std::vector<uint8_t> buf(4, 0);
+    buf[0] = 0x47;
+    buf[1] = 0x40;
 
-    L3Frame frame(Primitive::L3_DATA, 16);
-    size_t wp = 0;
-    frame.writeField(wp, data[0], 8);
-    frame.writeField(wp, data[1], 8);
+    BitReader reader(buf.data(), 16);
+    auto parsedResult = L3CellSelectionParameters::parse(reader);
+    ASSERT_TRUE(parsedResult);
 
-    L3CellSelectionParameters parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
-
-    EXPECT_EQ(parsed.cellReselectHysteresis(), 2u);
-    EXPECT_EQ(parsed.msTxpwrMaxCch(), 7u);
-    EXPECT_EQ(parsed.acs(), 0u);
-    EXPECT_EQ(parsed.neci(), 1u);
-    EXPECT_EQ(parsed.rxlevAccessMin(), 0u);
+    EXPECT_EQ((*parsedResult).cellReselectHysteresis(), 2u);
+    EXPECT_EQ((*parsedResult).msTxpwrMaxCch(), 7u);
+    EXPECT_EQ((*parsedResult).acs(), 0u);
+    EXPECT_EQ((*parsedResult).neci(), 1u);
+    EXPECT_EQ((*parsedResult).rxlevAccessMin(), 0u);
 }
 
 // ── Control Channel Description (GSM 04.08 10.5.2.11) ─────────────────
@@ -497,24 +497,21 @@ TEST(GSMSpecTest, ControlChannelDescription_RefValues) {
     // Byte 0: 11001001 = 0xC9
     // Byte 1: 00000000 = 0x00
     // Byte 2: 00000001 = 0x01
-    uint8_t data[] = {0xC9, 0x00, 0x01};
+    std::vector<uint8_t> buf(4, 0);
+    buf[0] = 0xC9;
+    buf[1] = 0x00;
+    buf[2] = 0x01;
 
-    L3Frame frame(Primitive::L3_DATA, 24);
-    size_t wp = 0;
-    frame.writeField(wp, data[0], 8);
-    frame.writeField(wp, data[1], 8);
-    frame.writeField(wp, data[2], 8);
+    BitReader reader(buf.data(), 24);
+    auto parsedResult = L3ControlChannelDescription::parse(reader);
+    ASSERT_TRUE(parsedResult);
 
-    L3ControlChannelDescription parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
-
-    EXPECT_EQ(parsed.mATT, 1u);              // att = true
-    EXPECT_EQ(parsed.mBS_AG_BLKS_RES, 1u);   // bs_ag_blks_res = 1
-    EXPECT_EQ(parsed.mCCCH_CONF, 1u);        // ccch_conf = 1 (CCHAN_DESC_1CCCH_COMBINED)
-    EXPECT_EQ(parsed.mBS_PA_MFRMS, 0u);      // bs_pa_mfrms = 0 (reference value)
-    EXPECT_EQ(parsed.mT3212, 1u);            // t3212 = 1 (6 minutes)
-    EXPECT_TRUE(parsed.isCCCHCombined());
+    EXPECT_EQ((*parsedResult).mATT, 1u);
+    EXPECT_EQ((*parsedResult).mBS_AG_BLKS_RES, 1u);
+    EXPECT_EQ((*parsedResult).mCCCH_CONF, 1u);
+    EXPECT_EQ((*parsedResult).mBS_PA_MFRMS, 0u);
+    EXPECT_EQ((*parsedResult).mT3212, 1u);
+    EXPECT_TRUE((*parsedResult).isCCCHCombined());
 }
 
 // ── Request Reference (GSM 04.08 10.5.2.30) ───────────────────────────
@@ -524,12 +521,12 @@ TEST(GSMSpecTest, ControlChannelDescription_RefValues) {
 TEST(GSMSpecTest, RequestReference_Compute) {
     // From GSM_RR_Types.ttcn f_compute_ReqRef:
     // t1p = (fn / 1326) mod 32, t2 = fn mod 26, t3 = fn mod 51
-    unsigned fn = 1326; // 1 full superframe
+    unsigned fn = 1326;
     unsigned ra = 0x42;
 
-    unsigned expected_t1p = (fn / 1326) % 32;  // 1
-    unsigned expected_t2 = fn % 26;             // 0
-    unsigned expected_t3 = fn % 51;             // 0
+    unsigned expected_t1p = (fn / 1326) % 32;
+    unsigned expected_t2 = fn % 26;
+    unsigned expected_t3 = fn % 51;
 
     L3RequestReference rr(ra, expected_t1p, expected_t2, expected_t3);
     EXPECT_EQ(rr.ra(), ra);
@@ -541,18 +538,18 @@ TEST(GSMSpecTest, RequestReference_Compute) {
 TEST(GSMSpecTest, RequestReference_RoundTrip) {
     L3RequestReference orig(0xAB, 5, 12, 20);
 
-    L3Frame frame(Primitive::L3_DATA, 32);
-    size_t wp = 0;
-    orig.writeV(frame, wp);
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
 
-    L3RequestReference parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3RequestReference::parse(reader);
+    ASSERT_TRUE(parsedResult);
 
-    EXPECT_EQ(parsed.ra(), orig.ra());
-    EXPECT_EQ(parsed.t1p(), orig.t1p());
-    EXPECT_EQ(parsed.t2(), orig.t2());
-    EXPECT_EQ(parsed.t3(), orig.t3());
+    EXPECT_EQ((*parsedResult).ra(), orig.ra());
+    EXPECT_EQ((*parsedResult).t1p(), orig.t1p());
+    EXPECT_EQ((*parsedResult).t2(), orig.t2());
+    EXPECT_EQ((*parsedResult).t3(), orig.t3());
 }
 
 // ── Measurement Results (GSM 04.08 10.5.2.20) ─────────────────────────
@@ -562,23 +559,23 @@ TEST(GSMSpecTest, RequestReference_RoundTrip) {
 
 TEST(GSMSpecTest, MeasurementResults_Size) {
     L3MeasurementResults mr;
-    EXPECT_EQ(mr.lengthV(), 16u); // 128 bits fixed
+    EXPECT_EQ(mr.lengthV(), 16u);
 }
 
 TEST(GSMSpecTest, MeasurementResults_RoundTrip) {
     L3MeasurementResults orig;
     // Default construction zeroes everything
 
-    L3Frame frame(Primitive::L3_DATA, 128);
-    size_t wp = 0;
-    orig.writeV(frame, wp);
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
 
-    L3MeasurementResults parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3MeasurementResults::parse(reader);
+    ASSERT_TRUE(parsedResult);
 
-    EXPECT_EQ(parsed.noNcell(), orig.noNcell());
-    EXPECT_EQ(parsed.rxlevFullServingCellRaw(), orig.rxlevFullServingCellRaw());
+    EXPECT_EQ((*parsedResult).noNcell(), orig.noNcell());
+    EXPECT_EQ((*parsedResult).rxlevFullServingCellRaw(), orig.rxlevFullServingCellRaw());
 }
 
 // ── GSM Alphabet ───────────────────────────────────────────────────────
@@ -623,20 +620,20 @@ TEST(GSMSpecTest, Data2Hex) {
 // GSM 04.08 10.2: PD=0x06(RR) in high nibble, skip=0, MTI=0x19(SystemInformationType1)
 // Reference: GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_1 = '00011001'B
 TEST(GSMSpecTest, ParseHexWithVariousFormats) {
-    auto msg1 = parseL3Hex("601900", ctx);
-    ASSERT_TRUE(msg1.has_value());
-    EXPECT_EQ(msg1->pd(), L3PD::RadioResource);
+    auto msg1 = parseL3Hex("601900");
+    ASSERT_TRUE(msg1);
+    EXPECT_EQ(messagePD(*msg1), L3PD::RadioResource);
 
     // Spaces between bytes
-    auto msg2 = parseL3Hex("60 19 00", ctx);
-    ASSERT_TRUE(msg2.has_value());
-    EXPECT_EQ(msg2->pd(), L3PD::RadioResource);
+    auto msg2 = parseL3Hex("60 19 00");
+    ASSERT_TRUE(msg2);
+    EXPECT_EQ(messagePD(*msg2), L3PD::RadioResource);
 
     // Empty string
-    auto msg3 = parseL3Hex("", ctx);
+    auto msg3 = parseL3Hex("");
     EXPECT_FALSE(msg3);
 
     // Single byte (too short)
-    auto msg4 = parseL3Hex("60", ctx);
+    auto msg4 = parseL3Hex("60");
     EXPECT_FALSE(msg4);
 }

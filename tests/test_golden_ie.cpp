@@ -53,24 +53,25 @@
 #include <gsml3parser/common/l3common.h>
 #include <gsml3parser/gsm_common.h>
 #include <gsml3parser/rr/l3rrmessages.h>
-#include <gsml3parser/cc/l3cclements.h>
+#include <gsml3parser/cc/l3ccelements.h>
 #include <gsml3parser/mm/l3mmelements.h>
-#include <gsml3parser/bitvector.h>
+#include <gsml3parser/bitreader.h>
+#include <gsml3parser/bitwriter.h>
 
 using namespace gsml3parser;
 
-// Generic round-trip helper for L3ProtocolElement.
+// Generic round-trip helper for IE value types.
 template<typename T>
 static void ieRoundTrip(const T& orig) {
-    L3Frame frame(Primitive::L3_DATA, 256);
-    size_t wp = 0;
-    orig.writeV(frame, wp);
-    T parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
+    std::vector<uint8_t> buf(256, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = T::parse(reader);
+    ASSERT_TRUE(parsedResult);
     std::ostringstream os1, os2;
     orig.text(os1);
-    parsed.text(os2);
+    (*parsedResult).text(os2);
     EXPECT_EQ(os1.str(), os2.str());
 }
 
@@ -97,11 +98,11 @@ TEST(GoldenIE, CellIdentity_MaxValue) {
 
 TEST(GoldenIE, CellIdentity_Encoding) {
     L3CellIdentity ci(0x1234);
-    L3Frame frame(Primitive::L3_DATA, 16);
-    size_t wp = 0;
-    ci.writeV(frame, wp);
-    EXPECT_EQ(frame.data()[0], 0x12);
-    EXPECT_EQ(frame.data()[1], 0x34);
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    ci.write(writer);
+    EXPECT_EQ(buf[0], 0x12);
+    EXPECT_EQ(buf[1], 0x34);
 }
 
 // =====================================================================
@@ -153,13 +154,13 @@ TEST(GoldenIE, LAI_Ref_262_42) {
     L3LocationAreaIdentity lai("262", "42", 0x002A);
     EXPECT_EQ(lai.mcc(), 262);
     EXPECT_EQ(lai.mnc(), 42);
-    L3Frame frame(Primitive::L3_DATA, 40);
-    size_t wp = 0;
-    lai.writeV(frame, wp);
+    std::vector<uint8_t> buf(10, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    lai.write(writer);
     // Spec-verified: GSM_Types.ttcn BcdMccMnc encoding with HEXORDER(low) nibble swap
-    EXPECT_EQ(frame.data()[0], 0x62); // MCC digit 2(6)|MCC digit 1(2) -> '26'H -> nibble-swapped -> 0x62
-    EXPECT_EQ(frame.data()[1], 0xF2); // MNC digit 3(F)|MCC digit 3(2) -> '2F'H -> nibble-swapped -> 0xF2
-    EXPECT_EQ(frame.data()[2], 0x24); // MNC digit 2(4)|MNC digit 1(2) -> '42'H -> nibble-swapped -> 0x24
+    EXPECT_EQ(buf[0], 0x62);
+    EXPECT_EQ(buf[1], 0xF2);
+    EXPECT_EQ(buf[2], 0x24);
 }
 
 // =====================================================================
@@ -209,25 +210,25 @@ TEST(GoldenIE, MobileIdentity_Default) {
 TEST(GoldenIE, MobileIdentity_TMSI_Encoding) {
     // Spec-verified: GSM 24.008 10.5.1.4 Mobile Identity encoding
     L3MobileIdentity id(0xDEADBEEF);
-    L3Frame frame(Primitive::L3_DATA, 64);
-    size_t wp = 0;
-    id.writeV(frame, wp);
+    std::vector<uint8_t> buf(16, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    id.write(writer);
     // GSM 24.008 10.5.1.4: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 -> 0b0000_1000 = 0x08
-    EXPECT_EQ(frame.data()[0], 0x08);
+    EXPECT_EQ(buf[0], 0x08);
     // Bytes 1-4: TMSI value in big-endian order
-    EXPECT_EQ(frame.data()[1], 0xDE);
-    EXPECT_EQ(frame.data()[2], 0xAD);
-    EXPECT_EQ(frame.data()[3], 0xBE);
-    EXPECT_EQ(frame.data()[4], 0xEF);
+    EXPECT_EQ(buf[1], 0xDE);
+    EXPECT_EQ(buf[2], 0xAD);
+    EXPECT_EQ(buf[3], 0xBE);
+    EXPECT_EQ(buf[4], 0xEF);
 }
 
 TEST(GoldenIE, MobileIdentity_IMSI_Encoding) {
     L3MobileIdentity id("250011234567890");
-    L3Frame frame(Primitive::L3_DATA, 64);
-    size_t wp = 0;
-    id.writeV(frame, wp);
+    std::vector<uint8_t> buf(16, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    id.write(writer);
     // GSM 24.008 10.5.1.4: spare(4)=0|typeOfIdentity(3)=001(IMSI)|oddevenIndicator(1)=1(odd) -> 0b0000_0011 = 0x03
-    EXPECT_EQ(frame.data()[0], 0x03);
+    EXPECT_EQ(buf[0], 0x03);
 }
 
 // =====================================================================
@@ -248,10 +249,10 @@ TEST(GoldenIE, Classmark1_RoundTrip) {
 
 TEST(GoldenIE, Classmark1_Zero) {
     L3MobileStationClassmark1 cm1;
-    L3Frame frame(Primitive::L3_DATA, 16);
-    size_t wp = 0;
-    cm1.writeV(frame, wp);
-    EXPECT_EQ(frame.data()[0], 0x00);
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    cm1.write(writer);
+    EXPECT_EQ(buf[0], 0x00);
 }
 
 // =====================================================================
@@ -286,12 +287,12 @@ TEST(GoldenIE, Classmark2_A5Bits) {
 
 TEST(GoldenIE, Classmark2_Zero) {
     L3MobileStationClassmark2 cm2;
-    L3Frame frame(Primitive::L3_DATA, 32);
-    size_t wp = 0;
-    cm2.writeV(frame, wp);
-    EXPECT_EQ(frame.data()[0], 0x00);
-    EXPECT_EQ(frame.data()[1], 0x00);
-    EXPECT_EQ(frame.data()[2], 0x00);
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    cm2.write(writer);
+    EXPECT_EQ(buf[0], 0x00);
+    EXPECT_EQ(buf[1], 0x00);
+    EXPECT_EQ(buf[2], 0x00);
 }
 
 // =====================================================================
@@ -362,16 +363,16 @@ TEST(GoldenIE, ChannelDescription_CBCH) {
 
 TEST(GoldenIE, ChannelDescription_RoundTrip) {
     L3ChannelDescription orig(TDMA_TCHF, 3, 7, 100);
-    L3Frame frame(Primitive::L3_DATA, 32);
-    size_t wp = 0;
-    orig.writeV(frame, wp);
-    L3ChannelDescription parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
-    EXPECT_EQ(parsed.typeAndOffset(), orig.typeAndOffset());
-    EXPECT_EQ(parsed.tn(), orig.tn());
-    EXPECT_EQ(parsed.tsc(), orig.tsc());
-    EXPECT_EQ(parsed.arfcn(), orig.arfcn());
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3ChannelDescription::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).typeAndOffset(), orig.typeAndOffset());
+    EXPECT_EQ((*parsedResult).tn(), orig.tn());
+    EXPECT_EQ((*parsedResult).tsc(), orig.tsc());
+    EXPECT_EQ((*parsedResult).arfcn(), orig.arfcn());
 }
 
 // =====================================================================
@@ -404,16 +405,16 @@ TEST(GoldenIE, AdditionalChannelDescription_Default) {
 
 TEST(GoldenIE, AdditionalChannelDescription_RoundTrip) {
     L3AdditionalChannelDescription orig(TDMA_TCHF, 3, 5, 150);
-    L3Frame frame(Primitive::L3_DATA, 32);
-    size_t wp = 0;
-    orig.writeV(frame, wp);
-    L3AdditionalChannelDescription parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
-    EXPECT_EQ(parsed.typeAndOffset(), orig.typeAndOffset());
-    EXPECT_EQ(parsed.tn(), orig.tn());
-    EXPECT_EQ(parsed.tsc(), orig.tsc());
-    EXPECT_EQ(parsed.arfcn(), orig.arfcn());
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3AdditionalChannelDescription::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).typeAndOffset(), orig.typeAndOffset());
+    EXPECT_EQ((*parsedResult).tn(), orig.tn());
+    EXPECT_EQ((*parsedResult).tsc(), orig.tsc());
+    EXPECT_EQ((*parsedResult).arfcn(), orig.arfcn());
 }
 
 // =====================================================================
@@ -444,12 +445,12 @@ TEST(GoldenIE, PowerCommand_Encoding) {
     //   power_command(5 bits MSB)|spare(3 bits LSB) = 1 octet
     //   command=15 -> 0b01111_000 = 0x78 (15 in high 5 bits, spare 0 in low 3 bits)
     L3PowerCommand pc(15);
-    L3Frame frame(Primitive::L3_DATA, 16);
-    size_t wp = 0;
-    pc.writeV(frame, wp);
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    pc.write(writer);
     // GSM 24.008 10.5.2.28: power_command(5 bits MSB)|spare(3 bits LSB) = 1 octet
     // power_command=15 -> 0b01111_000 = 0x78 (15 in high 5 bits, spare 0 in low 3 bits)
-    EXPECT_EQ(frame.data()[0], 0x78);
+    EXPECT_EQ(buf[0], 0x78);
 }
 
 // =====================================================================
@@ -532,12 +533,12 @@ TEST(GoldenIE, TimingAdvance_Encoding) {
     //   timing_advance(6 bits MSB)|spare(2 bits LSB) = 1 octet
     //   value=42 -> 0b101010_00 = 0xA8 (42 in high 6 bits, spare 0 in low 2 bits)
     L3TimingAdvance ta(42);
-    L3Frame frame(Primitive::L3_DATA, 16);
-    size_t wp = 0;
-    ta.writeV(frame, wp);
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    ta.write(writer);
     // GSM 24.008 10.5.2.40: timing_advance(6 bits MSB)|spare(2 bits LSB) = 1 octet
     // timing_advance=42 -> 0b101010_00 = 0xA8 (42 in high 6 bits, spare 0 in low 2 bits)
-    EXPECT_EQ(frame.data()[0], 0xA8);
+    EXPECT_EQ(buf[0], 0xA8);
 }
 
 // =====================================================================
@@ -602,13 +603,13 @@ TEST(GoldenIE, CipheringModeSetting_Encoding) {
     //   ciphering(1)=sC|algorithm(3)=algorithmIdentifier
     //   ciphering=true, algorithm=3(A5/3) -> sC(1)=1|algId(3)=011 -> 4-bit value = 0b1011 = 0x0B
     L3CipheringModeSetting cms(true, 3);
-    L3Frame frame(Primitive::L3_DATA, 16);
-    size_t wp = 0;
-    cms.writeV(frame, wp);
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    cms.write(writer);
     // GSM 24.008 10.5.2.9: cipheringModeSetting is 4 bits: sC(1)|algorithmIdentifier(3)
     // ciphering=true -> sC=1, algorithm=3(A5/3) -> algorithmIdentifier=011
     // 4-bit value = 0b1_011 = 0x0B. Placed in low nibble of the octet (spare(4)=0).
-    EXPECT_EQ(frame.data()[0] & 0x0F, 0x0B);
+    EXPECT_EQ(buf[0] & 0x0F, 0x0B);
 }
 
 // =====================================================================
@@ -805,21 +806,19 @@ TEST(GoldenIE, CellSelectionParameters_RefValues) {
     // Spec-verified: GSM 24.008 10.5.2.4 Cell Selection Parameters (17 bits = 2 octets + 1 bit)
     //   cell_resel_hyst(3)|ms_txpwr_max_cch(5)|acs(1)|neci(1)|rxlev_access_min(6)
     //   {0x47, 0x40}: cell_resel_hyst=2, ms_txpwr_max_cch=7, acs=0, neci=1, rxlev_access_min=0
-    uint8_t data[] = {0x47, 0x40};
-    L3Frame frame(Primitive::L3_DATA, 16);
-    size_t wp = 0;
-    frame.writeField(wp, data[0], 8);
-    frame.writeField(wp, data[1], 8);
-    L3CellSelectionParameters parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
+    std::vector<uint8_t> buf(4, 0);
+    buf[0] = 0x47;
+    buf[1] = 0x40;
+    BitReader reader(buf.data(), 16);
+    auto parsedResult = L3CellSelectionParameters::parse(reader);
+    ASSERT_TRUE(parsedResult);
     // Spec-verified: byte 0 = 0x47 = 0b0100_0111 -> cell_resel_hyst(3)=010=2, ms_txpwr_max_cch(5)=00111=7
     //   byte 1 = 0x40 = 0b0100_0000 -> acs(1)=0, neci(1)=1, rxlev_access_min(6)=000000=0
-    EXPECT_EQ(parsed.cellReselectHysteresis(), 2u);
-    EXPECT_EQ(parsed.msTxpwrMaxCch(), 7u);
-    EXPECT_EQ(parsed.acs(), 0u);
-    EXPECT_EQ(parsed.neci(), 1u);
-    EXPECT_EQ(parsed.rxlevAccessMin(), 0u);
+    EXPECT_EQ((*parsedResult).cellReselectHysteresis(), 2u);
+    EXPECT_EQ((*parsedResult).msTxpwrMaxCch(), 7u);
+    EXPECT_EQ((*parsedResult).acs(), 0u);
+    EXPECT_EQ((*parsedResult).neci(), 1u);
+    EXPECT_EQ((*parsedResult).rxlevAccessMin(), 0u);
 }
 
 // =====================================================================
@@ -849,22 +848,20 @@ TEST(GoldenIE, RACHControlParameters_RefValues) {
     // Spec-verified: GSM 24.008 10.5.2.29 RACH Control Parameters (24 bits = 3 octets)
     //   max_retrans(2)|tx_integer(4)|cell_bar_qualify(1)|cell_barr_access(1)|re_not_allowed(1)|ACC(16)
     //   {0xE5, 0x04, 0x00}: max_retrans=3, tx_integer=9, cell_bar_qualify=0, cell_barr_access=0, re_not_allowed=1, ACC=0x0400
-    uint8_t data[] = {0xE5, 0x04, 0x00};
-    L3Frame frame(Primitive::L3_DATA, 24);
-    size_t wp = 0;
-    frame.writeField(wp, data[0], 8);
-    frame.writeField(wp, data[1], 8);
-    frame.writeField(wp, data[2], 8);
-    L3RACHControlParameters parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
+    std::vector<uint8_t> buf(4, 0);
+    buf[0] = 0xE5;
+    buf[1] = 0x04;
+    buf[2] = 0x00;
+    BitReader reader(buf.data(), 24);
+    auto parsedResult = L3RACHControlParameters::parse(reader);
+    ASSERT_TRUE(parsedResult);
     // Spec-verified: byte 0 = 0xE5 = 0b1110_0101 -> max_retrans(2)=11=3, tx_integer(4)=1001=9, cell_bar_qualify(1)=0, cell_bar_access(1)=0, re_not_allowed(1)=1
     //   byte 1 = 0x04, byte 2 = 0x00 -> ACC(16) = 0x0400 (ACC[6] barred, bit 6 from MSB per GSM convention)
-    EXPECT_EQ(parsed.maxRetrans(), 3u);
-    EXPECT_EQ(parsed.txInteger(), 9u);
-    EXPECT_EQ(parsed.cellBarAccess(), false);
-    EXPECT_EQ(parsed.re(), 1u);
-    EXPECT_EQ(parsed.ac(), 0x0400u);
+    EXPECT_EQ((*parsedResult).maxRetrans(), 3u);
+    EXPECT_EQ((*parsedResult).txInteger(), 9u);
+    EXPECT_EQ((*parsedResult).cellBarAccess(), false);
+    EXPECT_EQ((*parsedResult).re(), 1u);
+    EXPECT_EQ((*parsedResult).ac(), 0x0400u);
 }
 
 // =====================================================================
@@ -895,24 +892,22 @@ TEST(GoldenIE, ControlChannelDescription_RefValues) {
     // Spec-verified: GSM 24.008 10.5.2.11 Control Channel Description (24 bits = 3 octets)
     //   msc_r99(1)|att(1)|bs_ag_blks_res(3)|ccch_conf(3)|si22ind(1)|cbq3(2)|spare(2)|bs_pa_mfrms(3)|t3212(8)
     //   {0xC9, 0x00, 0x01}: msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1(combined), si22ind=0, cbq3=0, spare=0, bs_pa_mfrms=0, t3212=1
-    uint8_t data[] = {0xC9, 0x00, 0x01};
-    L3Frame frame(Primitive::L3_DATA, 24);
-    size_t wp = 0;
-    frame.writeField(wp, data[0], 8);
-    frame.writeField(wp, data[1], 8);
-    frame.writeField(wp, data[2], 8);
-    L3ControlChannelDescription parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
+    std::vector<uint8_t> buf(4, 0);
+    buf[0] = 0xC9;
+    buf[1] = 0x00;
+    buf[2] = 0x01;
+    BitReader reader(buf.data(), 24);
+    auto parsedResult = L3ControlChannelDescription::parse(reader);
+    ASSERT_TRUE(parsedResult);
     // Spec-verified: byte 0 = 0xC9 = 0b1100_1001 -> msc_r99(1)=1, att(1)=1, bs_ag_blks_res(3)=001=1, ccch_conf(3)=001=1(combined), si22ind(1)=0, cbq3(2)=00
     //   byte 1 = 0x00 -> spare(2)=00, bs_pa_mfrms(3)=000=0, t3212 high 3 bits = 000
     //   byte 2 = 0x01 -> t3212 low 5 bits = 00001, so t3212 = 1 (6 minutes)
-    EXPECT_EQ(parsed.mATT, 1u);
-    EXPECT_EQ(parsed.mBS_AG_BLKS_RES, 1u);
-    EXPECT_EQ(parsed.mCCCH_CONF, 1u);
-    EXPECT_EQ(parsed.mBS_PA_MFRMS, 0u);
-    EXPECT_EQ(parsed.mT3212, 1u);
-    EXPECT_TRUE(parsed.isCCCHCombined()); // ccch_conf=1 means 1CCCH combined with SDCCCH/4
+    EXPECT_EQ((*parsedResult).mATT, 1u);
+    EXPECT_EQ((*parsedResult).mBS_AG_BLKS_RES, 1u);
+    EXPECT_EQ((*parsedResult).mCCCH_CONF, 1u);
+    EXPECT_EQ((*parsedResult).mBS_PA_MFRMS, 0u);
+    EXPECT_EQ((*parsedResult).mT3212, 1u);
+    EXPECT_TRUE((*parsedResult).isCCCHCombined());
 }
 
 // =====================================================================
@@ -961,24 +956,24 @@ TEST(GoldenIE, FrequencyList_Empty) {
     L3FrequencyList fl;
     EXPECT_EQ(fl.lengthV(), 16u);
     EXPECT_TRUE(fl.arfcns().empty());
-    L3Frame frame(Primitive::L3_DATA, 128);
-    size_t wp = 0;
-    fl.writeV(frame, wp);
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    fl.write(writer);
     for (int i = 0; i < 16; i++) {
-        EXPECT_EQ(frame.data()[i], 0x00);
+        EXPECT_EQ(buf[i], 0x00);
     }
 }
 
 TEST(GoldenIE, FrequencyList_SingleARFCN) {
     std::vector<unsigned> arfcns = {100};
     L3FrequencyList fl(arfcns);
-    L3Frame frame(Primitive::L3_DATA, 128);
-    size_t wp = 0;
-    fl.writeV(frame, wp);
-    L3FrequencyList parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
-    EXPECT_EQ(parsed.arfcns(), arfcns);
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    fl.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3FrequencyList::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).arfcns(), arfcns);
 }
 
 // =====================================================================
@@ -1024,11 +1019,11 @@ TEST(GoldenIE, MeasurementResults_Default) {
 TEST(GoldenIE, MeasurementResults_Zero) {
     L3MeasurementResults mr;
     EXPECT_EQ(mr.lengthV(), 16u);
-    L3Frame frame(Primitive::L3_DATA, 128);
-    size_t wp = 0;
-    mr.writeV(frame, wp);
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    mr.write(writer);
     for (int i = 0; i < 16; i++) {
-        EXPECT_EQ(frame.data()[i], 0x00);
+        EXPECT_EQ(buf[i], 0x00);
     }
 }
 
@@ -1119,11 +1114,11 @@ TEST(GoldenIE, APDUData_Empty) {
 }
 
 TEST(GoldenIE, APDUData_WithData) {
-    BitVector data(16);
-    size_t wp = 0;
-    data.writeField(wp, 0xAB, 8);
-    data.writeField(wp, 0xCD, 8);
-    L3APDUData orig(data);
+    std::vector<uint8_t> rawData(2, 0);
+    BitWriter bw(rawData.data(), 16);
+    bw.writeField(0xAB, 8);
+    bw.writeField(0xCD, 8);
+    L3APDUData orig(rawData);
     EXPECT_EQ(orig.lengthV(), 2u);
     ieRoundTrip(orig);
 }
@@ -1281,13 +1276,13 @@ TEST(GoldenIE, SupportedCodecList_Default) {
 
 TEST(GoldenIE, CalledPartyBCDNumber_RoundTrip) {
     L3CalledPartyBCDNumber orig("1234567890");
-    L3Frame frame(Primitive::L3_DATA, 64);
-    size_t wp = 0;
-    orig.writeV(frame, wp);
-    L3CalledPartyBCDNumber parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp, orig.lengthV()); ASSERT_TRUE(_res.has_value()); }
-    EXPECT_STREQ(parsed.digits(), "1234567890");
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3CalledPartyBCDNumber::parse(reader, orig.lengthV());
+    ASSERT_TRUE(parsedResult);
+    EXPECT_STREQ((*parsedResult).digits(), "1234567890");
 }
 
 TEST(GoldenIE, CalledPartyBCDNumber_International) {
@@ -1315,13 +1310,13 @@ TEST(GoldenIE, CalledPartyBCDNumber_National) {
 
 TEST(GoldenIE, CallingPartyBCDNumber_RoundTrip) {
     L3CallingPartyBCDNumber orig("1234567890");
-    L3Frame frame(Primitive::L3_DATA, 64);
-    size_t wp = 0;
-    orig.writeV(frame, wp);
-    L3CallingPartyBCDNumber parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp, orig.lengthV()); ASSERT_TRUE(_res.has_value()); }
-    EXPECT_STREQ(parsed.digits(), "1234567890");
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3CallingPartyBCDNumber::parse(reader, orig.lengthV());
+    ASSERT_TRUE(parsedResult);
+    EXPECT_STREQ((*parsedResult).digits(), "1234567890");
 }
 
 // =====================================================================
@@ -1337,14 +1332,14 @@ TEST(GoldenIE, CauseElement_RoundTrip) {
 
 TEST(GoldenIE, CauseElement_NormalClearing) {
     L3CauseElement orig(CCCause::Normal_Call_Clearing, CCCauseLocation::Private_Serving_Local);
-    L3Frame frame(Primitive::L3_DATA, 32);
-    size_t wp = 0;
-    orig.writeV(frame, wp);
-    L3CauseElement parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
-    EXPECT_EQ(parsed.cause(), CCCause::Normal_Call_Clearing);
-    EXPECT_EQ(parsed.location(), CCCauseLocation::Private_Serving_Local);
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3CauseElement::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).cause(), CCCause::Normal_Call_Clearing);
+    EXPECT_EQ((*parsedResult).location(), CCCauseLocation::Private_Serving_Local);
 }
 
 // =====================================================================
@@ -1372,15 +1367,15 @@ TEST(GoldenIE, ProgressIndicator_RoundTrip) {
 
 TEST(GoldenIE, ProgressIndicator_Encoding) {
     L3ProgressIndicator pi(L3ProgressIndicator::InBandAvailable,
-                           L3ProgressIndicator::PrivateServingLocal);
-    L3Frame frame(Primitive::L3_DATA, 32);
-    size_t wp = 0;
-    pi.writeV(frame, wp);
-    L3ProgressIndicator parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
-    EXPECT_EQ(parsed.progress(), L3ProgressIndicator::InBandAvailable);
-    EXPECT_EQ(parsed.location(), L3ProgressIndicator::PrivateServingLocal);
+                            L3ProgressIndicator::PrivateServingLocal);
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    pi.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3ProgressIndicator::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).progress(), L3ProgressIndicator::InBandAvailable);
+    EXPECT_EQ((*parsedResult).location(), L3ProgressIndicator::PrivateServingLocal);
 }
 
 // =====================================================================
@@ -1398,13 +1393,13 @@ TEST(GoldenIE, KeypadFacility_Digit) {
     L3KeypadFacility kp('5');
     EXPECT_EQ(kp.ia5(), '5');
     EXPECT_EQ(kp.lengthV(), 1u);
-    L3Frame frame(Primitive::L3_DATA, 16);
-    size_t wp = 0;
-    kp.writeV(frame, wp);
-    L3KeypadFacility parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp); ASSERT_TRUE(_res.has_value()); }
-    EXPECT_EQ(parsed.ia5(), '5');
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    kp.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3KeypadFacility::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).ia5(), '5');
 }
 
 // =====================================================================
@@ -1616,13 +1611,13 @@ TEST(GoldenIE, TimeZoneAndTime_Local) {
 
 TEST(GoldenIE, GSMAlphabet_Decode) {
     // Spec-verified: 3GPP TS 23.038 Table 1 default alphabet mapping
-    EXPECT_EQ(decodeGSMChar(0), '@');   // Code 0 = '@'
-    EXPECT_EQ(decodeGSMChar(2), '$');   // Code 2 = '$'
-    EXPECT_EQ(decodeGSMChar(44), '0');  // Code 44 = '0' (digit zero)
-    EXPECT_EQ(decodeGSMChar(48), '4');  // Code 48 = '4'
-    EXPECT_EQ(decodeGSMChar(84), 'a');  // Code 84 = 'a' (lowercase start)
-    EXPECT_EQ(decodeGSMChar(85), 'b');  // Code 85 = 'b'
-    EXPECT_EQ(decodeGSMChar(86), 'c');  // Code 86 = 'c'
+    EXPECT_EQ(decodeGSMChar(0), '@');
+    EXPECT_EQ(decodeGSMChar(2), '$');
+    EXPECT_EQ(decodeGSMChar(44), '0');
+    EXPECT_EQ(decodeGSMChar(48), '4');
+    EXPECT_EQ(decodeGSMChar(84), 'a');
+    EXPECT_EQ(decodeGSMChar(85), 'b');
+    EXPECT_EQ(decodeGSMChar(86), 'c');
 }
 
 // =====================================================================
@@ -1655,9 +1650,9 @@ TEST(GoldenIE, RxLev_Conversion) {
     // Spec-verified: TS 45.008 8.1.4: RxLev = received level + 110 dB
     //   RxLev=0 -> -110 dBm (minimum), RxLev=31 -> -79 dBm, RxLev=63 -> -47 dBm (maximum)
     L3MeasurementResults mr;
-    EXPECT_EQ(mr.decodeLevToDBm(0), -110);   // GSM_Types.ttcn rxlev2dbm: -110 + 0 = -110
-    EXPECT_EQ(mr.decodeLevToDBm(31), -79);   // -110 + 31 = -79
-    EXPECT_EQ(mr.decodeLevToDBm(63), -47);   // -110 + 63 = -47
+    EXPECT_EQ(mr.decodeLevToDBm(0), -110);
+    EXPECT_EQ(mr.decodeLevToDBm(31), -79);
+    EXPECT_EQ(mr.decodeLevToDBm(63), -47);
 }
 
 TEST(GoldenIE, RxQual_Conversion) {
@@ -1666,7 +1661,7 @@ TEST(GoldenIE, RxQual_Conversion) {
     L3MeasurementResults mr;
     float ber0 = mr.decodeQualToBER(0);
     float ber7 = mr.decodeQualToBER(7);
-    EXPECT_LT(ber0, ber7); // BER for quality 0 must be lower than quality 7
+    EXPECT_LT(ber0, ber7);
 }
 
 // =====================================================================
@@ -1734,13 +1729,13 @@ TEST(GoldenIE, BCD_OddDigits) {
 
 TEST(GoldenIE, BCD_RoundTrip) {
     L3CalledPartyBCDNumber orig("1234567890");
-    L3Frame frame(Primitive::L3_DATA, 64);
-    size_t wp = 0;
-    orig.writeV(frame, wp);
-    L3CalledPartyBCDNumber parsed;
-    size_t rp = 0;
-    { auto _res = parsed.try_parseV(frame, rp, orig.lengthV()); ASSERT_TRUE(_res.has_value()); }
-    EXPECT_STREQ(parsed.digits(), "1234567890");
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3CalledPartyBCDNumber::parse(reader, orig.lengthV());
+    ASSERT_TRUE(parsedResult);
+    EXPECT_STREQ((*parsedResult).digits(), "1234567890");
 }
 
 // =====================================================================
@@ -1762,10 +1757,10 @@ TEST(GoldenIE, RestOctetPaddingPattern) {
     // GSM_RR_Types.ttcn line 163, GSM_RestOctets.ttcn line 37, and all SI rest octet types
     constexpr uint8_t GSM_REST_OCTET_PAD = 0x2B;
     EXPECT_EQ(GSM_REST_OCTET_PAD, 0x2B);
-    BitVector bv(8);
-    size_t wp = 0;
-    bv.writeField(wp, GSM_REST_OCTET_PAD, 8);
-    EXPECT_EQ(bv.data()[0], 0x2B);
+    std::vector<uint8_t> buf(1, 0);
+    BitWriter writer(buf.data(), 8);
+    writer.writeField(GSM_REST_OCTET_PAD, 8);
+    EXPECT_EQ(buf[0], 0x2B);
 }
 
 // =====================================================================
@@ -1774,13 +1769,13 @@ TEST(GoldenIE, RestOctetPaddingPattern) {
 // =====================================================================
 
 TEST(GoldenIE, L_H_Bits) {
-    L3Frame frame(Primitive::L3_DATA, 16);
-    size_t wp = 0;
-    frame.writeL(wp);
-    frame.writeH(wp);
-    size_t rp = 0;
-    EXPECT_EQ(frame.readField(rp, 1), 0u);
-    EXPECT_EQ(frame.readField(rp, 1), 1u);
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    writer.writeField(0, 1); // L bit = 0
+    writer.writeField(1, 1); // H bit = 1
+    BitReader reader(buf.data(), 2);
+    EXPECT_EQ(reader.readField(1).value(), 0u);
+    EXPECT_EQ(reader.readField(1).value(), 1u);
 }
 
 // =====================================================================
@@ -1813,7 +1808,7 @@ TEST(GoldenIE, SI2bis_BodyLength) {
     // Spec-verified: SI2bis body = Extended BCCH freq list(16) + RACH control params(3) = 19 octets
     L3SystemInformationType2bis msg;
     EXPECT_EQ(msg.l2BodyLength(), 19u);
-    EXPECT_EQ(msg.fullBodyLength(), 20u); // Padded to multiple of word boundary
+    EXPECT_EQ(msg.fullBodyLength(), 20u);
 }
 
 // =====================================================================
@@ -1827,7 +1822,7 @@ TEST(GoldenIE, SI2ter_BodyLength) {
     // Spec-verified: SI2ter body = Extended BCCH freq list(16) = 16 octets
     L3SystemInformationType2ter msg;
     EXPECT_EQ(msg.l2BodyLength(), 16u);
-    EXPECT_EQ(msg.fullBodyLength(), 20u); // Padded to multiple of word boundary
+    EXPECT_EQ(msg.fullBodyLength(), 20u);
 }
 
 // =====================================================================

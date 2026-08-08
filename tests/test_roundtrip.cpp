@@ -27,27 +27,19 @@
 #include <gsml3parser/parser.h>
 #include <gsml3parser/rr/l3rrmessages.h>
 #include <gsml3parser/common/l3common.h>
+#include <gsml3parser/visitor.h>
 
 using namespace gsml3parser;
 
-static ParserContext ctx;
-
-// Helper: serialize msg → parse → return result.
-static std::unique_ptr<L3Message> roundtrip(const L3Message& msg) {
-    std::vector<uint8_t> buf(msg.fullLength());
-    auto writeRes = writeL3(msg, buf.data(), buf.size());
-    if (!writeRes.has_value()) return nullptr;
-    if (writeRes.value() == 0) return nullptr;
-    auto result = parseL3(std::span<const uint8_t>(buf), ctx);
-    if (!result.has_value()) return nullptr;
-    return std::move(result).value();
+static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
+    auto hex = writeL3Hex(msg);
+    if (!hex) return Expected<ParsedMessage>::error(hex.error());
+    return parseL3Hex(hex.value());
 }
 
-// Helper: verify PD + MTI survived round-trip.
-static void checkHeader(std::unique_ptr<L3Message>& parsed, L3PD expectPD, int expectMTI) {
-    ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->pd(), expectPD);
-    EXPECT_EQ(parsed->mti(), expectMTI);
+static void checkHeader(const ParsedMessage& parsed, L3PD expectPD, int expectMTI) {
+    EXPECT_EQ(messagePD(parsed), expectPD);
+    EXPECT_EQ(messageMTI(parsed), expectMTI);
 }
 
 // ── Paging Request Type 1 (GSM 04.08 9.1.22) ───────────────────────────
@@ -57,38 +49,46 @@ static void checkHeader(std::unique_ptr<L3Message>& parsed, L3PD expectPD, int e
 
 TEST(RoundTripTest, PagingRequestType1_TMSI) {
     L3MobileIdentity id(0x12345678);
-    L3PagingRequestType1 msg = L3PagingRequestType1::builder()
+    L3PagingRequestType1 concrete = L3PagingRequestType1::builder()
         .addMobileId(id, ChannelType::SDCCHType).build();
+    ParsedMessage msg(RRM(std::move(concrete)));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::PagingRequestType1);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3PagingRequestType1::MTI);
 }
 
 // GSM 04.08 9.1.22: PagingRequestType1 with IMSI MobileIdentity
 // Reference: L3_Templates.ttcn ts_MI_IMSI_LV (IMSI BCD encoding with HEXORDER low nibble swap)
 TEST(RoundTripTest, PagingRequestType1_IMSI) {
     L3MobileIdentity id("250011234567890");
-    L3PagingRequestType1 msg = L3PagingRequestType1::builder()
+    L3PagingRequestType1 concrete = L3PagingRequestType1::builder()
         .addMobileId(id, ChannelType::TCHFType).build();
+    ParsedMessage msg(RRM(std::move(concrete)));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::PagingRequestType1);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3PagingRequestType1::MTI);
 }
 
 // ── Paging Request Type 2 (GSM 04.08 9.1.23) ───────────────────────────
 
 TEST(RoundTripTest, PagingRequestType2) {
-    L3PagingRequestType2 msg = L3PagingRequestType2::builder()
+    L3PagingRequestType2 concrete = L3PagingRequestType2::builder()
         .addTMSI(0xDEADBEEF, ChannelType::SDCCHType).build();
+    ParsedMessage msg(RRM(std::move(concrete)));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::PagingRequestType2);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3PagingRequestType2::MTI);
 }
 
 // ── Paging Request Type 3 (GSM 04.08 9.1.24) ───────────────────────────
 
 TEST(RoundTripTest, PagingRequestType3) {
-    L3PagingRequestType3 msg = L3PagingRequestType3::builder()
+    L3PagingRequestType3 concrete = L3PagingRequestType3::builder()
         .addTMSI(0xABCDEF01, ChannelType::TCHHType).build();
+    ParsedMessage msg(RRM(std::move(concrete)));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::PagingRequestType3);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3PagingRequestType3::MTI);
 }
 
 // ── Paging Response (GSM 04.08 9.1.25) ─────────────────────────────────
@@ -96,9 +96,10 @@ TEST(RoundTripTest, PagingRequestType3) {
 // Structure: spare_half(4), CKSN(4), CM2 LV, MI LV, [addl_upd_par TV]
 
 TEST(RoundTripTest, PagingResponse) {
-    L3PagingResponse msg;
+    ParsedMessage msg(RRM(L3PagingResponse{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::PagingResponse);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3PagingResponse::MTI);
 }
 
 // ── System Information messages (GSM 04.08 9.1.31..9.1.43c) ──────────
@@ -106,156 +107,172 @@ TEST(RoundTripTest, PagingResponse) {
 // BTS_Tests.ttcn ts_SI*_default, GSM_RestOctets.ttcn
 
 TEST(RoundTripTest, SystemInformationType1) {
-    L3SystemInformationType1 msg;
+    ParsedMessage msg(RRM(L3SystemInformationType1{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType1);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType1::MTI);
 }
 
 // GSM 04.08 9.1.32: BCCHFrequencyList(16) + NCCPermitted(1) + RACHControlParameters(3) = 20 bytes
 // Reference: GSM_SystemInformation.ttcn SystemInformationType2 (no rest_octets)
 TEST(RoundTripTest, SystemInformationType2) {
-    L3SystemInformationType2 msg;
+    ParsedMessage msg(RRM(L3SystemInformationType2{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType2);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType2::MTI);
 }
 
 // GSM 04.08 9.1.33: ExtdBCCHFrequencyList(16) + RACHControlParameters(3) + rest_octets(0..1)
 // Reference: GSM_SystemInformation.ttcn SystemInformationType2bis
 TEST(RoundTripTest, SystemInformationType2bis) {
-    L3SystemInformationType2bis msg;
+    ParsedMessage msg(RRM(L3SystemInformationType2bis{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType2bis);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType2bis::MTI);
 }
 
 // GSM 04.08 9.1.34: ExtdBCCHFrequencyList(16) + rest_octets(0..4)
 // Reference: GSM_SystemInformation.ttcn SystemInformationType2ter
 TEST(RoundTripTest, SystemInformationType2ter) {
-    L3SystemInformationType2ter msg;
+    ParsedMessage msg(RRM(L3SystemInformationType2ter{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType2ter);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType2ter::MTI);
 }
 
 // GSM 04.08 9.1.35: CellIdentity(2) + LAI(5) + ControlChannelDesc(3) + CellOptions(1) +
 //   CellSelectionParameters(2) + RACHControlParameters(3) + SI3RestOctets
 // Reference: GSM_SystemInformation.ttcn SystemInformationType3
 TEST(RoundTripTest, SystemInformationType3) {
-    L3SystemInformationType3 msg;
+    ParsedMessage msg(RRM(L3SystemInformationType3{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType3);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType3::MTI);
 }
 
 // GSM 04.08 9.1.36: LAI(5) + CellSelectionParameters(2) + RACHControlParameters(3) +
 //   [CBCH ChannelDesc TLV] + [CBCH MobileAlloc TLV] + SI4RestOctets
 // Reference: GSM_SystemInformation.ttcn SystemInformationType4
 TEST(RoundTripTest, SystemInformationType4) {
-    L3SystemInformationType4 msg;
+    ParsedMessage msg(RRM(L3SystemInformationType4{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType4);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType4::MTI);
 }
 
 // GSM 04.08 9.1.37: BCCHFrequencyList(16)
 // Reference: GSM_SystemInformation.ttcn SystemInformationType5
 TEST(RoundTripTest, SystemInformationType5) {
-    L3SystemInformationType5 msg;
+    ParsedMessage msg(RRM(L3SystemInformationType5{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType5);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType5::MTI);
 }
 
 // GSM 04.08 9.1.38: ExtdBCCHFrequencyList(16)
 // Reference: GSM_SystemInformation.ttcn SystemInformationType5bis
 TEST(RoundTripTest, SystemInformationType5bis) {
-    L3SystemInformationType5bis msg;
+    ParsedMessage msg(RRM(L3SystemInformationType5bis{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType5bis);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType5bis::MTI);
 }
 
 // GSM 04.08 9.1.39: ExtdBCCHFrequencyList(16)
 // Reference: GSM_SystemInformation.ttcn SystemInformationType5ter
 TEST(RoundTripTest, SystemInformationType5ter) {
-    L3SystemInformationType5ter msg;
+    ParsedMessage msg(RRM(L3SystemInformationType5ter{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType5ter);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType5ter::MTI);
 }
 
 // GSM 04.08 9.1.40: CellIdentity(2) + LAI(5) + CellOptionsSacch(1) + NCCPermitted(1) +
 //   SI6RestOctets
 // Reference: GSM_SystemInformation.ttcn SystemInformationType6
 TEST(RoundTripTest, SystemInformationType6) {
-    L3SystemInformationType6 msg;
+    ParsedMessage msg(RRM(L3SystemInformationType6{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType6);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType6::MTI);
 }
 
 // GSM 04.08 9.1.41: CellIdentity(2) + LAI(5) + CellOptionsSacch(1) + NCCPermitted(1) +
 //   NeighborCellDescription(16) + SI7RestOctets
 // Reference: GSM_SystemInformation.ttcn SystemInformationType7
 TEST(RoundTripTest, SystemInformationType7) {
-    L3SystemInformationType7 msg;
+    ParsedMessage msg(RRM(L3SystemInformationType7{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType7);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType7::MTI);
 }
 
 // GSM 04.08 9.1.42: CellChannelDescription(16) + CellOptionsSacch(1) + NCCPermitted(1) +
 //   SI8RestOctets
 // Reference: GSM_SystemInformation.ttcn SystemInformationType8
 TEST(RoundTripTest, SystemInformationType8) {
-    L3SystemInformationType8 msg;
+    ParsedMessage msg(RRM(L3SystemInformationType8{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType8);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType8::MTI);
 }
 
 // GSM 04.08 9.1.43: CellIdentity(2) + LAI(5) + CellOptionsSacch(1) + NCCPermitted(1) +
 //   NeighborCellDescription(16) + SI9RestOctets
 // Reference: GSM_SystemInformation.ttcn SystemInformationType9
 TEST(RoundTripTest, SystemInformationType9) {
-    L3SystemInformationType9 msg;
+    ParsedMessage msg(RRM(L3SystemInformationType9{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType9);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType9::MTI);
 }
 
 // GSM 04.08 9.1.43a: SI13RestOctets (GPRSCellOptions, etc.)
 // Reference: GSM_SystemInformation.ttcn SystemInformationType13
 TEST(RoundTripTest, SystemInformationType13) {
-    L3SystemInformationType13 msg;
+    ParsedMessage msg(RRM(L3SystemInformationType13{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType13);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType13::MTI);
 }
 
 // GSM 04.08 9.1.43b: TDDCellDescription + TDDCellOptions + TDDCellSelectionParameters +
 //   TDDRACHControlParameters + SI16RestOctets
 // Reference: GSM_SystemInformation.ttcn SystemInformationType16
 TEST(RoundTripTest, SystemInformationType16) {
-    L3SystemInformationType16 msg;
+    ParsedMessage msg(RRM(L3SystemInformationType16{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType16);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType16::MTI);
 }
 
-// GSM 04.08 9.1.43c: TDDCellIdentity + TD德拉LocationAreaIdentification + TDDCellOptionsSacch +
+// GSM 04.08 9.1.43c: TDDCellIdentity + TDDLocationAreaIdentification + TDDCellOptionsSacch +
 //   TDDNCCPermitted + TDDNeighborCellDescription + SI17RestOctets
 // Reference: GSM_SystemInformation.ttcn SystemInformationType17
 TEST(RoundTripTest, SystemInformationType17) {
-    L3SystemInformationType17 msg;
+    ParsedMessage msg(RRM(L3SystemInformationType17{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SystemInformationType17);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType17::MTI);
 }
 
 // ── Channel Release (GSM 04.08 9.1.7) ────────────────────────────────
 // Reference: L3_Templates.ttcn tr_RRM_RR_RELEASE
 
 TEST(RoundTripTest, ChannelRelease_Normal) {
-    L3ChannelRelease msg(RRCause::Normal_Event);
+    ParsedMessage msg(RRM(L3ChannelRelease(RRCause::Normal_Event)));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    auto* cr = dynamic_cast<L3ChannelRelease*>(parsed.get());
+    auto* cr = tryGet<L3ChannelRelease>(*parsed);
     ASSERT_TRUE(cr);
     EXPECT_EQ(cr->cause(), RRCause::Normal_Event);
 }
 
 TEST(RoundTripTest, ChannelRelease_Preemptive) {
-    L3ChannelRelease msg(RRCause::Preemptive_Release);
+    ParsedMessage msg(RRM(L3ChannelRelease(RRCause::Preemptive_Release)));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    auto* cr = dynamic_cast<L3ChannelRelease*>(parsed.get());
+    auto* cr = tryGet<L3ChannelRelease>(*parsed);
     ASSERT_TRUE(cr);
     EXPECT_EQ(cr->cause(), RRCause::Preemptive_Release);
 }
@@ -268,11 +285,11 @@ TEST(RoundTripTest, ChannelRelease_Preemptive) {
 // Byte 2: cause = 0x60 (Invalid_Mandatory_Information)
 TEST(RoundTripTest, RRStatus) {
     uint8_t data[] = {0x60, 0x12, 0x60};
-    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg.has_value());
-    EXPECT_EQ(msg->pd(), L3PD::RadioResource);
-    EXPECT_EQ(msg->mti(), L3RRMessage::RRStatus);
-    auto* rs = dynamic_cast<L3RRStatus*>(msg.get());
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messagePD(*msg), L3PD::RadioResource);
+    EXPECT_EQ(messageMTI(*msg), L3RRStatus::MTI);
+    auto* rs = tryGet<L3RRStatus>(*msg);
     ASSERT_TRUE(rs);
     EXPECT_EQ(rs->cause(), RRCause::Invalid_Mandatory_Information);
 }
@@ -282,9 +299,10 @@ TEST(RoundTripTest, RRStatus) {
 // GSM_RR_Types.ttcn AssignmentCommand: ChanDesc(24 bits) + PowerCmd(8 bits) + [optional IEs]
 
 TEST(RoundTripTest, AssignmentCommand) {
-    L3AssignmentCommand msg;
+    ParsedMessage msg(RRM(L3AssignmentCommand{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::AssignmentCommand);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3AssignmentCommand::MTI);
 }
 
 // ── Assignment Complete (GSM 04.08 9.1.3) ─────────────────────────────
@@ -295,14 +313,15 @@ TEST(RoundTripTest, AssignmentCommand) {
 // Byte 2: cause = 0x00 (Normal_Event)
 TEST(RoundTripTest, AssignmentComplete) {
     uint8_t data[] = {0x60, 0x29, 0x00};
-    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg.has_value());
-    auto* ac = dynamic_cast<L3AssignmentComplete*>(msg.get());
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto* ac = tryGet<L3AssignmentComplete>(*msg);
     ASSERT_TRUE(ac);
     EXPECT_EQ(ac->cause(), RRCause::Normal_Event);
 
-    auto parsed = roundtrip(*ac);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::AssignmentComplete);
+    auto parsed = roundtrip(*msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3AssignmentComplete::MTI);
 }
 
 // ── Assignment Failure (GSM 04.08 9.1.3) ──────────────────────────────
@@ -311,23 +330,25 @@ TEST(RoundTripTest, AssignmentComplete) {
 // Byte 0: 0x60, Byte 1: 0x2F, Byte 2: cause=0x09(Channel_Mode_Unacceptable)
 TEST(RoundTripTest, AssignmentFailure) {
     uint8_t data[] = {0x60, 0x2F, 0x09};
-    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg.has_value());
-    auto* af = dynamic_cast<L3AssignmentFailure*>(msg.get());
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto* af = tryGet<L3AssignmentFailure>(*msg);
     ASSERT_TRUE(af);
     EXPECT_EQ(af->cause(), RRCause::Channel_Mode_Unacceptable);
 
-    auto parsed = roundtrip(*af);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::AssignmentFailure);
+    auto parsed = roundtrip(*msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3AssignmentFailure::MTI);
 }
 
 // ── Classmark Enquiry (GSM 04.08 9.1.14) ─────────────────────────────
 // Reference: L3_Templates.ttcn tr_RRM_CM_ENQUIRY
 
 TEST(RoundTripTest, ClassmarkEnquiry) {
-    L3ClassmarkEnquiry msg;
+    ParsedMessage msg(RRM(L3ClassmarkEnquiry{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::ClassmarkEnquiry);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3ClassmarkEnquiry::MTI);
 }
 
 // ── Measurement Report (GSM 04.08 9.1.21) ────────────────────────────
@@ -335,32 +356,36 @@ TEST(RoundTripTest, ClassmarkEnquiry) {
 // GSM_RR_Types.ttcn MeasurementResults: 16 bytes fixed
 
 TEST(RoundTripTest, MeasurementReport) {
-    L3MeasurementReport msg;
+    ParsedMessage msg(RRM(L3MeasurementReport{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::MeasurementReport);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3MeasurementReport::MTI);
 }
 
 // ── Ciphering Mode Command (GSM 04.08 9.1.9) ─────────────────────────
 // Reference: L3_Templates.ttcn ts_RRM_CiphModeCmd
 
 TEST(RoundTripTest, CipheringModeCommand_A5_0) {
-    L3CipheringModeCommand msg(false, 0);
+    ParsedMessage msg(RRM(L3CipheringModeCommand(false, 0)));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::CipheringModeCommand);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3CipheringModeCommand::MTI);
 }
 
 TEST(RoundTripTest, CipheringModeCommand_A5_3) {
-    L3CipheringModeCommand msg(true, 3);
+    ParsedMessage msg(RRM(L3CipheringModeCommand(true, 3)));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::CipheringModeCommand);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3CipheringModeCommand::MTI);
 }
 
 // ── Ciphering Mode Complete (GSM 04.08 9.1.10) ───────────────────────
 
 TEST(RoundTripTest, CipheringModeComplete) {
-    L3CipheringModeComplete msg;
+    ParsedMessage msg(RRM(L3CipheringModeComplete{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::CipheringModeComplete);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3CipheringModeComplete::MTI);
 }
 
 // ── Handover Command (GSM 04.08 9.1.15) ──────────────────────────────
@@ -369,9 +394,10 @@ TEST(RoundTripTest, CipheringModeComplete) {
 // Structure: CellDesc(16) + ChanDesc(24) + HORef(8) + PowerCmdAccType(8) + SyncInd(8) = 70 bits
 
 TEST(RoundTripTest, HandoverCommand) {
-    L3HandoverCommand msg;
+    ParsedMessage msg(RRM(L3HandoverCommand{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::HandoverCommand);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3HandoverCommand::MTI);
 }
 
 // ── Handover Complete (GSM 04.08 9.1.16) ─────────────────────────────
@@ -379,14 +405,15 @@ TEST(RoundTripTest, HandoverCommand) {
 // GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x2C(HandoverComplete), cause=Normal
 TEST(RoundTripTest, HandoverComplete) {
     uint8_t data[] = {0x60, 0x2C, 0x00};
-    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg.has_value());
-    auto* hc = dynamic_cast<L3HandoverComplete*>(msg.get());
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto* hc = tryGet<L3HandoverComplete>(*msg);
     ASSERT_TRUE(hc);
     EXPECT_EQ(hc->cause(), RRCause::Normal_Event);
 
-    auto parsed = roundtrip(*hc);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::HandoverComplete);
+    auto parsed = roundtrip(*msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3HandoverComplete::MTI);
 }
 
 // ── Handover Failure (GSM 04.08 9.1.17) ──────────────────────────────
@@ -394,22 +421,24 @@ TEST(RoundTripTest, HandoverComplete) {
 // GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x28(HandoverFailure), cause=Handover_Impossible
 TEST(RoundTripTest, HandoverFailure) {
     uint8_t data[] = {0x60, 0x28, 0x08};
-    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg.has_value());
-    auto* hf = dynamic_cast<L3HandoverFailure*>(msg.get());
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto* hf = tryGet<L3HandoverFailure>(*msg);
     ASSERT_TRUE(hf);
     EXPECT_EQ(hf->cause(), RRCause::Handover_Impossible);
 
-    auto parsed = roundtrip(*hf);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::HandoverFailure);
+    auto parsed = roundtrip(*msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3HandoverFailure::MTI);
 }
 
 // ── Physical Information (GSM 04.08 9.1.12) ──────────────────────────
 
 TEST(RoundTripTest, PhysicalInformation) {
-    L3PhysicalInformation msg;
+    ParsedMessage msg(RRM(L3PhysicalInformation{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::PhysicalInformation);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3PhysicalInformation::MTI);
 }
 
 // ── Immediate Assignment (GSM 04.08 9.1.19) ──────────────────────────
@@ -417,34 +446,38 @@ TEST(RoundTripTest, PhysicalInformation) {
 // Structure: DedOrTBF(4) + PageMode(4) + ChanDesc(24) + ReqRef(24) + TA(8) + MobileAlloc LV + RestOctets
 
 TEST(RoundTripTest, ImmediateAssignment) {
-    L3ImmediateAssignment msg;
+    ParsedMessage msg(RRM(L3ImmediateAssignment{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::ImmediateAssignment);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3ImmediateAssignment::MTI);
 }
 
 // ── Immediate Assignment Extended (GSM 04.08 9.1.18) ─────────────────
 
 TEST(RoundTripTest, ImmediateAssignmentExtended) {
-    L3ImmediateAssignmentExtended msg;
+    ParsedMessage msg(RRM(L3ImmediateAssignmentExtended{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::ImmediateAssignmentExtended);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3ImmediateAssignmentExtended::MTI);
 }
 
 // ── Immediate Assignment Reject (GSM 04.08 9.1.20) ───────────────────
 // Reference: GSM_RR_Types.ttcn IMMEDIATE_ASSIGNMENT_REJECT='00111010'B = 0x3A
 // GSM_RestOctets.ttcn IARRestOctets
 TEST(RoundTripTest, ImmediateAssignmentReject) {
-    L3ImmediateAssignmentReject msg(30);
+    ParsedMessage msg(RRM(L3ImmediateAssignmentReject(30)));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::ImmediateAssignmentReject);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3ImmediateAssignmentReject::MTI);
 }
 
 // ── Additional Assignment (GSM 04.08 9.1.1) ──────────────────────────
 
 TEST(RoundTripTest, AdditionalAssignment) {
-    L3AdditionalAssignment msg;
+    ParsedMessage msg(RRM(L3AdditionalAssignment{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::AdditionalAssignment);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3AdditionalAssignment::MTI);
 }
 
 // ── Channel Mode Modify (GSM 04.08 9.1.5) ────────────────────────────
@@ -453,9 +486,10 @@ TEST(RoundTripTest, AdditionalAssignment) {
 TEST(RoundTripTest, ChannelModeModify) {
     L3ChannelDescription chd(TDMA_TCHF, 1, 7, 100);
     L3ChannelMode mode(L3ChannelMode::SpeechV1);
-    L3ChannelModeModify msg(chd, mode);
+    ParsedMessage msg(RRM(L3ChannelModeModify(chd, mode)));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::ChannelModeModify);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3ChannelModeModify::MTI);
 }
 
 // ── Channel Mode Modify Acknowledge (GSM 04.08 9.1.6) ────────────────
@@ -473,36 +507,37 @@ TEST(RoundTripTest, ChannelModeModifyAcknowledge) {
         0x11, 0xE0, 0x64,
         // ChanMode: SpeechV1 = 1
         0x01};
-    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg.has_value());
-    auto* cma = dynamic_cast<L3ChannelModeModifyAcknowledge*>(msg.get());
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto* cma = tryGet<L3ChannelModeModifyAcknowledge>(*msg);
     ASSERT_TRUE(cma);
     EXPECT_EQ(cma->description().typeAndOffset(), TDMA_TCHF);
     EXPECT_EQ(cma->mode().mode(), L3ChannelMode::SpeechV1);
 
-    auto parsed = roundtrip(*cma);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::ChannelModeModifyAcknowledge);
+    auto parsed = roundtrip(*msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3ChannelModeModifyAcknowledge::MTI);
 }
 
 // ── GPRS Suspension Request (GSM 04.08 9.1.13b) ──────────────────────
 // Reference: GSM_RR_Types.ttcn GPRS_SUSPENSION_REQUEST='00110100'B = 0x34
 // 3GPP 44.018 3.4.25: GPRS Suspension procedure, TLLI + RA_ID + SuspensionCause
 TEST(RoundTripTest, GPRSSuspensionRequest) {
-    L3GPRSSuspensionRequest msg;
+    ParsedMessage msg(RRM(L3GPRSSuspensionRequest{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::GPRSSuspensionRequest);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3GPRSSuspensionRequest::MTI);
 }
 
 // ── Application Information (GSM 04.08 9.1.53) ───────────────────────
 // Reference: L3_Templates.ttcn tr_RR_APP_INFO
 
 TEST(RoundTripTest, ApplicationInformation) {
-    BitVector data(8);
-    size_t wp = 0;
-    data.writeField(wp, 0xAB, 8);
-    L3ApplicationInformation msg(data);
+    std::vector<uint8_t> rawData(1, 0xAB);
+    ParsedMessage msg(RRM(L3ApplicationInformation(rawData)));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::ApplicationInformation);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3ApplicationInformation::MTI);
 }
 
 // ── Synchronization Channel Information (GSM 04.08 9.1.30) ───────────
@@ -510,27 +545,30 @@ TEST(RoundTripTest, ApplicationInformation) {
 // not a standard 8-bit RR messageType. Reference: GSM_RR_Types.ttcn RrShortDisc.
 // These are sent on SCH and use a different encoding path.
 TEST(RoundTripTest, SynchronizationChannelInformation) {
-    L3SynchronizationChannelInformation msg;
+    ParsedMessage msg(RRM(L3SynchronizationChannelInformation{}));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::SynchronizationChannelInformation);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SynchronizationChannelInformation::MTI);
 }
 
 // ── Channel Request (GSM 04.08 9.1.13) ───────────────────────────────
 // ChannelRequest uses MTI=0x101 (internal RrShortDisc code).
 // Reference: GSM_RR_Types.ttcn RrShortDisc. Sent on RACH, encoded differently.
 TEST(RoundTripTest, ChannelRequest) {
-    L3ChannelRequest msg(0x42);
+    ParsedMessage msg(RRM(L3ChannelRequest(0x42)));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::ChannelRequest);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3ChannelRequest::MTI);
 }
 
 // ── Handover Access (GSM 04.08 9.1.14a) ──────────────────────────────
 // HandoverAccess uses MTI=0x102 (internal RrShortDisc code).
 // Reference: GSM_RR_Types.ttcn RrShortDisc. Sent on HO access timeslot.
 TEST(RoundTripTest, HandoverAccess) {
-    L3HandoverAccess msg(0x17);
+    ParsedMessage msg(RRM(L3HandoverAccess(0x17)));
     auto parsed = roundtrip(msg);
-    checkHeader(parsed, L3PD::RadioResource, L3RRMessage::HandoverAccess);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3HandoverAccess::MTI);
 }
 
 // ── Classmark Change (GSM 04.08 9.1.11) ──────────────────────────────
@@ -546,7 +584,7 @@ TEST(RoundTripTest, ClassmarkChange) {
         0x03,       // CM2 length = 3
         0x20, 0x00, 0x80 // CM2 value (24 bits)
     };
-    auto msg = parseL3(std::span<const uint8_t>(data), ctx);
-    ASSERT_TRUE(msg.has_value());
-    EXPECT_EQ(msg->mti(), L3RRMessage::ClassmarkChange);
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3ClassmarkChange::MTI);
 }

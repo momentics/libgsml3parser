@@ -22,9 +22,8 @@
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
 #include <gsml3parser/arena.h>
-#include <gsml3parser/logger.h>
-#include <gsml3parser/bitvector.h>
-#include <gsml3parser/context.h>
+#include <gsml3parser/bitreader.h>
+#include <gsml3parser/bitwriter.h>
 #include <gsml3parser/rr/l3rrmessages.h>
 #include <gsml3parser/mm/l3mmmessages.h>
 #include <gsml3parser/cc/l3ccmessages.h>
@@ -39,9 +38,9 @@
 
 using namespace gsml3parser;
 
-// ── Test: 4 threads parse concurrently with separate ParserContext ───────
+// ── Test: 4 threads parse concurrently with separate ParserConfig ───────
 
-TEST(ThreadingTest, ConcurrentParseWithContext) {
+TEST(ThreadingTest, ConcurrentParseWithConfig) {
     constexpr int NumThreads = 4;
     constexpr int IterationsPerThread = 200;
 
@@ -59,13 +58,13 @@ TEST(ThreadingTest, ConcurrentParseWithContext) {
 
     for (int t = 0; t < NumThreads; ++t) {
         threads.emplace_back([&msgBuffers, &successCount, &failCount, t]() {
-            ParserContext ctx;
+            ParserConfig cfg;
             int localSuccess = 0;
             int localFail = 0;
             std::span<const uint8_t> msgSpan(msgBuffers[t].data(), msgBuffers[t].size());
 
             for (int i = 0; i < IterationsPerThread; ++i) {
-                auto msg = parseL3(msgSpan, ctx);
+                auto msg = parseL3(msgSpan, cfg);
                 if (msg) {
                     ++localSuccess;
                 } else {
@@ -86,118 +85,34 @@ TEST(ThreadingTest, ConcurrentParseWithContext) {
     EXPECT_EQ(failCount.load(), 0);
 }
 
-// ── Test: thread-local LogLevel isolation ───────────────────────────────
+// ── Test: ParserConfig is immutable — concurrent reads are safe ────────
 
-TEST(ThreadingTest, ThreadLocalLogLevel) {
-    constexpr int NumThreads = 4;
+TEST(ThreadingTest, ConcurrentConfigRead) {
+    constexpr int NumThreads = 8;
+    std::atomic<int> errorCount{0};
     std::vector<std::thread> threads;
-    std::mutex mtx;
-    std::condition_variable cv;
-    bool allReady = false;
-    std::atomic<int> readyCount{0};
-    std::atomic<int> doneCount{0};
 
-    // Set main thread log level
-    setLogLevel(LogLevel::DEBUG);
-    EXPECT_EQ(getLogLevel(), LogLevel::DEBUG);
-
-    std::vector<LogLevel> expectedLevels = {
-        LogLevel::EMERG, LogLevel::WARNING, LogLevel::INFO, LogLevel::DEBUG
-    };
+    // Shared immutable config
+    ParserConfig cfg;
+    cfg = cfg.withLogLevel(LogLevel::DEBUG);
 
     for (int t = 0; t < NumThreads; ++t) {
-        threads.emplace_back([&mtx, &cv, &allReady, &readyCount, &doneCount, level = expectedLevels[t], NumThreads]() {
-            setLogLevel(level);
-            int cnt = readyCount.fetch_add(1) + 1;
-
-            // Wait until all threads are ready
-            std::unique_lock<std::mutex> lock(mtx);
-            cv.wait(lock, [&allReady] { return allReady; });
-
-            // Verify our thread has the correct level
-            EXPECT_EQ(getLogLevel(), level);
-
-            doneCount.fetch_add(1);
+        threads.emplace_back([&cfg, &errorCount]() {
+            for (int i = 0; i < 1000; ++i) {
+                // Concurrent read — should be safe since config is immutable
+                auto level = cfg.getLogLevel();
+                if (level != LogLevel::DEBUG) {
+                    errorCount.fetch_add(1);
+                }
+            }
         });
     }
-
-    // Wait for all threads to be ready, then signal
-    while (readyCount.load() < NumThreads) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    {
-        std::lock_guard<std::mutex> lock(mtx);
-        allReady = true;
-    }
-    cv.notify_all();
 
     for (auto& thr : threads) {
         thr.join();
     }
 
-    EXPECT_EQ(doneCount.load(), NumThreads);
-
-    // Main thread log level should be unchanged
-    EXPECT_EQ(getLogLevel(), LogLevel::DEBUG);
-}
-
-// ── Test: LogCallback isolation per thread ──────────────────────────────
-
-TEST(ThreadingTest, ThreadLocalLogCallback) {
-    std::vector<std::thread> threads;
-    std::mutex mtx;
-    std::condition_variable cv;
-    bool ready = false;
-    std::atomic<int> readyCount{0};
-    constexpr int NumThreads = 4;
-
-    for (int t = 0; t < NumThreads; ++t) {
-        threads.emplace_back([&, t]() {
-            std::mutex localMutex;
-            std::vector<std::string> localCaptures;
-
-            setLogCallback([&localMutex, &localCaptures](LogLevel, const char*, int, const char* msg) {
-                std::lock_guard<std::mutex> lock(localMutex);
-                localCaptures.push_back(std::string(msg));
-            });
-
-            readyCount.fetch_add(1);
-
-            // Wait for signal
-            std::unique_lock<std::mutex> lock(mtx);
-            cv.wait(lock, [&ready] { return ready; });
-
-            // Trigger a log message
-            setLogLevel(LogLevel::DEBUG);
-            char buf[64];
-            std::snprintf(buf, sizeof(buf), "thread_%d_msg", t);
-            logMessage(LogLevel::INFO, "test_threading.cpp", __LINE__, "%s", buf);
-
-            std::lock_guard<std::mutex> lck(localMutex);
-            EXPECT_EQ(localCaptures.size(), 1u);
-            char expected[64];
-            std::snprintf(expected, sizeof(expected), "thread_%d_msg", t);
-            EXPECT_STREQ(localCaptures[0].c_str(), expected);
-
-            setLogCallback(nullptr);
-        });
-    }
-
-    while (readyCount.load() < NumThreads) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
-    {
-        std::lock_guard<std::mutex> lock(mtx);
-        ready = true;
-    }
-    cv.notify_all();
-
-    for (auto& thr : threads) {
-        thr.join();
-    }
-
-    // Reset callback on main thread
-    setLogCallback(nullptr);
+    EXPECT_EQ(errorCount.load(), 0);
 }
 
 // ── Test: Arena allocator — each thread has its own arena, no conflicts ─
@@ -251,9 +166,9 @@ TEST(ThreadingTest, ConcurrentArenaNoConflict) {
     EXPECT_EQ(errorCount.load(), 0);
 }
 
-// ── Test: BitVector with Arena — concurrent allocation ──────────────────
+// ── Test: BitReader/BitWriter with Arena — concurrent allocation ───────
 
-TEST(ThreadingTest, ConcurrentArenaBitVector) {
+TEST(ThreadingTest, ConcurrentArenaBitIO) {
     constexpr int NumThreads = 4;
     std::atomic<int> errorCount{0};
     std::vector<std::thread> threads;
@@ -261,71 +176,24 @@ TEST(ThreadingTest, ConcurrentArenaBitVector) {
     for (int t = 0; t < NumThreads; ++t) {
         threads.emplace_back([&errorCount]() {
             Arena arena(16384);
-            std::vector<BitVector> vectors;
+            std::vector<uint8_t>* buf = static_cast<std::vector<uint8_t>*>(arena.allocate(sizeof(std::vector<uint8_t>), alignof(std::vector<uint8_t>)));
+            new (buf) std::vector<uint8_t>(256, 0);
 
             for (int i = 0; i < 100; ++i) {
-                BitVector bv(arena, 64);
-                size_t wp = 0;
-                bv.writeField(wp, 0xAB, 8);
-                bv.writeField(wp, 0xCD, 8);
+                BitWriter writer(buf->data(), buf->size() * 8);
+                writer.writeField(0xAB, 8);
+                writer.writeField(0xCD, 8);
 
                 // Read back to verify
-                size_t rp = 0;
-                if (bv.readField(rp, 8) != 0xAB || bv.readField(rp, 8) != 0xCD) {
+                BitReader reader(buf->data(), 16);
+                auto v1 = reader.readField(8);
+                auto v2 = reader.readField(8);
+                if (!v1 || !v2 || v1.value() != 0xAB || v2.value() != 0xCD) {
                     errorCount.fetch_add(1);
                 }
-
-                vectors.push_back(std::move(bv));
             }
 
-            // Reset arena to reclaim memory
-            arena.reset();
-            if (arena.used() != 0) {
-                errorCount.fetch_add(1);
-            }
-        });
-    }
-
-    for (auto& thr : threads) {
-        thr.join();
-    }
-
-    EXPECT_EQ(errorCount.load(), 0);
-}
-
-// ── Test: ParserContext PDHandler registration is thread-safe ───────────
-
-TEST(ThreadingTest, ConcurrentPDHandlerRegistration) {
-    constexpr int NumThreads = 4;
-    std::atomic<int> errorCount{0};
-    std::vector<std::thread> threads;
-
-    // Shared context — tests that shared_mutex protects concurrent writes
-    ParserContext ctx;
-
-    for (int t = 0; t < NumThreads; ++t) {
-        threads.emplace_back([&ctx, &errorCount, t]() {
-            L3PD pd = static_cast<L3PD>(t + 1);
-
-            // Register handler
-            ctx.registerPDHandler(pd, [&](const L3Frame&) {
-                return std::make_unique<L3CMServiceAccept>();
-            });
-
-            // Verify handler is registered
-            auto handler = ctx.getPDHandler(pd);
-            if (!handler.has_value()) {
-                errorCount.fetch_add(1);
-            }
-
-            // Unregister
-            ctx.unregisterPDHandler(pd);
-
-            // Verify handler is gone
-            handler = ctx.getPDHandler(pd);
-            if (handler.has_value()) {
-                errorCount.fetch_add(1);
-            }
+            buf->~vector();
         });
     }
 
@@ -358,14 +226,13 @@ TEST(ThreadingTest, HeavyConcurrentParse) {
 
     for (int t = 0; t < NumThreads; ++t) {
         threads.emplace_back([&msgPool, &parseCount, &successCount, t]() {
-            ParserContext ctx;
             int localParses = 0;
             int localSuccess = 0;
 
             for (int i = 0; i < IterationsPerThread; ++i) {
                 int msgIdx = (t + i) % static_cast<int>(msgPool.size());
                 auto& buf = msgPool[msgIdx];
-                auto msg = parseL3(std::span<const uint8_t>(buf.data(), buf.size()), ctx);
+                auto msg = parseL3(std::span<const uint8_t>(buf.data(), buf.size()));
                 ++localParses;
                 if (msg) {
                     ++localSuccess;
@@ -393,30 +260,28 @@ TEST(ThreadingTest, HeavyConcurrentParse) {
     EXPECT_LE(successCount.load(), static_cast<int>(expectedSuccess + 2));
 }
 
-// ── Test: BitSpan zero-copy concurrency ────────────────────────────────
+// ── Test: BitReader zero-copy concurrency ───────────────────────────────
 
-TEST(ThreadingTest, ConcurrentBitSpan) {
+TEST(ThreadingTest, ConcurrentBitReader) {
     constexpr int NumThreads = 4;
     std::atomic<int> errorCount{0};
     std::vector<std::thread> threads;
 
-    // Shared read-only buffer — BitSpan is non-owning, reads should be safe
+    // Shared read-only buffer — BitReader is non-owning, reads should be safe
     std::vector<uint8_t> sharedBuffer(256);
-    size_t wp = 0;
-    BitVector writer(2048);
+    std::vector<uint8_t> writerBuf(256, 0);
+    BitWriter writer(writerBuf.data(), writerBuf.size() * 8);
     for (int i = 0; i < 256; ++i) {
-        writer.writeField(wp, static_cast<unsigned>(i & 0xFF), 8);
+        writer.writeField(static_cast<unsigned>(i & 0xFF), 8);
     }
-    std::copy(writer.data(), writer.data() + 256, sharedBuffer.begin());
-
-    BitSpan view(sharedBuffer.data(), 2048);
+    std::copy(writerBuf.begin(), writerBuf.end(), sharedBuffer.begin());
 
     for (int t = 0; t < NumThreads; ++t) {
-        threads.emplace_back([&view, &errorCount]() {
-            size_t rp = 0;
+        threads.emplace_back([&sharedBuffer, &errorCount]() {
+            BitReader reader(sharedBuffer.data(), sharedBuffer.size() * 8);
             for (int i = 0; i < 256; ++i) {
-                unsigned val = view.readField(rp, 8);
-                if (val != (i & 0xFF)) {
+                auto val = reader.readField(8);
+                if (!val || val.value() != (i & 0xFF)) {
                     errorCount.fetch_add(1);
                     break;
                 }
@@ -431,9 +296,9 @@ TEST(ThreadingTest, ConcurrentBitSpan) {
     EXPECT_EQ(errorCount.load(), 0);
 }
 
-// ── Test: ParserContext log level isolation across threads ──────────────
+// ── Test: ParserConfig log level isolation across threads ───────────────
 
-TEST(ThreadingTest, ContextLogLevelIsolation) {
+TEST(ThreadingTest, ConfigLogLevelIsolation) {
     constexpr int NumThreads = 4;
     std::atomic<int> errorCount{0};
     std::vector<std::thread> threads;
@@ -444,21 +309,21 @@ TEST(ThreadingTest, ContextLogLevelIsolation) {
 
     for (int t = 0; t < NumThreads; ++t) {
         threads.emplace_back([&errorCount, level = expectedLevels[t]]() {
-            ParserContext ctx;
-            ctx.setLogLevel(level);
+            ParserConfig cfg;
+            cfg = cfg.withLogLevel(level);
 
-            if (ctx.logLevel() != level) {
+            if (cfg.getLogLevel() != level) {
                 errorCount.fetch_add(1);
             }
 
             // Do some other work to ensure no cross-thread contamination
             for (int i = 0; i < 100; ++i) {
-                ctx.setLogLevel(static_cast<LogLevel>((static_cast<int>(level) + i) % 8));
+                cfg = cfg.withLogLevel(static_cast<LogLevel>((static_cast<int>(level) + i) % 8));
             }
 
             // Restore and verify
-            ctx.setLogLevel(level);
-            if (ctx.logLevel() != level) {
+            cfg = cfg.withLogLevel(level);
+            if (cfg.getLogLevel() != level) {
                 errorCount.fetch_add(1);
             }
         });
