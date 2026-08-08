@@ -21,91 +21,52 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
-#include <functional>
-#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
 
-#include "l3message.h"
-#include "l3frame.h"
-#include "context.h"
-#include "result.h"
+#include "expected.h"
+#include "message_types.h"
+#include "parser_config.h"
 
 namespace gsml3parser {
 
-// Forward declarations
-class L3RRMessage;
-class L3MMMessage;
-class L3CCMessage;
-class L3SupServMessage;
-
-// ── Primary API: context-aware parsers ──────────────────────────────────
-
 /**
- * Parse a complete L3 message from an L3Frame using the given context.
+ * Parse a complete L3 message from a raw byte span.
  *
- * @param frame  The L3 frame to parse.
- * @param ctx    Parser configuration (PD handlers, log level).
- * @return       ParseResult with unique_ptr to the parsed message, or error on failure.
+ * @param data  Span of raw L3 message bytes (header + body).
+ * @param cfg   Parser configuration (log level, custom PD handlers).
+ * @return      Expected<ParsedMessage> holding the parsed variant, or ParseError on failure.
  */
-ParseResult<std::unique_ptr<L3Message>> parseL3(const L3Frame& frame, const ParserContext& ctx);
+[[nodiscard]] Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfig& cfg = {});
 
 /**
-   * Parse a complete L3 message from a byte span using the given context.
-   *
-   * @param data   Span of raw L3 message bytes.
-   * @param ctx    Parser configuration (PD handlers, log level).
-   * @return       ParseResult with unique_ptr to the parsed message, or error on failure.
-   */
-ParseResult<std::unique_ptr<L3Message>> parseL3(std::span<const uint8_t> data, const ParserContext& ctx);
-
-/**
-   * Parse a complete L3 message from a hex string using the given context.
-   *
-   * @param hex    Hex-encoded L3 message (e.g. "061900...").
-   * @param ctx    Parser configuration (PD handlers, log level).
-   * @return       ParseResult with unique_ptr to the parsed message, or error on failure.
-   */
-ParseResult<std::unique_ptr<L3Message>> parseL3Hex(std::string_view hex, const ParserContext& ctx);
-
-// ── Serializers (stateless, no context needed) ──────────────────────────
-
-/**
- * Write an L3Message to raw bytes.
+ * Parse a complete L3 message from a hex-encoded string.
  *
- * @param msg     The message to serialize.
- * @param out     Output buffer (must be at least msg.fullLength() bytes).
+ * @param hex   Hex-encoded L3 message (e.g. "060D00").
+ * @param cfg   Parser configuration (log level, custom PD handlers).
+ * @return      Expected<ParsedMessage> holding the parsed variant, or ParseError on failure.
+ */
+[[nodiscard]] Expected<ParsedMessage> parseL3Hex(std::string_view hex, const ParserConfig& cfg = {});
+
+/**
+ * Serialize a ParsedMessage to raw bytes (header + body).
+ *
+ * @param msg     The parsed message to serialize.
+ * @param out     Output buffer.
  * @param maxlen  Maximum number of bytes to write.
- * @return        ParseResult with number of bytes written, or error on failure.
+ * @return        Expected<size_t> with bytes written, or ParseError if buffer too small.
  */
-ParseResult<size_t> writeL3(const L3Message& msg, uint8_t* out, size_t maxlen);
+[[nodiscard]] Expected<size_t> writeL3(const ParsedMessage& msg, uint8_t* out, size_t maxlen);
 
 /**
- * Write an L3Message to a hex string.
+ * Serialize a ParsedMessage to a hex-encoded string.
  *
- * @param msg     The message to serialize.
- * @return        Hex-encoded string.
+ * @param msg  The parsed message to serialize.
+ * @return     Expected<std::string> with hex encoding, or ParseError on failure.
  */
-std::string writeL3Hex(const L3Message& msg);
-
-// ── Domain parsers and factories (internal) ─────────────────────────────
-
-namespace detail {
-
-ParseResult<std::unique_ptr<L3RRMessage>> L3RRFactory(int mti);
-ParseResult<std::unique_ptr<L3MMMessage>> L3MMFactory(int mti);
-ParseResult<std::unique_ptr<L3CCMessage>> L3CCFactory(int mti);
-ParseResult<std::unique_ptr<L3SupServMessage>> L3SupServFactory(int mti);
-
-ParseResult<std::unique_ptr<L3RRMessage>> parseL3RR(const L3Frame& source);
-ParseResult<std::unique_ptr<L3MMMessage>> parseL3MM(const L3Frame& source);
-ParseResult<std::unique_ptr<L3CCMessage>> parseL3CC(const L3Frame& source);
-ParseResult<std::unique_ptr<L3SupServMessage>> parseL3SupServ(const L3Frame& source);
-
-} // namespace detail
+[[nodiscard]] Expected<std::string> writeL3Hex(const ParsedMessage& msg);
 
 } // namespace gsml3parser
-
-

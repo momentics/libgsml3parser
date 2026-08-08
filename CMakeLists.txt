@@ -36,7 +36,7 @@ set(CORE_SOURCES
     src/parser.cpp
     src/parser_config.cpp
     src/mm/l3mmelements.cpp
-    src/cc/l3cclements.cpp
+    src/cc/l3ccelements.cpp
     src/visitor.cpp
 )
 
