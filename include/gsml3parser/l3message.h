@@ -176,6 +176,7 @@ public:
     L3OctetAlignedProtocolElement() : mExtant(false) {}
     explicit L3OctetAlignedProtocolElement(std::string wData) : mData(std::move(wData)), mExtant(true) {}
 };
+#define GSML3PARSER_L3OCTETALIGNEDPROTOCOL_ELEMENT_DEFINED
 
 /** Non-aligned message element (bit-level, not TLV). */
 class GenericMessageElement {

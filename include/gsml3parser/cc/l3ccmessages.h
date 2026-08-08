@@ -21,411 +21,543 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <ostream>
-#include <string>
 
-#include "../l3message.h"
-#include "../l3frame.h"
+#include "../expected.h"
+#include "../bitreader.h"
+#include "../bitwriter.h"
 #include "../types.h"
 #include "../enums.h"
-#include "../common/l3common.h"
-#include "l3cclements.h"
+#include "l3ccelements.h"
 
 namespace gsml3parser {
 
-// ── L3CCMessage ─────────────────────────────────────────────────────────
+// ── CC Message Type identifiers ─────────────────────────────────────────
 
-class L3CCMessage : public L3Message {
-private:
-    unsigned mTI;
-public:
-    enum MessageType : int {
-        Alerting           = 0x01,
-        CallConfirmed      = 0x08,
-        CallProceeding     = 0x02,
-        Connect            = 0x07,
-        Setup              = 0x05,
-        EmergencySetup     = 0x0e,
-        ConnectAcknowledge = 0x0f,
-        Progress           = 0x03,
-        Disconnect         = 0x25,
-        Release            = 0x2d,
-        ReleaseComplete    = 0x2a,
-        StartDTMF          = 0x35,
-        StopDTMF           = 0x31,
-        StopDTMFAcknowledge = 0x32,
-        StartDTMFAcknowledge = 0x36,
-        StartDTMFReject    = 0x37,
-        Hold               = 0x18,
-        HoldReject         = 0x1a,
-        CCStatus           = 0x3d
-    };
-
-    explicit L3CCMessage(unsigned wTI = 7) : mTI(wTI) {}
-
-    size_t fullBodyLength() const override { return l2BodyLength(); }
-    ParseResult<void> write(L3Frame& dest) const override;
-    L3PD pd() const override { return L3PD::CallControl; }
-    unsigned ti() const override { return mTI; }
-    void ti(unsigned wTI) { mTI = wTI; }
-    void text(std::ostream& os) const override;
+enum class CCMessageType : uint8_t {
+    Alerting           = 0x01,
+    CallProceeding     = 0x02,
+    Progress           = 0x03,
+    Setup              = 0x05,
+    Connect            = 0x07,
+    CallConfirmed      = 0x08,
+    EmergencySetup     = 0x0e,
+    ConnectAcknowledge = 0x0f,
+    Hold               = 0x18,
+    HoldReject         = 0x1a,
+    Disconnect         = 0x25,
+    ReleaseComplete    = 0x2a,
+    StartDTMF          = 0x35,
+    StopDTMF           = 0x31,
+    StopDTMFAcknowledge = 0x32,
+    StartDTMFAcknowledge = 0x36,
+    StartDTMFReject    = 0x37,
+    Release            = 0x2d,
+    CCStatus           = 0x3d
 };
 
-std::ostream& operator<<(std::ostream& os, L3CCMessage::MessageType MTI);
+std::ostream& operator<<(std::ostream& os, CCMessageType mti);
 
 // ── Setup (GSM 04.08 9.3.19) ──────────────────────────────────────────
 
-class L3Setup : public L3CCMessage, public L3CCCapabilities, public L3CCCommonIEs {
-private:
-    bool mHaveCalledParty;
-    L3CalledPartyBCDNumber mCalledPartyBCDNumber;
-    bool mHaveCallingParty;
-    L3CallingPartyBCDNumber mCallingPartyBCDNumber;
-    bool mHaveSignal;
+class L3Setup {
+    static constexpr uint8_t spareBit() { return 1; }
+    unsigned mTI{7};
+    bool mHaveCalledParty{false};
+    L3CalledPartyBCDNumber mCalledParty;
+    bool mHaveCallingParty{false};
+    L3CallingPartyBCDNumber mCallingParty;
+    bool mHaveSignal{false};
     L3Signal mSignal;
+    bool mHaveBearerCapability{false};
+    L3BearerCapability mBearerCapability;
+    bool mHaveSupportedCodecs{false};
+    L3SupportedCodecList mSupportedCodecs;
+    bool mHaveFacility{false};
+    L3SupServFacilityIE mFacility;
+    bool mHaveSSVersion{false};
+    L3SupServVersionIndicator mSSVersion;
+
 public:
-    explicit L3Setup(unsigned wTI = 7)
-        : L3CCMessage(wTI), mHaveCalledParty(false), mHaveCallingParty(false), mHaveSignal(false) {}
+    static constexpr int MTI = 0x05;
+
+    L3Setup() = default;
+    explicit L3Setup(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
 
     bool haveCalledParty() const { return mHaveCalledParty; }
-    const L3CalledPartyBCDNumber& calledPartyBCDNumber() const { return mCalledPartyBCDNumber; }
-    const char* digits() const { return mCalledPartyBCDNumber.digits(); }
-    TypeOfNumber typeOfNumber() const { return mCalledPartyBCDNumber.type(); }
-    NumberingPlan numberingPlan() const { return mCalledPartyBCDNumber.plan(); }
+    const L3CalledPartyBCDNumber& calledPartyBCDNumber() const { return mCalledParty; }
+    const char* digits() const { return mCalledParty.digits(); }
+    TypeOfNumber typeOfNumber() const { return mCalledParty.type(); }
+    NumberingPlan numberingPlan() const { return mCalledParty.plan(); }
 
-    int mti() const override { return Setup; }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    size_t l2BodyLength() const override;
-    void text(std::ostream& os) const override;
+    bool haveCallingParty() const { return mHaveCallingParty; }
+    const L3CallingPartyBCDNumber& callingPartyBCDNumber() const { return mCallingParty; }
 
-    class Builder {
-    public:
-        explicit Builder(unsigned wTI = 7);
-        Builder& calledParty(const L3CalledPartyBCDNumber& cp);
-        Builder& callingParty(const L3CallingPartyBCDNumber& cp);
-        Builder& signal(const L3Signal& sig);
-        Builder& bearerCapability(const L3BearerCapability& bc);
-        Builder& supportedCodecs(const L3SupportedCodecList& sc);
-        L3Setup build();
-    private:
-        unsigned mTI{7};
-        bool mHaveCalledParty{false};
-        L3CalledPartyBCDNumber mCalledPartyBCDNumber;
-        bool mHaveCallingParty{false};
-        L3CallingPartyBCDNumber mCallingPartyBCDNumber;
-        bool mHaveSignal{false};
-        L3Signal mSignal;
-        L3BearerCapability mBearerCapability;
-        L3SupportedCodecList mSupportedCodecs;
-    };
+    bool haveSignal() const { return mHaveSignal; }
+    const L3Signal& signal() const { return mSignal; }
 
-    static Builder builder(unsigned wTI = 7) { return Builder(wTI); }
+    bool haveBearerCapability() const { return mHaveBearerCapability; }
+    const L3BearerCapability& bearerCapability() const { return mBearerCapability; }
+
+    bool haveSupportedCodecs() const { return mHaveSupportedCodecs; }
+    const L3SupportedCodecList& supportedCodecs() const { return mSupportedCodecs; }
+
+    bool haveFacility() const { return mHaveFacility; }
+    const L3SupServFacilityIE& facility() const { return mFacility; }
+
+    bool haveSSVersion() const { return mHaveSSVersion; }
+    const L3SupServVersionIndicator& ssVersion() const { return mSSVersion; }
+
+    [[nodiscard]] static Expected<L3Setup> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const;
+    void text(std::ostream& os) const;
 };
 
 // ── Emergency Setup (GSM 04.08 9.3.8) ─────────────────────────────────
 
-class L3EmergencySetup : public L3Setup {
+class L3EmergencySetup {
+    unsigned mTI{7};
 public:
-    explicit L3EmergencySetup(unsigned wTI = 7) : L3Setup(wTI) {}
-    int mti() const override { return EmergencySetup; }
-    size_t l2BodyLength() const override { return 0; }
+    static constexpr int MTI = 0x0e;
+
+    L3EmergencySetup() = default;
+    explicit L3EmergencySetup(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+
+    [[nodiscard]] static Expected<L3EmergencySetup> parse(BitReader&);
+    void write(BitWriter&) const;
+    size_t bodyLength() const { return 0; }
+    void text(std::ostream& os) const;
 };
 
 // ── Call Proceeding (GSM 04.08 9.3.3) ─────────────────────────────────
 
-class L3CallProceeding : public L3CCMessage {
-private:
+class L3CallProceeding {
+    unsigned mTI{7};
+    bool mHaveBearerCapability{false};
     L3BearerCapability mBearerCapability;
-    bool mHaveProgress;
+    bool mHaveProgress{false};
     L3ProgressIndicator mProgress;
+
 public:
-    explicit L3CallProceeding(unsigned wTI = 7) : L3CCMessage(wTI), mHaveProgress(false) {}
-    int mti() const override { return CallProceeding; }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    size_t l2BodyLength() const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x02;
+
+    L3CallProceeding() = default;
+    explicit L3CallProceeding(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+
     bool hasProgress() const { return mHaveProgress; }
     const L3ProgressIndicator& progress() const { return mProgress; }
+
+    bool haveBearerCapability() const { return mHaveBearerCapability; }
+    const L3BearerCapability& bearerCapability() const { return mBearerCapability; }
+
+    [[nodiscard]] static Expected<L3CallProceeding> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const;
+    void text(std::ostream& os) const;
 };
 
 // ── Alerting (GSM 04.08 9.3.1) ────────────────────────────────────────
 
-class L3Alerting : public L3CCMessage, public L3CCCommonIEs {
-private:
-    bool mHaveProgress;
+class L3Alerting {
+    unsigned mTI{7};
+    bool mHaveProgress{false};
     L3ProgressIndicator mProgress;
+    bool mHaveFacility{false};
+    L3SupServFacilityIE mFacility;
+    bool mHaveSSVersion{false};
+    L3SupServVersionIndicator mSSVersion;
+
 public:
-    explicit L3Alerting(unsigned wTI = 7) : L3CCMessage(wTI), mHaveProgress(false) {}
-    int mti() const override { return Alerting; }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    size_t l2BodyLength() const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x01;
+
+    L3Alerting() = default;
+    explicit L3Alerting(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+
     bool hasProgress() const { return mHaveProgress; }
     const L3ProgressIndicator& progress() const { return mProgress; }
+
+    bool haveFacility() const { return mHaveFacility; }
+    const L3SupServFacilityIE& facility() const { return mFacility; }
+
+    bool haveSSVersion() const { return mHaveSSVersion; }
+    const L3SupServVersionIndicator& ssVersion() const { return mSSVersion; }
+
+    [[nodiscard]] static Expected<L3Alerting> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const;
+    void text(std::ostream& os) const;
 };
 
 // ── Connect (GSM 04.08 9.3.5) ─────────────────────────────────────────
 
-class L3Connect : public L3CCMessage {
-private:
-    bool mHaveProgress;
+class L3Connect {
+    unsigned mTI{7};
+    bool mHaveProgress{false};
     L3ProgressIndicator mProgress;
+
 public:
-    explicit L3Connect(unsigned wTI = 7) : L3CCMessage(wTI), mHaveProgress(false) {}
-    int mti() const override { return Connect; }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    size_t l2BodyLength() const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x07;
+
+    L3Connect() = default;
+    explicit L3Connect(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+
     bool hasProgress() const { return mHaveProgress; }
     const L3ProgressIndicator& progress() const { return mProgress; }
+
+    [[nodiscard]] static Expected<L3Connect> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const;
+    void text(std::ostream& os) const;
 };
 
 // ── Connect Acknowledge (GSM 04.08 9.3.6) ─────────────────────────────
 
-class L3ConnectAcknowledge : public L3CCMessage {
+class L3ConnectAcknowledge {
+    unsigned mTI{7};
 public:
-    explicit L3ConnectAcknowledge(unsigned wTI = 7) : L3CCMessage(wTI) {}
-    int mti() const override { return ConnectAcknowledge; }
-    size_t l2BodyLength() const override { return 0; }
-    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override { return {}; }
-    ParseResult<void> try_parseBody(const L3Frame&, size_t&) override { return {}; }
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x0f;
+
+    L3ConnectAcknowledge() = default;
+    explicit L3ConnectAcknowledge(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+
+    [[nodiscard]] static Expected<L3ConnectAcknowledge> parse(BitReader&);
+    void write(BitWriter&) const;
+    size_t bodyLength() const { return 0; }
+    void text(std::ostream& os) const;
 };
 
 // ── Call Confirmed (GSM 04.08 9.3.2) ──────────────────────────────────
 
-class L3CallConfirmed : public L3CCMessage, public L3CCCapabilities {
-private:
-    bool mHaveCause;
+class L3CallConfirmed {
+    unsigned mTI{7};
+    bool mHaveBearerCapability{false};
+    L3BearerCapability mBearerCapability;
+    bool mHaveSupportedCodecs{false};
+    L3SupportedCodecList mSupportedCodecs;
+    bool mHaveCause{false};
     L3CauseElement mCause;
+
 public:
-    explicit L3CallConfirmed(unsigned wTI = 7) : L3CCMessage(wTI), mHaveCause(false) {}
-    int mti() const override { return CallConfirmed; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    size_t l2BodyLength() const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x08;
+
+    L3CallConfirmed() = default;
+    explicit L3CallConfirmed(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+
     bool hasCause() const { return mHaveCause; }
     const L3CauseElement& cause() const { return mCause; }
+
+    bool haveBearerCapability() const { return mHaveBearerCapability; }
+    const L3BearerCapability& bearerCapability() const { return mBearerCapability; }
+
+    bool haveSupportedCodecs() const { return mHaveSupportedCodecs; }
+    const L3SupportedCodecList& supportedCodecs() const { return mSupportedCodecs; }
+
+    [[nodiscard]] static Expected<L3CallConfirmed> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const;
+    void text(std::ostream& os) const;
 };
 
 // ── Disconnect (GSM 04.08 9.3.7) ──────────────────────────────────────
 
-class L3Disconnect : public L3CCMessage {
-private:
-    CCCause mCause;
-    CCCauseLocation mLocation;
+class L3Disconnect {
+    unsigned mTI{7};
+    CCCause mCause{CCCause::Normal_Call_Clearing};
+    CCCauseLocation mLocation{CCCauseLocation::Private_Serving_Local};
+
 public:
-    L3Disconnect(unsigned wTI = 7, CCCause cause = CCCause::Normal_Call_Clearing,
-                 CCCauseLocation loc = CCCauseLocation::Private_Serving_Local)
-        : L3CCMessage(wTI), mCause(cause), mLocation(loc) {}
+    static constexpr int MTI = 0x25;
+
+    L3Disconnect() = default;
+    L3Disconnect(unsigned ti, CCCause cause, CCCauseLocation loc)
+        : mTI(ti), mCause(cause), mLocation(loc) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
 
     CCCause cause() const { return mCause; }
     CCCauseLocation location() const { return mLocation; }
-    int mti() const override { return Disconnect; }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    size_t l2BodyLength() const override { return 4; }
-    size_t fullBodyLength() const override { return 4; }
-    void text(std::ostream& os) const override;
+
+    [[nodiscard]] static Expected<L3Disconnect> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const { return 2; }
+    void text(std::ostream& os) const;
 };
 
 // ── Release (GSM 04.08 9.3.19) ────────────────────────────────────────
 
-class L3Release : public L3CCMessage, public L3CCCommonIEs {
-private:
-    bool mHaveCause;
-    CCCause mCause;
+class L3Release {
+    unsigned mTI{7};
+    bool mHaveCause{false};
+    CCCause mCause{CCCause::Normal_Call_Clearing};
+    bool mHaveFacility{false};
+    L3SupServFacilityIE mFacility;
+    bool mHaveSSVersion{false};
+    L3SupServVersionIndicator mSSVersion;
+
 public:
-    explicit L3Release(unsigned wTI = 7) : L3CCMessage(wTI), mHaveCause(false) {}
+    static constexpr int MTI = 0x2d;
+
+    L3Release() = default;
+    explicit L3Release(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
 
     bool haveCause() const { return mHaveCause; }
     CCCause cause() const { return mCause; }
-    int mti() const override { return Release; }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    size_t l2BodyLength() const override;
-    void text(std::ostream& os) const override;
 
-    class Builder {
-    public:
-        explicit Builder(unsigned wTI = 7);
-        Builder& cause(CCCause c);
-        L3Release build();
-    private:
-        unsigned mTI{7};
-        bool mHaveCause{false};
-        CCCause mCause{CCCause::Normal_Call_Clearing};
-    };
+    bool haveFacility() const { return mHaveFacility; }
+    const L3SupServFacilityIE& facility() const { return mFacility; }
 
-    static Builder builder(unsigned wTI = 7) { return Builder(wTI); }
+    bool haveSSVersion() const { return mHaveSSVersion; }
+    const L3SupServVersionIndicator& ssVersion() const { return mSSVersion; }
+
+    [[nodiscard]] static Expected<L3Release> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const;
+    void text(std::ostream& os) const;
 };
 
 // ── Release Complete (GSM 04.08 9.3.19) ───────────────────────────────
 
-class L3ReleaseComplete : public L3CCMessage, public L3CCCommonIEs {
-private:
-    bool mHaveCause;
-    CCCause mCause;
+class L3ReleaseComplete {
+    unsigned mTI{7};
+    bool mHaveCause{false};
+    CCCause mCause{CCCause::Normal_Call_Clearing};
+    bool mHaveFacility{false};
+    L3SupServFacilityIE mFacility;
+    bool mHaveSSVersion{false};
+    L3SupServVersionIndicator mSSVersion;
+
 public:
-    explicit L3ReleaseComplete(unsigned wTI = 7) : L3CCMessage(wTI), mHaveCause(false) {}
+    static constexpr int MTI = 0x2a;
 
-    int mti() const override { return ReleaseComplete; }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    size_t l2BodyLength() const override;
-    void text(std::ostream& os) const override;
+    L3ReleaseComplete() = default;
+    explicit L3ReleaseComplete(unsigned ti) : mTI(ti) {}
 
-    class Builder {
-    public:
-        explicit Builder(unsigned wTI = 7);
-        Builder& cause(CCCause c);
-        L3ReleaseComplete build();
-    private:
-        unsigned mTI{7};
-        bool mHaveCause{false};
-        CCCause mCause{CCCause::Normal_Call_Clearing};
-    };
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
 
-    static Builder builder(unsigned wTI = 7) { return Builder(wTI); }
+    bool haveCause() const { return mHaveCause; }
+    CCCause cause() const { return mCause; }
+
+    bool haveFacility() const { return mHaveFacility; }
+    const L3SupServFacilityIE& facility() const { return mFacility; }
+
+    bool haveSSVersion() const { return mHaveSSVersion; }
+    const L3SupServVersionIndicator& ssVersion() const { return mSSVersion; }
+
+    [[nodiscard]] static Expected<L3ReleaseComplete> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const;
+    void text(std::ostream& os) const;
 };
 
 // ── CC Status (GSM 04.08 9.3.19) ──────────────────────────────────────
 
-class L3CCStatus : public L3CCMessage {
-private:
-    CCCause mCause;
-    unsigned mCallState;
+class L3CCStatus {
+    unsigned mTI{7};
+    CCCause mCause{CCCause::Normal_Call_Clearing};
+    unsigned mCallState{0};
+
 public:
-    explicit L3CCStatus(unsigned wTI = 7) : L3CCMessage(wTI) {}
+    static constexpr int MTI = 0x3d;
+
+    L3CCStatus() = default;
+    explicit L3CCStatus(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
 
     CCCause cause() const { return mCause; }
     unsigned callState() const { return mCallState; }
-    int mti() const override { return CCStatus; }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    size_t l2BodyLength() const override { return 4; }
-    void text(std::ostream& os) const override;
 
-    class Builder {
-    public:
-        explicit Builder(unsigned wTI = 7);
-        Builder& cause(CCCause c);
-        Builder& callState(unsigned cs);
-        L3CCStatus build();
-    private:
-        unsigned mTI{7};
-        CCCause mCause{CCCause::Normal_Call_Clearing};
-        unsigned mCallState{0};
-    };
-
-    static Builder builder(unsigned wTI = 7) { return Builder(wTI); }
+    [[nodiscard]] static Expected<L3CCStatus> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const { return 3; }
+    void text(std::ostream& os) const;
 };
 
 // ── DTMF messages ──────────────────────────────────────────────────────
 
-class L3StartDTMF : public L3CCMessage {
-private:
-    char mKey;
+class L3StartDTMF {
+    unsigned mTI{7};
+    char mKey{0};
 public:
-    explicit L3StartDTMF(unsigned wTI = 7) : L3CCMessage(wTI), mKey(0) {}
+    static constexpr int MTI = 0x35;
+
+    L3StartDTMF() = default;
+    explicit L3StartDTMF(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+
     char key() const { return mKey; }
-    int mti() const override { return StartDTMF; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    size_t l2BodyLength() const override { return 1; }
-    void text(std::ostream& os) const override;
+
+    [[nodiscard]] static Expected<L3StartDTMF> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const { return 1; }
+    void text(std::ostream& os) const;
 };
 
-class L3StartDTMFAcknowledge : public L3CCMessage {
-private:
-    char mKey;
+class L3StopDTMF {
+    unsigned mTI{7};
 public:
-    L3StartDTMFAcknowledge(unsigned wTI, char key) : L3CCMessage(wTI), mKey(key) {}
-    int mti() const override { return StartDTMFAcknowledge; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    size_t l2BodyLength() const override { return 1; }
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x31;
+
+    L3StopDTMF() = default;
+    explicit L3StopDTMF(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+
+    [[nodiscard]] static Expected<L3StopDTMF> parse(BitReader&);
+    void write(BitWriter&) const;
+    size_t bodyLength() const { return 0; }
+    void text(std::ostream& os) const;
+};
+
+class L3StopDTMFAcknowledge {
+    unsigned mTI{7};
+public:
+    static constexpr int MTI = 0x32;
+
+    L3StopDTMFAcknowledge() = default;
+    explicit L3StopDTMFAcknowledge(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+
+    [[nodiscard]] static Expected<L3StopDTMFAcknowledge> parse(BitReader&);
+    void write(BitWriter&) const;
+    size_t bodyLength() const { return 0; }
+    void text(std::ostream& os) const;
+};
+
+class L3StartDTMFAcknowledge {
+    unsigned mTI{7};
+    char mKey{0};
+public:
+    static constexpr int MTI = 0x36;
+
+    L3StartDTMFAcknowledge() = default;
+    explicit L3StartDTMFAcknowledge(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+
     char key() const { return mKey; }
+
+    [[nodiscard]] static Expected<L3StartDTMFAcknowledge> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const { return 2; }
+    void text(std::ostream& os) const;
 };
 
-class L3StartDTMFReject : public L3CCMessage {
-private:
-    CCCause mCause;
+class L3StartDTMFReject {
+    unsigned mTI{7};
+    CCCause mCause{CCCause::Unknown_L3_Cause};
 public:
-    L3StartDTMFReject(unsigned wTI, CCCause cause) : L3CCMessage(wTI), mCause(cause) {}
-    int mti() const override { return StartDTMFReject; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    size_t l2BodyLength() const override { return 3; }
-    void text(std::ostream& os) const override;
-};
+    static constexpr int MTI = 0x37;
 
-class L3StopDTMF : public L3CCMessage {
-public:
-    explicit L3StopDTMF(unsigned wTI = 7) : L3CCMessage(wTI) {}
-    int mti() const override { return StopDTMF; }
-    ParseResult<void> try_parseBody(const L3Frame&, size_t&) override { return {}; }
-    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override { return {}; }
-    size_t l2BodyLength() const override { return 0; }
-    void text(std::ostream& os) const override;
-};
+    L3StartDTMFReject() = default;
+    L3StartDTMFReject(unsigned ti, CCCause cause) : mTI(ti), mCause(cause) {}
 
-class L3StopDTMFAcknowledge : public L3CCMessage {
-public:
-    explicit L3StopDTMFAcknowledge(unsigned wTI) : L3CCMessage(wTI) {}
-    int mti() const override { return StopDTMFAcknowledge; }
-    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override { return {}; }
-    ParseResult<void> try_parseBody(const L3Frame&, size_t&) override { return {}; }
-    size_t l2BodyLength() const override { return 0; }
-    void text(std::ostream& os) const override;
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+
+    CCCause cause() const { return mCause; }
+
+    [[nodiscard]] static Expected<L3StartDTMFReject> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const { return 3; }
+    void text(std::ostream& os) const;
 };
 
 // ── Hold ───────────────────────────────────────────────────────────────
 
-class L3Hold : public L3CCMessage {
+class L3Hold {
+    unsigned mTI{7};
 public:
-    explicit L3Hold(unsigned wTI = 7) : L3CCMessage(wTI) {}
-    int mti() const override { return Hold; }
-    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override { return {}; }
-    ParseResult<void> try_parseBody(const L3Frame&, size_t&) override { return {}; }
-    size_t l2BodyLength() const override { return 0; }
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x18;
+
+    L3Hold() = default;
+    explicit L3Hold(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+
+    [[nodiscard]] static Expected<L3Hold> parse(BitReader&);
+    void write(BitWriter&) const;
+    size_t bodyLength() const { return 0; }
+    void text(std::ostream& os) const;
 };
 
-class L3HoldReject : public L3CCMessage {
-private:
-    CCCause mCause;
+class L3HoldReject {
+    unsigned mTI{7};
+    CCCause mCause{CCCause::Unknown_L3_Cause};
 public:
-    L3HoldReject(unsigned wTI, CCCause cause) : L3CCMessage(wTI), mCause(cause) {}
-    int mti() const override { return HoldReject; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    size_t l2BodyLength() const override { return 3; }
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x1a;
+
+    L3HoldReject() = default;
+    L3HoldReject(unsigned ti, CCCause cause) : mTI(ti), mCause(cause) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+
+    CCCause cause() const { return mCause; }
+
+    [[nodiscard]] static Expected<L3HoldReject> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const { return 3; }
+    void text(std::ostream& os) const;
 };
 
 // ── Progress (GSM 04.08 9.3.17) ───────────────────────────────────────
 
-class L3Progress : public L3CCMessage {
-private:
-    unsigned mProgress;
+class L3Progress {
+    unsigned mTI{7};
+    L3ProgressIndicator mProgress;
 public:
-    explicit L3Progress(unsigned wTI) : L3CCMessage(wTI), mProgress(0) {}
-    int mti() const override { return Progress; }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    size_t l2BodyLength() const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x03;
+
+    L3Progress() = default;
+    explicit L3Progress(unsigned ti) : mTI(ti) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+
+    const L3ProgressIndicator& progress() const { return mProgress; }
+
+    [[nodiscard]] static Expected<L3Progress> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const { return 2; }
+    void text(std::ostream& os) const;
 };
 
 } // namespace gsml3parser
-
-

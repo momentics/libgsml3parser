@@ -20,85 +20,86 @@
 // SOFTWARE.
 
 #include "gsml3parser/rr/l3rrmessages.h"
-#include "gsml3parser/logger.h"
 #include <algorithm>
 #include <sstream>
 #include <iomanip>
 
 namespace gsml3parser {
 
-// ── L3RRMessage ─────────────────────────────────────────────────────────
+constexpr unsigned channelNeededCode(ChannelType wType) {
+    switch (wType) {
+        case ChannelType::AnyDCCHType: return 0;
+        case ChannelType::SDCCHType: return 1;
+        case ChannelType::TCHFType: return 2;
+        case ChannelType::AnyTCHType: return 3;
+        default: return 0;
+    }
+}
 
-const char* L3RRMessage::name(MessageType mt) {
-    switch (mt) {
-        case SystemInformationType1:  return "SystemInformationType1";
-        case SystemInformationType2:  return "SystemInformationType2";
-        case SystemInformationType2bis: return "SystemInformationType2bis";
-        case SystemInformationType2ter: return "SystemInformationType2ter";
-        case SystemInformationType3:  return "SystemInformationType3";
-        case SystemInformationType4:  return "SystemInformationType4";
-        case SystemInformationType5:  return "SystemInformationType5";
-        case SystemInformationType5bis: return "SystemInformationType5bis";
-        case SystemInformationType5ter: return "SystemInformationType5ter";
-        case SystemInformationType6:  return "SystemInformationType6";
-        case SystemInformationType7:  return "SystemInformationType7";
-        case SystemInformationType8:  return "SystemInformationType8";
-        case SystemInformationType9:  return "SystemInformationType9";
-        case SystemInformationType13: return "SystemInformationType13";
-        case SystemInformationType16: return "SystemInformationType16";
-        case SystemInformationType17: return "SystemInformationType17";
-        case AssignmentCommand:       return "AssignmentCommand";
-        case AssignmentComplete:      return "AssignmentComplete";
-        case AssignmentFailure:       return "AssignmentFailure";
-        case ChannelRelease:          return "ChannelRelease";
-        case ImmediateAssignment:     return "ImmediateAssignment";
-        case ImmediateAssignmentExtended: return "ImmediateAssignmentExtended";
-        case ImmediateAssignmentReject: return "ImmediateAssignmentReject";
-        case AdditionalAssignment:    return "AdditionalAssignment";
-        case PagingRequestType1:      return "PagingRequestType1";
-        case PagingRequestType2:      return "PagingRequestType2";
-        case PagingRequestType3:      return "PagingRequestType3";
-        case PagingResponse:          return "PagingResponse";
-        case HandoverCommand:         return "HandoverCommand";
-        case HandoverComplete:        return "HandoverComplete";
-        case HandoverFailure:         return "HandoverFailure";
-        case PhysicalInformation:     return "PhysicalInformation";
-        case CipheringModeCommand:    return "CipheringModeCommand";
-        case CipheringModeComplete:   return "CipheringModeComplete";
-        case ChannelModeModify:       return "ChannelModeModify";
-        case ChannelModeModifyAcknowledge: return "ChannelModeModifyAcknowledge";
-        case RRStatus:                return "RRStatus";
-        case ClassmarkChange:         return "ClassmarkChange";
-        case ClassmarkEnquiry:        return "ClassmarkEnquiry";
-        case MeasurementReport:       return "MeasurementReport";
-        case GPRSSuspensionRequest:   return "GPRSSuspensionRequest";
-        case ApplicationInformation:  return "ApplicationInformation";
-        case SynchronizationChannelInformation: return "SynchronizationChannelInformation";
-        case ChannelRequest:          return "ChannelRequest";
-        case HandoverAccess:          return "HandoverAccess";
+constexpr ChannelType channelNeededType(unsigned code) {
+    switch (code) {
+        case 0: return ChannelType::AnyDCCHType;
+        case 1: return ChannelType::SDCCHType;
+        case 2: return ChannelType::TCHFType;
+        case 3: return ChannelType::AnyTCHType;
+        default: return ChannelType::AnyDCCHType;
+    }
+}
+
+// ── rrMessageName ───────────────────────────────────────────────────────
+
+const char* rrMessageName(int mti) {
+    switch (mti) {
+        case L3SystemInformationType1::MTI:  return "SystemInformationType1";
+        case L3SystemInformationType2::MTI:  return "SystemInformationType2";
+        case L3SystemInformationType2bis::MTI: return "SystemInformationType2bis";
+        case L3SystemInformationType2ter::MTI: return "SystemInformationType2ter";
+        case L3SystemInformationType3::MTI:  return "SystemInformationType3";
+        case L3SystemInformationType4::MTI:  return "SystemInformationType4";
+        case L3SystemInformationType5::MTI:  return "SystemInformationType5";
+        case L3SystemInformationType5bis::MTI: return "SystemInformationType5bis";
+        case L3SystemInformationType5ter::MTI: return "SystemInformationType5ter";
+        case L3SystemInformationType6::MTI:  return "SystemInformationType6";
+        case L3SystemInformationType7::MTI:  return "SystemInformationType7";
+        case L3SystemInformationType8::MTI:  return "SystemInformationType8";
+        case L3SystemInformationType9::MTI:  return "SystemInformationType9";
+        case L3SystemInformationType13::MTI: return "SystemInformationType13";
+        case L3SystemInformationType16::MTI: return "SystemInformationType16";
+        case L3SystemInformationType17::MTI: return "SystemInformationType17";
+        case L3AssignmentCommand::MTI:       return "AssignmentCommand";
+        case L3AssignmentComplete::MTI:      return "AssignmentComplete";
+        case L3AssignmentFailure::MTI:       return "AssignmentFailure";
+        case L3ChannelRelease::MTI:          return "ChannelRelease";
+        case L3ImmediateAssignment::MTI:     return "ImmediateAssignment";
+        case L3ImmediateAssignmentExtended::MTI: return "ImmediateAssignmentExtended";
+        case L3ImmediateAssignmentReject::MTI: return "ImmediateAssignmentReject";
+        case L3AdditionalAssignment::MTI:    return "AdditionalAssignment";
+        case L3PagingRequestType1::MTI:      return "PagingRequestType1";
+        case L3PagingRequestType2::MTI:      return "PagingRequestType2";
+        case L3PagingRequestType3::MTI:      return "PagingRequestType3";
+        case L3PagingResponse::MTI:          return "PagingResponse";
+        case L3HandoverCommand::MTI:         return "HandoverCommand";
+        case L3HandoverComplete::MTI:        return "HandoverComplete";
+        case L3HandoverFailure::MTI:         return "HandoverFailure";
+        case L3PhysicalInformation::MTI:     return "PhysicalInformation";
+        case L3CipheringModeCommand::MTI:    return "CipheringModeCommand";
+        case L3CipheringModeComplete::MTI:   return "CipheringModeComplete";
+        case L3ChannelModeModify::MTI:       return "ChannelModeModify";
+        case L3ChannelModeModifyAcknowledge::MTI: return "ChannelModeModifyAcknowledge";
+        case L3RRStatus::MTI:                return "RRStatus";
+        case L3ClassmarkChange::MTI:         return "ClassmarkChange";
+        case L3ClassmarkEnquiry::MTI:        return "ClassmarkEnquiry";
+        case L3MeasurementReport::MTI:       return "MeasurementReport";
+        case L3GPRSSuspensionRequest::MTI:   return "GPRSSuspensionRequest";
+        case L3ApplicationInformation::MTI:  return "ApplicationInformation";
+        case L3SynchronizationChannelInformation::MTI: return "SynchronizationChannelInformation";
+        case L3ChannelRequest::MTI:          return "ChannelRequest";
+        case L3HandoverAccess::MTI:          return "HandoverAccess";
         default:                      return "Unknown_RR";
     }
 }
 
-void L3RRMessage::text(std::ostream& os) const {
-    L3Message::text(os);
-    os << " (" << name(static_cast<MessageType>(mti())) << ")";
-}
-
-std::ostream& operator<<(std::ostream& os, L3RRMessage::MessageType mt) {
-    os << L3RRMessage::name(mt);
-    return os;
-}
-
 // ── L3PagingRequestType1 ────────────────────────────────────────────────
-
-L3PagingRequestType1::L3PagingRequestType1() {
-    mMobileIDs.emplace_back();
-    mChannelsNeeded[0] = ChannelType::AnyDCCHType;
-    mChannelsNeeded[1] = ChannelType::AnyDCCHType;
-}
-
-// ── Builder ────────────────────────────────────────────────────────────
 
 L3PagingRequestType1::Builder L3PagingRequestType1::builder() { return Builder{}; }
 
@@ -121,67 +122,56 @@ L3PagingRequestType1 L3PagingRequestType1::Builder::build() {
     return msg;
 }
 
-size_t L3PagingRequestType1::l2BodyLength() const {
+size_t L3PagingRequestType1::bodyLength() const {
     int sz = static_cast<int>(mMobileIDs.size());
     size_t len = 1;
-    len += mMobileIDs[0].lengthLV();
-    if (sz > 1) len += mMobileIDs[1].lengthTLV();
+    len += mMobileIDs[0].lengthV() + 1;
+    if (sz > 1) len += 2 + mMobileIDs[1].lengthV();
     return len;
 }
 
-constexpr unsigned channelNeededCode(ChannelType wType) {
-    switch (wType) {
-        case ChannelType::AnyDCCHType: return 0;
-        case ChannelType::SDCCHType: return 1;
-        case ChannelType::TCHFType: return 2;
-        case ChannelType::AnyTCHType: return 3;
-        default: return 0;
-    }
-}
+Expected<L3PagingRequestType1> L3PagingRequestType1::parse(BitReader& br) {
+    L3PagingRequestType1 msg;
+    auto r = br.readField(2); if (!r) return Expected<L3PagingRequestType1>::error(r.error());
+    msg.mChannelsNeeded[1] = channelNeededType(r.value());
+    r = br.readField(2); if (!r) return Expected<L3PagingRequestType1>::error(r.error());
+    msg.mChannelsNeeded[0] = channelNeededType(r.value());
+    r = br.readField(4); if (!r) return Expected<L3PagingRequestType1>::error(r.error());
 
-constexpr ChannelType channelNeededType(unsigned code) {
-    switch (code) {
-        case 0: return ChannelType::AnyDCCHType;
-        case 1: return ChannelType::SDCCHType;
-        case 2: return ChannelType::TCHFType;
-        case 3: return ChannelType::AnyTCHType;
-        default: return ChannelType::AnyDCCHType;
-    }
-}
-
-ParseResult<void> L3PagingRequestType1::try_writeBody(L3Frame& dest, size_t& wp) const {
-    // GSM 04.08 9.1.22: reverse order for half-octet fields
-    int sz = static_cast<int>(mMobileIDs.size());
-    dest.writeField(wp, channelNeededCode(mChannelsNeeded[sz > 1 ? 1 : 0]), 2);
-    dest.writeField(wp, channelNeededCode(mChannelsNeeded[0]), 2);
-    dest.writeField(wp, 0x0, 4);  // page mode: normal paging
-    mMobileIDs[0].writeLV(dest, wp);
-    if (sz > 1) mMobileIDs[1].writeTLV(0x17, dest, wp);
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3PagingRequestType1::try_parseBody(const L3Frame& src, size_t& rp) {
-    mChannelsNeeded[1] = channelNeededType(src.readField(rp, 2));
-    mChannelsNeeded[0] = channelNeededType(src.readField(rp, 2));
-    src.readField(rp, 4);  // page mode
-    mMobileIDs.clear();
     L3MobileIdentity id;
     {
-        auto res = id.try_parseLV(src, rp);
-        if (!res.has_value()) return res;
+        auto lenR = br.readField(8); if (!lenR) return Expected<L3PagingRequestType1>::error(lenR.error());
+        auto res = L3MobileIdentity::parse(br, lenR.value());
+        if (!res) return Expected<L3PagingRequestType1>::error(res.error());
+        msg.mMobileIDs.push_back(std::move(res.value()));
     }
-    mMobileIDs.push_back(id);
-    // Second mobile identity is TLV with IEI=0x17
-    if (rp + 16 <= src.size() && src.peekField(rp, 8) == 0x17) {
-        rp += 8;  // skip IEI
-        L3MobileIdentity id2;
-        {
-            auto res = id2.try_parseLV(src, rp);
-            if (!res.has_value()) return res;
+
+    if (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if (peek == 0x17) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3PagingRequestType1>::error(_.error()); }
+            auto lenR = br.readField(8); if (!lenR) return Expected<L3PagingRequestType1>::error(lenR.error());
+            auto res = L3MobileIdentity::parse(br, lenR.value());
+            if (!res) return Expected<L3PagingRequestType1>::error(res.error());
+            msg.mMobileIDs.push_back(std::move(res.value()));
         }
-        mMobileIDs.push_back(id2);
     }
-    return ParseResult<void>();
+
+    return Expected<L3PagingRequestType1>::hold(std::move(msg));
+}
+
+void L3PagingRequestType1::write(BitWriter& bw) const {
+    int sz = static_cast<int>(mMobileIDs.size());
+    bw.writeField(channelNeededCode(mChannelsNeeded[sz > 1 ? 1 : 0]), 2);
+    bw.writeField(channelNeededCode(mChannelsNeeded[0]), 2);
+    bw.writeField(0x0, 4);
+    bw.writeField(static_cast<uint32_t>(mMobileIDs[0].lengthV()), 8);
+    mMobileIDs[0].write(bw);
+    if (sz > 1) {
+        bw.writeField(0x97, 8);
+        bw.writeField(static_cast<uint32_t>(mMobileIDs[1].lengthV()), 8);
+        mMobileIDs[1].write(bw);
+    }
 }
 
 void L3PagingRequestType1::text(std::ostream& os) const {
@@ -191,35 +181,162 @@ void L3PagingRequestType1::text(std::ostream& os) const {
     }
 }
 
+// ── L3PagingRequestType2 ───────────────────────────────────────────────
+
+L3PagingRequestType2::Builder L3PagingRequestType2::builder() { return Builder{}; }
+
+L3PagingRequestType2::Builder& L3PagingRequestType2::Builder::addTMSI(uint32_t tmsi, ChannelType type) {
+    mTMSIs.push_back(tmsi);
+    if (mTMSIs.size() <= 2) {
+        mChannelsNeeded[mTMSIs.size() - 1] = type;
+    }
+    return *this;
+}
+
+L3PagingRequestType2 L3PagingRequestType2::Builder::build() {
+    L3PagingRequestType2 msg;
+    if (mTMSIs.empty()) {
+        msg.mTMSIs.push_back(0);
+        msg.mTMSIs.push_back(0);
+    } else {
+        msg.mTMSIs = std::move(mTMSIs);
+        while (msg.mTMSIs.size() < 2) msg.mTMSIs.push_back(0);
+    }
+    msg.mChannelsNeeded = mChannelsNeeded;
+    return msg;
+}
+
+size_t L3PagingRequestType2::bodyLength() const {
+    return 1 + mTMSIs.size() * 4;
+}
+
+Expected<L3PagingRequestType2> L3PagingRequestType2::parse(BitReader& br) {
+    L3PagingRequestType2 msg;
+    auto r = br.readField(2); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
+    msg.mChannelsNeeded[1] = channelNeededType(r.value());
+    r = br.readField(2); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
+    msg.mChannelsNeeded[0] = channelNeededType(r.value());
+    r = br.readField(4); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
+
+    for (int i = 0; i < 2; ++i) {
+        r = br.readField(32); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
+        msg.mTMSIs.push_back(r.value());
+    }
+
+    return Expected<L3PagingRequestType2>::hold(std::move(msg));
+}
+
+void L3PagingRequestType2::write(BitWriter& bw) const {
+    bw.writeField(channelNeededCode(mChannelsNeeded[1]), 2);
+    bw.writeField(channelNeededCode(mChannelsNeeded[0]), 2);
+    bw.writeField(0x0, 4);
+    for (const auto& tmsi : mTMSIs) {
+        bw.writeField(tmsi, 32);
+    }
+}
+
+void L3PagingRequestType2::text(std::ostream& os) const {
+    os << "PagingRequestType2: ";
+    for (const auto& tmsi : mTMSIs) {
+        os << "TMSI=0x" << std::hex << tmsi << std::dec;
+    }
+}
+
+// ── L3PagingRequestType3 ───────────────────────────────────────────────
+
+L3PagingRequestType3::Builder L3PagingRequestType3::builder() { return Builder{}; }
+
+L3PagingRequestType3::Builder& L3PagingRequestType3::Builder::addTMSI(uint32_t tmsi, ChannelType type) {
+    mTMSIs.push_back(tmsi);
+    if (mTMSIs.size() <= 2) {
+        mChannelsNeeded[mTMSIs.size() - 1] = type;
+    }
+    return *this;
+}
+
+L3PagingRequestType3 L3PagingRequestType3::Builder::build() {
+    L3PagingRequestType3 msg;
+    if (mTMSIs.empty()) {
+        for (int i = 0; i < 4; i++) msg.mTMSIs.push_back(0);
+    } else {
+        msg.mTMSIs = std::move(mTMSIs);
+        while (msg.mTMSIs.size() < 4) msg.mTMSIs.push_back(0);
+    }
+    msg.mChannelsNeeded = mChannelsNeeded;
+    return msg;
+}
+
+size_t L3PagingRequestType3::bodyLength() const {
+    return 1 + mTMSIs.size() * 4;
+}
+
+Expected<L3PagingRequestType3> L3PagingRequestType3::parse(BitReader& br) {
+    L3PagingRequestType3 msg;
+    auto r = br.readField(2); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
+    msg.mChannelsNeeded[1] = channelNeededType(r.value());
+    r = br.readField(2); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
+    msg.mChannelsNeeded[0] = channelNeededType(r.value());
+    r = br.readField(4); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
+
+    for (int i = 0; i < 4; ++i) {
+        r = br.readField(32); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
+        msg.mTMSIs.push_back(r.value());
+    }
+
+    return Expected<L3PagingRequestType3>::hold(std::move(msg));
+}
+
+void L3PagingRequestType3::write(BitWriter& bw) const {
+    bw.writeField(channelNeededCode(mChannelsNeeded[1]), 2);
+    bw.writeField(channelNeededCode(mChannelsNeeded[0]), 2);
+    bw.writeField(0x0, 4);
+    for (const auto& tmsi : mTMSIs) {
+        bw.writeField(tmsi, 32);
+    }
+}
+
+void L3PagingRequestType3::text(std::ostream& os) const {
+    os << "PagingRequestType3: ";
+    for (const auto& tmsi : mTMSIs) {
+        os << "TMSI=0x" << std::hex << tmsi << std::dec;
+    }
+}
+
 // ── L3PagingResponse ───────────────────────────────────────────────────
 
-size_t L3PagingResponse::l2BodyLength() const {
-    return 1 + mClassmark.lengthLV() + mMobileID.lengthLV();
+size_t L3PagingResponse::bodyLength() const {
+    return 1 + mClassmark.lengthV() + 1 + mMobileID.lengthV();
 }
 
-ParseResult<void> L3PagingResponse::try_parseBody(const L3Frame& source, size_t& rp) {
-    // GSM 24.008 9.1.25: cipheringKeySequenceNumber(4)|spare1_4(4) = 1 octet, then CM2 LV, MI LV
-    // Reference: L3_Templates.ttcn ts_PAG_RESP: cipheringKeySequenceNumber + spare1_4 pack into 1 octet
-    // CKSN is high nibble (keySequence 3 bits + spare 1 bit), spare1_4 is low nibble
-    mCKSN = source.readField(rp, 4);  // cipheringKeySequenceNumber (high 4 bits)
-    rp += 4;  // spare1_4 (low 4 bits)
+Expected<L3PagingResponse> L3PagingResponse::parse(BitReader& br) {
+    L3PagingResponse msg;
+    auto r = br.readField(4); if (!r) return Expected<L3PagingResponse>::error(r.error());
+    msg.mCKSN = r.value();
+    r = br.readField(4); if (!r) return Expected<L3PagingResponse>::error(r.error());
+
     {
-        auto res = mClassmark.try_parseLV(source, rp);
-        if (!res.has_value()) return res;
+        auto lenR = br.readField(8); if (!lenR) return Expected<L3PagingResponse>::error(lenR.error());
+        auto res = L3MobileStationClassmark2::parse(br);
+        if (!res) return Expected<L3PagingResponse>::error(res.error());
+        msg.mClassmark = std::move(res.value());
     }
     {
-        auto res = mMobileID.try_parseLV(source, rp);
-        if (!res.has_value()) return res;
+        auto lenR = br.readField(8); if (!lenR) return Expected<L3PagingResponse>::error(lenR.error());
+        auto res = L3MobileIdentity::parse(br, lenR.value());
+        if (!res) return Expected<L3PagingResponse>::error(res.error());
+        msg.mMobileID = std::move(res.value());
     }
-    return ParseResult<void>();
+
+    return Expected<L3PagingResponse>::hold(std::move(msg));
 }
 
-ParseResult<void> L3PagingResponse::try_writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mCKSN & 0x0F, 4);  // cipheringKeySequenceNumber (high nibble)
-    dest.writeField(wp, 0, 4);              // spare1_4 (low nibble)
-    mClassmark.writeLV(dest, wp);
-    mMobileID.writeLV(dest, wp);
-    return ParseResult<void>();
+void L3PagingResponse::write(BitWriter& bw) const {
+    bw.writeField(mCKSN & 0x0F, 4);
+    bw.writeField(0, 4);
+    bw.writeField(static_cast<uint32_t>(L3MobileStationClassmark2::lengthV()), 8);
+    mClassmark.write(bw);
+    bw.writeField(static_cast<uint32_t>(mMobileID.lengthV()), 8);
+    mMobileID.write(bw);
 }
 
 void L3PagingResponse::text(std::ostream& os) const {
@@ -229,70 +346,38 @@ void L3PagingResponse::text(std::ostream& os) const {
     mClassmark.text(os);
 }
 
-// ── L3SystemInformationType1 ────────────────────────────────────────────
-
-L3SystemInformationType1::L3SystemInformationType1()
-    : mHaveRestOctets(false), mRestOctet(0x2b) {}
-
-ParseResult<void> L3SystemInformationType1::try_parseBody(const L3Frame& src, size_t& rp) {
-    {
-        auto res = mCellChannelDescription.try_parseV(src, rp);
-        if (!res.has_value()) return res;
-    }
-    {
-        auto res = mRACHControlParameters.try_parseV(src, rp);
-        if (!res.has_value()) return res;
-    }
-    // Optional Rest Octets (GSM 44.018 9.1.31, 10.5.2.32)
-    if (rp + 8 <= src.size()) {
-        mHaveRestOctets = true;
-        mRestOctet = static_cast<uint8_t>(src.readField(rp, 8));
-    }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3SystemInformationType1::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mCellChannelDescription.writeV(dest, wp);
-    mRACHControlParameters.writeV(dest, wp);
-    if (mHaveRestOctets) {
-        dest.writeField(wp, mRestOctet, 8);
-    }
-    return ParseResult<void>();
-}
-
-void L3SystemInformationType1::text(std::ostream& os) const {
-    os << "SystemInformationType1: ";
-    mCellChannelDescription.text(os);
-    os << " ";
-    mRACHControlParameters.text(os);
-    if (mHaveRestOctets) {
-        os << " RestOctet=0x" << std::hex << std::setw(2) << std::setfill('0')
-           << static_cast<int>(mRestOctet) << std::dec;
-    }
-}
-
 // ── L3ChannelRelease ───────────────────────────────────────────────────
 
-ParseResult<void> L3ChannelRelease::try_parseBody(const L3Frame& src, size_t& rp) {
-    mCause = static_cast<RRCause>(src.readField(rp, 8));
-    // Optional GPRS Resumption IEI=0x01, 1 bit
-    if (rp + 8 <= src.size() && src.peekField(rp, 8) == 0x01) {
-        rp += 8; // skip IEI
-        mGprsResumptionPresent = true;
-        mGprsResumptionBit = src.readField(rp, 1);
-        src.readField(rp, 7); // spare
-    }
-    return ParseResult<void>();
+size_t L3ChannelRelease::bodyLength() const {
+    return 1 + (mGprsResumptionPresent ? 1 : 0);
 }
 
-ParseResult<void> L3ChannelRelease::try_writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
-    if (mGprsResumptionPresent) {
-        dest.writeField(wp, 0x01, 8); // IEI
-        dest.writeField(wp, mGprsResumptionBit ? 1 : 0, 1);
-        dest.writeField(wp, 0, 7); // spare
+Expected<L3ChannelRelease> L3ChannelRelease::parse(BitReader& br) {
+    L3ChannelRelease msg;
+    auto r = br.readField(8); if (!r) return Expected<L3ChannelRelease>::error(r.error());
+    msg.mCause = static_cast<RRCause>(r.value());
+
+    if (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if (peek == 0x01) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3ChannelRelease>::error(_.error()); }
+            msg.mGprsResumptionPresent = true;
+            r = br.readField(1); if (!r) return Expected<L3ChannelRelease>::error(r.error());
+            msg.mGprsResumptionBit = r.value() != 0;
+            r = br.readField(7); if (!r) return Expected<L3ChannelRelease>::error(r.error());
+        }
     }
-    return ParseResult<void>();
+
+    return Expected<L3ChannelRelease>::hold(std::move(msg));
+}
+
+void L3ChannelRelease::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mCause), 8);
+    if (mGprsResumptionPresent) {
+        bw.writeField(0x01, 8);
+        bw.writeField(mGprsResumptionBit ? 1 : 0, 1);
+        bw.writeField(0, 7);
+    }
 }
 
 void L3ChannelRelease::text(std::ostream& os) const {
@@ -304,14 +389,15 @@ void L3ChannelRelease::text(std::ostream& os) const {
 
 // ── L3RRStatus ──────────────────────────────────────────────────────────
 
-ParseResult<void> L3RRStatus::try_parseBody(const L3Frame& src, size_t& rp) {
-    mCause = static_cast<RRCause>(src.readField(rp, 8));
-    return ParseResult<void>();
+Expected<L3RRStatus> L3RRStatus::parse(BitReader& br) {
+    L3RRStatus msg;
+    auto r = br.readField(8); if (!r) return Expected<L3RRStatus>::error(r.error());
+    msg.mCause = static_cast<RRCause>(r.value());
+    return Expected<L3RRStatus>::hold(std::move(msg));
 }
 
-ParseResult<void> L3RRStatus::try_writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
-    return ParseResult<void>();
+void L3RRStatus::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mCause), 8);
 }
 
 void L3RRStatus::text(std::ostream& os) const {
@@ -319,64 +405,6 @@ void L3RRStatus::text(std::ostream& os) const {
 }
 
 // ── L3AssignmentCommand ─────────────────────────────────────────────────
-
-L3AssignmentCommand::L3AssignmentCommand()
-    : mHaveMode1(false) {}
-
-size_t L3AssignmentCommand::l2BodyLength() const {
-    size_t len = mChannel.lengthV() + mPowerCommand.lengthV();
-    if (mHaveMode1) len += mMode1.lengthTV();
-    if (isAMR()) len += mMultiRate.lengthTLV();
-    return len;
-}
-
-ParseResult<void> L3AssignmentCommand::try_parseBody(const L3Frame& src, size_t& rp) {
-    {
-        auto res = mChannel.try_parseV(src, rp);
-        if (!res.has_value()) return res;
-    }
-    {
-        auto res = mPowerCommand.try_parseV(src, rp);
-        if (!res.has_value()) return res;
-    }
-    // Optional Mode 1 (TV, IEI=0x63)
-    {
-        auto res = mMode1.try_parseTV(0x63, src, rp);
-        if (!res.has_value()) return res;
-        mHaveMode1 = res.value();
-    }
-    // Optional Multi Rate Configuration for AMR (TLV, IEI=0x15)
-    if (isAMR()) {
-        auto res = mMultiRate.try_parseTLV(0x15, src, rp);
-        if (!res.has_value()) return res;
-    }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3AssignmentCommand::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mChannel.writeV(dest, wp);
-    mPowerCommand.writeV(dest, wp);
-    if (mHaveMode1) {
-        mMode1.writeTV(0x63, dest, wp);
-    }
-    if (isAMR()) {
-        mMultiRate.writeTLV(0x15, dest, wp);
-    }
-    return ParseResult<void>();
-}
-
-void L3AssignmentCommand::text(std::ostream& os) const {
-    os << "AssignmentCommand: ";
-    mChannel.text(os);
-    os << " ";
-    mPowerCommand.text(os);
-    if (mHaveMode1) {
-        os << " ";
-        mMode1.text(os);
-    }
-}
-
-// ── L3AssignmentCommand Builder ────────────────────────────────────────
 
 L3AssignmentCommand::Builder L3AssignmentCommand::builder() { return Builder{}; }
 
@@ -411,22 +439,92 @@ L3AssignmentCommand L3AssignmentCommand::Builder::build() {
     return msg;
 }
 
-// ── L3ClassmarkEnquiry ──────────────────────────────────────────────────
+size_t L3AssignmentCommand::bodyLength() const {
+    size_t len = mChannel.lengthV() + mPowerCommand.lengthV();
+    if (mHaveMode1) len += 1 + mMode1.lengthV();
+    if (isAMR()) len += 1 + 1 + mMultiRate.lengthV();
+    return len;
+}
 
-void L3ClassmarkEnquiry::text(std::ostream& os) const {
-    os << "ClassmarkEnquiry";
+Expected<L3AssignmentCommand> L3AssignmentCommand::parse(BitReader& br) {
+    L3AssignmentCommand msg;
+    {
+        auto res = L3ChannelDescription::parse(br);
+        if (!res) return Expected<L3AssignmentCommand>::error(res.error());
+        msg.mChannel = std::move(res.value());
+    }
+    {
+        auto res = L3PowerCommand::parse(br);
+        if (!res) return Expected<L3AssignmentCommand>::error(res.error());
+        msg.mPowerCommand = std::move(res.value());
+    }
+
+    if (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if (peek == 0x63) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3AssignmentCommand>::error(_.error()); }
+            auto res = L3ChannelMode::parse(br);
+            if (!res) return Expected<L3AssignmentCommand>::error(res.error());
+            msg.mMode1 = std::move(res.value());
+            msg.mHaveMode1 = true;
+        }
+    }
+
+    if (msg.isAMR() && br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if ((peek & 0x7F) == 0x15) {
+            auto ieiR = br.readField(8); if (!ieiR) return Expected<L3AssignmentCommand>::error(ieiR.error());
+            bool ext = (ieiR.value() & 0x80) != 0;
+            size_t len = 0;
+            if (ext) {
+                auto lR = br.readField(8); if (!lR) return Expected<L3AssignmentCommand>::error(lR.error());
+                len = lR.value();
+            }
+            auto res = L3MultiRateConfiguration::parse(br);
+            if (!res) return Expected<L3AssignmentCommand>::error(res.error());
+            msg.mMultiRate = std::move(res.value());
+        }
+    }
+
+    return Expected<L3AssignmentCommand>::hold(std::move(msg));
+}
+
+void L3AssignmentCommand::write(BitWriter& bw) const {
+    mChannel.write(bw);
+    mPowerCommand.write(bw);
+    if (mHaveMode1) {
+        bw.writeField(0x63, 8);
+        mMode1.write(bw);
+    }
+    if (isAMR()) {
+        bw.writeField(0x95, 8);
+        bw.writeField(static_cast<uint32_t>(mMultiRate.lengthV()), 8);
+        mMultiRate.write(bw);
+    }
+}
+
+void L3AssignmentCommand::text(std::ostream& os) const {
+    os << "AssignmentCommand: ";
+    mChannel.text(os);
+    os << " ";
+    mPowerCommand.text(os);
+    if (mHaveMode1) {
+        os << " ";
+        mMode1.text(os);
+    }
 }
 
 // ── L3AssignmentComplete ───────────────────────────────────────────────
 
-ParseResult<void> L3AssignmentComplete::try_parseBody(const L3Frame& src, size_t& rp) {
-    mCause = static_cast<RRCause>(src.readField(rp, 8));
-    return ParseResult<void>();
+Expected<L3AssignmentComplete> L3AssignmentComplete::parse(BitReader& br) {
+    L3AssignmentComplete msg;
+    auto r = br.readField(8); if (!r) return Expected<L3AssignmentComplete>::error(r.error());
+    msg.mCause = static_cast<RRCause>(r.value());
+    return Expected<L3AssignmentComplete>::hold(std::move(msg));
 }
 
-ParseResult<void> L3AssignmentComplete::try_writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
-    return ParseResult<void>();
+void L3AssignmentComplete::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mCause), 8);
 }
 
 void L3AssignmentComplete::text(std::ostream& os) const {
@@ -435,48 +533,78 @@ void L3AssignmentComplete::text(std::ostream& os) const {
 
 // ── L3AssignmentFailure ────────────────────────────────────────────────
 
-ParseResult<void> L3AssignmentFailure::try_parseBody(const L3Frame& src, size_t& rp) {
-    mCause = static_cast<RRCause>(src.readField(rp, 8));
-    return ParseResult<void>();
+Expected<L3AssignmentFailure> L3AssignmentFailure::parse(BitReader& br) {
+    L3AssignmentFailure msg;
+    auto r = br.readField(8); if (!r) return Expected<L3AssignmentFailure>::error(r.error());
+    msg.mCause = static_cast<RRCause>(r.value());
+    return Expected<L3AssignmentFailure>::hold(std::move(msg));
 }
 
-ParseResult<void> L3AssignmentFailure::try_writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
-    return ParseResult<void>();
+void L3AssignmentFailure::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mCause), 8);
 }
 
 void L3AssignmentFailure::text(std::ostream& os) const {
     os << "AssignmentFailure: cause=" << RRCause2Str(mCause);
 }
 
+// ── L3ClassmarkEnquiry ──────────────────────────────────────────────────
+
+Expected<L3ClassmarkEnquiry> L3ClassmarkEnquiry::parse(BitReader&) {
+    return Expected<L3ClassmarkEnquiry>::hold(L3ClassmarkEnquiry{});
+}
+
+void L3ClassmarkEnquiry::write(BitWriter&) const {}
+
+void L3ClassmarkEnquiry::text(std::ostream& os) const {
+    os << "ClassmarkEnquiry";
+}
+
 // ── L3ClassmarkChange ──────────────────────────────────────────────────
 
-size_t L3ClassmarkChange::l2BodyLength() const {
-    size_t len = mClassmark.lengthLV();
-    if (mHaveAdditionalClassmark) len += mAdditionalClassmark.lengthTLV();
+size_t L3ClassmarkChange::bodyLength() const {
+    size_t len = 1 + mClassmark.lengthV();
+    if (mHaveAdditionalClassmark) len += 1 + 1 + mAdditionalClassmark.lengthV();
     return len;
 }
 
-ParseResult<void> L3ClassmarkChange::try_parseBody(const L3Frame& src, size_t& rp) {
-    // GSM 04.08 9.1.11: classmark(LV), additionalClassmark(TLV 0x20)
+Expected<L3ClassmarkChange> L3ClassmarkChange::parse(BitReader& br) {
+    L3ClassmarkChange msg;
     {
-        auto res = mClassmark.try_parseLV(src, rp);
-        if (!res.has_value()) return res;
+        auto lenR = br.readField(8); if (!lenR) return Expected<L3ClassmarkChange>::error(lenR.error());
+        auto res = L3MobileStationClassmark2::parse(br);
+        if (!res) return Expected<L3ClassmarkChange>::error(res.error());
+        msg.mClassmark = std::move(res.value());
     }
-    {
-        auto res = mAdditionalClassmark.try_parseTLV(0x20, src, rp);
-        if (!res.has_value()) return res;
-        mHaveAdditionalClassmark = res.value();
+
+    if (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if ((peek & 0x7F) == 0x20) {
+            auto ieiR = br.readField(8); if (!ieiR) return Expected<L3ClassmarkChange>::error(ieiR.error());
+            bool ext = (ieiR.value() & 0x80) != 0;
+            size_t len = 0;
+            if (ext) {
+                auto lR = br.readField(8); if (!lR) return Expected<L3ClassmarkChange>::error(lR.error());
+                len = lR.value();
+            }
+            auto res = L3MobileStationClassmark3::parse(br);
+            if (!res) return Expected<L3ClassmarkChange>::error(res.error());
+            msg.mAdditionalClassmark = std::move(res.value());
+            msg.mHaveAdditionalClassmark = true;
+        }
     }
-    return ParseResult<void>();
+
+    return Expected<L3ClassmarkChange>::hold(std::move(msg));
 }
 
-ParseResult<void> L3ClassmarkChange::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mClassmark.writeLV(dest, wp);
+void L3ClassmarkChange::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(L3MobileStationClassmark2::lengthV()), 8);
+    mClassmark.write(bw);
     if (mHaveAdditionalClassmark) {
-        mAdditionalClassmark.writeTLV(0x20, dest, wp);
+        bw.writeField(0xA0, 8);
+        bw.writeField(static_cast<uint32_t>(L3MobileStationClassmark3::lengthV()), 8);
+        mAdditionalClassmark.write(bw);
     }
-    return ParseResult<void>();
 }
 
 void L3ClassmarkChange::text(std::ostream& os) const {
@@ -490,17 +618,18 @@ void L3ClassmarkChange::text(std::ostream& os) const {
 
 // ── L3MeasurementReport ────────────────────────────────────────────────
 
-ParseResult<void> L3MeasurementReport::try_parseBody(const L3Frame& src, size_t& rp) {
+Expected<L3MeasurementReport> L3MeasurementReport::parse(BitReader& br) {
+    L3MeasurementReport msg;
     {
-        auto res = mMeasurementResults.try_parseV(src, rp);
-        if (!res.has_value()) return res;
+        auto res = L3MeasurementResults::parse(br);
+        if (!res) return Expected<L3MeasurementReport>::error(res.error());
+        msg.mMeasurementResults = std::move(res.value());
     }
-    return ParseResult<void>();
+    return Expected<L3MeasurementReport>::hold(std::move(msg));
 }
 
-ParseResult<void> L3MeasurementReport::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mMeasurementResults.writeV(dest, wp);
-    return ParseResult<void>();
+void L3MeasurementReport::write(BitWriter& bw) const {
+    mMeasurementResults.write(bw);
 }
 
 void L3MeasurementReport::text(std::ostream& os) const {
@@ -510,30 +639,27 @@ void L3MeasurementReport::text(std::ostream& os) const {
 
 // ── L3CipheringModeCommand ─────────────────────────────────────────────
 
-int L3CipheringModeCommand::mti() const { return CipheringModeCommand; }
-
-ParseResult<void> L3CipheringModeCommand::try_parseBody(const L3Frame& src, size_t& rp) {
-    // Half-octet reverse order: Response first, then Setting
+Expected<L3CipheringModeCommand> L3CipheringModeCommand::parse(BitReader& br) {
+    L3CipheringModeCommand msg;
     {
-        auto res = mCipheringModeResponse.try_parseV(src, rp);
-        if (!res.has_value()) return res;
+        auto res = L3CipheringModeResponse::parse(br);
+        if (!res) return Expected<L3CipheringModeCommand>::error(res.error());
+        msg.mCipheringModeResponse = std::move(res.value());
     }
-    L3CipheringModeSetting cms;
     {
-        auto res = cms.try_parseV(src, rp);
-        if (!res.has_value()) return res;
+        auto res = L3CipheringModeSetting::parse(br);
+        if (!res) return Expected<L3CipheringModeCommand>::error(res.error());
+        auto cms = res.value();
+        msg.mCiphering = cms.ciphering();
+        msg.mAlgorithm = cms.algorithm();
     }
-    mCiphering = cms.ciphering();
-    mAlgorithm = cms.algorithm();
-    return ParseResult<void>();
+    return Expected<L3CipheringModeCommand>::hold(std::move(msg));
 }
 
-ParseResult<void> L3CipheringModeCommand::try_writeBody(L3Frame& dest, size_t& wp) const {
-    // Half-octet reverse order: Response first, then Setting
-    mCipheringModeResponse.writeV(dest, wp);
+void L3CipheringModeCommand::write(BitWriter& bw) const {
+    mCipheringModeResponse.write(bw);
     L3CipheringModeSetting cms(mCiphering, mAlgorithm);
-    cms.writeV(dest, wp);
-    return ParseResult<void>();
+    cms.write(bw);
 }
 
 void L3CipheringModeCommand::text(std::ostream& os) const {
@@ -544,7 +670,11 @@ void L3CipheringModeCommand::text(std::ostream& os) const {
 
 // ── L3CipheringModeComplete ────────────────────────────────────────────
 
-int L3CipheringModeComplete::mti() const { return CipheringModeComplete; }
+Expected<L3CipheringModeComplete> L3CipheringModeComplete::parse(BitReader&) {
+    return Expected<L3CipheringModeComplete>::hold(L3CipheringModeComplete{});
+}
+
+void L3CipheringModeComplete::write(BitWriter&) const {}
 
 void L3CipheringModeComplete::text(std::ostream& os) const {
     os << "CipheringModeComplete";
@@ -552,14 +682,15 @@ void L3CipheringModeComplete::text(std::ostream& os) const {
 
 // ── L3HandoverComplete ─────────────────────────────────────────────────
 
-ParseResult<void> L3HandoverComplete::try_parseBody(const L3Frame& src, size_t& rp) {
-    mCause = static_cast<RRCause>(src.readField(rp, 8));
-    return ParseResult<void>();
+Expected<L3HandoverComplete> L3HandoverComplete::parse(BitReader& br) {
+    L3HandoverComplete msg;
+    auto r = br.readField(8); if (!r) return Expected<L3HandoverComplete>::error(r.error());
+    msg.mCause = static_cast<RRCause>(r.value());
+    return Expected<L3HandoverComplete>::hold(std::move(msg));
 }
 
-ParseResult<void> L3HandoverComplete::try_writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
-    return ParseResult<void>();
+void L3HandoverComplete::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mCause), 8);
 }
 
 void L3HandoverComplete::text(std::ostream& os) const {
@@ -568,14 +699,15 @@ void L3HandoverComplete::text(std::ostream& os) const {
 
 // ── L3HandoverFailure ──────────────────────────────────────────────────
 
-ParseResult<void> L3HandoverFailure::try_parseBody(const L3Frame& src, size_t& rp) {
-    mCause = static_cast<RRCause>(src.readField(rp, 8));
-    return ParseResult<void>();
+Expected<L3HandoverFailure> L3HandoverFailure::parse(BitReader& br) {
+    L3HandoverFailure msg;
+    auto r = br.readField(8); if (!r) return Expected<L3HandoverFailure>::error(r.error());
+    msg.mCause = static_cast<RRCause>(r.value());
+    return Expected<L3HandoverFailure>::hold(std::move(msg));
 }
 
-ParseResult<void> L3HandoverFailure::try_writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, static_cast<unsigned>(mCause), 8);
-    return ParseResult<void>();
+void L3HandoverFailure::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mCause), 8);
 }
 
 void L3HandoverFailure::text(std::ostream& os) const {
@@ -584,38 +716,48 @@ void L3HandoverFailure::text(std::ostream& os) const {
 
 // ── L3ChannelModeModify ────────────────────────────────────────────────
 
-L3ChannelModeModify::L3ChannelModeModify() {}
-
-L3ChannelModeModify::L3ChannelModeModify(const L3ChannelDescription& wDesc, const L3ChannelMode& wMode)
-    : mDescription(wDesc), mMode(wMode) {}
-
-size_t L3ChannelModeModify::l2BodyLength() const {
-    return mDescription.lengthV() + mMode.lengthV() + (isAMR() ? mMultiRate.lengthTLV() : 0);
+size_t L3ChannelModeModify::bodyLength() const {
+    return mDescription.lengthV() + mMode.lengthV() + (isAMR() ? (1 + 1 + mMultiRate.lengthV()) : 0);
 }
 
-ParseResult<void> L3ChannelModeModify::try_parseBody(const L3Frame& src, size_t& rp) {
+Expected<L3ChannelModeModify> L3ChannelModeModify::parse(BitReader& br) {
+    L3ChannelModeModify msg;
     {
-        auto res = mDescription.try_parseV(src, rp);
-        if (!res.has_value()) return res;
+        auto res = L3ChannelDescription::parse(br);
+        if (!res) return Expected<L3ChannelModeModify>::error(res.error());
+        msg.mDescription = std::move(res.value());
     }
     {
-        auto res = mMode.try_parseV(src, rp);
-        if (!res.has_value()) return res;
+        auto res = L3ChannelMode::parse(br);
+        if (!res) return Expected<L3ChannelModeModify>::error(res.error());
+        msg.mMode = std::move(res.value());
     }
-    if (isAMR()) {
-        auto res = mMultiRate.try_parseTLV(0x15, src, rp);
-        if (!res.has_value()) return res;
+    if (msg.isAMR() && br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if ((peek & 0x7F) == 0x15) {
+            auto ieiR = br.readField(8); if (!ieiR) return Expected<L3ChannelModeModify>::error(ieiR.error());
+            bool ext = (ieiR.value() & 0x80) != 0;
+            size_t len = 0;
+            if (ext) {
+                auto lR = br.readField(8); if (!lR) return Expected<L3ChannelModeModify>::error(lR.error());
+                len = lR.value();
+            }
+            auto res = L3MultiRateConfiguration::parse(br);
+            if (!res) return Expected<L3ChannelModeModify>::error(res.error());
+            msg.mMultiRate = std::move(res.value());
+        }
     }
-    return ParseResult<void>();
+    return Expected<L3ChannelModeModify>::hold(std::move(msg));
 }
 
-ParseResult<void> L3ChannelModeModify::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mDescription.writeV(dest, wp);
-    mMode.writeV(dest, wp);
+void L3ChannelModeModify::write(BitWriter& bw) const {
+    mDescription.write(bw);
+    mMode.write(bw);
     if (isAMR()) {
-        mMultiRate.writeTLV(0x15, dest, wp);
+        bw.writeField(0x95, 8);
+        bw.writeField(static_cast<uint32_t>(mMultiRate.lengthV()), 8);
+        mMultiRate.write(bw);
     }
-    return ParseResult<void>();
 }
 
 void L3ChannelModeModify::text(std::ostream& os) const {
@@ -627,26 +769,28 @@ void L3ChannelModeModify::text(std::ostream& os) const {
 
 // ── L3ChannelModeModifyAcknowledge ─────────────────────────────────────
 
-ParseResult<void> L3ChannelModeModifyAcknowledge::try_parseBody(const L3Frame& src, size_t& rp) {
-    {
-        auto res = mDescription.try_parseV(src, rp);
-        if (!res.has_value()) return res;
-    }
-    {
-        auto res = mMode.try_parseV(src, rp);
-        if (!res.has_value()) return res;
-    }
-    return ParseResult<void>();
-}
-
-size_t L3ChannelModeModifyAcknowledge::l2BodyLength() const {
+size_t L3ChannelModeModifyAcknowledge::bodyLength() const {
     return mDescription.lengthV() + mMode.lengthV();
 }
 
-ParseResult<void> L3ChannelModeModifyAcknowledge::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mDescription.writeV(dest, wp);
-    mMode.writeV(dest, wp);
-    return ParseResult<void>();
+Expected<L3ChannelModeModifyAcknowledge> L3ChannelModeModifyAcknowledge::parse(BitReader& br) {
+    L3ChannelModeModifyAcknowledge msg;
+    {
+        auto res = L3ChannelDescription::parse(br);
+        if (!res) return Expected<L3ChannelModeModifyAcknowledge>::error(res.error());
+        msg.mDescription = std::move(res.value());
+    }
+    {
+        auto res = L3ChannelMode::parse(br);
+        if (!res) return Expected<L3ChannelModeModifyAcknowledge>::error(res.error());
+        msg.mMode = std::move(res.value());
+    }
+    return Expected<L3ChannelModeModifyAcknowledge>::hold(std::move(msg));
+}
+
+void L3ChannelModeModifyAcknowledge::write(BitWriter& bw) const {
+    mDescription.write(bw);
+    mMode.write(bw);
 }
 
 void L3ChannelModeModifyAcknowledge::text(std::ostream& os) const {
@@ -658,94 +802,106 @@ void L3ChannelModeModifyAcknowledge::text(std::ostream& os) const {
 
 // ── L3GPRSSuspensionRequest ────────────────────────────────────────────
 
-ParseResult<void> L3GPRSSuspensionRequest::try_parseBody(const L3Frame& src, size_t& rp) {
-    // GSM 04.08 9.1.13b: TLLI(32), RaId(48), suspensionCause(8), optional serviceSupport(TLV 0x01)
-    mTLLI = src.readField(rp, 32);
-    mRaId.resize(6);
+Expected<L3GPRSSuspensionRequest> L3GPRSSuspensionRequest::parse(BitReader& br) {
+    L3GPRSSuspensionRequest msg;
+    auto r = br.readField(32); if (!r) return Expected<L3GPRSSuspensionRequest>::error(r.error());
+    msg.mTLLI = r.value();
+    msg.mRaId.resize(6);
     for (size_t i = 0; i < 6; ++i) {
-        mRaId[i] = static_cast<uint8_t>(src.readField(rp, 8));
+        r = br.readField(8); if (!r) return Expected<L3GPRSSuspensionRequest>::error(r.error());
+        msg.mRaId[i] = static_cast<uint8_t>(r.value());
     }
-    mSuspensionCause = src.readField(rp, 8);
-    // Optional service support, IEI=0x01
-    if (rp + 16 <= src.size() && src.peekField(rp, 8) == 0x01) {
-        rp += 8;  // skip IEI
-        mServiceSupport = src.readField(rp, 8);
+    r = br.readField(8); if (!r) return Expected<L3GPRSSuspensionRequest>::error(r.error());
+    msg.mSuspensionCause = r.value();
+
+    if (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if (peek == 0x01) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3GPRSSuspensionRequest>::error(_.error()); }
+            r = br.readField(8); if (!r) return Expected<L3GPRSSuspensionRequest>::error(r.error());
+            msg.mServiceSupport = r.value();
+        }
     }
-    return ParseResult<void>();
+
+    return Expected<L3GPRSSuspensionRequest>::hold(std::move(msg));
 }
 
-ParseResult<void> L3GPRSSuspensionRequest::try_writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mTLLI, 32);
+void L3GPRSSuspensionRequest::write(BitWriter& bw) const {
+    bw.writeField(mTLLI, 32);
     for (size_t i = 0; i < 6; ++i) {
-        dest.writeField(wp, mRaId[i], 8);
+        bw.writeField(mRaId[i], 8);
     }
-    dest.writeField(wp, mSuspensionCause, 8);
+    bw.writeField(mSuspensionCause, 8);
     if (mServiceSupport) {
-        dest.writeField(wp, 0x01, 8);  // IEI for service support
-        dest.writeField(wp, mServiceSupport, 8);
+        bw.writeField(0x01, 8);
+        bw.writeField(mServiceSupport, 8);
     }
-    return ParseResult<void>();
 }
 
 void L3GPRSSuspensionRequest::text(std::ostream& os) const {
     os << "GPRSSuspensionRequest: TLLI=0x" << std::hex << mTLLI
-        << " cause=" << static_cast<int>(mSuspensionCause);
+       << " cause=" << static_cast<int>(mSuspensionCause);
 }
 
 // ── L3ApplicationInformation ───────────────────────────────────────────
 
-L3ApplicationInformation::L3ApplicationInformation()
-    : mProtocolIdentifier(0), mCR(0), mFirstSegment(0), mLastSegment(0) {}
-
-L3ApplicationInformation::L3ApplicationInformation(BitVector data, unsigned protocolId,
-                                                     unsigned cr, unsigned first, unsigned last)
-    : mProtocolIdentifier(protocolId), mCR(cr), mFirstSegment(first),
-      mLastSegment(last), mData(std::move(data)) {}
-
-size_t L3ApplicationInformation::l2BodyLength() const {
-    // APDU ID (4 bits) + APDU Flags (4 bits) = 1 byte, then APDU Data (LV)
+size_t L3ApplicationInformation::bodyLength() const {
     size_t dataLen = (mData.size() + 7) / 8;
     return 1 + 1 + dataLen;
 }
 
-ParseResult<void> L3ApplicationInformation::try_writeBody(L3Frame& dest, size_t& wp) const {
-    // Half-octet reverse order: APDU Flags first, then APDU ID
-    dest.writeField(wp, 0, 1);
-    dest.writeField(wp, mCR, 1);
-    dest.writeField(wp, mFirstSegment, 1);
-    dest.writeField(wp, mLastSegment, 1);
-    dest.writeField(wp, mProtocolIdentifier, 4);
-    // APDU Data as LV
-    size_t dataLen = (mData.size() + 7) / 8;
-    dest.writeField(wp, dataLen, 8);
-    size_t wp2 = 0;
-    for (size_t i = 0; i < mData.size(); ++i) {
-        unsigned bit = mData.readField(wp2, 1);
-        dest.writeField(wp, bit, 1);
+Expected<L3ApplicationInformation> L3ApplicationInformation::parse(BitReader& br) {
+    L3ApplicationInformation msg;
+
+    auto r = br.readField(1); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
+    r = br.readField(1); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
+    msg.mCR = r.value();
+    r = br.readField(1); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
+    msg.mFirstSegment = r.value();
+    r = br.readField(1); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
+    msg.mLastSegment = r.value();
+    r = br.readField(4); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
+    msg.mProtocolIdentifier = r.value();
+
+    size_t dataLen = 0;
+    {
+        auto lenR = br.readField(8); if (!lenR) return Expected<L3ApplicationInformation>::error(lenR.error());
+        dataLen = lenR.value();
     }
-    while (wp % 8 != 0) {
-        dest.writeField(wp, 0, 1);
+    msg.mData.resize(dataLen * 8);
+    for (size_t i = 0; i < dataLen; ++i) {
+        r = br.readField(8); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
+        uint8_t byte = static_cast<uint8_t>(r.value());
+        for (int bit = 7; bit >= 0; --bit) {
+            size_t idx = (i * 8) + (7 - bit);
+            if (idx < msg.mData.size()) {
+                msg.mData[idx] = (byte >> bit) & 1;
+            }
+        }
     }
-    return ParseResult<void>();
+
+    return Expected<L3ApplicationInformation>::hold(std::move(msg));
 }
 
-ParseResult<void> L3ApplicationInformation::try_parseBody(const L3Frame& src, size_t& rp) {
-    // Half-octet reverse order: APDU Flags first, then APDU ID
-    src.readField(rp, 1);
-    mCR = src.readField(rp, 1);
-    mFirstSegment = src.readField(rp, 1);
-    mLastSegment = src.readField(rp, 1);
-    mProtocolIdentifier = src.readField(rp, 4);
-    // APDU Data as LV
-    size_t dataLen = src.readField(rp, 8);
-    size_t bitsLen = dataLen * 8;
-    mData = BitVector(bitsLen);
-    size_t wp2 = 0;
-    for (size_t i = 0; i < bitsLen && rp + 1 <= src.size(); ++i) {
-        unsigned bit = src.readField(rp, 1);
-        mData.writeField(wp2, bit, 1);
+void L3ApplicationInformation::write(BitWriter& bw) const {
+    bw.writeField(0, 1);
+    bw.writeField(mCR, 1);
+    bw.writeField(mFirstSegment, 1);
+    bw.writeField(mLastSegment, 1);
+    bw.writeField(mProtocolIdentifier, 4);
+
+    size_t dataLen = (mData.size() + 7) / 8;
+    bw.writeField(static_cast<uint32_t>(dataLen), 8);
+    for (size_t i = 0; i < dataLen; ++i) {
+        uint8_t byte = 0;
+        for (int bit = 0; bit < 8; ++bit) {
+            size_t idx = i * 8 + bit;
+            if (idx < mData.size()) {
+                byte |= (mData[idx] << (7 - bit));
+            }
+        }
+        bw.writeField(byte, 8);
     }
-    return ParseResult<void>();
 }
 
 void L3ApplicationInformation::text(std::ostream& os) const {
@@ -754,28 +910,182 @@ void L3ApplicationInformation::text(std::ostream& os) const {
        << " len=" << mData.size() << "bits";
 }
 
-// ── L3SystemInformationType3 ───────────────────────────────────────────
+// ── System Information Types ────────────────────────────────────────────
 
-ParseResult<void> L3SystemInformationType3::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mCI.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mLAI.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mControlChannelDescription.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mCellOptions.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mCellSelectionParameters.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mRACHControlParameters.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mRestOctets.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
+// ── L3SystemInformationType1 ────────────────────────────────────────────
+
+Expected<L3SystemInformationType1> L3SystemInformationType1::parse(BitReader& br) {
+    L3SystemInformationType1 msg;
+    {
+        auto res = L3FrequencyList::parse(br);
+        if (!res) return Expected<L3SystemInformationType1>::error(res.error());
+        msg.mCellChannelDescription = std::move(res.value());
+    }
+    {
+        auto res = L3RACHControlParameters::parse(br);
+        if (!res) return Expected<L3SystemInformationType1>::error(res.error());
+        msg.mRACHControlParameters = std::move(res.value());
+    }
+
+    if (br.hasMore()) {
+        msg.mHaveRestOctets = true;
+        auto r = br.readField(8); if (!r) return Expected<L3SystemInformationType1>::error(r.error());
+        msg.mRestOctet = static_cast<uint8_t>(r.value());
+    }
+
+    return Expected<L3SystemInformationType1>::hold(std::move(msg));
 }
 
-ParseResult<void> L3SystemInformationType3::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mCI.writeV(dest, wp);
-    mLAI.writeV(dest, wp);
-    mControlChannelDescription.writeV(dest, wp);
-    mCellOptions.writeV(dest, wp);
-    mCellSelectionParameters.writeV(dest, wp);
-    mRACHControlParameters.writeV(dest, wp);
-    mRestOctets.writeV(dest, wp);
-    return ParseResult<void>();
+void L3SystemInformationType1::write(BitWriter& bw) const {
+    mCellChannelDescription.write(bw);
+    mRACHControlParameters.write(bw);
+    if (mHaveRestOctets) {
+        bw.writeField(mRestOctet, 8);
+    }
+}
+
+void L3SystemInformationType1::text(std::ostream& os) const {
+    os << "SystemInformationType1: ";
+    mCellChannelDescription.text(os);
+    os << " ";
+    mRACHControlParameters.text(os);
+    if (mHaveRestOctets) {
+        os << " RestOctet=0x" << std::hex << std::setw(2) << std::setfill('0')
+           << static_cast<int>(mRestOctet) << std::dec;
+    }
+}
+
+// ── L3SystemInformationType2 ───────────────────────────────────────────
+
+Expected<L3SystemInformationType2> L3SystemInformationType2::parse(BitReader& br) {
+    L3SystemInformationType2 msg;
+    {
+        auto res = L3BCCHFrequencyList::parse(br);
+        if (!res) return Expected<L3SystemInformationType2>::error(res.error());
+        msg.mBCCHFrequencyList = std::move(res.value());
+    }
+    {
+        auto res = L3NCCPermitted::parse(br);
+        if (!res) return Expected<L3SystemInformationType2>::error(res.error());
+        msg.mNCCPermitted = std::move(res.value());
+    }
+    {
+        auto res = L3RACHControlParameters::parse(br);
+        if (!res) return Expected<L3SystemInformationType2>::error(res.error());
+        msg.mRACHControlParameters = std::move(res.value());
+    }
+    return Expected<L3SystemInformationType2>::hold(std::move(msg));
+}
+
+void L3SystemInformationType2::write(BitWriter& bw) const {
+    mBCCHFrequencyList.write(bw);
+    mNCCPermitted.write(bw);
+    mRACHControlParameters.write(bw);
+}
+
+void L3SystemInformationType2::text(std::ostream& os) const {
+    os << "SystemInformationType2: ";
+    mBCCHFrequencyList.text(os);
+    os << " ";
+    mNCCPermitted.text(os);
+    os << " ";
+    mRACHControlParameters.text(os);
+}
+
+// ── L3SystemInformationType2bis ────────────────────────────────────────
+
+Expected<L3SystemInformationType2bis> L3SystemInformationType2bis::parse(BitReader& br) {
+    L3SystemInformationType2bis msg;
+    {
+        auto res = L3BCCHFrequencyList::parse(br);
+        if (!res) return Expected<L3SystemInformationType2bis>::error(res.error());
+        msg.mBCCHFrequencyList = std::move(res.value());
+    }
+    {
+        auto res = L3RACHControlParameters::parse(br);
+        if (!res) return Expected<L3SystemInformationType2bis>::error(res.error());
+        msg.mRACHControlParameters = std::move(res.value());
+    }
+    return Expected<L3SystemInformationType2bis>::hold(std::move(msg));
+}
+
+void L3SystemInformationType2bis::write(BitWriter& bw) const {
+    mBCCHFrequencyList.write(bw);
+    mRACHControlParameters.write(bw);
+}
+
+void L3SystemInformationType2bis::text(std::ostream& os) const {
+    os << "SystemInformationType2bis: ";
+    mBCCHFrequencyList.text(os);
+    os << " ";
+    mRACHControlParameters.text(os);
+}
+
+// ── L3SystemInformationType2ter ────────────────────────────────────────
+
+Expected<L3SystemInformationType2ter> L3SystemInformationType2ter::parse(BitReader& br) {
+    L3SystemInformationType2ter msg;
+    {
+        auto res = L3BCCHFrequencyList::parse(br);
+        if (!res) return Expected<L3SystemInformationType2ter>::error(res.error());
+        msg.mBCCHFrequencyList = std::move(res.value());
+    }
+    return Expected<L3SystemInformationType2ter>::hold(std::move(msg));
+}
+
+void L3SystemInformationType2ter::write(BitWriter& bw) const {
+    mBCCHFrequencyList.write(bw);
+}
+
+void L3SystemInformationType2ter::text(std::ostream& os) const {
+    os << "SystemInformationType2ter: ";
+    mBCCHFrequencyList.text(os);
+}
+
+// ── L3SystemInformationType3 ───────────────────────────────────────────
+
+Expected<L3SystemInformationType3> L3SystemInformationType3::parse(BitReader& br) {
+    L3SystemInformationType3 msg;
+    { auto res = L3CellIdentity::parse(br); if (!res) return Expected<L3SystemInformationType3>::error(res.error()); msg.mCI = std::move(res.value()); }
+    { auto res = L3LocationAreaIdentity::parse(br); if (!res) return Expected<L3SystemInformationType3>::error(res.error()); msg.mLAI = std::move(res.value()); }
+    { auto res = L3ControlChannelDescription::parse(br); if (!res) return Expected<L3SystemInformationType3>::error(res.error()); msg.mControlChannelDescription = std::move(res.value()); }
+    { auto res = L3CellOptionsBCCH::parse(br); if (!res) return Expected<L3SystemInformationType3>::error(res.error()); msg.mCellOptions = std::move(res.value()); }
+    { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType3>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
+    { auto res = L3RACHControlParameters::parse(br); if (!res) return Expected<L3SystemInformationType3>::error(res.error()); msg.mRACHControlParameters = std::move(res.value()); }
+    {
+        L3SI3RestOctets rest;
+        auto r = br.readField(1); if (!r) return Expected<L3SystemInformationType3>::error(r.error());
+        if (r.value() != 0) {
+            rest.mHaveSI3RestOctets = true;
+            r = br.readField(1); if (!r) return Expected<L3SystemInformationType3>::error(r.error());
+            if (r.value()) {
+                rest.mHaveSelectionParameters = true;
+                r = br.readField(1); if (!r) return Expected<L3SystemInformationType3>::error(r.error()); rest.mCBQ = r.value();
+                r = br.readField(6); if (!r) return Expected<L3SystemInformationType3>::error(r.error()); rest.mCELL_RESELECT_OFFSET = r.value();
+                r = br.readField(3); if (!r) return Expected<L3SystemInformationType3>::error(r.error()); rest.mTEMPORARY_OFFSET = r.value();
+                r = br.readField(5); if (!r) return Expected<L3SystemInformationType3>::error(r.error()); rest.mPENALTY_TIME = r.value();
+            }
+            r = br.readField(4); if (!r) return Expected<L3SystemInformationType3>::error(r.error());
+            r = br.readField(1); if (!r) return Expected<L3SystemInformationType3>::error(r.error());
+            if (r.value()) {
+                rest.mHaveGPRS = true;
+                r = br.readField(3); if (!r) return Expected<L3SystemInformationType3>::error(r.error()); rest.mRA_COLOUR = r.value();
+                r = br.readField(1); if (!r) return Expected<L3SystemInformationType3>::error(r.error());
+            }
+        }
+        msg.mRestOctets = std::move(rest);
+    }
+    return Expected<L3SystemInformationType3>::hold(std::move(msg));
+}
+
+void L3SystemInformationType3::write(BitWriter& bw) const {
+    mCI.write(bw);
+    mLAI.write(bw);
+    mControlChannelDescription.write(bw);
+    mCellOptions.write(bw);
+    mCellSelectionParameters.write(bw);
+    mRACHControlParameters.write(bw);
+    mRestOctets.write(bw);
 }
 
 void L3SystemInformationType3::text(std::ostream& os) const {
@@ -794,16 +1104,323 @@ void L3SystemInformationType3::text(std::ostream& os) const {
     mRestOctets.text(os);
 }
 
-// ── L3SystemInformationType13 ──────────────────────────────────────────
+// ── L3SystemInformationType4 ───────────────────────────────────────────
 
-ParseResult<void> L3SystemInformationType13::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mRestOctets.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
+size_t L3SystemInformationType4::bodyLength() const {
+    size_t len = mLAI.lengthV() + mCellSelectionParameters.lengthV() + mRACHControlParameters.lengthV();
+    if (mHaveCBCH) len += 1 + mCBCHChannelDescription.lengthV();
+    len += mRestOctets.lengthV();
+    return len;
 }
 
-ParseResult<void> L3SystemInformationType13::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mRestOctets.writeV(dest, wp);
-    return ParseResult<void>();
+size_t L3SystemInformationType4::restOctetsLength() const {
+    return mRestOctets.lengthV();
+}
+
+Expected<L3SystemInformationType4> L3SystemInformationType4::parse(BitReader& br) {
+    L3SystemInformationType4 msg;
+    { auto res = L3LocationAreaIdentity::parse(br); if (!res) return Expected<L3SystemInformationType4>::error(res.error()); msg.mLAI = std::move(res.value()); }
+    { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType4>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
+    { auto res = L3RACHControlParameters::parse(br); if (!res) return Expected<L3SystemInformationType4>::error(res.error()); msg.mRACHControlParameters = std::move(res.value()); }
+
+    if (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if (peek == 0x64) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType4>::error(_.error()); }
+            msg.mHaveCBCH = true;
+            auto res = L3ChannelDescription::parse(br);
+            if (!res) return Expected<L3SystemInformationType4>::error(res.error());
+            msg.mCBCHChannelDescription = std::move(res.value());
+        }
+    }
+
+    {
+        L3SIType4RestOctets rest;
+        auto r = br.readField(2); if (!r) return Expected<L3SystemInformationType4>::error(r.error());
+        r = br.readField(1); if (!r) return Expected<L3SystemInformationType4>::error(r.error());
+        if (r.value()) {
+            rest.mHaveGPRS = true;
+            r = br.readField(3); if (!r) return Expected<L3SystemInformationType4>::error(r.error()); rest.mRA_COLOUR = r.value();
+            r = br.readField(1); if (!r) return Expected<L3SystemInformationType4>::error(r.error());
+        }
+        msg.mRestOctets = std::move(rest);
+    }
+
+    return Expected<L3SystemInformationType4>::hold(std::move(msg));
+}
+
+void L3SystemInformationType4::write(BitWriter& bw) const {
+    mLAI.write(bw);
+    mCellSelectionParameters.write(bw);
+    mRACHControlParameters.write(bw);
+    if (mHaveCBCH) {
+        bw.writeField(0x64, 8);
+        mCBCHChannelDescription.write(bw);
+    }
+    mRestOctets.write(bw);
+}
+
+void L3SystemInformationType4::text(std::ostream& os) const {
+    os << "SystemInformationType4: ";
+    mLAI.text(os);
+    os << " ";
+    mCellSelectionParameters.text(os);
+    os << " ";
+    mRACHControlParameters.text(os);
+}
+
+// ── L3SystemInformationType5 ───────────────────────────────────────────
+
+Expected<L3SystemInformationType5> L3SystemInformationType5::parse(BitReader& br) {
+    L3SystemInformationType5 msg;
+    {
+        auto res = L3BCCHFrequencyList::parse(br);
+        if (!res) return Expected<L3SystemInformationType5>::error(res.error());
+        msg.mBCCHFrequencyList = std::move(res.value());
+    }
+    return Expected<L3SystemInformationType5>::hold(std::move(msg));
+}
+
+void L3SystemInformationType5::write(BitWriter& bw) const {
+    mBCCHFrequencyList.write(bw);
+}
+
+void L3SystemInformationType5::text(std::ostream& os) const {
+    os << "SystemInformationType5: ";
+    mBCCHFrequencyList.text(os);
+}
+
+// ── L3SystemInformationType5bis ────────────────────────────────────────
+
+Expected<L3SystemInformationType5bis> L3SystemInformationType5bis::parse(BitReader& br) {
+    L3SystemInformationType5bis msg;
+    {
+        auto res = L3BCCHFrequencyList::parse(br);
+        if (!res) return Expected<L3SystemInformationType5bis>::error(res.error());
+        msg.mBCCHFrequencyList = std::move(res.value());
+    }
+    return Expected<L3SystemInformationType5bis>::hold(std::move(msg));
+}
+
+void L3SystemInformationType5bis::write(BitWriter& bw) const {
+    mBCCHFrequencyList.write(bw);
+}
+
+void L3SystemInformationType5bis::text(std::ostream& os) const {
+    os << "SystemInformationType5bis: ";
+    mBCCHFrequencyList.text(os);
+}
+
+// ── L3SystemInformationType5ter ────────────────────────────────────────
+
+Expected<L3SystemInformationType5ter> L3SystemInformationType5ter::parse(BitReader& br) {
+    L3SystemInformationType5ter msg;
+    {
+        auto res = L3BCCHFrequencyList::parse(br);
+        if (!res) return Expected<L3SystemInformationType5ter>::error(res.error());
+        msg.mBCCHFrequencyList = std::move(res.value());
+    }
+    return Expected<L3SystemInformationType5ter>::hold(std::move(msg));
+}
+
+void L3SystemInformationType5ter::write(BitWriter& bw) const {
+    mBCCHFrequencyList.write(bw);
+}
+
+void L3SystemInformationType5ter::text(std::ostream& os) const {
+    os << "SystemInformationType5ter: ";
+    mBCCHFrequencyList.text(os);
+}
+
+// ── L3SystemInformationType6 ───────────────────────────────────────────
+
+Expected<L3SystemInformationType6> L3SystemInformationType6::parse(BitReader& br) {
+    L3SystemInformationType6 msg;
+    { auto res = L3CellIdentity::parse(br); if (!res) return Expected<L3SystemInformationType6>::error(res.error()); msg.mCI = std::move(res.value()); }
+    { auto res = L3LocationAreaIdentity::parse(br); if (!res) return Expected<L3SystemInformationType6>::error(res.error()); msg.mLAI = std::move(res.value()); }
+    { auto res = L3CellOptionsSACCH::parse(br); if (!res) return Expected<L3SystemInformationType6>::error(res.error()); msg.mCellOptions = std::move(res.value()); }
+    { auto res = L3NCCPermitted::parse(br); if (!res) return Expected<L3SystemInformationType6>::error(res.error()); msg.mNCCPermitted = std::move(res.value()); }
+    return Expected<L3SystemInformationType6>::hold(std::move(msg));
+}
+
+void L3SystemInformationType6::write(BitWriter& bw) const {
+    mCI.write(bw);
+    mLAI.write(bw);
+    mCellOptions.write(bw);
+    mNCCPermitted.write(bw);
+}
+
+void L3SystemInformationType6::text(std::ostream& os) const {
+    os << "SystemInformationType6: ";
+    mCI.text(os);
+    os << " ";
+    mLAI.text(os);
+    os << " ";
+    mCellOptions.text(os);
+    os << " ";
+    mNCCPermitted.text(os);
+}
+
+// ── L3SystemInformationType7 ───────────────────────────────────────────
+
+size_t L3SystemInformationType7::bodyLength() const {
+    size_t len = 1 + mRACHControl.lengthV();
+    for (const auto& ch : mCellChannelDescriptions) {
+        len += 1 + ch.lengthV();
+    }
+    return len;
+}
+
+Expected<L3SystemInformationType7> L3SystemInformationType7::parse(BitReader& br) {
+    L3SystemInformationType7 msg;
+    {
+        auto ieiR = br.readField(8); if (!ieiR) return Expected<L3SystemInformationType7>::error(ieiR.error());
+        if (ieiR.value() != 0x28) {
+            return Expected<L3SystemInformationType7>::error(ParseError{ParseError::Code::InvalidIE, "SI7: expected IEI 0x28"});
+        }
+        auto res = L3RACHControlParameters::parse(br);
+        if (!res) return Expected<L3SystemInformationType7>::error(res.error());
+        msg.mRACHControl = std::move(res.value());
+    }
+
+    while (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if (peek == 0x21) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType7>::error(_.error()); }
+            auto res = L3CellChannelDescription::parse(br);
+            if (!res) return Expected<L3SystemInformationType7>::error(res.error());
+            msg.mCellChannelDescriptions.push_back(std::move(res.value()));
+        } else {
+            break;
+        }
+    }
+
+    return Expected<L3SystemInformationType7>::hold(std::move(msg));
+}
+
+void L3SystemInformationType7::write(BitWriter& bw) const {
+    bw.writeField(0x28, 8);
+    mRACHControl.write(bw);
+    for (const auto& ch : mCellChannelDescriptions) {
+        bw.writeField(0x21, 8);
+        ch.write(bw);
+    }
+}
+
+void L3SystemInformationType7::text(std::ostream& os) const {
+    os << "SystemInformationType7: ";
+    mRACHControl.text(os);
+    os << " cells=" << mCellChannelDescriptions.size();
+}
+
+// ── L3SystemInformationType8 ───────────────────────────────────────────
+
+size_t L3SystemInformationType8::bodyLength() const {
+    size_t len = 1 + mNCCPermitted.lengthV() + 1 + mRACHControl.lengthV();
+    for (const auto& ch : mCellChannelDescriptions) {
+        len += 1 + ch.lengthV();
+    }
+    return len;
+}
+
+Expected<L3SystemInformationType8> L3SystemInformationType8::parse(BitReader& br) {
+    L3SystemInformationType8 msg;
+    {
+        auto ieiR = br.readField(8); if (!ieiR) return Expected<L3SystemInformationType8>::error(ieiR.error());
+        if (ieiR.value() != 0x27) {
+            return Expected<L3SystemInformationType8>::error(ParseError{ParseError::Code::InvalidIE, "SI8: expected IEI 0x27"});
+        }
+        auto res = L3NCCPermitted::parse(br);
+        if (!res) return Expected<L3SystemInformationType8>::error(res.error());
+        msg.mNCCPermitted = std::move(res.value());
+    }
+    {
+        auto ieiR = br.readField(8); if (!ieiR) return Expected<L3SystemInformationType8>::error(ieiR.error());
+        if (ieiR.value() != 0x28) {
+            return Expected<L3SystemInformationType8>::error(ParseError{ParseError::Code::InvalidIE, "SI8: expected IEI 0x28"});
+        }
+        auto res = L3RACHControlParameters::parse(br);
+        if (!res) return Expected<L3SystemInformationType8>::error(res.error());
+        msg.mRACHControl = std::move(res.value());
+    }
+
+    while (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if (peek == 0x21) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType8>::error(_.error()); }
+            auto res = L3CellChannelDescription::parse(br);
+            if (!res) return Expected<L3SystemInformationType8>::error(res.error());
+            msg.mCellChannelDescriptions.push_back(std::move(res.value()));
+        } else {
+            break;
+        }
+    }
+
+    return Expected<L3SystemInformationType8>::hold(std::move(msg));
+}
+
+void L3SystemInformationType8::write(BitWriter& bw) const {
+    bw.writeField(0x27, 8);
+    mNCCPermitted.write(bw);
+    bw.writeField(0x28, 8);
+    mRACHControl.write(bw);
+    for (const auto& ch : mCellChannelDescriptions) {
+        bw.writeField(0x21, 8);
+        ch.write(bw);
+    }
+}
+
+void L3SystemInformationType8::text(std::ostream& os) const {
+    os << "SystemInformationType8: ";
+    mNCCPermitted.text(os);
+    os << " ";
+    mRACHControl.text(os);
+    os << " cells=" << mCellChannelDescriptions.size();
+}
+
+// ── L3SystemInformationType9 ───────────────────────────────────────────
+
+Expected<L3SystemInformationType9> L3SystemInformationType9::parse(BitReader& br) {
+    L3SystemInformationType9 msg;
+    { auto res = L3CellIdentity::parse(br); if (!res) return Expected<L3SystemInformationType9>::error(res.error()); msg.mCI = std::move(res.value()); }
+    { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType9>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
+    { auto res = L3CellOptionsBCCH::parse(br); if (!res) return Expected<L3SystemInformationType9>::error(res.error()); msg.mCellOptions = std::move(res.value()); }
+    return Expected<L3SystemInformationType9>::hold(std::move(msg));
+}
+
+void L3SystemInformationType9::write(BitWriter& bw) const {
+    mCI.write(bw);
+    mCellSelectionParameters.write(bw);
+    mCellOptions.write(bw);
+}
+
+void L3SystemInformationType9::text(std::ostream& os) const {
+    os << "SystemInformationType9: ";
+    mCI.text(os);
+    os << " ";
+    mCellSelectionParameters.text(os);
+    os << " ";
+    mCellOptions.text(os);
+}
+
+// ── L3SystemInformationType13 ──────────────────────────────────────────
+
+Expected<L3SystemInformationType13> L3SystemInformationType13::parse(BitReader& br) {
+    L3SystemInformationType13 msg;
+    auto r = br.readField(1); if (!r) return Expected<L3SystemInformationType13>::error(r.error());
+    r = br.readField(3); if (!r) return Expected<L3SystemInformationType13>::error(r.error());
+    r = br.readField(4); if (!r) return Expected<L3SystemInformationType13>::error(r.error());
+    r = br.readField(1); if (!r) return Expected<L3SystemInformationType13>::error(r.error());
+    r = br.readField(1); if (!r) return Expected<L3SystemInformationType13>::error(r.error());
+    r = br.readField(8); if (!r) return Expected<L3SystemInformationType13>::error(r.error()); msg.mRestOctets.mRAC = r.value();
+    r = br.readField(1); if (!r) return Expected<L3SystemInformationType13>::error(r.error()); msg.mRestOctets.mSPGC_CCCH_SUP = r.value() != 0;
+    r = br.readField(3); if (!r) return Expected<L3SystemInformationType13>::error(r.error()); msg.mRestOctets.mPRIORITY_ACCESS_THR = r.value();
+    r = br.readField(2); if (!r) return Expected<L3SystemInformationType13>::error(r.error()); msg.mRestOctets.mNETWORK_CONTROL_ORDER = r.value();
+    return Expected<L3SystemInformationType13>::hold(std::move(msg));
+}
+
+void L3SystemInformationType13::write(BitWriter& bw) const {
+    mRestOctets.write(bw);
 }
 
 void L3SystemInformationType13::text(std::ostream& os) const {
@@ -811,62 +1428,142 @@ void L3SystemInformationType13::text(std::ostream& os) const {
     mRestOctets.text(os);
 }
 
-// ── L3ImmediateAssignment ──────────────────────────────────────────────
+// ── L3SystemInformationType16 ──────────────────────────────────────────
 
-L3ImmediateAssignment::L3ImmediateAssignment()
-    : mDedicatedModeOrTBF(false, false), mStartTimePresent(false), mStartTimeFrame(0) {}
+Expected<L3SystemInformationType16> L3SystemInformationType16::parse(BitReader& br) {
+    L3SystemInformationType16 msg;
+    { auto res = L3CellIdentity::parse(br); if (!res) return Expected<L3SystemInformationType16>::error(res.error()); msg.mCI = std::move(res.value()); }
+    { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType16>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
+    { auto res = L3CellOptionsBCCH::parse(br); if (!res) return Expected<L3SystemInformationType16>::error(res.error()); msg.mCellOptions = std::move(res.value()); }
+    return Expected<L3SystemInformationType16>::hold(std::move(msg));
+}
 
-size_t L3ImmediateAssignment::l2BodyLength() const {
-    // PageMode(1) + DedicatedModeOrTBF(1) + RequestRef(3) + ChannelDesc(3) + TimingAdv(1) + MobileAlloc(LV) + StartTime(opt)
-    size_t len = 1 + 1 + 3 + 3 + 1;
-    if (!mMobileAllocation.empty()) len += 1 + mMobileAllocation.size();
-    if (mStartTimePresent) len += 3;
+void L3SystemInformationType16::write(BitWriter& bw) const {
+    mCI.write(bw);
+    mCellSelectionParameters.write(bw);
+    mCellOptions.write(bw);
+}
+
+void L3SystemInformationType16::text(std::ostream& os) const {
+    os << "SystemInformationType16: ";
+    mCI.text(os);
+    os << " ";
+    mCellSelectionParameters.text(os);
+    os << " ";
+    mCellOptions.text(os);
+}
+
+// ── L3SystemInformationType17 ──────────────────────────────────────────
+
+size_t L3SystemInformationType17::bodyLength() const {
+    size_t len = 1 + mRACHControl.lengthV();
+    for (const auto& ch : mCellChannelDescriptions) {
+        len += 1 + ch.lengthV();
+    }
     return len;
 }
 
-ParseResult<void> L3ImmediateAssignment::try_parseBody(const L3Frame& src, size_t& rp) {
-    // Half-octet reverse order: DedicatedModeOrTBF first, then PageMode
-    { auto res = mDedicatedModeOrTBF.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mPageMode.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mRequestReference.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mChannelDescription.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mTimingAdvance.try_parseV(src, rp); if (!res.has_value()) return res; }
-    // Mobile Allocation: LV format - length byte + data
-    if (rp + 8 <= src.size()) {
-        size_t maLen = src.readField(rp, 8);
-        if (maLen > 0 && rp + maLen * 8 <= src.size()) {
-            mMobileAllocation.resize(maLen);
+Expected<L3SystemInformationType17> L3SystemInformationType17::parse(BitReader& br) {
+    L3SystemInformationType17 msg;
+    {
+        auto ieiR = br.readField(8); if (!ieiR) return Expected<L3SystemInformationType17>::error(ieiR.error());
+        if (ieiR.value() != 0x28) {
+            return Expected<L3SystemInformationType17>::error(ParseError{ParseError::Code::InvalidIE, "SI17: expected IEI 0x28"});
+        }
+        auto res = L3RACHControlParameters::parse(br);
+        if (!res) return Expected<L3SystemInformationType17>::error(res.error());
+        msg.mRACHControl = std::move(res.value());
+    }
+
+    while (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if (peek == 0x21) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType17>::error(_.error()); }
+            auto res = L3CellChannelDescription::parse(br);
+            if (!res) return Expected<L3SystemInformationType17>::error(res.error());
+            msg.mCellChannelDescriptions.push_back(std::move(res.value()));
+        } else {
+            break;
+        }
+    }
+
+    return Expected<L3SystemInformationType17>::hold(std::move(msg));
+}
+
+void L3SystemInformationType17::write(BitWriter& bw) const {
+    bw.writeField(0x28, 8);
+    mRACHControl.write(bw);
+    for (const auto& ch : mCellChannelDescriptions) {
+        bw.writeField(0x21, 8);
+        ch.write(bw);
+    }
+}
+
+void L3SystemInformationType17::text(std::ostream& os) const {
+    os << "SystemInformationType17: ";
+    mRACHControl.text(os);
+    os << " cells=" << mCellChannelDescriptions.size();
+}
+
+// ── L3ImmediateAssignment ──────────────────────────────────────────────
+
+size_t L3ImmediateAssignment::bodyLength() const {
+    size_t len = 1 + 1 + mRequestReference.lengthV() + mChannelDescription.lengthV() + mTimingAdvance.lengthV();
+    if (!mMobileAllocation.empty()) len += 1 + mMobileAllocation.size();
+    if (mStartTimePresent) len += 1 + 3;
+    return len;
+}
+
+Expected<L3ImmediateAssignment> L3ImmediateAssignment::parse(BitReader& br) {
+    L3ImmediateAssignment msg;
+
+    { auto res = L3DedicatedModeOrTBF::parse(br); if (!res) return Expected<L3ImmediateAssignment>::error(res.error()); msg.mDedicatedModeOrTBF = std::move(res.value()); }
+    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3ImmediateAssignment>::error(res.error()); msg.mPageMode = std::move(res.value()); }
+    { auto res = L3RequestReference::parse(br); if (!res) return Expected<L3ImmediateAssignment>::error(res.error()); msg.mRequestReference = std::move(res.value()); }
+    { auto res = L3ChannelDescription::parse(br); if (!res) return Expected<L3ImmediateAssignment>::error(res.error()); msg.mChannelDescription = std::move(res.value()); }
+    { auto res = L3TimingAdvance::parse(br); if (!res) return Expected<L3ImmediateAssignment>::error(res.error()); msg.mTimingAdvance = std::move(res.value()); }
+
+    if (br.hasMore()) {
+        auto lenR = br.readField(8); if (!lenR) return Expected<L3ImmediateAssignment>::error(lenR.error());
+        size_t maLen = lenR.value();
+        if (maLen > 0) {
+            msg.mMobileAllocation.resize(maLen);
             for (size_t i = 0; i < maLen; ++i) {
-                mMobileAllocation[i] = static_cast<uint8_t>(src.readField(rp, 8));
+                auto r2 = br.readField(8); if (!r2) return Expected<L3ImmediateAssignment>::error(r2.error());
+                msg.mMobileAllocation[i] = static_cast<uint8_t>(r2.value());
             }
         }
     }
-    // StartTime: TLV format (IEI=0x7c)
-    if (rp + 8 <= src.size() && src.peekField(rp, 8) == 0x7c) {
-        rp += 8; // skip IEI
-        mStartTimePresent = true;
-        mStartTimeFrame = src.readField(rp, 23);
+
+    if (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if (peek == 0x7c) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3ImmediateAssignment>::error(_.error()); }
+            msg.mStartTimePresent = true;
+            auto r2 = br.readField(23); if (!r2) return Expected<L3ImmediateAssignment>::error(r2.error());
+            msg.mStartTimeFrame = r2.value();
+        }
     }
-    return ParseResult<void>();
+
+    return Expected<L3ImmediateAssignment>::hold(std::move(msg));
 }
 
-ParseResult<void> L3ImmediateAssignment::try_writeBody(L3Frame& dest, size_t& wp) const {
-    // Half-octet reverse order: DedicatedModeOrTBF first, then PageMode
-    mDedicatedModeOrTBF.writeV(dest, wp);
-    mPageMode.writeV(dest, wp);
-    mRequestReference.writeV(dest, wp);
-    mChannelDescription.writeV(dest, wp);
-    mTimingAdvance.writeV(dest, wp);
-    // Mobile Allocation: LV format - length byte + data
-    dest.writeField(wp, static_cast<uint8_t>(mMobileAllocation.size()), 8);
+void L3ImmediateAssignment::write(BitWriter& bw) const {
+    mDedicatedModeOrTBF.write(bw);
+    mPageMode.write(bw);
+    mRequestReference.write(bw);
+    mChannelDescription.write(bw);
+    mTimingAdvance.write(bw);
+
+    bw.writeField(static_cast<uint32_t>(mMobileAllocation.size()), 8);
     for (const auto& b : mMobileAllocation) {
-        dest.writeField(wp, b, 8);
+        bw.writeField(b, 8);
     }
+
     if (mStartTimePresent) {
-        dest.writeField(wp, 0x7c, 8);  // IEI for StartTime
-        dest.writeField(wp, mStartTimeFrame, 23);
+        bw.writeField(0x7c, 8);
+        bw.writeField(mStartTimeFrame, 23);
     }
-    return ParseResult<void>();
 }
 
 void L3ImmediateAssignment::text(std::ostream& os) const {
@@ -878,70 +1575,75 @@ void L3ImmediateAssignment::text(std::ostream& os) const {
 
 // ── L3ImmediateAssignmentExtended ──────────────────────────────────────
 
-L3ImmediateAssignmentExtended::L3ImmediateAssignmentExtended()
-    : mDedicatedModeOrTBF(false, false), mStartTimePresent(false), mStartTimeFrame(0),
-      mHaveAdditionalChannel(false) {}
-
-size_t L3ImmediateAssignmentExtended::l2BodyLength() const {
-    // PageMode(1) + DedicatedModeOrTBF(1) + RequestRef(3) + ChannelDesc(3) + TimingAdv(1) + MobileAlloc(LV) + StartTime(opt) + AdditionalChannel(opt)
-    size_t len = 1 + 1 + 3 + 3 + 1;
+size_t L3ImmediateAssignmentExtended::bodyLength() const {
+    size_t len = 1 + 1 + mRequestReference.lengthV() + mChannelDescription.lengthV() + mTimingAdvance.lengthV();
     if (!mMobileAllocation.empty()) len += 1 + mMobileAllocation.size();
-    if (mStartTimePresent) len += 3;
+    if (mStartTimePresent) len += 1 + 3;
     if (mHaveAdditionalChannel) len += mAdditionalChannel.lengthV();
     return len;
 }
 
-ParseResult<void> L3ImmediateAssignmentExtended::try_parseBody(const L3Frame& src, size_t& rp) {
-    // Half-octet reverse order: DedicatedModeOrTBF first, then PageMode
-    { auto res = mDedicatedModeOrTBF.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mPageMode.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mRequestReference.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mChannelDescription.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mTimingAdvance.try_parseV(src, rp); if (!res.has_value()) return res; }
-    // Mobile Allocation: LV format - length byte + data
-    if (rp + 8 <= src.size()) {
-        size_t maLen = src.readField(rp, 8);
-        if (maLen > 0 && rp + maLen * 8 <= src.size()) {
-            mMobileAllocation.resize(maLen);
+Expected<L3ImmediateAssignmentExtended> L3ImmediateAssignmentExtended::parse(BitReader& br) {
+    L3ImmediateAssignmentExtended msg;
+
+    { auto res = L3DedicatedModeOrTBF::parse(br); if (!res) return Expected<L3ImmediateAssignmentExtended>::error(res.error()); msg.mDedicatedModeOrTBF = std::move(res.value()); }
+    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3ImmediateAssignmentExtended>::error(res.error()); msg.mPageMode = std::move(res.value()); }
+    { auto res = L3RequestReference::parse(br); if (!res) return Expected<L3ImmediateAssignmentExtended>::error(res.error()); msg.mRequestReference = std::move(res.value()); }
+    { auto res = L3ChannelDescription::parse(br); if (!res) return Expected<L3ImmediateAssignmentExtended>::error(res.error()); msg.mChannelDescription = std::move(res.value()); }
+    { auto res = L3TimingAdvance::parse(br); if (!res) return Expected<L3ImmediateAssignmentExtended>::error(res.error()); msg.mTimingAdvance = std::move(res.value()); }
+
+    if (br.hasMore()) {
+        auto lenR = br.readField(8); if (!lenR) return Expected<L3ImmediateAssignmentExtended>::error(lenR.error());
+        size_t maLen = lenR.value();
+        if (maLen > 0) {
+            msg.mMobileAllocation.resize(maLen);
             for (size_t i = 0; i < maLen; ++i) {
-                mMobileAllocation[i] = static_cast<uint8_t>(src.readField(rp, 8));
+                auto r2 = br.readField(8); if (!r2) return Expected<L3ImmediateAssignmentExtended>::error(r2.error());
+                msg.mMobileAllocation[i] = static_cast<uint8_t>(r2.value());
             }
         }
     }
-    // StartTime: TLV format (IEI=0x7c)
-    if (rp + 8 <= src.size() && src.peekField(rp, 8) == 0x7c) {
-        rp += 8;
-        mStartTimePresent = true;
-        mStartTimeFrame = src.readField(rp, 23);
+
+    if (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if (peek == 0x7c) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3ImmediateAssignmentExtended>::error(_.error()); }
+            msg.mStartTimePresent = true;
+            auto r = br.readField(23); if (!r) return Expected<L3ImmediateAssignmentExtended>::error(r.error());
+            msg.mStartTimeFrame = r.value();
+        }
     }
-    // Additional Channel Description (optional)
-    if (rp + 24 <= src.size()) {
-        mHaveAdditionalChannel = true;
-        { auto res = mAdditionalChannel.try_parseV(src, rp); if (!res.has_value()) return res; }
+
+    if (br.hasMore()) {
+        msg.mHaveAdditionalChannel = true;
+        auto res = L3AdditionalChannelDescription::parse(br);
+        if (!res) return Expected<L3ImmediateAssignmentExtended>::error(res.error());
+        msg.mAdditionalChannel = std::move(res.value());
     }
-    return ParseResult<void>();
+
+    return Expected<L3ImmediateAssignmentExtended>::hold(std::move(msg));
 }
 
-ParseResult<void> L3ImmediateAssignmentExtended::try_writeBody(L3Frame& dest, size_t& wp) const {
-    // Half-octet reverse order: DedicatedModeOrTBF first, then PageMode
-    mDedicatedModeOrTBF.writeV(dest, wp);
-    mPageMode.writeV(dest, wp);
-    mRequestReference.writeV(dest, wp);
-    mChannelDescription.writeV(dest, wp);
-    mTimingAdvance.writeV(dest, wp);
-    // Mobile Allocation: LV format - length byte + data
-    dest.writeField(wp, static_cast<uint8_t>(mMobileAllocation.size()), 8);
+void L3ImmediateAssignmentExtended::write(BitWriter& bw) const {
+    mDedicatedModeOrTBF.write(bw);
+    mPageMode.write(bw);
+    mRequestReference.write(bw);
+    mChannelDescription.write(bw);
+    mTimingAdvance.write(bw);
+
+    bw.writeField(static_cast<uint32_t>(mMobileAllocation.size()), 8);
     for (const auto& b : mMobileAllocation) {
-        dest.writeField(wp, b, 8);
+        bw.writeField(b, 8);
     }
+
     if (mStartTimePresent) {
-        dest.writeField(wp, 0x7c, 8);
-        dest.writeField(wp, mStartTimeFrame, 23);
+        bw.writeField(0x7c, 8);
+        bw.writeField(mStartTimeFrame, 23);
     }
+
     if (mHaveAdditionalChannel) {
-        mAdditionalChannel.writeV(dest, wp);
+        mAdditionalChannel.write(bw);
     }
-    return ParseResult<void>();
 }
 
 void L3ImmediateAssignmentExtended::text(std::ostream& os) const {
@@ -957,48 +1659,45 @@ void L3ImmediateAssignmentExtended::text(std::ostream& os) const {
 
 // ── L3ImmediateAssignmentReject ────────────────────────────────────────
 
-L3ImmediateAssignmentReject::L3ImmediateAssignmentReject()
-    : mFeatureIndicator(0), mPageMode(0), mWaitIndication(0) {}
-
 L3ImmediateAssignmentReject::L3ImmediateAssignmentReject(unsigned waitSeconds)
     : mFeatureIndicator(0), mPageMode(0), mWaitIndication(waitSeconds) {}
 
-size_t L3ImmediateAssignmentReject::l2BodyLength() const {
+size_t L3ImmediateAssignmentReject::bodyLength() const {
     return 1 + static_cast<size_t>(mRequestReferences.size()) * 4;
 }
 
-ParseResult<void> L3ImmediateAssignmentReject::try_parseBody(const L3Frame& src, size_t& rp) {
-    // GSM 04.08 9.1.20: FeatureIndicator(4)|PageMode(4), then optional ReqRefWaitInd4
-    // Reference: GSM_RR_Types.ttcn ImmediateAssignmentReject {
-    //   FeatureIndicator feature_ind, PageMode page_mode, ReqRefWaitInd4 payload }
-    mFeatureIndicator = src.readField(rp, 4);
-    mPageMode = src.readField(rp, 4);
-    // Optional: up to 4 pairs of (RequestReference(24 bits) + WaitIndication(8 bits))
+Expected<L3ImmediateAssignmentReject> L3ImmediateAssignmentReject::parse(BitReader& br) {
+    L3ImmediateAssignmentReject msg;
+    auto r = br.readField(4); if (!r) return Expected<L3ImmediateAssignmentReject>::error(r.error());
+    msg.mFeatureIndicator = r.value();
+    r = br.readField(4); if (!r) return Expected<L3ImmediateAssignmentReject>::error(r.error());
+    msg.mPageMode = r.value();
+
     for (int i = 0; i < 4; ++i) {
-        if (rp + 32 <= src.size()) {
-            L3RequestReference rr;
-            { auto res = rr.try_parseV(src, rp); if (!res.has_value()) return res; }
-            mRequestReferences.push_back(rr);
-            unsigned waitInd = src.readField(rp, 8);
-            mWaitIndications.push_back(waitInd);
-        }
+        if (!br.hasMore()) break;
+        auto res = L3RequestReference::parse(br);
+        if (!res) return Expected<L3ImmediateAssignmentReject>::error(res.error());
+        msg.mRequestReferences.push_back(std::move(res.value()));
+        r = br.readField(8); if (!r) return Expected<L3ImmediateAssignmentReject>::error(r.error());
+        msg.mWaitIndications.push_back(r.value());
     }
-    if (mRequestReferences.empty()) {
-        mWaitIndication = 0;
+
+    if (msg.mRequestReferences.empty()) {
+        msg.mWaitIndication = 0;
     } else {
-        mWaitIndication = mWaitIndications.empty() ? 0 : mWaitIndications.back();
+        msg.mWaitIndication = msg.mWaitIndications.empty() ? 0 : msg.mWaitIndications.back();
     }
-    return ParseResult<void>();
+
+    return Expected<L3ImmediateAssignmentReject>::hold(std::move(msg));
 }
 
-ParseResult<void> L3ImmediateAssignmentReject::try_writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mFeatureIndicator & 0x0F, 4);
-    dest.writeField(wp, mPageMode & 0x0F, 4);
+void L3ImmediateAssignmentReject::write(BitWriter& bw) const {
+    bw.writeField(mFeatureIndicator & 0x0F, 4);
+    bw.writeField(mPageMode & 0x0F, 4);
     for (size_t i = 0; i < mRequestReferences.size(); ++i) {
-        mRequestReferences[i].writeV(dest, wp);
-        dest.writeField(wp, i < mWaitIndications.size() ? mWaitIndications[i] : mWaitIndication, 8);
+        mRequestReferences[i].write(bw);
+        bw.writeField(i < mWaitIndications.size() ? mWaitIndications[i] : mWaitIndication, 8);
     }
-    return ParseResult<void>();
 }
 
 void L3ImmediateAssignmentReject::text(std::ostream& os) const {
@@ -1007,167 +1706,60 @@ void L3ImmediateAssignmentReject::text(std::ostream& os) const {
     os << " requestReferences=(" << mRequestReferences.size() << ")";
 }
 
-// ── L3PagingRequestType2 ───────────────────────────────────────────────
+// ── L3AdditionalAssignment ─────────────────────────────────────────────
 
-L3PagingRequestType2::L3PagingRequestType2() {
-    mTMSIs.push_back(0);
-    mTMSIs.push_back(0);
-    mChannelsNeeded[0] = ChannelType::AnyDCCHType;
-    mChannelsNeeded[1] = ChannelType::AnyDCCHType;
+size_t L3AdditionalAssignment::bodyLength() const {
+    size_t len = mAdditionalChannel.lengthV();
+    if (mHavePowerCommand) len += mPowerCommand.lengthV();
+    return len;
 }
 
-// ── L3PagingRequestType2 Builder ───────────────────────────────────────
-
-L3PagingRequestType2::Builder L3PagingRequestType2::builder() { return Builder{}; }
-
-L3PagingRequestType2::Builder& L3PagingRequestType2::Builder::addTMSI(uint32_t tmsi, ChannelType type) {
-    mTMSIs.push_back(tmsi);
-    if (mTMSIs.size() <= 2) {
-        mChannelsNeeded[mTMSIs.size() - 1] = type;
+Expected<L3AdditionalAssignment> L3AdditionalAssignment::parse(BitReader& br) {
+    L3AdditionalAssignment msg;
+    {
+        auto res = L3AdditionalChannelDescription::parse(br);
+        if (!res) return Expected<L3AdditionalAssignment>::error(res.error());
+        msg.mAdditionalChannel = std::move(res.value());
     }
-    return *this;
-}
-
-L3PagingRequestType2 L3PagingRequestType2::Builder::build() {
-    L3PagingRequestType2 msg;
-    if (mTMSIs.empty()) {
-        msg.mTMSIs.push_back(0);
-        msg.mTMSIs.push_back(0);
-    } else {
-        msg.mTMSIs = std::move(mTMSIs);
-        while (msg.mTMSIs.size() < 2) msg.mTMSIs.push_back(0);
+    if (br.hasMore()) {
+        msg.mHavePowerCommand = true;
+        auto res = L3PowerCommand::parse(br);
+        if (!res) return Expected<L3AdditionalAssignment>::error(res.error());
+        msg.mPowerCommand = std::move(res.value());
     }
-    msg.mChannelsNeeded = mChannelsNeeded;
-    return msg;
+    return Expected<L3AdditionalAssignment>::hold(std::move(msg));
 }
 
-size_t L3PagingRequestType2::l2BodyLength() const {
-    // ChannelNeeded(4)|PageMode(4) + GsmTmsi mi1(4) + GsmTmsi mi2(4) = 9 bytes
-    // Reference: GSM_RR_Types.ttcn: GsmTmsi = uint32_t (raw, NOT LV!)
-    return 1 + mTMSIs.size() * 4;
-}
-
-ParseResult<void> L3PagingRequestType2::try_writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, channelNeededCode(mChannelsNeeded[1]), 2);
-    dest.writeField(wp, channelNeededCode(mChannelsNeeded[0]), 2);
-    dest.writeField(wp, 0x0, 4);
-    // Raw GsmTmsi values (4 bytes each, MSB first)
-    for (const auto& tmsi : mTMSIs) {
-        dest.writeField(wp, tmsi, 32);
-    }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3PagingRequestType2::try_parseBody(const L3Frame& src, size_t& rp) {
-    mChannelsNeeded[1] = channelNeededType(src.readField(rp, 2));
-    mChannelsNeeded[0] = channelNeededType(src.readField(rp, 2));
-    src.readField(rp, 4);  // page mode
-    mTMSIs.clear();
-    // Two raw GsmTmsi (uint32_t each, NOT LV-prefixed!)
-    // Reference: GSM_RR_Types.ttcn PagingRequestType2 { GsmTmsi mi1, GsmTmsi mi2 }
-    for (int i = 0; i < 2; ++i) {
-        if (rp + 32 <= src.size()) {
-            uint32_t tmsi = static_cast<uint32_t>(src.readField(rp, 32));
-            mTMSIs.push_back(tmsi);
-        }
-    }
-    return ParseResult<void>();
-}
-
-void L3PagingRequestType2::text(std::ostream& os) const {
-    os << "PagingRequestType2: ";
-    for (const auto& tmsi : mTMSIs) {
-        os << "TMSI=0x" << std::hex << tmsi << std::dec;
+void L3AdditionalAssignment::write(BitWriter& bw) const {
+    mAdditionalChannel.write(bw);
+    if (mHavePowerCommand) {
+        mPowerCommand.write(bw);
     }
 }
 
-// ── L3PagingRequestType3 ───────────────────────────────────────────────
-
-L3PagingRequestType3::L3PagingRequestType3() {
-    mTMSIs.push_back(0);
-    mTMSIs.push_back(0);
-    mTMSIs.push_back(0);
-    mTMSIs.push_back(0);
-    mChannelsNeeded[0] = ChannelType::AnyDCCHType;
-    mChannelsNeeded[1] = ChannelType::AnyDCCHType;
-}
-
-// ── L3PagingRequestType3 Builder ───────────────────────────────────────
-
-L3PagingRequestType3::Builder L3PagingRequestType3::builder() { return Builder{}; }
-
-L3PagingRequestType3::Builder& L3PagingRequestType3::Builder::addTMSI(uint32_t tmsi, ChannelType type) {
-    mTMSIs.push_back(tmsi);
-    if (mTMSIs.size() <= 2) {
-        mChannelsNeeded[mTMSIs.size() - 1] = type;
-    }
-    return *this;
-}
-
-L3PagingRequestType3 L3PagingRequestType3::Builder::build() {
-    L3PagingRequestType3 msg;
-    if (mTMSIs.empty()) {
-        for (int i = 0; i < 4; i++) msg.mTMSIs.push_back(0);
-    } else {
-        msg.mTMSIs = std::move(mTMSIs);
-        while (msg.mTMSIs.size() < 4) msg.mTMSIs.push_back(0);
-    }
-    msg.mChannelsNeeded = mChannelsNeeded;
-    return msg;
-}
-
-size_t L3PagingRequestType3::l2BodyLength() const {
-    // ChannelNeeded(4)|PageMode(4) + 4x GsmTmsi(4 each) = 17 bytes
-    // Reference: GSM_RR_Types.ttcn: GsmTmsi4 = record length(4) of GsmTmsi (raw!)
-    return 1 + mTMSIs.size() * 4;
-}
-
-ParseResult<void> L3PagingRequestType3::try_writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, channelNeededCode(mChannelsNeeded[1]), 2);
-    dest.writeField(wp, channelNeededCode(mChannelsNeeded[0]), 2);
-    dest.writeField(wp, 0x0, 4);
-    // Raw GsmTmsi values (4 bytes each, MSB first)
-    for (const auto& tmsi : mTMSIs) {
-        dest.writeField(wp, tmsi, 32);
-    }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3PagingRequestType3::try_parseBody(const L3Frame& src, size_t& rp) {
-    mChannelsNeeded[1] = channelNeededType(src.readField(rp, 2));
-    mChannelsNeeded[0] = channelNeededType(src.readField(rp, 2));
-    src.readField(rp, 4);  // page mode
-    mTMSIs.clear();
-    // Four raw GsmTmsi (uint32_t each, NOT LV-prefixed!)
-    // Reference: GSM_RR_Types.ttcn PagingRequestType3 { GsmTmsi4 mi }
-    for (int i = 0; i < 4; ++i) {
-        if (rp + 32 <= src.size()) {
-            uint32_t tmsi = static_cast<uint32_t>(src.readField(rp, 32));
-            mTMSIs.push_back(tmsi);
-        }
-    }
-    return ParseResult<void>();
-}
-
-void L3PagingRequestType3::text(std::ostream& os) const {
-    os << "PagingRequestType3: ";
-    for (const auto& tmsi : mTMSIs) {
-        os << "TMSI=0x" << std::hex << tmsi << std::dec;
+void L3AdditionalAssignment::text(std::ostream& os) const {
+    os << "AdditionalAssignment: ";
+    mAdditionalChannel.text(os);
+    if (mHavePowerCommand) {
+        os << " ";
+        mPowerCommand.text(os);
     }
 }
 
 // ── L3PhysicalInformation ──────────────────────────────────────────────
 
-L3PhysicalInformation::L3PhysicalInformation() {}
-
-ParseResult<void> L3PhysicalInformation::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mTA.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
+Expected<L3PhysicalInformation> L3PhysicalInformation::parse(BitReader& br) {
+    L3PhysicalInformation msg;
+    {
+        auto res = L3TimingAdvance::parse(br);
+        if (!res) return Expected<L3PhysicalInformation>::error(res.error());
+        msg.mTA = std::move(res.value());
+    }
+    return Expected<L3PhysicalInformation>::hold(std::move(msg));
 }
 
-ParseResult<void> L3PhysicalInformation::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mTA.writeV(dest, wp);
-    return ParseResult<void>();
+void L3PhysicalInformation::write(BitWriter& bw) const {
+    mTA.write(bw);
 }
 
 void L3PhysicalInformation::text(std::ostream& os) const {
@@ -1176,47 +1768,6 @@ void L3PhysicalInformation::text(std::ostream& os) const {
 }
 
 // ── L3HandoverCommand ──────────────────────────────────────────────────
-
-L3HandoverCommand::L3HandoverCommand() {}
-
-size_t L3HandoverCommand::l2BodyLength() const {
-    return mCellDescription.lengthV() +
-           mChannelDescriptionAfter.lengthV() +
-           mHandoverReference.lengthV() +
-           mPowerCommandAccessType.lengthV() +
-           mSynchronizationIndication.lengthV();
-}
-
-ParseResult<void> L3HandoverCommand::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mCellDescription.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mChannelDescriptionAfter.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mHandoverReference.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mPowerCommandAccessType.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mSynchronizationIndication.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3HandoverCommand::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mCellDescription.writeV(dest, wp);
-    mChannelDescriptionAfter.writeV(dest, wp);
-    mHandoverReference.writeV(dest, wp);
-    mPowerCommandAccessType.writeV(dest, wp);
-    mSynchronizationIndication.writeV(dest, wp);
-    return ParseResult<void>();
-}
-
-void L3HandoverCommand::text(std::ostream& os) const {
-    os << "HandoverCommand: ";
-    mCellDescription.text(os);
-    os << " ";
-    mChannelDescriptionAfter.text(os);
-    os << " HORef=";
-    mHandoverReference.text(os);
-    os << " SyncInd=";
-    mSynchronizationIndication.text(os);
-}
-
-// ── L3HandoverCommand Builder ──────────────────────────────────────────
 
 L3HandoverCommand::Builder L3HandoverCommand::builder() { return Builder{}; }
 
@@ -1255,429 +1806,55 @@ L3HandoverCommand L3HandoverCommand::Builder::build() {
     return msg;
 }
 
-// ── L3AdditionalAssignment ─────────────────────────────────────────────
-
-L3AdditionalAssignment::L3AdditionalAssignment()
-    : mHavePowerCommand(false) {}
-
-size_t L3AdditionalAssignment::l2BodyLength() const {
-    size_t len = mAdditionalChannel.lengthV();
-    if (mHavePowerCommand) len += mPowerCommand.lengthV();
-    return len;
+size_t L3HandoverCommand::bodyLength() const {
+    return mCellDescription.lengthV() +
+           mChannelDescriptionAfter.lengthV() +
+           mHandoverReference.lengthV() +
+           mPowerCommandAccessType.lengthV() +
+           mSynchronizationIndication.lengthV();
 }
 
-ParseResult<void> L3AdditionalAssignment::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mAdditionalChannel.try_parseV(src, rp); if (!res.has_value()) return res; }
-    if (rp + 8 <= src.size()) {
-        mHavePowerCommand = true;
-        { auto res = mPowerCommand.try_parseV(src, rp); if (!res.has_value()) return res; }
-    }
-    return ParseResult<void>();
+Expected<L3HandoverCommand> L3HandoverCommand::parse(BitReader& br) {
+    L3HandoverCommand msg;
+    { auto res = L3CellDescription::parse(br); if (!res) return Expected<L3HandoverCommand>::error(res.error()); msg.mCellDescription = std::move(res.value()); }
+    { auto res = L3ChannelDescription2::parse(br); if (!res) return Expected<L3HandoverCommand>::error(res.error()); msg.mChannelDescriptionAfter = std::move(res.value()); }
+    { auto res = L3HandoverReference::parse(br); if (!res) return Expected<L3HandoverCommand>::error(res.error()); msg.mHandoverReference = std::move(res.value()); }
+    { auto res = L3PowerCommandAndAccessType::parse(br); if (!res) return Expected<L3HandoverCommand>::error(res.error()); msg.mPowerCommandAccessType = std::move(res.value()); }
+    { auto res = L3SynchronizationIndication::parse(br); if (!res) return Expected<L3HandoverCommand>::error(res.error()); msg.mSynchronizationIndication = std::move(res.value()); }
+    return Expected<L3HandoverCommand>::hold(std::move(msg));
 }
 
-ParseResult<void> L3AdditionalAssignment::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mAdditionalChannel.writeV(dest, wp);
-    if (mHavePowerCommand) {
-        mPowerCommand.writeV(dest, wp);
-    }
-    return ParseResult<void>();
+void L3HandoverCommand::write(BitWriter& bw) const {
+    mCellDescription.write(bw);
+    mChannelDescriptionAfter.write(bw);
+    mHandoverReference.write(bw);
+    mPowerCommandAccessType.write(bw);
+    mSynchronizationIndication.write(bw);
 }
 
-void L3AdditionalAssignment::text(std::ostream& os) const {
-    os << "AdditionalAssignment: ";
-    mAdditionalChannel.text(os);
-    if (mHavePowerCommand) {
-        os << " ";
-        mPowerCommand.text(os);
-    }
-}
-
-// ── L3SystemInformationType2 ───────────────────────────────────────────
-
-L3SystemInformationType2::L3SystemInformationType2() {}
-
-ParseResult<void> L3SystemInformationType2::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mBCCHFrequencyList.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mNCCPermitted.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mRACHControlParameters.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3SystemInformationType2::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mBCCHFrequencyList.writeV(dest, wp);
-    mNCCPermitted.writeV(dest, wp);
-    mRACHControlParameters.writeV(dest, wp);
-    return ParseResult<void>();
-}
-
-void L3SystemInformationType2::text(std::ostream& os) const {
-    os << "SystemInformationType2: ";
-    mBCCHFrequencyList.text(os);
+void L3HandoverCommand::text(std::ostream& os) const {
+    os << "HandoverCommand: ";
+    mCellDescription.text(os);
     os << " ";
-    mNCCPermitted.text(os);
-    os << " ";
-    mRACHControlParameters.text(os);
-}
-
-// ── L3SystemInformationType2bis ────────────────────────────────────────
-
-L3SystemInformationType2bis::L3SystemInformationType2bis() {}
-
-ParseResult<void> L3SystemInformationType2bis::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mBCCHFrequencyList.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mRACHControlParameters.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3SystemInformationType2bis::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mBCCHFrequencyList.writeV(dest, wp);
-    mRACHControlParameters.writeV(dest, wp);
-    return ParseResult<void>();
-}
-
-void L3SystemInformationType2bis::text(std::ostream& os) const {
-    os << "SystemInformationType2bis: ";
-    mBCCHFrequencyList.text(os);
-    os << " ";
-    mRACHControlParameters.text(os);
-}
-
-// ── L3SystemInformationType2ter ────────────────────────────────────────
-
-L3SystemInformationType2ter::L3SystemInformationType2ter() {}
-
-ParseResult<void> L3SystemInformationType2ter::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mBCCHFrequencyList.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3SystemInformationType2ter::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mBCCHFrequencyList.writeV(dest, wp);
-    return ParseResult<void>();
-}
-
-void L3SystemInformationType2ter::text(std::ostream& os) const {
-    os << "SystemInformationType2ter: ";
-    mBCCHFrequencyList.text(os);
-}
-
-// ── L3SystemInformationType4 ───────────────────────────────────────────
-
-L3SystemInformationType4::L3SystemInformationType4() : mHaveCBCH(false) {}
-
-size_t L3SystemInformationType4::l2BodyLength() const {
-    // LAI(5) + CellSelectionParameters(2) + RACHControlParameters(3) = 10
-    // + optional CBCH Channel Description (TV, IEI=0x64, 4 bytes)
-    size_t len = mLAI.lengthV() + mCellSelectionParameters.lengthV() + mRACHControlParameters.lengthV();
-    if (mHaveCBCH) len += mCBCHChannelDescription.lengthTV();
-    return len;
-}
-
-size_t L3SystemInformationType4::restOctetsLength() const {
-    return mRestOctets.lengthV();
-}
-
-ParseResult<void> L3SystemInformationType4::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mLAI.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mCellSelectionParameters.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mRACHControlParameters.try_parseV(src, rp); if (!res.has_value()) return res; }
-    // Optional CBCH Channel Description (TV, IEI=0x64)
-    if (rp + 8 <= src.size() && src.peekField(rp, 8) == 0x64) {
-        mHaveCBCH = true;
-        { auto res = mCBCHChannelDescription.try_parseTV(0x64, src, rp); if (!res.has_value()) return res; }
-    }
-    { auto res = mRestOctets.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3SystemInformationType4::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mLAI.writeV(dest, wp);
-    mCellSelectionParameters.writeV(dest, wp);
-    mRACHControlParameters.writeV(dest, wp);
-    if (mHaveCBCH) {
-        mCBCHChannelDescription.writeTV(0x64, dest, wp);
-    }
-    mRestOctets.writeV(dest, wp);
-    return ParseResult<void>();
-}
-
-void L3SystemInformationType4::text(std::ostream& os) const {
-    os << "SystemInformationType4: ";
-    mLAI.text(os);
-    os << " ";
-    mCellSelectionParameters.text(os);
-    os << " ";
-    mRACHControlParameters.text(os);
-}
-
-// ── L3SystemInformationType5 ───────────────────────────────────────────
-
-L3SystemInformationType5::L3SystemInformationType5() {}
-
-ParseResult<void> L3SystemInformationType5::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mBCCHFrequencyList.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3SystemInformationType5::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mBCCHFrequencyList.writeV(dest, wp);
-    return ParseResult<void>();
-}
-
-void L3SystemInformationType5::text(std::ostream& os) const {
-    os << "SystemInformationType5: ";
-    mBCCHFrequencyList.text(os);
-}
-
-// ── L3SystemInformationType5bis ────────────────────────────────────────
-
-L3SystemInformationType5bis::L3SystemInformationType5bis() {}
-
-ParseResult<void> L3SystemInformationType5bis::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mBCCHFrequencyList.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3SystemInformationType5bis::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mBCCHFrequencyList.writeV(dest, wp);
-    return ParseResult<void>();
-}
-
-void L3SystemInformationType5bis::text(std::ostream& os) const {
-    os << "SystemInformationType5bis: ";
-    mBCCHFrequencyList.text(os);
-}
-
-// ── L3SystemInformationType5ter ────────────────────────────────────────
-
-L3SystemInformationType5ter::L3SystemInformationType5ter() {}
-
-ParseResult<void> L3SystemInformationType5ter::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mBCCHFrequencyList.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3SystemInformationType5ter::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mBCCHFrequencyList.writeV(dest, wp);
-    return ParseResult<void>();
-}
-
-void L3SystemInformationType5ter::text(std::ostream& os) const {
-    os << "SystemInformationType5ter: ";
-    mBCCHFrequencyList.text(os);
-}
-
-// ── L3SystemInformationType6 ───────────────────────────────────────────
-
-L3SystemInformationType6::L3SystemInformationType6() {}
-
-ParseResult<void> L3SystemInformationType6::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mCI.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mLAI.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mCellOptions.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mNCCPermitted.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3SystemInformationType6::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mCI.writeV(dest, wp);
-    mLAI.writeV(dest, wp);
-    mCellOptions.writeV(dest, wp);
-    mNCCPermitted.writeV(dest, wp);
-    return ParseResult<void>();
-}
-
-void L3SystemInformationType6::text(std::ostream& os) const {
-    os << "SystemInformationType6: ";
-    mCI.text(os);
-    os << " ";
-    mLAI.text(os);
-    os << " ";
-    mCellOptions.text(os);
-    os << " ";
-    mNCCPermitted.text(os);
-}
-
-// ── L3SystemInformationType7 ───────────────────────────────────────────
-
-L3SystemInformationType7::L3SystemInformationType7() {}
-
-size_t L3SystemInformationType7::l2BodyLength() const {
-    size_t len = mRACHControl.lengthTV();
-    for (const auto& ch : mCellChannelDescriptions) {
-        len += ch.lengthTV();
-    }
-    return len;
-}
-
-ParseResult<void> L3SystemInformationType7::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mRACHControl.try_parseTV(0x28, src, rp); if (!res.has_value()) return res; }
-    while (rp + 8 <= src.size() && parseHasT(0x21, src, rp)) {
-        L3CellChannelDescription ch;
-        { auto res = ch.try_parseTV(0x21, src, rp); if (!res.has_value()) return res; }
-        mCellChannelDescriptions.push_back(ch);
-    }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3SystemInformationType7::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mRACHControl.writeTV(0x28, dest, wp);
-    for (const auto& ch : mCellChannelDescriptions) {
-        ch.writeTV(0x21, dest, wp);
-    }
-    return ParseResult<void>();
-}
-
-void L3SystemInformationType7::text(std::ostream& os) const {
-    os << "SystemInformationType7: ";
-    mRACHControl.text(os);
-    os << " cells=" << mCellChannelDescriptions.size();
-}
-
-// ── L3SystemInformationType8 ───────────────────────────────────────────
-
-L3SystemInformationType8::L3SystemInformationType8() {}
-
-size_t L3SystemInformationType8::l2BodyLength() const {
-    size_t len = mNCCPermitted.lengthTV() + mRACHControl.lengthTV();
-    for (const auto& ch : mCellChannelDescriptions) {
-        len += ch.lengthTV();
-    }
-    return len;
-}
-
-ParseResult<void> L3SystemInformationType8::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mNCCPermitted.try_parseTV(0x27, src, rp); if (!res.has_value()) return res; }
-    { auto res = mRACHControl.try_parseTV(0x28, src, rp); if (!res.has_value()) return res; }
-    while (rp + 8 <= src.size() && parseHasT(0x21, src, rp)) {
-        L3CellChannelDescription ch;
-        { auto res = ch.try_parseTV(0x21, src, rp); if (!res.has_value()) return res; }
-        mCellChannelDescriptions.push_back(ch);
-    }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3SystemInformationType8::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mNCCPermitted.writeTV(0x27, dest, wp);
-    mRACHControl.writeTV(0x28, dest, wp);
-    for (const auto& ch : mCellChannelDescriptions) {
-        ch.writeTV(0x21, dest, wp);
-    }
-    return ParseResult<void>();
-}
-
-void L3SystemInformationType8::text(std::ostream& os) const {
-    os << "SystemInformationType8: ";
-    mNCCPermitted.text(os);
-    os << " ";
-    mRACHControl.text(os);
-    os << " cells=" << mCellChannelDescriptions.size();
-}
-
-// ── L3SystemInformationType9 ───────────────────────────────────────────
-
-L3SystemInformationType9::L3SystemInformationType9() {}
-
-ParseResult<void> L3SystemInformationType9::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mCI.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mCellSelectionParameters.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mCellOptions.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3SystemInformationType9::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mCI.writeV(dest, wp);
-    mCellSelectionParameters.writeV(dest, wp);
-    mCellOptions.writeV(dest, wp);
-    return ParseResult<void>();
-}
-
-void L3SystemInformationType9::text(std::ostream& os) const {
-    os << "SystemInformationType9: ";
-    mCI.text(os);
-    os << " ";
-    mCellSelectionParameters.text(os);
-    os << " ";
-    mCellOptions.text(os);
-}
-
-// ── L3SystemInformationType16 ──────────────────────────────────────────
-
-L3SystemInformationType16::L3SystemInformationType16() {}
-
-ParseResult<void> L3SystemInformationType16::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mCI.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mCellSelectionParameters.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mCellOptions.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3SystemInformationType16::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mCI.writeV(dest, wp);
-    mCellSelectionParameters.writeV(dest, wp);
-    mCellOptions.writeV(dest, wp);
-    return ParseResult<void>();
-}
-
-void L3SystemInformationType16::text(std::ostream& os) const {
-    os << "SystemInformationType16: ";
-    mCI.text(os);
-    os << " ";
-    mCellSelectionParameters.text(os);
-    os << " ";
-    mCellOptions.text(os);
-}
-
-// ── L3SystemInformationType17 ──────────────────────────────────────────
-
-L3SystemInformationType17::L3SystemInformationType17() {}
-
-size_t L3SystemInformationType17::l2BodyLength() const {
-    size_t len = mRACHControl.lengthTV();
-    for (const auto& ch : mCellChannelDescriptions) {
-        len += ch.lengthTV();
-    }
-    return len;
-}
-
-ParseResult<void> L3SystemInformationType17::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mRACHControl.try_parseTV(0x28, src, rp); if (!res.has_value()) return res; }
-    while (rp + 8 <= src.size() && parseHasT(0x21, src, rp)) {
-        L3CellChannelDescription ch;
-        { auto res = ch.try_parseTV(0x21, src, rp); if (!res.has_value()) return res; }
-        mCellChannelDescriptions.push_back(ch);
-    }
-    return ParseResult<void>();
-}
-
-ParseResult<void> L3SystemInformationType17::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mRACHControl.writeTV(0x28, dest, wp);
-    for (const auto& ch : mCellChannelDescriptions) {
-        ch.writeTV(0x21, dest, wp);
-    }
-    return ParseResult<void>();
-}
-
-void L3SystemInformationType17::text(std::ostream& os) const {
-    os << "SystemInformationType17: ";
-    mRACHControl.text(os);
-    os << " cells=" << mCellChannelDescriptions.size();
+    mChannelDescriptionAfter.text(os);
+    os << " HORef=";
+    mHandoverReference.text(os);
+    os << " SyncInd=";
+    mSynchronizationIndication.text(os);
 }
 
 // ── L3SynchronizationChannelInformation ────────────────────────────────
 
-L3SynchronizationChannelInformation::L3SynchronizationChannelInformation() {}
-
-ParseResult<void> L3SynchronizationChannelInformation::try_parseBody(const L3Frame& src, size_t& rp) {
-    { auto res = mCellIdentity.try_parseV(src, rp); if (!res.has_value()) return res; }
-    { auto res = mLocationAreaIdentity.try_parseV(src, rp); if (!res.has_value()) return res; }
-    return ParseResult<void>();
+Expected<L3SynchronizationChannelInformation> L3SynchronizationChannelInformation::parse(BitReader& br) {
+    L3SynchronizationChannelInformation msg;
+    { auto res = L3CellIdentity::parse(br); if (!res) return Expected<L3SynchronizationChannelInformation>::error(res.error()); msg.mCellIdentity = std::move(res.value()); }
+    { auto res = L3LocationAreaIdentity::parse(br); if (!res) return Expected<L3SynchronizationChannelInformation>::error(res.error()); msg.mLocationAreaIdentity = std::move(res.value()); }
+    return Expected<L3SynchronizationChannelInformation>::hold(std::move(msg));
 }
 
-ParseResult<void> L3SynchronizationChannelInformation::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mCellIdentity.writeV(dest, wp);
-    mLocationAreaIdentity.writeV(dest, wp);
-    return ParseResult<void>();
+void L3SynchronizationChannelInformation::write(BitWriter& bw) const {
+    mCellIdentity.write(bw);
+    mLocationAreaIdentity.write(bw);
 }
 
 void L3SynchronizationChannelInformation::text(std::ostream& os) const {
@@ -1689,19 +1866,17 @@ void L3SynchronizationChannelInformation::text(std::ostream& os) const {
 
 // ── L3ChannelRequest ───────────────────────────────────────────────────
 
-L3ChannelRequest::L3ChannelRequest(unsigned wRef)
-    : mRequestReference(wRef) {}
-
-ParseResult<void> L3ChannelRequest::try_parseBody(const L3Frame& src, size_t& rp) {
-    mRequestReference = src.readField(rp, 4);
-    src.readField(rp, 4);
-    return ParseResult<void>();
+Expected<L3ChannelRequest> L3ChannelRequest::parse(BitReader& br) {
+    L3ChannelRequest msg;
+    auto r = br.readField(4); if (!r) return Expected<L3ChannelRequest>::error(r.error());
+    msg.mRequestReference = r.value();
+    r = br.readField(4); if (!r) return Expected<L3ChannelRequest>::error(r.error());
+    return Expected<L3ChannelRequest>::hold(std::move(msg));
 }
 
-ParseResult<void> L3ChannelRequest::try_writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mRequestReference, 4);
-    dest.writeField(wp, 0, 4);
-    return ParseResult<void>();
+void L3ChannelRequest::write(BitWriter& bw) const {
+    bw.writeField(mRequestReference, 4);
+    bw.writeField(0, 4);
 }
 
 void L3ChannelRequest::text(std::ostream& os) const {
@@ -1710,104 +1885,21 @@ void L3ChannelRequest::text(std::ostream& os) const {
 
 // ── L3HandoverAccess ───────────────────────────────────────────────────
 
-L3HandoverAccess::L3HandoverAccess(unsigned wNumber)
-    : mHandoverNumber(wNumber) {}
-
-ParseResult<void> L3HandoverAccess::try_parseBody(const L3Frame& src, size_t& rp) {
-    mHandoverNumber = src.readField(rp, 27);
-    src.readField(rp, 5);
-    return ParseResult<void>();
+Expected<L3HandoverAccess> L3HandoverAccess::parse(BitReader& br) {
+    L3HandoverAccess msg;
+    auto r = br.readField(27); if (!r) return Expected<L3HandoverAccess>::error(r.error());
+    msg.mHandoverNumber = r.value();
+    r = br.readField(5); if (!r) return Expected<L3HandoverAccess>::error(r.error());
+    return Expected<L3HandoverAccess>::hold(std::move(msg));
 }
 
-ParseResult<void> L3HandoverAccess::try_writeBody(L3Frame& dest, size_t& wp) const {
-    dest.writeField(wp, mHandoverNumber, 27);
-    dest.writeField(wp, 0, 5);
-    return ParseResult<void>();
+void L3HandoverAccess::write(BitWriter& bw) const {
+    bw.writeField(mHandoverNumber, 27);
+    bw.writeField(0, 5);
 }
 
 void L3HandoverAccess::text(std::ostream& os) const {
     os << "HandoverAccess: handoverNumber=" << mHandoverNumber;
 }
-
-// ── Factory & Parser (internal) ────────────────────────────────────────
-
-namespace detail {
-
-ParseResult<std::unique_ptr<L3RRMessage>> L3RRFactory(int mti) {
-    switch (mti) {
-        case L3RRMessage::PagingRequestType1:          return std::make_unique<L3PagingRequestType1>();
-        case L3RRMessage::PagingRequestType2:          return std::make_unique<L3PagingRequestType2>();
-        case L3RRMessage::PagingRequestType3:          return std::make_unique<L3PagingRequestType3>();
-        case L3RRMessage::PagingResponse:              return std::make_unique<L3PagingResponse>();
-        case L3RRMessage::SystemInformationType1:      return std::make_unique<L3SystemInformationType1>();
-        case L3RRMessage::SystemInformationType2:      return std::make_unique<L3SystemInformationType2>();
-        case L3RRMessage::SystemInformationType2bis:   return std::make_unique<L3SystemInformationType2bis>();
-        case L3RRMessage::SystemInformationType2ter:   return std::make_unique<L3SystemInformationType2ter>();
-        case L3RRMessage::SystemInformationType3:      return std::make_unique<L3SystemInformationType3>();
-        case L3RRMessage::SystemInformationType4:      return std::make_unique<L3SystemInformationType4>();
-        case L3RRMessage::SystemInformationType5:      return std::make_unique<L3SystemInformationType5>();
-        case L3RRMessage::SystemInformationType5bis:   return std::make_unique<L3SystemInformationType5bis>();
-        case L3RRMessage::SystemInformationType5ter:   return std::make_unique<L3SystemInformationType5ter>();
-        case L3RRMessage::SystemInformationType6:      return std::make_unique<L3SystemInformationType6>();
-        case L3RRMessage::SystemInformationType7:      return std::make_unique<L3SystemInformationType7>();
-        case L3RRMessage::SystemInformationType8:      return std::make_unique<L3SystemInformationType8>();
-        case L3RRMessage::SystemInformationType9:      return std::make_unique<L3SystemInformationType9>();
-        case L3RRMessage::SystemInformationType13:     return std::make_unique<L3SystemInformationType13>();
-        case L3RRMessage::SystemInformationType16:     return std::make_unique<L3SystemInformationType16>();
-        case L3RRMessage::SystemInformationType17:     return std::make_unique<L3SystemInformationType17>();
-        case L3RRMessage::ChannelRelease:              return std::make_unique<L3ChannelRelease>();
-        case L3RRMessage::ImmediateAssignment:         return std::make_unique<L3ImmediateAssignment>();
-        case L3RRMessage::ImmediateAssignmentExtended: return std::make_unique<L3ImmediateAssignmentExtended>();
-        case L3RRMessage::ImmediateAssignmentReject:   return std::make_unique<L3ImmediateAssignmentReject>();
-        case L3RRMessage::AdditionalAssignment:        return std::make_unique<L3AdditionalAssignment>();
-        case L3RRMessage::PhysicalInformation:         return std::make_unique<L3PhysicalInformation>();
-        case L3RRMessage::HandoverCommand:             return std::make_unique<L3HandoverCommand>();
-        case L3RRMessage::HandoverComplete:            return std::make_unique<L3HandoverComplete>();
-        case L3RRMessage::HandoverFailure:             return std::make_unique<L3HandoverFailure>();
-        case L3RRMessage::AssignmentCommand:           return std::make_unique<L3AssignmentCommand>();
-        case L3RRMessage::AssignmentComplete:          return std::make_unique<L3AssignmentComplete>();
-        case L3RRMessage::AssignmentFailure:           return std::make_unique<L3AssignmentFailure>();
-        case L3RRMessage::ClassmarkEnquiry:            return std::make_unique<L3ClassmarkEnquiry>();
-        case L3RRMessage::ClassmarkChange:             return std::make_unique<L3ClassmarkChange>();
-        case L3RRMessage::MeasurementReport:           return std::make_unique<L3MeasurementReport>();
-        case L3RRMessage::CipheringModeCommand:        return std::make_unique<L3CipheringModeCommand>(false, 0);
-        case L3RRMessage::CipheringModeComplete:       return std::make_unique<L3CipheringModeComplete>();
-        case L3RRMessage::ChannelModeModify:           return std::make_unique<L3ChannelModeModify>();
-        case L3RRMessage::ChannelModeModifyAcknowledge: return std::make_unique<L3ChannelModeModifyAcknowledge>();
-        case L3RRMessage::GPRSSuspensionRequest:       return std::make_unique<L3GPRSSuspensionRequest>();
-        case L3RRMessage::ApplicationInformation:      return std::make_unique<L3ApplicationInformation>();
-        case L3RRMessage::RRStatus:                    return std::make_unique<L3RRStatus>();
-        case L3RRMessage::SynchronizationChannelInformation: return std::make_unique<L3SynchronizationChannelInformation>();
-        case L3RRMessage::ChannelRequest:              return std::make_unique<L3ChannelRequest>();
-        case L3RRMessage::HandoverAccess:              return std::make_unique<L3HandoverAccess>();
-        default:
-            return ParseResult<std::unique_ptr<L3RRMessage>>(
-                ParseErrorCode::InvalidMTI, "Unknown RR message type: 0x" + std::to_string(mti & 0xFF));
-    }
-}
-
-ParseResult<std::unique_ptr<L3RRMessage>> parseL3RR(const L3Frame& source) {
-    if (source.size() < 16) {
-        return ParseResult<std::unique_ptr<L3RRMessage>>(
-            ParseErrorCode::TruncatedInput, "Frame too short for L3 header");
-    }
-
-    unsigned mti = source.mti();
-    auto factoryResult = L3RRFactory(static_cast<L3RRMessage::MessageType>(mti));
-    if (!factoryResult.has_value()) {
-        GSML3PARSER_LOG_WARN("Unknown RR MTI: 0x%02x", mti);
-        return ParseResult<std::unique_ptr<L3RRMessage>>(factoryResult.error());
-    }
-
-    auto parseResult = factoryResult.value()->parse(source);
-    if (!parseResult.has_value()) {
-        GSML3PARSER_LOG_WARN("RR parse failed for MTI=0x%02x", mti);
-        return ParseResult<std::unique_ptr<L3RRMessage>>(parseResult.error());
-    }
-
-    return ParseResult<std::unique_ptr<L3RRMessage>>(std::move(factoryResult).value());
-}
-
-} // namespace detail
 
 } // namespace gsml3parser

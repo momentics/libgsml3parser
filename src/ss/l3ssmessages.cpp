@@ -15,189 +15,235 @@
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
 // FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// LIABILITY, WHETHER IN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
 #include "gsml3parser/ss/l3ssmessages.h"
-#include "gsml3parser/cc/l3cclements.h"
 #include "gsml3parser/logger.h"
 #include <sstream>
 #include <iomanip>
 
 namespace gsml3parser {
 
-// ── L3SupServMessage ────────────────────────────────────────────────────
+// ── TLV/LV helper functions ────────────────────────────────────────────
 
-ParseResult<void> L3SupServMessage::write(L3Frame& dest) const {
-    size_t l3len = bitsNeeded();
-    if (dest.size() != l3len) dest.resize(l3len);
-    size_t wp = 0;
-    dest.writeField(wp, static_cast<unsigned>(pd()), 4);
-    dest.writeField(wp, mTI, 3);
-    dest.writeField(wp, 0, 1);
-    dest.writeField(wp, mti() << 2, 8);
-    auto res = try_writeBody(dest, wp);
-    if (!res.has_value()) return res;
-    dest.l2Length(l2Length());
-    return ParseResult<void>();
+static void writeTLV(BitWriter& bw, unsigned iei, const uint8_t* data, size_t len) {
+    bw.writeField(0x80 | (iei & 0x7F), 8);
+    bw.writeField(static_cast<uint32_t>(len), 8);
+    bw.writeBytes(data, len);
 }
 
-void L3SupServMessage::text(std::ostream& os) const {
-    L3Message::text(os);
-    os << " TI=" << mTI;
+static bool try_parseTLV(BitReader& br, unsigned iei, std::vector<uint8_t>& out) {
+    auto r = br.readField(8);
+    if (!r) return false;
+    uint8_t tag = static_cast<uint8_t>(r.value());
+    if ((tag & 0x7F) != (iei & 0x7F)) return false;
+    if (tag & 0x80) {
+        auto lenR = br.readField(8);
+        if (!lenR) return false;
+        size_t len = lenR.value();
+        out.resize(len);
+        auto readR = br.readBytes(out.data(), len);
+        if (!readR) return false;
+    } else {
+        out.clear();
+    }
+    return true;
+}
+
+static void writeLV(BitWriter& bw, const uint8_t* data, size_t len) {
+    if (len > 0) {
+        bw.writeField(static_cast<uint32_t>(len), 8);
+        bw.writeBytes(data, len);
+    }
+}
+
+static Expected<size_t> readLVLength(BitReader& br) {
+    auto r = br.readField(8);
+    if (!r) return Expected<size_t>::error(r.error());
+    return Expected<size_t>::hold(r.value());
 }
 
 // ── L3SupServFacilityMessage ───────────────────────────────────────────
 
-L3SupServFacilityMessage::L3SupServFacilityMessage() {}
-
-L3SupServFacilityMessage::L3SupServFacilityMessage(unsigned wTI, const std::string& facility)
-    : L3SupServMessage(wTI), mFacility(facility) {}
-
-size_t L3SupServFacilityMessage::l2BodyLength() const {
-    return mFacility.lengthLV();
+size_t L3SupServFacilityMessage::bodyLength() const {
+    return mFacility.lengthV() + 1;
 }
 
-ParseResult<void> L3SupServFacilityMessage::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mFacility.writeLV(dest, wp);
-    return ParseResult<void>();
+Expected<L3SupServFacilityMessage> L3SupServFacilityMessage::parse(BitReader& br) {
+    L3SupServFacilityMessage msg;
+
+    auto lenRes = readLVLength(br);
+    if (!lenRes) return Expected<L3SupServFacilityMessage>::error(lenRes.error());
+    size_t len = lenRes.value();
+
+    auto facRes = L3OctetAlignedProtocolElement::parse(br, len);
+    if (!facRes) return Expected<L3SupServFacilityMessage>::error(facRes.error());
+    msg.mFacility = std::move(facRes).value();
+
+    return Expected<L3SupServFacilityMessage>::hold(std::move(msg));
 }
 
-ParseResult<void> L3SupServFacilityMessage::try_parseBody(const L3Frame& src, size_t& rp) {
-    auto res = mFacility.try_parseLV(src, rp);
-    if (!res.has_value()) return res;
-    return ParseResult<void>();
+void L3SupServFacilityMessage::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(pd()), 4);
+    bw.writeField(mTI, 3);
+    bw.writeField(0, 1);
+    bw.writeField(static_cast<uint32_t>(MTI) << 2, 8);
+    writeLV(bw, mFacility.peData(), mFacility.lengthV());
 }
 
 void L3SupServFacilityMessage::text(std::ostream& os) const {
-    os << "Facility: ";
+    os << "Facility TI=" << mTI << ": ";
     mFacility.text(os);
 }
 
 // ── L3SupServRegisterMessage ───────────────────────────────────────────
 
-L3SupServRegisterMessage::L3SupServRegisterMessage()
-    : mHaveVersion(false), mVersionIndicator(0) {}
-
-L3SupServRegisterMessage::L3SupServRegisterMessage(unsigned wTI, const std::string& facility)
-    : L3SupServMessage(wTI), mFacility(facility), mHaveVersion(false), mVersionIndicator(0) {}
-
-size_t L3SupServRegisterMessage::l2BodyLength() const {
-    size_t len = 1; // IEI tag always present
-    if (mFacility.mExtant) len += mFacility.lengthLV();
-    return len + (mHaveVersion ? 3 : 0);
+size_t L3SupServRegisterMessage::bodyLength() const {
+    size_t len = 1;
+    if (mFacility.mExtant) len += 1 + mFacility.lengthV();
+    len += mHaveVersion ? 3 : 0;
+    return len;
 }
 
-ParseResult<void> L3SupServRegisterMessage::try_writeBody(L3Frame& dest, size_t& wp) const {
-    mFacility.writeTLV(0x1c, dest, wp);
-    if (mHaveVersion) {
-        dest.writeField(wp, 0x7f, 8);  // IEI
-        dest.writeField(wp, 1, 8);       // Length
-        dest.writeField(wp, mVersionIndicator, 8);
+Expected<L3SupServRegisterMessage> L3SupServRegisterMessage::parse(BitReader& br) {
+    L3SupServRegisterMessage msg;
+
+    std::vector<uint8_t> facData;
+    if (!try_parseTLV(br, 0x1c, facData)) {
+        return Expected<L3SupServRegisterMessage>::error(
+            ParseError{ParseError::Code::InvalidIE, "Missing facility IEI 0x1c"});
     }
-    return ParseResult<void>();
+    if (!facData.empty()) {
+        msg.mFacility.mData.assign(facData.begin(), facData.end());
+        msg.mFacility.mExtant = true;
+    }
+
+    msg.mHaveVersion = (br.peekField(8) == 0x7F);
+    if (msg.mHaveVersion) {
+        auto r = br.readField(8);
+        if (!r) return Expected<L3SupServRegisterMessage>::error(r.error()); // IEI
+        r = br.readField(8);
+        if (!r) return Expected<L3SupServRegisterMessage>::error(r.error()); // length
+        r = br.readField(8);
+        if (!r) return Expected<L3SupServRegisterMessage>::error(r.error());
+        msg.mVersionIndicator = static_cast<uint8_t>(r.value());
+    }
+
+    return Expected<L3SupServRegisterMessage>::hold(std::move(msg));
 }
 
-ParseResult<void> L3SupServRegisterMessage::try_parseBody(const L3Frame& src, size_t& rp) {
-    auto tlRes = mFacility.try_parseTLV(0x1c, src, rp);
-    if (!tlRes.has_value()) return tlRes;
-    mHaveVersion = (src.peekField(rp, 8) == 0x7f);
-    if (mHaveVersion) {
-        rp += 8;  // skip IEI
-        src.readField(rp, 8);  // skip length
-        mVersionIndicator = src.readField(rp, 8);
+void L3SupServRegisterMessage::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(pd()), 4);
+    bw.writeField(mTI, 3);
+    bw.writeField(0, 1);
+    bw.writeField(static_cast<uint32_t>(MTI) << 2, 8);
+
+    if (mFacility.mExtant) {
+        writeTLV(bw, 0x1c,
+                 reinterpret_cast<const uint8_t*>(mFacility.mData.data()),
+                 mFacility.lengthV());
+    } else {
+        bw.writeField(0x1c, 8);
     }
-    return ParseResult<void>();
+
+    if (mHaveVersion) {
+        bw.writeField(0x7F, 8);
+        bw.writeField(1, 8);
+        bw.writeField(mVersionIndicator, 8);
+    }
 }
 
 void L3SupServRegisterMessage::text(std::ostream& os) const {
-    os << "Register: ";
+    os << "Register TI=" << mTI << ": ";
     mFacility.text(os);
-    if (mHaveVersion) os << " version=" << mVersionIndicator;
+    if (mHaveVersion) os << " version=" << static_cast<int>(mVersionIndicator);
 }
 
 // ── L3SupServReleaseCompleteMessage ────────────────────────────────────
 
-L3SupServReleaseCompleteMessage::L3SupServReleaseCompleteMessage()
-    : mHaveCause(false), mCause() {}
-
-L3SupServReleaseCompleteMessage::L3SupServReleaseCompleteMessage(unsigned wTI)
-    : L3SupServMessage(wTI), mHaveCause(false), mCause() {}
-
-L3SupServReleaseCompleteMessage::L3SupServReleaseCompleteMessage(unsigned wTI, CCCause cause)
-    : L3SupServMessage(wTI), mHaveCause(true), mCause(cause) {}
-
-size_t L3SupServReleaseCompleteMessage::l2BodyLength() const {
+size_t L3SupServReleaseCompleteMessage::bodyLength() const {
     size_t len = 0;
-    if (mFacility.mExtant) len += mFacility.lengthTLV();
-    if (mHaveCause) len += mCause.lengthTLV();
+    if (mFacility.mExtant) len += 2 + mFacility.lengthV();
+    if (mHaveCause) len += 2 + L3CauseElement::lengthV();
     return len;
 }
 
-ParseResult<void> L3SupServReleaseCompleteMessage::try_writeBody(L3Frame& dest, size_t& wp) const {
-    if (mFacility.mExtant) mFacility.writeTLV(0x1c, dest, wp);
-    if (mHaveCause) mCause.writeTLV(0x08, dest, wp);
-    return ParseResult<void>();
+Expected<L3SupServReleaseCompleteMessage> L3SupServReleaseCompleteMessage::parse(BitReader& br) {
+    L3SupServReleaseCompleteMessage msg;
+
+    while (br.hasMore()) {
+        auto r = br.readField(8);
+        if (!r) return Expected<L3SupServReleaseCompleteMessage>::error(r.error());
+        uint8_t tag = static_cast<uint8_t>(r.value());
+        unsigned iei = tag & 0x7F;
+        bool ext = (tag & 0x80) != 0;
+
+        if (iei == 0x08) {
+            if (ext) {
+                r = br.readField(8);
+                if (!r) return Expected<L3SupServReleaseCompleteMessage>::error(r.error());
+            }
+            auto causeRes = L3CauseElement::parse(br);
+            if (!causeRes) return Expected<L3SupServReleaseCompleteMessage>::error(causeRes.error());
+            msg.mCause = std::move(causeRes).value();
+            msg.mHaveCause = true;
+        } else if (iei == 0x1c) {
+            size_t len = 0;
+            if (ext) {
+                r = br.readField(8);
+                if (!r) return Expected<L3SupServReleaseCompleteMessage>::error(r.error());
+                len = r.value();
+            }
+            if (len > 0) {
+                auto facRes = L3OctetAlignedProtocolElement::parse(br, len);
+                if (!facRes) return Expected<L3SupServReleaseCompleteMessage>::error(facRes.error());
+                msg.mFacility = std::move(facRes).value();
+            }
+        } else {
+            size_t skip = 0;
+            if (ext) {
+                r = br.readField(8);
+                if (!r) return Expected<L3SupServReleaseCompleteMessage>::error(r.error());
+                skip = r.value();
+            }
+            if (skip > 0) {
+                std::vector<uint8_t> dummy(skip);
+                auto skipRes = br.readBytes(dummy.data(), skip);
+                if (!skipRes) return Expected<L3SupServReleaseCompleteMessage>::error(skipRes.error());
+            }
+        }
+    }
+
+    return Expected<L3SupServReleaseCompleteMessage>::hold(std::move(msg));
 }
 
-ParseResult<void> L3SupServReleaseCompleteMessage::try_parseBody(const L3Frame& src, size_t& rp) {
-    auto tlRes = mCause.try_parseTLV(0x08, src, rp);
-    if (!tlRes.has_value()) return tlRes;
-    mHaveCause = tlRes.value();
-    auto facRes = mFacility.try_parseTLV(0x1c, src, rp);
-    if (!facRes.has_value()) return facRes;
-    return ParseResult<void>();
+void L3SupServReleaseCompleteMessage::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(pd()), 4);
+    bw.writeField(mTI, 3);
+    bw.writeField(0, 1);
+    bw.writeField(static_cast<uint32_t>(MTI) << 2, 8);
+
+    if (mFacility.mExtant) {
+        writeTLV(bw, 0x1c,
+                 reinterpret_cast<const uint8_t*>(mFacility.mData.data()),
+                 mFacility.lengthV());
+    }
+    if (mHaveCause) {
+        bw.writeField(0x88, 8);
+        bw.writeField(L3CauseElement::lengthV(), 8);
+        mCause.write(bw);
+    }
 }
 
 void L3SupServReleaseCompleteMessage::text(std::ostream& os) const {
-    os << "SupServReleaseComplete";
+    os << "SupServReleaseComplete TI=" << mTI;
     if (mFacility.mExtant) {
         os << " ";
         mFacility.text(os);
     }
     if (mHaveCause) os << ": " << CCCause2Str(mCause.cause());
 }
-
-// ── Factory & Parser (internal) ────────────────────────────────────────
-
-namespace detail {
-
-ParseResult<std::unique_ptr<L3SupServMessage>> L3SupServFactory(int mti) {
-    switch (mti) {
-        case L3SupServMessage::Facility:      return std::make_unique<L3SupServFacilityMessage>();
-        case L3SupServMessage::Register:      return std::make_unique<L3SupServRegisterMessage>();
-        case L3SupServMessage::ReleaseComplete: return std::make_unique<L3SupServReleaseCompleteMessage>();
-        default:
-            return ParseResult<std::unique_ptr<L3SupServMessage>>(
-                ParseErrorCode::InvalidMTI, "Unknown SS message type: 0x" + std::to_string(mti & 0xFF));
-    }
-}
-
-ParseResult<std::unique_ptr<L3SupServMessage>> parseL3SupServ(const L3Frame& source) {
-    if (source.size() < 16) {
-        return ParseResult<std::unique_ptr<L3SupServMessage>>(
-            ParseErrorCode::TruncatedInput, "Frame too short for L3 header");
-    }
-
-    unsigned mti = source.mti() & 0xbf;
-    auto factoryResult = L3SupServFactory(static_cast<L3SupServMessage::MessageType>(mti));
-    if (!factoryResult.has_value()) {
-        GSML3PARSER_LOG_WARN("Unknown SS MTI: 0x%02x", mti);
-        return ParseResult<std::unique_ptr<L3SupServMessage>>(factoryResult.error());
-    }
-
-    auto& msg = factoryResult.value();
-    msg->ti(source.ti());
-    auto parseResult = msg->parse(source);
-    if (!parseResult.has_value()) {
-        GSML3PARSER_LOG_WARN("SS parse failed for MTI=0x%02x", mti);
-        return ParseResult<std::unique_ptr<L3SupServMessage>>(parseResult.error());
-    }
-
-    return ParseResult<std::unique_ptr<L3SupServMessage>>(std::move(factoryResult).value());
-}
-
-} // namespace detail
 
 } // namespace gsml3parser

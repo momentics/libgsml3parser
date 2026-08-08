@@ -35,8 +35,9 @@ set(CORE_SOURCES
     src/logger.cpp
     src/parser.cpp
     src/parser_config.cpp
-    src/mm/l3mmlements.cpp
+    src/mm/l3mmelements.cpp
     src/cc/l3cclements.cpp
+    src/visitor.cpp
 )
 
 set(RR_SOURCES
@@ -78,9 +79,14 @@ set(PUBLIC_HEADERS
     include/gsml3parser/protocol_types.h
     include/gsml3parser/common/l3common.h
     include/gsml3parser/rr/l3rrmessages.h
+    include/gsml3parser/mm/l3mmelements.h
     include/gsml3parser/mm/l3mmmessages.h
     include/gsml3parser/cc/l3ccmessages.h
+    include/gsml3parser/cc/l3ccelements.h
     include/gsml3parser/ss/l3ssmessages.h
+    include/gsml3parser/message_types.h
+    include/gsml3parser/visitor.h
+    include/gsml3parser/gsml3parser.hpp
 )
 
 # ── Library target ────────────────────────────────────────────────────

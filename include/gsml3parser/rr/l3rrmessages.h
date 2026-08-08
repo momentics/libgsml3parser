@@ -23,208 +23,178 @@
 
 #include <array>
 #include <cstdint>
-#include <memory>
 #include <ostream>
 #include <string>
 #include <vector>
 
-#include "../l3message.h"
-#include "../l3frame.h"
+#include "../expected.h"
+#include "../bitreader.h"
+#include "../bitwriter.h"
 #include "../types.h"
+#include "../enums.h"
 #include "../common/l3common.h"
 
 namespace gsml3parser {
 
-// ── L3RRMessage ─────────────────────────────────────────────────────────
-
-class L3RRMessage : public L3Message {
-public:
-    enum MessageType : int {
-        SystemInformationType1  = 0x19,
-        SystemInformationType2  = 0x1a,
-        SystemInformationType2bis = 0x02,
-        SystemInformationType2ter = 0x03,
-        SystemInformationType3  = 0x1b,
-        SystemInformationType4  = 0x1c,
-        SystemInformationType5  = 0x1d,
-        SystemInformationType5bis = 0x05,
-        SystemInformationType5ter = 0x06,
-        SystemInformationType6  = 0x1e,
-        SystemInformationType7  = 0x1f,
-        SystemInformationType8  = 0x18,
-        SystemInformationType9  = 0x04,
-        SystemInformationType13 = 0x00,
-        SystemInformationType16 = 0x3d,
-        SystemInformationType17 = 0x3e,
-        AssignmentCommand       = 0x2e,
-        AssignmentComplete      = 0x29,
-        AssignmentFailure       = 0x2f,
-        ChannelRelease          = 0x0d,
-        ImmediateAssignment     = 0x3f,
-        ImmediateAssignmentExtended = 0x39,
-        ImmediateAssignmentReject = 0x3a,
-        AdditionalAssignment    = 0x3b,
-        PagingRequestType1      = 0x21,
-        PagingRequestType2      = 0x22,
-        PagingRequestType3      = 0x24,
-        PagingResponse          = 0x27,
-        HandoverCommand         = 0x2b,
-        HandoverComplete        = 0x2c,
-        HandoverFailure         = 0x28,
-        PhysicalInformation     = 0x2d,
-        CipheringModeCommand    = 0x35,
-        CipheringModeComplete   = 0x32,
-        ChannelModeModify       = 0x10,
-        RRStatus                = 0x12,
-        ChannelModeModifyAcknowledge = 0x17,
-        ClassmarkChange         = 0x16,
-        ClassmarkEnquiry        = 0x13,
-        MeasurementReport       = 0x15,
-        GPRSSuspensionRequest   = 0x34,
-        SynchronizationChannelInformation = 0x100,
-        ChannelRequest          = 0x101,
-        HandoverAccess          = 0x102,
-        ApplicationInformation  = 0x38
-    };
-
-    static const char* name(MessageType mt);
-
-    L3PD pd() const override { return L3PD::RadioResource; }
-    void text(std::ostream& os) const override;
-};
-
-std::ostream& operator<<(std::ostream& os, L3RRMessage::MessageType mt);
-
-// ── L3RRMessageNRO (no rest octets) ─────────────────────────────────────
-
-class L3RRMessageNRO : public L3RRMessage {
-public:
-    size_t fullBodyLength() const override { return l2BodyLength(); }
-};
-
-// ── L3RRMessageRO (with rest octets) ────────────────────────────────────
-
-class L3RRMessageRO : public L3RRMessage {
-public:
-    virtual size_t restOctetsLength() const = 0;
-    size_t fullBodyLength() const override { return l2BodyLength() + restOctetsLength(); }
-};
+// RR message type names for text output.
+const char* rrMessageName(int mti);
 
 // ── Paging Request Type 1 (GSM 04.08 9.1.22) ──────────────────────────
 
-class L3PagingRequestType1 : public L3RRMessageNRO {
-private:
+class L3PagingRequestType1 {
     std::vector<L3MobileIdentity> mMobileIDs;
-    std::array<ChannelType, 2> mChannelsNeeded;
+    std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
 public:
-    L3PagingRequestType1();
+    static constexpr int MTI = 0x21;
+
+    L3PagingRequestType1() = default;
 
     class Builder {
+        std::vector<L3MobileIdentity> mMobileIds;
+        std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
     public:
         Builder& addMobileId(const L3MobileIdentity& id, ChannelType type);
         L3PagingRequestType1 build();
-    private:
-        std::vector<L3MobileIdentity> mMobileIds;
-        std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
     };
 
     static Builder builder();
 
-    int mti() const override { return PagingRequestType1; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    void text(std::ostream& os) const override;
+    const std::vector<L3MobileIdentity>& mobileIds() const { return mMobileIDs; }
+    const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3PagingRequestType1> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Paging Request Type 2 (GSM 04.08 9.1.23) ──────────────────────────
+
+class L3PagingRequestType2 {
+    std::vector<uint32_t> mTMSIs;
+    std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
+public:
+    static constexpr int MTI = 0x22;
+
+    L3PagingRequestType2() = default;
+
+    class Builder {
+        std::vector<uint32_t> mTMSIs;
+        std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
+    public:
+        Builder& addTMSI(uint32_t tmsi, ChannelType type);
+        L3PagingRequestType2 build();
+    };
+
+    static Builder builder();
+
+    const std::vector<uint32_t>& tmsis() const { return mTMSIs; }
+    const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3PagingRequestType2> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Paging Request Type 3 (GSM 04.08 9.1.24) ──────────────────────────
+
+class L3PagingRequestType3 {
+    std::vector<uint32_t> mTMSIs;
+    std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
+public:
+    static constexpr int MTI = 0x24;
+
+    L3PagingRequestType3() = default;
+
+    class Builder {
+        std::vector<uint32_t> mTMSIs;
+        std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
+    public:
+        Builder& addTMSI(uint32_t tmsi, ChannelType type);
+        L3PagingRequestType3 build();
+    };
+
+    static Builder builder();
+
+    const std::vector<uint32_t>& tmsis() const { return mTMSIs; }
+    const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3PagingRequestType3> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Paging Response (GSM 04.08 9.1.25) ─────────────────────────────────
 
-class L3PagingResponse : public L3RRMessageNRO {
-private:
-    unsigned mCKSN;
+class L3PagingResponse {
+    unsigned mCKSN{0};
     L3MobileStationClassmark2 mClassmark;
     L3MobileIdentity mMobileID;
 public:
+    static constexpr int MTI = 0x27;
+
     const L3MobileIdentity& mobileId() const { return mMobileID; }
     unsigned cksn() const { return mCKSN; }
-    int mti() const override { return PagingResponse; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& source, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-};
+    const L3MobileStationClassmark2& classmark() const { return mClassmark; }
 
-// ── System Information Type 1 (GSM 04.08 9.1.31) ──────────────────────
-
-class L3SystemInformationType1 : public L3RRMessageNRO {
-private:
-    L3FrequencyList mCellChannelDescription;
-    L3RACHControlParameters mRACHControlParameters;
-    bool mHaveRestOctets{};
-    uint8_t mRestOctet;
-public:
-    L3SystemInformationType1();
-    int mti() const override { return SystemInformationType1; }
-    size_t l2BodyLength() const override { return 19 + (mHaveRestOctets ? 1 : 0); }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    void text(std::ostream& os) const override;
-    const L3FrequencyList& cellChannelDescription() const { return mCellChannelDescription; }
-    const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
-    bool hasRestOctets() const { return mHaveRestOctets; }
-    uint8_t restOctet() const { return mRestOctet; }
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3PagingResponse> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Channel Release (GSM 04.08 9.1.7) ──────────────────────────────────
 
-class L3ChannelRelease : public L3RRMessageNRO {
-private:
-    RRCause mCause;
-    bool mGprsResumptionPresent;
-    bool mGprsResumptionBit;
+class L3ChannelRelease {
+    RRCause mCause{RRCause::Normal_Event};
+    bool mGprsResumptionPresent{false};
+    bool mGprsResumptionBit{false};
 public:
-    explicit L3ChannelRelease(RRCause cause = RRCause::Normal_Event)
-        : mCause(cause), mGprsResumptionPresent(false), mGprsResumptionBit(false) {}
-    int mti() const override { return ChannelRelease; }
-    size_t l2BodyLength() const override { return 1 + (mGprsResumptionPresent ? 1 : 0); }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x0d;
+
+    L3ChannelRelease() = default;
+    explicit L3ChannelRelease(RRCause cause) : mCause(cause) {}
+
     RRCause cause() const { return mCause; }
     bool hasGprsResumption() const { return mGprsResumptionPresent; }
     bool gprsResumption() const { return mGprsResumptionBit; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3ChannelRelease> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── RR Status (GSM 04.08 9.1.29) ──────────────────────────────────────
 
-class L3RRStatus : public L3RRMessageNRO {
-private:
-    RRCause mCause;
+class L3RRStatus {
+    RRCause mCause{RRCause::Normal_Event};
 public:
+    static constexpr int MTI = 0x12;
+
     RRCause cause() const { return mCause; }
-    int mti() const override { return RRStatus; }
-    size_t l2BodyLength() const override { return 1; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3RRStatus> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Assignment Command (GSM 04.08 9.1.2) ───────────────────────────────
 
-class L3AssignmentCommand : public L3RRMessageNRO {
-private:
+class L3AssignmentCommand {
     L3ChannelDescription mChannel;
     L3PowerCommand mPowerCommand;
-    bool mHaveMode1;
+    bool mHaveMode1{false};
     L3ChannelMode mMode1;
     L3MultiRateConfiguration mMultiRate;
 public:
-    L3AssignmentCommand();
-    int mti() const override { return AssignmentCommand; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x2e;
+
+    L3AssignmentCommand() = default;
+
     const L3ChannelDescription& channel() const { return mChannel; }
     const L3PowerCommand& powerCommand() const { return mPowerCommand; }
     bool hasMode1() const { return mHaveMode1; }
@@ -233,235 +203,343 @@ public:
     const L3MultiRateConfiguration& multiRate() const { return mMultiRate; }
 
     class Builder {
+        L3ChannelDescription mChannel;
+        L3PowerCommand mPowerCommand;
+        bool mHaveMode1{false};
+        L3ChannelMode mMode1;
+        L3MultiRateConfiguration mMultiRate;
     public:
         Builder& channel(const L3ChannelDescription& ch);
         Builder& powerCommand(const L3PowerCommand& pc);
         Builder& mode1(const L3ChannelMode& mode);
         Builder& multiRate(const L3MultiRateConfiguration& mr);
         L3AssignmentCommand build();
-    private:
-        L3ChannelDescription mChannel;
-        L3PowerCommand mPowerCommand;
-        bool mHaveMode1{false};
-        L3ChannelMode mMode1;
-        L3MultiRateConfiguration mMultiRate;
     };
 
     static Builder builder();
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3AssignmentCommand> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Assignment Complete (GSM 04.08 9.1.3) ──────────────────────────────
 
-class L3AssignmentComplete : public L3RRMessageNRO {
-private:
-    RRCause mCause;
+class L3AssignmentComplete {
+    RRCause mCause{RRCause::Normal_Event};
 public:
+    static constexpr int MTI = 0x29;
+
     RRCause cause() const { return mCause; }
-    int mti() const override { return AssignmentComplete; }
-    size_t l2BodyLength() const override { return 1; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3AssignmentComplete> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Assignment Failure (GSM 04.08 9.1.3) ───────────────────────────────
 
-class L3AssignmentFailure : public L3RRMessageNRO {
-private:
-    RRCause mCause;
+class L3AssignmentFailure {
+    RRCause mCause{RRCause::Normal_Event};
 public:
+    static constexpr int MTI = 0x2f;
+
     RRCause cause() const { return mCause; }
-    int mti() const override { return AssignmentFailure; }
-    size_t l2BodyLength() const override { return 1; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3AssignmentFailure> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Classmark Enquiry (GSM 04.08 9.1.14) ──────────────────────────────
 
-class L3ClassmarkEnquiry : public L3RRMessageNRO {
+class L3ClassmarkEnquiry {
 public:
-    int mti() const override { return ClassmarkEnquiry; }
-    size_t l2BodyLength() const override { return 0; }
-    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override { return {}; }
-    ParseResult<void> try_parseBody(const L3Frame&, size_t&) override { return {}; }
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x13;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3ClassmarkEnquiry> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Classmark Change (GSM 04.08 9.1.11) ───────────────────────────────
 
-class L3ClassmarkChange : public L3RRMessageNRO {
-protected:
+class L3ClassmarkChange {
     L3MobileStationClassmark2 mClassmark;
-    bool mHaveAdditionalClassmark;
+    bool mHaveAdditionalClassmark{false};
     L3MobileStationClassmark3 mAdditionalClassmark;
 public:
-    int mti() const override { return ClassmarkChange; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x16;
+
     const L3MobileStationClassmark2& classmark() const { return mClassmark; }
     bool hasAdditionalClassmark() const { return mHaveAdditionalClassmark; }
     const L3MobileStationClassmark3& additionalClassmark() const { return mAdditionalClassmark; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3ClassmarkChange> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Measurement Report (GSM 04.08 9.1.21) ─────────────────────────────
 
-class L3MeasurementReport : public L3RRMessageNRO {
-private:
+class L3MeasurementReport {
     L3MeasurementResults mMeasurementResults;
 public:
-    int mti() const override { return MeasurementReport; }
-    size_t l2BodyLength() const override { return 16; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x15;
+
     const L3MeasurementResults& measurementResults() const { return mMeasurementResults; }
+
+    size_t bodyLength() const { return 16; }
+    [[nodiscard]] static Expected<L3MeasurementReport> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Ciphering Mode Command (GSM 04.08 9.1.9) ──────────────────────────
 
-class L3CipheringModeCommand : public L3RRMessageNRO {
-protected:
-    bool mCiphering;
-    int mAlgorithm;
+class L3CipheringModeCommand {
+    bool mCiphering{false};
+    int mAlgorithm{0};
     L3CipheringModeResponse mCipheringModeResponse;
 public:
+    static constexpr int MTI = 0x35;
+
+    L3CipheringModeCommand() = default;
     L3CipheringModeCommand(bool ciphering, int algorithm)
-        : mCiphering(ciphering), mAlgorithm(algorithm), mCipheringModeResponse() {}
-    int mti() const override;
-    size_t l2BodyLength() const override { return 1; }
-    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    void text(std::ostream& os) const override;
+        : mCiphering(ciphering), mAlgorithm(algorithm) {}
+
+    bool isCiphering() const { return mCiphering; }
+    int algorithm() const { return mAlgorithm; }
     bool includeIMEISV() const { return mCipheringModeResponse.includeIMEISV(); }
+    const L3CipheringModeResponse& cipheringModeResponse() const { return mCipheringModeResponse; }
+
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3CipheringModeCommand> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Ciphering Mode Complete (GSM 04.08 9.1.10) ────────────────────────
 
-class L3CipheringModeComplete : public L3RRMessageNRO {
+class L3CipheringModeComplete {
 public:
-    int mti() const override;
-    size_t l2BodyLength() const override { return 0; }
-    ParseResult<void> try_parseBody(const L3Frame&, size_t&) override { return {}; }
-    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override { return {}; }
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x32;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3CipheringModeComplete> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Handover Complete (GSM 04.08 9.1.16) ──────────────────────────────
 
-class L3HandoverComplete : public L3RRMessageNRO {
-protected:
-    RRCause mCause;
+class L3HandoverComplete {
+    RRCause mCause{RRCause::Normal_Event};
 public:
-    int mti() const override { return HandoverComplete; }
-    size_t l2BodyLength() const override { return 1; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x2c;
+
     RRCause cause() const { return mCause; }
+
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3HandoverComplete> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Handover Failure (GSM 04.08 9.1.17) ───────────────────────────────
 
-class L3HandoverFailure : public L3RRMessageNRO {
-protected:
-    RRCause mCause;
+class L3HandoverFailure {
+    RRCause mCause{RRCause::Normal_Event};
 public:
-    int mti() const override { return HandoverFailure; }
-    size_t l2BodyLength() const override { return 1; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x28;
+
     RRCause cause() const { return mCause; }
+
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3HandoverFailure> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Channel Mode Modify (GSM 04.08 9.1.5) ─────────────────────────────
 
-class L3ChannelModeModify : public L3RRMessageNRO {
-private:
+class L3ChannelModeModify {
     L3ChannelDescription mDescription;
     L3ChannelMode mMode;
     L3MultiRateConfiguration mMultiRate;
 public:
-    L3ChannelModeModify();
-    L3ChannelModeModify(const L3ChannelDescription& wDesc, const L3ChannelMode& wMode);
-    int mti() const override { return ChannelModeModify; }
+    static constexpr int MTI = 0x10;
+
+    L3ChannelModeModify() = default;
+    L3ChannelModeModify(const L3ChannelDescription& wDesc, const L3ChannelMode& wMode)
+        : mDescription(wDesc), mMode(wMode) {}
+
     bool isAMR() const { return mMode.isAMR(); }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    void text(std::ostream& os) const override;
     const L3ChannelDescription& description() const { return mDescription; }
     const L3ChannelMode& mode() const { return mMode; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3ChannelModeModify> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Channel Mode Modify Acknowledge (GSM 04.08 9.1.6) ─────────────────
 
-class L3ChannelModeModifyAcknowledge : public L3RRMessageNRO {
-private:
+class L3ChannelModeModifyAcknowledge {
     L3ChannelDescription mDescription;
     L3ChannelMode mMode;
 public:
-    int mti() const override { return ChannelModeModifyAcknowledge; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x17;
+
     const L3ChannelDescription& description() const { return mDescription; }
     const L3ChannelMode& mode() const { return mMode; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3ChannelModeModifyAcknowledge> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── GPRS Suspension Request (GSM 04.08 9.1.13b) ────────────────────────
 
-class L3GPRSSuspensionRequest : public L3RRMessageNRO {
+class L3GPRSSuspensionRequest {
 public:
-    uint32_t mTLLI;
-    std::vector<uint8_t> mRaId;
-    uint8_t mSuspensionCause;
-    uint8_t mServiceSupport;
+    static constexpr int MTI = 0x34;
 
-    L3GPRSSuspensionRequest() : mTLLI(0), mRaId(6, 0), mSuspensionCause(0), mServiceSupport(0) {}
-    int mti() const override { return GPRSSuspensionRequest; }
-    size_t l2BodyLength() const override { return 11; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    uint32_t mTLLI{0};
+    std::vector<uint8_t> mRaId;
+    uint8_t mSuspensionCause{0};
+    uint8_t mServiceSupport{0};
+
+    L3GPRSSuspensionRequest() : mRaId(6, 0) {}
+
+    size_t bodyLength() const { return 11; }
+    [[nodiscard]] static Expected<L3GPRSSuspensionRequest> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Application Information (GSM 04.08 9.1.53) ────────────────────────
 
-class L3ApplicationInformation : public L3RRMessageNRO {
-private:
-    unsigned mProtocolIdentifier;
-    unsigned mCR;
-    unsigned mFirstSegment;
-    unsigned mLastSegment;
-    BitVector mData;
+class L3ApplicationInformation {
+    unsigned mProtocolIdentifier{0};
+    unsigned mCR{0};
+    unsigned mFirstSegment{0};
+    unsigned mLastSegment{0};
+    std::vector<uint8_t> mData;
 public:
-    L3ApplicationInformation();
-    L3ApplicationInformation(BitVector data, unsigned protocolId = 0,
-                              unsigned cr = 0, unsigned first = 0, unsigned last = 0);
+    static constexpr int MTI = 0x38;
+
+    L3ApplicationInformation() = default;
+    L3ApplicationInformation(std::vector<uint8_t> data, unsigned protocolId = 0,
+                              unsigned cr = 0, unsigned first = 0, unsigned last = 0)
+        : mProtocolIdentifier(protocolId), mCR(cr), mFirstSegment(first),
+          mLastSegment(last), mData(std::move(data)) {}
 
     unsigned protocolIdentifier() const { return mProtocolIdentifier; }
     unsigned cr() const { return mCR; }
     unsigned firstSegment() const { return mFirstSegment; }
     unsigned lastSegment() const { return mLastSegment; }
-    const BitVector& data() const { return mData; }
+    const std::vector<uint8_t>& data() const { return mData; }
 
-    int mti() const override { return ApplicationInformation; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    void text(std::ostream& os) const override;
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3ApplicationInformation> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 1 (GSM 04.08 9.1.31) ──────────────────────
+
+class L3SystemInformationType1 {
+    L3FrequencyList mCellChannelDescription;
+    L3RACHControlParameters mRACHControlParameters;
+    bool mHaveRestOctets{false};
+    uint8_t mRestOctet{0};
+public:
+    static constexpr int MTI = 0x19;
+
+    L3SystemInformationType1() = default;
+
+    const L3FrequencyList& cellChannelDescription() const { return mCellChannelDescription; }
+    const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
+    bool hasRestOctets() const { return mHaveRestOctets; }
+    uint8_t restOctet() const { return mRestOctet; }
+
+    size_t bodyLength() const { return 19 + (mHaveRestOctets ? 1 : 0); }
+    size_t restOctetsLength() const { return mHaveRestOctets ? 1 : 0; }
+    [[nodiscard]] static Expected<L3SystemInformationType1> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 2 (GSM 04.08 9.1.32) ─────────────────────
+
+class L3SystemInformationType2 {
+    L3BCCHFrequencyList mBCCHFrequencyList;
+    L3NCCPermitted mNCCPermitted;
+    L3RACHControlParameters mRACHControlParameters;
+public:
+    static constexpr int MTI = 0x1a;
+
+    L3SystemInformationType2() = default;
+
+    const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
+    const L3NCCPermitted& nccPermitted() const { return mNCCPermitted; }
+    const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
+
+    size_t bodyLength() const { return 20; }
+    [[nodiscard]] static Expected<L3SystemInformationType2> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 2bis (GSM 04.08 9.1.33) ──────────────────
+
+class L3SystemInformationType2bis {
+    L3BCCHFrequencyList mBCCHFrequencyList;
+    L3RACHControlParameters mRACHControlParameters;
+public:
+    static constexpr int MTI = 0x02;
+
+    L3SystemInformationType2bis() = default;
+
+    const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
+    const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
+
+    size_t bodyLength() const { return 19; }
+    size_t restOctetsLength() const { return 1; }
+    [[nodiscard]] static Expected<L3SystemInformationType2bis> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 2ter (GSM 04.08 9.1.34) ──────────────────
+
+class L3SystemInformationType2ter {
+    L3BCCHFrequencyList mBCCHFrequencyList;
+public:
+    static constexpr int MTI = 0x03;
+
+    L3SystemInformationType2ter() = default;
+
+    const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
+
+    size_t bodyLength() const { return 16; }
+    size_t restOctetsLength() const { return 4; }
+    [[nodiscard]] static Expected<L3SystemInformationType2ter> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── System Information Type 3 (GSM 04.08 9.1.35) ──────────────────────
 
-class L3SystemInformationType3 : public L3RRMessageRO {
-private:
+class L3SystemInformationType3 {
     L3CellIdentity mCI;
     L3LocationAreaIdentity mLAI;
     L3ControlChannelDescription mControlChannelDescription;
@@ -470,196 +548,376 @@ private:
     L3RACHControlParameters mRACHControlParameters;
     L3SI3RestOctets mRestOctets;
 public:
-    int mti() const override { return SystemInformationType3; }
-    size_t l2BodyLength() const override { return 16; }
-    size_t restOctetsLength() const override { return mRestOctets.lengthV(); }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x1b;
+
     const L3CellIdentity& ci() const { return mCI; }
     const L3LocationAreaIdentity& lai() const { return mLAI; }
     const L3ControlChannelDescription& controlChannelDescription() const { return mControlChannelDescription; }
     const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
     const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
     const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
+    const L3SI3RestOctets& restOctets() const { return mRestOctets; }
+
+    L3SystemInformationType3() = default;
+
+    size_t bodyLength() const { return 16; }
+    size_t restOctetsLength() const { return mRestOctets.lengthV(); }
+    [[nodiscard]] static Expected<L3SystemInformationType3> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 4 (GSM 04.08 9.1.36) ─────────────────────
+
+class L3SystemInformationType4 {
+    L3LocationAreaIdentity mLAI;
+    L3CellSelectionParameters mCellSelectionParameters;
+    L3RACHControlParameters mRACHControlParameters;
+    bool mHaveCBCH{false};
+    L3ChannelDescription mCBCHChannelDescription;
+    L3SIType4RestOctets mRestOctets;
+public:
+    static constexpr int MTI = 0x1c;
+
+    L3SystemInformationType4() = default;
+
+    const L3LocationAreaIdentity& lai() const { return mLAI; }
+    const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
+    const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
+    bool hasCBCH() const { return mHaveCBCH; }
+    const L3ChannelDescription& cbchChannelDescription() const { return mCBCHChannelDescription; }
+    const L3SIType4RestOctets& restOctets() const { return mRestOctets; }
+
+    size_t bodyLength() const;
+    size_t restOctetsLength() const;
+    [[nodiscard]] static Expected<L3SystemInformationType4> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 5 (GSM 04.08 9.1.37) ─────────────────────
+
+class L3SystemInformationType5 {
+    L3BCCHFrequencyList mBCCHFrequencyList;
+public:
+    static constexpr int MTI = 0x1d;
+
+    L3SystemInformationType5() = default;
+
+    const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
+
+    size_t bodyLength() const { return 16; }
+    [[nodiscard]] static Expected<L3SystemInformationType5> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 5bis (GSM 04.08 9.1.38) ──────────────────
+
+class L3SystemInformationType5bis {
+    L3BCCHFrequencyList mBCCHFrequencyList;
+public:
+    static constexpr int MTI = 0x05;
+
+    L3SystemInformationType5bis() = default;
+
+    const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
+
+    size_t bodyLength() const { return 16; }
+    [[nodiscard]] static Expected<L3SystemInformationType5bis> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 5ter (GSM 04.08 9.1.39) ──────────────────
+
+class L3SystemInformationType5ter {
+    L3BCCHFrequencyList mBCCHFrequencyList;
+public:
+    static constexpr int MTI = 0x06;
+
+    L3SystemInformationType5ter() = default;
+
+    const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
+
+    size_t bodyLength() const { return 16; }
+    [[nodiscard]] static Expected<L3SystemInformationType5ter> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 6 (GSM 04.08 9.1.40) ─────────────────────
+
+class L3SystemInformationType6 {
+    L3CellIdentity mCI;
+    L3LocationAreaIdentity mLAI;
+    L3CellOptionsSACCH mCellOptions;
+    L3NCCPermitted mNCCPermitted;
+public:
+    static constexpr int MTI = 0x1e;
+
+    L3SystemInformationType6() = default;
+
+    const L3CellIdentity& ci() const { return mCI; }
+    const L3LocationAreaIdentity& lai() const { return mLAI; }
+    const L3CellOptionsSACCH& cellOptions() const { return mCellOptions; }
+    const L3NCCPermitted& nccPermitted() const { return mNCCPermitted; }
+
+    size_t bodyLength() const { return 9; }
+    [[nodiscard]] static Expected<L3SystemInformationType6> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 7 (GSM 04.08 9.1.41) ─────────────────────
+
+class L3SystemInformationType7 {
+    L3RACHControlParameters mRACHControl;
+    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+public:
+    static constexpr int MTI = 0x1f;
+
+    L3SystemInformationType7() = default;
+
+    const L3RACHControlParameters& rachControl() const { return mRACHControl; }
+    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3SystemInformationType7> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 8 (GSM 04.08 9.1.42) ─────────────────────
+
+class L3SystemInformationType8 {
+    L3NCCPermitted mNCCPermitted;
+    L3RACHControlParameters mRACHControl;
+    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+public:
+    static constexpr int MTI = 0x18;
+
+    L3SystemInformationType8() = default;
+
+    const L3NCCPermitted& nccPermitted() const { return mNCCPermitted; }
+    const L3RACHControlParameters& rachControl() const { return mRACHControl; }
+    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3SystemInformationType8> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 9 (GSM 04.08 9.1.43) ─────────────────────
+
+class L3SystemInformationType9 {
+    L3CellIdentity mCI;
+    L3CellSelectionParameters mCellSelectionParameters;
+    L3CellOptionsBCCH mCellOptions;
+public:
+    static constexpr int MTI = 0x04;
+
+    L3SystemInformationType9() = default;
+
+    const L3CellIdentity& ci() const { return mCI; }
+    const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
+    const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
+
+    size_t bodyLength() const { return 5; }
+    [[nodiscard]] static Expected<L3SystemInformationType9> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── System Information Type 13 (GSM 04.08 9.1.43a) ────────────────────
 
-class L3SystemInformationType13 : public L3RRMessageRO {
-private:
+class L3SystemInformationType13 {
     L3SI13RestOctets mRestOctets;
 public:
-    int mti() const override { return SystemInformationType13; }
-    size_t l2BodyLength() const override { return 0; }
-    size_t restOctetsLength() const override { return mRestOctets.lengthV(); }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x00;
+
+    const L3SI13RestOctets& restOctets() const { return mRestOctets; }
+
+    size_t bodyLength() const { return 0; }
+    size_t restOctetsLength() const { return mRestOctets.lengthV(); }
+    [[nodiscard]] static Expected<L3SystemInformationType13> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 16 (GSM 04.08 9.1.43b) ───────────────────
+
+class L3SystemInformationType16 {
+    L3CellIdentity mCI;
+    L3CellSelectionParameters mCellSelectionParameters;
+    L3CellOptionsBCCH mCellOptions;
+public:
+    static constexpr int MTI = 0x3d;
+
+    L3SystemInformationType16() = default;
+
+    const L3CellIdentity& ci() const { return mCI; }
+    const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
+    const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
+
+    size_t bodyLength() const { return 5; }
+    [[nodiscard]] static Expected<L3SystemInformationType16> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 17 (GSM 04.08 9.1.43c) ───────────────────
+
+class L3SystemInformationType17 {
+    L3RACHControlParameters mRACHControl;
+    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+public:
+    static constexpr int MTI = 0x3e;
+
+    L3SystemInformationType17() = default;
+
+    const L3RACHControlParameters& rachControl() const { return mRACHControl; }
+    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3SystemInformationType17> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Immediate Assignment (GSM 04.08 9.1.19) ───────────────────────────
 
-class L3ImmediateAssignment : public L3RRMessageNRO {
-private:
+class L3ImmediateAssignment {
     L3PageMode mPageMode;
     L3DedicatedModeOrTBF mDedicatedModeOrTBF;
     L3RequestReference mRequestReference;
     L3ChannelDescription mChannelDescription;
     L3TimingAdvance mTimingAdvance;
     std::vector<uint8_t> mMobileAllocation;
-    bool mStartTimePresent{};
-    uint32_t mStartTimeFrame{};
+    bool mStartTimePresent{false};
+    uint32_t mStartTimeFrame{0};
 public:
-    L3ImmediateAssignment();
-    int mti() const override { return ImmediateAssignment; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x3f;
+
+    L3ImmediateAssignment() = default;
+
     const L3ChannelDescription& channelDescription() const { return mChannelDescription; }
     const L3RequestReference& requestReference() const { return mRequestReference; }
     const L3TimingAdvance& timingAdvance() const { return mTimingAdvance; }
     bool hasStartTime() const { return mStartTimePresent; }
     uint32_t startTimeFrame() const { return mStartTimeFrame; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3ImmediateAssignment> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Immediate Assignment Extended (GSM 04.08 9.1.18) ──────────────────
 
-class L3ImmediateAssignmentExtended : public L3RRMessageNRO {
-private:
+class L3ImmediateAssignmentExtended {
     L3PageMode mPageMode;
     L3DedicatedModeOrTBF mDedicatedModeOrTBF;
     L3RequestReference mRequestReference;
     L3ChannelDescription mChannelDescription;
     L3TimingAdvance mTimingAdvance;
     std::vector<uint8_t> mMobileAllocation;
-    bool mStartTimePresent{};
-    uint32_t mStartTimeFrame{};
-    bool mHaveAdditionalChannel{};
+    bool mStartTimePresent{false};
+    uint32_t mStartTimeFrame{0};
+    bool mHaveAdditionalChannel{false};
     L3AdditionalChannelDescription mAdditionalChannel;
 public:
-    L3ImmediateAssignmentExtended();
-    int mti() const override { return ImmediateAssignmentExtended; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x39;
+
+    L3ImmediateAssignmentExtended() = default;
+
     const L3ChannelDescription& channelDescription() const { return mChannelDescription; }
     bool hasAdditionalChannel() const { return mHaveAdditionalChannel; }
     const L3AdditionalChannelDescription& additionalChannel() const { return mAdditionalChannel; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3ImmediateAssignmentExtended> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Immediate Assignment Reject (GSM 04.08 9.1.20) ────────────────────
 
-class L3ImmediateAssignmentReject : public L3RRMessageNRO {
-private:
-    unsigned mFeatureIndicator;
-    unsigned mPageMode;
+class L3ImmediateAssignmentReject {
+    unsigned mFeatureIndicator{0};
+    unsigned mPageMode{0};
     std::vector<L3RequestReference> mRequestReferences;
     std::vector<unsigned> mWaitIndications;
-    unsigned mWaitIndication;
+    unsigned mWaitIndication{0};
 public:
-    L3ImmediateAssignmentReject();
+    static constexpr int MTI = 0x3a;
+
+    L3ImmediateAssignmentReject() = default;
     explicit L3ImmediateAssignmentReject(unsigned waitSeconds);
-    int mti() const override { return ImmediateAssignmentReject; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+
     unsigned pageMode() const { return mPageMode; }
     unsigned featureIndicator() const { return mFeatureIndicator; }
     unsigned waitTime() const { return mWaitIndication; }
     const std::vector<L3RequestReference>& requestReferences() const { return mRequestReferences; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3ImmediateAssignmentReject> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
-// ── Paging Request Type 2 (GSM 04.08 9.1.23) ──────────────────────────
-// Reference: GSM_RR_Types.ttcn: GsmTmsi mi1, GsmTmsi mi2 (raw uint32_t, NOT LV!)
+// ── Additional Assignment (GSM 04.08 9.1.1) ───────────────────────────
 
-class L3PagingRequestType2 : public L3RRMessageNRO {
-private:
-    std::vector<uint32_t> mTMSIs;
-    std::array<ChannelType, 2> mChannelsNeeded;
+class L3AdditionalAssignment {
+    L3AdditionalChannelDescription mAdditionalChannel;
+    bool mHavePowerCommand{false};
+    L3PowerCommand mPowerCommand;
 public:
-    L3PagingRequestType2();
-    int mti() const override { return PagingRequestType2; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    void text(std::ostream& os) const override;
-    const std::vector<uint32_t>& tmsis() const { return mTMSIs; }
+    static constexpr int MTI = 0x3b;
 
-    class Builder {
-    public:
-        Builder& addTMSI(uint32_t tmsi, ChannelType type);
-        L3PagingRequestType2 build();
-    private:
-        std::vector<uint32_t> mTMSIs;
-        std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
-    };
+    L3AdditionalAssignment() = default;
 
-    static Builder builder();
-};
+    const L3AdditionalChannelDescription& additionalChannel() const { return mAdditionalChannel; }
+    bool hasPowerCommand() const { return mHavePowerCommand; }
+    const L3PowerCommand& powerCommand() const { return mPowerCommand; }
 
-// ── Paging Request Type 3 (GSM 04.08 9.1.24) ──────────────────────────
-// Reference: GSM_RR_Types.ttcn: GsmTmsi4 mi (4x raw uint32_t, NOT LV!)
-
-class L3PagingRequestType3 : public L3RRMessageNRO {
-private:
-    std::vector<uint32_t> mTMSIs;
-    std::array<ChannelType, 2> mChannelsNeeded;
-public:
-    L3PagingRequestType3();
-    int mti() const override { return PagingRequestType3; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    void text(std::ostream& os) const override;
-    const std::vector<uint32_t>& tmsis() const { return mTMSIs; }
-
-    class Builder {
-    public:
-        Builder& addTMSI(uint32_t tmsi, ChannelType type);
-        L3PagingRequestType3 build();
-    private:
-        std::vector<uint32_t> mTMSIs;
-        std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
-    };
-
-    static Builder builder();
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3AdditionalAssignment> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Physical Information (GSM 04.08 9.1.12) ───────────────────────────
 
-class L3PhysicalInformation : public L3RRMessageNRO {
-private:
+class L3PhysicalInformation {
     L3TimingAdvance mTA;
 public:
-    L3PhysicalInformation();
-    int mti() const override { return PhysicalInformation; }
-    size_t l2BodyLength() const override { return mTA.lengthV(); }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x2d;
+
+    L3PhysicalInformation() = default;
+
     const L3TimingAdvance& timingAdvance() const { return mTA; }
+
+    size_t bodyLength() const { return mTA.lengthV(); }
+    [[nodiscard]] static Expected<L3PhysicalInformation> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Handover Command (GSM 04.08 9.1.15) ───────────────────────────────
 
-class L3HandoverCommand : public L3RRMessageNRO {
-private:
+class L3HandoverCommand {
     L3CellDescription mCellDescription;
     L3ChannelDescription2 mChannelDescriptionAfter;
     L3HandoverReference mHandoverReference;
     L3PowerCommandAndAccessType mPowerCommandAccessType;
     L3SynchronizationIndication mSynchronizationIndication;
 public:
-    L3HandoverCommand();
-    int mti() const override { return HandoverCommand; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x2b;
+
+    L3HandoverCommand() = default;
+
     const L3CellDescription& cellDescription() const { return mCellDescription; }
     const L3ChannelDescription2& channelDescriptionAfter() const { return mChannelDescriptionAfter; }
     const L3HandoverReference& handoverReference() const { return mHandoverReference; }
@@ -667,6 +925,11 @@ public:
     const L3SynchronizationIndication& syncIndication() const { return mSynchronizationIndication; }
 
     class Builder {
+        L3CellDescription mCellDescription;
+        L3ChannelDescription2 mChannelDescriptionAfter;
+        L3HandoverReference mHandoverReference;
+        L3PowerCommandAndAccessType mPowerCommandAccessType;
+        L3SynchronizationIndication mSynchronizationIndication;
     public:
         Builder& cellDescription(const L3CellDescription& cd);
         Builder& channelDescriptionAfter(const L3ChannelDescription2& cda);
@@ -674,332 +937,72 @@ public:
         Builder& powerCommandAccessType(const L3PowerCommandAndAccessType& pcat);
         Builder& syncIndication(const L3SynchronizationIndication& si);
         L3HandoverCommand build();
-    private:
-        L3CellDescription mCellDescription;
-        L3ChannelDescription2 mChannelDescriptionAfter;
-        L3HandoverReference mHandoverReference;
-        L3PowerCommandAndAccessType mPowerCommandAccessType;
-        L3SynchronizationIndication mSynchronizationIndication;
     };
 
     static Builder builder();
-};
 
-// ── Additional Assignment (GSM 04.08 9.1.1) ───────────────────────────
-
-class L3AdditionalAssignment : public L3RRMessageNRO {
-private:
-    L3AdditionalChannelDescription mAdditionalChannel;
-    bool mHavePowerCommand;
-    L3PowerCommand mPowerCommand;
-public:
-    L3AdditionalAssignment();
-    int mti() const override { return AdditionalAssignment; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3AdditionalChannelDescription& additionalChannel() const { return mAdditionalChannel; }
-    bool hasPowerCommand() const { return mHavePowerCommand; }
-    const L3PowerCommand& powerCommand() const { return mPowerCommand; }
-};
-
-// ── System Information Type 2 (GSM 04.08 9.1.32) ─────────────────────
-// V-format: BCCH Frequency List(16) + NCC Permitted(1) + RACH Control Parameters(3) = 20 bytes
-
-class L3SystemInformationType2 : public L3RRMessageNRO {
-private:
-    L3BCCHFrequencyList mBCCHFrequencyList;
-    L3NCCPermitted mNCCPermitted;
-    L3RACHControlParameters mRACHControlParameters;
-public:
-    L3SystemInformationType2();
-    int mti() const override { return SystemInformationType2; }
-    size_t l2BodyLength() const override { return 20; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
-    const L3NCCPermitted& nccPermitted() const { return mNCCPermitted; }
-    const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
-};
-
-// ── System Information Type 2bis (GSM 04.08 9.1.33) ──────────────────
-// V-format: extd_bcch_freq_list(16) + rach_control(3) = 19 bytes (no NCCPermitted)
-
-class L3SystemInformationType2bis : public L3RRMessageRO {
-private:
-    L3BCCHFrequencyList mBCCHFrequencyList;
-    L3RACHControlParameters mRACHControlParameters;
-public:
-    L3SystemInformationType2bis();
-    int mti() const override { return SystemInformationType2bis; }
-    size_t l2BodyLength() const override { return 19; }
-    size_t restOctetsLength() const override { return 1; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
-    const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
-};
-
-// ── System Information Type 2ter (GSM 04.08 9.1.34) ──────────────────
-// V-format: extd_bcch_freq_list(16) = 16 bytes (no RACH control, no NCCPermitted)
-
-class L3SystemInformationType2ter : public L3RRMessageRO {
-private:
-    L3BCCHFrequencyList mBCCHFrequencyList;
-public:
-    L3SystemInformationType2ter();
-    int mti() const override { return SystemInformationType2ter; }
-    size_t l2BodyLength() const override { return 16; }
-    size_t restOctetsLength() const override { return 4; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
-};
-
-// ── System Information Type 4 (GSM 04.08 9.1.36) ─────────────────────
-// V-format: LAI(5) + Cell Selection Parameters(2) + RACH Control Parameters(3) = 10 bytes
-// Rest octets: CBCH Channel Description (optional, TV 0x64) + SI4 Rest Octets
-
-class L3SystemInformationType4 : public L3RRMessageRO {
-private:
-    L3LocationAreaIdentity mLAI;
-    L3CellSelectionParameters mCellSelectionParameters;
-    L3RACHControlParameters mRACHControlParameters;
-    bool mHaveCBCH;
-    L3ChannelDescription mCBCHChannelDescription;
-    L3SIType4RestOctets mRestOctets;
-public:
-    L3SystemInformationType4();
-    int mti() const override { return SystemInformationType4; }
-    size_t l2BodyLength() const override;
-    size_t restOctetsLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3LocationAreaIdentity& lai() const { return mLAI; }
-    const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
-    const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
-    bool hasCBCH() const { return mHaveCBCH; }
-    const L3ChannelDescription& cbchChannelDescription() const { return mCBCHChannelDescription; }
-};
-
-// ── System Information Type 5 (GSM 04.08 9.1.37) ─────────────────────
-// V-format: BCCH Frequency List(16) = 16 bytes
-
-class L3SystemInformationType5 : public L3RRMessageNRO {
-private:
-    L3BCCHFrequencyList mBCCHFrequencyList;
-public:
-    L3SystemInformationType5();
-    int mti() const override { return SystemInformationType5; }
-    size_t l2BodyLength() const override { return 16; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
-};
-
-// ── System Information Type 5bis (GSM 04.08 9.1.38) ──────────────────
-// V-format: BCCH Frequency List(16) = 16 bytes
-
-class L3SystemInformationType5bis : public L3RRMessageNRO {
-private:
-    L3BCCHFrequencyList mBCCHFrequencyList;
-public:
-    L3SystemInformationType5bis();
-    int mti() const override { return SystemInformationType5bis; }
-    size_t l2BodyLength() const override { return 16; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
-};
-
-// ── System Information Type 5ter (GSM 04.08 9.1.39) ──────────────────
-// V-format: BCCH Frequency List(16) = 16 bytes
-
-class L3SystemInformationType5ter : public L3RRMessageNRO {
-private:
-    L3BCCHFrequencyList mBCCHFrequencyList;
-public:
-    L3SystemInformationType5ter();
-    int mti() const override { return SystemInformationType5ter; }
-    size_t l2BodyLength() const override { return 16; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
-};
-
-// ── System Information Type 6 (GSM 04.08 9.1.40) ─────────────────────
-// V-format: CI(2) + LAI(5) + Cell Options SACCH(1) + NCC Permitted(1) = 9 bytes
-
-class L3SystemInformationType6 : public L3RRMessageNRO {
-private:
-    L3CellIdentity mCI;
-    L3LocationAreaIdentity mLAI;
-    L3CellOptionsSACCH mCellOptions;
-    L3NCCPermitted mNCCPermitted;
-public:
-    L3SystemInformationType6();
-    int mti() const override { return SystemInformationType6; }
-    size_t l2BodyLength() const override { return 9; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3CellIdentity& ci() const { return mCI; }
-    const L3LocationAreaIdentity& lai() const { return mLAI; }
-    const L3CellOptionsSACCH& cellOptions() const { return mCellOptions; }
-    const L3NCCPermitted& nccPermitted() const { return mNCCPermitted; }
-};
-
-// ── System Information Type 7 (GSM 04.08 9.1.41) ─────────────────────
-// TV-format: RACH Control Parameters(TV,0x28) + Neighbor Cells Description(0..10, TV,0x21)
-
-class L3SystemInformationType7 : public L3RRMessageNRO {
-private:
-    L3RACHControlParameters mRACHControl;
-    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
-public:
-    L3SystemInformationType7();
-    int mti() const override { return SystemInformationType7; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3RACHControlParameters& rachControl() const { return mRACHControl; }
-    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
-};
-
-// ── System Information Type 8 (GSM 04.08 9.1.42) ─────────────────────
-// TV-format: NCC Permitted(TV,0x27) + RACH Control Parameters(TV,0x28) + Neighbor Cells Description(0..10, TV,0x21)
-
-class L3SystemInformationType8 : public L3RRMessageNRO {
-private:
-    L3NCCPermitted mNCCPermitted;
-    L3RACHControlParameters mRACHControl;
-    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
-public:
-    L3SystemInformationType8();
-    int mti() const override { return SystemInformationType8; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3NCCPermitted& nccPermitted() const { return mNCCPermitted; }
-    const L3RACHControlParameters& rachControl() const { return mRACHControl; }
-    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
-};
-
-// ── System Information Type 9 (GSM 04.08 9.1.43) ─────────────────────
-// V-format: CI(2) + Cell Selection Parameters(2) + Cell Options BCCH(1) = 5 bytes
-
-class L3SystemInformationType9 : public L3RRMessageNRO {
-private:
-    L3CellIdentity mCI;
-    L3CellSelectionParameters mCellSelectionParameters;
-    L3CellOptionsBCCH mCellOptions;
-public:
-    L3SystemInformationType9();
-    int mti() const override { return SystemInformationType9; }
-    size_t l2BodyLength() const override { return 5; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3CellIdentity& ci() const { return mCI; }
-    const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
-    const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
-};
-
-// ── System Information Type 16 (GSM 04.08 9.1.43b) ───────────────────
-// V-format: CI(2) + Cell Selection Parameters(2) + Cell Options BCCH(1) = 5 bytes
-
-class L3SystemInformationType16 : public L3RRMessageNRO {
-private:
-    L3CellIdentity mCI;
-    L3CellSelectionParameters mCellSelectionParameters;
-    L3CellOptionsBCCH mCellOptions;
-public:
-    L3SystemInformationType16();
-    int mti() const override { return SystemInformationType16; }
-    size_t l2BodyLength() const override { return 5; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3CellIdentity& ci() const { return mCI; }
-    const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
-    const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
-};
-
-// ── System Information Type 17 (GSM 04.08 9.1.43c) ───────────────────
-// TV-format: RACH Control Parameters(TV,0x28) + Neighbor Cells Description(0..10, TV,0x21)
-
-class L3SystemInformationType17 : public L3RRMessageNRO {
-private:
-    L3RACHControlParameters mRACHControl;
-    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
-public:
-    L3SystemInformationType17();
-    int mti() const override { return SystemInformationType17; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3RACHControlParameters& rachControl() const { return mRACHControl; }
-    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3HandoverCommand> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Synchronization Channel Information (GSM 04.08 9.1.30) ────────────
+// Short message: no standard L3 header, 7 bytes fixed.
 
-class L3SynchronizationChannelInformation : public L3RRMessageNRO {
-private:
+class L3SynchronizationChannelInformation {
     L3CellIdentity mCellIdentity;
     L3LocationAreaIdentity mLocationAreaIdentity;
 public:
-    L3SynchronizationChannelInformation();
-    int mti() const override { return SynchronizationChannelInformation; }
-    size_t l2BodyLength() const override { return 7; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x100;
+
+    L3SynchronizationChannelInformation() = default;
+
     const L3CellIdentity& cellIdentity() const { return mCellIdentity; }
     const L3LocationAreaIdentity& locationAreaIdentity() const { return mLocationAreaIdentity; }
+
+    size_t bodyLength() const { return 7; }
+    [[nodiscard]] static Expected<L3SynchronizationChannelInformation> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Channel Request (GSM 04.08 9.1.13) ────────────────────────────────
+// Short message: no standard L3 header, 1 byte.
 
-class L3ChannelRequest : public L3RRMessageNRO {
-private:
-    unsigned mRequestReference;
+class L3ChannelRequest {
+    unsigned mRequestReference{0};
 public:
-    L3ChannelRequest(unsigned wRef = 0);
-    int mti() const override { return ChannelRequest; }
-    size_t l2BodyLength() const override { return 1; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x101;
+
+    L3ChannelRequest() = default;
+    explicit L3ChannelRequest(unsigned wRef) : mRequestReference(wRef) {}
+
     unsigned requestReference() const { return mRequestReference; }
+
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3ChannelRequest> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Handover Access (GSM 04.08 9.1.14a) ───────────────────────────────
+// Short message: no standard L3 header, 4 bytes.
 
-class L3HandoverAccess : public L3RRMessageNRO {
-private:
-    unsigned mHandoverNumber;
+class L3HandoverAccess {
+    unsigned mHandoverNumber{0};
 public:
-    L3HandoverAccess(unsigned wNumber = 0);
-    int mti() const override { return HandoverAccess; }
-    size_t l2BodyLength() const override { return 4; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x102;
+
+    L3HandoverAccess() = default;
+    explicit L3HandoverAccess(unsigned wNumber) : mHandoverNumber(wNumber) {}
+
     unsigned handoverNumber() const { return mHandoverNumber; }
+
+    size_t bodyLength() const { return 4; }
+    [[nodiscard]] static Expected<L3HandoverAccess> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 } // namespace gsml3parser
-
-

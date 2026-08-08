@@ -22,53 +22,19 @@
 #pragma once
 
 #include <cstdint>
-#include <memory>
 #include <ostream>
 #include <string>
 #include <vector>
 
-#include "../l3message.h"
-#include "../l3frame.h"
+#include "../expected.h"
+#include "../bitreader.h"
+#include "../bitwriter.h"
 #include "../types.h"
+#include "../enums.h"
 #include "../common/l3common.h"
-#include "l3mmlements.h"
+#include "l3mmelements.h"
 
 namespace gsml3parser {
-
-// ── L3MMMessage ─────────────────────────────────────────────────────────
-
-class L3MMMessage : public L3Message {
-public:
-    enum MessageType : int {
-        IMSIDetachIndication      = 0x01,
-        CMServiceAccept           = 0x21,
-        CMServiceReject           = 0x22,
-        CMServiceAbort            = 0x23,
-        CMServiceRequest          = 0x24,
-        CMReestablishmentRequest  = 0x28,
-        IdentityResponse          = 0x19,
-        IdentityRequest           = 0x18,
-        MMInformation             = 0x32,
-        LocationUpdatingAccept    = 0x02,
-        LocationUpdatingReject    = 0x04,
-        LocationUpdatingRequest   = 0x08,
-        TMSIReallocationCommand   = 0x1a,
-        TMSIReallocationComplete  = 0x1b,
-        MMStatus                  = 0x31,
-        AuthenticationRequest     = 0x12,
-        AuthenticationResponse    = 0x14,
-        AuthenticationReject      = 0x11,
-        Undefined                 = -1
-    };
-
-    size_t fullBodyLength() const override { return l2BodyLength(); }
-    L3PD pd() const override { return L3PD::MobilityManagement; }
-    void text(std::ostream& os) const override;
-};
-
-std::ostream& operator<<(std::ostream& os, L3MMMessage::MessageType val);
-
-// ── Location Update Type ───────────────────────────────────────────────
 
 enum class LocationUpdateType : uint8_t {
     Normal = 0,
@@ -76,305 +42,273 @@ enum class LocationUpdateType : uint8_t {
     IMSIAttach = 2
 };
 
-// ── Location Updating Request (GSM 04.08 9.2.15) ──────────────────────
+// ── IMSI Detach Indication (GSM 04.08 9.2.15) ─────────────────────────
 
-class L3LocationUpdatingRequest : public L3MMMessage {
+class L3IMSIDetachIndication {
+public:
+    static constexpr int MTI = 0x01;
 private:
-    unsigned mUpdateType;
-    unsigned mCKSN;
     L3MobileStationClassmark1 mClassmark;
     L3MobileIdentity mMobileIdentity;
-    L3LocationAreaIdentity mLAI;
 public:
     const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
-    const L3LocationAreaIdentity& lai() const { return mLAI; }
-    int mti() const override { return LocationUpdatingRequest; }
-    size_t l2BodyLength() const override;
-    LocationUpdateType getLocationUpdatingType() const { return static_cast<LocationUpdateType>(mUpdateType & 0x3); }
-    unsigned getFollowOnRequest() const { return mUpdateType & 0x8; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3IMSIDetachIndication> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Location Updating Accept (GSM 04.08 9.2.13) ───────────────────────
 
-class L3LocationUpdatingAccept : public L3MMMessage {
+class L3LocationUpdatingAccept {
 private:
     L3LocationAreaIdentity mLAI;
-    bool mFollowOnProceed;
-    bool mHaveMobileIdentity;
+    bool mFollowOnProceed{false};
+    bool mHaveMobileIdentity{false};
     L3MobileIdentity mMobileIdentity;
 public:
-    L3LocationUpdatingAccept();
-
-    int mti() const override { return LocationUpdatingAccept; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-
-    class Builder {
-    public:
-        Builder& lai(const L3LocationAreaIdentity& lai);
-        Builder& mobileIdentity(const L3MobileIdentity& id);
-        Builder& followOn(bool fo);
-        L3LocationUpdatingAccept build();
-    private:
-        L3LocationAreaIdentity mLAI;
-        bool mFollowOnProceed{false};
-        bool mHaveMobileIdentity{false};
-        L3MobileIdentity mMobileIdentity;
-    };
-
-    static Builder builder();
+    static constexpr int MTI = 0x02;
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3LocationUpdatingAccept> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Location Updating Reject (GSM 04.08 9.2.14) ───────────────────────
 
-class L3LocationUpdatingReject : public L3MMMessage {
+class L3LocationUpdatingReject {
 private:
-    MMRejectCause mCause;
+    MMRejectCause mCause{MMRejectCause::Zero};
 public:
+    static constexpr int MTI = 0x04;
     explicit L3LocationUpdatingReject(MMRejectCause cause) : mCause(cause) {}
-    int mti() const override { return LocationUpdatingReject; }
-    size_t l2BodyLength() const override { return 1; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3LocationUpdatingReject> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
-// ── IMSI Detach Indication (GSM 04.08 9.2.15) ─────────────────────────
+// ── Location Updating Request (GSM 04.08 9.2.15) ──────────────────────
 
-class L3IMSIDetachIndication : public L3MMMessage {
+class L3LocationUpdatingRequest {
 private:
+    unsigned mUpdateType{0};
+    unsigned mCKSN{0};
     L3MobileStationClassmark1 mClassmark;
     L3MobileIdentity mMobileIdentity;
+    L3LocationAreaIdentity mLAI;
 public:
+    static constexpr int MTI = 0x08;
     const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
-    int mti() const override { return IMSIDetachIndication; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    const L3LocationAreaIdentity& lai() const { return mLAI; }
+    size_t bodyLength() const;
+    LocationUpdateType getLocationUpdatingType() const { return static_cast<LocationUpdateType>(mUpdateType & 0x3); }
+    unsigned getFollowOnRequest() const { return mUpdateType & 0x8; }
+    [[nodiscard]] static Expected<L3LocationUpdatingRequest> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Authentication Reject (GSM 04.08 9.2.1) ───────────────────────────
+
+class L3AuthenticationReject {
+public:
+    static constexpr int MTI = 0x11;
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3AuthenticationReject> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Authentication Request (GSM 04.08 9.2.2) ──────────────────────────
+
+class L3AuthenticationRequest {
+private:
+    unsigned mCKSN{0};
+    std::vector<uint8_t> mRAND;
+public:
+    static constexpr int MTI = 0x12;
+    L3AuthenticationRequest() = default;
+    L3AuthenticationRequest(unsigned ckSN, const std::vector<uint8_t>& rand) : mCKSN(ckSN), mRAND(rand) {}
+    size_t bodyLength() const { return 17; }
+    [[nodiscard]] static Expected<L3AuthenticationRequest> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Authentication Response (GSM 04.08 9.2.3) ─────────────────────────
+
+class L3AuthenticationResponse {
+private:
+    uint32_t mSRES{0};
+public:
+    static constexpr int MTI = 0x14;
+    L3AuthenticationResponse() = default;
+    explicit L3AuthenticationResponse(uint32_t sres) : mSRES(sres) {}
+    uint32_t sres() const { return mSRES; }
+    size_t bodyLength() const { return 4; }
+    [[nodiscard]] static Expected<L3AuthenticationResponse> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── CM Service Accept (GSM 04.08 9.2.5) ───────────────────────────────
 
-class L3CMServiceAccept : public L3MMMessage {
+class L3CMServiceAccept {
 public:
-    int mti() const override { return CMServiceAccept; }
-    size_t l2BodyLength() const override { return 0; }
-    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override { return {}; }
-    ParseResult<void> try_parseBody(const L3Frame&, size_t&) override { return {}; }
-    void text(std::ostream& os) const override;
-};
-
-// ── CM Service Abort (GSM 04.08 9.2.7) ────────────────────────────────
-
-class L3CMServiceAbort : public L3MMMessage {
-public:
-    int mti() const override { return CMServiceAbort; }
-    size_t l2BodyLength() const override { return 0; }
-    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override { return {}; }
-    ParseResult<void> try_parseBody(const L3Frame&, size_t&) override;
-    void text(std::ostream& os) const override;
+    static constexpr int MTI = 0x21;
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3CMServiceAccept> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
 };
 
 // ── CM Service Reject (GSM 04.08 9.2.6) ───────────────────────────────
 
-class L3CMServiceReject : public L3MMMessage {
+class L3CMServiceReject {
 private:
-    MMRejectCause mCause;
+    MMRejectCause mCause{MMRejectCause::Zero};
 public:
+    static constexpr int MTI = 0x22;
     explicit L3CMServiceReject(MMRejectCause cause) : mCause(cause) {}
-    int mti() const override { return CMServiceReject; }
-    size_t l2BodyLength() const override { return 1; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override;
-    void text(std::ostream& os) const override;
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3CMServiceReject> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── CM Service Abort (GSM 04.08 9.2.7) ────────────────────────────────
+
+class L3CMServiceAbort {
+public:
+    static constexpr int MTI = 0x23;
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3CMServiceAbort> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
 };
 
 // ── CM Service Request (GSM 04.08 9.2.9) ──────────────────────────────
 
-class L3CMServiceRequest : public L3MMMessage {
+class L3CMServiceRequest {
 private:
     L3MobileStationClassmark2 mClassmark;
     L3MobileIdentity mMobileIdentity;
     L3CMServiceType mServiceType;
 public:
+    static constexpr int MTI = 0x24;
     const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
     L3CMServiceType::TypeCode serviceType() const { return mServiceType.type(); }
-    int mti() const override { return CMServiceRequest; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-};
-
-// ── CM Reestablishment Request (GSM 04.08 9.2.4) ──────────────────────
-
-class L3CMReestablishmentRequest : public L3MMMessage {
-private:
-    unsigned mCKSN;
-    L3MobileStationClassmark2 mClassmark;
-    L3MobileIdentity mMobileID;
-    bool mHaveLAI;
-    L3LocationAreaIdentity mLAI;
-public:
-    L3CMReestablishmentRequest() : mCKSN(0), mHaveLAI(false) {}
-    const L3MobileIdentity& mobileId() const { return mMobileID; }
-    unsigned cksn() const { return mCKSN; }
-    int mti() const override { return CMReestablishmentRequest; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-};
-
-// ── MM Information (GSM 04.08 9.2.15a) ────────────────────────────────
-
-class L3MMInformation : public L3MMMessage {
-private:
-    L3NetworkName mShortName;
-    L3TimeZoneAndTime mTime;
-public:
-    L3MMInformation();
-    int mti() const override { return MMInformation; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    void text(std::ostream& os) const override;
-    const L3NetworkName& shortName() const { return mShortName; }
-    const L3TimeZoneAndTime& time() const { return mTime; }
-};
-
-// ── Identity Request (GSM 04.08 9.2.10) ───────────────────────────────
-
-class L3IdentityRequest : public L3MMMessage {
-private:
-    MobileIDType mType;
-public:
-    explicit L3IdentityRequest(MobileIDType type) : mType(type) {}
-    int mti() const override { return IdentityRequest; }
-    size_t l2BodyLength() const override { return 1; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-};
-
-// ── Identity Response (GSM 04.08 9.2.11) ──────────────────────────────
-
-class L3IdentityResponse : public L3MMMessage {
-private:
-    L3MobileIdentity mMobileID;
-public:
-    int mti() const override { return IdentityResponse; }
-    size_t l2BodyLength() const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-    const L3MobileIdentity& mobileId() const { return mMobileID; }
-};
-
-// ── Authentication Request (GSM 04.08 9.2.2) ──────────────────────────
-
-class L3AuthenticationRequest : public L3MMMessage {
-private:
-    unsigned mCKSN;
-    std::vector<uint8_t> mRAND; // 128 bits
-public:
-    L3AuthenticationRequest(unsigned ckSN, const std::vector<uint8_t>& rand);
-    int mti() const override { return AuthenticationRequest; }
-    size_t l2BodyLength() const override { return 17; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override;
-    void text(std::ostream& os) const override;
-};
-
-// ── Authentication Response (GSM 04.08 9.2.3) ─────────────────────────
-
-class L3AuthenticationResponse : public L3MMMessage {
-private:
-    uint32_t mSRES;
-public:
-    uint32_t sres() const { return mSRES; }
-    int mti() const override { return AuthenticationResponse; }
-    size_t l2BodyLength() const override { return 4; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
-};
-
-// ── Authentication Reject (GSM 04.08 9.2.1) ───────────────────────────
-
-class L3AuthenticationReject : public L3MMMessage {
-public:
-    int mti() const override { return AuthenticationReject; }
-    size_t l2BodyLength() const override { return 0; }
-    ParseResult<void> try_parseBody(const L3Frame&, size_t&) override { return {}; }
-    ParseResult<void> try_writeBody(L3Frame&, size_t&) const override { return {}; }
-    void text(std::ostream& os) const override;
-};
-
-// ── TMSI Reallocation Command (GSM 04.08 9.2.17) ──────────────────────
-
-class L3TMSIReallocationCommand : public L3MMMessage {
-private:
-    L3LocationAreaIdentity mLAI;
-    L3MobileIdentity mTMSI;
-    bool mFollowOnProceed;
-public:
-    L3TMSIReallocationCommand();
-    const L3LocationAreaIdentity& lai() const { return mLAI; }
-    const L3MobileIdentity& tmsi() const { return mTMSI; }
-    bool followOnProceed() const { return mFollowOnProceed; }
-    int mti() const override { return TMSIReallocationCommand; }
-    size_t l2BodyLength() const override { return mLAI.lengthV() + mTMSI.lengthLV() + 1; }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    void text(std::ostream& os) const override;
-
-    class Builder {
-    public:
-        Builder& lai(const L3LocationAreaIdentity& lai);
-        Builder& tmsi(const L3MobileIdentity& t);
-        Builder& followOn(bool fo);
-        L3TMSIReallocationCommand build();
-    private:
-        L3LocationAreaIdentity mLAI;
-        L3MobileIdentity mTMSI;
-        bool mFollowOnProceed{false};
-    };
-
-    static Builder builder();
-};
-
-// ── TMSI Reallocation Complete (GSM 04.08 9.2.18) ─────────────────────
-
-class L3TMSIReallocationComplete : public L3MMMessage {
-public:
-    int mti() const override { return TMSIReallocationComplete; }
-    size_t l2BodyLength() const override { return 0; }
-    ParseResult<void> try_parseBody(const L3Frame&, size_t&) override { return {}; }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3CMServiceRequest> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── MM Status (GSM 04.08 9.2.15) ──────────────────────────────────────
 
-class L3MMStatus : public L3MMMessage {
+class L3MMStatus {
 private:
-    MMRejectCause mCause;
+    MMRejectCause mCause{MMRejectCause::Zero};
 public:
+    static constexpr int MTI = 0x31;
     MMRejectCause cause() const { return mCause; }
-    int mti() const override { return MMStatus; }
-    size_t l2BodyLength() const override { return 3; }
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    void text(std::ostream& os) const override;
+    size_t bodyLength() const { return 3; }
+    [[nodiscard]] static Expected<L3MMStatus> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── MM Information (GSM 04.08 9.2.15a) ────────────────────────────────
+
+class L3MMInformation {
+private:
+    L3NetworkName mShortName;
+    L3TimeZoneAndTime mTime;
+public:
+    static constexpr int MTI = 0x32;
+    const L3NetworkName& shortName() const { return mShortName; }
+    const L3TimeZoneAndTime& time() const { return mTime; }
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3MMInformation> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Identity Request (GSM 04.08 9.2.10) ───────────────────────────────
+
+class L3IdentityRequest {
+private:
+    MobileIDType mType{MobileIDType::NoID};
+public:
+    static constexpr int MTI = 0x18;
+    explicit L3IdentityRequest(MobileIDType type) : mType(type) {}
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3IdentityRequest> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Identity Response (GSM 04.08 9.2.11) ──────────────────────────────
+
+class L3IdentityResponse {
+private:
+    L3MobileIdentity mMobileID;
+public:
+    static constexpr int MTI = 0x19;
+    const L3MobileIdentity& mobileId() const { return mMobileID; }
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3IdentityResponse> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── TMSI Reallocation Command (GSM 04.08 9.2.17) ──────────────────────
+
+class L3TMSIReallocationCommand {
+private:
+    L3LocationAreaIdentity mLAI;
+    L3MobileIdentity mTMSI;
+    bool mFollowOnProceed{false};
+public:
+    static constexpr int MTI = 0x1a;
+    const L3LocationAreaIdentity& lai() const { return mLAI; }
+    const L3MobileIdentity& tmsi() const { return mTMSI; }
+    bool followOnProceed() const { return mFollowOnProceed; }
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3TMSIReallocationCommand> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── TMSI Reallocation Complete (GSM 04.08 9.2.18) ─────────────────────
+
+class L3TMSIReallocationComplete {
+public:
+    static constexpr int MTI = 0x1b;
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3TMSIReallocationComplete> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── CM Reestablishment Request (GSM 04.08 9.2.4) ──────────────────────
+
+class L3CMReestablishmentRequest {
+private:
+    unsigned mCKSN{0};
+    L3MobileStationClassmark2 mClassmark;
+    L3MobileIdentity mMobileID;
+    bool mHaveLAI{false};
+    L3LocationAreaIdentity mLAI;
+public:
+    static constexpr int MTI = 0x28;
+    const L3MobileIdentity& mobileId() const { return mMobileID; }
+    unsigned cksn() const { return mCKSN; }
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3CMReestablishmentRequest> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 } // namespace gsml3parser
-
-

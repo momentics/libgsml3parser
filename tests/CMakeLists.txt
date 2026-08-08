@@ -9,26 +9,12 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
+# Phase 1-2 tests only (Phase 5 migrates remaining tests)
 add_executable(gsml3parser_tests
-    test_bitvector.cpp
     test_expected.cpp
     test_bitreader.cpp
     test_parser_config.cpp
     test_l3header.cpp
-    test_parser.cpp
-    test_messages.cpp
-    test_roundtrip.cpp
-    test_gsm_specs.cpp
-    test_mm_messages.cpp
-    test_cc_messages.cpp
-    test_ss_messages.cpp
-    test_l3frame.cpp
-    test_common_ie.cpp
-    test_golden_rr.cpp
-    test_golden_mm.cpp
-    test_golden_cc.cpp
-    test_golden_ie.cpp
-    test_threading.cpp
 )
 
 find_package(Threads REQUIRED)

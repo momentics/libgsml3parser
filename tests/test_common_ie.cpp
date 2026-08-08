@@ -27,7 +27,7 @@
 #include <gsml3parser/parser.h>
 #include <gsml3parser/common/l3common.h>
 #include <gsml3parser/rr/l3rrmessages.h>
-#include <gsml3parser/mm/l3mmlements.h>
+#include <gsml3parser/mm/l3mmelements.h>
 #include <gsml3parser/cc/l3cclements.h>
 
 using namespace gsml3parser;

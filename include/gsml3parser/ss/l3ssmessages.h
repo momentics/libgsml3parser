@@ -21,102 +21,106 @@
 
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
-#include <memory>
 #include <ostream>
 #include <string>
 
-#include "../l3message.h"
-#include "../l3frame.h"
+#include "../expected.h"
+#include "../bitreader.h"
+#include "../bitwriter.h"
 #include "../types.h"
 #include "../enums.h"
-#include "../cc/l3cclements.h"
+#include "../common/l3common.h"
+#include "../cc/l3ccelements.h"
 
 namespace gsml3parser {
 
-// ── L3SupServMessage ────────────────────────────────────────────────────
-
-class L3SupServMessage : public L3Message {
-protected:
-    unsigned mTI;
-public:
-    enum MessageType : int {
-        ReleaseComplete = 0x2a,
-        Facility        = 0x3a,
-        Register        = 0x3b
-    };
-
-    explicit L3SupServMessage(unsigned wTI = 7) : mTI(wTI) {}
-
-    size_t fullBodyLength() const override { return l2BodyLength(); }
-    ParseResult<void> write(L3Frame& dest) const override;
-    L3PD pd() const override { return L3PD::NonCallSS; }
-    unsigned ti() const override { return mTI; }
-    void ti(unsigned wTI) { mTI = wTI; }
-    void text(std::ostream& os) const override;
-};
-
 // ── Facility Message (GSM 04.80/24.080 2.3) ────────────────────────────
 
-class L3SupServFacilityMessage : public L3SupServMessage {
+class L3SupServFacilityMessage {
 private:
+    unsigned mTI{7};
     L3OctetAlignedProtocolElement mFacility;
 public:
-    L3SupServFacilityMessage();
-    L3SupServFacilityMessage(unsigned wTI, const std::string& facility);
+    static constexpr int MTI = 0x3a;
 
-    std::string getMapComponents() const { return mFacility.mData; }
-    int mti() const override { return Facility; }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    size_t l2BodyLength() const override;
-    void text(std::ostream& os) const override;
+    L3SupServFacilityMessage() = default;
+    L3SupServFacilityMessage(unsigned wTI, const std::string& facility)
+        : mTI(wTI), mFacility(facility) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned wTI) { mTI = wTI; }
+    static constexpr L3PD pd() { return L3PD::NonCallSS; }
+    int mti() const { return MTI; }
+
+    const std::string& getMapComponents() const { return mFacility.mData; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3SupServFacilityMessage> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Register Message (GSM 04.80/24.080 2.4) ───────────────────────────
 
-class L3SupServRegisterMessage : public L3SupServMessage {
+class L3SupServRegisterMessage {
 private:
+    unsigned mTI{7};
     L3OctetAlignedProtocolElement mFacility;
     bool mHaveVersion{};
-    uint8_t mVersionIndicator;
+    uint8_t mVersionIndicator{};
 public:
-    L3SupServRegisterMessage();
-    L3SupServRegisterMessage(unsigned wTI, const std::string& facility);
+    static constexpr int MTI = 0x3b;
+
+    L3SupServRegisterMessage() = default;
+    L3SupServRegisterMessage(unsigned wTI, const std::string& facility)
+        : mTI(wTI), mFacility(facility) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned wTI) { mTI = wTI; }
+    static constexpr L3PD pd() { return L3PD::NonCallSS; }
+    int mti() const { return MTI; }
 
     bool haveVersionIndicator() const { return mHaveVersion; }
     uint8_t versionIndicator() const { return mVersionIndicator; }
-    std::string getMapComponents() const { return mFacility.mData; }
+    const std::string& getMapComponents() const { return mFacility.mData; }
 
-    int mti() const override { return Register; }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    size_t l2BodyLength() const override;
-    void text(std::ostream& os) const override;
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3SupServRegisterMessage> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 // ── Release Complete (GSM 04.80/24.080 2.5) ───────────────────────────
 
-class L3SupServReleaseCompleteMessage : public L3SupServMessage {
+class L3SupServReleaseCompleteMessage {
 private:
+    unsigned mTI{7};
     L3OctetAlignedProtocolElement mFacility;
-    bool mHaveCause;
+    bool mHaveCause{};
     L3CauseElement mCause;
 public:
-    L3SupServReleaseCompleteMessage();
-    explicit L3SupServReleaseCompleteMessage(unsigned wTI);
-    L3SupServReleaseCompleteMessage(unsigned wTI, CCCause cause);
+    static constexpr int MTI = 0x2a;
+
+    L3SupServReleaseCompleteMessage() = default;
+    explicit L3SupServReleaseCompleteMessage(unsigned wTI) : mTI(wTI) {}
+    L3SupServReleaseCompleteMessage(unsigned wTI, CCCause cause)
+        : mTI(wTI), mHaveCause(true), mCause(cause, CCCauseLocation::Private_Serving_Local) {}
+
+    unsigned ti() const { return mTI; }
+    void ti(unsigned wTI) { mTI = wTI; }
+    static constexpr L3PD pd() { return L3PD::NonCallSS; }
+    int mti() const { return MTI; }
 
     bool haveFacility() const { return mFacility.mExtant; }
     CCCause cause() const { return mCause.cause(); }
     CCCauseLocation causeLocation() const { return mCause.location(); }
-    int mti() const override { return ReleaseComplete; }
-    ParseResult<void> try_writeBody(L3Frame& dest, size_t& wp) const override;
-    ParseResult<void> try_parseBody(const L3Frame& src, size_t& rp) override;
-    size_t l2BodyLength() const override;
-    void text(std::ostream& os) const override;
+
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3SupServReleaseCompleteMessage> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
 };
 
 } // namespace gsml3parser
-
-

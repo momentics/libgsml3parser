@@ -54,7 +54,7 @@
 #include <gsml3parser/gsm_common.h>
 #include <gsml3parser/rr/l3rrmessages.h>
 #include <gsml3parser/cc/l3cclements.h>
-#include <gsml3parser/mm/l3mmlements.h>
+#include <gsml3parser/mm/l3mmelements.h>
 #include <gsml3parser/bitvector.h>
 
 using namespace gsml3parser;

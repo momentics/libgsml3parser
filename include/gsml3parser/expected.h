@@ -29,6 +29,8 @@
 
 namespace gsml3parser {
 
+#ifndef GSML3PARSER_PARSE_ERROR_DEFINED
+#define GSML3PARSER_PARSE_ERROR_DEFINED
 struct ParseError {
     enum class Code : uint8_t {
         Ok,
@@ -72,6 +74,7 @@ struct ParseError {
         return code != Code::Ok;
     }
 };
+#endif // GSML3PARSER_PARSE_ERROR_DEFINED
 
 // ── Expected<T, ParseError> (general) ────────────────────────────────────
 

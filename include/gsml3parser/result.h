@@ -43,12 +43,14 @@ enum class ParseErrorCode : uint8_t {
 };
 
 struct ParseError {
+    using Code = ParseErrorCode;
     ParseErrorCode code{ParseErrorCode::Ok};
     std::string message;
     size_t bitPosition{};
 
     constexpr bool failed() const { return code != ParseErrorCode::Ok; }
 };
+#define GSML3PARSER_PARSE_ERROR_DEFINED
 
 // ── ParseResult<T> (general) ────────────────────────────────────────────
 
