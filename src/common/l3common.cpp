@@ -442,23 +442,15 @@ bool L3BCCHFrequencyList::contains(unsigned arfcn) const {
 }
 
 Expected<L3BCCHFrequencyList> L3BCCHFrequencyList::parse(BitReader& br) {
-    auto r = br.readField(3); if (!r) return Expected<L3BCCHFrequencyList>::error(r.error()); // skip header bits
+    auto r = br.readField(8); if (!r) return Expected<L3BCCHFrequencyList>::error(r.error()); // skip header byte (3 bits + 5 spare)
     std::vector<uint8_t> raw(16);
-    // Read the full 16 bytes (including the partial first byte we already read 3 bits of)
-    // Actually, BCCH freq list has 3 extra bits before the 16-byte frequency list
-    // The 16-byte list starts after those 3 bits. We need to be careful.
-    // For simplicity: read remaining bits in current byte, then 15 more bytes
-    { auto rb = br.readField(5); if (!rb) return Expected<L3BCCHFrequencyList>::error(rb.error()); raw[0] = static_cast<uint8_t>(rb.value()); }
-    { auto rb = br.readBytes(raw.data() + 1, 15); if (!rb) return Expected<L3BCCHFrequencyList>::error(rb.error()); }
-    // Actually this is wrong. Let me read the full raw data as bytes from the start of the field.
-    // The BCCH frequency list format: BA-IND(1)|EXT-IND(1)|Spare(1) then 16-byte freq list
-    // But we already consumed 3 bits. We need to reconstruct.
-    // For now, just parse from what remains.
-    return Expected<L3BCCHFrequencyList>::error({ParseError::Code::InvalidIE, "BCCHFreqList parse needs byte-aligned read"});
+    auto rb = br.readBytes(raw.data(), 16); if (!rb) return Expected<L3BCCHFrequencyList>::error(rb.error());
+    return Expected<L3BCCHFrequencyList>::hold(L3BCCHFrequencyList(frequencyListFromRaw(raw)));
 }
 
 void L3BCCHFrequencyList::write(BitWriter& bw) const {
     bw.writeField(0, 3); // BA-IND, EXT-IND, Spare
+    bw.writeField(0, 5); // padding to byte boundary
     std::vector<uint8_t> raw = frequencyListToRaw(mARFCNs);
     bw.writeBytes(raw.data(), raw.size());
 }
@@ -486,15 +478,15 @@ bool L3NeighborCellsDescription::contains(unsigned arfcn) const {
 }
 
 Expected<L3NeighborCellsDescription> L3NeighborCellsDescription::parse(BitReader& br) {
-    auto r = br.readField(3); if (!r) return Expected<L3NeighborCellsDescription>::error(r.error()); // skip header
+    auto r = br.readField(8); if (!r) return Expected<L3NeighborCellsDescription>::error(r.error()); // skip header byte (3 bits + 5 spare)
     std::vector<uint8_t> raw(16);
-    { auto rb = br.readField(5); if (!rb) return Expected<L3NeighborCellsDescription>::error(rb.error()); raw[0] = static_cast<uint8_t>(rb.value()); }
-    { auto rb = br.readBytes(raw.data() + 1, 15); if (!rb) return Expected<L3NeighborCellsDescription>::error(rb.error()); }
-    return Expected<L3NeighborCellsDescription>::error({ParseError::Code::InvalidIE, "NeighborCells parse needs byte-aligned read"});
+    auto rb = br.readBytes(raw.data(), 16); if (!rb) return Expected<L3NeighborCellsDescription>::error(rb.error());
+    return Expected<L3NeighborCellsDescription>::hold(L3NeighborCellsDescription(frequencyListFromRaw(raw)));
 }
 
 void L3NeighborCellsDescription::write(BitWriter& bw) const {
     bw.writeField(0, 3); // BA-IND, EXT-IND, Spare
+    bw.writeField(0, 5); // padding to byte boundary
     std::vector<uint8_t> raw = frequencyListToRaw(mNeighbors);
     bw.writeBytes(raw.data(), raw.size());
 }
@@ -569,7 +561,7 @@ void L3ControlChannelDescription::text(std::ostream& os) const {
 
 L3ChannelDescription::L3ChannelDescription(TypeAndOffset tao, unsigned tn, unsigned tsc, unsigned arfcn)
     : mTypeAndOffset(static_cast<uint8_t>(tao)), mTN(static_cast<uint8_t>(tn)),
-      mTSC(static_cast<uint8_t>(tsc)), mHFlag(0), mARFCN(static_cast<uint16_t>(arfcn)) {}
+      mTSC(static_cast<uint8_t>(tsc)), mHFlag(0), mARFCN(static_cast<uint16_t>(arfcn)), mInitialized(true) {}
 
 Expected<L3ChannelDescription> L3ChannelDescription::parse(BitReader& br) {
     L3ChannelDescription result;
@@ -584,6 +576,7 @@ Expected<L3ChannelDescription> L3ChannelDescription::parse(BitReader& br) {
         r = br.readField(2); if (!r) return Expected<L3ChannelDescription>::error(r.error()); // spare
         r = br.readField(10); if (!r) return Expected<L3ChannelDescription>::error(r.error()); result.mARFCN = static_cast<uint16_t>(r.value());
     }
+    result.mInitialized = true;
     return Expected<L3ChannelDescription>::hold(std::move(result));
 }
 
@@ -667,7 +660,7 @@ void L3ChannelDescription2::text(std::ostream& os) const {
 
 L3AdditionalChannelDescription::L3AdditionalChannelDescription(TypeAndOffset tao, unsigned tn, unsigned tsc, unsigned arfcn)
     : mTypeAndOffset(static_cast<uint8_t>(tao)), mTN(static_cast<uint8_t>(tn)),
-      mTSC(static_cast<uint8_t>(tsc)), mHFlag(0), mARFCN(static_cast<uint16_t>(arfcn)) {}
+      mTSC(static_cast<uint8_t>(tsc)), mHFlag(0), mARFCN(static_cast<uint16_t>(arfcn)), mInitialized(true) {}
 
 Expected<L3AdditionalChannelDescription> L3AdditionalChannelDescription::parse(BitReader& br) {
     L3AdditionalChannelDescription result;
@@ -682,6 +675,7 @@ Expected<L3AdditionalChannelDescription> L3AdditionalChannelDescription::parse(B
         r = br.readField(2); if (!r) return Expected<L3AdditionalChannelDescription>::error(r.error());
         r = br.readField(10); if (!r) return Expected<L3AdditionalChannelDescription>::error(r.error()); result.mARFCN = static_cast<uint16_t>(r.value());
     }
+    result.mInitialized = true;
     return Expected<L3AdditionalChannelDescription>::hold(std::move(result));
 }
 
@@ -818,15 +812,13 @@ void L3HandoverReference::text(std::ostream& os) const {
 // ── L3CipheringModeSetting ─────────────────────────────────────────────
 
 Expected<L3CipheringModeSetting> L3CipheringModeSetting::parse(BitReader& br) {
-    auto r = br.readField(4); if (!r) return Expected<L3CipheringModeSetting>::error(r.error()); // spare
-    r = br.readField(1); if (!r) return Expected<L3CipheringModeSetting>::error(r.error()); bool ciphering = r.value() != 0;
+    auto r = br.readField(1); if (!r) return Expected<L3CipheringModeSetting>::error(r.error()); bool ciphering = r.value() != 0;
     r = br.readField(3); if (!r) return Expected<L3CipheringModeSetting>::error(r.error()); int algo = static_cast<int>(r.value());
     if (!ciphering) algo = 0;
     return Expected<L3CipheringModeSetting>::hold(L3CipheringModeSetting(ciphering, algo));
 }
 
 void L3CipheringModeSetting::write(BitWriter& bw) const {
-    bw.writeField(0, 4);
     bw.writeField(mCiphering ? 1 : 0, 1);
     bw.writeField(mAlgorithm & 0x07, 3);
 }
@@ -1406,8 +1398,8 @@ Expected<L3RestOctets> L3SI3RestOctets::parse(BitReader& br, size_t lengthBytes)
 }
 
 void L3SI3RestOctets::write(BitWriter& bw) const {
+    bw.writeField(mHaveSI3RestOctets ? 1 : 0, 1);
     if (!mHaveSI3RestOctets) return;
-    bw.writeField(1, 1);
     if (mHaveSelectionParameters) {
         bw.writeField(1, 1);
         bw.writeField(mCBQ ? 1 : 0, 1);
@@ -1439,10 +1431,8 @@ void L3SI3RestOctets::text(std::ostream& os) const {
 // ── L3SIType4RestOctets ────────────────────────────────────────────────
 
 size_t L3SIType4RestOctets::lengthV() const {
-    int bits = 1 + 1;
-    if (mHaveGPRS) bits += 1 + 3 + 1;
-    else bits += 1;
-    bits += 2;
+    if (!mHaveGPRS) return 0;
+    int bits = 1 + 1 + 1 + 3 + 1 + 2;
     return (bits + 7) / 8;
 }
 

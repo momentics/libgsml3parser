@@ -141,11 +141,16 @@ bool peekTLVType(BitReader& br, unsigned expectedIEI) {
 // ── L3IMSIDetachIndication (MTI=0x01) ──────────────────────────────────
 
 size_t L3IMSIDetachIndication::bodyLength() const {
-    return 1 + lvLen(mMobileIdentity.lengthV());
+    return lvLen(mClassmark.lengthV()) + lvLen(mMobileIdentity.lengthV());
 }
 
 Expected<L3IMSIDetachIndication> L3IMSIDetachIndication::parse(BitReader& br) {
     L3IMSIDetachIndication msg;
+    // CM1 is LV-encoded: length byte + value
+    {
+        auto lenR = br.readField(8);
+        if (!lenR) return Expected<L3IMSIDetachIndication>::error(lenR.error());
+    }
     {
         auto cmRes = L3MobileStationClassmark1::parse(br);
         if (!cmRes) return Expected<L3IMSIDetachIndication>::error(cmRes.error());
@@ -160,6 +165,7 @@ Expected<L3IMSIDetachIndication> L3IMSIDetachIndication::parse(BitReader& br) {
 }
 
 void L3IMSIDetachIndication::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mClassmark.lengthV()), 8);
     mClassmark.write(bw);
     writeLVMI(mMobileIdentity, bw);
 }
@@ -283,7 +289,11 @@ Expected<L3CMReestablishmentRequest> L3CMReestablishmentRequest::parse(BitReader
         auto sp = br.readField(4);
         if (!sp) return Expected<L3CMReestablishmentRequest>::error(sp.error());
     }
-    // Classmark2 (LV - but CM2::parse reads 24 bits, we need to skip length octet first)
+    // Classmark2 (LV: length octet + 3 bytes value)
+    {
+        auto lenR = br.readField(8);
+        if (!lenR) return Expected<L3CMReestablishmentRequest>::error(lenR.error());
+    }
     {
         auto cmRes = L3MobileStationClassmark2::parse(br);
         if (!cmRes) return Expected<L3CMReestablishmentRequest>::error(cmRes.error());
@@ -514,6 +524,10 @@ Expected<L3LocationUpdatingRequest> L3LocationUpdatingRequest::parse(BitReader& 
     }
     // Classmark1 (LV: length octet + 1 byte value)
     {
+        auto lenR = br.readField(8);
+        if (!lenR) return Expected<L3LocationUpdatingRequest>::error(lenR.error());
+    }
+    {
         auto cmRes = L3MobileStationClassmark1::parse(br);
         if (!cmRes) return Expected<L3LocationUpdatingRequest>::error(cmRes.error());
         msg.mClassmark = cmRes.value();
@@ -625,16 +639,11 @@ Expected<L3MMStatus> L3MMStatus::parse(BitReader& br) {
         if (!ca) return Expected<L3MMStatus>::error(ca.error());
         msg.mCause = static_cast<MMRejectCause>(ca.value());
     }
-    {
-        auto sp = br.readField(16);
-        if (!sp) return Expected<L3MMStatus>::error(sp.error());
-    }
     return Expected<L3MMStatus>::hold(msg);
 }
 
 void L3MMStatus::write(BitWriter& bw) const {
     bw.writeField(static_cast<uint32_t>(mCause), 8);
-    bw.writeField(0, 16);
 }
 
 void L3MMStatus::text(std::ostream& os) const {

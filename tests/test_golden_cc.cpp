@@ -324,11 +324,12 @@ TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
 TEST(GoldenCC, Disconnect_Parse) {
     // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x25(Disconnect)|NSD(2)=0 = 0x94 [GSM 24.008 Table 10.5.4]
-    // Cause LV (no IEI, length-prefixed): GSM 24.008 10.5.4.11
-    // Byte 2: Length = 2 (2 octets Cause value part)
-    // Byte 3: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11|ext(1)=0 = 0x16
-    // Byte 4: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21
-    uint8_t data[] = {0x3E, 0x94, 0x02, 0x16, 0x21};
+    // Cause TLV (IEI + length + value): GSM 24.008 10.5.4.11
+    // Byte 2: IEI = 0x08 (Cause)
+    // Byte 3: Length = 2 (2 octets Cause value part)
+    // Byte 4: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11|ext(1)=0 = 0x16
+    // Byte 5: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21
+    uint8_t data[] = {0x3E, 0x94, 0x08, 0x02, 0x16, 0x21};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3Disconnect::MTI);

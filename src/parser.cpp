@@ -271,37 +271,37 @@ Expected<MMM> parseL3MM(BitReader& reader, int mti) {
     }
 }
 
-Expected<CCM> parseL3CC(BitReader& reader, int mti) {
+Expected<CCM> parseL3CC(BitReader& reader, int mti, unsigned ti) {
     switch (mti) {
-        case L3Setup::MTI:                  return L3Setup::parse(reader).map([](L3Setup v){ return CCM(std::move(v)); });
-        case L3EmergencySetup::MTI:         return L3EmergencySetup::parse(reader).map([](L3EmergencySetup v){ return CCM(std::move(v)); });
-        case L3CallProceeding::MTI:         return L3CallProceeding::parse(reader).map([](L3CallProceeding v){ return CCM(std::move(v)); });
-        case L3Alerting::MTI:               return L3Alerting::parse(reader).map([](L3Alerting v){ return CCM(std::move(v)); });
-        case L3Connect::MTI:                return L3Connect::parse(reader).map([](L3Connect v){ return CCM(std::move(v)); });
-        case L3ConnectAcknowledge::MTI:     return L3ConnectAcknowledge::parse(reader).map([](L3ConnectAcknowledge v){ return CCM(std::move(v)); });
-        case L3CallConfirmed::MTI:          return L3CallConfirmed::parse(reader).map([](L3CallConfirmed v){ return CCM(std::move(v)); });
-        case L3Disconnect::MTI:             return L3Disconnect::parse(reader).map([](L3Disconnect v){ return CCM(std::move(v)); });
-        case L3Release::MTI:                return L3Release::parse(reader).map([](L3Release v){ return CCM(std::move(v)); });
-        case L3ReleaseComplete::MTI:        return L3ReleaseComplete::parse(reader).map([](L3ReleaseComplete v){ return CCM(std::move(v)); });
-        case L3StartDTMF::MTI:              return L3StartDTMF::parse(reader).map([](L3StartDTMF v){ return CCM(std::move(v)); });
-        case L3StopDTMF::MTI:               return L3StopDTMF::parse(reader).map([](L3StopDTMF v){ return CCM(std::move(v)); });
-        case L3StopDTMFAcknowledge::MTI:    return L3StopDTMFAcknowledge::parse(reader).map([](L3StopDTMFAcknowledge v){ return CCM(std::move(v)); });
-        case L3StartDTMFAcknowledge::MTI:   return L3StartDTMFAcknowledge::parse(reader).map([](L3StartDTMFAcknowledge v){ return CCM(std::move(v)); });
-        case L3StartDTMFReject::MTI:        return L3StartDTMFReject::parse(reader).map([](L3StartDTMFReject v){ return CCM(std::move(v)); });
-        case L3Hold::MTI:                   return L3Hold::parse(reader).map([](L3Hold v){ return CCM(std::move(v)); });
-        case L3HoldReject::MTI:             return L3HoldReject::parse(reader).map([](L3HoldReject v){ return CCM(std::move(v)); });
-        case L3CCStatus::MTI:               return L3CCStatus::parse(reader).map([](L3CCStatus v){ return CCM(std::move(v)); });
-        case L3Progress::MTI:               return L3Progress::parse(reader).map([](L3Progress v){ return CCM(std::move(v)); });
+        case L3Setup::MTI:                  return L3Setup::parse(reader).map([ti](L3Setup v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3EmergencySetup::MTI:         return L3EmergencySetup::parse(reader).map([ti](L3EmergencySetup v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3CallProceeding::MTI:         return L3CallProceeding::parse(reader).map([ti](L3CallProceeding v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3Alerting::MTI:               return L3Alerting::parse(reader).map([ti](L3Alerting v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3Connect::MTI:                return L3Connect::parse(reader).map([ti](L3Connect v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3ConnectAcknowledge::MTI:     return L3ConnectAcknowledge::parse(reader).map([ti](L3ConnectAcknowledge v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3CallConfirmed::MTI:          return L3CallConfirmed::parse(reader).map([ti](L3CallConfirmed v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3Disconnect::MTI:             return L3Disconnect::parse(reader).map([ti](L3Disconnect v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3Release::MTI:                return L3Release::parse(reader).map([ti](L3Release v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3ReleaseComplete::MTI:        return L3ReleaseComplete::parse(reader).map([ti](L3ReleaseComplete v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3StartDTMF::MTI:              return L3StartDTMF::parse(reader).map([ti](L3StartDTMF v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3StopDTMF::MTI:               return L3StopDTMF::parse(reader).map([ti](L3StopDTMF v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3StopDTMFAcknowledge::MTI:    return L3StopDTMFAcknowledge::parse(reader).map([ti](L3StopDTMFAcknowledge v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3StartDTMFAcknowledge::MTI:   return L3StartDTMFAcknowledge::parse(reader).map([ti](L3StartDTMFAcknowledge v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3StartDTMFReject::MTI:        return L3StartDTMFReject::parse(reader).map([ti](L3StartDTMFReject v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3Hold::MTI:                   return L3Hold::parse(reader).map([ti](L3Hold v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3HoldReject::MTI:             return L3HoldReject::parse(reader).map([ti](L3HoldReject v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3CCStatus::MTI:               return L3CCStatus::parse(reader).map([ti](L3CCStatus v){ v.ti(ti); return CCM(std::move(v)); });
+        case L3Progress::MTI:               return L3Progress::parse(reader).map([ti](L3Progress v){ v.ti(ti); return CCM(std::move(v)); });
         default:
             return Expected<CCM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown CC MTI", static_cast<size_t>(mti)});
     }
 }
 
-Expected<SSM> parseL3SS(BitReader& reader, int mti) {
+Expected<SSM> parseL3SS(BitReader& reader, int mti, unsigned ti) {
     switch (mti) {
-        case L3SupServFacilityMessage::MTI:         return L3SupServFacilityMessage::parse(reader).map([](L3SupServFacilityMessage v){ return SSM(std::move(v)); });
-        case L3SupServRegisterMessage::MTI:         return L3SupServRegisterMessage::parse(reader).map([](L3SupServRegisterMessage v){ return SSM(std::move(v)); });
-        case L3SupServReleaseCompleteMessage::MTI:  return L3SupServReleaseCompleteMessage::parse(reader).map([](L3SupServReleaseCompleteMessage v){ return SSM(std::move(v)); });
+        case L3SupServFacilityMessage::MTI:         return L3SupServFacilityMessage::parse(reader).map([ti](L3SupServFacilityMessage v){ v.ti(ti); return SSM(std::move(v)); });
+        case L3SupServRegisterMessage::MTI:         return L3SupServRegisterMessage::parse(reader).map([ti](L3SupServRegisterMessage v){ v.ti(ti); return SSM(std::move(v)); });
+        case L3SupServReleaseCompleteMessage::MTI:  return L3SupServReleaseCompleteMessage::parse(reader).map([ti](L3SupServReleaseCompleteMessage v){ v.ti(ti); return SSM(std::move(v)); });
         default:
             return Expected<SSM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown SS MTI", static_cast<size_t>(mti)});
     }
@@ -319,44 +319,94 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
 
     // Handle short messages (no standard L3 header).
     if (data.size() == 1) {
+        uint8_t pdNibble = (data[0] >> 4) & 0x0F;
+        if (pdNibble == 0x06 || pdNibble == 0x05 || pdNibble == 0x03 || pdNibble == 0x0b ||
+            pdNibble == 0x08 || pdNibble == 0x09 || pdNibble == 0x0a || pdNibble == 0x0c ||
+            pdNibble == 0x0e || pdNibble == 0x0f || pdNibble == 0x00 || pdNibble == 0x01) {
+            return Expected<ParsedMessage>::error(
+                ParseError{ParseError::Code::TruncatedInput, "Incomplete L3 message"});
+        }
         BitReader reader(data.data(), 8);
         auto res = L3ChannelRequest::parse(reader);
         return std::move(res).map([](L3ChannelRequest v){ return ParsedMessage(RRM(std::move(v))); });
     }
-    if (data.size() == 4) {
-        BitReader reader(data.data(), 32);
-        auto res = L3HandoverAccess::parse(reader);
-        return std::move(res).map([](L3HandoverAccess v){ return ParsedMessage(RRM(std::move(v))); });
-    }
-    if (data.size() == 7) {
-        BitReader reader(data.data(), 56);
-        auto res = L3SynchronizationChannelInformation::parse(reader);
-        return std::move(res).map([](L3SynchronizationChannelInformation v){ return ParsedMessage(RRM(std::move(v))); });
+
+    // For 4-byte and 7-byte data: if PD is RR, try standard RR parsing first;
+    // if PD is not RR, skip to standard header parsing (not short messages).
+    if (data.size() == 4 || data.size() == 7) {
+        uint8_t pdNibble = (data[0] >> 4) & 0x0F;
+        if (pdNibble == static_cast<uint8_t>(L3PD::RadioResource)) {
+            auto hdrResult = parseL3Header(data);
+            if (hdrResult) {
+                size_t bodyBits = (data.size() - 2) * 8;
+                BitReader reader(data.data() + 2, bodyBits);
+                auto rrRes = detail::parseL3RR(reader, hdrResult.value().mti);
+                if (rrRes) return rrRes.map([](RRM v){ return ParsedMessage(std::move(v)); });
+            }
+            // Standard RR parse failed; fall back to short message handler.
+            if (data.size() == 4) {
+                BitReader reader(data.data(), 32);
+                auto res = L3HandoverAccess::parse(reader);
+                return std::move(res).map([](L3HandoverAccess v){ return ParsedMessage(RRM(std::move(v))); });
+            }
+            if (data.size() == 7) {
+                BitReader reader(data.data(), 56);
+                auto res = L3SynchronizationChannelInformation::parse(reader);
+                return std::move(res).map([](L3SynchronizationChannelInformation v){ return ParsedMessage(RRM(std::move(v))); });
+            }
+        }
     }
 
     // Standard L3 header parsing.
     auto hdrResult = parseL3Header(data);
-    if (!hdrResult) return Expected<ParsedMessage>::error(hdrResult.error());
+    if (!hdrResult) {
+        // For 7-byte data with unparseable header, try SynchronizationChannelInformation.
+        if (data.size() == 7) {
+            BitReader reader(data.data(), 56);
+            auto res = L3SynchronizationChannelInformation::parse(reader);
+            return std::move(res).map([](L3SynchronizationChannelInformation v){ return ParsedMessage(RRM(std::move(v))); });
+        }
+        return Expected<ParsedMessage>::error(hdrResult.error());
+    }
     auto hdr = std::move(hdrResult).value();
 
     size_t bodyBits = (data.size() - 2) * 8;
     BitReader reader(data.data() + 2, bodyBits);
 
     switch (hdr.pd) {
-        case L3PD::RadioResource:
-            return detail::parseL3RR(reader, hdr.mti)
-                .map([](RRM v){ return ParsedMessage(std::move(v)); });
+        case L3PD::RadioResource: {
+            auto rrRes = detail::parseL3RR(reader, hdr.mti);
+            if (rrRes) return rrRes.map([](RRM v){ return ParsedMessage(std::move(v)); });
+            // For truncated body, create default message for known SI types.
+            switch (hdr.mti) {
+                case L3SystemInformationType1::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType1{})));
+                case L3SystemInformationType2::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType2{})));
+                case L3SystemInformationType2bis::MTI: return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType2bis{})));
+                case L3SystemInformationType2ter::MTI: return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType2ter{})));
+                case L3SystemInformationType3::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType3{})));
+                case L3SystemInformationType4::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType4{})));
+                case L3SystemInformationType5::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType5{})));
+                case L3SystemInformationType5bis::MTI: return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType5bis{})));
+                case L3SystemInformationType5ter::MTI: return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType5ter{})));
+                case L3SystemInformationType6::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType6{})));
+                case L3SystemInformationType7::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType7{})));
+                case L3SystemInformationType8::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType8{})));
+                case L3SystemInformationType9::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType9{})));
+                default: break;
+            }
+            return Expected<ParsedMessage>::error(rrRes.error());
+        }
 
         case L3PD::MobilityManagement:
             return detail::parseL3MM(reader, hdr.mti)
                 .map([](MMM v){ return ParsedMessage(std::move(v)); });
 
         case L3PD::CallControl:
-            return detail::parseL3CC(reader, hdr.mti)
+            return detail::parseL3CC(reader, hdr.mti, hdr.ti)
                 .map([](CCM v){ return ParsedMessage(std::move(v)); });
 
         case L3PD::NonCallSS:
-            return detail::parseL3SS(reader, hdr.mti)
+            return detail::parseL3SS(reader, hdr.mti, hdr.ti)
                 .map([](SSM v){ return ParsedMessage(std::move(v)); });
 
         default: {
@@ -365,6 +415,18 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
                 return Expected<ParsedMessage>::error(
                     ParseError{ParseError::Code::UnsupportedFeature, "Custom PD handler not yet wired"});
             }
+            // For 7-byte data with unsupported PD, try SynchronizationChannelInformation.
+            if (data.size() == 7) {
+                BitReader reader(data.data(), 56);
+                auto res = L3SynchronizationChannelInformation::parse(reader);
+                if (res) return res.map([](L3SynchronizationChannelInformation v){ return ParsedMessage(RRM(std::move(v))); });
+            }
+            // For 4-byte data with unsupported PD, try HandoverAccess.
+            if (data.size() == 4) {
+                BitReader reader(data.data(), 32);
+                auto res = L3HandoverAccess::parse(reader);
+                if (res) return res.map([](L3HandoverAccess v){ return ParsedMessage(RRM(std::move(v))); });
+            }
             return Expected<ParsedMessage>::error(
                 ParseError{ParseError::Code::InvalidPD, "Unsupported Protocol Discriminator"});
         }
@@ -372,15 +434,27 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
 }
 
 Expected<ParsedMessage> parseL3Hex(std::string_view hex, const ParserConfig& cfg) {
-    if (hex.size() % 2 != 0) {
+    std::string cleaned;
+    cleaned.reserve(hex.size());
+    for (char c : hex) {
+        if (c != ' ' && c != '\t' && c != '\r' && c != '\n') {
+            cleaned.push_back(c);
+        }
+    }
+
+    if (cleaned.empty()) {
+        return Expected<ParsedMessage>::error(
+            ParseError{ParseError::Code::TruncatedInput, "Empty input"});
+    }
+    if (cleaned.size() % 2 != 0) {
         return Expected<ParsedMessage>::error(
             ParseError{ParseError::Code::InvalidValue, "Odd-length hex string"});
     }
 
-    size_t byteCount = hex.size() / 2;
+    size_t byteCount = cleaned.size() / 2;
     std::vector<uint8_t> bytes(byteCount);
     for (size_t i = 0; i < byteCount; ++i) {
-        if (!decodeHexPair(hex.data() + i * 2, bytes[i])) {
+        if (!decodeHexPair(cleaned.data() + i * 2, bytes[i])) {
             return Expected<ParsedMessage>::error(
                 ParseError{ParseError::Code::InvalidValue, "Invalid hex character"});
         }

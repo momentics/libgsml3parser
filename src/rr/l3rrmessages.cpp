@@ -305,7 +305,7 @@ void L3PagingRequestType3::text(std::ostream& os) const {
 // ── L3PagingResponse ───────────────────────────────────────────────────
 
 size_t L3PagingResponse::bodyLength() const {
-    return 1 + mClassmark.lengthV() + 1 + mMobileID.lengthV();
+    return 1 + 1 + mClassmark.lengthV() + 1 + mMobileID.lengthV();
 }
 
 Expected<L3PagingResponse> L3PagingResponse::parse(BitReader& br) {
@@ -847,36 +847,27 @@ void L3GPRSSuspensionRequest::text(std::ostream& os) const {
 
 size_t L3ApplicationInformation::bodyLength() const {
     size_t dataLen = (mData.size() + 7) / 8;
-    return 1 + 1 + dataLen;
+    return 1 + dataLen;
 }
 
 Expected<L3ApplicationInformation> L3ApplicationInformation::parse(BitReader& br) {
     L3ApplicationInformation msg;
 
-    auto r = br.readField(1); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
+    auto r = br.readField(4); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
+    msg.mProtocolIdentifier = r.value();
     r = br.readField(1); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
     msg.mCR = r.value();
     r = br.readField(1); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
     msg.mFirstSegment = r.value();
     r = br.readField(1); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
     msg.mLastSegment = r.value();
-    r = br.readField(4); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
-    msg.mProtocolIdentifier = r.value();
+    r = br.readField(1); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
 
-    size_t dataLen = 0;
-    {
-        auto lenR = br.readField(8); if (!lenR) return Expected<L3ApplicationInformation>::error(lenR.error());
-        dataLen = lenR.value();
-    }
-    msg.mData.resize(dataLen * 8);
-    for (size_t i = 0; i < dataLen; ++i) {
+    while (br.hasMore()) {
         r = br.readField(8); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
         uint8_t byte = static_cast<uint8_t>(r.value());
         for (int bit = 7; bit >= 0; --bit) {
-            size_t idx = (i * 8) + (7 - bit);
-            if (idx < msg.mData.size()) {
-                msg.mData[idx] = (byte >> bit) & 1;
-            }
+            msg.mData.push_back((byte >> bit) & 1);
         }
     }
 
@@ -884,14 +875,13 @@ Expected<L3ApplicationInformation> L3ApplicationInformation::parse(BitReader& br
 }
 
 void L3ApplicationInformation::write(BitWriter& bw) const {
-    bw.writeField(0, 1);
+    bw.writeField(mProtocolIdentifier, 4);
     bw.writeField(mCR, 1);
     bw.writeField(mFirstSegment, 1);
     bw.writeField(mLastSegment, 1);
-    bw.writeField(mProtocolIdentifier, 4);
+    bw.writeField(0, 1);
 
     size_t dataLen = (mData.size() + 7) / 8;
-    bw.writeField(static_cast<uint32_t>(dataLen), 8);
     for (size_t i = 0; i < dataLen; ++i) {
         uint8_t byte = 0;
         for (int bit = 0; bit < 8; ++bit) {

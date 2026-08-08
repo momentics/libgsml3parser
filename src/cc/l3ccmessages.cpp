@@ -969,6 +969,9 @@ void L3CCStatus::text(std::ostream& os) const {
 
 Expected<L3StartDTMF> L3StartDTMF::parse(BitReader& br) {
     L3StartDTMF msg;
+    // KeypadFacility TV (IEI=0x2c)
+    auto ieiRes = detail::readIEI(br);
+    if (!ieiRes) return Expected<L3StartDTMF>::error(ieiRes.error());
     auto r = br.readField(8);
     if (!r) return Expected<L3StartDTMF>::error(r.error());
     msg.mKey = static_cast<char>(r.value());
@@ -976,6 +979,7 @@ Expected<L3StartDTMF> L3StartDTMF::parse(BitReader& br) {
 }
 
 void L3StartDTMF::write(BitWriter& bw) const {
+    bw.writeField(0x2c, 8);
     bw.writeField(static_cast<uint32_t>(static_cast<unsigned char>(mKey)), 8);
 }
 
@@ -1090,21 +1094,11 @@ void L3HoldReject::text(std::ostream& os) const {
 
 // ── L3Progress ─────────────────────────────────────────────────────────
 
-Expected<L3Progress> L3Progress::parse(BitReader& br) {
-    L3Progress msg;
-    // ProgressIndicator LV (no IEI)
-    auto lenRes = detail::readLength(br);
-    if (!lenRes) return Expected<L3Progress>::error(lenRes.error());
-    auto p = L3ProgressIndicator::parse(br);
-    if (!p) return Expected<L3Progress>::error(p.error());
-    msg.mProgress = std::move(p.value());
-    return Expected<L3Progress>::hold(std::move(msg));
+Expected<L3Progress> L3Progress::parse(BitReader&) {
+    return Expected<L3Progress>::hold(L3Progress());
 }
 
-void L3Progress::write(BitWriter& bw) const {
-    bw.writeField(L3ProgressIndicator::lengthV(), 8);
-    mProgress.write(bw);
-}
+void L3Progress::write(BitWriter&) const {}
 
 void L3Progress::text(std::ostream& os) const {
     os << "Progress: TI=" << mTI;

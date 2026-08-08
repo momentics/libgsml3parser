@@ -260,7 +260,7 @@ private:
 public:
     static constexpr int MTI = 0x31;
     MMRejectCause cause() const { return mCause; }
-    size_t bodyLength() const { return 3; }
+    size_t bodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3MMStatus> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;

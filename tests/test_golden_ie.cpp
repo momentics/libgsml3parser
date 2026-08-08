@@ -620,8 +620,8 @@ TEST(GoldenIE, CipheringModeSetting_Encoding) {
     cms.write(writer);
     // GSM 24.008 10.5.2.9: cipheringModeSetting is 4 bits: sC(1)|algorithmIdentifier(3)
     // ciphering=true -> sC=1, algorithm=3(A5/3) -> algorithmIdentifier=011
-    // 4-bit value = 0b1_011 = 0x0B. Placed in low nibble of the octet (spare(4)=0).
-    EXPECT_EQ(buf[0] & 0x0F, 0x0B);
+    // 4-bit value = 0b1_011 = 0x0B. Written MSB-first starting at bit position 0 (high nibble).
+    EXPECT_EQ((buf[0] >> 4) & 0x0F, 0x0B);
 }
 
 // =====================================================================

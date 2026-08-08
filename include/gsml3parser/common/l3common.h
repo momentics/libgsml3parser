@@ -316,11 +316,12 @@ class L3ChannelDescription {
     uint16_t mARFCN{};
     uint8_t mMAIO{};
     uint8_t mHSN{};
+    bool mInitialized{false};
 public:
     L3ChannelDescription() = default;
     L3ChannelDescription(TypeAndOffset tao, unsigned tn, unsigned tsc, unsigned arfcn);
 
-    bool initialized() const { return mTypeAndOffset != TDMA_MISC; }
+    bool initialized() const { return mInitialized; }
     uint8_t typeAndOffset() const { return mTypeAndOffset; }
     uint8_t tn() const { return mTN; }
     uint8_t tsc() const { return mTSC; }
@@ -377,11 +378,12 @@ class L3AdditionalChannelDescription {
     uint16_t mARFCN{};
     uint8_t mMAIO{};
     uint8_t mHSN{};
+    bool mInitialized{false};
 public:
     L3AdditionalChannelDescription() = default;
     L3AdditionalChannelDescription(TypeAndOffset tao, unsigned tn, unsigned tsc, unsigned arfcn);
 
-    bool initialized() const { return mTypeAndOffset != TDMA_MISC; }
+    bool initialized() const { return mInitialized; }
     uint8_t typeAndOffset() const { return mTypeAndOffset; }
     uint8_t tn() const { return mTN; }
     uint8_t tsc() const { return mTSC; }

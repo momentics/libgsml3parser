@@ -339,7 +339,7 @@ public:
 
     [[nodiscard]] static Expected<L3Disconnect> parse(BitReader& br);
     void write(BitWriter& bw) const;
-    size_t bodyLength() const { return 2; }
+    size_t bodyLength() const { return 4; }
     void text(std::ostream& os) const;
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
@@ -481,7 +481,7 @@ public:
 
     [[nodiscard]] static Expected<L3CCStatus> parse(BitReader& br);
     void write(BitWriter& bw) const;
-    size_t bodyLength() const { return 3; }
+    size_t bodyLength() const { return 5; }
     void text(std::ostream& os) const;
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
@@ -506,7 +506,7 @@ public:
 
     [[nodiscard]] static Expected<L3StartDTMF> parse(BitReader& br);
     void write(BitWriter& bw) const;
-    size_t bodyLength() const { return 1; }
+    size_t bodyLength() const { return 2; }
     void text(std::ostream& os) const;
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
@@ -661,9 +661,9 @@ public:
 
     const L3ProgressIndicator& progress() const { return mProgress; }
 
-    [[nodiscard]] static Expected<L3Progress> parse(BitReader& br);
-    void write(BitWriter& bw) const;
-    size_t bodyLength() const { return 2; }
+    [[nodiscard]] static Expected<L3Progress> parse(BitReader&);
+    void write(BitWriter&) const;
+    size_t bodyLength() const { return 0; }
     void text(std::ostream& os) const;
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }

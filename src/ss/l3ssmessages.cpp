@@ -74,23 +74,28 @@ size_t L3SupServFacilityMessage::bodyLength() const {
 Expected<L3SupServFacilityMessage> L3SupServFacilityMessage::parse(BitReader& br) {
     L3SupServFacilityMessage msg;
 
+    if (!br.hasMore()) {
+        return Expected<L3SupServFacilityMessage>::hold(std::move(msg));
+    }
+
     auto lenRes = readLVLength(br);
     if (!lenRes) return Expected<L3SupServFacilityMessage>::error(lenRes.error());
     size_t len = lenRes.value();
 
-    auto facRes = L3OctetAlignedProtocolElement::parse(br, len);
-    if (!facRes) return Expected<L3SupServFacilityMessage>::error(facRes.error());
-    msg.mFacility = std::move(facRes).value();
+    if (len > 0) {
+        auto facRes = L3OctetAlignedProtocolElement::parse(br, len);
+        if (!facRes) return Expected<L3SupServFacilityMessage>::error(facRes.error());
+        msg.mFacility = std::move(facRes).value();
+    }
 
     return Expected<L3SupServFacilityMessage>::hold(std::move(msg));
 }
 
 void L3SupServFacilityMessage::write(BitWriter& bw) const {
-    bw.writeField(static_cast<uint32_t>(pd()), 4);
-    bw.writeField(mTI, 3);
-    bw.writeField(0, 1);
-    bw.writeField(static_cast<uint32_t>(MTI) << 2, 8);
-    writeLV(bw, mFacility.peData(), mFacility.lengthV());
+    bw.writeField(static_cast<uint32_t>(mFacility.lengthV()), 8);
+    if (mFacility.lengthV() > 0) {
+        bw.writeBytes(mFacility.peData(), mFacility.lengthV());
+    }
 }
 
 void L3SupServFacilityMessage::text(std::ostream& os) const {
@@ -135,15 +140,10 @@ Expected<L3SupServRegisterMessage> L3SupServRegisterMessage::parse(BitReader& br
 }
 
 void L3SupServRegisterMessage::write(BitWriter& bw) const {
-    bw.writeField(static_cast<uint32_t>(pd()), 4);
-    bw.writeField(mTI, 3);
-    bw.writeField(0, 1);
-    bw.writeField(static_cast<uint32_t>(MTI) << 2, 8);
-
     if (mFacility.mExtant) {
         writeTLV(bw, 0x1c,
-                 reinterpret_cast<const uint8_t*>(mFacility.mData.data()),
-                 mFacility.lengthV());
+                  reinterpret_cast<const uint8_t*>(mFacility.mData.data()),
+                  mFacility.lengthV());
     } else {
         bw.writeField(0x1c, 8);
     }
@@ -220,15 +220,10 @@ Expected<L3SupServReleaseCompleteMessage> L3SupServReleaseCompleteMessage::parse
 }
 
 void L3SupServReleaseCompleteMessage::write(BitWriter& bw) const {
-    bw.writeField(static_cast<uint32_t>(pd()), 4);
-    bw.writeField(mTI, 3);
-    bw.writeField(0, 1);
-    bw.writeField(static_cast<uint32_t>(MTI) << 2, 8);
-
     if (mFacility.mExtant) {
         writeTLV(bw, 0x1c,
-                 reinterpret_cast<const uint8_t*>(mFacility.mData.data()),
-                 mFacility.lengthV());
+                  reinterpret_cast<const uint8_t*>(mFacility.mData.data()),
+                  mFacility.lengthV());
     }
     if (mHaveCause) {
         bw.writeField(0x88, 8);
