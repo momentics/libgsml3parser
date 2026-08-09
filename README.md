@@ -82,7 +82,7 @@ target_link_libraries(myapp PRIVATE gsml3parser::parser)
 
 int main() {
     // Parse from hex string (std::string_view)
-    auto msg = gsml3parser::parseL3Hex("060D");
+    auto msg = gsml3parser::parseL3Hex("060D00");
 
     if (msg) {
         // Compile-time typed access — no dynamic_cast needed
@@ -109,7 +109,7 @@ int main() {
 
 int main() {
     std::span<const uint8_t> data{
-        0x05, 0x84  // CM Service Accept (MM)
+        0x50, 0x84  // CM Service Accept (MM) — PD=0x05 high nibble, NSD=1
     };
 
     auto msg = gsml3parser::parseL3(data);
@@ -128,7 +128,7 @@ int main() {
 
 int main() {
     // Parse a message, then serialize back to hex
-    auto msg = gsml3parser::parseL3Hex("060D");
+    auto msg = gsml3parser::parseL3Hex("060D00");
 
     if (msg) {
         auto hex = gsml3parser::writeL3Hex(*msg);
@@ -155,16 +155,15 @@ auto hex = gsml3parser::writeL3Hex(disconnect);
 
 ### Registering a Custom PD Handler
 
+Custom handlers for unsupported Protocol Discriminators (e.g. SMS, GPRS) can be registered via an immutable `ParserConfig` builder. The handler receives the raw L3 header and body bytes, allowing you to parse with `BitReader`:
+
 ```cpp
 #include <gsml3parser/gsml3parser.hpp>
 
 // Create immutable config with custom handler for SMS (PD=0x09)
 gsml3parser::ParserConfig cfg;
 cfg = cfg.withPDHandler(gsml3parser::L3PD::SMS,
-    [](const gsml3parser::L3Frame& frame) {
-        // Your SMS parsing logic here
-        return std::make_unique<MySMSMessage>();
-    });
+    /* PDHandler callback — receives L3Header + body span */);
 
 // Parse with the configured parser
 auto result = gsml3parser::parseL3(data, cfg);
