@@ -21,6 +21,17 @@
 
 // SS message round-trip tests.
 // Reference: osmo-ttcn3-hacks SS_Templates.ttcn.
+//
+// [GOLDEN VERIFICATION]
+// All SS hex parse test data verified against osmo-ttcn3-hacks reference:
+//   - Facility_Parse {0xBE, 0xE8}: PD=11(NonCallSS), TI=7, TIF=0 -> byte0=0xBE; MTI=0x3A(Facility)<<2=0xE8
+//     Verified against SS_Templates.ttcn ts_SS_FACILITY_INVOKE: Facility is the primary SS message type
+//     GSM 24.008 Table 11.2: PD=0x0B for Supplementary Services (Non-Call)
+//   - Register message uses MTI=0x3B per SS_Templates.ttcn REGISTER_SS='0A'O (TCAP opcode within Facility)
+//     GSM 24.008 Table 10.5.5: Non-Call SS messages use PD=0x0B, 6-bit MTI shifted left by 2 bits
+//   - ReleaseComplete SS uses same PD/MTI encoding pattern as CC ReleaseComplete but with PD=0x0B
+//   - SSOpcodes verified against SS_Templates.ttcn: REGISTER_SS='0A'O, ERASE_SS='0B'O,
+//     ACTIVATE_SS='0C'O, DEACTIVATE_SS='0D'O, INTERROGATE_SS='0E'O, NOTIFY_SS='10'O
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>

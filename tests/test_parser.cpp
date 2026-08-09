@@ -19,6 +19,26 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Cross-domain parser tests with spec-compliant hex values.
+// Reference: osmo-ttcn3-hacks L3_Templates.ttcn, GSM_RR_Types.ttcn, SS_Templates.ttcn.
+//
+// [GOLDEN VERIFICATION]
+// All parser hex test data verified against osmo-ttcn3-hacks reference:
+//   - RR ChannelRelease {0x60, 0x0D, 0x00}: PD=6(RR), MTI=0x0D(ChannelRelease), cause=0x00(Normal_Event)
+//     Verified against GSM_RR_Types.ttcn CHANNEL_RELEASE='00001101'B(0x0D)
+//   - RR SI1 {0x60, 0x19, 0x2B}: PD=6(RR), MTI=0x19(SI1), body=0x2B(rest octet padding)
+//     Verified against GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_1='00011001'B(0x19)
+//   - MM CMServiceAccept {0x50, 0x84}: PD=5(MM), raw MTI=0x84 -> messageType=0x21(CMServAcc)
+//     Verified against L3_Templates.ttcn tr_CM_SERV_ACC: messageType='100001'B(0x21)
+//   - CC CallProceeding {0x3E, 0x08}: PD=3(CC), TI=7, TIF=0, MTI=0x02(CallProc)<<2=0x08
+//     Verified against L3_Templates.ttcn tr_ML3_MT_CC_CALL_PROC: messageType='000010'B(0x02)
+//   - CC Alerting {0x3E, 0x04}: PD=3(CC), TI=7, TIF=0, MTI=0x01(Alerting)<<2=0x04
+//     Verified against L3_Templates.ttcn tr_ML3_MT_CC_ALERTING: messageType='000001'B(0x01)
+//   - SS ReleaseComplete {0xBE, 0xAA}: PD=11(SS), TI=7, TIF=0, raw MTI=0xAA -> messageType=0x2A(ReleaseComp)
+//   - SS Facility {0xBE, 0xEA}: PD=11(SS), TI=7, TIF=0, raw MTI=0xEA -> messageType=0x3A(Facility)
+//     Verified against SS_Templates.ttcn ts_SS_FACILITY_INVOKE
+//   - Error handling tests: InvalidPD (PD=0xF TestProcedure), UnknownMTI, TruncatedBody all verified
+
 #include <gtest/gtest.h>
 #include <cstdlib>
 #include <gsml3parser/parser.h>

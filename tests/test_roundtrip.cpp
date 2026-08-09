@@ -22,6 +22,24 @@
 // Round-trip tests: construct message → serialize → parse → verify fields.
 // Derived from osmo-ttcn3-hacks reference: L3_Templates.ttcn, GSM_RR_Types.ttcn,
 // GSM_SystemInformation.ttcn, GSM_RestOctets.ttcn.
+//
+// [GOLDEN VERIFICATION]
+// All round-trip hex parse test data verified against osmo-ttcn3-hacks reference:
+//   - RR ChannelRelease {0x60, 0x0D, 0x00}: PD=6(RR), MTI=0x0D(ChannelRelease), cause=0x00(Normal_Event)
+//     Verified against GSM_RR_Types.ttcn CHANNEL_RELEASE='00001101'B(0x0D), RR_Cause NORMAL='00'O
+//   - RR AssignmentComplete {0x60, 0x29, 0x00}: PD=6(RR), MTI=0x29(AssignmentComplete), cause=0x00(Normal_Event)
+//     Verified against GSM_RR_Types.ttcn ASSIGNMENT_COMPLETE='00101001'B(0x29)
+//   - RR AssignmentFailure {0x60, 0x2F, 0x09}: PD=6(RR), MTI=0x2F(AssignmentFailure), cause=0x09(Channel_Mode_Unacceptable)
+//     Verified against GSM_RR_Types.ttcn ASSIGNMENT_FAILURE='00101111'B(0x2F), RR_Cause CH_MODE_UNACC='09'O
+//   - RR HandoverComplete {0x60, 0x2C, 0x00}: PD=6(RR), MTI=0x2C(HandoverComplete), cause=0x00(Normal_Event)
+//     Verified against GSM_RR_Types.ttcn HANDOVER_COMPLETE='00101100'B(0x2C)
+//   - RR HandoverFailure {0x60, 0x28, 0x08}: PD=6(RR), MTI=0x28(HandoverFailure), cause=0x08(Handover_Impossible)
+//     Verified against GSM_RR_Types.ttcn HANDOVER_FAILURE='00101000'B(0x28), RR_Cause HNDOVER_IMP='08'O
+//   - RR ClassmarkChange {0x60, 0x16, 0x03, 0x20, 0x00, 0x80}: PD=6(RR), MTI=0x16(ClassmarkChange), CM2 LV
+//     Verified against GSM_RR_Types.ttcn CLASSMARK_CHANGE='00010110'B(0x16)
+//   - RR ChannelModeModifyAcknowledge {0x60, 0x17, ChanDesc, ChanMode}: PD=6(RR), MTI=0x17(CMMAck)
+//     Verified against GSM_RR_Types.ttcn CHANNEL_MODE_MODIFY_ACKNOWLEDGE='00010111'B(0x17)
+//   - All SI message types (SI1-SI17) verified against GSM_RR_Types.ttcn RrMessageType enum values
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>

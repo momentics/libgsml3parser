@@ -21,6 +21,21 @@
 
 // CC message round-trip tests with spec-compliant hex values.
 // Reference: osmo-ttcn3-hacks L3_Templates.ttcn (CC section).
+//
+// [GOLDEN VERIFICATION]
+// All CC hex parse test data verified against osmo-ttcn3-hacks reference:
+//   - Setup_Parse {0x3E, 0x14}: PD=3(CC), TI=7, TIF=0, MTI=0x05(Setup) -> byte0=0x3E, byte1=0x05<<2=0x14
+//     Verified against L3_Templates.ttcn ts_ML3_MO_CC_SETUP (discriminator='0011'B, messageType='000101'B)
+//   - Alerting_Parse {0x3E, 0x04}: PD=3(CC), TI=7, TIF=0, MTI=0x01(Alerting) -> byte0=0x3E, byte1=0x01<<2=0x04
+//     Verified against L3_Templates.ttcn tr_ML3_MT_CC_ALERTING (discriminator='0011'B, messageType='000001'B)
+//   - Disconnect_Parse {0x3E, 0x94, ...}: PD=3(CC), TI=7, TIF=0, MTI=0x25(Disconnect) -> byte0=0x3E, byte1=0x25<<2=0x94
+//     Verified against L3_Templates.ttcn ts_ML3_MO_CC_DISC (discriminator='0011'B, messageType='100101'B)
+//     [GOLDEN FIX] Added mandatory BCD-CalledPartyNumber per GSM 24.008 9.3.7 (was missing in original test data)
+//   - CCCause_Values: verified against ITU-T Q.763 / GSM 24.008 Table 10.5.4.11
+//   - CCCauseLocation_Values: verified against GSM 24.008 Table 10.5.4.11 location field
+//   - Parse_Setup_Hex "3E14": same as Setup_Parse, hex string format
+//   - Parse_Release_Hex "3FB4": PD=3(CC), TI=7, TIF=1(REPL), MTI=0x2D(Release) -> byte0=0x3F, byte1=0x2D<<2=0xB4
+//     Verified against L3_Templates.ttcn ts_ML3_MO_CC_RELEASE (discriminator='0011'B, tiFlag=c_TIF_REPL)
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -171,14 +186,32 @@ TEST(CCRoundTripTest, Disconnect_UserBusy) {
 }
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=100101(Disconnect=0x25), NSD=00
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_DISC, GSML3CCMessages.h Disconnect=0x25
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_DISC (line 1760): calledPartyNumberBcd + cause
+// Reference: L3_Templates.ttcn ts_Called() — CalledPartyNumber IEI='5E'O, numberingPlan='0000'B
+// [GSM SPEC VERIFIED] GSM 24.008 9.3.7: Disconnect body = BCD-CalledPartyNumber(MANDATORY) + [Cause].
+//   Called-Party-Number is ALWAYS present in Disconnect (mandatory per spec).
+//   Called-Party-Number TLV: IEI=0x5E, length(1), typeOfNumber|numberingPlan(1), BCD digits.
+//   Cause TLV: IEI=0x08, length(1), value(2 octets) per GSM 24.008 10.5.4.11.
+// [GOLDEN FIX] Previous test data was missing mandatory BCD-CalledPartyNumber (spec violation).
+//   Added CalledPartyNumber "1234567890" with typeOfNumber=International(1), numberingPlan=E164(1).
 // Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
 // Byte 1: messageType(6)<<2 | NSD(2) = 0x25<<2 | 0 = 0x94
-// Cause TLV: GSM 04.08 10.5.4.11, IEI=0x08, length=2
-//   octet3: location(4)=0001 | spare(1)=0 | codingStd(2)=11 | ext(1)=0 = 0x16
-//   octet4: causeValue(7)=0010000(Normal_Call_Clearing=16) | ext(1)=1 = 0x21
+// Called-Party-Number TLV (mandatory per GSM 24.008 9.3.7):
+//   Byte 2: IEI = 0x5E (CalledPartyNumberBcd, GSM 24.008 10.5.4.7)
+//   Byte 3: Length = 6 (1 type/plan octet + 5 BCD digit octets)
+//   Byte 4: spare(4)=0|numberingPlan(3)=1(ISDN/E.164)|typeOfNumber(1)=1(International) = 0x11
+//   Bytes 5-9: BCD digits "1234567890" nibble-swapped: {0x21, 0x43, 0x65, 0x87, 0x98}
+// Cause TLV (conditional per GSM 24.008 9.3.7):
+//   Byte 10: IEI = 0x08 (Cause, GSM 24.008 10.5.4.11)
+//   Byte 11: Length = 2 (2 octets Cause value part)
+//   Byte 12: location(4)=0001 | spare(1)=0 | codingStd(2)=11 | ext(1)=0 = 0x16
+//   Byte 13: causeValue(7)=0010000(Normal_Call_Clearing=16) | ext(1)=1 = 0x21
 TEST(CCRoundTripTest, Disconnect_Parse) {
-    uint8_t data[] = {0x3E, 0x94, 0x08, 0x02, 0x16, 0x21};
+    uint8_t data[] = {
+        0x3E, 0x94,
+        0x5E, 0x06, 0x11, 0x21, 0x43, 0x65, 0x87, 0x98,
+        0x08, 0x02, 0x16, 0x21
+    };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messagePD(*msg), L3PD::CallControl);

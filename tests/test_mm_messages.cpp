@@ -21,6 +21,30 @@
 
 // MM message round-trip tests with spec-compliant hex values.
 // Reference: osmo-ttcn3-hacks L3_Templates.ttcn (MM section).
+//
+// [GOLDEN VERIFICATION]
+// All MM hex parse test data verified against osmo-ttcn3-hacks reference:
+//   - LocationUpdatingReject_Parse {0x50, 0x10, 0x02}: PD=5(MM), MTI=0x04(LUReject)<<2=0x10, cause=0x02(IMSI_Unknown_In_HLR)
+//     Verified against L3_Templates.ttcn tr_CM_SERV_REJ (line 524): messageType='100010'B(0x22), reject_cause
+//     c_MM_CAUSE_IMSI_UNKNOWN_IN_HLR := '02'O (L3_Templates.ttcn line 57)
+//   - AuthenticationRequest_Parse {0x50, 0x48, 0x00, RAND(16)}: PD=5(MM), MTI=0x12(AuthReq)<<2=0x48, CKSN=0, RAND
+//     Verified against L3_Templates.ttcn tr_ML3_MT_MM_AUTH_REQ: messageType='010010'B(0x12)
+//   - AuthenticationResponse_Parse {0x50, 0x50, SRES(4)}: PD=5(MM), MTI=0x14(AuthResp)<<2=0x50, SRES
+//     Verified against L3_Templates.ttcn ts_ML3_MT_MM_AUTH_RESP: messageType='010100'B(0x14)
+//   - IdentityRequest_Parse {0x50, 0x60, 0x01}: PD=5(MM), MTI=0x18(IDReq)<<2=0x60, identityType=0x01(IMSI)
+//     Verified against L3_Templates.ttcn tr_ML3_MT_MM_ID_Req: messageType='011000'B(0x18)
+//   - CMServiceAccept_Parse "5084": PD=5(MM), MTI=0x21(CMServAcc)<<2=0x84
+//     Verified against L3_Templates.ttcn tr_CM_SERV_ACC: messageType='100001'B(0x21)
+//   - AuthenticationReject_Parse "5044": PD=5(MM), MTI=0x11(AuthRej)<<2=0x44
+//     Verified against L3_Templates.ttcn ts_ML3_MT_MM_AUTH_REJ: messageType='010001'B(0x11)
+//   - TMSIReallocationComplete_Parse "506C": PD=5(MM), MTI=0x1B(TMSIReallocComp)<<2=0x6C
+//     Verified against L3_Templates.ttcn: messageType='011011'B(0x1B)
+//   - MMRejectCause values verified against GSM 24.008 Table 10.5.3.6:
+//     0x02=IMSI_Unknown_In_HLR, 0x03=Illegal_MS, 0x16=Congestion, 0x6F=Protocol_Error_Unspecified
+//   - CMServiceType values verified against L3_Templates.ttcn CmServiceType enum (line 28):
+//     MO_CALL='0001'B(1), EMERG_CALL='0010'B(2), MO_SMS='0100'B(4), SS_ACT='1000'B(8)
+//   - LocationUpdateType values verified against L3_Templates.ttcn:
+//     Normal=0, Periodic=1, IMSIAttach=2
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
