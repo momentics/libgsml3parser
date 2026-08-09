@@ -19,18 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#include <gsml3parser/parser.h>
-#include <gsml3parser/context.h>
-#include <gsml3parser/arena.h>
-#include <gsml3parser/bitvector.h>
-#include <gsml3parser/rr/l3rrmessages.h>
-#include <gsml3parser/mm/l3mmmessages.h>
-#include <gsml3parser/cc/l3ccmessages.h>
-#include <gsml3parser/ss/l3ssmessages.h>
+#include <gsml3parser/gsml3parser.hpp>
 #include <fstream>
 #include <iostream>
 #include <sstream>
-#include <span>
+#include <string>
+#include <string_view>
 #include <vector>
 
 using namespace gsml3parser;
@@ -45,35 +39,31 @@ std::string readFileAsString(std::string_view path) {
     return ss.str();
 }
 
-void printMsgDetails(const L3Message& msg) {
-    if (auto* rr = dynamic_cast<const L3RRMessage*>(&msg)) {
-        std::cout << "  PD: RadioResource\n";
-        std::cout << "  MTI: " << L3RRMessage::name(
-            static_cast<L3RRMessage::MessageType>(rr->mti())) << "\n";
-    } else if (auto* mm = dynamic_cast<const L3MMMessage*>(&msg)) {
-        std::cout << "  PD: MobilityManagement\n";
-    } else if (auto* cc = dynamic_cast<const L3CCMessage*>(&msg)) {
-        std::cout << "  PD: CallControl\n";
-        std::cout << "  TI: " << cc->ti() << "\n";
-    } else if (auto* ss = dynamic_cast<const L3SupServMessage*>(&msg)) {
-        std::cout << "  PD: SupplementaryServices\n";
-        std::cout << "  TI: " << ss->ti() << "\n";
-    }
+void printMsgDetails(const ParsedMessage& msg) {
+    std::cout << "  PD: " << static_cast<int>(messagePD(msg)) << "\n";
+    std::cout << "  MTI: 0x" << std::hex << messageMTI(msg) << std::dec << "\n";
+    std::cout << "  Name: " << messageName(msg) << "\n";
 }
 
-// Demo: use Arena for batch BitVector allocation
-void demoArenaBatch(const std::vector<std::string>& hexFrames) {
-    Arena arena(16384);
-    size_t totalParsed = 0;
-
+// Demo: parse multiple hex frames and display their types
+void demoBatchParse(const std::vector<std::string>& hexFrames) {
     for (const auto& hex : hexFrames) {
-        arena.reset();
-        BitVector bv(arena, hex.size() * 4);
-        ++totalParsed;
-    }
+        auto result = parseL3Hex(hex);
+        if (result) {
+            const auto& msg = *result;
+            std::cout << "[OK] " << messageName(msg)
+                      << " (PD=" << static_cast<int>(messagePD(msg))
+                      << ", MTI=0x" << std::hex << messageMTI(msg) << std::dec << ")\n";
 
-    std::cout << "[Arena] Processed " << totalParsed
-              << " frames, arena used: " << arena.used() << " bytes\n";
+            // Round-trip: serialize back to hex and compare
+            auto reHex = writeL3Hex(msg);
+            if (reHex) {
+                std::cout << "    Round-trip: " << *reHex << "\n";
+            }
+        } else {
+            std::cout << "[FAIL] " << result.error().message << "\n";
+        }
+    }
 }
 
 } // anonymous namespace
@@ -93,25 +83,42 @@ int main(int argc, char* argv[]) {
         content = std::string{input};
     }
 
-    // Parse with explicit ParserContext
-    ParserContext ctx;
-    auto msg = parseL3Hex(content, ctx);
+    // Parse using the new Expected<ParsedMessage> API
+    auto result = parseL3Hex(content);
 
-    if (msg) {
-        std::cout << msg->text() << "\n";
-        printMsgDetails(**msg);
+    if (result) {
+        const auto& msg = *result;
+
+        // Typed access via tryGet — no dynamic_cast needed
+        if (auto* cr = tryGet<L3ChannelRelease>(msg)) {
+            std::cout << "Channel Release detected\n";
+        } else if (auto* paging = tryGet<L3PagingRequestType1>(msg)) {
+            std::cout << "Paging Request Type 1 detected\n";
+        } else if (auto* setup = tryGet<L3Setup>(msg)) {
+            std::cout << "CC Setup detected\n";
+        }
+
+        printMsgDetails(msg);
+
+        // Serialize back to hex for round-trip verification
+        auto hexOut = writeL3Hex(msg);
+        if (hexOut) {
+            std::cout << "Serialized: " << *hexOut << "\n";
+        }
     } else {
-        std::cerr << "Failed to parse: " << content << "\n";
+        std::cerr << "Failed to parse: " << result.error().message << "\n";
         return 1;
     }
 
-    // Demo Arena batch parsing with multiple frames
+    // Demo batch parsing with multiple example frames
+    std::cout << "\n--- Batch Parse Demo ---\n";
     std::vector<std::string> batch{
-        "06270460001",
-        "05080460001",
+        "600D00",            // Channel Release (RR)
+        "5084",              // CM Service Accept (MM)
+        "3E9408021621",      // CC Disconnect (CC, TI=7)
         content
     };
-    demoArenaBatch(batch);
+    demoBatchParse(batch);
 
     return 0;
 }

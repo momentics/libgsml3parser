@@ -70,6 +70,38 @@ struct ParseError {
         }
     }
 
+    // Copy constructor: redirect string_view to this object's inline buffer
+    // if the source was using its own inline storage.
+    constexpr ParseError(const ParseError& other)
+        : code(other.code), bitPosition(other.bitPosition),
+          message(other.message), mInline(other.mInline), mInlineLen(other.mInlineLen)
+    {
+        if (other.message.data() == other.mInline.data()) {
+            message = std::string_view{mInline.data(), mInlineLen};
+        }
+    }
+
+    // Copy assignment: same logic as copy constructor.
+    constexpr ParseError& operator=(const ParseError& other)
+    {
+        if (this != &other) {
+            code = other.code;
+            bitPosition = other.bitPosition;
+            mInline = other.mInline;
+            mInlineLen = other.mInlineLen;
+            if (other.message.data() == other.mInline.data()) {
+                message = std::string_view{mInline.data(), mInlineLen};
+            } else {
+                message = other.message;
+            }
+        }
+        return *this;
+    }
+
+    // Move constructor and assignment are fine (string_view just copies pointers).
+    constexpr ParseError(ParseError&&) = default;
+    constexpr ParseError& operator=(ParseError&&) = default;
+
     [[nodiscard]] constexpr bool failed() const noexcept {
         return code != Code::Ok;
     }

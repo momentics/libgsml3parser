@@ -24,17 +24,11 @@ set(CORE_SOURCES
     src/arena.cpp
     src/bitreader.cpp
     src/bitwriter.cpp
-    src/bitvector.cpp
-    src/context.cpp
     src/gsm_common.cpp
-    src/l3frame.cpp
     src/l3header.cpp
-    src/l3message.cpp
     src/common/l3common.cpp
     src/enums.cpp
-    src/logger.cpp
     src/parser.cpp
-    src/parser_config.cpp
     src/mm/l3mmelements.cpp
     src/cc/l3ccelements.cpp
     src/visitor.cpp
@@ -63,23 +57,16 @@ set(SS_SOURCES
 
 set(PUBLIC_HEADERS
     include/gsml3parser/arena.h
-    include/gsml3parser/bitvector.h
-    include/gsml3parser/context.h
-    include/gsml3parser/l3frame.h
-    include/gsml3parser/l3header.h
-    include/gsml3parser/l3message.h
-    include/gsml3parser/types.h
-    include/gsml3parser/enums.h
     include/gsml3parser/expected.h
     include/gsml3parser/bitreader.h
     include/gsml3parser/bitwriter.h
-    include/gsml3parser/parser_config.h
-
-    include/gsml3parser/gsm_common.h
-    include/gsml3parser/logger.h
-    include/gsml3parser/parser.h
-    include/gsml3parser/result.h
+    include/gsml3parser/types.h
+    include/gsml3parser/enums.h
     include/gsml3parser/protocol_types.h
+    include/gsml3parser/gsm_common.h
+    include/gsml3parser/parser_config.h
+    include/gsml3parser/l3header.h
+    include/gsml3parser/parser.h
     include/gsml3parser/common/l3common.h
     include/gsml3parser/rr/l3rrmessages.h
     include/gsml3parser/mm/l3mmelements.h
@@ -118,6 +105,12 @@ target_compile_features(gsml3parser PUBLIC cxx_std_20)
 target_compile_definitions(gsml3parser PRIVATE
     GSML3PARSER_EXPORTS
 )
+
+if(MSVC)
+    target_compile_options(gsml3parser PRIVATE /W4 /WX-)
+else()
+    target_compile_options(gsml3parser PRIVATE -Wall -Wextra -Wpedantic)
+endif()
 
 # ── Install ───────────────────────────────────────────────────────────
 
