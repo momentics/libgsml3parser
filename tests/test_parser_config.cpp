@@ -1,6 +1,5 @@
 #include <gtest/gtest.h>
 #include "gsml3parser/parser_config.h"
-#include "gsml3parser/l3message.h"
 
 using namespace gsml3parser;
 

@@ -27,11 +27,18 @@
 #include <memory>
 
 #include "types.h"
+#include "l3header.h"
 
 namespace gsml3parser {
 
-class L3Frame;
-class L3Message;
+/** Base class for all L3 messages. */
+class L3Message {};
+
+/** Raw L3 frame: header + payload bytes. */
+struct L3Frame {
+    L3Header header;
+    std::span<const uint8_t> data;
+};
 
 using PDHandler = std::function<std::unique_ptr<L3Message>(const L3Frame&)>;
 
