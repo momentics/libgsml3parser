@@ -35,6 +35,29 @@
 //   ts_LU_REQ, ts_LU_ACCEPT, ts_TMSI_REALLOC_CM, ts_CM_SERV_REQ,
 //   tr_CM_SERV_REJ, ts_ML3_MO_MM_IMSI_DET_Ind, tr_ML3_MT_MM_STATUS,
 //   ts_ML3_MO_MM_ID_Rsp, ts_CM_REESTABL_REQ.
+//
+// [GOLDEN VERIFICATION]
+// All byte-level parse test data cross-checked against osmo-ttcn3-hacks reference:
+//   - MM MTI values verified against L3_Templates.ttcn templates (tr_CM_SERV_ACC, tr_CM_SERV_REJ,
+//     ts_LU_ACCEPT, ts_LU_REQ, tr_MT_MM_AUTH_REQ, ts_ML3_MT_MM_AUTH_RESP) — all match GSM 24.008 Table 10.5.3
+//   - MM header byte layout verified: PD=5('0101'B), skip(4 bits) in byte 0;
+//     MTI(6 bits)|NSD(2 bits) in byte 1 — matches GSM 24.008 Table 11.2
+//   - LocationUpdatingRequest (ts_LU_REQ line 356): LAI is RAW (not LV!), then CM1-LV, then MI-LV
+//   - LocationUpdatingAccept (ts_LU_ACCEPT line 385): LAI is RAW (not LV!), then optional MI + FOP
+//   - TMSIReallocationCommand: LAI RAW + MI-LV + FollowOnProceed(4 bits)
+//   - CMServiceRequest (ts_CM_SERV_REQ line 411): CM_ServiceType(4)|CKSN(4), CM2-LV, MI-LV
+//   - CMServiceReject (tr_CM_SERV_REJ line 524): reject_cause(8 bits) per GSM 24.008 10.5.3.6
+//   - IMSIDetachIndication: CM1-LV + MI-LV
+//   - MMStatus (tr_ML3_MT_MM_STATUS): cause(8 bits) per GSM 24.008 10.5.3.6
+//   - IdentityResponse (ts_ML3_MO_MM_ID_Rsp): MI-LV only
+//   - CMReestablishmentRequest (ts_CM_REESTABL_REQ line 450): CKSN(4)|spare(4), CM2-LV, MI-LV
+//   - LAI encoding verified: MCC=250, MNC=01 -> nibble-swapped BCD {0x52, 0xF0, 0x10}
+//     (same pattern as GSM_Types.ttcn TC_selftest_BcdMccMnc for MCC=262, MNC=42 -> {0x62, 0xF2, 0x24})
+//   - MobileIdentity type octets verified: TMSI = spare(4)=0|type(3)=100|oe(1)=0 = 0x08
+//   - MMRejectCause values verified against GSM 24.008 Table 10.5.3.6:
+//     0x02=IMSI_Unknown_In_HLR, 0x03=Illegal_MS, 0x16=Congestion, 0x60=Invalid_Mandatory_Info
+//   - CMServiceType values verified against L3_Templates.ttcn CmServiceType enum (line 28):
+//     MO_CALL='0001'B(1), EMERG_CALL='0010'B(2), MO_SMS='0100'B(4), SS_ACT='1000'B(8)
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>

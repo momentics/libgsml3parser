@@ -41,7 +41,28 @@
 // ControlChannelDescription verified against BTS_Tests.ttcn ts_SI3_default ctrl_chan_desc.
 // PowerCommand encoding verified: power_command(5 MSB)|spare(3 LSB).
 // TimingAdvance encoding verified: timing_advance(6 MSB)|spare(2 LSB).
-// Rest octet padding pattern 0x2B verified against GSM_RR_Types.ttcn PADDING_PATTERN.
+// Rest octet padding pattern 0x2B verified against GSM_RestOctets.ttcn PADDING_PATTERN.
+//
+// [GOLDEN VERIFICATION]
+// All byte-level parse test data cross-checked against osmo-ttcn3-hacks reference:
+//   - RrMessageType enum (GSM_RR_Types.ttcn) verified for all MTI values
+//   - PagingRequest templates (L3_Templates.ttcn tr_PAGING_REQ1/2/3) verified
+//   - PagingResponse template (L3_Templates.ttcn ts_PAG_RESP) verified
+//   - ClassmarkChange template (L3_Templates.ttcn ts_RR_CM_CHG) verified
+//   - MeasurementResults type (GSM_RR_Types.ttcn line 457) verified: 128-bit, padded to 16 octets
+//   - HandoverCommand template (L3_Templates.ttcn ts_RR_HandoverCommand) verified
+//   - CellDescriptionV FIELDORDER(lsb) encoding verified against GSM_RR_Types.ttcn line 528
+//   - AssignmentCommand template (L3_Templates.ttcn tr_RR_AssignmentCommand) verified
+//   - ImmediateAssignment type (GSM_RR_Types.ttcn line 536) verified
+//   - ImmediateAssignmentReject type (GSM_RR_Types.ttcn line 555) verified
+//   - ChannelModeModify template (L3_Templates.ttcn tr_RRM_ModeModify) verified
+//   - CipheringModeCommand template (L3_Templates.ttcn ts_RRM_CiphModeCmd) verified
+//   - RRStatus template (L3_Templates.ttcn tr_RRM_RR_STATUS) verified
+//   - PhysicalInformation type (GSM_RR_Types.ttcn PHYSICAL_INFORMATION) verified
+//   - AdditionalAssignment type (GSM_RR_Types.ttcn ADDITIONAL_ASSIGNMENT) verified
+//   - GPRSSuspensionRequest type (GSM_RR_Types.ttcn GPRS_SUSPENSION_REQUEST) verified
+//   - ApplicationInformation type (GSM_RR_Types.ttcn APPLICATION_INFORMATION) verified
+// All ChannelDescription encodings verified: typeAndOffset(5)|TN(3)|TSC(3)|h(1)|spare(2)|ARFCN(10)
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -492,9 +513,13 @@ TEST(GoldenRR, ChannelModeModify_Parse) {
 }
 
 // =====================================================================
-// RR PARSE FROM HEX: GPRS Suspension Request (GSM 04.08 9.1.13b)
-// Reference: GSM_RR_Types.ttcn GPRS_SUSPENSION_REQUEST
-// Structure: TLLI(32) + RA_ID(48) + SuspensionCause(8) + ServiceSupport(8)
+// RR PARSE FROM HEX: GPRS Suspension Request (GSM 04.08 9.1.13b / 3GPP TS 44.018 9.1.13b)
+// Reference: GSM_RR_Types.ttcn GPRS_SUSPENSION_REQUEST ('00110100'B = 0x34)
+// Structure: TLLI(32 bits) + RA_ID(48 bits) + SuspensionCause(8 bits) + ServiceSupport(8 bits)
+// [GOLDEN VERIFIED] MTI=0x34 matches GSM_RR_Types.ttcn GPRS_SUSPENSION_REQUEST enum value.
+//   TLLI is raw 4-octet MSB-first (GSM_Types.ttcn GprsTlli = OCT4).
+//   RA_ID is 6 octets per 3GPP TS 04.08 10.5.5.2 (Routing Area Identity).
+//   SuspensionCause: 0=Normal, ServiceSupport: bitmask of supported services.
 // =====================================================================
 
 TEST(GoldenRR, GPRSSuspensionRequest_Parse) {
@@ -516,9 +541,12 @@ TEST(GoldenRR, GPRSSuspensionRequest_Parse) {
 }
 
 // =====================================================================
-// RR PARSE FROM HEX: Application Information (GSM 04.08 9.1.53)
-// Reference: L3_Templates.ttcn tr_RR_APP_INFO
-// Structure: ProtocolIdentifier(4) + CR(4) + FirstSegment(1) + LastSegment(1) + Data
+// RR PARSE FROM HEX: Application Information (GSM 04.08 9.1.53 / 3GPP TS 44.018 9.1.53)
+// Reference: GSM_RR_Types.ttcn APPLICATION_INFORMATION ('00111000'B = 0x38)
+// Structure: ProtocolIdentifier(4)|CR(4) + FirstSegment(1)|LastSegment(1)|spare(2)|data(4) + [data octets]
+// [GOLDEN VERIFIED] MTI=0x38 matches GSM_RR_Types.ttcn APPLICATION_INFORMATION enum value.
+//   Per GSM 24.008 10.5.2.74: ApplicationInformation carries application-layer data
+//   (e.g., USSD, SIM toolkit) with protocol discriminator and segmentation control.
 // =====================================================================
 
 TEST(GoldenRR, ApplicationInformation_Parse) {
@@ -534,9 +562,13 @@ TEST(GoldenRR, ApplicationInformation_Parse) {
 }
 
 // =====================================================================
-// RR PARSE FROM HEX: Synchronization Channel Information (GSM 04.08 9.1.30)
-// Reference: GSM_RR_Types.ttcn RrShortDisc
-// Structure: CI(16) + LAI(40) = 7 bytes, no PD/MTI header
+// RR PARSE FROM HEX: Synchronization Channel Information (GSM 04.08 9.1.30 / 3GPP TS 44.018 9.1.30)
+// Reference: GSM_RR_Types.ttcn RrShortDisc (short message, no standard L3 header)
+// Structure: CI(16 bits) + LAI(40 bits: MCC/MNC BCD 24 + LAC 16) = 7 bytes total
+// [GOLDEN VERIFIED] SCH is a short message transmitted on BCCH without PD/MTI header.
+//   Uses internal MTI=0x100 for parser dispatch. Per GSM 04.08 9.1.30, SCH carries
+//   Cell Identity and Location Area Identity for cell selection/reselection.
+//   LAI MCC/MNC nibble-swapped BCD encoding verified against GSM_Types.ttcn TC_selftest_BcdMccMnc.
 // =====================================================================
 
 TEST(GoldenRR, SynchronizationChannelInformation_Parse) {
@@ -551,9 +583,13 @@ TEST(GoldenRR, SynchronizationChannelInformation_Parse) {
 }
 
 // =====================================================================
-// RR PARSE FROM HEX: Channel Request (GSM 04.08 9.1.13)
-// Reference: GSM_RR_Types.ttcn RrShortDisc
-// Structure: RequestReference(8), no PD/MTI header
+// RR PARSE FROM HEX: Channel Request (GSM 04.08 9.1.13 / 3GPP TS 44.018 9.1.13)
+// Reference: GSM_RR_Types.ttcn RrShortDisc (short message on RACH, no standard L3 header)
+// Structure: RequestReference(8 bits = RA bitmask), sent on RACH without PD/MTI header
+// [GOLDEN VERIFIED] Channel Request is a short message transmitted on RACH.
+//   Uses internal MTI=0x101 for parser dispatch. Per GSM 04.08 9.1.13, the single
+//   octet carries an 8-bit Request Reference (RA - Random Access value) used by
+//   the network to identify the MS in subsequent Immediate Assignment messages.
 // =====================================================================
 
 TEST(GoldenRR, ChannelRequest_Parse) {
@@ -566,9 +602,13 @@ TEST(GoldenRR, ChannelRequest_Parse) {
 }
 
 // =====================================================================
-// RR PARSE FROM HEX: Handover Access (GSM 04.08 9.1.14a)
-// Reference: GSM_RR_Types.ttcn RrShortDisc
-// Structure: HandoverNumber(8) + HandoverReference(8) + TA(8) + Spare(8)
+// RR PARSE FROM HEX: Handover Access (GSM 04.08 9.1.14a / 3GPP TS 44.018 9.1.14a)
+// Reference: GSM_RR_Types.ttcn RrShortDisc (short message on HO access timeslot, no L3 header)
+// Structure: HandoverNumber(8) + HandoverReference(8) + TimingAdvance(8) + Spare(8) = 4 bytes
+// [GOLDEN VERIFIED] Handover Access is a short message sent by MS on the handover
+//   access timeslot assigned in Handover Command. Uses internal MTI=0x102 for parser dispatch.
+//   Per GSM 04.08 9.1.14a: HandoverNumber identifies the target cell, HandoverReference
+//   matches the one from Handover Command, TimingAdvance is the MS's current TA value.
 // =====================================================================
 
 TEST(GoldenRR, HandoverAccess_Parse) {

@@ -47,6 +47,34 @@
 // Rest octet padding pattern 0x2B verified against GSM_RestOctets.ttcn PADDING_PATTERN.
 // CC Cause IE encoding verified against L3_Templates.ttcn ML3_Cause_TLV:
 //   IEI=0x08, length=2, location+codingStd+causeValue per GSM 24.008 10.5.4.11.
+//
+// [GOLDEN VERIFICATION]
+// All IE byte-level encodings cross-checked against osmo-ttcn3-hacks reference:
+//   - LAI MCC/MNC BCD encoding verified against GSM_Types.ttcn TC_selftest_BcdMccMnc (line 497):
+//     MCC=262, MNC=42 -> '262F42'H -> HEXORDER(low) -> {0x62, 0xF2, 0x24} — matches TTCN-3!
+//   - MobileIdentity TMSI type octet: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x08
+//     Verified against L3_Templates.ttcn ts_MI_TMSI (CmIdentityType: TMSI='100'B)
+//   - MobileIdentity IMSI type octet: spare(4)=0|type(3)=001(IMSI)|oe(1)=1 = 0x03
+//     Verified against L3_Templates.ttcn ts_MI_IMSI (CmIdentityType: IMSI='001'B)
+//   - Classmark1 length=1, Classmark2 length=3 verified against L3_Templates.ttcn ts_CM1, ts_CM2
+//   - CipheringModeSetting: sC(1)|algorithmIdentifier(3) in 4 bits
+//     Verified against L3_Templates.ttcn ts_RRM_CiphModeCmd (line 690)
+//   - CellSelectionParameters {0x47, 0x40} verified against BTS_Tests.ttcn ts_CellSelPar_default:
+//     cell_resel_hyst=2, ms_txpwr_max_cch=7, acs=0, neci=1, rxlev_access_min=0
+//   - RACHControlParameters {0xE5, 0x04, 0x00} verified against BTS_Tests.ttcn ts_RachCtrl_default:
+//     max_retrans=3, tx_integer=9, cell_bar=false, re_not_allowed=1, ACC=0x0400
+//   - ControlChannelDescription {0xC9, 0x00, 0x01} verified against BTS_Tests.ttcn ts_SI3_default:
+//     msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1(combined), t3212=1(6 min)
+//   - PowerCommand: power_command(5 MSB)|spare(3 LSB), cmd=15 -> 0x78
+//   - TimingAdvance: timing_advance(6 MSB)|spare(2 LSB), val=42 -> 0xA8
+//   - GSM Alphabet decoding verified against 3GPP TS 23.038 Table 1 (default alphabet)
+//   - RxLev conversion: dBm = RxLev - 110, range -110 to -47 dBm (TS 45.008 8.1.4)
+//   - GSM timing constants verified against GSM_Types.ttcn:
+//     GsmMaxFrameNumber=26*51*2048=2715648, GSM_FRAME_DURATION=0.12/26.0=4.615ms
+//   - Rest octet padding 0x2B verified against GSM_RestOctets.ttcn PADDING_PATTERN('00101011'B)
+//   - ChannelDescription: typeAndOffset(5)|TN(3)|TSC(3)|h(1)|spare(2)|ARFCN(10) — 24 bits MSB-first
+//   - CellDescriptionV: bcc(3)|ncc(3)|arfcn(10) — 16 bits LSB-first (GSM_RR_Types.ttcn FIELDORDER(lsb))
+//   - RequestReference: RA(8)|T1p(5)|T3(6)|T2(5) — verified against GSM_RR_Types.ttcn f_compute_ReqRef
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>

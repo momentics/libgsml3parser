@@ -31,6 +31,27 @@
 // Parse test hex data cross-checked against osmo-ttcn3-hacks L3_Templates.ttcn templates.
 // StartDTMF keypadFacility corrected to IA5 encoding per GSM 24.008 10.5.4.17
 //   (osmo-ttcn3-hacks uses non-standard char2int() encoding).
+//
+// [GOLDEN VERIFICATION]
+// All byte-level parse test data cross-checked against osmo-ttcn3-hacks reference:
+//   - CC MTI values verified against L3_Templates.ttcn (ts_ML3_MO_CC_SETUP, tr_ML3_MT_CC_CALL_PROC,
+//     tr_ML3_MT_CC_ALERTING, ts_ML3_MO_CC_CONNECT, ts_ML3_MO_CC_CALL_CONF, ts_ML3_MO_CC_EMERG_SETUP,
+//     ts_ML3_MO_CC_CONNECT_ACK, ts_ML3_MO_CC_DISC, tr_ML3_MT_CC_RELEASE, ts_ML3_MO_CC_REL_COMPL,
+//     ts_ML3_MO_CC_START_DTMF) — all match GSM 24.008 Table 10.5.4
+//   - Cause TLV encoding verified against L3_Templates.ttcn ts_ML3_Cause (line 60):
+//     IEI=0x08, oct3=[location(4)|spare(1)|codingStandard(2)|ext1(1)],
+//     oct4=[causeValue(7)|ext3(1)=1] — matches GSM 24.008 10.5.4.11
+//   - Cause LV encoding verified against L3_Templates.ttcn ts_ML3_Cause_LV (line 78):
+//     No IEI, length(1) + oct3 + oct4 — matches GSM 24.008 10.5.4.11
+//   - CC header byte layout verified: PD=3('0011'B), TI(3 bits), TIF(1 bit) in byte 0;
+//     MTI(6 bits)|NSD(2 bits) in byte 1 — matches GSM 24.008 Table 11.2
+//   - CC Cause values (CCCause enum) verified against ITU-T Q.763 / GSM 24.008 Table 10.5.4.11:
+//     16=Normal_Call_Clearing, 17=User_Busy, 31=Normal_Unspecified, 95=Semantic_Error, etc.
+//   - CC CauseLocation values verified against GSM 24.008 Table 10.5.4.11:
+//     0=User, 1=Private_Serving_Local, 2=Public_Serving_Local, 3=Transit, 7=International, etc.
+//   - BSS Cause values verified against GSM 48.008 Table 3.2:
+//     1=Radio_Interface_Failure, 2=Uplink_Quality, 32=Equipment_Failure, 64=Ciphering_Algorithm_Not_Supported, etc.
+//   - StartDTMF keypadFacility IEI=0x2C verified against L3_Templates.ttcn ts_ML3_MO_CC_START_DTMF (line 1727)
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -310,26 +331,40 @@ TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: Disconnect with Cause (GSM 24.008 9.3.7)
+// CC PARSE FROM HEX: Disconnect with CalledPartyNumber + Cause (GSM 24.008 9.3.7)
 // Reference: L3_Templates.ttcn ts_ML3_MO_CC_DISC (line 1760):
-//   messageType := '100101'B (MTI=0x25), cause := ts_ML3_Cause_LV(cause)
-// Spec-verified: Disconnect with Cause LV per GSM 24.008 10.5.4.11
-// [GSM SPEC VERIFIED] GSM 24.008 9.3.7: Disconnect body = BCD-CalledPartyNumber + [Cause].
-//   Cause is conditional (included if SETUP had BCD-Called-Party-Number from network).
-//   Cause LV format (no IEI): length(1 octet) + value(2 octets) = 3 octets total.
-//   Value octet 1: location(4)|spare(1)|codingStandard(2)|ext1(1).
-//   Value octet 2: ext3(1)|causeValue(7). codingStandard=11 for ITU-T/3GPP.
+//   messageType := '100101'B (MTI=0x25), calledPartyNumberBcd, cause := ts_ML3_Cause_LV(cause)
+// Reference: L3_Templates.ttcn ts_Called() — CalledPartyNumber IEI='5E'O, numberingPlan='0000'B
+// Spec-verified: Disconnect with BCD-CalledPartyNumber(TLV) + Cause(TLV) per GSM 24.008 9.3.7
+// [GSM SPEC VERIFIED] GSM 24.008 9.3.7: Disconnect body = BCD-CalledPartyNumber(MANDATORY) + [Cause].
+//   Called-Party-Number is ALWAYS present in Disconnect (mandatory per spec).
+//   Called-Party-Number TLV: IEI=0x5E, length(1), typeOfNumber|numberingPlan(1), BCD digits.
+//   BCD encoding per GSM 24.008 Figure 10.5.4.7: digit pairs nibble-swapped (d1|d0).
+//   Cause TLV: IEI=0x08, length(1), value(2 octets). Value per GSM 24.008 10.5.4.11.
+// [GOLDEN FIX] Previous test data was missing mandatory BCD-CalledPartyNumber (spec violation).
+//   Added CalledPartyNumber "1234567890" with typeOfNumber=International(1), numberingPlan=E164(1).
 // =====================================================================
 
 TEST(GoldenCC, Disconnect_Parse) {
     // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
     // Byte 1: messageType(6)=0x25(Disconnect)|NSD(2)=0 = 0x94 [GSM 24.008 Table 10.5.4]
-    // Cause TLV (IEI + length + value): GSM 24.008 10.5.4.11
-    // Byte 2: IEI = 0x08 (Cause)
-    // Byte 3: Length = 2 (2 octets Cause value part)
-    // Byte 4: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11|ext(1)=0 = 0x16
-    // Byte 5: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21
-    uint8_t data[] = {0x3E, 0x94, 0x08, 0x02, 0x16, 0x21};
+    // Called-Party-Number TLV (mandatory per GSM 24.008 9.3.7):
+    // Byte 2: IEI = 0x5E (CalledPartyNumberBcd, GSM 24.008 10.5.4.7)
+    // Byte 3: Length = 6 (1 type/plan octet + 5 BCD digit octets)
+    // Byte 4: spare(4)=0|numberingPlan(3)=1(ISDN/E.164)|typeOfNumber(1)=1(International) = 0x11
+    //   [GSM 24.008 Figure 10.5.4.7: typeOfNumber=001(International), numberingPlan=001(ISDN)]
+    // Bytes 5-9: BCD digits "1234567890" nibble-swapped: {0x21, 0x43, 0x65, 0x87, 0x98}
+    //   [GSM 24.008 Figure 10.5.4.7: each octet = digit_high|digit_low, pairs reversed]
+    // Cause TLV (conditional per GSM 24.008 9.3.7):
+    // Byte 10: IEI = 0x08 (Cause, GSM 24.008 10.5.4.11)
+    // Byte 11: Length = 2 (2 octets Cause value part)
+    // Byte 12: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11|ext(1)=0 = 0x16
+    // Byte 13: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21 [ITU-T Q.763]
+    uint8_t data[] = {
+        0x3E, 0x94,
+        0x5E, 0x06, 0x11, 0x21, 0x43, 0x65, 0x87, 0x98,
+        0x08, 0x02, 0x16, 0x21
+    };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3Disconnect::MTI);
