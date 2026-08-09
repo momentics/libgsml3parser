@@ -303,6 +303,8 @@ Expected<RRM> parseL3RR(BitReader& reader, int mti) {
         case L3FrequencyRedefinition::MTI: return L3FrequencyRedefinition::parse(reader).map([](L3FrequencyRedefinition v){ return RRM(std::move(v)); });
         case L3NotificationResponse::MTI: return L3NotificationResponse::parse(reader).map([](L3NotificationResponse v){ return RRM(std::move(v)); });
         case L3VGCSUplinkGrant::MTI: return L3VGCSUplinkGrant::parse(reader).map([](L3VGCSUplinkGrant v){ return RRM(std::move(v)); });
+        case L3NotificationNCH::MTI: return L3NotificationNCH::parse(reader).map([](L3NotificationNCH v){ return RRM(std::move(v)); });
+        case L3TalkerIndication::MTI: return L3TalkerIndication::parse(reader).map([](L3TalkerIndication v){ return RRM(std::move(v)); });
         case L3UplinkRelease::MTI: return L3UplinkRelease::parse(reader).map([](L3UplinkRelease v){ return RRM(std::move(v)); });
         case L3UplinkBusy::MTI: return L3UplinkBusy::parse(reader).map([](L3UplinkBusy v){ return RRM(std::move(v)); });
         case L3PriorityUplinkRequest::MTI: return L3PriorityUplinkRequest::parse(reader).map([](L3PriorityUplinkRequest v){ return RRM(std::move(v)); });

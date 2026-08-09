@@ -1062,7 +1062,7 @@ Each message is a plain struct with:
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3NotificationNCH` | 0x104 | DL | Variable-length data (CBCH) |
+| `L3NotificationNCH` | 0x20 | DL | Variable-length data (CBCH) |
 | `L3NotificationResponse` | 0x26 | UL | Variable-length data |
 
 ### VGCS/VBS Messages
@@ -1077,7 +1077,7 @@ Each message is a plain struct with:
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3TalkerIndication` | 0x105 | DL | Empty body |
+| `L3TalkerIndication` | 0x11 | DL | Empty body |
 | `L3PriorityUplinkRequest` | 0x66 | UL | TMSI (4 octets) |
 | `L3DataIndication` | 0x67 | DL | Variable-length data |
 | `L3DataIndication2` | 0x68 | DL | Variable-length data |

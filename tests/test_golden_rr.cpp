@@ -1711,18 +1711,34 @@ TEST(GoldenRR, SystemInformationType23_RoundTrip) {
 // These use internal MTI codes and are written/read without standard L3 headers.
 // =====================================================================
 
+TEST(GoldenRR, NotificationNCH_Parse) {
+    // MTI=0x20 per GSM_RR_Types.ttcn NOTIFICATION_NCH='00100000'B
+    uint8_t data[] = {0x60, 0x20};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3NotificationNCH::MTI);
+}
+
 TEST(GoldenRR, NotificationNCH_RoundTrip) {
     ParsedMessage msg(RRM(L3NotificationNCH{}));
-    auto hex = writeL3Hex(msg);
-    ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "");
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(messageMTI(*parsed), L3NotificationNCH::MTI);
+}
+
+TEST(GoldenRR, TalkerIndication_Parse) {
+    // MTI=0x11 per GSM_RR_Types.ttcn TALKER_INDICATION='00010001'B
+    uint8_t data[] = {0x60, 0x11};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3TalkerIndication::MTI);
 }
 
 TEST(GoldenRR, TalkerIndication_RoundTrip) {
     ParsedMessage msg(RRM(L3TalkerIndication{}));
-    auto hex = writeL3Hex(msg);
-    ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "");
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(messageMTI(*parsed), L3TalkerIndication::MTI);
 }
 
 TEST(GoldenRR, SystemInformationType10_RoundTrip) {
@@ -1831,12 +1847,12 @@ TEST(GoldenRR, NewMessageTypeValues) {
     EXPECT_EQ(L3ExtendedMeasurementReport::MTI, 0x36);
     EXPECT_EQ(L3ExtendedMeasurementOrder::MTI, 0x37);
     EXPECT_EQ(L3FrequencyRedefinition::MTI, 0x14);
-    EXPECT_EQ(L3NotificationNCH::MTI, 0x104);
+    EXPECT_EQ(L3NotificationNCH::MTI, 0x20);
     EXPECT_EQ(L3NotificationResponse::MTI, 0x26);
     EXPECT_EQ(L3VGCSUplinkGrant::MTI, 0x09);
     EXPECT_EQ(L3UplinkRelease::MTI, 0x0e);
     EXPECT_EQ(L3UplinkBusy::MTI, 0x2a);
-    EXPECT_EQ(L3TalkerIndication::MTI, 0x105);
+    EXPECT_EQ(L3TalkerIndication::MTI, 0x11);
     EXPECT_EQ(L3PriorityUplinkRequest::MTI, 0x66);
     EXPECT_EQ(L3DataIndication::MTI, 0x67);
     EXPECT_EQ(L3DataIndication2::MTI, 0x68);

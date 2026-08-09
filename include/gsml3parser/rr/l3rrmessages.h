@@ -1297,12 +1297,14 @@ public:
 };
 
 // ── Notification NCH (GSM 04.08 9.1.26) ───────────────────────────────
-// Note: MTI=0x00 conflicts with SystemInformationType13; uses internal MTI for dispatch.
+// Note: MTI=0x20 per GSM_RR_Types.ttcn NOTIFICATION_NCH='00100000'B.
+// Transmitted on CBCH; if same wire bytes could be SI Type 13 (MTI=0x00),
+// disambiguation is by channel context, not L3 parser.
 
 class L3NotificationNCH {
     std::vector<uint8_t> mData;
 public:
-    static constexpr int MTI = 0x104;
+    static constexpr int MTI = 0x20;
 
     const std::vector<uint8_t>& data() const { return mData; }
 
@@ -1382,11 +1384,11 @@ public:
 };
 
 // ── Talker Indication (GSM 04.08 9.1.28c) ─────────────────────────────
-// Note: MTI=0x01 conflicts with SystemInformationType14; uses internal MTI for dispatch.
+// MTI=0x11 per GSM_RR_Types.ttcn TALKER_INDICATION='00010001'B.
 
 class L3TalkerIndication {
 public:
-    static constexpr int MTI = 0x105;
+    static constexpr int MTI = 0x11;
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
