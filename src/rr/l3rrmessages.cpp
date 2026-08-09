@@ -475,10 +475,9 @@ Expected<L3AssignmentCommand> L3AssignmentCommand::parse(BitReader& br) {
         if ((peek & 0x7F) == 0x15) {
             auto ieiR = br.readField(8); if (!ieiR) return Expected<L3AssignmentCommand>::error(ieiR.error());
             bool ext = (ieiR.value() & 0x80) != 0;
-            size_t len = 0;
             if (ext) {
                 auto lR = br.readField(8); if (!lR) return Expected<L3AssignmentCommand>::error(lR.error());
-                len = lR.value();
+                (void)lR;
             }
             auto res = L3MultiRateConfiguration::parse(br);
             if (!res) return Expected<L3AssignmentCommand>::error(res.error());
@@ -582,10 +581,9 @@ Expected<L3ClassmarkChange> L3ClassmarkChange::parse(BitReader& br) {
         if ((peek & 0x7F) == 0x20) {
             auto ieiR = br.readField(8); if (!ieiR) return Expected<L3ClassmarkChange>::error(ieiR.error());
             bool ext = (ieiR.value() & 0x80) != 0;
-            size_t len = 0;
             if (ext) {
                 auto lR = br.readField(8); if (!lR) return Expected<L3ClassmarkChange>::error(lR.error());
-                len = lR.value();
+                (void)lR;
             }
             auto res = L3MobileStationClassmark3::parse(br);
             if (!res) return Expected<L3ClassmarkChange>::error(res.error());
@@ -737,10 +735,9 @@ Expected<L3ChannelModeModify> L3ChannelModeModify::parse(BitReader& br) {
         if ((peek & 0x7F) == 0x15) {
             auto ieiR = br.readField(8); if (!ieiR) return Expected<L3ChannelModeModify>::error(ieiR.error());
             bool ext = (ieiR.value() & 0x80) != 0;
-            size_t len = 0;
             if (ext) {
                 auto lR = br.readField(8); if (!lR) return Expected<L3ChannelModeModify>::error(lR.error());
-                len = lR.value();
+                (void)lR;
             }
             auto res = L3MultiRateConfiguration::parse(br);
             if (!res) return Expected<L3ChannelModeModify>::error(res.error());
@@ -812,14 +809,14 @@ Expected<L3GPRSSuspensionRequest> L3GPRSSuspensionRequest::parse(BitReader& br) 
         msg.mRaId[i] = static_cast<uint8_t>(r.value());
     }
     r = br.readField(8); if (!r) return Expected<L3GPRSSuspensionRequest>::error(r.error());
-    msg.mSuspensionCause = r.value();
+    msg.mSuspensionCause = static_cast<uint8_t>(r.value());
 
     if (br.hasMore()) {
         unsigned peek = br.peekField(8);
         if (peek == 0x01) {
             { auto _ = br.readField(8); if (!_) return Expected<L3GPRSSuspensionRequest>::error(_.error()); }
             r = br.readField(8); if (!r) return Expected<L3GPRSSuspensionRequest>::error(r.error());
-            msg.mServiceSupport = r.value();
+            msg.mServiceSupport = static_cast<uint8_t>(r.value());
         }
     }
 

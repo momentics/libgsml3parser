@@ -90,6 +90,7 @@ public:
     L3BCDDigits() = default;
     explicit L3BCDDigits(const char* wDigits);
     L3BCDDigits(const L3BCDDigits& other);
+    L3BCDDigits& operator=(const L3BCDDigits& other);
 
     [[nodiscard]] Expected<void> parse(BitReader& br, size_t numOctets, bool international = false);
     void write(BitWriter& bw) const;

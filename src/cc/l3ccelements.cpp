@@ -141,6 +141,13 @@ L3BCDDigits::L3BCDDigits(const L3BCDDigits& other) {
     std::memcpy(mDigits, other.mDigits, sizeof(mDigits));
 }
 
+L3BCDDigits& L3BCDDigits::operator=(const L3BCDDigits& other) {
+    if (this != &other) {
+        std::memcpy(mDigits, other.mDigits, sizeof(mDigits));
+    }
+    return *this;
+}
+
 Expected<void> L3BCDDigits::parse(BitReader& br, size_t numOctets, bool international) {
     mDigits[0] = '\0';
     size_t i = 0;

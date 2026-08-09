@@ -221,7 +221,7 @@ class L3CellChannelDescription {
 public:
     L3CellChannelDescription() = default;
     L3CellChannelDescription(unsigned arfcn, unsigned bsic, unsigned spacing)
-        : mARfcn(arfcn), mBSIC(static_cast<uint8_t>(bsic)), mChannelSpacing(spacing) {}
+        : mARfcn(static_cast<uint16_t>(arfcn)), mBSIC(static_cast<uint8_t>(bsic)), mChannelSpacing(spacing) {}
 
     uint16_t arfcn() const { return mARfcn; }
     uint8_t bsic() const { return mBSIC; }
@@ -488,7 +488,7 @@ class L3CellDescription {
 public:
     L3CellDescription() = default;
     L3CellDescription(unsigned arfcn, unsigned ncc, unsigned bcc)
-        : mARFCN(arfcn), mNCC(static_cast<uint8_t>(ncc)), mBCC(static_cast<uint8_t>(bcc)) {}
+        : mARFCN(static_cast<uint16_t>(arfcn)), mNCC(static_cast<uint8_t>(ncc)), mBCC(static_cast<uint8_t>(bcc)) {}
 
     uint16_t arfcn() const { return mARFCN; }
     uint8_t ncc() const { return mNCC; }
@@ -982,7 +982,7 @@ public:
     L3RestOctets() = default;
     virtual ~L3RestOctets() = default;
     virtual size_t lengthV() const { return 0; }
-    virtual void write(BitWriter& bw) const {}
+    virtual void write(BitWriter&) const {}
     [[nodiscard]] virtual Expected<L3RestOctets> parse(BitReader& br);
     [[nodiscard]] virtual Expected<L3RestOctets> parse(BitReader& br, size_t lengthBytes);
 };

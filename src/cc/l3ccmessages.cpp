@@ -520,7 +520,7 @@ void L3CallProceeding::write(BitWriter& bw) const {
     }
     if (mHaveProgress) {
         bw.writeField(0x1e, 8);
-        bw.writeField(L3ProgressIndicator::lengthV(), 8);
+        bw.writeField(static_cast<uint32_t>(L3ProgressIndicator::lengthV()), 8);
         mProgress.write(bw);
     }
 }
@@ -573,7 +573,7 @@ void L3Alerting::write(BitWriter& bw) const {
     detail::ccCommonWrite(bw, mHaveFacility, mFacility, mHaveSSVersion, mSSVersion);
     if (mHaveProgress) {
         bw.writeField(0x1e, 8);
-        bw.writeField(L3ProgressIndicator::lengthV(), 8);
+        bw.writeField(static_cast<uint32_t>(L3ProgressIndicator::lengthV()), 8);
         mProgress.write(bw);
     }
 }
@@ -635,7 +635,7 @@ Expected<L3Connect> L3Connect::parse(BitReader& br) {
 void L3Connect::write(BitWriter& bw) const {
     if (mHaveProgress) {
         bw.writeField(0x1e, 8);
-        bw.writeField(L3ProgressIndicator::lengthV(), 8);
+        bw.writeField(static_cast<uint32_t>(L3ProgressIndicator::lengthV()), 8);
         mProgress.write(bw);
     }
 }
@@ -729,7 +729,7 @@ void L3CallConfirmed::write(BitWriter& bw) const {
     }
     if (mHaveCause) {
         bw.writeField(0x08, 8);
-        bw.writeField(L3CauseElement::lengthV(), 8);
+        bw.writeField(static_cast<uint32_t>(L3CauseElement::lengthV()), 8);
         mCause.write(bw);
     }
     if (mHaveSupportedCodecs && (mSupportedCodecs.isGsmPresent() || mSupportedCodecs.isUmtsPresent())) {
@@ -780,7 +780,7 @@ Expected<L3Disconnect> L3Disconnect::parse(BitReader& br) {
 
 void L3Disconnect::write(BitWriter& bw) const {
     bw.writeField(0x08, 8);
-    bw.writeField(L3CauseElement::lengthV(), 8);
+    bw.writeField(static_cast<uint32_t>(L3CauseElement::lengthV()), 8);
     L3CauseElement cause(mCause, mLocation);
     cause.write(bw);
 }
@@ -833,7 +833,7 @@ Expected<L3Release> L3Release::parse(BitReader& br) {
 void L3Release::write(BitWriter& bw) const {
     if (mHaveCause) {
         bw.writeField(0x08, 8);
-        bw.writeField(L3CauseElement::lengthV(), 8);
+        bw.writeField(static_cast<uint32_t>(L3CauseElement::lengthV()), 8);
         L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
         cause.write(bw);
     }
@@ -896,7 +896,7 @@ Expected<L3ReleaseComplete> L3ReleaseComplete::parse(BitReader& br) {
 void L3ReleaseComplete::write(BitWriter& bw) const {
     if (mHaveCause) {
         bw.writeField(0x08, 8);
-        bw.writeField(L3CauseElement::lengthV(), 8);
+        bw.writeField(static_cast<uint32_t>(L3CauseElement::lengthV()), 8);
         L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
         cause.write(bw);
     }
@@ -954,7 +954,7 @@ Expected<L3CCStatus> L3CCStatus::parse(BitReader& br) {
 
 void L3CCStatus::write(BitWriter& bw) const {
     bw.writeField(0x08, 8);
-    bw.writeField(L3CauseElement::lengthV(), 8);
+    bw.writeField(static_cast<uint32_t>(L3CauseElement::lengthV()), 8);
     L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
     cause.write(bw);
     L3CallState state(mCallState);
@@ -1048,7 +1048,7 @@ Expected<L3StartDTMFReject> L3StartDTMFReject::parse(BitReader& br) {
 }
 
 void L3StartDTMFReject::write(BitWriter& bw) const {
-    bw.writeField(L3CauseElement::lengthV(), 8);
+    bw.writeField(static_cast<uint32_t>(L3CauseElement::lengthV()), 8);
     L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
     cause.write(bw);
 }
@@ -1083,7 +1083,7 @@ Expected<L3HoldReject> L3HoldReject::parse(BitReader& br) {
 }
 
 void L3HoldReject::write(BitWriter& bw) const {
-    bw.writeField(L3CauseElement::lengthV(), 8);
+    bw.writeField(static_cast<uint32_t>(L3CauseElement::lengthV()), 8);
     L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
     cause.write(bw);
 }

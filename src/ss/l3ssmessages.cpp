@@ -37,7 +37,7 @@ static bool try_parseTLV(BitReader& br, unsigned iei, std::vector<uint8_t>& out)
     auto r = br.readField(8);
     if (!r) return false;
     uint8_t tag = static_cast<uint8_t>(r.value());
-    if ((tag & 0x7F) != (iei & 0x7F)) return false;
+    if ((tag & 0x7F) != static_cast<uint8_t>(iei & 0x7F)) return false;
     if (tag & 0x80) {
         auto lenR = br.readField(8);
         if (!lenR) return false;
@@ -49,13 +49,6 @@ static bool try_parseTLV(BitReader& br, unsigned iei, std::vector<uint8_t>& out)
         out.clear();
     }
     return true;
-}
-
-static void writeLV(BitWriter& bw, const uint8_t* data, size_t len) {
-    if (len > 0) {
-        bw.writeField(static_cast<uint32_t>(len), 8);
-        bw.writeBytes(data, len);
-    }
 }
 
 static Expected<size_t> readLVLength(BitReader& br) {
@@ -226,7 +219,7 @@ void L3SupServReleaseCompleteMessage::write(BitWriter& bw) const {
     }
     if (mHaveCause) {
         bw.writeField(0x88, 8);
-        bw.writeField(L3CauseElement::lengthV(), 8);
+        bw.writeField(static_cast<uint32_t>(L3CauseElement::lengthV()), 8);
         mCause.write(bw);
     }
 }

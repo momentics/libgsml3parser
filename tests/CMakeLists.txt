@@ -41,4 +41,8 @@ target_link_libraries(gsml3parser_tests
         Threads::Threads
 )
 
+if(MSVC)
+    target_compile_definitions(gsml3parser_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
+endif()
+
 add_test(NAME gsml3parser_tests COMMAND gsml3parser_tests)

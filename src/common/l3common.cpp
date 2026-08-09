@@ -1348,12 +1348,11 @@ void L3CellSelection::text(std::ostream& os) const {
 
 // ── L3RestOctets ───────────────────────────────────────────────────────
 
-Expected<L3RestOctets> L3RestOctets::parse(BitReader& br) {
+Expected<L3RestOctets> L3RestOctets::parse(BitReader&) {
     return Expected<L3RestOctets>::hold(L3RestOctets{});
 }
 
-Expected<L3RestOctets> L3RestOctets::parse(BitReader& br, size_t lengthBytes) {
-    (void)lengthBytes;
+Expected<L3RestOctets> L3RestOctets::parse(BitReader&, size_t) {
     return Expected<L3RestOctets>::hold(L3RestOctets{});
 }
 
@@ -1393,7 +1392,7 @@ Expected<L3RestOctets> L3SI3RestOctets::parse(BitReader& br) {
     return Expected<L3RestOctets>::hold(std::move(result));
 }
 
-Expected<L3RestOctets> L3SI3RestOctets::parse(BitReader& br, size_t lengthBytes) {
+Expected<L3RestOctets> L3SI3RestOctets::parse(BitReader& br, size_t) {
     return parse(br);
 }
 
@@ -1448,7 +1447,7 @@ Expected<L3RestOctets> L3SIType4RestOctets::parse(BitReader& br) {
     return Expected<L3RestOctets>::hold(std::move(result));
 }
 
-Expected<L3RestOctets> L3SIType4RestOctets::parse(BitReader& br, size_t lengthBytes) {
+Expected<L3RestOctets> L3SIType4RestOctets::parse(BitReader& br, size_t) {
     return parse(br);
 }
 
@@ -1522,7 +1521,7 @@ void L3GPRSSI13PowerControlParameters::text(std::ostream& os) const {
 // ── L3SI13RestOctets ───────────────────────────────────────────────────
 
 size_t L3SI13RestOctets::lengthV() const {
-    int bits = 1 + 3 + 4 + 1 + 1 + 8 + 1 + 3 + 2;
+    size_t bits = 1 + 3 + 4 + 1 + 1 + 8 + 1 + 3 + 2;
     bits += mCellOptions.lengthBits();
     bits += mPowerControlParameters.lengthBits();
     return (bits + 7) / 8;
@@ -1542,7 +1541,7 @@ Expected<L3RestOctets> L3SI13RestOctets::parse(BitReader& br) {
     return Expected<L3RestOctets>::hold(std::move(result));
 }
 
-Expected<L3RestOctets> L3SI13RestOctets::parse(BitReader& br, size_t lengthBytes) {
+Expected<L3RestOctets> L3SI13RestOctets::parse(BitReader& br, size_t) {
     return parse(br);
 }
 
@@ -1591,7 +1590,7 @@ void L3OctetAlignedProtocolElement::text(std::ostream& os) const {
 
 namespace detail {
 
-size_t skipLV(BitReader& br, size_t lengthBytes) {
+size_t skipLV(BitReader&, size_t lengthBytes) {
     return lengthBytes;
 }
 

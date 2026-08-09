@@ -66,10 +66,10 @@ public:
     virtual void onFrame(const ParsedMessage& msg, const ExtractedFrame& raw) = 0;
 
     /** Called when a frame fails to parse. Default: no-op. */
-    virtual void onError(const ParseError& err, std::span<const uint8_t> rawData) {}
+    virtual void onError(const ParseError&, std::span<const uint8_t>) {}
 
     /** Called periodically with updated statistics. Default: no-op. */
-    virtual void onStats(const StreamStats& stats) {}
+    virtual void onStats(const StreamStats&) {}
 };
 
 /**

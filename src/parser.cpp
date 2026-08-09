@@ -417,14 +417,14 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
             }
             // For 7-byte data with unsupported PD, try SynchronizationChannelInformation.
             if (data.size() == 7) {
-                BitReader reader(data.data(), 56);
-                auto res = L3SynchronizationChannelInformation::parse(reader);
+                BitReader rawReader(data.data(), 56);
+                auto res = L3SynchronizationChannelInformation::parse(rawReader);
                 if (res) return res.map([](L3SynchronizationChannelInformation v){ return ParsedMessage(RRM(std::move(v))); });
             }
             // For 4-byte data with unsupported PD, try HandoverAccess.
             if (data.size() == 4) {
-                BitReader reader(data.data(), 32);
-                auto res = L3HandoverAccess::parse(reader);
+                BitReader rawReader(data.data(), 32);
+                auto res = L3HandoverAccess::parse(rawReader);
                 if (res) return res.map([](L3HandoverAccess v){ return ParsedMessage(RRM(std::move(v))); });
             }
             return Expected<ParsedMessage>::error(
