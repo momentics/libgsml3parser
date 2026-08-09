@@ -29,7 +29,11 @@ namespace gsml3parser {
 // ── L3StreamProcessor ──────────────────────────────────────────────────
 
 L3StreamProcessor::L3StreamProcessor(ByteSource& source, ParserConfig cfg, FrameConfig fcfg)
-    : mSource(source), mFramer(source, std::move(fcfg)), mConfig(std::move(cfg)) {}
+    : mSource(&source), mFramer(source, std::move(fcfg)), mConfig(std::move(cfg)) {}
+
+L3StreamProcessor::L3StreamProcessor(std::unique_ptr<ByteSource> source, ParserConfig cfg, FrameConfig fcfg)
+    : mOwnedSource(std::move(source)), mSource(mOwnedSource.get()),
+      mFramer(*mOwnedSource, std::move(fcfg)), mConfig(std::move(cfg)) {}
 
 bool L3StreamProcessor::processOne(std::function<void(const ParsedMessage&)> handler) {
     auto frameResult = mFramer.nextFrame();
@@ -206,6 +210,11 @@ std::unique_ptr<L3StreamProcessor> L3StreamBuilder::build() {
         mOwnedSource = std::make_unique<RingBuffer>(mRingBufferSize);
         mSource = mOwnedSource.get();
     }
+    // Transfer ownership of the ByteSource to the processor when we own it.
+    if (mOwnedSource) {
+        return std::make_unique<L3StreamProcessor>(std::move(mOwnedSource), mConfig, mFrameConfig);
+    }
+    // External source: use reference-based constructor.
     return std::make_unique<L3StreamProcessor>(*mSource, mConfig, mFrameConfig);
 }
 

@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
+#include <utility>
 
 #include "gsml3parser/expected.h"
 #include "gsml3parser/parser_config.h"
@@ -79,13 +80,15 @@ public:
  * in StreamStats.
  */
 class L3StreamProcessor {
-    ByteSource& mSource;
+    std::unique_ptr<ByteSource> mOwnedSource;
+    ByteSource* mSource{};
     L3Framer mFramer;
     ParserConfig mConfig;
     StreamStats mStats{};
 
-public:
+ public:
     L3StreamProcessor(ByteSource& source, ParserConfig cfg = {}, FrameConfig fcfg = {});
+    L3StreamProcessor(std::unique_ptr<ByteSource> source, ParserConfig cfg = {}, FrameConfig fcfg = {});
 
     /**
      * Non-blocking: process one frame if available.

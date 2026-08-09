@@ -6,3 +6,6 @@ target_link_libraries(example_streaming PRIVATE gsml3parser)
 
 add_executable(example_multithread example_multithread.cpp)
 target_link_libraries(example_multithread PRIVATE gsml3parser)
+
+add_executable(example_benchmark example_benchmark.cpp)
+target_link_libraries(example_benchmark PRIVATE gsml3parser)

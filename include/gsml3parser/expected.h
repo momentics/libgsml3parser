@@ -98,9 +98,32 @@ struct ParseError {
         return *this;
     }
 
-    // Move constructor and assignment are fine (string_view just copies pointers).
-    constexpr ParseError(ParseError&&) = default;
-    constexpr ParseError& operator=(ParseError&&) = default;
+    // Move constructor: redirect string_view to destination inline buffer if source used SSO.
+    constexpr ParseError(ParseError&& other) noexcept
+        : code(other.code), bitPosition(other.bitPosition),
+          message(other.message), mInline(other.mInline), mInlineLen(other.mInlineLen)
+    {
+        if (other.message.data() == other.mInline.data()) {
+            message = std::string_view{mInline.data(), mInlineLen};
+        }
+    }
+
+    // Move assignment: same redirect logic.
+    constexpr ParseError& operator=(ParseError&& other) noexcept
+    {
+        if (this != &other) {
+            code = other.code;
+            bitPosition = other.bitPosition;
+            mInline = other.mInline;
+            mInlineLen = other.mInlineLen;
+            if (other.message.data() == other.mInline.data()) {
+                message = std::string_view{mInline.data(), mInlineLen};
+            } else {
+                message = other.message;
+            }
+        }
+        return *this;
+    }
 
     [[nodiscard]] constexpr bool failed() const noexcept {
         return code != Code::Ok;
