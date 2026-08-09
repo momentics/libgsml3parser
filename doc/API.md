@@ -341,7 +341,7 @@ Returns `TruncatedInput` error if fewer than 2 bytes provided. Returns `InvalidP
 Each protocol domain has a `std::variant` type that holds all message types for that domain:
 
 ```cpp
-using RRM = std::variant< /* 45 RR types */ >;
+using RRM = std::variant< /* 95 RR types */ >;
 using MMM = std::variant< /* 18 MM types */ >;
 using CCM = std::variant< /* 20 CC types */ >;
 using SSM = std::variant< /* 3 SS types */ >;
@@ -957,7 +957,7 @@ Cell parameters and handover reference for handover procedures.
 
 ## 15. Radio Resource Messages
 
-**File:** `gsml3parser/rr/l3rrmessages.h` — 45 message types in the `RRM` variant.
+**File:** `gsml3parser/rr/l3rrmessages.h` — 95 message types in the `RRM` variant.
 
 Each message is a plain struct with:
 - `parse(BitReader&)` → `Expected<Self>` (static method)
@@ -1029,6 +1029,113 @@ Each message is a plain struct with:
 | `L3ChannelModeModifyAcknowledge` | 0x11 | UL | Channel desc + mode |
 | `L3GPRSSuspensionRequest` | 0x34 | UL | TLLI, RA ID, suspension cause |
 | `L3ApplicationInformation` | 0x38 | DL/UL | RRLP encapsulation data |
+
+### Configuration Change Messages
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3ConfigurationChangeCommand` | 0x30 | DL | [ChanDesc] [PowerCmd] |
+| `L3ConfigurationChangeAcknowledge` | 0x31 | UL | Empty body |
+| `L3ConfigurationChangeReject` | 0x33 | UL | Cause |
+
+### Partial Release Messages
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3PartialRelease` | 0x0a | DL | ChannelDescription |
+| `L3PartialReleaseComplete` | 0x0f | UL | Empty body |
+
+### Extended Measurement Messages
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3ExtendedMeasurementReport` | 0x36 | UL | MeasurementResults (16 octets) |
+| `L3ExtendedMeasurementOrder` | 0x37 | DL | Variable-length data |
+
+### Frequency Redefinition
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3FrequencyRedefinition` | 0x14 | DL | CellChannelDescription + RACHControlParameters |
+
+### Notification Messages
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3NotificationNCH` | 0x104 | DL | Variable-length data (CBCH) |
+| `L3NotificationResponse` | 0x26 | UL | Variable-length data |
+
+### VGCS/VBS Messages
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3VGCSUplinkGrant` | 0x09 | DL | Empty body |
+| `L3UplinkRelease` | 0x0e | DL | Empty body |
+| `L3UplinkBusy` | 0x2a | DL | Empty body |
+
+### Data Indication Messages
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3TalkerIndication` | 0x105 | DL | Empty body |
+| `L3PriorityUplinkRequest` | 0x66 | UL | TMSI (4 octets) |
+| `L3DataIndication` | 0x67 | DL | Variable-length data |
+| `L3DataIndication2` | 0x68 | DL | Variable-length data |
+
+### DTM and Packet Messages
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3DTMAssignmentFailure` | 0x80 | UL | Cause |
+| `L3DTMReject` | 0x81 | DL | Empty body |
+| `L3DTMRequest` | 0x82 | UL | Empty body |
+| `L3PacketAssignment` | 0x83 | DL | ChannelDescription + TimingAdvance |
+| `L3DTMAssignmentCommand` | 0x84 | DL | Empty body |
+| `L3DTMInformation` | 0x85 | UL | Empty body |
+| `L3PacketInformation` | 0x86 | DL | Empty body |
+
+### Inter-RAT Classmark Change Messages
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3UTRANClassmarkChange` | 0x60 | UL | Variable-length classmark |
+| `L3CDMA2000ClassmarkChange` | 0x62 | UL | Variable-length classmark |
+| `L3IntersysToUTRANHOCommand` | 0x63 | DL | Variable-length HO data |
+| `L3IntersysToCDMA2000HOCommand` | 0x64 | DL | Variable-length HO data |
+| `L3GERANIUClassmarkChange` | 0x65 | UL | Variable-length classmark |
+
+### Additional System Information Messages
+
+| Message | MTI | Description |
+|---------|-----|-------------|
+| `L3SystemInformationType14` | 0x01 | CellIdentity + CellSelectionParameters |
+| `L3SystemInformationType15` | 0x43 | Empty body |
+| `L3SystemInformationType18` | 0x40 | RACHControl + CellChannelDescriptions |
+| `L3SystemInformationType19` | 0x41 | RACHControl + CellChannelDescriptions |
+| `L3SystemInformationType20` | 0x42 | RACHControl + CellChannelDescriptions |
+| `L3SystemInformationType13alt` | 0x44 | Empty body |
+| `L3SystemInformationType2n` | 0x45 | Empty body |
+| `L3SystemInformationType21` | 0x46 | Empty body |
+| `L3SystemInformationType22` | 0x47 | Empty body |
+| `L3SystemInformationType23` | 0x4f | Empty body |
+
+### Short Messages (FACCH, BCCH)
+
+| Message | Size | Description |
+|---------|------|-------------|
+| `L3SystemInformationType10` | 10 bytes | CI + LAI + CellOptions + CellSelectionParameters |
+| `L3SystemInformationType10bis` | 10 bytes | CI + LAI + CellOptions + CellSelectionParameters |
+| `L3SystemInformationType10ter` | 10 bytes | CI + LAI + CellOptions + CellSelectionParameters |
+| `L3NotificationFACCH` | — | FACCH notification |
+| `L3UplinkFree` | — | FACCH uplink free |
+| `L3EnhancedMeasurementRepUL` | variable | FACCH measurement report UL |
+| `L3MeasurementInfoDL` | variable | FACCH measurement info DL |
+| `L3VBSVGCSRecon` | — | VBS/VGCS reconfiguration |
+| `L3VBSVGCSRecon2` | — | VBS/VGCS reconfiguration 2 |
+| `L3VGCSAddInfo` | — | VGCS additional info |
+| `L3VGCSMSInfo` | — | VGCS SMS info |
+| `L3VGCSSNeighCellInfo` | — | VGCS neighbor cell info |
+| `L3NotifyAppData` | — | Notify application data |
 
 ---
 

@@ -84,6 +84,58 @@ RR_TRAIT(L3SystemInformationType9)
 RR_TRAIT(L3SystemInformationType13)
 RR_TRAIT(L3SystemInformationType16)
 RR_TRAIT(L3SystemInformationType17)
+RR_TRAIT(L3ConfigurationChangeCommand)
+RR_TRAIT(L3ConfigurationChangeAcknowledge)
+RR_TRAIT(L3ConfigurationChangeReject)
+RR_TRAIT(L3PartialRelease)
+RR_TRAIT(L3PartialReleaseComplete)
+RR_TRAIT(L3ExtendedMeasurementReport)
+RR_TRAIT(L3ExtendedMeasurementOrder)
+RR_TRAIT(L3FrequencyRedefinition)
+RR_TRAIT(L3NotificationNCH)
+RR_TRAIT(L3NotificationResponse)
+RR_TRAIT(L3VGCSUplinkGrant)
+RR_TRAIT(L3UplinkRelease)
+RR_TRAIT(L3UplinkBusy)
+RR_TRAIT(L3TalkerIndication)
+RR_TRAIT(L3PriorityUplinkRequest)
+RR_TRAIT(L3DataIndication)
+RR_TRAIT(L3DataIndication2)
+RR_TRAIT(L3DTMAssignmentFailure)
+RR_TRAIT(L3DTMReject)
+RR_TRAIT(L3DTMRequest)
+RR_TRAIT(L3PacketAssignment)
+RR_TRAIT(L3DTMAssignmentCommand)
+RR_TRAIT(L3DTMInformation)
+RR_TRAIT(L3PacketInformation)
+RR_TRAIT(L3UTRANClassmarkChange)
+RR_TRAIT(L3CDMA2000ClassmarkChange)
+RR_TRAIT(L3IntersysToUTRANHOCommand)
+RR_TRAIT(L3IntersysToCDMA2000HOCommand)
+RR_TRAIT(L3GERANIUClassmarkChange)
+RR_TRAIT(L3SystemInformationType14)
+RR_TRAIT(L3SystemInformationType15)
+RR_TRAIT(L3SystemInformationType18)
+RR_TRAIT(L3SystemInformationType19)
+RR_TRAIT(L3SystemInformationType20)
+RR_TRAIT(L3SystemInformationType13alt)
+RR_TRAIT(L3SystemInformationType2n)
+RR_TRAIT(L3SystemInformationType21)
+RR_TRAIT(L3SystemInformationType22)
+RR_TRAIT(L3SystemInformationType23)
+RR_TRAIT(L3SystemInformationType10)
+RR_TRAIT(L3SystemInformationType10bis)
+RR_TRAIT(L3SystemInformationType10ter)
+RR_TRAIT(L3NotificationFACCH)
+RR_TRAIT(L3UplinkFree)
+RR_TRAIT(L3EnhancedMeasurementRepUL)
+RR_TRAIT(L3MeasurementInfoDL)
+RR_TRAIT(L3VBSVGCSRecon)
+RR_TRAIT(L3VBSVGCSRecon2)
+RR_TRAIT(L3VGCSAddInfo)
+RR_TRAIT(L3VGCSMSInfo)
+RR_TRAIT(L3VGCSSNeighCellInfo)
+RR_TRAIT(L3NotifyAppData)
 #undef RR_TRAIT
 
 /* ── MM messages (18 types) ── */
@@ -241,6 +293,43 @@ Expected<RRM> parseL3RR(BitReader& reader, int mti) {
         case L3SystemInformationType13::MTI: return L3SystemInformationType13::parse(reader).map([](L3SystemInformationType13 v){ return RRM(std::move(v)); });
         case L3SystemInformationType16::MTI: return L3SystemInformationType16::parse(reader).map([](L3SystemInformationType16 v){ return RRM(std::move(v)); });
         case L3SystemInformationType17::MTI: return L3SystemInformationType17::parse(reader).map([](L3SystemInformationType17 v){ return RRM(std::move(v)); });
+        case L3ConfigurationChangeCommand::MTI: return L3ConfigurationChangeCommand::parse(reader).map([](L3ConfigurationChangeCommand v){ return RRM(std::move(v)); });
+        case L3ConfigurationChangeAcknowledge::MTI: return L3ConfigurationChangeAcknowledge::parse(reader).map([](L3ConfigurationChangeAcknowledge v){ return RRM(std::move(v)); });
+        case L3ConfigurationChangeReject::MTI: return L3ConfigurationChangeReject::parse(reader).map([](L3ConfigurationChangeReject v){ return RRM(std::move(v)); });
+        case L3PartialRelease::MTI: return L3PartialRelease::parse(reader).map([](L3PartialRelease v){ return RRM(std::move(v)); });
+        case L3PartialReleaseComplete::MTI: return L3PartialReleaseComplete::parse(reader).map([](L3PartialReleaseComplete v){ return RRM(std::move(v)); });
+        case L3ExtendedMeasurementReport::MTI: return L3ExtendedMeasurementReport::parse(reader).map([](L3ExtendedMeasurementReport v){ return RRM(std::move(v)); });
+        case L3ExtendedMeasurementOrder::MTI: return L3ExtendedMeasurementOrder::parse(reader).map([](L3ExtendedMeasurementOrder v){ return RRM(std::move(v)); });
+        case L3FrequencyRedefinition::MTI: return L3FrequencyRedefinition::parse(reader).map([](L3FrequencyRedefinition v){ return RRM(std::move(v)); });
+        case L3NotificationResponse::MTI: return L3NotificationResponse::parse(reader).map([](L3NotificationResponse v){ return RRM(std::move(v)); });
+        case L3VGCSUplinkGrant::MTI: return L3VGCSUplinkGrant::parse(reader).map([](L3VGCSUplinkGrant v){ return RRM(std::move(v)); });
+        case L3UplinkRelease::MTI: return L3UplinkRelease::parse(reader).map([](L3UplinkRelease v){ return RRM(std::move(v)); });
+        case L3UplinkBusy::MTI: return L3UplinkBusy::parse(reader).map([](L3UplinkBusy v){ return RRM(std::move(v)); });
+        case L3PriorityUplinkRequest::MTI: return L3PriorityUplinkRequest::parse(reader).map([](L3PriorityUplinkRequest v){ return RRM(std::move(v)); });
+        case L3DataIndication::MTI: return L3DataIndication::parse(reader).map([](L3DataIndication v){ return RRM(std::move(v)); });
+        case L3DataIndication2::MTI: return L3DataIndication2::parse(reader).map([](L3DataIndication2 v){ return RRM(std::move(v)); });
+        case L3DTMAssignmentFailure::MTI: return L3DTMAssignmentFailure::parse(reader).map([](L3DTMAssignmentFailure v){ return RRM(std::move(v)); });
+        case L3DTMReject::MTI: return L3DTMReject::parse(reader).map([](L3DTMReject v){ return RRM(std::move(v)); });
+        case L3DTMRequest::MTI: return L3DTMRequest::parse(reader).map([](L3DTMRequest v){ return RRM(std::move(v)); });
+        case L3PacketAssignment::MTI: return L3PacketAssignment::parse(reader).map([](L3PacketAssignment v){ return RRM(std::move(v)); });
+        case L3DTMAssignmentCommand::MTI: return L3DTMAssignmentCommand::parse(reader).map([](L3DTMAssignmentCommand v){ return RRM(std::move(v)); });
+        case L3DTMInformation::MTI: return L3DTMInformation::parse(reader).map([](L3DTMInformation v){ return RRM(std::move(v)); });
+        case L3PacketInformation::MTI: return L3PacketInformation::parse(reader).map([](L3PacketInformation v){ return RRM(std::move(v)); });
+        case L3UTRANClassmarkChange::MTI: return L3UTRANClassmarkChange::parse(reader).map([](L3UTRANClassmarkChange v){ return RRM(std::move(v)); });
+        case L3CDMA2000ClassmarkChange::MTI: return L3CDMA2000ClassmarkChange::parse(reader).map([](L3CDMA2000ClassmarkChange v){ return RRM(std::move(v)); });
+        case L3IntersysToUTRANHOCommand::MTI: return L3IntersysToUTRANHOCommand::parse(reader).map([](L3IntersysToUTRANHOCommand v){ return RRM(std::move(v)); });
+        case L3IntersysToCDMA2000HOCommand::MTI: return L3IntersysToCDMA2000HOCommand::parse(reader).map([](L3IntersysToCDMA2000HOCommand v){ return RRM(std::move(v)); });
+        case L3GERANIUClassmarkChange::MTI: return L3GERANIUClassmarkChange::parse(reader).map([](L3GERANIUClassmarkChange v){ return RRM(std::move(v)); });
+        case L3SystemInformationType14::MTI: return L3SystemInformationType14::parse(reader).map([](L3SystemInformationType14 v){ return RRM(std::move(v)); });
+        case L3SystemInformationType15::MTI: return L3SystemInformationType15::parse(reader).map([](L3SystemInformationType15 v){ return RRM(std::move(v)); });
+        case L3SystemInformationType18::MTI: return L3SystemInformationType18::parse(reader).map([](L3SystemInformationType18 v){ return RRM(std::move(v)); });
+        case L3SystemInformationType19::MTI: return L3SystemInformationType19::parse(reader).map([](L3SystemInformationType19 v){ return RRM(std::move(v)); });
+        case L3SystemInformationType20::MTI: return L3SystemInformationType20::parse(reader).map([](L3SystemInformationType20 v){ return RRM(std::move(v)); });
+        case L3SystemInformationType13alt::MTI: return L3SystemInformationType13alt::parse(reader).map([](L3SystemInformationType13alt v){ return RRM(std::move(v)); });
+        case L3SystemInformationType2n::MTI: return L3SystemInformationType2n::parse(reader).map([](L3SystemInformationType2n v){ return RRM(std::move(v)); });
+        case L3SystemInformationType21::MTI: return L3SystemInformationType21::parse(reader).map([](L3SystemInformationType21 v){ return RRM(std::move(v)); });
+        case L3SystemInformationType22::MTI: return L3SystemInformationType22::parse(reader).map([](L3SystemInformationType22 v){ return RRM(std::move(v)); });
+        case L3SystemInformationType23::MTI: return L3SystemInformationType23::parse(reader).map([](L3SystemInformationType23 v){ return RRM(std::move(v)); });
         default:
             return Expected<RRM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown RR MTI", static_cast<size_t>(mti)});
     }
@@ -468,29 +557,21 @@ Expected<ParsedMessage> parseL3Hex(std::string_view hex, const ParserConfig& cfg
 namespace detail {
 
 template<typename ConcreteMsg>
+constexpr bool is_short_message_v = MessageTraits<ConcreteMsg>::mti >= 0x100;
+
+template<typename ConcreteMsg>
 Expected<size_t> writeL3Body(const ConcreteMsg& msg, uint8_t* out, size_t maxlen) {
     L3PD pd = message_pd<ConcreteMsg>();
     int mtiVal = message_mti<ConcreteMsg>();
 
     // Short messages: no standard L3 header, body only.
-    if constexpr (std::is_same_v<ConcreteMsg, L3ChannelRequest>) {
-        if (maxlen < 1) return Expected<size_t>::error(
+    if constexpr (is_short_message_v<ConcreteMsg>) {
+        size_t bodyLen = msg.bodyLength();
+        if (bodyLen > maxlen) return Expected<size_t>::error(
             ParseError{ParseError::Code::InvalidValue, "Buffer too small"});
-        BitWriter writer(out, 8);
+        BitWriter writer(out, bodyLen * 8);
         msg.write(writer);
-        return Expected<size_t>::hold(static_cast<size_t>(1));
-    } else if constexpr (std::is_same_v<ConcreteMsg, L3HandoverAccess>) {
-        if (maxlen < 4) return Expected<size_t>::error(
-            ParseError{ParseError::Code::InvalidValue, "Buffer too small"});
-        BitWriter writer(out, 32);
-        msg.write(writer);
-        return Expected<size_t>::hold(static_cast<size_t>(4));
-    } else if constexpr (std::is_same_v<ConcreteMsg, L3SynchronizationChannelInformation>) {
-        if (maxlen < 7) return Expected<size_t>::error(
-            ParseError{ParseError::Code::InvalidValue, "Buffer too small"});
-        BitWriter writer(out, 56);
-        msg.write(writer);
-        return Expected<size_t>::hold(static_cast<size_t>(7));
+        return Expected<size_t>::hold(bodyLen);
     } else {
         // Standard messages: L3 header + body.
         unsigned ti = 0;

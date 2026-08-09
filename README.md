@@ -228,9 +228,9 @@ The library follows a layered design:
 
 ## Supported Messages
 
-### Radio Resource (PD=0x06) — 45 message types
+### Radio Resource (PD=0x06) — 95 message types
 
-Paging Request Type 1/2/3, Paging Response, System Information Type 1/2/2bis/2ter/3/4/5/5bis/5ter/6/7/8/9/13/16/17, Channel Release, Immediate Assignment/Extended/Reject, Additional Assignment, Physical Information, Handover Command/Complete/Failure, RR Status, Assignment Command/Complete/Failure, Classmark Enquiry/Change, Measurement Report, Ciphering Mode Command/Complete, Channel Mode Modify/Acknowledge, GPRS Suspension Request, Application Information, Synchronization Channel Info, Channel Request, Handover Access.
+Paging Request Type 1/2/3, Paging Response, System Information Type 1/2/2bis/2ter/3/4/5/5bis/5ter/6/7/8/9/13/13alt/14/15/16/17/18/19/20/2n/21/22/23, Channel Release, Immediate Assignment/Extended/Reject, Additional Assignment, Physical Information, Handover Command/Complete/Failure, RR Status, Assignment Command/Complete/Failure, Classmark Enquiry/Change, Measurement Report, Extended Measurement Report/Order, Ciphering Mode Command/Complete, Channel Mode Modify/Acknowledge, GPRS Suspension Request, Application Information, Synchronization Channel Info, Channel Request, Handover Access, Configuration Change Command/Acknowledge/Reject, Partial Release/Complete, Frequency Redefinition, Notification NCH/Response, VGCS Uplink Grant, Uplink Release/Busy, Talker Indication, Priority Uplink Request, Data Indication/Data Indication 2, DTM Assignment Failure/Reject/Request/Assignment Command/Information, Packet Assignment/Information, UTRAN Classmark Change, CDMA2000 Classmark Change, Intersys to UTRAN HO Command, Intersys to CDMA2000 HO Command, GERAN IU Mode Classmark Change, System Information Type 10/10bis/10ter (short), Notification FACCH, Uplink Free, Enhanced Measurement Report UL, Measurement Info DL, VBS/VGCS Recon/Recon 2, VGCS Add Info, VGCS SMS Info, VGCS Neighbor Cell Info, Notify App Data.
 
 ### Mobility Management (PD=0x05) — 18 message types
 

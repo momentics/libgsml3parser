@@ -1143,4 +1143,929 @@ public:
     void text(std::ostream& os) const;
 };
 
+// ── Configuration Change Command (GSM 04.08 9.1.4) ────────────────────
+
+class L3ConfigurationChangeCommand {
+    bool mHaveChanDesc{false};
+    L3ChannelDescription mChanDesc;
+    bool mHavePowerCmd{false};
+    L3PowerCommand mPowerCmd;
+public:
+    static constexpr int MTI = 0x30;
+
+    L3ConfigurationChangeCommand() = default;
+
+    bool hasChannelDescription() const { return mHaveChanDesc; }
+    const L3ChannelDescription& channelDescription() const { return mChanDesc; }
+    bool hasPowerCommand() const { return mHavePowerCmd; }
+    const L3PowerCommand& powerCommand() const { return mPowerCmd; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3ConfigurationChangeCommand> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Configuration Change Acknowledge (GSM 04.08 9.1.4) ────────────────
+
+class L3ConfigurationChangeAcknowledge {
+public:
+    static constexpr int MTI = 0x31;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3ConfigurationChangeAcknowledge> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Configuration Change Reject (GSM 04.08 9.1.4) ─────────────────────
+
+class L3ConfigurationChangeReject {
+    RRCause mCause{RRCause::Normal_Event};
+public:
+    static constexpr int MTI = 0x33;
+
+    L3ConfigurationChangeReject() = default;
+    explicit L3ConfigurationChangeReject(RRCause cause) : mCause(cause) {}
+
+    RRCause cause() const { return mCause; }
+
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3ConfigurationChangeReject> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Partial Release (GSM 04.08 9.1.8) ─────────────────────────────────
+
+class L3PartialRelease {
+    L3ChannelDescription mChanDesc;
+public:
+    static constexpr int MTI = 0x0a;
+
+    L3PartialRelease() = default;
+
+    const L3ChannelDescription& channelDescription() const { return mChanDesc; }
+
+    size_t bodyLength() const { return mChanDesc.lengthV(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3PartialRelease> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Partial Release Complete (GSM 04.08 9.1.8) ────────────────────────
+
+class L3PartialReleaseComplete {
+public:
+    static constexpr int MTI = 0x0f;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3PartialReleaseComplete> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Extended Measurement Report (GSM 04.08 9.1.21a) ───────────────────
+
+class L3ExtendedMeasurementReport {
+    L3MeasurementResults mMeasurementResults;
+public:
+    static constexpr int MTI = 0x36;
+
+    const L3MeasurementResults& measurementResults() const { return mMeasurementResults; }
+
+    size_t bodyLength() const { return 16; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 16; }
+    [[nodiscard]] static Expected<L3ExtendedMeasurementReport> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Extended Measurement Order (GSM 04.08 9.1.21b) ────────────────────
+
+class L3ExtendedMeasurementOrder {
+    std::vector<uint8_t> mData;
+public:
+    static constexpr int MTI = 0x37;
+
+    const std::vector<uint8_t>& data() const { return mData; }
+
+    size_t bodyLength() const { return mData.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3ExtendedMeasurementOrder> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Frequency Redefinition (GSM 04.08 9.1.13a) ────────────────────────
+
+class L3FrequencyRedefinition {
+    L3FrequencyList mCellChannelDescription;
+    L3RACHControlParameters mRACHControlParameters;
+public:
+    static constexpr int MTI = 0x14;
+
+    const L3FrequencyList& cellChannelDescription() const { return mCellChannelDescription; }
+    const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
+
+    size_t bodyLength() const { return mCellChannelDescription.lengthV() + mRACHControlParameters.lengthV(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3FrequencyRedefinition> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Notification NCH (GSM 04.08 9.1.26) ───────────────────────────────
+// Note: MTI=0x00 conflicts with SystemInformationType13; uses internal MTI for dispatch.
+
+class L3NotificationNCH {
+    std::vector<uint8_t> mData;
+public:
+    static constexpr int MTI = 0x104;
+
+    const std::vector<uint8_t>& data() const { return mData; }
+
+    size_t bodyLength() const { return mData.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3NotificationNCH> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Notification Response (GSM 04.08 9.1.27) ──────────────────────────
+
+class L3NotificationResponse {
+    std::vector<uint8_t> mData;
+public:
+    static constexpr int MTI = 0x26;
+
+    const std::vector<uint8_t>& data() const { return mData; }
+
+    size_t bodyLength() const { return mData.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3NotificationResponse> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── VGCS Uplink Grant (GSM 04.08 9.1.28) ──────────────────────────────
+// Note: MTI=0x09 conflicts with no existing RR message, but plan notes potential issues.
+
+class L3VGCSUplinkGrant {
+public:
+    static constexpr int MTI = 0x09;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3VGCSUplinkGrant> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Uplink Release (GSM 04.08 9.1.28a) ────────────────────────────────
+// Note: MTI=0x0e conflicts with CC EmergencySetup; resolved by PD context.
+
+class L3UplinkRelease {
+public:
+    static constexpr int MTI = 0x0e;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3UplinkRelease> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Uplink Busy (GSM 04.08 9.1.28b) ───────────────────────────────────
+// Note: MTI=0x2a conflicts with CC ReleaseComplete; resolved by PD context.
+
+class L3UplinkBusy {
+public:
+    static constexpr int MTI = 0x2a;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3UplinkBusy> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Talker Indication (GSM 04.08 9.1.28c) ─────────────────────────────
+// Note: MTI=0x01 conflicts with SystemInformationType14; uses internal MTI for dispatch.
+
+class L3TalkerIndication {
+public:
+    static constexpr int MTI = 0x105;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3TalkerIndication> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Priority Uplink Request (GSM 04.08 9.1.28d) ───────────────────────
+
+class L3PriorityUplinkRequest {
+    uint32_t mTMSI{0};
+public:
+    static constexpr int MTI = 0x66;
+
+    uint32_t tmsi() const { return mTMSI; }
+
+    size_t bodyLength() const { return 4; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 4; }
+    [[nodiscard]] static Expected<L3PriorityUplinkRequest> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Data Indication (GSM 04.08 9.1.28e) ───────────────────────────────
+
+class L3DataIndication {
+    std::vector<uint8_t> mData;
+public:
+    static constexpr int MTI = 0x67;
+
+    const std::vector<uint8_t>& data() const { return mData; }
+
+    size_t bodyLength() const { return mData.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3DataIndication> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Data Indication 2 (GSM 04.08 9.1.28f) ─────────────────────────────
+
+class L3DataIndication2 {
+    std::vector<uint8_t> mData;
+public:
+    static constexpr int MTI = 0x68;
+
+    const std::vector<uint8_t>& data() const { return mData; }
+
+    size_t bodyLength() const { return mData.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3DataIndication2> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── DTM Assignment Failure (GSM 04.08 9.1.3d) ─────────────────────────
+
+class L3DTMAssignmentFailure {
+    RRCause mCause{RRCause::Normal_Event};
+public:
+    static constexpr int MTI = 0x80;
+
+    L3DTMAssignmentFailure() = default;
+    explicit L3DTMAssignmentFailure(RRCause cause) : mCause(cause) {}
+
+    RRCause cause() const { return mCause; }
+
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3DTMAssignmentFailure> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── DTM Reject (GSM 04.08 9.1.3d) ─────────────────────────────────────
+
+class L3DTMReject {
+public:
+    static constexpr int MTI = 0x81;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3DTMReject> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── DTM Request (GSM 04.08 9.1.3d) ────────────────────────────────────
+
+class L3DTMRequest {
+public:
+    static constexpr int MTI = 0x82;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3DTMRequest> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Packet Assignment (GSM 04.08 9.1.3e) ───────────────────────────────
+
+class L3PacketAssignment {
+    L3ChannelDescription mChanDesc;
+    L3TimingAdvance mTA;
+public:
+    static constexpr int MTI = 0x83;
+
+    const L3ChannelDescription& channelDescription() const { return mChanDesc; }
+    const L3TimingAdvance& timingAdvance() const { return mTA; }
+
+    size_t bodyLength() const { return mChanDesc.lengthV() + mTA.lengthV(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3PacketAssignment> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── DTM Assignment Command (GSM 04.08 9.1.3d) ─────────────────────────
+
+class L3DTMAssignmentCommand {
+public:
+    static constexpr int MTI = 0x84;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3DTMAssignmentCommand> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── DTM Information (GSM 04.08 9.1.3d) ────────────────────────────────
+
+class L3DTMInformation {
+public:
+    static constexpr int MTI = 0x85;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3DTMInformation> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Packet Information (GSM 04.08 9.1.3e) ─────────────────────────────
+
+class L3PacketInformation {
+public:
+    static constexpr int MTI = 0x86;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3PacketInformation> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── UTRAN Classmark Change (GSM 04.08 9.1.11a) ────────────────────────
+
+class L3UTRANClassmarkChange {
+    std::vector<uint8_t> mClassmark;
+public:
+    static constexpr int MTI = 0x60;
+
+    const std::vector<uint8_t>& classmark() const { return mClassmark; }
+
+    size_t bodyLength() const { return mClassmark.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3UTRANClassmarkChange> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── CDMA2000 Classmark Change (GSM 04.08 9.1.11b) ────────────────────
+
+class L3CDMA2000ClassmarkChange {
+    std::vector<uint8_t> mClassmark;
+public:
+    static constexpr int MTI = 0x62;
+
+    const std::vector<uint8_t>& classmark() const { return mClassmark; }
+
+    size_t bodyLength() const { return mClassmark.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3CDMA2000ClassmarkChange> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Intersys to UTRAN HO Command (GSM 04.08 9.1.15a) ─────────────────
+
+class L3IntersysToUTRANHOCommand {
+    std::vector<uint8_t> mData;
+public:
+    static constexpr int MTI = 0x63;
+
+    const std::vector<uint8_t>& data() const { return mData; }
+
+    size_t bodyLength() const { return mData.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3IntersysToUTRANHOCommand> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Intersys to CDMA2000 HO Command (GSM 04.08 9.1.15b) ───────────────
+
+class L3IntersysToCDMA2000HOCommand {
+    std::vector<uint8_t> mData;
+public:
+    static constexpr int MTI = 0x64;
+
+    const std::vector<uint8_t>& data() const { return mData; }
+
+    size_t bodyLength() const { return mData.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3IntersysToCDMA2000HOCommand> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── GERAN IU Mode Classmark Change (GSM 04.08 9.1.11c) ────────────────
+
+class L3GERANIUClassmarkChange {
+    std::vector<uint8_t> mClassmark;
+public:
+    static constexpr int MTI = 0x65;
+
+    const std::vector<uint8_t>& classmark() const { return mClassmark; }
+
+    size_t bodyLength() const { return mClassmark.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3GERANIUClassmarkChange> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 14 (GSM 04.08 9.1.43d) ────────────────────
+
+class L3SystemInformationType14 {
+    L3CellIdentity mCI;
+    L3CellSelectionParameters mCellSelectionParameters;
+public:
+    static constexpr int MTI = 0x01;
+
+    const L3CellIdentity& ci() const { return mCI; }
+    const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
+
+    size_t bodyLength() const { return 5; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 5; }
+    [[nodiscard]] static Expected<L3SystemInformationType14> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 15 (GSM 04.08 9.1.43e) ────────────────────
+
+class L3SystemInformationType15 {
+public:
+    static constexpr int MTI = 0x43;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3SystemInformationType15> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 18 (GSM 04.08 9.1.43f) ────────────────────
+
+class L3SystemInformationType18 {
+    L3RACHControlParameters mRACHControl;
+    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+public:
+    static constexpr int MTI = 0x40;
+
+    const L3RACHControlParameters& rachControl() const { return mRACHControl; }
+    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3SystemInformationType18> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 19 (GSM 04.08 9.1.43g) ────────────────────
+
+class L3SystemInformationType19 {
+    L3RACHControlParameters mRACHControl;
+    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+public:
+    static constexpr int MTI = 0x41;
+
+    const L3RACHControlParameters& rachControl() const { return mRACHControl; }
+    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3SystemInformationType19> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 20 (GSM 04.08 9.1.43h) ────────────────────
+
+class L3SystemInformationType20 {
+    L3RACHControlParameters mRACHControl;
+    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+public:
+    static constexpr int MTI = 0x42;
+
+    const L3RACHControlParameters& rachControl() const { return mRACHControl; }
+    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3SystemInformationType20> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 13alt (GSM 04.08 9.1.43a) ─────────────────
+
+class L3SystemInformationType13alt {
+public:
+    static constexpr int MTI = 0x44;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3SystemInformationType13alt> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 2n (GSM 04.08 9.1.43i) ────────────────────
+
+class L3SystemInformationType2n {
+public:
+    static constexpr int MTI = 0x45;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3SystemInformationType2n> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 21 (GSM 04.08 9.1.43j) ────────────────────
+
+class L3SystemInformationType21 {
+public:
+    static constexpr int MTI = 0x46;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3SystemInformationType21> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 22 (GSM 04.08 9.1.43k) ────────────────────
+
+class L3SystemInformationType22 {
+public:
+    static constexpr int MTI = 0x47;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3SystemInformationType22> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 23 (GSM 04.08 9.1.43l) ────────────────────
+
+class L3SystemInformationType23 {
+public:
+    static constexpr int MTI = 0x4f;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3SystemInformationType23> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 10 (GSM 04.08 9.1.44) ─────────────────────
+// Short message: no standard L3 header, sent on BCCH.
+
+class L3SystemInformationType10 {
+    L3CellIdentity mCI;
+    L3LocationAreaIdentity mLAI;
+    L3CellOptionsBCCH mCellOptions;
+    L3CellSelectionParameters mCellSelectionParameters;
+public:
+    static constexpr int MTI = 0x106;
+
+    const L3CellIdentity& ci() const { return mCI; }
+    const L3LocationAreaIdentity& lai() const { return mLAI; }
+    const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
+    const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
+
+    size_t bodyLength() const { return 10; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3SystemInformationType10> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 10bis (GSM 04.08 9.1.44a) ─────────────────
+// Short message: no standard L3 header, sent on BCCH.
+
+class L3SystemInformationType10bis {
+    L3CellIdentity mCI;
+    L3LocationAreaIdentity mLAI;
+    L3CellOptionsBCCH mCellOptions;
+    L3CellSelectionParameters mCellSelectionParameters;
+public:
+    static constexpr int MTI = 0x107;
+
+    const L3CellIdentity& ci() const { return mCI; }
+    const L3LocationAreaIdentity& lai() const { return mLAI; }
+    const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
+    const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
+
+    size_t bodyLength() const { return 10; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3SystemInformationType10bis> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── System Information Type 10ter (GSM 04.08 9.1.44b) ─────────────────
+// Short message: no standard L3 header, sent on BCCH.
+
+class L3SystemInformationType10ter {
+    L3CellIdentity mCI;
+    L3LocationAreaIdentity mLAI;
+    L3CellOptionsBCCH mCellOptions;
+    L3CellSelectionParameters mCellSelectionParameters;
+public:
+    static constexpr int MTI = 0x108;
+
+    const L3CellIdentity& ci() const { return mCI; }
+    const L3LocationAreaIdentity& lai() const { return mLAI; }
+    const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
+    const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
+
+    size_t bodyLength() const { return 10; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3SystemInformationType10ter> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Notification FACCH (GSM 04.08 9.1.45) ─────────────────────────────
+// Short message: no standard L3 header, sent on FACCH.
+
+class L3NotificationFACCH {
+public:
+    static constexpr int MTI = 0x109;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3NotificationFACCH> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Uplink Free (GSM 04.08 9.1.45a) ───────────────────────────────────
+// Short message: no standard L3 header, sent on FACCH.
+
+class L3UplinkFree {
+public:
+    static constexpr int MTI = 0x10A;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3UplinkFree> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Enhanced Measurement Report UL (GSM 04.08 9.1.45b) ────────────────
+// Short message: no standard L3 header, sent on FACCH.
+
+class L3EnhancedMeasurementRepUL {
+    std::vector<uint8_t> mData;
+public:
+    static constexpr int MTI = 0x10B;
+
+    const std::vector<uint8_t>& data() const { return mData; }
+
+    size_t bodyLength() const { return mData.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3EnhancedMeasurementRepUL> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Measurement Info DL (GSM 04.08 9.1.45c) ───────────────────────────
+// Short message: no standard L3 header, sent on FACCH.
+
+class L3MeasurementInfoDL {
+    std::vector<uint8_t> mData;
+public:
+    static constexpr int MTI = 0x10C;
+
+    const std::vector<uint8_t>& data() const { return mData; }
+
+    size_t bodyLength() const { return mData.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3MeasurementInfoDL> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── VBS/VGCS Recon (GSM 04.08 9.1.45d) ────────────────────────────────
+// Short message: no standard L3 header, sent on FACCH.
+
+class L3VBSVGCSRecon {
+public:
+    static constexpr int MTI = 0x10D;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3VBSVGCSRecon> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── VBS/VGCS Recon 2 (GSM 04.08 9.1.45e) ──────────────────────────────
+// Short message: no standard L3 header, sent on FACCH.
+
+class L3VBSVGCSRecon2 {
+public:
+    static constexpr int MTI = 0x10E;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3VBSVGCSRecon2> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── VGCS Add Info (GSM 04.08 9.1.45f) ─────────────────────────────────
+// Short message: no standard L3 header, sent on FACCH.
+
+class L3VGCSAddInfo {
+public:
+    static constexpr int MTI = 0x10F;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3VGCSAddInfo> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── VGCS SMS Info (GSM 04.08 9.1.45g) ─────────────────────────────────
+// Short message: no standard L3 header, sent on FACCH.
+
+class L3VGCSMSInfo {
+public:
+    static constexpr int MTI = 0x110;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3VGCSMSInfo> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── VGCS Neighbor Cell Info (GSM 04.08 9.1.45h) ───────────────────────
+// Short message: no standard L3 header, sent on FACCH.
+
+class L3VGCSSNeighCellInfo {
+public:
+    static constexpr int MTI = 0x111;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3VGCSSNeighCellInfo> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
+// ── Notify App Data (GSM 04.08 9.1.45i) ───────────────────────────────
+// Short message: no standard L3 header, sent on FACCH.
+
+class L3NotifyAppData {
+public:
+    static constexpr int MTI = 0x112;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3NotifyAppData> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+};
+
 } // namespace gsml3parser

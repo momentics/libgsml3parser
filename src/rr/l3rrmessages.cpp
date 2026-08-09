@@ -95,6 +95,58 @@ const char* rrMessageName(int mti) {
         case L3SynchronizationChannelInformation::MTI: return "SynchronizationChannelInformation";
         case L3ChannelRequest::MTI:          return "ChannelRequest";
         case L3HandoverAccess::MTI:          return "HandoverAccess";
+        case L3ConfigurationChangeCommand::MTI: return "ConfigurationChangeCommand";
+        case L3ConfigurationChangeAcknowledge::MTI: return "ConfigurationChangeAcknowledge";
+        case L3ConfigurationChangeReject::MTI: return "ConfigurationChangeReject";
+        case L3PartialRelease::MTI:          return "PartialRelease";
+        case L3PartialReleaseComplete::MTI:  return "PartialReleaseComplete";
+        case L3ExtendedMeasurementReport::MTI: return "ExtendedMeasurementReport";
+        case L3ExtendedMeasurementOrder::MTI: return "ExtendedMeasurementOrder";
+        case L3FrequencyRedefinition::MTI:   return "FrequencyRedefinition";
+        case L3NotificationNCH::MTI:         return "NotificationNCH";
+        case L3NotificationResponse::MTI:    return "NotificationResponse";
+        case L3VGCSUplinkGrant::MTI:         return "VGCSUplinkGrant";
+        case L3UplinkRelease::MTI:           return "UplinkRelease";
+        case L3UplinkBusy::MTI:              return "UplinkBusy";
+        case L3TalkerIndication::MTI:        return "TalkerIndication";
+        case L3PriorityUplinkRequest::MTI:   return "PriorityUplinkRequest";
+        case L3DataIndication::MTI:          return "DataIndication";
+        case L3DataIndication2::MTI:         return "DataIndication2";
+        case L3DTMAssignmentFailure::MTI:    return "DTMAssignmentFailure";
+        case L3DTMReject::MTI:               return "DTMReject";
+        case L3DTMRequest::MTI:              return "DTMRequest";
+        case L3PacketAssignment::MTI:        return "PacketAssignment";
+        case L3DTMAssignmentCommand::MTI:    return "DTMAssignmentCommand";
+        case L3DTMInformation::MTI:          return "DTMInformation";
+        case L3PacketInformation::MTI:       return "PacketInformation";
+        case L3UTRANClassmarkChange::MTI:    return "UTRANClassmarkChange";
+        case L3CDMA2000ClassmarkChange::MTI: return "CDMA2000ClassmarkChange";
+        case L3IntersysToUTRANHOCommand::MTI: return "IntersysToUTRANHOCommand";
+        case L3IntersysToCDMA2000HOCommand::MTI: return "IntersysToCDMA2000HOCommand";
+        case L3GERANIUClassmarkChange::MTI:  return "GERANIUClassmarkChange";
+        case L3SystemInformationType14::MTI: return "SystemInformationType14";
+        case L3SystemInformationType15::MTI: return "SystemInformationType15";
+        case L3SystemInformationType18::MTI: return "SystemInformationType18";
+        case L3SystemInformationType19::MTI: return "SystemInformationType19";
+        case L3SystemInformationType20::MTI: return "SystemInformationType20";
+        case L3SystemInformationType13alt::MTI: return "SystemInformationType13alt";
+        case L3SystemInformationType2n::MTI: return "SystemInformationType2n";
+        case L3SystemInformationType21::MTI: return "SystemInformationType21";
+        case L3SystemInformationType22::MTI: return "SystemInformationType22";
+        case L3SystemInformationType23::MTI: return "SystemInformationType23";
+        case L3SystemInformationType10::MTI: return "SystemInformationType10";
+        case L3SystemInformationType10bis::MTI: return "SystemInformationType10bis";
+        case L3SystemInformationType10ter::MTI: return "SystemInformationType10ter";
+        case L3NotificationFACCH::MTI:       return "NotificationFACCH";
+        case L3UplinkFree::MTI:              return "UplinkFree";
+        case L3EnhancedMeasurementRepUL::MTI: return "EnhancedMeasurementRepUL";
+        case L3MeasurementInfoDL::MTI:       return "MeasurementInfoDL";
+        case L3VBSVGCSRecon::MTI:            return "VBSVGCSRecon";
+        case L3VBSVGCSRecon2::MTI:           return "VBSVGCSRecon2";
+        case L3VGCSAddInfo::MTI:             return "VGCSAddInfo";
+        case L3VGCSMSInfo::MTI:              return "VGCSMSInfo";
+        case L3VGCSSNeighCellInfo::MTI:      return "VGCSSNeighCellInfo";
+        case L3NotifyAppData::MTI:           return "NotifyAppData";
         default:                      return "Unknown_RR";
     }
 }
@@ -1887,6 +1939,1011 @@ void L3HandoverAccess::write(BitWriter& bw) const {
 
 void L3HandoverAccess::text(std::ostream& os) const {
     os << "HandoverAccess: handoverNumber=" << mHandoverNumber;
+}
+
+// ── L3ConfigurationChangeCommand ───────────────────────────────────────
+
+size_t L3ConfigurationChangeCommand::bodyLength() const {
+    size_t len = 0;
+    if (mHaveChanDesc) len += mChanDesc.lengthV();
+    if (mHavePowerCmd) len += 1 + mPowerCmd.lengthV();
+    return len;
+}
+
+Expected<L3ConfigurationChangeCommand> L3ConfigurationChangeCommand::parse(BitReader& br) {
+    L3ConfigurationChangeCommand msg;
+
+    while (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if (peek == 0x64) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3ConfigurationChangeCommand>::error(_.error()); }
+            auto res = L3ChannelDescription::parse(br);
+            if (!res) return Expected<L3ConfigurationChangeCommand>::error(res.error());
+            msg.mChanDesc = std::move(res.value());
+            msg.mHaveChanDesc = true;
+        } else if (peek == 0x65) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3ConfigurationChangeCommand>::error(_.error()); }
+            auto res = L3PowerCommand::parse(br);
+            if (!res) return Expected<L3ConfigurationChangeCommand>::error(res.error());
+            msg.mPowerCmd = std::move(res.value());
+            msg.mHavePowerCmd = true;
+        } else {
+            break;
+        }
+    }
+
+    return Expected<L3ConfigurationChangeCommand>::hold(std::move(msg));
+}
+
+void L3ConfigurationChangeCommand::write(BitWriter& bw) const {
+    if (mHaveChanDesc) {
+        bw.writeField(0x64, 8);
+        mChanDesc.write(bw);
+    }
+    if (mHavePowerCmd) {
+        bw.writeField(0x65, 8);
+        mPowerCmd.write(bw);
+    }
+}
+
+void L3ConfigurationChangeCommand::text(std::ostream& os) const {
+    os << "ConfigurationChangeCommand";
+    if (mHaveChanDesc) {
+        os << " ";
+        mChanDesc.text(os);
+    }
+}
+
+// ── L3ConfigurationChangeAcknowledge ───────────────────────────────────
+
+Expected<L3ConfigurationChangeAcknowledge> L3ConfigurationChangeAcknowledge::parse(BitReader&) {
+    return Expected<L3ConfigurationChangeAcknowledge>::hold(L3ConfigurationChangeAcknowledge{});
+}
+
+void L3ConfigurationChangeAcknowledge::write(BitWriter&) const {}
+
+void L3ConfigurationChangeAcknowledge::text(std::ostream& os) const {
+    os << "ConfigurationChangeAcknowledge";
+}
+
+// ── L3ConfigurationChangeReject ────────────────────────────────────────
+
+Expected<L3ConfigurationChangeReject> L3ConfigurationChangeReject::parse(BitReader& br) {
+    L3ConfigurationChangeReject msg;
+    auto r = br.readField(8); if (!r) return Expected<L3ConfigurationChangeReject>::error(r.error());
+    msg.mCause = static_cast<RRCause>(r.value());
+    return Expected<L3ConfigurationChangeReject>::hold(std::move(msg));
+}
+
+void L3ConfigurationChangeReject::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mCause), 8);
+}
+
+void L3ConfigurationChangeReject::text(std::ostream& os) const {
+    os << "ConfigurationChangeReject: cause=" << RRCause2Str(mCause);
+}
+
+// ── L3PartialRelease ───────────────────────────────────────────────────
+
+Expected<L3PartialRelease> L3PartialRelease::parse(BitReader& br) {
+    L3PartialRelease msg;
+    {
+        auto res = L3ChannelDescription::parse(br);
+        if (!res) return Expected<L3PartialRelease>::error(res.error());
+        msg.mChanDesc = std::move(res.value());
+    }
+    return Expected<L3PartialRelease>::hold(std::move(msg));
+}
+
+void L3PartialRelease::write(BitWriter& bw) const {
+    mChanDesc.write(bw);
+}
+
+void L3PartialRelease::text(std::ostream& os) const {
+    os << "PartialRelease: ";
+    mChanDesc.text(os);
+}
+
+// ── L3PartialReleaseComplete ───────────────────────────────────────────
+
+Expected<L3PartialReleaseComplete> L3PartialReleaseComplete::parse(BitReader&) {
+    return Expected<L3PartialReleaseComplete>::hold(L3PartialReleaseComplete{});
+}
+
+void L3PartialReleaseComplete::write(BitWriter&) const {}
+
+void L3PartialReleaseComplete::text(std::ostream& os) const {
+    os << "PartialReleaseComplete";
+}
+
+// ── L3ExtendedMeasurementReport ────────────────────────────────────────
+
+Expected<L3ExtendedMeasurementReport> L3ExtendedMeasurementReport::parse(BitReader& br) {
+    L3ExtendedMeasurementReport msg;
+    {
+        auto res = L3MeasurementResults::parse(br);
+        if (!res) return Expected<L3ExtendedMeasurementReport>::error(res.error());
+        msg.mMeasurementResults = std::move(res.value());
+    }
+    return Expected<L3ExtendedMeasurementReport>::hold(std::move(msg));
+}
+
+void L3ExtendedMeasurementReport::write(BitWriter& bw) const {
+    mMeasurementResults.write(bw);
+}
+
+void L3ExtendedMeasurementReport::text(std::ostream& os) const {
+    os << "ExtendedMeasurementReport: ";
+    mMeasurementResults.text(os);
+}
+
+// ── L3ExtendedMeasurementOrder ─────────────────────────────────────────
+
+Expected<L3ExtendedMeasurementOrder> L3ExtendedMeasurementOrder::parse(BitReader& br) {
+    L3ExtendedMeasurementOrder msg;
+    while (br.hasMore()) {
+        auto r = br.readField(8); if (!r) return Expected<L3ExtendedMeasurementOrder>::error(r.error());
+        msg.mData.push_back(static_cast<uint8_t>(r.value()));
+    }
+    return Expected<L3ExtendedMeasurementOrder>::hold(std::move(msg));
+}
+
+void L3ExtendedMeasurementOrder::write(BitWriter& bw) const {
+    for (const auto& b : mData) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3ExtendedMeasurementOrder::text(std::ostream& os) const {
+    os << "ExtendedMeasurementOrder: len=" << mData.size();
+}
+
+// ── L3FrequencyRedefinition ────────────────────────────────────────────
+
+Expected<L3FrequencyRedefinition> L3FrequencyRedefinition::parse(BitReader& br) {
+    L3FrequencyRedefinition msg;
+    {
+        auto res = L3FrequencyList::parse(br);
+        if (!res) return Expected<L3FrequencyRedefinition>::error(res.error());
+        msg.mCellChannelDescription = std::move(res.value());
+    }
+    {
+        auto res = L3RACHControlParameters::parse(br);
+        if (!res) return Expected<L3FrequencyRedefinition>::error(res.error());
+        msg.mRACHControlParameters = std::move(res.value());
+    }
+    return Expected<L3FrequencyRedefinition>::hold(std::move(msg));
+}
+
+void L3FrequencyRedefinition::write(BitWriter& bw) const {
+    mCellChannelDescription.write(bw);
+    mRACHControlParameters.write(bw);
+}
+
+void L3FrequencyRedefinition::text(std::ostream& os) const {
+    os << "FrequencyRedefinition: ";
+    mCellChannelDescription.text(os);
+    os << " ";
+    mRACHControlParameters.text(os);
+}
+
+// ── L3NotificationNCH ──────────────────────────────────────────────────
+
+Expected<L3NotificationNCH> L3NotificationNCH::parse(BitReader& br) {
+    L3NotificationNCH msg;
+    while (br.hasMore()) {
+        auto r = br.readField(8); if (!r) return Expected<L3NotificationNCH>::error(r.error());
+        msg.mData.push_back(static_cast<uint8_t>(r.value()));
+    }
+    return Expected<L3NotificationNCH>::hold(std::move(msg));
+}
+
+void L3NotificationNCH::write(BitWriter& bw) const {
+    for (const auto& b : mData) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3NotificationNCH::text(std::ostream& os) const {
+    os << "NotificationNCH: len=" << mData.size();
+}
+
+// ── L3NotificationResponse ─────────────────────────────────────────────
+
+Expected<L3NotificationResponse> L3NotificationResponse::parse(BitReader& br) {
+    L3NotificationResponse msg;
+    while (br.hasMore()) {
+        auto r = br.readField(8); if (!r) return Expected<L3NotificationResponse>::error(r.error());
+        msg.mData.push_back(static_cast<uint8_t>(r.value()));
+    }
+    return Expected<L3NotificationResponse>::hold(std::move(msg));
+}
+
+void L3NotificationResponse::write(BitWriter& bw) const {
+    for (const auto& b : mData) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3NotificationResponse::text(std::ostream& os) const {
+    os << "NotificationResponse: len=" << mData.size();
+}
+
+// ── L3VGCSUplinkGrant ──────────────────────────────────────────────────
+
+Expected<L3VGCSUplinkGrant> L3VGCSUplinkGrant::parse(BitReader&) {
+    return Expected<L3VGCSUplinkGrant>::hold(L3VGCSUplinkGrant{});
+}
+
+void L3VGCSUplinkGrant::write(BitWriter&) const {}
+
+void L3VGCSUplinkGrant::text(std::ostream& os) const {
+    os << "VGCSUplinkGrant";
+}
+
+// ── L3UplinkRelease ────────────────────────────────────────────────────
+
+Expected<L3UplinkRelease> L3UplinkRelease::parse(BitReader&) {
+    return Expected<L3UplinkRelease>::hold(L3UplinkRelease{});
+}
+
+void L3UplinkRelease::write(BitWriter&) const {}
+
+void L3UplinkRelease::text(std::ostream& os) const {
+    os << "UplinkRelease";
+}
+
+// ── L3UplinkBusy ───────────────────────────────────────────────────────
+
+Expected<L3UplinkBusy> L3UplinkBusy::parse(BitReader&) {
+    return Expected<L3UplinkBusy>::hold(L3UplinkBusy{});
+}
+
+void L3UplinkBusy::write(BitWriter&) const {}
+
+void L3UplinkBusy::text(std::ostream& os) const {
+    os << "UplinkBusy";
+}
+
+// ── L3TalkerIndication ─────────────────────────────────────────────────
+
+Expected<L3TalkerIndication> L3TalkerIndication::parse(BitReader&) {
+    return Expected<L3TalkerIndication>::hold(L3TalkerIndication{});
+}
+
+void L3TalkerIndication::write(BitWriter&) const {}
+
+void L3TalkerIndication::text(std::ostream& os) const {
+    os << "TalkerIndication";
+}
+
+// ── L3PriorityUplinkRequest ────────────────────────────────────────────
+
+Expected<L3PriorityUplinkRequest> L3PriorityUplinkRequest::parse(BitReader& br) {
+    L3PriorityUplinkRequest msg;
+    auto r = br.readField(32); if (!r) return Expected<L3PriorityUplinkRequest>::error(r.error());
+    msg.mTMSI = r.value();
+    return Expected<L3PriorityUplinkRequest>::hold(std::move(msg));
+}
+
+void L3PriorityUplinkRequest::write(BitWriter& bw) const {
+    bw.writeField(mTMSI, 32);
+}
+
+void L3PriorityUplinkRequest::text(std::ostream& os) const {
+    os << "PriorityUplinkRequest: TMSI=0x" << std::hex << mTMSI << std::dec;
+}
+
+// ── L3DataIndication ───────────────────────────────────────────────────
+
+Expected<L3DataIndication> L3DataIndication::parse(BitReader& br) {
+    L3DataIndication msg;
+    while (br.hasMore()) {
+        auto r = br.readField(8); if (!r) return Expected<L3DataIndication>::error(r.error());
+        msg.mData.push_back(static_cast<uint8_t>(r.value()));
+    }
+    return Expected<L3DataIndication>::hold(std::move(msg));
+}
+
+void L3DataIndication::write(BitWriter& bw) const {
+    for (const auto& b : mData) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3DataIndication::text(std::ostream& os) const {
+    os << "DataIndication: len=" << mData.size();
+}
+
+// ── L3DataIndication2 ──────────────────────────────────────────────────
+
+Expected<L3DataIndication2> L3DataIndication2::parse(BitReader& br) {
+    L3DataIndication2 msg;
+    while (br.hasMore()) {
+        auto r = br.readField(8); if (!r) return Expected<L3DataIndication2>::error(r.error());
+        msg.mData.push_back(static_cast<uint8_t>(r.value()));
+    }
+    return Expected<L3DataIndication2>::hold(std::move(msg));
+}
+
+void L3DataIndication2::write(BitWriter& bw) const {
+    for (const auto& b : mData) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3DataIndication2::text(std::ostream& os) const {
+    os << "DataIndication2: len=" << mData.size();
+}
+
+// ── L3DTMAssignmentFailure ─────────────────────────────────────────────
+
+Expected<L3DTMAssignmentFailure> L3DTMAssignmentFailure::parse(BitReader& br) {
+    L3DTMAssignmentFailure msg;
+    auto r = br.readField(8); if (!r) return Expected<L3DTMAssignmentFailure>::error(r.error());
+    msg.mCause = static_cast<RRCause>(r.value());
+    return Expected<L3DTMAssignmentFailure>::hold(std::move(msg));
+}
+
+void L3DTMAssignmentFailure::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mCause), 8);
+}
+
+void L3DTMAssignmentFailure::text(std::ostream& os) const {
+    os << "DTMAssignmentFailure: cause=" << RRCause2Str(mCause);
+}
+
+// ── L3DTMReject ────────────────────────────────────────────────────────
+
+Expected<L3DTMReject> L3DTMReject::parse(BitReader&) {
+    return Expected<L3DTMReject>::hold(L3DTMReject{});
+}
+
+void L3DTMReject::write(BitWriter&) const {}
+
+void L3DTMReject::text(std::ostream& os) const {
+    os << "DTMReject";
+}
+
+// ── L3DTMRequest ───────────────────────────────────────────────────────
+
+Expected<L3DTMRequest> L3DTMRequest::parse(BitReader&) {
+    return Expected<L3DTMRequest>::hold(L3DTMRequest{});
+}
+
+void L3DTMRequest::write(BitWriter&) const {}
+
+void L3DTMRequest::text(std::ostream& os) const {
+    os << "DTMRequest";
+}
+
+// ── L3PacketAssignment ─────────────────────────────────────────────────
+
+Expected<L3PacketAssignment> L3PacketAssignment::parse(BitReader& br) {
+    L3PacketAssignment msg;
+    {
+        auto res = L3ChannelDescription::parse(br);
+        if (!res) return Expected<L3PacketAssignment>::error(res.error());
+        msg.mChanDesc = std::move(res.value());
+    }
+    {
+        auto res = L3TimingAdvance::parse(br);
+        if (!res) return Expected<L3PacketAssignment>::error(res.error());
+        msg.mTA = std::move(res.value());
+    }
+    return Expected<L3PacketAssignment>::hold(std::move(msg));
+}
+
+void L3PacketAssignment::write(BitWriter& bw) const {
+    mChanDesc.write(bw);
+    mTA.write(bw);
+}
+
+void L3PacketAssignment::text(std::ostream& os) const {
+    os << "PacketAssignment: ";
+    mChanDesc.text(os);
+    os << " TA=";
+    mTA.text(os);
+}
+
+// ── L3DTMAssignmentCommand ─────────────────────────────────────────────
+
+Expected<L3DTMAssignmentCommand> L3DTMAssignmentCommand::parse(BitReader&) {
+    return Expected<L3DTMAssignmentCommand>::hold(L3DTMAssignmentCommand{});
+}
+
+void L3DTMAssignmentCommand::write(BitWriter&) const {}
+
+void L3DTMAssignmentCommand::text(std::ostream& os) const {
+    os << "DTMAssignmentCommand";
+}
+
+// ── L3DTMInformation ───────────────────────────────────────────────────
+
+Expected<L3DTMInformation> L3DTMInformation::parse(BitReader&) {
+    return Expected<L3DTMInformation>::hold(L3DTMInformation{});
+}
+
+void L3DTMInformation::write(BitWriter&) const {}
+
+void L3DTMInformation::text(std::ostream& os) const {
+    os << "DTMInformation";
+}
+
+// ── L3PacketInformation ────────────────────────────────────────────────
+
+Expected<L3PacketInformation> L3PacketInformation::parse(BitReader&) {
+    return Expected<L3PacketInformation>::hold(L3PacketInformation{});
+}
+
+void L3PacketInformation::write(BitWriter&) const {}
+
+void L3PacketInformation::text(std::ostream& os) const {
+    os << "PacketInformation";
+}
+
+// ── L3UTRANClassmarkChange ─────────────────────────────────────────────
+
+Expected<L3UTRANClassmarkChange> L3UTRANClassmarkChange::parse(BitReader& br) {
+    L3UTRANClassmarkChange msg;
+    while (br.hasMore()) {
+        auto r = br.readField(8); if (!r) return Expected<L3UTRANClassmarkChange>::error(r.error());
+        msg.mClassmark.push_back(static_cast<uint8_t>(r.value()));
+    }
+    return Expected<L3UTRANClassmarkChange>::hold(std::move(msg));
+}
+
+void L3UTRANClassmarkChange::write(BitWriter& bw) const {
+    for (const auto& b : mClassmark) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3UTRANClassmarkChange::text(std::ostream& os) const {
+    os << "UTRANClassmarkChange: len=" << mClassmark.size();
+}
+
+// ── L3CDMA2000ClassmarkChange ──────────────────────────────────────────
+
+Expected<L3CDMA2000ClassmarkChange> L3CDMA2000ClassmarkChange::parse(BitReader& br) {
+    L3CDMA2000ClassmarkChange msg;
+    while (br.hasMore()) {
+        auto r = br.readField(8); if (!r) return Expected<L3CDMA2000ClassmarkChange>::error(r.error());
+        msg.mClassmark.push_back(static_cast<uint8_t>(r.value()));
+    }
+    return Expected<L3CDMA2000ClassmarkChange>::hold(std::move(msg));
+}
+
+void L3CDMA2000ClassmarkChange::write(BitWriter& bw) const {
+    for (const auto& b : mClassmark) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3CDMA2000ClassmarkChange::text(std::ostream& os) const {
+    os << "CDMA2000ClassmarkChange: len=" << mClassmark.size();
+}
+
+// ── L3IntersysToUTRANHOCommand ─────────────────────────────────────────
+
+Expected<L3IntersysToUTRANHOCommand> L3IntersysToUTRANHOCommand::parse(BitReader& br) {
+    L3IntersysToUTRANHOCommand msg;
+    while (br.hasMore()) {
+        auto r = br.readField(8); if (!r) return Expected<L3IntersysToUTRANHOCommand>::error(r.error());
+        msg.mData.push_back(static_cast<uint8_t>(r.value()));
+    }
+    return Expected<L3IntersysToUTRANHOCommand>::hold(std::move(msg));
+}
+
+void L3IntersysToUTRANHOCommand::write(BitWriter& bw) const {
+    for (const auto& b : mData) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3IntersysToUTRANHOCommand::text(std::ostream& os) const {
+    os << "IntersysToUTRANHOCommand: len=" << mData.size();
+}
+
+// ── L3IntersysToCDMA2000HOCommand ──────────────────────────────────────
+
+Expected<L3IntersysToCDMA2000HOCommand> L3IntersysToCDMA2000HOCommand::parse(BitReader& br) {
+    L3IntersysToCDMA2000HOCommand msg;
+    while (br.hasMore()) {
+        auto r = br.readField(8); if (!r) return Expected<L3IntersysToCDMA2000HOCommand>::error(r.error());
+        msg.mData.push_back(static_cast<uint8_t>(r.value()));
+    }
+    return Expected<L3IntersysToCDMA2000HOCommand>::hold(std::move(msg));
+}
+
+void L3IntersysToCDMA2000HOCommand::write(BitWriter& bw) const {
+    for (const auto& b : mData) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3IntersysToCDMA2000HOCommand::text(std::ostream& os) const {
+    os << "IntersysToCDMA2000HOCommand: len=" << mData.size();
+}
+
+// ── L3GERANIUClassmarkChange ───────────────────────────────────────────
+
+Expected<L3GERANIUClassmarkChange> L3GERANIUClassmarkChange::parse(BitReader& br) {
+    L3GERANIUClassmarkChange msg;
+    while (br.hasMore()) {
+        auto r = br.readField(8); if (!r) return Expected<L3GERANIUClassmarkChange>::error(r.error());
+        msg.mClassmark.push_back(static_cast<uint8_t>(r.value()));
+    }
+    return Expected<L3GERANIUClassmarkChange>::hold(std::move(msg));
+}
+
+void L3GERANIUClassmarkChange::write(BitWriter& bw) const {
+    for (const auto& b : mClassmark) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3GERANIUClassmarkChange::text(std::ostream& os) const {
+    os << "GERANIUClassmarkChange: len=" << mClassmark.size();
+}
+
+// ── L3SystemInformationType14 ──────────────────────────────────────────
+
+Expected<L3SystemInformationType14> L3SystemInformationType14::parse(BitReader& br) {
+    L3SystemInformationType14 msg;
+    { auto res = L3CellIdentity::parse(br); if (!res) return Expected<L3SystemInformationType14>::error(res.error()); msg.mCI = std::move(res.value()); }
+    { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType14>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
+    return Expected<L3SystemInformationType14>::hold(std::move(msg));
+}
+
+void L3SystemInformationType14::write(BitWriter& bw) const {
+    mCI.write(bw);
+    mCellSelectionParameters.write(bw);
+}
+
+void L3SystemInformationType14::text(std::ostream& os) const {
+    os << "SystemInformationType14: ";
+    mCI.text(os);
+    os << " ";
+    mCellSelectionParameters.text(os);
+}
+
+// ── L3SystemInformationType15 ──────────────────────────────────────────
+
+Expected<L3SystemInformationType15> L3SystemInformationType15::parse(BitReader&) {
+    return Expected<L3SystemInformationType15>::hold(L3SystemInformationType15{});
+}
+
+void L3SystemInformationType15::write(BitWriter&) const {}
+
+void L3SystemInformationType15::text(std::ostream& os) const {
+    os << "SystemInformationType15";
+}
+
+// ── L3SystemInformationType18 ──────────────────────────────────────────
+
+size_t L3SystemInformationType18::bodyLength() const {
+    size_t len = 1 + mRACHControl.lengthV();
+    for (const auto& ch : mCellChannelDescriptions) {
+        len += 1 + ch.lengthV();
+    }
+    return len;
+}
+
+Expected<L3SystemInformationType18> L3SystemInformationType18::parse(BitReader& br) {
+    L3SystemInformationType18 msg;
+    {
+        auto ieiR = br.readField(8); if (!ieiR) return Expected<L3SystemInformationType18>::error(ieiR.error());
+        auto res = L3RACHControlParameters::parse(br);
+        if (!res) return Expected<L3SystemInformationType18>::error(res.error());
+        msg.mRACHControl = std::move(res.value());
+    }
+    while (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if (peek == 0x21) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType18>::error(_.error()); }
+            auto res = L3CellChannelDescription::parse(br);
+            if (!res) return Expected<L3SystemInformationType18>::error(res.error());
+            msg.mCellChannelDescriptions.push_back(std::move(res.value()));
+        } else {
+            break;
+        }
+    }
+    return Expected<L3SystemInformationType18>::hold(std::move(msg));
+}
+
+void L3SystemInformationType18::write(BitWriter& bw) const {
+    bw.writeField(0x28, 8);
+    mRACHControl.write(bw);
+    for (const auto& ch : mCellChannelDescriptions) {
+        bw.writeField(0x21, 8);
+        ch.write(bw);
+    }
+}
+
+void L3SystemInformationType18::text(std::ostream& os) const {
+    os << "SystemInformationType18: ";
+    mRACHControl.text(os);
+    os << " cells=" << mCellChannelDescriptions.size();
+}
+
+// ── L3SystemInformationType19 ──────────────────────────────────────────
+
+size_t L3SystemInformationType19::bodyLength() const {
+    size_t len = 1 + mRACHControl.lengthV();
+    for (const auto& ch : mCellChannelDescriptions) {
+        len += 1 + ch.lengthV();
+    }
+    return len;
+}
+
+Expected<L3SystemInformationType19> L3SystemInformationType19::parse(BitReader& br) {
+    L3SystemInformationType19 msg;
+    {
+        auto ieiR = br.readField(8); if (!ieiR) return Expected<L3SystemInformationType19>::error(ieiR.error());
+        auto res = L3RACHControlParameters::parse(br);
+        if (!res) return Expected<L3SystemInformationType19>::error(res.error());
+        msg.mRACHControl = std::move(res.value());
+    }
+    while (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if (peek == 0x21) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType19>::error(_.error()); }
+            auto res = L3CellChannelDescription::parse(br);
+            if (!res) return Expected<L3SystemInformationType19>::error(res.error());
+            msg.mCellChannelDescriptions.push_back(std::move(res.value()));
+        } else {
+            break;
+        }
+    }
+    return Expected<L3SystemInformationType19>::hold(std::move(msg));
+}
+
+void L3SystemInformationType19::write(BitWriter& bw) const {
+    bw.writeField(0x28, 8);
+    mRACHControl.write(bw);
+    for (const auto& ch : mCellChannelDescriptions) {
+        bw.writeField(0x21, 8);
+        ch.write(bw);
+    }
+}
+
+void L3SystemInformationType19::text(std::ostream& os) const {
+    os << "SystemInformationType19: ";
+    mRACHControl.text(os);
+    os << " cells=" << mCellChannelDescriptions.size();
+}
+
+// ── L3SystemInformationType20 ──────────────────────────────────────────
+
+size_t L3SystemInformationType20::bodyLength() const {
+    size_t len = 1 + mRACHControl.lengthV();
+    for (const auto& ch : mCellChannelDescriptions) {
+        len += 1 + ch.lengthV();
+    }
+    return len;
+}
+
+Expected<L3SystemInformationType20> L3SystemInformationType20::parse(BitReader& br) {
+    L3SystemInformationType20 msg;
+    {
+        auto ieiR = br.readField(8); if (!ieiR) return Expected<L3SystemInformationType20>::error(ieiR.error());
+        auto res = L3RACHControlParameters::parse(br);
+        if (!res) return Expected<L3SystemInformationType20>::error(res.error());
+        msg.mRACHControl = std::move(res.value());
+    }
+    while (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if (peek == 0x21) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType20>::error(_.error()); }
+            auto res = L3CellChannelDescription::parse(br);
+            if (!res) return Expected<L3SystemInformationType20>::error(res.error());
+            msg.mCellChannelDescriptions.push_back(std::move(res.value()));
+        } else {
+            break;
+        }
+    }
+    return Expected<L3SystemInformationType20>::hold(std::move(msg));
+}
+
+void L3SystemInformationType20::write(BitWriter& bw) const {
+    bw.writeField(0x28, 8);
+    mRACHControl.write(bw);
+    for (const auto& ch : mCellChannelDescriptions) {
+        bw.writeField(0x21, 8);
+        ch.write(bw);
+    }
+}
+
+void L3SystemInformationType20::text(std::ostream& os) const {
+    os << "SystemInformationType20: ";
+    mRACHControl.text(os);
+    os << " cells=" << mCellChannelDescriptions.size();
+}
+
+// ── L3SystemInformationType13alt ───────────────────────────────────────
+
+Expected<L3SystemInformationType13alt> L3SystemInformationType13alt::parse(BitReader&) {
+    return Expected<L3SystemInformationType13alt>::hold(L3SystemInformationType13alt{});
+}
+
+void L3SystemInformationType13alt::write(BitWriter&) const {}
+
+void L3SystemInformationType13alt::text(std::ostream& os) const {
+    os << "SystemInformationType13alt";
+}
+
+// ── L3SystemInformationType2n ──────────────────────────────────────────
+
+Expected<L3SystemInformationType2n> L3SystemInformationType2n::parse(BitReader&) {
+    return Expected<L3SystemInformationType2n>::hold(L3SystemInformationType2n{});
+}
+
+void L3SystemInformationType2n::write(BitWriter&) const {}
+
+void L3SystemInformationType2n::text(std::ostream& os) const {
+    os << "SystemInformationType2n";
+}
+
+// ── L3SystemInformationType21 ──────────────────────────────────────────
+
+Expected<L3SystemInformationType21> L3SystemInformationType21::parse(BitReader&) {
+    return Expected<L3SystemInformationType21>::hold(L3SystemInformationType21{});
+}
+
+void L3SystemInformationType21::write(BitWriter&) const {}
+
+void L3SystemInformationType21::text(std::ostream& os) const {
+    os << "SystemInformationType21";
+}
+
+// ── L3SystemInformationType22 ──────────────────────────────────────────
+
+Expected<L3SystemInformationType22> L3SystemInformationType22::parse(BitReader&) {
+    return Expected<L3SystemInformationType22>::hold(L3SystemInformationType22{});
+}
+
+void L3SystemInformationType22::write(BitWriter&) const {}
+
+void L3SystemInformationType22::text(std::ostream& os) const {
+    os << "SystemInformationType22";
+}
+
+// ── L3SystemInformationType23 ──────────────────────────────────────────
+
+Expected<L3SystemInformationType23> L3SystemInformationType23::parse(BitReader&) {
+    return Expected<L3SystemInformationType23>::hold(L3SystemInformationType23{});
+}
+
+void L3SystemInformationType23::write(BitWriter&) const {}
+
+void L3SystemInformationType23::text(std::ostream& os) const {
+    os << "SystemInformationType23";
+}
+
+// ── L3SystemInformationType10 ──────────────────────────────────────────
+
+Expected<L3SystemInformationType10> L3SystemInformationType10::parse(BitReader& br) {
+    L3SystemInformationType10 msg;
+    { auto res = L3CellIdentity::parse(br); if (!res) return Expected<L3SystemInformationType10>::error(res.error()); msg.mCI = std::move(res.value()); }
+    { auto res = L3LocationAreaIdentity::parse(br); if (!res) return Expected<L3SystemInformationType10>::error(res.error()); msg.mLAI = std::move(res.value()); }
+    { auto res = L3CellOptionsBCCH::parse(br); if (!res) return Expected<L3SystemInformationType10>::error(res.error()); msg.mCellOptions = std::move(res.value()); }
+    { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType10>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
+    return Expected<L3SystemInformationType10>::hold(std::move(msg));
+}
+
+void L3SystemInformationType10::write(BitWriter& bw) const {
+    mCI.write(bw);
+    mLAI.write(bw);
+    mCellOptions.write(bw);
+    mCellSelectionParameters.write(bw);
+}
+
+void L3SystemInformationType10::text(std::ostream& os) const {
+    os << "SystemInformationType10: ";
+    mCI.text(os);
+    os << " ";
+    mLAI.text(os);
+    os << " ";
+    mCellOptions.text(os);
+    os << " ";
+    mCellSelectionParameters.text(os);
+}
+
+// ── L3SystemInformationType10bis ───────────────────────────────────────
+
+Expected<L3SystemInformationType10bis> L3SystemInformationType10bis::parse(BitReader& br) {
+    L3SystemInformationType10bis msg;
+    { auto res = L3CellIdentity::parse(br); if (!res) return Expected<L3SystemInformationType10bis>::error(res.error()); msg.mCI = std::move(res.value()); }
+    { auto res = L3LocationAreaIdentity::parse(br); if (!res) return Expected<L3SystemInformationType10bis>::error(res.error()); msg.mLAI = std::move(res.value()); }
+    { auto res = L3CellOptionsBCCH::parse(br); if (!res) return Expected<L3SystemInformationType10bis>::error(res.error()); msg.mCellOptions = std::move(res.value()); }
+    { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType10bis>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
+    return Expected<L3SystemInformationType10bis>::hold(std::move(msg));
+}
+
+void L3SystemInformationType10bis::write(BitWriter& bw) const {
+    mCI.write(bw);
+    mLAI.write(bw);
+    mCellOptions.write(bw);
+    mCellSelectionParameters.write(bw);
+}
+
+void L3SystemInformationType10bis::text(std::ostream& os) const {
+    os << "SystemInformationType10bis: ";
+    mCI.text(os);
+    os << " ";
+    mLAI.text(os);
+    os << " ";
+    mCellOptions.text(os);
+    os << " ";
+    mCellSelectionParameters.text(os);
+}
+
+// ── L3SystemInformationType10ter ───────────────────────────────────────
+
+Expected<L3SystemInformationType10ter> L3SystemInformationType10ter::parse(BitReader& br) {
+    L3SystemInformationType10ter msg;
+    { auto res = L3CellIdentity::parse(br); if (!res) return Expected<L3SystemInformationType10ter>::error(res.error()); msg.mCI = std::move(res.value()); }
+    { auto res = L3LocationAreaIdentity::parse(br); if (!res) return Expected<L3SystemInformationType10ter>::error(res.error()); msg.mLAI = std::move(res.value()); }
+    { auto res = L3CellOptionsBCCH::parse(br); if (!res) return Expected<L3SystemInformationType10ter>::error(res.error()); msg.mCellOptions = std::move(res.value()); }
+    { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType10ter>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
+    return Expected<L3SystemInformationType10ter>::hold(std::move(msg));
+}
+
+void L3SystemInformationType10ter::write(BitWriter& bw) const {
+    mCI.write(bw);
+    mLAI.write(bw);
+    mCellOptions.write(bw);
+    mCellSelectionParameters.write(bw);
+}
+
+void L3SystemInformationType10ter::text(std::ostream& os) const {
+    os << "SystemInformationType10ter: ";
+    mCI.text(os);
+    os << " ";
+    mLAI.text(os);
+    os << " ";
+    mCellOptions.text(os);
+    os << " ";
+    mCellSelectionParameters.text(os);
+}
+
+// ── L3NotificationFACCH ────────────────────────────────────────────────
+
+Expected<L3NotificationFACCH> L3NotificationFACCH::parse(BitReader&) {
+    return Expected<L3NotificationFACCH>::hold(L3NotificationFACCH{});
+}
+
+void L3NotificationFACCH::write(BitWriter&) const {}
+
+void L3NotificationFACCH::text(std::ostream& os) const {
+    os << "NotificationFACCH";
+}
+
+// ── L3UplinkFree ───────────────────────────────────────────────────────
+
+Expected<L3UplinkFree> L3UplinkFree::parse(BitReader&) {
+    return Expected<L3UplinkFree>::hold(L3UplinkFree{});
+}
+
+void L3UplinkFree::write(BitWriter&) const {}
+
+void L3UplinkFree::text(std::ostream& os) const {
+    os << "UplinkFree";
+}
+
+// ── L3EnhancedMeasurementRepUL ─────────────────────────────────────────
+
+Expected<L3EnhancedMeasurementRepUL> L3EnhancedMeasurementRepUL::parse(BitReader& br) {
+    L3EnhancedMeasurementRepUL msg;
+    while (br.hasMore()) {
+        auto r = br.readField(8); if (!r) return Expected<L3EnhancedMeasurementRepUL>::error(r.error());
+        msg.mData.push_back(static_cast<uint8_t>(r.value()));
+    }
+    return Expected<L3EnhancedMeasurementRepUL>::hold(std::move(msg));
+}
+
+void L3EnhancedMeasurementRepUL::write(BitWriter& bw) const {
+    for (const auto& b : mData) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3EnhancedMeasurementRepUL::text(std::ostream& os) const {
+    os << "EnhancedMeasurementRepUL: len=" << mData.size();
+}
+
+// ── L3MeasurementInfoDL ────────────────────────────────────────────────
+
+Expected<L3MeasurementInfoDL> L3MeasurementInfoDL::parse(BitReader& br) {
+    L3MeasurementInfoDL msg;
+    while (br.hasMore()) {
+        auto r = br.readField(8); if (!r) return Expected<L3MeasurementInfoDL>::error(r.error());
+        msg.mData.push_back(static_cast<uint8_t>(r.value()));
+    }
+    return Expected<L3MeasurementInfoDL>::hold(std::move(msg));
+}
+
+void L3MeasurementInfoDL::write(BitWriter& bw) const {
+    for (const auto& b : mData) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3MeasurementInfoDL::text(std::ostream& os) const {
+    os << "MeasurementInfoDL: len=" << mData.size();
+}
+
+// ── L3VBSVGCSRecon ─────────────────────────────────────────────────────
+
+Expected<L3VBSVGCSRecon> L3VBSVGCSRecon::parse(BitReader&) {
+    return Expected<L3VBSVGCSRecon>::hold(L3VBSVGCSRecon{});
+}
+
+void L3VBSVGCSRecon::write(BitWriter&) const {}
+
+void L3VBSVGCSRecon::text(std::ostream& os) const {
+    os << "VBSVGCSRecon";
+}
+
+// ── L3VBSVGCSRecon2 ────────────────────────────────────────────────────
+
+Expected<L3VBSVGCSRecon2> L3VBSVGCSRecon2::parse(BitReader&) {
+    return Expected<L3VBSVGCSRecon2>::hold(L3VBSVGCSRecon2{});
+}
+
+void L3VBSVGCSRecon2::write(BitWriter&) const {}
+
+void L3VBSVGCSRecon2::text(std::ostream& os) const {
+    os << "VBSVGCSRecon2";
+}
+
+// ── L3VGCSAddInfo ──────────────────────────────────────────────────────
+
+Expected<L3VGCSAddInfo> L3VGCSAddInfo::parse(BitReader&) {
+    return Expected<L3VGCSAddInfo>::hold(L3VGCSAddInfo{});
+}
+
+void L3VGCSAddInfo::write(BitWriter&) const {}
+
+void L3VGCSAddInfo::text(std::ostream& os) const {
+    os << "VGCSAddInfo";
+}
+
+// ── L3VGCSMSInfo ───────────────────────────────────────────────────────
+
+Expected<L3VGCSMSInfo> L3VGCSMSInfo::parse(BitReader&) {
+    return Expected<L3VGCSMSInfo>::hold(L3VGCSMSInfo{});
+}
+
+void L3VGCSMSInfo::write(BitWriter&) const {}
+
+void L3VGCSMSInfo::text(std::ostream& os) const {
+    os << "VGCSMSInfo";
+}
+
+// ── L3VGCSSNeighCellInfo ───────────────────────────────────────────────
+
+Expected<L3VGCSSNeighCellInfo> L3VGCSSNeighCellInfo::parse(BitReader&) {
+    return Expected<L3VGCSSNeighCellInfo>::hold(L3VGCSSNeighCellInfo{});
+}
+
+void L3VGCSSNeighCellInfo::write(BitWriter&) const {}
+
+void L3VGCSSNeighCellInfo::text(std::ostream& os) const {
+    os << "VGCSSNeighCellInfo";
+}
+
+// ── L3NotifyAppData ────────────────────────────────────────────────────
+
+Expected<L3NotifyAppData> L3NotifyAppData::parse(BitReader&) {
+    return Expected<L3NotifyAppData>::hold(L3NotifyAppData{});
+}
+
+void L3NotifyAppData::write(BitWriter&) const {}
+
+void L3NotifyAppData::text(std::ostream& os) const {
+    os << "NotifyAppData";
 }
 
 } // namespace gsml3parser

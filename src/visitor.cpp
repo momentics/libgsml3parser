@@ -51,6 +51,58 @@ struct NameVisitor {
     std::string_view operator()(const L3SystemInformationType13&) const { return "SystemInformationType13"; }
     std::string_view operator()(const L3SystemInformationType16&) const { return "SystemInformationType16"; }
     std::string_view operator()(const L3SystemInformationType17&) const { return "SystemInformationType17"; }
+    std::string_view operator()(const L3ConfigurationChangeCommand&) const { return "ConfigurationChangeCommand"; }
+    std::string_view operator()(const L3ConfigurationChangeAcknowledge&) const { return "ConfigurationChangeAcknowledge"; }
+    std::string_view operator()(const L3ConfigurationChangeReject&) const { return "ConfigurationChangeReject"; }
+    std::string_view operator()(const L3PartialRelease&) const { return "PartialRelease"; }
+    std::string_view operator()(const L3PartialReleaseComplete&) const { return "PartialReleaseComplete"; }
+    std::string_view operator()(const L3ExtendedMeasurementReport&) const { return "ExtendedMeasurementReport"; }
+    std::string_view operator()(const L3ExtendedMeasurementOrder&) const { return "ExtendedMeasurementOrder"; }
+    std::string_view operator()(const L3FrequencyRedefinition&) const { return "FrequencyRedefinition"; }
+    std::string_view operator()(const L3NotificationNCH&) const { return "NotificationNCH"; }
+    std::string_view operator()(const L3NotificationResponse&) const { return "NotificationResponse"; }
+    std::string_view operator()(const L3VGCSUplinkGrant&) const { return "VGCSUplinkGrant"; }
+    std::string_view operator()(const L3UplinkRelease&) const { return "UplinkRelease"; }
+    std::string_view operator()(const L3UplinkBusy&) const { return "UplinkBusy"; }
+    std::string_view operator()(const L3TalkerIndication&) const { return "TalkerIndication"; }
+    std::string_view operator()(const L3PriorityUplinkRequest&) const { return "PriorityUplinkRequest"; }
+    std::string_view operator()(const L3DataIndication&) const { return "DataIndication"; }
+    std::string_view operator()(const L3DataIndication2&) const { return "DataIndication2"; }
+    std::string_view operator()(const L3DTMAssignmentFailure&) const { return "DTMAssignmentFailure"; }
+    std::string_view operator()(const L3DTMReject&) const { return "DTMReject"; }
+    std::string_view operator()(const L3DTMRequest&) const { return "DTMRequest"; }
+    std::string_view operator()(const L3PacketAssignment&) const { return "PacketAssignment"; }
+    std::string_view operator()(const L3DTMAssignmentCommand&) const { return "DTMAssignmentCommand"; }
+    std::string_view operator()(const L3DTMInformation&) const { return "DTMInformation"; }
+    std::string_view operator()(const L3PacketInformation&) const { return "PacketInformation"; }
+    std::string_view operator()(const L3UTRANClassmarkChange&) const { return "UTRANClassmarkChange"; }
+    std::string_view operator()(const L3CDMA2000ClassmarkChange&) const { return "CDMA2000ClassmarkChange"; }
+    std::string_view operator()(const L3IntersysToUTRANHOCommand&) const { return "IntersysToUTRANHOCommand"; }
+    std::string_view operator()(const L3IntersysToCDMA2000HOCommand&) const { return "IntersysToCDMA2000HOCommand"; }
+    std::string_view operator()(const L3GERANIUClassmarkChange&) const { return "GERANIUClassmarkChange"; }
+    std::string_view operator()(const L3SystemInformationType14&) const { return "SystemInformationType14"; }
+    std::string_view operator()(const L3SystemInformationType15&) const { return "SystemInformationType15"; }
+    std::string_view operator()(const L3SystemInformationType18&) const { return "SystemInformationType18"; }
+    std::string_view operator()(const L3SystemInformationType19&) const { return "SystemInformationType19"; }
+    std::string_view operator()(const L3SystemInformationType20&) const { return "SystemInformationType20"; }
+    std::string_view operator()(const L3SystemInformationType13alt&) const { return "SystemInformationType13alt"; }
+    std::string_view operator()(const L3SystemInformationType2n&) const { return "SystemInformationType2n"; }
+    std::string_view operator()(const L3SystemInformationType21&) const { return "SystemInformationType21"; }
+    std::string_view operator()(const L3SystemInformationType22&) const { return "SystemInformationType22"; }
+    std::string_view operator()(const L3SystemInformationType23&) const { return "SystemInformationType23"; }
+    std::string_view operator()(const L3SystemInformationType10&) const { return "SystemInformationType10"; }
+    std::string_view operator()(const L3SystemInformationType10bis&) const { return "SystemInformationType10bis"; }
+    std::string_view operator()(const L3SystemInformationType10ter&) const { return "SystemInformationType10ter"; }
+    std::string_view operator()(const L3NotificationFACCH&) const { return "NotificationFACCH"; }
+    std::string_view operator()(const L3UplinkFree&) const { return "UplinkFree"; }
+    std::string_view operator()(const L3EnhancedMeasurementRepUL&) const { return "EnhancedMeasurementRepUL"; }
+    std::string_view operator()(const L3MeasurementInfoDL&) const { return "MeasurementInfoDL"; }
+    std::string_view operator()(const L3VBSVGCSRecon&) const { return "VBSVGCSRecon"; }
+    std::string_view operator()(const L3VBSVGCSRecon2&) const { return "VBSVGCSRecon2"; }
+    std::string_view operator()(const L3VGCSAddInfo&) const { return "VGCSAddInfo"; }
+    std::string_view operator()(const L3VGCSMSInfo&) const { return "VGCSMSInfo"; }
+    std::string_view operator()(const L3VGCSSNeighCellInfo&) const { return "VGCSSNeighCellInfo"; }
+    std::string_view operator()(const L3NotifyAppData&) const { return "NotifyAppData"; }
 
     // MM names
     std::string_view operator()(const L3IMSIDetachIndication&) const { return "IMSIDetachIndication"; }
@@ -157,6 +209,58 @@ struct MTIVisitor {
     int operator()(const L3SystemInformationType13&) const { return L3SystemInformationType13::MTI; }
     int operator()(const L3SystemInformationType16&) const { return L3SystemInformationType16::MTI; }
     int operator()(const L3SystemInformationType17&) const { return L3SystemInformationType17::MTI; }
+    int operator()(const L3ConfigurationChangeCommand&) const { return L3ConfigurationChangeCommand::MTI; }
+    int operator()(const L3ConfigurationChangeAcknowledge&) const { return L3ConfigurationChangeAcknowledge::MTI; }
+    int operator()(const L3ConfigurationChangeReject&) const { return L3ConfigurationChangeReject::MTI; }
+    int operator()(const L3PartialRelease&) const { return L3PartialRelease::MTI; }
+    int operator()(const L3PartialReleaseComplete&) const { return L3PartialReleaseComplete::MTI; }
+    int operator()(const L3ExtendedMeasurementReport&) const { return L3ExtendedMeasurementReport::MTI; }
+    int operator()(const L3ExtendedMeasurementOrder&) const { return L3ExtendedMeasurementOrder::MTI; }
+    int operator()(const L3FrequencyRedefinition&) const { return L3FrequencyRedefinition::MTI; }
+    int operator()(const L3NotificationNCH&) const { return L3NotificationNCH::MTI; }
+    int operator()(const L3NotificationResponse&) const { return L3NotificationResponse::MTI; }
+    int operator()(const L3VGCSUplinkGrant&) const { return L3VGCSUplinkGrant::MTI; }
+    int operator()(const L3UplinkRelease&) const { return L3UplinkRelease::MTI; }
+    int operator()(const L3UplinkBusy&) const { return L3UplinkBusy::MTI; }
+    int operator()(const L3TalkerIndication&) const { return L3TalkerIndication::MTI; }
+    int operator()(const L3PriorityUplinkRequest&) const { return L3PriorityUplinkRequest::MTI; }
+    int operator()(const L3DataIndication&) const { return L3DataIndication::MTI; }
+    int operator()(const L3DataIndication2&) const { return L3DataIndication2::MTI; }
+    int operator()(const L3DTMAssignmentFailure&) const { return L3DTMAssignmentFailure::MTI; }
+    int operator()(const L3DTMReject&) const { return L3DTMReject::MTI; }
+    int operator()(const L3DTMRequest&) const { return L3DTMRequest::MTI; }
+    int operator()(const L3PacketAssignment&) const { return L3PacketAssignment::MTI; }
+    int operator()(const L3DTMAssignmentCommand&) const { return L3DTMAssignmentCommand::MTI; }
+    int operator()(const L3DTMInformation&) const { return L3DTMInformation::MTI; }
+    int operator()(const L3PacketInformation&) const { return L3PacketInformation::MTI; }
+    int operator()(const L3UTRANClassmarkChange&) const { return L3UTRANClassmarkChange::MTI; }
+    int operator()(const L3CDMA2000ClassmarkChange&) const { return L3CDMA2000ClassmarkChange::MTI; }
+    int operator()(const L3IntersysToUTRANHOCommand&) const { return L3IntersysToUTRANHOCommand::MTI; }
+    int operator()(const L3IntersysToCDMA2000HOCommand&) const { return L3IntersysToCDMA2000HOCommand::MTI; }
+    int operator()(const L3GERANIUClassmarkChange&) const { return L3GERANIUClassmarkChange::MTI; }
+    int operator()(const L3SystemInformationType14&) const { return L3SystemInformationType14::MTI; }
+    int operator()(const L3SystemInformationType15&) const { return L3SystemInformationType15::MTI; }
+    int operator()(const L3SystemInformationType18&) const { return L3SystemInformationType18::MTI; }
+    int operator()(const L3SystemInformationType19&) const { return L3SystemInformationType19::MTI; }
+    int operator()(const L3SystemInformationType20&) const { return L3SystemInformationType20::MTI; }
+    int operator()(const L3SystemInformationType13alt&) const { return L3SystemInformationType13alt::MTI; }
+    int operator()(const L3SystemInformationType2n&) const { return L3SystemInformationType2n::MTI; }
+    int operator()(const L3SystemInformationType21&) const { return L3SystemInformationType21::MTI; }
+    int operator()(const L3SystemInformationType22&) const { return L3SystemInformationType22::MTI; }
+    int operator()(const L3SystemInformationType23&) const { return L3SystemInformationType23::MTI; }
+    int operator()(const L3SystemInformationType10&) const { return L3SystemInformationType10::MTI; }
+    int operator()(const L3SystemInformationType10bis&) const { return L3SystemInformationType10bis::MTI; }
+    int operator()(const L3SystemInformationType10ter&) const { return L3SystemInformationType10ter::MTI; }
+    int operator()(const L3NotificationFACCH&) const { return L3NotificationFACCH::MTI; }
+    int operator()(const L3UplinkFree&) const { return L3UplinkFree::MTI; }
+    int operator()(const L3EnhancedMeasurementRepUL&) const { return L3EnhancedMeasurementRepUL::MTI; }
+    int operator()(const L3MeasurementInfoDL&) const { return L3MeasurementInfoDL::MTI; }
+    int operator()(const L3VBSVGCSRecon&) const { return L3VBSVGCSRecon::MTI; }
+    int operator()(const L3VBSVGCSRecon2&) const { return L3VBSVGCSRecon2::MTI; }
+    int operator()(const L3VGCSAddInfo&) const { return L3VGCSAddInfo::MTI; }
+    int operator()(const L3VGCSMSInfo&) const { return L3VGCSMSInfo::MTI; }
+    int operator()(const L3VGCSSNeighCellInfo&) const { return L3VGCSSNeighCellInfo::MTI; }
+    int operator()(const L3NotifyAppData&) const { return L3NotifyAppData::MTI; }
 
     int operator()(const L3IMSIDetachIndication&) const { return L3IMSIDetachIndication::MTI; }
     int operator()(const L3CMServiceAccept&) const { return L3CMServiceAccept::MTI; }
