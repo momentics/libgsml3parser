@@ -24,6 +24,7 @@
 #include <array>
 #include <cstddef>
 #include <string_view>
+#include <functional>
 #include <utility>
 #include <variant>
 

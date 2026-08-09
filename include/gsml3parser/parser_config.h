@@ -27,7 +27,6 @@
 #include <memory>
 
 #include "types.h"
-#include "logger.h"
 
 namespace gsml3parser {
 

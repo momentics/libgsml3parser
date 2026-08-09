@@ -26,6 +26,18 @@
 
 namespace gsml3parser {
 
+// Log severity levels
+enum class LogLevel : uint8_t {
+    EMERG   = 0,
+    ALERT   = 1,
+    CRIT    = 2,
+    ERR     = 3,
+    WARNING = 4,
+    NOTICE  = 5,
+    INFO    = 6,
+    DEBUG   = 7
+};
+
 // L3 Protocol Discriminator — GSM 04.08 10.2, GSM 04.07 11.2.3.1.1
 enum class L3PD : int8_t {
     GroupCallControl     = 0x00,
