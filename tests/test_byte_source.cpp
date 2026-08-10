@@ -25,6 +25,7 @@
 #include <vector>
 #include <cstring>
 #include <cstdio>
+#include <ctime>
 
 using namespace gsml3parser;
 
@@ -84,7 +85,14 @@ TEST(SpanByteSource, EmptySpan) {
 // ── FileByteSource tests ───────────────────────────────────────────────
 
 TEST(FileByteSource, ReadKnownFile) {
-    const char* tmp = "C:\\Users\\MOMENT~1\\AppData\\Local\\Temp\\kilo\\test_file_source.bin";
+    const char* tmpEnv = std::getenv("TEMP");
+    if (!tmpEnv) tmpEnv = std::getenv("TMP");
+    if (!tmpEnv) tmpEnv = "/tmp";
+
+    char tmp[512];
+    std::snprintf(tmp, sizeof(tmp), "%s/test_file_source_%u.bin",
+                  tmpEnv, static_cast<unsigned>(std::time(nullptr)));
+
     std::FILE* f = std::fopen(tmp, "wb");
     ASSERT_TRUE(f != nullptr);
     uint8_t expected[] = {0xDE, 0xAD, 0xBE, 0xEF};
