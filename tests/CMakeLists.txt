@@ -27,6 +27,7 @@ add_executable(gsml3parser_tests
     test_mm_messages.cpp
     test_cc_messages.cpp
     test_ss_messages.cpp
+    test_gmm_messages.cpp
     test_gsm_specs.cpp
     test_threading.cpp
     test_parser.cpp

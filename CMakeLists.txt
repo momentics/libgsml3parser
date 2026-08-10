@@ -29,8 +29,6 @@ set(CORE_SOURCES
     src/common/l3common.cpp
     src/enums.cpp
     src/parser.cpp
-    src/mm/l3mmelements.cpp
-    src/cc/l3ccelements.cpp
     src/visitor.cpp
     src/bitstream/byte_source.cpp
     src/bitstream/framer.cpp
@@ -42,15 +40,22 @@ set(RR_SOURCES
 )
 
 set(MM_SOURCES
+    src/mm/l3mmelements.cpp
     src/mm/l3mmmessages.cpp
 )
 
 set(CC_SOURCES
+    src/cc/l3ccelements.cpp
     src/cc/l3ccmessages.cpp
 )
 
 set(SS_SOURCES
     src/ss/l3ssmessages.cpp
+)
+
+set(GMM_SOURCES
+    src/gmm/l3gmmmessages.cpp
+    src/gmm/l3gmmelements.cpp
 )
 
 # ── Public headers ────────────────────────────────────────────────────
@@ -74,6 +79,8 @@ set(PUBLIC_HEADERS
     include/gsml3parser/cc/l3ccmessages.h
     include/gsml3parser/cc/l3ccelements.h
     include/gsml3parser/ss/l3ssmessages.h
+    include/gsml3parser/gmm/l3gmmelements.h
+    include/gsml3parser/gmm/l3gmmmessages.h
     include/gsml3parser/message_types.h
     include/gsml3parser/visitor.h
     include/gsml3parser/gsml3parser.hpp
@@ -90,6 +97,7 @@ add_library(gsml3parser
     ${MM_SOURCES}
     ${CC_SOURCES}
     ${SS_SOURCES}
+    ${GMM_SOURCES}
 )
 
 add_library(gsml3parser::parser ALIAS gsml3parser)

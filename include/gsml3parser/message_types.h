@@ -5,6 +5,7 @@
 #include "mm/l3mmmessages.h"
 #include "cc/l3ccmessages.h"
 #include "ss/l3ssmessages.h"
+#include "gmm/l3gmmmessages.h"
 
 namespace gsml3parser {
 
@@ -157,8 +158,34 @@ using SSM = std::variant<
     L3SupServReleaseCompleteMessage
 >;
 
-using ParsedMessage = std::variant<RRM, MMM, CCM, SSM>;
+using GMM = std::variant<
+    L3AttachRequest,
+    L3AttachAccept,
+    L3AttachComplete,
+    L3AttachReject,
+    L3DetachRequest,
+    L3DetachAccept,
+    L3RoutingAreaUpdateRequest,
+    L3RoutingAreaUpdateAccept,
+    L3RoutingAreaUpdateComplete,
+    L3RoutingAreaUpdateReject,
+    L3ServiceRequest,
+    L3ServiceAccept,
+    L3ServiceReject,
+    L3P_TMSIReallocationCommand,
+    L3P_TMSIReallocationComplete,
+    L3AuthenticationAndCipheringRequest,
+    L3AuthenticationAndCipheringResponse,
+    L3AuthenticationAndCipheringReject,
+    L3GMMIdentityRequest,
+    L3GMMIdentityResponse,
+    L3AuthenticationAndCipheringFailure,
+    L3GMMStatus,
+    L3GMMInformation
+>;
 
-static_assert(sizeof(ParsedMessage) < 4096, "ParsedMessage variant too large");
+using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM>;
+
+static_assert(sizeof(ParsedMessage) < 8192, "ParsedMessage variant too large");
 
 } // namespace gsml3parser

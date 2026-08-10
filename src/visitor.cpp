@@ -149,6 +149,31 @@ struct NameVisitor {
     std::string_view operator()(const L3SupServFacilityMessage&) const { return "SupServFacilityMessage"; }
     std::string_view operator()(const L3SupServRegisterMessage&) const { return "SupServRegisterMessage"; }
     std::string_view operator()(const L3SupServReleaseCompleteMessage&) const { return "SupServReleaseCompleteMessage"; }
+
+    // GMM names
+    std::string_view operator()(const L3AttachRequest&) const { return "AttachRequest"; }
+    std::string_view operator()(const L3AttachAccept&) const { return "AttachAccept"; }
+    std::string_view operator()(const L3AttachComplete&) const { return "AttachComplete"; }
+    std::string_view operator()(const L3AttachReject&) const { return "AttachReject"; }
+    std::string_view operator()(const L3DetachRequest&) const { return "DetachRequest"; }
+    std::string_view operator()(const L3DetachAccept&) const { return "DetachAccept"; }
+    std::string_view operator()(const L3RoutingAreaUpdateRequest&) const { return "RoutingAreaUpdateRequest"; }
+    std::string_view operator()(const L3RoutingAreaUpdateAccept&) const { return "RoutingAreaUpdateAccept"; }
+    std::string_view operator()(const L3RoutingAreaUpdateComplete&) const { return "RoutingAreaUpdateComplete"; }
+    std::string_view operator()(const L3RoutingAreaUpdateReject&) const { return "RoutingAreaUpdateReject"; }
+    std::string_view operator()(const L3ServiceRequest&) const { return "ServiceRequest"; }
+    std::string_view operator()(const L3ServiceAccept&) const { return "ServiceAccept"; }
+    std::string_view operator()(const L3ServiceReject&) const { return "ServiceReject"; }
+    std::string_view operator()(const L3P_TMSIReallocationCommand&) const { return "P_TMSIReallocationCommand"; }
+    std::string_view operator()(const L3P_TMSIReallocationComplete&) const { return "P_TMSIReallocationComplete"; }
+    std::string_view operator()(const L3AuthenticationAndCipheringRequest&) const { return "AuthAndCipheringRequest"; }
+    std::string_view operator()(const L3AuthenticationAndCipheringResponse&) const { return "AuthAndCipheringResponse"; }
+    std::string_view operator()(const L3AuthenticationAndCipheringReject&) const { return "AuthAndCipheringReject"; }
+    std::string_view operator()(const L3GMMIdentityRequest&) const { return "GMMIdentityRequest"; }
+    std::string_view operator()(const L3GMMIdentityResponse&) const { return "GMMIdentityResponse"; }
+    std::string_view operator()(const L3AuthenticationAndCipheringFailure&) const { return "AuthAndCipheringFailure"; }
+    std::string_view operator()(const L3GMMStatus&) const { return "GMMStatus"; }
+    std::string_view operator()(const L3GMMInformation&) const { return "GMMInformation"; }
 };
 
 struct PDVisitor {
@@ -156,6 +181,7 @@ struct PDVisitor {
     L3PD operator()(const MMM&) const { return L3PD::MobilityManagement; }
     L3PD operator()(const CCM&) const { return L3PD::CallControl; }
     L3PD operator()(const SSM&) const { return L3PD::NonCallSS; }
+    L3PD operator()(const GMM&) const { return L3PD::GPRSMobilityManagement; }
 };
 
 struct MTIVisitor {
@@ -163,6 +189,7 @@ struct MTIVisitor {
     int operator()(const MMM& v) const { return std::visit(*this, v); }
     int operator()(const CCM& v) const { return std::visit(*this, v); }
     int operator()(const SSM& v) const { return std::visit(*this, v); }
+    int operator()(const GMM& v) const { return std::visit(*this, v); }
 
     int operator()(const L3PagingRequestType1&) const { return L3PagingRequestType1::MTI; }
     int operator()(const L3PagingRequestType2&) const { return L3PagingRequestType2::MTI; }
@@ -304,6 +331,31 @@ struct MTIVisitor {
     int operator()(const L3SupServFacilityMessage&) const { return L3SupServFacilityMessage::MTI; }
     int operator()(const L3SupServRegisterMessage&) const { return L3SupServRegisterMessage::MTI; }
     int operator()(const L3SupServReleaseCompleteMessage&) const { return L3SupServReleaseCompleteMessage::MTI; }
+
+    // GMM MTI values
+    int operator()(const L3AttachRequest&) const { return L3AttachRequest::MTI; }
+    int operator()(const L3AttachAccept&) const { return L3AttachAccept::MTI; }
+    int operator()(const L3AttachComplete&) const { return L3AttachComplete::MTI; }
+    int operator()(const L3AttachReject&) const { return L3AttachReject::MTI; }
+    int operator()(const L3DetachRequest&) const { return L3DetachRequest::MTI; }
+    int operator()(const L3DetachAccept&) const { return L3DetachAccept::MTI; }
+    int operator()(const L3RoutingAreaUpdateRequest&) const { return L3RoutingAreaUpdateRequest::MTI; }
+    int operator()(const L3RoutingAreaUpdateAccept&) const { return L3RoutingAreaUpdateAccept::MTI; }
+    int operator()(const L3RoutingAreaUpdateComplete&) const { return L3RoutingAreaUpdateComplete::MTI; }
+    int operator()(const L3RoutingAreaUpdateReject&) const { return L3RoutingAreaUpdateReject::MTI; }
+    int operator()(const L3ServiceRequest&) const { return L3ServiceRequest::MTI; }
+    int operator()(const L3ServiceAccept&) const { return L3ServiceAccept::MTI; }
+    int operator()(const L3ServiceReject&) const { return L3ServiceReject::MTI; }
+    int operator()(const L3P_TMSIReallocationCommand&) const { return L3P_TMSIReallocationCommand::MTI; }
+    int operator()(const L3P_TMSIReallocationComplete&) const { return L3P_TMSIReallocationComplete::MTI; }
+    int operator()(const L3AuthenticationAndCipheringRequest&) const { return L3AuthenticationAndCipheringRequest::MTI; }
+    int operator()(const L3AuthenticationAndCipheringResponse&) const { return L3AuthenticationAndCipheringResponse::MTI; }
+    int operator()(const L3AuthenticationAndCipheringReject&) const { return L3AuthenticationAndCipheringReject::MTI; }
+    int operator()(const L3GMMIdentityRequest&) const { return L3GMMIdentityRequest::MTI; }
+    int operator()(const L3GMMIdentityResponse&) const { return L3GMMIdentityResponse::MTI; }
+    int operator()(const L3AuthenticationAndCipheringFailure&) const { return L3AuthenticationAndCipheringFailure::MTI; }
+    int operator()(const L3GMMStatus&) const { return L3GMMStatus::MTI; }
+    int operator()(const L3GMMInformation&) const { return L3GMMInformation::MTI; }
 };
 
 } // anonymous namespace

@@ -27,6 +27,7 @@
 #include "gsml3parser/mm/l3mmmessages.h"
 #include "gsml3parser/cc/l3ccmessages.h"
 #include "gsml3parser/ss/l3ssmessages.h"
+#include "gsml3parser/gmm/l3gmmmessages.h"
 
 #include <algorithm>
 #include <cstring>
@@ -190,6 +191,33 @@ SS_TRAIT(L3SupServRegisterMessage)
 SS_TRAIT(L3SupServReleaseCompleteMessage)
 #undef SS_TRAIT
 
+/* ── GMM messages (23 types) ── */
+#define GMM_TRAIT(T) template<> struct MessageTraits<T> { static constexpr L3PD pd = L3PD::GPRSMobilityManagement; static constexpr int mti = T::MTI; };
+GMM_TRAIT(L3AttachRequest)
+GMM_TRAIT(L3AttachAccept)
+GMM_TRAIT(L3AttachComplete)
+GMM_TRAIT(L3AttachReject)
+GMM_TRAIT(L3DetachRequest)
+GMM_TRAIT(L3DetachAccept)
+GMM_TRAIT(L3RoutingAreaUpdateRequest)
+GMM_TRAIT(L3RoutingAreaUpdateAccept)
+GMM_TRAIT(L3RoutingAreaUpdateComplete)
+GMM_TRAIT(L3RoutingAreaUpdateReject)
+GMM_TRAIT(L3ServiceRequest)
+GMM_TRAIT(L3ServiceAccept)
+GMM_TRAIT(L3ServiceReject)
+GMM_TRAIT(L3P_TMSIReallocationCommand)
+GMM_TRAIT(L3P_TMSIReallocationComplete)
+GMM_TRAIT(L3AuthenticationAndCipheringRequest)
+GMM_TRAIT(L3AuthenticationAndCipheringResponse)
+GMM_TRAIT(L3AuthenticationAndCipheringReject)
+GMM_TRAIT(L3GMMIdentityRequest)
+GMM_TRAIT(L3GMMIdentityResponse)
+GMM_TRAIT(L3AuthenticationAndCipheringFailure)
+GMM_TRAIT(L3GMMStatus)
+GMM_TRAIT(L3GMMInformation)
+#undef GMM_TRAIT
+
 // ── Helpers: extract PD and MTI from any message type ──────────────────
 
 template<typename T>
@@ -238,6 +266,11 @@ static void encodeL3Header(uint8_t* buf, L3PD pd, int mti, unsigned ti = 0, bool
             buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4 | (ti & 0x07) << 1);
             if (tif) buf[0] |= 0x01;
             buf[1] = static_cast<uint8_t>(((mti & 0x3F) << 2) | 0);
+            break;
+        }
+        case L3PD::GPRSMobilityManagement: {
+            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
+            buf[1] = static_cast<uint8_t>(mti & 0xFF);
             break;
         }
         default:
@@ -398,6 +431,46 @@ Expected<SSM> parseL3SS(BitReader& reader, int mti, unsigned ti) {
     }
 }
 
+// GMM messages (24.008 Table 10.4)
+Expected<GMM> parseL3GMM(BitReader& reader, int mti) {
+    switch (mti) {
+        // Attach procedure (24.008 9.4.1-9.4.4)
+        case L3AttachRequest::MTI:                  return L3AttachRequest::parse(reader).map([](L3AttachRequest v){ return GMM(std::move(v)); });
+        case L3AttachAccept::MTI:                   return L3AttachAccept::parse(reader).map([](L3AttachAccept v){ return GMM(std::move(v)); });
+        case L3AttachComplete::MTI:                 return L3AttachComplete::parse(reader).map([](L3AttachComplete v){ return GMM(std::move(v)); });
+        case L3AttachReject::MTI:                   return L3AttachReject::parse(reader).map([](L3AttachReject v){ return GMM(std::move(v)); });
+        // Detach procedure (24.008 9.4.5-9.4.6)
+        case L3DetachRequest::MTI:                  return L3DetachRequest::parse(reader).map([](L3DetachRequest v){ return GMM(std::move(v)); });
+        case L3DetachAccept::MTI:                   return L3DetachAccept::parse(reader).map([](L3DetachAccept v){ return GMM(std::move(v)); });
+        // Routing Area Update (24.008 9.4.12-9.4.17)
+        case L3RoutingAreaUpdateRequest::MTI:       return L3RoutingAreaUpdateRequest::parse(reader).map([](L3RoutingAreaUpdateRequest v){ return GMM(std::move(v)); });
+        case L3RoutingAreaUpdateAccept::MTI:        return L3RoutingAreaUpdateAccept::parse(reader).map([](L3RoutingAreaUpdateAccept v){ return GMM(std::move(v)); });
+        case L3RoutingAreaUpdateComplete::MTI:      return L3RoutingAreaUpdateComplete::parse(reader).map([](L3RoutingAreaUpdateComplete v){ return GMM(std::move(v)); });
+        case L3RoutingAreaUpdateReject::MTI:        return L3RoutingAreaUpdateReject::parse(reader).map([](L3RoutingAreaUpdateReject v){ return GMM(std::move(v)); });
+        // Service Request (24.008 9.4.20-9.4.22)
+        case L3ServiceRequest::MTI:                 return L3ServiceRequest::parse(reader).map([](L3ServiceRequest v){ return GMM(std::move(v)); });
+        case L3ServiceAccept::MTI:                  return L3ServiceAccept::parse(reader).map([](L3ServiceAccept v){ return GMM(std::move(v)); });
+        case L3ServiceReject::MTI:                  return L3ServiceReject::parse(reader).map([](L3ServiceReject v){ return GMM(std::move(v)); });
+        // P-TMSI Reallocation (24.008 9.4.8)
+        case L3P_TMSIReallocationCommand::MTI:      return L3P_TMSIReallocationCommand::parse(reader).map([](L3P_TMSIReallocationCommand v){ return GMM(std::move(v)); });
+        case L3P_TMSIReallocationComplete::MTI:     return L3P_TMSIReallocationComplete::parse(reader).map([](L3P_TMSIReallocationComplete v){ return GMM(std::move(v)); });
+        // Authentication and Ciphering (24.008 9.4.9)
+        case L3AuthenticationAndCipheringRequest::MTI: return L3AuthenticationAndCipheringRequest::parse(reader).map([](L3AuthenticationAndCipheringRequest v){ return GMM(std::move(v)); });
+        case L3AuthenticationAndCipheringResponse::MTI: return L3AuthenticationAndCipheringResponse::parse(reader).map([](L3AuthenticationAndCipheringResponse v){ return GMM(std::move(v)); });
+        case L3AuthenticationAndCipheringReject::MTI:  return L3AuthenticationAndCipheringReject::parse(reader).map([](L3AuthenticationAndCipheringReject v){ return GMM(std::move(v)); });
+        // Identity (24.008 9.4.7, 9.4.10)
+        case L3GMMIdentityRequest::MTI:             return L3GMMIdentityRequest::parse(reader).map([](L3GMMIdentityRequest v){ return GMM(std::move(v)); });
+        case L3GMMIdentityResponse::MTI:            return L3GMMIdentityResponse::parse(reader).map([](L3GMMIdentityResponse v){ return GMM(std::move(v)); });
+        // Auth Failure (24.008 9.4.23)
+        case L3AuthenticationAndCipheringFailure::MTI: return L3AuthenticationAndCipheringFailure::parse(reader).map([](L3AuthenticationAndCipheringFailure v){ return GMM(std::move(v)); });
+        // Status/Information (24.008 9.4.24)
+        case L3GMMStatus::MTI:                      return L3GMMStatus::parse(reader).map([](L3GMMStatus v){ return GMM(std::move(v)); });
+        case L3GMMInformation::MTI:                 return L3GMMInformation::parse(reader).map([](L3GMMInformation v){ return GMM(std::move(v)); });
+        default:
+            return Expected<GMM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown GMM MTI", static_cast<size_t>(mti)});
+    }
+}
+
 } // namespace detail
 
 // ── Step 3.2: Top-level parseL3() and parseL3Hex() ─────────────────────
@@ -499,6 +572,10 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
         case L3PD::NonCallSS:
             return detail::parseL3SS(reader, hdr.mti, hdr.ti)
                 .map([](SSM v){ return ParsedMessage(std::move(v)); });
+
+        case L3PD::GPRSMobilityManagement:
+            return detail::parseL3GMM(reader, hdr.mti)
+                .map([](GMM v){ return ParsedMessage(std::move(v)); });
 
         default: {
             auto* handler = cfg.getPDHandler(hdr.pd);
