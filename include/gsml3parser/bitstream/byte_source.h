@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <span>
@@ -84,18 +85,22 @@ public:
 };
 
 /**
- * Lock-free-ish ring buffer for producer/consumer streaming.
+ * Lock-free SPSC ring buffer for producer/consumer streaming.
  *
  * Intended use: an SDR or network callback writes bytes via write(),
  * and the L3Framer / L3StreamProcessor reads them via read().
  *
- * Single-producer, single-consumer pattern is fully safe without locks.
+ * Uses std::atomic with acquire/release ordering for correct behaviour
+ * on weakly-ordered architectures (ARM, PowerPC).  On x86-64 (TSO) the
+ * compiler emits plain loads/stores — zero overhead.
+ *
+ * Single-producer, single-consumer is fully safe without locks.
  * Multi-producer or multi-consumer requires external synchronization.
  */
 class RingBuffer : public ByteSource {
     std::vector<uint8_t> mBuf;
-    size_t mHead{};   // write position
-    size_t mTail{};   // read position
+    std::atomic<size_t> mHead{0};  // write position — owned by producer
+    std::atomic<size_t> mTail{0};  // read position  — owned by consumer
     size_t mCapacity{};
 
 public:
