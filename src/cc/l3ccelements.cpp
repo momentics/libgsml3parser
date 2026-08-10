@@ -939,4 +939,287 @@ void L3BackupBearerCapability::text(std::ostream& os) const {
     os << "]";
 }
 
+// ── SSOpCode name helper ───────────────────────────────────────────────
+
+std::string_view ssOpCodeName(SSOpCode code) {
+    switch (code) {
+        case SSOpCode::RegisterSS: return "RegisterSS";
+        case SSOpCode::EraseSS: return "EraseSS";
+        case SSOpCode::ActivateSS: return "ActivateSS";
+        case SSOpCode::DeactivateSS: return "DeactivateSS";
+        case SSOpCode::InterrogateSS: return "InterrogateSS";
+        case SSOpCode::NotifySS: return "NotifySS";
+        case SSOpCode::RegisterPassword: return "RegisterPassword";
+        case SSOpCode::GetPassword: return "GetPassword";
+        case SSOpCode::ProcessUSSData: return "ProcessUSSData";
+        case SSOpCode::ForwardCheckSSInd: return "ForwardCheckSSInd";
+        case SSOpCode::ProcessUSSReq: return "ProcessUSSReq";
+        case SSOpCode::USSRequest: return "USSRequest";
+        case SSOpCode::USSNotify: return "USSNotify";
+        case SSOpCode::ForwardCUGInfo: return "ForwardCUGInfo";
+        case SSOpCode::SplitMPTY: return "SplitMPTY";
+        case SSOpCode::RetrieveMPTY: return "RetrieveMPTY";
+        case SSOpCode::HoldMPTY: return "HoldMPTY";
+        case SSOpCode::BuildMPTY: return "BuildMPTY";
+        case SSOpCode::ForwardChargeAdvice: return "ForwardChargeAdvice";
+    }
+    return "Unknown";
+}
+
+// ── SSErrorCode name helper ────────────────────────────────────────────
+
+std::string_view ssErrorCodeName(SSErrorCode code) {
+    switch (code) {
+        case SSErrorCode::UnknownSubscriber: return "UnknownSubscriber";
+        case SSErrorCode::IllegalSubscriber: return "IllegalSubscriber";
+        case SSErrorCode::BearerServiceNotProvisioned: return "BearerServiceNotProvisioned";
+        case SSErrorCode::TeleserviceNotProvisioned: return "TeleserviceNotProvisioned";
+        case SSErrorCode::IllegalEquipment: return "IllegalEquipment";
+        case SSErrorCode::CallBarred: return "CallBarred";
+        case SSErrorCode::IllegalSSOperation: return "IllegalSSOperation";
+        case SSErrorCode::SSErrorStatus: return "SSErrorStatus";
+        case SSErrorCode::SSNotAvailable: return "SSNotAvailable";
+        case SSErrorCode::SSSubscriptionViolation: return "SSSubscriptionViolation";
+        case SSErrorCode::SSIncompatibility: return "SSIncompatibility";
+        case SSErrorCode::FacilityNotSupported: return "FacilityNotSupported";
+        case SSErrorCode::AbsentSubscriber: return "AbsentSubscriber";
+        case SSErrorCode::SystemFailure: return "SystemFailure";
+        case SSErrorCode::DataMissing: return "DataMissing";
+        case SSErrorCode::UnexpectedDataValue: return "UnexpectedDataValue";
+        case SSErrorCode::PWRegistrationFailure: return "PWRegistrationFailure";
+        case SSErrorCode::NegativePWCheck: return "NegativePWCheck";
+        case SSErrorCode::NumPWAttemptsViolation: return "NumPWAttemptsViolation";
+        case SSErrorCode::UnknownAlphabet: return "UnknownAlphabet";
+        case SSErrorCode::USSDBusy: return "USSDBusy";
+        case SSErrorCode::MaxMPTYParticipants: return "MaxMPTYParticipants";
+        case SSErrorCode::ResourcesNotAvailable: return "ResourcesNotAvailable";
+    }
+    return "Unknown";
+}
+
+// ── L3FacilityOpCode ───────────────────────────────────────────────────
+
+L3FacilityOpCode::L3FacilityOpCode(ComponentType comp, int8_t invokeId, SSOpCode op, std::vector<uint8_t> params)
+    : mComponent(comp), mInvokeId(invokeId), mOpCode(op), mParameters(std::move(params)) {}
+
+L3FacilityOpCode::L3FacilityOpCode(ComponentType comp, int8_t invokeId, SSErrorCode err)
+    : mComponent(comp), mInvokeId(invokeId), mErrorCode(err), mHasErrorCode(true) {}
+
+size_t L3FacilityOpCode::lengthV() const {
+    return 1 + 1 + (mParameters.empty() ? 0 : 1 + mParameters.size());
+}
+
+Expected<L3FacilityOpCode> L3FacilityOpCode::parse(const std::string& facilityData) {
+    if (facilityData.size() < 2) {
+        return Expected<L3FacilityOpCode>::error(
+            ParseError{ParseError::Code::TruncatedInput, "SS Facility data too short for op_code"});
+    }
+
+    L3FacilityOpCode result;
+    size_t pos = 0;
+
+    result.mComponent = static_cast<ComponentType>(static_cast<uint8_t>(facilityData[pos++]));
+
+    if (result.mComponent != Invoke && result.mComponent != ReturnResult &&
+        result.mComponent != ReturnError && result.mComponent != Reject) {
+        return Expected<L3FacilityOpCode>::error(
+            ParseError{ParseError::Code::InvalidValue, "Unknown TCAP component tag in SS Facility"});
+    }
+
+    if (facilityData.size() < pos + 1) {
+        return Expected<L3FacilityOpCode>::error(
+            ParseError{ParseError::Code::TruncatedInput, "SS Facility data truncated at invoke ID"});
+    }
+    result.mInvokeId = static_cast<int8_t>(static_cast<uint8_t>(facilityData[pos++]));
+
+    if (result.mComponent == Invoke) {
+        if (facilityData.size() < pos + 1) {
+            return Expected<L3FacilityOpCode>::error(
+                ParseError{ParseError::Code::TruncatedInput, "SS Facility data truncated at op_code"});
+        }
+        result.mOpCode = static_cast<SSOpCode>(static_cast<uint8_t>(facilityData[pos++]));
+
+        if (pos < facilityData.size()) {
+            result.mParameters.assign(facilityData.begin() + pos, facilityData.end());
+        }
+    } else if (result.mComponent == ReturnError) {
+        if (facilityData.size() < pos + 1) {
+            return Expected<L3FacilityOpCode>::error(
+                ParseError{ParseError::Code::TruncatedInput, "SS Facility data truncated at error code"});
+        }
+        result.mErrorCode = static_cast<SSErrorCode>(static_cast<uint8_t>(facilityData[pos++]));
+        result.mHasErrorCode = true;
+
+        if (pos < facilityData.size()) {
+            result.mParameters.assign(facilityData.begin() + pos, facilityData.end());
+        }
+    } else if (result.mComponent == ReturnResult) {
+        if (pos < facilityData.size()) {
+            result.mParameters.assign(facilityData.begin() + pos, facilityData.end());
+        }
+    }
+
+    return Expected<L3FacilityOpCode>::hold(std::move(result));
+}
+
+void L3FacilityOpCode::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mComponent), 8);
+    bw.writeField(mInvokeId & 0xFF, 8);
+
+    if (mComponent == Invoke) {
+        bw.writeField(static_cast<uint32_t>(mOpCode), 8);
+        for (const auto& b : mParameters) {
+            bw.writeField(b, 8);
+        }
+    } else if (mComponent == ReturnError) {
+        if (mHasErrorCode) {
+            bw.writeField(static_cast<uint32_t>(mErrorCode), 8);
+        }
+        for (const auto& b : mParameters) {
+            bw.writeField(b, 8);
+        }
+    } else if (mComponent == ReturnResult) {
+        for (const auto& b : mParameters) {
+            bw.writeField(b, 8);
+        }
+    }
+}
+
+void L3FacilityOpCode::text(std::ostream& os) const {
+    os << "SSFacility[";
+    switch (mComponent) {
+        case Invoke: os << "INVOKE"; break;
+        case ReturnResult: os << "RETURN-RESULT"; break;
+        case ReturnError: os << "RETURN-ERROR"; break;
+        case Reject: os << "REJECT"; break;
+    }
+    os << " id=" << static_cast<int>(mInvokeId);
+    if (mComponent == Invoke) {
+        os << " op=" << ssOpCodeName(mOpCode);
+    } else if (mComponent == ReturnError && mHasErrorCode) {
+        os << " err=" << ssErrorCodeName(mErrorCode);
+    }
+    if (!mParameters.empty()) {
+        os << " params=[";
+        for (size_t i = 0; i < mParameters.size(); ++i) {
+            if (i > 0) os << " ";
+            os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mParameters[i]);
+        }
+        os << "]";
+    }
+    os << "]";
+}
+
+// ── GSM 7-bit alphabet decode/encode helpers ───────────────────────────
+
+static std::string gsm7bitDecode(const std::vector<uint8_t>& data) {
+    std::string result;
+    uint32_t accumulator = 0;
+    int bitCount = 0;
+
+    for (size_t i = 0; i < data.size(); ++i) {
+        accumulator |= (static_cast<uint32_t>(data[i]) << bitCount);
+        bitCount += 8;
+
+        while (bitCount >= 7) {
+            unsigned c = accumulator & 0x7F;
+            result += static_cast<char>(c);
+            accumulator >>= 7;
+            bitCount -= 7;
+        }
+    }
+
+    return result;
+}
+
+static std::vector<uint8_t> gsm7bitEncode(const std::string& text) {
+    std::vector<uint8_t> result;
+    int bitPos = 0;
+    uint32_t accumulator = 0;
+
+    for (char c : text) {
+        accumulator |= (static_cast<uint32_t>(c & 0x7F) << bitPos);
+        bitPos += 7;
+
+        while (bitPos >= 8) {
+            result.push_back(static_cast<uint8_t>(accumulator & 0xFF));
+            accumulator >>= 8;
+            bitPos -= 8;
+        }
+    }
+
+    if (bitPos > 0) {
+        result.push_back(static_cast<uint8_t>(accumulator & 0xFF));
+    }
+
+    return result;
+}
+
+// ── L3USSDData ─────────────────────────────────────────────────────────
+
+L3USSDData::L3USSDData(int8_t invokeId, SSOpCode op, uint8_t dcs, const std::vector<uint8_t>& ussdString, bool isResult)
+    : mInvokeId(invokeId), mOpCode(op), mDcs(dcs), mRawUssdString(ussdString), mIsResult(isResult) {}
+
+size_t L3USSDData::lengthV() const {
+    return 1 + 1 + 1 + mRawUssdString.size();
+}
+
+Expected<L3USSDData> L3USSDData::parse(const std::string& facilityData, SSOpCode opCode) {
+    (void)opCode; // op_code is read from data; parameter kept for API compatibility
+    if (facilityData.size() < 3) {
+        return Expected<L3USSDData>::error(
+            ParseError{ParseError::Code::TruncatedInput, "SS Facility data too short for USSD"});
+    }
+
+    L3USSDData result;
+    size_t pos = 0;
+
+    result.mInvokeId = static_cast<int8_t>(static_cast<uint8_t>(facilityData[pos++]));
+    result.mOpCode = static_cast<SSOpCode>(static_cast<uint8_t>(facilityData[pos++]));
+    result.mDcs = static_cast<uint8_t>(facilityData[pos++]);
+
+    if (pos < facilityData.size()) {
+        result.mRawUssdString.assign(facilityData.begin() + pos, facilityData.end());
+    }
+
+    if (result.mOpCode == SSOpCode::USSNotify) {
+        result.mIsResult = true;
+    }
+
+    return Expected<L3USSDData>::hold(std::move(result));
+}
+
+void L3USSDData::write(BitWriter& bw) const {
+    bw.writeField(mInvokeId & 0xFF, 8);
+    bw.writeField(static_cast<uint32_t>(mOpCode), 8);
+    bw.writeField(mDcs, 8);
+    for (const auto& b : mRawUssdString) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3USSDData::text(std::ostream& os) const {
+    os << "USSD[id=" << static_cast<int>(mInvokeId)
+       << " op=" << ssOpCodeName(mOpCode)
+       << " dcs=0x" << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mDcs)
+       << " text=\"" << decodeUssdString() << "\"]";
+}
+
+std::string L3USSDData::decodeUssdString() const {
+    if (alphabet() == UCS2) {
+        std::string result;
+        for (size_t i = 0; i + 1 < mRawUssdString.size(); i += 2) {
+            uint16_t cp = (static_cast<uint16_t>(mRawUssdString[i]) << 8) | mRawUssdString[i + 1];
+            if (cp < 128) result += static_cast<char>(cp);
+            else result += '?';
+        }
+        return result;
+    }
+    return gsm7bitDecode(mRawUssdString);
+}
+
+std::vector<uint8_t> L3USSDData::encodeUssdString(const std::string& text) {
+    return gsm7bitEncode(text);
+}
+
 } // namespace gsml3parser

@@ -1288,6 +1288,160 @@ MTI values are the 6-bit messageType field (GSM 04.08 Table 10.3). In the L3 hea
 | `L3SupServRegisterMessage` | varies | DL/UL | Registration request/response |
 | `L3SupServReleaseCompleteMessage` | varies | DL | SS release complete |
 
+### SS Operation Codes
+
+**File:** `gsml3parser/cc/l3ccelements.h`
+
+TCAP operation codes defined in GSM TS 04.80 section 4.5. Reference: `ref/osmo-ttcn3-hacks/library/SS_Templates.ttcn` `SS_Op_Code` enum.
+
+```cpp
+enum class SSOpCode : uint8_t {
+    RegisterSS = 0x0A,       EraseSS = 0x0B,
+    ActivateSS = 0x0C,       DeactivateSS = 0x0D,
+    InterrogateSS = 0x0E,    NotifySS = 0x10,
+    RegisterPassword = 0x11, GetPassword = 0x12,
+    ProcessUSSData = 0x13,   ForwardCheckSSInd = 0x26,
+    ProcessUSSReq = 0x3B,    USSRequest = 0x3C,
+    USSNotify = 0x3D,        ForwardCUGInfo = 0x78,
+    SplitMPTY = 0x79,        RetrieveMPTY = 0x7A,
+    HoldMPTY = 0x7B,         BuildMPTY = 0x7C,
+    ForwardChargeAdvice = 0x7D
+};
+
+std::string_view ssOpCodeName(SSOpCode code);
+```
+
+### SS Error Codes
+
+Error codes defined in GSM TS 04.80 section 4.5. Reference: `SS_Templates.ttcn` `SS_Err_Code` enum.
+
+```cpp
+enum class SSErrorCode : uint8_t {
+    UnknownSubscriber = 0x01,       IllegalSubscriber = 0x09,
+    BearerServiceNotProvisioned = 0x0A, TeleserviceNotProvisioned = 0x0B,
+    IllegalEquipment = 0x0C,        CallBarred = 0x0D,
+    IllegalSSOperation = 0x10,      SSErrorStatus = 0x11,
+    SSNotAvailable = 0x12,          SSSubscriptionViolation = 0x13,
+    SSIncompatibility = 0x14,       FacilityNotSupported = 0x15,
+    AbsentSubscriber = 0x1B,        SystemFailure = 0x22,
+    DataMissing = 0x23,             UnexpectedDataValue = 0x24,
+    PWRegistrationFailure = 0x25,   NegativePWCheck = 0x26,
+    NumPWAttemptsViolation = 0x2B,  UnknownAlphabet = 0x47,
+    USSDBusy = 0x48,                MaxMPTYParticipants = 0x7E,
+    ResourcesNotAvailable = 0x7F
+};
+
+std::string_view ssErrorCodeName(SSErrorCode code);
+```
+
+### L3FacilityOpCode — TCAP Component Parser
+
+Parses the TCAP-level component from raw SS Facility data. Supports all four TCAP component types:
+
+```cpp
+class L3FacilityOpCode {
+public:
+    enum ComponentType : uint8_t {
+        Invoke = 0x81,    ReturnResult = 0x82,
+        ReturnError = 0x83, Reject = 0x84
+    };
+
+    static Expected<L3FacilityOpCode> parse(const std::string& facilityData);
+
+    ComponentType component() const;
+    int8_t invokeId() const;
+    SSOpCode opCode() const;           // Invoke only
+    bool hasErrorCode() const;
+    SSErrorCode errorCode() const;     // ReturnError only
+    const std::vector<uint8_t>& parameters() const;
+    void write(BitWriter& bw) const;
+    size_t lengthV() const;
+    void text(std::ostream& os) const;
+};
+```
+
+| Method | Description |
+|--------|-------------|
+| `parse(facilityData)` | Parse TCAP component from raw Facility IE data |
+| `component()` | Returns Invoke/ReturnResult/ReturnError/Reject |
+| `invokeId()` | TCAP invoke identifier (-128..127) |
+| `opCode()` | SS operation code (Invoke components) |
+| `errorCode()` | SS error code (ReturnError components) |
+| `parameters()` | Remaining parameter bytes |
+
+**Usage:**
+
+```cpp
+// Parse Facility message to extract TCAP op_code
+auto msg = parseL3Hex("be e8 03 81 01 3c");
+if (msg) {
+    if (auto* fac = tryGet<L3SupServFacilityMessage>(*msg)) {
+        auto fc = L3FacilityOpCode::parse(fac->getMapComponents());
+        if (fc) {
+            // fc->component() == Invoke, fc->opCode() == USSRequest
+        }
+    }
+}
+```
+
+### L3USSDData — USSD Message IE
+
+Parses USSD-specific content from SS Facility data. Handles GSM 7-bit alphabet encoding and UCS2.
+
+```cpp
+class L3USSDData {
+public:
+    enum Alphabet : uint8_t {
+        DefaultAlphabet = 0,  ExtendedCIDAlphabet = 1,
+        ShiftGSMtoUCS2 = 4,   UCS2 = 6
+    };
+
+    static Expected<L3USSDData> parse(const std::string& facilityData, SSOpCode opCode);
+
+    int8_t invokeId() const;
+    SSOpCode opCode() const;
+    uint8_t dcs() const;
+    Alphabet alphabet() const;
+    unsigned language() const;
+    const std::vector<uint8_t>& rawUssdString() const;
+    bool isResult() const;
+    void write(BitWriter& bw) const;
+    size_t lengthV() const;
+    void text(std::ostream& os) const;
+
+    std::string decodeUssdString() const;
+    static std::vector<uint8_t> encodeUssdString(const std::string& text);
+};
+```
+
+| Method | Description |
+|--------|-------------|
+| `parse(facilityData, opCode)` | Parse USSD from TCAP parameter bytes |
+| `invokeId()` | TCAP invoke ID |
+| `opCode()` | USSD op code (USSRequest, USSNotify, ProcessUSSData, etc.) |
+| `dcs()` | Data Coding Scheme (GSM 02.90 §4.1.1) |
+| `alphabet()` | Alphabet type from DCS low nibble |
+| `language()` | Language indicator from DCS high nibble |
+| `rawUssdString()` | Raw GSM 7-bit or UCS2 encoded bytes |
+| `isResult()` | True for USS-Notify (network response) |
+| `decodeUssdString()` | Decode to human-readable string |
+| `encodeUssdString(text)` | Encode text to GSM 7-bit packed bytes |
+
+**Usage:**
+
+```cpp
+// Encode a USSD string
+auto encoded = L3USSDData::encodeUssdString("*#100#");
+
+// Parse USSD from Facility data
+auto ussd = L3USSDData::parse(facilityBytes, SSOpCode::USSRequest);
+if (ussd) {
+    std::string text = ussd->decodeUssdString();  // e.g. "*#100#"
+}
+```
+
+**GSM 7-bit encoding:** The encoder packs characters into 7-bit frames per GSM 03.38, producing compact byte sequences suitable for USSD transport over the SS Facility IE.
+
 ---
 
 ## Conformance Notes
@@ -1298,5 +1452,6 @@ The library implements encodings defined by:
 |----------|-------|----------|
 | **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | Full RR, MM, CC message parsing and generation |
 | **GSM 04.07 / 3GPP TS 24.007** | Information element encoding rules | V, TV, TLV, LV formats; H/L rest octet padding (0x2B); bit ordering |
-| **GSM 04.80 / 3GPP TS 24.080** | Supplementary services on mobile | Facility, Register, Release Complete messages |
+| **GSM 04.80 / 3GPP TS 24.080** | Supplementary services on mobile | Facility, Register, Release Complete messages; SSOpCode/SSErrorCode enums; L3FacilityOpCode TCAP parser; L3USSDData IE |
+| **GSM 02.90 / 3GPP TS 23.038** | USSD alphabet and encoding | GSM 7-bit default/extended alphabet, UCS2, DCS handling in L3USSDData |
 | **3GPP TS 44.018** | Multi-rate speech channels (AMR) | Channel mode, multi-rate configuration, codec set negotiation |

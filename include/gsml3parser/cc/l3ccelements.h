@@ -699,4 +699,155 @@ public:
 };
 #endif
 
+// ── SS Operation Codes (GSM 04.80 section 4.5) ────────────────────────
+// Reference: ref/osmo-ttcn3-hacks/library/SS_Templates.ttcn SS_Op_Code enum
+
+#ifndef GSML3PARSER_SS_OPCODE_DEFINED
+#define GSML3PARSER_SS_OPCODE_DEFINED
+enum class SSOpCode : uint8_t {
+    RegisterSS = 0x0A,
+    EraseSS = 0x0B,
+    ActivateSS = 0x0C,
+    DeactivateSS = 0x0D,
+    InterrogateSS = 0x0E,
+    NotifySS = 0x10,
+    RegisterPassword = 0x11,
+    GetPassword = 0x12,
+    ProcessUSSData = 0x13,
+    ForwardCheckSSInd = 0x26,
+    ProcessUSSReq = 0x3B,
+    USSRequest = 0x3C,
+    USSNotify = 0x3D,
+    ForwardCUGInfo = 0x78,
+    SplitMPTY = 0x79,
+    RetrieveMPTY = 0x7A,
+    HoldMPTY = 0x7B,
+    BuildMPTY = 0x7C,
+    ForwardChargeAdvice = 0x7D
+};
+
+[[nodiscard]] std::string_view ssOpCodeName(SSOpCode code);
+#endif
+
+// ── SS Error Codes (GSM 04.80 section 4.5) ────────────────────────────
+// Reference: ref/osmo-ttcn3-hacks/library/SS_Templates.ttcn SS_Err_Code enum
+
+#ifndef GSML3PARSER_SS_ERROR_CODE_DEFINED
+#define GSML3PARSER_SS_ERROR_CODE_DEFINED
+enum class SSErrorCode : uint8_t {
+    UnknownSubscriber = 0x01,
+    IllegalSubscriber = 0x09,
+    BearerServiceNotProvisioned = 0x0A,
+    TeleserviceNotProvisioned = 0x0B,
+    IllegalEquipment = 0x0C,
+    CallBarred = 0x0D,
+    IllegalSSOperation = 0x10,
+    SSErrorStatus = 0x11,
+    SSNotAvailable = 0x12,
+    SSSubscriptionViolation = 0x13,
+    SSIncompatibility = 0x14,
+    FacilityNotSupported = 0x15,
+    AbsentSubscriber = 0x1B,
+    SystemFailure = 0x22,
+    DataMissing = 0x23,
+    UnexpectedDataValue = 0x24,
+    PWRegistrationFailure = 0x25,
+    NegativePWCheck = 0x26,
+    NumPWAttemptsViolation = 0x2B,
+    UnknownAlphabet = 0x47,
+    USSDBusy = 0x48,
+    MaxMPTYParticipants = 0x7E,
+    ResourcesNotAvailable = 0x7F
+};
+
+[[nodiscard]] std::string_view ssErrorCodeName(SSErrorCode code);
+#endif
+
+// ── SS Facility OpCode IE (TCAP component parser) ─────────────────────
+// Parses the TCAP-level op_code from SS Facility data.
+// TCAP component tags: Invoke=0x81, ReturnResult=0x82, ReturnError=0x83, Reject=0x84
+
+#ifndef GSML3PARSER_L3FACILITY_OPCODE_DEFINED
+#define GSML3PARSER_L3FACILITY_OPCODE_DEFINED
+class L3FacilityOpCode {
+public:
+    enum ComponentType : uint8_t {
+        Invoke = 0x81,
+        ReturnResult = 0x82,
+        ReturnError = 0x83,
+        Reject = 0x84
+    };
+
+private:
+    ComponentType mComponent{ComponentType::Invoke};
+    int8_t mInvokeId{0};
+    SSOpCode mOpCode{SSOpCode::RegisterSS};
+    SSErrorCode mErrorCode{SSErrorCode::UnknownSubscriber};
+    bool mHasErrorCode{false};
+    std::vector<uint8_t> mParameters;
+
+public:
+    L3FacilityOpCode() = default;
+    L3FacilityOpCode(ComponentType comp, int8_t invokeId, SSOpCode op, std::vector<uint8_t> params);
+    L3FacilityOpCode(ComponentType comp, int8_t invokeId, SSErrorCode err);
+
+    ComponentType component() const { return mComponent; }
+    int8_t invokeId() const { return mInvokeId; }
+    SSOpCode opCode() const { return mOpCode; }
+    bool hasErrorCode() const { return mHasErrorCode; }
+    SSErrorCode errorCode() const { return mErrorCode; }
+    const std::vector<uint8_t>& parameters() const { return mParameters; }
+
+    [[nodiscard]] static Expected<L3FacilityOpCode> parse(const std::string& facilityData);
+    void write(BitWriter& bw) const;
+    size_t lengthV() const;
+    void text(std::ostream& os) const;
+};
+#endif
+
+// ── USSD Data IE (GSM 02.90 / GSM 04.80) ──────────────────────────────
+// Parses USSD-specific content from SS Facility data.
+// Structure: InvokeId(1) | OpCode(1) | DCS(1) | USSDString(7-bit packed)...
+// DCS per GSM 02.90 section 4.1.1: alphabet(4) | language(4)
+
+#ifndef GSML3PARSER_L3USSDDATA_DEFINED
+#define GSML3PARSER_L3USSDDATA_DEFINED
+class L3USSDData {
+public:
+    enum Alphabet : uint8_t {
+        DefaultAlphabet = 0,
+        ExtendedCIDAlphabet = 1,
+        ShiftGSMtoUCS2 = 4,
+        UCS2 = 6
+    };
+
+private:
+    int8_t mInvokeId{0};
+    SSOpCode mOpCode{SSOpCode::ProcessUSSData};
+    uint8_t mDcs{0x0F};
+    std::vector<uint8_t> mRawUssdString;
+    bool mIsResult{false};
+
+public:
+    L3USSDData() = default;
+    L3USSDData(int8_t invokeId, SSOpCode op, uint8_t dcs, const std::vector<uint8_t>& ussdString, bool isResult = false);
+
+    int8_t invokeId() const { return mInvokeId; }
+    SSOpCode opCode() const { return mOpCode; }
+    uint8_t dcs() const { return mDcs; }
+    Alphabet alphabet() const { return static_cast<Alphabet>(mDcs & 0x0F); }
+    unsigned language() const { return (mDcs >> 4) & 0x0F; }
+    const std::vector<uint8_t>& rawUssdString() const { return mRawUssdString; }
+    bool isResult() const { return mIsResult; }
+
+    [[nodiscard]] static Expected<L3USSDData> parse(const std::string& facilityData, SSOpCode opCode);
+    void write(BitWriter& bw) const;
+    size_t lengthV() const;
+    void text(std::ostream& os) const;
+
+    [[nodiscard]] std::string decodeUssdString() const;
+    static std::vector<uint8_t> encodeUssdString(const std::string& text);
+};
+#endif
+
 } // namespace gsml3parser

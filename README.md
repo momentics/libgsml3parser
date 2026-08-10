@@ -16,7 +16,7 @@ libgsml3parser is a standalone C++20 library for parsing and generating GSM Laye
 | **Radio Resource (RR)** | `0x06` | GSM 04.08 9.1 | Paging, System Information (SI1–SI17), Handover, Assignment, Ciphering, etc. |
 | **Mobility Management (MM)** | `0x05` | GSM 04.08 9.2 | Location Updating, Authentication, Identity, CM Service, TMSI Reallocation |
 | **Call Control (CC)** | `0x03` | GSM 04.08 9.3 / ISDN Q.931 | Setup, Connect, Disconnect, Release, DTMF, Hold, Progress (+ 26 CC IEs: ConnectedNumber, SubAddress, RedirectingNumber, CLIR Sup/Invoke, NetworkCCCapabilities, LayerCompatibility, UserUser, Priority, StreamIdentifier, AllowedActions, CCCapabilities, BackupBearerCapability) |
-| **Supplementary Services (SS)** | `0x0b` | GSM 04.80 / 3GPP TS 24.080 | Facility, Register, Release Complete |
+| **Supplementary Services (SS)** | `0x0b` | GSM 04.80 / 3GPP TS 24.080 | Facility, Register, Release Complete (+ SSOpCode/SSErrorCode enums, L3FacilityOpCode IE, L3USSDData IE with GSM 7-bit encode/decode) |
 
 The library is self-contained with zero external dependencies beyond the C++20 standard library. It provides bidirectional parsing (binary to typed C++ objects and back), human-readable output, `Expected<T>` result types, immutable configuration, compile-time message dispatch via `std::variant` + `std::visit`, and a streaming bitstream I/O layer.
 
@@ -240,11 +240,19 @@ IMSI Detach Indication, CM Service Accept/Reject/Abort/Request, CM Reestablishme
 
 Setup, Emergency Setup, Call Proceeding, Alerting, Connect, Connect Acknowledge, Call Confirmed, Disconnect, Release, Release Complete, Start DTMF, Stop DTMF, Stop DTMF Acknowledge, Start DTMF Acknowledge, Start DTM F Reject, Hold, Hold Reject, CC Status, Progress.
 
-**CC Information Elements (26 types):** BearerCapability, BackupBearerCapability, SupportedCodecList, BCDDigits, CalledPartyBCDNumber, CallingPartyBCDNumber, ConnectedNumber, RedirectingNumber, SubAddress, CauseElement, CallState, ProgressIndicator, KeypadFacility, Signal, RepeatIndicator, CLIRSuppression, CLIRInvocation, NetworkCCCapabilities, LowLayerCompatibility, HighLayerCompatibility, UserUser, Priority, StreamIdentifier, AllowedActions, CCCapabilities, SupServFacilityIE, SupServVersionIndicator.
+**CC Information Elements (26 types):** BearerCapability, BackupBearerCapability, SupportedCodecList, BCDDigits, CalledPartyBCDNumber, CallingPartyBCDNumber, ConnectedNumber, RedirectingNumber, SubAddress, CauseElement, CallState, ProgressIndicator, KeypadFacility, Signal, RepeatIndicator CLIRSuppression, CLIRInvocation, NetworkCCCapabilities, LowLayerCompatibility, HighLayerCompatibility, UserUser, Priority, StreamIdentifier, AllowedActions, CCCapabilities, SupServFacilityIE, SupServVersionIndicator.
 
-### Supplementary Services (PD=0x0b) — 4 message types
+**SS Enums (2 types):** SSOpCode (19 operation codes per GSM 04.80 §4.5), SSErrorCode (23 error codes).
 
-Supervisory Service Facility Message, Supervisory Service Register Message, Supervisory Service Release Complete Message.
+**SS IEs (2 types):** L3FacilityOpCode (TCAP component parser: Invoke/ReturnResult/ReturnError/Reject), L3USSDData (USSD message with DCS, GSM 7-bit encode/decode, UCS2 support).
+
+### Supplementary Services (PD=0x0b) — 3 message types, 2 enums, 2 IEs
+
+**Messages:** Supervisory Service Facility Message, Supervisory Service Register Message, Supervisory Service Release Complete Message.
+
+**Enums:** SSOpCode (19 TCAP operation codes: RegisterSS, EraseSS, ActivateSS, DeactivateSS, InterrogateSS, NotifySS, RegisterPassword, GetPassword, ProcessUSSData, ForwardCheckSSInd, ProcessUSSReq, USSRequest, USSNotify, ForwardCUGInfo, SplitMPTY, RetrieveMPTY, HoldMPTY, BuildMPTY, ForwardChargeAdvice), SSErrorCode (23 error codes per GSM 04.80 §4.5).
+
+**IEs:** L3FacilityOpCode (TCAP component parser from raw Facility data — Invoke/ReturnResult/ReturnError/Reject with invoke ID, op code, error code, parameters), L3USSDData (USSD-specific IE: invoke ID, DCS with alphabet/language, GSM 7-bit packed string, UCS2 support, encode/decode helpers).
 
 ## Error Handling
 
