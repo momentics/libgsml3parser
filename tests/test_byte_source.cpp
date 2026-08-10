@@ -25,6 +25,7 @@
 #include <vector>
 #include <cstring>
 #include <cstdio>
+#include <ctime>
 
 using namespace gsml3parser;
 
@@ -84,7 +85,14 @@ TEST(SpanByteSource, EmptySpan) {
 // ── FileByteSource tests ───────────────────────────────────────────────
 
 TEST(FileByteSource, ReadKnownFile) {
-    const char* tmp = "C:\\Users\\MOMENT~1\\AppData\\Local\\Temp\\kilo\\test_file_source.bin";
+    const char* tmpEnv = std::getenv("TEMP");
+    if (!tmpEnv) tmpEnv = std::getenv("TMP");
+    if (!tmpEnv) tmpEnv = "/tmp";
+
+    char tmp[512];
+    std::snprintf(tmp, sizeof(tmp), "%s/test_file_source_%u.bin",
+                  tmpEnv, static_cast<unsigned>(std::time(nullptr)));
+
     std::FILE* f = std::fopen(tmp, "wb");
     ASSERT_TRUE(f != nullptr);
     uint8_t expected[] = {0xDE, 0xAD, 0xBE, 0xEF};
@@ -241,4 +249,63 @@ TEST(RingBuffer, ConcurrentProducerConsumer) {
 
     ASSERT_EQ(received.size(), expected.size());
     ASSERT_EQ(std::memcmp(received.data(), expected.data(), expected.size()), 0);
+}
+
+// Stress test: tiny buffer, large data volume — maximizes wrap-around and contention.
+TEST(RingBuffer, ConcurrentStressTinyBuffer) {
+    RingBuffer rb(64);
+    constexpr size_t kChunks = 500;
+    constexpr size_t ChunkSize = 8;
+    constexpr size_t TotalBytes = kChunks * ChunkSize;
+
+    auto producer = [&]() {
+        for (size_t i = 0; i < kChunks; ++i) {
+            uint8_t block[8];
+            for (size_t j = 0; j < ChunkSize; ++j)
+                block[j] = static_cast<uint8_t>((i * ChunkSize + j) & 0xFF);
+
+            size_t total = 0;
+            while (total < sizeof(block)) {
+                size_t w = rb.write(block + total, sizeof(block) - total);
+                if (w == 0) std::this_thread::yield();
+                total += w;
+            }
+        }
+    };
+
+    std::vector<uint8_t> received;
+    received.reserve(TotalBytes);
+    auto consumer = [&]() {
+        uint8_t buf[16];
+        while (received.size() < TotalBytes) {
+            size_t n = rb.read(buf, sizeof(buf));
+            if (n > 0) {
+                received.insert(received.end(), buf, buf + n);
+            } else {
+                std::this_thread::yield();
+            }
+        }
+    };
+
+    std::vector<uint8_t> expected(TotalBytes);
+    for (size_t i = 0; i < kChunks; ++i)
+        for (size_t j = 0; j < ChunkSize; ++j)
+            expected[i * ChunkSize + j] = static_cast<uint8_t>((i * ChunkSize + j) & 0xFF);
+
+    std::thread pt(producer);
+    std::thread ct(consumer);
+    ct.join();
+    pt.join();
+
+    ASSERT_EQ(received.size(), expected.size());
+    ASSERT_EQ(std::memcmp(received.data(), expected.data(), expected.size()), 0);
+}
+
+// Verify that atomic<size_t> is lock-free on the target platform.
+TEST(RingBuffer, AtomicsAreLockFree) {
+    // std::atomic<size_t> is lock-free on all modern 64-bit platforms (x86-64, ARM64).
+    // On 32-bit x86 it may fall back to a mutex, which is still correct but slower.
+    EXPECT_TRUE(std::atomic<size_t>::is_always_lock_free)
+        << "atomic<size_t> is not lock-free on this platform; "
+           "RingBuffer will use a fallback lock (still correct but slower)";
 }
