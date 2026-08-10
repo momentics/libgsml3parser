@@ -53,8 +53,9 @@ Expected<L3Header> parseL3Header(std::span<const uint8_t> data) {
         hdr.pd == L3PD::NonCallSS) {
         hdr.mti = (rawMti & 0xFC) >> 2;
     }
-    // GMM, SMS: byte 1 = raw messageType(8), no NSD field
-    else if (hdr.pd == L3PD::GPRSMobilityManagement || hdr.pd == L3PD::SMS) {
+    // GMM, SMS, SM: byte 1 = raw messageType(8), no NSD field
+    else if (hdr.pd == L3PD::GPRSMobilityManagement || hdr.pd == L3PD::SMS ||
+             hdr.pd == L3PD::GPRSSessionManagement) {
         hdr.mti = rawMti;
     }
     // RR short messages: TIF=1 indicates MTI >= 0x100

@@ -70,6 +70,16 @@ template<typename T>
     return std::get_if<T>(&v);
 }
 
+template<typename T>
+[[nodiscard]] const T* tryGet(const SM& v) {
+    return std::get_if<T>(&v);
+}
+
+template<typename T>
+[[nodiscard]] T* tryGet(SM& v) {
+    return std::get_if<T>(&v);
+}
+
 // Top-level: dispatch to domain, then tryGet within.
 // Uses SFINAE to only instantiate get_if for the correct domain variant.
 template<typename T>
@@ -97,6 +107,11 @@ template<typename T>
     if (const auto* gmm = std::get_if<GMM>(&msg)) {
         if constexpr (detail::is_variant_alternative_v<T, GMM>) {
             return tryGet<T>(*gmm);
+        }
+    }
+    if (const auto* sm = std::get_if<SM>(&msg)) {
+        if constexpr (detail::is_variant_alternative_v<T, SM>) {
+            return tryGet<T>(*sm);
         }
     }
     return nullptr;
@@ -127,6 +142,11 @@ template<typename T>
     if (auto* gmm = std::get_if<GMM>(&msg)) {
         if constexpr (detail::is_variant_alternative_v<T, GMM>) {
             return tryGet<T>(*gmm);
+        }
+    }
+    if (auto* sm = std::get_if<SM>(&msg)) {
+        if constexpr (detail::is_variant_alternative_v<T, SM>) {
+            return tryGet<T>(*sm);
         }
     }
     return nullptr;

@@ -28,6 +28,7 @@
 #include "gsml3parser/cc/l3ccmessages.h"
 #include "gsml3parser/ss/l3ssmessages.h"
 #include "gsml3parser/gmm/l3gmmmessages.h"
+#include "gsml3parser/sm/l3smmessages.h"
 
 #include <algorithm>
 #include <cstring>
@@ -218,6 +219,19 @@ GMM_TRAIT(L3GMMStatus)
 GMM_TRAIT(L3GMMInformation)
 #undef GMM_TRAIT
 
+/* ── SM messages (9 types) ── */
+#define SM_TRAIT(T) template<> struct MessageTraits<T> { static constexpr L3PD pd = L3PD::GPRSSessionManagement; static constexpr int mti = T::MTI; };
+SM_TRAIT(L3ActivatePDPContextRequest)
+SM_TRAIT(L3ActivatePDPContextAccept)
+SM_TRAIT(L3ActivatePDPContextReject)
+SM_TRAIT(L3DeactivatePDPContextRequest)
+SM_TRAIT(L3DeactivatePDPContextAccept)
+SM_TRAIT(L3ModifyPDPContextRequest)
+SM_TRAIT(L3ModifyPDPContextAccept)
+SM_TRAIT(L3ModifyPDPContextReject)
+SM_TRAIT(L3SMStatus)
+#undef SM_TRAIT
+
 // ── Helpers: extract PD and MTI from any message type ──────────────────
 
 template<typename T>
@@ -269,6 +283,11 @@ static void encodeL3Header(uint8_t* buf, L3PD pd, int mti, unsigned ti = 0, bool
             break;
         }
         case L3PD::GPRSMobilityManagement: {
+            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
+            buf[1] = static_cast<uint8_t>(mti & 0xFF);
+            break;
+        }
+        case L3PD::GPRSSessionManagement: {
             buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
             buf[1] = static_cast<uint8_t>(mti & 0xFF);
             break;
@@ -471,6 +490,27 @@ Expected<GMM> parseL3GMM(BitReader& reader, int mti) {
     }
 }
 
+// SM messages (24.008 Table 10.4a)
+Expected<SM> parseL3SM(BitReader& reader, int mti) {
+    switch (mti) {
+        // Activate PDP Context (24.008 9.5.1-9.5.3)
+        case L3ActivatePDPContextRequest::MTI:  return L3ActivatePDPContextRequest::parse(reader).map([](L3ActivatePDPContextRequest v){ return SM(std::move(v)); });
+        case L3ActivatePDPContextAccept::MTI:   return L3ActivatePDPContextAccept::parse(reader).map([](L3ActivatePDPContextAccept v){ return SM(std::move(v)); });
+        case L3ActivatePDPContextReject::MTI:   return L3ActivatePDPContextReject::parse(reader).map([](L3ActivatePDPContextReject v){ return SM(std::move(v)); });
+        // Deactivate PDP Context (24.008 9.5.4-9.5.5)
+        case L3DeactivatePDPContextRequest::MTI: return L3DeactivatePDPContextRequest::parse(reader).map([](L3DeactivatePDPContextRequest v){ return SM(std::move(v)); });
+        case L3DeactivatePDPContextAccept::MTI:  return L3DeactivatePDPContextAccept::parse(reader).map([](L3DeactivatePDPContextAccept v){ return SM(std::move(v)); });
+        // Modify PDP Context (24.008 9.5.6-9.5.8)
+        case L3ModifyPDPContextRequest::MTI:    return L3ModifyPDPContextRequest::parse(reader).map([](L3ModifyPDPContextRequest v){ return SM(std::move(v)); });
+        case L3ModifyPDPContextAccept::MTI:     return L3ModifyPDPContextAccept::parse(reader).map([](L3ModifyPDPContextAccept v){ return SM(std::move(v)); });
+        case L3ModifyPDPContextReject::MTI:     return L3ModifyPDPContextReject::parse(reader).map([](L3ModifyPDPContextReject v){ return SM(std::move(v)); });
+        // SM Status (24.008 9.5.9)
+        case L3SMStatus::MTI:                   return L3SMStatus::parse(reader).map([](L3SMStatus v){ return SM(std::move(v)); });
+        default:
+            return Expected<SM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown SM MTI", static_cast<size_t>(mti)});
+    }
+}
+
 } // namespace detail
 
 // ── Step 3.2: Top-level parseL3() and parseL3Hex() ─────────────────────
@@ -576,6 +616,10 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
         case L3PD::GPRSMobilityManagement:
             return detail::parseL3GMM(reader, hdr.mti)
                 .map([](GMM v){ return ParsedMessage(std::move(v)); });
+
+        case L3PD::GPRSSessionManagement:
+            return detail::parseL3SM(reader, hdr.mti)
+                .map([](SM v){ return ParsedMessage(std::move(v)); });
 
         default: {
             auto* handler = cfg.getPDHandler(hdr.pd);

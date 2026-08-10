@@ -174,6 +174,17 @@ struct NameVisitor {
     std::string_view operator()(const L3AuthenticationAndCipheringFailure&) const { return "AuthAndCipheringFailure"; }
     std::string_view operator()(const L3GMMStatus&) const { return "GMMStatus"; }
     std::string_view operator()(const L3GMMInformation&) const { return "GMMInformation"; }
+
+    // SM names
+    std::string_view operator()(const L3ActivatePDPContextRequest&) const { return "ActivatePDPContextRequest"; }
+    std::string_view operator()(const L3ActivatePDPContextAccept&) const { return "ActivatePDPContextAccept"; }
+    std::string_view operator()(const L3ActivatePDPContextReject&) const { return "ActivatePDPContextReject"; }
+    std::string_view operator()(const L3DeactivatePDPContextRequest&) const { return "DeactivatePDPContextRequest"; }
+    std::string_view operator()(const L3DeactivatePDPContextAccept&) const { return "DeactivatePDPContextAccept"; }
+    std::string_view operator()(const L3ModifyPDPContextRequest&) const { return "ModifyPDPContextRequest"; }
+    std::string_view operator()(const L3ModifyPDPContextAccept&) const { return "ModifyPDPContextAccept"; }
+    std::string_view operator()(const L3ModifyPDPContextReject&) const { return "ModifyPDPContextReject"; }
+    std::string_view operator()(const L3SMStatus&) const { return "SMStatus"; }
 };
 
 struct PDVisitor {
@@ -182,6 +193,7 @@ struct PDVisitor {
     L3PD operator()(const CCM&) const { return L3PD::CallControl; }
     L3PD operator()(const SSM&) const { return L3PD::NonCallSS; }
     L3PD operator()(const GMM&) const { return L3PD::GPRSMobilityManagement; }
+    L3PD operator()(const SM&) const { return L3PD::GPRSSessionManagement; }
 };
 
 struct MTIVisitor {
@@ -190,6 +202,7 @@ struct MTIVisitor {
     int operator()(const CCM& v) const { return std::visit(*this, v); }
     int operator()(const SSM& v) const { return std::visit(*this, v); }
     int operator()(const GMM& v) const { return std::visit(*this, v); }
+    int operator()(const SM& v) const { return std::visit(*this, v); }
 
     int operator()(const L3PagingRequestType1&) const { return L3PagingRequestType1::MTI; }
     int operator()(const L3PagingRequestType2&) const { return L3PagingRequestType2::MTI; }
@@ -356,6 +369,17 @@ struct MTIVisitor {
     int operator()(const L3AuthenticationAndCipheringFailure&) const { return L3AuthenticationAndCipheringFailure::MTI; }
     int operator()(const L3GMMStatus&) const { return L3GMMStatus::MTI; }
     int operator()(const L3GMMInformation&) const { return L3GMMInformation::MTI; }
+
+    // SM MTI values
+    int operator()(const L3ActivatePDPContextRequest&) const { return L3ActivatePDPContextRequest::MTI; }
+    int operator()(const L3ActivatePDPContextAccept&) const { return L3ActivatePDPContextAccept::MTI; }
+    int operator()(const L3ActivatePDPContextReject&) const { return L3ActivatePDPContextReject::MTI; }
+    int operator()(const L3DeactivatePDPContextRequest&) const { return L3DeactivatePDPContextRequest::MTI; }
+    int operator()(const L3DeactivatePDPContextAccept&) const { return L3DeactivatePDPContextAccept::MTI; }
+    int operator()(const L3ModifyPDPContextRequest&) const { return L3ModifyPDPContextRequest::MTI; }
+    int operator()(const L3ModifyPDPContextAccept&) const { return L3ModifyPDPContextAccept::MTI; }
+    int operator()(const L3ModifyPDPContextReject&) const { return L3ModifyPDPContextReject::MTI; }
+    int operator()(const L3SMStatus&) const { return L3SMStatus::MTI; }
 };
 
 } // anonymous namespace
