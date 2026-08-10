@@ -50,7 +50,8 @@ Expected<L3Header> parseL3Header(std::span<const uint8_t> data) {
 
     // MM, CC, SS: byte 1 = messageType(6)|NSD(2), mask and shift
     if (hdr.pd == L3PD::MobilityManagement || hdr.pd == L3PD::CallControl ||
-        hdr.pd == L3PD::NonCallSS) {
+        hdr.pd == L3PD::NonCallSS || hdr.pd == L3PD::BroadcastCallControl ||
+        hdr.pd == L3PD::GroupCallControl) {
         hdr.mti = (rawMti & 0xFC) >> 2;
     }
     // GMM, SMS, SM: byte 1 = raw messageType(8), no NSD field

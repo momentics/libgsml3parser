@@ -30,6 +30,8 @@
 #include "gsml3parser/gmm/l3gmmmessages.h"
 #include "gsml3parser/sms/l3smsmessages.h"
 #include "gsml3parser/sm/l3smmessages.h"
+#include "gsml3parser/bcc/l3bccmessages.h"
+#include "gsml3parser/gcc/l3gccmessages.h"
 
 #include <algorithm>
 #include <cstring>
@@ -242,6 +244,27 @@ SMS_TRAIT(L3CPStatus)
 SMS_TRAIT(L3CPSMT)
 #undef SMS_TRAIT
 
+/* ── BCC messages (6 types) ── */
+#define BCC_TRAIT(T) template<> struct MessageTraits<T> { static constexpr L3PD pd = L3PD::BroadcastCallControl; static constexpr int mti = T::MTI; };
+BCC_TRAIT(L3BCCSetup)
+BCC_TRAIT(L3BCCProceeding)
+BCC_TRAIT(L3BCCConnect)
+BCC_TRAIT(L3BCCDisconnect)
+BCC_TRAIT(L3BCCRelease)
+BCC_TRAIT(L3BCCReleaseComplete)
+#undef BCC_TRAIT
+
+/* ── GCC messages (7 types) ── */
+#define GCC_TRAIT(T) template<> struct MessageTraits<T> { static constexpr L3PD pd = L3PD::GroupCallControl; static constexpr int mti = T::MTI; };
+GCC_TRAIT(L3GCCSetup)
+GCC_TRAIT(L3GCCAcknowledge)
+GCC_TRAIT(L3GCCProceeding)
+GCC_TRAIT(L3GCCConnect)
+GCC_TRAIT(L3GCCDisconnect)
+GCC_TRAIT(L3GCCRelease)
+GCC_TRAIT(L3GCCReleaseComplete)
+#undef GCC_TRAIT
+
 // ── Helpers: extract PD and MTI from any message type ──────────────────
 
 template<typename T>
@@ -305,6 +328,18 @@ static void encodeL3Header(uint8_t* buf, L3PD pd, int mti, unsigned ti = 0, bool
         case L3PD::SMS: {
             buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
             buf[1] = static_cast<uint8_t>(mti & 0xFF);
+            break;
+        }
+        case L3PD::BroadcastCallControl: {
+            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4 | (ti & 0x07) << 1);
+            if (tif) buf[0] |= 0x01;
+            buf[1] = static_cast<uint8_t>(((mti & 0x3F) << 2) | 0);
+            break;
+        }
+        case L3PD::GroupCallControl: {
+            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4 | (ti & 0x07) << 1);
+            if (tif) buf[0] |= 0x01;
+            buf[1] = static_cast<uint8_t>(((mti & 0x3F) << 2) | 0);
             break;
         }
         default:
@@ -544,6 +579,48 @@ Expected<SMS> parseL3SMS(BitReader& reader, int mti) {
     }
 }
 
+// BCC messages (44.018 Table 10.4.3)
+Expected<BCCM> parseL3BCC(BitReader& reader, int mti, unsigned ti) {
+    switch (mti) {
+        // Broadcast Call Setup (44.018 9.6.2.2)
+        case L3BCCSetup::MTI:                  return L3BCCSetup::parse(reader).map([ti](L3BCCSetup v){ v.ti(ti); return BCCM(std::move(v)); });
+        // Broadcast Call Proceeding (44.018 9.6.2.3)
+        case L3BCCProceeding::MTI:             return L3BCCProceeding::parse(reader).map([ti](L3BCCProceeding v){ v.ti(ti); return BCCM(std::move(v)); });
+        // Broadcast Call Connect (44.018 9.6.2.6)
+        case L3BCCConnect::MTI:                return L3BCCConnect::parse(reader).map([ti](L3BCCConnect v){ v.ti(ti); return BCCM(std::move(v)); });
+        // Broadcast Call Disconnect (44.018 9.6.2.7)
+        case L3BCCDisconnect::MTI:             return L3BCCDisconnect::parse(reader).map([ti](L3BCCDisconnect v){ v.ti(ti); return BCCM(std::move(v)); });
+        // Broadcast Call Release (44.018 9.6.2.8)
+        case L3BCCRelease::MTI:                return L3BCCRelease::parse(reader).map([ti](L3BCCRelease v){ v.ti(ti); return BCCM(std::move(v)); });
+        // Broadcast Call Release Complete (44.018 9.6.2.9)
+        case L3BCCReleaseComplete::MTI:        return L3BCCReleaseComplete::parse(reader).map([ti](L3BCCReleaseComplete v){ v.ti(ti); return BCCM(std::move(v)); });
+        default:
+            return Expected<BCCM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown BCC MTI", static_cast<size_t>(mti)});
+    }
+}
+
+// GCC messages (44.018 Table 10.4.4)
+Expected<GCCM> parseL3GCC(BitReader& reader, int mti, unsigned ti) {
+    switch (mti) {
+        // Group Call Setup (44.018 9.7.2.2)
+        case L3GCCSetup::MTI:                  return L3GCCSetup::parse(reader).map([ti](L3GCCSetup v){ v.ti(ti); return GCCM(std::move(v)); });
+        // Group Call Acknowledge (44.018 9.7.2.3)
+        case L3GCCAcknowledge::MTI:            return L3GCCAcknowledge::parse(reader).map([ti](L3GCCAcknowledge v){ v.ti(ti); return GCCM(std::move(v)); });
+        // Group Call Proceeding (44.018 9.7.2.4)
+        case L3GCCProceeding::MTI:             return L3GCCProceeding::parse(reader).map([ti](L3GCCProceeding v){ v.ti(ti); return GCCM(std::move(v)); });
+        // Group Call Connect (44.018 9.7.2.6)
+        case L3GCCConnect::MTI:                return L3GCCConnect::parse(reader).map([ti](L3GCCConnect v){ v.ti(ti); return GCCM(std::move(v)); });
+        // Group Call Disconnect (44.018 9.7.2.7)
+        case L3GCCDisconnect::MTI:             return L3GCCDisconnect::parse(reader).map([ti](L3GCCDisconnect v){ v.ti(ti); return GCCM(std::move(v)); });
+        // Group Call Release (44.018 9.7.2.8)
+        case L3GCCRelease::MTI:                return L3GCCRelease::parse(reader).map([ti](L3GCCRelease v){ v.ti(ti); return GCCM(std::move(v)); });
+        // Group Call Release Complete (44.018 9.7.2.9)
+        case L3GCCReleaseComplete::MTI:        return L3GCCReleaseComplete::parse(reader).map([ti](L3GCCReleaseComplete v){ v.ti(ti); return GCCM(std::move(v)); });
+        default:
+            return Expected<GCCM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown GCC MTI", static_cast<size_t>(mti)});
+    }
+}
+
 } // namespace detail
 
 // ── Step 3.2: Top-level parseL3() and parseL3Hex() ─────────────────────
@@ -568,10 +645,14 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
         return std::move(res).map([](L3ChannelRequest v){ return ParsedMessage(RRM(std::move(v))); });
     }
 
-    // For 4-byte and 7-byte data: if PD is RR, try standard RR parsing first;
-    // if PD is not RR, skip to standard header parsing (not short messages).
+    // For 4-byte and 7-byte data: handle short messages (no standard L3 header).
+    // HandoverAccess is 4 bytes, SynchronizationChannelInformation is 7 bytes.
+    // These are RR short messages but their first byte's high nibble may match
+    // any PD value (including BCC=0x01, GCC=0x00), since they have no standard header.
     if (data.size() == 4 || data.size() == 7) {
         uint8_t pdNibble = (data[0] >> 4) & 0x0F;
+
+        // RR PD: try standard RR parsing first, then fall back to short message.
         if (pdNibble == static_cast<uint8_t>(L3PD::RadioResource)) {
             auto hdrResult = parseL3Header(data);
             if (hdrResult) {
@@ -580,7 +661,26 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
                 auto rrRes = detail::parseL3RR(reader, hdrResult.value().mti);
                 if (rrRes) return rrRes.map([](RRM v){ return ParsedMessage(std::move(v)); });
             }
-            // Standard RR parse failed; fall back to short message handler.
+        }
+
+        // BCC/GCC PD: short messages may have first byte that looks like BCC/GCC header.
+        // Try short message handler first, then fall through to standard BCC/GCC parsing.
+        if (pdNibble == static_cast<uint8_t>(L3PD::BroadcastCallControl) ||
+            pdNibble == static_cast<uint8_t>(L3PD::GroupCallControl)) {
+            if (data.size() == 4) {
+                BitReader reader(data.data(), 32);
+                auto res = L3HandoverAccess::parse(reader);
+                if (res) return res.map([](L3HandoverAccess v){ return ParsedMessage(RRM(std::move(v))); });
+            }
+            if (data.size() == 7) {
+                BitReader reader(data.data(), 56);
+                auto res = L3SynchronizationChannelInformation::parse(reader);
+                if (res) return res.map([](L3SynchronizationChannelInformation v){ return ParsedMessage(RRM(std::move(v))); });
+            }
+        }
+
+        // RR standard parse failed; fall back to short message handler.
+        if (pdNibble == static_cast<uint8_t>(L3PD::RadioResource)) {
             if (data.size() == 4) {
                 BitReader reader(data.data(), 32);
                 auto res = L3HandoverAccess::parse(reader);
@@ -657,6 +757,14 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
         case L3PD::SMS:
             return detail::parseL3SMS(reader, hdr.mti)
                 .map([](SMS v){ return ParsedMessage(std::move(v)); });
+
+        case L3PD::BroadcastCallControl:
+            return detail::parseL3BCC(reader, hdr.mti, hdr.ti)
+                .map([](BCCM v){ return ParsedMessage(std::move(v)); });
+
+        case L3PD::GroupCallControl:
+            return detail::parseL3GCC(reader, hdr.mti, hdr.ti)
+                .map([](GCCM v){ return ParsedMessage(std::move(v)); });
 
         default: {
             auto* handler = cfg.getPDHandler(hdr.pd);

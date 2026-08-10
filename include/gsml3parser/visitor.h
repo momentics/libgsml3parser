@@ -90,6 +90,26 @@ template<typename T>
     return std::get_if<T>(&v);
 }
 
+template<typename T>
+[[nodiscard]] const T* tryGet(const BCCM& v) {
+    return std::get_if<T>(&v);
+}
+
+template<typename T>
+[[nodiscard]] T* tryGet(BCCM& v) {
+    return std::get_if<T>(&v);
+}
+
+template<typename T>
+[[nodiscard]] const T* tryGet(const GCCM& v) {
+    return std::get_if<T>(&v);
+}
+
+template<typename T>
+[[nodiscard]] T* tryGet(GCCM& v) {
+    return std::get_if<T>(&v);
+}
+
 // Top-level: dispatch to domain, then tryGet within.
 // Uses SFINAE to only instantiate get_if for the correct domain variant.
 template<typename T>
@@ -127,6 +147,16 @@ template<typename T>
     if (const auto* sms = std::get_if<SMS>(&msg)) {
         if constexpr (detail::is_variant_alternative_v<T, SMS>) {
             return tryGet<T>(*sms);
+        }
+    }
+    if (const auto* bccm = std::get_if<BCCM>(&msg)) {
+        if constexpr (detail::is_variant_alternative_v<T, BCCM>) {
+            return tryGet<T>(*bccm);
+        }
+    }
+    if (const auto* gccm = std::get_if<GCCM>(&msg)) {
+        if constexpr (detail::is_variant_alternative_v<T, GCCM>) {
+            return tryGet<T>(*gccm);
         }
     }
     return nullptr;
@@ -167,6 +197,16 @@ template<typename T>
     if (auto* sms = std::get_if<SMS>(&msg)) {
         if constexpr (detail::is_variant_alternative_v<T, SMS>) {
             return tryGet<T>(*sms);
+        }
+    }
+    if (auto* bccm = std::get_if<BCCM>(&msg)) {
+        if constexpr (detail::is_variant_alternative_v<T, BCCM>) {
+            return tryGet<T>(*bccm);
+        }
+    }
+    if (auto* gccm = std::get_if<GCCM>(&msg)) {
+        if constexpr (detail::is_variant_alternative_v<T, GCCM>) {
+            return tryGet<T>(*gccm);
         }
     }
     return nullptr;
