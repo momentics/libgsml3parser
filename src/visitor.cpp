@@ -185,6 +185,13 @@ struct NameVisitor {
     std::string_view operator()(const L3ModifyPDPContextAccept&) const { return "ModifyPDPContextAccept"; }
     std::string_view operator()(const L3ModifyPDPContextReject&) const { return "ModifyPDPContextReject"; }
     std::string_view operator()(const L3SMStatus&) const { return "SMStatus"; }
+
+    // SMS names
+    std::string_view operator()(const L3CPData&) const { return "CPData"; }
+    std::string_view operator()(const L3CPAck&) const { return "CPAck"; }
+    std::string_view operator()(const L3CPErr&) const { return "CPErr"; }
+    std::string_view operator()(const L3CPStatus&) const { return "CPStatus"; }
+    std::string_view operator()(const L3CPSMT&) const { return "CPSMT"; }
 };
 
 struct PDVisitor {
@@ -194,6 +201,7 @@ struct PDVisitor {
     L3PD operator()(const SSM&) const { return L3PD::NonCallSS; }
     L3PD operator()(const GMM&) const { return L3PD::GPRSMobilityManagement; }
     L3PD operator()(const SM&) const { return L3PD::GPRSSessionManagement; }
+    L3PD operator()(const SMS&) const { return L3PD::SMS; }
 };
 
 struct MTIVisitor {
@@ -203,6 +211,7 @@ struct MTIVisitor {
     int operator()(const SSM& v) const { return std::visit(*this, v); }
     int operator()(const GMM& v) const { return std::visit(*this, v); }
     int operator()(const SM& v) const { return std::visit(*this, v); }
+    int operator()(const SMS& v) const { return std::visit(*this, v); }
 
     int operator()(const L3PagingRequestType1&) const { return L3PagingRequestType1::MTI; }
     int operator()(const L3PagingRequestType2&) const { return L3PagingRequestType2::MTI; }
@@ -380,6 +389,13 @@ struct MTIVisitor {
     int operator()(const L3ModifyPDPContextAccept&) const { return L3ModifyPDPContextAccept::MTI; }
     int operator()(const L3ModifyPDPContextReject&) const { return L3ModifyPDPContextReject::MTI; }
     int operator()(const L3SMStatus&) const { return L3SMStatus::MTI; }
+
+    // SMS CP MTI values
+    int operator()(const L3CPData&) const { return L3CPData::MTI; }
+    int operator()(const L3CPAck&) const { return L3CPAck::MTI; }
+    int operator()(const L3CPErr&) const { return L3CPErr::MTI; }
+    int operator()(const L3CPStatus&) const { return L3CPStatus::MTI; }
+    int operator()(const L3CPSMT&) const { return L3CPSMT::MTI; }
 };
 
 } // anonymous namespace

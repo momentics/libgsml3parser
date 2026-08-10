@@ -28,6 +28,7 @@
 #include "gsml3parser/cc/l3ccmessages.h"
 #include "gsml3parser/ss/l3ssmessages.h"
 #include "gsml3parser/gmm/l3gmmmessages.h"
+#include "gsml3parser/sms/l3smsmessages.h"
 #include "gsml3parser/sm/l3smmessages.h"
 
 #include <algorithm>
@@ -232,6 +233,15 @@ SM_TRAIT(L3ModifyPDPContextReject)
 SM_TRAIT(L3SMStatus)
 #undef SM_TRAIT
 
+/* ── SMS messages (5 types) ── */
+#define SMS_TRAIT(T) template<> struct MessageTraits<T> { static constexpr L3PD pd = L3PD::SMS; static constexpr int mti = T::MTI; };
+SMS_TRAIT(L3CPData)
+SMS_TRAIT(L3CPAck)
+SMS_TRAIT(L3CPErr)
+SMS_TRAIT(L3CPStatus)
+SMS_TRAIT(L3CPSMT)
+#undef SMS_TRAIT
+
 // ── Helpers: extract PD and MTI from any message type ──────────────────
 
 template<typename T>
@@ -288,6 +298,11 @@ static void encodeL3Header(uint8_t* buf, L3PD pd, int mti, unsigned ti = 0, bool
             break;
         }
         case L3PD::GPRSSessionManagement: {
+            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
+            buf[1] = static_cast<uint8_t>(mti & 0xFF);
+            break;
+        }
+        case L3PD::SMS: {
             buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
             buf[1] = static_cast<uint8_t>(mti & 0xFF);
             break;
@@ -511,6 +526,24 @@ Expected<SM> parseL3SM(BitReader& reader, int mti) {
     }
 }
 
+// SMS CP messages (24.008 Table 10.6a, 24.011 sections 7-8)
+Expected<SMS> parseL3SMS(BitReader& reader, int mti) {
+    switch (mti) {
+        // CP-DATA (24.011 8.1.2)
+        case L3CPData::MTI:       return L3CPData::parse(reader).map([](L3CPData v){ return SMS(std::move(v)); });
+        // CP-ACK (24.011 8.1.3)
+        case L3CPAck::MTI:        return L3CPAck::parse(reader).map([](L3CPAck v){ return SMS(std::move(v)); });
+        // CP-ERROR (24.011 8.1.4)
+        case L3CPErr::MTI:        return L3CPErr::parse(reader).map([](L3CPErr v){ return SMS(std::move(v)); });
+        // CP-STATUS (24.011 8.1.5)
+        case L3CPStatus::MTI:     return L3CPStatus::parse(reader).map([](L3CPStatus v){ return SMS(std::move(v)); });
+        // CP-SMT (24.011 8.1.6)
+        case L3CPSMT::MTI:        return L3CPSMT::parse(reader).map([](L3CPSMT v){ return SMS(std::move(v)); });
+        default:
+            return Expected<SMS>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown SMS CP-MTI", static_cast<size_t>(mti)});
+    }
+}
+
 } // namespace detail
 
 // ── Step 3.2: Top-level parseL3() and parseL3Hex() ─────────────────────
@@ -620,6 +653,10 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
         case L3PD::GPRSSessionManagement:
             return detail::parseL3SM(reader, hdr.mti)
                 .map([](SM v){ return ParsedMessage(std::move(v)); });
+
+        case L3PD::SMS:
+            return detail::parseL3SMS(reader, hdr.mti)
+                .map([](SMS v){ return ParsedMessage(std::move(v)); });
 
         default: {
             auto* handler = cfg.getPDHandler(hdr.pd);
