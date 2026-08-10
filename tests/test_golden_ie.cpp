@@ -1883,3 +1883,360 @@ TEST(GoldenIE, BeaconTimeslots) {
     // ccch_conf=0 (1CCCH not combined) -> 1 beacon
     EXPECT_GT(countBeaconTimeslots(0), 0u);
 }
+
+// =====================================================================
+// CC IEs: L3ConnectedNumber (GSM 04.08 10.5.4.7)
+// Reference: L3_Templates.ttcn connectedNumber in tr_ML3_MT_CC_CONNECT (line 1685)
+// TLV format: IEI=0x9c, Length(1) | TypeOctet(1) | Digits...
+// =====================================================================
+
+TEST(GoldenIE, ConnectedNumber_Default) {
+    L3ConnectedNumber num;
+    EXPECT_EQ(num.lengthV(), 1u);
+}
+
+TEST(GoldenIE, ConnectedNumber_Digits) {
+    L3ConnectedNumber num("1234567890");
+    EXPECT_STREQ(num.digits(), "1234567890");
+    EXPECT_EQ(num.lengthV(), 6u);
+}
+
+TEST(GoldenIE, ConnectedNumber_International) {
+    L3ConnectedNumber num("+1234567890");
+    EXPECT_EQ(num.type(), TypeOfNumber::International);
+    EXPECT_EQ(num.plan(), NumberingPlan::E164);
+}
+
+TEST(GoldenIE, ConnectedNumber_RoundTrip) {
+    L3ConnectedNumber orig("1234567890");
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3ConnectedNumber::parse(reader, orig.lengthV());
+    ASSERT_TRUE(parsedResult);
+    EXPECT_STREQ((*parsedResult).digits(), "1234567890");
+}
+
+TEST(GoldenIE, ConnectedNumber_IEI) {
+    EXPECT_EQ(L3ConnectedNumber::IEI, 0x9c);
+}
+
+// =====================================================================
+// CC IEs: L3SubAddress (GSM 04.08 10.5.4.3)
+// Reference: L3_Templates.ttcn callingPartySubAddress (line 1505),
+//   calledPartySubAddress (line 1507), connectedSubAddress (line 1660, 1686)
+// TLV format: IEI=0x9a/0x9b, Length(1) | NumItems(1) | SubAddressItem...
+// =====================================================================
+
+TEST(GoldenIE, SubAddress_Default) {
+    L3SubAddress sa;
+    EXPECT_EQ(sa.lengthV(), 1u);
+    EXPECT_TRUE(sa.items().empty());
+}
+
+TEST(GoldenIE, SubAddress_RoundTrip) {
+    L3SubAddress orig;
+    ieRoundTripLen(orig);
+}
+
+// =====================================================================
+// CC IEs: L3RedirectingNumber (GSM 04.08 10.5.4.13)
+// Reference: L3_Templates.ttcn redirectingPartyBCDNumber (line 2012),
+//   redirectingPartySubaddress (line 2013)
+// TLV format: IEI=0x97, Length(1) | TypeOctet(1) | Digits... | [Reason(1)]
+// =====================================================================
+
+TEST(GoldenIE, RedirectingNumber_Default) {
+    L3RedirectingNumber rn;
+    EXPECT_EQ(rn.lengthV(), 1u);
+}
+
+TEST(GoldenIE, RedirectingNumber_Digits) {
+    L3RedirectingNumber rn("9876543210");
+    EXPECT_STREQ(rn.digits(), "9876543210");
+}
+
+TEST(GoldenIE, RedirectingNumber_IEI) {
+    EXPECT_EQ(L3RedirectingNumber::IEI, 0x97);
+}
+
+TEST(GoldenIE, RedirectingNumber_RoundTrip) {
+    L3RedirectingNumber orig("9876543210");
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3RedirectingNumber::parse(reader, orig.lengthV());
+    ASSERT_TRUE(parsedResult);
+    EXPECT_STREQ((*parsedResult).digits(), "9876543210");
+}
+
+// =====================================================================
+// CC IEs: L3CLIRSuppression (GSM 04.08 10.5.4.16)
+// Reference: L3_Templates.ttcn clir_Suppression (line 1516)
+// TV format: IEI=0xc1, Value(1 octet)
+// =====================================================================
+
+TEST(GoldenIE, CLIRSuppression_Default) {
+    L3CLIRSuppression clir;
+    EXPECT_EQ(clir.value(), 0u);
+    EXPECT_EQ(L3CLIRSuppression::IEI, 0xc1);
+}
+
+TEST(GoldenIE, CLIRSuppression_Value) {
+    L3CLIRSuppression clir(5);
+    EXPECT_EQ(clir.value(), 5u);
+}
+
+TEST(GoldenIE, CLIRSuppression_RoundTrip) {
+    ieRoundTrip(L3CLIRSuppression(7));
+}
+
+// =====================================================================
+// CC IEs: L3CLIRInvocation (GSM 04.08 10.5.4.17)
+// Reference: L3_Templates.ttcn clir_Invocation (line 1517)
+// TV format: IEI=0xc2, Value(1 octet)
+// =====================================================================
+
+TEST(GoldenIE, CLIRInvocation_Default) {
+    L3CLIRInvocation cliri;
+    EXPECT_EQ(cliri.value(), 0u);
+    EXPECT_EQ(L3CLIRInvocation::IEI, 0xc2);
+}
+
+TEST(GoldenIE, CLIRInvocation_Value) {
+    L3CLIRInvocation cliri(3);
+    EXPECT_EQ(cliri.value(), 3u);
+}
+
+TEST(GoldenIE, CLIRInvocation_RoundTrip) {
+    ieRoundTrip(L3CLIRInvocation(7));
+}
+
+// =====================================================================
+// CC IEs: L3NetworkCCCapabilities (GSM 04.08 10.5.4.15)
+// Reference: L3_Templates.ttcn networkCCCapabilities in tr_ML3_MT_CC_CALL_PROC (line 1573)
+// TLV format: IEI=0x7a, Length(1) | CapabilityBits(2 octets min)
+// =====================================================================
+
+TEST(GoldenIE, NetworkCCCapabilities_Default) {
+    L3NetworkCCCapabilities caps;
+    EXPECT_EQ(caps.lengthV(), 0u);
+    EXPECT_EQ(L3NetworkCCCapabilities::IEI, 0x7a);
+}
+
+TEST(GoldenIE, NetworkCCCapabilities_RoundTrip) {
+    std::vector<uint8_t> buf(8, 0);
+    buf[0] = 0x01; buf[1] = 0x02;
+    BitWriter writer(buf.data(), buf.size() * 8);
+    writer.writeField(static_cast<uint32_t>(2), 8);
+    writer.writeField(0x01, 8);
+    writer.writeField(0x02, 8);
+    BitReader reader(buf.data(), writer.position());
+    auto readLen = reader.readField(8);
+    ASSERT_TRUE(readLen);
+    auto parsedResult = L3NetworkCCCapabilities::parse(reader, readLen.value());
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).lengthV(), 2u);
+}
+
+// =====================================================================
+// CC IEs: L3LowLayerCompatibility (GSM 04.08 10.5.4.14)
+// Reference: L3_Templates.ttcn lowLayerCompatibility1/2 (line 1509-1510)
+// TLV format: IEI=0x86, variable length
+// =====================================================================
+
+TEST(GoldenIE, LowLayerCompatibility_Default) {
+    L3LowLayerCompatibility llc;
+    EXPECT_EQ(llc.lengthV(), 0u);
+    EXPECT_EQ(L3LowLayerCompatibility::IEI, 0x86);
+}
+
+TEST(GoldenIE, LowLayerCompatibility_RoundTrip) {
+    std::vector<uint8_t> buf(8, 0);
+    buf[0] = 0xAB; buf[1] = 0xCD;
+    BitWriter writer(buf.data(), buf.size() * 8);
+    writer.writeField(static_cast<uint32_t>(2), 8);
+    writer.writeField(0xAB, 8);
+    writer.writeField(0xCD, 8);
+    BitReader reader(buf.data(), writer.position());
+    auto readLen = reader.readField(8);
+    ASSERT_TRUE(readLen);
+    auto parsedResult = L3LowLayerCompatibility::parse(reader, readLen.value());
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).lengthV(), 2u);
+}
+
+// =====================================================================
+// CC IEs: L3HighLayerCompatibility (GSM 04.08 10.5.4.14)
+// Reference: L3_Templates.ttcn highLayerCompatibility1/2 (line 1512-1513)
+// TLV format: IEI=0x87, variable length
+// =====================================================================
+
+TEST(GoldenIE, HighLayerCompatibility_Default) {
+    L3HighLayerCompatibility hlc;
+    EXPECT_EQ(hlc.lengthV(), 0u);
+    EXPECT_EQ(L3HighLayerCompatibility::IEI, 0x87);
+}
+
+TEST(GoldenIE, HighLayerCompatibility_RoundTrip) {
+    std::vector<uint8_t> buf(8, 0);
+    buf[0] = 0x12; buf[1] = 0x34;
+    BitWriter writer(buf.data(), buf.size() * 8);
+    writer.writeField(static_cast<uint32_t>(2), 8);
+    writer.writeField(0x12, 8);
+    writer.writeField(0x34, 8);
+    BitReader reader(buf.data(), writer.position());
+    auto readLen = reader.readField(8);
+    ASSERT_TRUE(readLen);
+    auto parsedResult = L3HighLayerCompatibility::parse(reader, readLen.value());
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).lengthV(), 2u);
+}
+
+// =====================================================================
+// CC IEs: L3UserUser (GSM 04.08 10.5.4.27)
+// Reference: L3_Templates.ttcn user_user in ts_ML3_MO_CC_SETUP (line 1514),
+//   tr_ML3_MT_CC_ALERTING (line 1595), tr_ML3_MT_CC_CONNECT (line 1687)
+// TLV format: IEI=0x75, variable length
+// =====================================================================
+
+TEST(GoldenIE, UserUser_Default) {
+    L3UserUser uu;
+    EXPECT_EQ(uu.lengthV(), 0u);
+    EXPECT_EQ(L3UserUser::IEI, 0x75);
+}
+
+TEST(GoldenIE, UserUser_RoundTrip) {
+    std::vector<uint8_t> buf(16, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    writer.writeField(static_cast<uint32_t>(3), 8);
+    writer.writeField(0x01, 8);
+    writer.writeField(0x02, 8);
+    writer.writeField(0x03, 8);
+    BitReader reader(buf.data(), writer.position());
+    auto readLen = reader.readField(8);
+    ASSERT_TRUE(readLen);
+    auto parsedResult = L3UserUser::parse(reader, readLen.value());
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).lengthV(), 3u);
+}
+
+// =====================================================================
+// CC IEs: L3Priority (GSM 04.08 10.5.4.19)
+// Reference: L3_Templates.ttcn priority in CC message templates
+// TV format: IEI=0x88, Value(1 octet): spare(1)|request(1)|priorityLevel(3)|spare(3)
+// =====================================================================
+
+TEST(GoldenIE, Priority_Default) {
+    L3Priority pri;
+    EXPECT_EQ(pri.priorityLevel(), 0u);
+    EXPECT_FALSE(pri.request());
+    EXPECT_EQ(L3Priority::IEI, 0x88);
+}
+
+TEST(GoldenIE, Priority_Value) {
+    L3Priority pri(5, true);
+    EXPECT_EQ(pri.priorityLevel(), 5u);
+    EXPECT_TRUE(pri.request());
+}
+
+TEST(GoldenIE, Priority_RoundTrip) {
+    ieRoundTrip(L3Priority(7, true));
+}
+
+// =====================================================================
+// CC IEs: L3StreamIdentifier (GSM 04.08 10.5.4.29)
+// Reference: L3_Templates.ttcn streamIdentifier in ts_ML3_MO_CC_SETUP (line 1521),
+//   ts_ML3_MO_CC_EMERG_SETUP (line 1544)
+// TV format: IEI=0x8e, Value(1 octet): spare(3)|VBS/VGCS(1)|streamID(4)
+// =====================================================================
+
+TEST(GoldenIE, StreamIdentifier_Default) {
+    L3StreamIdentifier si;
+    EXPECT_EQ(si.streamId(), 0u);
+    EXPECT_FALSE(si.vbs());
+    EXPECT_EQ(L3StreamIdentifier::IEI, 0x8e);
+}
+
+TEST(GoldenIE, StreamIdentifier_Value) {
+    L3StreamIdentifier si(5, true);
+    EXPECT_EQ(si.streamId(), 5u);
+    EXPECT_TRUE(si.vbs());
+}
+
+TEST(GoldenIE, StreamIdentifier_RoundTrip) {
+    ieRoundTrip(L3StreamIdentifier(15, false));
+}
+
+// =====================================================================
+// CC IEs: L3AllowedActions (GSM 04.08 10.5.4.2)
+// TLV format: IEI=0x92, Length(1) | Flags(2 octets): spare(5)|action(11)
+// =====================================================================
+
+TEST(GoldenIE, AllowedActions_Default) {
+    L3AllowedActions aa;
+    EXPECT_EQ(aa.flags(), 0u);
+    EXPECT_EQ(L3AllowedActions::IEI, 0x92);
+}
+
+TEST(GoldenIE, AllowedActions_Value) {
+    L3AllowedActions aa(0x123);
+    EXPECT_EQ(aa.flags(), 0x123u);
+}
+
+TEST(GoldenIE, AllowedActions_RoundTrip) {
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    L3AllowedActions orig(0x456);
+    writer.writeField(static_cast<uint32_t>(orig.lengthV()), 8);
+    orig.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto readLen = reader.readField(8);
+    ASSERT_TRUE(readLen);
+    auto parsedResult = L3AllowedActions::parse(reader, readLen.value());
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).flags(), 0x456u);
+}
+
+// =====================================================================
+// CC IEs: L3CCCapabilities (GSM 04.08 10.5.4.4)
+// Reference: L3_Templates.ttcn cC_Capabilities in ts_ML3_MO_CC_SETUP (line 1518)
+// TLV format: IEI=0x51, Length(1) | CapabilityBits(1 octet min): ext(1)|cap(7)
+// =====================================================================
+
+TEST(GoldenIE, CCCapabilities_Default) {
+    L3CCCapabilities caps;
+    EXPECT_EQ(caps.lengthV(), 0u);
+    EXPECT_EQ(L3CCCapabilities::IEI, 0x51);
+}
+
+TEST(GoldenIE, CCCapabilities_RoundTrip) {
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    writer.writeField(static_cast<uint32_t>(1), 8);
+    writer.writeField(0x01, 8);
+    BitReader reader(buf.data(), writer.position());
+    auto readLen = reader.readField(8);
+    ASSERT_TRUE(readLen);
+    auto parsedResult = L3CCCapabilities::parse(reader, readLen.value());
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).lengthV(), 1u);
+}
+
+// =====================================================================
+// CC IEs: L3BackupBearerCapability (GSM 04.08 10.5.4.5b)
+// Reference: L3_Templates.ttcn backupBearerCapacity in tr_ML3_MT_CC_SETUP
+// TLV format: IEI=0x7c, similar to L3BearerCapability
+// =====================================================================
+
+TEST(GoldenIE, BackupBearerCapability_Default) {
+    L3BackupBearerCapability bbc;
+    EXPECT_EQ(bbc.lengthV(), 1u);
+    EXPECT_EQ(L3BackupBearerCapability::IEI, 0x7c);
+}
+
+TEST(GoldenIE, BackupBearerCapability_RoundTrip) {
+    ieRoundTrip(L3BackupBearerCapability{});
+}

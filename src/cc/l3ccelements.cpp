@@ -484,4 +484,459 @@ void L3SupServVersionIndicator::text(std::ostream& os) const {
     os << "SSVersion[" << mVersion << "]";
 }
 
+// ── L3ConnectedNumber ──────────────────────────────────────────────────
+
+L3ConnectedNumber::L3ConnectedNumber(const char* wDigits)
+    : mPlan(NumberingPlan::E164) {
+    if (wDigits[0] == '+') {
+        mType = TypeOfNumber::International;
+        mDigits = L3BCDDigits(wDigits + 1);
+    } else {
+        mType = TypeOfNumber::Unknown;
+        mPlan = NumberingPlan::Unknown;
+        mDigits = L3BCDDigits(wDigits);
+    }
+}
+
+size_t L3ConnectedNumber::lengthV() const {
+    return 1 + mDigits.lengthV();
+}
+
+Expected<L3ConnectedNumber> L3ConnectedNumber::parse(BitReader& br, size_t lengthBytes) {
+    L3ConnectedNumber result;
+
+    auto r = br.readField(1); if (!r) return Expected<L3ConnectedNumber>::error(r.error()); // spare
+    r = br.readField(3); if (!r) return Expected<L3ConnectedNumber>::error(r.error());
+    result.mType = static_cast<TypeOfNumber>(r.value());
+    r = br.readField(4); if (!r) return Expected<L3ConnectedNumber>::error(r.error());
+    result.mPlan = static_cast<NumberingPlan>(r.value());
+
+    size_t digitBytes = lengthBytes - 1;
+    auto res = result.mDigits.parse(br, digitBytes, result.mType == TypeOfNumber::International);
+    if (!res) return Expected<L3ConnectedNumber>::error(res.error());
+
+    return Expected<L3ConnectedNumber>::hold(std::move(result));
+}
+
+void L3ConnectedNumber::write(BitWriter& bw) const {
+    bw.writeField(1, 1);
+    bw.writeField(static_cast<uint32_t>(mType), 3);
+    bw.writeField(static_cast<uint32_t>(mPlan), 4);
+    mDigits.write(bw);
+}
+
+void L3ConnectedNumber::text(std::ostream& os) const {
+    os << "ConnectedNumber[" << mDigits.digits() << "]";
+}
+
+// ── L3SubAddress ───────────────────────────────────────────────────────
+
+size_t L3SubAddress::lengthV() const {
+    size_t len = 1;
+    for (const auto& item : mItems) {
+        len += 2 + item.len;
+    }
+    return len;
+}
+
+Expected<L3SubAddress> L3SubAddress::parse(BitReader& br, size_t lengthBytes) {
+    L3SubAddress result;
+
+    auto r = br.readField(8); if (!r) return Expected<L3SubAddress>::error(r.error());
+    unsigned numItems = r.value();
+
+    size_t remaining = lengthBytes - 1;
+    for (unsigned i = 0; i < numItems && remaining >= 2; ++i) {
+        SubAddressItem item;
+        r = br.readField(8); if (!r) return Expected<L3SubAddress>::error(r.error());
+        unsigned octet = r.value();
+        item.sel = static_cast<Selector>((octet >> 5) & 0x07);
+        item.len = static_cast<uint8_t>(octet & 0x1f);
+        remaining--;
+
+        if (item.len > remaining) item.len = static_cast<uint8_t>(remaining);
+        item.data.resize(item.len);
+        for (size_t j = 0; j < item.len; ++j) {
+            r = br.readField(8); if (!r) return Expected<L3SubAddress>::error(r.error());
+            item.data[j] = static_cast<uint8_t>(r.value());
+        }
+        remaining -= item.len;
+
+        result.mItems.push_back(std::move(item));
+    }
+
+    return Expected<L3SubAddress>::hold(std::move(result));
+}
+
+void L3SubAddress::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mItems.size()), 8);
+    for (const auto& item : mItems) {
+        bw.writeField(((item.sel & 0x07) << 5) | (item.len & 0x1f), 8);
+        for (const auto& b : item.data) {
+            bw.writeField(b, 8);
+        }
+    }
+}
+
+void L3SubAddress::text(std::ostream& os) const {
+    os << "SubAddress[" << mItems.size() << " items]";
+}
+
+// ── L3RedirectingNumber ────────────────────────────────────────────────
+
+L3RedirectingNumber::L3RedirectingNumber(const char* wDigits)
+    : mPlan(NumberingPlan::E164) {
+    if (wDigits[0] == '+') {
+        mType = TypeOfNumber::International;
+        mDigits = L3BCDDigits(wDigits + 1);
+    } else {
+        mType = TypeOfNumber::Unknown;
+        mPlan = NumberingPlan::Unknown;
+        mDigits = L3BCDDigits(wDigits);
+    }
+}
+
+size_t L3RedirectingNumber::lengthV() const {
+    return 1 + mDigits.lengthV() + (mHaveReason ? 1 : 0);
+}
+
+Expected<L3RedirectingNumber> L3RedirectingNumber::parse(BitReader& br, size_t lengthBytes) {
+    L3RedirectingNumber result;
+
+    auto r = br.readField(1); if (!r) return Expected<L3RedirectingNumber>::error(r.error());
+    bool haveReasonBit = !r.value();
+    r = br.readField(3); if (!r) return Expected<L3RedirectingNumber>::error(r.error());
+    result.mType = static_cast<TypeOfNumber>(r.value());
+    r = br.readField(4); if (!r) return Expected<L3RedirectingNumber>::error(r.error());
+    result.mPlan = static_cast<NumberingPlan>(r.value());
+
+    size_t remaining = lengthBytes - 1;
+    if (haveReasonBit && remaining >= 2) {
+        r = br.readField(8); if (!r) return Expected<L3RedirectingNumber>::error(r.error());
+        result.mReason = static_cast<RedirectReason>(r.value() & 0x03);
+        result.mHaveReason = true;
+        remaining--;
+    }
+
+    auto res = result.mDigits.parse(br, remaining, result.mType == TypeOfNumber::International);
+    if (!res) return Expected<L3RedirectingNumber>::error(res.error());
+
+    return Expected<L3RedirectingNumber>::hold(std::move(result));
+}
+
+void L3RedirectingNumber::write(BitWriter& bw) const {
+    bw.writeField(mHaveReason ? 0 : 1, 1);
+    bw.writeField(static_cast<uint32_t>(mType), 3);
+    bw.writeField(static_cast<uint32_t>(mPlan), 4);
+    if (mHaveReason) {
+        bw.writeField(static_cast<uint32_t>(mReason), 8);
+    }
+    mDigits.write(bw);
+}
+
+void L3RedirectingNumber::text(std::ostream& os) const {
+    os << "RedirectingNumber[" << mDigits.digits() << "]";
+    if (mHaveReason) os << " reason=" << static_cast<int>(mReason);
+}
+
+// ── L3CLIRSuppression ──────────────────────────────────────────────────
+
+L3CLIRSuppression::L3CLIRSuppression(unsigned wValue) : mValue(wValue & 0x07) {}
+
+Expected<L3CLIRSuppression> L3CLIRSuppression::parse(BitReader& br) {
+    auto r = br.readField(8); if (!r) return Expected<L3CLIRSuppression>::error(r.error());
+    return Expected<L3CLIRSuppression>::hold(L3CLIRSuppression(r.value()));
+}
+
+void L3CLIRSuppression::write(BitWriter& bw) const {
+    bw.writeField(mValue, 8);
+}
+
+void L3CLIRSuppression::text(std::ostream& os) const {
+    os << "CLIRSuppression[" << mValue << "]";
+}
+
+// ── L3CLIRInvocation ───────────────────────────────────────────────────
+
+L3CLIRInvocation::L3CLIRInvocation(unsigned wValue) : mValue(wValue & 0x07) {}
+
+Expected<L3CLIRInvocation> L3CLIRInvocation::parse(BitReader& br) {
+    auto r = br.readField(8); if (!r) return Expected<L3CLIRInvocation>::error(r.error());
+    return Expected<L3CLIRInvocation>::hold(L3CLIRInvocation(r.value()));
+}
+
+void L3CLIRInvocation::write(BitWriter& bw) const {
+    bw.writeField(mValue, 8);
+}
+
+void L3CLIRInvocation::text(std::ostream& os) const {
+    os << "CLIRInvocation[" << mValue << "]";
+}
+
+// ── L3NetworkCCCapabilities ────────────────────────────────────────────
+
+size_t L3NetworkCCCapabilities::lengthV() const {
+    return mCapabilities.size();
+}
+
+Expected<L3NetworkCCCapabilities> L3NetworkCCCapabilities::parse(BitReader& br, size_t lengthBytes) {
+    L3NetworkCCCapabilities result;
+    result.mCapabilities.resize(lengthBytes);
+    for (size_t i = 0; i < lengthBytes; ++i) {
+        auto r = br.readField(8); if (!r) return Expected<L3NetworkCCCapabilities>::error(r.error());
+        result.mCapabilities[i] = static_cast<uint8_t>(r.value());
+    }
+    return Expected<L3NetworkCCCapabilities>::hold(std::move(result));
+}
+
+void L3NetworkCCCapabilities::write(BitWriter& bw) const {
+    for (const auto& b : mCapabilities) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3NetworkCCCapabilities::text(std::ostream& os) const {
+    os << "NetCCCaps[";
+    for (size_t i = 0; i < mCapabilities.size(); ++i) {
+        if (i > 0) os << " ";
+        os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mCapabilities[i]);
+    }
+    os << "]";
+}
+
+// ── L3LowLayerCompatibility ────────────────────────────────────────────
+
+size_t L3LowLayerCompatibility::lengthV() const {
+    return mData.size();
+}
+
+Expected<L3LowLayerCompatibility> L3LowLayerCompatibility::parse(BitReader& br, size_t lengthBytes) {
+    L3LowLayerCompatibility result;
+    result.mData.resize(lengthBytes);
+    for (size_t i = 0; i < lengthBytes; ++i) {
+        auto r = br.readField(8); if (!r) return Expected<L3LowLayerCompatibility>::error(r.error());
+        result.mData[i] = static_cast<uint8_t>(r.value());
+    }
+    return Expected<L3LowLayerCompatibility>::hold(std::move(result));
+}
+
+void L3LowLayerCompatibility::write(BitWriter& bw) const {
+    for (const auto& b : mData) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3LowLayerCompatibility::text(std::ostream& os) const {
+    os << "LLCompat[";
+    for (size_t i = 0; i < mData.size(); ++i) {
+        if (i > 0) os << " ";
+        os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mData[i]);
+    }
+    os << "]";
+}
+
+// ── L3HighLayerCompatibility ───────────────────────────────────────────
+
+size_t L3HighLayerCompatibility::lengthV() const {
+    return mData.size();
+}
+
+Expected<L3HighLayerCompatibility> L3HighLayerCompatibility::parse(BitReader& br, size_t lengthBytes) {
+    L3HighLayerCompatibility result;
+    result.mData.resize(lengthBytes);
+    for (size_t i = 0; i < lengthBytes; ++i) {
+        auto r = br.readField(8); if (!r) return Expected<L3HighLayerCompatibility>::error(r.error());
+        result.mData[i] = static_cast<uint8_t>(r.value());
+    }
+    return Expected<L3HighLayerCompatibility>::hold(std::move(result));
+}
+
+void L3HighLayerCompatibility::write(BitWriter& bw) const {
+    for (const auto& b : mData) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3HighLayerCompatibility::text(std::ostream& os) const {
+    os << "HLCompat[";
+    for (size_t i = 0; i < mData.size(); ++i) {
+        if (i > 0) os << " ";
+        os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mData[i]);
+    }
+    os << "]";
+}
+
+// ── L3UserUser ─────────────────────────────────────────────────────────
+
+size_t L3UserUser::lengthV() const {
+    return mData.size();
+}
+
+Expected<L3UserUser> L3UserUser::parse(BitReader& br, size_t lengthBytes) {
+    L3UserUser result;
+    result.mData.resize(lengthBytes);
+    for (size_t i = 0; i < lengthBytes; ++i) {
+        auto r = br.readField(8); if (!r) return Expected<L3UserUser>::error(r.error());
+        result.mData[i] = static_cast<uint8_t>(r.value());
+    }
+    return Expected<L3UserUser>::hold(std::move(result));
+}
+
+void L3UserUser::write(BitWriter& bw) const {
+    for (const auto& b : mData) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3UserUser::text(std::ostream& os) const {
+    os << "UserUser[";
+    for (size_t i = 0; i < mData.size(); ++i) {
+        if (i > 0) os << " ";
+        os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mData[i]);
+    }
+    os << "]";
+}
+
+// ── L3Priority ─────────────────────────────────────────────────────────
+
+L3Priority::L3Priority(unsigned level, bool request)
+    : mPriorityLevel(level & 0x07), mRequest(request) {}
+
+Expected<L3Priority> L3Priority::parse(BitReader& br) {
+    auto r = br.readField(8); if (!r) return Expected<L3Priority>::error(r.error());
+    unsigned val = r.value();
+    L3Priority result;
+    result.mRequest = !!(val & 0x40);
+    result.mPriorityLevel = (val >> 3) & 0x07;
+    return Expected<L3Priority>::hold(std::move(result));
+}
+
+void L3Priority::write(BitWriter& bw) const {
+    uint8_t val = static_cast<uint8_t>((mPriorityLevel & 0x07) << 3 | (mRequest ? 0x40 : 0));
+    bw.writeField(val, 8);
+}
+
+void L3Priority::text(std::ostream& os) const {
+    os << "Priority[level=" << mPriorityLevel << " request=" << (mRequest ? 1 : 0) << "]";
+}
+
+// ── L3StreamIdentifier ─────────────────────────────────────────────────
+
+L3StreamIdentifier::L3StreamIdentifier(unsigned id, bool vbs)
+    : mStreamId(id & 0x0f), mVBS(vbs) {}
+
+Expected<L3StreamIdentifier> L3StreamIdentifier::parse(BitReader& br) {
+    auto r = br.readField(8); if (!r) return Expected<L3StreamIdentifier>::error(r.error());
+    unsigned val = r.value();
+    L3StreamIdentifier result;
+    result.mVBS = !!(val & 0x10);
+    result.mStreamId = val & 0x0f;
+    return Expected<L3StreamIdentifier>::hold(std::move(result));
+}
+
+void L3StreamIdentifier::write(BitWriter& bw) const {
+    uint8_t val = static_cast<uint8_t>((mVBS ? 0x10 : 0) | (mStreamId & 0x0f));
+    bw.writeField(val, 8);
+}
+
+void L3StreamIdentifier::text(std::ostream& os) const {
+    os << "StreamID[" << mStreamId << (mVBS ? " VBS" : " VGCS") << "]";
+}
+
+// ── L3AllowedActions ───────────────────────────────────────────────────
+
+L3AllowedActions::L3AllowedActions(uint16_t flags) : mFlags(flags & 0x07ff) {}
+
+Expected<L3AllowedActions> L3AllowedActions::parse(BitReader& br, size_t lengthBytes) {
+    if (lengthBytes < 2) return Expected<L3AllowedActions>::error(
+        ParseError{ParseError::Code::TruncatedInput, "AllowedActions requires at least 2 octets"});
+
+    auto r = br.readField(8); if (!r) return Expected<L3AllowedActions>::error(r.error());
+    uint16_t high = static_cast<uint16_t>(r.value());
+    r = br.readField(8); if (!r) return Expected<L3AllowedActions>::error(r.error());
+    uint16_t low = static_cast<uint16_t>(r.value());
+
+    L3AllowedActions result;
+    result.mFlags = (high << 8) | low;
+    return Expected<L3AllowedActions>::hold(std::move(result));
+}
+
+void L3AllowedActions::write(BitWriter& bw) const {
+    bw.writeField((mFlags >> 8) & 0xff, 8);
+    bw.writeField(mFlags & 0xff, 8);
+}
+
+void L3AllowedActions::text(std::ostream& os) const {
+    os << "AllowedActions[0x" << std::hex << std::setw(4) << std::setfill('0') << mFlags << "]";
+}
+
+// ── L3CCCapabilities ───────────────────────────────────────────────────
+
+size_t L3CCCapabilities::lengthV() const {
+    return mCapabilities.size();
+}
+
+Expected<L3CCCapabilities> L3CCCapabilities::parse(BitReader& br, size_t lengthBytes) {
+    L3CCCapabilities result;
+    result.mCapabilities.resize(lengthBytes);
+    for (size_t i = 0; i < lengthBytes; ++i) {
+        auto r = br.readField(8); if (!r) return Expected<L3CCCapabilities>::error(r.error());
+        result.mCapabilities[i] = static_cast<uint8_t>(r.value());
+    }
+    return Expected<L3CCCapabilities>::hold(std::move(result));
+}
+
+void L3CCCapabilities::write(BitWriter& bw) const {
+    for (const auto& b : mCapabilities) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3CCCapabilities::text(std::ostream& os) const {
+    os << "CCCaps[";
+    for (size_t i = 0; i < mCapabilities.size(); ++i) {
+        if (i > 0) os << " ";
+        os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mCapabilities[i]);
+    }
+    os << "]";
+}
+
+// ── L3BackupBearerCapability ───────────────────────────────────────────
+
+size_t L3BackupBearerCapability::lengthV() const {
+    return 1 + mOctet3a.size();
+}
+
+Expected<L3BackupBearerCapability> L3BackupBearerCapability::parse(BitReader& br) {
+    L3BackupBearerCapability result;
+
+    auto r = br.readField(8); if (!r) return Expected<L3BackupBearerCapability>::error(r.error());
+    result.mOctet3 = static_cast<uint8_t>(r.value());
+
+    if (result.mOctet3 & 0x10) {
+        r = br.readField(8); if (!r) return Expected<L3BackupBearerCapability>::error(r.error());
+        result.mOctet3a.push_back(static_cast<uint8_t>(r.value()));
+        r = br.readField(8); if (!r) return Expected<L3BackupBearerCapability>::error(r.error());
+        result.mOctet3a.push_back(static_cast<uint8_t>(r.value()));
+    }
+
+    return Expected<L3BackupBearerCapability>::hold(std::move(result));
+}
+
+void L3BackupBearerCapability::write(BitWriter& bw) const {
+    bw.writeField(mOctet3, 8);
+    for (const auto& b : mOctet3a) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3BackupBearerCapability::text(std::ostream& os) const {
+    os << "BackupBearerCap[0x" << std::hex << std::setw(2) << std::setfill('0')
+       << static_cast<int>(mOctet3);
+    for (const auto& b : mOctet3a) {
+        os << " 0x" << std::setw(2) << std::setfill('0') << static_cast<int>(b);
+    }
+    os << "]";
+}
+
 } // namespace gsml3parser

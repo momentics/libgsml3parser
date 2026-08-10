@@ -79,6 +79,22 @@ class L3Setup {
     L3SupServFacilityIE mFacility;
     bool mHaveSSVersion{false};
     L3SupServVersionIndicator mSSVersion;
+    bool mHaveSubAddress{false};
+    L3SubAddress mSubAddress;
+    bool mHaveLowLayerCompat{false};
+    L3LowLayerCompatibility mLowLayerCompat;
+    bool mHaveHighLayerCompat{false};
+    L3HighLayerCompatibility mHighLayerCompat;
+    bool mHaveUserUser{false};
+    L3UserUser mUserUser;
+    bool mHaveCLIRSuppression{false};
+    L3CLIRSuppression mCLIRSuppression;
+    bool mHaveCLIRInvocation{false};
+    L3CLIRInvocation mCLIRInvocation;
+    bool mHaveCCCapabilities{false};
+    L3CCCapabilities mCCCapabilities;
+    bool mHaveStreamIdentifier{false};
+    L3StreamIdentifier mStreamIdentifier;
     friend struct Builder;
 
 public:
@@ -113,6 +129,30 @@ public:
 
     bool haveSSVersion() const { return mHaveSSVersion; }
     const L3SupServVersionIndicator& ssVersion() const { return mSSVersion; }
+
+    bool haveSubAddress() const { return mHaveSubAddress; }
+    const L3SubAddress& subAddress() const { return mSubAddress; }
+
+    bool haveLowLayerCompat() const { return mHaveLowLayerCompat; }
+    const L3LowLayerCompatibility& lowLayerCompat() const { return mLowLayerCompat; }
+
+    bool haveHighLayerCompat() const { return mHaveHighLayerCompat; }
+    const L3HighLayerCompatibility& highLayerCompat() const { return mHighLayerCompat; }
+
+    bool haveUserUser() const { return mHaveUserUser; }
+    const L3UserUser& userUser() const { return mUserUser; }
+
+    bool haveCLIRSuppression() const { return mHaveCLIRSuppression; }
+    const L3CLIRSuppression& clirSuppression() const { return mCLIRSuppression; }
+
+    bool haveCLIRInvocation() const { return mHaveCLIRInvocation; }
+    const L3CLIRInvocation& clirInvocation() const { return mCLIRInvocation; }
+
+    bool haveCCCapabilities() const { return mHaveCCCapabilities; }
+    const L3CCCapabilities& ccCapabilities() const { return mCCCapabilities; }
+
+    bool haveStreamIdentifier() const { return mHaveStreamIdentifier; }
+    const L3StreamIdentifier& streamIdentifier() const { return mStreamIdentifier; }
 
     struct Builder {
         unsigned m_ti;
@@ -163,6 +203,10 @@ class L3CallProceeding {
     L3BearerCapability mBearerCapability;
     bool mHaveProgress{false};
     L3ProgressIndicator mProgress;
+    bool mHavePriority{false};
+    L3Priority mPriority;
+    bool mHaveNetworkCCCapabilities{false};
+    L3NetworkCCCapabilities mNetworkCCCapabilities;
 
 public:
     static constexpr int MTI = 0x02;
@@ -178,6 +222,12 @@ public:
 
     bool haveBearerCapability() const { return mHaveBearerCapability; }
     const L3BearerCapability& bearerCapability() const { return mBearerCapability; }
+
+    bool havePriority() const { return mHavePriority; }
+    const L3Priority& priority() const { return mPriority; }
+
+    bool haveNetworkCCCapabilities() const { return mHaveNetworkCCCapabilities; }
+    const L3NetworkCCCapabilities& networkCCCapabilities() const { return mNetworkCCCapabilities; }
 
     [[nodiscard]] static Expected<L3CallProceeding> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -198,6 +248,8 @@ class L3Alerting {
     L3SupServFacilityIE mFacility;
     bool mHaveSSVersion{false};
     L3SupServVersionIndicator mSSVersion;
+    bool mHaveUserUser{false};
+    L3UserUser mUserUser;
 
 public:
     static constexpr int MTI = 0x01;
@@ -217,6 +269,9 @@ public:
     bool haveSSVersion() const { return mHaveSSVersion; }
     const L3SupServVersionIndicator& ssVersion() const { return mSSVersion; }
 
+    bool haveUserUser() const { return mHaveUserUser; }
+    const L3UserUser& userUser() const { return mUserUser; }
+
     [[nodiscard]] static Expected<L3Alerting> parse(BitReader& br);
     void write(BitWriter& bw) const;
     size_t bodyLength() const;
@@ -232,6 +287,14 @@ class L3Connect {
     unsigned mTI{7};
     bool mHaveProgress{false};
     L3ProgressIndicator mProgress;
+    bool mHaveConnectedNumber{false};
+    L3ConnectedNumber mConnectedNumber;
+    bool mHaveConnectedSubAddress{false};
+    L3SubAddress mConnectedSubAddress;
+    bool mHaveUserUser{false};
+    L3UserUser mUserUser;
+    bool mHaveStreamIdentifier{false};
+    L3StreamIdentifier mStreamIdentifier;
 
 public:
     static constexpr int MTI = 0x07;
@@ -244,6 +307,18 @@ public:
 
     bool hasProgress() const { return mHaveProgress; }
     const L3ProgressIndicator& progress() const { return mProgress; }
+
+    bool haveConnectedNumber() const { return mHaveConnectedNumber; }
+    const L3ConnectedNumber& connectedNumber() const { return mConnectedNumber; }
+
+    bool haveConnectedSubAddress() const { return mHaveConnectedSubAddress; }
+    const L3SubAddress& connectedSubAddress() const { return mConnectedSubAddress; }
+
+    bool haveUserUser() const { return mHaveUserUser; }
+    const L3UserUser& userUser() const { return mUserUser; }
+
+    bool haveStreamIdentifier() const { return mHaveStreamIdentifier; }
+    const L3StreamIdentifier& streamIdentifier() const { return mStreamIdentifier; }
 
     [[nodiscard]] static Expected<L3Connect> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -286,6 +361,8 @@ class L3CallConfirmed {
     L3SupportedCodecList mSupportedCodecs;
     bool mHaveCause{false};
     L3CauseElement mCause;
+    bool mHaveUserUser{false};
+    L3UserUser mUserUser;
 
 public:
     static constexpr int MTI = 0x08;
@@ -304,6 +381,9 @@ public:
 
     bool haveSupportedCodecs() const { return mHaveSupportedCodecs; }
     const L3SupportedCodecList& supportedCodecs() const { return mSupportedCodecs; }
+
+    bool haveUserUser() const { return mHaveUserUser; }
+    const L3UserUser& userUser() const { return mUserUser; }
 
     [[nodiscard]] static Expected<L3CallConfirmed> parse(BitReader& br);
     void write(BitWriter& bw) const;

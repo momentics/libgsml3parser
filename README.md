@@ -15,7 +15,7 @@ libgsml3parser is a standalone C++20 library for parsing and generating GSM Laye
 |--------|----|-------------|----------|
 | **Radio Resource (RR)** | `0x06` | GSM 04.08 9.1 | Paging, System Information (SI1–SI17), Handover, Assignment, Ciphering, etc. |
 | **Mobility Management (MM)** | `0x05` | GSM 04.08 9.2 | Location Updating, Authentication, Identity, CM Service, TMSI Reallocation |
-| **Call Control (CC)** | `0x03` | GSM 04.08 9.3 / ISDN Q.931 | Setup, Connect, Disconnect, Release, DTMF, Hold, Progress |
+| **Call Control (CC)** | `0x03` | GSM 04.08 9.3 / ISDN Q.931 | Setup, Connect, Disconnect, Release, DTMF, Hold, Progress (+ 26 CC IEs: ConnectedNumber, SubAddress, RedirectingNumber, CLIR Sup/Invoke, NetworkCCCapabilities, LayerCompatibility, UserUser, Priority, StreamIdentifier, AllowedActions, CCCapabilities, BackupBearerCapability) |
 | **Supplementary Services (SS)** | `0x0b` | GSM 04.80 / 3GPP TS 24.080 | Facility, Register, Release Complete |
 
 The library is self-contained with zero external dependencies beyond the C++20 standard library. It provides bidirectional parsing (binary to typed C++ objects and back), human-readable output, `Expected<T>` result types, immutable configuration, compile-time message dispatch via `std::variant` + `std::visit`, and a streaming bitstream I/O layer.
@@ -236,9 +236,11 @@ Paging Request Type 1/2/3, Paging Response, System Information Type 1/2/2bis/2te
 
 IMSI Detach Indication, CM Service Accept/Reject/Abort/Request, CM Reestablishment Request, Identity Response/Request, MM Information, Location Updating Accept/Reject/Request, TMSI Reallocation Command/Complete, MM Status, Authentication Request/Response/Reject.
 
-### Call Control (PD=0x03) — 20 message types
+### Call Control (PD=0x03) — 20 message types, 26 IE types
 
-Setup, Emergency Setup, Call Proceeding, Alerting, Connect, Connect Acknowledge, Call Confirmed, Disconnect, Release, Release Complete, Start DTMF, Stop DTMF, Stop DTMF Acknowledge, Start DTMF Acknowledge, Start DTMF Reject, Hold, Hold Reject, CC Status, Progress.
+Setup, Emergency Setup, Call Proceeding, Alerting, Connect, Connect Acknowledge, Call Confirmed, Disconnect, Release, Release Complete, Start DTMF, Stop DTMF, Stop DTMF Acknowledge, Start DTMF Acknowledge, Start DTM F Reject, Hold, Hold Reject, CC Status, Progress.
+
+**CC Information Elements (26 types):** BearerCapability, BackupBearerCapability, SupportedCodecList, BCDDigits, CalledPartyBCDNumber, CallingPartyBCDNumber, ConnectedNumber, RedirectingNumber, SubAddress, CauseElement, CallState, ProgressIndicator, KeypadFacility, Signal, RepeatIndicator, CLIRSuppression, CLIRInvocation, NetworkCCCapabilities, LowLayerCompatibility, HighLayerCompatibility, UserUser, Priority, StreamIdentifier, AllowedActions, CCCapabilities, SupServFacilityIE, SupServVersionIndicator.
 
 ### Supplementary Services (PD=0x0b) — 4 message types
 

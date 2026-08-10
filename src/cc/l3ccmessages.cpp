@@ -267,13 +267,8 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
         if (!ieiRes) return Expected<L3Setup>::error(ieiRes.error());
         uint8_t iei = ieiRes.value();
 
-        // Structured elements: skip
+        // Structured elements: skip unrecognized 0xd0-0xdf
         if ((iei & 0xf0) == 0xd0) {
-            auto skipRes = detail::skipTLV(br);
-            if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
-            continue;
-        }
-        if ((iei & 0xf0) == 0x80) {
             auto skipRes = detail::skipTLV(br);
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
@@ -334,10 +329,19 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             msg.mHaveCalledParty = true;
             continue;
         }
-        case 0x6d: case 0x74: case 0x75:
+        case 0x6d: case 0x74:
         case 0x7c: case 0x7d: case 0x7e: { // Skip TLV
             auto skipRes = detail::skipTLV(br);
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
+            continue;
+        }
+        case 0x75: { // User-User TLV
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
+            auto p = L3UserUser::parse(br, lenRes.value());
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mUserUser = std::move(p.value());
+            msg.mHaveUserUser = true;
             continue;
         }
         case 0x7f: { // Structured element - may contain SSVersion
@@ -384,6 +388,70 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
+        case 0x9a: case 0x9b: { // SubAddress TLV
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
+            auto p = L3SubAddress::parse(br, lenRes.value());
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mSubAddress = std::move(p.value());
+            msg.mHaveSubAddress = true;
+            continue;
+        }
+        case 0x86: { // LowLayerCompatibility TLV (structured)
+            auto lenRes = detail::readStructuredLength(br);
+            if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
+            auto p = L3LowLayerCompatibility::parse(br, lenRes.value());
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mLowLayerCompat = std::move(p.value());
+            msg.mHaveLowLayerCompat = true;
+            continue;
+        }
+        case 0x87: { // HighLayerCompatibility TLV (structured)
+            auto lenRes = detail::readStructuredLength(br);
+            if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
+            auto p = L3HighLayerCompatibility::parse(br, lenRes.value());
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mHighLayerCompat = std::move(p.value());
+            msg.mHaveHighLayerCompat = true;
+            continue;
+        }
+        case 0xc1: { // CLIR Suppression TV
+            auto p = L3CLIRSuppression::parse(br);
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mCLIRSuppression = std::move(p.value());
+            msg.mHaveCLIRSuppression = true;
+            continue;
+        }
+        case 0xc2: { // CLIR Invocation TV
+            auto p = L3CLIRInvocation::parse(br);
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mCLIRInvocation = std::move(p.value());
+            msg.mHaveCLIRInvocation = true;
+            continue;
+        }
+        case 0x51: { // CC Capabilities TLV
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
+            auto p = L3CCCapabilities::parse(br, lenRes.value());
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mCCCapabilities = std::move(p.value());
+            msg.mHaveCCCapabilities = true;
+            continue;
+        }
+        case 0x8e: { // StreamIdentifier TV
+            auto p = L3StreamIdentifier::parse(br);
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mStreamIdentifier = std::move(p.value());
+            msg.mHaveStreamIdentifier = true;
+            continue;
+        }
+        case 0x80: case 0x81: case 0x82: case 0x83: case 0x84: case 0x85:
+        case 0x89: case 0x8a: case 0x8b: case 0x8c: case 0x8d:
+        case 0x8f: { // Other structured elements - skip TLV
+            auto skipRes = detail::skipTLV(br);
+            if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
+            continue;
+        }
         default: { // Unknown IE - skip TLV
             auto skipRes = detail::skipTLV(br);
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
@@ -420,6 +488,55 @@ void L3Setup::write(BitWriter& bw) const {
         bw.writeField(0x34, 8);
         mSignal.write(bw);
     }
+    if (mHaveSubAddress) {
+        bw.writeField(0x9a, 8);
+        bw.writeField(static_cast<uint32_t>(mSubAddress.lengthV()), 8);
+        mSubAddress.write(bw);
+    }
+    if (mHaveLowLayerCompat) {
+        bw.writeField(0x86, 8);
+        auto llLen = mLowLayerCompat.lengthV();
+        if (llLen < 128) {
+            bw.writeField(static_cast<uint32_t>(llLen), 7);
+        } else {
+            bw.writeField(1, 7);
+            bw.writeField(static_cast<uint32_t>(llLen), 8);
+        }
+        mLowLayerCompat.write(bw);
+    }
+    if (mHaveHighLayerCompat) {
+        bw.writeField(0x87, 8);
+        auto hlLen = mHighLayerCompat.lengthV();
+        if (hlLen < 128) {
+            bw.writeField(static_cast<uint32_t>(hlLen), 7);
+        } else {
+            bw.writeField(1, 7);
+            bw.writeField(static_cast<uint32_t>(hlLen), 8);
+        }
+        mHighLayerCompat.write(bw);
+    }
+    if (mHaveUserUser) {
+        bw.writeField(0x75, 8);
+        bw.writeField(static_cast<uint32_t>(mUserUser.lengthV()), 8);
+        mUserUser.write(bw);
+    }
+    if (mHaveCLIRSuppression) {
+        bw.writeField(0xc1, 8);
+        mCLIRSuppression.write(bw);
+    }
+    if (mHaveCLIRInvocation) {
+        bw.writeField(0xc2, 8);
+        mCLIRInvocation.write(bw);
+    }
+    if (mHaveCCCapabilities) {
+        bw.writeField(0x51, 8);
+        bw.writeField(static_cast<uint32_t>(mCCCapabilities.lengthV()), 8);
+        mCCCapabilities.write(bw);
+    }
+    if (mHaveStreamIdentifier) {
+        bw.writeField(0x8e, 8);
+        mStreamIdentifier.write(bw);
+    }
     detail::ccCommonWrite(bw, mHaveFacility, mFacility, mHaveSSVersion, mSSVersion);
 }
 
@@ -431,6 +548,14 @@ size_t L3Setup::bodyLength() const {
     if (mHaveSupportedCodecs && (mSupportedCodecs.isGsmPresent() || mSupportedCodecs.isUmtsPresent()))
         len += 2 + mSupportedCodecs.lengthV();
     if (mHaveSignal) len += 1 + L3Signal::lengthV();
+    if (mHaveSubAddress) len += 2 + mSubAddress.lengthV();
+    if (mHaveLowLayerCompat) len += 2 + mLowLayerCompat.lengthV();
+    if (mHaveHighLayerCompat) len += 2 + mHighLayerCompat.lengthV();
+    if (mHaveUserUser) len += 2 + mUserUser.lengthV();
+    if (mHaveCLIRSuppression) len += 1 + L3CLIRSuppression::lengthV();
+    if (mHaveCLIRInvocation) len += 1 + L3CLIRInvocation::lengthV();
+    if (mHaveCCCapabilities) len += 2 + mCCCapabilities.lengthV();
+    if (mHaveStreamIdentifier) len += 1 + L3StreamIdentifier::lengthV();
     len += detail::ccCommonLength(mHaveFacility, mFacility, mHaveSSVersion);
     return len;
 }
@@ -444,6 +569,14 @@ void L3Setup::text(std::ostream& os) const {
         os << " SupportedCodecList=("; mSupportedCodecs.text(os); os << ")";
     }
     if (mHaveSignal) { os << " "; mSignal.text(os); }
+    if (mHaveSubAddress) { os << " SubAddress=("; mSubAddress.text(os); os << ")"; }
+    if (mHaveLowLayerCompat) { os << " LowLayerCompat=("; mLowLayerCompat.text(os); os << ")"; }
+    if (mHaveHighLayerCompat) { os << " HighLayerCompat=("; mHighLayerCompat.text(os); os << ")"; }
+    if (mHaveUserUser) { os << " UserUser=("; mUserUser.text(os); os << ")"; }
+    if (mHaveCLIRSuppression) { os << " CLIRSuppression=("; mCLIRSuppression.text(os); os << ")"; }
+    if (mHaveCLIRInvocation) { os << " CLIRInvocation=("; mCLIRInvocation.text(os); os << ")"; }
+    if (mHaveCCCapabilities) { os << " CCCapabilities=("; mCCCapabilities.text(os); os << ")"; }
+    if (mHaveStreamIdentifier) { os << " StreamID=("; mStreamIdentifier.text(os); os << ")"; }
     detail::ccCommonText(os, mHaveFacility, mFacility, mHaveSSVersion, mSSVersion);
 }
 
@@ -499,6 +632,22 @@ Expected<L3CallProceeding> L3CallProceeding::parse(BitReader& br) {
             msg.mHaveProgress = true;
             continue;
         }
+        case 0x88: { // Priority TV
+            auto p = L3Priority::parse(br);
+            if (!p) return Expected<L3CallProceeding>::error(p.error());
+            msg.mPriority = std::move(p.value());
+            msg.mHavePriority = true;
+            continue;
+        }
+        case 0x7a: { // NetworkCCCapabilities TLV
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3CallProceeding>::error(lenRes.error());
+            auto p = L3NetworkCCCapabilities::parse(br, lenRes.value());
+            if (!p) return Expected<L3CallProceeding>::error(p.error());
+            msg.mNetworkCCCapabilities = std::move(p.value());
+            msg.mHaveNetworkCCCapabilities = true;
+            continue;
+        }
         default: {
             auto lenRes = detail::readLength(br);
             if (!lenRes) return Expected<L3CallProceeding>::error(lenRes.error());
@@ -523,12 +672,23 @@ void L3CallProceeding::write(BitWriter& bw) const {
         bw.writeField(static_cast<uint32_t>(L3ProgressIndicator::lengthV()), 8);
         mProgress.write(bw);
     }
+    if (mHavePriority) {
+        bw.writeField(0x88, 8);
+        mPriority.write(bw);
+    }
+    if (mHaveNetworkCCCapabilities) {
+        bw.writeField(0x7a, 8);
+        bw.writeField(static_cast<uint32_t>(mNetworkCCCapabilities.lengthV()), 8);
+        mNetworkCCCapabilities.write(bw);
+    }
 }
 
 size_t L3CallProceeding::bodyLength() const {
     size_t sum = 0;
     if (mHaveBearerCapability) sum += 2 + mBearerCapability.lengthV();
     if (mHaveProgress) sum += 2 + L3ProgressIndicator::lengthV();
+    if (mHavePriority) sum += 1 + L3Priority::lengthV();
+    if (mHaveNetworkCCCapabilities) sum += 2 + mNetworkCCCapabilities.lengthV();
     return sum;
 }
 
@@ -536,6 +696,8 @@ void L3CallProceeding::text(std::ostream& os) const {
     os << "CallProceeding: TI=" << mTI;
     if (mHaveBearerCapability) { os << " BearerCapability=("; mBearerCapability.text(os); os << ")"; }
     if (mHaveProgress) { os << " Progress=("; mProgress.text(os); os << ")"; }
+    if (mHavePriority) { os << " Priority=("; mPriority.text(os); os << ")"; }
+    if (mHaveNetworkCCCapabilities) { os << " NetCCCaps=("; mNetworkCCCapabilities.text(os); os << ")"; }
 }
 
 // ── L3Alerting ─────────────────────────────────────────────────────────
@@ -566,6 +728,23 @@ Expected<L3Alerting> L3Alerting::parse(BitReader& br) {
     ccRes = detail::ccCommonParse(br, msg.mHaveFacility, msg.mFacility, msg.mHaveSSVersion, msg.mSSVersion);
     if (!ccRes) return Expected<L3Alerting>::error(ccRes.error());
 
+    // Handle userUser (0x75) after ccCommon
+    while (br.hasMore()) {
+        uint8_t peek = static_cast<uint8_t>(br.peekField(8));
+        if (peek == 0x75) {
+            auto ieiRes = detail::readIEI(br);
+            if (!ieiRes) return Expected<L3Alerting>::error(ieiRes.error());
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Alerting>::error(lenRes.error());
+            auto p = L3UserUser::parse(br, lenRes.value());
+            if (!p) return Expected<L3Alerting>::error(p.error());
+            msg.mUserUser = std::move(p.value());
+            msg.mHaveUserUser = true;
+        } else {
+            break;
+        }
+    }
+
     return Expected<L3Alerting>::hold(std::move(msg));
 }
 
@@ -576,11 +755,17 @@ void L3Alerting::write(BitWriter& bw) const {
         bw.writeField(static_cast<uint32_t>(L3ProgressIndicator::lengthV()), 8);
         mProgress.write(bw);
     }
+    if (mHaveUserUser) {
+        bw.writeField(0x75, 8);
+        bw.writeField(static_cast<uint32_t>(mUserUser.lengthV()), 8);
+        mUserUser.write(bw);
+    }
 }
 
 size_t L3Alerting::bodyLength() const {
     size_t sum = 0;
     if (mHaveProgress) sum += 2 + L3ProgressIndicator::lengthV();
+    if (mHaveUserUser) sum += 2 + mUserUser.lengthV();
     sum += detail::ccCommonLength(mHaveFacility, mFacility, mHaveSSVersion);
     return sum;
 }
@@ -588,6 +773,7 @@ size_t L3Alerting::bodyLength() const {
 void L3Alerting::text(std::ostream& os) const {
     os << "Alerting: TI=" << mTI;
     if (mHaveProgress) { os << " Progress=("; mProgress.text(os); os << ")"; }
+    if (mHaveUserUser) { os << " UserUser=("; mUserUser.text(os); os << ")"; }
     detail::ccCommonText(os, mHaveFacility, mFacility, mHaveSSVersion, mSSVersion);
 }
 
@@ -619,6 +805,40 @@ Expected<L3Connect> L3Connect::parse(BitReader& br) {
             msg.mHaveProgress = true;
             continue;
         }
+        case 0x9c: { // ConnectedNumber TLV
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Connect>::error(lenRes.error());
+            auto p = L3ConnectedNumber::parse(br, lenRes.value());
+            if (!p) return Expected<L3Connect>::error(p.error());
+            msg.mConnectedNumber = std::move(p.value());
+            msg.mHaveConnectedNumber = true;
+            continue;
+        }
+        case 0x9b: { // ConnectedSubAddress TLV
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Connect>::error(lenRes.error());
+            auto p = L3SubAddress::parse(br, lenRes.value());
+            if (!p) return Expected<L3Connect>::error(p.error());
+            msg.mConnectedSubAddress = std::move(p.value());
+            msg.mHaveConnectedSubAddress = true;
+            continue;
+        }
+        case 0x75: { // User-User TLV
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Connect>::error(lenRes.error());
+            auto p = L3UserUser::parse(br, lenRes.value());
+            if (!p) return Expected<L3Connect>::error(p.error());
+            msg.mUserUser = std::move(p.value());
+            msg.mHaveUserUser = true;
+            continue;
+        }
+        case 0x8e: { // StreamIdentifier TV
+            auto p = L3StreamIdentifier::parse(br);
+            if (!p) return Expected<L3Connect>::error(p.error());
+            msg.mStreamIdentifier = std::move(p.value());
+            msg.mHaveStreamIdentifier = true;
+            continue;
+        }
         default: {
             auto lenRes = detail::readLength(br);
             if (!lenRes) return Expected<L3Connect>::error(lenRes.error());
@@ -633,6 +853,25 @@ Expected<L3Connect> L3Connect::parse(BitReader& br) {
 }
 
 void L3Connect::write(BitWriter& bw) const {
+    if (mHaveConnectedNumber) {
+        bw.writeField(0x9c, 8);
+        bw.writeField(static_cast<uint32_t>(mConnectedNumber.lengthV()), 8);
+        mConnectedNumber.write(bw);
+    }
+    if (mHaveConnectedSubAddress) {
+        bw.writeField(0x9b, 8);
+        bw.writeField(static_cast<uint32_t>(mConnectedSubAddress.lengthV()), 8);
+        mConnectedSubAddress.write(bw);
+    }
+    if (mHaveUserUser) {
+        bw.writeField(0x75, 8);
+        bw.writeField(static_cast<uint32_t>(mUserUser.lengthV()), 8);
+        mUserUser.write(bw);
+    }
+    if (mHaveStreamIdentifier) {
+        bw.writeField(0x8e, 8);
+        mStreamIdentifier.write(bw);
+    }
     if (mHaveProgress) {
         bw.writeField(0x1e, 8);
         bw.writeField(static_cast<uint32_t>(L3ProgressIndicator::lengthV()), 8);
@@ -642,12 +881,19 @@ void L3Connect::write(BitWriter& bw) const {
 
 size_t L3Connect::bodyLength() const {
     size_t len = 0;
+    if (mHaveConnectedNumber) len += 2 + mConnectedNumber.lengthV();
+    if (mHaveConnectedSubAddress) len += 2 + mConnectedSubAddress.lengthV();
+    if (mHaveUserUser) len += 2 + mUserUser.lengthV();
+    if (mHaveStreamIdentifier) len += 1 + L3StreamIdentifier::lengthV();
     if (mHaveProgress) len += 2 + L3ProgressIndicator::lengthV();
     return len;
 }
 
 void L3Connect::text(std::ostream& os) const {
     os << "Connect: TI=" << mTI;
+    if (mHaveConnectedNumber) { os << " ConnectedNumber=(" << mConnectedNumber.digits() << ")"; }
+    if (mHaveUserUser) { os << " UserUser=("; mUserUser.text(os); os << ")"; }
+    if (mHaveStreamIdentifier) { os << " StreamID=("; mStreamIdentifier.text(os); os << ")"; }
     if (mHaveProgress) { os << " Progress=("; mProgress.text(os); os << ")"; }
 }
 
@@ -710,6 +956,15 @@ Expected<L3CallConfirmed> L3CallConfirmed::parse(BitReader& br) {
             if (!skipRes) return Expected<L3CallConfirmed>::error(skipRes.error());
             continue;
         }
+        case 0x75: { // User-User TLV
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3CallConfirmed>::error(lenRes.error());
+            auto p = L3UserUser::parse(br, lenRes.value());
+            if (!p) return Expected<L3CallConfirmed>::error(p.error());
+            msg.mUserUser = std::move(p.value());
+            msg.mHaveUserUser = true;
+            continue;
+        }
         default: {
             auto skipRes = detail::skipTLV(br);
             if (!skipRes) return Expected<L3CallConfirmed>::error(skipRes.error());
@@ -737,6 +992,11 @@ void L3CallConfirmed::write(BitWriter& bw) const {
         bw.writeField(static_cast<uint32_t>(mSupportedCodecs.lengthV()), 8);
         mSupportedCodecs.write(bw);
     }
+    if (mHaveUserUser) {
+        bw.writeField(0x75, 8);
+        bw.writeField(static_cast<uint32_t>(mUserUser.lengthV()), 8);
+        mUserUser.write(bw);
+    }
 }
 
 size_t L3CallConfirmed::bodyLength() const {
@@ -745,6 +1005,7 @@ size_t L3CallConfirmed::bodyLength() const {
     if (mHaveCause) sum += 2 + L3CauseElement::lengthV();
     if (mHaveSupportedCodecs && (mSupportedCodecs.isGsmPresent() || mSupportedCodecs.isUmtsPresent()))
         sum += 2 + mSupportedCodecs.lengthV();
+    if (mHaveUserUser) sum += 2 + mUserUser.lengthV();
     return sum;
 }
 
@@ -754,6 +1015,7 @@ void L3CallConfirmed::text(std::ostream& os) const {
     if (mHaveSupportedCodecs && (mSupportedCodecs.isGsmPresent() || mSupportedCodecs.isUmtsPresent())) {
         os << " SupportedCodecList=("; mSupportedCodecs.text(os); os << ")";
     }
+    if (mHaveUserUser) { os << " UserUser=("; mUserUser.text(os); os << ")"; }
     if (mHaveCause) { os << " Cause=("; mCause.text(os); os << ")"; }
 }
 

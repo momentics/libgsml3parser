@@ -1189,45 +1189,92 @@ Each message is a plain struct with:
 
 **File:** `gsml3parser/cc/l3ccelements.h`
 
-| IE | Description |
-|----|-------------|
-| `L3BearerCapability` | Bearer capability (coding, mode, rate) |
-| `L3SupportedCodecList` | AMR codec set and mode preferences |
-| `L3BCDDigits` | BCD-encoded digit string |
-| `L3CalledPartyBCDNumber` | Called party number (TLV format) |
-| `L3CallingPartyBCDNumber` | Calling party number (TLV format) |
-| `L3CauseElement` | CC cause code + location + diagnostic |
-| `L3CallState` | Call state flags (speech, DTMF, hold, etc.) |
-| `L3ProgressIndicator` | Progress cause and location |
-| `L3KeypadFacility` | DTMF digit indicator |
-| `L3Signal` | Signal type indicator |
-| `L3RepeatIndicator` | Repeat count for keypad DTMF |
-| `L3SupServFacilityIE` | Supplementary service facility data (TLV) |
-| `L3SupServVersionIndicator` | SS version indicator |
+| IE | IEI | Format | Description |
+|----|-----|--------|-------------|
+| `L3BearerCapability` | 0x04 | TLV | Bearer capability (coding, mode, rate) |
+| `L3BackupBearerCapability` | 0x7c | TLV | Backup bearer capability |
+| `L3SupportedCodecList` | 0x40 | TLV | AMR codec set and mode preferences |
+| `L3BCDDigits` | — | V | BCD-encoded digit string utility |
+| `L3CalledPartyBCDNumber` | 0x5e | TLV | Called party number |
+| `L3CallingPartyBCDNumber` | 0x5c | TLV | Calling party number |
+| `L3ConnectedNumber` | 0x9c | TLV | Connected party number (GSM 04.08 10.5.4.7) |
+| `L3RedirectingNumber` | 0x97 | TLV | Redirecting number (GSM 04.08 10.5.4.13) |
+| `L3SubAddress` | 0x9a/0x9b | TLV | Calling/Called party sub-address (GSM 04.08 10.5.4.3) |
+| `L3CauseElement` | 0x08 | TLV | CC cause code + location + diagnostic |
+| `L3CallState` | — | V | Call state flags (speech, DTMF, hold, etc.) |
+| `L3ProgressIndicator` | 0x1e | TLV | Progress cause and location |
+| `L3KeypadFacility` | 0x2c | TV | DTMF digit indicator |
+| `L3Signal` | 0x34 | TV | Signal type indicator (GSM 04.08 10.5.4.23) |
+| `L3RepeatIndicator` | 0x0d | TV | Repeat count for keypad DTMF |
+| `L3CLIRSuppression` | 0xc1 | TV | CLIR suppression (GSM 04.08 10.5.4.16) |
+| `L3CLIRInvocation` | 0xc2 | TV | CLIR invocation (GSM 04.08 10.5.4.17) |
+| `L3NetworkCCCapabilities` | 0x7a | TLV | Network CC capabilities (GSM 04.08 10.5.4.15) |
+| `L3LowLayerCompatibility` | 0x86 | TLV | Low layer compatibility (GSM 04.08 10.5.4.14) |
+| `L3HighLayerCompatibility` | 0x87 | TLV | High layer compatibility (GSM 04.08 10.5.4.14) |
+| `L3UserUser` | 0x75 | TLV | User-User information element (GSM 04.08 10.5.4.27) |
+| `L3Priority` | 0x88 | TV | Priority level and request flag (GSM 04.08 10.5.4.19) |
+| `L3StreamIdentifier` | 0x8e | TV | VBS/VGCS stream identifier (GSM 04.08 10.5.4.29) |
+| `L3AllowedActions` | 0x92 | TLV | Allowed actions bitmask (GSM 04.08 10.5.4.2) |
+| `L3CCCapabilities` | 0x51 | TLV | CC capabilities (GSM 04.08 10.5.4.4) |
+| `L3SupServFacilityIE` | 0x1c | TLV | Supplementary service facility data |
+| `L3SupServVersionIndicator` | — | V | SS version indicator (GSM 04.08 10.5.4.24) |
+
+#### IE Encoding Formats
+
+- **V (Value-only):** No IEI octet; length is fixed by spec
+- **TV (Type-Value):** IEI octet + fixed-size value (typically 1 octet)
+- **TLV (Type-Length-Value):** IEI octet + length octet + variable-length value
+- **LV (Length-Value):** Length octet + value (IEI known from context)
 
 ### CC Messages
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3Setup` | 0x25 | UL | Called party [+ calling, bearer, codecs] |
-| `L3EmergencySetup` | 0x25 | UL | Emergency call setup (no called party) |
-| `L3CallProceeding` | 0x19 | DL | Cause [+ progress indicator] |
-| `L3Alerting` | 0x09 | DL | Call state [+ cause] |
-| `L3Connect` | 0x1B | UL | Bearer capability + call state |
-| `L3ConnectAcknowledge` | 0x1A | DL | Call state |
-| `L3CallConfirmed` | 0x18 | DL | Call state |
-| `L3Disconnect` | 0x16 | UL | Cause [+ SS facility, version] |
-| `L3Release` | 0x1E | DL/UL | Cause [+ SS facility] |
-| `L3ReleaseComplete` | 0x1F | DL/UL | Empty body |
-| `L3StartDTMF` | 0x45 | UL | Keypad digit + repeat indicator |
-| `L3StopDTMF` | 0x46 | UL | Signal type |
-| `L3StopDTMFAcknowledge` | 0x47 | DL | Empty body |
-| `L3StartDTMFAcknowledge` | 0x48 | DL | Signal + repeat |
-| `L3StartDTMFReject` | 0x49 | DL | Cause |
-| `L3Hold` | 0x33 | UL | Call state |
-| `L3HoldReject` | 0x34 | DL | Cause |
-| `L3CCStatus` | 0x73 | DL/UL | Cause + unit data |
-| `L3Progress` | 0x2B | DL | Progress indicator |
+| `L3Setup` | 0x05 | UL | CalledParty [+ CallingParty, BearerCapability, SupportedCodecs, Signal, SubAddress, LowLayerCompat, HighLayerCompat, UserUser, CLIRSuppression, CLIRInvocation, CCCapabilities, StreamIdentifier, Facility, SSVersion] |
+| `L3EmergencySetup` | 0x0e | UL | Emergency call setup (no called party) |
+| `L3CallProceeding` | 0x02 | DL | [+ BearerCapability×2, ProgressIndicator, Priority, NetworkCCCapabilities] |
+| `L3Alerting` | 0x01 | DL | [+ Facility, ProgressIndicator, UserUser, SSVersion] |
+| `L3Connect` | 0x07 | UL | [+ ProgressIndicator, ConnectedNumber, ConnectedSubAddress, UserUser, StreamIdentifier] |
+| `L3ConnectAcknowledge` | 0x0f | DL | Empty body |
+| `L3CallConfirmed` | 0x08 | DL | [+ BearerCapability, SupportedCodecs, Cause, UserUser] |
+| `L3Disconnect` | 0x25 | UL | Cause (CCCause + CCCauseLocation) |
+| `L3Release` | 0x2d | DL/UL | [+ Cause, Facility, SSVersion] |
+| `L3ReleaseComplete` | 0x2a | DL/UL | [+ Cause, Facility, SSVersion] |
+| `L3StartDTMF` | 0x35 | UL | KeypadFacility digit |
+| `L3StopDTMF` | 0x31 | UL | Empty body |
+| `L3StopDTMFAcknowledge` | 0x32 | DL | Empty body |
+| `L3StartDTMFAcknowledge` | 0x36 | DL | KeypadFacility digit |
+| `L3StartDTMFReject` | 0x37 | DL | Cause |
+| `L3Hold` | 0x18 | UL | Empty body |
+| `L3HoldReject` | 0x1a | DL | Cause |
+| `L3CCStatus` | 0x3d | DL/UL | Cause + CallState |
+| `L3Progress` | 0x03 | DL | ProgressIndicator |
+
+#### CC Message Type Identifiers
+
+MTI values are the 6-bit messageType field (GSM 04.08 Table 10.3). In the L3 header byte 1, the actual encoding is `(mti << 2) | nsd` where `nsd` (Not Significant Data) is 2 bits.
+
+| MTI | Message | Spec Section |
+|-----|---------|-------------|
+| 0x01 | Alerting | GSM 04.08 9.3.1 |
+| 0x02 | Call Proceeding | GSM 04.08 9.3.3 |
+| 0x03 | Progress | GSM 04.08 9.3.17 |
+| 0x05 | Setup | GSM 04.08 9.3.19 |
+| 0x07 | Connect | GSM 04.08 9.3.5 |
+| 0x08 | Call Confirmed | GSM 04.08 9.3.2 |
+| 0x0e | Emergency Setup | GSM 04.08 9.3.8 |
+| 0x0f | Connect Acknowledge | GSM 04.08 9.3.6 |
+| 0x18 | Hold | GSM 04.08 9.3.23 |
+| 0x1a | Hold Reject | GSM 04.08 9.3.24 |
+| 0x25 | Disconnect | GSM 04.08 9.3.7 |
+| 0x2a | Release Complete | GSM 04.08 9.3.19 |
+| 0x2d | Release | GSM 04.08 9.3.19 |
+| 0x31 | Stop DTMF | GSM 04.08 9.3.25 |
+| 0x32 | Stop DTMF Acknowledge | GSM 04.08 9.3.25 |
+| 0x35 | Start DTMF | GSM 04.08 9.3.25 |
+| 0x36 | Start DTMF Acknowledge | GSM 04.08 9.3.25 |
+| 0x37 | Start DTMF Reject | GSM 04.08 9.3.25 |
+| 0x3d | CC Status | GSM 04.08 9.3.19 |
 
 ---
 
