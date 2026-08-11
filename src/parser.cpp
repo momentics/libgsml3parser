@@ -143,8 +143,6 @@ RR_TRAIT(L3VGCSMSInfo)
 RR_TRAIT(L3VGCSSNeighCellInfo)
 RR_TRAIT(L3NotifyAppData)
 RR_TRAIT(L3SystemInformationType2quater)
-RR_TRAIT(L3SystemInformationType11)
-RR_TRAIT(L3MeasurementOrder)
 #undef RR_TRAIT
 
 /* ── MM messages (18 types) ── */
@@ -459,12 +457,8 @@ Expected<RRM> parseL3RR(BitReader& reader, int mti) {
         case L3SystemInformationType21::MTI: return L3SystemInformationType21::parse(reader).map([](L3SystemInformationType21 v){ return RRM(std::move(v)); });
         case L3SystemInformationType22::MTI: return L3SystemInformationType22::parse(reader).map([](L3SystemInformationType22 v){ return RRM(std::move(v)); });
         case L3SystemInformationType23::MTI: return L3SystemInformationType23::parse(reader).map([](L3SystemInformationType23 v){ return RRM(std::move(v)); });
-        // System Information Type 2quater (GSM 04.08 9.1.34a)
+        // System Information Type 2quater (GSM 04.08 9.1.34a, MTI=0x07)
         case L3SystemInformationType2quater::MTI: return L3SystemInformationType2quater::parse(reader).map([](L3SystemInformationType2quater v){ return RRM(std::move(v)); });
-        // System Information Type 11 (GSM 04.08 9.1.43o)
-        case L3SystemInformationType11::MTI: return L3SystemInformationType11::parse(reader).map([](L3SystemInformationType11 v){ return RRM(std::move(v)); });
-        // Measurement Order (GSM 04.08 9.1.21a)
-        case L3MeasurementOrder::MTI: return L3MeasurementOrder::parse(reader).map([](L3MeasurementOrder v){ return RRM(std::move(v)); });
         default:
             return Expected<RRM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown RR MTI", static_cast<size_t>(mti)});
     }

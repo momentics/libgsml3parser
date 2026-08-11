@@ -299,7 +299,7 @@ Expected<L3CMRequest> L3CMRequest::parse(BitReader& br) {
     // CM-Service-Type is optional. We try to detect it: if next byte looks like a service type code (0x1X or 0x6X), consume it.
     // Service type codes are single nibble in low 4 bits of an octet where high 4 bits indicate MT direction.
     // For simplicity, we check if the byte after CKSN matches known service type patterns.
-    uint8_t nextByte = br.peekField(8);
+    uint8_t nextByte = static_cast<uint8_t>(br.peekField(8));
     if ((nextByte & 0xF0) == 0x10 || (nextByte & 0xF0) == 0x60) {
         auto stByte = br.readField(8);
         if (!stByte) return Expected<L3CMRequest>::error(stByte.error());

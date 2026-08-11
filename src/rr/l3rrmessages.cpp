@@ -2967,46 +2967,4 @@ void L3SystemInformationType2quater::text(std::ostream& os) const {
     if (!mBody.empty()) os << " [" << mBody.size() << " octets]";
 }
 
-// ── L3SystemInformationType11 (GSM 04.08 §9.1.43o, MTI=0x4b) ──────────
-
-Expected<L3SystemInformationType11> L3SystemInformationType11::parse(BitReader& br) {
-    L3SystemInformationType11 msg;
-    while (br.hasMore()) {
-        auto b = br.readField(8);
-        if (!b) return Expected<L3SystemInformationType11>::error(b.error());
-        msg.mBody.push_back(static_cast<uint8_t>(b.value()));
-    }
-    return Expected<L3SystemInformationType11>::hold(std::move(msg));
-}
-
-void L3SystemInformationType11::write(BitWriter& bw) const {
-    for (uint8_t b : mBody) bw.writeField(b, 8);
-}
-
-void L3SystemInformationType11::text(std::ostream& os) const {
-    os << "SystemInformationType11";
-    if (!mBody.empty()) os << " [" << mBody.size() << " octets]";
-}
-
-// ── L3MeasurementOrder (GSM 04.08 §9.1.21a, MTI=0x3c) ─────────────────
-
-Expected<L3MeasurementOrder> L3MeasurementOrder::parse(BitReader& br) {
-    L3MeasurementOrder msg;
-    while (br.hasMore()) {
-        auto b = br.readField(8);
-        if (!b) return Expected<L3MeasurementOrder>::error(b.error());
-        msg.mBody.push_back(static_cast<uint8_t>(b.value()));
-    }
-    return Expected<L3MeasurementOrder>::hold(std::move(msg));
-}
-
-void L3MeasurementOrder::write(BitWriter& bw) const {
-    for (uint8_t b : mBody) bw.writeField(b, 8);
-}
-
-void L3MeasurementOrder::text(std::ostream& os) const {
-    os << "MeasurementOrder";
-    if (!mBody.empty()) os << " [" << mBody.size() << " octets]";
-}
-
 } // namespace gsml3parser

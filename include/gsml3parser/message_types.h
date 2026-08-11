@@ -112,9 +112,7 @@ using RRM = std::variant<
     L3VGCSMSInfo,
     L3VGCSSNeighCellInfo,
     L3NotifyAppData,
-    L3SystemInformationType2quater,
-    L3SystemInformationType11,
-    L3MeasurementOrder
+    L3SystemInformationType2quater
 >;
 
 using MMM = std::variant<

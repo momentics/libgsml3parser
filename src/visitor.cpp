@@ -104,8 +104,6 @@ struct NameVisitor {
     std::string_view operator()(const L3VGCSSNeighCellInfo&) const { return "VGCSSNeighCellInfo"; }
     std::string_view operator()(const L3NotifyAppData&) const { return "NotifyAppData"; }
     std::string_view operator()(const L3SystemInformationType2quater&) const { return "SystemInformationType2quater"; }
-    std::string_view operator()(const L3SystemInformationType11&) const { return "SystemInformationType11"; }
-    std::string_view operator()(const L3MeasurementOrder&) const { return "MeasurementOrder"; }
 
     // MM names
     std::string_view operator()(const L3IMSIDetachIndication&) const { return "IMSIDetachIndication"; }
@@ -351,8 +349,6 @@ struct MTIVisitor {
     int operator()(const L3VGCSSNeighCellInfo&) const { return L3VGCSSNeighCellInfo::MTI; }
     int operator()(const L3NotifyAppData&) const { return L3NotifyAppData::MTI; }
     int operator()(const L3SystemInformationType2quater&) const { return L3SystemInformationType2quater::MTI; }
-    int operator()(const L3SystemInformationType11&) const { return L3SystemInformationType11::MTI; }
-    int operator()(const L3MeasurementOrder&) const { return L3MeasurementOrder::MTI; }
 
     int operator()(const L3IMSIDetachIndication&) const { return L3IMSIDetachIndication::MTI; }
     int operator()(const L3CMServiceAccept&) const { return L3CMServiceAccept::MTI; }

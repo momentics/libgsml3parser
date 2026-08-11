@@ -613,19 +613,3 @@ TEST(RoundTripTest, SI2quater_RoundTrip) {
     ASSERT_TRUE(parsed);
     checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType2quater::MTI);
 }
-
-// System Information Type 11 (GSM 04.08 §9.1.43o, MTI=0x4b)
-TEST(RoundTripTest, SI11_RoundTrip) {
-    ParsedMessage msg{RRM{L3SystemInformationType11{}}};
-    auto parsed = roundtrip(msg);
-    ASSERT_TRUE(parsed);
-    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType11::MTI);
-}
-
-// Measurement Order (GSM 04.08 §9.1.21a, MTI=0x3c)
-TEST(RoundTripTest, MeasurementOrder_RoundTrip) {
-    ParsedMessage msg{RRM{L3MeasurementOrder{}}};
-    auto parsed = roundtrip(msg);
-    ASSERT_TRUE(parsed);
-    checkHeader(*parsed, L3PD::RadioResource, L3MeasurementOrder::MTI);
-}
