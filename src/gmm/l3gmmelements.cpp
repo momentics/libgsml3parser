@@ -156,9 +156,7 @@ L3RoutingAreaIdentification::L3RoutingAreaIdentification(const char* wMCC, const
         mMCC[i] = wMCC[i] ? wMCC[i] - '0' : 0;
     }
     // Parse MNC digits
-    int mncLen = 0;
     for (int i = 0; i < 3; ++i) {
-        if (wMNC[i]) mncLen = i + 1;
         mMNC[i] = wMNC[i] ? wMNC[i] - '0' : 0;
     }
     mLAC = static_cast<uint16_t>(wLAC);

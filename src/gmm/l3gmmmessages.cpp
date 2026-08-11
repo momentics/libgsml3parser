@@ -46,33 +46,6 @@ void writeLVMI(const L3MobileIdentity& mi, BitWriter& bw) {
     mi.write(bw);
 }
 
-// Skip a TLV IE and return the IEI that was read.
-Expected<uint8_t> skipTLV(BitReader& br) {
-    if (!br.hasMore()) return Expected<uint8_t>::error(
-        ParseError{ParseError::Code::TruncatedInput, "no TLV", br.position()});
-    auto type = br.readField(8);
-    if (!type) return Expected<uint8_t>::error(type.error());
-    bool ext = (type.value() & 0x80) != 0;
-    if (ext) {
-        auto len = br.readField(8);
-        if (!len) return Expected<uint8_t>::error(len.error());
-        if (len.value() > 0 && !br.hasMore()) return Expected<uint8_t>::error(
-            ParseError{ParseError::Code::TruncatedInput, "TLV value truncated", br.position()});
-        // Skip value bytes
-        size_t skipBits = len.value() * 8;
-        if (br.position() + skipBits > br.remainingBits() + br.position()) return Expected<uint8_t>::error(
-            ParseError{ParseError::Code::TruncatedInput, "TLV skip past end", br.position()});
-        // Actually we need to advance the reader
-    }
-    return Expected<uint8_t>::hold(static_cast<uint8_t>(type.value() & 0x7F));
-}
-
-// Read a TV (Type-Value) element: IEI(4 bits) | Value(variable, known per type)
-Expected<uint8_t> readTVIEI(BitReader& br) {
-    auto r = br.peekField(4);
-    return Expected<uint8_t>::hold(static_cast<uint8_t>(r));
-}
-
 } // anonymous namespace
 
 // ── L3AttachRequest (GSM 24.008 9.4.1) ────────────────────────────────
@@ -255,7 +228,6 @@ Expected<L3AttachAccept> L3AttachAccept::parse(BitReader& br) {
         auto fullType = br.readField(8);
         if (!fullType) return Expected<L3AttachAccept>::error(fullType.error());
         uint8_t iei = static_cast<uint8_t>(fullType.value());
-        bool ext = (iei & 0x80) != 0;
         iei &= 0x7F;
 
         auto len = br.readField(8);
@@ -302,8 +274,7 @@ void L3AttachAccept::text(std::ostream& os) const {
 
 // ── L3AttachComplete (GSM 24.008 9.4.3) ──────────────────────────────
 
-Expected<L3AttachComplete> L3AttachComplete::parse(BitReader& br) {
-    // No mandatory body fields; consume any remaining as optional IEs
+Expected<L3AttachComplete> L3AttachComplete::parse(BitReader&) {
     return Expected<L3AttachComplete>::hold(L3AttachComplete{});
 }
 
@@ -328,7 +299,6 @@ Expected<L3AttachReject> L3AttachReject::parse(BitReader& br) {
         auto type = br.readField(8);
         if (!type) return Expected<L3AttachReject>::error(type.error());
         uint8_t rawType = static_cast<uint8_t>(type.value());
-        bool ext = (rawType & 0x80) != 0;
         uint8_t iei = rawType & 0x7F;
 
         auto len = br.readField(8);
@@ -471,7 +441,6 @@ Expected<L3RoutingAreaUpdateRequest> L3RoutingAreaUpdateRequest::parse(BitReader
         auto type = br.readField(8);
         if (!type) return Expected<L3RoutingAreaUpdateRequest>::error(type.error());
         uint8_t rawType = static_cast<uint8_t>(type.value());
-        bool ext = (rawType & 0x80) != 0;
         uint8_t iei = rawType & 0x7F;
 
         auto len = br.readField(8);
@@ -586,7 +555,7 @@ void L3RoutingAreaUpdateAccept::text(std::ostream& os) const {
 
 // ── L3RoutingAreaUpdateComplete (GSM 24.008 9.4.16) ──────────────────
 
-Expected<L3RoutingAreaUpdateComplete> L3RoutingAreaUpdateComplete::parse(BitReader& br) {
+Expected<L3RoutingAreaUpdateComplete> L3RoutingAreaUpdateComplete::parse(BitReader&) {
     return Expected<L3RoutingAreaUpdateComplete>::hold(L3RoutingAreaUpdateComplete{});
 }
 

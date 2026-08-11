@@ -551,8 +551,7 @@ TEST(RoundTripTest, GPRSSuspensionRequest) {
 // Reference: L3_Templates.ttcn tr_RR_APP_INFO
 
 TEST(RoundTripTest, ApplicationInformation) {
-    std::vector<uint8_t> rawData(1, 0xAB);
-    ParsedMessage msg{RRM{L3ApplicationInformation{rawData}}};
+    ParsedMessage msg{RRM{L3ApplicationInformation{{0xAB}}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     checkHeader(*parsed, L3PD::RadioResource, L3ApplicationInformation::MTI);
