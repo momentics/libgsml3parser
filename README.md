@@ -160,7 +160,7 @@ auto hex = gsml3parser::writeL3Hex(disconnect);
 
 ### Registering a Custom PD Handler
 
-Custom handlers for unsupported Protocol Discriminators (e.g. SMS, GPRS) can be registered via an immutable `ParserConfig` builder. The handler receives the raw L3 header and body bytes, allowing you to parse with `BitReader`:
+Custom handlers for unsupported Protocol Discriminators can be registered via an immutable `ParserConfig` builder. The handler receives the raw L3 header and body bytes, allowing you to parse with `BitReader`:
 
 ```cpp
 #include <gsml3parser/gsml3parser.hpp>
