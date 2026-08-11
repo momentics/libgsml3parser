@@ -220,6 +220,20 @@ struct NameVisitor {
     std::string_view operator()(const L3CPErr&) const { return "CPErr"; }
     std::string_view operator()(const L3CPStatus&) const { return "CPStatus"; }
     std::string_view operator()(const L3CPSMT&) const { return "CPSMT"; }
+    std::string_view operator()(const L3SMSStatusReport&) const { return "SMSStatusReport"; }
+    std::string_view operator()(const L3SMSProvidedReplyExpected&) const { return "SMSProvidedReplyExpected"; }
+    std::string_view operator()(const L3SMSSubmitRep&) const { return "SMSSubmitReply"; }
+    std::string_view operator()(const L3SMSDeliver&) const { return "SMSDeliver"; }
+    std::string_view operator()(const L3SMSDeliverRep&) const { return "SMSDeliverReply"; }
+    std::string_view operator()(const L3SMSStatusReportAck&) const { return "SMSStatusReportAck"; }
+    std::string_view operator()(const L3SMSStatusReportReject&) const { return "SMSStatusReportReject"; }
+    std::string_view operator()(const L3SMSTSReject&) const { return "SMSTSReject"; }
+    std::string_view operator()(const L3SMSSubmitDeferred&) const { return "SMSSubmitDeferred"; }
+    std::string_view operator()(const L3SMSSubmitReject&) const { return "SMSSubmitReject"; }
+    std::string_view operator()(const L3SMSSFProvidedRep&) const { return "SMSSFProvidedReply"; }
+    std::string_view operator()(const L3SMSSFProvidedRepAck&) const { return "SMSSFProvidedReplyAck"; }
+    std::string_view operator()(const L3SMSNotification&) const { return "SMSNotification"; }
+    std::string_view operator()(const L3SMSShortCodeInfo&) const { return "SMSShortCodeInfo"; }
 
     // BCC names
     std::string_view operator()(const L3BCCSetup&) const { return "BCCSetup"; }
@@ -482,6 +496,21 @@ struct MTIVisitor {
     int operator()(const L3CPErr&) const { return L3CPErr::MTI; }
     int operator()(const L3CPStatus&) const { return L3CPStatus::MTI; }
     int operator()(const L3CPSMT&) const { return L3CPSMT::MTI; }
+    // SMS L3 MTI values
+    int operator()(const L3SMSStatusReport&) const { return L3SMSStatusReport::MTI; }
+    int operator()(const L3SMSProvidedReplyExpected&) const { return L3SMSProvidedReplyExpected::MTI; }
+    int operator()(const L3SMSSubmitRep&) const { return L3SMSSubmitRep::MTI; }
+    int operator()(const L3SMSDeliver&) const { return L3SMSDeliver::MTI; }
+    int operator()(const L3SMSDeliverRep&) const { return L3SMSDeliverRep::MTI; }
+    int operator()(const L3SMSStatusReportAck&) const { return L3SMSStatusReportAck::MTI; }
+    int operator()(const L3SMSStatusReportReject&) const { return L3SMSStatusReportReject::MTI; }
+    int operator()(const L3SMSTSReject&) const { return L3SMSTSReject::MTI; }
+    int operator()(const L3SMSSubmitDeferred&) const { return L3SMSSubmitDeferred::MTI; }
+    int operator()(const L3SMSSubmitReject&) const { return L3SMSSubmitReject::MTI; }
+    int operator()(const L3SMSSFProvidedRep&) const { return L3SMSSFProvidedRep::MTI; }
+    int operator()(const L3SMSSFProvidedRepAck&) const { return L3SMSSFProvidedRepAck::MTI; }
+    int operator()(const L3SMSNotification&) const { return L3SMSNotification::MTI; }
+    int operator()(const L3SMSShortCodeInfo&) const { return L3SMSShortCodeInfo::MTI; }
 
     // BCC MTI values
     int operator()(const L3BCCSetup&) const { return L3BCCSetup::MTI; }

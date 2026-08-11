@@ -31,6 +31,7 @@
 #include <gsml3parser/gmm/l3gmmmessages.h>
 #include <gsml3parser/sm/l3smmessages.h>
 #include <gsml3parser/sms/l3smsmessages.h>
+#include <gsml3parser/sms/l3smsl3messages.h>
 #include <gsml3parser/bcc/l3bccmessages.h>
 #include <gsml3parser/gcc/l3gccmessages.h>
 
@@ -840,4 +841,140 @@ TEST(Visitor, smsMessageName_CoversAll) {
     EXPECT_STREQ(smsMessageName(L3CPAck::MTI), "CPAck");
     EXPECT_STREQ(smsMessageName(L3CPSMT::MTI), "CPSMT");
     EXPECT_STREQ(smsMessageName(0xFF), "Unknown_SMS");
+}
+
+// =====================================================================
+// tryGet on domain variants (SMS L3)
+// =====================================================================
+
+TEST(Visitor, tryGet_SMSL3_StatusReport) {
+    SMS smsVariant{L3SMSStatusReport{}};
+    EXPECT_NE(tryGet<L3SMSStatusReport>(smsVariant), nullptr);
+    EXPECT_EQ(tryGet<L3CPData>(smsVariant), nullptr);
+}
+
+TEST(Visitor, tryGet_SMSL3_ProvidedReplyExpected) {
+    SMS smsVariant{L3SMSProvidedReplyExpected{}};
+    EXPECT_NE(tryGet<L3SMSProvidedReplyExpected>(smsVariant), nullptr);
+}
+
+TEST(Visitor, tryGet_SMSL3_SubmitRep) {
+    SMS smsVariant{L3SMSSubmitRep{}};
+    EXPECT_NE(tryGet<L3SMSSubmitRep>(smsVariant), nullptr);
+}
+
+TEST(Visitor, tryGet_SMSL3_Deliver) {
+    SMS smsVariant{L3SMSDeliver{}};
+    EXPECT_NE(tryGet<L3SMSDeliver>(smsVariant), nullptr);
+}
+
+TEST(Visitor, tryGet_SMSL3_DeliverRep) {
+    SMS smsVariant{L3SMSDeliverRep{}};
+    EXPECT_NE(tryGet<L3SMSDeliverRep>(smsVariant), nullptr);
+}
+
+TEST(Visitor, tryGet_SMSL3_StatusReportAck) {
+    SMS smsVariant{L3SMSStatusReportAck{}};
+    EXPECT_NE(tryGet<L3SMSStatusReportAck>(smsVariant), nullptr);
+}
+
+TEST(Visitor, tryGet_SMSL3_StatusReportReject) {
+    SMS smsVariant{L3SMSStatusReportReject{}};
+    EXPECT_NE(tryGet<L3SMSStatusReportReject>(smsVariant), nullptr);
+}
+
+TEST(Visitor, tryGet_SMSL3_TSReject) {
+    SMS smsVariant{L3SMSTSReject{}};
+    EXPECT_NE(tryGet<L3SMSTSReject>(smsVariant), nullptr);
+}
+
+TEST(Visitor, tryGet_SMSL3_SubmitDeferred) {
+    SMS smsVariant{L3SMSSubmitDeferred{}};
+    EXPECT_NE(tryGet<L3SMSSubmitDeferred>(smsVariant), nullptr);
+}
+
+TEST(Visitor, tryGet_SMSL3_SubmitReject) {
+    SMS smsVariant{L3SMSSubmitReject{}};
+    EXPECT_NE(tryGet<L3SMSSubmitReject>(smsVariant), nullptr);
+}
+
+TEST(Visitor, tryGet_SMSL3_SSFProvidedRep) {
+    SMS smsVariant{L3SMSSFProvidedRep{}};
+    EXPECT_NE(tryGet<L3SMSSFProvidedRep>(smsVariant), nullptr);
+}
+
+TEST(Visitor, tryGet_SMSL3_SSFProvidedRepAck) {
+    SMS smsVariant{L3SMSSFProvidedRepAck{}};
+    EXPECT_NE(tryGet<L3SMSSFProvidedRepAck>(smsVariant), nullptr);
+}
+
+TEST(Visitor, tryGet_SMSL3_Notification) {
+    SMS smsVariant{L3SMSNotification{}};
+    EXPECT_NE(tryGet<L3SMSNotification>(smsVariant), nullptr);
+}
+
+TEST(Visitor, tryGet_SMSL3_ShortCodeInfo) {
+    SMS smsVariant{L3SMSShortCodeInfo{}};
+    EXPECT_NE(tryGet<L3SMSShortCodeInfo>(smsVariant), nullptr);
+}
+
+// =====================================================================
+// messageName/messagePD for SMS L3 messages via ParsedMessage
+// =====================================================================
+
+TEST(Visitor, SMSL3_MessageNames) {
+    auto check = [](const ParsedMessage& msg, std::string_view expected) {
+        EXPECT_EQ(messageName(msg), expected);
+    };
+
+    check(ParsedMessage(SMS(L3SMSStatusReport{})), "SMSStatusReport");
+    check(ParsedMessage(SMS(L3SMSProvidedReplyExpected{})), "SMSProvidedReplyExpected");
+    check(ParsedMessage(SMS(L3SMSSubmitRep{})), "SMSSubmitReply");
+    check(ParsedMessage(SMS(L3SMSDeliver{})), "SMSDeliver");
+    check(ParsedMessage(SMS(L3SMSDeliverRep{})), "SMSDeliverReply");
+    check(ParsedMessage(SMS(L3SMSStatusReportAck{})), "SMSStatusReportAck");
+    check(ParsedMessage(SMS(L3SMSStatusReportReject{})), "SMSStatusReportReject");
+    check(ParsedMessage(SMS(L3SMSTSReject{})), "SMSTSReject");
+    check(ParsedMessage(SMS(L3SMSSubmitDeferred{})), "SMSSubmitDeferred");
+    check(ParsedMessage(SMS(L3SMSSubmitReject{})), "SMSSubmitReject");
+    check(ParsedMessage(SMS(L3SMSSFProvidedRep{})), "SMSSFProvidedReply");
+    check(ParsedMessage(SMS(L3SMSSFProvidedRepAck{})), "SMSSFProvidedReplyAck");
+    check(ParsedMessage(SMS(L3SMSNotification{})), "SMSNotification");
+    check(ParsedMessage(SMS(L3SMSShortCodeInfo{})), "SMSShortCodeInfo");
+}
+
+TEST(Visitor, SMSL3_MessagePD) {
+    auto check = [](const ParsedMessage& msg) {
+        EXPECT_EQ(messagePD(msg), L3PD::SMS);
+    };
+
+    check(ParsedMessage(SMS(L3SMSStatusReport{})));
+    check(ParsedMessage(SMS(L3SMSDeliver{})));
+    check(ParsedMessage(SMS(L3SMSDeliverRep{})));
+    check(ParsedMessage(SMS(L3SMSStatusReportAck{})));
+    check(ParsedMessage(SMS(L3SMSTSReject{})));
+    check(ParsedMessage(SMS(L3SMSSubmitReject{})));
+    check(ParsedMessage(SMS(L3SMSSFProvidedRepAck{})));
+    check(ParsedMessage(SMS(L3SMSNotification{})));
+    check(ParsedMessage(SMS(L3SMSShortCodeInfo{})));
+}
+
+TEST(Visitor, SMSL3_MessageMTI) {
+    EXPECT_EQ(messageMTI(ParsedMessage(SMS(L3SMSStatusReport{}))), 0x11);
+    EXPECT_EQ(messageMTI(ParsedMessage(SMS(L3SMSDeliver{}))), 0x14);
+    EXPECT_EQ(messageMTI(ParsedMessage(SMS(L3SMSDeliverRep{}))), 0x15);
+    EXPECT_EQ(messageMTI(ParsedMessage(SMS(L3SMSStatusReportAck{}))), 0x16);
+    EXPECT_EQ(messageMTI(ParsedMessage(SMS(L3SMSTSReject{}))), 0x18);
+    EXPECT_EQ(messageMTI(ParsedMessage(SMS(L3SMSSubmitReject{}))), 0x1A);
+    EXPECT_EQ(messageMTI(ParsedMessage(SMS(L3SMSSFProvidedRepAck{}))), 0x1C);
+    EXPECT_EQ(messageMTI(ParsedMessage(SMS(L3SMSNotification{}))), 0x1D);
+    EXPECT_EQ(messageMTI(ParsedMessage(SMS(L3SMSShortCodeInfo{}))), 0x1E);
+}
+
+TEST(Visitor, SMSL3_TryGetFromParsedMessage) {
+    SMS smv{L3SMSStatusReport{}};
+    ParsedMessage pm(std::move(smv));
+    EXPECT_NE(tryGet<L3SMSStatusReport>(pm), nullptr);
+    EXPECT_EQ(tryGet<L3CPData>(pm), nullptr);
+    EXPECT_EQ(tryGet<L3SMSDeliver>(pm), nullptr);
 }

@@ -29,6 +29,7 @@
 #include "gsml3parser/ss/l3ssmessages.h"
 #include "gsml3parser/gmm/l3gmmmessages.h"
 #include "gsml3parser/sms/l3smsmessages.h"
+#include "gsml3parser/sms/l3smsl3messages.h"
 #include "gsml3parser/sm/l3smmessages.h"
 #include "gsml3parser/bcc/l3bccmessages.h"
 #include "gsml3parser/gcc/l3gccmessages.h"
@@ -264,13 +265,27 @@ SM_TRAIT(L3RequestSecondaryPDPContextActivationReject)
 SM_TRAIT(L3SMNotification)
 #undef SM_TRAIT
 
-/* ── SMS messages (5 types) ── */
+/* ── SMS messages (19 types: 5 CP + 14 L3) ── */
 #define SMS_TRAIT(T) template<> struct MessageTraits<T> { static constexpr L3PD pd = L3PD::SMS; static constexpr int mti = T::MTI; };
 SMS_TRAIT(L3CPData)
 SMS_TRAIT(L3CPAck)
 SMS_TRAIT(L3CPErr)
 SMS_TRAIT(L3CPStatus)
 SMS_TRAIT(L3CPSMT)
+SMS_TRAIT(L3SMSStatusReport)
+SMS_TRAIT(L3SMSProvidedReplyExpected)
+SMS_TRAIT(L3SMSSubmitRep)
+SMS_TRAIT(L3SMSDeliver)
+SMS_TRAIT(L3SMSDeliverRep)
+SMS_TRAIT(L3SMSStatusReportAck)
+SMS_TRAIT(L3SMSStatusReportReject)
+SMS_TRAIT(L3SMSTSReject)
+SMS_TRAIT(L3SMSSubmitDeferred)
+SMS_TRAIT(L3SMSSubmitReject)
+SMS_TRAIT(L3SMSSFProvidedRep)
+SMS_TRAIT(L3SMSSFProvidedRepAck)
+SMS_TRAIT(L3SMSNotification)
+SMS_TRAIT(L3SMSShortCodeInfo)
 #undef SMS_TRAIT
 
 /* ── BCC messages (6 types) ── */
@@ -648,7 +663,10 @@ Expected<SM> parseL3SM(BitReader& reader, int mti) {
     }
 }
 
-// SMS CP messages (24.008 Table 10.6a, 24.011 sections 7-8)
+// SMS messages (24.008 Table 10.6a, 24.011 sections 7-8)
+// Note: MTI 0x12 and 0x13 overlap between CP-layer and L3-layer messages.
+// CP-STATUS(0x12) vs SMSProvidedReplyExpected(0x12), CP-SMT(0x13) vs SMSSubmitRep(0x13).
+// For backward compatibility, overlapping MTIs dispatch to CP messages.
 Expected<SMS> parseL3SMS(BitReader& reader, int mti) {
     switch (mti) {
         // CP-DATA (24.011 8.1.2)
@@ -657,12 +675,36 @@ Expected<SMS> parseL3SMS(BitReader& reader, int mti) {
         case L3CPAck::MTI:        return L3CPAck::parse(reader).map([](L3CPAck v){ return SMS(std::move(v)); });
         // CP-ERROR (24.011 8.1.4)
         case L3CPErr::MTI:        return L3CPErr::parse(reader).map([](L3CPErr v){ return SMS(std::move(v)); });
-        // CP-STATUS (24.011 8.1.5)
+        // CP-STATUS (24.011 8.1.5) — MTI 0x12 overlaps with SMSProvidedReplyExpected; CP takes precedence
         case L3CPStatus::MTI:     return L3CPStatus::parse(reader).map([](L3CPStatus v){ return SMS(std::move(v)); });
-        // CP-SMT (24.011 8.1.6)
+        // CP-SMT (24.011 8.1.6) — MTI 0x13 overlaps with SMSSubmitRep; CP takes precedence
         case L3CPSMT::MTI:        return L3CPSMT::parse(reader).map([](L3CPSMT v){ return SMS(std::move(v)); });
+        // SMS Status Report (24.008 9.6.1)
+        case L3SMSStatusReport::MTI: return L3SMSStatusReport::parse(reader).map([](L3SMSStatusReport v){ return SMS(std::move(v)); });
+        // SMS Deliver (24.008 9.6.4)
+        case L3SMSDeliver::MTI:   return L3SMSDeliver::parse(reader).map([](L3SMSDeliver v){ return SMS(std::move(v)); });
+        // SMS Deliver Reply (24.008 9.6.5)
+        case L3SMSDeliverRep::MTI: return L3SMSDeliverRep::parse(reader).map([](L3SMSDeliverRep v){ return SMS(std::move(v)); });
+        // SMS Status Report Ack (24.008 9.6.6)
+        case L3SMSStatusReportAck::MTI: return L3SMSStatusReportAck::parse(reader).map([](L3SMSStatusReportAck v){ return SMS(std::move(v)); });
+        // SMS Status Report Reject (24.008 9.6.7)
+        case L3SMSStatusReportReject::MTI: return L3SMSStatusReportReject::parse(reader).map([](L3SMSStatusReportReject v){ return SMS(std::move(v)); });
+        // SMS TS Reject (24.008 9.6.8)
+        case L3SMSTSReject::MTI:  return L3SMSTSReject::parse(reader).map([](L3SMSTSReject v){ return SMS(std::move(v)); });
+        // SMS Submit Deferred (24.008 9.6.9)
+        case L3SMSSubmitDeferred::MTI: return L3SMSSubmitDeferred::parse(reader).map([](L3SMSSubmitDeferred v){ return SMS(std::move(v)); });
+        // SMS Submit Reject (24.008 9.6.10)
+        case L3SMSSubmitReject::MTI: return L3SMSSubmitReject::parse(reader).map([](L3SMSSubmitReject v){ return SMS(std::move(v)); });
+        // SMS SSF Provided Reply (24.008 9.6.11)
+        case L3SMSSFProvidedRep::MTI: return L3SMSSFProvidedRep::parse(reader).map([](L3SMSSFProvidedRep v){ return SMS(std::move(v)); });
+        // SMS SSF Provided Reply Ack (24.008 9.6.12)
+        case L3SMSSFProvidedRepAck::MTI: return L3SMSSFProvidedRepAck::parse(reader).map([](L3SMSSFProvidedRepAck v){ return SMS(std::move(v)); });
+        // SMS Notification (24.008 9.6.13)
+        case L3SMSNotification::MTI: return L3SMSNotification::parse(reader).map([](L3SMSNotification v){ return SMS(std::move(v)); });
+        // SMS Short Code Info (24.008 9.6.14)
+        case L3SMSShortCodeInfo::MTI: return L3SMSShortCodeInfo::parse(reader).map([](L3SMSShortCodeInfo v){ return SMS(std::move(v)); });
         default:
-            return Expected<SMS>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown SMS CP-MTI", static_cast<size_t>(mti)});
+            return Expected<SMS>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown SMS MTI", static_cast<size_t>(mti)});
     }
 }
 

@@ -66,6 +66,7 @@ set(SM_SOURCES
 set(SMS_SOURCES
     src/sms/l3smsmessages.cpp
     src/sms/l3smselements.cpp
+    src/sms/l3smsl3messages.cpp
 )
 
 set(BCC_SOURCES
@@ -107,6 +108,7 @@ set(PUBLIC_HEADERS
     include/gsml3parser/sm/l3smmessages.h
     include/gsml3parser/sms/l3smselements.h
     include/gsml3parser/sms/l3smsmessages.h
+    include/gsml3parser/sms/l3smsl3messages.h
     include/gsml3parser/bcc/l3bccmessages.h
     include/gsml3parser/gcc/l3gccmessages.h
     include/gsml3parser/ls/l3lsmessages.h

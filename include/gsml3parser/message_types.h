@@ -7,6 +7,7 @@
 #include "ss/l3ssmessages.h"
 #include "gmm/l3gmmmessages.h"
 #include "sms/l3smsmessages.h"
+#include "sms/l3smsl3messages.h"
 #include "sm/l3smmessages.h"
 #include "bcc/l3bccmessages.h"
 #include "gcc/l3gccmessages.h"
@@ -234,7 +235,21 @@ using SMS = std::variant<
     L3CPAck,
     L3CPErr,
     L3CPStatus,
-    L3CPSMT
+    L3CPSMT,
+    L3SMSStatusReport,
+    L3SMSProvidedReplyExpected,
+    L3SMSSubmitRep,
+    L3SMSDeliver,
+    L3SMSDeliverRep,
+    L3SMSStatusReportAck,
+    L3SMSStatusReportReject,
+    L3SMSTSReject,
+    L3SMSSubmitDeferred,
+    L3SMSSubmitReject,
+    L3SMSSFProvidedRep,
+    L3SMSSFProvidedRepAck,
+    L3SMSNotification,
+    L3SMSShortCodeInfo
 >;
 
 using BCCM = std::variant<
