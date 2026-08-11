@@ -150,7 +150,7 @@ void L3TPAddress::write(BitWriter& bw) const {
 }
 
 void L3TPAddress::text(std::ostream& os) const {
-    os << "TP-Addr(ton=" << static_cast<int>(mTon) << ",npi=" << static_cast<int>(mNpi) << ",digits=[";
+    os << "TP-Addr(ton=" << mTon << ",npi=" << mNpi << ",digits=[";
     for (size_t i = 0; i < mDigits.size(); ++i) {
         if (i > 0) os << ",";
         os << "0x" << std::hex << static_cast<int>(mDigits[i]);

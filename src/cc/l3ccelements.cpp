@@ -371,8 +371,8 @@ void L3ProgressIndicator::write(BitWriter& bw) const {
 }
 
 void L3ProgressIndicator::text(std::ostream& os) const {
-    os << "Progress[location=" << static_cast<int>(mLocation)
-       << " progress=" << static_cast<int>(mProgress) << "]";
+    os << "Progress[location=" << mLocation
+        << " progress=" << mProgress << "]";
 }
 
 // ── L3KeypadFacility ───────────────────────────────────────────────────
@@ -1220,6 +1220,34 @@ std::string L3USSDData::decodeUssdString() const {
 
 std::vector<uint8_t> L3USSDData::encodeUssdString(const std::string& text) {
     return gsm7bitEncode(text);
+}
+
+std::ostream& operator<<(std::ostream& os, L3ProgressIndicator::Location loc) {
+    switch (loc) {
+        case L3ProgressIndicator::Location::User:                 os << "User"; break;
+        case L3ProgressIndicator::Location::PrivateServingLocal:  os << "PrivateServingLocal"; break;
+        case L3ProgressIndicator::Location::PublicServingLocal:   os << "PublicServingLocal"; break;
+        case L3ProgressIndicator::Location::PublicServingRemote:  os << "PublicServingRemote"; break;
+        case L3ProgressIndicator::Location::PrivateServingRemote: os << "PrivateServingRemote"; break;
+        case L3ProgressIndicator::Location::BeyondInternetworking:os << "BeyondInternetworking"; break;
+        default: os << "Loc(" << static_cast<int>(loc) << ")"; break;
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, L3ProgressIndicator::Progress prog) {
+    switch (prog) {
+        case L3ProgressIndicator::Progress::Unspecified:         os << "Unspecified"; break;
+        case L3ProgressIndicator::Progress::NotISDN:             os << "NotISDN"; break;
+        case L3ProgressIndicator::Progress::DestinationNotISDN:  os << "DestinationNotISDN"; break;
+        case L3ProgressIndicator::Progress::OriginationNotISDN:  os << "OriginationNotISDN"; break;
+        case L3ProgressIndicator::Progress::ReturnedToISDN:      os << "ReturnedToISDN"; break;
+        case L3ProgressIndicator::Progress::InBandAvailable:     os << "InBandAvailable"; break;
+        case L3ProgressIndicator::Progress::EndToEndISDN:        os << "EndToEndISDN"; break;
+        case L3ProgressIndicator::Progress::Queuing:             os << "Queuing"; break;
+        default: os << "Prog(" << static_cast<int>(prog) << ")"; break;
+    }
+    return os;
 }
 
 } // namespace gsml3parser

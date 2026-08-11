@@ -22,6 +22,7 @@
 #pragma once
 
 #include <cstdint>
+#include <ostream>
 
 namespace gsml3parser {
 
@@ -152,6 +153,8 @@ enum class CCCauseLocation : uint8_t {
     International             = 7,
     Beyond_Inter_Networking   = 10
 };
+
+std::ostream& operator<<(std::ostream& os, CCCauseLocation loc);
 
 // BSS Cause (GSM 48.008 3.2.2.5)
 enum class BSSCause : uint8_t {

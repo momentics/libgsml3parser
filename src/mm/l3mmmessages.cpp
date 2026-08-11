@@ -371,7 +371,7 @@ void L3IdentityRequest::write(BitWriter& bw) const {
 }
 
 void L3IdentityRequest::text(std::ostream& os) const {
-    os << "IdentityRequest: type=" << static_cast<int>(mType);
+    os << "IdentityRequest: type=" << mType;
 }
 
 // ── L3MMInformation (MTI=0x32) ─────────────────────────────────────────

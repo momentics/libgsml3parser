@@ -38,6 +38,8 @@ enum class LogLevel : uint8_t {
     DEBUG   = 7
 };
 
+std::ostream& operator<<(std::ostream& os, LogLevel level);
+
 // L3 Protocol Discriminator — GSM 04.08 10.2, GSM 04.07 11.2.3.1.1
 enum class L3PD : int8_t {
     GroupCallControl     = 0x00,
@@ -165,6 +167,8 @@ enum class GSMAlphabet : uint8_t {
     ALPHABET_8BIT,
     ALPHABET_UCS2
 };
+
+std::ostream& operator<<(std::ostream& os, GSMAlphabet alphabet);
 
 // Type And Offset for L3ChannelDescription — GSM 04.08 10.5.2.5
 // Encodes channel type (3 bits) and TDMA offset (2 bits).

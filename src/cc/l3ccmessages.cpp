@@ -1048,7 +1048,7 @@ void L3Disconnect::write(BitWriter& bw) const {
 }
 
 void L3Disconnect::text(std::ostream& os) const {
-    os << "Disconnect: TI=" << mTI << " cause=" << CCCause2Str(mCause) << " loc=" << static_cast<int>(mLocation);
+    os << "Disconnect: TI=" << mTI << " cause=" << CCCause2Str(mCause) << " loc=" << mLocation;
 }
 
 // ── L3Release ──────────────────────────────────────────────────────────

@@ -221,6 +221,9 @@ public:
         EndToEndISDN = 0x20,
         Queuing = 0x40
     };
+
+    friend std::ostream& operator<<(std::ostream& os, Location loc);
+    friend std::ostream& operator<<(std::ostream& os, Progress prog);
 private:
     Location mLocation{Location::PrivateServingLocal};
     Progress mProgress{Progress::Unspecified};

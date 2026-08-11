@@ -392,4 +392,12 @@ void L3GMMStatusCause::text(std::ostream& os) const {
     os << "GMMStatusCause(" << GMMCause2Str(mCause) << ")";
 }
 
+std::ostream& operator<<(std::ostream& os, GMMPTMSIType type) {
+    switch (type) {
+        case GMMPTMSIType::Native: os << "Native"; break;
+        case GMMPTMSIType::Mapped: os << "Mapped"; break;
+    }
+    return os;
+}
+
 } // namespace gsml3parser

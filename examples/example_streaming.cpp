@@ -58,7 +58,7 @@ public:
     void onFrame(const ParsedMessage& msg, const ExtractedFrame& raw) override {
         std::cout << "  Frame[" << raw.data.size() << "B]: "
                   << messageName(msg)
-                  << " (PD=" << static_cast<int>(messagePD(msg))
+                   << " (PD=" << messagePD(msg)
                   << ", MTI=0x" << std::hex << messageMTI(msg) << std::dec << ")\n";
     }
 

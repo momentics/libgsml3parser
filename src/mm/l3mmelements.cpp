@@ -294,7 +294,7 @@ Expected<L3NetworkName> L3NetworkName::parse(BitReader& br, size_t expectedLengt
 }
 
 void L3NetworkName::text(std::ostream& os) const {
-    os << "NetworkName[\"" << mName << "\" alphabet=" << static_cast<int>(mAlphabet);
+    os << "NetworkName[\"" << mName << "\" alphabet=" << mAlphabet;
     if (mCI) {
         os << " CI=" << mCI;
     }

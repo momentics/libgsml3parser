@@ -761,7 +761,7 @@ void L3P_TMSIReallocationCommand::write(BitWriter& bw) const {
 }
 
 void L3P_TMSIReallocationCommand::text(std::ostream& os) const {
-    os << "P_TMSIRreallocCmd(type=" << static_cast<int>(mPTMSIType) << ")";
+    os << "P_TMSIRreallocCmd(type=" << mPTMSIType << ")";
 }
 
 // ── L3P_TMSIReallocationComplete (GSM 24.008 9.4.8) ──────────────────
@@ -896,7 +896,7 @@ void L3GMMIdentityRequest::write(BitWriter& bw) const {
 }
 
 void L3GMMIdentityRequest::text(std::ostream& os) const {
-    os << "GMMIdentityReq(type=" << static_cast<int>(mIdentityType) << ")";
+    os << "GMMIdentityReq(type=" << mIdentityType << ")";
 }
 
 // ── L3GMMIdentityResponse (GSM 24.008 9.4.10) ────────────────────────

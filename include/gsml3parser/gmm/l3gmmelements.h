@@ -117,6 +117,8 @@ enum class GMMPTMSIType : uint8_t {
     Mapped = 1
 };
 
+std::ostream& operator<<(std::ostream& os, GMMPTMSIType type);
+
 // ── PDP Context Status (GSM 24.008 10.5.7.1) ──────────────────────────
 // TLV format: IEI=0x32 | Length(1) | Value(2 octets bitmap)
 // Each bit represents a PDP context identifier (1-16).

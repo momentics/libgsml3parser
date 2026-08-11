@@ -44,7 +44,7 @@ std::string readFileAsString(std::string_view path) {
 }
 
 void printMsgDetails(const ParsedMessage& msg) {
-    std::cout << "  PD: " << static_cast<int>(messagePD(msg)) << "\n";
+    std::cout << "  PD: " << messagePD(msg) << "\n";
     std::cout << "  MTI: 0x" << std::hex << messageMTI(msg) << std::dec << "\n";
     std::cout << "  Name: " << messageName(msg) << "\n";
 }
@@ -56,7 +56,7 @@ void demoBatchParse(const std::vector<std::pair<std::string, std::string>>& hexF
         if (result) {
             const auto& msg = *result;
             std::cout << "[OK] " << label << ": " << messageName(msg)
-                      << " (PD=" << static_cast<int>(messagePD(msg))
+                       << " (PD=" << messagePD(msg)
                       << ", MTI=0x" << std::hex << messageMTI(msg) << std::dec << ")\n";
 
             // Round-trip: serialize back to hex and compare

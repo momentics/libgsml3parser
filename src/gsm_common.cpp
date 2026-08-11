@@ -20,6 +20,7 @@
 // SOFTWARE.
 
 #include "gsml3parser/gsm_common.h"
+#include "gsml3parser/enums.h"
 #include <sstream>
 #include <iomanip>
 
@@ -184,6 +185,43 @@ std::ostream& operator<<(std::ostream& os, ChannelType ch) {
         case ChannelType::CCCHType:  os << "CCCH"; break;
         case ChannelType::RACHType:  os << "RACH"; break;
         default:                      os << "CH(" << static_cast<int>(ch) << ")"; break;
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, LogLevel level) {
+    switch (level) {
+        case LogLevel::EMERG:   os << "EMERG"; break;
+        case LogLevel::ALERT:   os << "ALERT"; break;
+        case LogLevel::CRIT:    os << "CRIT"; break;
+        case LogLevel::ERR:     os << "ERR"; break;
+        case LogLevel::WARNING: os << "WARNING"; break;
+        case LogLevel::NOTICE:  os << "NOTICE"; break;
+        case LogLevel::INFO:    os << "INFO"; break;
+        case LogLevel::DEBUG:   os << "DEBUG"; break;
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, GSMAlphabet alphabet) {
+    switch (alphabet) {
+        case GSMAlphabet::ALPHABET_7BIT: os << "GSM-7bit"; break;
+        case GSMAlphabet::ALPHABET_8BIT: os << "8bit"; break;
+        case GSMAlphabet::ALPHABET_UCS2: os << "UCS2"; break;
+    }
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, CCCauseLocation loc) {
+    switch (loc) {
+        case CCCauseLocation::User:                 os << "User"; break;
+        case CCCauseLocation::Private_Serving_Local: os << "PrivateServingLocal"; break;
+        case CCCauseLocation::Public_Serving_Local:  os << "PublicServingLocal"; break;
+        case CCCauseLocation::Transit:               os << "Transit"; break;
+        case CCCauseLocation::Public_Serving_Remote: os << "PublicServingRemote"; break;
+        case CCCauseLocation::Private_Serving_Remote:os << "PrivateServingRemote"; break;
+        case CCCauseLocation::International:         os << "International"; break;
+        case CCCauseLocation::Beyond_Inter_Networking: os << "BeyondInterNetworking"; break;
     }
     return os;
 }
