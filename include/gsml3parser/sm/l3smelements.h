@@ -269,4 +269,29 @@ public:
     void text(std::ostream& os) const;
 };
 
+// ── TMGI — Temporary Mobile Group Identity (GSM 24.008 10.5.6.14) ──────
+// TLV format: IEI=0x42 | Length(1)=6 | PLMN Identity(3) | Service ID(2) | Session ID(1)
+
+class L3TMGI {
+    std::array<uint8_t, 3> mPLMN{0, 0, 0};
+    uint16_t mServiceId{0};
+    uint8_t mSessionId{0};
+public:
+    static constexpr uint8_t IEI = 0x42;
+    L3TMGI() = default;
+    L3TMGI(std::array<uint8_t, 3> plmn, uint16_t serviceId, uint8_t sessionId)
+        : mPLMN(std::move(plmn)), mServiceId(serviceId), mSessionId(sessionId) {}
+
+    bool operator==(const L3TMGI&) const = default;
+
+    const std::array<uint8_t, 3>& plmn() const { return mPLMN; }
+    uint16_t serviceId() const { return mServiceId; }
+    uint8_t sessionId() const { return mSessionId; }
+    static constexpr size_t lengthV() { return 6; }
+
+    [[nodiscard]] static Expected<L3TMGI> parse(BitReader& br, size_t lengthBytes);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
 } // namespace gsml3parser

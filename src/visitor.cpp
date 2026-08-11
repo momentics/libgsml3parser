@@ -193,6 +193,26 @@ struct NameVisitor {
     std::string_view operator()(const L3ModifyPDPContextAccept&) const { return "ModifyPDPContextAccept"; }
     std::string_view operator()(const L3ModifyPDPContextReject&) const { return "ModifyPDPContextReject"; }
     std::string_view operator()(const L3SMStatus&) const { return "SMStatus"; }
+    std::string_view operator()(const L3RequestPDPContextActivation&) const { return "RequestPDPContextActivation"; }
+    std::string_view operator()(const L3RequestPDPContextActivationReject&) const { return "RequestPDPContextActivationReject"; }
+    std::string_view operator()(const L3ModifyPDPContextRequestMS&) const { return "ModifyPDPContextRequestMS"; }
+    std::string_view operator()(const L3ModifyPDPContextAcceptNet&) const { return "ModifyPDPContextAcceptNet"; }
+    std::string_view operator()(const L3ActivateSecondaryPDPContextRequest&) const { return "ActivateSecondaryPDPContextRequest"; }
+    std::string_view operator()(const L3ActivateSecondaryPDPContextAccept&) const { return "ActivateSecondaryPDPContextAccept"; }
+    std::string_view operator()(const L3ActivateSecondaryPDPContextReject&) const { return "ActivateSecondaryPDPContextReject"; }
+    std::string_view operator()(const L3ActivateAAPDPContextRequest&) const { return "ActivateAAPDPContextRequest"; }
+    std::string_view operator()(const L3ActivateAAPDPContextAccept&) const { return "ActivateAAPDPContextAccept"; }
+    std::string_view operator()(const L3ActivateAAPDPContextReject&) const { return "ActivateAAPDPContextReject"; }
+    std::string_view operator()(const L3DeactivateAAPDPContextRequest&) const { return "DeactivateAAPDPContextRequest"; }
+    std::string_view operator()(const L3DeactivateAAPDPContextAccept&) const { return "DeactivateAAPDPContextAccept"; }
+    std::string_view operator()(const L3ActivateMBMSContextRequest&) const { return "ActivateMBMSContextRequest"; }
+    std::string_view operator()(const L3ActivateMBMSContextAccept&) const { return "ActivateMBMSContextAccept"; }
+    std::string_view operator()(const L3ActivateMBMSContextReject&) const { return "ActivateMBMSContextReject"; }
+    std::string_view operator()(const L3RequestMBMSContextActivation&) const { return "RequestMBMSContextActivation"; }
+    std::string_view operator()(const L3RequestMBMSContextActivationReject&) const { return "RequestMBMSContextActivationReject"; }
+    std::string_view operator()(const L3RequestSecondaryPDPContextActivation&) const { return "RequestSecondaryPDPContextActivation"; }
+    std::string_view operator()(const L3RequestSecondaryPDPContextActivationReject&) const { return "RequestSecondaryPDPContextActivationReject"; }
+    std::string_view operator()(const L3SMNotification&) const { return "SMNotification"; }
 
     // SMS names
     std::string_view operator()(const L3CPData&) const { return "CPData"; }
@@ -435,6 +455,26 @@ struct MTIVisitor {
     int operator()(const L3ModifyPDPContextAccept&) const { return L3ModifyPDPContextAccept::MTI; }
     int operator()(const L3ModifyPDPContextReject&) const { return L3ModifyPDPContextReject::MTI; }
     int operator()(const L3SMStatus&) const { return L3SMStatus::MTI; }
+    int operator()(const L3RequestPDPContextActivation&) const { return L3RequestPDPContextActivation::MTI; }
+    int operator()(const L3RequestPDPContextActivationReject&) const { return L3RequestPDPContextActivationReject::MTI; }
+    int operator()(const L3ModifyPDPContextRequestMS&) const { return L3ModifyPDPContextRequestMS::MTI; }
+    int operator()(const L3ModifyPDPContextAcceptNet&) const { return L3ModifyPDPContextAcceptNet::MTI; }
+    int operator()(const L3ActivateSecondaryPDPContextRequest&) const { return L3ActivateSecondaryPDPContextRequest::MTI; }
+    int operator()(const L3ActivateSecondaryPDPContextAccept&) const { return L3ActivateSecondaryPDPContextAccept::MTI; }
+    int operator()(const L3ActivateSecondaryPDPContextReject&) const { return L3ActivateSecondaryPDPContextReject::MTI; }
+    int operator()(const L3ActivateAAPDPContextRequest&) const { return L3ActivateAAPDPContextRequest::MTI; }
+    int operator()(const L3ActivateAAPDPContextAccept&) const { return L3ActivateAAPDPContextAccept::MTI; }
+    int operator()(const L3ActivateAAPDPContextReject&) const { return L3ActivateAAPDPContextReject::MTI; }
+    int operator()(const L3DeactivateAAPDPContextRequest&) const { return L3DeactivateAAPDPContextRequest::MTI; }
+    int operator()(const L3DeactivateAAPDPContextAccept&) const { return L3DeactivateAAPDPContextAccept::MTI; }
+    int operator()(const L3ActivateMBMSContextRequest&) const { return L3ActivateMBMSContextRequest::MTI; }
+    int operator()(const L3ActivateMBMSContextAccept&) const { return L3ActivateMBMSContextAccept::MTI; }
+    int operator()(const L3ActivateMBMSContextReject&) const { return L3ActivateMBMSContextReject::MTI; }
+    int operator()(const L3RequestMBMSContextActivation&) const { return L3RequestMBMSContextActivation::MTI; }
+    int operator()(const L3RequestMBMSContextActivationReject&) const { return L3RequestMBMSContextActivationReject::MTI; }
+    int operator()(const L3RequestSecondaryPDPContextActivation&) const { return L3RequestSecondaryPDPContextActivation::MTI; }
+    int operator()(const L3RequestSecondaryPDPContextActivationReject&) const { return L3RequestSecondaryPDPContextActivationReject::MTI; }
+    int operator()(const L3SMNotification&) const { return L3SMNotification::MTI; }
 
     // SMS CP MTI values
     int operator()(const L3CPData&) const { return L3CPData::MTI; }

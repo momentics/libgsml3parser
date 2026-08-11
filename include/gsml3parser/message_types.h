@@ -206,7 +206,27 @@ using SM = std::variant<
     L3ModifyPDPContextRequest,
     L3ModifyPDPContextAccept,
     L3ModifyPDPContextReject,
-    L3SMStatus
+    L3SMStatus,
+    L3RequestPDPContextActivation,
+    L3RequestPDPContextActivationReject,
+    L3ModifyPDPContextRequestMS,
+    L3ModifyPDPContextAcceptNet,
+    L3ActivateSecondaryPDPContextRequest,
+    L3ActivateSecondaryPDPContextAccept,
+    L3ActivateSecondaryPDPContextReject,
+    L3ActivateAAPDPContextRequest,
+    L3ActivateAAPDPContextAccept,
+    L3ActivateAAPDPContextReject,
+    L3DeactivateAAPDPContextRequest,
+    L3DeactivateAAPDPContextAccept,
+    L3ActivateMBMSContextRequest,
+    L3ActivateMBMSContextAccept,
+    L3ActivateMBMSContextReject,
+    L3RequestMBMSContextActivation,
+    L3RequestMBMSContextActivationReject,
+    L3RequestSecondaryPDPContextActivation,
+    L3RequestSecondaryPDPContextActivationReject,
+    L3SMNotification
 >;
 
 using SMS = std::variant<

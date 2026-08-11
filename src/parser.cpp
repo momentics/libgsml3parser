@@ -231,7 +231,7 @@ GMM_TRAIT(L3GMMStatus)
 GMM_TRAIT(L3GMMInformation)
 #undef GMM_TRAIT
 
-/* ── SM messages (9 types) ── */
+/* ── SM messages (29 types) ── */
 #define SM_TRAIT(T) template<> struct MessageTraits<T> { static constexpr L3PD pd = L3PD::GPRSSessionManagement; static constexpr int mti = T::MTI; };
 SM_TRAIT(L3ActivatePDPContextRequest)
 SM_TRAIT(L3ActivatePDPContextAccept)
@@ -242,6 +242,26 @@ SM_TRAIT(L3ModifyPDPContextRequest)
 SM_TRAIT(L3ModifyPDPContextAccept)
 SM_TRAIT(L3ModifyPDPContextReject)
 SM_TRAIT(L3SMStatus)
+SM_TRAIT(L3RequestPDPContextActivation)
+SM_TRAIT(L3RequestPDPContextActivationReject)
+SM_TRAIT(L3ModifyPDPContextRequestMS)
+SM_TRAIT(L3ModifyPDPContextAcceptNet)
+SM_TRAIT(L3ActivateSecondaryPDPContextRequest)
+SM_TRAIT(L3ActivateSecondaryPDPContextAccept)
+SM_TRAIT(L3ActivateSecondaryPDPContextReject)
+SM_TRAIT(L3ActivateAAPDPContextRequest)
+SM_TRAIT(L3ActivateAAPDPContextAccept)
+SM_TRAIT(L3ActivateAAPDPContextReject)
+SM_TRAIT(L3DeactivateAAPDPContextRequest)
+SM_TRAIT(L3DeactivateAAPDPContextAccept)
+SM_TRAIT(L3ActivateMBMSContextRequest)
+SM_TRAIT(L3ActivateMBMSContextAccept)
+SM_TRAIT(L3ActivateMBMSContextReject)
+SM_TRAIT(L3RequestMBMSContextActivation)
+SM_TRAIT(L3RequestMBMSContextActivationReject)
+SM_TRAIT(L3RequestSecondaryPDPContextActivation)
+SM_TRAIT(L3RequestSecondaryPDPContextActivationReject)
+SM_TRAIT(L3SMNotification)
 #undef SM_TRAIT
 
 /* ── SMS messages (5 types) ── */
@@ -586,15 +606,43 @@ Expected<SM> parseL3SM(BitReader& reader, int mti) {
         case L3ActivatePDPContextRequest::MTI:  return L3ActivatePDPContextRequest::parse(reader).map([](L3ActivatePDPContextRequest v){ return SM(std::move(v)); });
         case L3ActivatePDPContextAccept::MTI:   return L3ActivatePDPContextAccept::parse(reader).map([](L3ActivatePDPContextAccept v){ return SM(std::move(v)); });
         case L3ActivatePDPContextReject::MTI:   return L3ActivatePDPContextReject::parse(reader).map([](L3ActivatePDPContextReject v){ return SM(std::move(v)); });
+        // Request PDP Context Activation (24.008 9.5.10)
+        case L3RequestPDPContextActivation::MTI: return L3RequestPDPContextActivation::parse(reader).map([](L3RequestPDPContextActivation v){ return SM(std::move(v)); });
+        case L3RequestPDPContextActivationReject::MTI: return L3RequestPDPContextActivationReject::parse(reader).map([](L3RequestPDPContextActivationReject v){ return SM(std::move(v)); });
         // Deactivate PDP Context (24.008 9.5.4-9.5.5)
         case L3DeactivatePDPContextRequest::MTI: return L3DeactivatePDPContextRequest::parse(reader).map([](L3DeactivatePDPContextRequest v){ return SM(std::move(v)); });
         case L3DeactivatePDPContextAccept::MTI:  return L3DeactivatePDPContextAccept::parse(reader).map([](L3DeactivatePDPContextAccept v){ return SM(std::move(v)); });
         // Modify PDP Context (24.008 9.5.6-9.5.8)
         case L3ModifyPDPContextRequest::MTI:    return L3ModifyPDPContextRequest::parse(reader).map([](L3ModifyPDPContextRequest v){ return SM(std::move(v)); });
         case L3ModifyPDPContextAccept::MTI:     return L3ModifyPDPContextAccept::parse(reader).map([](L3ModifyPDPContextAccept v){ return SM(std::move(v)); });
+        case L3ModifyPDPContextRequestMS::MTI:  return L3ModifyPDPContextRequestMS::parse(reader).map([](L3ModifyPDPContextRequestMS v){ return SM(std::move(v)); });
+        case L3ModifyPDPContextAcceptNet::MTI:  return L3ModifyPDPContextAcceptNet::parse(reader).map([](L3ModifyPDPContextAcceptNet v){ return SM(std::move(v)); });
         case L3ModifyPDPContextReject::MTI:     return L3ModifyPDPContextReject::parse(reader).map([](L3ModifyPDPContextReject v){ return SM(std::move(v)); });
+        // Activate Secondary PDP Context (24.008 9.5.11-9.5.13)
+        case L3ActivateSecondaryPDPContextRequest::MTI: return L3ActivateSecondaryPDPContextRequest::parse(reader).map([](L3ActivateSecondaryPDPContextRequest v){ return SM(std::move(v)); });
+        case L3ActivateSecondaryPDPContextAccept::MTI: return L3ActivateSecondaryPDPContextAccept::parse(reader).map([](L3ActivateSecondaryPDPContextAccept v){ return SM(std::move(v)); });
+        case L3ActivateSecondaryPDPContextReject::MTI: return L3ActivateSecondaryPDPContextReject::parse(reader).map([](L3ActivateSecondaryPDPContextReject v){ return SM(std::move(v)); });
+        // Activate AA PDP Context (24.008 9.5.14-9.5.16)
+        case L3ActivateAAPDPContextRequest::MTI: return L3ActivateAAPDPContextRequest::parse(reader).map([](L3ActivateAAPDPContextRequest v){ return SM(std::move(v)); });
+        case L3ActivateAAPDPContextAccept::MTI: return L3ActivateAAPDPContextAccept::parse(reader).map([](L3ActivateAAPDPContextAccept v){ return SM(std::move(v)); });
+        case L3ActivateAAPDPContextReject::MTI: return L3ActivateAAPDPContextReject::parse(reader).map([](L3ActivateAAPDPContextReject v){ return SM(std::move(v)); });
+        // Deactivate AA PDP Context (24.008 9.5.17)
+        case L3DeactivateAAPDPContextRequest::MTI: return L3DeactivateAAPDPContextRequest::parse(reader).map([](L3DeactivateAAPDPContextRequest v){ return SM(std::move(v)); });
+        case L3DeactivateAAPDPContextAccept::MTI: return L3DeactivateAAPDPContextAccept::parse(reader).map([](L3DeactivateAAPDPContextAccept v){ return SM(std::move(v)); });
         // SM Status (24.008 9.5.9)
         case L3SMStatus::MTI:                   return L3SMStatus::parse(reader).map([](L3SMStatus v){ return SM(std::move(v)); });
+        // Activate MBMS Context (24.008 9.5.18-9.5.20)
+        case L3ActivateMBMSContextRequest::MTI: return L3ActivateMBMSContextRequest::parse(reader).map([](L3ActivateMBMSContextRequest v){ return SM(std::move(v)); });
+        case L3ActivateMBMSContextAccept::MTI:  return L3ActivateMBMSContextAccept::parse(reader).map([](L3ActivateMBMSContextAccept v){ return SM(std::move(v)); });
+        case L3ActivateMBMSContextReject::MTI:  return L3ActivateMBMSContextReject::parse(reader).map([](L3ActivateMBMSContextReject v){ return SM(std::move(v)); });
+        // Request MBMS Context Activation (24.008 9.5.21-9.5.22)
+        case L3RequestMBMSContextActivation::MTI: return L3RequestMBMSContextActivation::parse(reader).map([](L3RequestMBMSContextActivation v){ return SM(std::move(v)); });
+        case L3RequestMBMSContextActivationReject::MTI: return L3RequestMBMSContextActivationReject::parse(reader).map([](L3RequestMBMSContextActivationReject v){ return SM(std::move(v)); });
+        // Request Secondary PDP Context Activation (24.008 9.5.23-9.5.24)
+        case L3RequestSecondaryPDPContextActivation::MTI: return L3RequestSecondaryPDPContextActivation::parse(reader).map([](L3RequestSecondaryPDPContextActivation v){ return SM(std::move(v)); });
+        case L3RequestSecondaryPDPContextActivationReject::MTI: return L3RequestSecondaryPDPContextActivationReject::parse(reader).map([](L3RequestSecondaryPDPContextActivationReject v){ return SM(std::move(v)); });
+        // SM Notification (24.008 9.5.25)
+        case L3SMNotification::MTI:             return L3SMNotification::parse(reader).map([](L3SMNotification v){ return SM(std::move(v)); });
         default:
             return Expected<SM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown SM MTI", static_cast<size_t>(mti)});
     }

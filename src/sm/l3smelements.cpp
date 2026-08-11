@@ -263,4 +263,51 @@ void L3PDPHandle::text(std::ostream& os) const {
     os << "PDPHandle(" << static_cast<int>(mValue) << ")";
 }
 
+// ── L3TMGI (GSM 24.008 10.5.6.14) ─────────────────────────────────────
+
+Expected<L3TMGI> L3TMGI::parse(BitReader& br, size_t lengthBytes) {
+    L3TMGI tmgi;
+
+    if (lengthBytes < 6) {
+        return Expected<L3TMGI>::error(
+            ParseError{ParseError::Code::TruncatedInput, "TMGI too short", br.position()});
+    }
+
+    // PLMN Identity (3 octets)
+    auto r = br.readBytes(tmgi.mPLMN.data(), 3);
+    if (!r) return Expected<L3TMGI>::error(r.error());
+
+    // Service ID (2 octets, MSB first)
+    auto sHi = br.readField(8);
+    if (!sHi) return Expected<L3TMGI>::error(sHi.error());
+    auto sLo = br.readField(8);
+    if (!sLo) return Expected<L3TMGI>::error(sLo.error());
+    tmgi.mServiceId = static_cast<uint16_t>((sHi.value() << 8) | sLo.value());
+
+    // Session ID (1 octet)
+    auto sid = br.readField(8);
+    if (!sid) return Expected<L3TMGI>::error(sid.error());
+    tmgi.mSessionId = static_cast<uint8_t>(sid.value());
+
+    return Expected<L3TMGI>::hold(std::move(tmgi));
+}
+
+void L3TMGI::write(BitWriter& bw) const {
+    // PLMN Identity (3 octets)
+    bw.writeBytes(mPLMN.data(), 3);
+    // Service ID (2 octets, MSB first)
+    bw.writeField((mServiceId >> 8) & 0xFF, 8);
+    bw.writeField(mServiceId & 0xFF, 8);
+    // Session ID (1 octet)
+    bw.writeField(mSessionId, 8);
+}
+
+void L3TMGI::text(std::ostream& os) const {
+    os << "TMGI(plmn=" << std::hex << static_cast<int>(mPLMN[0]) << ":"
+                           << static_cast<int>(mPLMN[1]) << ":"
+                           << static_cast<int>(mPLMN[2])
+       << ",serviceId=" << mServiceId
+       << ",sessionId=" << static_cast<int>(mSessionId) << ")";
+}
+
 } // namespace gsml3parser

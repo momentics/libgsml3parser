@@ -1916,7 +1916,7 @@ TEST(GoldenRR, NotifyAppData_RoundTrip) {
 }
 
 // =====================================================================
-// RR MESSAGE TYPE VALUES — New messages (Phase 1)
+// RR MESSAGE TYPE VALUES — Additional messages (Phase 1)
 // Reference: GSM_RR_Types.ttcn RrMessageType enum
 // Spec-verified: 3GPP TS 44.018 Table 10.4.1
 // =====================================================================
