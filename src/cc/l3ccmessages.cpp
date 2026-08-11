@@ -239,6 +239,11 @@ std::ostream& operator<<(std::ostream& os, CCMessageType mti) {
         case CCMessageType::Hold:                os << "Hold"; break;
         case CCMessageType::HoldReject:          os << "HoldReject"; break;
         case CCMessageType::CCStatus:            os << "CCStatus"; break;
+        case CCMessageType::Facility:            os << "Facility"; break;
+        case CCMessageType::Modify:              os << "Modify"; break;
+        case CCMessageType::UnitData:            os << "UnitData"; break;
+        case CCMessageType::UnitDataAck:         os << "UnitDataAck"; break;
+        case CCMessageType::ErrorIndication:     os << "ErrorIndication"; break;
         default:                                  os << "Unknown_CC(" << static_cast<uint8_t>(mti) << ")"; break;
     }
     return os;
@@ -1393,8 +1398,229 @@ const char* ccMessageName(int mti) {
         case L3HoldReject::MTI:                return "HoldReject";
         case L3CCStatus::MTI:                  return "CCStatus";
         case L3Progress::MTI:                  return "Progress";
+        case L3Facility::MTI:                  return "Facility";
+        case L3Modify::MTI:                    return "Modify";
+        case L3UnitData::MTI:                  return "UnitData";
+        case L3UnitDataAck::MTI:               return "UnitDataAck";
+        case L3ErrorIndication::MTI:           return "ErrorIndication";
         default:                               return "Unknown_CC";
     }
+}
+
+// ── L3Facility (MTI=0x3a, TS 24.008 §9.3.21) ───────────────────────────
+
+size_t L3Facility::bodyLength() const {
+    return mFacilityBody.size();
+}
+
+Expected<L3Facility> L3Facility::parse(BitReader& br) {
+    L3Facility msg;
+    while (br.hasMore()) {
+        auto b = br.readField(8);
+        if (!b) return Expected<L3Facility>::error(b.error());
+        msg.mFacilityBody.push_back(static_cast<uint8_t>(b.value()));
+    }
+    return Expected<L3Facility>::hold(std::move(msg));
+}
+
+void L3Facility::write(BitWriter& bw) const {
+    for (uint8_t b : mFacilityBody) {
+        bw.writeField(b, 8);
+    }
+}
+
+void L3Facility::text(std::ostream& os) const {
+    os << "Facility: TI=" << mTI;
+    if (!mFacilityBody.empty()) {
+        os << " body(";
+        for (uint8_t b : mFacilityBody) {
+            os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b);
+        }
+        os << ")";
+    }
+}
+
+// ── L3Modify (MTI=0x19, TS 24.008 §9.3.15) ─────────────────────────────
+
+size_t L3Modify::bodyLength() const {
+    size_t len = 0;
+    if (mHaveBearerCapability) len += 2 + mBearerCapability.lengthV();
+    if (mHaveCalledParty) len += 2 + mCalledParty.lengthV();
+    if (mHaveCallingParty) len += 2 + mCallingParty.lengthV();
+    return len;
+}
+
+Expected<L3Modify> L3Modify::parse(BitReader& br) {
+    L3Modify msg;
+    while (br.hasMore()) {
+        auto ieiRes = detail::readIEI(br);
+        if (!ieiRes) return Expected<L3Modify>::error(ieiRes.error());
+        uint8_t iei = ieiRes.value();
+        switch (iei) {
+        case 0x04: {
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Modify>::error(lenRes.error());
+            auto p = L3BearerCapability::parse(br);
+            if (!p) return Expected<L3Modify>::error(p.error());
+            msg.mBearerCapability = std::move(p.value());
+            msg.mHaveBearerCapability = true;
+            continue;
+        }
+        case 0x5e: {
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Modify>::error(lenRes.error());
+            auto p = L3CalledPartyBCDNumber::parse(br, lenRes.value());
+            if (!p) return Expected<L3Modify>::error(p.error());
+            msg.mCalledParty = std::move(p.value());
+            msg.mHaveCalledParty = true;
+            continue;
+        }
+        case 0x5c: {
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Modify>::error(lenRes.error());
+            auto p = L3CallingPartyBCDNumber::parse(br, lenRes.value());
+            if (!p) return Expected<L3Modify>::error(p.error());
+            msg.mCallingParty = std::move(p.value());
+            msg.mHaveCallingParty = true;
+            continue;
+        }
+        default: {
+            auto skipRes = detail::skipTLV(br);
+            if (!skipRes) return Expected<L3Modify>::error(skipRes.error());
+            continue;
+        }
+        }
+    }
+    return Expected<L3Modify>::hold(std::move(msg));
+}
+
+void L3Modify::write(BitWriter& bw) const {
+    if (mHaveBearerCapability) {
+        bw.writeField(0x04, 8);
+        bw.writeField(static_cast<uint32_t>(mBearerCapability.lengthV()), 8);
+        mBearerCapability.write(bw);
+    }
+    if (mHaveCalledParty) {
+        bw.writeField(0x5e, 8);
+        bw.writeField(static_cast<uint32_t>(mCalledParty.lengthV()), 8);
+        mCalledParty.write(bw);
+    }
+    if (mHaveCallingParty) {
+        bw.writeField(0x5c, 8);
+        bw.writeField(static_cast<uint32_t>(mCallingParty.lengthV()), 8);
+        mCallingParty.write(bw);
+    }
+}
+
+void L3Modify::text(std::ostream& os) const {
+    os << "Modify: TI=" << mTI;
+    if (mHaveBearerCapability) { os << " BearerCapability=("; mBearerCapability.text(os); os << ")"; }
+    if (mHaveCalledParty) { os << " CalledParty=(" << mCalledParty.digits() << ")"; }
+    if (mHaveCallingParty) { os << " CallingParty=(" << mCallingParty.digits() << ")"; }
+}
+
+// ── L3UnitData (MTI=0x27, TS 24.008 §9.3.16) ───────────────────────────
+
+size_t L3UnitData::bodyLength() const {
+    size_t len = 0;
+    if (mHaveBearerCapability) len += 2 + mBearerCapability.lengthV();
+    if (!mUserData.empty()) len += 1 + mUserData.size();
+    return len;
+}
+
+Expected<L3UnitData> L3UnitData::parse(BitReader& br) {
+    L3UnitData msg;
+    while (br.hasMore()) {
+        auto ieiRes = detail::readIEI(br);
+        if (!ieiRes) return Expected<L3UnitData>::error(ieiRes.error());
+        uint8_t iei = ieiRes.value();
+        switch (iei) {
+        case 0x04: {
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3UnitData>::error(lenRes.error());
+            auto p = L3BearerCapability::parse(br);
+            if (!p) return Expected<L3UnitData>::error(p.error());
+            msg.mBearerCapability = std::move(p.value());
+            msg.mHaveBearerCapability = true;
+            continue;
+        }
+        case 0x17: {
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3UnitData>::error(lenRes.error());
+            size_t udLen = lenRes.value();
+            msg.mUserData.resize(udLen);
+            for (size_t i = 0; i < udLen; ++i) {
+                auto b = br.readField(8);
+                if (!b) return Expected<L3UnitData>::error(b.error());
+                msg.mUserData[i] = static_cast<uint8_t>(b.value());
+            }
+            continue;
+        }
+        default: {
+            auto skipRes = detail::skipTLV(br);
+            if (!skipRes) return Expected<L3UnitData>::error(skipRes.error());
+            continue;
+        }
+        }
+    }
+    return Expected<L3UnitData>::hold(std::move(msg));
+}
+
+void L3UnitData::write(BitWriter& bw) const {
+    if (mHaveBearerCapability) {
+        bw.writeField(0x04, 8);
+        bw.writeField(static_cast<uint32_t>(mBearerCapability.lengthV()), 8);
+        mBearerCapability.write(bw);
+    }
+    if (!mUserData.empty()) {
+        bw.writeField(0x17, 8);
+        bw.writeField(static_cast<uint32_t>(mUserData.size()), 8);
+        for (uint8_t b : mUserData) {
+            bw.writeField(b, 8);
+        }
+    }
+}
+
+void L3UnitData::text(std::ostream& os) const {
+    os << "UnitData: TI=" << mTI;
+    if (mHaveBearerCapability) { os << " BearerCapability=("; mBearerCapability.text(os); os << ")"; }
+    if (!mUserData.empty()) {
+        os << " UserData(";
+        for (uint8_t b : mUserData) {
+            os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b);
+        }
+        os << ")";
+    }
+}
+
+// ── L3UnitDataAck (MTI=0x28, TS 24.008 §9.3.16a) ───────────────────────
+
+Expected<L3UnitDataAck> L3UnitDataAck::parse(BitReader&) {
+    return Expected<L3UnitDataAck>::hold(L3UnitDataAck());
+}
+
+void L3UnitDataAck::write(BitWriter&) const {}
+
+void L3UnitDataAck::text(std::ostream& os) const {
+    os << "UnitDataAck: TI=" << mTI;
+}
+
+// ── L3ErrorIndication (MTI=0x2b, TS 24.008 §9.3.16b) ───────────────────
+
+Expected<L3ErrorIndication> L3ErrorIndication::parse(BitReader& br) {
+    L3ErrorIndication msg;
+    auto r = br.readField(8);
+    if (!r) return Expected<L3ErrorIndication>::error(r.error());
+    msg.mCause = static_cast<CCCause>(r.value());
+    return Expected<L3ErrorIndication>::hold(std::move(msg));
+}
+
+void L3ErrorIndication::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mCause), 8);
+}
+
+void L3ErrorIndication::text(std::ostream& os) const {
+    os << "ErrorIndication: TI=" << mTI << " cause=" << CCCause2Str(mCause);
 }
 
 } // namespace gsml3parser

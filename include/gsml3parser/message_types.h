@@ -10,6 +10,7 @@
 #include "sm/l3smmessages.h"
 #include "bcc/l3bccmessages.h"
 #include "gcc/l3gccmessages.h"
+#include "ls/l3lsmessages.h"
 
 namespace gsml3parser {
 
@@ -110,7 +111,10 @@ using RRM = std::variant<
     L3VGCSAddInfo,
     L3VGCSMSInfo,
     L3VGCSSNeighCellInfo,
-    L3NotifyAppData
+    L3NotifyAppData,
+    L3SystemInformationType2quater,
+    L3SystemInformationType11,
+    L3MeasurementOrder
 >;
 
 using MMM = std::variant<
@@ -131,7 +135,9 @@ using MMM = std::variant<
     L3MMStatus,
     L3AuthenticationRequest,
     L3AuthenticationResponse,
-    L3AuthenticationReject
+    L3AuthenticationReject,
+    L3CMRequest,
+    L3PagingMM
 >;
 
 using CCM = std::variant<
@@ -153,7 +159,12 @@ using CCM = std::variant<
     L3Hold,
     L3HoldReject,
     L3CCStatus,
-    L3Progress
+    L3Progress,
+    L3Facility,
+    L3Modify,
+    L3UnitData,
+    L3UnitDataAck,
+    L3ErrorIndication
 >;
 
 using SSM = std::variant<
@@ -214,7 +225,9 @@ using BCCM = std::variant<
     L3BCCConnect,
     L3BCCDisconnect,
     L3BCCRelease,
-    L3BCCReleaseComplete
+    L3BCCReleaseComplete,
+    L3BCCCallConfirmed,
+    L3BCCConnectAcknowledge
 >;
 
 using GCCM = std::variant<
@@ -224,10 +237,16 @@ using GCCM = std::variant<
     L3GCCConnect,
     L3GCCDisconnect,
     L3GCCRelease,
-    L3GCCReleaseComplete
+    L3GCCReleaseComplete,
+    L3GCCCallConfirmed
 >;
 
-using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM>;
+using LSM = std::variant<
+    L3LocationServiceRequest,
+    L3LocationServiceProviderMessage
+>;
+
+using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM>;
 
 static_assert(sizeof(ParsedMessage) < 8192, "ParsedMessage variant too large");
 

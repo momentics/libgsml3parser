@@ -2070,4 +2070,59 @@ public:
     void text(std::ostream& os) const;
 };
 
+// System Information Type 2quater — GSM 04.08 §9.1.34a
+// Direction: DL (BCCH)
+// Carries: extended BCCH freq list, RACH ctrl params, CBCH description
+// Note: shares MTI with SI Type 17 (0x4e), distinguished by body content
+class L3SystemInformationType2quater {
+    std::vector<uint8_t> mBody;
+public:
+    static constexpr int MTI = 0x4e;
+    L3SystemInformationType2quater() = default;
+    const std::vector<uint8_t>& body() const { return mBody; }
+    size_t bodyLength() const { return mBody.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3SystemInformationType2quater> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// System Information Type 11 — GSM 04.08 §9.1.43o
+// Direction: DL (BCCH)
+// Carries: CBCH neighborhood info for paging channels
+class L3SystemInformationType11 {
+    std::vector<uint8_t> mBody;
+public:
+    static constexpr int MTI = 0x4b;
+    L3SystemInformationType11() = default;
+    const std::vector<uint8_t>& body() const { return mBody; }
+    size_t bodyLength() const { return mBody.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3SystemInformationType11> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// Measurement Order — GSM 04.08 §9.1.21a
+// Direction: DL (DCCH/FACCH)
+// Carries: measurement order parameters for MS
+class L3MeasurementOrder {
+    std::vector<uint8_t> mBody;
+public:
+    static constexpr int MTI = 0x3c;
+    L3MeasurementOrder() = default;
+    const std::vector<uint8_t>& body() const { return mBody; }
+    size_t bodyLength() const { return mBody.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3MeasurementOrder> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
 } // namespace gsml3parser

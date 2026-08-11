@@ -76,6 +76,10 @@ set(GCC_SOURCES
     src/gcc/l3gccmessages.cpp
 )
 
+set(LS_SOURCES
+    src/ls/l3lsmessages.cpp
+)
+
 # ── Public headers ────────────────────────────────────────────────────
 
 set(PUBLIC_HEADERS
@@ -105,6 +109,7 @@ set(PUBLIC_HEADERS
     include/gsml3parser/sms/l3smsmessages.h
     include/gsml3parser/bcc/l3bccmessages.h
     include/gsml3parser/gcc/l3gccmessages.h
+    include/gsml3parser/ls/l3lsmessages.h
     include/gsml3parser/message_types.h
     include/gsml3parser/visitor.h
     include/gsml3parser/gsml3parser.hpp
@@ -126,6 +131,7 @@ add_library(gsml3parser
     ${SMS_SOURCES}
     ${BCC_SOURCES}
     ${GCC_SOURCES}
+    ${LS_SOURCES}
 )
 
 add_library(gsml3parser::parser ALIAS gsml3parser)

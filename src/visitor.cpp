@@ -103,6 +103,9 @@ struct NameVisitor {
     std::string_view operator()(const L3VGCSMSInfo&) const { return "VGCSMSInfo"; }
     std::string_view operator()(const L3VGCSSNeighCellInfo&) const { return "VGCSSNeighCellInfo"; }
     std::string_view operator()(const L3NotifyAppData&) const { return "NotifyAppData"; }
+    std::string_view operator()(const L3SystemInformationType2quater&) const { return "SystemInformationType2quater"; }
+    std::string_view operator()(const L3SystemInformationType11&) const { return "SystemInformationType11"; }
+    std::string_view operator()(const L3MeasurementOrder&) const { return "MeasurementOrder"; }
 
     // MM names
     std::string_view operator()(const L3IMSIDetachIndication&) const { return "IMSIDetachIndication"; }
@@ -123,6 +126,8 @@ struct NameVisitor {
     std::string_view operator()(const L3AuthenticationRequest&) const { return "AuthenticationRequest"; }
     std::string_view operator()(const L3AuthenticationResponse&) const { return "AuthenticationResponse"; }
     std::string_view operator()(const L3AuthenticationReject&) const { return "AuthenticationReject"; }
+    std::string_view operator()(const L3CMRequest&) const { return "CMRequest"; }
+    std::string_view operator()(const L3PagingMM&) const { return "PagingMM"; }
 
     // CC names
     std::string_view operator()(const L3Setup&) const { return "Setup"; }
@@ -144,6 +149,11 @@ struct NameVisitor {
     std::string_view operator()(const L3HoldReject&) const { return "HoldReject"; }
     std::string_view operator()(const L3CCStatus&) const { return "CCStatus"; }
     std::string_view operator()(const L3Progress&) const { return "Progress"; }
+    std::string_view operator()(const L3Facility&) const { return "Facility"; }
+    std::string_view operator()(const L3Modify&) const { return "Modify"; }
+    std::string_view operator()(const L3UnitData&) const { return "UnitData"; }
+    std::string_view operator()(const L3UnitDataAck&) const { return "UnitDataAck"; }
+    std::string_view operator()(const L3ErrorIndication&) const { return "ErrorIndication"; }
 
     // SS names
     std::string_view operator()(const L3SupServFacilityMessage&) const { return "SupServFacilityMessage"; }
@@ -200,6 +210,8 @@ struct NameVisitor {
     std::string_view operator()(const L3BCCDisconnect&) const { return "BCCDisconnect"; }
     std::string_view operator()(const L3BCCRelease&) const { return "BCCRelease"; }
     std::string_view operator()(const L3BCCReleaseComplete&) const { return "BCCReleaseComplete"; }
+    std::string_view operator()(const L3BCCCallConfirmed&) const { return "BCCCallConfirmed"; }
+    std::string_view operator()(const L3BCCConnectAcknowledge&) const { return "BCCConnectAcknowledge"; }
 
     // GCC names
     std::string_view operator()(const L3GCCSetup&) const { return "GCCSetup"; }
@@ -209,6 +221,11 @@ struct NameVisitor {
     std::string_view operator()(const L3GCCDisconnect&) const { return "GCCDisconnect"; }
     std::string_view operator()(const L3GCCRelease&) const { return "GCCRelease"; }
     std::string_view operator()(const L3GCCReleaseComplete&) const { return "GCCReleaseComplete"; }
+    std::string_view operator()(const L3GCCCallConfirmed&) const { return "GCCCallConfirmed"; }
+
+    // LS names
+    std::string_view operator()(const L3LocationServiceRequest&) const { return "LocationServiceRequest"; }
+    std::string_view operator()(const L3LocationServiceProviderMessage&) const { return "LocationServiceProviderMessage"; }
 };
 
 struct PDVisitor {
@@ -221,6 +238,7 @@ struct PDVisitor {
     L3PD operator()(const SMS&) const { return L3PD::SMS; }
     L3PD operator()(const BCCM&) const { return L3PD::BroadcastCallControl; }
     L3PD operator()(const GCCM&) const { return L3PD::GroupCallControl; }
+    L3PD operator()(const LSM&) const { return L3PD::Location; }
 };
 
 struct MTIVisitor {
@@ -233,6 +251,7 @@ struct MTIVisitor {
     int operator()(const SMS& v) const { return std::visit(*this, v); }
     int operator()(const BCCM& v) const { return std::visit(*this, v); }
     int operator()(const GCCM& v) const { return std::visit(*this, v); }
+    int operator()(const LSM& v) const { return std::visit(*this, v); }
 
     int operator()(const L3PagingRequestType1&) const { return L3PagingRequestType1::MTI; }
     int operator()(const L3PagingRequestType2&) const { return L3PagingRequestType2::MTI; }
@@ -331,6 +350,9 @@ struct MTIVisitor {
     int operator()(const L3VGCSMSInfo&) const { return L3VGCSMSInfo::MTI; }
     int operator()(const L3VGCSSNeighCellInfo&) const { return L3VGCSSNeighCellInfo::MTI; }
     int operator()(const L3NotifyAppData&) const { return L3NotifyAppData::MTI; }
+    int operator()(const L3SystemInformationType2quater&) const { return L3SystemInformationType2quater::MTI; }
+    int operator()(const L3SystemInformationType11&) const { return L3SystemInformationType11::MTI; }
+    int operator()(const L3MeasurementOrder&) const { return L3MeasurementOrder::MTI; }
 
     int operator()(const L3IMSIDetachIndication&) const { return L3IMSIDetachIndication::MTI; }
     int operator()(const L3CMServiceAccept&) const { return L3CMServiceAccept::MTI; }
@@ -350,6 +372,8 @@ struct MTIVisitor {
     int operator()(const L3AuthenticationRequest&) const { return L3AuthenticationRequest::MTI; }
     int operator()(const L3AuthenticationResponse&) const { return L3AuthenticationResponse::MTI; }
     int operator()(const L3AuthenticationReject&) const { return L3AuthenticationReject::MTI; }
+    int operator()(const L3CMRequest&) const { return L3CMRequest::MTI; }
+    int operator()(const L3PagingMM&) const { return L3PagingMM::MTI; }
 
     int operator()(const L3Setup&) const { return L3Setup::MTI; }
     int operator()(const L3EmergencySetup&) const { return L3EmergencySetup::MTI; }
@@ -370,6 +394,11 @@ struct MTIVisitor {
     int operator()(const L3HoldReject&) const { return L3HoldReject::MTI; }
     int operator()(const L3CCStatus&) const { return L3CCStatus::MTI; }
     int operator()(const L3Progress&) const { return L3Progress::MTI; }
+    int operator()(const L3Facility&) const { return L3Facility::MTI; }
+    int operator()(const L3Modify&) const { return L3Modify::MTI; }
+    int operator()(const L3UnitData&) const { return L3UnitData::MTI; }
+    int operator()(const L3UnitDataAck&) const { return L3UnitDataAck::MTI; }
+    int operator()(const L3ErrorIndication&) const { return L3ErrorIndication::MTI; }
 
     int operator()(const L3SupServFacilityMessage&) const { return L3SupServFacilityMessage::MTI; }
     int operator()(const L3SupServRegisterMessage&) const { return L3SupServRegisterMessage::MTI; }
@@ -425,6 +454,8 @@ struct MTIVisitor {
     int operator()(const L3BCCDisconnect&) const { return L3BCCDisconnect::MTI; }
     int operator()(const L3BCCRelease&) const { return L3BCCRelease::MTI; }
     int operator()(const L3BCCReleaseComplete&) const { return L3BCCReleaseComplete::MTI; }
+    int operator()(const L3BCCCallConfirmed&) const { return L3BCCCallConfirmed::MTI; }
+    int operator()(const L3BCCConnectAcknowledge&) const { return L3BCCConnectAcknowledge::MTI; }
 
     // GCC MTI values
     int operator()(const L3GCCSetup&) const { return L3GCCSetup::MTI; }
@@ -434,6 +465,11 @@ struct MTIVisitor {
     int operator()(const L3GCCDisconnect&) const { return L3GCCDisconnect::MTI; }
     int operator()(const L3GCCRelease&) const { return L3GCCRelease::MTI; }
     int operator()(const L3GCCReleaseComplete&) const { return L3GCCReleaseComplete::MTI; }
+    int operator()(const L3GCCCallConfirmed&) const { return L3GCCCallConfirmed::MTI; }
+
+    // LS MTI values
+    int operator()(const L3LocationServiceRequest&) const { return L3LocationServiceRequest::MTI; }
+    int operator()(const L3LocationServiceProviderMessage&) const { return L3LocationServiceProviderMessage::MTI; }
 };
 
 } // anonymous namespace

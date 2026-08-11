@@ -189,4 +189,16 @@ void L3GCCReleaseComplete::text(std::ostream& os) const {
     }
 }
 
+// ── L3GCCCallConfirmed (TS 44.018 §9.7.2.5, MTI=0x03) ────────────────
+
+Expected<L3GCCCallConfirmed> L3GCCCallConfirmed::parse(BitReader&) {
+    return Expected<L3GCCCallConfirmed>::hold(L3GCCCallConfirmed{});
+}
+
+void L3GCCCallConfirmed::write(BitWriter&) const {}
+
+void L3GCCCallConfirmed::text(std::ostream& os) const {
+    os << "GCCCallConfirmed(ti=" << mTi << ")";
+}
+
 } // namespace gsml3parser

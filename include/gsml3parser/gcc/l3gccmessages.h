@@ -197,4 +197,21 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
+// GCC Call Confirmed — TS 44.018 §9.7.2.5, Table 10.4.4
+// Direction: MT
+class L3GCCCallConfirmed {
+    unsigned mTi{0};
+public:
+    static constexpr int MTI = 0x03;
+    void ti(unsigned t) { mTi = t; }
+    unsigned ti() const { return mTi; }
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3GCCCallConfirmed> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::GroupCallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+};
+
 } // namespace gsml3parser

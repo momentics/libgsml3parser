@@ -168,4 +168,28 @@ void L3BCCReleaseComplete::text(std::ostream& os) const {
     }
 }
 
+// ── L3BCCCallConfirmed (TS 44.018 §9.6.2.5, MTI=0x04) ────────────────
+
+Expected<L3BCCCallConfirmed> L3BCCCallConfirmed::parse(BitReader&) {
+    return Expected<L3BCCCallConfirmed>::hold(L3BCCCallConfirmed{});
+}
+
+void L3BCCCallConfirmed::write(BitWriter&) const {}
+
+void L3BCCCallConfirmed::text(std::ostream& os) const {
+    os << "BCCCallConfirmed(ti=" << mTi << ")";
+}
+
+// ── L3BCCConnectAcknowledge (TS 44.018 §9.6.2.10, MTI=0x09) ──────────
+
+Expected<L3BCCConnectAcknowledge> L3BCCConnectAcknowledge::parse(BitReader&) {
+    return Expected<L3BCCConnectAcknowledge>::hold(L3BCCConnectAcknowledge{});
+}
+
+void L3BCCConnectAcknowledge::write(BitWriter&) const {}
+
+void L3BCCConnectAcknowledge::text(std::ostream& os) const {
+    os << "BCCConnectAcknowledge(ti=" << mTi << ")";
+}
+
 } // namespace gsml3parser

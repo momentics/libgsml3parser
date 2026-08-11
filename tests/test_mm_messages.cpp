@@ -459,3 +459,48 @@ TEST(MMRoundTripTest, LocationUpdateType_Values) {
     EXPECT_EQ(static_cast<uint8_t>(LocationUpdateType::Periodic), 1u);
     EXPECT_EQ(static_cast<uint8_t>(LocationUpdateType::IMSIAttach), 2u);
 }
+
+// ── CM-Request (TS 24.008 §9.2.8, MTI=0x20) ─────────────────────────
+// Reference: L3_Templates.ttcn ts_CM_REQ
+// Structure: PD=0x05, MTI=0x20, CKSN(4)|spare(4), [CM-Service-Type], Classmark2 LV, MobileIdentity LV
+
+TEST(MMRoundTripTest, CMRequest_RoundTrip) {
+    ParsedMessage msg(MMM(L3CMRequest{}));
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(messagePD(*parsed), L3PD::MobilityManagement);
+    EXPECT_EQ(messageMTI(*parsed), L3CMRequest::MTI);
+}
+
+TEST(MMRoundTripTest, CMRequest_Parse_Golden) {
+    // PD=0x05(MM), MTI=0x20<<2=0x80, CKSN=5|spare=0, CM2 LV(length=3, value=0x03 0x20 0x00), MI LV(length=4, TMSI=0x12345678)
+    uint8_t data[] = {0x50, 0x80, 0x50, 0x03, 0x03, 0x20, 0x00, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3CMRequest::MTI);
+    auto* cmr = tryGet<L3CMRequest>(*msg);
+    ASSERT_TRUE(cmr);
+    EXPECT_EQ(cmr->cksn(), 5u);
+}
+
+// ── MM-Paging (TS 24.008 §9.2.12, MTI=0x06) ─────────────────────────
+// Reference: L3_Templates.ttcn ts_ML3_MT_MM_PAGING
+// Structure: PD=0x05, MTI=0x06, MobileIdentity LV
+
+TEST(MMRoundTripTest, PagingMM_RoundTrip) {
+    ParsedMessage msg(MMM(L3PagingMM{}));
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(messagePD(*parsed), L3PD::MobilityManagement);
+    EXPECT_EQ(messageMTI(*parsed), L3PagingMM::MTI);
+}
+
+TEST(MMRoundTripTest, PagingMM_Parse_Golden) {
+    // PD=0x05(MM), MTI=0x06<<2=0x18, MI LV(length=4, TMSI type=0x08, value=0x12345678)
+    uint8_t data[] = {0x50, 0x18, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3PagingMM::MTI);
+    auto* pg = tryGet<L3PagingMM>(*msg);
+    ASSERT_TRUE(pg);
+}

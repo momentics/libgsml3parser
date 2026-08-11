@@ -517,3 +517,80 @@ TEST(CCRoundTripTest, Parse_Release_Hex) {
     EXPECT_EQ(messagePD(*msg), L3PD::CallControl);
     EXPECT_EQ(messageMTI(*msg), L3Release::MTI);
 }
+
+// ── CC Facility (TS 24.008 §9.3.21, MTI=0x3a) ────────────────────────
+// Reference: L3_Templates.ttcn ts_ML3_MO_CC_FACILITY
+// Structure: PD=0x03(CC), TI=7, TIF=0, messageType=111010(Facility=0x3a)
+
+TEST(CCRoundTripTest, Facility_RoundTrip) {
+    ParsedMessage msg(CCM(L3Facility{}));
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(messagePD(*parsed), L3PD::CallControl);
+    EXPECT_EQ(messageMTI(*parsed), L3Facility::MTI);
+}
+
+TEST(CCRoundTripTest, Facility_Parse_Golden) {
+    // PD=0x03(CC), TI=7, TIF=0 -> byte0=0x3E, messageType=0x3a<<2=0xEA
+    uint8_t data[] = {0x3E, 0xEA, 0x01, 0x02, 0x03};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3Facility::MTI);
+    auto* fac = tryGet<L3Facility>(*msg);
+    ASSERT_TRUE(fac);
+    EXPECT_EQ(fac->facilityBody().size(), 3u);
+}
+
+// ── CC Modify (TS 24.008 §9.3.15, MTI=0x19) ──────────────────────────
+
+TEST(CCRoundTripTest, Modify_RoundTrip) {
+    ParsedMessage msg(CCM(L3Modify{}));
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(messagePD(*parsed), L3PD::CallControl);
+    EXPECT_EQ(messageMTI(*parsed), L3Modify::MTI);
+}
+
+// ── CC UnitData (TS 24.008 §9.3.16, MTI=0x27) ────────────────────────
+
+TEST(CCRoundTripTest, UnitData_RoundTrip) {
+    ParsedMessage msg(CCM(L3UnitData{}));
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(messagePD(*parsed), L3PD::CallControl);
+    EXPECT_EQ(messageMTI(*parsed), L3UnitData::MTI);
+}
+
+// ── CC UnitDataAck (TS 24.008 §9.3.16a, MTI=0x28) ────────────────────
+
+TEST(CCRoundTripTest, UnitDataAck_RoundTrip) {
+    ParsedMessage msg(CCM(L3UnitDataAck{}));
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(messagePD(*parsed), L3PD::CallControl);
+    EXPECT_EQ(messageMTI(*parsed), L3UnitDataAck::MTI);
+}
+
+// ── CC ErrorIndication (TS 24.008 §9.3.16b, MTI=0x2b) ────────────────
+
+TEST(CCRoundTripTest, ErrorIndication_RoundTrip) {
+    ParsedMessage msg(CCM(L3ErrorIndication{}));
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(messagePD(*parsed), L3PD::CallControl);
+    EXPECT_EQ(messageMTI(*parsed), L3ErrorIndication::MTI);
+}
+
+TEST(CCRoundTripTest, ErrorIndication_Parse_Golden) {
+    // Build via round-trip to get correct wire encoding, then parse
+    L3ErrorIndication orig;
+    orig.ti(7);
+    ParsedMessage pm(CCM(std::move(orig)));
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    auto msg = parseL3Hex(hex.value());
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3ErrorIndication::MTI);
+    auto* ei = tryGet<L3ErrorIndication>(*msg);
+    ASSERT_TRUE(ei);
+}

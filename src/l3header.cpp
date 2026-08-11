@@ -59,6 +59,10 @@ Expected<L3Header> parseL3Header(std::span<const uint8_t> data) {
              hdr.pd == L3PD::GPRSSessionManagement) {
         hdr.mti = rawMti;
     }
+    // Location Services: byte 1 = raw messageType(8)
+    else if (hdr.pd == L3PD::Location) {
+        hdr.mti = rawMti;
+    }
     // RR short messages: TIF=1 indicates MTI >= 0x100
     else if (hdr.pd == L3PD::RadioResource && hdr.tif) {
         hdr.mti = 0x100 + (rawMti & 0xFF);

@@ -653,3 +653,51 @@ TEST(GoldenBCCGCCTest, GCCTextOutput) {
     rc.text(oss);
     EXPECT_NE(oss.str().find("GCCReleaseComplete"), std::string::npos);
 }
+
+// BCC Call Confirmed — TS 44.018 §9.6.2.5, MTI=0x04
+TEST(GoldenBCCGCCTest, BCCCallConfirmed_Minimal) {
+    uint8_t data[] = {0x10, 0x10};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3BCCCallConfirmed::MTI);
+    EXPECT_NE(tryGet<L3BCCCallConfirmed>(*msg), nullptr);
+}
+
+TEST(GoldenBCCGCCTest, BCCCallConfirmed_RoundTrip) {
+    ParsedMessage pm(BCCM(L3BCCCallConfirmed{}));
+    auto rt = roundtrip(pm);
+    ASSERT_TRUE(rt);
+    EXPECT_EQ(messageMTI(*rt), L3BCCCallConfirmed::MTI);
+}
+
+// BCC Connect Acknowledge — TS 44.018 §9.6.2.10, MTI=0x09
+TEST(GoldenBCCGCCTest, BCCConnectAcknowledge_Minimal) {
+    uint8_t data[] = {0x10, 0x24};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3BCCConnectAcknowledge::MTI);
+    EXPECT_NE(tryGet<L3BCCConnectAcknowledge>(*msg), nullptr);
+}
+
+TEST(GoldenBCCGCCTest, BCCConnectAcknowledge_RoundTrip) {
+    ParsedMessage pm(BCCM(L3BCCConnectAcknowledge{}));
+    auto rt = roundtrip(pm);
+    ASSERT_TRUE(rt);
+    EXPECT_EQ(messageMTI(*rt), L3BCCConnectAcknowledge::MTI);
+}
+
+// GCC Call Confirmed — TS 44.018 §9.7.2.5, MTI=0x03
+TEST(GoldenBCCGCCTest, GCCCallConfirmed_Minimal) {
+    uint8_t data[] = {0x00, 0x0C};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3GCCCallConfirmed::MTI);
+    EXPECT_NE(tryGet<L3GCCCallConfirmed>(*msg), nullptr);
+}
+
+TEST(GoldenBCCGCCTest, GCCCallConfirmed_RoundTrip) {
+    ParsedMessage pm(GCCM(L3GCCCallConfirmed{}));
+    auto rt = roundtrip(pm);
+    ASSERT_TRUE(rt);
+    EXPECT_EQ(messageMTI(*rt), L3GCCCallConfirmed::MTI);
+}

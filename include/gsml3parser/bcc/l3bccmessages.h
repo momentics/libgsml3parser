@@ -175,4 +175,38 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
+// BCC Call Confirmed — TS 44.018 §9.6.2.5, Table 10.4.3
+// Direction: MT
+class L3BCCCallConfirmed {
+    unsigned mTi{0};
+public:
+    static constexpr int MTI = 0x04;
+    void ti(unsigned t) { mTi = t; }
+    unsigned ti() const { return mTi; }
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3BCCCallConfirmed> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::BroadcastCallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+};
+
+// BCC Connect Acknowledge — TS 44.018 §9.6.2.10, Table 10.4.3
+// Direction: MT
+class L3BCCConnectAcknowledge {
+    unsigned mTi{0};
+public:
+    static constexpr int MTI = 0x09;
+    void ti(unsigned t) { mTi = t; }
+    unsigned ti() const { return mTi; }
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3BCCConnectAcknowledge> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::BroadcastCallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+};
+
 } // namespace gsml3parser

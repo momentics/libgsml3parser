@@ -46,16 +46,21 @@ enum class CCMessageType : uint8_t {
     EmergencySetup     = 0x0e,
     ConnectAcknowledge = 0x0f,
     Hold               = 0x18,
+    Modify             = 0x19,
     HoldReject         = 0x1a,
     Disconnect         = 0x25,
+    UnitData           = 0x27,
+    UnitDataAck        = 0x28,
     ReleaseComplete    = 0x2a,
+    ErrorIndication    = 0x2b,
+    Release            = 0x2d,
     StartDTMF          = 0x35,
     StopDTMF           = 0x31,
     StopDTMFAcknowledge = 0x32,
     StartDTMFAcknowledge = 0x36,
     StartDTMFReject    = 0x37,
-    Release            = 0x2d,
-    CCStatus           = 0x3d
+    CCStatus           = 0x3d,
+    Facility           = 0x3a
 };
 
 std::ostream& operator<<(std::ostream& os, CCMessageType mti);
@@ -727,6 +732,123 @@ public:
     [[nodiscard]] static Expected<L3Progress> parse(BitReader&);
     void write(BitWriter&) const;
     size_t bodyLength() const { return 0; }
+    void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+};
+
+// CC Facility — 3GPP TS 24.008 §9.3.21
+// Direction: Both
+// Carries: TI, facility body (TCAP components for supplementary services)
+class L3Facility {
+    unsigned mTI{7};
+    std::vector<uint8_t> mFacilityBody;
+public:
+    static constexpr int MTI = 0x3a;
+    L3Facility() = default;
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+    const std::vector<uint8_t>& facilityBody() const { return mFacilityBody; }
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3Facility> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+};
+
+// CC Modify — 3GPP TS 24.008 §9.3.15
+// Direction: Both
+// Carries: TI, Bearer Capability, Called/Calling Party Number, etc.
+class L3Modify {
+    unsigned mTI{7};
+    bool mHaveBearerCapability{false};
+    L3BearerCapability mBearerCapability;
+    bool mHaveCalledParty{false};
+    L3CalledPartyBCDNumber mCalledParty;
+    bool mHaveCallingParty{false};
+    L3CallingPartyBCDNumber mCallingParty;
+public:
+    static constexpr int MTI = 0x19;
+    L3Modify() = default;
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+    bool haveBearerCapability() const { return mHaveBearerCapability; }
+    const L3BearerCapability& bearerCapability() const { return mBearerCapability; }
+    bool haveCalledParty() const { return mHaveCalledParty; }
+    const L3CalledPartyBCDNumber& calledParty() const { return mCalledParty; }
+    bool haveCallingParty() const { return mHaveCallingParty; }
+    const L3CallingPartyBCDNumber& callingParty() const { return mCallingParty; }
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3Modify> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+};
+
+// CC UnitData — 3GPP TS 24.008 §9.3.16
+// Direction: Both
+// Carries: TI, User Data, Bearer Capability
+class L3UnitData {
+    unsigned mTI{7};
+    bool mHaveBearerCapability{false};
+    L3BearerCapability mBearerCapability;
+    std::vector<uint8_t> mUserData;
+public:
+    static constexpr int MTI = 0x27;
+    L3UnitData() = default;
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+    bool haveBearerCapability() const { return mHaveBearerCapability; }
+    const L3BearerCapability& bearerCapability() const { return mBearerCapability; }
+    const std::vector<uint8_t>& userData() const { return mUserData; }
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3UnitData> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+};
+
+// CC UnitDataAck — 3GPP TS 24.008 §9.3.16a
+// Direction: MT
+// Carries: TI
+class L3UnitDataAck {
+    unsigned mTI{7};
+public:
+    static constexpr int MTI = 0x28;
+    L3UnitDataAck() = default;
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3UnitDataAck> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+};
+
+// CC ErrorIndication — 3GPP TS 24.008 §9.3.16b
+// Direction: Both
+// Carries: TI, Diagnostic
+class L3ErrorIndication {
+    unsigned mTI{7};
+    CCCause mCause{CCCause::Normal_Call_Clearing};
+public:
+    static constexpr int MTI = 0x2b;
+    L3ErrorIndication() = default;
+    unsigned ti() const { return mTI; }
+    void ti(unsigned v) { mTI = v; }
+    CCCause cause() const { return mCause; }
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3ErrorIndication> parse(BitReader& br);
+    void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }

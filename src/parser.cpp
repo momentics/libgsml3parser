@@ -32,6 +32,7 @@
 #include "gsml3parser/sm/l3smmessages.h"
 #include "gsml3parser/bcc/l3bccmessages.h"
 #include "gsml3parser/gcc/l3gccmessages.h"
+#include "gsml3parser/ls/l3lsmessages.h"
 
 #include <algorithm>
 #include <cstring>
@@ -141,6 +142,9 @@ RR_TRAIT(L3VGCSAddInfo)
 RR_TRAIT(L3VGCSMSInfo)
 RR_TRAIT(L3VGCSSNeighCellInfo)
 RR_TRAIT(L3NotifyAppData)
+RR_TRAIT(L3SystemInformationType2quater)
+RR_TRAIT(L3SystemInformationType11)
+RR_TRAIT(L3MeasurementOrder)
 #undef RR_TRAIT
 
 /* ── MM messages (18 types) ── */
@@ -163,6 +167,8 @@ MM_TRAIT(L3MMStatus)
 MM_TRAIT(L3AuthenticationRequest)
 MM_TRAIT(L3AuthenticationResponse)
 MM_TRAIT(L3AuthenticationReject)
+MM_TRAIT(L3CMRequest)
+MM_TRAIT(L3PagingMM)
 #undef MM_TRAIT
 
 /* ── CC messages (20 types) ── */
@@ -186,6 +192,11 @@ CC_TRAIT(L3Hold)
 CC_TRAIT(L3HoldReject)
 CC_TRAIT(L3CCStatus)
 CC_TRAIT(L3Progress)
+CC_TRAIT(L3Facility)
+CC_TRAIT(L3Modify)
+CC_TRAIT(L3UnitData)
+CC_TRAIT(L3UnitDataAck)
+CC_TRAIT(L3ErrorIndication)
 #undef CC_TRAIT
 
 /* ── SS messages (3 types) ── */
@@ -252,6 +263,8 @@ BCC_TRAIT(L3BCCConnect)
 BCC_TRAIT(L3BCCDisconnect)
 BCC_TRAIT(L3BCCRelease)
 BCC_TRAIT(L3BCCReleaseComplete)
+BCC_TRAIT(L3BCCCallConfirmed)
+BCC_TRAIT(L3BCCConnectAcknowledge)
 #undef BCC_TRAIT
 
 /* ── GCC messages (7 types) ── */
@@ -263,7 +276,14 @@ GCC_TRAIT(L3GCCConnect)
 GCC_TRAIT(L3GCCDisconnect)
 GCC_TRAIT(L3GCCRelease)
 GCC_TRAIT(L3GCCReleaseComplete)
+GCC_TRAIT(L3GCCCallConfirmed)
 #undef GCC_TRAIT
+
+/* ── LS messages (2 types) ── */
+#define LS_TRAIT(T) template<> struct MessageTraits<T> { static constexpr L3PD pd = L3PD::Location; static constexpr int mti = T::MTI; };
+LS_TRAIT(L3LocationServiceRequest)
+LS_TRAIT(L3LocationServiceProviderMessage)
+#undef LS_TRAIT
 
 // ── Helpers: extract PD and MTI from any message type ──────────────────
 
@@ -340,6 +360,11 @@ static void encodeL3Header(uint8_t* buf, L3PD pd, int mti, unsigned ti = 0, bool
             buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4 | (ti & 0x07) << 1);
             if (tif) buf[0] |= 0x01;
             buf[1] = static_cast<uint8_t>(((mti & 0x3F) << 2) | 0);
+            break;
+        }
+        case L3PD::Location: {
+            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
+            buf[1] = static_cast<uint8_t>(mti & 0xFF);
             break;
         }
         default:
@@ -434,6 +459,12 @@ Expected<RRM> parseL3RR(BitReader& reader, int mti) {
         case L3SystemInformationType21::MTI: return L3SystemInformationType21::parse(reader).map([](L3SystemInformationType21 v){ return RRM(std::move(v)); });
         case L3SystemInformationType22::MTI: return L3SystemInformationType22::parse(reader).map([](L3SystemInformationType22 v){ return RRM(std::move(v)); });
         case L3SystemInformationType23::MTI: return L3SystemInformationType23::parse(reader).map([](L3SystemInformationType23 v){ return RRM(std::move(v)); });
+        // System Information Type 2quater (GSM 04.08 9.1.34a)
+        case L3SystemInformationType2quater::MTI: return L3SystemInformationType2quater::parse(reader).map([](L3SystemInformationType2quater v){ return RRM(std::move(v)); });
+        // System Information Type 11 (GSM 04.08 9.1.43o)
+        case L3SystemInformationType11::MTI: return L3SystemInformationType11::parse(reader).map([](L3SystemInformationType11 v){ return RRM(std::move(v)); });
+        // Measurement Order (GSM 04.08 9.1.21a)
+        case L3MeasurementOrder::MTI: return L3MeasurementOrder::parse(reader).map([](L3MeasurementOrder v){ return RRM(std::move(v)); });
         default:
             return Expected<RRM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown RR MTI", static_cast<size_t>(mti)});
     }
@@ -459,6 +490,10 @@ Expected<MMM> parseL3MM(BitReader& reader, int mti) {
         case L3AuthenticationRequest::MTI:         return L3AuthenticationRequest::parse(reader).map([](L3AuthenticationRequest v){ return MMM(std::move(v)); });
         case L3AuthenticationResponse::MTI:        return L3AuthenticationResponse::parse(reader).map([](L3AuthenticationResponse v){ return MMM(std::move(v)); });
         case L3AuthenticationReject::MTI:          return L3AuthenticationReject::parse(reader).map([](L3AuthenticationReject v){ return MMM(std::move(v)); });
+        // CM-Request (24.008 9.2.8)
+        case L3CMRequest::MTI:                     return L3CMRequest::parse(reader).map([](L3CMRequest v){ return MMM(std::move(v)); });
+        // MM-Paging (24.008 9.2.12)
+        case L3PagingMM::MTI:                      return L3PagingMM::parse(reader).map([](L3PagingMM v){ return MMM(std::move(v)); });
         default:
             return Expected<MMM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown MM MTI", static_cast<size_t>(mti)});
     }
@@ -485,6 +520,16 @@ Expected<CCM> parseL3CC(BitReader& reader, int mti, unsigned ti) {
         case L3HoldReject::MTI:             return L3HoldReject::parse(reader).map([ti](L3HoldReject v){ v.ti(ti); return CCM(std::move(v)); });
         case L3CCStatus::MTI:               return L3CCStatus::parse(reader).map([ti](L3CCStatus v){ v.ti(ti); return CCM(std::move(v)); });
         case L3Progress::MTI:               return L3Progress::parse(reader).map([ti](L3Progress v){ v.ti(ti); return CCM(std::move(v)); });
+        // Facility (24.008 9.3.21)
+        case L3Facility::MTI:               return L3Facility::parse(reader).map([ti](L3Facility v){ v.ti(ti); return CCM(std::move(v)); });
+        // Modify (24.008 9.3.15)
+        case L3Modify::MTI:                 return L3Modify::parse(reader).map([ti](L3Modify v){ v.ti(ti); return CCM(std::move(v)); });
+        // UnitData (24.008 9.3.16)
+        case L3UnitData::MTI:               return L3UnitData::parse(reader).map([ti](L3UnitData v){ v.ti(ti); return CCM(std::move(v)); });
+        // UnitDataAck (24.008 9.3.16a)
+        case L3UnitDataAck::MTI:            return L3UnitDataAck::parse(reader).map([ti](L3UnitDataAck v){ v.ti(ti); return CCM(std::move(v)); });
+        // ErrorIndication (24.008 9.3.16b)
+        case L3ErrorIndication::MTI:        return L3ErrorIndication::parse(reader).map([ti](L3ErrorIndication v){ v.ti(ti); return CCM(std::move(v)); });
         default:
             return Expected<CCM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown CC MTI", static_cast<size_t>(mti)});
     }
@@ -594,6 +639,10 @@ Expected<BCCM> parseL3BCC(BitReader& reader, int mti, unsigned ti) {
         case L3BCCRelease::MTI:                return L3BCCRelease::parse(reader).map([ti](L3BCCRelease v){ v.ti(ti); return BCCM(std::move(v)); });
         // Broadcast Call Release Complete (44.018 9.6.2.9)
         case L3BCCReleaseComplete::MTI:        return L3BCCReleaseComplete::parse(reader).map([ti](L3BCCReleaseComplete v){ v.ti(ti); return BCCM(std::move(v)); });
+        // Broadcast Call Confirmed (44.018 9.6.2.5)
+        case L3BCCCallConfirmed::MTI:          return L3BCCCallConfirmed::parse(reader).map([ti](L3BCCCallConfirmed v){ v.ti(ti); return BCCM(std::move(v)); });
+        // Broadcast Connect Acknowledge (44.018 9.6.2.10)
+        case L3BCCConnectAcknowledge::MTI:     return L3BCCConnectAcknowledge::parse(reader).map([ti](L3BCCConnectAcknowledge v){ v.ti(ti); return BCCM(std::move(v)); });
         default:
             return Expected<BCCM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown BCC MTI", static_cast<size_t>(mti)});
     }
@@ -616,8 +665,22 @@ Expected<GCCM> parseL3GCC(BitReader& reader, int mti, unsigned ti) {
         case L3GCCRelease::MTI:                return L3GCCRelease::parse(reader).map([ti](L3GCCRelease v){ v.ti(ti); return GCCM(std::move(v)); });
         // Group Call Release Complete (44.018 9.7.2.9)
         case L3GCCReleaseComplete::MTI:        return L3GCCReleaseComplete::parse(reader).map([ti](L3GCCReleaseComplete v){ v.ti(ti); return GCCM(std::move(v)); });
+        // Group Call Confirmed (44.018 9.7.2.5)
+        case L3GCCCallConfirmed::MTI:          return L3GCCCallConfirmed::parse(reader).map([ti](L3GCCCallConfirmed v){ v.ti(ti); return GCCM(std::move(v)); });
         default:
             return Expected<GCCM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown GCC MTI", static_cast<size_t>(mti)});
+    }
+}
+
+// LS messages (TS 44.031)
+Expected<LSM> parseL3LS(BitReader& reader, int mti) {
+    switch (mti) {
+        // Location Service Request (TS 44.031 9.1.2)
+        case L3LocationServiceRequest::MTI:            return L3LocationServiceRequest::parse(reader).map([](L3LocationServiceRequest v){ return LSM(std::move(v)); });
+        // Location Service Provider Message (TS 44.031 9.1.3)
+        case L3LocationServiceProviderMessage::MTI:    return L3LocationServiceProviderMessage::parse(reader).map([](L3LocationServiceProviderMessage v){ return LSM(std::move(v)); });
+        default:
+            return Expected<LSM>::error(ParseError{ParseError::Code::InvalidMTI, "Unknown LS MTI", static_cast<size_t>(mti)});
     }
 }
 
@@ -765,6 +828,10 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
         case L3PD::GroupCallControl:
             return detail::parseL3GCC(reader, hdr.mti, hdr.ti)
                 .map([](GCCM v){ return ParsedMessage(std::move(v)); });
+
+        case L3PD::Location:
+            return detail::parseL3LS(reader, hdr.mti)
+                .map([](LSM v){ return ParsedMessage(std::move(v)); });
 
         default: {
             auto* handler = cfg.getPDHandler(hdr.pd);

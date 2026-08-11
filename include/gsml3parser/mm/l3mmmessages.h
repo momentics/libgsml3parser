@@ -370,6 +370,49 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
+// CM-Request — 3GPP TS 24.008 §9.2.8
+// Direction: Both
+// Carries: CKSN, optional CM-Service-Type, Classmark Container(s), Mobile Identity
+class L3CMRequest {
+    unsigned mCKSN{0};
+    bool mHaveServiceType{false};
+    L3CMServiceType mServiceType;
+    L3MobileStationClassmark2 mClassmark;
+    L3MobileIdentity mMobileIdentity;
+public:
+    static constexpr int MTI = 0x20;
+    L3CMRequest() = default;
+    unsigned cksn() const { return mCKSN; }
+    bool haveServiceType() const { return mHaveServiceType; }
+    L3CMServiceType::TypeCode serviceType() const { return mServiceType.type(); }
+    const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3CMRequest> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+};
+
+// MM-Paging — 3GPP TS 24.008 §9.2.12
+// Direction: DL
+// Carries: Mobile Identity (TMSI or IMSI of paged subscriber)
+class L3PagingMM {
+    L3MobileIdentity mMobileIdentity;
+public:
+    static constexpr int MTI = 0x06;
+    L3PagingMM() = default;
+    const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3PagingMM> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+};
+
 // ── CM Reestablishment Request (GSM 04.08 9.2.4) ──────────────────────
 
 class L3CMReestablishmentRequest {

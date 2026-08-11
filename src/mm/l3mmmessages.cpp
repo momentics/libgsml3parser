@@ -269,6 +269,106 @@ void L3CMServiceRequest::text(std::ostream& os) const {
     mMobileIdentity.text(os);
 }
 
+// ── L3CMRequest (MTI=0x20, TS 24.008 §9.2.8) ──────────────────────────
+
+size_t L3CMRequest::bodyLength() const {
+    size_t len = 1 + lvLen(mClassmark.lengthV()) + lvLen(mMobileIdentity.lengthV());
+    if (mHaveServiceType) len += 1;
+    return len;
+}
+
+Expected<L3CMRequest> L3CMRequest::parse(BitReader& br) {
+    L3CMRequest msg;
+    // CKSN(4)|spare(4)
+    auto ck = br.readField(4);
+    if (!ck) return Expected<L3CMRequest>::error(ck.error());
+    msg.mCKSN = ck.value();
+    auto sp = br.readField(4);
+    if (!sp) return Expected<L3CMRequest>::error(sp.error());
+    // Optional CM-Service-Type (1 octet, present if high bit of next byte != 0x80 classmark length)
+    // Per spec: service type is optional, followed by classmark LV and mobile identity LV
+    // The service type octet has the same encoding as in CM-Service-Request
+    // We detect it by checking if next byte could be a service type (value 0x10-0x19 or 0x64-0x69)
+    // Actually per spec, CM-Request: CKSN(4)|spare(4), then optionally CM-Service-Type, then Classmark2 LV, then MobileIdentity LV
+    // CM-Service-Type is present when there's a service type octet before the classmark length
+    // The classmark2 length is always 3, so we look for 0x03 as the next byte after optional service type
+    // Simpler: per TS 24.008 9.2.8, CM-Service-Type is L/P (optional), followed by mandatory Classmark Container LV and MobileIdentity LV
+    // The presence bit approach: first bit of CKSN octet is spare, no presence bits for service type
+    // Actually re-reading spec: the message format is:
+    //   spare(4)|CKSN(4) | [CM-Service-Type] | Classmark Container (LV) | Mobile Identity (LV)
+    // CM-Service-Type is optional. We try to detect it: if next byte looks like a service type code (0x1X or 0x6X), consume it.
+    // Service type codes are single nibble in low 4 bits of an octet where high 4 bits indicate MT direction.
+    // For simplicity, we check if the byte after CKSN matches known service type patterns.
+    uint8_t nextByte = br.peekField(8);
+    if ((nextByte & 0xF0) == 0x10 || (nextByte & 0xF0) == 0x60) {
+        auto stByte = br.readField(8);
+        if (!stByte) return Expected<L3CMRequest>::error(stByte.error());
+        msg.mServiceType = L3CMServiceType(static_cast<L3CMServiceType::TypeCode>(stByte.value() & 0x0F));
+        msg.mHaveServiceType = true;
+    }
+    // Classmark2 (LV: length octet + 3 bytes value)
+    {
+        auto lenR = br.readField(8);
+        if (!lenR) return Expected<L3CMRequest>::error(lenR.error());
+    }
+    {
+        auto cmRes = L3MobileStationClassmark2::parse(br);
+        if (!cmRes) return Expected<L3CMRequest>::error(cmRes.error());
+        msg.mClassmark = cmRes.value();
+    }
+    // MobileIdentity (LV)
+    {
+        auto miRes = parseLVMI(br);
+        if (!miRes) return Expected<L3CMRequest>::error(miRes.error());
+        msg.mMobileIdentity = miRes.value();
+    }
+    return Expected<L3CMRequest>::hold(msg);
+}
+
+void L3CMRequest::write(BitWriter& bw) const {
+    bw.writeField(mCKSN & 0x0F, 4);
+    bw.writeField(0, 4);
+    if (mHaveServiceType) {
+        mServiceType.write(bw);
+    }
+    bw.writeField(static_cast<uint32_t>(mClassmark.lengthV()), 8);
+    mClassmark.write(bw);
+    writeLVMI(mMobileIdentity, bw);
+}
+
+void L3CMRequest::text(std::ostream& os) const {
+    os << "CMRequest: CKSN=" << mCKSN;
+    if (mHaveServiceType) {
+        os << " type=";
+        mServiceType.text(os);
+    }
+    os << " ";
+    mMobileIdentity.text(os);
+}
+
+// ── L3PagingMM (MTI=0x06, TS 24.008 §9.2.12) ──────────────────────────
+
+size_t L3PagingMM::bodyLength() const {
+    return lvLen(mMobileIdentity.lengthV());
+}
+
+Expected<L3PagingMM> L3PagingMM::parse(BitReader& br) {
+    L3PagingMM msg;
+    auto miRes = parseLVMI(br);
+    if (!miRes) return Expected<L3PagingMM>::error(miRes.error());
+    msg.mMobileIdentity = miRes.value();
+    return Expected<L3PagingMM>::hold(msg);
+}
+
+void L3PagingMM::write(BitWriter& bw) const {
+    writeLVMI(mMobileIdentity, bw);
+}
+
+void L3PagingMM::text(std::ostream& os) const {
+    os << "PagingMM: ";
+    mMobileIdentity.text(os);
+}
+
 // ── L3CMReestablishmentRequest (MTI=0x28) ──────────────────────────────
 
 size_t L3CMReestablishmentRequest::bodyLength() const {
