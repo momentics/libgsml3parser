@@ -132,7 +132,7 @@ TEST(ParserTest, ParseL3_CC_Alerting) {
 }
 
 TEST(ParserTest, ParseL3_CC_Disconnect) {
-    ParsedMessage orig{CCM{L3Disconnect(7, CCCause::Normal_Call_Clearing)}};
+    ParsedMessage orig{CCM{L3Disconnect(CCCause::Normal_Call_Clearing)}};
     auto hex = writeL3Hex(orig);
     ASSERT_TRUE(hex);
     std::string h = hex.value();
@@ -289,7 +289,7 @@ TEST(ParserTest, WriteL3_MM) {
 }
 
 TEST(ParserTest, WriteL3_CC) {
-    ParsedMessage msg{CCM{L3CallProceeding(7)}};
+    ParsedMessage msg{CCM{L3CallProceeding{}}};
     uint8_t buf[64];
     auto res = writeL3(msg, buf, sizeof(buf));
     ASSERT_TRUE(res);
@@ -331,7 +331,7 @@ TEST(ParserTest, WriteL3Hex_MM) {
 }
 
 TEST(ParserTest, WriteL3Hex_CC) {
-    ParsedMessage msg{CCM{L3CallProceeding(7)}};
+    ParsedMessage msg{CCM{L3CallProceeding{}}};
     auto res = writeL3Hex(msg);
     ASSERT_TRUE(res);
     EXPECT_EQ(res.value(), "3e08");
@@ -360,7 +360,7 @@ TEST(ParserTest, RoundTrip_MM_CMServiceAccept) {
 }
 
 TEST(ParserTest, RoundTrip_CC_Setup) {
-    ParsedMessage orig{CCM{L3Setup(7)}};
+    ParsedMessage orig{CCM{L3Setup{}}};
     auto hex = writeL3Hex(orig);
     ASSERT_TRUE(hex);
     auto res = parseL3Hex(hex.value());

@@ -149,10 +149,8 @@ int main() {
 ```cpp
 #include <gsml3parser/gsml3parser.hpp>
 
-// Build a Disconnect message
-gsml3parser::L3Disconnect disconnect(7,
-    gsml3parser::CCCause::Normal_Call_Clearing,
-    gsml3parser::CCCauseLocation::Private_Serving_Local);
+    // Build a Disconnect message
+    gsml3parser::L3Disconnect disconnect(gsml3parser::CCCause::Normal_Call_Clearing);
 
 // Serialize to hex string
 auto hex = gsml3parser::writeL3Hex(disconnect);

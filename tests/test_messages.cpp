@@ -259,7 +259,7 @@ TEST(MessagesTest, RR_SystemInformationType17) {
 // ── CC Message Tests ───────────────────────────────────────────────────
 
 TEST(MessagesTest, CC_Setup) {
-    L3Setup msg(7);
+    L3Setup msg;
     EXPECT_EQ(msg.mti(), L3Setup::MTI);
     EXPECT_EQ(msg.ti(), 7u);
     EXPECT_FALSE(msg.haveCalledParty());
@@ -267,48 +267,48 @@ TEST(MessagesTest, CC_Setup) {
 
 TEST(MessagesTest, CC_SetupWithDigits) {
     L3CalledPartyBCDNumber called("1234567890");
-    L3Setup msg = L3Setup::builder(7).calledParty(called).build();
+    L3Setup msg = L3Setup::builder().calledParty(called).build();
     EXPECT_EQ(msg.mti(), L3Setup::MTI);
     EXPECT_TRUE(msg.haveCalledParty());
     EXPECT_STREQ(msg.digits(), "1234567890");
 }
 
 TEST(MessagesTest, CC_Disconnect) {
-    L3Disconnect msg(7, CCCause::Normal_Call_Clearing);
+    L3Disconnect msg(CCCause::Normal_Call_Clearing);
     EXPECT_EQ(msg.mti(), L3Disconnect::MTI);
     EXPECT_EQ(msg.cause(), CCCause::Normal_Call_Clearing);
     EXPECT_EQ(msg.l2BodyLength(), 4u);
 }
 
 TEST(MessagesTest, CC_Release) {
-    L3Release msg(7);
+    L3Release msg;
     EXPECT_EQ(msg.mti(), L3Release::MTI);
     EXPECT_FALSE(msg.haveCause());
 
-    L3Release msg2 = L3Release::builder(7).cause(CCCause::User_Busy).build();
+    L3Release msg2 = L3Release::builder().cause(CCCause::User_Busy).build();
     EXPECT_TRUE(msg2.haveCause());
     EXPECT_EQ(msg2.cause(), CCCause::User_Busy);
 }
 
 TEST(MessagesTest, CC_ReleaseComplete) {
-    L3ReleaseComplete msg(7);
+    L3ReleaseComplete msg;
     EXPECT_EQ(msg.mti(), L3ReleaseComplete::MTI);
 }
 
 TEST(MessagesTest, CC_Alerting) {
-    L3Alerting msg(7);
+    L3Alerting msg;
     EXPECT_EQ(msg.mti(), L3Alerting::MTI);
     EXPECT_EQ(msg.l2BodyLength(), 0u);
 }
 
 TEST(MessagesTest, CC_CallProceeding) {
-    L3CallProceeding msg(7);
+    L3CallProceeding msg;
     EXPECT_EQ(msg.mti(), L3CallProceeding::MTI);
     EXPECT_EQ(msg.l2BodyLength(), 0u);
 }
 
 TEST(MessagesTest, CC_Connect) {
-    L3Connect msg(7);
+    L3Connect msg;
     EXPECT_EQ(msg.mti(), L3Connect::MTI);
     EXPECT_EQ(msg.l2BodyLength(), 0u);
 }

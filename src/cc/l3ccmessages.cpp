@@ -246,12 +246,13 @@ std::ostream& operator<<(std::ostream& os, CCMessageType mti) {
 
 // ── L3Setup ─────────────────────────────────────────────────────────────
 
-L3Setup::Builder L3Setup::builder(unsigned ti) {
-    return Builder{ti};
+L3Setup::Builder L3Setup::builder() {
+    return Builder{};
 }
 
 L3Setup L3Setup::Builder::build() const {
-    L3Setup msg(m_ti);
+    L3Setup msg;
+    msg.mTI = m_ti;
     if (m_haveCalled) {
         msg.mHaveCalledParty = true;
         msg.mCalledParty = m_called;
@@ -1053,12 +1054,13 @@ void L3Disconnect::text(std::ostream& os) const {
 
 // ── L3Release ──────────────────────────────────────────────────────────
 
-L3Release::Builder L3Release::builder(unsigned ti) {
-    return Builder{ti};
+L3Release::Builder L3Release::builder() {
+    return Builder{};
 }
 
 L3Release L3Release::Builder::build() const {
-    L3Release msg(m_ti);
+    L3Release msg;
+    msg.mTI = m_ti;
     if (m_haveCause) {
         msg.mHaveCause = true;
         msg.mCause = m_cause;
@@ -1117,12 +1119,13 @@ void L3Release::text(std::ostream& os) const {
 
 // ── L3ReleaseComplete ──────────────────────────────────────────────────
 
-L3ReleaseComplete::Builder L3ReleaseComplete::builder(unsigned ti) {
-    return Builder{ti};
+L3ReleaseComplete::Builder L3ReleaseComplete::builder() {
+    return Builder{};
 }
 
 L3ReleaseComplete L3ReleaseComplete::Builder::build() const {
-    L3ReleaseComplete msg(m_ti);
+    L3ReleaseComplete msg;
+    msg.mTI = m_ti;
     if (m_haveCause) {
         msg.mHaveCause = true;
         msg.mCause = m_cause;
@@ -1180,8 +1183,8 @@ void L3ReleaseComplete::text(std::ostream& os) const {
 
 // ── L3CCStatus ─────────────────────────────────────────────────────────
 
-L3CCStatus::Builder L3CCStatus::builder(unsigned ti) {
-    return Builder{ti};
+L3CCStatus::Builder L3CCStatus::builder() {
+    return Builder{};
 }
 
 L3CCStatus L3CCStatus::Builder::build() const {

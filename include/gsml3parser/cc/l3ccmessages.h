@@ -101,7 +101,6 @@ public:
     static constexpr int MTI = 0x05;
 
     L3Setup() = default;
-    explicit L3Setup(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -155,14 +154,14 @@ public:
     const L3StreamIdentifier& streamIdentifier() const { return mStreamIdentifier; }
 
     struct Builder {
-        unsigned m_ti;
+        unsigned m_ti{7};
         bool m_haveCalled{false};
         L3CalledPartyBCDNumber m_called;
-        Builder(unsigned ti) : m_ti(ti) {}
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
         Builder& calledParty(const L3CalledPartyBCDNumber& v) { m_called = v; m_haveCalled = true; return *this; }
         [[nodiscard]] L3Setup build() const;
     };
-    static Builder builder(unsigned ti);
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3Setup> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -181,7 +180,6 @@ public:
     static constexpr int MTI = 0x0e;
 
     L3EmergencySetup() = default;
-    explicit L3EmergencySetup(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -212,7 +210,6 @@ public:
     static constexpr int MTI = 0x02;
 
     L3CallProceeding() = default;
-    explicit L3CallProceeding(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -255,7 +252,6 @@ public:
     static constexpr int MTI = 0x01;
 
     L3Alerting() = default;
-    explicit L3Alerting(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -300,7 +296,6 @@ public:
     static constexpr int MTI = 0x07;
 
     L3Connect() = default;
-    explicit L3Connect(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -337,7 +332,6 @@ public:
     static constexpr int MTI = 0x0f;
 
     L3ConnectAcknowledge() = default;
-    explicit L3ConnectAcknowledge(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -368,7 +362,6 @@ public:
     static constexpr int MTI = 0x08;
 
     L3CallConfirmed() = default;
-    explicit L3CallConfirmed(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -405,11 +398,10 @@ public:
     static constexpr int MTI = 0x25;
 
     L3Disconnect() = default;
-    explicit L3Disconnect(unsigned ti) : mTI(ti) {}
-    L3Disconnect(unsigned ti, CCCause cause)
-        : mTI(ti), mCause(cause) {}
-    L3Disconnect(unsigned ti, CCCause cause, CCCauseLocation loc)
-        : mTI(ti), mCause(cause), mLocation(loc) {}
+    explicit L3Disconnect(CCCause cause)
+        : mCause(cause) {}
+    L3Disconnect(CCCause cause, CCCauseLocation loc)
+        : mCause(cause), mLocation(loc) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -442,7 +434,6 @@ public:
     static constexpr int MTI = 0x2d;
 
     L3Release() = default;
-    explicit L3Release(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -457,14 +448,14 @@ public:
     const L3SupServVersionIndicator& ssVersion() const { return mSSVersion; }
 
     struct Builder {
-        unsigned m_ti;
+        unsigned m_ti{7};
         bool m_haveCause{false};
         CCCause m_cause{CCCause::Unknown_L3_Cause};
-        Builder(unsigned ti) : m_ti(ti) {}
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
         Builder& cause(CCCause v) { m_cause = v; m_haveCause = true; return *this; }
         [[nodiscard]] L3Release build() const;
     };
-    static Builder builder(unsigned ti);
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3Release> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -491,7 +482,6 @@ public:
     static constexpr int MTI = 0x2a;
 
     L3ReleaseComplete() = default;
-    explicit L3ReleaseComplete(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -506,14 +496,14 @@ public:
     const L3SupServVersionIndicator& ssVersion() const { return mSSVersion; }
 
     struct Builder {
-        unsigned m_ti;
+        unsigned m_ti{7};
         bool m_haveCause{false};
         CCCause m_cause{CCCause::Unknown_L3_Cause};
-        Builder(unsigned ti) : m_ti(ti) {}
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
         Builder& cause(CCCause v) { m_cause = v; m_haveCause = true; return *this; }
         [[nodiscard]] L3ReleaseComplete build() const;
     };
-    static Builder builder(unsigned ti);
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3ReleaseComplete> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -533,16 +523,16 @@ class L3CCStatus {
 
 public:
     struct Builder {
-        unsigned m_ti;
+        unsigned m_ti{7};
         bool m_haveCause{false};
         CCCause m_cause{CCCause::Unknown_L3_Cause};
         unsigned m_callState{0};
-        Builder(unsigned ti) : m_ti(ti) {}
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
         Builder& cause(CCCause v) { m_cause = v; m_haveCause = true; return *this; }
         Builder& callState(unsigned v) { m_callState = v; return *this; }
         [[nodiscard]] L3CCStatus build() const;
     };
-    static Builder builder(unsigned ti);
+    static Builder builder();
 
 private:
     friend struct Builder;
@@ -551,7 +541,6 @@ public:
     static constexpr int MTI = 0x3d;
 
     L3CCStatus() = default;
-    explicit L3CCStatus(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -577,7 +566,6 @@ public:
     static constexpr int MTI = 0x35;
 
     L3StartDTMF() = default;
-    explicit L3StartDTMF(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -599,7 +587,6 @@ public:
     static constexpr int MTI = 0x31;
 
     L3StopDTMF() = default;
-    explicit L3StopDTMF(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -619,7 +606,6 @@ public:
     static constexpr int MTI = 0x32;
 
     L3StopDTMFAcknowledge() = default;
-    explicit L3StopDTMFAcknowledge(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -640,8 +626,7 @@ public:
     static constexpr int MTI = 0x36;
 
     L3StartDTMFAcknowledge() = default;
-    explicit L3StartDTMFAcknowledge(unsigned ti) : mTI(ti) {}
-    L3StartDTMFAcknowledge(unsigned ti, char keypad) : mTI(ti), mKey(keypad) {}
+    explicit L3StartDTMFAcknowledge(char keypad) : mKey(keypad) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -664,7 +649,7 @@ public:
     static constexpr int MTI = 0x37;
 
     L3StartDTMFReject() = default;
-    L3StartDTMFReject(unsigned ti, CCCause cause) : mTI(ti), mCause(cause) {}
+    explicit L3StartDTMFReject(CCCause cause) : mCause(cause) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -688,7 +673,6 @@ public:
     static constexpr int MTI = 0x18;
 
     L3Hold() = default;
-    explicit L3Hold(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -709,7 +693,7 @@ public:
     static constexpr int MTI = 0x1a;
 
     L3HoldReject() = default;
-    L3HoldReject(unsigned ti, CCCause cause) : mTI(ti), mCause(cause) {}
+    explicit L3HoldReject(CCCause cause) : mCause(cause) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
@@ -734,7 +718,6 @@ public:
     static constexpr int MTI = 0x03;
 
     L3Progress() = default;
-    explicit L3Progress(unsigned ti) : mTI(ti) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }

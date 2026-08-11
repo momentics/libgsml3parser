@@ -55,7 +55,7 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 // PD=0x03, TI(3)+TIF(1)+skip(4), MTI(6)=000101, NSD(2), [BearerCap TLV], [CalledParty TLV], ...
 
 TEST(CCRoundTripTest, Setup_NoDigits) {
-    ParsedMessage msg(CCM(L3Setup(7)));
+    ParsedMessage msg(CCM(L3Setup{}));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messagePD(*parsed), L3PD::CallControl);
@@ -68,7 +68,7 @@ TEST(CCRoundTripTest, Setup_NoDigits) {
 
 TEST(CCRoundTripTest, Setup_WithCalledParty) {
     L3CalledPartyBCDNumber called("1234567890");
-    ParsedMessage msg(CCM(L3Setup::builder(7).calledParty(called).build()));
+    ParsedMessage msg(CCM(L3Setup::builder().calledParty(called).build()));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     auto* s = tryGet<L3Setup>(*parsed);
@@ -95,7 +95,7 @@ TEST(CCRoundTripTest, Setup_Parse) {
 // ── Emergency Setup (GSM 04.08 9.3.8) ────────────────────────────────
 
 TEST(CCRoundTripTest, EmergencySetup) {
-    ParsedMessage msg(CCM(L3EmergencySetup(7)));
+    ParsedMessage msg(CCM(L3EmergencySetup{}));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3EmergencySetup::MTI);
@@ -105,7 +105,7 @@ TEST(CCRoundTripTest, EmergencySetup) {
 // Reference: L3_Templates.ttcn tr_ML3_MT_CC_CALL_PROC
 
 TEST(CCRoundTripTest, CallProceeding) {
-    ParsedMessage msg(CCM(L3CallProceeding(7)));
+    ParsedMessage msg(CCM(L3CallProceeding{}));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3CallProceeding::MTI);
@@ -115,7 +115,7 @@ TEST(CCRoundTripTest, CallProceeding) {
 // Reference: L3_Templates.ttcn tr_ML3_MT_CC_ALERTING
 
 TEST(CCRoundTripTest, Alerting) {
-    ParsedMessage msg(CCM(L3Alerting(7)));
+    ParsedMessage msg(CCM(L3Alerting{}));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3Alerting::MTI);
@@ -135,7 +135,7 @@ TEST(CCRoundTripTest, Alerting_Parse) {
 // ── Connect (GSM 04.08 9.3.5) ────────────────────────────────────────
 
 TEST(CCRoundTripTest, Connect) {
-    ParsedMessage msg(CCM(L3Connect(7)));
+    ParsedMessage msg(CCM(L3Connect{}));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3Connect::MTI);
@@ -144,7 +144,7 @@ TEST(CCRoundTripTest, Connect) {
 // ── Connect Acknowledge (GSM 04.08 9.3.6) ────────────────────────────
 
 TEST(CCRoundTripTest, ConnectAcknowledge) {
-    ParsedMessage msg(CCM(L3ConnectAcknowledge(7)));
+    ParsedMessage msg(CCM(L3ConnectAcknowledge{}));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3ConnectAcknowledge::MTI);
@@ -154,7 +154,7 @@ TEST(CCRoundTripTest, ConnectAcknowledge) {
 // Reference: L3_Templates.ttcn ts_ML3_MO_CC_CALL_CONF
 
 TEST(CCRoundTripTest, CallConfirmed) {
-    ParsedMessage msg(CCM(L3CallConfirmed(7)));
+    ParsedMessage msg(CCM(L3CallConfirmed{}));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3CallConfirmed::MTI);
@@ -165,7 +165,7 @@ TEST(CCRoundTripTest, CallConfirmed) {
 // PD=0x03, TI(3)+TIF(1), MTI(6)=100101, NSD(2), Cause TLV
 
 TEST(CCRoundTripTest, Disconnect_NormalClearing) {
-    ParsedMessage msg(CCM(L3Disconnect(7, CCCause::Normal_Call_Clearing)));
+    ParsedMessage msg{CCM{L3Disconnect{CCCause::Normal_Call_Clearing}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     auto* d = tryGet<L3Disconnect>(*parsed);
@@ -175,7 +175,9 @@ TEST(CCRoundTripTest, Disconnect_NormalClearing) {
 }
 
 TEST(CCRoundTripTest, Disconnect_UserBusy) {
-    ParsedMessage msg(CCM(L3Disconnect(3, CCCause::User_Busy)));
+    L3Disconnect disc(CCCause::User_Busy);
+    disc.ti(3);
+    ParsedMessage msg{CCM{disc}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     auto* d = tryGet<L3Disconnect>(*parsed);
@@ -223,7 +225,7 @@ TEST(CCRoundTripTest, Disconnect_Parse) {
 // Reference: L3_Templates.ttcn ts_ML3_MO_CC_RELEASE
 
 TEST(CCRoundTripTest, Release_NoCause) {
-    ParsedMessage msg(CCM(L3Release(7)));
+    ParsedMessage msg(CCM(L3Release{}));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     auto* r = tryGet<L3Release>(*parsed);
@@ -232,7 +234,7 @@ TEST(CCRoundTripTest, Release_NoCause) {
 }
 
 TEST(CCRoundTripTest, Release_WithCause) {
-    ParsedMessage msg(CCM(L3Release::builder(7).cause(CCCause::User_Busy).build()));
+    ParsedMessage msg(CCM(L3Release::builder().cause(CCCause::User_Busy).build()));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     auto* r = tryGet<L3Release>(*parsed);
@@ -245,14 +247,14 @@ TEST(CCRoundTripTest, Release_WithCause) {
 // Reference: L3_Templates.ttcn ts_ML3_MO_CC_REL_COMPL
 
 TEST(CCRoundTripTest, ReleaseComplete_NoCause) {
-    ParsedMessage msg(CCM(L3ReleaseComplete(7)));
+    ParsedMessage msg(CCM(L3ReleaseComplete{}));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3ReleaseComplete::MTI);
 }
 
 TEST(CCRoundTripTest, ReleaseComplete_WithCause) {
-    L3ReleaseComplete orig = L3ReleaseComplete::builder(5).cause(CCCause::Normal_Call_Clearing).build();
+    L3ReleaseComplete orig = L3ReleaseComplete::builder().ti(5).cause(CCCause::Normal_Call_Clearing).build();
     ParsedMessage msg{CCM{orig}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
@@ -268,7 +270,7 @@ TEST(CCRoundTripTest, ReleaseComplete_WithCause) {
 // ── CC Status (GSM 04.08 9.3.19) ─────────────────────────────────────
 
 TEST(CCRoundTripTest, CCStatus) {
-    ParsedMessage msg(CCM(L3CCStatus::builder(7).cause(CCCause::Normal_Unspecified).callState(0x00).build()));
+    ParsedMessage msg(CCM(L3CCStatus::builder().cause(CCCause::Normal_Unspecified).callState(0x00).build()));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3CCStatus::MTI);
@@ -278,7 +280,7 @@ TEST(CCRoundTripTest, CCStatus) {
 // Reference: L3_Templates.ttcn ts_ML3_MO_CC_START_DTMF
 
 TEST(CCRoundTripTest, StartDTMF) {
-    ParsedMessage msg(CCM(L3StartDTMF(7)));
+    ParsedMessage msg(CCM(L3StartDTMF{}));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3StartDTMF::MTI);
@@ -287,7 +289,7 @@ TEST(CCRoundTripTest, StartDTMF) {
 // ── Start DTMF Acknowledge (GSM 04.08 9.3.25) ────────────────────────
 
 TEST(CCRoundTripTest, StartDTMFAcknowledge) {
-    ParsedMessage msg(CCM(L3StartDTMFAcknowledge(7, '1')));
+    ParsedMessage msg{CCM{L3StartDTMFAcknowledge{'1'}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3StartDTMFAcknowledge::MTI);
@@ -296,7 +298,7 @@ TEST(CCRoundTripTest, StartDTMFAcknowledge) {
 // ── Start DTMF Reject (GSM 04.08 9.3.26) ─────────────────────────────
 
 TEST(CCRoundTripTest, StartDTMFReject) {
-    ParsedMessage msg(CCM(L3StartDTMFReject(7, CCCause::Normal_Unspecified)));
+    ParsedMessage msg{CCM{L3StartDTMFReject{CCCause::Normal_Unspecified}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3StartDTMFReject::MTI);
@@ -305,7 +307,7 @@ TEST(CCRoundTripTest, StartDTMFReject) {
 // ── Stop DTMF (GSM 04.08 9.3.29) ─────────────────────────────────────
 
 TEST(CCRoundTripTest, StopDTMF) {
-    ParsedMessage msg(CCM(L3StopDTMF(7)));
+    ParsedMessage msg(CCM(L3StopDTMF{}));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3StopDTMF::MTI);
@@ -314,7 +316,7 @@ TEST(CCRoundTripTest, StopDTMF) {
 // ── Stop DTMF Acknowledge (GSM 04.08 9.3.30) ─────────────────────────
 
 TEST(CCRoundTripTest, StopDTMFAcknowledge) {
-    ParsedMessage msg(CCM(L3StopDTMFAcknowledge(7)));
+    ParsedMessage msg(CCM(L3StopDTMFAcknowledge{}));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3StopDTMFAcknowledge::MTI);
@@ -323,7 +325,7 @@ TEST(CCRoundTripTest, StopDTMFAcknowledge) {
 // ── Hold (GSM 04.08 9.3.10) ──────────────────────────────────────────
 
 TEST(CCRoundTripTest, Hold) {
-    ParsedMessage msg(CCM(L3Hold(7)));
+    ParsedMessage msg(CCM(L3Hold{}));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3Hold::MTI);
@@ -332,7 +334,7 @@ TEST(CCRoundTripTest, Hold) {
 // ── Hold Reject (GSM 04.08 9.3.12) ───────────────────────────────────
 
 TEST(CCRoundTripTest, HoldReject) {
-    ParsedMessage msg(CCM(L3HoldReject(7, CCCause::Normal_Unspecified)));
+    ParsedMessage msg{CCM{L3HoldReject{CCCause::Normal_Unspecified}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3HoldReject::MTI);
@@ -341,7 +343,7 @@ TEST(CCRoundTripTest, HoldReject) {
 // ── Progress (GSM 04.08 9.3.17) ──────────────────────────────────────
 
 TEST(CCRoundTripTest, Progress) {
-    ParsedMessage msg(CCM(L3Progress(7)));
+    ParsedMessage msg(CCM(L3Progress{}));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3Progress::MTI);
@@ -481,7 +483,9 @@ TEST(CCRoundTripTest, BCDDigits_OddLength) {
 
 TEST(CCRoundTripTest, TI_DifferentValues) {
     for (unsigned ti = 0; ti < 8; ti++) {
-        ParsedMessage msg(CCM(L3Disconnect(ti, CCCause::Normal_Call_Clearing)));
+        L3Disconnect disc(CCCause::Normal_Call_Clearing);
+        disc.ti(ti);
+        ParsedMessage msg{CCM{disc}};
         auto parsed = roundtrip(msg);
         ASSERT_TRUE(parsed);
         auto* d = tryGet<L3Disconnect>(*parsed);

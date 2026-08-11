@@ -191,7 +191,7 @@ TEST(Visitor, tryGet_ParsedMessage_Mutable_RR) {
 }
 
 TEST(Visitor, tryGet_ParsedMessage_Mutable_CC) {
-    L3Setup setup(7);
+    L3Setup setup{};
     ParsedMessage msg{CCM{setup}};
     auto* p = tryGet<L3Setup>(msg);
     EXPECT_NE(p, nullptr);
@@ -335,7 +335,7 @@ TEST(Visitor, ParseAndTryGet_MM) {
 }
 
 TEST(Visitor, ParseAndTryGet_CC) {
-    ParsedMessage orig{CCM{L3Setup(7)}};
+    ParsedMessage orig{CCM{L3Setup{}}};
     auto hex = writeL3Hex(orig);
     ASSERT_TRUE(hex);
     auto res = parseL3Hex(hex.value());

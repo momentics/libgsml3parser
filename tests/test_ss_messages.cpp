@@ -59,7 +59,7 @@ TEST(SSRoundTripTest, Facility_Empty) {
 }
 
 TEST(SSRoundTripTest, Facility_WithData) {
-    ParsedMessage msg(SSM(L3SupServFacilityMessage(7, std::string("\x81\x01\x13", 3))));
+    ParsedMessage msg{SSM{L3SupServFacilityMessage{std::string("\x81\x01\x13", 3)}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3SupServFacilityMessage::MTI);
@@ -93,7 +93,9 @@ TEST(SSRoundTripTest, Register_Empty) {
 
 TEST(SSRoundTripTest, Register_WithData) {
     // Register with TI=5 and 3-byte Facility data (TCAP INVOKE: opcode 0x81, length 1, value 0x0A)
-    ParsedMessage msg(SSM(L3SupServRegisterMessage(5, std::string("\x81\x01\x0A", 3))));
+    L3SupServRegisterMessage reg(std::string("\x81\x01\x0A", 3));
+    reg.ti(5);
+    ParsedMessage msg{SSM{reg}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3SupServRegisterMessage::MTI);
@@ -109,7 +111,7 @@ TEST(SSRoundTripTest, ReleaseComplete_Empty) {
 }
 
 TEST(SSRoundTripTest, ReleaseComplete_WithCause) {
-    L3SupServReleaseCompleteMessage orig(7, CCCause::Normal_Call_Clearing);
+    L3SupServReleaseCompleteMessage orig(CCCause::Normal_Call_Clearing);
     ParsedMessage msg{SSM{orig}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
@@ -126,7 +128,9 @@ TEST(SSRoundTripTest, ReleaseComplete_WithCause) {
 
 TEST(SSRoundTripTest, TI_DifferentValues) {
     for (unsigned ti = 0; ti < 8; ti++) {
-        ParsedMessage msg(SSM(L3SupServFacilityMessage(ti, std::string())));
+        L3SupServFacilityMessage fac{};
+        fac.ti(ti);
+        ParsedMessage msg{SSM{fac}};
         auto parsed = roundtrip(msg);
         ASSERT_TRUE(parsed);
         auto* s = tryGet<L3SupServFacilityMessage>(*parsed);
@@ -142,7 +146,7 @@ TEST(SSRoundTripTest, SSOpcodes_Exist) {
     // These are TCAP opcodes defined in SS_Templates.ttcn
     // Our library doesn't parse TCAP internally, but the Facility IE carries raw data
     // Verify that the facility data can carry arbitrary TCAP content
-    ParsedMessage msg(SSM(L3SupServFacilityMessage(7, std::string("\x81\x03\x3B\x01\x00", 5))));
+    ParsedMessage msg{SSM{L3SupServFacilityMessage{std::string("\x81\x03\x3B\x01\x00", 5)}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
 }

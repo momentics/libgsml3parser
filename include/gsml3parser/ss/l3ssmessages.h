@@ -46,8 +46,8 @@ public:
     static constexpr int MTI = 0x3a;
 
     L3SupServFacilityMessage() = default;
-    L3SupServFacilityMessage(unsigned wTI, const std::string& facility)
-        : mTI(wTI), mFacility(facility) {}
+    explicit L3SupServFacilityMessage(const std::string& facility)
+        : mFacility(facility) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned wTI) { mTI = wTI; }
@@ -75,8 +75,8 @@ public:
     static constexpr int MTI = 0x3b;
 
     L3SupServRegisterMessage() = default;
-    L3SupServRegisterMessage(unsigned wTI, const std::string& facility)
-        : mTI(wTI), mFacility(facility) {}
+    explicit L3SupServRegisterMessage(const std::string& facility)
+        : mFacility(facility) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned wTI) { mTI = wTI; }
@@ -106,9 +106,8 @@ public:
     static constexpr int MTI = 0x2a;
 
     L3SupServReleaseCompleteMessage() = default;
-    explicit L3SupServReleaseCompleteMessage(unsigned wTI) : mTI(wTI) {}
-    L3SupServReleaseCompleteMessage(unsigned wTI, CCCause cause)
-        : mTI(wTI), mHaveCause(true), mCause(cause, CCCauseLocation::Private_Serving_Local) {}
+    explicit L3SupServReleaseCompleteMessage(CCCause cause)
+        : mHaveCause(true), mCause(cause, CCCauseLocation::Private_Serving_Local) {}
 
     unsigned ti() const { return mTI; }
     void ti(unsigned wTI) { mTI = wTI; }
