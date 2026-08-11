@@ -1306,6 +1306,7 @@ class L3NotificationNCH {
 public:
     static constexpr int MTI = 0x20;
 
+    std::vector<uint8_t>& data() { return mData; }
     const std::vector<uint8_t>& data() const { return mData; }
 
     size_t bodyLength() const { return mData.size(); }
@@ -1324,6 +1325,7 @@ class L3NotificationResponse {
 public:
     static constexpr int MTI = 0x26;
 
+    std::vector<uint8_t>& data() { return mData; }
     const std::vector<uint8_t>& data() const { return mData; }
 
     size_t bodyLength() const { return mData.size(); }
@@ -1424,6 +1426,7 @@ class L3DataIndication {
 public:
     static constexpr int MTI = 0x67;
 
+    std::vector<uint8_t>& data() { return mData; }
     const std::vector<uint8_t>& data() const { return mData; }
 
     size_t bodyLength() const { return mData.size(); }
@@ -1442,6 +1445,7 @@ class L3DataIndication2 {
 public:
     static constexpr int MTI = 0x68;
 
+    std::vector<uint8_t>& data() { return mData; }
     const std::vector<uint8_t>& data() const { return mData; }
 
     size_t bodyLength() const { return mData.size(); }
@@ -1576,6 +1580,7 @@ class L3UTRANClassmarkChange {
 public:
     static constexpr int MTI = 0x60;
 
+    std::vector<uint8_t>& classmark() { return mClassmark; }
     const std::vector<uint8_t>& classmark() const { return mClassmark; }
 
     size_t bodyLength() const { return mClassmark.size(); }
@@ -1594,6 +1599,7 @@ class L3CDMA2000ClassmarkChange {
 public:
     static constexpr int MTI = 0x62;
 
+    std::vector<uint8_t>& classmark() { return mClassmark; }
     const std::vector<uint8_t>& classmark() const { return mClassmark; }
 
     size_t bodyLength() const { return mClassmark.size(); }
@@ -1612,6 +1618,7 @@ class L3IntersysToUTRANHOCommand {
 public:
     static constexpr int MTI = 0x63;
 
+    std::vector<uint8_t>& data() { return mData; }
     const std::vector<uint8_t>& data() const { return mData; }
 
     size_t bodyLength() const { return mData.size(); }
@@ -1630,6 +1637,7 @@ class L3IntersysToCDMA2000HOCommand {
 public:
     static constexpr int MTI = 0x64;
 
+    std::vector<uint8_t>& data() { return mData; }
     const std::vector<uint8_t>& data() const { return mData; }
 
     size_t bodyLength() const { return mData.size(); }
@@ -1648,6 +1656,7 @@ class L3GERANIUClassmarkChange {
 public:
     static constexpr int MTI = 0x65;
 
+    std::vector<uint8_t>& classmark() { return mClassmark; }
     const std::vector<uint8_t>& classmark() const { return mClassmark; }
 
     size_t bodyLength() const { return mClassmark.size(); }
@@ -1944,6 +1953,7 @@ class L3EnhancedMeasurementRepUL {
 public:
     static constexpr int MTI = 0x10B;
 
+    std::vector<uint8_t>& data() { return mData; }
     const std::vector<uint8_t>& data() const { return mData; }
 
     size_t bodyLength() const { return mData.size(); }
@@ -1963,6 +1973,7 @@ class L3MeasurementInfoDL {
 public:
     static constexpr int MTI = 0x10C;
 
+    std::vector<uint8_t>& data() { return mData; }
     const std::vector<uint8_t>& data() const { return mData; }
 
     size_t bodyLength() const { return mData.size(); }

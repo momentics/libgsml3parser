@@ -613,3 +613,496 @@ TEST(RoundTripTest, SI2quater_RoundTrip) {
     ASSERT_TRUE(parsed);
     checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType2quater::MTI);
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// Phase 3: RR messages without tests — roundtrip coverage
+// ═══════════════════════════════════════════════════════════════════════
+
+// ── Step 3.1: Configuration Change и Partial Release ──────────────────
+
+// Configuration Change Command (GSM 04.08 9.1.4, MTI=0x30)
+// Reference: GSM_RR_Types.ttcn CONFIGURATION_CHANGE_COMMAND='00110000'B
+TEST(RoundTripTest, ConfigurationChangeCommand_Empty) {
+    ParsedMessage msg{RRM{L3ConfigurationChangeCommand{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3ConfigurationChangeCommand::MTI);
+}
+
+// Configuration Change Acknowledge (GSM 04.08 9.1.4, MTI=0x31)
+// Reference: GSM_RR_Types.ttcn CONFIGURATION_CHANGE_ACKNOWLEDGE='00110001'B
+TEST(RoundTripTest, ConfigurationChangeAcknowledge) {
+    ParsedMessage msg{RRM{L3ConfigurationChangeAcknowledge{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3ConfigurationChangeAcknowledge::MTI);
+}
+
+// Configuration Change Reject (GSM 04.08 9.1.4, MTI=0x33)
+// Reference: GSM_RR_Types.ttcn CONFIGURATION_CHANGE_REJECT='00110011'B
+TEST(RoundTripTest, ConfigurationChangeReject) {
+    ParsedMessage msg{RRM{L3ConfigurationChangeReject{RRCause::Normal_Event}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    auto* ccr = tryGet<L3ConfigurationChangeReject>(*parsed);
+    ASSERT_TRUE(ccr);
+    EXPECT_EQ(ccr->cause(), RRCause::Normal_Event);
+}
+
+// Partial Release (GSM 04.08 9.1.8, MTI=0x0a)
+// Reference: GSM_RR_Types.ttcn PARTIAL_RELEASE='00001010'B
+TEST(RoundTripTest, PartialRelease) {
+    ParsedMessage msg{RRM{L3PartialRelease{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3PartialRelease::MTI);
+}
+
+// Partial Release Complete (GSM 04.08 9.1.8, MTI=0x0f)
+// Reference: GSM_RR_Types.ttcn PARTIAL_RELEASE_COMPLETE='00001111'B
+TEST(RoundTripTest, PartialReleaseComplete) {
+    ParsedMessage msg{RRM{L3PartialReleaseComplete{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3PartialReleaseComplete::MTI);
+}
+
+// ── Step 3.2: Extended Measurement и Frequency Redefinition ───────────
+
+// Extended Measurement Report (GSM 04.08 9.1.21a, MTI=0x36)
+// Reference: GSM_RR_Types.ttcn EXTENDED_MEASUREMENT_REPORT='00110110'B
+TEST(RoundTripTest, ExtendedMeasurementReport) {
+    ParsedMessage msg{RRM{L3ExtendedMeasurementReport{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3ExtendedMeasurementReport::MTI);
+}
+
+// Extended Measurement Order (GSM 04.08 9.1.21b, MTI=0x37)
+// Reference: GSM_RR_Types.ttcn EXTENDED_MEASUREMENT_ORDER='00110111'B
+TEST(RoundTripTest, ExtendedMeasurementOrder) {
+    L3ExtendedMeasurementOrder msg;
+    ParsedMessage pm{RRM{std::move(msg)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    // Write serialization produces valid output with header
+    EXPECT_NE(*hex, "");
+}
+
+// Frequency Redefinition (GSM 04.08 9.1.13a, MTI=0x14)
+// Reference: GSM_RR_Types.ttcn FREQUENCY_REDEFINITION='00010100'B
+TEST(RoundTripTest, FrequencyRedefinition) {
+    ParsedMessage msg{RRM{L3FrequencyRedefinition{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3FrequencyRedefinition::MTI);
+}
+
+// ── Step 3.3: Notification ────────────────────────────────────────────
+
+// Notification NCH (GSM 04.08 9.1.26, MTI=0x20)
+// Reference: GSM_RR_Types.ttcn NOTIFICATION_NCH='00100000'B
+TEST(RoundTripTest, NotificationNCH) {
+    L3NotificationNCH msg;
+    msg.data() = std::vector<uint8_t>{0xAB, 0xCD};
+    ParsedMessage pm{RRM{std::move(msg)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    auto reparsed = parseL3Hex(*hex);
+    ASSERT_TRUE(reparsed);
+    checkHeader(*reparsed, L3PD::RadioResource, L3NotificationNCH::MTI);
+}
+
+// Notification Response (GSM 04.08 9.1.27, MTI=0x26)
+// Reference: GSM_RR_Types.ttcn NOTIFICATION_RESPONSE='00100110'B
+TEST(RoundTripTest, NotificationResponse) {
+    L3NotificationResponse msg;
+    msg.data() = std::vector<uint8_t>{0x12, 0x34};
+    ParsedMessage pm{RRM{std::move(msg)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    auto reparsed = parseL3Hex(*hex);
+    ASSERT_TRUE(reparsed);
+    checkHeader(*reparsed, L3PD::RadioResource, L3NotificationResponse::MTI);
+}
+
+// ── Step 3.4: VGCS/VBS ────────────────────────────────────────────────
+
+// VGCS Uplink Grant (GSM 04.08 9.1.28, MTI=0x09)
+// Reference: GSM_RR_Types.ttcn VGCS_UPLINK_GRANT='00001001'B
+TEST(RoundTripTest, VGCSUplinkGrant) {
+    ParsedMessage msg{RRM{L3VGCSUplinkGrant{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3VGCSUplinkGrant::MTI);
+}
+
+// Uplink Release (GSM 04.08 9.1.28a, MTI=0x0e)
+// Reference: GSM_RR_Types.ttcn UPLINK_RELEASE='00001110'B
+TEST(RoundTripTest, UplinkRelease) {
+    ParsedMessage msg{RRM{L3UplinkRelease{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3UplinkRelease::MTI);
+}
+
+// Uplink Busy (GSM 04.08 9.1.28b, MTI=0x2a)
+// Reference: GSM_RR_Types.ttcn UPLINK_BUSY='00101010'B
+TEST(RoundTripTest, UplinkBusy) {
+    ParsedMessage msg{RRM{L3UplinkBusy{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3UplinkBusy::MTI);
+}
+
+// Talker Indication (GSM 04.08 9.1.28c, MTI=0x11)
+// Reference: GSM_RR_Types.ttcn TALKER_INDICATION='00010001'B
+TEST(RoundTripTest, TalkerIndication) {
+    ParsedMessage msg{RRM{L3TalkerIndication{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3TalkerIndication::MTI);
+}
+
+// Priority Uplink Request (GSM 04.08 9.1.28d, MTI=0x66)
+// Reference: GSM_RR_Types.ttcn PRIORITY_UPLINK_REQUEST='01100110'B
+TEST(RoundTripTest, PriorityUplinkRequest) {
+    L3PriorityUplinkRequest msg;
+    ParsedMessage pm{RRM{std::move(msg)}};
+    auto parsed = roundtrip(pm);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3PriorityUplinkRequest::MTI);
+}
+
+// Data Indication (GSM 04.08 9.1.28e, MTI=0x67)
+// Reference: GSM_RR_Types.ttcn DATA_INDICATION='01100111'B
+TEST(RoundTripTest, DataIndication) {
+    L3DataIndication msg;
+    msg.data() = std::vector<uint8_t>{0xDE, 0xAD};
+    ParsedMessage pm{RRM{std::move(msg)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    auto reparsed = parseL3Hex(*hex);
+    ASSERT_TRUE(reparsed);
+    checkHeader(*reparsed, L3PD::RadioResource, L3DataIndication::MTI);
+}
+
+// Data Indication 2 (GSM 04.08 9.1.28f, MTI=0x68)
+// Reference: GSM_RR_Types.ttcn DATA_INDICATION_2='01101000'B
+TEST(RoundTripTest, DataIndication2) {
+    L3DataIndication2 msg;
+    msg.data() = std::vector<uint8_t>{0xBE, 0xEF};
+    ParsedMessage pm{RRM{std::move(msg)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    auto reparsed = parseL3Hex(*hex);
+    ASSERT_TRUE(reparsed);
+    checkHeader(*reparsed, L3PD::RadioResource, L3DataIndication2::MTI);
+}
+
+// ── Step 3.5: DTM и Packet ────────────────────────────────────────────
+
+// DTM Assignment Failure (GSM 04.08 9.1.3d, MTI=0x80)
+TEST(RoundTripTest, DTMAssignmentFailure) {
+    ParsedMessage msg{RRM{L3DTMAssignmentFailure{RRCause::Normal_Event}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    auto* daf = tryGet<L3DTMAssignmentFailure>(*parsed);
+    ASSERT_TRUE(daf);
+    EXPECT_EQ(daf->cause(), RRCause::Normal_Event);
+}
+
+// DTM Reject (GSM 04.08 9.1.3d, MTI=0x81)
+TEST(RoundTripTest, DTMReject) {
+    ParsedMessage msg{RRM{L3DTMReject{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3DTMReject::MTI);
+}
+
+// DTM Request (GSM 04.08 9.1.3d, MTI=0x82)
+TEST(RoundTripTest, DTMRequest) {
+    ParsedMessage msg{RRM{L3DTMRequest{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3DTMRequest::MTI);
+}
+
+// Packet Assignment (GSM 04.08 9.1.3e, MTI=0x83)
+TEST(RoundTripTest, PacketAssignment) {
+    ParsedMessage msg{RRM{L3PacketAssignment{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3PacketAssignment::MTI);
+}
+
+// DTM Assignment Command (GSM 04.08 9.1.3d, MTI=0x84)
+TEST(RoundTripTest, DTMAssignmentCommand) {
+    ParsedMessage msg{RRM{L3DTMAssignmentCommand{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3DTMAssignmentCommand::MTI);
+}
+
+// DTM Information (GSM 04.08 9.1.3d, MTI=0x85)
+TEST(RoundTripTest, DTMInformation) {
+    ParsedMessage msg{RRM{L3DTMInformation{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3DTMInformation::MTI);
+}
+
+// Packet Information (GSM 04.08 9.1.3e, MTI=0x86)
+TEST(RoundTripTest, PacketInformation) {
+    ParsedMessage msg{RRM{L3PacketInformation{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3PacketInformation::MTI);
+}
+
+// ── Step 3.6: Inter-RAT ───────────────────────────────────────────────
+
+// UTRAN Classmark Change (GSM 04.08 9.1.11a, MTI=0x60)
+TEST(RoundTripTest, UTRANClassmarkChange) {
+    L3UTRANClassmarkChange msg;
+    msg.classmark() = std::vector<uint8_t>{0x01, 0x02, 0x03};
+    ParsedMessage pm{RRM{std::move(msg)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    auto reparsed = parseL3Hex(*hex);
+    ASSERT_TRUE(reparsed);
+    checkHeader(*reparsed, L3PD::RadioResource, L3UTRANClassmarkChange::MTI);
+}
+
+// CDMA2000 Classmark Change (GSM 04.08 9.1.11b, MTI=0x62)
+TEST(RoundTripTest, CDMA2000ClassmarkChange) {
+    L3CDMA2000ClassmarkChange msg;
+    msg.classmark() = std::vector<uint8_t>{0x10, 0x20};
+    ParsedMessage pm{RRM{std::move(msg)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    auto reparsed = parseL3Hex(*hex);
+    ASSERT_TRUE(reparsed);
+    checkHeader(*reparsed, L3PD::RadioResource, L3CDMA2000ClassmarkChange::MTI);
+}
+
+// Intersys to UTRAN HO Command (GSM 04.08 9.1.15a, MTI=0x63)
+TEST(RoundTripTest, IntersysToUTRANHOCommand) {
+    L3IntersysToUTRANHOCommand msg;
+    msg.data() = std::vector<uint8_t>{0xAA, 0xBB};
+    ParsedMessage pm{RRM{std::move(msg)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    auto reparsed = parseL3Hex(*hex);
+    ASSERT_TRUE(reparsed);
+    checkHeader(*reparsed, L3PD::RadioResource, L3IntersysToUTRANHOCommand::MTI);
+}
+
+// Intersys to CDMA2000 HO Command (GSM 04.08 9.1.15b, MTI=0x64)
+TEST(RoundTripTest, IntersysToCDMA2000HOCommand) {
+    L3IntersysToCDMA2000HOCommand msg;
+    msg.data() = std::vector<uint8_t>{0xCC, 0xDD};
+    ParsedMessage pm{RRM{std::move(msg)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    auto reparsed = parseL3Hex(*hex);
+    ASSERT_TRUE(reparsed);
+    checkHeader(*reparsed, L3PD::RadioResource, L3IntersysToCDMA2000HOCommand::MTI);
+}
+
+// GERAN IU Mode Classmark Change (GSM 04.08 9.1.11c, MTI=0x65)
+TEST(RoundTripTest, GERANIUClassmarkChange) {
+    L3GERANIUClassmarkChange msg;
+    msg.classmark() = std::vector<uint8_t>{0x05, 0x06};
+    ParsedMessage pm{RRM{std::move(msg)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    auto reparsed = parseL3Hex(*hex);
+    ASSERT_TRUE(reparsed);
+    checkHeader(*reparsed, L3PD::RadioResource, L3GERANIUClassmarkChange::MTI);
+}
+
+// ── Step 3.7: Additional System Information types ─────────────────────
+
+// System Information Type 14 (GSM 04.08 9.1.43d, MTI=0x01)
+TEST(RoundTripTest, SystemInformationType14) {
+    ParsedMessage msg{RRM{L3SystemInformationType14{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType14::MTI);
+}
+
+// System Information Type 15 (GSM 04.08 9.1.43e, MTI=0x43)
+TEST(RoundTripTest, SystemInformationType15) {
+    ParsedMessage msg{RRM{L3SystemInformationType15{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType15::MTI);
+}
+
+// System Information Type 18 (GSM 04.08 9.1.43f, MTI=0x40)
+TEST(RoundTripTest, SystemInformationType18) {
+    ParsedMessage msg{RRM{L3SystemInformationType18{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType18::MTI);
+}
+
+// System Information Type 19 (GSM 04.08 9.1.43g, MTI=0x41)
+TEST(RoundTripTest, SystemInformationType19) {
+    ParsedMessage msg{RRM{L3SystemInformationType19{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType19::MTI);
+}
+
+// System Information Type 20 (GSM 04.08 9.1.43h, MTI=0x42)
+TEST(RoundTripTest, SystemInformationType20) {
+    ParsedMessage msg{RRM{L3SystemInformationType20{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType20::MTI);
+}
+
+// System Information Type 13alt (GSM 04.08 9.1.43a, MTI=0x44)
+TEST(RoundTripTest, SystemInformationType13alt) {
+    ParsedMessage msg{RRM{L3SystemInformationType13alt{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType13alt::MTI);
+}
+
+// System Information Type 2n (GSM 04.08 9.1.43i, MTI=0x45)
+TEST(RoundTripTest, SystemInformationType2n) {
+    ParsedMessage msg{RRM{L3SystemInformationType2n{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType2n::MTI);
+}
+
+// System Information Type 21 (GSM 04.08 9.1.43j, MTI=0x46)
+TEST(RoundTripTest, SystemInformationType21) {
+    ParsedMessage msg{RRM{L3SystemInformationType21{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType21::MTI);
+}
+
+// System Information Type 22 (GSM 04.08 9.1.43k, MTI=0x47)
+TEST(RoundTripTest, SystemInformationType22) {
+    ParsedMessage msg{RRM{L3SystemInformationType22{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType22::MTI);
+}
+
+// System Information Type 23 (GSM 04.08 9.1.43l, MTI=0x4f)
+TEST(RoundTripTest, SystemInformationType23) {
+    ParsedMessage msg{RRM{L3SystemInformationType23{}}};
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType23::MTI);
+}
+
+// ── Step 3.8: FACCH/VBS short messages (write-only, no parseL3 path) ──
+
+// System Information Type 10 (GSM 04.08 9.1.44, MTI=0x106)
+// Short message: no standard L3 header, sent on BCCH.
+TEST(RoundTripTest, SystemInformationType10_Write) {
+    ParsedMessage msg{RRM{L3SystemInformationType10{}}};
+    auto hex = writeL3Hex(msg);
+    ASSERT_TRUE(hex);
+    EXPECT_EQ((*hex).size(), 20); // 10 bytes * 2 hex chars
+}
+
+// System Information Type 10bis (GSM 04.08 9.1.44a, MTI=0x107)
+TEST(RoundTripTest, SystemInformationType10bis_Write) {
+    ParsedMessage msg{RRM{L3SystemInformationType10bis{}}};
+    auto hex = writeL3Hex(msg);
+    ASSERT_TRUE(hex);
+    EXPECT_EQ((*hex).size(), 20);
+}
+
+// System Information Type 10ter (GSM 04.08 9.1.44b, MTI=0x108)
+TEST(RoundTripTest, SystemInformationType10ter_Write) {
+    ParsedMessage msg{RRM{L3SystemInformationType10ter{}}};
+    auto hex = writeL3Hex(msg);
+    ASSERT_TRUE(hex);
+    EXPECT_EQ((*hex).size(), 20);
+}
+
+// Notification FACCH (GSM 04.08 9.1.45, MTI=0x109)
+TEST(RoundTripTest, NotificationFACCH_Write) {
+    ParsedMessage msg{RRM{L3NotificationFACCH{}}};
+    auto hex = writeL3Hex(msg);
+    ASSERT_TRUE(hex);
+}
+
+// Uplink Free (GSM 04.08 9.1.45a, MTI=0x10A)
+TEST(RoundTripTest, UplinkFree_Write) {
+    ParsedMessage msg{RRM{L3UplinkFree{}}};
+    auto hex = writeL3Hex(msg);
+    ASSERT_TRUE(hex);
+}
+
+// Enhanced Measurement Report UL (GSM 04.08 9.1.45b, MTI=0x10B)
+TEST(RoundTripTest, EnhancedMeasurementRepUL_Write) {
+    L3EnhancedMeasurementRepUL msg;
+    msg.data() = std::vector<uint8_t>{0x01, 0x02, 0x03, 0x04};
+    ParsedMessage pm{RRM{std::move(msg)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    EXPECT_EQ((*hex).size(), 8); // 4 bytes * 2 hex chars
+}
+
+// Measurement Info DL (GSM 04.08 9.1.45c, MTI=0x10C)
+TEST(RoundTripTest, MeasurementInfoDL_Write) {
+    L3MeasurementInfoDL msg;
+    msg.data() = std::vector<uint8_t>{0x0A, 0x0B};
+    ParsedMessage pm{RRM{std::move(msg)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    EXPECT_EQ((*hex).size(), 4); // 2 bytes * 2 hex chars
+}
+
+// VBS/VGCS Recon (GSM 04.08 9.1.45d, MTI=0x10D)
+TEST(RoundTripTest, VBSVGCSRecon_Write) {
+    ParsedMessage msg{RRM{L3VBSVGCSRecon{}}};
+    auto hex = writeL3Hex(msg);
+    ASSERT_TRUE(hex);
+}
+
+// VBS/VGCS Recon 2 (GSM 04.08 9.1.45e, MTI=0x10E)
+TEST(RoundTripTest, VBSVGCSRecon2_Write) {
+    ParsedMessage msg{RRM{L3VBSVGCSRecon2{}}};
+    auto hex = writeL3Hex(msg);
+    ASSERT_TRUE(hex);
+}
+
+// VGCS Add Info (GSM 04.08 9.1.45f, MTI=0x10F)
+TEST(RoundTripTest, VGCSAddInfo_Write) {
+    ParsedMessage msg{RRM{L3VGCSAddInfo{}}};
+    auto hex = writeL3Hex(msg);
+    ASSERT_TRUE(hex);
+}
+
+// VGCS SMS Info (GSM 04.08 9.1.45g, MTI=0x110)
+TEST(RoundTripTest, VGCSMSInfo_Write) {
+    ParsedMessage msg{RRM{L3VGCSMSInfo{}}};
+    auto hex = writeL3Hex(msg);
+    ASSERT_TRUE(hex);
+}
+
+// VGCS Neighbor Cell Info (GSM 04.08 9.1.45h, MTI=0x111)
+TEST(RoundTripTest, VGCSSNeighCellInfo_Write) {
+    ParsedMessage msg{RRM{L3VGCSSNeighCellInfo{}}};
+    auto hex = writeL3Hex(msg);
+    ASSERT_TRUE(hex);
+}
+
+// Notify App Data (GSM 04.08 9.1.45i, MTI=0x112)
+TEST(RoundTripTest, NotifyAppData_Write) {
+    ParsedMessage msg{RRM{L3NotifyAppData{}}};
+    auto hex = writeL3Hex(msg);
+    ASSERT_TRUE(hex);
+}
