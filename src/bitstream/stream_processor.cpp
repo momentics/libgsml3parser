@@ -63,7 +63,12 @@ bool L3StreamProcessor::processOne(std::function<void(const ParsedMessage&)> han
         case L3PD::MobilityManagement: mStats.mmMessages++; break;
         case L3PD::CallControl:        mStats.ccMessages++; break;
         case L3PD::NonCallSS:          mStats.ssMessages++; break;
-        default:                       mStats.unsupportedPD++; break;
+        case L3PD::GPRSMobilityManagement: mStats.gmmMessages++; break;
+        case L3PD::GPRSSessionManagement:  mStats.smMessages++; break;
+        case L3PD::SMS:                    mStats.smsMessages++; break;
+        case L3PD::BroadcastCallControl:   mStats.bccMessages++; break;
+        case L3PD::GroupCallControl:       mStats.gccMessages++; break;
+        default:                           mStats.unsupportedPD++; break;
     }
 
     if (handler) handler(*msgResult);
@@ -103,7 +108,12 @@ void L3StreamProcessor::processUntilEOF(FrameHandler& handler) {
             case L3PD::MobilityManagement: mStats.mmMessages++; break;
             case L3PD::CallControl:        mStats.ccMessages++; break;
             case L3PD::NonCallSS:          mStats.ssMessages++; break;
-            default:                       mStats.unsupportedPD++; break;
+            case L3PD::GPRSMobilityManagement: mStats.gmmMessages++; break;
+            case L3PD::GPRSSessionManagement:  mStats.smMessages++; break;
+            case L3PD::SMS:                    mStats.smsMessages++; break;
+            case L3PD::BroadcastCallControl:   mStats.bccMessages++; break;
+            case L3PD::GroupCallControl:       mStats.gccMessages++; break;
+            default:                           mStats.unsupportedPD++; break;
         }
 
         handler.onFrame(*msgResult, frame);
@@ -145,7 +155,12 @@ void L3StreamProcessor::processN(size_t count, FrameHandler& handler) {
             case L3PD::MobilityManagement: mStats.mmMessages++; break;
             case L3PD::CallControl:        mStats.ccMessages++; break;
             case L3PD::NonCallSS:          mStats.ssMessages++; break;
-            default:                       mStats.unsupportedPD++; break;
+            case L3PD::GPRSMobilityManagement: mStats.gmmMessages++; break;
+            case L3PD::GPRSSessionManagement:  mStats.smMessages++; break;
+            case L3PD::SMS:                    mStats.smsMessages++; break;
+            case L3PD::BroadcastCallControl:   mStats.bccMessages++; break;
+            case L3PD::GroupCallControl:       mStats.gccMessages++; break;
+            default:                           mStats.unsupportedPD++; break;
         }
 
         handler.onFrame(*msgResult, frame);

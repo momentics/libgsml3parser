@@ -279,4 +279,7 @@ public:
     void text(std::ostream& os) const;
 };
 
+// SMS message type names for text output.
+const char* smsMessageName(int mti);
+
 } // namespace gsml3parser

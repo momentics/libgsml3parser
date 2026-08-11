@@ -572,4 +572,7 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
+// GMM message type names for text output.
+const char* gmmMessageName(int mti);
+
 } // namespace gsml3parser

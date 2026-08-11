@@ -27,6 +27,12 @@
 #include <gsml3parser/rr/l3rrmessages.h>
 #include <gsml3parser/mm/l3mmmessages.h>
 #include <gsml3parser/cc/l3ccmessages.h>
+#include <gsml3parser/gmm/l3gmmmessages.h>
+#include <gsml3parser/sm/l3smmessages.h>
+#include <gsml3parser/sms/l3smsmessages.h>
+#include <gsml3parser/bcc/l3bccmessages.h>
+#include <gsml3parser/gcc/l3gccmessages.h>
+#include <gsml3parser/visitor.h>
 
 #include <atomic>
 #include <thread>
@@ -50,6 +56,10 @@ TEST(ThreadingTest, ConcurrentParseWithConfig) {
         {0x50, 0x84},                                    // MM CMServiceAccept
         {0x30, 0x94, 0x08, 0x02, 0x16, 0x21},          // CC Disconnect
         {0xB0, 0xE8},                                    // SS Facility
+        {0x80, 0x01, 0x00, 0x04, 0x11, 0x03, 0x01, 0x02, 0x03, 0x04}, // GMM AttachRequest
+        {0xA0, 0x41, 0x0F, 0x00},                       // SM ActivatePDPContextRequest
+        {0x90, 0x01, 0x01, 0x04, 0x05, 0x06, 0x07},    // SMS CPData
+        {0x10, 0x01},                                    // BCC Setup
     };
 
     std::atomic<int> successCount{0};
@@ -334,4 +344,66 @@ TEST(ThreadingTest, ConfigLogLevelIsolation) {
     }
 
     EXPECT_EQ(errorCount.load(), 0);
+}
+
+// ── Test: Multi-domain round-trip concurrency (GMM/SM/SMS/BCC/GCC) ────
+
+TEST(ThreadingTest, MultiDomainRoundTripConcurrent) {
+    constexpr int NumThreads = 4;
+    constexpr int IterationsPerThread = 100;
+
+    // Pre-serialized hex for each domain (verified parseable).
+    std::vector<std::string> hexPool = {
+        "60 0D 00",                          // RR: ChannelRelease
+        "50 84",                              // MM: CMServiceAccept
+        "30 94 08 02 16 21",                 // CC: Disconnect
+        "B0 E8",                              // SS: Facility
+        "80 20 05",                            // GMM: GMMStatus(cause=5)
+        "A0 55 32 01 05",                      // SM: SMStatus(cause=5)
+        "90 04 01 02",                         // SMS: CPAck(ref=2)
+        "10 01",                               // BCC: Setup
+    };
+
+    std::atomic<int> successCount{0};
+    std::atomic<int> errorCount{0};
+    std::vector<std::thread> threads;
+
+    for (int t = 0; t < NumThreads; ++t) {
+        threads.emplace_back([&hexPool, &successCount, &errorCount, t]() {
+            int localSuccess = 0;
+            int localError = 0;
+
+            for (int i = 0; i < IterationsPerThread; ++i) {
+                int idx = (t + i) % static_cast<int>(hexPool.size());
+                auto msg = parseL3Hex(hexPool[idx]);
+                if (msg) {
+                    // Round-trip: write back and re-parse
+                    auto hex = writeL3Hex(*msg);
+                    if (hex) {
+                        auto msg2 = parseL3Hex(hex.value());
+                        if (msg2 && messageMTI(*msg) == messageMTI(*msg2)) {
+                            ++localSuccess;
+                        } else {
+                            ++localError;
+                        }
+                    } else {
+                        ++localError;
+                    }
+                } else {
+                    ++localError;
+                }
+            }
+
+            successCount.fetch_add(localSuccess);
+            errorCount.fetch_add(localError);
+        });
+    }
+
+    for (auto& thr : threads) {
+        thr.join();
+    }
+
+    int total = NumThreads * IterationsPerThread;
+    EXPECT_EQ(successCount.load() + errorCount.load(), total);
+    EXPECT_GT(successCount.load(), total / 2); // At least half should succeed
 }

@@ -19,6 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Demonstrates parsing L3 messages from hex strings or files, typed access
+// via tryGet<>, round-trip serialization, and batch parsing across all 9 PD
+// domains (RR, MM, CC, SS, GMM, SM, SMS, BCC, GCC).
+
 #include <gsml3parser/gsml3parser.hpp>
 #include <fstream>
 #include <iostream>
@@ -45,13 +49,13 @@ void printMsgDetails(const ParsedMessage& msg) {
     std::cout << "  Name: " << messageName(msg) << "\n";
 }
 
-// Demo: parse multiple hex frames and display their types
-void demoBatchParse(const std::vector<std::string>& hexFrames) {
-    for (const auto& hex : hexFrames) {
+// Demo: parse multiple hex frames from all 9 PD domains and display their types
+void demoBatchParse(const std::vector<std::pair<std::string, std::string>>& hexFrames) {
+    for (const auto& [label, hex] : hexFrames) {
         auto result = parseL3Hex(hex);
         if (result) {
             const auto& msg = *result;
-            std::cout << "[OK] " << messageName(msg)
+            std::cout << "[OK] " << label << ": " << messageName(msg)
                       << " (PD=" << static_cast<int>(messagePD(msg))
                       << ", MTI=0x" << std::hex << messageMTI(msg) << std::dec << ")\n";
 
@@ -61,7 +65,7 @@ void demoBatchParse(const std::vector<std::string>& hexFrames) {
                 std::cout << "    Round-trip: " << *reHex << "\n";
             }
         } else {
-            std::cout << "[FAIL] " << result.error().message << "\n";
+            std::cout << "[FAIL] " << label << ": " << result.error().message << "\n";
         }
     }
 }
@@ -89,13 +93,27 @@ int main(int argc, char* argv[]) {
     if (result) {
         const auto& msg = *result;
 
-        // Typed access via tryGet — no dynamic_cast needed
+        // Typed access via tryGet — covers all 9 PD domains
         if (auto* cr = tryGet<L3ChannelRelease>(msg)) {
-            std::cout << "Channel Release detected\n";
+            std::cout << "RR: Channel Release detected\n";
         } else if (auto* paging = tryGet<L3PagingRequestType1>(msg)) {
-            std::cout << "Paging Request Type 1 detected\n";
+            std::cout << "RR: Paging Request Type 1 detected\n";
         } else if (auto* setup = tryGet<L3Setup>(msg)) {
-            std::cout << "CC Setup detected\n";
+            std::cout << "CC: Setup detected\n";
+        } else if (auto* fac = tryGet<L3SupServFacilityMessage>(msg)) {
+            std::cout << "SS: Facility detected\n";
+        } else if (auto* attach = tryGet<L3AttachRequest>(msg)) {
+            std::cout << "GMM: Attach Request detected\n";
+        } else if (auto* pdu = tryGet<L3ActivatePDPContextRequest>(msg)) {
+            std::cout << "SM: Activate PDP Context Request detected\n";
+        } else if (auto* cpd = tryGet<L3CPData>(msg)) {
+            std::cout << "SMS: CP Data detected\n";
+        } else if (auto* bccSetup = tryGet<L3BCCSetup>(msg)) {
+            std::cout << "BCC: Setup detected\n";
+        } else if (auto* gccSetup = tryGet<L3GCCSetup>(msg)) {
+            std::cout << "GCC: Setup detected\n";
+        } else {
+            std::cout << "Parsed message type: " << messageName(msg) << "\n";
         }
 
         printMsgDetails(msg);
@@ -110,13 +128,18 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Demo batch parsing with multiple example frames
-    std::cout << "\n--- Batch Parse Demo ---\n";
-    std::vector<std::string> batch{
-        "600D00",            // Channel Release (RR)
-        "5084",              // CM Service Accept (MM)
-        "3E9408021621",      // CC Disconnect (CC, TI=7)
-        content
+    // Demo batch parsing with representative messages from all 9 PD domains
+    std::cout << "\n--- Batch Parse Demo (All 9 PD Domains) ---\n";
+    std::vector<std::pair<std::string, std::string>> batch{
+        {"RR",       "60 0D 00"},                          // Channel Release
+        {"MM",       "50 84"},                              // CM Service Accept
+        {"CC",       "3E 94 08 02 16 21"},                  // Disconnect (TI=7)
+        {"SS",       "B0 E8"},                              // Facility
+        {"GMM",      "80 20 05"},                            // GMM Status (cause=5)
+        {"SM",       "A0 55 32 01 05"},                      // SM Status (cause=5)
+        {"SMS",      "90 04 01 02"},                         // CP Ack (ref=2)
+        {"BCC",      "10 01"},                               // BCC Setup
+        {"GCC",      "00 01 02"},                            // GCC Setup
     };
     demoBatchParse(batch);
 

@@ -393,4 +393,17 @@ void L3RPSMMA::text(std::ostream& os) const {
        << ",ref=" << static_cast<int>(mMessageRef) << ")";
 }
 
+// ── smsMessageName ──────────────────────────────────────────────────────
+
+const char* smsMessageName(int mti) {
+    switch (mti) {
+        case L3CPData::MTI:   return "CPData";
+        case L3CPAck::MTI:    return "CPAck";
+        case L3CPErr::MTI:    return "CPErr";
+        case L3CPStatus::MTI: return "CPStatus";
+        case L3CPSMT::MTI:    return "CPSMT";
+        default:              return "Unknown_SMS";
+    }
+}
+
 } // namespace gsml3parser

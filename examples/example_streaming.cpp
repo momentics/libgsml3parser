@@ -19,6 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Demonstrates streaming L3 frame processing with SpanByteSource, RingBuffer
+// producer/consumer, and L3StreamBuilder fluent API.  Covers all 9 PD domains
+// (RR, MM, CC, SS, GMM, SM, SMS, BCC, GCC).
+
 #include <gsml3parser/gsml3parser.hpp>
 #include <chrono>
 #include <iostream>
@@ -72,19 +76,24 @@ public:
 
 // Demo 1: Parse a batch of frames from memory using SpanByteSource.
 void demoSpanSource() {
-    std::cout << "=== SpanByteSource Demo ===\n";
+    std::cout << "=== SpanByteSource Demo (All 9 PD Domains) ===\n";
 
-    // Simulated capture data: multiple L3 messages concatenated.
-    // Each message is prefixed with its L2 length octet.
-    std::vector<std::string> hexMessages{
-        "600D00",             // Channel Release (RR) - PD=0x6, MTI=0x0D, Cause=Normal_Event
-        "5084",               // CM Service Accept (MM) - PD=0x5, MTI=0x21, empty body
-        "3E9408021621",       // CC Disconnect (CC) - PD=0x3, TI=7, MTI=0x25, Cause TLV
+    // Representative messages from each PD domain.
+    std::vector<std::pair<std::string, std::string>> hexMessages{
+        {"RR",   "600D00"},             // Channel Release
+        {"MM",   "5084"},               // CM Service Accept
+        {"CC",   "3E9408021621"},       // Disconnect (TI=7)
+        {"SS",   "B0E8"},               // Facility
+        {"GMM",  "802005"},              // GMM Status (cause=5)
+        {"SM",   "A055320105"},          // SM Status (cause=5)
+        {"SMS",  "90040102"},            // CP Ack (ref=2)
+        {"BCC",  "1001"},                // BCC Setup
+        {"GCC",  "000102"},              // GCC Setup
     };
 
     // Concatenate all messages into one buffer with L2 length prefixes.
     std::vector<uint8_t> buffer;
-    for (const auto& hex : hexMessages) {
+    for (const auto& [label, hex] : hexMessages) {
         auto bytes = hexToBytes(hex);
         uint8_t len = static_cast<uint8_t>(bytes.size());
         buffer.push_back(len);
@@ -98,7 +107,17 @@ void demoSpanSource() {
     processor.processUntilEOF(handler);
 
     const auto& stats = processor.stats();
-    std::cout << "Total: " << stats.totalFrames << " frames parsed\n\n";
+    std::cout << "Total: " << stats.totalFrames << " frames parsed\n";
+    std::cout << "  RR=" << stats.rrMessages
+              << " MM=" << stats.mmMessages
+              << " CC=" << stats.ccMessages
+              << " SS=" << stats.ssMessages
+              << " GMM=" << stats.gmmMessages
+              << " SM=" << stats.smMessages
+              << " SMS=" << stats.smsMessages
+              << " BCC=" << stats.bccMessages
+              << " GCC=" << stats.gccMessages
+              << "\n\n";
 }
 
 // Demo 2: Producer/consumer with RingBuffer.
@@ -108,13 +127,15 @@ void demoRingBuffer() {
     RingBuffer ring(4096);
 
     // Producer: write frames asynchronously.
-    std::vector<std::string> hexMessages{
-        "600D00",             // Channel Release (RR)
-        "5084",               // CM Service Accept (MM)
+    std::vector<std::pair<std::string, std::string>> hexMessages{
+        {"RR",   "600D00"},             // Channel Release
+        {"MM",   "5084"},               // CM Service Accept
+        {"GMM",  "802005"},              // GMM Status
+        {"SMS",  "90040102"},            // CP Ack
     };
 
     auto producerThread = std::thread([&ring, &hexMessages]() {
-        for (const auto& hex : hexMessages) {
+        for (const auto& [label, hex] : hexMessages) {
             auto bytes = hexToBytes(hex);
             uint8_t len = static_cast<uint8_t>(bytes.size());
             ring.write(&len, 1);
@@ -130,7 +151,7 @@ void demoRingBuffer() {
 
         // Process frames as they arrive (non-blocking loop).
         int emptyCount = 0;
-        while (emptyCount < 20) {
+        while (emptyCount < 40) {
             if (!processor.processOne([&](const ParsedMessage& msg) {
                 std::cout << "  Got: " << messageName(msg) << "\n";
             })) {

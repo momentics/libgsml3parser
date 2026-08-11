@@ -1367,4 +1367,31 @@ void L3Progress::text(std::ostream& os) const {
     mProgress.text(os);
 }
 
+// ── ccMessageName ───────────────────────────────────────────────────────
+
+const char* ccMessageName(int mti) {
+    switch (mti) {
+        case L3Setup::MTI:                     return "Setup";
+        case L3EmergencySetup::MTI:            return "EmergencySetup";
+        case L3CallProceeding::MTI:            return "CallProceeding";
+        case L3Alerting::MTI:                  return "Alerting";
+        case L3Connect::MTI:                   return "Connect";
+        case L3ConnectAcknowledge::MTI:        return "ConnectAcknowledge";
+        case L3CallConfirmed::MTI:             return "CallConfirmed";
+        case L3Disconnect::MTI:                return "Disconnect";
+        case L3Release::MTI:                   return "Release";
+        case L3ReleaseComplete::MTI:           return "ReleaseComplete";
+        case L3StartDTMF::MTI:                 return "StartDTMF";
+        case L3StopDTMF::MTI:                  return "StopDTMF";
+        case L3StopDTMFAcknowledge::MTI:       return "StopDTMFAcknowledge";
+        case L3StartDTMFAcknowledge::MTI:      return "StartDTMFAcknowledge";
+        case L3StartDTMFReject::MTI:           return "StartDTMFReject";
+        case L3Hold::MTI:                      return "Hold";
+        case L3HoldReject::MTI:                return "HoldReject";
+        case L3CCStatus::MTI:                  return "CCStatus";
+        case L3Progress::MTI:                  return "Progress";
+        default:                               return "Unknown_CC";
+    }
+}
+
 } // namespace gsml3parser

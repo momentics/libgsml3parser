@@ -750,4 +750,7 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
+// CC message type names for text output.
+const char* ccMessageName(int mti);
+
 } // namespace gsml3parser

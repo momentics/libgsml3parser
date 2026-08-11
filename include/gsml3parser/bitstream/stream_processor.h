@@ -50,6 +50,11 @@ struct StreamStats {
     uint64_t mmMessages{};
     uint64_t ccMessages{};
     uint64_t ssMessages{};
+    uint64_t gmmMessages{};
+    uint64_t smMessages{};
+    uint64_t smsMessages{};
+    uint64_t bccMessages{};
+    uint64_t gccMessages{};
 };
 
 /**

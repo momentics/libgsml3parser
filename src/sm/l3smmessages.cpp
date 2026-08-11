@@ -700,4 +700,21 @@ void L3SMStatus::text(std::ostream& os) const {
     os << "SMStatus(cause=" << SMCause2Str(mCause) << ")";
 }
 
+// ── smMessageName ───────────────────────────────────────────────────────
+
+const char* smMessageName(int mti) {
+    switch (mti) {
+        case L3ActivatePDPContextRequest::MTI:  return "ActivatePDPContextRequest";
+        case L3ActivatePDPContextAccept::MTI:   return "ActivatePDPContextAccept";
+        case L3ActivatePDPContextReject::MTI:   return "ActivatePDPContextReject";
+        case L3DeactivatePDPContextRequest::MTI: return "DeactivatePDPContextRequest";
+        case L3DeactivatePDPContextAccept::MTI: return "DeactivatePDPContextAccept";
+        case L3ModifyPDPContextRequest::MTI:    return "ModifyPDPContextRequest";
+        case L3ModifyPDPContextAccept::MTI:     return "ModifyPDPContextAccept";
+        case L3ModifyPDPContextReject::MTI:     return "ModifyPDPContextReject";
+        case L3SMStatus::MTI:                   return "SMStatus";
+        default:                                return "Unknown_SM";
+    }
+}
+
 } // namespace gsml3parser

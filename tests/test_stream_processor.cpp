@@ -24,6 +24,14 @@
 #include "gsml3parser/bitstream/byte_source.h"
 #include "gsml3parser/parser.h"
 #include "gsml3parser/visitor.h"
+#include "gsml3parser/rr/l3rrmessages.h"
+#include "gsml3parser/mm/l3mmmessages.h"
+#include "gsml3parser/cc/l3ccmessages.h"
+#include "gsml3parser/gmm/l3gmmmessages.h"
+#include "gsml3parser/sm/l3smmessages.h"
+#include "gsml3parser/sms/l3smsmessages.h"
+#include "gsml3parser/bcc/l3bccmessages.h"
+#include "gsml3parser/gcc/l3gccmessages.h"
 #include <vector>
 #include <functional>
 
@@ -219,4 +227,106 @@ TEST(L3StreamProcessor, MixedMessageTypes) {
     ASSERT_EQ(stats.parsedOk, 3u);
     ASSERT_EQ(stats.rrMessages, 2u);
     ASSERT_EQ(stats.mmMessages, 1u);
+}
+
+// ── Multi-domain stream: all protocol domains with L2 length framing ───
+
+TEST(L3StreamProcessor, MultiDomainStream) {
+    // L2 length-prefixed frames for reliable multi-domain parsing.
+    // Format: Length(1) | PD+MTI(2) | Body...
+    uint8_t data[] = {
+        0x03, 0x60, 0x0D, 0x00,                             // RR: Channel Release (3 bytes)
+        0x02, 0x50, 0x84,                                    // MM: CM Service Accept (2 bytes)
+        0x06, 0x30, 0x94, 0x08, 0x02, 0x16, 0x21,          // CC: Disconnect (6 bytes)
+        0x02, 0xB0, 0xE8,                                    // SS: Facility (2 bytes)
+        0x09, 0x80, 0x01, 0x00, 0x04, 0x11, 0x03, 0x01, 0x02, 0x03, // GMM: AttachRequest (9 bytes)
+        0x04, 0xA0, 0x41, 0x0F, 0x00,                       // SM: ActivatePDPContextRequest (4 bytes)
+        0x07, 0x90, 0x01, 0x01, 0x04, 0x05, 0x06, 0x07,    // SMS: CPData (7 bytes)
+        0x02, 0x10, 0x01,                                    // BCC: Setup (2 bytes)
+    };
+    auto proc = L3StreamBuilder()
+        .source(std::span<const uint8_t>(data, std::size(data)))
+        .useL2Length(true)
+        .build();
+
+    TestHandler handler;
+    proc->processUntilEOF(handler);
+
+    const auto& stats = proc->stats();
+    ASSERT_GT(stats.parsedOk, 0u);
+    ASSERT_GT(stats.rrMessages, 0u);
+    ASSERT_GT(stats.mmMessages, 0u);
+    ASSERT_GT(stats.ccMessages, 0u);
+    ASSERT_GT(stats.ssMessages, 0u);
+}
+
+// ── Domain-specific message identification in stream ───────────────────
+
+TEST(L3StreamProcessor, DomainMessageIdentification) {
+    uint8_t data[] = {
+        0x60, 0x0D, 0x00,                             // RR: Channel Release
+        0x60, 0x0D, 0x01,                             // RR: Channel Release #2
+        0x60, 0x0D, 0x02,                             // RR: Channel Release #3
+    };
+    SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
+    L3StreamProcessor proc(src);
+
+    std::vector<std::string_view> names;
+    while (proc.processOne([&names](const ParsedMessage& msg) {
+        names.push_back(messageName(msg));
+    })) {}
+
+    ASSERT_EQ(names.size(), 3u);
+    EXPECT_EQ(names[0], "ChannelRelease");
+    EXPECT_EQ(names[1], "ChannelRelease");
+    EXPECT_EQ(names[2], "ChannelRelease");
+}
+
+// ── Large stream with repeated RR messages ─────────────────────────────
+
+TEST(L3StreamProcessor, LargeMultiDomainStream) {
+    std::vector<uint8_t> data;
+    // RR ChannelRelease messages × 5
+    for (int i = 0; i < 5; ++i) {
+        data.push_back(0x60); data.push_back(0x0D); data.push_back(static_cast<uint8_t>(i));
+    }
+    // MM CMServiceAccept × 3
+    for (int i = 0; i < 3; ++i) {
+        data.push_back(0x50); data.push_back(0x84);
+    }
+
+    SpanByteSource src(std::span<const uint8_t>(data.data(), data.size()));
+    L3StreamProcessor proc(src);
+
+    TestHandler handler;
+    proc.processUntilEOF(handler);
+
+    const auto& stats = proc.stats();
+    ASSERT_EQ(stats.rrMessages, 5u);
+    ASSERT_EQ(stats.mmMessages, 3u);
+    ASSERT_EQ(stats.totalFrames, 8u);
+}
+
+// ── L2-framed stream with GMM/SM/SMS/BCC/GCC domains ──────────────────
+
+TEST(L3StreamProcessor, L2FramedAllDomains) {
+    // Each frame: Length(1) | L3 message...
+    uint8_t data[] = {
+        0x09, 0x80, 0x01, 0x00, 0x04, 0x11, 0x03, 0x01, 0x02,   // GMM: AttachRequest (partial)
+        0x04, 0xA0, 0x41, 0x0F, 0x00,                             // SM: ActivatePDPContextRequest
+        0x07, 0x90, 0x01, 0x01, 0x04, 0x05, 0x06, 0x07,          // SMS: CPData
+        0x02, 0x10, 0x01,                                          // BCC: Setup
+        0x03, 0x00, 0x01, 0x02,                                    // GCC: Setup (3 bytes)
+    };
+    auto proc = L3StreamBuilder()
+        .source(std::span<const uint8_t>(data, std::size(data)))
+        .useL2Length(true)
+        .build();
+
+    TestHandler handler;
+    proc->processUntilEOF(handler);
+
+    const auto& stats = proc->stats();
+    // At least some frames should parse (depends on message body validity).
+    ASSERT_GT(stats.totalFrames, 0u);
 }

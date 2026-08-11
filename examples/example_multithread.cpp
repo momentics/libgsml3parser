@@ -19,6 +19,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+// Multi-threaded parse benchmark across all 9 PD domains (RR, MM, CC, SS,
+// GMM, SM, SMS, BCC, GCC).  Each thread uses its own immutable ParserConfig
+// — no mutex needed for configuration.  Round-trip serialization is verified
+// per message.
+
 #include <gsml3parser/gsml3parser.hpp>
 #include <atomic>
 #include <chrono>
@@ -38,16 +43,24 @@ struct ThreadStats {
     std::atomic<uint64_t> mmCount{0};
     std::atomic<uint64_t> ccCount{0};
     std::atomic<uint64_t> ssCount{0};
+    std::atomic<uint64_t> gmmCount{0};
+    std::atomic<uint64_t> smCount{0};
+    std::atomic<uint64_t> smsCount{0};
+    std::atomic<uint64_t> bccCount{0};
+    std::atomic<uint64_t> gccCount{0};
 };
 
-// Example messages to parse in each thread.
+// Example messages for all 9 PD domains.
 std::vector<std::string> sExampleHexes = {
-    "600D00",                    // Channel Release (RR)
-    "60270460001",               // Paging Response (RR)
-    "5084",                      // CM Service Accept (MM)
-    "508C0460001",               // Location Updating Request (MM)
-    "3E9408021621",              // CC Disconnect (CC, TI=7)
-    "B0E8",                      // SS Facility (SS)
+    "600D00",                    // RR: Channel Release
+    "5084",                      // MM: CM Service Accept
+    "3E9408021621",              // CC: Disconnect (TI=7)
+    "B0E8",                      // SS: Facility
+    "802005",                     // GMM: GMM Status (cause=5)
+    "A055320105",                 // SM: SM Status (cause=5)
+    "90040102",                   // SMS: CP Ack (ref=2)
+    "1001",                       // BCC: Setup
+    "000102",                     // GCC: Setup
 };
 
 void workerThread(int id, ThreadStats& stats, int iterations) {
@@ -58,6 +71,7 @@ void workerThread(int id, ThreadStats& stats, int iterations) {
     uint64_t localParsed = 0;
     uint64_t localErrors = 0;
     uint64_t localRR = 0, localMM = 0, localCC = 0, localSS = 0;
+    uint64_t localGMM = 0, localSM = 0, localSMS = 0, localBCC = 0, localGCC = 0;
 
     for (int i = 0; i < iterations; ++i) {
         const auto& hex = sExampleHexes[i % static_cast<int>(sExampleHexes.size())];
@@ -69,10 +83,15 @@ void workerThread(int id, ThreadStats& stats, int iterations) {
 
             // Count by domain.
             switch (messagePD(msg)) {
-                case L3PD::RadioResource:    ++localRR; break;
-                case L3PD::MobilityManagement: ++localMM; break;
-                case L3PD::CallControl:      ++localCC; break;
-                case L3PD::NonCallSS:        ++localSS; break;
+                case L3PD::RadioResource:          ++localRR; break;
+                case L3PD::MobilityManagement:     ++localMM; break;
+                case L3PD::CallControl:            ++localCC; break;
+                case L3PD::NonCallSS:              ++localSS; break;
+                case L3PD::GPRSMobilityManagement: ++localGMM; break;
+                case L3PD::GPRSSessionManagement:  ++localSM; break;
+                case L3PD::SMS:                    ++localSMS; break;
+                case L3PD::BroadcastCallControl:   ++localBCC; break;
+                case L3PD::GroupCallControl:       ++localGCC; break;
                 default: break;
             }
 
@@ -96,6 +115,11 @@ void workerThread(int id, ThreadStats& stats, int iterations) {
     stats.mmCount.fetch_add(localMM, std::memory_order_relaxed);
     stats.ccCount.fetch_add(localCC, std::memory_order_relaxed);
     stats.ssCount.fetch_add(localSS, std::memory_order_relaxed);
+    stats.gmmCount.fetch_add(localGMM, std::memory_order_relaxed);
+    stats.smCount.fetch_add(localSM, std::memory_order_relaxed);
+    stats.smsCount.fetch_add(localSMS, std::memory_order_relaxed);
+    stats.bccCount.fetch_add(localBCC, std::memory_order_relaxed);
+    stats.gccCount.fetch_add(localGCC, std::memory_order_relaxed);
 }
 
 } // anonymous namespace
@@ -107,7 +131,7 @@ int main(int argc, char* argv[]) {
     if (argc > 1) numThreads = std::stoi(argv[1]);
     if (argc > 2) iterations = std::stoi(argv[2]);
 
-    std::cout << "Multi-threaded parse benchmark\n";
+    std::cout << "Multi-threaded parse benchmark (9 PD domains)\n";
     std::cout << "  Threads:    " << numThreads << "\n";
     std::cout << "  Iterations: " << iterations << " / thread\n";
     std::cout << "  Total msgs: " << (static_cast<int64_t>(numThreads) * iterations) << "\n\n";
@@ -136,6 +160,11 @@ int main(int argc, char* argv[]) {
     std::cout << "  MM msgs: " << stats.mmCount.load() << "\n";
     std::cout << "  CC msgs: " << stats.ccCount.load() << "\n";
     std::cout << "  SS msgs: " << stats.ssCount.load() << "\n";
+    std::cout << "  GMM msgs: " << stats.gmmCount.load() << "\n";
+    std::cout << "  SM msgs: " << stats.smCount.load() << "\n";
+    std::cout << "  SMS msgs: " << stats.smsCount.load() << "\n";
+    std::cout << "  BCC msgs: " << stats.bccCount.load() << "\n";
+    std::cout << "  GCC msgs: " << stats.gccCount.load() << "\n";
     std::cout << "  Time:    " << elapsed << "s\n";
 
     if (elapsed > 0) {

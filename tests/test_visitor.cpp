@@ -28,6 +28,11 @@
 #include <gsml3parser/mm/l3mmmessages.h>
 #include <gsml3parser/cc/l3ccmessages.h>
 #include <gsml3parser/ss/l3ssmessages.h>
+#include <gsml3parser/gmm/l3gmmmessages.h>
+#include <gsml3parser/sm/l3smmessages.h>
+#include <gsml3parser/sms/l3smsmessages.h>
+#include <gsml3parser/bcc/l3bccmessages.h>
+#include <gsml3parser/gcc/l3gccmessages.h>
 
 using namespace gsml3parser;
 
@@ -359,4 +364,402 @@ TEST(Visitor, ParseRoundTrip_Visitor) {
     EXPECT_EQ(messageName(*reparsed), messageName(orig));
     EXPECT_EQ(messagePD(*reparsed), messagePD(orig));
     EXPECT_EQ(messageMTI(*reparsed), messageMTI(orig));
+}
+
+// =====================================================================
+// tryGet on domain variants (GMM)
+// =====================================================================
+
+TEST(Visitor, tryGet_GMM_AttachRequest) {
+    GMM gmm{L3AttachRequest{}};
+    EXPECT_NE(tryGet<L3AttachRequest>(gmm), nullptr);
+    EXPECT_EQ(tryGet<L3DetachRequest>(gmm), nullptr);
+}
+
+TEST(Visitor, tryGet_GMM_RoutingAreaUpdateAccept) {
+    GMM gmm{L3RoutingAreaUpdateAccept{}};
+    EXPECT_NE(tryGet<L3RoutingAreaUpdateAccept>(gmm), nullptr);
+    EXPECT_EQ(tryGet<L3ServiceRequest>(gmm), nullptr);
+}
+
+TEST(Visitor, tryGet_GMM_AuthAndCipheringRequest) {
+    GMM gmm{L3AuthenticationAndCipheringRequest{}};
+    EXPECT_NE(tryGet<L3AuthenticationAndCipheringRequest>(gmm), nullptr);
+    EXPECT_EQ(tryGet<L3GMMIdentityRequest>(gmm), nullptr);
+}
+
+// =====================================================================
+// tryGet on domain variants (SM)
+// =====================================================================
+
+TEST(Visitor, tryGet_SM_ActivatePDPRequest) {
+    SM sm{L3ActivatePDPContextRequest{}};
+    EXPECT_NE(tryGet<L3ActivatePDPContextRequest>(sm), nullptr);
+    EXPECT_EQ(tryGet<L3DeactivatePDPContextRequest>(sm), nullptr);
+}
+
+TEST(Visitor, tryGet_SM_ModifyPDPAccept) {
+    SM sm{L3ModifyPDPContextAccept{}};
+    EXPECT_NE(tryGet<L3ModifyPDPContextAccept>(sm), nullptr);
+    EXPECT_EQ(tryGet<L3SMStatus>(sm), nullptr);
+}
+
+// =====================================================================
+// tryGet on domain variants (SMS)
+// =====================================================================
+
+TEST(Visitor, tryGet_SMS_CPData) {
+    SMS sms{L3CPData{}};
+    EXPECT_NE(tryGet<L3CPData>(sms), nullptr);
+    EXPECT_EQ(tryGet<L3CPAck>(sms), nullptr);
+}
+
+TEST(Visitor, tryGet_SMS_CPSMT) {
+    SMS sms{L3CPSMT{}};
+    EXPECT_NE(tryGet<L3CPSMT>(sms), nullptr);
+    EXPECT_EQ(tryGet<L3CPStatus>(sms), nullptr);
+}
+
+// =====================================================================
+// tryGet on domain variants (BCCM)
+// =====================================================================
+
+TEST(Visitor, tryGet_BCC_Setup) {
+    BCCM bcc{L3BCCSetup{}};
+    EXPECT_NE(tryGet<L3BCCSetup>(bcc), nullptr);
+    EXPECT_EQ(tryGet<L3BCCRelease>(bcc), nullptr);
+}
+
+TEST(Visitor, tryGet_BCC_Connect) {
+    BCCM bcc{L3BCCConnect{}};
+    EXPECT_NE(tryGet<L3BCCConnect>(bcc), nullptr);
+    EXPECT_EQ(tryGet<L3BCCDisconnect>(bcc), nullptr);
+}
+
+// =====================================================================
+// tryGet on domain variants (GCCM)
+// =====================================================================
+
+TEST(Visitor, tryGet_GCC_Setup) {
+    GCCM gcc{L3GCCSetup{}};
+    EXPECT_NE(tryGet<L3GCCSetup>(gcc), nullptr);
+    EXPECT_EQ(tryGet<L3GCCRelease>(gcc), nullptr);
+}
+
+TEST(Visitor, tryGet_GCC_ReleaseComplete) {
+    GCCM gcc{L3GCCReleaseComplete{}};
+    EXPECT_NE(tryGet<L3GCCReleaseComplete>(gcc), nullptr);
+    EXPECT_EQ(tryGet<L3GCCAcknowledge>(gcc), nullptr);
+}
+
+// =====================================================================
+// tryGet on top-level ParsedMessage — GMM/SM/SMS/BCC/GCC domains
+// =====================================================================
+
+TEST(Visitor, tryGet_ParsedMessage_GMM) {
+    ParsedMessage msg{GMM{L3AttachRequest{}}};
+    EXPECT_NE(tryGet<L3AttachRequest>(msg), nullptr);
+}
+
+TEST(Visitor, tryGet_ParsedMessage_SM) {
+    ParsedMessage msg{SM{L3ActivatePDPContextRequest{}}};
+    EXPECT_NE(tryGet<L3ActivatePDPContextRequest>(msg), nullptr);
+}
+
+TEST(Visitor, tryGet_ParsedMessage_SMS) {
+    ParsedMessage msg{SMS{L3CPData{}}};
+    EXPECT_NE(tryGet<L3CPData>(msg), nullptr);
+}
+
+TEST(Visitor, tryGet_ParsedMessage_BCC) {
+    ParsedMessage msg{BCCM{L3BCCSetup{}}};
+    EXPECT_NE(tryGet<L3BCCSetup>(msg), nullptr);
+}
+
+TEST(Visitor, tryGet_ParsedMessage_GCC) {
+    ParsedMessage msg{GCCM{L3GCCSetup{}}};
+    EXPECT_NE(tryGet<L3GCCSetup>(msg), nullptr);
+}
+
+// =====================================================================
+// tryGet on top-level ParsedMessage — wrong domain returns nullptr (new)
+// =====================================================================
+
+TEST(Visitor, tryGet_ParsedMessage_WrongDomain_GMM_ask_RR) {
+    ParsedMessage msg{GMM{L3AttachRequest{}}};
+    EXPECT_EQ(tryGet<L3ChannelRelease>(msg), nullptr);
+}
+
+TEST(Visitor, tryGet_ParsedMessage_WrongDomain_SM_ask_CC) {
+    ParsedMessage msg{SM{L3ActivatePDPContextAccept{}}};
+    EXPECT_EQ(tryGet<L3Setup>(msg), nullptr);
+}
+
+TEST(Visitor, tryGet_ParsedMessage_WrongDomain_SMS_ask_MM) {
+    ParsedMessage msg{SMS{L3CPAck{}}};
+    EXPECT_EQ(tryGet<L3CMServiceAccept>(msg), nullptr);
+}
+
+TEST(Visitor, tryGet_ParsedMessage_WrongDomain_BCC_ask_GMM) {
+    ParsedMessage msg{BCCM{L3BCCConnect{}}};
+    EXPECT_EQ(tryGet<L3AttachAccept>(msg), nullptr);
+}
+
+TEST(Visitor, tryGet_ParsedMessage_WrongDomain_GCC_ask_SM) {
+    ParsedMessage msg{GCCM{L3GCCProceeding{}}};
+    EXPECT_EQ(tryGet<L3SMStatus>(msg), nullptr);
+}
+
+// =====================================================================
+// messageName returns correct string for GMM/SM/SMS/BCC/GCC
+// =====================================================================
+
+TEST(Visitor, messageName_GMM_AttachRequest) {
+    ParsedMessage msg{GMM{L3AttachRequest{}}};
+    EXPECT_EQ(messageName(msg), "AttachRequest");
+}
+
+TEST(Visitor, messageName_GMM_RoutingAreaUpdateReject) {
+    ParsedMessage msg{GMM{L3RoutingAreaUpdateReject{}}};
+    EXPECT_EQ(messageName(msg), "RoutingAreaUpdateReject");
+}
+
+TEST(Visitor, messageName_GMM_AuthAndCipheringFailure) {
+    ParsedMessage msg{GMM{L3AuthenticationAndCipheringFailure{}}};
+    EXPECT_EQ(messageName(msg), "AuthAndCipheringFailure");
+}
+
+TEST(Visitor, messageName_GMM_GMMStatus) {
+    ParsedMessage msg{GMM{L3GMMStatus{}}};
+    EXPECT_EQ(messageName(msg), "GMMStatus");
+}
+
+TEST(Visitor, messageName_SM_ActivatePDPRequest) {
+    ParsedMessage msg{SM{L3ActivatePDPContextRequest{}}};
+    EXPECT_EQ(messageName(msg), "ActivatePDPContextRequest");
+}
+
+TEST(Visitor, messageName_SM_DeactivatePDPAccept) {
+    ParsedMessage msg{SM{L3DeactivatePDPContextAccept{}}};
+    EXPECT_EQ(messageName(msg), "DeactivatePDPContextAccept");
+}
+
+TEST(Visitor, messageName_SM_ModifyPDPReject) {
+    ParsedMessage msg{SM{L3ModifyPDPContextReject{}}};
+    EXPECT_EQ(messageName(msg), "ModifyPDPContextReject");
+}
+
+TEST(Visitor, messageName_SM_SMStatus) {
+    ParsedMessage msg{SM{L3SMStatus{}}};
+    EXPECT_EQ(messageName(msg), "SMStatus");
+}
+
+TEST(Visitor, messageName_SMS_CPData) {
+    ParsedMessage msg{SMS{L3CPData{}}};
+    EXPECT_EQ(messageName(msg), "CPData");
+}
+
+TEST(Visitor, messageName_SMS_CPAck) {
+    ParsedMessage msg{SMS{L3CPAck{}}};
+    EXPECT_EQ(messageName(msg), "CPAck");
+}
+
+TEST(Visitor, messageName_SMS_CPErr) {
+    ParsedMessage msg{SMS{L3CPErr{}}};
+    EXPECT_EQ(messageName(msg), "CPErr");
+}
+
+TEST(Visitor, messageName_SMS_CPStatus) {
+    ParsedMessage msg{SMS{L3CPStatus{}}};
+    EXPECT_EQ(messageName(msg), "CPStatus");
+}
+
+TEST(Visitor, messageName_SMS_CPSMT) {
+    ParsedMessage msg{SMS{L3CPSMT{}}};
+    EXPECT_EQ(messageName(msg), "CPSMT");
+}
+
+TEST(Visitor, messageName_BCC_Setup) {
+    ParsedMessage msg{BCCM{L3BCCSetup{}}};
+    EXPECT_EQ(messageName(msg), "BCCSetup");
+}
+
+TEST(Visitor, messageName_BCC_Connect) {
+    ParsedMessage msg{BCCM{L3BCCConnect{}}};
+    EXPECT_EQ(messageName(msg), "BCCConnect");
+}
+
+TEST(Visitor, messageName_BCC_ReleaseComplete) {
+    ParsedMessage msg{BCCM{L3BCCReleaseComplete{}}};
+    EXPECT_EQ(messageName(msg), "BCCReleaseComplete");
+}
+
+TEST(Visitor, messageName_GCC_Setup) {
+    ParsedMessage msg{GCCM{L3GCCSetup{}}};
+    EXPECT_EQ(messageName(msg), "GCCSetup");
+}
+
+TEST(Visitor, messageName_GCC_Acknowledge) {
+    ParsedMessage msg{GCCM{L3GCCAcknowledge{}}};
+    EXPECT_EQ(messageName(msg), "GCCAcknowledge");
+}
+
+TEST(Visitor, messageName_GCC_ReleaseComplete) {
+    ParsedMessage msg{GCCM{L3GCCReleaseComplete{}}};
+    EXPECT_EQ(messageName(msg), "GCCReleaseComplete");
+}
+
+// =====================================================================
+// messagePD returns correct L3PD for GMM/SM/SMS/BCC/GCC
+// =====================================================================
+
+TEST(Visitor, messagePD_GMM) {
+    ParsedMessage msg{GMM{L3AttachAccept{}}};
+    EXPECT_EQ(messagePD(msg), L3PD::GPRSMobilityManagement);
+}
+
+TEST(Visitor, messagePD_SM) {
+    ParsedMessage msg{SM{L3ActivatePDPContextAccept{}}};
+    EXPECT_EQ(messagePD(msg), L3PD::GPRSSessionManagement);
+}
+
+TEST(Visitor, messagePD_SMS) {
+    ParsedMessage msg{SMS{L3CPData{}}};
+    EXPECT_EQ(messagePD(msg), L3PD::SMS);
+}
+
+TEST(Visitor, messagePD_BCC) {
+    ParsedMessage msg{BCCM{L3BCCProceeding{}}};
+    EXPECT_EQ(messagePD(msg), L3PD::BroadcastCallControl);
+}
+
+TEST(Visitor, messagePD_GCC) {
+    ParsedMessage msg{GCCM{L3GCCConnect{}}};
+    EXPECT_EQ(messagePD(msg), L3PD::GroupCallControl);
+}
+
+// =====================================================================
+// messageMTI returns correct MTI for GMM/SM/SMS/BCC/GCC
+// =====================================================================
+
+TEST(Visitor, messageMTI_GMM) {
+    ParsedMessage msg{GMM{L3DetachRequest{}}};
+    EXPECT_EQ(messageMTI(msg), L3DetachRequest::MTI);
+}
+
+TEST(Visitor, messageMTI_SM) {
+    ParsedMessage msg{SM{L3ModifyPDPContextRequest{}}};
+    EXPECT_EQ(messageMTI(msg), L3ModifyPDPContextRequest::MTI);
+}
+
+TEST(Visitor, messageMTI_SMS) {
+    ParsedMessage msg{SMS{L3CPErr{}}};
+    EXPECT_EQ(messageMTI(msg), L3CPErr::MTI);
+}
+
+TEST(Visitor, messageMTI_BCC) {
+    ParsedMessage msg{BCCM{L3BCCDisconnect{}}};
+    EXPECT_EQ(messageMTI(msg), L3BCCDisconnect::MTI);
+}
+
+TEST(Visitor, messageMTI_GCC) {
+    ParsedMessage msg{GCCM{L3GCCDisconnect{}}};
+    EXPECT_EQ(messageMTI(msg), L3GCCDisconnect::MTI);
+}
+
+// =====================================================================
+// Integration: parse from hex, then use visitor helpers (GMM/SM/SMS)
+// =====================================================================
+
+TEST(Visitor, ParseAndTryGet_GMM) {
+    ParsedMessage orig{GMM{L3GMMStatus{GMMCause::ReqAccepted}}};
+    auto hex = writeL3Hex(orig);
+    ASSERT_TRUE(hex);
+    auto res = parseL3Hex(hex.value());
+    ASSERT_TRUE(res);
+    EXPECT_NE(tryGet<L3GMMStatus>(*res), nullptr);
+    EXPECT_EQ(messagePD(*res), L3PD::GPRSMobilityManagement);
+    EXPECT_EQ(messageMTI(*res), L3GMMStatus::MTI);
+}
+
+TEST(Visitor, ParseAndTryGet_SM) {
+    ParsedMessage orig{SM{L3ActivatePDPContextRequest{}}};
+    auto hex = writeL3Hex(orig);
+    ASSERT_TRUE(hex);
+    auto res = parseL3Hex(hex.value());
+    ASSERT_TRUE(res);
+    EXPECT_NE(tryGet<L3ActivatePDPContextRequest>(*res), nullptr);
+    EXPECT_EQ(messagePD(*res), L3PD::GPRSSessionManagement);
+}
+
+TEST(Visitor, ParseAndTryGet_SMS) {
+    ParsedMessage orig{SMS{L3CPData{}}};
+    auto hex = writeL3Hex(orig);
+    ASSERT_TRUE(hex);
+    auto res = parseL3Hex(hex.value());
+    ASSERT_TRUE(res);
+    EXPECT_NE(tryGet<L3CPData>(*res), nullptr);
+    EXPECT_EQ(messagePD(*res), L3PD::SMS);
+}
+
+TEST(Visitor, ParseAndTryGet_BCC) {
+    ParsedMessage orig{BCCM{L3BCCSetup{}}};
+    auto hex = writeL3Hex(orig);
+    ASSERT_TRUE(hex);
+    auto res = parseL3Hex(hex.value());
+    ASSERT_TRUE(res);
+    EXPECT_NE(tryGet<L3BCCSetup>(*res), nullptr);
+    EXPECT_EQ(messagePD(*res), L3PD::BroadcastCallControl);
+}
+
+TEST(Visitor, ParseAndTryGet_GCC) {
+    ParsedMessage orig{GCCM{L3GCCSetup{}}};
+    auto hex = writeL3Hex(orig);
+    ASSERT_TRUE(hex);
+    auto res = parseL3Hex(hex.value());
+    ASSERT_TRUE(res);
+    EXPECT_NE(tryGet<L3GCCSetup>(*res), nullptr);
+    EXPECT_EQ(messagePD(*res), L3PD::GroupCallControl);
+}
+
+// =====================================================================
+// Domain MessageName functions
+// =====================================================================
+
+TEST(Visitor, rrMessageName_CoversAll) {
+    EXPECT_STREQ(rrMessageName(L3ChannelRelease::MTI), "ChannelRelease");
+    EXPECT_STREQ(rrMessageName(L3ConfigurationChangeCommand::MTI), "ConfigurationChangeCommand");
+    EXPECT_STREQ(rrMessageName(L3SystemInformationType14::MTI), "SystemInformationType14");
+    EXPECT_STREQ(rrMessageName(L3DTMRequest::MTI), "DTMRequest");
+    EXPECT_STREQ(rrMessageName(L3NotificationFACCH::MTI), "NotificationFACCH");
+    EXPECT_STREQ(rrMessageName(0xFF), "Unknown_RR");
+}
+
+TEST(Visitor, ccMessageName_CoversAll) {
+    EXPECT_STREQ(ccMessageName(L3Setup::MTI), "Setup");
+    EXPECT_STREQ(ccMessageName(L3Hold::MTI), "Hold");
+    EXPECT_STREQ(ccMessageName(L3Progress::MTI), "Progress");
+    EXPECT_STREQ(ccMessageName(L3ReleaseComplete::MTI), "ReleaseComplete");
+    EXPECT_STREQ(ccMessageName(0xFF), "Unknown_CC");
+}
+
+TEST(Visitor, gmmMessageName_CoversAll) {
+    EXPECT_STREQ(gmmMessageName(L3AttachRequest::MTI), "AttachRequest");
+    EXPECT_STREQ(gmmMessageName(L3RoutingAreaUpdateAccept::MTI), "RoutingAreaUpdateAccept");
+    EXPECT_STREQ(gmmMessageName(L3GMMStatus::MTI), "GMMStatus");
+    EXPECT_STREQ(gmmMessageName(0xFF), "Unknown_GMM");
+}
+
+TEST(Visitor, smMessageName_CoversAll) {
+    EXPECT_STREQ(smMessageName(L3ActivatePDPContextRequest::MTI), "ActivatePDPContextRequest");
+    EXPECT_STREQ(smMessageName(L3DeactivatePDPContextAccept::MTI), "DeactivatePDPContextAccept");
+    EXPECT_STREQ(smMessageName(L3SMStatus::MTI), "SMStatus");
+    EXPECT_STREQ(smMessageName(0xFF), "Unknown_SM");
+}
+
+TEST(Visitor, smsMessageName_CoversAll) {
+    EXPECT_STREQ(smsMessageName(L3CPData::MTI), "CPData");
+    EXPECT_STREQ(smsMessageName(L3CPAck::MTI), "CPAck");
+    EXPECT_STREQ(smsMessageName(L3CPSMT::MTI), "CPSMT");
+    EXPECT_STREQ(smsMessageName(0xFF), "Unknown_SMS");
 }

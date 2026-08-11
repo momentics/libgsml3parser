@@ -1,6 +1,6 @@
 # libgsml3parser — Full API Reference
 
-> Version 0.6.0 | C++20 | Thread-safe | Zero heap allocation on hot path | No external dependencies
+> Version 0.8.0 | C++20 | Thread-safe | Zero heap allocation on hot path | No external dependencies
 
 ## Table of Contents
 
@@ -22,6 +22,11 @@
 16. [Mobility Management Messages](#16-mobility-management-messages)
 17. [Call Control Messages](#17-call-control-messages)
 18. [Supplementary Services Messages](#18-supplementary-services-messages)
+19. [GPRS Mobility Management Messages](#19-gprs-mobility-management-messages)
+20. [GPRS Session Management Messages](#20-gprs-session-management-messages)
+21. [SMS Messages](#21-sms-messages)
+22. [Broadcast Call Control Messages](#22-broadcast-call-control-messages)
+23. [Group Call Control Messages](#23-group-call-control-messages)
 
 ---
 
@@ -341,10 +346,15 @@ Returns `TruncatedInput` error if fewer than 2 bytes provided. Returns `InvalidP
 Each protocol domain has a `std::variant` type that holds all message types for that domain:
 
 ```cpp
-using RRM = std::variant< /* 95 RR types */ >;
-using MMM = std::variant< /* 18 MM types */ >;
-using CCM = std::variant< /* 20 CC types */ >;
-using SSM = std::variant< /* 3 SS types */ >;
+using RRM  = std::variant< /* 95 RR types */ >;
+using MMM  = std::variant< /* 18 MM types */ >;
+using CCM  = std::variant< /* 20 CC types */ >;
+using SSM  = std::variant< /* 3 SS types */ >;
+using GMM  = std::variant< /* 19 GMM types */ >;
+using SM   = std::variant< /* 9 SM types */ >;
+using SMS  = std::variant< /* 5 CP types */ >;
+using BCCM = std::variant< /* 6 BCC types */ >;
+using GCCM = std::variant< /* 7 GCC types */ >;
 ```
 
 ### 6.2 ParsedMessage
@@ -352,10 +362,10 @@ using SSM = std::variant< /* 3 SS types */ >;
 The top-level variant that wraps all domains:
 
 ```cpp
-using ParsedMessage = std::variant<RRM, MMM, CCM, SSM>;
+using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM>;
 ```
 
-Stored on the stack — no heap allocation. `sizeof(ParsedMessage)` is guaranteed < 4KB via `static_assert`.
+Stored on the stack — no heap allocation. `sizeof(ParsedMessage)` is guaranteed < 8 KB via `static_assert`.
 
 **Usage:**
 
@@ -561,7 +571,7 @@ public:
 | `freeSpace()` | Free slots in the buffer |
 | `read(buf, maxSize)` | Read up to `maxSize` bytes |
 
-**Thread safety:** Single-producer, single-consumer is fully safe without locks. Multi-producer or multi-consumer requires external synchronization.
+**Thread safety:** Single-producer, single-consumer is fully safe without locks. Uses `std::atomic` with acquire/release ordering for correct behaviour on weakly-ordered architectures (ARM, PowerPC). On x86-64 (TSO) the compiler emits plain loads/stores — zero overhead. Multi-producer or multi-consumer requires external synchronization.
 
 ### 9.5 L3Framer
 
@@ -1444,14 +1454,239 @@ if (ussd) {
 
 ---
 
+## 19. GPRS Mobility Management Messages
+
+**File:** `gsml3parser/gmm/l3gmmmessages.h` — 19 message types in the `GMM` variant.
+**Spec:** 3GPP TS 24.008 sections 9.4, Table 10.4.
+**PD:** `0x08` (GPRSMobilityManagement).
+
+### GMM Information Elements
+
+**File:** `gsml3parser/gmm/l3gmmelements.h`
+
+| IE | IEI | Format | Description |
+|----|-----|--------|-------------|
+| `L3PDPContextStatus` | 0x32 | TLV | PDP context activation bitmap (16 contexts) |
+| `L3T3302Timer` | 0x1b | TLV | T3302 timer value (GPRS Timer 2 encoding) |
+| `L3MSNetworkCapability` | — | V | MS network capability bit string |
+| `L3RoutingAreaIdentification` | — | V | MCC/MNC BCD(3) + LAC(2) + RAC(1) = 6 octets |
+| `L3DRXParameter` | 0x1a | TV | DRX cycle code + timer settings (2 octets) |
+| `L3GMMCKSN` | — | bit-field | Ciphering key sequence number (3 bits) |
+| `L3GMMCauseIE` | 0x25 | TLV | GMM cause value |
+| `L3AuthRAND` | 0x15 | TLV | 128-bit authentication challenge |
+| `L3AuthRES` | 0x16 | TLV | 32-bit authentication response |
+| `L3AuthFailureParam` | 0x30 | TLV | AUTS failure parameter (variable) |
+| `L3PTMSISignature` | 0x13 | TV | P-TMSI signature (3 octets) |
+| `L3GMMStatusCause` | — | V | GMM status cause octet |
+
+### GMM Enums
+
+| Enum | Values | Description |
+|------|--------|-------------|
+| `GMMCause` | 27 codes | GMM cause values (ReqAccepted, GprsNotAllowed, PLMN_Not_Allowed, MAC_Failure, etc.) |
+| `GMMAttachType` | 2 values | GPRSAttach, CombinedGPRSAndIMSIAttach |
+| `GMMUpdateType` | 4 values | RAUpdated, CombinedRALAUpdated, CombinedRALAWithImsiAttach, PeriodicUpdating |
+| `GMMDetachTypeMO` | 3 values | GPRS, IMSI, CombinedGPRSIMSI (MS-originated) |
+| `GMMDetachTypeMT` | 3 values | ReattachRequired, ReattachNotRequired, IMSIDetach (MT-originated) |
+| `GMMPTMSIType` | 2 values | Native, Mapped |
+
+### GMM Messages
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3AttachRequest` | 0x01 | UL | MS Network Capability, attach type, CKSN, DRX, MobileIdentity, old RAI |
+| `L3AttachAccept` | 0x02 | DL | Attach result, force-to-standby, update timer, RAI, [PTMSI] |
+| `L3AttachComplete` | 0x03 | UL | Empty body |
+| `L3AttachReject` | 0x04 | DL | GMM cause, [T3302 timer] |
+| `L3DetachRequest` | 0x05 | Bidir | Detach type, power-off flag, [PTMSI], [cause] |
+| `L3DetachAccept` | 0x06 | Bidir | Force-to-standby flag |
+| `L3RoutingAreaUpdateRequest` | 0x08 | UL | Update type, CKSN, old RAI, [MS RA cap] |
+| `L3RoutingAreaUpdateAccept` | 0x09 | DL | Force-to-standby, update result, timer, radio priority, RAI, [PTMSI] |
+| `L3RoutingAreaUpdateComplete` | 0x0a | UL | Empty body |
+| `L3RoutingAreaUpdateReject` | 0x0b | DL | Force-to-standby, GMM cause, [T3302 timer] |
+| `L3ServiceRequest` | 0x0c | UL | CKSN, service type, PTMSI, [PDP context status] |
+| `L3ServiceAccept` | 0x0d | DL | [PDP context status] |
+| `L3ServiceReject` | 0x0e | DL | GMM cause, [T3346 timer] |
+| `L3P_TMSIReallocationCommand` | 0x10 | DL | P-TMSI type, force-to-standby, RAI, [allocated PTMSI] |
+| `L3P_TMSIReallocationComplete` | 0x11 | UL | Empty body |
+| `L3AuthenticationAndCipheringRequest` | 0x12 | DL | Ciphering algorithm, IMEISV request, AC ref number, RAND |
+| `L3AuthenticationAndCipheringResponse` | 0x13 | UL | AC ref number, RES |
+| `L3AuthenticationAndCipheringReject` | 0x14 | DL | Empty body |
+| `L3GMMIdentityRequest` | 0x15 | DL | Identity type (IMSI/IMEI), force-to-standby |
+| `L3GMMIdentityResponse` | 0x16 | UL | Mobile identity |
+| `L3AuthenticationAndCipheringFailure` | 0x1c | UL | GMM cause, AUTS failure parameter |
+| `L3GMMStatus` | 0x20 | Bidir | GMM cause |
+| `L3GMMInformation` | 0x21 | DL | Network information |
+
+---
+
+## 20. GPRS Session Management Messages
+
+**File:** `gsml3parser/sm/l3smmessages.h` — 9 message types in the `SM` variant.
+**Spec:** 3GPP TS 24.008 sections 9.5, Table 10.4a.
+**PD:** `0x0a` (GPRSSessionManagement).
+
+### SM Information Elements
+
+**File:** `gsml3parser/sm/l3smelements.h`
+
+| IE | IEI | Format | Description |
+|----|-----|--------|-------------|
+| `L3PDPAddress` | 0x08 | TLV | PDP type (IPv4/IPv6/PPP/IPsec) + address bytes |
+| `L3QoS` | 0x09 | TLV | QoS profile: type + up to 18 element types |
+| `L3AccessPointName` | 0x2F | TLV | APN string (UTF-8 encoded) |
+| `L3ProtocolConfigOptions` | 0x3C | TLV | Protocol config options (e.g. IPCP=0xC029 for IPv4) |
+| `L3SMCauseIE` | 0x27 | TV | SM cause value |
+| `L3BackOffTimer` | 0x28 | TV | Back-off timer value (GPRS Timer 2 encoding) |
+| `L3PDPHandle` | — | bit-field | PDP context identifier (4 bits, 0–15) |
+
+### SM Enums
+
+| Enum | Values | Description |
+|------|--------|-------------|
+| `PDPType` | 6 values | IPv4, IPv6, IPsecAH, PPP, Private, Unknown |
+| `QoSType` | 3 values | Requested, Default, Teardown |
+| `QoSElementType` | 18 values | QoSClass, MaxBitRate UL/DL, Delay, DeliveryOrder, SopClass, ResidualErrorRate, PeakThroughput, MeanThroughput, TrafficClass, GuaranteedBitRate, SRB rates, GPRS/External Priority |
+| `SMCause` | 17 codes | SM cause values (ReqAccepted, Unsupported_PDP_Address_Type, PDP_Auth_Failed, IE_Invalid, etc.) |
+
+### SM Messages
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3ActivatePDPContextRequest` | 0x41 | UL | PDP type, [PDP address], APN, QoS, [PCO] |
+| `L3ActivatePDPContextAccept` | 0x42 | DL | PDP handle, [PDP address], QoS, [PCO] |
+| `L3ActivatePDPContextReject` | 0x43 | DL | SM cause, [Back-off timer] |
+| `L3DeactivatePDPContextRequest` | 0x46 | Bidir | PDP handle, [PDP type], [PDP address] |
+| `L3DeactivatePDPContextAccept` | 0x47 | Bidir | PDP handle |
+| `L3ModifyPDPContextRequest` | 0x48 | DL | PDP handle, QoS, [PCO] |
+| `L3ModifyPDPContextAccept` | 0x49 | UL | PDP handle, QoS, [PCO] |
+| `L3ModifyPDPContextReject` | 0x4c | Bidir | PDP handle, SM cause, [Back-off timer] |
+| `L3SMStatus` | 0x55 | Bidir | SM cause |
+
+---
+
+## 21. SMS Messages
+
+**File:** `gsml3parser/sms/l3smsmessages.h` — 5 CP messages in the `SMS` variant.
+**Spec:** 3GPP TS 24.011 sections 7-8, 3GPP TS 23.040.
+**PD:** `0x09` (SMS).
+
+The SMS layer uses a three-level encapsulation: L3 header → CP message → RP message → TP PDU.
+
+### CP Cause Codes
+
+| Code | Meaning |
+|------|---------|
+| `Unspecified` | Unspecified error |
+| `CpusNotSupported` | CUPS not supported |
+| `NoRPLPDU` | No RPLPDU present |
+| `UnknownRPMessageType` | Unknown RP message type |
+| `InvalidRPMessageReference` | Invalid message reference |
+| `RPUserBusy` | RP user busy |
+| `UnknownRPOriginatorAddress` | Unknown originator |
+| `UnknownRPDestinationAddress` | Unknown destination |
+| `RPLinkNotAvailable` | RP link not available |
+| `NoRPResponse` | No RP response |
+
+### Control Part (CP) Messages
+
+| Message | CP-MTI | Direction | Description |
+|---------|--------|-----------|-------------|
+| `L3CPData` | 0x01 | Bidir | Length + RPDU (wraps relay or TP layer) |
+| `L3CPAck` | 0x04 | Bidir | Acknowledgement, no body |
+| `L3CPErr` | 0x10 | Bidir | CP cause value (7-bit + extension bit) |
+| `L3CPStatus` | 0x12 | MT | TP-OI, MTI type, [message reference] |
+| `L3CPSMT` | 0x13 | MT | Length + RPDU (Short Message to Telephony) |
+
+### Relay Part (RP) Messages
+
+| Message | RP-MTI (MO/MT) | Description |
+|---------|----------------|-------------|
+| `L3RPData` | 0 / 1 | Relay data: [originator addr], [destination addr], user data |
+| `L3RPAck` | 2 / 3 | Relay acknowledgement: message reference |
+| `L3RPError` | 4 / 5 | Relay error: message reference + cause |
+| `L3RPSMMA` | 6 / 7 | Short message memory available |
+
+### Transport Part (TP) Elements
+
+**File:** `gsml3parser/sms/l3smselements.h`
+
+| Type | TP-MTI | Description |
+|------|--------|-------------|
+| `L3TPDeliver` | 0x00 | MT delivery: MMS, SRI, UDHI, RP flags, OA, PID, DCS, [SCTS], UDL, user data |
+| `L3TPSubmit` | 0x01 | MO submission: RD, VPF, SRR, UDHI, RP flags, MR, DA, PID, DCS, [VP], UDL, user data |
+| `L3TPStatusReport` | 0x02 | Status report: MR, DA, PID, DCS, SCTS, STS |
+| `L3TPCommand` | 0x03 | Command: MR, PID, DCS, CMD, [address] |
+
+### TP Enums
+
+| Enum | Values | Description |
+|------|--------|-------------|
+| `TPDCS` | 3 values | Default_Alphabet (7-bit), Default_8bit, UCS2 |
+| `TPPID` | 6 values | Default, GSM, X121, Telex, LandLine, SS7_DestinationAccess |
+
+### TP Information Elements
+
+| IE | Description |
+|----|-------------|
+| `L3TPAddress` | TP-DA/TP-OA: LV format with TON/NPI + BCD digits |
+| `TPSCTimeStamp` | Service centre time stamp: year, month, day, hour, minute, second, timezone (7 octets) |
+
+---
+
+## 22. Broadcast Call Control Messages
+
+**File:** `gsml3parser/bcc/l3bccmessages.h` — 6 message types in the `BCCM` variant.
+**Spec:** 3GPP TS 44.018 sections 9.6, Table 10.4.3.
+**PD:** `0x01` (BroadcastCallControl).
+
+L3 header encoding matches CC: Byte 0 high nibble = PD, bits 1-3 = TI, bit 0 = TIF. Byte 1 encodes 6-bit messageType shifted left by 2, plus 2-bit NSD.
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3BCCSetup` | 0x00 | MO | Broadcast call setup with TI + opaque body |
+| `L3BCCProceeding` | 0x01 | MT | Network proceeding indication |
+| `L3BCCConnect` | 0x05 | MT | Broadcast call connected |
+| `L3BCCDisconnect` | 0x06 | MO | Broadcast call disconnect |
+| `L3BCCRelease` | 0x07 | MT | Broadcast call release |
+| `L3BCCReleaseComplete` | 0x0a | Bidir | Release complete |
+
+Each message stores the body as an opaque octet sequence for basic infrastructure parsing. The `ti()` accessor returns the Transaction Identifier.
+
+---
+
+## 23. Group Call Control Messages
+
+**File:** `gsml3parser/gcc/l3gccmessages.h` — 7 message types in the `GCCM` variant.
+**Spec:** 3GPP TS 44.018 sections 9.7, Table 10.4.4.
+**PD:** `0x00` (GroupCallControl).
+
+L3 header encoding matches CC: Byte 0 high nibble = PD, bits 1-3 = TI, bit 0 = TIF. Byte 1 encodes 6-bit messageType shifted left by 2, plus 2-bit NSD.
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3GCCSetup` | 0x00 | MO | Group call setup with TI + opaque body |
+| `L3GCCProceeding` | 0x01 | MT | Network proceeding indication |
+| `L3GCCAcknowledge` | 0x02 | MT | Group call acknowledgement |
+| `L3GCCConnect` | 0x05 | MT | Group call connected |
+| `L3GCCDisconnect` | 0x06 | MO | Group call disconnect |
+| `L3GCCRelease` | 0x07 | MT | Group call release |
+| `L3GCCReleaseComplete` | 0x0a | Bidir | Release complete |
+
+Each message stores the body as an opaque octet sequence for basic infrastructure parsing. The `ti()` accessor returns the Transaction Identifier.
+
+---
+
 ## Conformance Notes
 
 The library implements encodings defined by:
 
 | Standard | Scope | Coverage |
 |----------|-------|----------|
-| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | Full RR, MM, CC message parsing and generation |
+| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | Full RR, MM, CC, GMM, SM message parsing and generation |
 | **GSM 04.07 / 3GPP TS 24.007** | Information element encoding rules | V, TV, TLV, LV formats; H/L rest octet padding (0x2B); bit ordering |
 | **GSM 04.80 / 3GPP TS 24.080** | Supplementary services on mobile | Facility, Register, Release Complete messages; SSOpCode/SSErrorCode enums; L3FacilityOpCode TCAP parser; L3USSDData IE |
 | **GSM 02.90 / 3GPP TS 23.038** | USSD alphabet and encoding | GSM 7-bit default/extended alphabet, UCS2, DCS handling in L3USSDData |
-| **3GPP TS 44.018** | Multi-rate speech channels (AMR) | Channel mode, multi-rate configuration, codec set negotiation |
+| **3GPP TS 44.018** | Group call and broadcast call control | GCC (PD=0x00): 7 messages; BCC (PD=0x01): 6 messages |
+| **3GPP TS 24.011 / GSM 04.11** | SMS over mobile radio interface | CP layer (5 messages), RP layer (4 messages), TP PDUs (Deliver, Submit, StatusReport, Command) |
+| **3GPP TS 23.040 / GSM 03.40** | SMS TPDU formatting and encoding | TP address, TP-DCS, TP-PID, TP-SCTS, GSM 7-bit alphabet |

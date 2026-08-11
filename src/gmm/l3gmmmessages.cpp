@@ -1036,4 +1036,35 @@ void L3GMMInformation::text(std::ostream& os) const {
     os << "GMMInformation";
 }
 
+// ── gmmMessageName ──────────────────────────────────────────────────────
+
+const char* gmmMessageName(int mti) {
+    switch (mti) {
+        case L3AttachRequest::MTI:                        return "AttachRequest";
+        case L3AttachAccept::MTI:                         return "AttachAccept";
+        case L3AttachComplete::MTI:                       return "AttachComplete";
+        case L3AttachReject::MTI:                         return "AttachReject";
+        case L3DetachRequest::MTI:                        return "DetachRequest";
+        case L3DetachAccept::MTI:                         return "DetachAccept";
+        case L3RoutingAreaUpdateRequest::MTI:             return "RoutingAreaUpdateRequest";
+        case L3RoutingAreaUpdateAccept::MTI:              return "RoutingAreaUpdateAccept";
+        case L3RoutingAreaUpdateComplete::MTI:            return "RoutingAreaUpdateComplete";
+        case L3RoutingAreaUpdateReject::MTI:              return "RoutingAreaUpdateReject";
+        case L3ServiceRequest::MTI:                       return "ServiceRequest";
+        case L3ServiceAccept::MTI:                        return "ServiceAccept";
+        case L3ServiceReject::MTI:                        return "ServiceReject";
+        case L3P_TMSIReallocationCommand::MTI:            return "P_TMSIReallocationCommand";
+        case L3P_TMSIReallocationComplete::MTI:           return "P_TMSIReallocationComplete";
+        case L3AuthenticationAndCipheringRequest::MTI:    return "AuthAndCipheringRequest";
+        case L3AuthenticationAndCipheringResponse::MTI:   return "AuthAndCipheringResponse";
+        case L3AuthenticationAndCipheringReject::MTI:     return "AuthAndCipheringReject";
+        case L3GMMIdentityRequest::MTI:                   return "GMMIdentityRequest";
+        case L3GMMIdentityResponse::MTI:                  return "GMMIdentityResponse";
+        case L3AuthenticationAndCipheringFailure::MTI:    return "AuthAndCipheringFailure";
+        case L3GMMStatus::MTI:                            return "GMMStatus";
+        case L3GMMInformation::MTI:                       return "GMMInformation";
+        default:                                          return "Unknown_GMM";
+    }
+}
+
 } // namespace gsml3parser
