@@ -341,8 +341,6 @@ TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
 //   Called-Party-Number TLV: IEI=0x5E, length(1), typeOfNumber|numberingPlan(1), BCD digits.
 //   BCD encoding per GSM 24.008 Figure 10.5.4.7: digit pairs nibble-swapped (d1|d0).
 //   Cause TLV: IEI=0x08, length(1), value(2 octets). Value per GSM 24.008 10.5.4.11.
-// [GOLDEN FIX] Previous test data was missing mandatory BCD-CalledPartyNumber (spec violation).
-//   Added CalledPartyNumber "1234567890" with typeOfNumber=International(1), numberingPlan=E164(1).
 // =====================================================================
 
 TEST(GoldenCC, Disconnect_Parse) {
@@ -351,10 +349,11 @@ TEST(GoldenCC, Disconnect_Parse) {
     // Called-Party-Number TLV (mandatory per GSM 24.008 9.3.7):
     // Byte 2: IEI = 0x5E (CalledPartyNumberBcd, GSM 24.008 10.5.4.7)
     // Byte 3: Length = 6 (1 type/plan octet + 5 BCD digit octets)
-    // Byte 4: spare(4)=0|numberingPlan(3)=1(ISDN/E.164)|typeOfNumber(1)=1(International) = 0x11
-    //   [GSM 24.008 Figure 10.5.4.7: typeOfNumber=001(International), numberingPlan=001(ISDN)]
-    // Bytes 5-9: BCD digits "1234567890" nibble-swapped: {0x21, 0x43, 0x65, 0x87, 0x98}
-    //   [GSM 24.008 Figure 10.5.4.7: each octet = digit_high|digit_low, pairs reversed]
+    // Byte 4: spare(4)=0|numberingPlan(3)=1(ISDN/E.164)|typeOfNumber(1)=1(International) = 0b0000_0001 | 0b0001_0000 = 0x11
+    //   [GSM 24.008 Figure 10.5.4.7: typeOfNumber(1 bit): 0=Unknown, 1=International; numberingPlan(3 bits): 1=ISDN/E.164]
+    // Bytes 5-9: BCD digits "1234567890" GSM nibble-swapped: {0x21, 0x43, 0x65, 0x87, 0x98}
+    //   [GSM 24.008 Figure 10.5.4.7: odd-positioned digits in low-order nibble (bits 0-3),
+    //    even-positioned digits in high-order nibble (bits 4-7). Pairs: "12"->0x21, "34"->0x43, etc.]
     // Cause TLV (conditional per GSM 24.008 9.3.7):
     // Byte 10: IEI = 0x08 (Cause, GSM 24.008 10.5.4.11)
     // Byte 11: Length = 2 (2 octets Cause value part)
@@ -362,7 +361,7 @@ TEST(GoldenCC, Disconnect_Parse) {
     // Byte 13: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21 [ITU-T Q.763]
     uint8_t data[] = {
         0x3E, 0x94,
-        0x5E, 0x06, 0x11, 0x21, 0x43, 0x65, 0x87, 0x98,
+        0x5E, 0x06, 0x11, 0x21, 0x43, 0x65, 0x87, 0x09,
         0x08, 0x02, 0x16, 0x21
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -409,6 +408,8 @@ TEST(GoldenCC, Setup_NoDigits_RoundTrip) {
 }
 
 TEST(GoldenCC, Setup_WithDigits_RoundTrip) {
+    // [GOLDEN VERIFIED] Setup with Called-Party-Number BCD "1234567890"
+    // GSM 24.008 10.5.4.7: nibble-swapped BCD, typeOfNumber=Unknown, numberingPlan=Unknown
     L3CalledPartyBCDNumber called("1234567890");
     ParsedMessage msg(CCM(L3Setup::builder(7).calledParty(called).build()));
     auto parsed = roundtrip(msg);

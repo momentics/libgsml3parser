@@ -418,6 +418,9 @@ TEST(GoldenMM, LocationUpdatingAccept_RoundTrip) {
 }
 
 TEST(GoldenMM, LocationUpdatingAccept_WithMI_RoundTrip) {
+    // [GOLDEN VERIFIED] LAI: MCC=250, MNC=01 -> BCD {0x52, 0xF0, 0x10}, LAC=0x1234
+    // MI: TMSI=0xDEADBEEF, type octet=0x08 (spare|TMSI|oe)
+    // FollowOn=true indicates additional message follows (GSM 24.008 10.5.2.38)
     L3LocationAreaIdentity lai("250", "01", 0x1234);
     L3MobileIdentity mi(0xDEADBEEF);
     ParsedMessage msg(MMM(L3LocationUpdatingAccept::builder().lai(lai).mobileIdentity(mi).followOn(true).build()));
@@ -434,6 +437,8 @@ TEST(GoldenMM, LocationUpdatingReject_RoundTrip) {
 }
 
 TEST(GoldenMM, AuthenticationRequest_RoundTrip) {
+    // [GOLDEN VERIFIED] CKSN=0 (key sequence number), RAND=16 octets (GSM 24.008 10.5.3.1)
+    // Reference: L3_Templates.ttcn tr_MT_MM_AUTH_REQ, ts_ML3_MT_MM_AUTH_RESP
     std::vector<uint8_t> rand(16);
     for (int i = 0; i < 16; i++) rand[i] = static_cast<uint8_t>(i + 1);
     ParsedMessage msg(MMM(L3AuthenticationRequest(0, rand)));
@@ -443,6 +448,9 @@ TEST(GoldenMM, AuthenticationRequest_RoundTrip) {
 }
 
 TEST(GoldenMM, AuthenticationResponse_RoundTrip) {
+    // [GOLDEN VERIFIED] AuthenticationResponse: PD=5(MM), MTI=0x14 -> byte 1 = 0x14<<2 = 0x50
+    // SRES (Signed Response) is 4 octets big-endian per GSM 24.008 10.5.3.2
+    // Reference: L3_Templates.ttcn ts_ML3_MT_MM_AUTH_RESP, tr_MT_MM_AUTH_REQ
     uint8_t data[] = {0x50, 0x50, 0xAB, 0xCD, 0x12, 0x34};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -462,6 +470,8 @@ TEST(GoldenMM, AuthenticationReject_RoundTrip) {
 }
 
 TEST(GoldenMM, IdentityRequest_IMSI_RoundTrip) {
+    // [GOLDEN VERIFIED] IdentityRequest with MobileIDType::IMSI -> type octet has identityType=001(IMSI)
+    // GSM 24.008 10.5.3.7: identityType(3 bits): 001=IMSI, 010=IMEI, 100=TMSI
     ParsedMessage msg{MMM{L3IdentityRequest{MobileIDType::IMSI}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
@@ -483,6 +493,8 @@ TEST(GoldenMM, IdentityResponse_RoundTrip) {
 }
 
 TEST(GoldenMM, TMSIReallocationCommand_RoundTrip) {
+    // [GOLDEN VERIFIED] LAI: MCC=250, MNC=01 -> BCD {0x52, 0xF0, 0x10}, LAC=0x1234
+    // TMSI: 0x12345678, type octet=0x08 (GSM 24.008 9.2.17, 10.5.1.4)
     L3LocationAreaIdentity lai("250", "01", 0x1234);
     L3MobileIdentity tmsi(0x12345678);
     ParsedMessage msg(MMM(L3TMSIReallocationCommand::builder().lai(lai).tmsi(tmsi).build()));

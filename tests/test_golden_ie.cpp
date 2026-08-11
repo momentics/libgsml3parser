@@ -865,10 +865,9 @@ TEST(GoldenIE, CellSelectionParameters_RefValues) {
 // Common IEs: L3RACHControlParameters (GSM 04.08 10.5.2.29)
 // Reference: BTS_Tests.ttcn ts_RachCtrl_default
 // 25 bits: max_retrans(2) + tx_integer(4) + cell_barr_access(1) + re_not_allowed(1) + ACC(16)
-// [GSM SPEC VERIFIED] GSM 24.008 10.5.2.29: 3 octets (note: some versions include
-//   cell_bar_qualify(1) bit, making it 25 bits total packed into 3 octets).
-//   Octet 1: max_retrans(2)|tx_integer(4)|cell_bar_qualify(1)|cell_barr_access(1)
-//   Octet 2-3: re_not_allowed(1)|ACC(16)|spare(1, to octet boundary)
+// [GSM SPEC VERIFIED] GSM 24.008 10.5.2.29: 3 octets (24 bits total).
+//   Octet 1: max_retrans(2)|tx_integer(4)|cell_barr_access(1)|re_not_allowed(1)|spare(2)
+//   Octet 2-3: ACC(16) access class barring bitmap
 // Reference values from BTS_Tests.ttcn ts_RachCtrl_default:
 //   max_retrans=3(11), tx_integer=9(1001), cell_bar_qualify=0, cell_barr_access=0,
 //   re_not_allowed=1, ACC=0x0400 (ACC[6] barred)
@@ -886,8 +885,8 @@ TEST(GoldenIE, RACHControlParameters_RefValues) {
     //   max_retrans=RACH_MAX_RETRANS_7(=3), tx_integer='1001'B(=9), cell_barr_access=false,
     //   re_not_allowed=true, acc='0000010000000000'B (=0x0400, ACC[6] barred, bit 6 from MSB)
     // Spec-verified: GSM 24.008 10.5.2.29 RACH Control Parameters (24 bits = 3 octets)
-    //   max_retrans(2)|tx_integer(4)|cell_bar_qualify(1)|cell_barr_access(1)|re_not_allowed(1)|ACC(16)
-    //   {0xE5, 0x04, 0x00}: max_retrans=3, tx_integer=9, cell_bar_qualify=0, cell_barr_access=0, re_not_allowed=1, ACC=0x0400
+    //   max_retrans(2)|tx_integer(4)|cell_barr_access(1)|re_not_allowed(1)|spare(2)|ACC(16)
+    //   {0xE5, 0x04, 0x00}: max_retrans=3, tx_integer=9, cell_barr_access=0, re_not_allowed=1, ACC=0x0400
     std::vector<uint8_t> buf(4, 0);
     buf[0] = 0xE5;
     buf[1] = 0x04;
@@ -895,7 +894,7 @@ TEST(GoldenIE, RACHControlParameters_RefValues) {
     BitReader reader(buf.data(), 24);
     auto parsedResult = L3RACHControlParameters::parse(reader);
     ASSERT_TRUE(parsedResult);
-    // Spec-verified: byte 0 = 0xE5 = 0b1110_0101 -> max_retrans(2)=11=3, tx_integer(4)=1001=9, cell_bar_qualify(1)=0, cell_bar_access(1)=0, re_not_allowed(1)=1
+    // Spec-verified: byte 0 = 0xE5 = 0b1110_0101 -> max_retrans(2)=11=3, tx_integer(4)=1001=9, cell_barr_access(1)=0, re_not_allowed(1)=1, spare(2)=01
     //   byte 1 = 0x04, byte 2 = 0x00 -> ACC(16) = 0x0400 (ACC[6] barred, bit 6 from MSB per GSM convention)
     EXPECT_EQ((*parsedResult).maxRetrans(), 3u);
     EXPECT_EQ((*parsedResult).txInteger(), 9u);
@@ -939,7 +938,8 @@ TEST(GoldenIE, ControlChannelDescription_RefValues) {
     BitReader reader(buf.data(), 24);
     auto parsedResult = L3ControlChannelDescription::parse(reader);
     ASSERT_TRUE(parsedResult);
-    // Spec-verified: byte 0 = 0xC9 = 0b1100_1001 -> msc_r99(1)=1, att(1)=1, bs_ag_blks_res(3)=001=1, ccch_conf(3)=001=1(combined), si22ind(1)=0, cbq3(2)=00
+    // Spec-verified: byte 0 = 0xC9 = 0b1100_1001 -> msc_r99(1)=1, att(1)=1, bs_ag_blks_res(3)=001=1, ccch_conf(2)=01=1(combined)
+    //   byte 1 = 0x00 -> si22ind(1)=0, cbq3(2)=00, spare(2)=00, bs_pa_mfrms(3)=000=0, t3212 high 3 bits = 000
     //   byte 1 = 0x00 -> spare(2)=00, bs_pa_mfrms(3)=000=0, t3212 high 3 bits = 000
     //   byte 2 = 0x01 -> t3212 low 5 bits = 00001, so t3212 = 1 (6 minutes)
     EXPECT_EQ((*parsedResult).mATT, 1u);

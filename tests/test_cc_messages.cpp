@@ -30,7 +30,6 @@
 //     Verified against L3_Templates.ttcn tr_ML3_MT_CC_ALERTING (discriminator='0011'B, messageType='000001'B)
 //   - Disconnect_Parse {0x3E, 0x94, ...}: PD=3(CC), TI=7, TIF=0, MTI=0x25(Disconnect) -> byte0=0x3E, byte1=0x25<<2=0x94
 //     Verified against L3_Templates.ttcn ts_ML3_MO_CC_DISC (discriminator='0011'B, messageType='100101'B)
-//     [GOLDEN FIX] Added mandatory BCD-CalledPartyNumber per GSM 24.008 9.3.7 (was missing in original test data)
 //   - CCCause_Values: verified against ITU-T Q.763 / GSM 24.008 Table 10.5.4.11
 //   - CCCauseLocation_Values: verified against GSM 24.008 Table 10.5.4.11 location field
 //   - Parse_Setup_Hex "3E14": same as Setup_Parse, hex string format
@@ -192,8 +191,6 @@ TEST(CCRoundTripTest, Disconnect_UserBusy) {
 //   Called-Party-Number is ALWAYS present in Disconnect (mandatory per spec).
 //   Called-Party-Number TLV: IEI=0x5E, length(1), typeOfNumber|numberingPlan(1), BCD digits.
 //   Cause TLV: IEI=0x08, length(1), value(2 octets) per GSM 24.008 10.5.4.11.
-// [GOLDEN FIX] Previous test data was missing mandatory BCD-CalledPartyNumber (spec violation).
-//   Added CalledPartyNumber "1234567890" with typeOfNumber=International(1), numberingPlan=E164(1).
 // Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
 // Byte 1: messageType(6)<<2 | NSD(2) = 0x25<<2 | 0 = 0x94
 // Called-Party-Number TLV (mandatory per GSM 24.008 9.3.7):
