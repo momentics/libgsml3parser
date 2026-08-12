@@ -69,4 +69,8 @@ namespace gsml3parser {
  */
 [[nodiscard]] Expected<std::string> writeL3Hex(const ParsedMessage& msg);
 
+/// Serialize a ParsedMessage to raw bytes (header + body).
+/// Returns a std::vector<uint8_t> ready for transmission over LAPDm/PHY.
+[[nodiscard]] Expected<std::vector<uint8_t>> writeL3Bytes(const ParsedMessage& msg);
+
 } // namespace gsml3parser

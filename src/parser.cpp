@@ -1088,4 +1088,14 @@ Expected<std::string> writeL3Hex(const ParsedMessage& msg) {
     return Expected<std::string>::hold(std::move(result));
 }
 
+Expected<std::vector<uint8_t>> writeL3Bytes(const ParsedMessage& msg) {
+    constexpr size_t MaxMsgBytes = 4096;
+    alignas(1) uint8_t buf[MaxMsgBytes];
+    auto szResult = writeL3(msg, buf, MaxMsgBytes);
+    if (!szResult) return Expected<std::vector<uint8_t>>::error(szResult.error());
+    size_t n = szResult.value();
+    std::vector<uint8_t> result(buf, buf + n);
+    return Expected<std::vector<uint8_t>>::hold(std::move(result));
+}
+
 } // namespace gsml3parser

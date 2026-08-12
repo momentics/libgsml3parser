@@ -343,6 +343,22 @@ TEST(ParserTest, WriteL3Hex_CC) {
 }
 
 // =====================================================================
+// writeL3Bytes() — raw byte vector serialization
+// =====================================================================
+
+// GSM 04.08 9.1.7: Channel Release (RR, MTI=0x0D)
+TEST(ParserTest, WriteL3Bytes_ReturnsRawBytes) {
+    auto msg = parseL3Hex("600d00");
+    ASSERT_TRUE(msg);
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ(bytes.value().size(), 3u);
+    EXPECT_EQ(bytes.value()[0], 0x60);
+    EXPECT_EQ(bytes.value()[1], 0x0D);
+    EXPECT_EQ(bytes.value()[2], 0x00);
+}
+
+// =====================================================================
 // Round-trip: construct → writeL3Hex → parseL3Hex → verify type
 // =====================================================================
 
