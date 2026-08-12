@@ -27,6 +27,10 @@
 21. [SMS Messages](#21-sms-messages)
 22. [Broadcast Call Control Messages](#22-broadcast-call-control-messages)
 23. [Group Call Control Messages](#23-group-call-control-messages)
+24. [Location Services Messages](#24-location-services-messages)
+25. [SMS L3 Messages](#25-sms-l3-messages)
+26. [Extended PD Messages](#26-extended-pd-messages)
+27. [Test Procedure PD Messages](#27-test-procedure-pd-messages)
 
 ---
 
@@ -346,15 +350,18 @@ Returns `TruncatedInput` error if fewer than 2 bytes provided. Returns `InvalidP
 Each protocol domain has a `std::variant` type that holds all message types for that domain:
 
 ```cpp
-using RRM  = std::variant< /* 95 RR types */ >;
-using MMM  = std::variant< /* 18 MM types */ >;
-using CCM  = std::variant< /* 20 CC types */ >;
-using SSM  = std::variant< /* 3 SS types */ >;
-using GMM  = std::variant< /* 19 GMM types */ >;
-using SM   = std::variant< /* 9 SM types */ >;
-using SMS  = std::variant< /* 5 CP types */ >;
-using BCCM = std::variant< /* 6 BCC types */ >;
-using GCCM = std::variant< /* 7 GCC types */ >;
+using RRM      = std::variant< /* 95 RR types */ >;
+using MMM      = std::variant< /* 20 MM types */ >;
+using CCM      = std::variant< /* 23 CC types */ >;
+using SSM      = std::variant< /* 3 SS types */ >;
+using GMM      = std::variant< /* 23 GMM types */ >;
+using SM       = std::variant< /* 29 SM types */ >;
+using SMS      = std::variant< /* 19 SMS types (5 CP + 14 L3) */ >;
+using BCCM     = std::variant< /* 8 BCC types */ >;
+using GCCM     = std::variant< /* 8 GCC types */ >;
+using LSM      = std::variant< /* 2 LS types */ >;
+using EXTENDED = std::variant<L3ExtendedMessage>;
+using TESTPROC = std::variant<L3TestProcedureMessage>;
 ```
 
 ### 6.2 ParsedMessage
@@ -362,10 +369,10 @@ using GCCM = std::variant< /* 7 GCC types */ >;
 The top-level variant that wraps all domains:
 
 ```cpp
-using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM>;
+using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM, EXTENDED, TESTPROC>;
 ```
 
-Stored on the stack — no heap allocation. `sizeof(ParsedMessage)` is guaranteed < 8 KB via `static_assert`.
+Stored on the stack — no heap allocation. `sizeof(ParsedMessage)` is guaranteed < 8 KB via `static_assert`. The variant spans 12 protocol domains.
 
 **Usage:**
 
@@ -1522,7 +1529,7 @@ if (ussd) {
 
 ## 20. GPRS Session Management Messages
 
-**File:** `gsml3parser/sm/l3smmessages.h` — 9 message types in the `SM` variant.
+**File:** `gsml3parser/sm/l3smmessages.h` — 29 message types in the `SM` variant.
 **Spec:** 3GPP TS 24.008 sections 9.5, Table 10.4a.
 **PD:** `0x0a` (GPRSSessionManagement).
 
@@ -1539,6 +1546,7 @@ if (ussd) {
 | `L3SMCauseIE` | 0x27 | TV | SM cause value |
 | `L3BackOffTimer` | 0x28 | TV | Back-off timer value (GPRS Timer 2 encoding) |
 | `L3PDPHandle` | — | bit-field | PDP context identifier (4 bits, 0–15) |
+| `L3TMGI` | 0x42 | TLV | Temporary Mobile Group Identity: PLMN(3) + ServiceID(2) + SessionID(1) |
 
 ### SM Enums
 
@@ -1546,10 +1554,10 @@ if (ussd) {
 |------|--------|-------------|
 | `PDPType` | 6 values | IPv4, IPv6, IPsecAH, PPP, Private, Unknown |
 | `QoSType` | 3 values | Requested, Default, Teardown |
-| `QoSElementType` | 18 values | QoSClass, MaxBitRate UL/DL, Delay, DeliveryOrder, SopClass, ResidualErrorRate, PeakThroughput, MeanThroughput, TrafficClass, GuaranteedBitRate, SRB rates, GPRS/External Priority |
+| `QoSElementType` | 18 values | QoSClass, MaxBitRate UL/DL, Delay, DeliveryOrder, SopClass, ResidualErrorRate, PeakThroughput, MeanThroughput, TrafficClass, GuaranteedBitRate, SRB rate, GPRS/External Priority |
 | `SMCause` | 17 codes | SM cause values (ReqAccepted, Unsupported_PDP_Address_Type, PDP_Auth_Failed, IE_Invalid, etc.) |
 
-### SM Messages
+### SM Messages — Primary PDP Context
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -1563,15 +1571,65 @@ if (ussd) {
 | `L3ModifyPDPContextReject` | 0x4c | Bidir | PDP handle, SM cause, [Back-off timer] |
 | `L3SMStatus` | 0x55 | Bidir | SM cause |
 
+### SM Messages — Request PDP Context Activation (Net-initiated)
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3RequestPDPContextActivation` | 0x44 | DL | PDP handle, [PDP address], APN, QoS, [PCO] |
+| `L3RequestPDPContextActivationReject` | 0x45 | UL | PDP handle, SM cause |
+
+### SM Messages — Bidirectional Modify (MS-initiated variants)
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3ModifyPDPContextRequestMS` | 0x4A | UL | PDP handle, QoS, [PCO] |
+| `L3ModifyPDPContextAcceptNet` | 0x4B | DL | PDP handle, QoS, [PCO] |
+
+### SM Messages — Secondary PDP Context
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3ActivateSecondaryPDPContextRequest` | 0x4D | DL | PDP handle, [PDP address], APN, QoS, [PCO] |
+| `L3ActivateSecondaryPDPContextAccept` | 0x4E | UL | PDP handle, [PDP address], QoS, [PCO] |
+| `L3ActivateSecondaryPDPContextReject` | 0x4F | UL | PDP handle, SM cause |
+
+### SM Messages — Always Active (AA) PDP Context
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3ActivateAAPDPContextRequest` | 0x50 | DL | PDP handle, [PDP address], APN, QoS, [PCO] |
+| `L3ActivateAAPDPContextAccept` | 0x51 | UL | PDP handle, [PDP address], QoS, [PCO] |
+| `L3ActivateAAPDPContextReject` | 0x52 | UL | PDP handle, SM cause |
+| `L3DeactivateAAPDPContextRequest` | 0x53 | DL | PDP handle |
+| `L3DeactivateAAPDPContextAccept` | 0x54 | UL | PDP handle |
+
+### SM Messages — MBMS Context
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3ActivateMBMSContextRequest` | 0x56 | UL | TMGI, QoS, [PCO] |
+| `L3ActivateMBMSContextAccept` | 0x57 | DL | PDP handle, QoS, [PCO] |
+| `L3ActivateMBMSContextReject` | 0x58 | DL | SM cause |
+| `L3RequestMBMSContextActivation` | 0x59 | DL | TMGI, QoS, [PCO] |
+| `L3RequestMBMSContextActivationReject` | 0x5A | UL | SM cause |
+
+### SM Messages — Network-Initiated Secondary & Notification
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3RequestSecondaryPDPContextActivation` | 0x5B | DL | PDP handle, [PDP address], APN, QoS, [PCO] |
+| `L3RequestSecondaryPDPContextActivationReject` | 0x5C | UL | PDP handle, SM cause |
+| `L3SMNotification` | 0x5D | DL | PDP handle |
+
 ---
 
 ## 21. SMS Messages
 
-**File:** `gsml3parser/sms/l3smsmessages.h` — 5 CP messages in the `SMS` variant.
-**Spec:** 3GPP TS 24.011 sections 7-8, 3GPP TS 23.040.
+**File:** `gsml3parser/sms/l3smsmessages.h` — 5 CP messages; `gsml3parser/sms/l3smsl3messages.h` — 14 L3 messages; total 19 in the `SMS` variant.
+**Spec:** 3GPP TS 24.011 sections 7-8, 3GPP TS 23.040 (CP/RP/TP layers); 3GPP TS 24.008 sections 9.6, Table 10.6a (SMS L3 primitives).
 **PD:** `0x09` (SMS).
 
-The SMS layer uses a three-level encapsulation: L3 header → CP message → RP message → TP PDU.
+The SMS layer uses a three-level encapsulation: L3 header → CP message → RP message → TP PDU. Additionally, the SMS L3 messages (MTI=0x11–0x1E) provide TE-to-MS SMS primitives for status reporting, deliver/reply, and notification flows.
 
 ### CP Cause Codes
 
@@ -1677,16 +1735,128 @@ Each message stores the body as an opaque octet sequence for basic infrastructur
 
 ---
 
+## 24. Location Services Messages
+
+**File:** `gsml3parser/ls/l3lsmessages.h` — 2 message types in the `LSM` variant.
+**Spec:** 3GPP TS 44.031 / TS 24.027 / TS 24.028.
+**PD:** `0x0c` (Location).
+
+Location Services messages carry mobile location service parameters between the MS and the network. Both message types store their body as a raw octet sequence, with parse/write handling the L3 header dispatch.
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3LocationServiceRequest` | 0x01 | Bidir | Location service request parameters (raw body) |
+| `L3LocationServiceProviderMessage` | 0x02 | Bidir | Location service provider data (raw body) |
+
+---
+
+## 25. SMS L3 Messages
+
+**File:** `gsml3parser/sms/l3smsl3messages.h` — 14 message types, part of the `SMS` variant.
+**Spec:** 3GPP TS 24.008 sections 9.6.1–9.6.14, Table 10.6a.
+**PD:** `0x09` (SMS).
+
+These are L3-level SMS primitives used for SMS-on-CS fallback, status reporting, and network-initiated SMS delivery. They share the PD with CP-layer messages but operate in a different context. MTI 0x12 and 0x13 overlap with CP-STATUS and CP-SMT; the parser resolves overlaps by preferring CP messages for backward compatibility.
+
+### SMS L3 Enums
+
+| Enum | Values | Description |
+|------|--------|-------------|
+| `TPStatus` | 5 values | Delivered, DeliveryAttempted, ErasedAtMS, DeliveryNotPossible, Decrypted |
+| `RPDisposalType` | 4 values | NoFurtherAction, DisplayToUser, StoreInSIM, DeleteFromMS |
+| `SMSCause` | 8 codes | SMS-specific cause values (NoCause, SMSSystemFailure, etc.) |
+
+### SMS L3 Messages — Status Report Flow
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3SMSStatusReport` | 0x11 | Bidir | TP-MR, RP-Disp, [TP-DA], [TP-OA], [SCTS], [MT-StartTime], TP-ST |
+| `L3SMSProvidedReplyExpected` | 0x12 | DL | [TP-PID], TP-DCS, [TP-Ud] |
+| `L3SMSSubmitRep` | 0x13 | DL | [TP-PID], TP-DCS, [TP-Ud] |
+
+### SMS L3 Messages — Deliver Flow
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3SMSDeliver` | 0x14 | DL | TP-MTI, TP-MR, [TP-OA], TP-PID, TP-DCS, SCTS, [TP-Ud] |
+| `L3SMSDeliverRep` | 0x15 | UL | TP-MTI, TP-MR, [TP-DA], TP-PID, TP-DCS, [TP-Ud] |
+
+### SMS L3 Messages — Status Ack/Reject
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3SMSStatusReportAck` | 0x16 | UL | TP-MR |
+| `L3SMSStatusReportReject` | 0x17 | DL | TP-MR, SM-Cause |
+| `L3SMSTSReject` | 0x18 | DL | SM-Cause |
+
+### SMS L3 Messages — Submit Control
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3SMSSubmitDeferred` | 0x19 | DL | [TP-PID], TP-DCS, [TP-Ud] |
+| `L3SMSSubmitReject` | 0x1A | DL | SM-Cause |
+
+### SMS L3 Messages — Service Centre & Notification
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3SMSSFProvidedRep` | 0x1B | UL | [TP-PID], TP-DCS, [TP-Ud] |
+| `L3SMSSFProvidedRepAck` | 0x1C | DL | Empty body |
+| `L3SMSNotification` | 0x1D | Bidir | [TP-PID], TP-DCS, [TP-Ud] |
+| `L3SMSShortCodeInfo` | 0x1E | Bidir | ShortCodeType, [ShortCode] |
+
+---
+
+## 26. Extended PD Messages
+
+**File:** `gsml3parser/extended/l3extendedmessages.h` — 1 placeholder type in the `EXTENDED` variant.
+**Spec:** GSM 04.08 §10.2.
+**PD:** `0x0e` (Extended).
+
+The Extended PD provides infrastructure for future extended protocol discriminators. The `L3ExtendedMessage` class captures the raw MTI from the L3 header and stores the remaining body as an opaque octet sequence, allowing forward-compatible parsing of unknown extended messages.
+
+| Method | Description |
+|--------|-------------|
+| `mti()` | Returns the parsed MTI value |
+| `pd()` | Returns `L3PD::Extended` |
+| `body()` | Raw body bytes |
+| `parse(br, parsedMti)` | Static factory; takes pre-parsed MTI |
+| `write(bw)` | Serializes body octets |
+| `text(os)` | Human-readable dump of MTI and body |
+
+---
+
+## 27. Test Procedure PD Messages
+
+**File:** `gsml3parser/testproc/l3testproceduremessages.h` — 1 placeholder type in the `TESTPROC` variant.
+**Spec:** GSM 04.08 §10.2.
+**PD:** `0x0f` (TestProcedure).
+
+The Test Procedure PD provides infrastructure for test procedure messages used in network testing scenarios. The `L3TestProcedureMessage` class captures the raw MTI from the L3 header and stores the remaining body as an opaque octet sequence, allowing forward-compatible parsing of test procedure messages.
+
+| Method | Description |
+|--------|-------------|
+| `mti()` | Returns the parsed MTI value |
+| `pd()` | Returns `L3PD::TestProcedure` |
+| `body()` | Raw body bytes |
+| `parse(br, parsedMti)` | Static factory; takes pre-parsed MTI |
+| `write(bw)` | Serializes body octets |
+| `text(os)` | Human-readable dump of MTI and body |
+
+---
+
 ## Conformance Notes
 
 The library implements encodings defined by:
 
 | Standard | Scope | Coverage |
 |----------|-------|----------|
-| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | Full RR, MM, CC, GMM, SM message parsing and generation |
+| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | Full RR, MM, CC, GMM, SM (29 types), SMS L3 (14 types) message parsing and generation |
 | **GSM 04.07 / 3GPP TS 24.007** | Information element encoding rules | V, TV, TLV, LV formats; H/L rest octet padding (0x2B); bit ordering |
 | **GSM 04.80 / 3GPP TS 24.080** | Supplementary services on mobile | Facility, Register, Release Complete messages; SSOpCode/SSErrorCode enums; L3FacilityOpCode TCAP parser; L3USSDData IE |
 | **GSM 02.90 / 3GPP TS 23.038** | USSD alphabet and encoding | GSM 7-bit default/extended alphabet, UCS2, DCS handling in L3USSDData |
 | **3GPP TS 44.018** | Group call and broadcast call control | GCC (PD=0x00): 7 messages; BCC (PD=0x01): 6 messages |
 | **3GPP TS 24.011 / GSM 04.11** | SMS over mobile radio interface | CP layer (5 messages), RP layer (4 messages), TP PDUs (Deliver, Submit, StatusReport, Command) |
 | **3GPP TS 23.040 / GSM 03.40** | SMS TPDU formatting and encoding | TP address, TP-DCS, TP-PID, TP-SCTS, GSM 7-bit alphabet |
+| **3GPP TS 44.031 / TS 24.027/24.028** | Location services on mobile radio | LSM: L3LocationServiceRequest, L3LocationServiceProviderMessage |
+| **GSM 04.08 §10.2** | Extended and Test Procedure PDs | EXTENDED (PD=0x0e), TESTPROC (PD=0x0f) raw-body placeholder parsing |

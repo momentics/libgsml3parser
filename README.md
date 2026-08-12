@@ -1,4 +1,4 @@
-# libgsml3parser
+﻿# libgsml3parser
 
 **GSM Layer 3 Signalling Message Parser — Standalone C++20 Library**
 
@@ -9,7 +9,7 @@
 
 ## Overview
 
-libgsml3parser is a standalone C++20 library for parsing and generating GSM Layer 3 (L3) signalling messages. It implements protocol discriminator dispatch across nine domains, as defined by GSM 04.08 / 3GPP TS 24.008:
+libgsml3parser is a standalone C++20 library for parsing and generating GSM Layer 3 (L3) signalling messages. It implements protocol discriminator dispatch across twelve domains, as defined by GSM 04.08 / 3GPP TS 24.008:
 
 | Domain | PD | Spec Section | Messages |
 |--------|----|-------------|----------|
@@ -21,9 +21,12 @@ libgsml3parser is a standalone C++20 library for parsing and generating GSM Laye
 | **GPRS Mobility Mgmt (GMM)** | `0x08` | GSM 04.08 9.4 / Table 10.4 | Attach, Detach, RA Update, Service Request, P-TMSI Reallocation, Auth/Ciphering, Identity, Status, Information |
 | **SMS** | `0x09` | GSM 24.011 / 3GPP TS 23.040 | CP-DATA/ACK/ERROR/STATUS/SMT, RP-DATA/ACK/ERROR/SMMA, TP-Deliver/Submit/StatusReport/Command |
 | **GPRS Session Mgmt (SM)** | `0x0a` | GSM 24.008 9.5 / Table 10.4a | Activate/Deactivate/Modify PDP Context (Request/Accept/Reject), SM Status |
-| **Supplementary Services (SS)** | `0x0b` | GSM 04.80 / 3GPP TS 24.080 | Facility, Register, Release Complete (+ SSOpCode/SSErrorCode enums, L3FacilityOpCode IE, L3USSDDate IE with GSM 7-bit encode/decode) |
+| **Supplementary Services (SS)** | `0x0b` | GSM 04.80 / 3GPP TS 24.080 | Facility, Register, Release Complete (+ SSOpCode/SSErrorCode enums, L3FacilityOpCode IE, L3USSData IE with GSM 7-bit encode/decode) |
+| **Location Services (LS)** | `0x0c` | 3GPP TS 44.031 / 24.027/24.028 | LocationServiceRequest, LocationServiceProviderMessage |
+| **Extended PD** | `0x0e` | GSM 04.08 §10.2 | Raw-body placeholder for extended protocol discriminators |
+| **Test Procedure PD** | `0x0f` | GSM 04.08 §10.2 | Raw-body placeholder for test procedure messages |
 
-The library is self-contained with zero external dependencies beyond the C++20 standard library. It provides bidirectional parsing (binary to typed C++ objects and back), human-readable output, `Expected<T>` result types, immutable configuration, compile-time message dispatch via `std::variant` + `std::visit`, and a streaming bitstream I/O layer. `ParsedMessage` spans 9 protocol domains on the stack (`sizeof < 8 KB`).
+The library is self-contained with zero external dependencies beyond the C++20 standard library. It provides bidirectional parsing (binary to typed C++ objects and back), human-readable output, `Expected<T>` result types, immutable configuration, compile-time message dispatch via `std::variant` + `std::visit`, and a streaming bitstream I/O layer. `ParsedMessage` spans 12 protocol domains on the stack (`sizeof < 8 KB`).
 
 ## Features
 
@@ -43,7 +46,7 @@ The library is self-contained with zero external dependencies beyond the C++20 s
 - **Zero external dependencies** — No networking, no SIP, no radio stack
 - **Fuzzing-ready** — Clean parse/generate API suitable for libFuzzer integration
 - **Comprehensive test suite** — Golden test vectors cross-validated against osmo-ttcn3-hacks TTCN-3 reference
-- **Spec-compliant** — Follows GSM 04.08 / 3GPP TS 24.008, GSM 04.07 / 3GPP TS 24.007, GSM 04.80 / 3GPP TS 24.080, 3GPP TS 44.018
+- **Spec-compliant** — Follows GSM 04.08 / 3GPP TS 24.008, GSM 04.07 / 3GPP TS 24.007, GSM 04.80 / 3GPP TS 24.080, 3GPP TS 44.018, 3GPP TS 44.031 / 24.027 / 24.028
 - **V/TV/TLV/LV formats** — Correct handling of all GSM 04.07 IE encoding formats
 - **Short messages** — Synchronization Channel Information, Channel Request, Handover Access
 
@@ -225,7 +228,7 @@ The library follows a layered design:
 
 2. **Message types** — Each L3 message is a plain C++ struct with `parse(BitReader&)` and `write(BitWriter&)` methods. No inheritance hierarchies for IEs.
 
-3. **Variant dispatch** — `ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM>` holds the parsed result on the stack (9 domains). `tryGet<T>()` provides compile-time typed access.
+3. **Variant dispatch** — `ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM, EXTENDED, TESTPROC>` holds the parsed result on the stack (12 domains). `tryGet<T>()` provides compile-time typed access.
 
 4. **Streaming** — `ByteSource` → `L3Framer` → `L3StreamProcessor` pipeline processes raw byte streams with automatic frame boundary detection.
 
@@ -517,7 +520,7 @@ The library follows a layered design:
 | `L3PTMSISignature` | P-TMSI signature (3 octets) |
 | `L3GMMStatusCause` | GMM status cause octet |
 
-### SMS (PD=0x09) — 5 CP messages, 4 TP types, 4 RP types
+### SMS (PD=0x09) — 5 CP messages, 14 SMS L3 messages, 4 TP types, 4 RP types
 
 **Control Part (CP) Messages:**
 
@@ -553,10 +556,31 @@ The library follows a layered design:
 |----|-------------|
 | `L3TPAddress` | TP-DA/TP-OA: TON/NPI + BCD digits |
 | `TPSCTimeStamp` | Service centre time stamp (7 octets) |
+
+**SMS L3 Messages (14 types, TS 24.008 9.6):**
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3SMSStatusReport` | 0x11 | Bidir | TP-MR, RP-Disp, [TP-DA], [TP-OA], [SCTS], [MT-StartTime], TP-ST |
+| `L3SMSProvidedReplyExpected` | 0x12 | DL | [TP-PID], TP-DCS, [TP-Ud] |
+| `L3SMSSubmitRep` | 0x13 | DL | [TP-PID], TP-DCS, [TP-Ud] |
+| `L3SMSDeliver` | 0x14 | DL | TP-MTI, TP-MR, [TP-OA], TP-PID, TP-DCS, SCTS, [TP-Ud] |
+| `L3SMSDeliverRep` | 0x15 | UL | TP-MTI, TP-MR, [TP-DA], TP-PID, TP-DCS, [TP-Ud] |
+| `L3SMSStatusReportAck` | 0x16 | UL | TP-MR |
+| `L3SMSStatusReportReject` | 0x17 | DL | TP-MR, SM-Cause |
+| `L3SMSTSReject` | 0x18 | DL | SM-Cause |
+| `L3SMSSubmitDeferred` | 0x19 | DL | [TP-PID], TP-DCS, [TP-Ud] |
+| `L3SMSSubmitReject` | 0x1A | DL | SM-Cause |
+| `L3SMSSFProvidedRep` | 0x1B | UL | [TP-PID], TP-DCS, [TP-Ud] |
+| `L3SMSSFProvidedRepAck` | 0x1C | DL | Empty body |
+| `L3SMSNotification` | 0x1D | Bidir | [TP-PID], TP-DCS, [TP-Ud] |
+| `L3SMSShortCodeInfo` | 0x1E | Bidir | ShortCodeType, [ShortCode] |
 | `TPDCS` | Data coding scheme (Default, 8-bit, UCS2) |
 | `TPPID` | Protocol identifier (GSM, X121, Telex, etc.) |
 
-### GPRS Session Management (PD=0x0a) — 9 message types
+### GPRS Session Management (PD=0x0a) — 29 message types
+
+**Primary PDP Context:**
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -570,6 +594,56 @@ The library follows a layered design:
 | `L3ModifyPDPContextReject` | 0x4c | Bidir | Modification rejected |
 | `L3SMStatus` | 0x55 | Bidir | SM status report |
 
+**Request PDP Context Activation (Net-initiated):**
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3RequestPDPContextActivation` | 0x44 | DL | Network requests PDP context activation |
+| `L3RequestPDPContextActivationReject` | 0x45 | UL | MS rejects network request |
+
+**Bidirectional Modify (MS-initiated variants):**
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3ModifyPDPContextRequestMS` | 0x4A | UL | MS requests PDP context modification |
+| `L3ModifyPDPContextAcceptNet` | 0x4B | DL | Network accepts MS modification |
+
+**Secondary PDP Context:**
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3ActivateSecondaryPDPContextRequest` | 0x4D | DL | Network requests secondary PDP activation |
+| `L3ActivateSecondaryPDPContextAccept` | 0x4E | UL | MS accepts secondary PDP activation |
+| `L3ActivateSecondaryPDPContextReject` | 0x4F | UL | MS rejects secondary PDP activation |
+
+**Always Active (AA) PDP Context:**
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3ActivateAAPDPContextRequest` | 0x50 | DL | Network requests AA PDP activation |
+| `L3ActivateAAPDPContextAccept` | 0x51 | UL | MS accepts AA PDP activation |
+| `L3ActivateAAPDPContextReject` | 0x52 | UL | MS rejects AA PDP activation |
+| `L3DeactivateAAPDPContextRequest` | 0x53 | DL | Network requests AA PDP deactivation |
+| `L3DeactivateAAPDPContextAccept` | 0x54 | UL | MS accepts AA PDP deactivation |
+
+**MBMS Context:**
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3ActivateMBMSContextRequest` | 0x56 | UL | MS requests MBMS context activation |
+| `L3ActivateMBMSContextAccept` | 0x57 | DL | Network accepts MBMS activation |
+| `L3ActivateMBMSContextReject` | 0x58 | DL | Network rejects MBMS activation |
+| `L3RequestMBMSContextActivation` | 0x59 | DL | Network requests MBMS activation |
+| `L3RequestMBMSContextActivationReject` | 0x5A | UL | MS rejects network MBMS request |
+
+**Network-Initiated Secondary & Notification:**
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3RequestSecondaryPDPContextActivation` | 0x5B | DL | Network requests secondary PDP activation |
+| `L3RequestSecondaryPDPContextActivationReject` | 0x5C | UL | MS rejects network secondary request |
+| `L3SMNotification` | 0x5D | DL | Network notification to MS |
+
 **SM Information Elements:**
 
 | IE | Description |
@@ -581,6 +655,7 @@ The library follows a layered design:
 | `L3SMCauseIE` | SM cause value |
 | `L3BackOffTimer` | Back-off timer (GPRS Timer 2 encoding) |
 | `L3PDPHandle` | PDP context identifier (0–15) |
+| `L3TMGI` | Temporary Mobile Group Identity: PLMN(3) + ServiceID(2) + SessionID(1) |
 
 ### Supplementary Services (PD=0x0b) — 3 message types, 2 enums, 2 IEs
 
@@ -605,6 +680,25 @@ The library follows a layered design:
 |----|-------------|
 | `L3FacilityOpCode` | TCAP component parser (Invoke/ReturnResult/ReturnError/Reject) |
 | `L3USSDData` | USSD message with GSM 7-bit encode/decode, UCS2, DCS handling |
+
+### Location Services (PD=0x0c) — 2 message types
+
+| Message | MTI | Direction | Description |
+|---------|-----|-----------|-------------|
+| `L3LocationServiceRequest` | 0x01 | Bidir | Location service request parameters |
+| `L3LocationServiceProviderMessage` | 0x02 | Bidir | Location service provider data |
+
+### Extended PD (PD=0x0e) — 1 placeholder type
+
+| Message | Description |
+|---------|-------------|
+| `L3ExtendedMessage` | Raw-body placeholder for extended protocol discriminators; MTI determined at parse time |
+
+### Test Procedure PD (PD=0x0f) — 1 placeholder type
+
+| Message | Description |
+|---------|-------------|
+| `L3TestProcedureMessage` | Raw-body placeholder for test procedure messages; MTI determined at parse time |
 
 ## Error Handling
 
@@ -703,7 +797,6 @@ A GitHub Actions workflow builds and tests the library on every release, produci
 - [ ] Fuzzing target (libFuzzer integration)
 - [ ] C API wrapper for FFI
 - [ ] Python bindings (pybind11)
-- [ ] Location services parser (PD=0x0c) — 3GPP TS 24.027 / 24.028
 
 ## License
 
