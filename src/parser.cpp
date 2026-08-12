@@ -34,6 +34,8 @@
 #include "gsml3parser/bcc/l3bccmessages.h"
 #include "gsml3parser/gcc/l3gccmessages.h"
 #include "gsml3parser/ls/l3lsmessages.h"
+#include "gsml3parser/extended/l3extendedmessages.h"
+#include "gsml3parser/testproc/l3testproceduremessages.h"
 
 #include <algorithm>
 #include <cstring>
@@ -318,6 +320,16 @@ LS_TRAIT(L3LocationServiceRequest)
 LS_TRAIT(L3LocationServiceProviderMessage)
 #undef LS_TRAIT
 
+/* ── Extended PD messages (1 type) ── */
+#define EXT_TRAIT(T) template<> struct MessageTraits<T> { static constexpr L3PD pd = L3PD::Extended; static constexpr int mti = T::MTI; };
+EXT_TRAIT(L3ExtendedMessage)
+#undef EXT_TRAIT
+
+/* ── TestProcedure PD messages (1 type) ── */
+#define TP_TRAIT(T) template<> struct MessageTraits<T> { static constexpr L3PD pd = L3PD::TestProcedure; static constexpr int mti = T::MTI; };
+TP_TRAIT(L3TestProcedureMessage)
+#undef TP_TRAIT
+
 // ── Helpers: extract PD and MTI from any message type ──────────────────
 
 template<typename T>
@@ -396,6 +408,16 @@ static void encodeL3Header(uint8_t* buf, L3PD pd, int mti, unsigned ti = 0, bool
             break;
         }
         case L3PD::Location: {
+            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
+            buf[1] = static_cast<uint8_t>(mti & 0xFF);
+            break;
+        }
+        case L3PD::Extended: {
+            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
+            buf[1] = static_cast<uint8_t>(mti & 0xFF);
+            break;
+        }
+        case L3PD::TestProcedure: {
             buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
             buf[1] = static_cast<uint8_t>(mti & 0xFF);
             break;
@@ -768,6 +790,16 @@ Expected<LSM> parseL3LS(BitReader& reader, int mti) {
     }
 }
 
+// Extended PD messages (GSM 04.08 §10.2, PD=0x0e)
+Expected<EXTENDED> parseL3Extended(BitReader& reader, uint8_t mti) {
+    return L3ExtendedMessage::parse(reader, mti).map([](L3ExtendedMessage v){ return EXTENDED(std::move(v)); });
+}
+
+// TestProcedure PD messages (GSM 04.08 §10.2, PD=0x0f)
+Expected<TESTPROC> parseL3TestProc(BitReader& reader, uint8_t mti) {
+    return L3TestProcedureMessage::parse(reader, mti).map([](L3TestProcedureMessage v){ return TESTPROC(std::move(v)); });
+}
+
 } // namespace detail
 
 // ── Step 3.2: Top-level parseL3() and parseL3Hex() ─────────────────────
@@ -917,6 +949,14 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
             return detail::parseL3LS(reader, hdr.mti)
                 .map([](LSM v){ return ParsedMessage(std::move(v)); });
 
+        case L3PD::Extended:
+            return detail::parseL3Extended(reader, static_cast<uint8_t>(hdr.mti))
+                .map([](EXTENDED v){ return ParsedMessage(std::move(v)); });
+
+        case L3PD::TestProcedure:
+            return detail::parseL3TestProc(reader, static_cast<uint8_t>(hdr.mti))
+                .map([](TESTPROC v){ return ParsedMessage(std::move(v)); });
+
         default: {
             auto* handler = cfg.getPDHandler(hdr.pd);
             if (handler) {
@@ -982,6 +1022,11 @@ template<typename ConcreteMsg>
 Expected<size_t> writeL3Body(const ConcreteMsg& msg, uint8_t* out, size_t maxlen) {
     L3PD pd = message_pd<ConcreteMsg>();
     int mtiVal = message_mti<ConcreteMsg>();
+
+    // For messages with runtime-determined MTI (Extended, TestProcedure), override.
+    if constexpr (requires { msg.mti(); }) {
+        mtiVal = static_cast<int>(msg.mti());
+    }
 
     // Short messages: no standard L3 header, body only.
     if constexpr (is_short_message_v<ConcreteMsg>) {

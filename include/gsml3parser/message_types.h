@@ -12,6 +12,8 @@
 #include "bcc/l3bccmessages.h"
 #include "gcc/l3gccmessages.h"
 #include "ls/l3lsmessages.h"
+#include "extended/l3extendedmessages.h"
+#include "testproc/l3testproceduremessages.h"
 
 namespace gsml3parser {
 
@@ -279,7 +281,11 @@ using LSM = std::variant<
     L3LocationServiceProviderMessage
 >;
 
-using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM>;
+using EXTENDED = std::variant<L3ExtendedMessage>;
+
+using TESTPROC = std::variant<L3TestProcedureMessage>;
+
+using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM, EXTENDED, TESTPROC>;
 
 static_assert(sizeof(ParsedMessage) < 8192, "ParsedMessage variant too large");
 

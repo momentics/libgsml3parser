@@ -233,8 +233,8 @@ TEST(ParserTest, TruncatedHex) {
 }
 
 TEST(ParserTest, InvalidPD) {
-    // PD=0x0F (TestProcedure) is not supported by built-in parser
-    uint8_t data[] = {0xF0, 0x01};
+    // PD=0x02 is an undefined/unsupported Protocol Discriminator
+    uint8_t data[] = {0x20, 0x01};
     auto res = parseL3(std::span<const uint8_t>(data));
     EXPECT_FALSE(res);
 }

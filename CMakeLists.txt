@@ -81,6 +81,14 @@ set(LS_SOURCES
     src/ls/l3lsmessages.cpp
 )
 
+set(EXTENDED_SOURCES
+    src/extended/l3extendedmessages.cpp
+)
+
+set(TESTPROC_SOURCES
+    src/testproc/l3testproceduremessages.cpp
+)
+
 # ── Public headers ────────────────────────────────────────────────────
 
 set(PUBLIC_HEADERS
@@ -112,6 +120,8 @@ set(PUBLIC_HEADERS
     include/gsml3parser/bcc/l3bccmessages.h
     include/gsml3parser/gcc/l3gccmessages.h
     include/gsml3parser/ls/l3lsmessages.h
+    include/gsml3parser/extended/l3extendedmessages.h
+    include/gsml3parser/testproc/l3testproceduremessages.h
     include/gsml3parser/message_types.h
     include/gsml3parser/visitor.h
     include/gsml3parser/gsml3parser.hpp
@@ -134,6 +144,8 @@ add_library(gsml3parser
     ${BCC_SOURCES}
     ${GCC_SOURCES}
     ${LS_SOURCES}
+    ${EXTENDED_SOURCES}
+    ${TESTPROC_SOURCES}
 )
 
 add_library(gsml3parser::parser ALIAS gsml3parser)
