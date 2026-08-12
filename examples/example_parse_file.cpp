@@ -20,8 +20,8 @@
 // SOFTWARE.
 
 // Demonstrates parsing L3 messages from hex strings or files, typed access
-// via tryGet<>, round-trip serialization, and batch parsing across all 9 PD
-// domains (RR, MM, CC, SS, GMM, SM, SMS, BCC, GCC).
+// via tryGet<>, round-trip serialization, and batch parsing across all 12 PD
+// domains (RR, MM, CC, SS, GMM, SM, SMS, BCC, GCC, LS, EXT, TST).
 
 #include <gsml3parser/gsml3parser.hpp>
 #include <fstream>
@@ -112,6 +112,14 @@ int main(int argc, char* argv[]) {
             std::cout << "BCC: Setup detected\n";
         } else if (auto* gccSetup = tryGet<L3GCCSetup>(msg)) {
             std::cout << "GCC: Setup detected\n";
+        } else if (auto* lsReq = tryGet<L3LocationServiceRequest>(msg)) {
+            std::cout << "LS: LocationServiceRequest detected\n";
+        } else if (auto* lsProv = tryGet<L3LocationServiceProviderMessage>(msg)) {
+            std::cout << "LS: LocationServiceProviderMessage detected\n";
+        } else if (auto* ext = tryGet<L3ExtendedMessage>(msg)) {
+            std::cout << "EXT: ExtendedMessage detected\n";
+        } else if (auto* tst = tryGet<L3TestProcedureMessage>(msg)) {
+            std::cout << "TST: TestProcedureMessage detected\n";
         } else {
             std::cout << "Parsed message type: " << messageName(msg) << "\n";
         }
@@ -129,7 +137,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Demo batch parsing with representative messages from all 9 PD domains
-    std::cout << "\n--- Batch Parse Demo (All 9 PD Domains) ---\n";
+    std::cout << "\n--- Batch Parse Demo (All 12 PD Domains) ---\n";
     std::vector<std::pair<std::string, std::string>> batch{
         {"RR",       "60 0D 00"},                          // Channel Release
         {"MM",       "50 84"},                              // CM Service Accept
@@ -140,6 +148,9 @@ int main(int argc, char* argv[]) {
         {"SMS",      "90 04 01 02"},                         // CP Ack (ref=2)
         {"BCC",      "10 01"},                               // BCC Setup
         {"GCC",      "00 01 02"},                            // GCC Setup
+        {"LS",       "C0 01"},                               // LocationServiceRequest
+        {"EXT",      "E0 01"},                               // ExtendedMessage
+        {"TST",      "F0 01"},                               // TestProcedureMessage
     };
     demoBatchParse(batch);
 

@@ -19,8 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Performance benchmark for parseL3() and L3StreamProcessor across all 9 PD
-// domains (RR, MM, CC, SS, GMM, SM, SMS, BCC, GCC).  Also includes a mixed-
+// Performance benchmark for parseL3() and L3StreamProcessor across all 12 PD
+// domains (RR, MM, CC, SS, GMM, SM, SMS, BCC, GCC, LS, EXT, TST).  Also includes a mixed-
 // domain stream benchmark with all message types interleaved.
 
 #include <chrono>
@@ -104,7 +104,7 @@ static void runStreamBenchmark(const char* label, std::span<const uint8_t> singl
 }
 
 int main() {
-    printf("=== libgsml3parser Benchmark (9 PD Domains) ===\n\n");
+    printf("=== libgsml3parser Benchmark (12 PD Domains) ===\n\n");
 
     // Representative messages for each PD domain.
     // RR: Channel Release (3 bytes) — PD=0x6, MTI=0x0D
@@ -134,6 +134,15 @@ int main() {
     // GCC: Setup (3 bytes) — PD=0x0, MTI=0x01
     uint8_t gccMsg[] = {0x00, 0x01, 0x02};
 
+    // LS: LocationServiceRequest (2 bytes) — PD=0x0c, MTI=0x01
+    uint8_t lsMsg[] = {0xC0, 0x01};
+
+    // EXT: ExtendedMessage (2 bytes) — PD=0x0e, MTI=0x01
+    uint8_t extMsg[] = {0xE0, 0x01};
+
+    // TST: TestProcedureMessage (2 bytes) — PD=0x0f, MTI=0x01
+    uint8_t tstMsg[] = {0xF0, 0x01};
+
     uint64_t iterations = 500000;
 
     printf("--- parseL3() Benchmark (%llu iterations each) ---\n", iterations);
@@ -146,6 +155,9 @@ int main() {
     runParseBenchmark("SMS CPAck", smsMsg, iterations);
     runParseBenchmark("BCC Setup", bccMsg, iterations);
     runParseBenchmark("GCC Setup", gccMsg, iterations);
+    runParseBenchmark("LS LocationServiceRequest", lsMsg, iterations);
+    runParseBenchmark("EXT ExtendedMessage", extMsg, iterations);
+    runParseBenchmark("TST TestProcedureMessage", tstMsg, iterations);
 
     printf("\n--- L3StreamProcessor Benchmark (%llu iterations each) ---\n", iterations);
     runStreamBenchmark("RR ChannelRelease", rrMsg, iterations);
@@ -157,13 +169,17 @@ int main() {
     runStreamBenchmark("SMS CPAck", smsMsg, iterations);
     runStreamBenchmark("BCC Setup", bccMsg, iterations);
     runStreamBenchmark("GCC Setup", gccMsg, iterations);
+    runStreamBenchmark("LS LocationServiceRequest", lsMsg, iterations);
+    runStreamBenchmark("EXT ExtendedMessage", extMsg, iterations);
+    runStreamBenchmark("TST TestProcedureMessage", tstMsg, iterations);
 
-    printf("\n--- Mixed stream Benchmark (All 9 PD Domains) ---\n");
+    printf("\n--- Mixed stream Benchmark (All 12 PD Domains) ---\n");
     // Build a mixed stream with all 9 message types interleaved.
     {
         size_t singleCycle = sizeof(rrMsg) + sizeof(mmMsg) + sizeof(ccMsg) +
-                             sizeof(ssMsg) + sizeof(gmmMsg) + sizeof(smMsg) +
-                             sizeof(smsMsg) + sizeof(bccMsg) + sizeof(gccMsg);
+                              sizeof(ssMsg) + sizeof(gmmMsg) + sizeof(smMsg) +
+                              sizeof(smsMsg) + sizeof(bccMsg) + sizeof(gccMsg) +
+                              sizeof(lsMsg) + sizeof(extMsg) + sizeof(tstMsg);
         uint64_t mixedIters = iterations / 9;
         std::vector<uint8_t> data(singleCycle * mixedIters);
         uint8_t* p = data.data();
@@ -177,6 +193,9 @@ int main() {
             std::memcpy(p, smsMsg, sizeof(smsMsg)); p += sizeof(smsMsg);
             std::memcpy(p, bccMsg, sizeof(bccMsg)); p += sizeof(bccMsg);
             std::memcpy(p, gccMsg, sizeof(gccMsg)); p += sizeof(gccMsg);
+            std::memcpy(p, lsMsg, sizeof(lsMsg));    p += sizeof(lsMsg);
+            std::memcpy(p, extMsg, sizeof(extMsg));   p += sizeof(extMsg);
+            std::memcpy(p, tstMsg, sizeof(tstMsg));   p += sizeof(tstMsg);
         }
 
         SpanByteSource src(data);
@@ -198,7 +217,7 @@ int main() {
         uint64_t perSec = secs > 0 ? static_cast<uint64_t>(handler.count / secs) : 0;
 
         printf("  %-40s %llu msgs  %8.4f s  %llu msg/s\n",
-               "Mixed (all 9 PD domains)", handler.count, secs, perSec);
+                "Mixed (all 12 PD domains)", handler.count, secs, perSec);
     }
 
     printf("\n=== Benchmark complete ===\n");

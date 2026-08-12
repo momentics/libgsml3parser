@@ -19,8 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Multi-threaded parse benchmark across all 9 PD domains (RR, MM, CC, SS,
-// GMM, SM, SMS, BCC, GCC).  Each thread uses its own immutable ParserConfig
+// Multi-threaded parse benchmark across all 12 PD domains (RR, MM, CC, SS,
+// GMM, SM, SMS, BCC, GCC, LS, EXT, TST).  Each thread uses its own immutable ParserConfig
 // — no mutex needed for configuration.  Round-trip serialization is verified
 // per message.
 
@@ -48,6 +48,9 @@ struct ThreadStats {
     std::atomic<uint64_t> smsCount{0};
     std::atomic<uint64_t> bccCount{0};
     std::atomic<uint64_t> gccCount{0};
+    std::atomic<uint64_t> lsCount{0};
+    std::atomic<uint64_t> extCount{0};
+    std::atomic<uint64_t> tstCount{0};
 };
 
 // Example messages for all 9 PD domains.
@@ -61,7 +64,10 @@ std::vector<std::string> sExampleHexes = {
     "90040102",                   // SMS: CP Ack (ref=2)
     "1001",                       // BCC: Setup
     "000102",                     // GCC: Setup
-};
+    "C001",                       // LS: LocationServiceRequest
+    "E001",                       // EXT: ExtendedMessage
+    "F001",                       // TST: TestProcedureMessage
+    };
 
 void workerThread(int id, ThreadStats& stats, int iterations) {
     // Each thread creates its own immutable ParserConfig — no mutex needed.
@@ -72,6 +78,7 @@ void workerThread(int id, ThreadStats& stats, int iterations) {
     uint64_t localErrors = 0;
     uint64_t localRR = 0, localMM = 0, localCC = 0, localSS = 0;
     uint64_t localGMM = 0, localSM = 0, localSMS = 0, localBCC = 0, localGCC = 0;
+    uint64_t localLS = 0, localEXT = 0, localTST = 0;
 
     for (int i = 0; i < iterations; ++i) {
         const auto& hex = sExampleHexes[i % static_cast<int>(sExampleHexes.size())];
@@ -92,6 +99,9 @@ void workerThread(int id, ThreadStats& stats, int iterations) {
                 case L3PD::SMS:                    ++localSMS; break;
                 case L3PD::BroadcastCallControl:   ++localBCC; break;
                 case L3PD::GroupCallControl:       ++localGCC; break;
+                case L3PD::Location:               ++localLS; break;
+                case L3PD::Extended:               ++localEXT; break;
+                case L3PD::TestProcedure:          ++localTST; break;
                 default: break;
             }
 
@@ -120,6 +130,9 @@ void workerThread(int id, ThreadStats& stats, int iterations) {
     stats.smsCount.fetch_add(localSMS, std::memory_order_relaxed);
     stats.bccCount.fetch_add(localBCC, std::memory_order_relaxed);
     stats.gccCount.fetch_add(localGCC, std::memory_order_relaxed);
+    stats.lsCount.fetch_add(localLS, std::memory_order_relaxed);
+    stats.extCount.fetch_add(localEXT, std::memory_order_relaxed);
+    stats.tstCount.fetch_add(localTST, std::memory_order_relaxed);
 }
 
 } // anonymous namespace
@@ -131,7 +144,7 @@ int main(int argc, char* argv[]) {
     if (argc > 1) numThreads = std::stoi(argv[1]);
     if (argc > 2) iterations = std::stoi(argv[2]);
 
-    std::cout << "Multi-threaded parse benchmark (9 PD domains)\n";
+    std::cout << "Multi-threaded parse benchmark (12 PD domains)\n";
     std::cout << "  Threads:    " << numThreads << "\n";
     std::cout << "  Iterations: " << iterations << " / thread\n";
     std::cout << "  Total msgs: " << (static_cast<int64_t>(numThreads) * iterations) << "\n\n";
@@ -165,6 +178,9 @@ int main(int argc, char* argv[]) {
     std::cout << "  SMS msgs: " << stats.smsCount.load() << "\n";
     std::cout << "  BCC msgs: " << stats.bccCount.load() << "\n";
     std::cout << "  GCC msgs: " << stats.gccCount.load() << "\n";
+    std::cout << "  LS msgs:  " << stats.lsCount.load() << "\n";
+    std::cout << "  EXT msgs: " << stats.extCount.load() << "\n";
+    std::cout << "  TST msgs: " << stats.tstCount.load() << "\n";
     std::cout << "  Time:    " << elapsed << "s\n";
 
     if (elapsed > 0) {

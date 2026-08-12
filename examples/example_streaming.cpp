@@ -20,8 +20,8 @@
 // SOFTWARE.
 
 // Demonstrates streaming L3 frame processing with SpanByteSource, RingBuffer
-// producer/consumer, and L3StreamBuilder fluent API.  Covers all 9 PD domains
-// (RR, MM, CC, SS, GMM, SM, SMS, BCC, GCC).
+// producer/consumer, and L3StreamBuilder fluent API.  Covers all 12 PD domains
+// (RR, MM, CC, SS, GMM, SM, SMS, BCC, GCC, LS, EXT, TST).
 
 #include <gsml3parser/gsml3parser.hpp>
 #include <chrono>
@@ -76,7 +76,7 @@ public:
 
 // Demo 1: Parse a batch of frames from memory using SpanByteSource.
 void demoSpanSource() {
-    std::cout << "=== SpanByteSource Demo (All 9 PD Domains) ===\n";
+    std::cout << "=== SpanByteSource Demo (All 12 PD Domains) ===\n";
 
     // Representative messages from each PD domain.
     std::vector<std::pair<std::string, std::string>> hexMessages{
@@ -89,6 +89,9 @@ void demoSpanSource() {
         {"SMS",  "90040102"},            // CP Ack (ref=2)
         {"BCC",  "1001"},                // BCC Setup
         {"GCC",  "000102"},              // GCC Setup
+        {"LS",   "C001"},                // LocationServiceRequest
+        {"EXT",  "E001"},                // ExtendedMessage
+        {"TST",  "F001"},                // TestProcedureMessage
     };
 
     // Concatenate all messages into one buffer with L2 length prefixes.
@@ -115,9 +118,12 @@ void demoSpanSource() {
               << " GMM=" << stats.gmmMessages
               << " SM=" << stats.smMessages
               << " SMS=" << stats.smsMessages
-              << " BCC=" << stats.bccMessages
-              << " GCC=" << stats.gccMessages
-              << "\n\n";
+               << " BCC=" << stats.bccMessages
+               << " GCC=" << stats.gccMessages
+               << " LS=" << stats.lsMessages
+               << " EXT=" << stats.extendedMessages
+               << " TST=" << stats.testprocMessages
+               << "\n\n";
 }
 
 // Demo 2: Producer/consumer with RingBuffer.
