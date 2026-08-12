@@ -220,14 +220,14 @@ TEST(ThreadingTest, HeavyConcurrentParse) {
     constexpr int NumThreads = 8;
     constexpr int IterationsPerThread = 100;
 
-    // Pool of messages to parse
-    std::vector<std::vector<uint8_t>> msgPool = {
-        {0x60, 0x0D, 0x00},                             // RR ChannelRelease
-        {0x50, 0x84},                                    // MM CMServiceAccept
-        {0x30, 0x94, 0x08, 0x02, 0x16, 0x21},          // CC Disconnect
-        {0xB0, 0xE8},                                    // SS Facility
-        {},                                              // empty — expected to fail
-        {0xFF, 0xFF},                                    // invalid — expected to fail
+    // Shared read-only pool — concurrent reads are safe.
+    const std::vector<std::vector<uint8_t>> msgPool = {
+        {0x60, 0x0D, 0x00},                             // RR ChannelRelease (valid)
+        {0x50, 0x84},                                    // MM CMServiceAccept (valid)
+        {0x30, 0x94, 0x08, 0x02, 0x16, 0x21},          // CC Disconnect (valid)
+        {0xB0, 0xE8},                                    // SS Facility (valid)
+        {},                                              // empty — expected to fail (TruncatedInput)
+        {0x20, 0x01},                                    // invalid PD=0x02 — expected to fail (InvalidPD)
     };
 
     std::atomic<int> parseCount{0};
@@ -259,15 +259,22 @@ TEST(ThreadingTest, HeavyConcurrentParse) {
     }
 
     EXPECT_EQ(parseCount.load(), NumThreads * IterationsPerThread);
-    // msgPool has 6 entries: indices 0-3 valid, 4-5 invalid.
-    // For each thread t, iteration i: msgIdx = (t+i) % 6.
-    // Over 100 iterations per thread, residues cycle every 6; valid residues are 0,1,2,3.
-    // 100/6 = 16 full cycles + 4 remainder. Each full cycle has 4 valid hits.
-    // Remainder depends on starting offset t. Total across all 8 threads: ~533 successes.
-    // Allow small tolerance for edge-case parsing behavior on empty/invalid spans.
-    int expectedSuccess = 533;
-    EXPECT_GE(successCount.load(), static_cast<int>(expectedSuccess - 2));
-    EXPECT_LE(successCount.load(), static_cast<int>(expectedSuccess + 2));
+    // 6 entries: indices 0-3 valid, 4-5 invalid.
+    // Per thread t: msgIdx = (t+i) % 6, i=0..99.
+    // 100/6 = 16 full cycles + 4 remainder residues.
+    // Each full cycle hits all 6 residues; 4 valid per cycle => 64 valid from base.
+    // 4 remainder residues starting at t%6 — count how many are in {0,1,2,3}.
+    // Thread 0 (rem 0,1,2,3): 4 valid extras => 68
+    // Thread 1 (rem 1,2,3,4): 3 valid extras => 67
+    // Thread 2 (rem 2,3,4,5): 2 valid extras => 66
+    // Thread 3 (rem 3,4,5,0): 2 valid extras => 66
+    // Thread 4 (rem 4,5,0,1): 2 valid extras => 66
+    // Thread 5 (rem 5,0,1,2): 3 valid extras => 67
+    // Thread 6 (rem 0,1,2,3): 4 valid extras => 68
+    // Thread 7 (rem 1,2,3,4): 3 valid extras => 67
+    // Total: 68+67+66+66+66+67+68+67 = 535
+    int expectedSuccess = 535;
+    EXPECT_EQ(successCount.load(), expectedSuccess);
 }
 
 // ── Test: BitReader zero-copy concurrency ───────────────────────────────
