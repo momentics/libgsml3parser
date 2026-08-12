@@ -439,6 +439,18 @@ void L3ChannelRelease::text(std::ostream& os) const {
     }
 }
 
+L3ChannelRelease L3ChannelRelease::Builder::build() const {
+    L3ChannelRelease msg;
+    msg.mCause = mCause;
+    msg.mGprsResumptionPresent = mGprsResumptionPresent;
+    msg.mGprsResumptionBit = mGprsResumptionBit;
+    return msg;
+}
+
+L3ChannelRelease::Builder L3ChannelRelease::builder() {
+    return Builder{};
+}
+
 // ── L3RRStatus ──────────────────────────────────────────────────────────
 
 Expected<L3RRStatus> L3RRStatus::parse(BitReader& br) {
@@ -454,6 +466,16 @@ void L3RRStatus::write(BitWriter& bw) const {
 
 void L3RRStatus::text(std::ostream& os) const {
     os << "RRStatus: cause=" << RRCause2Str(mCause);
+}
+
+L3RRStatus L3RRStatus::Builder::build() const {
+    L3RRStatus msg;
+    msg.mCause = mCause;
+    return msg;
+}
+
+L3RRStatus::Builder L3RRStatus::builder() {
+    return Builder{};
 }
 
 // ── L3AssignmentCommand ─────────────────────────────────────────────────
@@ -582,6 +604,16 @@ void L3AssignmentComplete::text(std::ostream& os) const {
     os << "AssignmentComplete: cause=" << RRCause2Str(mCause);
 }
 
+L3AssignmentComplete L3AssignmentComplete::Builder::build() const {
+    L3AssignmentComplete msg;
+    msg.mCause = mCause;
+    return msg;
+}
+
+L3AssignmentComplete::Builder L3AssignmentComplete::builder() {
+    return Builder{};
+}
+
 // ── L3AssignmentFailure ────────────────────────────────────────────────
 
 Expected<L3AssignmentFailure> L3AssignmentFailure::parse(BitReader& br) {
@@ -597,6 +629,16 @@ void L3AssignmentFailure::write(BitWriter& bw) const {
 
 void L3AssignmentFailure::text(std::ostream& os) const {
     os << "AssignmentFailure: cause=" << RRCause2Str(mCause);
+}
+
+L3AssignmentFailure L3AssignmentFailure::Builder::build() const {
+    L3AssignmentFailure msg;
+    msg.mCause = mCause;
+    return msg;
+}
+
+L3AssignmentFailure::Builder L3AssignmentFailure::builder() {
+    return Builder{};
 }
 
 // ── L3ClassmarkEnquiry ──────────────────────────────────────────────────
@@ -718,6 +760,18 @@ void L3CipheringModeCommand::text(std::ostream& os) const {
        << " includeIMEISV=" << mCipheringModeResponse.includeIMEISV();
 }
 
+L3CipheringModeCommand L3CipheringModeCommand::Builder::build() const {
+    L3CipheringModeCommand msg;
+    msg.mCiphering = mCiphering;
+    msg.mAlgorithm = mAlgorithm;
+    msg.mCipheringModeResponse = mCipheringModeResponse;
+    return msg;
+}
+
+L3CipheringModeCommand::Builder L3CipheringModeCommand::builder() {
+    return Builder{};
+}
+
 // ── L3CipheringModeComplete ────────────────────────────────────────────
 
 Expected<L3CipheringModeComplete> L3CipheringModeComplete::parse(BitReader&) {
@@ -728,6 +782,14 @@ void L3CipheringModeComplete::write(BitWriter&) const {}
 
 void L3CipheringModeComplete::text(std::ostream& os) const {
     os << "CipheringModeComplete";
+}
+
+L3CipheringModeComplete L3CipheringModeComplete::Builder::build() const {
+    return L3CipheringModeComplete{};
+}
+
+L3CipheringModeComplete::Builder L3CipheringModeComplete::builder() {
+    return Builder{};
 }
 
 // ── L3HandoverComplete ─────────────────────────────────────────────────
@@ -747,6 +809,16 @@ void L3HandoverComplete::text(std::ostream& os) const {
     os << "HandoverComplete: cause=" << RRCause2Str(mCause);
 }
 
+L3HandoverComplete L3HandoverComplete::Builder::build() const {
+    L3HandoverComplete msg;
+    msg.mCause = mCause;
+    return msg;
+}
+
+L3HandoverComplete::Builder L3HandoverComplete::builder() {
+    return Builder{};
+}
+
 // ── L3HandoverFailure ──────────────────────────────────────────────────
 
 Expected<L3HandoverFailure> L3HandoverFailure::parse(BitReader& br) {
@@ -762,6 +834,16 @@ void L3HandoverFailure::write(BitWriter& bw) const {
 
 void L3HandoverFailure::text(std::ostream& os) const {
     os << "HandoverFailure: cause=" << RRCause2Str(mCause);
+}
+
+L3HandoverFailure L3HandoverFailure::Builder::build() const {
+    L3HandoverFailure msg;
+    msg.mCause = mCause;
+    return msg;
+}
+
+L3HandoverFailure::Builder L3HandoverFailure::builder() {
+    return Builder{};
 }
 
 // ── L3ChannelModeModify ────────────────────────────────────────────────
@@ -816,6 +898,18 @@ void L3ChannelModeModify::text(std::ostream& os) const {
     mMode.text(os);
 }
 
+L3ChannelModeModify L3ChannelModeModify::Builder::build() const {
+    L3ChannelModeModify msg;
+    msg.mDescription = mDescription;
+    msg.mMode = mMode;
+    msg.mMultiRate = mMultiRate;
+    return msg;
+}
+
+L3ChannelModeModify::Builder L3ChannelModeModify::builder() {
+    return Builder{};
+}
+
 // ── L3ChannelModeModifyAcknowledge ─────────────────────────────────────
 
 size_t L3ChannelModeModifyAcknowledge::bodyLength() const {
@@ -847,6 +941,17 @@ void L3ChannelModeModifyAcknowledge::text(std::ostream& os) const {
     mDescription.text(os);
     os << " ";
     mMode.text(os);
+}
+
+L3ChannelModeModifyAcknowledge L3ChannelModeModifyAcknowledge::Builder::build() const {
+    L3ChannelModeModifyAcknowledge msg;
+    msg.mDescription = mDescription;
+    msg.mMode = mMode;
+    return msg;
+}
+
+L3ChannelModeModifyAcknowledge::Builder L3ChannelModeModifyAcknowledge::builder() {
+    return Builder{};
 }
 
 // ── L3GPRSSuspensionRequest ────────────────────────────────────────────
@@ -1612,6 +1717,23 @@ void L3ImmediateAssignment::text(std::ostream& os) const {
     mTimingAdvance.text(os);
 }
 
+L3ImmediateAssignment L3ImmediateAssignment::Builder::build() const {
+    L3ImmediateAssignment msg;
+    msg.mPageMode = mPageMode;
+    msg.mDedicatedModeOrTBF = mDedicatedModeOrTBF;
+    msg.mRequestReference = mRequestReference;
+    msg.mChannelDescription = mChannelDescription;
+    msg.mTimingAdvance = mTimingAdvance;
+    msg.mMobileAllocation = mMobileAllocation;
+    msg.mStartTimePresent = mStartTimePresent;
+    msg.mStartTimeFrame = mStartTimeFrame;
+    return msg;
+}
+
+L3ImmediateAssignment::Builder L3ImmediateAssignment::builder() {
+    return Builder{};
+}
+
 // ── L3ImmediateAssignmentExtended ──────────────────────────────────────
 
 size_t L3ImmediateAssignmentExtended::bodyLength() const {
@@ -1696,6 +1818,25 @@ void L3ImmediateAssignmentExtended::text(std::ostream& os) const {
     }
 }
 
+L3ImmediateAssignmentExtended L3ImmediateAssignmentExtended::Builder::build() const {
+    L3ImmediateAssignmentExtended msg;
+    msg.mPageMode = mPageMode;
+    msg.mDedicatedModeOrTBF = mDedicatedModeOrTBF;
+    msg.mRequestReference = mRequestReference;
+    msg.mChannelDescription = mChannelDescription;
+    msg.mTimingAdvance = mTimingAdvance;
+    msg.mMobileAllocation = mMobileAllocation;
+    msg.mStartTimePresent = mStartTimePresent;
+    msg.mStartTimeFrame = mStartTimeFrame;
+    msg.mHaveAdditionalChannel = mHaveAdditionalChannel;
+    msg.mAdditionalChannel = mAdditionalChannel;
+    return msg;
+}
+
+L3ImmediateAssignmentExtended::Builder L3ImmediateAssignmentExtended::builder() {
+    return Builder{};
+}
+
 // ── L3ImmediateAssignmentReject ────────────────────────────────────────
 
 L3ImmediateAssignmentReject::L3ImmediateAssignmentReject(unsigned waitSeconds)
@@ -1745,6 +1886,27 @@ void L3ImmediateAssignmentReject::text(std::ostream& os) const {
     os << " requestReferences=(" << mRequestReferences.size() << ")";
 }
 
+L3ImmediateAssignmentReject L3ImmediateAssignmentReject::Builder::build() const {
+    L3ImmediateAssignmentReject msg;
+    msg.mFeatureIndicator = mFeatureIndicator;
+    msg.mPageMode = mPageMode;
+    msg.mRequestReferences = mRequestReferences;
+    msg.mWaitIndications = mWaitIndications;
+    msg.mWaitIndication = mWaitIndication;
+    return msg;
+}
+
+L3ImmediateAssignmentReject::Builder L3ImmediateAssignmentReject::builder() {
+    return Builder{};
+}
+
+L3ImmediateAssignmentReject::Builder& L3ImmediateAssignmentReject::Builder::addWaitIndication(
+    L3RequestReference ref, unsigned waitSeconds) {
+    mRequestReferences.push_back(std::move(ref));
+    mWaitIndications.push_back(waitSeconds);
+    return *this;
+}
+
 // ── L3AdditionalAssignment ─────────────────────────────────────────────
 
 size_t L3AdditionalAssignment::bodyLength() const {
@@ -1785,6 +1947,18 @@ void L3AdditionalAssignment::text(std::ostream& os) const {
     }
 }
 
+L3AdditionalAssignment L3AdditionalAssignment::Builder::build() const {
+    L3AdditionalAssignment msg;
+    msg.mAdditionalChannel = mAdditionalChannel;
+    msg.mHavePowerCommand = mHavePowerCommand;
+    msg.mPowerCommand = mPowerCommand;
+    return msg;
+}
+
+L3AdditionalAssignment::Builder L3AdditionalAssignment::builder() {
+    return Builder{};
+}
+
 // ── L3PhysicalInformation ──────────────────────────────────────────────
 
 Expected<L3PhysicalInformation> L3PhysicalInformation::parse(BitReader& br) {
@@ -1804,6 +1978,16 @@ void L3PhysicalInformation::write(BitWriter& bw) const {
 void L3PhysicalInformation::text(std::ostream& os) const {
     os << "PhysicalInformation: ";
     mTA.text(os);
+}
+
+L3PhysicalInformation L3PhysicalInformation::Builder::build() const {
+    L3PhysicalInformation msg;
+    msg.mTA = mTA;
+    return msg;
+}
+
+L3PhysicalInformation::Builder L3PhysicalInformation::builder() {
+    return Builder{};
 }
 
 // ── L3HandoverCommand ──────────────────────────────────────────────────
@@ -1994,6 +2178,19 @@ void L3ConfigurationChangeCommand::text(std::ostream& os) const {
     }
 }
 
+L3ConfigurationChangeCommand L3ConfigurationChangeCommand::Builder::build() const {
+    L3ConfigurationChangeCommand msg;
+    msg.mHaveChanDesc = mHaveChanDesc;
+    msg.mChanDesc = mChanDesc;
+    msg.mHavePowerCmd = mHavePowerCmd;
+    msg.mPowerCmd = mPowerCmd;
+    return msg;
+}
+
+L3ConfigurationChangeCommand::Builder L3ConfigurationChangeCommand::builder() {
+    return Builder{};
+}
+
 // ── L3ConfigurationChangeAcknowledge ───────────────────────────────────
 
 Expected<L3ConfigurationChangeAcknowledge> L3ConfigurationChangeAcknowledge::parse(BitReader&) {
@@ -2004,6 +2201,14 @@ void L3ConfigurationChangeAcknowledge::write(BitWriter&) const {}
 
 void L3ConfigurationChangeAcknowledge::text(std::ostream& os) const {
     os << "ConfigurationChangeAcknowledge";
+}
+
+L3ConfigurationChangeAcknowledge L3ConfigurationChangeAcknowledge::Builder::build() const {
+    return L3ConfigurationChangeAcknowledge{};
+}
+
+L3ConfigurationChangeAcknowledge::Builder L3ConfigurationChangeAcknowledge::builder() {
+    return Builder{};
 }
 
 // ── L3ConfigurationChangeReject ────────────────────────────────────────
@@ -2021,6 +2226,16 @@ void L3ConfigurationChangeReject::write(BitWriter& bw) const {
 
 void L3ConfigurationChangeReject::text(std::ostream& os) const {
     os << "ConfigurationChangeReject: cause=" << RRCause2Str(mCause);
+}
+
+L3ConfigurationChangeReject L3ConfigurationChangeReject::Builder::build() const {
+    L3ConfigurationChangeReject msg;
+    msg.mCause = mCause;
+    return msg;
+}
+
+L3ConfigurationChangeReject::Builder L3ConfigurationChangeReject::builder() {
+    return Builder{};
 }
 
 // ── L3PartialRelease ───────────────────────────────────────────────────
@@ -2044,6 +2259,16 @@ void L3PartialRelease::text(std::ostream& os) const {
     mChanDesc.text(os);
 }
 
+L3PartialRelease L3PartialRelease::Builder::build() const {
+    L3PartialRelease msg;
+    msg.mChanDesc = mChanDesc;
+    return msg;
+}
+
+L3PartialRelease::Builder L3PartialRelease::builder() {
+    return Builder{};
+}
+
 // ── L3PartialReleaseComplete ───────────────────────────────────────────
 
 Expected<L3PartialReleaseComplete> L3PartialReleaseComplete::parse(BitReader&) {
@@ -2054,6 +2279,14 @@ void L3PartialReleaseComplete::write(BitWriter&) const {}
 
 void L3PartialReleaseComplete::text(std::ostream& os) const {
     os << "PartialReleaseComplete";
+}
+
+L3PartialReleaseComplete L3PartialReleaseComplete::Builder::build() const {
+    return L3PartialReleaseComplete{};
+}
+
+L3PartialReleaseComplete::Builder L3PartialReleaseComplete::builder() {
+    return Builder{};
 }
 
 // ── L3ExtendedMeasurementReport ────────────────────────────────────────

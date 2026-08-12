@@ -163,6 +163,8 @@ class L3ChannelRelease {
     RRCause mCause{RRCause::Normal_Event};
     bool mGprsResumptionPresent{false};
     bool mGprsResumptionBit{false};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x0d;
 
@@ -172,6 +174,21 @@ public:
     RRCause cause() const { return mCause; }
     bool hasGprsResumption() const { return mGprsResumptionPresent; }
     bool gprsResumption() const { return mGprsResumptionBit; }
+
+    struct Builder {
+        RRCause mCause{RRCause::Normal_Event};
+        bool mGprsResumptionPresent{false};
+        bool mGprsResumptionBit{false};
+
+        /// Set the RR cause.
+        Builder& cause(RRCause v) { mCause = v; return *this; }
+        /// Set GPRS resumption flag.
+        Builder& gprsResumption(bool present, bool value) { mGprsResumptionPresent = present; mGprsResumptionBit = value; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ChannelRelease build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -186,10 +203,23 @@ public:
 
 class L3RRStatus {
     RRCause mCause{RRCause::Normal_Event};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x12;
 
     RRCause cause() const { return mCause; }
+
+    struct Builder {
+        RRCause mCause{RRCause::Normal_Event};
+
+        /// Set the RR cause.
+        Builder& cause(RRCause v) { mCause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3RRStatus build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const { return 1; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -227,10 +257,15 @@ public:
         L3ChannelMode mMode1;
         L3MultiRateConfiguration mMultiRate;
     public:
+        /// Set the channel description.
         Builder& channel(const L3ChannelDescription& ch);
+        /// Set the power command.
         Builder& powerCommand(const L3PowerCommand& pc);
+        /// Set the channel mode (sets mHaveMode1 flag).
         Builder& mode1(const L3ChannelMode& mode);
+        /// Set the multi-rate configuration.
         Builder& multiRate(const L3MultiRateConfiguration& mr);
+        /// Build the final message.
         L3AssignmentCommand build();
     };
 
@@ -249,10 +284,23 @@ public:
 
 class L3AssignmentComplete {
     RRCause mCause{RRCause::Normal_Event};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x29;
 
     RRCause cause() const { return mCause; }
+
+    struct Builder {
+        RRCause mCause{RRCause::Normal_Event};
+
+        /// Set the RR cause.
+        Builder& cause(RRCause v) { mCause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3AssignmentComplete build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const { return 1; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -267,10 +315,23 @@ public:
 
 class L3AssignmentFailure {
     RRCause mCause{RRCause::Normal_Event};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x2f;
 
     RRCause cause() const { return mCause; }
+
+    struct Builder {
+        RRCause mCause{RRCause::Normal_Event};
+
+        /// Set the RR cause.
+        Builder& cause(RRCause v) { mCause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3AssignmentFailure build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const { return 1; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -342,6 +403,8 @@ class L3CipheringModeCommand {
     bool mCiphering{false};
     int mAlgorithm{0};
     L3CipheringModeResponse mCipheringModeResponse;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x35;
 
@@ -353,6 +416,23 @@ public:
     int algorithm() const { return mAlgorithm; }
     bool includeIMEISV() const { return mCipheringModeResponse.includeIMEISV(); }
     const L3CipheringModeResponse& cipheringModeResponse() const { return mCipheringModeResponse; }
+
+    struct Builder {
+        bool mCiphering{false};
+        int mAlgorithm{0};
+        L3CipheringModeResponse mCipheringModeResponse;
+
+        /// Set ciphering on/off.
+        Builder& ciphering(bool v) { mCiphering = v; return *this; }
+        /// Set ciphering algorithm (A5/x).
+        Builder& algorithm(int v) { mAlgorithm = v; return *this; }
+        /// Set ciphering mode response (IMEISV flag etc.).
+        Builder& cipheringModeResponse(L3CipheringModeResponse v) { mCipheringModeResponse = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CipheringModeCommand build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const { return 1; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -369,6 +449,13 @@ class L3CipheringModeComplete {
 public:
     static constexpr int MTI = 0x32;
 
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3CipheringModeComplete build() const;
+    };
+    friend struct Builder;
+    static Builder builder();
+
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
@@ -382,10 +469,23 @@ public:
 
 class L3HandoverComplete {
     RRCause mCause{RRCause::Normal_Event};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x2c;
 
     RRCause cause() const { return mCause; }
+
+    struct Builder {
+        RRCause mCause{RRCause::Normal_Event};
+
+        /// Set the RR cause.
+        Builder& cause(RRCause v) { mCause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3HandoverComplete build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const { return 1; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -400,10 +500,23 @@ public:
 
 class L3HandoverFailure {
     RRCause mCause{RRCause::Normal_Event};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x28;
 
     RRCause cause() const { return mCause; }
+
+    struct Builder {
+        RRCause mCause{RRCause::Normal_Event};
+
+        /// Set the RR cause.
+        Builder& cause(RRCause v) { mCause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3HandoverFailure build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const { return 1; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -420,6 +533,8 @@ class L3ChannelModeModify {
     L3ChannelDescription mDescription;
     L3ChannelMode mMode;
     L3MultiRateConfiguration mMultiRate;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x10;
 
@@ -430,6 +545,23 @@ public:
     bool isAMR() const { return mMode.isAMR(); }
     const L3ChannelDescription& description() const { return mDescription; }
     const L3ChannelMode& mode() const { return mMode; }
+
+    struct Builder {
+        L3ChannelDescription mDescription;
+        L3ChannelMode mMode;
+        L3MultiRateConfiguration mMultiRate;
+
+        /// Set the channel description.
+        Builder& description(L3ChannelDescription v) { mDescription = v; return *this; }
+        /// Set the channel mode.
+        Builder& mode(L3ChannelMode v) { mMode = v; return *this; }
+        /// Set multi-rate configuration.
+        Builder& multiRate(L3MultiRateConfiguration v) { mMultiRate = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ChannelModeModify build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -445,11 +577,27 @@ public:
 class L3ChannelModeModifyAcknowledge {
     L3ChannelDescription mDescription;
     L3ChannelMode mMode;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x17;
 
     const L3ChannelDescription& description() const { return mDescription; }
     const L3ChannelMode& mode() const { return mMode; }
+
+    struct Builder {
+        L3ChannelDescription mDescription;
+        L3ChannelMode mMode;
+
+        /// Set the channel description.
+        Builder& description(L3ChannelDescription v) { mDescription = v; return *this; }
+        /// Set the channel mode.
+        Builder& mode(L3ChannelMode v) { mMode = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ChannelModeModifyAcknowledge build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -908,6 +1056,8 @@ class L3ImmediateAssignment {
     std::vector<uint8_t> mMobileAllocation;
     bool mStartTimePresent{false};
     uint32_t mStartTimeFrame{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x3f;
 
@@ -918,6 +1068,36 @@ public:
     const L3TimingAdvance& timingAdvance() const { return mTimingAdvance; }
     bool hasStartTime() const { return mStartTimePresent; }
     uint32_t startTimeFrame() const { return mStartTimeFrame; }
+
+    struct Builder {
+        L3PageMode mPageMode{};
+        L3DedicatedModeOrTBF mDedicatedModeOrTBF{};
+        L3RequestReference mRequestReference{};
+        L3ChannelDescription mChannelDescription{};
+        L3TimingAdvance mTimingAdvance{};
+        std::vector<uint8_t> mMobileAllocation;
+        bool mStartTimePresent{false};
+        uint32_t mStartTimeFrame{0};
+
+        /// Set the page mode (normal/urgent).
+        Builder& pageMode(L3PageMode v) { mPageMode = v; return *this; }
+        /// Set dedicated mode or TBF flag.
+        Builder& dedicatedModeOrTBF(L3DedicatedModeOrTBF v) { mDedicatedModeOrTBF = v; return *this; }
+        /// Set the request reference from RACH.
+        Builder& requestReference(L3RequestReference v) { mRequestReference = v; return *this; }
+        /// Set the channel description for assignment.
+        Builder& channelDescription(L3ChannelDescription v) { mChannelDescription = v; return *this; }
+        /// Set timing advance value.
+        Builder& timingAdvance(L3TimingAdvance v) { mTimingAdvance = v; return *this; }
+        /// Set mobile allocation list.
+        Builder& mobileAllocation(std::vector<uint8_t> v) { mMobileAllocation = std::move(v); return *this; }
+        /// Set optional start time frame.
+        Builder& startTime(uint32_t fn, bool present = true) { mStartTimeFrame = fn; mStartTimePresent = present; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ImmediateAssignment build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -941,6 +1121,8 @@ class L3ImmediateAssignmentExtended {
     uint32_t mStartTimeFrame{0};
     bool mHaveAdditionalChannel{false};
     L3AdditionalChannelDescription mAdditionalChannel;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x39;
 
@@ -949,6 +1131,40 @@ public:
     const L3ChannelDescription& channelDescription() const { return mChannelDescription; }
     bool hasAdditionalChannel() const { return mHaveAdditionalChannel; }
     const L3AdditionalChannelDescription& additionalChannel() const { return mAdditionalChannel; }
+
+    struct Builder {
+        L3PageMode mPageMode{};
+        L3DedicatedModeOrTBF mDedicatedModeOrTBF{};
+        L3RequestReference mRequestReference{};
+        L3ChannelDescription mChannelDescription{};
+        L3TimingAdvance mTimingAdvance{};
+        std::vector<uint8_t> mMobileAllocation;
+        bool mStartTimePresent{false};
+        uint32_t mStartTimeFrame{0};
+        bool mHaveAdditionalChannel{false};
+        L3AdditionalChannelDescription mAdditionalChannel;
+
+        /// Set the page mode (normal/urgent).
+        Builder& pageMode(L3PageMode v) { mPageMode = v; return *this; }
+        /// Set dedicated mode or TBF flag.
+        Builder& dedicatedModeOrTBF(L3DedicatedModeOrTBF v) { mDedicatedModeOrTBF = v; return *this; }
+        /// Set the request reference from RACH.
+        Builder& requestReference(L3RequestReference v) { mRequestReference = v; return *this; }
+        /// Set the channel description for assignment.
+        Builder& channelDescription(L3ChannelDescription v) { mChannelDescription = v; return *this; }
+        /// Set timing advance value.
+        Builder& timingAdvance(L3TimingAdvance v) { mTimingAdvance = v; return *this; }
+        /// Set mobile allocation list.
+        Builder& mobileAllocation(std::vector<uint8_t> v) { mMobileAllocation = std::move(v); return *this; }
+        /// Set optional start time frame.
+        Builder& startTime(uint32_t fn, bool present = true) { mStartTimeFrame = fn; mStartTimePresent = present; return *this; }
+        /// Set additional channel description (sets mHaveAdditionalChannel flag).
+        Builder& additionalChannel(L3AdditionalChannelDescription v) { mAdditionalChannel = v; mHaveAdditionalChannel = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ImmediateAssignmentExtended build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -967,6 +1183,8 @@ class L3ImmediateAssignmentReject {
     std::vector<L3RequestReference> mRequestReferences;
     std::vector<unsigned> mWaitIndications;
     unsigned mWaitIndication{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x3a;
 
@@ -977,6 +1195,27 @@ public:
     unsigned featureIndicator() const { return mFeatureIndicator; }
     unsigned waitTime() const { return mWaitIndication; }
     const std::vector<L3RequestReference>& requestReferences() const { return mRequestReferences; }
+
+    struct Builder {
+        unsigned mFeatureIndicator{0};
+        unsigned mPageMode{0};
+        std::vector<L3RequestReference> mRequestReferences;
+        std::vector<unsigned> mWaitIndications;
+        unsigned mWaitIndication{0};
+
+        /// Set the feature indicator.
+        Builder& featureIndicator(unsigned v) { mFeatureIndicator = v; return *this; }
+        /// Set the page mode.
+        Builder& pageMode(unsigned v) { mPageMode = v; return *this; }
+        /// Add a wait indication with request reference and wait time in seconds.
+        Builder& addWaitIndication(L3RequestReference ref, unsigned waitSeconds);
+        /// Set simple wait time (sets mWaitIndication directly).
+        Builder& waitTime(unsigned seconds) { mWaitIndication = seconds; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ImmediateAssignmentReject build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -993,6 +1232,8 @@ class L3AdditionalAssignment {
     L3AdditionalChannelDescription mAdditionalChannel;
     bool mHavePowerCommand{false};
     L3PowerCommand mPowerCommand;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x3b;
 
@@ -1001,6 +1242,21 @@ public:
     const L3AdditionalChannelDescription& additionalChannel() const { return mAdditionalChannel; }
     bool hasPowerCommand() const { return mHavePowerCommand; }
     const L3PowerCommand& powerCommand() const { return mPowerCommand; }
+
+    struct Builder {
+        L3AdditionalChannelDescription mAdditionalChannel;
+        bool mHavePowerCommand{false};
+        L3PowerCommand mPowerCommand;
+
+        /// Set the additional channel description.
+        Builder& additionalChannel(L3AdditionalChannelDescription v) { mAdditionalChannel = v; return *this; }
+        /// Set power command (sets mHavePowerCommand flag).
+        Builder& powerCommand(L3PowerCommand v) { mPowerCommand = v; mHavePowerCommand = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3AdditionalAssignment build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -1015,12 +1271,25 @@ public:
 
 class L3PhysicalInformation {
     L3TimingAdvance mTA;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x2d;
 
     L3PhysicalInformation() = default;
 
     const L3TimingAdvance& timingAdvance() const { return mTA; }
+
+    struct Builder {
+        L3TimingAdvance mTA{};
+
+        /// Set timing advance value.
+        Builder& timingAdvance(L3TimingAdvance v) { mTA = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3PhysicalInformation build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const { return mTA.lengthV(); }
     [[nodiscard]] int mti() const { return MTI; }
@@ -1057,11 +1326,17 @@ public:
         L3PowerCommandAndAccessType mPowerCommandAccessType;
         L3SynchronizationIndication mSynchronizationIndication;
     public:
+        /// Set the target cell description.
         Builder& cellDescription(const L3CellDescription& cd);
+        /// Set the channel description after handover.
         Builder& channelDescriptionAfter(const L3ChannelDescription2& cda);
+        /// Set the handover reference number.
         Builder& handoverReference(const L3HandoverReference& hr);
+        /// Set power command and access type.
         Builder& powerCommandAccessType(const L3PowerCommandAndAccessType& pcat);
+        /// Set synchronization indication.
         Builder& syncIndication(const L3SynchronizationIndication& si);
+        /// Build the final message.
         L3HandoverCommand build();
     };
 
@@ -1150,6 +1425,8 @@ class L3ConfigurationChangeCommand {
     L3ChannelDescription mChanDesc;
     bool mHavePowerCmd{false};
     L3PowerCommand mPowerCmd;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x30;
 
@@ -1159,6 +1436,22 @@ public:
     const L3ChannelDescription& channelDescription() const { return mChanDesc; }
     bool hasPowerCommand() const { return mHavePowerCmd; }
     const L3PowerCommand& powerCommand() const { return mPowerCmd; }
+
+    struct Builder {
+        bool mHaveChanDesc{false};
+        L3ChannelDescription mChanDesc;
+        bool mHavePowerCmd{false};
+        L3PowerCommand mPowerCmd;
+
+        /// Set channel description (sets mHaveChanDesc flag).
+        Builder& channelDescription(L3ChannelDescription v) { mChanDesc = v; mHaveChanDesc = true; return *this; }
+        /// Set power command (sets mHavePowerCmd flag).
+        Builder& powerCommand(L3PowerCommand v) { mPowerCmd = v; mHavePowerCmd = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ConfigurationChangeCommand build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -1175,6 +1468,13 @@ class L3ConfigurationChangeAcknowledge {
 public:
     static constexpr int MTI = 0x31;
 
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3ConfigurationChangeAcknowledge build() const;
+    };
+    friend struct Builder;
+    static Builder builder();
+
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
@@ -1188,6 +1488,8 @@ public:
 
 class L3ConfigurationChangeReject {
     RRCause mCause{RRCause::Normal_Event};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x33;
 
@@ -1195,6 +1497,17 @@ public:
     explicit L3ConfigurationChangeReject(RRCause cause) : mCause(cause) {}
 
     RRCause cause() const { return mCause; }
+
+    struct Builder {
+        RRCause mCause{RRCause::Normal_Event};
+
+        /// Set the RR cause.
+        Builder& cause(RRCause v) { mCause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ConfigurationChangeReject build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const { return 1; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -1209,12 +1522,25 @@ public:
 
 class L3PartialRelease {
     L3ChannelDescription mChanDesc;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x0a;
 
     L3PartialRelease() = default;
 
     const L3ChannelDescription& channelDescription() const { return mChanDesc; }
+
+    struct Builder {
+        L3ChannelDescription mChanDesc;
+
+        /// Set the channel description.
+        Builder& channelDescription(L3ChannelDescription v) { mChanDesc = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3PartialRelease build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const { return mChanDesc.lengthV(); }
     [[nodiscard]] int mti() const { return MTI; }
@@ -1230,6 +1556,13 @@ public:
 class L3PartialReleaseComplete {
 public:
     static constexpr int MTI = 0x0f;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3PartialReleaseComplete build() const;
+    };
+    friend struct Builder;
+    static Builder builder();
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
