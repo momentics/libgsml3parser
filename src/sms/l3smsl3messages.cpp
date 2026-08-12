@@ -346,7 +346,7 @@ Expected<L3SMSDeliver> L3SMSDeliver::parse(BitReader& br) {
             if (!lb) return Expected<L3SMSDeliver>::error(lb.error());
             lenByte = static_cast<uint8_t>(lb.value());
         }
-        if (lenByte >= 1 && remainingBytes >= 9 + 1 + lenByte) {
+        if (lenByte >= 1 && remainingBytes >= 9 + 1 + static_cast<size_t>(lenByte)) {
             std::vector<uint8_t> addrBytes;
             addrBytes.push_back(lenByte);
             for (size_t i = 0; i < lenByte; ++i) {
@@ -465,7 +465,7 @@ Expected<L3SMSDeliverRep> L3SMSDeliverRep::parse(BitReader& br) {
             if (!lb) return Expected<L3SMSDeliverRep>::error(lb.error());
             lenByte = static_cast<uint8_t>(lb.value());
         }
-        if (lenByte >= 1 && remainingBytes >= 2 + 1 + lenByte) {
+        if (lenByte >= 1 && remainingBytes >= 2 + 1 + static_cast<size_t>(lenByte)) {
             std::vector<uint8_t> addrBytes;
             addrBytes.push_back(lenByte);
             for (size_t i = 0; i < lenByte; ++i) {
