@@ -51,6 +51,9 @@ enum class TPDCS : uint8_t {
     Default_Alphabet = 0x00,
     Default_8bit     = 0x08,
     UCS2             = 0x0C,
+    Range_Indicator  = 0x40,
+    RLA_64           = 0x44,
+    RLA_128          = 0x45,
 };
 
 const char* TPDCS2Str(TPDCS dcs);
@@ -58,12 +61,29 @@ const char* TPDCS2Str(TPDCS dcs);
 // ── TP Protocol Identifier (GSM 03.40 9.2.3.9) ────────────────────────
 
 enum class TPPID : uint8_t {
-    Default      = 0x00,
-    GSM          = 0x01,
-    X121         = 0x03,
-    Telex        = 0x04,
-    LandLine     = 0x06,
+    Default               = 0x00,
+    GSM                   = 0x01,
+    X121                  = 0x03,
+    Telex                 = 0x04,
+    LandLine              = 0x06,
     SS7_DestinationAccess = 0x0A,
+    TeX_Page              = 0x0B,
+    Packet_Switched_64k   = 0x0E,
+    TeX_Information       = 0x10,
+    Packet_Switched_1200  = 0x11,
+    SS7_Telephone_User    = 0x12,
+    SS7_Telex_User        = 0x13,
+    SS7_Direct_Connection = 0x14,
+    SS7_MAP               = 0x15,
+    SNA                   = 0x16,
+    X400_FTAM             = 0x17,
+    Telematic_Application = 0x18,
+    SCF_Access            = 0x19,
+    H323_Video            = 0x1A,
+    Internet_ST_FIP       = 0x1B,
+    CAP                   = 0x1C,
+    SS7_SCCP              = 0x1D,
+    X25_Packet_Switched   = 0x1E,
 };
 
 const char* TPPID2Str(TPPID pid);

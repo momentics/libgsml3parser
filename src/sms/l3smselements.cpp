@@ -36,18 +36,38 @@ const char* TPDCS2Str(TPDCS dcs) {
         case TPDCS::Default_Alphabet: return "Default-Alphabet";
         case TPDCS::Default_8bit:     return "Default-8bit";
         case TPDCS::UCS2:             return "UCS2";
+        case TPDCS::Range_Indicator:  return "Reserved-Range";
+        case TPDCS::RLA_64:           return "RLA-64";
+        case TPDCS::RLA_128:          return "RLA-128";
     }
     return "Unknown";
 }
 
 const char* TPPID2Str(TPPID pid) {
     switch (pid) {
-        case TPPID::Default: return "Default";
-        case TPPID::GSM:     return "GSM";
-        case TPPID::X121:    return "X.121";
-        case TPPID::Telex:   return "Telex";
-        case TPPID::LandLine: return "Land-Line";
+        case TPPID::Default:               return "Default";
+        case TPPID::GSM:                   return "GSM";
+        case TPPID::X121:                  return "X.121";
+        case TPPID::Telex:                 return "Telex";
+        case TPPID::LandLine:              return "Land-Line";
         case TPPID::SS7_DestinationAccess: return "SS7-Destination-Access";
+        case TPPID::TeX_Page:              return "TeX-Page";
+        case TPPID::Packet_Switched_64k:   return "PS-64k";
+        case TPPID::TeX_Information:       return "TeX-Info";
+        case TPPID::Packet_Switched_1200:  return "PS-1200";
+        case TPPID::SS7_Telephone_User:    return "SS7-Tel-User";
+        case TPPID::SS7_Telex_User:        return "SS7-Tex-User";
+        case TPPID::SS7_Direct_Connection: return "SS7-Direct";
+        case TPPID::SS7_MAP:               return "SS7-MAP";
+        case TPPID::SNA:                   return "SNA";
+        case TPPID::X400_FTAM:             return "X.400-FTAM";
+        case TPPID::Telematic_Application: return "Telematic";
+        case TPPID::SCF_Access:            return "SCF-Access";
+        case TPPID::H323_Video:            return "H.323-Video";
+        case TPPID::Internet_ST_FIP:       return "ST-FIP";
+        case TPPID::CAP:                   return "CAP";
+        case TPPID::SS7_SCCP:             return "SS7-SCCP";
+        case TPPID::X25_Packet_Switched:   return "X.25-PS";
     }
     return "Unknown";
 }

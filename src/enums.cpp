@@ -43,8 +43,17 @@ const char* RRCause2Str(RRCause cause) {
         case RRCause::Message_Type_Invalid:          return "Message_Type_Invalid";
         case RRCause::Message_Type_Not_Compatible:   return "Message_Type_Not_Compatible";
         case RRCause::Conditional_IE_Error:          return "Conditional_IE_Error";
-        case RRCause::No_Cell_Available:             return "No_Cell_Available";
-        case RRCause::Protocol_Error_Unspecified:    return "Protocol_Error";
+        case RRCause::No_Cell_Available:                return "No_Cell_Available";
+        case RRCause::IE_Not_Coded:                     return "IE_Not_Coded";
+        case RRCause::Unidentified_IE:                  return "Unidentified_IE";
+        case RRCause::Condensed_IE_Error:               return "Condensed_IE_Error";
+        case RRCause::OutOfRange_IE:                    return "OutOfRange_IE";
+        case RRCause::Message_Type_Incompatible:        return "Message_Type_Incompatible";
+        case RRCause::Protocol_Error_T3312_Expired:     return "Protocol_Error_T3312_Expired";
+        case RRCause::Protocol_Error_T3395_Expired:     return "Protocol_Error_T3395_Expired";
+        case RRCause::Protocol_Error_GMM_T3346_Expired: return "Protocol_Error_GMM_T3346_Expired";
+        case RRCause::Protocol_Error_Unknown:           return "Protocol_Error_Unknown";
+        case RRCause::Protocol_Error_Unspecified:       return "Protocol_Error";
         default:                                     return "Unknown_RR_Cause";
     }
 }
@@ -61,8 +70,9 @@ const char* MMRejectCause2Str(MMRejectCause cause) {
         case MMRejectCause::Location_Area_Not_Allowed:   return "LA_Not_Allowed";
         case MMRejectCause::Roaming_Not_Allowed_In_LA:   return "Roaming_Not_Allowed";
         case MMRejectCause::No_Suitable_Cells_In_LA:     return "No_Suitable_Cells";
-        case MMRejectCause::Network_Failure:             return "Network_Failure";
-        case MMRejectCause::MAC_Failure:                 return "MAC_Failure";
+        case MMRejectCause::Network_Failure:                   return "Network_Failure";
+        case MMRejectCause::Gprs_Packet_Service_Not_Available: return "GPRS_Packet_Service_Not_Available";
+        case MMRejectCause::MAC_Failure:                       return "MAC_Failure";
         case MMRejectCause::Synch_Failure:               return "Synch_Failure";
         case MMRejectCause::Congestion:                  return "Congestion";
         case MMRejectCause::GSM_Authentication_Unacceptable: return "Auth_Unacceptable";

@@ -47,6 +47,15 @@ enum class RRCause : uint8_t {
     Message_Type_Not_Compatible      = 0x62,
     Conditional_IE_Error             = 0x64,
     No_Cell_Available                = 0x65,
+    IE_Not_Coded                     = 0x66,
+    Unidentified_IE                  = 0x67,
+    Condensed_IE_Error               = 0x68,
+    OutOfRange_IE                    = 0x69,
+    Message_Type_Incompatible        = 0x6a,
+    Protocol_Error_T3312_Expired     = 0x6b,
+    Protocol_Error_T3395_Expired     = 0x6c,
+    Protocol_Error_GMM_T3346_Expired = 0x6d,
+    Protocol_Error_Unknown           = 0x6e,
     Protocol_Error_Unspecified       = 0x6f
 };
 
@@ -64,8 +73,9 @@ enum class MMRejectCause : uint8_t {
     Location_Area_Not_Allowed       = 0xc,
     Roaming_Not_Allowed_In_LA       = 0xd,
     No_Suitable_Cells_In_LA         = 0xf,
-    Network_Failure                 = 0x11,
-    MAC_Failure                     = 0x14,
+    Network_Failure                       = 0x11,
+    Gprs_Packet_Service_Not_Available     = 0x12,
+    MAC_Failure                           = 0x14,
     Synch_Failure                   = 0x15,
     Congestion                      = 0x16,
     GSM_Authentication_Unacceptable = 0x17,
