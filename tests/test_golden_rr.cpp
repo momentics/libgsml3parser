@@ -1916,12 +1916,12 @@ TEST(GoldenRR, NotifyAppData_RoundTrip) {
 }
 
 // =====================================================================
-// RR MESSAGE TYPE VALUES — Additional messages (Phase 1)
+// RR MESSAGE TYPE VALUES — Additional messages
 // Reference: GSM_RR_Types.ttcn RrMessageType enum
 // Spec-verified: 3GPP TS 44.018 Table 10.4.1
 // =====================================================================
 
-TEST(GoldenRR, NewMessageTypeValues) {
+TEST(GoldenRR, MessageTypeValues_Extended) {
     EXPECT_EQ(L3ConfigurationChangeCommand::MTI, 0x30);
     EXPECT_EQ(L3ConfigurationChangeAcknowledge::MTI, 0x31);
     EXPECT_EQ(L3ConfigurationChangeReject::MTI, 0x33);

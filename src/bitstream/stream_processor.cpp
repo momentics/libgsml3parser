@@ -59,15 +59,18 @@ bool L3StreamProcessor::processOne(std::function<void(const ParsedMessage&)> han
 
     // Categorize by protocol discriminator.
     switch (messagePD(*msgResult)) {
-        case L3PD::RadioResource:      mStats.rrMessages++; break;
-        case L3PD::MobilityManagement: mStats.mmMessages++; break;
-        case L3PD::CallControl:        mStats.ccMessages++; break;
-        case L3PD::NonCallSS:          mStats.ssMessages++; break;
+        case L3PD::RadioResource:          mStats.rrMessages++; break;
+        case L3PD::MobilityManagement:     mStats.mmMessages++; break;
+        case L3PD::CallControl:            mStats.ccMessages++; break;
+        case L3PD::NonCallSS:              mStats.ssMessages++; break;
         case L3PD::GPRSMobilityManagement: mStats.gmmMessages++; break;
         case L3PD::GPRSSessionManagement:  mStats.smMessages++; break;
         case L3PD::SMS:                    mStats.smsMessages++; break;
         case L3PD::BroadcastCallControl:   mStats.bccMessages++; break;
         case L3PD::GroupCallControl:       mStats.gccMessages++; break;
+        case L3PD::Location:               mStats.lsMessages++; break;
+        case L3PD::Extended:               mStats.extendedMessages++; break;
+        case L3PD::TestProcedure:          mStats.testprocMessages++; break;
         default:                           mStats.unsupportedPD++; break;
     }
 
@@ -104,15 +107,18 @@ void L3StreamProcessor::processUntilEOF(FrameHandler& handler) {
         mStats.parsedOk++;
 
         switch (messagePD(*msgResult)) {
-            case L3PD::RadioResource:      mStats.rrMessages++; break;
-            case L3PD::MobilityManagement: mStats.mmMessages++; break;
-            case L3PD::CallControl:        mStats.ccMessages++; break;
-            case L3PD::NonCallSS:          mStats.ssMessages++; break;
+            case L3PD::RadioResource:          mStats.rrMessages++; break;
+            case L3PD::MobilityManagement:     mStats.mmMessages++; break;
+            case L3PD::CallControl:            mStats.ccMessages++; break;
+            case L3PD::NonCallSS:              mStats.ssMessages++; break;
             case L3PD::GPRSMobilityManagement: mStats.gmmMessages++; break;
             case L3PD::GPRSSessionManagement:  mStats.smMessages++; break;
             case L3PD::SMS:                    mStats.smsMessages++; break;
             case L3PD::BroadcastCallControl:   mStats.bccMessages++; break;
             case L3PD::GroupCallControl:       mStats.gccMessages++; break;
+            case L3PD::Location:               mStats.lsMessages++; break;
+            case L3PD::Extended:               mStats.extendedMessages++; break;
+            case L3PD::TestProcedure:          mStats.testprocMessages++; break;
             default:                           mStats.unsupportedPD++; break;
         }
 
@@ -151,15 +157,18 @@ void L3StreamProcessor::processN(size_t count, FrameHandler& handler) {
         mStats.parsedOk++;
 
         switch (messagePD(*msgResult)) {
-            case L3PD::RadioResource:      mStats.rrMessages++; break;
-            case L3PD::MobilityManagement: mStats.mmMessages++; break;
-            case L3PD::CallControl:        mStats.ccMessages++; break;
-            case L3PD::NonCallSS:          mStats.ssMessages++; break;
+            case L3PD::RadioResource:          mStats.rrMessages++; break;
+            case L3PD::MobilityManagement:     mStats.mmMessages++; break;
+            case L3PD::CallControl:            mStats.ccMessages++; break;
+            case L3PD::NonCallSS:              mStats.ssMessages++; break;
             case L3PD::GPRSMobilityManagement: mStats.gmmMessages++; break;
             case L3PD::GPRSSessionManagement:  mStats.smMessages++; break;
             case L3PD::SMS:                    mStats.smsMessages++; break;
             case L3PD::BroadcastCallControl:   mStats.bccMessages++; break;
             case L3PD::GroupCallControl:       mStats.gccMessages++; break;
+            case L3PD::Location:               mStats.lsMessages++; break;
+            case L3PD::Extended:               mStats.extendedMessages++; break;
+            case L3PD::TestProcedure:          mStats.testprocMessages++; break;
             default:                           mStats.unsupportedPD++; break;
         }
 

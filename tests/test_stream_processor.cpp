@@ -24,16 +24,22 @@
 #include "gsml3parser/bitstream/byte_source.h"
 #include "gsml3parser/parser.h"
 #include "gsml3parser/visitor.h"
+#include "gsml3parser/enums.h"
 #include "gsml3parser/rr/l3rrmessages.h"
 #include "gsml3parser/mm/l3mmmessages.h"
 #include "gsml3parser/cc/l3ccmessages.h"
+#include "gsml3parser/ss/l3ssmessages.h"
 #include "gsml3parser/gmm/l3gmmmessages.h"
 #include "gsml3parser/sm/l3smmessages.h"
 #include "gsml3parser/sms/l3smsmessages.h"
 #include "gsml3parser/bcc/l3bccmessages.h"
 #include "gsml3parser/gcc/l3gccmessages.h"
+#include "gsml3parser/ls/l3lsmessages.h"
+#include "gsml3parser/extended/l3extendedmessages.h"
+#include "gsml3parser/testproc/l3testproceduremessages.h"
 #include <vector>
 #include <functional>
+#include <string>
 
 using namespace gsml3parser;
 
@@ -329,4 +335,172 @@ TEST(L3StreamProcessor, L2FramedAllDomains) {
     const auto& stats = proc->stats();
     // At least some frames should parse (depends on message body validity).
     ASSERT_GT(stats.totalFrames, 0u);
+}
+
+// ── All 12 PD domains in a single stream with L2 length framing ─────────
+
+TEST(L3StreamProcessor, AllTwelveDomains) {
+    // Build L2-framed stream from known-good roundtrip data for all 12 PD domains.
+    std::vector<uint8_t> data;
+
+    auto appendFrame = [&data](const ParsedMessage& msg) {
+        auto hex = writeL3Hex(msg);
+        ASSERT_TRUE(hex);
+        // Decode hex to bytes, prepend L2 length byte.
+        std::string h = hex.value();
+        std::vector<uint8_t> bytes(h.size() / 2);
+        for (size_t i = 0; i < bytes.size(); ++i) {
+            unsigned hi = (h[i*2] >= 'a' ? h[i*2] - 'a' + 10 : h[i*2] - '0');
+            unsigned lo = (h[i*2+1] >= 'a' ? h[i*2+1] - 'a' + 10 : h[i*2+1] - '0');
+            bytes[i] = static_cast<uint8_t>((hi << 4) | lo);
+        }
+        data.push_back(static_cast<uint8_t>(bytes.size()));
+        data.insert(data.end(), bytes.begin(), bytes.end());
+    };
+
+    // RR: ChannelRelease
+    appendFrame(ParsedMessage(RRM(L3ChannelRelease(RRCause::Normal_Event))));
+    // MM: CMServiceAccept
+    appendFrame(ParsedMessage(MMM(L3CMServiceAccept{})));
+    // CC: Disconnect
+    appendFrame(ParsedMessage(CCM(L3Disconnect(CCCause::Normal_Call_Clearing))));
+    // SS: ReleaseComplete
+    appendFrame(ParsedMessage(SSM(L3SupServReleaseCompleteMessage{})));
+    // GMM: AttachComplete (empty body)
+    appendFrame(ParsedMessage(GMM(L3AttachComplete{})));
+    // SM: DeactivatePDPContextRequest (minimal body)
+    appendFrame(ParsedMessage(SM(L3DeactivatePDPContextRequest{})));
+    // SMS: CPAck (minimal)
+    appendFrame(ParsedMessage(SMS(L3CPAck{})));
+    // BCC: ReleaseComplete
+    L3BCCReleaseComplete bccRC;
+    bccRC.ti(0);
+    appendFrame(ParsedMessage(BCCM(std::move(bccRC))));
+    // GCC: ReleaseComplete
+    L3GCCReleaseComplete gccRC;
+    gccRC.ti(0);
+    appendFrame(ParsedMessage(GCCM(std::move(gccRC))));
+    // LS: LocationServiceRequest
+    appendFrame(ParsedMessage(LSM(L3LocationServiceRequest{})));
+    // Extended: raw message with MTI=0x55 and body
+    uint8_t extData[] = {0xE0, 0x55, 0xAA, 0xBB};
+    auto extParsed = parseL3(std::span<const uint8_t>(extData));
+    ASSERT_TRUE(extParsed);
+    appendFrame(*extParsed);
+    // TestProcedure: raw message with MTI=0x99 and body
+    uint8_t tpData[] = {0xF0, 0x99, 0xCC};
+    auto tpParsed = parseL3(std::span<const uint8_t>(tpData));
+    ASSERT_TRUE(tpParsed);
+    appendFrame(*tpParsed);
+
+    auto proc = L3StreamBuilder()
+        .source(std::span<const uint8_t>(data.data(), data.size()))
+        .useL2Length(true)
+        .build();
+
+    TestHandler handler;
+    proc->processUntilEOF(handler);
+
+    const auto& stats = proc->stats();
+    // All 12 frames should be processed.
+    ASSERT_EQ(stats.totalFrames, 12u);
+    ASSERT_EQ(stats.parsedOk, 12u);
+    ASSERT_EQ(stats.parseErrors, 0u);
+
+    // Each domain counter should be exactly 1.
+    ASSERT_EQ(stats.rrMessages, 1u);
+    ASSERT_EQ(stats.mmMessages, 1u);
+    ASSERT_EQ(stats.ccMessages, 1u);
+    ASSERT_EQ(stats.ssMessages, 1u);
+    ASSERT_EQ(stats.gmmMessages, 1u);
+    ASSERT_EQ(stats.smMessages, 1u);
+    ASSERT_EQ(stats.smsMessages, 1u);
+    ASSERT_EQ(stats.bccMessages, 1u);
+    ASSERT_EQ(stats.gccMessages, 1u);
+    ASSERT_EQ(stats.lsMessages, 1u);
+    ASSERT_EQ(stats.extendedMessages, 1u);
+    ASSERT_EQ(stats.testprocMessages, 1u);
+}
+
+// ── All 12 PD domains: message name verification in stream ─────────────
+
+TEST(L3StreamProcessor, AllDomainsMessageNames) {
+    // Build L2-framed stream from known-good roundtrip data.
+    std::vector<uint8_t> data;
+
+    auto appendFrame = [&data](const ParsedMessage& msg) {
+        auto hex = writeL3Hex(msg);
+        ASSERT_TRUE(hex);
+        std::string h = hex.value();
+        std::vector<uint8_t> bytes(h.size() / 2);
+        for (size_t i = 0; i < bytes.size(); ++i) {
+            unsigned hi = (h[i*2] >= 'a' ? h[i*2] - 'a' + 10 : h[i*2] - '0');
+            unsigned lo = (h[i*2+1] >= 'a' ? h[i*2+1] - 'a' + 10 : h[i*2+1] - '0');
+            bytes[i] = static_cast<uint8_t>((hi << 4) | lo);
+        }
+        data.push_back(static_cast<uint8_t>(bytes.size()));
+        data.insert(data.end(), bytes.begin(), bytes.end());
+    };
+
+    appendFrame(ParsedMessage(RRM(L3ChannelRelease(RRCause::Normal_Event))));
+    appendFrame(ParsedMessage(MMM(L3CMServiceAccept{})));
+    appendFrame(ParsedMessage(CCM(L3Disconnect(CCCause::Normal_Call_Clearing))));
+    appendFrame(ParsedMessage(SSM(L3SupServReleaseCompleteMessage{})));
+    appendFrame(ParsedMessage(GMM(L3AttachComplete{})));
+    appendFrame(ParsedMessage(SM(L3DeactivatePDPContextRequest{})));
+    appendFrame(ParsedMessage(SMS(L3CPAck{})));
+    { L3BCCReleaseComplete rc; rc.ti(0); appendFrame(ParsedMessage(BCCM(std::move(rc)))); }
+    { L3GCCReleaseComplete rc; rc.ti(0); appendFrame(ParsedMessage(GCCM(std::move(rc)))); }
+    appendFrame(ParsedMessage(LSM(L3LocationServiceRequest{})));
+    { uint8_t d[] = {0xE0, 0x55, 0xAA, 0xBB}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p); appendFrame(*p); }
+    { uint8_t d[] = {0xF0, 0x99, 0xCC}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p); appendFrame(*p); }
+
+    struct NameHandler : FrameHandler {
+        std::vector<std::string>* mNames{};
+        std::vector<L3PD>* mPds{};
+        explicit NameHandler(std::vector<std::string>* names, std::vector<L3PD>* pds)
+            : mNames(names), mPds(pds) {}
+        void onFrame(const ParsedMessage& msg, const ExtractedFrame&) override {
+            mNames->push_back(std::string(messageName(msg)));
+            mPds->push_back(messagePD(msg));
+        }
+    };
+
+    std::vector<std::string> allNames;
+    std::vector<L3PD> allPds;
+    auto proc = L3StreamBuilder()
+        .source(std::span<const uint8_t>(data.data(), data.size()))
+        .useL2Length(true)
+        .build();
+
+    NameHandler h(&allNames, &allPds);
+    proc->processUntilEOF(h);
+
+    ASSERT_EQ(allNames.size(), 12u);
+    EXPECT_EQ(allNames[0], "ChannelRelease");
+    EXPECT_EQ(allNames[1], "CMServiceAccept");
+    EXPECT_EQ(allNames[2], "Disconnect");
+    EXPECT_EQ(allNames[3], "SupServReleaseCompleteMessage");
+    EXPECT_EQ(allNames[4], "AttachComplete");
+    EXPECT_EQ(allNames[5], "DeactivatePDPContextRequest");
+    EXPECT_EQ(allNames[6], "CPAck");
+    EXPECT_EQ(allNames[7], "BCCReleaseComplete");
+    EXPECT_EQ(allNames[8], "GCCReleaseComplete");
+    EXPECT_EQ(allNames[9], "LocationServiceRequest");
+    EXPECT_EQ(allNames[10], "ExtendedMessage");
+    EXPECT_EQ(allNames[11], "TestProcedureMessage");
+
+    // Verify all PDs are distinct.
+    EXPECT_EQ(allPds[0], L3PD::RadioResource);
+    EXPECT_EQ(allPds[1], L3PD::MobilityManagement);
+    EXPECT_EQ(allPds[2], L3PD::CallControl);
+    EXPECT_EQ(allPds[3], L3PD::NonCallSS);
+    EXPECT_EQ(allPds[4], L3PD::GPRSMobilityManagement);
+    EXPECT_EQ(allPds[5], L3PD::GPRSSessionManagement);
+    EXPECT_EQ(allPds[6], L3PD::SMS);
+    EXPECT_EQ(allPds[7], L3PD::BroadcastCallControl);
+    EXPECT_EQ(allPds[8], L3PD::GroupCallControl);
+    EXPECT_EQ(allPds[9], L3PD::Location);
+    EXPECT_EQ(allPds[10], L3PD::Extended);
+    EXPECT_EQ(allPds[11], L3PD::TestProcedure);
 }

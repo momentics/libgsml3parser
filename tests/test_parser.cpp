@@ -49,6 +49,11 @@
 #include <gsml3parser/mm/l3mmmessages.h>
 #include <gsml3parser/cc/l3ccmessages.h>
 #include <gsml3parser/ss/l3ssmessages.h>
+#include <gsml3parser/sm/l3smmessages.h>
+#include <gsml3parser/sms/l3smsl3messages.h>
+#include <gsml3parser/ls/l3lsmessages.h>
+#include <gsml3parser/extended/l3extendedmessages.h>
+#include <gsml3parser/testproc/l3testproceduremessages.h>
 
 using namespace gsml3parser;
 
@@ -435,4 +440,182 @@ TEST(ParserTest, BinaryRoundTrip) {
     auto readRes = parseL3(std::span<const uint8_t>(buf, written));
     ASSERT_TRUE(readRes);
     EXPECT_NE(tryGet<L3ChannelRelease>(*readRes), nullptr);
+}
+
+// =====================================================================
+// InvalidMTI tests for domains (SM, SMS L3, LS, Extended, TestProc)
+// =====================================================================
+
+TEST(ParserTest, UnknownMTI_SM) {
+    // PD=0x0a (SM), MTI=0xFF (unknown SM message type)
+    uint8_t data[] = {0xA0, 0xFF};
+    auto res = parseL3(std::span<const uint8_t>(data));
+    EXPECT_FALSE(res);
+    EXPECT_EQ(res.error().code, ParseError::Code::InvalidMTI);
+}
+
+TEST(ParserTest, UnknownMTI_SMS) {
+    // PD=0x09 (SMS), MTI=0xFF (unknown SMS message type)
+    uint8_t data[] = {0x90, 0xFF};
+    auto res = parseL3(std::span<const uint8_t>(data));
+    EXPECT_FALSE(res);
+    EXPECT_EQ(res.error().code, ParseError::Code::InvalidMTI);
+}
+
+TEST(ParserTest, UnknownMTI_GMM) {
+    // PD=0x08 (GMM), MTI=0xFF (unknown GMM message type)
+    uint8_t data[] = {0x80, 0xFF};
+    auto res = parseL3(std::span<const uint8_t>(data));
+    EXPECT_FALSE(res);
+    EXPECT_EQ(res.error().code, ParseError::Code::InvalidMTI);
+}
+
+TEST(ParserTest, UnknownMTI_LS) {
+    // PD=0x0c (LS), MTI=0xFF (unknown LS message type)
+    uint8_t data[] = {0xC0, 0xFF};
+    auto res = parseL3(std::span<const uint8_t>(data));
+    EXPECT_FALSE(res);
+    EXPECT_EQ(res.error().code, ParseError::Code::InvalidMTI);
+}
+
+// =====================================================================
+// parseL3Hex tests for domains
+// =====================================================================
+
+TEST(ParserTest, ParseL3Hex_SM) {
+    // SM: ActivatePDPContextRequest — PD=0x0a, MTI=0x41, body: pdpType(4)|spare(4)=0xF (IPv4), then QoS IE
+    auto res = parseL3Hex("A041 0F");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::GPRSSessionManagement);
+    EXPECT_NE(tryGet<L3ActivatePDPContextRequest>(*res), nullptr);
+}
+
+TEST(ParserTest, ParseL3Hex_LS) {
+    // LS: LocationServiceRequest — PD=0x0c, MTI=0x01, empty body
+    auto res = parseL3Hex("C001");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::Location);
+    EXPECT_NE(tryGet<L3LocationServiceRequest>(*res), nullptr);
+}
+
+TEST(ParserTest, ParseL3Hex_Extended) {
+    // Extended: PD=0x0e, MTI=0x42, body=AA BB CC
+    auto res = parseL3Hex("E042 AABBCC");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::Extended);
+    EXPECT_NE(tryGet<L3ExtendedMessage>(*res), nullptr);
+}
+
+TEST(ParserTest, ParseL3Hex_TestProcedure) {
+    // TestProcedure: PD=0x0f, MTI=0xA1, body=11 22 33
+    auto res = parseL3Hex("F0A1 112233");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::TestProcedure);
+    EXPECT_NE(tryGet<L3TestProcedureMessage>(*res), nullptr);
+}
+
+// =====================================================================
+// writeL3Hex roundtrip tests for domains
+// =====================================================================
+
+TEST(ParserTest, RoundTrip_SM_ActivatePDPContextRequest) {
+    ParsedMessage orig{SM{L3ActivatePDPContextRequest{}}};
+    auto hex = writeL3Hex(orig);
+    ASSERT_TRUE(hex);
+    auto res = parseL3Hex(hex.value());
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::GPRSSessionManagement);
+    EXPECT_NE(tryGet<L3ActivatePDPContextRequest>(*res), nullptr);
+}
+
+TEST(ParserTest, RoundTrip_SM_DeactivatePDPContextRequest) {
+    ParsedMessage orig{SM{L3DeactivatePDPContextRequest{}}};
+    auto hex = writeL3Hex(orig);
+    ASSERT_TRUE(hex);
+    auto res = parseL3Hex(hex.value());
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::GPRSSessionManagement);
+    EXPECT_NE(tryGet<L3DeactivatePDPContextRequest>(*res), nullptr);
+}
+
+TEST(ParserTest, RoundTrip_SM_SMNotification) {
+    ParsedMessage orig{SM{L3SMNotification{}}};
+    auto hex = writeL3Hex(orig);
+    ASSERT_TRUE(hex);
+    auto res = parseL3Hex(hex.value());
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::GPRSSessionManagement);
+    EXPECT_NE(tryGet<L3SMNotification>(*res), nullptr);
+}
+
+TEST(ParserTest, RoundTrip_LS_LocationServiceRequest) {
+    ParsedMessage orig{LSM{L3LocationServiceRequest{}}};
+    auto hex = writeL3Hex(orig);
+    ASSERT_TRUE(hex);
+    auto res = parseL3Hex(hex.value());
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::Location);
+    EXPECT_NE(tryGet<L3LocationServiceRequest>(*res), nullptr);
+}
+
+TEST(ParserTest, RoundTrip_Extended) {
+    L3ExtendedMessage orig(0x55);
+    ParsedMessage pm{EXTENDED{std::move(orig)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    auto res = parseL3Hex(hex.value());
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::Extended);
+    EXPECT_NE(tryGet<L3ExtendedMessage>(*res), nullptr);
+}
+
+TEST(ParserTest, RoundTrip_TestProcedure) {
+    L3TestProcedureMessage orig(0x99);
+    ParsedMessage pm{TESTPROC{std::move(orig)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    auto res = parseL3Hex(hex.value());
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::TestProcedure);
+    EXPECT_NE(tryGet<L3TestProcedureMessage>(*res), nullptr);
+}
+
+// =====================================================================
+// writeL3 binary roundtrip for domains
+// =====================================================================
+
+TEST(ParserTest, BinaryRoundTrip_Extended) {
+    uint8_t data[] = {0xE0, 0x77, 0xDE, 0xAD};
+    auto orig = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(orig);
+    uint8_t buf[64];
+    auto writeRes = writeL3(*orig, buf, sizeof(buf));
+    ASSERT_TRUE(writeRes);
+    auto readRes = parseL3(std::span<const uint8_t>(buf, writeRes.value()));
+    ASSERT_TRUE(readRes);
+    EXPECT_EQ(messagePD(*readRes), L3PD::Extended);
+    EXPECT_NE(tryGet<L3ExtendedMessage>(*readRes), nullptr);
+}
+
+TEST(ParserTest, BinaryRoundTrip_TestProcedure) {
+    uint8_t data[] = {0xF0, 0xBB, 0xCA, 0xFE};
+    auto orig = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(orig);
+    uint8_t buf[64];
+    auto writeRes = writeL3(*orig, buf, sizeof(buf));
+    ASSERT_TRUE(writeRes);
+    auto readRes = parseL3(std::span<const uint8_t>(buf, writeRes.value()));
+    ASSERT_TRUE(readRes);
+    EXPECT_EQ(messagePD(*readRes), L3PD::TestProcedure);
+    EXPECT_NE(tryGet<L3TestProcedureMessage>(*readRes), nullptr);
+}
+
+TEST(ParserTest, BinaryRoundTrip_LS) {
+    ParsedMessage orig{LSM{L3LocationServiceProviderMessage{}}};
+    uint8_t buf[64];
+    auto writeRes = writeL3(orig, buf, sizeof(buf));
+    ASSERT_TRUE(writeRes);
+    auto readRes = parseL3(std::span<const uint8_t>(buf, writeRes.value()));
+    ASSERT_TRUE(readRes);
+    EXPECT_EQ(messagePD(*readRes), L3PD::Location);
 }

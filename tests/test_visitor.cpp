@@ -513,7 +513,7 @@ TEST(Visitor, tryGet_ParsedMessage_GCC) {
 }
 
 // =====================================================================
-// tryGet on top-level ParsedMessage — wrong domain returns nullptr (new)
+// tryGet on top-level ParsedMessage — wrong domain returns nullptr
 // =====================================================================
 
 TEST(Visitor, tryGet_ParsedMessage_WrongDomain_GMM_ask_RR) {

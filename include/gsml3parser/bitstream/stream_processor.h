@@ -55,6 +55,9 @@ struct StreamStats {
     uint64_t smsMessages{};
     uint64_t bccMessages{};
     uint64_t gccMessages{};
+    uint64_t lsMessages{};
+    uint64_t extendedMessages{};
+    uint64_t testprocMessages{};
 };
 
 /**

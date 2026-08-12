@@ -76,3 +76,111 @@ TEST(L3HeaderTest, SingleByte) {
     EXPECT_FALSE(res.has_value());
     EXPECT_EQ(res.error().code, ParseError::Code::TruncatedInput);
 }
+
+// ── Extended PD (0x0e) header ──────────────────────────────────────────
+
+TEST(L3HeaderTest, ExtendedHeader) {
+    // PD=0x0e(Extended), MTI=0x55, raw byte extraction
+    std::array<uint8_t, 2> data{0xE0, 0x55};
+    auto res = parseL3Header(data);
+    EXPECT_TRUE(res.has_value());
+    L3Header hdr = res.value();
+    EXPECT_EQ(hdr.pd, L3PD::Extended);
+    EXPECT_EQ(hdr.mti, 0x55);
+    EXPECT_EQ(hdr.ti, 0u);
+    EXPECT_FALSE(hdr.tif);
+}
+
+TEST(L3HeaderTest, ExtendedHeader_HighMTI) {
+    // PD=0x0e(Extended), MTI=0xFF (high raw byte value)
+    std::array<uint8_t, 2> data{0xE0, 0xFF};
+    auto res = parseL3Header(data);
+    EXPECT_TRUE(res.has_value());
+    L3Header hdr = res.value();
+    EXPECT_EQ(hdr.pd, L3PD::Extended);
+    EXPECT_EQ(hdr.mti, 0xFF);
+}
+
+// ── TestProcedure PD (0x0f) header ─────────────────────────────────────
+
+TEST(L3HeaderTest, TestProcedureHeader) {
+    // PD=0x0f(TestProcedure), MTI=0xAA, raw byte extraction
+    std::array<uint8_t, 2> data{0xF0, 0xAA};
+    auto res = parseL3Header(data);
+    EXPECT_TRUE(res.has_value());
+    L3Header hdr = res.value();
+    EXPECT_EQ(hdr.pd, L3PD::TestProcedure);
+    EXPECT_EQ(hdr.mti, 0xAA);
+    EXPECT_EQ(hdr.ti, 0u);
+    EXPECT_FALSE(hdr.tif);
+}
+
+TEST(L3HeaderTest, TestProcedureHeader_ZeroMTI) {
+    // PD=0x0f(TestProcedure), MTI=0x00
+    std::array<uint8_t, 2> data{0xF0, 0x00};
+    auto res = parseL3Header(data);
+    EXPECT_TRUE(res.has_value());
+    L3Header hdr = res.value();
+    EXPECT_EQ(hdr.pd, L3PD::TestProcedure);
+    EXPECT_EQ(hdr.mti, 0x00);
+}
+
+// ── Location Services PD (0x0c) header ─────────────────────────────────
+
+TEST(L3HeaderTest, LocationServicesHeader) {
+    // PD=0x0c(Location), MTI=0x01(LocationServiceRequest)
+    std::array<uint8_t, 2> data{0xC0, 0x01};
+    auto res = parseL3Header(data);
+    EXPECT_TRUE(res.has_value());
+    L3Header hdr = res.value();
+    EXPECT_EQ(hdr.pd, L3PD::Location);
+    EXPECT_EQ(hdr.mti, 0x01);
+    EXPECT_EQ(hdr.ti, 0u);
+    EXPECT_FALSE(hdr.tif);
+}
+
+TEST(L3HeaderTest, LocationServicesHeader_ProviderMessage) {
+    // PD=0x0c(Location), MTI=0x02(LocationServiceProviderMessage)
+    std::array<uint8_t, 2> data{0xC0, 0x02};
+    auto res = parseL3Header(data);
+    EXPECT_TRUE(res.has_value());
+    L3Header hdr = res.value();
+    EXPECT_EQ(hdr.pd, L3PD::Location);
+    EXPECT_EQ(hdr.mti, 0x02);
+}
+
+// ── GMM header (PD=0x08) ───────────────────────────────────────────────
+
+TEST(L3HeaderTest, GMMHeader) {
+    // PD=0x08(GMM), MTI=0x01(AttachRequest), raw byte extraction
+    std::array<uint8_t, 2> data{0x80, 0x01};
+    auto res = parseL3Header(data);
+    EXPECT_TRUE(res.has_value());
+    L3Header hdr = res.value();
+    EXPECT_EQ(hdr.pd, L3PD::GPRSMobilityManagement);
+    EXPECT_EQ(hdr.mti, 0x01);
+}
+
+// ── SM header (PD=0x0a) ────────────────────────────────────────────────
+
+TEST(L3HeaderTest, SMHeader) {
+    // PD=0x0a(SM), MTI=0x41(ActivatePDPContextRequest), raw byte extraction
+    std::array<uint8_t, 2> data{0xA0, 0x41};
+    auto res = parseL3Header(data);
+    EXPECT_TRUE(res.has_value());
+    L3Header hdr = res.value();
+    EXPECT_EQ(hdr.pd, L3PD::GPRSSessionManagement);
+    EXPECT_EQ(hdr.mti, 0x41);
+}
+
+// ── SMS header (PD=0x09) ───────────────────────────────────────────────
+
+TEST(L3HeaderTest, SMSHeader) {
+    // PD=0x09(SMS), MTI=0x01(CPData), raw byte extraction
+    std::array<uint8_t, 2> data{0x90, 0x01};
+    auto res = parseL3Header(data);
+    EXPECT_TRUE(res.has_value());
+    L3Header hdr = res.value();
+    EXPECT_EQ(hdr.pd, L3PD::SMS);
+    EXPECT_EQ(hdr.mti, 0x01);
+}

@@ -87,7 +87,7 @@ int main(int argc, char* argv[]) {
         content = std::string{input};
     }
 
-    // Parse using the new Expected<ParsedMessage> API
+    // Parse using the Expected<ParsedMessage> API
     auto result = parseL3Hex(content);
 
     if (result) {
