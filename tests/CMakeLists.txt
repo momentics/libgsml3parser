@@ -42,6 +42,7 @@ add_executable(gsml3parser_tests
     test_mm_builders.cpp
     test_cc_builders.cpp
     test_lapdm.cpp
+    test_dispatcher.cpp
 )
 
 find_package(Threads REQUIRED)

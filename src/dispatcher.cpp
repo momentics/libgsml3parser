@@ -19,33 +19,49 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#pragma once
-
-// Umbrella header — single include for full gsml3parser API.
-
-#include "gsml3parser/expected.h"
-#include "gsml3parser/bitreader.h"
-#include "gsml3parser/bitwriter.h"
-#include "gsml3parser/types.h"
-#include "gsml3parser/enums.h"
-#include "gsml3parser/protocol_types.h"
-#include "gsml3parser/gsm_common.h"
-#include "gsml3parser/arena.h"
-#include "gsml3parser/parser_config.h"
-#include "gsml3parser/l3header.h"
-#include "gsml3parser/common/l3common.h"
-#include "gsml3parser/mm/l3mmelements.h"
-#include "gsml3parser/cc/l3ccelements.h"
-#include "gsml3parser/rr/l3rrmessages.h"
-#include "gsml3parser/mm/l3mmmessages.h"
-#include "gsml3parser/cc/l3ccmessages.h"
-#include "gsml3parser/ss/l3ssmessages.h"
-#include "gsml3parser/message_types.h"
-#include "gsml3parser/parser.h"
-#include "gsml3parser/visitor.h"
-#include "gsml3parser/bitstream/byte_source.h"
-#include "gsml3parser/bitstream/framer.h"
-#include "gsml3parser/bitstream/stream_processor.h"
-#include "gsml3parser/enum_formatters.h"
-#include "gsml3parser/lapdm.h"
 #include "gsml3parser/dispatcher.h"
+
+namespace gsml3parser {
+
+void ProtocolDispatcher::registerHandler(L3PD pd, int mti, MessageHandler handler) {
+    mHandlers[{pd, mti}] = std::move(handler);
+}
+
+void ProtocolDispatcher::registerDomainHandler(L3PD pd, MessageHandler handler) {
+    mDomainHandlers[pd] = std::move(handler);
+}
+
+void ProtocolDispatcher::setFallbackHandler(MessageHandler handler) {
+    mFallback = std::move(handler);
+}
+
+void ProtocolDispatcher::dispatch(const ParsedMessage& msg, void* context) {
+    L3PD pd = messagePD(msg);
+    int mti = messageMTI(msg);
+    HandlerKey key{pd, mti};
+
+    auto it = mHandlers.find(key);
+    if (it != mHandlers.end()) {
+        it->second(msg, context);
+        return;
+    }
+
+    auto dit = mDomainHandlers.find(pd);
+    if (dit != mDomainHandlers.end()) {
+        dit->second(msg, context);
+        return;
+    }
+
+    if (mFallback) {
+        mFallback(msg, context);
+    }
+}
+
+bool ProtocolDispatcher::dispatchRaw(std::span<const uint8_t> data, void* context) {
+    auto msg = parseL3(data);
+    if (!msg) return false;
+    dispatch(*msg, context);
+    return true;
+}
+
+} // namespace gsml3parser
