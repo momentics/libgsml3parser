@@ -46,6 +46,7 @@ add_executable(gsml3parser_tests
     test_sm_builders.cpp
     test_full_roundtrip.cpp
     test_bts_pipeline.cpp
+    test_ms_context.cpp
 )
 
 find_package(Threads REQUIRED)

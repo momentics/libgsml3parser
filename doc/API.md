@@ -35,6 +35,7 @@
 29. [SMS L3 Messages](#29-sms-l3-messages)
 30. [Extended PD Messages](#30-extended-pd-messages)
 31. [Test Procedure PD Messages](#31-test-procedure-pd-messages)
+32. [MSContext — Per-Subscriber State](#32-mscontext-per-subscriber-state)
 
 ---
 
@@ -2156,6 +2157,89 @@ The Test Procedure PD provides infrastructure for test procedure messages used i
 | `parse(br, parsedMti)` | Static factory; takes pre-parsed MTI |
 | `write(bw)` | Serializes body octets |
 | `text(os)` | Human-readable dump of MTI and body |
+
+---
+
+## 32. MSContext — Per-Subscriber State
+
+MSContext aggregates all state associated with a single mobile station: identity (TMSI/IMSI), channel assignment, classmark, location area, and protocol-layer flags (ciphering, registration, authentication). This is the primary object through which a BTS tracks each subscriber.
+
+**Header:** `#include <gsml3parser/stack/ms_context.h>`
+
+### 32.1 Performance Characteristics
+
+| Property | Value |
+|----------|-------|
+| `sizeof(MSContext)` | ≤ 256 bytes (enforced by `static_assert`) |
+| Heap allocations | **Zero** — all fields stored inline |
+| Hot path methods | O(1), no virtual dispatch, no heap |
+| Thread safety | NOT thread-safe. One instance per MS, single-thread access |
+
+Fields are ordered by access frequency: hot fields (identity, channel, flags) first, cold fields (LAI, classmark) last. This layout minimizes cache line misses for the typical message processing path.
+
+### 32.2 Factory Methods
+
+| Method | Description |
+|--------|-------------|
+| `MSContext::createWithTMSI(uint32_t tmsi)` | Create context with TMSI identity |
+| `MSContext::createWithIMSI(std::string_view imsiDigits)` | Create context with IMSI identity |
+
+### 32.3 Identity API
+
+| Method | Description |
+|--------|-------------|
+| `identity()` | Returns `const L3MobileIdentity&` — current primary identity |
+| `setTMSI(uint32_t tmsi)` | Update or set TMSI |
+| `setIMSI(std::string_view digits)` | Update or set IMSI |
+
+### 32.4 Channel Assignment API
+
+| Method | Description |
+|--------|-------------|
+| `channelType()` | Returns current `ChannelType` (or `UndefinedCHType`) |
+| `assignChannel(type, trx, ts, arfcn)` | Assign a logical channel with physical parameters |
+| `releaseChannel()` | Release channel, resets to `UndefinedCHType` |
+| `trxNumber()` | Returns transceiver index |
+| `timeslot()` | Returns TDMA timeslot number |
+| `arfcn()` | Returns ARFCN value |
+
+### 32.5 State Flags API
+
+| Method | Description |
+|--------|-------------|
+| `isCiphered()` / `setCiphered(bool)` | Ciphering active state |
+| `isRegistered()` / `setRegistered(bool)` | Location update completed |
+| `isAuthenticated()` / `setAuthenticated(bool)` | Authentication performed |
+| `timingAdvance()` / `setTimingAdvance(uint8_t)` | Timing advance value (0-63) |
+| `classmark()` / `setClassmark(cm)` | MS Classmark 1 storage |
+| `lai()` / `setLAI(lai)` | Location Area Identity storage |
+
+### 32.6 Example
+
+```cpp
+#include <gsml3parser/stack/ms_context.h>
+
+using namespace gsml3parser;
+
+// Create context for a known MS
+auto ctx = MSContext::createWithTMSI(0x12345678u);
+
+// Assign SDCCH channel after RACH handling
+ctx.assignChannel(ChannelType::SDCCHType, /*trx=*/0, /*ts=*/0, /*arfcn=*/125);
+
+// After authentication procedure completes
+ctx.setAuthenticated(true);
+ctx.setCiphered(true);
+
+// Store classmark received in CM Service Request
+L3MobileStationClassmark1 cm;
+ctx.setClassmark(cm);
+
+// After location update
+L3LocationAreaIdentity lai("262", "42", 1234);
+ctx.setLAI(lai);
+ctx.setRegistered(true);
+```
 
 ---
 
