@@ -1,6 +1,6 @@
 ﻿# libgsml3parser
 
-**GSM Layer 3 Signalling Message Parser — Standalone C++20 Library**
+**GSM Layer 3 Signalling Library — Parse, Build, and Frame L3 Messages for Software BTS**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
@@ -147,17 +147,115 @@ int main() {
 }
 ```
 
-### Using the Builder Pattern for CC Messages
+### Building Messages
+
+The library provides a fluent Builder API for constructing L3 messages from scratch. Each message type exposes a `builder()` factory method with chainable setters and a `build()` call that returns the final message object:
 
 ```cpp
 #include <gsml3parser/gsml3parser.hpp>
+#include <iostream>
 
-    // Build a Disconnect message
-    gsml3parser::L3Disconnect disconnect(gsml3parser::CCCause::Normal_Call_Clearing);
+using namespace gsml3parser;
 
-// Serialize to hex string
-auto hex = gsml3parser::writeL3Hex(disconnect);
+int main() {
+    // Build an Immediate Assignment (RR) message
+    auto msg = L3ImmediateAssignment::builder()
+        .channelDescription(L3ChannelDescription(TDMA_SDCCH, 0, 1, 100))
+        .timingAdvance(L3TimingAdvance(32))
+        .build();
+
+    // Wrap in ParsedMessage and serialize to raw bytes
+    ParsedMessage pm{RRM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+
+    if (bytes) {
+        std::cout << "L3 message: " << bytes->size() << " bytes\n";
+    }
+}
 ```
+
+Raw bytes from `writeL3Bytes()` are ready for LAPDm framing and over-the-air transmission.
+
+### LAPDm Framing
+
+Wrap L3 messages in LAPDm frames (GSM 04.06) for transmission over the Um interface:
+
+```cpp
+#include <gsml3parser/gsml3parser.hpp>
+#include <gsml3parser/lapdm.h>
+
+using namespace gsml3parser;
+using namespace gsml3parser::lapdm;
+
+int main() {
+    auto msg = parseL3Hex("600d00"); // Channel Release
+    ASSERT_TRUE(msg);
+
+    auto l3Bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(l3Bytes);
+
+    // Wrap in LAPDm UI frame (SAPI0, command)
+    auto frame = wrapL3(*l3Bytes, SAPI::SAPI0, false);
+    // frame: [0x01][0x03][0x60][0x0D][0x00]
+
+    // Unwrap on the receiving side
+    auto payload = unwrapL3(frame);
+    ASSERT_TRUE(payload);
+
+    auto reparsed = parseL3(*payload);
+    // reparsed contains the original Channel Release
+}
+```
+
+### Protocol Dispatching
+
+Route incoming L3 messages to type-specific handlers using `ProtocolDispatcher`:
+
+```cpp
+#include <gsml3parser/gsml3parser.hpp>
+#include <gsml3parser/dispatcher.h>
+
+using namespace gsml3parser;
+
+int main() {
+    ProtocolDispatcher dispatcher;
+
+    // Register handler for Channel Release (RR, MTI=0x0D)
+    dispatcher.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
+        [](const ParsedMessage& msg, void*) {
+            if (auto* cr = tryGet<L3ChannelRelease>(msg)) {
+                // Handle channel release...
+            }
+        });
+
+    // Register domain-wide fallback for all RR messages
+    dispatcher.registerDomainHandler(L3PD::RadioResource,
+        [](const ParsedMessage& msg, void*) {
+            std::cout << "RR message: " << messageName(msg) << "\n";
+        });
+
+    // Dispatch parsed message or raw bytes
+    auto msg = parseL3Hex("600d00");
+    if (msg) dispatcher.dispatch(*msg);
+
+    // Or dispatch raw bytes directly
+    uint8_t data[] = {0x60, 0x0D, 0x00};
+    dispatcher.dispatchRaw(std::span<const uint8_t>(data));
+}
+```
+
+### BTS Examples
+
+The `examples/` directory contains complete BTS workflow demonstrations:
+
+| Example | Description |
+|---------|-------------|
+| `example_bts_paging.cpp` | Full paging cycle: Builder → L3 bytes → LAPDm → unwrap → parse |
+| `example_bts_channel_assignment.cpp` | Channel Request handling and Immediate Assignment response |
+| `example_bts_sysinfo.cpp` | System Information (SI1–SI4) construction for BCCH broadcast |
+| `example_bts_dispatcher.cpp` | ProtocolDispatcher with multiple message handlers |
+
+Build with `-DBUILD_EXAMPLES=ON`.
 
 ### Registering a Custom PD Handler
 

@@ -69,13 +69,19 @@ enum class ControlField : uint8_t {
 /// @return L3 payload bytes (without LAPDm headers).
 [[nodiscard]] Expected<std::vector<uint8_t>> unwrapL3(std::span<const uint8_t> lapdmFrame);
 
-/// Extract SAPI from a LAPDm address field byte.
+/// @brief Extract SAPI from a LAPDm address field byte.
+/// @param addrByte Single byte LAPDm address field.
+/// @return SAPI value extracted from bits 7-4.
 [[nodiscard]] SAPI extractSAPI(uint8_t addrByte);
 
-/// Extract C/R bit from a LAPDm address field byte.
+/// @brief Extract C/R bit from a LAPDm address field byte.
+/// @param addrByte Single byte LAPDm address field.
+/// @return true if command (C/R=1), false if response (C/R=0).
 [[nodiscard]] bool extractCR(uint8_t addrByte);
 
-/// Check if a LAPDm frame has a UI control field.
+/// @brief Check if a LAPDm frame has a UI control field.
+/// @param lapdmFrame Complete LAPDm frame bytes (minimum 2 bytes).
+/// @return true if the control field equals UI (0x03).
 [[nodiscard]] bool isUIFrame(std::span<const uint8_t> lapdmFrame);
 
 } // namespace gsml3parser::lapdm

@@ -49,10 +49,13 @@ public:
     /// @param handler Callback function.
     void registerHandler(L3PD pd, int mti, MessageHandler handler);
 
-    /// Register a catch-all handler for all messages in a PD domain.
+    /// @brief Register a catch-all handler for all messages in a PD domain.
+    /// @param pd Protocol Discriminator domain.
+    /// @param handler Callback invoked for any unregistered MTI within this PD.
     void registerDomainHandler(L3PD pd, MessageHandler handler);
 
-    /// Register a global fallback handler for unregistered message types.
+    /// @brief Register a global fallback handler for unregistered message types.
+    /// @param handler Callback invoked when no specific or domain handler matches.
     void setFallbackHandler(MessageHandler handler);
 
     /// Dispatch a parsed message to the appropriate handler.
