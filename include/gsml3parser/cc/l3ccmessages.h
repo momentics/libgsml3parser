@@ -162,8 +162,68 @@ public:
         unsigned m_ti{7};
         bool m_haveCalled{false};
         L3CalledPartyBCDNumber m_called;
+        bool m_haveCallingParty{false};
+        L3CallingPartyBCDNumber m_callingParty;
+        bool m_haveSignal{false};
+        L3Signal m_signal;
+        bool m_haveBearerCapability{false};
+        L3BearerCapability m_bearerCapability;
+        bool m_haveSupportedCodecs{false};
+        L3SupportedCodecList m_supportedCodecs;
+        bool m_haveFacility{false};
+        L3SupServFacilityIE m_facility;
+        bool m_haveSSVersion{false};
+        L3SupServVersionIndicator m_ssVersion;
+        bool m_haveSubAddress{false};
+        L3SubAddress m_subAddress;
+        bool m_haveLowLayerCompat{false};
+        L3LowLayerCompatibility m_lowLayerCompat;
+        bool m_haveHighLayerCompat{false};
+        L3HighLayerCompatibility m_highLayerCompat;
+        bool m_haveUserUser{false};
+        L3UserUser m_userUser;
+        bool m_haveCLIRSuppression{false};
+        L3CLIRSuppression m_clirSuppression;
+        bool m_haveCLIRInvocation{false};
+        L3CLIRInvocation m_clirInvocation;
+        bool m_haveCCCapabilities{false};
+        L3CCCapabilities m_ccCapabilities;
+        bool m_haveStreamIdentifier{false};
+        L3StreamIdentifier m_streamIdentifier;
+
+        /// Set transaction identifier.
         Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set called party BCD number (sets m_haveCalled flag).
         Builder& calledParty(const L3CalledPartyBCDNumber& v) { m_called = v; m_haveCalled = true; return *this; }
+        /// Set calling party BCD number (sets m_haveCallingParty flag).
+        Builder& callingParty(const L3CallingPartyBCDNumber& v) { m_callingParty = v; m_haveCallingParty = true; return *this; }
+        /// Set signal IE (sets m_haveSignal flag).
+        Builder& signal(const L3Signal& v) { m_signal = v; m_haveSignal = true; return *this; }
+        /// Set bearer capability (sets m_haveBearerCapability flag).
+        Builder& bearerCapability(const L3BearerCapability& v) { m_bearerCapability = v; m_haveBearerCapability = true; return *this; }
+        /// Set supported codec list (sets m_haveSupportedCodecs flag).
+        Builder& supportedCodecs(const L3SupportedCodecList& v) { m_supportedCodecs = v; m_haveSupportedCodecs = true; return *this; }
+        /// Set facility IE (sets m_haveFacility flag).
+        Builder& facility(const L3SupServFacilityIE& v) { m_facility = v; m_haveFacility = true; return *this; }
+        /// Set supplementary service version indicator (sets m_haveSSVersion flag).
+        Builder& ssVersion(const L3SupServVersionIndicator& v) { m_ssVersion = v; m_haveSSVersion = true; return *this; }
+        /// Set sub-address (sets m_haveSubAddress flag).
+        Builder& subAddress(const L3SubAddress& v) { m_subAddress = v; m_haveSubAddress = true; return *this; }
+        /// Set low layer compatibility (sets m_haveLowLayerCompat flag).
+        Builder& lowLayerCompat(const L3LowLayerCompatibility& v) { m_lowLayerCompat = v; m_haveLowLayerCompat = true; return *this; }
+        /// Set high layer compatibility (sets m_haveHighLayerCompat flag).
+        Builder& highLayerCompat(const L3HighLayerCompatibility& v) { m_highLayerCompat = v; m_haveHighLayerCompat = true; return *this; }
+        /// Set user-user IE (sets m_haveUserUser flag).
+        Builder& userUser(const L3UserUser& v) { m_userUser = v; m_haveUserUser = true; return *this; }
+        /// Set CLIR suppression (sets m_haveCLIRSuppression flag).
+        Builder& clirSuppression(const L3CLIRSuppression& v) { m_clirSuppression = v; m_haveCLIRSuppression = true; return *this; }
+        /// Set CLIR invocation (sets m_haveCLIRInvocation flag).
+        Builder& clirInvocation(const L3CLIRInvocation& v) { m_clirInvocation = v; m_haveCLIRInvocation = true; return *this; }
+        /// Set CC capabilities (sets m_haveCCCapabilities flag).
+        Builder& ccCapabilities(const L3CCCapabilities& v) { m_ccCapabilities = v; m_haveCCCapabilities = true; return *this; }
+        /// Set stream identifier (sets m_haveStreamIdentifier flag).
+        Builder& streamIdentifier(const L3StreamIdentifier& v) { m_streamIdentifier = v; m_haveStreamIdentifier = true; return *this; }
+        /// Build the final message.
         [[nodiscard]] L3Setup build() const;
     };
     static Builder builder();
@@ -181,6 +241,7 @@ public:
 
 class L3EmergencySetup {
     unsigned mTI{7};
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x0e;
 
@@ -188,6 +249,16 @@ public:
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
+
+    struct Builder {
+        unsigned m_ti{7};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3EmergencySetup build() const;
+    };
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3EmergencySetup> parse(BitReader&);
     void write(BitWriter&) const;
@@ -210,6 +281,7 @@ class L3CallProceeding {
     L3Priority mPriority;
     bool mHaveNetworkCCCapabilities{false};
     L3NetworkCCCapabilities mNetworkCCCapabilities;
+    friend struct Builder;
 
 public:
     static constexpr int MTI = 0x02;
@@ -230,6 +302,32 @@ public:
 
     bool haveNetworkCCCapabilities() const { return mHaveNetworkCCCapabilities; }
     const L3NetworkCCCapabilities& networkCCCapabilities() const { return mNetworkCCCapabilities; }
+
+    struct Builder {
+        unsigned m_ti{7};
+        bool m_haveBearerCapability{false};
+        L3BearerCapability m_bearerCapability;
+        bool m_haveProgress{false};
+        L3ProgressIndicator m_progress;
+        bool m_havePriority{false};
+        L3Priority m_priority;
+        bool m_haveNetworkCCCapabilities{false};
+        L3NetworkCCCapabilities m_networkCCCapabilities;
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set bearer capability (sets m_haveBearerCapability flag).
+        Builder& bearerCapability(const L3BearerCapability& v) { m_bearerCapability = v; m_haveBearerCapability = true; return *this; }
+        /// Set progress indicator (sets m_haveProgress flag).
+        Builder& progress(const L3ProgressIndicator& v) { m_progress = v; m_haveProgress = true; return *this; }
+        /// Set priority (sets m_havePriority flag).
+        Builder& priority(const L3Priority& v) { m_priority = v; m_havePriority = true; return *this; }
+        /// Set network CC capabilities (sets m_haveNetworkCCCapabilities flag).
+        Builder& networkCCCapabilities(const L3NetworkCCCapabilities& v) { m_networkCCCapabilities = v; m_haveNetworkCCCapabilities = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CallProceeding build() const;
+    };
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3CallProceeding> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -252,6 +350,7 @@ class L3Alerting {
     L3SupServVersionIndicator mSSVersion;
     bool mHaveUserUser{false};
     L3UserUser mUserUser;
+    friend struct Builder;
 
 public:
     static constexpr int MTI = 0x01;
@@ -272,6 +371,32 @@ public:
 
     bool haveUserUser() const { return mHaveUserUser; }
     const L3UserUser& userUser() const { return mUserUser; }
+
+    struct Builder {
+        unsigned m_ti{7};
+        bool m_haveProgress{false};
+        L3ProgressIndicator m_progress;
+        bool m_haveFacility{false};
+        L3SupServFacilityIE m_facility;
+        bool m_haveSSVersion{false};
+        L3SupServVersionIndicator m_ssVersion;
+        bool m_haveUserUser{false};
+        L3UserUser m_userUser;
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set progress indicator (sets m_haveProgress flag).
+        Builder& progress(const L3ProgressIndicator& v) { m_progress = v; m_haveProgress = true; return *this; }
+        /// Set facility IE (sets m_haveFacility flag).
+        Builder& facility(const L3SupServFacilityIE& v) { m_facility = v; m_haveFacility = true; return *this; }
+        /// Set SS version indicator (sets m_haveSSVersion flag).
+        Builder& ssVersion(const L3SupServVersionIndicator& v) { m_ssVersion = v; m_haveSSVersion = true; return *this; }
+        /// Set user-user IE (sets m_haveUserUser flag).
+        Builder& userUser(const L3UserUser& v) { m_userUser = v; m_haveUserUser = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3Alerting build() const;
+    };
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3Alerting> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -296,6 +421,7 @@ class L3Connect {
     L3UserUser mUserUser;
     bool mHaveStreamIdentifier{false};
     L3StreamIdentifier mStreamIdentifier;
+    friend struct Builder;
 
 public:
     static constexpr int MTI = 0x07;
@@ -320,6 +446,36 @@ public:
     bool haveStreamIdentifier() const { return mHaveStreamIdentifier; }
     const L3StreamIdentifier& streamIdentifier() const { return mStreamIdentifier; }
 
+    struct Builder {
+        unsigned m_ti{7};
+        bool m_haveProgress{false};
+        L3ProgressIndicator m_progress;
+        bool m_haveConnectedNumber{false};
+        L3ConnectedNumber m_connectedNumber;
+        bool m_haveConnectedSubAddress{false};
+        L3SubAddress m_connectedSubAddress;
+        bool m_haveUserUser{false};
+        L3UserUser m_userUser;
+        bool m_haveStreamIdentifier{false};
+        L3StreamIdentifier m_streamIdentifier;
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set progress indicator (sets m_haveProgress flag).
+        Builder& progress(const L3ProgressIndicator& v) { m_progress = v; m_haveProgress = true; return *this; }
+        /// Set connected number (sets m_haveConnectedNumber flag).
+        Builder& connectedNumber(const L3ConnectedNumber& v) { m_connectedNumber = v; m_haveConnectedNumber = true; return *this; }
+        /// Set connected sub-address (sets m_haveConnectedSubAddress flag).
+        Builder& connectedSubAddress(const L3SubAddress& v) { m_connectedSubAddress = v; m_haveConnectedSubAddress = true; return *this; }
+        /// Set user-user IE (sets m_haveUserUser flag).
+        Builder& userUser(const L3UserUser& v) { m_userUser = v; m_haveUserUser = true; return *this; }
+        /// Set stream identifier (sets m_haveStreamIdentifier flag).
+        Builder& streamIdentifier(const L3StreamIdentifier& v) { m_streamIdentifier = v; m_haveStreamIdentifier = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3Connect build() const;
+    };
+    static Builder builder();
+
     [[nodiscard]] static Expected<L3Connect> parse(BitReader& br);
     void write(BitWriter& bw) const;
     size_t bodyLength() const;
@@ -333,6 +489,7 @@ public:
 
 class L3ConnectAcknowledge {
     unsigned mTI{7};
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x0f;
 
@@ -340,6 +497,16 @@ public:
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
+
+    struct Builder {
+        unsigned m_ti{7};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ConnectAcknowledge build() const;
+    };
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3ConnectAcknowledge> parse(BitReader&);
     void write(BitWriter&) const;
@@ -362,6 +529,7 @@ class L3CallConfirmed {
     L3CauseElement mCause;
     bool mHaveUserUser{false};
     L3UserUser mUserUser;
+    friend struct Builder;
 
 public:
     static constexpr int MTI = 0x08;
@@ -383,6 +551,32 @@ public:
     bool haveUserUser() const { return mHaveUserUser; }
     const L3UserUser& userUser() const { return mUserUser; }
 
+    struct Builder {
+        unsigned m_ti{7};
+        bool m_haveBearerCapability{false};
+        L3BearerCapability m_bearerCapability;
+        bool m_haveSupportedCodecs{false};
+        L3SupportedCodecList m_supportedCodecs;
+        bool m_haveCause{false};
+        L3CauseElement m_cause;
+        bool m_haveUserUser{false};
+        L3UserUser m_userUser;
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set bearer capability (sets m_haveBearerCapability flag).
+        Builder& bearerCapability(const L3BearerCapability& v) { m_bearerCapability = v; m_haveBearerCapability = true; return *this; }
+        /// Set supported codec list (sets m_haveSupportedCodecs flag).
+        Builder& supportedCodecs(const L3SupportedCodecList& v) { m_supportedCodecs = v; m_haveSupportedCodecs = true; return *this; }
+        /// Set cause element (sets m_haveCause flag).
+        Builder& cause(const L3CauseElement& v) { m_cause = v; m_haveCause = true; return *this; }
+        /// Set user-user IE (sets m_haveUserUser flag).
+        Builder& userUser(const L3UserUser& v) { m_userUser = v; m_haveUserUser = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CallConfirmed build() const;
+    };
+    static Builder builder();
+
     [[nodiscard]] static Expected<L3CallConfirmed> parse(BitReader& br);
     void write(BitWriter& bw) const;
     size_t bodyLength() const;
@@ -398,6 +592,7 @@ class L3Disconnect {
     unsigned mTI{7};
     CCCause mCause{CCCause::Normal_Call_Clearing};
     CCCauseLocation mLocation{CCCauseLocation::Private_Serving_Local};
+    friend struct Builder;
 
 public:
     static constexpr int MTI = 0x25;
@@ -413,6 +608,22 @@ public:
 
     CCCause cause() const { return mCause; }
     CCCauseLocation location() const { return mLocation; }
+
+    struct Builder {
+        unsigned m_ti{7};
+        CCCause m_cause{CCCause::Normal_Call_Clearing};
+        CCCauseLocation m_location{CCCauseLocation::Private_Serving_Local};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set CC cause.
+        Builder& cause(CCCause v) { m_cause = v; return *this; }
+        /// Set cause location.
+        Builder& location(CCCauseLocation v) { m_location = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3Disconnect build() const;
+    };
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3Disconnect> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -456,8 +667,20 @@ public:
         unsigned m_ti{7};
         bool m_haveCause{false};
         CCCause m_cause{CCCause::Unknown_L3_Cause};
+        bool m_haveFacility{false};
+        L3SupServFacilityIE m_facility;
+        bool m_haveSSVersion{false};
+        L3SupServVersionIndicator m_ssVersion;
+
+        /// Set transaction identifier.
         Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set CC cause (sets m_haveCause flag).
         Builder& cause(CCCause v) { m_cause = v; m_haveCause = true; return *this; }
+        /// Set facility IE (sets m_haveFacility flag).
+        Builder& facility(const L3SupServFacilityIE& v) { m_facility = v; m_haveFacility = true; return *this; }
+        /// Set SS version indicator (sets m_haveSSVersion flag).
+        Builder& ssVersion(const L3SupServVersionIndicator& v) { m_ssVersion = v; m_haveSSVersion = true; return *this; }
+        /// Build the final message.
         [[nodiscard]] L3Release build() const;
     };
     static Builder builder();
@@ -504,8 +727,20 @@ public:
         unsigned m_ti{7};
         bool m_haveCause{false};
         CCCause m_cause{CCCause::Unknown_L3_Cause};
+        bool m_haveFacility{false};
+        L3SupServFacilityIE m_facility;
+        bool m_haveSSVersion{false};
+        L3SupServVersionIndicator m_ssVersion;
+
+        /// Set transaction identifier.
         Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set CC cause (sets m_haveCause flag).
         Builder& cause(CCCause v) { m_cause = v; m_haveCause = true; return *this; }
+        /// Set facility IE (sets m_haveFacility flag).
+        Builder& facility(const L3SupServFacilityIE& v) { m_facility = v; m_haveFacility = true; return *this; }
+        /// Set SS version indicator (sets m_haveSSVersion flag).
+        Builder& ssVersion(const L3SupServVersionIndicator& v) { m_ssVersion = v; m_haveSSVersion = true; return *this; }
+        /// Build the final message.
         [[nodiscard]] L3ReleaseComplete build() const;
     };
     static Builder builder();
@@ -567,6 +802,7 @@ public:
 class L3StartDTMF {
     unsigned mTI{7};
     char mKey{0};
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x35;
 
@@ -576,6 +812,19 @@ public:
     void ti(unsigned v) { mTI = v; }
 
     char key() const { return mKey; }
+
+    struct Builder {
+        unsigned m_ti{7};
+        char m_key{0};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set DTMF key character.
+        Builder& key(char v) { m_key = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3StartDTMF build() const;
+    };
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3StartDTMF> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -588,6 +837,7 @@ public:
 
 class L3StopDTMF {
     unsigned mTI{7};
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x31;
 
@@ -595,6 +845,16 @@ public:
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
+
+    struct Builder {
+        unsigned m_ti{7};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3StopDTMF build() const;
+    };
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3StopDTMF> parse(BitReader&);
     void write(BitWriter&) const;
@@ -607,6 +867,7 @@ public:
 
 class L3StopDTMFAcknowledge {
     unsigned mTI{7};
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x32;
 
@@ -614,6 +875,16 @@ public:
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
+
+    struct Builder {
+        unsigned m_ti{7};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3StopDTMFAcknowledge build() const;
+    };
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3StopDTMFAcknowledge> parse(BitReader&);
     void write(BitWriter&) const;
@@ -627,6 +898,7 @@ public:
 class L3StartDTMFAcknowledge {
     unsigned mTI{7};
     char mKey{0};
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x36;
 
@@ -637,6 +909,19 @@ public:
     void ti(unsigned v) { mTI = v; }
 
     char key() const { return mKey; }
+
+    struct Builder {
+        unsigned m_ti{7};
+        char m_key{0};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set DTMF key character.
+        Builder& key(char v) { m_key = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3StartDTMFAcknowledge build() const;
+    };
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3StartDTMFAcknowledge> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -650,6 +935,7 @@ public:
 class L3StartDTMFReject {
     unsigned mTI{7};
     CCCause mCause{CCCause::Unknown_L3_Cause};
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x37;
 
@@ -660,6 +946,19 @@ public:
     void ti(unsigned v) { mTI = v; }
 
     CCCause cause() const { return mCause; }
+
+    struct Builder {
+        unsigned m_ti{7};
+        CCCause m_cause{CCCause::Unknown_L3_Cause};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set CC cause.
+        Builder& cause(CCCause v) { m_cause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3StartDTMFReject build() const;
+    };
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3StartDTMFReject> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -674,6 +973,7 @@ public:
 
 class L3Hold {
     unsigned mTI{7};
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x18;
 
@@ -681,6 +981,16 @@ public:
 
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
+
+    struct Builder {
+        unsigned m_ti{7};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3Hold build() const;
+    };
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3Hold> parse(BitReader&);
     void write(BitWriter&) const;
@@ -694,6 +1004,7 @@ public:
 class L3HoldReject {
     unsigned mTI{7};
     CCCause mCause{CCCause::Unknown_L3_Cause};
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x1a;
 
@@ -704,6 +1015,19 @@ public:
     void ti(unsigned v) { mTI = v; }
 
     CCCause cause() const { return mCause; }
+
+    struct Builder {
+        unsigned m_ti{7};
+        CCCause m_cause{CCCause::Unknown_L3_Cause};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set CC cause.
+        Builder& cause(CCCause v) { m_cause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3HoldReject build() const;
+    };
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3HoldReject> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -719,6 +1043,7 @@ public:
 class L3Progress {
     unsigned mTI{7};
     L3ProgressIndicator mProgress;
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x03;
 
@@ -728,6 +1053,19 @@ public:
     void ti(unsigned v) { mTI = v; }
 
     const L3ProgressIndicator& progress() const { return mProgress; }
+
+    struct Builder {
+        unsigned m_ti{7};
+        L3ProgressIndicator m_progress;
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set progress indicator.
+        Builder& progress(const L3ProgressIndicator& v) { m_progress = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3Progress build() const;
+    };
+    static Builder builder();
 
     [[nodiscard]] static Expected<L3Progress> parse(BitReader&);
     void write(BitWriter&) const;
@@ -744,12 +1082,27 @@ public:
 class L3Facility {
     unsigned mTI{7};
     std::vector<uint8_t> mFacilityBody;
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x3a;
     L3Facility() = default;
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
     const std::vector<uint8_t>& facilityBody() const { return mFacilityBody; }
+
+    struct Builder {
+        unsigned m_ti{7};
+        std::vector<uint8_t> m_facilityBody;
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set facility body bytes.
+        Builder& facilityBody(std::vector<uint8_t> v) { m_facilityBody = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3Facility build() const;
+    };
+    static Builder builder();
+
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3Facility> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -770,6 +1123,7 @@ class L3Modify {
     L3CalledPartyBCDNumber mCalledParty;
     bool mHaveCallingParty{false};
     L3CallingPartyBCDNumber mCallingParty;
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x19;
     L3Modify() = default;
@@ -781,6 +1135,29 @@ public:
     const L3CalledPartyBCDNumber& calledParty() const { return mCalledParty; }
     bool haveCallingParty() const { return mHaveCallingParty; }
     const L3CallingPartyBCDNumber& callingParty() const { return mCallingParty; }
+
+    struct Builder {
+        unsigned m_ti{7};
+        bool m_haveBearerCapability{false};
+        L3BearerCapability m_bearerCapability;
+        bool m_haveCalledParty{false};
+        L3CalledPartyBCDNumber m_calledParty;
+        bool m_haveCallingParty{false};
+        L3CallingPartyBCDNumber m_callingParty;
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set bearer capability (sets m_haveBearerCapability flag).
+        Builder& bearerCapability(const L3BearerCapability& v) { m_bearerCapability = v; m_haveBearerCapability = true; return *this; }
+        /// Set called party BCD number (sets m_haveCalledParty flag).
+        Builder& calledParty(const L3CalledPartyBCDNumber& v) { m_calledParty = v; m_haveCalledParty = true; return *this; }
+        /// Set calling party BCD number (sets m_haveCallingParty flag).
+        Builder& callingParty(const L3CallingPartyBCDNumber& v) { m_callingParty = v; m_haveCallingParty = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3Modify build() const;
+    };
+    static Builder builder();
+
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3Modify> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -798,6 +1175,7 @@ class L3UnitData {
     bool mHaveBearerCapability{false};
     L3BearerCapability mBearerCapability;
     std::vector<uint8_t> mUserData;
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x27;
     L3UnitData() = default;
@@ -806,6 +1184,24 @@ public:
     bool haveBearerCapability() const { return mHaveBearerCapability; }
     const L3BearerCapability& bearerCapability() const { return mBearerCapability; }
     const std::vector<uint8_t>& userData() const { return mUserData; }
+
+    struct Builder {
+        unsigned m_ti{7};
+        bool m_haveBearerCapability{false};
+        L3BearerCapability m_bearerCapability;
+        std::vector<uint8_t> m_userData;
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set bearer capability (sets m_haveBearerCapability flag).
+        Builder& bearerCapability(const L3BearerCapability& v) { m_bearerCapability = v; m_haveBearerCapability = true; return *this; }
+        /// Set user data bytes.
+        Builder& userData(std::vector<uint8_t> v) { m_userData = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3UnitData build() const;
+    };
+    static Builder builder();
+
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3UnitData> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -820,11 +1216,23 @@ public:
 // Carries: TI
 class L3UnitDataAck {
     unsigned mTI{7};
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x28;
     L3UnitDataAck() = default;
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
+
+    struct Builder {
+        unsigned m_ti{7};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3UnitDataAck build() const;
+    };
+    static Builder builder();
+
     size_t bodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3UnitDataAck> parse(BitReader&);
     void write(BitWriter&) const;
@@ -840,12 +1248,27 @@ public:
 class L3ErrorIndication {
     unsigned mTI{7};
     CCCause mCause{CCCause::Normal_Call_Clearing};
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x2b;
     L3ErrorIndication() = default;
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
     CCCause cause() const { return mCause; }
+
+    struct Builder {
+        unsigned m_ti{7};
+        CCCause m_cause{CCCause::Normal_Call_Clearing};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { m_ti = v; return *this; }
+        /// Set CC cause.
+        Builder& cause(CCCause v) { m_cause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ErrorIndication build() const;
+    };
+    static Builder builder();
+
     size_t bodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3ErrorIndication> parse(BitReader& br);
     void write(BitWriter& bw) const;

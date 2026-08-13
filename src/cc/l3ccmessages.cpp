@@ -262,6 +262,62 @@ L3Setup L3Setup::Builder::build() const {
         msg.mHaveCalledParty = true;
         msg.mCalledParty = m_called;
     }
+    if (m_haveCallingParty) {
+        msg.mHaveCallingParty = true;
+        msg.mCallingParty = m_callingParty;
+    }
+    if (m_haveSignal) {
+        msg.mHaveSignal = true;
+        msg.mSignal = m_signal;
+    }
+    if (m_haveBearerCapability) {
+        msg.mHaveBearerCapability = true;
+        msg.mBearerCapability = m_bearerCapability;
+    }
+    if (m_haveSupportedCodecs) {
+        msg.mHaveSupportedCodecs = true;
+        msg.mSupportedCodecs = m_supportedCodecs;
+    }
+    if (m_haveFacility) {
+        msg.mHaveFacility = true;
+        msg.mFacility = m_facility;
+    }
+    if (m_haveSSVersion) {
+        msg.mHaveSSVersion = true;
+        msg.mSSVersion = m_ssVersion;
+    }
+    if (m_haveSubAddress) {
+        msg.mHaveSubAddress = true;
+        msg.mSubAddress = m_subAddress;
+    }
+    if (m_haveLowLayerCompat) {
+        msg.mHaveLowLayerCompat = true;
+        msg.mLowLayerCompat = m_lowLayerCompat;
+    }
+    if (m_haveHighLayerCompat) {
+        msg.mHaveHighLayerCompat = true;
+        msg.mHighLayerCompat = m_highLayerCompat;
+    }
+    if (m_haveUserUser) {
+        msg.mHaveUserUser = true;
+        msg.mUserUser = m_userUser;
+    }
+    if (m_haveCLIRSuppression) {
+        msg.mHaveCLIRSuppression = true;
+        msg.mCLIRSuppression = m_clirSuppression;
+    }
+    if (m_haveCLIRInvocation) {
+        msg.mHaveCLIRInvocation = true;
+        msg.mCLIRInvocation = m_clirInvocation;
+    }
+    if (m_haveCCCapabilities) {
+        msg.mHaveCCCapabilities = true;
+        msg.mCCCapabilities = m_ccCapabilities;
+    }
+    if (m_haveStreamIdentifier) {
+        msg.mHaveStreamIdentifier = true;
+        msg.mStreamIdentifier = m_streamIdentifier;
+    }
     return msg;
 }
 
@@ -1070,6 +1126,14 @@ L3Release L3Release::Builder::build() const {
         msg.mHaveCause = true;
         msg.mCause = m_cause;
     }
+    if (m_haveFacility) {
+        msg.mHaveFacility = true;
+        msg.mFacility = m_facility;
+    }
+    if (m_haveSSVersion) {
+        msg.mHaveSSVersion = true;
+        msg.mSSVersion = m_ssVersion;
+    }
     return msg;
 }
 
@@ -1134,6 +1198,14 @@ L3ReleaseComplete L3ReleaseComplete::Builder::build() const {
     if (m_haveCause) {
         msg.mHaveCause = true;
         msg.mCause = m_cause;
+    }
+    if (m_haveFacility) {
+        msg.mHaveFacility = true;
+        msg.mFacility = m_facility;
+    }
+    if (m_haveSSVersion) {
+        msg.mHaveSSVersion = true;
+        msg.mSSVersion = m_ssVersion;
     }
     return msg;
 }
@@ -1524,7 +1596,7 @@ void L3Modify::text(std::ostream& os) const {
 size_t L3UnitData::bodyLength() const {
     size_t len = 0;
     if (mHaveBearerCapability) len += 2 + mBearerCapability.lengthV();
-    if (!mUserData.empty()) len += 1 + mUserData.size();
+    if (!mUserData.empty()) len += 2 + mUserData.size();
     return len;
 }
 
@@ -1621,6 +1693,322 @@ void L3ErrorIndication::write(BitWriter& bw) const {
 
 void L3ErrorIndication::text(std::ostream& os) const {
     os << "ErrorIndication: TI=" << mTI << " cause=" << CCCause2Str(mCause);
+}
+
+// ── Builder implementations for new CC message types ────────────────────
+
+// L3EmergencySetup
+L3EmergencySetup::Builder L3EmergencySetup::builder() {
+    return Builder{};
+}
+
+L3EmergencySetup L3EmergencySetup::Builder::build() const {
+    L3EmergencySetup msg;
+    msg.mTI = m_ti;
+    return msg;
+}
+
+// L3CallProceeding
+L3CallProceeding::Builder L3CallProceeding::builder() {
+    return Builder{};
+}
+
+L3CallProceeding L3CallProceeding::Builder::build() const {
+    L3CallProceeding msg;
+    msg.mTI = m_ti;
+    if (m_haveBearerCapability) {
+        msg.mHaveBearerCapability = true;
+        msg.mBearerCapability = m_bearerCapability;
+    }
+    if (m_haveProgress) {
+        msg.mHaveProgress = true;
+        msg.mProgress = m_progress;
+    }
+    if (m_havePriority) {
+        msg.mHavePriority = true;
+        msg.mPriority = m_priority;
+    }
+    if (m_haveNetworkCCCapabilities) {
+        msg.mHaveNetworkCCCapabilities = true;
+        msg.mNetworkCCCapabilities = m_networkCCCapabilities;
+    }
+    return msg;
+}
+
+// L3Alerting
+L3Alerting::Builder L3Alerting::builder() {
+    return Builder{};
+}
+
+L3Alerting L3Alerting::Builder::build() const {
+    L3Alerting msg;
+    msg.mTI = m_ti;
+    if (m_haveProgress) {
+        msg.mHaveProgress = true;
+        msg.mProgress = m_progress;
+    }
+    if (m_haveFacility) {
+        msg.mHaveFacility = true;
+        msg.mFacility = m_facility;
+    }
+    if (m_haveSSVersion) {
+        msg.mHaveSSVersion = true;
+        msg.mSSVersion = m_ssVersion;
+    }
+    if (m_haveUserUser) {
+        msg.mHaveUserUser = true;
+        msg.mUserUser = m_userUser;
+    }
+    return msg;
+}
+
+// L3Connect
+L3Connect::Builder L3Connect::builder() {
+    return Builder{};
+}
+
+L3Connect L3Connect::Builder::build() const {
+    L3Connect msg;
+    msg.mTI = m_ti;
+    if (m_haveProgress) {
+        msg.mHaveProgress = true;
+        msg.mProgress = m_progress;
+    }
+    if (m_haveConnectedNumber) {
+        msg.mHaveConnectedNumber = true;
+        msg.mConnectedNumber = m_connectedNumber;
+    }
+    if (m_haveConnectedSubAddress) {
+        msg.mHaveConnectedSubAddress = true;
+        msg.mConnectedSubAddress = m_connectedSubAddress;
+    }
+    if (m_haveUserUser) {
+        msg.mHaveUserUser = true;
+        msg.mUserUser = m_userUser;
+    }
+    if (m_haveStreamIdentifier) {
+        msg.mHaveStreamIdentifier = true;
+        msg.mStreamIdentifier = m_streamIdentifier;
+    }
+    return msg;
+}
+
+// L3ConnectAcknowledge
+L3ConnectAcknowledge::Builder L3ConnectAcknowledge::builder() {
+    return Builder{};
+}
+
+L3ConnectAcknowledge L3ConnectAcknowledge::Builder::build() const {
+    L3ConnectAcknowledge msg;
+    msg.mTI = m_ti;
+    return msg;
+}
+
+// L3CallConfirmed
+L3CallConfirmed::Builder L3CallConfirmed::builder() {
+    return Builder{};
+}
+
+L3CallConfirmed L3CallConfirmed::Builder::build() const {
+    L3CallConfirmed msg;
+    msg.mTI = m_ti;
+    if (m_haveBearerCapability) {
+        msg.mHaveBearerCapability = true;
+        msg.mBearerCapability = m_bearerCapability;
+    }
+    if (m_haveSupportedCodecs) {
+        msg.mHaveSupportedCodecs = true;
+        msg.mSupportedCodecs = m_supportedCodecs;
+    }
+    if (m_haveCause) {
+        msg.mHaveCause = true;
+        msg.mCause = m_cause;
+    }
+    if (m_haveUserUser) {
+        msg.mHaveUserUser = true;
+        msg.mUserUser = m_userUser;
+    }
+    return msg;
+}
+
+// L3Disconnect
+L3Disconnect::Builder L3Disconnect::builder() {
+    return Builder{};
+}
+
+L3Disconnect L3Disconnect::Builder::build() const {
+    L3Disconnect msg;
+    msg.mTI = m_ti;
+    msg.mCause = m_cause;
+    msg.mLocation = m_location;
+    return msg;
+}
+
+// L3StartDTMF
+L3StartDTMF::Builder L3StartDTMF::builder() {
+    return Builder{};
+}
+
+L3StartDTMF L3StartDTMF::Builder::build() const {
+    L3StartDTMF msg;
+    msg.mTI = m_ti;
+    msg.mKey = m_key;
+    return msg;
+}
+
+// L3StopDTMF
+L3StopDTMF::Builder L3StopDTMF::builder() {
+    return Builder{};
+}
+
+L3StopDTMF L3StopDTMF::Builder::build() const {
+    L3StopDTMF msg;
+    msg.mTI = m_ti;
+    return msg;
+}
+
+// L3StopDTMFAcknowledge
+L3StopDTMFAcknowledge::Builder L3StopDTMFAcknowledge::builder() {
+    return Builder{};
+}
+
+L3StopDTMFAcknowledge L3StopDTMFAcknowledge::Builder::build() const {
+    L3StopDTMFAcknowledge msg;
+    msg.mTI = m_ti;
+    return msg;
+}
+
+// L3StartDTMFAcknowledge
+L3StartDTMFAcknowledge::Builder L3StartDTMFAcknowledge::builder() {
+    return Builder{};
+}
+
+L3StartDTMFAcknowledge L3StartDTMFAcknowledge::Builder::build() const {
+    L3StartDTMFAcknowledge msg;
+    msg.mTI = m_ti;
+    msg.mKey = m_key;
+    return msg;
+}
+
+// L3StartDTMFReject
+L3StartDTMFReject::Builder L3StartDTMFReject::builder() {
+    return Builder{};
+}
+
+L3StartDTMFReject L3StartDTMFReject::Builder::build() const {
+    L3StartDTMFReject msg;
+    msg.mTI = m_ti;
+    msg.mCause = m_cause;
+    return msg;
+}
+
+// L3Hold
+L3Hold::Builder L3Hold::builder() {
+    return Builder{};
+}
+
+L3Hold L3Hold::Builder::build() const {
+    L3Hold msg;
+    msg.mTI = m_ti;
+    return msg;
+}
+
+// L3HoldReject
+L3HoldReject::Builder L3HoldReject::builder() {
+    return Builder{};
+}
+
+L3HoldReject L3HoldReject::Builder::build() const {
+    L3HoldReject msg;
+    msg.mTI = m_ti;
+    msg.mCause = m_cause;
+    return msg;
+}
+
+// L3Progress
+L3Progress::Builder L3Progress::builder() {
+    return Builder{};
+}
+
+L3Progress L3Progress::Builder::build() const {
+    L3Progress msg;
+    msg.mTI = m_ti;
+    msg.mProgress = m_progress;
+    return msg;
+}
+
+// L3Facility
+L3Facility::Builder L3Facility::builder() {
+    return Builder{};
+}
+
+L3Facility L3Facility::Builder::build() const {
+    L3Facility msg;
+    msg.mTI = m_ti;
+    msg.mFacilityBody = m_facilityBody;
+    return msg;
+}
+
+// L3Modify
+L3Modify::Builder L3Modify::builder() {
+    return Builder{};
+}
+
+L3Modify L3Modify::Builder::build() const {
+    L3Modify msg;
+    msg.mTI = m_ti;
+    if (m_haveBearerCapability) {
+        msg.mHaveBearerCapability = true;
+        msg.mBearerCapability = m_bearerCapability;
+    }
+    if (m_haveCalledParty) {
+        msg.mHaveCalledParty = true;
+        msg.mCalledParty = m_calledParty;
+    }
+    if (m_haveCallingParty) {
+        msg.mHaveCallingParty = true;
+        msg.mCallingParty = m_callingParty;
+    }
+    return msg;
+}
+
+// L3UnitData
+L3UnitData::Builder L3UnitData::builder() {
+    return Builder{};
+}
+
+L3UnitData L3UnitData::Builder::build() const {
+    L3UnitData msg;
+    msg.mTI = m_ti;
+    if (m_haveBearerCapability) {
+        msg.mHaveBearerCapability = true;
+        msg.mBearerCapability = m_bearerCapability;
+    }
+    msg.mUserData = m_userData;
+    return msg;
+}
+
+// L3UnitDataAck
+L3UnitDataAck::Builder L3UnitDataAck::builder() {
+    return Builder{};
+}
+
+L3UnitDataAck L3UnitDataAck::Builder::build() const {
+    L3UnitDataAck msg;
+    msg.mTI = m_ti;
+    return msg;
+}
+
+// L3ErrorIndication
+L3ErrorIndication::Builder L3ErrorIndication::builder() {
+    return Builder{};
+}
+
+L3ErrorIndication L3ErrorIndication::Builder::build() const {
+    L3ErrorIndication msg;
+    msg.mTI = m_ti;
+    msg.mCause = m_cause;
+    return msg;
 }
 
 } // namespace gsml3parser
