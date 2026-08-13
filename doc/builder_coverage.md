@@ -1,68 +1,70 @@
 # Builder Coverage Inventory
 
-Generated: 2026-08-12
+Generated: 2026-08-13 (Phase 11 final check)
 
-Scanned all `class L3*` message types across 13 domain headers. For each class, whether it has an inner `Builder` struct/class and an `explicit` constructor.
+Scanned all `class L3*` message types across 13 domain headers. For each class, whether it has an inner `Builder` with `static Builder builder()` factory.
 
-**Summary:** 240 total classes | 142 OK (have Builder) | 98 NEEDS_BUILDER
+**Summary:** 240 total classes | 167 OK (have Builder) | 73 NEEDS_BUILDER | Coverage: 69.6%
 
 ## Domains with full Builder coverage
 
 | Domain | Classes | Have Builder | Need Builder |
 |--------|---------|-------------|--------------|
-| RR | 93 | 93 | 0 |
 | MM | 20 | 20 | 0 |
 | CC | 24 | 24 | 0 |
+| GMM | 23 | 23 | 0 |
+| SM | 29 | 29 | 0 |
+| SMS | 9 | 9 | 0 |
+| SMSL3 | 14 | 14 | 0 |
+| BCC | 8 | 8 | 0 |
+| GCC | 8 | 8 | 0 |
+| LS | 2 | 2 | 0 |
 
 ## Domains needing Builder
 
 | Domain | Classes | Have Builder | Need Builder |
 |--------|---------|-------------|--------------|
-| GMM | 23 | 0 | 23 |
-| SM | 29 | 0 | 29 |
-| SMSL3 | 14 | 0 | 14 |
-| SMS | 9 | 0 | 9 |
-| BCC | 8 | 0 | 8 |
-| GCC | 8 | 0 | 8 |
+| RR | 98 | 50 | 48 |
 | SS | 3 | 0 | 3 |
-| LS | 2 | 0 | 2 |
 | Extended | 1 | 0 | 1 |
 | TestProc | 1 | 0 | 1 |
 
 ## Detailed Table
 
-| Domain | Message Class | Has Builder | Has Param Constructor | Action Needed |
-|--------|--------------|-------------|----------------------|---------------|
+### RR — Classes WITH Builder (50)
+
+| Domain | Message Class | Has Builder | Has Param Constructor | Action |
+|--------|--------------|-------------|----------------------|--------|
 | RR | L3AdditionalAssignment | Yes | No | OK |
-| RR | L3ApplicationInformation | Yes | No | OK |
+| RR | L3ApplicationInformation | No | No | NEEDS_BUILDER |
 | RR | L3AssignmentCommand | Yes | No | OK |
 | RR | L3AssignmentComplete | Yes | No | OK |
 | RR | L3AssignmentFailure | Yes | No | OK |
-| RR | L3CDMA2000ClassmarkChange | Yes | No | OK |
+| RR | L3CDMA2000ClassmarkChange | No | No | NEEDS_BUILDER |
 | RR | L3ChannelModeModify | Yes | No | OK |
 | RR | L3ChannelModeModifyAcknowledge | Yes | No | OK |
 | RR | L3ChannelRelease | Yes | Yes | OK |
 | RR | L3ChannelRequest | Yes | Yes | OK |
 | RR | L3CipheringModeCommand | Yes | No | OK |
 | RR | L3CipheringModeComplete | Yes | No | OK |
-| RR | L3ClassmarkChange | Yes | No | OK |
-| RR | L3ClassmarkEnquiry | Yes | No | OK |
+| RR | L3ClassmarkChange | No | No | NEEDS_BUILDER |
+| RR | L3ClassmarkEnquiry | No | No | NEEDS_BUILDER |
 | RR | L3ConfigurationChangeAcknowledge | Yes | No | OK |
 | RR | L3ConfigurationChangeCommand | Yes | No | OK |
 | RR | L3ConfigurationChangeReject | Yes | Yes | OK |
-| RR | L3DataIndication | Yes | No | OK |
-| RR | L3DataIndication2 | Yes | No | OK |
-| RR | L3DTMAssignmentCommand | Yes | No | OK |
-| RR | L3DTMAssignmentFailure | Yes | Yes | OK |
-| RR | L3DTMInformation | Yes | No | OK |
-| RR | L3DTMReject | Yes | No | OK |
-| RR | L3DTMRequest | Yes | No | OK |
-| RR | L3EnhancedMeasurementRepUL | Yes | No | OK |
-| RR | L3ExtendedMeasurementOrder | Yes | No | OK |
-| RR | L3ExtendedMeasurementReport | Yes | No | OK |
-| RR | L3FrequencyRedefinition | Yes | No | OK |
-| RR | L3GERANIUClassmarkChange | Yes | No | OK |
-| RR | L3GPRSSuspensionRequest | Yes | No | OK |
+| RR | L3DataIndication | No | No | NEEDS_BUILDER |
+| RR | L3DataIndication2 | No | No | NEEDS_BUILDER |
+| RR | L3DTMAssignmentCommand | No | No | NEEDS_BUILDER |
+| RR | L3DTMAssignmentFailure | No | Yes | NEEDS_BUILDER |
+| RR | L3DTMInformation | No | No | NEEDS_BUILDER |
+| RR | L3DTMReject | No | No | NEEDS_BUILDER |
+| RR | L3DTMRequest | No | No | NEEDS_BUILDER |
+| RR | L3EnhancedMeasurementRepUL | No | No | NEEDS_BUILDER |
+| RR | L3ExtendedMeasurementOrder | No | No | NEEDS_BUILDER |
+| RR | L3ExtendedMeasurementReport | No | No | NEEDS_BUILDER |
+| RR | L3FrequencyRedefinition | No | No | NEEDS_BUILDER |
+| RR | L3GERANIUClassmarkChange | No | No | NEEDS_BUILDER |
+| RR | L3GPRSSuspensionRequest | No | No | NEEDS_BUILDER |
 | RR | L3HandoverAccess | Yes | Yes | OK |
 | RR | L3HandoverCommand | Yes | No | OK |
 | RR | L3HandoverComplete | Yes | No | OK |
@@ -70,46 +72,46 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | RR | L3ImmediateAssignment | Yes | No | OK |
 | RR | L3ImmediateAssignmentExtended | Yes | No | OK |
 | RR | L3ImmediateAssignmentReject | Yes | Yes | OK |
-| RR | L3IntersysToCDMA2000HOCommand | Yes | No | OK |
-| RR | L3IntersysToUTRANHOCommand | Yes | No | OK |
-| RR | L3MeasurementInfoDL | Yes | No | OK |
-| RR | L3MeasurementReport | Yes | No | OK |
-| RR | L3NotificationFACCH | Yes | No | OK |
-| RR | L3NotificationNCH | Yes | No | OK |
-| RR | L3NotificationResponse | Yes | No | OK |
-| RR | L3NotifyAppData | Yes | No | OK |
-| RR | L3PacketAssignment | Yes | No | OK |
-| RR | L3PacketInformation | Yes | No | OK |
+| RR | L3IntersysToCDMA2000HOCommand | No | No | NEEDS_BUILDER |
+| RR | L3IntersysToUTRANHOCommand | No | No | NEEDS_BUILDER |
+| RR | L3MeasurementInfoDL | No | No | NEEDS_BUILDER |
+| RR | L3MeasurementReport | No | No | NEEDS_BUILDER |
+| RR | L3NotificationFACCH | No | No | NEEDS_BUILDER |
+| RR | L3NotificationNCH | No | No | NEEDS_BUILDER |
+| RR | L3NotificationResponse | No | No | NEEDS_BUILDER |
+| RR | L3NotifyAppData | No | No | NEEDS_BUILDER |
+| RR | L3PacketAssignment | No | No | NEEDS_BUILDER |
+| RR | L3PacketInformation | No | No | NEEDS_BUILDER |
 | RR | L3PagingRequestType1 | Yes | No | OK |
 | RR | L3PagingRequestType2 | Yes | No | OK |
 | RR | L3PagingRequestType3 | Yes | No | OK |
-| RR | L3PagingResponse | Yes | No | OK |
+| RR | L3PagingResponse | No | No | NEEDS_BUILDER |
 | RR | L3PartialRelease | Yes | No | OK |
 | RR | L3PartialReleaseComplete | Yes | No | OK |
 | RR | L3PhysicalInformation | Yes | No | OK |
-| RR | L3PriorityUplinkRequest | Yes | No | OK |
+| RR | L3PriorityUplinkRequest | No | No | NEEDS_BUILDER |
 | RR | L3RRStatus | Yes | No | OK |
-| RR | L3SynchronizationChannelInformation | Yes | No | OK |
+| RR | L3SynchronizationChannelInformation | No | No | NEEDS_BUILDER |
 | RR | L3SystemInformationType1 | Yes | No | OK |
-| RR | L3SystemInformationType10 | Yes | No | OK |
-| RR | L3SystemInformationType10bis | Yes | No | OK |
-| RR | L3SystemInformationType10ter | Yes | No | OK |
+| RR | L3SystemInformationType10 | No | No | NEEDS_BUILDER |
+| RR | L3SystemInformationType10bis | No | No | NEEDS_BUILDER |
+| RR | L3SystemInformationType10ter | No | No | NEEDS_BUILDER |
 | RR | L3SystemInformationType13 | Yes | No | OK |
-| RR | L3SystemInformationType13alt | Yes | No | OK |
-| RR | L3SystemInformationType14 | Yes | No | OK |
-| RR | L3SystemInformationType15 | Yes | No | OK |
+| RR | L3SystemInformationType13alt | No | No | NEEDS_BUILDER |
+| RR | L3SystemInformationType14 | No | No | NEEDS_BUILDER |
+| RR | L3SystemInformationType15 | No | No | NEEDS_BUILDER |
 | RR | L3SystemInformationType16 | Yes | No | OK |
 | RR | L3SystemInformationType17 | Yes | No | OK |
-| RR | L3SystemInformationType18 | Yes | No | OK |
-| RR | L3SystemInformationType19 | Yes | No | OK |
+| RR | L3SystemInformationType18 | No | No | NEEDS_BUILDER |
+| RR | L3SystemInformationType19 | No | No | NEEDS_BUILDER |
 | RR | L3SystemInformationType2 | Yes | No | OK |
-| RR | L3SystemInformationType20 | Yes | No | OK |
-| RR | L3SystemInformationType21 | Yes | No | OK |
-| RR | L3SystemInformationType22 | Yes | No | OK |
-| RR | L3SystemInformationType23 | Yes | No | OK |
+| RR | L3SystemInformationType20 | No | No | NEEDS_BUILDER |
+| RR | L3SystemInformationType21 | No | No | NEEDS_BUILDER |
+| RR | L3SystemInformationType22 | No | No | NEEDS_BUILDER |
+| RR | L3SystemInformationType23 | No | No | NEEDS_BUILDER |
 | RR | L3SystemInformationType2bis | Yes | No | OK |
-| RR | L3SystemInformationType2n | Yes | No | OK |
-| RR | L3SystemInformationType2quater | Yes | No | OK |
+| RR | L3SystemInformationType2n | No | No | NEEDS_BUILDER |
+| RR | L3SystemInformationType2quater | No | No | NEEDS_BUILDER |
 | RR | L3SystemInformationType2ter | Yes | No | OK |
 | RR | L3SystemInformationType3 | Yes | No | OK |
 | RR | L3SystemInformationType4 | Yes | No | OK |
@@ -120,17 +122,22 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | RR | L3SystemInformationType7 | Yes | No | OK |
 | RR | L3SystemInformationType8 | Yes | No | OK |
 | RR | L3SystemInformationType9 | Yes | No | OK |
-| RR | L3TalkerIndication | Yes | No | OK |
-| RR | L3UplinkBusy | Yes | No | OK |
-| RR | L3UplinkFree | Yes | No | OK |
-| RR | L3UplinkRelease | Yes | No | OK |
-| RR | L3UTRANClassmarkChange | Yes | No | OK |
-| RR | L3VBSVGCSRecon | Yes | No | OK |
-| RR | L3VBSVGCSRecon2 | Yes | No | OK |
-| RR | L3VGCSAddInfo | Yes | No | OK |
-| RR | L3VGCSMSInfo | Yes | No | OK |
-| RR | L3VGCSSNeighCellInfo | Yes | No | OK |
-| RR | L3VGCSUplinkGrant | Yes | No | OK |
+| RR | L3TalkerIndication | No | No | NEEDS_BUILDER |
+| RR | L3UplinkBusy | No | No | NEEDS_BUILDER |
+| RR | L3UplinkFree | No | No | NEEDS_BUILDER |
+| RR | L3UplinkRelease | No | No | NEEDS_BUILDER |
+| RR | L3UTRANClassmarkChange | No | No | NEEDS_BUILDER |
+| RR | L3VBSVGCSRecon | No | No | NEEDS_BUILDER |
+| RR | L3VBSVGCSRecon2 | No | No | NEEDS_BUILDER |
+| RR | L3VGCSAddInfo | No | No | NEEDS_BUILDER |
+| RR | L3VGCSMSInfo | No | No | NEEDS_BUILDER |
+| RR | L3VGCSSNeighCellInfo | No | No | NEEDS_BUILDER |
+| RR | L3VGCSUplinkGrant | No | No | NEEDS_BUILDER |
+
+### MM — All 20 classes have Builder (OK)
+
+| Domain | Message Class | Has Builder | Has Param Constructor | Action |
+|--------|--------------|-------------|----------------------|--------|
 | MM | L3AuthenticationReject | Yes | No | OK |
 | MM | L3AuthenticationRequest | Yes | No | OK |
 | MM | L3AuthenticationResponse | Yes | Yes | OK |
@@ -151,6 +158,11 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | MM | L3PagingMM | Yes | No | OK |
 | MM | L3TMSIReallocationCommand | Yes | No | OK |
 | MM | L3TMSIReallocationComplete | Yes | No | OK |
+
+### CC — All 24 classes have Builder (OK)
+
+| Domain | Message Class | Has Builder | Has Param Constructor | Action |
+|--------|--------------|-------------|----------------------|--------|
 | CC | L3Alerting | Yes | No | OK |
 | CC | L3CallConfirmed | Yes | No | OK |
 | CC | L3CallProceeding | Yes | No | OK |
@@ -175,101 +187,151 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | CC | L3StopDTMFAcknowledge | Yes | No | OK |
 | CC | L3UnitData | Yes | No | OK |
 | CC | L3UnitDataAck | Yes | No | OK |
-| GMM | L3AttachAccept | No | No | NEEDS_BUILDER |
-| GMM | L3AttachComplete | No | No | NEEDS_BUILDER |
-| GMM | L3AttachReject | No | No | NEEDS_BUILDER |
-| GMM | L3AttachRequest | No | No | NEEDS_BUILDER |
-| GMM | L3AuthenticationAndCipheringFailure | No | No | NEEDS_BUILDER |
-| GMM | L3AuthenticationAndCipheringReject | No | No | NEEDS_BUILDER |
-| GMM | L3AuthenticationAndCipheringRequest | No | No | NEEDS_BUILDER |
-| GMM | L3AuthenticationAndCipheringResponse | No | No | NEEDS_BUILDER |
-| GMM | L3DetachAccept | No | No | NEEDS_BUILDER |
-| GMM | L3DetachRequest | No | No | NEEDS_BUILDER |
-| GMM | L3GMMIdentityRequest | No | No | NEEDS_BUILDER |
-| GMM | L3GMMIdentityResponse | No | No | NEEDS_BUILDER |
-| GMM | L3GMMInformation | No | No | NEEDS_BUILDER |
-| GMM | L3GMMStatus | No | Yes | NEEDS_BUILDER |
-| GMM | L3P_TMSIReallocationCommand | No | No | NEEDS_BUILDER |
-| GMM | L3P_TMSIReallocationComplete | No | No | NEEDS_BUILDER |
-| GMM | L3RoutingAreaUpdateAccept | No | No | NEEDS_BUILDER |
-| GMM | L3RoutingAreaUpdateComplete | No | No | NEEDS_BUILDER |
-| GMM | L3RoutingAreaUpdateReject | No | No | NEEDS_BUILDER |
-| GMM | L3RoutingAreaUpdateRequest | No | No | NEEDS_BUILDER |
-| GMM | L3ServiceAccept | No | No | NEEDS_BUILDER |
-| GMM | L3ServiceReject | No | No | NEEDS_BUILDER |
-| GMM | L3ServiceRequest | No | No | NEEDS_BUILDER |
-| SM | L3ActivateAAPDPContextAccept | No | No | NEEDS_BUILDER |
-| SM | L3ActivateAAPDPContextReject | No | No | NEEDS_BUILDER |
-| SM | L3ActivateAAPDPContextRequest | No | No | NEEDS_BUILDER |
-| SM | L3ActivateMBMSContextAccept | No | No | NEEDS_BUILDER |
-| SM | L3ActivateMBMSContextReject | No | No | NEEDS_BUILDER |
-| SM | L3ActivateMBMSContextRequest | No | No | NEEDS_BUILDER |
-| SM | L3ActivatePDPContextAccept | No | No | NEEDS_BUILDER |
-| SM | L3ActivatePDPContextReject | No | No | NEEDS_BUILDER |
-| SM | L3ActivatePDPContextRequest | No | No | NEEDS_BUILDER |
-| SM | L3ActivateSecondaryPDPContextAccept | No | No | NEEDS_BUILDER |
-| SM | L3ActivateSecondaryPDPContextReject | No | No | NEEDS_BUILDER |
-| SM | L3ActivateSecondaryPDPContextRequest | No | No | NEEDS_BUILDER |
-| SM | L3DeactivateAAPDPContextAccept | No | No | NEEDS_BUILDER |
-| SM | L3DeactivateAAPDPContextRequest | No | No | NEEDS_BUILDER |
-| SM | L3DeactivatePDPContextAccept | No | No | NEEDS_BUILDER |
-| SM | L3DeactivatePDPContextRequest | No | No | NEEDS_BUILDER |
-| SM | L3ModifyPDPContextAccept | No | No | NEEDS_BUILDER |
-| SM | L3ModifyPDPContextAcceptNet | No | No | NEEDS_BUILDER |
-| SM | L3ModifyPDPContextReject | No | No | NEEDS_BUILDER |
-| SM | L3ModifyPDPContextRequest | No | No | NEEDS_BUILDER |
-| SM | L3ModifyPDPContextRequestMS | No | No | NEEDS_BUILDER |
-| SM | L3RequestMBMSContextActivation | No | No | NEEDS_BUILDER |
-| SM | L3RequestMBMSContextActivationReject | No | No | NEEDS_BUILDER |
-| SM | L3RequestPDPContextActivation | No | No | NEEDS_BUILDER |
-| SM | L3RequestPDPContextActivationReject | No | No | NEEDS_BUILDER |
-| SM | L3RequestSecondaryPDPContextActivation | No | No | NEEDS_BUILDER |
-| SM | L3RequestSecondaryPDPContextActivationReject | No | No | NEEDS_BUILDER |
-| SM | L3SMNotification | No | No | NEEDS_BUILDER |
-| SM | L3SMStatus | No | Yes | NEEDS_BUILDER |
-| SMS | L3CPAck | No | No | NEEDS_BUILDER |
-| SMS | L3CPData | No | No | NEEDS_BUILDER |
-| SMS | L3CPErr | No | No | NEEDS_BUILDER |
-| SMS | L3CPSMT | No | No | NEEDS_BUILDER |
-| SMS | L3CPStatus | No | No | NEEDS_BUILDER |
-| SMS | L3RPAck | No | No | NEEDS_BUILDER |
-| SMS | L3RPData | No | No | NEEDS_BUILDER |
-| SMS | L3RPError | No | No | NEEDS_BUILDER |
-| SMS | L3RPSMMA | No | No | NEEDS_BUILDER |
-| SMSL3 | L3SMSDeliver | No | No | NEEDS_BUILDER |
-| SMSL3 | L3SMSDeliverRep | No | No | NEEDS_BUILDER |
-| SMSL3 | L3SMSNotification | No | No | NEEDS_BUILDER |
-| SMSL3 | L3SMSProvidedReplyExpected | No | No | NEEDS_BUILDER |
-| SMSL3 | L3SMSSFProvidedRep | No | No | NEEDS_BUILDER |
-| SMSL3 | L3SMSSFProvidedRepAck | No | No | NEEDS_BUILDER |
-| SMSL3 | L3SMSShortCodeInfo | No | No | NEEDS_BUILDER |
-| SMSL3 | L3SMSStatusReport | No | No | NEEDS_BUILDER |
-| SMSL3 | L3SMSStatusReportAck | No | No | NEEDS_BUILDER |
-| SMSL3 | L3SMSStatusReportReject | No | No | NEEDS_BUILDER |
-| SMSL3 | L3SMSSubmitDeferred | No | No | NEEDS_BUILDER |
-| SMSL3 | L3SMSSubmitReject | No | No | NEEDS_BUILDER |
-| SMSL3 | L3SMSSubmitRep | No | No | NEEDS_BUILDER |
-| SMSL3 | L3SMSTSReject | No | No | NEEDS_BUILDER |
-| BCC | L3BCCCallConfirmed | No | No | NEEDS_BUILDER |
-| BCC | L3BCCConnect | No | No | NEEDS_BUILDER |
-| BCC | L3BCCConnectAcknowledge | No | No | NEEDS_BUILDER |
-| BCC | L3BCCDisconnect | No | No | NEEDS_BUILDER |
-| BCC | L3BCCProceeding | No | No | NEEDS_BUILDER |
-| BCC | L3BCCRelease | No | No | NEEDS_BUILDER |
-| BCC | L3BCCReleaseComplete | No | No | NEEDS_BUILDER |
-| BCC | L3BCCSetup | No | No | NEEDS_BUILDER |
-| GCC | L3GCCAcknowledge | No | No | NEEDS_BUILDER |
-| GCC | L3GCCCallConfirmed | No | No | NEEDS_BUILDER |
-| GCC | L3GCCConnect | No | No | NEEDS_BUILDER |
-| GCC | L3GCCDisconnect | No | No | NEEDS_BUILDER |
-| GCC | L3GCCProceeding | No | No | NEEDS_BUILDER |
-| GCC | L3GCCRelease | No | No | NEEDS_BUILDER |
-| GCC | L3GCCReleaseComplete | No | No | NEEDS_BUILDER |
-| GCC | L3GCCSetup | No | No | NEEDS_BUILDER |
-| LS | L3LocationServiceProviderMessage | No | No | NEEDS_BUILDER |
-| LS | L3LocationServiceRequest | No | No | NEEDS_BUILDER |
+
+### GMM — All 23 classes have Builder (OK)
+
+| Domain | Message Class | Has Builder | Has Param Constructor | Action |
+|--------|--------------|-------------|----------------------|--------|
+| GMM | L3AttachAccept | Yes | No | OK |
+| GMM | L3AttachComplete | Yes | No | OK |
+| GMM | L3AttachReject | Yes | No | OK |
+| GMM | L3AttachRequest | Yes | No | OK |
+| GMM | L3AuthenticationAndCipheringFailure | Yes | No | OK |
+| GMM | L3AuthenticationAndCipheringReject | Yes | No | OK |
+| GMM | L3AuthenticationAndCipheringRequest | Yes | No | OK |
+| GMM | L3AuthenticationAndCipheringResponse | Yes | No | OK |
+| GMM | L3DetachAccept | Yes | No | OK |
+| GMM | L3DetachRequest | Yes | No | OK |
+| GMM | L3GMMIdentityRequest | Yes | No | OK |
+| GMM | L3GMMIdentityResponse | Yes | No | OK |
+| GMM | L3GMMInformation | Yes | No | OK |
+| GMM | L3GMMStatus | Yes | Yes | OK |
+| GMM | L3P_TMSIReallocationCommand | Yes | No | OK |
+| GMM | L3P_TMSIReallocationComplete | Yes | No | OK |
+| GMM | L3RoutingAreaUpdateAccept | Yes | No | OK |
+| GMM | L3RoutingAreaUpdateComplete | Yes | No | OK |
+| GMM | L3RoutingAreaUpdateReject | Yes | No | OK |
+| GMM | L3RoutingAreaUpdateRequest | Yes | No | OK |
+| GMM | L3ServiceAccept | Yes | No | OK |
+| GMM | L3ServiceReject | Yes | No | OK |
+| GMM | L3ServiceRequest | Yes | No | OK |
+
+### SM — All 29 classes have Builder (OK)
+
+| Domain | Message Class | Has Builder | Has Param Constructor | Action |
+|--------|--------------|-------------|----------------------|--------|
+| SM | L3ActivateAAPDPContextAccept | Yes | No | OK |
+| SM | L3ActivateAAPDPContextReject | Yes | No | OK |
+| SM | L3ActivateAAPDPContextRequest | Yes | No | OK |
+| SM | L3ActivateMBMSContextAccept | Yes | No | OK |
+| SM | L3ActivateMBMSContextReject | Yes | No | OK |
+| SM | L3ActivateMBMSContextRequest | Yes | No | OK |
+| SM | L3ActivatePDPContextAccept | Yes | No | OK |
+| SM | L3ActivatePDPContextReject | Yes | No | OK |
+| SM | L3ActivatePDPContextRequest | Yes | No | OK |
+| SM | L3ActivateSecondaryPDPContextAccept | Yes | No | OK |
+| SM | L3ActivateSecondaryPDPContextReject | Yes | No | OK |
+| SM | L3ActivateSecondaryPDPContextRequest | Yes | No | OK |
+| SM | L3DeactivateAAPDPContextAccept | Yes | No | OK |
+| SM | L3DeactivateAAPDPContextRequest | Yes | No | OK |
+| SM | L3DeactivatePDPContextAccept | Yes | No | OK |
+| SM | L3DeactivatePDPContextRequest | Yes | No | OK |
+| SM | L3ModifyPDPContextAccept | Yes | No | OK |
+| SM | L3ModifyPDPContextAcceptNet | Yes | No | OK |
+| SM | L3ModifyPDPContextReject | Yes | No | OK |
+| SM | L3ModifyPDPContextRequest | Yes | No | OK |
+| SM | L3ModifyPDPContextRequestMS | Yes | No | OK |
+| SM | L3RequestMBMSContextActivation | Yes | No | OK |
+| SM | L3RequestMBMSContextActivationReject | Yes | No | OK |
+| SM | L3RequestPDPContextActivation | Yes | No | OK |
+| SM | L3RequestPDPContextActivationReject | Yes | No | OK |
+| SM | L3RequestSecondaryPDPContextActivation | Yes | No | OK |
+| SM | L3RequestSecondaryPDPContextActivationReject | Yes | No | OK |
+| SM | L3SMNotification | Yes | No | OK |
+| SM | L3SMStatus | Yes | Yes | OK |
+
+### SMS — All 9 classes have Builder (OK)
+
+| Domain | Message Class | Has Builder | Has Param Constructor | Action |
+|--------|--------------|-------------|----------------------|--------|
+| SMS | L3CPAck | Yes | No | OK |
+| SMS | L3CPData | Yes | No | OK |
+| SMS | L3CPErr | Yes | No | OK |
+| SMS | L3CPSMT | Yes | No | OK |
+| SMS | L3CPStatus | Yes | No | OK |
+| SMS | L3RPAck | Yes | No | OK |
+| SMS | L3RPData | Yes | No | OK |
+| SMS | L3RPError | Yes | No | OK |
+| SMS | L3RPSMMA | Yes | No | OK |
+
+### SMSL3 — All 14 classes have Builder (OK)
+
+| Domain | Message Class | Has Builder | Has Param Constructor | Action |
+|--------|--------------|-------------|----------------------|--------|
+| SMSL3 | L3SMSDeliver | Yes | No | OK |
+| SMSL3 | L3SMSDeliverRep | Yes | No | OK |
+| SMSL3 | L3SMSNotification | Yes | No | OK |
+| SMSL3 | L3SMSProvidedReplyExpected | Yes | No | OK |
+| SMSL3 | L3SMSSFProvidedRep | Yes | No | OK |
+| SMSL3 | L3SMSSFProvidedRepAck | Yes | No | OK |
+| SMSL3 | L3SMSShortCodeInfo | Yes | No | OK |
+| SMSL3 | L3SMSStatusReport | Yes | No | OK |
+| SMSL3 | L3SMSStatusReportAck | Yes | No | OK |
+| SMSL3 | L3SMSStatusReportReject | Yes | No | OK |
+| SMSL3 | L3SMSSubmitDeferred | Yes | No | OK |
+| SMSL3 | L3SMSSubmitReject | Yes | No | OK |
+| SMSL3 | L3SMSSubmitRep | Yes | No | OK |
+| SMSL3 | L3SMSTSReject | Yes | No | OK |
+
+### BCC — All 8 classes have Builder (OK)
+
+| Domain | Message Class | Has Builder | Has Param Constructor | Action |
+|--------|--------------|-------------|----------------------|--------|
+| BCC | L3BCCCallConfirmed | Yes | No | OK |
+| BCC | L3BCCConnect | Yes | No | OK |
+| BCC | L3BCCConnectAcknowledge | Yes | No | OK |
+| BCC | L3BCCDisconnect | Yes | No | OK |
+| BCC | L3BCCProceeding | Yes | No | OK |
+| BCC | L3BCCRelease | Yes | No | OK |
+| BCC | L3BCCReleaseComplete | Yes | No | OK |
+| BCC | L3BCCSetup | Yes | No | OK |
+
+### GCC — All 8 classes have Builder (OK)
+
+| Domain | Message Class | Has Builder | Has Param Constructor | Action |
+|--------|--------------|-------------|----------------------|--------|
+| GCC | L3GCCAcknowledge | Yes | No | OK |
+| GCC | L3GCCCallConfirmed | Yes | No | OK |
+| GCC | L3GCCConnect | Yes | No | OK |
+| GCC | L3GCCDisconnect | Yes | No | OK |
+| GCC | L3GCCProceeding | Yes | No | OK |
+| GCC | L3GCCRelease | Yes | No | OK |
+| GCC | L3GCCReleaseComplete | Yes | No | OK |
+| GCC | L3GCCSetup | Yes | No | OK |
+
+### LS — All 2 classes have Builder (OK)
+
+| Domain | Message Class | Has Builder | Has Param Constructor | Action |
+|--------|--------------|-------------|----------------------|--------|
+| LS | L3LocationServiceProviderMessage | Yes | No | OK |
+| LS | L3LocationServiceRequest | Yes | No | OK |
+
+### SS — 0 of 3 classes have Builder
+
+| Domain | Message Class | Has Builder | Has Param Constructor | Action |
+|--------|--------------|-------------|----------------------|--------|
 | SS | L3SupServFacilityMessage | No | Yes | NEEDS_BUILDER |
 | SS | L3SupServRegisterMessage | No | Yes | NEEDS_BUILDER |
 | SS | L3SupServReleaseCompleteMessage | No | Yes | NEEDS_BUILDER |
+
+### Extended — 0 of 1 class has Builder
+
+| Domain | Message Class | Has Builder | Has Param Constructor | Action |
+|--------|--------------|-------------|----------------------|--------|
 | Extended | L3ExtendedMessage | No | Yes | NEEDS_BUILDER |
+
+### TestProc — 0 of 1 class has Builder
+
+| Domain | Message Class | Has Builder | Has Param Constructor | Action |
+|--------|--------------|-------------|----------------------|--------|
 | TestProc | L3TestProcedureMessage | No | Yes | NEEDS_BUILDER |
