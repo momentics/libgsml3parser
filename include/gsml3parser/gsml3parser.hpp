@@ -49,3 +49,8 @@
 #include "gsml3parser/enum_formatters.h"
 #include "gsml3parser/lapdm.h"
 #include "gsml3parser/dispatcher.h"
+#include "gsml3parser/stack/ms_context.h"
+#include "gsml3parser/stack/l3_timer.h"
+#include "gsml3parser/stack/state_machine.h"
+#include "gsml3parser/stack/transaction.h"
+#include "gsml3parser/stack/channel_pool.h"

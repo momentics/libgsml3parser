@@ -16,6 +16,7 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(BUILD_SHARED_LIBS "Build shared library" OFF)
 option(BUILD_TESTS "Build unit tests" OFF)
 option(BUILD_EXAMPLES "Build examples" OFF)
+option(BUILD_BENCHMARKS "Build performance benchmarks" OFF)
 option(ENABLE_FUZZING "Build fuzzing target" OFF)
 
 # ── Source files ──────────────────────────────────────────────────────
@@ -35,6 +36,11 @@ set(CORE_SOURCES
     src/bitstream/stream_processor.cpp
     src/lapdm.cpp
     src/dispatcher.cpp
+    src/stack/ms_context.cpp
+    src/stack/l3_timer.cpp
+    src/stack/state_machine.cpp
+    src/stack/transaction.cpp
+    src/stack/channel_pool.cpp
 )
 
 set(RR_SOURCES
@@ -132,6 +138,11 @@ set(PUBLIC_HEADERS
     include/gsml3parser/bitstream/stream_processor.h
     include/gsml3parser/lapdm.h
     include/gsml3parser/dispatcher.h
+    include/gsml3parser/stack/ms_context.h
+    include/gsml3parser/stack/l3_timer.h
+    include/gsml3parser/stack/state_machine.h
+    include/gsml3parser/stack/transaction.h
+    include/gsml3parser/stack/channel_pool.h
 )
 
 # ── Library target ────────────────────────────────────────────────────
@@ -169,8 +180,10 @@ target_compile_definitions(gsml3parser PRIVATE
 if(MSVC)
     target_compile_definitions(gsml3parser PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_compile_options(gsml3parser PRIVATE /W4 /WX- /bigobj)
+    target_compile_options(gsml3parser PRIVATE $<$<CONFIG:Release>:/O2>)
 else()
     target_compile_options(gsml3parser PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(gsml3parser PRIVATE $<$<CONFIG:Release>:-O2>)
 endif()
 
 # ── Install ───────────────────────────────────────────────────────────
@@ -231,4 +244,10 @@ endif()
 
 if(BUILD_EXAMPLES)
     add_subdirectory(examples)
+endif()
+
+# ── Benchmarks ────────────────────────────────────────────────────────
+
+if(BUILD_BENCHMARKS)
+    add_subdirectory(benchmarks)
 endif()
