@@ -33,6 +33,7 @@ set(CORE_SOURCES
     src/bitstream/byte_source.cpp
     src/bitstream/framer.cpp
     src/bitstream/stream_processor.cpp
+    src/lapdm.cpp
 )
 
 set(RR_SOURCES
@@ -128,6 +129,7 @@ set(PUBLIC_HEADERS
     include/gsml3parser/bitstream/byte_source.h
     include/gsml3parser/bitstream/framer.h
     include/gsml3parser/bitstream/stream_processor.h
+    include/gsml3parser/lapdm.h
 )
 
 # ── Library target ────────────────────────────────────────────────────

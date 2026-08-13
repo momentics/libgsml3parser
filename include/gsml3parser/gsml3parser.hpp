@@ -26,3 +26,4 @@
 #include "gsml3parser/bitstream/framer.h"
 #include "gsml3parser/bitstream/stream_processor.h"
 #include "gsml3parser/enum_formatters.h"
+#include "gsml3parser/lapdm.h"
