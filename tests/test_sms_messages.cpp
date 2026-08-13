@@ -539,7 +539,7 @@ TEST(GoldenSMSTest, TPSubmit_Parse) {
 }
 
 // =====================================================================
-// SMS Full Wrapper Test (Step 6.4)
+// SMS Full Wrapper Test
 // Parse full L3 SMS message: CP-DATA -> RP-DATA -> TP-Submit
 // This tests the complete nesting: L3 header -> CP layer -> RP layer -> TP layer.
 // Reference: L3_Templates.ttcn ts_ML3_MO_SMS (line 3700)
@@ -603,7 +603,7 @@ TEST(GoldenSMSTest, FullSMSWrapper_MO) {
 }
 
 // =====================================================================
-// SMS Full Wrapper MT Test (Step 6.4)
+// SMS Full Wrapper MT Test
 // Parse full MT SMS message: CP-DATA -> RP-DATA -> TP-Deliver
 // Reference: L3_Templates.ttcn tr_ML3_MT_SMS (line 3726)
 // =====================================================================

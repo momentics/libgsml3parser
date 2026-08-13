@@ -141,6 +141,8 @@ class L3PagingResponse {
     unsigned mCKSN{0};
     L3MobileStationClassmark2 mClassmark;
     L3MobileIdentity mMobileID;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x27;
 
@@ -155,6 +157,29 @@ public:
     [[nodiscard]] static Expected<L3PagingResponse> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        unsigned mCKSN{0};
+        L3MobileStationClassmark2 mClassmark;
+        L3MobileIdentity mMobileID;
+
+        /// Set CKSN value.
+        Builder& cksn(unsigned v) { mCKSN = v; return *this; }
+        /// Set classmark.
+        Builder& classmark(L3MobileStationClassmark2 v) { mClassmark = v; return *this; }
+        /// Set mobile identity.
+        Builder& mobileId(L3MobileIdentity v) { mMobileID = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3PagingResponse build() const {
+            L3PagingResponse msg;
+            msg.mCKSN = mCKSN;
+            msg.mClassmark = mClassmark;
+            msg.mMobileID = mMobileID;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Channel Release (GSM 04.08 9.1.7) ──────────────────────────────────
@@ -355,6 +380,13 @@ public:
     [[nodiscard]] static Expected<L3ClassmarkEnquiry> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3ClassmarkEnquiry build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Classmark Change (GSM 04.08 9.1.11) ───────────────────────────────
@@ -363,6 +395,8 @@ class L3ClassmarkChange {
     L3MobileStationClassmark2 mClassmark;
     bool mHaveAdditionalClassmark{false};
     L3MobileStationClassmark3 mAdditionalClassmark;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x16;
 
@@ -377,12 +411,35 @@ public:
     [[nodiscard]] static Expected<L3ClassmarkChange> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3MobileStationClassmark2 mClassmark;
+        bool mHaveAdditionalClassmark{false};
+        L3MobileStationClassmark3 mAdditionalClassmark;
+
+        /// Set classmark.
+        Builder& classmark(L3MobileStationClassmark2 v) { mClassmark = v; return *this; }
+        /// Set additional classmark (sets mHaveAdditionalClassmark flag).
+        Builder& additionalClassmark(L3MobileStationClassmark3 v) { mAdditionalClassmark = v; mHaveAdditionalClassmark = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ClassmarkChange build() const {
+            L3ClassmarkChange msg;
+            msg.mClassmark = mClassmark;
+            msg.mHaveAdditionalClassmark = mHaveAdditionalClassmark;
+            msg.mAdditionalClassmark = mAdditionalClassmark;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Measurement Report (GSM 04.08 9.1.21) ─────────────────────────────
 
 class L3MeasurementReport {
     L3MeasurementResults mMeasurementResults;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x15;
 
@@ -395,6 +452,21 @@ public:
     [[nodiscard]] static Expected<L3MeasurementReport> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3MeasurementResults mMeasurementResults;
+
+        /// Set measurement results.
+        Builder& measurementResults(L3MeasurementResults v) { mMeasurementResults = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3MeasurementReport build() const {
+            L3MeasurementReport msg;
+            msg.mMeasurementResults = mMeasurementResults;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Ciphering Mode Command (GSM 04.08 9.1.9) ──────────────────────────
@@ -611,13 +683,14 @@ public:
 // ── GPRS Suspension Request (GSM 04.08 9.1.13b) ────────────────────────
 
 class L3GPRSSuspensionRequest {
-public:
-    static constexpr int MTI = 0x34;
-
     uint32_t mTLLI{0};
     std::vector<uint8_t> mRaId;
     uint8_t mSuspensionCause{0};
     uint8_t mServiceSupport{0};
+
+    friend struct Builder;
+public:
+    static constexpr int MTI = 0x34;
 
     L3GPRSSuspensionRequest() : mRaId(6, 0) {}
 
@@ -628,6 +701,33 @@ public:
     [[nodiscard]] static Expected<L3GPRSSuspensionRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        uint32_t mTLLI{0};
+        std::vector<uint8_t> mRaId;
+        uint8_t mSuspensionCause{0};
+        uint8_t mServiceSupport{0};
+
+        /// Set TLLI value.
+        Builder& tlli(uint32_t v) { mTLLI = v; return *this; }
+        /// Set RA ID.
+        Builder& raId(std::vector<uint8_t> v) { mRaId = std::move(v); return *this; }
+        /// Set suspension cause.
+        Builder& suspensionCause(uint8_t v) { mSuspensionCause = v; return *this; }
+        /// Set service support.
+        Builder& serviceSupport(uint8_t v) { mServiceSupport = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3GPRSSuspensionRequest build() const {
+            L3GPRSSuspensionRequest msg;
+            msg.mTLLI = mTLLI;
+            msg.mRaId = mRaId;
+            msg.mSuspensionCause = mSuspensionCause;
+            msg.mServiceSupport = mServiceSupport;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Application Information (GSM 04.08 9.1.53) ────────────────────────
@@ -638,12 +738,14 @@ class L3ApplicationInformation {
     unsigned mFirstSegment{0};
     unsigned mLastSegment{0};
     std::vector<uint8_t> mData;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x38;
 
     L3ApplicationInformation() = default;
     L3ApplicationInformation(std::vector<uint8_t> data, unsigned protocolId = 0,
-                              unsigned cr = 0, unsigned first = 0, unsigned last = 0)
+                               unsigned cr = 0, unsigned first = 0, unsigned last = 0)
         : mProtocolIdentifier(protocolId), mCR(cr), mFirstSegment(first),
           mLastSegment(last), mData(std::move(data)) {}
 
@@ -660,6 +762,37 @@ public:
     [[nodiscard]] static Expected<L3ApplicationInformation> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        unsigned mProtocolIdentifier{0};
+        unsigned mCR{0};
+        unsigned mFirstSegment{0};
+        unsigned mLastSegment{0};
+        std::vector<uint8_t> mData;
+
+        /// Set protocol identifier.
+        Builder& protocolIdentifier(unsigned v) { mProtocolIdentifier = v; return *this; }
+        /// Set C/R bit.
+        Builder& cr(unsigned v) { mCR = v; return *this; }
+        /// Set first segment flag.
+        Builder& firstSegment(unsigned v) { mFirstSegment = v; return *this; }
+        /// Set last segment flag.
+        Builder& lastSegment(unsigned v) { mLastSegment = v; return *this; }
+        /// Set data payload.
+        Builder& data(std::vector<uint8_t> v) { mData = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ApplicationInformation build() const {
+            L3ApplicationInformation msg;
+            msg.mProtocolIdentifier = mProtocolIdentifier;
+            msg.mCR = mCR;
+            msg.mFirstSegment = mFirstSegment;
+            msg.mLastSegment = mLastSegment;
+            msg.mData = mData;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── System Information Type 1 (GSM 04.08 9.1.31) ──────────────────────
@@ -1651,6 +1784,8 @@ public:
 class L3SynchronizationChannelInformation {
     L3CellIdentity mCellIdentity;
     L3LocationAreaIdentity mLocationAreaIdentity;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x100;
 
@@ -1666,6 +1801,25 @@ public:
     [[nodiscard]] static Expected<L3SynchronizationChannelInformation> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3CellIdentity mCellIdentity;
+        L3LocationAreaIdentity mLocationAreaIdentity;
+
+        /// Set cell identity.
+        Builder& cellIdentity(L3CellIdentity v) { mCellIdentity = v; return *this; }
+        /// Set location area identity.
+        Builder& locationAreaIdentity(L3LocationAreaIdentity v) { mLocationAreaIdentity = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SynchronizationChannelInformation build() const {
+            L3SynchronizationChannelInformation msg;
+            msg.mCellIdentity = mCellIdentity;
+            msg.mLocationAreaIdentity = mLocationAreaIdentity;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Channel Request (GSM 04.08 9.1.13) ────────────────────────────────
@@ -1673,6 +1827,8 @@ public:
 
 class L3ChannelRequest {
     unsigned mRequestReference{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x101;
 
@@ -1688,6 +1844,21 @@ public:
     [[nodiscard]] static Expected<L3ChannelRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        unsigned mRequestReference{0};
+
+        /// Set request reference.
+        Builder& requestReference(unsigned v) { mRequestReference = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ChannelRequest build() const {
+            L3ChannelRequest msg;
+            msg.mRequestReference = mRequestReference;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Handover Access (GSM 04.08 9.1.14a) ───────────────────────────────
@@ -1695,6 +1866,8 @@ public:
 
 class L3HandoverAccess {
     unsigned mHandoverNumber{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x102;
 
@@ -1710,6 +1883,21 @@ public:
     [[nodiscard]] static Expected<L3HandoverAccess> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        unsigned mHandoverNumber{0};
+
+        /// Set handover number.
+        Builder& handoverNumber(unsigned v) { mHandoverNumber = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3HandoverAccess build() const {
+            L3HandoverAccess msg;
+            msg.mHandoverNumber = mHandoverNumber;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Configuration Change Command (GSM 04.08 9.1.4) ────────────────────
@@ -1871,6 +2059,8 @@ public:
 
 class L3ExtendedMeasurementReport {
     L3MeasurementResults mMeasurementResults;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x36;
 
@@ -1883,12 +2073,29 @@ public:
     [[nodiscard]] static Expected<L3ExtendedMeasurementReport> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3MeasurementResults mMeasurementResults;
+
+        /// Set measurement results.
+        Builder& measurementResults(L3MeasurementResults v) { mMeasurementResults = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ExtendedMeasurementReport build() const {
+            L3ExtendedMeasurementReport msg;
+            msg.mMeasurementResults = mMeasurementResults;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Extended Measurement Order (GSM 04.08 9.1.21b) ────────────────────
 
 class L3ExtendedMeasurementOrder {
     std::vector<uint8_t> mData;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x37;
 
@@ -1901,6 +2108,21 @@ public:
     [[nodiscard]] static Expected<L3ExtendedMeasurementOrder> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mData;
+
+        /// Set data payload.
+        Builder& data(std::vector<uint8_t> v) { mData = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ExtendedMeasurementOrder build() const {
+            L3ExtendedMeasurementOrder msg;
+            msg.mData = mData;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Frequency Redefinition (GSM 04.08 9.1.13a) ────────────────────────
@@ -1908,6 +2130,8 @@ public:
 class L3FrequencyRedefinition {
     L3FrequencyList mCellChannelDescription;
     L3RACHControlParameters mRACHControlParameters;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x14;
 
@@ -1921,6 +2145,25 @@ public:
     [[nodiscard]] static Expected<L3FrequencyRedefinition> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3FrequencyList mCellChannelDescription;
+        L3RACHControlParameters mRACHControlParameters;
+
+        /// Set cell channel description (frequency list).
+        Builder& cellChannelDescription(L3FrequencyList v) { mCellChannelDescription = v; return *this; }
+        /// Set RACH control parameters.
+        Builder& rachControlParameters(L3RACHControlParameters v) { mRACHControlParameters = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3FrequencyRedefinition build() const {
+            L3FrequencyRedefinition msg;
+            msg.mCellChannelDescription = mCellChannelDescription;
+            msg.mRACHControlParameters = mRACHControlParameters;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Notification NCH (GSM 04.08 9.1.26) ───────────────────────────────
@@ -1930,6 +2173,8 @@ public:
 
 class L3NotificationNCH {
     std::vector<uint8_t> mData;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x20;
 
@@ -1943,12 +2188,29 @@ public:
     [[nodiscard]] static Expected<L3NotificationNCH> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mData;
+
+        /// Set data payload.
+        Builder& data(std::vector<uint8_t> v) { mData = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3NotificationNCH build() const {
+            L3NotificationNCH msg;
+            msg.mData = mData;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Notification Response (GSM 04.08 9.1.27) ──────────────────────────
 
 class L3NotificationResponse {
     std::vector<uint8_t> mData;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x26;
 
@@ -1962,6 +2224,21 @@ public:
     [[nodiscard]] static Expected<L3NotificationResponse> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mData;
+
+        /// Set data payload.
+        Builder& data(std::vector<uint8_t> v) { mData = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3NotificationResponse build() const {
+            L3NotificationResponse msg;
+            msg.mData = mData;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── VGCS Uplink Grant (GSM 04.08 9.1.28) ──────────────────────────────
@@ -1978,6 +2255,13 @@ public:
     [[nodiscard]] static Expected<L3VGCSUplinkGrant> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3VGCSUplinkGrant build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Uplink Release (GSM 04.08 9.1.28a) ────────────────────────────────
@@ -1994,6 +2278,13 @@ public:
     [[nodiscard]] static Expected<L3UplinkRelease> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3UplinkRelease build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Uplink Busy (GSM 04.08 9.1.28b) ───────────────────────────────────
@@ -2010,6 +2301,13 @@ public:
     [[nodiscard]] static Expected<L3UplinkBusy> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3UplinkBusy build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Talker Indication (GSM 04.08 9.1.28c) ─────────────────────────────
@@ -2026,12 +2324,21 @@ public:
     [[nodiscard]] static Expected<L3TalkerIndication> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3TalkerIndication build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Priority Uplink Request (GSM 04.08 9.1.28d) ───────────────────────
 
 class L3PriorityUplinkRequest {
     uint32_t mTMSI{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x66;
 
@@ -2044,12 +2351,29 @@ public:
     [[nodiscard]] static Expected<L3PriorityUplinkRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        uint32_t mTMSI{0};
+
+        /// Set TMSI value.
+        Builder& tmsi(uint32_t v) { mTMSI = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3PriorityUplinkRequest build() const {
+            L3PriorityUplinkRequest msg;
+            msg.mTMSI = mTMSI;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Data Indication (GSM 04.08 9.1.28e) ───────────────────────────────
 
 class L3DataIndication {
     std::vector<uint8_t> mData;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x67;
 
@@ -2063,12 +2387,29 @@ public:
     [[nodiscard]] static Expected<L3DataIndication> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mData;
+
+        /// Set data payload.
+        Builder& data(std::vector<uint8_t> v) { mData = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3DataIndication build() const {
+            L3DataIndication msg;
+            msg.mData = mData;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Data Indication 2 (GSM 04.08 9.1.28f) ─────────────────────────────
 
 class L3DataIndication2 {
     std::vector<uint8_t> mData;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x68;
 
@@ -2082,12 +2423,29 @@ public:
     [[nodiscard]] static Expected<L3DataIndication2> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mData;
+
+        /// Set data payload.
+        Builder& data(std::vector<uint8_t> v) { mData = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3DataIndication2 build() const {
+            L3DataIndication2 msg;
+            msg.mData = mData;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── DTM Assignment Failure (GSM 04.08 9.1.3d) ─────────────────────────
 
 class L3DTMAssignmentFailure {
     RRCause mCause{RRCause::Normal_Event};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x80;
 
@@ -2103,6 +2461,21 @@ public:
     [[nodiscard]] static Expected<L3DTMAssignmentFailure> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        RRCause mCause{RRCause::Normal_Event};
+
+        /// Set the RR cause.
+        Builder& cause(RRCause v) { mCause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3DTMAssignmentFailure build() const {
+            L3DTMAssignmentFailure msg;
+            msg.mCause = mCause;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── DTM Reject (GSM 04.08 9.1.3d) ─────────────────────────────────────
@@ -2118,6 +2491,13 @@ public:
     [[nodiscard]] static Expected<L3DTMReject> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3DTMReject build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── DTM Request (GSM 04.08 9.1.3d) ────────────────────────────────────
@@ -2133,6 +2513,13 @@ public:
     [[nodiscard]] static Expected<L3DTMRequest> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3DTMRequest build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Packet Assignment (GSM 04.08 9.1.3e) ───────────────────────────────
@@ -2140,6 +2527,8 @@ public:
 class L3PacketAssignment {
     L3ChannelDescription mChanDesc;
     L3TimingAdvance mTA;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x83;
 
@@ -2153,6 +2542,25 @@ public:
     [[nodiscard]] static Expected<L3PacketAssignment> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3ChannelDescription mChanDesc;
+        L3TimingAdvance mTA;
+
+        /// Set channel description.
+        Builder& channelDescription(L3ChannelDescription v) { mChanDesc = v; return *this; }
+        /// Set timing advance.
+        Builder& timingAdvance(L3TimingAdvance v) { mTA = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3PacketAssignment build() const {
+            L3PacketAssignment msg;
+            msg.mChanDesc = mChanDesc;
+            msg.mTA = mTA;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── DTM Assignment Command (GSM 04.08 9.1.3d) ─────────────────────────
@@ -2168,6 +2576,13 @@ public:
     [[nodiscard]] static Expected<L3DTMAssignmentCommand> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3DTMAssignmentCommand build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── DTM Information (GSM 04.08 9.1.3d) ────────────────────────────────
@@ -2183,6 +2598,13 @@ public:
     [[nodiscard]] static Expected<L3DTMInformation> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3DTMInformation build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Packet Information (GSM 04.08 9.1.3e) ─────────────────────────────
@@ -2198,12 +2620,21 @@ public:
     [[nodiscard]] static Expected<L3PacketInformation> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3PacketInformation build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── UTRAN Classmark Change (GSM 04.08 9.1.11a) ────────────────────────
 
 class L3UTRANClassmarkChange {
     std::vector<uint8_t> mClassmark;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x60;
 
@@ -2217,12 +2648,29 @@ public:
     [[nodiscard]] static Expected<L3UTRANClassmarkChange> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mClassmark;
+
+        /// Set classmark data.
+        Builder& classmark(std::vector<uint8_t> v) { mClassmark = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3UTRANClassmarkChange build() const {
+            L3UTRANClassmarkChange msg;
+            msg.mClassmark = mClassmark;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── CDMA2000 Classmark Change (GSM 04.08 9.1.11b) ────────────────────
 
 class L3CDMA2000ClassmarkChange {
     std::vector<uint8_t> mClassmark;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x62;
 
@@ -2236,12 +2684,29 @@ public:
     [[nodiscard]] static Expected<L3CDMA2000ClassmarkChange> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mClassmark;
+
+        /// Set classmark data.
+        Builder& classmark(std::vector<uint8_t> v) { mClassmark = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CDMA2000ClassmarkChange build() const {
+            L3CDMA2000ClassmarkChange msg;
+            msg.mClassmark = mClassmark;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Intersys to UTRAN HO Command (GSM 04.08 9.1.15a) ─────────────────
 
 class L3IntersysToUTRANHOCommand {
     std::vector<uint8_t> mData;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x63;
 
@@ -2255,12 +2720,29 @@ public:
     [[nodiscard]] static Expected<L3IntersysToUTRANHOCommand> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mData;
+
+        /// Set data payload.
+        Builder& data(std::vector<uint8_t> v) { mData = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3IntersysToUTRANHOCommand build() const {
+            L3IntersysToUTRANHOCommand msg;
+            msg.mData = mData;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Intersys to CDMA2000 HO Command (GSM 04.08 9.1.15b) ───────────────
 
 class L3IntersysToCDMA2000HOCommand {
     std::vector<uint8_t> mData;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x64;
 
@@ -2274,12 +2756,29 @@ public:
     [[nodiscard]] static Expected<L3IntersysToCDMA2000HOCommand> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mData;
+
+        /// Set data payload.
+        Builder& data(std::vector<uint8_t> v) { mData = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3IntersysToCDMA2000HOCommand build() const {
+            L3IntersysToCDMA2000HOCommand msg;
+            msg.mData = mData;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── GERAN IU Mode Classmark Change (GSM 04.08 9.1.11c) ────────────────
 
 class L3GERANIUClassmarkChange {
     std::vector<uint8_t> mClassmark;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x65;
 
@@ -2293,6 +2792,21 @@ public:
     [[nodiscard]] static Expected<L3GERANIUClassmarkChange> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mClassmark;
+
+        /// Set classmark data.
+        Builder& classmark(std::vector<uint8_t> v) { mClassmark = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3GERANIUClassmarkChange build() const {
+            L3GERANIUClassmarkChange msg;
+            msg.mClassmark = mClassmark;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── System Information Type 14 (GSM 04.08 9.1.43d) ────────────────────
@@ -2300,6 +2814,8 @@ public:
 class L3SystemInformationType14 {
     L3CellIdentity mCI;
     L3CellSelectionParameters mCellSelectionParameters;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x01;
 
@@ -2313,6 +2829,25 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType14> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3CellIdentity mCI;
+        L3CellSelectionParameters mCellSelectionParameters;
+
+        /// Set cell identity.
+        Builder& ci(L3CellIdentity v) { mCI = v; return *this; }
+        /// Set cell selection parameters.
+        Builder& cellSelectionParameters(L3CellSelectionParameters v) { mCellSelectionParameters = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType14 build() const {
+            L3SystemInformationType14 msg;
+            msg.mCI = mCI;
+            msg.mCellSelectionParameters = mCellSelectionParameters;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── System Information Type 15 (GSM 04.08 9.1.43e) ────────────────────
@@ -2328,6 +2863,13 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType15> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType15 build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── System Information Type 18 (GSM 04.08 9.1.43f) ────────────────────
@@ -2335,6 +2877,8 @@ public:
 class L3SystemInformationType18 {
     L3RACHControlParameters mRACHControl;
     std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x40;
 
@@ -2348,6 +2892,25 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType18> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3RACHControlParameters mRACHControl;
+        std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+
+        /// Set RACH control parameters.
+        Builder& rachControl(L3RACHControlParameters v) { mRACHControl = v; return *this; }
+        /// Set cell channel descriptions.
+        Builder& cellChannelDescriptions(std::vector<L3CellChannelDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType18 build() const {
+            L3SystemInformationType18 msg;
+            msg.mRACHControl = mRACHControl;
+            msg.mCellChannelDescriptions = mCellChannelDescriptions;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── System Information Type 19 (GSM 04.08 9.1.43g) ────────────────────
@@ -2355,6 +2918,8 @@ public:
 class L3SystemInformationType19 {
     L3RACHControlParameters mRACHControl;
     std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x41;
 
@@ -2368,6 +2933,25 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType19> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3RACHControlParameters mRACHControl;
+        std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+
+        /// Set RACH control parameters.
+        Builder& rachControl(L3RACHControlParameters v) { mRACHControl = v; return *this; }
+        /// Set cell channel descriptions.
+        Builder& cellChannelDescriptions(std::vector<L3CellChannelDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType19 build() const {
+            L3SystemInformationType19 msg;
+            msg.mRACHControl = mRACHControl;
+            msg.mCellChannelDescriptions = mCellChannelDescriptions;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── System Information Type 20 (GSM 04.08 9.1.43h) ────────────────────
@@ -2375,6 +2959,8 @@ public:
 class L3SystemInformationType20 {
     L3RACHControlParameters mRACHControl;
     std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x42;
 
@@ -2388,6 +2974,25 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType20> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3RACHControlParameters mRACHControl;
+        std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+
+        /// Set RACH control parameters.
+        Builder& rachControl(L3RACHControlParameters v) { mRACHControl = v; return *this; }
+        /// Set cell channel descriptions.
+        Builder& cellChannelDescriptions(std::vector<L3CellChannelDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType20 build() const {
+            L3SystemInformationType20 msg;
+            msg.mRACHControl = mRACHControl;
+            msg.mCellChannelDescriptions = mCellChannelDescriptions;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── System Information Type 13alt (GSM 04.08 9.1.43a) ─────────────────
@@ -2403,6 +3008,13 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType13alt> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType13alt build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── System Information Type 2n (GSM 04.08 9.1.43i) ────────────────────
@@ -2418,6 +3030,13 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType2n> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType2n build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── System Information Type 21 (GSM 04.08 9.1.43j) ────────────────────
@@ -2433,6 +3052,13 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType21> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType21 build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── System Information Type 22 (GSM 04.08 9.1.43k) ────────────────────
@@ -2448,6 +3074,13 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType22> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType22 build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── System Information Type 23 (GSM 04.08 9.1.43l) ────────────────────
@@ -2463,6 +3096,13 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType23> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType23 build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── System Information Type 10 (GSM 04.08 9.1.44) ─────────────────────
@@ -2473,6 +3113,8 @@ class L3SystemInformationType10 {
     L3LocationAreaIdentity mLAI;
     L3CellOptionsBCCH mCellOptions;
     L3CellSelectionParameters mCellSelectionParameters;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x106;
 
@@ -2488,6 +3130,33 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType10> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3CellIdentity mCI;
+        L3LocationAreaIdentity mLAI;
+        L3CellOptionsBCCH mCellOptions;
+        L3CellSelectionParameters mCellSelectionParameters;
+
+        /// Set cell identity.
+        Builder& ci(L3CellIdentity v) { mCI = v; return *this; }
+        /// Set location area identity.
+        Builder& lai(L3LocationAreaIdentity v) { mLAI = v; return *this; }
+        /// Set cell options for BCCH.
+        Builder& cellOptions(L3CellOptionsBCCH v) { mCellOptions = v; return *this; }
+        /// Set cell selection parameters.
+        Builder& cellSelectionParameters(L3CellSelectionParameters v) { mCellSelectionParameters = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType10 build() const {
+            L3SystemInformationType10 msg;
+            msg.mCI = mCI;
+            msg.mLAI = mLAI;
+            msg.mCellOptions = mCellOptions;
+            msg.mCellSelectionParameters = mCellSelectionParameters;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── System Information Type 10bis (GSM 04.08 9.1.44a) ─────────────────
@@ -2498,6 +3167,8 @@ class L3SystemInformationType10bis {
     L3LocationAreaIdentity mLAI;
     L3CellOptionsBCCH mCellOptions;
     L3CellSelectionParameters mCellSelectionParameters;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x107;
 
@@ -2513,6 +3184,33 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType10bis> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3CellIdentity mCI;
+        L3LocationAreaIdentity mLAI;
+        L3CellOptionsBCCH mCellOptions;
+        L3CellSelectionParameters mCellSelectionParameters;
+
+        /// Set cell identity.
+        Builder& ci(L3CellIdentity v) { mCI = v; return *this; }
+        /// Set location area identity.
+        Builder& lai(L3LocationAreaIdentity v) { mLAI = v; return *this; }
+        /// Set cell options for BCCH.
+        Builder& cellOptions(L3CellOptionsBCCH v) { mCellOptions = v; return *this; }
+        /// Set cell selection parameters.
+        Builder& cellSelectionParameters(L3CellSelectionParameters v) { mCellSelectionParameters = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType10bis build() const {
+            L3SystemInformationType10bis msg;
+            msg.mCI = mCI;
+            msg.mLAI = mLAI;
+            msg.mCellOptions = mCellOptions;
+            msg.mCellSelectionParameters = mCellSelectionParameters;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── System Information Type 10ter (GSM 04.08 9.1.44b) ─────────────────
@@ -2523,6 +3221,8 @@ class L3SystemInformationType10ter {
     L3LocationAreaIdentity mLAI;
     L3CellOptionsBCCH mCellOptions;
     L3CellSelectionParameters mCellSelectionParameters;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x108;
 
@@ -2538,6 +3238,33 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType10ter> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3CellIdentity mCI;
+        L3LocationAreaIdentity mLAI;
+        L3CellOptionsBCCH mCellOptions;
+        L3CellSelectionParameters mCellSelectionParameters;
+
+        /// Set cell identity.
+        Builder& ci(L3CellIdentity v) { mCI = v; return *this; }
+        /// Set location area identity.
+        Builder& lai(L3LocationAreaIdentity v) { mLAI = v; return *this; }
+        /// Set cell options for BCCH.
+        Builder& cellOptions(L3CellOptionsBCCH v) { mCellOptions = v; return *this; }
+        /// Set cell selection parameters.
+        Builder& cellSelectionParameters(L3CellSelectionParameters v) { mCellSelectionParameters = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType10ter build() const {
+            L3SystemInformationType10ter msg;
+            msg.mCI = mCI;
+            msg.mLAI = mLAI;
+            msg.mCellOptions = mCellOptions;
+            msg.mCellSelectionParameters = mCellSelectionParameters;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Notification FACCH (GSM 04.08 9.1.45) ─────────────────────────────
@@ -2554,6 +3281,13 @@ public:
     [[nodiscard]] static Expected<L3NotificationFACCH> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3NotificationFACCH build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Uplink Free (GSM 04.08 9.1.45a) ───────────────────────────────────
@@ -2570,6 +3304,13 @@ public:
     [[nodiscard]] static Expected<L3UplinkFree> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3UplinkFree build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Enhanced Measurement Report UL (GSM 04.08 9.1.45b) ────────────────
@@ -2577,6 +3318,8 @@ public:
 
 class L3EnhancedMeasurementRepUL {
     std::vector<uint8_t> mData;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x10B;
 
@@ -2590,6 +3333,21 @@ public:
     [[nodiscard]] static Expected<L3EnhancedMeasurementRepUL> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mData;
+
+        /// Set data payload.
+        Builder& data(std::vector<uint8_t> v) { mData = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3EnhancedMeasurementRepUL build() const {
+            L3EnhancedMeasurementRepUL msg;
+            msg.mData = mData;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Measurement Info DL (GSM 04.08 9.1.45c) ───────────────────────────
@@ -2597,6 +3355,8 @@ public:
 
 class L3MeasurementInfoDL {
     std::vector<uint8_t> mData;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x10C;
 
@@ -2610,6 +3370,21 @@ public:
     [[nodiscard]] static Expected<L3MeasurementInfoDL> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mData;
+
+        /// Set data payload.
+        Builder& data(std::vector<uint8_t> v) { mData = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3MeasurementInfoDL build() const {
+            L3MeasurementInfoDL msg;
+            msg.mData = mData;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── VBS/VGCS Recon (GSM 04.08 9.1.45d) ────────────────────────────────
@@ -2626,6 +3401,13 @@ public:
     [[nodiscard]] static Expected<L3VBSVGCSRecon> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3VBSVGCSRecon build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── VBS/VGCS Recon 2 (GSM 04.08 9.1.45e) ──────────────────────────────
@@ -2642,6 +3424,13 @@ public:
     [[nodiscard]] static Expected<L3VBSVGCSRecon2> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3VBSVGCSRecon2 build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── VGCS Add Info (GSM 04.08 9.1.45f) ─────────────────────────────────
@@ -2658,6 +3447,13 @@ public:
     [[nodiscard]] static Expected<L3VGCSAddInfo> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3VGCSAddInfo build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── VGCS SMS Info (GSM 04.08 9.1.45g) ─────────────────────────────────
@@ -2674,6 +3470,13 @@ public:
     [[nodiscard]] static Expected<L3VGCSMSInfo> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3VGCSMSInfo build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── VGCS Neighbor Cell Info (GSM 04.08 9.1.45h) ───────────────────────
@@ -2690,6 +3493,13 @@ public:
     [[nodiscard]] static Expected<L3VGCSSNeighCellInfo> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3VGCSSNeighCellInfo build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Notify App Data (GSM 04.08 9.1.45i) ───────────────────────────────
@@ -2706,6 +3516,13 @@ public:
     [[nodiscard]] static Expected<L3NotifyAppData> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3NotifyAppData build() const;
+    };
+    friend struct Builder;
+    static Builder builder() { return Builder{}; }
 };
 
 // System Information Type 2quater — GSM 04.08 §9.1.34a
@@ -2714,6 +3531,8 @@ public:
 // MTI=0x07 per GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_2quater('00000111'B)
 class L3SystemInformationType2quater {
     std::vector<uint8_t> mBody;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x07;
     L3SystemInformationType2quater() = default;
@@ -2725,6 +3544,21 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType2quater> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mBody;
+
+        /// Set body data.
+        Builder& body(std::vector<uint8_t> v) { mBody = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType2quater build() const {
+            L3SystemInformationType2quater msg;
+            msg.mBody = mBody;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 } // namespace gsml3parser

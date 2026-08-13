@@ -3420,4 +3420,102 @@ void L3SystemInformationType2quater::text(std::ostream& os) const {
     if (!mBody.empty()) os << " [" << mBody.size() << " octets]";
 }
 
+// ── Builder::build() implementations for empty classes ──────────────────
+
+L3ClassmarkEnquiry L3ClassmarkEnquiry::Builder::build() const {
+    return L3ClassmarkEnquiry{};
+}
+
+L3VGCSUplinkGrant L3VGCSUplinkGrant::Builder::build() const {
+    return L3VGCSUplinkGrant{};
+}
+
+L3UplinkRelease L3UplinkRelease::Builder::build() const {
+    return L3UplinkRelease{};
+}
+
+L3UplinkBusy L3UplinkBusy::Builder::build() const {
+    return L3UplinkBusy{};
+}
+
+L3TalkerIndication L3TalkerIndication::Builder::build() const {
+    return L3TalkerIndication{};
+}
+
+L3DTMReject L3DTMReject::Builder::build() const {
+    return L3DTMReject{};
+}
+
+L3DTMRequest L3DTMRequest::Builder::build() const {
+    return L3DTMRequest{};
+}
+
+L3DTMAssignmentCommand L3DTMAssignmentCommand::Builder::build() const {
+    return L3DTMAssignmentCommand{};
+}
+
+L3DTMInformation L3DTMInformation::Builder::build() const {
+    return L3DTMInformation{};
+}
+
+L3PacketInformation L3PacketInformation::Builder::build() const {
+    return L3PacketInformation{};
+}
+
+L3SystemInformationType15 L3SystemInformationType15::Builder::build() const {
+    return L3SystemInformationType15{};
+}
+
+L3SystemInformationType13alt L3SystemInformationType13alt::Builder::build() const {
+    return L3SystemInformationType13alt{};
+}
+
+L3SystemInformationType2n L3SystemInformationType2n::Builder::build() const {
+    return L3SystemInformationType2n{};
+}
+
+L3SystemInformationType21 L3SystemInformationType21::Builder::build() const {
+    return L3SystemInformationType21{};
+}
+
+L3SystemInformationType22 L3SystemInformationType22::Builder::build() const {
+    return L3SystemInformationType22{};
+}
+
+L3SystemInformationType23 L3SystemInformationType23::Builder::build() const {
+    return L3SystemInformationType23{};
+}
+
+L3NotificationFACCH L3NotificationFACCH::Builder::build() const {
+    return L3NotificationFACCH{};
+}
+
+L3UplinkFree L3UplinkFree::Builder::build() const {
+    return L3UplinkFree{};
+}
+
+L3VBSVGCSRecon L3VBSVGCSRecon::Builder::build() const {
+    return L3VBSVGCSRecon{};
+}
+
+L3VBSVGCSRecon2 L3VBSVGCSRecon2::Builder::build() const {
+    return L3VBSVGCSRecon2{};
+}
+
+L3VGCSAddInfo L3VGCSAddInfo::Builder::build() const {
+    return L3VGCSAddInfo{};
+}
+
+L3VGCSMSInfo L3VGCSMSInfo::Builder::build() const {
+    return L3VGCSMSInfo{};
+}
+
+L3VGCSSNeighCellInfo L3VGCSSNeighCellInfo::Builder::build() const {
+    return L3VGCSSNeighCellInfo{};
+}
+
+L3NotifyAppData L3NotifyAppData::Builder::build() const {
+    return L3NotifyAppData{};
+}
+
 } // namespace gsml3parser

@@ -614,12 +614,6 @@ TEST(RoundTripTest, SI2quater_RoundTrip) {
     checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType2quater::MTI);
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// Phase 3: RR messages without tests — roundtrip coverage
-// ═══════════════════════════════════════════════════════════════════════
-
-// ── Step 3.1: Configuration Change и Partial Release ──────────────────
-
 // Configuration Change Command (GSM 04.08 9.1.4, MTI=0x30)
 // Reference: GSM_RR_Types.ttcn CONFIGURATION_CHANGE_COMMAND='00110000'B
 TEST(RoundTripTest, ConfigurationChangeCommand_Empty) {
@@ -667,8 +661,6 @@ TEST(RoundTripTest, PartialReleaseComplete) {
     checkHeader(*parsed, L3PD::RadioResource, L3PartialReleaseComplete::MTI);
 }
 
-// ── Step 3.2: Extended Measurement и Frequency Redefinition ───────────
-
 // Extended Measurement Report (GSM 04.08 9.1.21a, MTI=0x36)
 // Reference: GSM_RR_Types.ttcn EXTENDED_MEASUREMENT_REPORT='00110110'B
 TEST(RoundTripTest, ExtendedMeasurementReport) {
@@ -698,8 +690,6 @@ TEST(RoundTripTest, FrequencyRedefinition) {
     checkHeader(*parsed, L3PD::RadioResource, L3FrequencyRedefinition::MTI);
 }
 
-// ── Step 3.3: Notification ────────────────────────────────────────────
-
 // Notification NCH (GSM 04.08 9.1.26, MTI=0x20)
 // Reference: GSM_RR_Types.ttcn NOTIFICATION_NCH='00100000'B
 TEST(RoundTripTest, NotificationNCH) {
@@ -725,8 +715,6 @@ TEST(RoundTripTest, NotificationResponse) {
     ASSERT_TRUE(reparsed);
     checkHeader(*reparsed, L3PD::RadioResource, L3NotificationResponse::MTI);
 }
-
-// ── Step 3.4: VGCS/VBS ────────────────────────────────────────────────
 
 // VGCS Uplink Grant (GSM 04.08 9.1.28, MTI=0x09)
 // Reference: GSM_RR_Types.ttcn VGCS_UPLINK_GRANT='00001001'B
@@ -800,8 +788,6 @@ TEST(RoundTripTest, DataIndication2) {
     checkHeader(*reparsed, L3PD::RadioResource, L3DataIndication2::MTI);
 }
 
-// ── Step 3.5: DTM и Packet ────────────────────────────────────────────
-
 // DTM Assignment Failure (GSM 04.08 9.1.3d, MTI=0x80)
 TEST(RoundTripTest, DTMAssignmentFailure) {
     ParsedMessage msg{RRM{L3DTMAssignmentFailure{RRCause::Normal_Event}}};
@@ -859,8 +845,6 @@ TEST(RoundTripTest, PacketInformation) {
     ASSERT_TRUE(parsed);
     checkHeader(*parsed, L3PD::RadioResource, L3PacketInformation::MTI);
 }
-
-// ── Step 3.6: Inter-RAT ───────────────────────────────────────────────
 
 // UTRAN Classmark Change (GSM 04.08 9.1.11a, MTI=0x60)
 TEST(RoundTripTest, UTRANClassmarkChange) {
@@ -921,8 +905,6 @@ TEST(RoundTripTest, GERANIUClassmarkChange) {
     ASSERT_TRUE(reparsed);
     checkHeader(*reparsed, L3PD::RadioResource, L3GERANIUClassmarkChange::MTI);
 }
-
-// ── Step 3.7: Additional System Information types ─────────────────────
 
 // System Information Type 14 (GSM 04.08 9.1.43d, MTI=0x01)
 TEST(RoundTripTest, SystemInformationType14) {
@@ -1003,8 +985,6 @@ TEST(RoundTripTest, SystemInformationType23) {
     ASSERT_TRUE(parsed);
     checkHeader(*parsed, L3PD::RadioResource, L3SystemInformationType23::MTI);
 }
-
-// ── Step 3.8: FACCH/VBS short messages (write-only, no parseL3 path) ──
 
 // System Information Type 10 (GSM 04.08 9.1.44, MTI=0x106)
 // Short message: no standard L3 header, sent on BCCH.

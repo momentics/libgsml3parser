@@ -42,6 +42,8 @@ class L3SupServFacilityMessage {
 private:
     unsigned mTI{7};
     L3OctetAlignedProtocolElement mFacility;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x3a;
 
@@ -61,6 +63,25 @@ public:
     [[nodiscard]] static Expected<L3SupServFacilityMessage> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        unsigned mTI{7};
+        L3OctetAlignedProtocolElement mFacility;
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { mTI = v; return *this; }
+        /// Set facility data.
+        Builder& facility(const std::string& v) { mFacility = L3OctetAlignedProtocolElement(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SupServFacilityMessage build() const {
+            L3SupServFacilityMessage msg;
+            msg.mTI = mTI;
+            msg.mFacility = mFacility;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Register Message (GSM 04.80/24.080 2.4) ───────────────────────────
@@ -71,6 +92,8 @@ private:
     L3OctetAlignedProtocolElement mFacility;
     bool mHaveVersion{};
     uint8_t mVersionIndicator{};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x3b;
 
@@ -92,6 +115,31 @@ public:
     [[nodiscard]] static Expected<L3SupServRegisterMessage> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        unsigned mTI{7};
+        L3OctetAlignedProtocolElement mFacility;
+        bool mHaveVersion{};
+        uint8_t mVersionIndicator{};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { mTI = v; return *this; }
+        /// Set facility data.
+        Builder& facility(const std::string& v) { mFacility = L3OctetAlignedProtocolElement(v); return *this; }
+        /// Set version indicator (sets mHaveVersion flag).
+        Builder& versionIndicator(uint8_t v) { mVersionIndicator = v; mHaveVersion = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SupServRegisterMessage build() const {
+            L3SupServRegisterMessage msg;
+            msg.mTI = mTI;
+            msg.mFacility = mFacility;
+            msg.mHaveVersion = mHaveVersion;
+            msg.mVersionIndicator = mVersionIndicator;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Release Complete (GSM 04.80/24.080 2.5) ───────────────────────────
@@ -102,6 +150,8 @@ private:
     L3OctetAlignedProtocolElement mFacility;
     bool mHaveCause{};
     L3CauseElement mCause;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x2a;
 
@@ -123,6 +173,33 @@ public:
     [[nodiscard]] static Expected<L3SupServReleaseCompleteMessage> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        unsigned mTI{7};
+        L3OctetAlignedProtocolElement mFacility;
+        bool mHaveCause{};
+        L3CauseElement mCause;
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { mTI = v; return *this; }
+        /// Set facility data.
+        Builder& facility(const std::string& v) { mFacility = L3OctetAlignedProtocolElement(v); return *this; }
+        /// Set cause (sets mHaveCause flag).
+        Builder& cause(CCCause c, CCCauseLocation loc = CCCauseLocation::Private_Serving_Local) {
+            mCause = L3CauseElement(c, loc); mHaveCause = true; return *this;
+        }
+        /// Build the final message.
+        [[nodiscard]] L3SupServReleaseCompleteMessage build() const {
+            L3SupServReleaseCompleteMessage msg;
+            msg.mTI = mTI;
+            msg.mFacility = mFacility;
+            msg.mHaveCause = mHaveCause;
+            msg.mCause = mCause;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 } // namespace gsml3parser

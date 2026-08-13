@@ -42,6 +42,8 @@ namespace gsml3parser {
 class L3ExtendedMessage {
     uint8_t mMti{};
     std::vector<uint8_t> mBody;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0; // placeholder; actual MTI set at parse time
 
@@ -57,6 +59,25 @@ public:
     [[nodiscard]] static Expected<L3ExtendedMessage> parse(BitReader& br, uint8_t parsedMti);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        uint8_t mMti{};
+        std::vector<uint8_t> mBody;
+
+        /// Set message type indicator.
+        Builder& mti(uint8_t v) { mMti = v; return *this; }
+        /// Set body data.
+        Builder& body(std::vector<uint8_t> v) { mBody = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ExtendedMessage build() const {
+            L3ExtendedMessage msg;
+            msg.mMti = mMti;
+            msg.mBody = mBody;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 } // namespace gsml3parser

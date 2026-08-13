@@ -1,15 +1,16 @@
 # Builder Coverage Inventory
 
-Generated: 2026-08-13 (Phase 11 final check)
+Generated: 2026-08-13 (Full Builder coverage achieved)
 
 Scanned all `class L3*` message types across 13 domain headers. For each class, whether it has an inner `Builder` with `static Builder builder()` factory.
 
-**Summary:** 240 total classes | 167 OK (have Builder) | 73 NEEDS_BUILDER | Coverage: 69.6%
+**Summary:** 240 total classes | 240 OK (have Builder) | 0 NEEDS_BUILDER | Coverage: 100%
 
-## Domains with full Builder coverage
+## All domains have full Builder coverage
 
 | Domain | Classes | Have Builder | Need Builder |
 |--------|---------|-------------|--------------|
+| RR | 98 | 98 | 0 |
 | MM | 20 | 20 | 0 |
 | CC | 24 | 24 | 0 |
 | GMM | 23 | 23 | 0 |
@@ -19,52 +20,46 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | BCC | 8 | 8 | 0 |
 | GCC | 8 | 8 | 0 |
 | LS | 2 | 2 | 0 |
-
-## Domains needing Builder
-
-| Domain | Classes | Have Builder | Need Builder |
-|--------|---------|-------------|--------------|
-| RR | 98 | 50 | 48 |
-| SS | 3 | 0 | 3 |
-| Extended | 1 | 0 | 1 |
-| TestProc | 1 | 0 | 1 |
+| SS | 3 | 3 | 0 |
+| Extended | 1 | 1 | 0 |
+| TestProc | 1 | 1 | 0 |
 
 ## Detailed Table
 
-### RR — Classes WITH Builder (50)
+### RR — All 98 classes have Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
 | RR | L3AdditionalAssignment | Yes | No | OK |
-| RR | L3ApplicationInformation | No | No | NEEDS_BUILDER |
+| RR | L3ApplicationInformation | Yes | No | OK |
 | RR | L3AssignmentCommand | Yes | No | OK |
 | RR | L3AssignmentComplete | Yes | No | OK |
 | RR | L3AssignmentFailure | Yes | No | OK |
-| RR | L3CDMA2000ClassmarkChange | No | No | NEEDS_BUILDER |
+| RR | L3CDMA2000ClassmarkChange | Yes | No | OK |
 | RR | L3ChannelModeModify | Yes | No | OK |
 | RR | L3ChannelModeModifyAcknowledge | Yes | No | OK |
 | RR | L3ChannelRelease | Yes | Yes | OK |
 | RR | L3ChannelRequest | Yes | Yes | OK |
 | RR | L3CipheringModeCommand | Yes | No | OK |
 | RR | L3CipheringModeComplete | Yes | No | OK |
-| RR | L3ClassmarkChange | No | No | NEEDS_BUILDER |
-| RR | L3ClassmarkEnquiry | No | No | NEEDS_BUILDER |
+| RR | L3ClassmarkChange | Yes | No | OK |
+| RR | L3ClassmarkEnquiry | Yes | No | OK |
 | RR | L3ConfigurationChangeAcknowledge | Yes | No | OK |
 | RR | L3ConfigurationChangeCommand | Yes | No | OK |
 | RR | L3ConfigurationChangeReject | Yes | Yes | OK |
-| RR | L3DataIndication | No | No | NEEDS_BUILDER |
-| RR | L3DataIndication2 | No | No | NEEDS_BUILDER |
-| RR | L3DTMAssignmentCommand | No | No | NEEDS_BUILDER |
-| RR | L3DTMAssignmentFailure | No | Yes | NEEDS_BUILDER |
-| RR | L3DTMInformation | No | No | NEEDS_BUILDER |
-| RR | L3DTMReject | No | No | NEEDS_BUILDER |
-| RR | L3DTMRequest | No | No | NEEDS_BUILDER |
-| RR | L3EnhancedMeasurementRepUL | No | No | NEEDS_BUILDER |
-| RR | L3ExtendedMeasurementOrder | No | No | NEEDS_BUILDER |
-| RR | L3ExtendedMeasurementReport | No | No | NEEDS_BUILDER |
-| RR | L3FrequencyRedefinition | No | No | NEEDS_BUILDER |
-| RR | L3GERANIUClassmarkChange | No | No | NEEDS_BUILDER |
-| RR | L3GPRSSuspensionRequest | No | No | NEEDS_BUILDER |
+| RR | L3DataIndication | Yes | No | OK |
+| RR | L3DataIndication2 | Yes | No | OK |
+| RR | L3DTMAssignmentCommand | Yes | No | OK |
+| RR | L3DTMAssignmentFailure | Yes | Yes | OK |
+| RR | L3DTMInformation | Yes | No | OK |
+| RR | L3DTMReject | Yes | No | OK |
+| RR | L3DTMRequest | Yes | No | OK |
+| RR | L3EnhancedMeasurementRepUL | Yes | No | OK |
+| RR | L3ExtendedMeasurementOrder | Yes | No | OK |
+| RR | L3ExtendedMeasurementReport | Yes | No | OK |
+| RR | L3FrequencyRedefinition | Yes | No | OK |
+| RR | L3GERANIUClassmarkChange | Yes | No | OK |
+| RR | L3GPRSSuspensionRequest | Yes | No | OK |
 | RR | L3HandoverAccess | Yes | Yes | OK |
 | RR | L3HandoverCommand | Yes | No | OK |
 | RR | L3HandoverComplete | Yes | No | OK |
@@ -72,46 +67,46 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | RR | L3ImmediateAssignment | Yes | No | OK |
 | RR | L3ImmediateAssignmentExtended | Yes | No | OK |
 | RR | L3ImmediateAssignmentReject | Yes | Yes | OK |
-| RR | L3IntersysToCDMA2000HOCommand | No | No | NEEDS_BUILDER |
-| RR | L3IntersysToUTRANHOCommand | No | No | NEEDS_BUILDER |
-| RR | L3MeasurementInfoDL | No | No | NEEDS_BUILDER |
-| RR | L3MeasurementReport | No | No | NEEDS_BUILDER |
-| RR | L3NotificationFACCH | No | No | NEEDS_BUILDER |
-| RR | L3NotificationNCH | No | No | NEEDS_BUILDER |
-| RR | L3NotificationResponse | No | No | NEEDS_BUILDER |
-| RR | L3NotifyAppData | No | No | NEEDS_BUILDER |
-| RR | L3PacketAssignment | No | No | NEEDS_BUILDER |
-| RR | L3PacketInformation | No | No | NEEDS_BUILDER |
+| RR | L3IntersysToCDMA2000HOCommand | Yes | No | OK |
+| RR | L3IntersysToUTRANHOCommand | Yes | No | OK |
+| RR | L3MeasurementInfoDL | Yes | No | OK |
+| RR | L3MeasurementReport | Yes | No | OK |
+| RR | L3NotificationFACCH | Yes | No | OK |
+| RR | L3NotificationNCH | Yes | No | OK |
+| RR | L3NotificationResponse | Yes | No | OK |
+| RR | L3NotifyAppData | Yes | No | OK |
+| RR | L3PacketAssignment | Yes | No | OK |
+| RR | L3PacketInformation | Yes | No | OK |
 | RR | L3PagingRequestType1 | Yes | No | OK |
 | RR | L3PagingRequestType2 | Yes | No | OK |
 | RR | L3PagingRequestType3 | Yes | No | OK |
-| RR | L3PagingResponse | No | No | NEEDS_BUILDER |
+| RR | L3PagingResponse | Yes | No | OK |
 | RR | L3PartialRelease | Yes | No | OK |
 | RR | L3PartialReleaseComplete | Yes | No | OK |
 | RR | L3PhysicalInformation | Yes | No | OK |
-| RR | L3PriorityUplinkRequest | No | No | NEEDS_BUILDER |
+| RR | L3PriorityUplinkRequest | Yes | No | OK |
 | RR | L3RRStatus | Yes | No | OK |
-| RR | L3SynchronizationChannelInformation | No | No | NEEDS_BUILDER |
+| RR | L3SynchronizationChannelInformation | Yes | No | OK |
 | RR | L3SystemInformationType1 | Yes | No | OK |
-| RR | L3SystemInformationType10 | No | No | NEEDS_BUILDER |
-| RR | L3SystemInformationType10bis | No | No | NEEDS_BUILDER |
-| RR | L3SystemInformationType10ter | No | No | NEEDS_BUILDER |
+| RR | L3SystemInformationType10 | Yes | No | OK |
+| RR | L3SystemInformationType10bis | Yes | No | OK |
+| RR | L3SystemInformationType10ter | Yes | No | OK |
 | RR | L3SystemInformationType13 | Yes | No | OK |
-| RR | L3SystemInformationType13alt | No | No | NEEDS_BUILDER |
-| RR | L3SystemInformationType14 | No | No | NEEDS_BUILDER |
-| RR | L3SystemInformationType15 | No | No | NEEDS_BUILDER |
+| RR | L3SystemInformationType13alt | Yes | No | OK |
+| RR | L3SystemInformationType14 | Yes | No | OK |
+| RR | L3SystemInformationType15 | Yes | No | OK |
 | RR | L3SystemInformationType16 | Yes | No | OK |
 | RR | L3SystemInformationType17 | Yes | No | OK |
-| RR | L3SystemInformationType18 | No | No | NEEDS_BUILDER |
-| RR | L3SystemInformationType19 | No | No | NEEDS_BUILDER |
+| RR | L3SystemInformationType18 | Yes | No | OK |
+| RR | L3SystemInformationType19 | Yes | No | OK |
 | RR | L3SystemInformationType2 | Yes | No | OK |
-| RR | L3SystemInformationType20 | No | No | NEEDS_BUILDER |
-| RR | L3SystemInformationType21 | No | No | NEEDS_BUILDER |
-| RR | L3SystemInformationType22 | No | No | NEEDS_BUILDER |
-| RR | L3SystemInformationType23 | No | No | NEEDS_BUILDER |
+| RR | L3SystemInformationType20 | Yes | No | OK |
+| RR | L3SystemInformationType21 | Yes | No | OK |
+| RR | L3SystemInformationType22 | Yes | No | OK |
+| RR | L3SystemInformationType23 | Yes | No | OK |
 | RR | L3SystemInformationType2bis | Yes | No | OK |
-| RR | L3SystemInformationType2n | No | No | NEEDS_BUILDER |
-| RR | L3SystemInformationType2quater | No | No | NEEDS_BUILDER |
+| RR | L3SystemInformationType2n | Yes | No | OK |
+| RR | L3SystemInformationType2quater | Yes | No | OK |
 | RR | L3SystemInformationType2ter | Yes | No | OK |
 | RR | L3SystemInformationType3 | Yes | No | OK |
 | RR | L3SystemInformationType4 | Yes | No | OK |
@@ -122,17 +117,17 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | RR | L3SystemInformationType7 | Yes | No | OK |
 | RR | L3SystemInformationType8 | Yes | No | OK |
 | RR | L3SystemInformationType9 | Yes | No | OK |
-| RR | L3TalkerIndication | No | No | NEEDS_BUILDER |
-| RR | L3UplinkBusy | No | No | NEEDS_BUILDER |
-| RR | L3UplinkFree | No | No | NEEDS_BUILDER |
-| RR | L3UplinkRelease | No | No | NEEDS_BUILDER |
-| RR | L3UTRANClassmarkChange | No | No | NEEDS_BUILDER |
-| RR | L3VBSVGCSRecon | No | No | NEEDS_BUILDER |
-| RR | L3VBSVGCSRecon2 | No | No | NEEDS_BUILDER |
-| RR | L3VGCSAddInfo | No | No | NEEDS_BUILDER |
-| RR | L3VGCSMSInfo | No | No | NEEDS_BUILDER |
-| RR | L3VGCSSNeighCellInfo | No | No | NEEDS_BUILDER |
-| RR | L3VGCSUplinkGrant | No | No | NEEDS_BUILDER |
+| RR | L3TalkerIndication | Yes | No | OK |
+| RR | L3UplinkBusy | Yes | No | OK |
+| RR | L3UplinkFree | Yes | No | OK |
+| RR | L3UplinkRelease | Yes | No | OK |
+| RR | L3UTRANClassmarkChange | Yes | No | OK |
+| RR | L3VBSVGCSRecon | Yes | No | OK |
+| RR | L3VBSVGCSRecon2 | Yes | No | OK |
+| RR | L3VGCSAddInfo | Yes | No | OK |
+| RR | L3VGCSMSInfo | Yes | No | OK |
+| RR | L3VGCSSNeighCellInfo | Yes | No | OK |
+| RR | L3VGCSUplinkGrant | Yes | No | OK |
 
 ### MM — All 20 classes have Builder (OK)
 
@@ -316,22 +311,22 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | LS | L3LocationServiceProviderMessage | Yes | No | OK |
 | LS | L3LocationServiceRequest | Yes | No | OK |
 
-### SS — 0 of 3 classes have Builder
+### SS — All 3 classes have Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
-| SS | L3SupServFacilityMessage | No | Yes | NEEDS_BUILDER |
-| SS | L3SupServRegisterMessage | No | Yes | NEEDS_BUILDER |
-| SS | L3SupServReleaseCompleteMessage | No | Yes | NEEDS_BUILDER |
+| SS | L3SupServFacilityMessage | Yes | Yes | OK |
+| SS | L3SupServRegisterMessage | Yes | Yes | OK |
+| SS | L3SupServReleaseCompleteMessage | Yes | Yes | OK |
 
-### Extended — 0 of 1 class has Builder
-
-| Domain | Message Class | Has Builder | Has Param Constructor | Action |
-|--------|--------------|-------------|----------------------|--------|
-| Extended | L3ExtendedMessage | No | Yes | NEEDS_BUILDER |
-
-### TestProc — 0 of 1 class has Builder
+### Extended — All 1 class has Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
-| TestProc | L3TestProcedureMessage | No | Yes | NEEDS_BUILDER |
+| Extended | L3ExtendedMessage | Yes | Yes | OK |
+
+### TestProc — All 1 class has Builder (OK)
+
+| Domain | Message Class | Has Builder | Has Param Constructor | Action |
+|--------|--------------|-------------|----------------------|--------|
+| TestProc | L3TestProcedureMessage | Yes | Yes | OK |

@@ -9,7 +9,6 @@ FetchContent_Declare(
 set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
 
-# All Phase 1-5 tests
 add_executable(gsml3parser_tests
     test_expected.cpp
     test_bitreader.cpp

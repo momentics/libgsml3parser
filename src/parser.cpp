@@ -427,8 +427,6 @@ static void encodeL3Header(uint8_t* buf, L3PD pd, int mti, unsigned ti = 0, bool
     }
 }
 
-// ── Step 3.1: Domain parse functions ───────────────────────────────────
-
 namespace detail {
 
 Expected<RRM> parseL3RR(BitReader& reader, int mti) {
@@ -802,8 +800,6 @@ Expected<TESTPROC> parseL3TestProc(BitReader& reader, uint8_t mti) {
 
 } // namespace detail
 
-// ── Step 3.2: Top-level parseL3() and parseL3Hex() ─────────────────────
-
 Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfig& cfg) {
     if (data.empty()) {
         return Expected<ParsedMessage>::error(
@@ -1010,8 +1006,6 @@ Expected<ParsedMessage> parseL3Hex(std::string_view hex, const ParserConfig& cfg
 
     return parseL3(std::span<const uint8_t>(bytes), cfg);
 }
-
-// ── Step 3.3: writeL3() and writeL3Hex() ───────────────────────────────
 
 namespace detail {
 
