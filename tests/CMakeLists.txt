@@ -59,6 +59,7 @@ target_link_libraries(gsml3parser_tests
 
 if(MSVC)
     target_compile_definitions(gsml3parser_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
+    target_compile_options(gsml3parser_tests PRIVATE /bigobj)
 endif()
 
 add_test(NAME gsml3parser_tests COMMAND gsml3parser_tests)

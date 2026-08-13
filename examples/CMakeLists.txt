@@ -29,5 +29,6 @@ if(MSVC)
                  example_bts_paging example_bts_channel_assignment example_bts_sysinfo
                  example_bts_dispatcher)
         target_compile_definitions(${_tgt} PRIVATE _CRT_SECURE_NO_WARNINGS)
+        target_compile_options(${_tgt} PRIVATE /bigobj)
     endforeach()
 endif()
