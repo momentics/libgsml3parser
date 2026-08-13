@@ -701,3 +701,232 @@ TEST(GoldenBCCGCCTest, GCCCallConfirmed_RoundTrip) {
     ASSERT_TRUE(rt);
     EXPECT_EQ(messageMTI(*rt), L3GCCCallConfirmed::MTI);
 }
+
+// ── BCC Builder Tests ──────────────────────────────────────────────────
+
+// 3GPP TS 44.018 9.6.2.2: BCC Setup Builder
+TEST(BCCBuilderTest, Setup) {
+    auto msg = L3BCCSetup::builder()
+        .ti(7)
+        .body(std::vector<uint8_t>{0x01, 0x02})
+        .build();
+    ParsedMessage pm{BCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes)[0], 0x1E); // PD=1(BCC), TI=7, TIF=0(body follows)
+}
+
+// 3GPP TS 44.018 9.6.2.3: BCC Proceeding Builder
+TEST(BCCBuilderTest, Proceeding) {
+    auto msg = L3BCCProceeding::builder()
+        .ti(7)
+        .build();
+    ParsedMessage pm{BCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3BCCProceeding::MTI);
+}
+
+// 3GPP TS 44.018 9.6.2.6: BCC Connect Builder
+TEST(BCCBuilderTest, Connect) {
+    auto msg = L3BCCConnect::builder()
+        .ti(7)
+        .body(std::vector<uint8_t>{0x80})
+        .build();
+    ParsedMessage pm{BCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3BCCConnect::MTI);
+}
+
+// 3GPP TS 44.018 9.6.2.7: BCC Disconnect Builder
+TEST(BCCBuilderTest, Disconnect) {
+    auto msg = L3BCCDisconnect::builder()
+        .ti(7)
+        .body(std::vector<uint8_t>{0x08, 0x01, 0x00})
+        .build();
+    ParsedMessage pm{BCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3BCCDisconnect::MTI);
+}
+
+// 3GPP TS 44.018 9.6.2.8: BCC Release Builder
+TEST(BCCBuilderTest, Release) {
+    auto msg = L3BCCRelease::builder()
+        .ti(7)
+        .build();
+    ParsedMessage pm{BCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3BCCRelease::MTI);
+}
+
+// 3GPP TS 44.018 9.6.2.9: BCC Release Complete Builder
+TEST(BCCBuilderTest, ReleaseComplete) {
+    auto msg = L3BCCReleaseComplete::builder()
+        .ti(7)
+        .build();
+    ParsedMessage pm{BCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3BCCReleaseComplete::MTI);
+}
+
+// 3GPP TS 44.018 9.6.2.5: BCC Call Confirmed Builder
+TEST(BCCBuilderTest, CallConfirmed) {
+    auto msg = L3BCCCallConfirmed::builder()
+        .ti(7)
+        .build();
+    ParsedMessage pm{BCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3BCCCallConfirmed::MTI);
+}
+
+// 3GPP TS 44.018 9.6.2.10: BCC Connect Acknowledge Builder
+TEST(BCCBuilderTest, ConnectAcknowledge) {
+    auto msg = L3BCCConnectAcknowledge::builder()
+        .ti(7)
+        .build();
+    ParsedMessage pm{BCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3BCCConnectAcknowledge::MTI);
+}
+
+// ── GCC Builder Tests ──────────────────────────────────────────────────
+
+// 3GPP TS 44.018 9.7.2.2: GCC Setup Builder
+TEST(GCCBuilderTest, Setup) {
+    auto msg = L3GCCSetup::builder()
+        .ti(7)
+        .body(std::vector<uint8_t>{0x01, 0x02})
+        .build();
+    ParsedMessage pm{GCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes)[0], 0x0E); // PD=0(GCC), TI=7, TIF=0(body follows)
+}
+
+// 3GPP TS 44.018 9.7.2.3: GCC Acknowledge Builder
+TEST(GCCBuilderTest, Acknowledge) {
+    auto msg = L3GCCAcknowledge::builder()
+        .ti(7)
+        .body(std::vector<uint8_t>{})
+        .build();
+    ParsedMessage pm{GCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3GCCAcknowledge::MTI);
+}
+
+// 3GPP TS 44.018 9.7.2.4: GCC Proceeding Builder
+TEST(GCCBuilderTest, Proceeding) {
+    auto msg = L3GCCProceeding::builder()
+        .ti(7)
+        .build();
+    ParsedMessage pm{GCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3GCCProceeding::MTI);
+}
+
+// 3GPP TS 44.018 9.7.2.6: GCC Connect Builder
+TEST(GCCBuilderTest, Connect) {
+    auto msg = L3GCCConnect::builder()
+        .ti(7)
+        .body(std::vector<uint8_t>{0x80})
+        .build();
+    ParsedMessage pm{GCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3GCCConnect::MTI);
+}
+
+// 3GPP TS 44.018 9.7.2.7: GCC Disconnect Builder
+TEST(GCCBuilderTest, Disconnect) {
+    auto msg = L3GCCDisconnect::builder()
+        .ti(7)
+        .body(std::vector<uint8_t>{0x08, 0x01, 0x00})
+        .build();
+    ParsedMessage pm{GCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3GCCDisconnect::MTI);
+}
+
+// 3GPP TS 44.018 9.7.2.8: GCC Release Builder
+TEST(GCCBuilderTest, Release) {
+    auto msg = L3GCCRelease::builder()
+        .ti(7)
+        .build();
+    ParsedMessage pm{GCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3GCCRelease::MTI);
+}
+
+// 3GPP TS 44.018 9.7.2.9: GCC Release Complete Builder
+TEST(GCCBuilderTest, ReleaseComplete) {
+    auto msg = L3GCCReleaseComplete::builder()
+        .ti(7)
+        .build();
+    ParsedMessage pm{GCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3GCCReleaseComplete::MTI);
+}
+
+// 3GPP TS 44.018 9.7.2.5: GCC Call Confirmed Builder
+TEST(GCCBuilderTest, CallConfirmed) {
+    auto msg = L3GCCCallConfirmed::builder()
+        .ti(7)
+        .build();
+    ParsedMessage pm{GCCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3GCCCallConfirmed::MTI);
+}

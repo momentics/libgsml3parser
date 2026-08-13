@@ -191,6 +191,24 @@ void L3AttachRequest::text(std::ostream& os) const {
     mMobileIdentity.text(os);
 }
 
+L3AttachRequest L3AttachRequest::Builder::build() const {
+    L3AttachRequest msg;
+    msg.mMsNetworkCapability = m_msNetworkCapability;
+    msg.mAttachType = m_attachType;
+    msg.mForL3 = m_forL3;
+    msg.mCKSN = mCKSN;
+    msg.mDRXParam = m_drxParam;
+    msg.mMobileIdentity = m_mobileIdentity;
+    msg.mOldRAI = m_oldRAI;
+    msg.mHaveMsRACap = m_haveMsRACap;
+    msg.mMsRACap = m_msRACap;
+    return msg;
+}
+
+L3AttachRequest::Builder L3AttachRequest::builder() {
+    return Builder{};
+}
+
 // ── L3AttachAccept (GSM 24.008 9.4.2) ────────────────────────────────
 
 size_t L3AttachAccept::bodyLength() const {
@@ -272,6 +290,22 @@ void L3AttachAccept::text(std::ostream& os) const {
     os << ",forceStandby=" << mForceToStandby << ")";
 }
 
+L3AttachAccept L3AttachAccept::Builder::build() const {
+    L3AttachAccept msg;
+    msg.mAttachResult = m_attachResult;
+    msg.mForceToStandby = m_forceToStandby;
+    msg.mUpdateTimer = m_updateTimer;
+    msg.mRadioPriority = m_radioPriority;
+    msg.mRAI = m_rai;
+    msg.mHavePTMSI = m_havePTMSI;
+    msg.mPTMSI = m_ptmsi;
+    return msg;
+}
+
+L3AttachAccept::Builder L3AttachAccept::builder() {
+    return Builder{};
+}
+
 // ── L3AttachComplete (GSM 24.008 9.4.3) ──────────────────────────────
 
 Expected<L3AttachComplete> L3AttachComplete::parse(BitReader&) {
@@ -282,6 +316,14 @@ void L3AttachComplete::write(BitWriter&) const {}
 
 void L3AttachComplete::text(std::ostream& os) const {
     os << "AttachComplete";
+}
+
+L3AttachComplete L3AttachComplete::Builder::build() const {
+    return L3AttachComplete{};
+}
+
+L3AttachComplete::Builder L3AttachComplete::builder() {
+    return Builder{};
 }
 
 // ── L3AttachReject (GSM 24.008 9.4.4) ────────────────────────────────
@@ -337,6 +379,18 @@ void L3AttachReject::text(std::ostream& os) const {
     os << "AttachReject(cause=" << GMMCause2Str(mCause) << ")";
 }
 
+L3AttachReject L3AttachReject::Builder::build() const {
+    L3AttachReject msg;
+    msg.mCause = m_cause;
+    msg.mHaveT3302 = m_haveT3302;
+    msg.mT3302 = m_t3302;
+    return msg;
+}
+
+L3AttachReject::Builder L3AttachReject::builder() {
+    return Builder{};
+}
+
 // ── L3DetachRequest (GSM 24.008 9.4.5) ───────────────────────────────
 
 size_t L3DetachRequest::bodyLength() const {
@@ -385,6 +439,21 @@ void L3DetachRequest::text(std::ostream& os) const {
     os << "DetachRequest(type=" << mDetachType << ",powerOff=" << mPowerOff << ")";
 }
 
+L3DetachRequest L3DetachRequest::Builder::build() const {
+    L3DetachRequest msg;
+    msg.mDetachType = m_detachType;
+    msg.mPowerOff = m_powerOff;
+    msg.mForceToStandby = m_forceToStandby;
+    msg.mHavePTMSI = m_havePTMSI;
+    msg.mPTMSI = m_ptmsi;
+    msg.mCause = m_cause;
+    return msg;
+}
+
+L3DetachRequest::Builder L3DetachRequest::builder() {
+    return Builder{};
+}
+
 // ── L3DetachAccept (GSM 24.008 9.4.6) ────────────────────────────────
 
 size_t L3DetachAccept::bodyLength() const {
@@ -406,6 +475,16 @@ void L3DetachAccept::write(BitWriter& bw) const {
 
 void L3DetachAccept::text(std::ostream& os) const {
     os << "DetachAccept(forceStandby=" << mForceToStandby << ")";
+}
+
+L3DetachAccept L3DetachAccept::Builder::build() const {
+    L3DetachAccept msg;
+    msg.mForceToStandby = m_forceToStandby;
+    return msg;
+}
+
+L3DetachAccept::Builder L3DetachAccept::builder() {
+    return Builder{};
 }
 
 // ── L3RoutingAreaUpdateRequest (GSM 24.008 9.4.12) ───────────────────
@@ -482,6 +561,21 @@ void L3RoutingAreaUpdateRequest::text(std::ostream& os) const {
     os << ",CKSN=" << (mCKSN >> 1 & 0x07) << ")";
 }
 
+L3RoutingAreaUpdateRequest L3RoutingAreaUpdateRequest::Builder::build() const {
+    L3RoutingAreaUpdateRequest msg;
+    msg.mUpdateType = m_updateType;
+    msg.mForL3 = m_forL3;
+    msg.mCKSN = mCKSN;
+    msg.mOldRAI = m_oldRAI;
+    msg.mHaveMsRACap = m_haveMsRACap;
+    msg.mMsRACap = m_msRACap;
+    return msg;
+}
+
+L3RoutingAreaUpdateRequest::Builder L3RoutingAreaUpdateRequest::builder() {
+    return Builder{};
+}
+
 // ── L3RoutingAreaUpdateAccept (GSM 24.008 9.4.15) ────────────────────
 
 size_t L3RoutingAreaUpdateAccept::bodyLength() const {
@@ -553,6 +647,22 @@ void L3RoutingAreaUpdateAccept::text(std::ostream& os) const {
     os << ")";
 }
 
+L3RoutingAreaUpdateAccept L3RoutingAreaUpdateAccept::Builder::build() const {
+    L3RoutingAreaUpdateAccept msg;
+    msg.mForceToStandby = m_forceToStandby;
+    msg.mUpdateResult = m_updateResult;
+    msg.mRAUpdateTimer = m_raUpdateTimer;
+    msg.mRadioPriority = m_radioPriority;
+    msg.mRAI = m_rai;
+    msg.mHavePTMSI = m_havePTMSI;
+    msg.mPTMSI = m_ptmsi;
+    return msg;
+}
+
+L3RoutingAreaUpdateAccept::Builder L3RoutingAreaUpdateAccept::builder() {
+    return Builder{};
+}
+
 // ── L3RoutingAreaUpdateComplete (GSM 24.008 9.4.16) ──────────────────
 
 Expected<L3RoutingAreaUpdateComplete> L3RoutingAreaUpdateComplete::parse(BitReader&) {
@@ -563,6 +673,14 @@ void L3RoutingAreaUpdateComplete::write(BitWriter&) const {}
 
 void L3RoutingAreaUpdateComplete::text(std::ostream& os) const {
     os << "RAUpdateComplete";
+}
+
+L3RoutingAreaUpdateComplete L3RoutingAreaUpdateComplete::Builder::build() const {
+    return L3RoutingAreaUpdateComplete{};
+}
+
+L3RoutingAreaUpdateComplete::Builder L3RoutingAreaUpdateComplete::builder() {
+    return Builder{};
 }
 
 // ── L3RoutingAreaUpdateReject (GSM 24.008 9.4.17) ────────────────────
@@ -616,6 +734,19 @@ void L3RoutingAreaUpdateReject::text(std::ostream& os) const {
     os << "RAUpdateReject(cause=" << GMMCause2Str(mCause) << ")";
 }
 
+L3RoutingAreaUpdateReject L3RoutingAreaUpdateReject::Builder::build() const {
+    L3RoutingAreaUpdateReject msg;
+    msg.mForceToStandby = m_forceToStandby;
+    msg.mCause = m_cause;
+    msg.mHaveT3302 = m_haveT3302;
+    msg.mT3302 = m_t3302;
+    return msg;
+}
+
+L3RoutingAreaUpdateReject::Builder L3RoutingAreaUpdateReject::builder() {
+    return Builder{};
+}
+
 // ── L3ServiceRequest (GSM 24.008 9.4.20) ─────────────────────────────
 
 size_t L3ServiceRequest::bodyLength() const {
@@ -654,6 +785,18 @@ void L3ServiceRequest::text(std::ostream& os) const {
     os << "ServiceRequest(CKSN=" << (mCKSN >> 1 & 0x07) << ",type=" << mServiceType << ")";
 }
 
+L3ServiceRequest L3ServiceRequest::Builder::build() const {
+    L3ServiceRequest msg;
+    msg.mCKSN = mCKSN;
+    msg.mServiceType = m_serviceType;
+    msg.mPTMSI = m_ptmsi;
+    return msg;
+}
+
+L3ServiceRequest::Builder L3ServiceRequest::builder() {
+    return Builder{};
+}
+
 // ── L3ServiceAccept (GSM 24.008 9.4.21) ──────────────────────────────
 
 Expected<L3ServiceAccept> L3ServiceAccept::parse(BitReader&) {
@@ -664,6 +807,14 @@ void L3ServiceAccept::write(BitWriter&) const {}
 
 void L3ServiceAccept::text(std::ostream& os) const {
     os << "ServiceAccept";
+}
+
+L3ServiceAccept L3ServiceAccept::Builder::build() const {
+    return L3ServiceAccept{};
+}
+
+L3ServiceAccept::Builder L3ServiceAccept::builder() {
+    return Builder{};
 }
 
 // ── L3ServiceReject (GSM 24.008 9.4.22) ──────────────────────────────
@@ -700,6 +851,16 @@ void L3ServiceReject::write(BitWriter& bw) const {
 
 void L3ServiceReject::text(std::ostream& os) const {
     os << "ServiceReject(cause=" << GMMCause2Str(mCause) << ")";
+}
+
+L3ServiceReject L3ServiceReject::Builder::build() const {
+    L3ServiceReject msg;
+    msg.mCause = m_cause;
+    return msg;
+}
+
+L3ServiceReject::Builder L3ServiceReject::builder() {
+    return Builder{};
 }
 
 // ── L3P_TMSIReallocationCommand (GSM 24.008 9.4.8) ───────────────────
@@ -764,6 +925,20 @@ void L3P_TMSIReallocationCommand::text(std::ostream& os) const {
     os << "P_TMSIRreallocCmd(type=" << mPTMSIType << ")";
 }
 
+L3P_TMSIReallocationCommand L3P_TMSIReallocationCommand::Builder::build() const {
+    L3P_TMSIReallocationCommand msg;
+    msg.mPTMSIType = m_ptmsiType;
+    msg.mForceToStandby = m_forceToStandby;
+    msg.mRAI = m_rai;
+    msg.mHavePTMSI = m_havePTMSI;
+    msg.mPTMSI = m_ptmsi;
+    return msg;
+}
+
+L3P_TMSIReallocationCommand::Builder L3P_TMSIReallocationCommand::builder() {
+    return Builder{};
+}
+
 // ── L3P_TMSIReallocationComplete (GSM 24.008 9.4.8) ──────────────────
 
 Expected<L3P_TMSIReallocationComplete> L3P_TMSIReallocationComplete::parse(BitReader&) {
@@ -774,6 +949,14 @@ void L3P_TMSIReallocationComplete::write(BitWriter&) const {}
 
 void L3P_TMSIReallocationComplete::text(std::ostream& os) const {
     os << "P_TMSIRreallocComplete";
+}
+
+L3P_TMSIReallocationComplete L3P_TMSIReallocationComplete::Builder::build() const {
+    return L3P_TMSIReallocationComplete{};
+}
+
+L3P_TMSIReallocationComplete::Builder L3P_TMSIReallocationComplete::builder() {
+    return Builder{};
 }
 
 // ── L3AuthenticationAndCipheringRequest (GSM 24.008 9.4.9) ────────────
@@ -823,6 +1006,20 @@ void L3AuthenticationAndCipheringRequest::text(std::ostream& os) const {
     os << "AuthCipherReq(alg=" << mCipheringAlgorithm << ",acRef=" << mACReferenceNumber << ")";
 }
 
+L3AuthenticationAndCipheringRequest L3AuthenticationAndCipheringRequest::Builder::build() const {
+    L3AuthenticationAndCipheringRequest msg;
+    msg.mCipheringAlgorithm = m_cipheringAlgorithm;
+    msg.mImeisvRequest = m_imeisvRequest;
+    msg.mForceToStandby = m_forceToStandby;
+    msg.mACReferenceNumber = m_acReferenceNumber;
+    msg.mRAND = m_rand;
+    return msg;
+}
+
+L3AuthenticationAndCipheringRequest::Builder L3AuthenticationAndCipheringRequest::builder() {
+    return Builder{};
+}
+
 // ── L3AuthenticationAndCipheringResponse (GSM 24.008 9.4.9) ───────────
 
 size_t L3AuthenticationAndCipheringResponse::bodyLength() const {
@@ -864,6 +1061,17 @@ void L3AuthenticationAndCipheringResponse::text(std::ostream& os) const {
     os << "AuthCipherResp(acRef=" << mACReferenceNumber << ")";
 }
 
+L3AuthenticationAndCipheringResponse L3AuthenticationAndCipheringResponse::Builder::build() const {
+    L3AuthenticationAndCipheringResponse msg;
+    msg.mACReferenceNumber = m_acReferenceNumber;
+    msg.mRES = m_res;
+    return msg;
+}
+
+L3AuthenticationAndCipheringResponse::Builder L3AuthenticationAndCipheringResponse::builder() {
+    return Builder{};
+}
+
 // ── L3AuthenticationAndCipheringReject (GSM 24.008 9.4.9) ─────────────
 
 Expected<L3AuthenticationAndCipheringReject> L3AuthenticationAndCipheringReject::parse(BitReader&) {
@@ -874,6 +1082,14 @@ void L3AuthenticationAndCipheringReject::write(BitWriter&) const {}
 
 void L3AuthenticationAndCipheringReject::text(std::ostream& os) const {
     os << "AuthCipherReject";
+}
+
+L3AuthenticationAndCipheringReject L3AuthenticationAndCipheringReject::Builder::build() const {
+    return L3AuthenticationAndCipheringReject{};
+}
+
+L3AuthenticationAndCipheringReject::Builder L3AuthenticationAndCipheringReject::builder() {
+    return Builder{};
 }
 
 // ── L3GMMIdentityRequest (GSM 24.008 9.4.7) ──────────────────────────
@@ -899,6 +1115,17 @@ void L3GMMIdentityRequest::text(std::ostream& os) const {
     os << "GMMIdentityReq(type=" << mIdentityType << ")";
 }
 
+L3GMMIdentityRequest L3GMMIdentityRequest::Builder::build() const {
+    L3GMMIdentityRequest msg;
+    msg.mIdentityType = m_identityType;
+    msg.mForceToStandby = m_forceToStandby;
+    return msg;
+}
+
+L3GMMIdentityRequest::Builder L3GMMIdentityRequest::builder() {
+    return Builder{};
+}
+
 // ── L3GMMIdentityResponse (GSM 24.008 9.4.10) ────────────────────────
 
 size_t L3GMMIdentityResponse::bodyLength() const {
@@ -921,6 +1148,16 @@ void L3GMMIdentityResponse::text(std::ostream& os) const {
     os << "GMMIdentityResp(";
     mMobileIdentity.text(os);
     os << ")";
+}
+
+L3GMMIdentityResponse L3GMMIdentityResponse::Builder::build() const {
+    L3GMMIdentityResponse msg;
+    msg.mMobileIdentity = m_mobileIdentity;
+    return msg;
+}
+
+L3GMMIdentityResponse::Builder L3GMMIdentityResponse::builder() {
+    return Builder{};
 }
 
 // ── L3AuthenticationAndCipheringFailure (GSM 24.008 9.4.23) ───────────
@@ -975,6 +1212,17 @@ void L3AuthenticationAndCipheringFailure::text(std::ostream& os) const {
     os << "AuthCipherFail(cause=" << GMMCause2Str(mCause) << ")";
 }
 
+L3AuthenticationAndCipheringFailure L3AuthenticationAndCipheringFailure::Builder::build() const {
+    L3AuthenticationAndCipheringFailure msg;
+    msg.mCause = m_cause;
+    msg.mAuthFailureParam = m_authFailureParam;
+    return msg;
+}
+
+L3AuthenticationAndCipheringFailure::Builder L3AuthenticationAndCipheringFailure::builder() {
+    return Builder{};
+}
+
 // ── L3GMMStatus (GSM 24.008 9.4.24) ──────────────────────────────────
 
 Expected<L3GMMStatus> L3GMMStatus::parse(BitReader& br) {
@@ -993,6 +1241,16 @@ void L3GMMStatus::text(std::ostream& os) const {
     os << "GMMStatus(cause=" << GMMCause2Str(mCause) << ")";
 }
 
+L3GMMStatus L3GMMStatus::Builder::build() const {
+    L3GMMStatus msg;
+    msg.mCause = m_cause;
+    return msg;
+}
+
+L3GMMStatus::Builder L3GMMStatus::builder() {
+    return Builder{};
+}
+
 // ── L3GMMInformation (GSM 24.008) ─────────────────────────────────────
 
 Expected<L3GMMInformation> L3GMMInformation::parse(BitReader&) {
@@ -1003,6 +1261,14 @@ void L3GMMInformation::write(BitWriter&) const {}
 
 void L3GMMInformation::text(std::ostream& os) const {
     os << "GMMInformation";
+}
+
+L3GMMInformation L3GMMInformation::Builder::build() const {
+    return L3GMMInformation{};
+}
+
+L3GMMInformation::Builder L3GMMInformation::builder() {
+    return Builder{};
 }
 
 // ── gmmMessageName ──────────────────────────────────────────────────────

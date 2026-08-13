@@ -49,6 +49,8 @@ namespace gsml3parser {
 class L3GCCSetup {
     std::vector<uint8_t> mBody;
     unsigned mTi{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x00;
 
@@ -63,6 +65,25 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::GroupCallControl; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        std::vector<uint8_t> mBody;
+        unsigned mTi{0};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { mTi = v; return *this; }
+        /// Set body data.
+        Builder& body(std::vector<uint8_t> v) { mBody = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3GCCSetup build() const {
+            L3GCCSetup msg;
+            msg.mTi = mTi;
+            msg.mBody = mBody;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Group Call Acknowledge (GSM 44.018 9.7.2.3) ──────────────────────
@@ -71,6 +92,8 @@ public:
 class L3GCCAcknowledge {
     std::vector<uint8_t> mBody;
     unsigned mTi{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x02;
 
@@ -85,6 +108,25 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::GroupCallControl; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        std::vector<uint8_t> mBody;
+        unsigned mTi{0};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { mTi = v; return *this; }
+        /// Set body data.
+        Builder& body(std::vector<uint8_t> v) { mBody = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3GCCAcknowledge build() const {
+            L3GCCAcknowledge msg;
+            msg.mTi = mTi;
+            msg.mBody = mBody;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Group Call Proceeding (GSM 44.018 9.7.2.4) ───────────────────────
@@ -93,6 +135,8 @@ public:
 class L3GCCProceeding {
     std::vector<uint8_t> mBody;
     unsigned mTi{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x01;
 
@@ -107,6 +151,25 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::GroupCallControl; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        std::vector<uint8_t> mBody;
+        unsigned mTi{0};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { mTi = v; return *this; }
+        /// Set body data.
+        Builder& body(std::vector<uint8_t> v) { mBody = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3GCCProceeding build() const {
+            L3GCCProceeding msg;
+            msg.mTi = mTi;
+            msg.mBody = mBody;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Group Call Connect (GSM 44.018 9.7.2.6) ──────────────────────────
@@ -115,6 +178,8 @@ public:
 class L3GCCConnect {
     std::vector<uint8_t> mBody;
     unsigned mTi{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x05;
 
@@ -129,6 +194,25 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::GroupCallControl; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        std::vector<uint8_t> mBody;
+        unsigned mTi{0};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { mTi = v; return *this; }
+        /// Set body data.
+        Builder& body(std::vector<uint8_t> v) { mBody = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3GCCConnect build() const {
+            L3GCCConnect msg;
+            msg.mTi = mTi;
+            msg.mBody = mBody;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Group Call Disconnect (GSM 44.018 9.7.2.7) ───────────────────────
@@ -137,6 +221,8 @@ public:
 class L3GCCDisconnect {
     std::vector<uint8_t> mBody;
     unsigned mTi{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x06;
 
@@ -151,6 +237,25 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::GroupCallControl; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        std::vector<uint8_t> mBody;
+        unsigned mTi{0};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { mTi = v; return *this; }
+        /// Set body data.
+        Builder& body(std::vector<uint8_t> v) { mBody = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3GCCDisconnect build() const {
+            L3GCCDisconnect msg;
+            msg.mTi = mTi;
+            msg.mBody = mBody;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Group Call Release (GSM 44.018 9.7.2.8) ──────────────────────────
@@ -159,6 +264,8 @@ public:
 class L3GCCRelease {
     std::vector<uint8_t> mBody;
     unsigned mTi{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x07;
 
@@ -173,6 +280,25 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::GroupCallControl; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        std::vector<uint8_t> mBody;
+        unsigned mTi{0};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { mTi = v; return *this; }
+        /// Set body data.
+        Builder& body(std::vector<uint8_t> v) { mBody = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3GCCRelease build() const {
+            L3GCCRelease msg;
+            msg.mTi = mTi;
+            msg.mBody = mBody;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Group Call Release Complete (GSM 44.018 9.7.2.9) ─────────────────
@@ -181,6 +307,8 @@ public:
 class L3GCCReleaseComplete {
     std::vector<uint8_t> mBody;
     unsigned mTi{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x0a;
 
@@ -195,12 +323,33 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::GroupCallControl; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        std::vector<uint8_t> mBody;
+        unsigned mTi{0};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { mTi = v; return *this; }
+        /// Set body data.
+        Builder& body(std::vector<uint8_t> v) { mBody = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3GCCReleaseComplete build() const {
+            L3GCCReleaseComplete msg;
+            msg.mTi = mTi;
+            msg.mBody = mBody;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // GCC Call Confirmed — TS 44.018 §9.7.2.5, Table 10.4.4
 // Direction: MT
 class L3GCCCallConfirmed {
     unsigned mTi{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x03;
     void ti(unsigned t) { mTi = t; }
@@ -212,6 +361,21 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::GroupCallControl; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        unsigned mTi{0};
+
+        /// Set transaction identifier.
+        Builder& ti(unsigned v) { mTi = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3GCCCallConfirmed build() const {
+            L3GCCCallConfirmed msg;
+            msg.mTi = mTi;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 } // namespace gsml3parser

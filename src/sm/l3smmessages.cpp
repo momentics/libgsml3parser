@@ -178,6 +178,22 @@ void L3ActivatePDPContextRequest::text(std::ostream& os) const {
     os << ")";
 }
 
+L3ActivatePDPContextRequest L3ActivatePDPContextRequest::Builder::build() const {
+    L3ActivatePDPContextRequest msg;
+    msg.mPDPType = m_pdpType;
+    msg.mHavePDPAddress = m_havePDPAddress;
+    msg.mPDPAddress = m_pdpAddress;
+    msg.mAPN = m_apn;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3ActivatePDPContextRequest::Builder L3ActivatePDPContextRequest::builder() {
+    return Builder{};
+}
+
 // ── L3ActivatePDPContextAccept (GSM 24.008 9.5.2) ────────────────────
 
 size_t L3ActivatePDPContextAccept::bodyLength() const {
@@ -281,6 +297,21 @@ void L3ActivatePDPContextAccept::text(std::ostream& os) const {
     os << ")";
 }
 
+L3ActivatePDPContextAccept L3ActivatePDPContextAccept::Builder::build() const {
+    L3ActivatePDPContextAccept msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mHavePDPAddress = m_havePDPAddress;
+    msg.mPDPAddress = m_pdpAddress;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3ActivatePDPContextAccept::Builder L3ActivatePDPContextAccept::builder() {
+    return Builder{};
+}
+
 // ── L3ActivatePDPContextReject (GSM 24.008 9.5.3) ────────────────────
 
 size_t L3ActivatePDPContextReject::bodyLength() const {
@@ -330,6 +361,18 @@ void L3ActivatePDPContextReject::write(BitWriter& bw) const {
 
 void L3ActivatePDPContextReject::text(std::ostream& os) const {
     os << "ActivatePDPRej(cause=" << SMCause2Str(mCause) << ")";
+}
+
+L3ActivatePDPContextReject L3ActivatePDPContextReject::Builder::build() const {
+    L3ActivatePDPContextReject msg;
+    msg.mCause = m_cause;
+    msg.mHaveBackOffTimer = m_haveBackOffTimer;
+    msg.mBackOffTimer = m_backOffTimer;
+    return msg;
+}
+
+L3ActivatePDPContextReject::Builder L3ActivatePDPContextReject::builder() {
+    return Builder{};
 }
 
 // ── L3DeactivatePDPContextRequest (GSM 24.008 9.5.4) ─────────────────
@@ -408,6 +451,20 @@ void L3DeactivatePDPContextRequest::text(std::ostream& os) const {
     os << ")";
 }
 
+L3DeactivatePDPContextRequest L3DeactivatePDPContextRequest::Builder::build() const {
+    L3DeactivatePDPContextRequest msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mHavePDPType = m_havePDPType;
+    msg.mPDPType = m_pdpType;
+    msg.mHavePDPAddress = m_havePDPAddress;
+    msg.mPDPAddress = m_pdpAddress;
+    return msg;
+}
+
+L3DeactivatePDPContextRequest::Builder L3DeactivatePDPContextRequest::builder() {
+    return Builder{};
+}
+
 // ── L3DeactivatePDPContextAccept (GSM 24.008 9.5.5) ──────────────────
 
 Expected<L3DeactivatePDPContextAccept> L3DeactivatePDPContextAccept::parse(BitReader& br) {
@@ -432,6 +489,16 @@ void L3DeactivatePDPContextAccept::write(BitWriter& bw) const {
 
 void L3DeactivatePDPContextAccept::text(std::ostream& os) const {
     os << "DeactivatePDPAcc(handle=" << static_cast<int>(mPDPHandle) << ")";
+}
+
+L3DeactivatePDPContextAccept L3DeactivatePDPContextAccept::Builder::build() const {
+    L3DeactivatePDPContextAccept msg;
+    msg.mPDPHandle = m_pdpHandle;
+    return msg;
+}
+
+L3DeactivatePDPContextAccept::Builder L3DeactivatePDPContextAccept::builder() {
+    return Builder{};
 }
 
 // ── L3ModifyPDPContextRequest (GSM 24.008 9.5.6) ─────────────────────
@@ -515,6 +582,19 @@ void L3ModifyPDPContextRequest::text(std::ostream& os) const {
     os << ")";
 }
 
+L3ModifyPDPContextRequest L3ModifyPDPContextRequest::Builder::build() const {
+    L3ModifyPDPContextRequest msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3ModifyPDPContextRequest::Builder L3ModifyPDPContextRequest::builder() {
+    return Builder{};
+}
+
 // ── L3ModifyPDPContextAccept (GSM 24.008 9.5.7) ──────────────────────
 
 size_t L3ModifyPDPContextAccept::bodyLength() const {
@@ -596,6 +676,19 @@ void L3ModifyPDPContextAccept::text(std::ostream& os) const {
     os << ")";
 }
 
+L3ModifyPDPContextAccept L3ModifyPDPContextAccept::Builder::build() const {
+    L3ModifyPDPContextAccept msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3ModifyPDPContextAccept::Builder L3ModifyPDPContextAccept::builder() {
+    return Builder{};
+}
+
 // ── L3ModifyPDPContextReject (GSM 24.008 9.5.8) ──────────────────────
 
 size_t L3ModifyPDPContextReject::bodyLength() const {
@@ -662,7 +755,20 @@ void L3ModifyPDPContextReject::write(BitWriter& bw) const {
 
 void L3ModifyPDPContextReject::text(std::ostream& os) const {
     os << "ModifyPDPRej(handle=" << static_cast<int>(mPDPHandle)
-       << ",cause=" << SMCause2Str(mCause) << ")";
+        << ",cause=" << SMCause2Str(mCause) << ")";
+}
+
+L3ModifyPDPContextReject L3ModifyPDPContextReject::Builder::build() const {
+    L3ModifyPDPContextReject msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mCause = m_cause;
+    msg.mHaveBackOffTimer = m_haveBackOffTimer;
+    msg.mBackOffTimer = m_backOffTimer;
+    return msg;
+}
+
+L3ModifyPDPContextReject::Builder L3ModifyPDPContextReject::builder() {
+    return Builder{};
 }
 
 // ── L3SMStatus (GSM 24.008 9.5.9) ────────────────────────────────────
@@ -698,6 +804,16 @@ void L3SMStatus::write(BitWriter& bw) const {
 
 void L3SMStatus::text(std::ostream& os) const {
     os << "SMStatus(cause=" << SMCause2Str(mCause) << ")";
+}
+
+L3SMStatus L3SMStatus::Builder::build() const {
+    L3SMStatus msg;
+    msg.mCause = m_cause;
+    return msg;
+}
+
+L3SMStatus::Builder L3SMStatus::builder() {
+    return Builder{};
 }
 
 // ── L3RequestPDPContextActivation (GSM 24.008 9.5.10) ─────────────────
@@ -786,6 +902,22 @@ void L3RequestPDPContextActivation::text(std::ostream& os) const {
     os << ")";
 }
 
+L3RequestPDPContextActivation L3RequestPDPContextActivation::Builder::build() const {
+    L3RequestPDPContextActivation msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mHavePDPAddress = m_havePDPAddress;
+    msg.mPDPAddress = m_pdpAddress;
+    msg.mAPN = m_apn;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3RequestPDPContextActivation::Builder L3RequestPDPContextActivation::builder() {
+    return Builder{};
+}
+
 // ── L3RequestPDPContextActivationReject (GSM 24.008 9.5.10) ───────────
 
 size_t L3RequestPDPContextActivationReject::bodyLength() const {
@@ -831,7 +963,18 @@ void L3RequestPDPContextActivationReject::write(BitWriter& bw) const {
 
 void L3RequestPDPContextActivationReject::text(std::ostream& os) const {
     os << "RequestPDPActRej(handle=" << static_cast<int>(mPDPHandle)
-       << ",cause=" << SMCause2Str(mCause) << ")";
+        << ",cause=" << SMCause2Str(mCause) << ")";
+}
+
+L3RequestPDPContextActivationReject L3RequestPDPContextActivationReject::Builder::build() const {
+    L3RequestPDPContextActivationReject msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mCause = m_cause;
+    return msg;
+}
+
+L3RequestPDPContextActivationReject::Builder L3RequestPDPContextActivationReject::builder() {
+    return Builder{};
 }
 
 // ── L3ModifyPDPContextRequestMS (GSM 24.008 9.5.6) ────────────────────
@@ -898,6 +1041,19 @@ void L3ModifyPDPContextRequestMS::text(std::ostream& os) const {
     os << ")";
 }
 
+L3ModifyPDPContextRequestMS L3ModifyPDPContextRequestMS::Builder::build() const {
+    L3ModifyPDPContextRequestMS msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3ModifyPDPContextRequestMS::Builder L3ModifyPDPContextRequestMS::builder() {
+    return Builder{};
+}
+
 // ── L3ModifyPDPContextAcceptNet (GSM 24.008 9.5.7) ────────────────────
 
 size_t L3ModifyPDPContextAcceptNet::bodyLength() const {
@@ -960,6 +1116,19 @@ void L3ModifyPDPContextAcceptNet::text(std::ostream& os) const {
     os << ", "; mQoS.text(os);
     if (mHavePCO) { os << ", "; mPCO.text(os); }
     os << ")";
+}
+
+L3ModifyPDPContextAcceptNet L3ModifyPDPContextAcceptNet::Builder::build() const {
+    L3ModifyPDPContextAcceptNet msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3ModifyPDPContextAcceptNet::Builder L3ModifyPDPContextAcceptNet::builder() {
+    return Builder{};
 }
 
 // ── L3ActivateSecondaryPDPContextRequest (GSM 24.008 9.5.11) ──────────
@@ -1048,6 +1217,22 @@ void L3ActivateSecondaryPDPContextRequest::text(std::ostream& os) const {
     os << ")";
 }
 
+L3ActivateSecondaryPDPContextRequest L3ActivateSecondaryPDPContextRequest::Builder::build() const {
+    L3ActivateSecondaryPDPContextRequest msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mHavePDPAddress = m_havePDPAddress;
+    msg.mPDPAddress = m_pdpAddress;
+    msg.mAPN = m_apn;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3ActivateSecondaryPDPContextRequest::Builder L3ActivateSecondaryPDPContextRequest::builder() {
+    return Builder{};
+}
+
 // ── L3ActivateSecondaryPDPContextAccept (GSM 24.008 9.5.12) ───────────
 
 size_t L3ActivateSecondaryPDPContextAccept::bodyLength() const {
@@ -1124,6 +1309,21 @@ void L3ActivateSecondaryPDPContextAccept::text(std::ostream& os) const {
     os << ")";
 }
 
+L3ActivateSecondaryPDPContextAccept L3ActivateSecondaryPDPContextAccept::Builder::build() const {
+    L3ActivateSecondaryPDPContextAccept msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mHavePDPAddress = m_havePDPAddress;
+    msg.mPDPAddress = m_pdpAddress;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3ActivateSecondaryPDPContextAccept::Builder L3ActivateSecondaryPDPContextAccept::builder() {
+    return Builder{};
+}
+
 // ── L3ActivateSecondaryPDPContextReject (GSM 24.008 9.5.13) ───────────
 
 size_t L3ActivateSecondaryPDPContextReject::bodyLength() const {
@@ -1169,7 +1369,18 @@ void L3ActivateSecondaryPDPContextReject::write(BitWriter& bw) const {
 
 void L3ActivateSecondaryPDPContextReject::text(std::ostream& os) const {
     os << "ActSecPDPRej(handle=" << static_cast<int>(mPDPHandle)
-       << ",cause=" << SMCause2Str(mCause) << ")";
+        << ",cause=" << SMCause2Str(mCause) << ")";
+}
+
+L3ActivateSecondaryPDPContextReject L3ActivateSecondaryPDPContextReject::Builder::build() const {
+    L3ActivateSecondaryPDPContextReject msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mCause = m_cause;
+    return msg;
+}
+
+L3ActivateSecondaryPDPContextReject::Builder L3ActivateSecondaryPDPContextReject::builder() {
+    return Builder{};
 }
 
 // ── L3ActivateAAPDPContextRequest (GSM 24.008 9.5.14) ─────────────────
@@ -1258,6 +1469,22 @@ void L3ActivateAAPDPContextRequest::text(std::ostream& os) const {
     os << ")";
 }
 
+L3ActivateAAPDPContextRequest L3ActivateAAPDPContextRequest::Builder::build() const {
+    L3ActivateAAPDPContextRequest msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mHavePDPAddress = m_havePDPAddress;
+    msg.mPDPAddress = m_pdpAddress;
+    msg.mAPN = m_apn;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3ActivateAAPDPContextRequest::Builder L3ActivateAAPDPContextRequest::builder() {
+    return Builder{};
+}
+
 // ── L3ActivateAAPDPContextAccept (GSM 24.008 9.5.15) ──────────────────
 
 size_t L3ActivateAAPDPContextAccept::bodyLength() const {
@@ -1334,6 +1561,21 @@ void L3ActivateAAPDPContextAccept::text(std::ostream& os) const {
     os << ")";
 }
 
+L3ActivateAAPDPContextAccept L3ActivateAAPDPContextAccept::Builder::build() const {
+    L3ActivateAAPDPContextAccept msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mHavePDPAddress = m_havePDPAddress;
+    msg.mPDPAddress = m_pdpAddress;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3ActivateAAPDPContextAccept::Builder L3ActivateAAPDPContextAccept::builder() {
+    return Builder{};
+}
+
 // ── L3ActivateAAPDPContextReject (GSM 24.008 9.5.16) ──────────────────
 
 size_t L3ActivateAAPDPContextReject::bodyLength() const {
@@ -1379,7 +1621,18 @@ void L3ActivateAAPDPContextReject::write(BitWriter& bw) const {
 
 void L3ActivateAAPDPContextReject::text(std::ostream& os) const {
     os << "ActAAPDPRej(handle=" << static_cast<int>(mPDPHandle)
-       << ",cause=" << SMCause2Str(mCause) << ")";
+        << ",cause=" << SMCause2Str(mCause) << ")";
+}
+
+L3ActivateAAPDPContextReject L3ActivateAAPDPContextReject::Builder::build() const {
+    L3ActivateAAPDPContextReject msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mCause = m_cause;
+    return msg;
+}
+
+L3ActivateAAPDPContextReject::Builder L3ActivateAAPDPContextReject::builder() {
+    return Builder{};
 }
 
 // ── L3DeactivateAAPDPContextRequest (GSM 24.008 9.5.17) ───────────────
@@ -1405,6 +1658,16 @@ void L3DeactivateAAPDPContextRequest::text(std::ostream& os) const {
     os << "DeactAAPDPReq(handle=" << static_cast<int>(mPDPHandle) << ")";
 }
 
+L3DeactivateAAPDPContextRequest L3DeactivateAAPDPContextRequest::Builder::build() const {
+    L3DeactivateAAPDPContextRequest msg;
+    msg.mPDPHandle = m_pdpHandle;
+    return msg;
+}
+
+L3DeactivateAAPDPContextRequest::Builder L3DeactivateAAPDPContextRequest::builder() {
+    return Builder{};
+}
+
 // ── L3DeactivateAAPDPContextAccept (GSM 24.008 9.5.17) ────────────────
 
 Expected<L3DeactivateAAPDPContextAccept> L3DeactivateAAPDPContextAccept::parse(BitReader& br) {
@@ -1426,6 +1689,16 @@ void L3DeactivateAAPDPContextAccept::write(BitWriter& bw) const {
 
 void L3DeactivateAAPDPContextAccept::text(std::ostream& os) const {
     os << "DeactAAPDPAcc(handle=" << static_cast<int>(mPDPHandle) << ")";
+}
+
+L3DeactivateAAPDPContextAccept L3DeactivateAAPDPContextAccept::Builder::build() const {
+    L3DeactivateAAPDPContextAccept msg;
+    msg.mPDPHandle = m_pdpHandle;
+    return msg;
+}
+
+L3DeactivateAAPDPContextAccept::Builder L3DeactivateAAPDPContextAccept::builder() {
+    return Builder{};
 }
 
 // ── L3ActivateMBMSContextRequest (GSM 24.008 9.5.18) ──────────────────
@@ -1485,6 +1758,19 @@ void L3ActivateMBMSContextRequest::text(std::ostream& os) const {
     os << ", "; mQoS.text(os);
     if (mHavePCO) { os << ", "; mPCO.text(os); }
     os << ")";
+}
+
+L3ActivateMBMSContextRequest L3ActivateMBMSContextRequest::Builder::build() const {
+    L3ActivateMBMSContextRequest msg;
+    msg.mTMGI = m_tmgi;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3ActivateMBMSContextRequest::Builder L3ActivateMBMSContextRequest::builder() {
+    return Builder{};
 }
 
 // ── L3ActivateMBMSContextAccept (GSM 24.008 9.5.19) ───────────────────
@@ -1551,6 +1837,19 @@ void L3ActivateMBMSContextAccept::text(std::ostream& os) const {
     os << ")";
 }
 
+L3ActivateMBMSContextAccept L3ActivateMBMSContextAccept::Builder::build() const {
+    L3ActivateMBMSContextAccept msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3ActivateMBMSContextAccept::Builder L3ActivateMBMSContextAccept::builder() {
+    return Builder{};
+}
+
 // ── L3ActivateMBMSContextReject (GSM 24.008 9.5.20) ───────────────────
 
 size_t L3ActivateMBMSContextReject::bodyLength() const {
@@ -1583,6 +1882,16 @@ void L3ActivateMBMSContextReject::write(BitWriter& bw) const {
 
 void L3ActivateMBMSContextReject::text(std::ostream& os) const {
     os << "ActMBMSRej(cause=" << SMCause2Str(mCause) << ")";
+}
+
+L3ActivateMBMSContextReject L3ActivateMBMSContextReject::Builder::build() const {
+    L3ActivateMBMSContextReject msg;
+    msg.mCause = m_cause;
+    return msg;
+}
+
+L3ActivateMBMSContextReject::Builder L3ActivateMBMSContextReject::builder() {
+    return Builder{};
 }
 
 // ── L3RequestMBMSContextActivation (GSM 24.008 9.5.21) ────────────────
@@ -1644,6 +1953,19 @@ void L3RequestMBMSContextActivation::text(std::ostream& os) const {
     os << ")";
 }
 
+L3RequestMBMSContextActivation L3RequestMBMSContextActivation::Builder::build() const {
+    L3RequestMBMSContextActivation msg;
+    msg.mTMGI = m_tmgi;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3RequestMBMSContextActivation::Builder L3RequestMBMSContextActivation::builder() {
+    return Builder{};
+}
+
 // ── L3RequestMBMSContextActivationReject (GSM 24.008 9.5.22) ──────────
 
 size_t L3RequestMBMSContextActivationReject::bodyLength() const {
@@ -1676,6 +1998,16 @@ void L3RequestMBMSContextActivationReject::write(BitWriter& bw) const {
 
 void L3RequestMBMSContextActivationReject::text(std::ostream& os) const {
     os << "ReqMBMSActRej(cause=" << SMCause2Str(mCause) << ")";
+}
+
+L3RequestMBMSContextActivationReject L3RequestMBMSContextActivationReject::Builder::build() const {
+    L3RequestMBMSContextActivationReject msg;
+    msg.mCause = m_cause;
+    return msg;
+}
+
+L3RequestMBMSContextActivationReject::Builder L3RequestMBMSContextActivationReject::builder() {
+    return Builder{};
 }
 
 // ── L3RequestSecondaryPDPContextActivation (GSM 24.008 9.5.23) ────────
@@ -1764,6 +2096,22 @@ void L3RequestSecondaryPDPContextActivation::text(std::ostream& os) const {
     os << ")";
 }
 
+L3RequestSecondaryPDPContextActivation L3RequestSecondaryPDPContextActivation::Builder::build() const {
+    L3RequestSecondaryPDPContextActivation msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mHavePDPAddress = m_havePDPAddress;
+    msg.mPDPAddress = m_pdpAddress;
+    msg.mAPN = m_apn;
+    msg.mQoS = m_qos;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    return msg;
+}
+
+L3RequestSecondaryPDPContextActivation::Builder L3RequestSecondaryPDPContextActivation::builder() {
+    return Builder{};
+}
+
 // ── L3RequestSecondaryPDPContextActivationReject (GSM 24.008 9.5.24) ──
 
 size_t L3RequestSecondaryPDPContextActivationReject::bodyLength() const {
@@ -1809,7 +2157,18 @@ void L3RequestSecondaryPDPContextActivationReject::write(BitWriter& bw) const {
 
 void L3RequestSecondaryPDPContextActivationReject::text(std::ostream& os) const {
     os << "ReqSecPDPActRej(handle=" << static_cast<int>(mPDPHandle)
-       << ",cause=" << SMCause2Str(mCause) << ")";
+        << ",cause=" << SMCause2Str(mCause) << ")";
+}
+
+L3RequestSecondaryPDPContextActivationReject L3RequestSecondaryPDPContextActivationReject::Builder::build() const {
+    L3RequestSecondaryPDPContextActivationReject msg;
+    msg.mPDPHandle = m_pdpHandle;
+    msg.mCause = m_cause;
+    return msg;
+}
+
+L3RequestSecondaryPDPContextActivationReject::Builder L3RequestSecondaryPDPContextActivationReject::builder() {
+    return Builder{};
 }
 
 // ── L3SMNotification (GSM 24.008 9.5.25) ──────────────────────────────
@@ -1833,6 +2192,16 @@ void L3SMNotification::write(BitWriter& bw) const {
 
 void L3SMNotification::text(std::ostream& os) const {
     os << "SMNotification(handle=" << static_cast<int>(mPDPHandle) << ")";
+}
+
+L3SMNotification L3SMNotification::Builder::build() const {
+    L3SMNotification msg;
+    msg.mPDPHandle = m_pdpHandle;
+    return msg;
+}
+
+L3SMNotification::Builder L3SMNotification::builder() {
+    return Builder{};
 }
 
 // ── smMessageName ───────────────────────────────────────────────────────

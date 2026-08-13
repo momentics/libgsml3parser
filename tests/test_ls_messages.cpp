@@ -80,3 +80,33 @@ TEST(LSMessageTest, LocationServiceProviderMessage_Parse_Golden) {
     ASSERT_TRUE(lsp);
     EXPECT_EQ(lsp->body().size(), 3u);
 }
+
+// ── LS Builder Tests ───────────────────────────────────────────────────
+
+// TS 44.031 §9.1.2: Location Service Request Builder
+TEST(LSBuilderTest, LocationServiceRequest) {
+    auto msg = L3LocationServiceRequest::builder()
+        .body(std::vector<uint8_t>{0x01, 0x02, 0x03})
+        .build();
+    ParsedMessage pm{LSM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3LocationServiceRequest::MTI);
+}
+
+// TS 44.031 §9.1.3: Location Service Provider Message Builder
+TEST(LSBuilderTest, LocationServiceProviderMessage) {
+    auto msg = L3LocationServiceProviderMessage::builder()
+        .body(std::vector<uint8_t>{0xAA, 0xBB})
+        .build();
+    ParsedMessage pm{LSM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3LocationServiceProviderMessage::MTI);
+}

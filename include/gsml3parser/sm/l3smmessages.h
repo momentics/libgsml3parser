@@ -55,8 +55,35 @@ class L3ActivatePDPContextRequest {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x41;
+
+    struct Builder {
+        PDPType m_pdpType{PDPType::IPv4};
+        bool m_havePDPAddress{false};
+        L3PDPAddress m_pdpAddress;
+        L3AccessPointName m_apn;
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set PDP type.
+        Builder& pdpType(PDPType v) { m_pdpType = v; return *this; }
+        /// Set PDP address (sets mHavePDPAddress flag).
+        Builder& pdpAddress(L3PDPAddress v) { m_pdpAddress = v; m_havePDPAddress = true; return *this; }
+        /// Set APN.
+        Builder& apn(L3AccessPointName v) { m_apn = v; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ActivatePDPContextRequest build() const;
+    };
+
+    static Builder builder();
 
     PDPType pdpType() const { return mPDPType; }
     bool hasPDPAddress() const { return mHavePDPAddress; }
@@ -85,8 +112,32 @@ class L3ActivatePDPContextAccept {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x42;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        bool m_havePDPAddress{false};
+        L3PDPAddress m_pdpAddress;
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set PDP address (sets mHavePDPAddress flag).
+        Builder& pdpAddress(L3PDPAddress v) { m_pdpAddress = v; m_havePDPAddress = true; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ActivatePDPContextAccept build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     bool hasPDPAddress() const { return mHavePDPAddress; }
@@ -111,8 +162,25 @@ class L3ActivatePDPContextReject {
     SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
     bool mHaveBackOffTimer{false};
     L3BackOffTimer mBackOffTimer;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x43;
+
+    struct Builder {
+        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+        bool m_haveBackOffTimer{false};
+        L3BackOffTimer m_backOffTimer;
+
+        /// Set SM cause.
+        Builder& cause(SMCause v) { m_cause = v; return *this; }
+        /// Set back-off timer (sets mHaveBackOffTimer flag).
+        Builder& backOffTimer(L3BackOffTimer v) { m_backOffTimer = v; m_haveBackOffTimer = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ActivatePDPContextReject build() const;
+    };
+
+    static Builder builder();
 
     SMCause cause() const { return mCause; }
     bool hasBackOffTimer() const { return mHaveBackOffTimer; }
@@ -136,8 +204,29 @@ class L3DeactivatePDPContextRequest {
     PDPType mPDPType{PDPType::IPv4};
     bool mHavePDPAddress{false};
     L3PDPAddress mPDPAddress;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x46;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        bool m_havePDPType{false};
+        PDPType m_pdpType{PDPType::IPv4};
+        bool m_havePDPAddress{false};
+        L3PDPAddress m_pdpAddress;
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set PDP type (sets mHavePDPType flag).
+        Builder& pdpType(PDPType v) { m_pdpType = v; m_havePDPType = true; return *this; }
+        /// Set PDP address (sets mHavePDPAddress flag).
+        Builder& pdpAddress(L3PDPAddress v) { m_pdpAddress = v; m_havePDPAddress = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3DeactivatePDPContextRequest build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     bool hasPDPType() const { return mHavePDPType; }
@@ -159,8 +248,21 @@ public:
 
 class L3DeactivatePDPContextAccept {
     uint8_t mPDPHandle{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x47;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3DeactivatePDPContextAccept build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
 
@@ -181,8 +283,28 @@ class L3ModifyPDPContextRequest {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x48;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ModifyPDPContextRequest build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     const L3QoS& qos() const { return mQoS; }
@@ -206,8 +328,28 @@ class L3ModifyPDPContextAccept {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x49;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ModifyPDPContextAccept build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     const L3QoS& qos() const { return mQoS; }
@@ -231,8 +373,28 @@ class L3ModifyPDPContextReject {
     SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
     bool mHaveBackOffTimer{false};
     L3BackOffTimer mBackOffTimer;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x4c;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+        bool m_haveBackOffTimer{false};
+        L3BackOffTimer m_backOffTimer;
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set SM cause.
+        Builder& cause(SMCause v) { m_cause = v; return *this; }
+        /// Set back-off timer (sets mHaveBackOffTimer flag).
+        Builder& backOffTimer(L3BackOffTimer v) { m_backOffTimer = v; m_haveBackOffTimer = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ModifyPDPContextReject build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     SMCause cause() const { return mCause; }
@@ -253,10 +415,23 @@ public:
 
 class L3SMStatus {
     SMCause mCause{SMCause::ReqAccepted};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x55;
     L3SMStatus() = default;
     explicit L3SMStatus(SMCause cause) : mCause(cause) {}
+
+    struct Builder {
+        SMCause m_cause{SMCause::ReqAccepted};
+
+        /// Set SM cause.
+        Builder& cause(SMCause v) { m_cause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMStatus build() const;
+    };
+
+    static Builder builder();
 
     SMCause cause() const { return mCause; }
 
@@ -280,8 +455,35 @@ class L3RequestPDPContextActivation {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x44;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        bool m_havePDPAddress{false};
+        L3PDPAddress m_pdpAddress;
+        L3AccessPointName m_apn;
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set PDP address (sets mHavePDPAddress flag).
+        Builder& pdpAddress(L3PDPAddress v) { m_pdpAddress = v; m_havePDPAddress = true; return *this; }
+        /// Set APN.
+        Builder& apn(L3AccessPointName v) { m_apn = v; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3RequestPDPContextActivation build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     bool hasPDPAddress() const { return mHavePDPAddress; }
@@ -306,8 +508,24 @@ public:
 class L3RequestPDPContextActivationReject {
     uint8_t mPDPHandle{0};
     SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x45;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set SM cause.
+        Builder& cause(SMCause v) { m_cause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3RequestPDPContextActivationReject build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     SMCause cause() const { return mCause; }
@@ -329,8 +547,28 @@ class L3ModifyPDPContextRequestMS {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x4A;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ModifyPDPContextRequestMS build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     const L3QoS& qos() const { return mQoS; }
@@ -354,8 +592,28 @@ class L3ModifyPDPContextAcceptNet {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x4B;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ModifyPDPContextAcceptNet build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     const L3QoS& qos() const { return mQoS; }
@@ -382,8 +640,35 @@ class L3ActivateSecondaryPDPContextRequest {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x4D;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        bool m_havePDPAddress{false};
+        L3PDPAddress m_pdpAddress;
+        L3AccessPointName m_apn;
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set PDP address (sets mHavePDPAddress flag).
+        Builder& pdpAddress(L3PDPAddress v) { m_pdpAddress = v; m_havePDPAddress = true; return *this; }
+        /// Set APN.
+        Builder& apn(L3AccessPointName v) { m_apn = v; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ActivateSecondaryPDPContextRequest build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     bool hasPDPAddress() const { return mHavePDPAddress; }
@@ -412,8 +697,32 @@ class L3ActivateSecondaryPDPContextAccept {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x4E;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        bool m_havePDPAddress{false};
+        L3PDPAddress m_pdpAddress;
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set PDP address (sets mHavePDPAddress flag).
+        Builder& pdpAddress(L3PDPAddress v) { m_pdpAddress = v; m_havePDPAddress = true; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ActivateSecondaryPDPContextAccept build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     bool hasPDPAddress() const { return mHavePDPAddress; }
@@ -437,8 +746,24 @@ public:
 class L3ActivateSecondaryPDPContextReject {
     uint8_t mPDPHandle{0};
     SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x4F;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set SM cause.
+        Builder& cause(SMCause v) { m_cause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ActivateSecondaryPDPContextReject build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     SMCause cause() const { return mCause; }
@@ -463,8 +788,35 @@ class L3ActivateAAPDPContextRequest {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x50;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        bool m_havePDPAddress{false};
+        L3PDPAddress m_pdpAddress;
+        L3AccessPointName m_apn;
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set PDP address (sets mHavePDPAddress flag).
+        Builder& pdpAddress(L3PDPAddress v) { m_pdpAddress = v; m_havePDPAddress = true; return *this; }
+        /// Set APN.
+        Builder& apn(L3AccessPointName v) { m_apn = v; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ActivateAAPDPContextRequest build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     bool hasPDPAddress() const { return mHavePDPAddress; }
@@ -493,8 +845,32 @@ class L3ActivateAAPDPContextAccept {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x51;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        bool m_havePDPAddress{false};
+        L3PDPAddress m_pdpAddress;
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set PDP address (sets mHavePDPAddress flag).
+        Builder& pdpAddress(L3PDPAddress v) { m_pdpAddress = v; m_havePDPAddress = true; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ActivateAAPDPContextAccept build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     bool hasPDPAddress() const { return mHavePDPAddress; }
@@ -518,8 +894,24 @@ public:
 class L3ActivateAAPDPContextReject {
     uint8_t mPDPHandle{0};
     SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x52;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set SM cause.
+        Builder& cause(SMCause v) { m_cause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ActivateAAPDPContextReject build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     SMCause cause() const { return mCause; }
@@ -538,8 +930,21 @@ public:
 
 class L3DeactivateAAPDPContextRequest {
     uint8_t mPDPHandle{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x53;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3DeactivateAAPDPContextRequest build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
 
@@ -557,8 +962,21 @@ public:
 
 class L3DeactivateAAPDPContextAccept {
     uint8_t mPDPHandle{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x54;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3DeactivateAAPDPContextAccept build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
 
@@ -579,8 +997,28 @@ class L3ActivateMBMSContextRequest {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x56;
+
+    struct Builder {
+        L3TMGI m_tmgi;
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set TMGI.
+        Builder& tmgi(L3TMGI v) { m_tmgi = v; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ActivateMBMSContextRequest build() const;
+    };
+
+    static Builder builder();
 
     const L3TMGI& tmgi() const { return mTMGI; }
     const L3QoS& qos() const { return mQoS; }
@@ -604,8 +1042,28 @@ class L3ActivateMBMSContextAccept {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x57;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ActivateMBMSContextAccept build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     const L3QoS& qos() const { return mQoS; }
@@ -626,8 +1084,21 @@ public:
 
 class L3ActivateMBMSContextReject {
     SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x58;
+
+    struct Builder {
+        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+
+        /// Set SM cause.
+        Builder& cause(SMCause v) { m_cause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ActivateMBMSContextReject build() const;
+    };
+
+    static Builder builder();
 
     SMCause cause() const { return mCause; }
 
@@ -648,8 +1119,28 @@ class L3RequestMBMSContextActivation {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x59;
+
+    struct Builder {
+        L3TMGI m_tmgi;
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set TMGI.
+        Builder& tmgi(L3TMGI v) { m_tmgi = v; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3RequestMBMSContextActivation build() const;
+    };
+
+    static Builder builder();
 
     const L3TMGI& tmgi() const { return mTMGI; }
     const L3QoS& qos() const { return mQoS; }
@@ -670,8 +1161,21 @@ public:
 
 class L3RequestMBMSContextActivationReject {
     SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x5A;
+
+    struct Builder {
+        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+
+        /// Set SM cause.
+        Builder& cause(SMCause v) { m_cause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3RequestMBMSContextActivationReject build() const;
+    };
+
+    static Builder builder();
 
     SMCause cause() const { return mCause; }
 
@@ -695,8 +1199,35 @@ class L3RequestSecondaryPDPContextActivation {
     L3QoS mQoS;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x5B;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        bool m_havePDPAddress{false};
+        L3PDPAddress m_pdpAddress;
+        L3AccessPointName m_apn;
+        L3QoS m_qos;
+        bool m_havePCO{false};
+        L3ProtocolConfigOptions m_pco;
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set PDP address (sets mHavePDPAddress flag).
+        Builder& pdpAddress(L3PDPAddress v) { m_pdpAddress = v; m_havePDPAddress = true; return *this; }
+        /// Set APN.
+        Builder& apn(L3AccessPointName v) { m_apn = v; return *this; }
+        /// Set QoS.
+        Builder& qos(L3QoS v) { m_qos = v; return *this; }
+        /// Set PCO (sets mHavePCO flag).
+        Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3RequestSecondaryPDPContextActivation build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     bool hasPDPAddress() const { return mHavePDPAddress; }
@@ -721,8 +1252,24 @@ public:
 class L3RequestSecondaryPDPContextActivationReject {
     uint8_t mPDPHandle{0};
     SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x5C;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Set SM cause.
+        Builder& cause(SMCause v) { m_cause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3RequestSecondaryPDPContextActivationReject build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
     SMCause cause() const { return mCause; }
@@ -741,8 +1288,21 @@ public:
 
 class L3SMNotification {
     uint8_t mPDPHandle{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x5D;
+
+    struct Builder {
+        uint8_t m_pdpHandle{0};
+
+        /// Set PDP handle.
+        Builder& pdpHandle(uint8_t v) { m_pdpHandle = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMNotification build() const;
+    };
+
+    static Builder builder();
 
     uint8_t pdpHandle() const { return mPDPHandle; }
 

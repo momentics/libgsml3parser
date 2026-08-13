@@ -40,6 +40,8 @@ namespace gsml3parser {
 // Carries: location service request parameters
 class L3LocationServiceRequest {
     std::vector<uint8_t> mBody;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x01;
     L3LocationServiceRequest() = default;
@@ -51,6 +53,21 @@ public:
     [[nodiscard]] static Expected<L3LocationServiceRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mBody;
+
+        /// Set body data.
+        Builder& body(std::vector<uint8_t> v) { mBody = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3LocationServiceRequest build() const {
+            L3LocationServiceRequest msg;
+            msg.mBody = mBody;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // Location Service Provider Message — TS 44.031 §9.1.3
@@ -58,6 +75,8 @@ public:
 // Carries: location service provider data
 class L3LocationServiceProviderMessage {
     std::vector<uint8_t> mBody;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x02;
     L3LocationServiceProviderMessage() = default;
@@ -69,6 +88,21 @@ public:
     [[nodiscard]] static Expected<L3LocationServiceProviderMessage> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mBody;
+
+        /// Set body data.
+        Builder& body(std::vector<uint8_t> v) { mBody = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3LocationServiceProviderMessage build() const {
+            L3LocationServiceProviderMessage msg;
+            msg.mBody = mBody;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 } // namespace gsml3parser

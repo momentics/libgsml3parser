@@ -61,8 +61,44 @@ class L3AttachRequest {
     L3RoutingAreaIdentification mOldRAI;
     bool mHaveMsRACap{false};
     std::vector<uint8_t> mMsRACap;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x01;
+
+    struct Builder {
+        L3MSNetworkCapability m_msNetworkCapability;
+        GMMAttachType m_attachType{GMMAttachType::GPRSAttach};
+        bool m_forL3{false};
+        uint8_t mCKSN{0};
+        L3DRXParameter m_drxParam;
+        L3MobileIdentity m_mobileIdentity;
+        L3RoutingAreaIdentification m_oldRAI;
+        bool m_haveMsRACap{false};
+        std::vector<uint8_t> m_msRACap;
+
+        /// Set MS network capability.
+        Builder& msNetworkCapability(L3MSNetworkCapability v) { m_msNetworkCapability = v; return *this; }
+        /// Set attach type.
+        Builder& attachType(GMMAttachType v) { m_attachType = v; return *this; }
+        /// Set forL3 flag.
+        Builder& forL3(bool v) { m_forL3 = v; return *this; }
+        /// Set CKSN value.
+        Builder& cksn(uint8_t v) { mCKSN = v; return *this; }
+        /// Set DRX parameter.
+        Builder& drxParam(L3DRXParameter v) { m_drxParam = v; return *this; }
+        /// Set mobile identity.
+        Builder& mobileIdentity(L3MobileIdentity v) { m_mobileIdentity = v; return *this; }
+        /// Set old routing area identification.
+        Builder& oldRAI(L3RoutingAreaIdentification v) { m_oldRAI = v; return *this; }
+        /// Set MS radio access capability with flag.
+        Builder& msRACap(std::vector<uint8_t> v) { m_haveMsRACap = true; m_msRACap = std::move(v); return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3AttachRequest build() const;
+    };
+
+    static Builder builder();
 
     GMMAttachType attachType() const { return mAttachType; }
     bool forL3() const { return mForL3; }
@@ -95,8 +131,38 @@ class L3AttachAccept {
     L3RoutingAreaIdentification mRAI;
     bool mHavePTMSI{false};
     L3MobileIdentity mPTMSI;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x02;
+
+    struct Builder {
+        GMMAttachType m_attachResult{GMMAttachType::GPRSAttach};
+        bool m_forceToStandby{false};
+        uint8_t m_updateTimer{0};
+        uint8_t m_radioPriority{0};
+        L3RoutingAreaIdentification m_rai;
+        bool m_havePTMSI{false};
+        L3MobileIdentity m_ptmsi;
+
+        /// Set attach result type.
+        Builder& attachResult(GMMAttachType v) { m_attachResult = v; return *this; }
+        /// Set force to standby flag.
+        Builder& forceToStandby(bool v) { m_forceToStandby = v; return *this; }
+        /// Set update timer value.
+        Builder& updateTimer(uint8_t v) { m_updateTimer = v; return *this; }
+        /// Set radio priority value.
+        Builder& radioPriority(uint8_t v) { m_radioPriority = v; return *this; }
+        /// Set routing area identification.
+        Builder& rai(L3RoutingAreaIdentification v) { m_rai = v; return *this; }
+        /// Set PTMSI with flag.
+        Builder& ptmsi(L3MobileIdentity v) { m_havePTMSI = true; m_ptmsi = std::move(v); return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3AttachAccept build() const;
+    };
+
+    static Builder builder();
 
     GMMAttachType attachResult() const { return mAttachResult; }
     bool forceToStandby() const { return mForceToStandby; }
@@ -122,6 +188,13 @@ class L3AttachComplete {
 public:
     static constexpr int MTI = 0x03;
 
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3AttachComplete build() const;
+    };
+
+    static Builder builder();
+
     size_t bodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3AttachComplete> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -138,8 +211,26 @@ class L3AttachReject {
     GMMCause mCause{GMMCause::Unspecified};
     bool mHaveT3302{false};
     L3T3302Timer mT3302;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x04;
+
+    struct Builder {
+        GMMCause m_cause{GMMCause::Unspecified};
+        bool m_haveT3302{false};
+        L3T3302Timer m_t3302;
+
+        /// Set GMM cause.
+        Builder& cause(GMMCause v) { m_cause = v; return *this; }
+        /// Set T3302 timer with flag.
+        Builder& t3302(L3T3302Timer v) { m_haveT3302 = true; m_t3302 = v; return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3AttachReject build() const;
+    };
+
+    static Builder builder();
 
     GMMCause cause() const { return mCause; }
     bool hasT3302() const { return mHaveT3302; }
@@ -165,8 +256,35 @@ class L3DetachRequest {
     bool mHavePTMSI{false};
     L3MobileIdentity mPTMSI;
     GMMCause mCause{GMMCause::Unspecified};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x05;
+
+    struct Builder {
+        uint8_t m_detachType{0};
+        bool m_powerOff{false};
+        bool m_forceToStandby{false};
+        bool m_havePTMSI{false};
+        L3MobileIdentity m_ptmsi;
+        GMMCause m_cause{GMMCause::Unspecified};
+
+        /// Set detach type.
+        Builder& detachType(uint8_t v) { m_detachType = v; return *this; }
+        /// Set power off flag.
+        Builder& powerOff(bool v) { m_powerOff = v; return *this; }
+        /// Set force to standby flag.
+        Builder& forceToStandby(bool v) { m_forceToStandby = v; return *this; }
+        /// Set PTMSI with flag.
+        Builder& ptmsi(L3MobileIdentity v) { m_havePTMSI = true; m_ptmsi = std::move(v); return *this; }
+        /// Set GMM cause.
+        Builder& cause(GMMCause v) { m_cause = v; return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3DetachRequest build() const;
+    };
+
+    static Builder builder();
 
     uint8_t detachType() const { return mDetachType & 0x07; }
     bool powerOff() const { return mPowerOff; }
@@ -190,8 +308,22 @@ public:
 
 class L3DetachAccept {
     bool mForceToStandby{false};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x06;
+
+    struct Builder {
+        bool m_forceToStandby{false};
+
+        /// Set force to standby flag.
+        Builder& forceToStandby(bool v) { m_forceToStandby = v; return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3DetachAccept build() const;
+    };
+
+    static Builder builder();
 
     bool forceToStandby() const { return mForceToStandby; }
 
@@ -215,8 +347,35 @@ class L3RoutingAreaUpdateRequest {
     L3RoutingAreaIdentification mOldRAI;
     bool mHaveMsRACap{false};
     std::vector<uint8_t> mMsRACap;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x08;
+
+    struct Builder {
+        GMMUpdateType m_updateType{GMMUpdateType::RAUpdated};
+        bool m_forL3{false};
+        uint8_t mCKSN{0};
+        L3RoutingAreaIdentification m_oldRAI;
+        bool m_haveMsRACap{false};
+        std::vector<uint8_t> m_msRACap;
+
+        /// Set update type.
+        Builder& updateType(GMMUpdateType v) { m_updateType = v; return *this; }
+        /// Set forL3 flag.
+        Builder& forL3(bool v) { m_forL3 = v; return *this; }
+        /// Set CKSN value.
+        Builder& cksn(uint8_t v) { mCKSN = v; return *this; }
+        /// Set old routing area identification.
+        Builder& oldRAI(L3RoutingAreaIdentification v) { m_oldRAI = v; return *this; }
+        /// Set MS radio access capability with flag.
+        Builder& msRACap(std::vector<uint8_t> v) { m_haveMsRACap = true; m_msRACap = std::move(v); return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3RoutingAreaUpdateRequest build() const;
+    };
+
+    static Builder builder();
 
     GMMUpdateType updateType() const { return mUpdateType; }
     bool forL3() const { return mForL3; }
@@ -246,8 +405,38 @@ class L3RoutingAreaUpdateAccept {
     L3RoutingAreaIdentification mRAI;
     bool mHavePTMSI{false};
     L3MobileIdentity mPTMSI;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x09;
+
+    struct Builder {
+        bool m_forceToStandby{false};
+        GMMUpdateType m_updateResult{GMMUpdateType::RAUpdated};
+        uint8_t m_raUpdateTimer{0};
+        uint8_t m_radioPriority{0};
+        L3RoutingAreaIdentification m_rai;
+        bool m_havePTMSI{false};
+        L3MobileIdentity m_ptmsi;
+
+        /// Set force to standby flag.
+        Builder& forceToStandby(bool v) { m_forceToStandby = v; return *this; }
+        /// Set update result type.
+        Builder& updateResult(GMMUpdateType v) { m_updateResult = v; return *this; }
+        /// Set RA update timer value.
+        Builder& raUpdateTimer(uint8_t v) { m_raUpdateTimer = v; return *this; }
+        /// Set radio priority value.
+        Builder& radioPriority(uint8_t v) { m_radioPriority = v; return *this; }
+        /// Set routing area identification.
+        Builder& rai(L3RoutingAreaIdentification v) { m_rai = v; return *this; }
+        /// Set PTMSI with flag.
+        Builder& ptmsi(L3MobileIdentity v) { m_havePTMSI = true; m_ptmsi = std::move(v); return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3RoutingAreaUpdateAccept build() const;
+    };
+
+    static Builder builder();
 
     bool forceToStandby() const { return mForceToStandby; }
     GMMUpdateType updateResult() const { return mUpdateResult; }
@@ -273,6 +462,13 @@ class L3RoutingAreaUpdateComplete {
 public:
     static constexpr int MTI = 0x0a;
 
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3RoutingAreaUpdateComplete build() const;
+    };
+
+    static Builder builder();
+
     size_t bodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3RoutingAreaUpdateComplete> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -290,8 +486,29 @@ class L3RoutingAreaUpdateReject {
     GMMCause mCause{GMMCause::Unspecified};
     bool mHaveT3302{false};
     L3T3302Timer mT3302;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x0b;
+
+    struct Builder {
+        bool m_forceToStandby{false};
+        GMMCause m_cause{GMMCause::Unspecified};
+        bool m_haveT3302{false};
+        L3T3302Timer m_t3302;
+
+        /// Set force to standby flag.
+        Builder& forceToStandby(bool v) { m_forceToStandby = v; return *this; }
+        /// Set GMM cause.
+        Builder& cause(GMMCause v) { m_cause = v; return *this; }
+        /// Set T3302 timer with flag.
+        Builder& t3302(L3T3302Timer v) { m_haveT3302 = true; m_t3302 = v; return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3RoutingAreaUpdateReject build() const;
+    };
+
+    static Builder builder();
 
     bool forceToStandby() const { return mForceToStandby; }
     GMMCause cause() const { return mCause; }
@@ -314,8 +531,28 @@ class L3ServiceRequest {
     uint8_t mCKSN{0};
     uint8_t mServiceType{0};
     L3MobileIdentity mPTMSI;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x0c;
+
+    struct Builder {
+        uint8_t mCKSN{0};
+        uint8_t m_serviceType{0};
+        L3MobileIdentity m_ptmsi;
+
+        /// Set CKSN value.
+        Builder& cksn(uint8_t v) { mCKSN = v; return *this; }
+        /// Set service type.
+        Builder& serviceType(uint8_t v) { m_serviceType = v; return *this; }
+        /// Set PTMSI.
+        Builder& ptmsi(L3MobileIdentity v) { m_ptmsi = std::move(v); return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3ServiceRequest build() const;
+    };
+
+    static Builder builder();
 
     uint8_t cksn() const { return mCKSN; }
     uint8_t serviceType() const { return mServiceType; }
@@ -337,6 +574,13 @@ class L3ServiceAccept {
 public:
     static constexpr int MTI = 0x0d;
 
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3ServiceAccept build() const;
+    };
+
+    static Builder builder();
+
     size_t bodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3ServiceAccept> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -351,8 +595,22 @@ public:
 
 class L3ServiceReject {
     GMMCause mCause{GMMCause::Unspecified};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x0e;
+
+    struct Builder {
+        GMMCause m_cause{GMMCause::Unspecified};
+
+        /// Set GMM cause.
+        Builder& cause(GMMCause v) { m_cause = v; return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3ServiceReject build() const;
+    };
+
+    static Builder builder();
 
     GMMCause cause() const { return mCause; }
 
@@ -375,8 +633,32 @@ class L3P_TMSIReallocationCommand {
     L3RoutingAreaIdentification mRAI;
     bool mHavePTMSI{false};
     L3MobileIdentity mPTMSI;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x10;
+
+    struct Builder {
+        GMMPTMSIType m_ptmsiType{GMMPTMSIType::Native};
+        bool m_forceToStandby{false};
+        L3RoutingAreaIdentification m_rai;
+        bool m_havePTMSI{false};
+        L3MobileIdentity m_ptmsi;
+
+        /// Set PTMSI type.
+        Builder& ptmsiType(GMMPTMSIType v) { m_ptmsiType = v; return *this; }
+        /// Set force to standby flag.
+        Builder& forceToStandby(bool v) { m_forceToStandby = v; return *this; }
+        /// Set routing area identification.
+        Builder& rai(L3RoutingAreaIdentification v) { m_rai = v; return *this; }
+        /// Set PTMSI with flag.
+        Builder& ptmsi(L3MobileIdentity v) { m_havePTMSI = true; m_ptmsi = std::move(v); return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3P_TMSIReallocationCommand build() const;
+    };
+
+    static Builder builder();
 
     GMMPTMSIType ptmsiType() const { return mPTMSIType; }
     bool forceToStandby() const { return mForceToStandby; }
@@ -400,6 +682,13 @@ class L3P_TMSIReallocationComplete {
 public:
     static constexpr int MTI = 0x11;
 
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3P_TMSIReallocationComplete build() const;
+    };
+
+    static Builder builder();
+
     size_t bodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3P_TMSIReallocationComplete> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -419,8 +708,34 @@ class L3AuthenticationAndCipheringRequest {
     bool mForceToStandby{false};
     uint8_t mACReferenceNumber{0};
     L3AuthRAND mRAND;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x12;
+
+    struct Builder {
+        uint8_t m_cipheringAlgorithm{0};
+        bool m_imeisvRequest{false};
+        bool m_forceToStandby{false};
+        uint8_t m_acReferenceNumber{0};
+        L3AuthRAND m_rand;
+
+        /// Set ciphering algorithm.
+        Builder& cipheringAlgorithm(uint8_t v) { m_cipheringAlgorithm = v; return *this; }
+        /// Set IMEISV request flag.
+        Builder& imeisvRequest(bool v) { m_imeisvRequest = v; return *this; }
+        /// Set force to standby flag.
+        Builder& forceToStandby(bool v) { m_forceToStandby = v; return *this; }
+        /// Set AC reference number.
+        Builder& acReferenceNumber(uint8_t v) { m_acReferenceNumber = v; return *this; }
+        /// Set authentication RAND.
+        Builder& rand(L3AuthRAND v) { m_rand = std::move(v); return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3AuthenticationAndCipheringRequest build() const;
+    };
+
+    static Builder builder();
 
     uint8_t cipheringAlgorithm() const { return mCipheringAlgorithm; }
     bool imeisvRequest() const { return mImeisvRequest; }
@@ -443,8 +758,25 @@ public:
 class L3AuthenticationAndCipheringResponse {
     uint8_t mACReferenceNumber{0};
     L3AuthRES mRES;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x13;
+
+    struct Builder {
+        uint8_t m_acReferenceNumber{0};
+        L3AuthRES m_res;
+
+        /// Set AC reference number.
+        Builder& acReferenceNumber(uint8_t v) { m_acReferenceNumber = v; return *this; }
+        /// Set authentication response.
+        Builder& res(L3AuthRES v) { m_res = std::move(v); return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3AuthenticationAndCipheringResponse build() const;
+    };
+
+    static Builder builder();
 
     uint8_t acReferenceNumber() const { return mACReferenceNumber; }
     const L3AuthRES& res() const { return mRES; }
@@ -465,6 +797,13 @@ class L3AuthenticationAndCipheringReject {
 public:
     static constexpr int MTI = 0x14;
 
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3AuthenticationAndCipheringReject build() const;
+    };
+
+    static Builder builder();
+
     size_t bodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3AuthenticationAndCipheringReject> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -480,8 +819,25 @@ public:
 class L3GMMIdentityRequest {
     MobileIDType mIdentityType{MobileIDType::NoID};
     bool mForceToStandby{false};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x15;
+
+    struct Builder {
+        MobileIDType m_identityType{MobileIDType::NoID};
+        bool m_forceToStandby{false};
+
+        /// Set identity type.
+        Builder& identityType(MobileIDType v) { m_identityType = v; return *this; }
+        /// Set force to standby flag.
+        Builder& forceToStandby(bool v) { m_forceToStandby = v; return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3GMMIdentityRequest build() const;
+    };
+
+    static Builder builder();
 
     MobileIDType identityType() const { return mIdentityType; }
     bool forceToStandby() const { return mForceToStandby; }
@@ -500,8 +856,22 @@ public:
 
 class L3GMMIdentityResponse {
     L3MobileIdentity mMobileIdentity;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x16;
+
+    struct Builder {
+        L3MobileIdentity m_mobileIdentity;
+
+        /// Set mobile identity.
+        Builder& mobileIdentity(L3MobileIdentity v) { m_mobileIdentity = std::move(v); return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3GMMIdentityResponse build() const;
+    };
+
+    static Builder builder();
 
     const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
 
@@ -520,8 +890,25 @@ public:
 class L3AuthenticationAndCipheringFailure {
     GMMCause mCause{GMMCause::Synch_Failure};
     L3AuthFailureParam mAuthFailureParam;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x1c;
+
+    struct Builder {
+        GMMCause m_cause{GMMCause::Synch_Failure};
+        L3AuthFailureParam m_authFailureParam;
+
+        /// Set GMM cause.
+        Builder& cause(GMMCause v) { m_cause = v; return *this; }
+        /// Set authentication failure parameter.
+        Builder& authFailureParam(L3AuthFailureParam v) { m_authFailureParam = std::move(v); return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3AuthenticationAndCipheringFailure build() const;
+    };
+
+    static Builder builder();
 
     GMMCause cause() const { return mCause; }
     const L3AuthFailureParam& authFailureParam() const { return mAuthFailureParam; }
@@ -540,10 +927,24 @@ public:
 
 class L3GMMStatus {
     GMMCause mCause{GMMCause::Unspecified};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x20;
     L3GMMStatus() = default;
     explicit L3GMMStatus(GMMCause cause) : mCause(cause) {}
+
+    struct Builder {
+        GMMCause m_cause{GMMCause::Unspecified};
+
+        /// Set GMM cause.
+        Builder& cause(GMMCause v) { m_cause = v; return *this; }
+
+        /// Build the final message.
+        [[nodiscard]] L3GMMStatus build() const;
+    };
+
+    static Builder builder();
 
     GMMCause cause() const { return mCause; }
 
@@ -562,6 +963,13 @@ public:
 class L3GMMInformation {
 public:
     static constexpr int MTI = 0x21;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3GMMInformation build() const;
+    };
+
+    static Builder builder();
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3GMMInformation> parse(BitReader& br);

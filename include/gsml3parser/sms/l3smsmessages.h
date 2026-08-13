@@ -77,6 +77,8 @@ const char* CPCause2Str(CPCause cause);
 
 class L3CPData {
     std::vector<uint8_t> mRpdu;
+
+    friend struct Builder;
 public:
     void setRpdu(std::vector<uint8_t> rpdu) { mRpdu = std::move(rpdu); }
     static constexpr int MTI = 0x01;
@@ -90,6 +92,21 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        std::vector<uint8_t> mRpdu;
+
+        /// Set the RPDU data.
+        Builder& rpdu(std::vector<uint8_t> v) { mRpdu = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CPData build() const {
+            L3CPData msg;
+            msg.mRpdu = mRpdu;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── CP-ACK (GSM 24.011 8.1.3) ─────────────────────────────────────────
@@ -97,6 +114,7 @@ public:
 // Bidirectional: MS<->SC
 
 class L3CPAck {
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x04;
 
@@ -107,6 +125,15 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3CPAck build() const {
+            return L3CPAck{};
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── CP-ERROR (GSM 24.011 8.1.4) ───────────────────────────────────────
@@ -115,6 +142,8 @@ public:
 
 class L3CPErr {
     CPCause mCause{CPCause::Unspecified};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x10;
 
@@ -127,6 +156,21 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        CPCause mCause{CPCause::Unspecified};
+
+        /// Set the CP cause.
+        Builder& cause(CPCause v) { mCause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CPErr build() const {
+            L3CPErr msg;
+            msg.mCause = mCause;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── CP-STATUS (GSM 24.011 8.1.5) ──────────────────────────────────────
@@ -138,6 +182,8 @@ class L3CPStatus {
     uint8_t mMti{0};
     bool mHaveMessageRef{false};
     uint8_t mMessageRef{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x12;
 
@@ -153,6 +199,33 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        uint8_t mTpOi{0};
+        uint8_t mMti{0};
+        bool mHaveMessageRef{false};
+        uint8_t mMessageRef{0};
+
+        /// Set the TP-OI field.
+        Builder& tpOi(uint8_t v) { mTpOi = v; return *this; }
+        /// Set the MTI value field.
+        Builder& mtiValue(uint8_t v) { mMti = v; return *this; }
+        /// Set whether a message reference is present.
+        Builder& haveMessageRef(bool v) { mHaveMessageRef = v; return *this; }
+        /// Set the message reference value.
+        Builder& messageRef(uint8_t v) { mMessageRef = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CPStatus build() const {
+            L3CPStatus msg;
+            msg.mTpOi = mTpOi;
+            msg.mMti = mMti;
+            msg.mHaveMessageRef = mHaveMessageRef;
+            msg.mMessageRef = mMessageRef;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── CP-SMT (GSM 24.011 8.1.6) ─────────────────────────────────────────
@@ -161,6 +234,8 @@ public:
 
 class L3CPSMT {
     std::vector<uint8_t> mRpdu;
+
+    friend struct Builder;
 public:
     void setRpdu(std::vector<uint8_t> rpdu) { mRpdu = std::move(rpdu); }
     static constexpr int MTI = 0x13;
@@ -174,6 +249,21 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        std::vector<uint8_t> mRpdu;
+
+        /// Set the RPDU data.
+        Builder& rpdu(std::vector<uint8_t> v) { mRpdu = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CPSMT build() const {
+            L3CPSMT msg;
+            msg.mRpdu = mRpdu;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── RP-DATA (GSM 24.011 7.3.1) ────────────────────────────────────────
@@ -187,6 +277,8 @@ class L3RPData {
     std::optional<L3TPAddress> mOriginatorAddress;
     std::optional<L3TPAddress> mDestinationAddress;
     std::vector<uint8_t> mUserData;
+
+    friend struct Builder;
 public:
     static constexpr int RP_MTI_MO = 0x00;
     static constexpr int RP_MTI_MT = 0x01;
@@ -202,6 +294,37 @@ public:
     [[nodiscard]] static Expected<L3RPData> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        uint8_t mRpMti{0};
+        uint8_t mMessageRef{0};
+        std::optional<L3TPAddress> mOriginatorAddress;
+        std::optional<L3TPAddress> mDestinationAddress;
+        std::vector<uint8_t> mUserData;
+
+        /// Set the RP-MTI value.
+        Builder& rpMti(uint8_t v) { mRpMti = v; return *this; }
+        /// Set the message reference.
+        Builder& messageRef(uint8_t v) { mMessageRef = v; return *this; }
+        /// Set the originator address.
+        Builder& originatorAddress(L3TPAddress v) { mOriginatorAddress = v; return *this; }
+        /// Set the destination address.
+        Builder& destinationAddress(L3TPAddress v) { mDestinationAddress = v; return *this; }
+        /// Set the user data.
+        Builder& userData(std::vector<uint8_t> v) { mUserData = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3RPData build() const {
+            L3RPData msg;
+            msg.mRpMti = mRpMti;
+            msg.mMessageRef = mMessageRef;
+            msg.mOriginatorAddress = mOriginatorAddress;
+            msg.mDestinationAddress = mDestinationAddress;
+            msg.mUserData = mUserData;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── RP-ACK (GSM 24.011 7.3.2) ─────────────────────────────────────────
@@ -212,6 +335,8 @@ public:
 class L3RPAck {
     uint8_t mRpMti{0};
     uint8_t mMessageRef{0};
+
+    friend struct Builder;
 public:
     static constexpr int RP_MTI_MO = 0x02;
     static constexpr int RP_MTI_MT = 0x03;
@@ -226,6 +351,25 @@ public:
     [[nodiscard]] static Expected<L3RPAck> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        uint8_t mRpMti{0};
+        uint8_t mMessageRef{0};
+
+        /// Set the RP-MTI value.
+        Builder& rpMti(uint8_t v) { mRpMti = v; return *this; }
+        /// Set the message reference.
+        Builder& messageRef(uint8_t v) { mMessageRef = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3RPAck build() const {
+            L3RPAck msg;
+            msg.mRpMti = mRpMti;
+            msg.mMessageRef = mMessageRef;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── RP-ERROR (GSM 24.011 7.3.4) ───────────────────────────────────────
@@ -237,6 +381,8 @@ class L3RPError {
     uint8_t mRpMti{0};
     uint8_t mMessageRef{0};
     CPCause mCause{CPCause::Unspecified};
+
+    friend struct Builder;
 public:
     static constexpr int RP_MTI_MO = 0x04;
     static constexpr int RP_MTI_MT = 0x05;
@@ -253,6 +399,29 @@ public:
     [[nodiscard]] static Expected<L3RPError> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        uint8_t mRpMti{0};
+        uint8_t mMessageRef{0};
+        CPCause mCause{CPCause::Unspecified};
+
+        /// Set the RP-MTI value.
+        Builder& rpMti(uint8_t v) { mRpMti = v; return *this; }
+        /// Set the message reference.
+        Builder& messageRef(uint8_t v) { mMessageRef = v; return *this; }
+        /// Set the CP cause.
+        Builder& cause(CPCause v) { mCause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3RPError build() const {
+            L3RPError msg;
+            msg.mRpMti = mRpMti;
+            msg.mMessageRef = mMessageRef;
+            msg.mCause = mCause;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── RP-SMMA (GSM 24.011 7.3.3) ────────────────────────────────────────
@@ -263,6 +432,8 @@ public:
 class L3RPSMMA {
     uint8_t mRpMti{0};
     uint8_t mMessageRef{0};
+
+    friend struct Builder;
 public:
     static constexpr int RP_MTI_MO = 0x06;
     static constexpr int RP_MTI_MT = 0x07;
@@ -277,6 +448,25 @@ public:
     [[nodiscard]] static Expected<L3RPSMMA> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        uint8_t mRpMti{0};
+        uint8_t mMessageRef{0};
+
+        /// Set the RP-MTI value.
+        Builder& rpMti(uint8_t v) { mRpMti = v; return *this; }
+        /// Set the message reference.
+        Builder& messageRef(uint8_t v) { mMessageRef = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3RPSMMA build() const {
+            L3RPSMMA msg;
+            msg.mRpMti = mRpMti;
+            msg.mMessageRef = mMessageRef;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // SMS message type names for text output.

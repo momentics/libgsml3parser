@@ -102,6 +102,7 @@ class L3SMSStatusReport {
     std::optional<TPSCTimeStamp> mMtStartTime;
     TPStatus mTpSt{TPStatus::Delivered};
 
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x11;
 
@@ -122,6 +123,53 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        uint8_t mTpMr{0};
+        RPDisposalType mRpDisp{RPDisposalType::NoFurtherAction};
+        bool mHaveTpDa{false};
+        L3TPAddress mTpDa;
+        bool mHaveTpOa{false};
+        L3TPAddress mTpOa;
+        std::optional<TPSCTimeStamp> mScts;
+        std::optional<TPSCTimeStamp> mMtStartTime;
+        TPStatus mTpSt{TPStatus::Delivered};
+
+        /// Set the TP-MR field.
+        Builder& tpMr(uint8_t v) { mTpMr = v; return *this; }
+        /// Set the RP-Disp field.
+        Builder& rpDisp(RPDisposalType v) { mRpDisp = v; return *this; }
+        /// Set whether TP-DA is present.
+        Builder& haveTpDa(bool v) { mHaveTpDa = v; return *this; }
+        /// Set the TP-DA address.
+        Builder& tpDa(L3TPAddress v) { mTpDa = v; return *this; }
+        /// Set whether TP-OA is present.
+        Builder& haveTpOa(bool v) { mHaveTpOa = v; return *this; }
+        /// Set the TP-OA address.
+        Builder& tpOa(L3TPAddress v) { mTpOa = v; return *this; }
+        /// Set the SCTS timestamp.
+        Builder& scts(TPSCTimeStamp v) { mScts = v; return *this; }
+        /// Set the MT start time.
+        Builder& mtStartTime(TPSCTimeStamp v) { mMtStartTime = v; return *this; }
+        /// Set the TP-ST field.
+        Builder& tpSt(TPStatus v) { mTpSt = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMSStatusReport build() const {
+            L3SMSStatusReport msg;
+            msg.mTpMr = mTpMr;
+            msg.mRpDisp = mRpDisp;
+            msg.mHaveTpDa = mHaveTpDa;
+            msg.mTpDa = mTpDa;
+            msg.mHaveTpOa = mHaveTpOa;
+            msg.mTpOa = mTpOa;
+            msg.mScts = mScts;
+            msg.mMtStartTime = mMtStartTime;
+            msg.mTpSt = mTpSt;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── SMS Provided Reply Expected (GSM 24.008 9.6.2) ────────────────────
@@ -134,6 +182,7 @@ class L3SMSProvidedReplyExpected {
     bool mHaveTpUd{false};
     std::vector<uint8_t> mTpUd;
 
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x12;
 
@@ -150,6 +199,37 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        bool mHaveTpPid{false};
+        TPPID mTpPid{TPPID::Default};
+        TPDCS mTpDcs{TPDCS::Default_Alphabet};
+        bool mHaveTpUd{false};
+        std::vector<uint8_t> mTpUd;
+
+        /// Set whether TP-PID is present.
+        Builder& haveTpPid(bool v) { mHaveTpPid = v; return *this; }
+        /// Set the TP-PID value.
+        Builder& tpPid(TPPID v) { mTpPid = v; return *this; }
+        /// Set the TP-DCS value.
+        Builder& tpDcs(TPDCS v) { mTpDcs = v; return *this; }
+        /// Set whether TP-Ud is present.
+        Builder& haveTpUd(bool v) { mHaveTpUd = v; return *this; }
+        /// Set the TP-Ud data.
+        Builder& tpUd(std::vector<uint8_t> v) { mTpUd = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMSProvidedReplyExpected build() const {
+            L3SMSProvidedReplyExpected msg;
+            msg.mHaveTpPid = mHaveTpPid;
+            msg.mTpPid = mTpPid;
+            msg.mTpDcs = mTpDcs;
+            msg.mHaveTpUd = mHaveTpUd;
+            msg.mTpUd = mTpUd;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── SMS Submit Reply (GSM 24.008 9.6.3) ───────────────────────────────
@@ -162,6 +242,7 @@ class L3SMSSubmitRep {
     bool mHaveTpUd{false};
     std::vector<uint8_t> mTpUd;
 
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x13;
 
@@ -178,6 +259,37 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        bool mHaveTpPid{false};
+        TPPID mTpPid{TPPID::Default};
+        TPDCS mTpDcs{TPDCS::Default_Alphabet};
+        bool mHaveTpUd{false};
+        std::vector<uint8_t> mTpUd;
+
+        /// Set whether TP-PID is present.
+        Builder& haveTpPid(bool v) { mHaveTpPid = v; return *this; }
+        /// Set the TP-PID value.
+        Builder& tpPid(TPPID v) { mTpPid = v; return *this; }
+        /// Set the TP-DCS value.
+        Builder& tpDcs(TPDCS v) { mTpDcs = v; return *this; }
+        /// Set whether TP-Ud is present.
+        Builder& haveTpUd(bool v) { mHaveTpUd = v; return *this; }
+        /// Set the TP-Ud data.
+        Builder& tpUd(std::vector<uint8_t> v) { mTpUd = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMSSubmitRep build() const {
+            L3SMSSubmitRep msg;
+            msg.mHaveTpPid = mHaveTpPid;
+            msg.mTpPid = mTpPid;
+            msg.mTpDcs = mTpDcs;
+            msg.mHaveTpUd = mHaveTpUd;
+            msg.mTpUd = mTpUd;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── SMS Deliver (GSM 24.008 9.6.4) ────────────────────────────────────
@@ -194,6 +306,7 @@ class L3SMSDeliver {
     bool mHaveTpUd{false};
     std::vector<uint8_t> mTpUd;
 
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x14;
 
@@ -214,6 +327,53 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        uint8_t mTpMti{0};
+        uint8_t mTpMr{0};
+        bool mHaveTpOa{false};
+        L3TPAddress mTpOa;
+        TPPID mTpPid{TPPID::Default};
+        TPDCS mTpDcs{TPDCS::Default_Alphabet};
+        TPSCTimeStamp mScts;
+        bool mHaveTpUd{false};
+        std::vector<uint8_t> mTpUd;
+
+        /// Set the TP-MTI field.
+        Builder& tpMti(uint8_t v) { mTpMti = v; return *this; }
+        /// Set the TP-MR field.
+        Builder& tpMr(uint8_t v) { mTpMr = v; return *this; }
+        /// Set whether TP-OA is present.
+        Builder& haveTpOa(bool v) { mHaveTpOa = v; return *this; }
+        /// Set the TP-OA address.
+        Builder& tpOa(L3TPAddress v) { mTpOa = v; return *this; }
+        /// Set the TP-PID value.
+        Builder& tpPid(TPPID v) { mTpPid = v; return *this; }
+        /// Set the TP-DCS value.
+        Builder& tpDcs(TPDCS v) { mTpDcs = v; return *this; }
+        /// Set the SCTS timestamp.
+        Builder& scts(TPSCTimeStamp v) { mScts = v; return *this; }
+        /// Set whether TP-Ud is present.
+        Builder& haveTpUd(bool v) { mHaveTpUd = v; return *this; }
+        /// Set the TP-Ud data.
+        Builder& tpUd(std::vector<uint8_t> v) { mTpUd = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMSDeliver build() const {
+            L3SMSDeliver msg;
+            msg.mTpMti = mTpMti;
+            msg.mTpMr = mTpMr;
+            msg.mHaveTpOa = mHaveTpOa;
+            msg.mTpOa = mTpOa;
+            msg.mTpPid = mTpPid;
+            msg.mTpDcs = mTpDcs;
+            msg.mScts = mScts;
+            msg.mHaveTpUd = mHaveTpUd;
+            msg.mTpUd = mTpUd;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── SMS Deliver Reply (GSM 24.008 9.6.5) ──────────────────────────────
@@ -229,6 +389,7 @@ class L3SMSDeliverRep {
     bool mHaveTpUd{false};
     std::vector<uint8_t> mTpUd;
 
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x15;
 
@@ -248,6 +409,49 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        uint8_t mTpMti{0};
+        uint8_t mTpMr{0};
+        bool mHaveTpDa{false};
+        L3TPAddress mTpDa;
+        TPPID mTpPid{TPPID::Default};
+        TPDCS mTpDcs{TPDCS::Default_Alphabet};
+        bool mHaveTpUd{false};
+        std::vector<uint8_t> mTpUd;
+
+        /// Set the TP-MTI field.
+        Builder& tpMti(uint8_t v) { mTpMti = v; return *this; }
+        /// Set the TP-MR field.
+        Builder& tpMr(uint8_t v) { mTpMr = v; return *this; }
+        /// Set whether TP-DA is present.
+        Builder& haveTpDa(bool v) { mHaveTpDa = v; return *this; }
+        /// Set the TP-DA address.
+        Builder& tpDa(L3TPAddress v) { mTpDa = v; return *this; }
+        /// Set the TP-PID value.
+        Builder& tpPid(TPPID v) { mTpPid = v; return *this; }
+        /// Set the TP-DCS value.
+        Builder& tpDcs(TPDCS v) { mTpDcs = v; return *this; }
+        /// Set whether TP-Ud is present.
+        Builder& haveTpUd(bool v) { mHaveTpUd = v; return *this; }
+        /// Set the TP-Ud data.
+        Builder& tpUd(std::vector<uint8_t> v) { mTpUd = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMSDeliverRep build() const {
+            L3SMSDeliverRep msg;
+            msg.mTpMti = mTpMti;
+            msg.mTpMr = mTpMr;
+            msg.mHaveTpDa = mHaveTpDa;
+            msg.mTpDa = mTpDa;
+            msg.mTpPid = mTpPid;
+            msg.mTpDcs = mTpDcs;
+            msg.mHaveTpUd = mHaveTpUd;
+            msg.mTpUd = mTpUd;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── SMS Status Report Ack (GSM 24.008 9.6.6) ──────────────────────────
@@ -256,6 +460,7 @@ public:
 class L3SMSStatusReportAck {
     uint8_t mTpMr{0};
 
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x16;
 
@@ -268,6 +473,21 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        uint8_t mTpMr{0};
+
+        /// Set the TP-MR field.
+        Builder& tpMr(uint8_t v) { mTpMr = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMSStatusReportAck build() const {
+            L3SMSStatusReportAck msg;
+            msg.mTpMr = mTpMr;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── SMS Status Report Reject (GSM 24.008 9.6.7) ───────────────────────
@@ -277,6 +497,7 @@ class L3SMSStatusReportReject {
     uint8_t mTpMr{0};
     SMSCause mSmCause{SMSCause::NoCause};
 
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x17;
 
@@ -290,6 +511,25 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        uint8_t mTpMr{0};
+        SMSCause mSmCause{SMSCause::NoCause};
+
+        /// Set the TP-MR field.
+        Builder& tpMr(uint8_t v) { mTpMr = v; return *this; }
+        /// Set the SM-Cause value.
+        Builder& smCause(SMSCause v) { mSmCause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMSStatusReportReject build() const {
+            L3SMSStatusReportReject msg;
+            msg.mTpMr = mTpMr;
+            msg.mSmCause = mSmCause;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── SMS TS Reject (GSM 24.008 9.6.8) ──────────────────────────────────
@@ -298,6 +538,7 @@ public:
 class L3SMSTSReject {
     SMSCause mSmCause{SMSCause::NoCause};
 
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x18;
 
@@ -310,6 +551,21 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        SMSCause mSmCause{SMSCause::NoCause};
+
+        /// Set the SM-Cause value.
+        Builder& smCause(SMSCause v) { mSmCause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMSTSReject build() const {
+            L3SMSTSReject msg;
+            msg.mSmCause = mSmCause;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── SMS Submit Deferred (GSM 24.008 9.6.9) ────────────────────────────
@@ -322,6 +578,7 @@ class L3SMSSubmitDeferred {
     bool mHaveTpUd{false};
     std::vector<uint8_t> mTpUd;
 
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x19;
 
@@ -338,6 +595,37 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        bool mHaveTpPid{false};
+        TPPID mTpPid{TPPID::Default};
+        TPDCS mTpDcs{TPDCS::Default_Alphabet};
+        bool mHaveTpUd{false};
+        std::vector<uint8_t> mTpUd;
+
+        /// Set whether TP-PID is present.
+        Builder& haveTpPid(bool v) { mHaveTpPid = v; return *this; }
+        /// Set the TP-PID value.
+        Builder& tpPid(TPPID v) { mTpPid = v; return *this; }
+        /// Set the TP-DCS value.
+        Builder& tpDcs(TPDCS v) { mTpDcs = v; return *this; }
+        /// Set whether TP-Ud is present.
+        Builder& haveTpUd(bool v) { mHaveTpUd = v; return *this; }
+        /// Set the TP-Ud data.
+        Builder& tpUd(std::vector<uint8_t> v) { mTpUd = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMSSubmitDeferred build() const {
+            L3SMSSubmitDeferred msg;
+            msg.mHaveTpPid = mHaveTpPid;
+            msg.mTpPid = mTpPid;
+            msg.mTpDcs = mTpDcs;
+            msg.mHaveTpUd = mHaveTpUd;
+            msg.mTpUd = mTpUd;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── SMS Submit Reject (GSM 24.008 9.6.10) ─────────────────────────────
@@ -346,6 +634,7 @@ public:
 class L3SMSSubmitReject {
     SMSCause mSmCause{SMSCause::NoCause};
 
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x1A;
 
@@ -358,6 +647,21 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        SMSCause mSmCause{SMSCause::NoCause};
+
+        /// Set the SM-Cause value.
+        Builder& smCause(SMSCause v) { mSmCause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMSSubmitReject build() const {
+            L3SMSSubmitReject msg;
+            msg.mSmCause = mSmCause;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── SMS SSF Provided Reply (GSM 24.008 9.6.11) ────────────────────────
@@ -370,6 +674,7 @@ class L3SMSSFProvidedRep {
     bool mHaveTpUd{false};
     std::vector<uint8_t> mTpUd;
 
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x1B;
 
@@ -386,12 +691,44 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        bool mHaveTpPid{false};
+        TPPID mTpPid{TPPID::Default};
+        TPDCS mTpDcs{TPDCS::Default_Alphabet};
+        bool mHaveTpUd{false};
+        std::vector<uint8_t> mTpUd;
+
+        /// Set whether TP-PID is present.
+        Builder& haveTpPid(bool v) { mHaveTpPid = v; return *this; }
+        /// Set the TP-PID value.
+        Builder& tpPid(TPPID v) { mTpPid = v; return *this; }
+        /// Set the TP-DCS value.
+        Builder& tpDcs(TPDCS v) { mTpDcs = v; return *this; }
+        /// Set whether TP-Ud is present.
+        Builder& haveTpUd(bool v) { mHaveTpUd = v; return *this; }
+        /// Set the TP-Ud data.
+        Builder& tpUd(std::vector<uint8_t> v) { mTpUd = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMSSFProvidedRep build() const {
+            L3SMSSFProvidedRep msg;
+            msg.mHaveTpPid = mHaveTpPid;
+            msg.mTpPid = mTpPid;
+            msg.mTpDcs = mTpDcs;
+            msg.mHaveTpUd = mHaveTpUd;
+            msg.mTpUd = mTpUd;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── SMS SSF Provided Reply Ack (GSM 24.008 9.6.12) ────────────────────
 // Net->MS: empty body
 
 class L3SMSSFProvidedRepAck {
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x1C;
 
@@ -402,6 +739,15 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3SMSSFProvidedRepAck build() const {
+            return L3SMSSFProvidedRepAck{};
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── SMS Notification (GSM 24.008 9.6.13) ──────────────────────────────
@@ -414,6 +760,7 @@ class L3SMSNotification {
     bool mHaveTpUd{false};
     std::vector<uint8_t> mTpUd;
 
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x1D;
 
@@ -430,6 +777,37 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        bool mHaveTpPid{false};
+        TPPID mTpPid{TPPID::Default};
+        TPDCS mTpDcs{TPDCS::Default_Alphabet};
+        bool mHaveTpUd{false};
+        std::vector<uint8_t> mTpUd;
+
+        /// Set whether TP-PID is present.
+        Builder& haveTpPid(bool v) { mHaveTpPid = v; return *this; }
+        /// Set the TP-PID value.
+        Builder& tpPid(TPPID v) { mTpPid = v; return *this; }
+        /// Set the TP-DCS value.
+        Builder& tpDcs(TPDCS v) { mTpDcs = v; return *this; }
+        /// Set whether TP-Ud is present.
+        Builder& haveTpUd(bool v) { mHaveTpUd = v; return *this; }
+        /// Set the TP-Ud data.
+        Builder& tpUd(std::vector<uint8_t> v) { mTpUd = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMSNotification build() const {
+            L3SMSNotification msg;
+            msg.mHaveTpPid = mHaveTpPid;
+            msg.mTpPid = mTpPid;
+            msg.mTpDcs = mTpDcs;
+            msg.mHaveTpUd = mHaveTpUd;
+            msg.mTpUd = mTpUd;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── SMS Short Code Info (GSM 24.008 9.6.14) ───────────────────────────
@@ -440,6 +818,7 @@ class L3SMSShortCodeInfo {
     bool mHaveShortCode{false};
     std::vector<uint8_t> mShortCode;
 
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x1E;
 
@@ -454,6 +833,29 @@ public:
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::SMS; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        uint8_t mShortCodeType{0};
+        bool mHaveShortCode{false};
+        std::vector<uint8_t> mShortCode;
+
+        /// Set the short code type.
+        Builder& shortCodeType(uint8_t v) { mShortCodeType = v; return *this; }
+        /// Set whether short code is present.
+        Builder& haveShortCode(bool v) { mHaveShortCode = v; return *this; }
+        /// Set the short code data.
+        Builder& shortCode(std::vector<uint8_t> v) { mShortCode = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SMSShortCodeInfo build() const {
+            L3SMSShortCodeInfo msg;
+            msg.mShortCodeType = mShortCodeType;
+            msg.mHaveShortCode = mHaveShortCode;
+            msg.mShortCode = mShortCode;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 } // namespace gsml3parser

@@ -749,3 +749,265 @@ TEST(GoldenSMSTest, FullCPData_RoundTrip) {
     EXPECT_EQ(cpd->rpdu()[0], 0x00); // RP-DATA MO
     EXPECT_EQ(cpd->rpdu()[1], 0x01); // Message-Reference
 }
+
+// ── SMS Builder Tests ──────────────────────────────────────────────────
+
+// 3GPP TS 24.011 8.1.2: CP-DATA Builder
+TEST(SMSBuilderTest, CPData) {
+    auto msg = L3CPData::builder()
+        .rpdu(std::vector<uint8_t>{0x00, 0x01, 0xAA})
+        .build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes)[0], 0x90); // PD=9(SMS)
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3CPData::MTI);
+}
+
+// 3GPP TS 24.011 8.1.3: CP-ACK Builder (empty)
+TEST(SMSBuilderTest, CPAck) {
+    auto msg = L3CPAck::builder().build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3CPAck::MTI);
+}
+
+// 3GPP TS 24.011 8.1.4: CP-ERROR Builder
+TEST(SMSBuilderTest, CPErr) {
+    auto msg = L3CPErr::builder()
+        .cause(CPCause::NoRPLPDU)
+        .build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3CPErr::MTI);
+}
+
+// 3GPP TS 24.011 8.1.5: CP-STATUS Builder
+TEST(SMSBuilderTest, CPStatus) {
+    auto msg = L3CPStatus::builder()
+        .tpOi(1)
+        .mtiValue(0x11)
+        .messageRef(5)
+        .build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3CPStatus::MTI);
+}
+
+// 3GPP TS 24.011 8.1.6: CP-SMT Builder
+TEST(SMSBuilderTest, CPSMT) {
+    auto msg = L3CPSMT::builder()
+        .rpdu(std::vector<uint8_t>{0x04, 0x01, 0xBB})
+        .build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3CPSMT::MTI);
+}
+
+// 3GPP TS 24.011 7.3.1: RP-DATA Builder
+TEST(SMSBuilderTest, RPData) {
+    auto msg = L3RPData::builder()
+        .rpMti(L3RPData::RP_MTI_MO)
+        .messageRef(3)
+        .userData(std::vector<uint8_t>{0x65, 0x6C, 0x6C, 0x6F})
+        .build();
+    EXPECT_EQ(msg.rpMti(), L3RPData::RP_MTI_MO);
+    EXPECT_EQ(msg.messageRef(), 3u);
+}
+
+// 3GPP TS 24.011 7.3.2: RP-ACK Builder
+TEST(SMSBuilderTest, RPAck) {
+    auto msg = L3RPAck::builder()
+        .rpMti(L3RPAck::RP_MTI_MO)
+        .messageRef(3)
+        .build();
+    EXPECT_EQ(msg.rpMti(), L3RPAck::RP_MTI_MO);
+}
+
+// 3GPP TS 24.011 7.3.4: RP-ERROR Builder
+TEST(SMSBuilderTest, RPError) {
+    auto msg = L3RPError::builder()
+        .rpMti(L3RPError::RP_MTI_MO)
+        .messageRef(4)
+        .cause(CPCause::NoRPLPDU)
+        .build();
+    EXPECT_EQ(msg.cause(), CPCause::NoRPLPDU);
+}
+
+// 3GPP TS 24.011 7.3.3: RP-SMMA Builder
+TEST(SMSBuilderTest, RPSMMA) {
+    auto msg = L3RPSMMA::builder()
+        .rpMti(L3RPSMMA::RP_MTI_MO)
+        .messageRef(5)
+        .build();
+    EXPECT_EQ(msg.rpMti(), L3RPSMMA::RP_MTI_MO);
+}
+
+// ── SMS L3 Layer Builder Tests ────────────────────────────────────────
+
+#include <gsml3parser/sms/l3smsl3messages.h>
+
+// 3GPP TS 24.008 9.6.1: SMS Status Report Builder
+TEST(SMSBuilderTest, SMSStatusReport) {
+    auto msg = L3SMSStatusReport::builder()
+        .tpMr(10)
+        .rpDisp(RPDisposalType::DisplayToUser)
+        .tpSt(TPStatus::Delivered)
+        .build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3SMSStatusReport::MTI);
+}
+
+// 3GPP TS 24.008 9.6.4: SMS Deliver Builder
+TEST(SMSBuilderTest, SMSDeliver) {
+    auto msg = L3SMSDeliver::builder()
+        .tpMti(0)
+        .tpMr(7)
+        .tpPid(TPPID::Default)
+        .tpDcs(TPDCS::Default_Alphabet)
+        .scts(TPSCTimeStamp{})
+        .build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3SMSDeliver::MTI);
+}
+
+// 3GPP TS 24.008 9.6.5: SMS Deliver Reply Builder
+TEST(SMSBuilderTest, SMSDeliverRep) {
+    auto msg = L3SMSDeliverRep::builder()
+        .tpMti(1)
+        .tpMr(7)
+        .build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3SMSDeliverRep::MTI);
+}
+
+// 3GPP TS 24.008 9.6.6: SMS Status Report Ack Builder
+TEST(SMSBuilderTest, SMSStatusReportAck) {
+    auto msg = L3SMSStatusReportAck::builder()
+        .tpMr(10)
+        .build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3SMSStatusReportAck::MTI);
+}
+
+// 3GPP TS 24.008 9.6.7: SMS Status Report Reject Builder
+TEST(SMSBuilderTest, SMSStatusReportReject) {
+    auto msg = L3SMSStatusReportReject::builder()
+        .tpMr(10)
+        .smCause(SMSCause::SMSSystemFailure)
+        .build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3SMSStatusReportReject::MTI);
+}
+
+// 3GPP TS 24.008 9.6.8: SMS TS Reject Builder
+TEST(SMSBuilderTest, SMSTSReject) {
+    auto msg = L3SMSTSReject::builder()
+        .smCause(SMSCause::SMSSystemFailure)
+        .build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3SMSTSReject::MTI);
+}
+
+// 3GPP TS 24.008 9.6.10: SMS Submit Reject Builder
+TEST(SMSBuilderTest, SMSSubmitReject) {
+    auto msg = L3SMSSubmitReject::builder()
+        .smCause(SMSCause::SMSSystemFailure)
+        .build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3SMSSubmitReject::MTI);
+}
+
+// 3GPP TS 24.008 9.6.12: SMS SSF Provided Reply Ack Builder (empty)
+TEST(SMSBuilderTest, SMSSFProvidedRepAck) {
+    auto msg = L3SMSSFProvidedRepAck::builder().build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3SMSSFProvidedRepAck::MTI);
+}
+
+// 3GPP TS 24.008 9.6.13: SMS Notification Builder
+TEST(SMSBuilderTest, SMSNotification) {
+    auto msg = L3SMSNotification::builder()
+        .tpDcs(TPDCS::Default_Alphabet)
+        .build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3SMSNotification::MTI);
+}
+
+// 3GPP TS 24.008 9.6.14: SMS Short Code Info Builder
+TEST(SMSBuilderTest, SMSShortCodeInfo) {
+    auto msg = L3SMSShortCodeInfo::builder()
+        .shortCodeType(1)
+        .build();
+    ParsedMessage pm{SMS{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3SMSShortCodeInfo::MTI);
+}
