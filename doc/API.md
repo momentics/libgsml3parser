@@ -1,6 +1,6 @@
 # libgsml3parser — Full API Reference
 
-> Version 0.8.0 | C++20 | Thread-safe | Zero heap allocation on hot path | No external dependencies
+> Version 0.10.0 | C++20 | Thread-safe | Zero heap allocation on hot path | No external dependencies
 
 ## Table of Contents
 
@@ -14,23 +14,27 @@
 8. [Visitor Helpers](#8-visitor-helpers)
 9. [Bitstream I/O](#9-bitstream-io)
 10. [Arena Allocator](#10-arena-allocator)
-11. [Data Types](#11-data-types)
-12. [Enumerations](#12-enumerations)
-13. [Protocol Types](#13-protocol-types)
-14. [Common Information Elements](#14-common-information-elements)
-15. [Radio Resource Messages](#15-radio-resource-messages)
-16. [Mobility Management Messages](#16-mobility-management-messages)
-17. [Call Control Messages](#17-call-control-messages)
-18. [Supplementary Services Messages](#18-supplementary-services-messages)
-19. [GPRS Mobility Management Messages](#19-gprs-mobility-management-messages)
-20. [GPRS Session Management Messages](#20-gprs-session-management-messages)
-21. [SMS Messages](#21-sms-messages)
-22. [Broadcast Call Control Messages](#22-broadcast-call-control-messages)
-23. [Group Call Control Messages](#23-group-call-control-messages)
-24. [Location Services Messages](#24-location-services-messages)
-25. [SMS L3 Messages](#25-sms-l3-messages)
-26. [Extended PD Messages](#26-extended-pd-messages)
-27. [Test Procedure PD Messages](#27-test-procedure-pd-messages)
+11. [LAPDm Framing](#11-lapdm-framing)
+12. [Protocol Dispatcher](#12-protocol-dispatcher)
+13. [Builder Pattern](#13-builder-pattern)
+14. [Enum Formatters](#14-enum-formatters)
+15. [Data Types](#15-data-types)
+16. [Enumerations](#16-enumerations)
+17. [Protocol Types](#17-protocol-types)
+18. [Common Information Elements](#18-common-information-elements)
+19. [Radio Resource Messages](#19-radio-resource-messages)
+20. [Mobility Management Messages](#20-mobility-management-messages)
+21. [Call Control Messages](#21-call-control-messages)
+22. [Supplementary Services Messages](#22-supplementary-services-messages)
+23. [GPRS Mobility Management Messages](#23-gprs-mobility-management-messages)
+24. [GPRS Session Management Messages](#24-gprs-session-management-messages)
+25. [SMS Messages](#25-sms-messages)
+26. [Broadcast Call Control Messages](#26-broadcast-call-control-messages)
+27. [Group Call Control Messages](#27-group-call-control-messages)
+28. [Location Services Messages](#28-location-services-messages)
+29. [SMS L3 Messages](#29-sms-l3-messages)
+30. [Extended PD Messages](#30-extended-pd-messages)
+31. [Test Procedure PD Messages](#31-test-procedure-pd-messages)
 
 ---
 
@@ -444,7 +448,31 @@ Expected<std::string> writeL3Hex(const ParsedMessage& msg);
 
 Uses inline encoding with lookup table — no `std::ostringstream` or `std::iomanip`.
 
-### 7.5 Round-trip Pattern
+### 7.5 writeL3Bytes()
+
+Serialize a ParsedMessage to a `std::vector<uint8_t>` of raw bytes (header + body). Returns bytes ready for LAPDm framing and over-the-air transmission.
+
+```cpp
+Expected<std::vector<uint8_t>> writeL3Bytes(const ParsedMessage& msg);
+```
+
+| Return | Description |
+|--------|-------------|
+| `std::vector<uint8_t>` | Raw L3 bytes, ready for LAPDm wrapping or direct transmission |
+
+**Usage:**
+
+```cpp
+auto msg = parseL3Hex("060D00");
+if (msg) {
+    auto bytes = writeL3Bytes(*msg);
+    if (bytes) {
+        // bytes->data() is ready for LAPDm framing
+    }
+}
+```
+
+### 7.6 Round-trip Pattern
 
 ```cpp
 auto original = parseL3Hex("06270460001");
@@ -722,7 +750,293 @@ public:
 
 ---
 
-## 11. Data Types
+## 11. LAPDm Framing
+
+**File:** `gsml3parser/lapdm.h`
+**Namespace:** `gsml3parser::lapdm`
+**Spec:** GSM 04.06 / 3GPP TS 24.022
+
+Wraps L3 messages in LAPDm (Link Access Protocol for DM channel) frames for transmission over the Um interface, and unwraps incoming LAPDm frames to extract L3 payloads.
+
+### makeAddress()
+
+Encode a LAPDm address field byte from SAPI, C/R, and EA bits.
+
+```cpp
+uint8_t makeAddress(SAPI sapi, bool cr, bool ea = true);
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `sapi` | Service Access Point (SAPI0=signalling, SAPI3=data) |
+| `cr` | Command (0) or Response (1) bit |
+| `ea` | Extended Address bit (normally 1 for L3 messages) |
+
+Bit layout: `[SAPI(7:4)][C/R(3)][reserved(2:1)][EA(0)]`.
+
+### ControlField
+
+```cpp
+enum class ControlField : uint8_t {
+    UI = 0x03,       // Unnumbered Information (most L3 messages)
+    SABME = 0x2F,    // Set Asynchronous Balanced Mode Extended
+    UA = 0x63,       // Unnumbered Acknowledgement
+    DM = 0x0F,       // Disconnected Mode
+};
+```
+
+NOTE: DISC shares the same bit pattern as UI (0x03). They are distinguished by protocol context.
+
+### wrapL3()
+
+Wrap an L3 message body in a LAPDm UI frame header. Output is `[address_field][control_field][l3_body...]`.
+
+```cpp
+std::vector<uint8_t> wrapL3(std::span<const uint8_t> l3Body, SAPI sapi = SAPI::SAPI0, bool cr = false);
+```
+
+### unwrapL3()
+
+Unwrap a LAPDm frame and extract the L3 payload. Validates that the frame is at least 2 bytes.
+
+```cpp
+Expected<std::vector<uint8_t>> unwrapL3(std::span<const uint8_t> lapdmFrame);
+```
+
+Returns `TruncatedInput` error if fewer than 2 bytes provided.
+
+### extractSAPI() / extractCR()
+
+Decode individual fields from a LAPDm address byte.
+
+```cpp
+SAPI extractSAPI(uint8_t addrByte);
+bool extractCR(uint8_t addrByte);
+```
+
+### isUIFrame()
+
+Check if a LAPDm frame carries a UI control field.
+
+```cpp
+bool isUIFrame(std::span<const uint8_t> lapdmFrame);
+```
+
+**Usage:**
+
+```cpp
+auto msg = parseL3Hex("600d00");
+auto l3Bytes = writeL3Bytes(*msg);
+
+// Wrap in LAPDm UI frame (SAPI0, command)
+auto frame = gsml3parser::lapdm::wrapL3(*l3Bytes, SAPI::SAPI0, false);
+
+// Unwrap on the receiving side
+auto payload = gsml3parser::lapdm::unwrapL3(frame);
+auto reparsed = parseL3(*payload);
+```
+
+---
+
+## 12. Protocol Dispatcher
+
+**File:** `gsml3parser/dispatcher.h`
+
+Callback-based message routing for BTS-style protocol handling. Dispatches incoming L3 messages to registered type-specific handlers using O(1) hash-map lookup on PD+MTI keys.
+
+### MessageHandler
+
+```cpp
+using MessageHandler = std::function<void(const ParsedMessage& msg, void* context)>;
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `msg` | The parsed L3 message |
+| `context` | User-provided context pointer (e.g., channel state, MS context) |
+
+### ProtocolDispatcher
+
+```cpp
+class ProtocolDispatcher {
+public:
+    void registerHandler(L3PD pd, int mti, MessageHandler handler);
+    void registerDomainHandler(L3PD pd, MessageHandler handler);
+    void setFallbackHandler(MessageHandler handler);
+    void dispatch(const ParsedMessage& msg, void* context = nullptr);
+    bool dispatchRaw(std::span<const uint8_t> data, void* context = nullptr);
+};
+```
+
+| Method | Description |
+|--------|-------------|
+| `registerHandler(pd, mti, h)` | Register handler for a specific PD + MTI combination |
+| `registerDomainHandler(pd, h)` | Catch-all handler for all messages in a PD domain |
+| `setFallbackHandler(h)` | Global fallback for unregistered message types |
+| `dispatch(msg, ctx)` | Route a parsed message to the matching handler |
+| `dispatchRaw(data, ctx)` | Parse raw bytes and dispatch in one call. Returns `true` if a handler was invoked. |
+
+**Dispatch priority:** Specific handler (PD+MTI) → Domain handler (PD) → Fallback handler.
+
+**Thread safety:** NOT thread-safe. Each thread should create its own `ProtocolDispatcher` instance.
+
+**Usage:**
+
+```cpp
+gsml3parser::ProtocolDispatcher dispatcher;
+
+// Specific handler for Channel Release (RR, MTI=0x0D)
+dispatcher.registerHandler(gsml3parser::L3PD::RadioResource, 0x0D,
+    [](const gsml3parser::ParsedMessage& msg, void*) {
+        // Handle channel release...
+    });
+
+// Domain-wide fallback for all RR messages
+dispatcher.registerDomainHandler(gsml3parser::L3PD::RadioResource,
+    [](const gsml3parser::ParsedMessage& msg, void*) {
+        std::cout << "RR message: " << gsml3parser::messageName(msg) << "\n";
+    });
+
+// Dispatch parsed message
+auto msg = gsml3parser::parseL3Hex("600d00");
+if (msg) dispatcher.dispatch(*msg);
+
+// Or dispatch raw bytes directly
+uint8_t data[] = {0x60, 0x0D, 0x00};
+dispatcher.dispatchRaw(std::span<const uint8_t>(data));
+```
+
+---
+
+## 13. Builder Pattern
+
+Every L3 message type provides a fluent `Builder` interface for constructing messages from scratch. Each message class exposes a static `builder()` factory method that returns a builder with chainable setters matching the message's Information Elements, and a `build()` method that returns the constructed message object.
+
+### General API
+
+```cpp
+// Each message type follows this pattern:
+struct L3SomeMessage {
+    static Builder builder();
+    // ...
+};
+
+// Builder has chainable setters and build():
+auto msg = L3SomeMessage::builder()
+    .field1(value1)
+    .field2(value2)
+    .optionalField(value3)
+    .build();
+```
+
+### Builder Coverage
+
+Builder patterns are implemented for all message types across all 12 protocol domains:
+
+| Domain | Messages with Builder |
+|--------|----------------------|
+| **RR** | All 95 types (Paging, System Information SI1–SI23, Handover, Assignment, Ciphering, etc.) |
+| **MM** | All 20 types (Location Updating, Authentication, Identity, CM Service, TMSI Reallocation) |
+| **CC** | All 25 types (Setup, Connect, Disconnect, Release, DTMF, Hold, Progress, etc.) |
+| **GMM** | All 19 types (Attach, Detach, RA Update, Service Request, P-TMSI Reallocation, etc.) |
+| **SM** | All 29 types (Activate/Deactivate/Modify PDP Context, MBMS, AA PDP, etc.) |
+| **SMS** | CP messages + L3 SMS messages |
+| **BCC** | All 6 types |
+| **GCC** | All 8 types |
+| **LS** | Both types |
+| **SS** | Facility, Register, Release Complete |
+| **Extended** | `L3ExtendedMessage` |
+| **TestProcedure** | `L3TestProcedureMessage` |
+
+### Example — Building an Immediate Assignment
+
+```cpp
+using namespace gsml3parser;
+
+auto msg = L3ImmediateAssignment::builder()
+    .channelDescription(L3ChannelDescription(TDMA_SDCCH, 0, 1, 100))
+    .timingAdvance(L3TimingAdvance(32))
+    .build();
+
+// Wrap in ParsedMessage and serialize
+ParsedMessage pm{RRM{std::move(msg)}};
+auto bytes = writeL3Bytes(pm);
+```
+
+### Example — Building a Paging Request Type 2
+
+```cpp
+auto msg = L3PagingRequestType2::builder()
+    .pageMode(L3PageMode::TMSI)
+    .tmsi(0x12345678)
+    .build();
+
+ParsedMessage pm{RRM{std::move(msg)}};
+auto hex = writeL3Hex(pm);
+```
+
+### Example — Building a Setup (CC) Message
+
+```cpp
+auto msg = L3Setup::builder()
+    .calledPartyNumber(L3CalledPartyBCDNumber("1234567890"))
+    .bearerCapability(L3BearerCapability{})
+    .build();
+
+ParsedMessage pm{CCM{std::move(msg)}};
+```
+
+---
+
+## 14. Enum Formatters
+
+**File:** `gsml3parser/enum_formatters.h`
+
+`std::formatter` specializations for all gsml3parser enums, enabling use with `std::format` and `std::println`. Each specialization delegates to the existing `operator<<(ostream&, T)`.
+
+### Supported Enums
+
+| Enum | Domain |
+|------|--------|
+| `LogLevel` | Parser config |
+| `L3PD` | Protocol Discriminator |
+| `Primitive` | Interlayer Primitives |
+| `SAPI` | Service Access Point |
+| `MobileIDType` | Identity types |
+| `TypeOfNumber` | Numbering |
+| `NumberingPlan` | Numbering |
+| `ChannelType` | RR channels |
+| `GSMAlphabet` | Text encoding |
+| `RRCause` | RR cause codes |
+| `MMRejectCause` | MM reject causes |
+| `CCCause` | CC cause codes (Q.931) |
+| `CCCauseLocation` | CC cause location |
+| `BSSCause` | BSSMAP cause codes |
+| `CCMessageType` | CC message type IDs |
+| `GMMPTMSIType` | GMM P-TMSI type |
+| `L3ProgressIndicator::Location` | CC Progress nested enum |
+| `L3ProgressIndicator::Progress` | CC Progress nested enum |
+
+### Usage
+
+```cpp
+#include <gsml3parser/enum_formatters.h>
+
+auto msg = gsml3parser::parseL3Hex("060D00");
+if (msg) {
+    std::println("PD: {}", gsml3parser::messagePD(*msg));
+    // Output: PD: RadioResource (0x06)
+
+    if (auto* cr = gsml3parser::tryGet<gsml3parser::L3ChannelRelease>(*msg)) {
+        std::println("Cause: {}", cr->cause());
+        // Output: cause value formatted via operator<<
+    }
+}
+```
+
+---
+
+## 15. Data Types
 
 **File:** `gsml3parser/types.h`
 
@@ -811,7 +1125,7 @@ enum class GSMAlphabet : uint8_t {
 
 ---
 
-## 12. Enumerations
+## 16. Enumerations
 
 **File:** `gsml3parser/enums.h`
 
@@ -853,7 +1167,7 @@ const char* BSSCause2Str(BSSCause cause);
 
 ---
 
-## 13. Protocol Types
+## 17. Protocol Types
 
 **File:** `gsml3parser/protocol_types.h`
 
@@ -891,7 +1205,7 @@ public:
 
 ---
 
-## 14. Common Information Elements
+## 18. Common Information Elements
 
 **File:** `gsml3parser/common/l3common.h`
 
@@ -972,7 +1286,7 @@ Cell parameters and handover reference for handover procedures.
 
 ---
 
-## 15. Radio Resource Messages
+## 19. Radio Resource Messages
 
 **File:** `gsml3parser/rr/l3rrmessages.h` — 95 message types in the `RRM` variant.
 
@@ -1156,7 +1470,7 @@ Each message is a plain struct with:
 
 ---
 
-## 16. Mobility Management Messages
+## 20. Mobility Management Messages
 
 **File:** `gsml3parser/mm/l3mmmessages.h` — 18 message types in the `MMM` variant.
 
@@ -1198,7 +1512,7 @@ Each message is a plain struct with:
 
 ---
 
-## 17. Call Control Messages
+## 21. Call Control Messages
 
 **File:** `gsml3parser/cc/l3ccmessages.h` — 20 message types in the `CCM` variant.
 
@@ -1295,7 +1609,7 @@ MTI values are the 6-bit messageType field (GSM 04.08 Table 10.3). In the L3 hea
 
 ---
 
-## 18. Supplementary Services Messages
+## 22. Supplementary Services Messages
 
 **File:** `gsml3parser/ss/l3ssmessages.h` — 3 message types in the `SSM` variant.
 
@@ -1461,7 +1775,7 @@ if (ussd) {
 
 ---
 
-## 19. GPRS Mobility Management Messages
+## 23. GPRS Mobility Management Messages
 
 **File:** `gsml3parser/gmm/l3gmmmessages.h` — 19 message types in the `GMM` variant.
 **Spec:** 3GPP TS 24.008 sections 9.4, Table 10.4.
@@ -1527,7 +1841,7 @@ if (ussd) {
 
 ---
 
-## 20. GPRS Session Management Messages
+## 24. GPRS Session Management Messages
 
 **File:** `gsml3parser/sm/l3smmessages.h` — 29 message types in the `SM` variant.
 **Spec:** 3GPP TS 24.008 sections 9.5, Table 10.4a.
@@ -1623,7 +1937,7 @@ if (ussd) {
 
 ---
 
-## 21. SMS Messages
+## 25. SMS Messages
 
 **File:** `gsml3parser/sms/l3smsmessages.h` — 5 CP messages; `gsml3parser/sms/l3smsl3messages.h` — 14 L3 messages; total 19 in the `SMS` variant.
 **Spec:** 3GPP TS 24.011 sections 7-8, 3GPP TS 23.040 (CP/RP/TP layers); 3GPP TS 24.008 sections 9.6, Table 10.6a (SMS L3 primitives).
@@ -1692,7 +2006,7 @@ The SMS layer uses a three-level encapsulation: L3 header → CP message → RP 
 
 ---
 
-## 22. Broadcast Call Control Messages
+## 26. Broadcast Call Control Messages
 
 **File:** `gsml3parser/bcc/l3bccmessages.h` — 6 message types in the `BCCM` variant.
 **Spec:** 3GPP TS 44.018 sections 9.6, Table 10.4.3.
@@ -1713,7 +2027,7 @@ Each message stores the body as an opaque octet sequence for basic infrastructur
 
 ---
 
-## 23. Group Call Control Messages
+## 27. Group Call Control Messages
 
 **File:** `gsml3parser/gcc/l3gccmessages.h` — 7 message types in the `GCCM` variant.
 **Spec:** 3GPP TS 44.018 sections 9.7, Table 10.4.4.
@@ -1735,7 +2049,7 @@ Each message stores the body as an opaque octet sequence for basic infrastructur
 
 ---
 
-## 24. Location Services Messages
+## 28. Location Services Messages
 
 **File:** `gsml3parser/ls/l3lsmessages.h` — 2 message types in the `LSM` variant.
 **Spec:** 3GPP TS 44.031 / TS 24.027 / TS 24.028.
@@ -1750,7 +2064,7 @@ Location Services messages carry mobile location service parameters between the 
 
 ---
 
-## 25. SMS L3 Messages
+## 29. SMS L3 Messages
 
 **File:** `gsml3parser/sms/l3smsl3messages.h` — 14 message types, part of the `SMS` variant.
 **Spec:** 3GPP TS 24.008 sections 9.6.1–9.6.14, Table 10.6a.
@@ -1807,7 +2121,7 @@ These are L3-level SMS primitives used for SMS-on-CS fallback, status reporting,
 
 ---
 
-## 26. Extended PD Messages
+## 30. Extended PD Messages
 
 **File:** `gsml3parser/extended/l3extendedmessages.h` — 1 placeholder type in the `EXTENDED` variant.
 **Spec:** GSM 04.08 §10.2.
@@ -1826,7 +2140,7 @@ The Extended PD provides infrastructure for future extended protocol discriminat
 
 ---
 
-## 27. Test Procedure PD Messages
+## 31. Test Procedure PD Messages
 
 **File:** `gsml3parser/testproc/l3testproceduremessages.h` — 1 placeholder type in the `TESTPROC` variant.
 **Spec:** GSM 04.08 §10.2.
@@ -1851,6 +2165,7 @@ The library implements encodings defined by:
 
 | Standard | Scope | Coverage |
 |----------|-------|----------|
+| **GSM 04.06 / 3GPP TS 24.022** | LAPDm framing for Um interface | `wrapL3()`/`unwrapL3()` UI frame construction, address field encoding (SAPI/C/R/EA), control field extraction |
 | **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | Full RR, MM, CC, GMM, SM (29 types), SMS L3 (14 types) message parsing and generation |
 | **GSM 04.07 / 3GPP TS 24.007** | Information element encoding rules | V, TV, TLV, LV formats; H/L rest octet padding (0x2B); bit ordering |
 | **GSM 04.80 / 3GPP TS 24.080** | Supplementary services on mobile | Facility, Register, Release Complete messages; SSOpCode/SSErrorCode enums; L3FacilityOpCode TCAP parser; L3USSDData IE |

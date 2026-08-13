@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![Build](https://github.com/momentics/libgsml3parser/actions/workflows/build-release.yml/badge.svg)](https://github.com/momentics/libgsml3parser/actions/workflows/build-release.yml)
-[![Version](https://img.shields.io/badge/Version-0.8.0-blue.svg)](https://github.com/momentics/libgsml3parser/releases)
+[![Version](https://img.shields.io/badge/Version-0.10.0-blue.svg)](https://github.com/momentics/libgsml3parser/releases)
 
 ## Overview
 
@@ -31,7 +31,11 @@ The library is self-contained with zero external dependencies beyond the C++20 s
 ## Features
 
 - **Full L3 message parsing** — Binary data to typed C++ objects with compile-time dispatch via `std::variant`
+- **Fluent Builder API** — Construct any L3 message from scratch with chainable setters and `build()` (all 12 domains)
 - **Message generation** — Typed C++ objects to binary data (for test harnesses, fuzzing, replay)
+- **LAPDm framing** — Wrap/unwrap L3 messages in LAPDm UI frames (GSM 04.06) for Um interface transmission
+- **ProtocolDispatcher** — Callback-based message routing with O(1) PD+MTI lookup, domain handlers, and fallback
+- **std::format support** — `enum_formatters.h` provides `std::formatter` specializations for all protocol enums
 - **Expected<T> result type** — Zero-allocation errors with structured error codes and bit-position tracking
 - **Immutable ParserConfig** — No mutex on parse path, thread-safe by design
 - **Zero heap allocation on hot path** — `ParsedMessage` variant on stack, no `std::unique_ptr` in parse/serialise
