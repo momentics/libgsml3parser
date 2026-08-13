@@ -1099,6 +1099,21 @@ void L3SystemInformationType1::text(std::ostream& os) const {
     }
 }
 
+// ── L3SystemInformationType1 Builder ───────────────────────────────────
+
+L3SystemInformationType1 L3SystemInformationType1::Builder::build() const {
+    L3SystemInformationType1 msg;
+    msg.mCellChannelDescription = mCellChannelDescription;
+    msg.mRACHControlParameters = mRACHControlParameters;
+    msg.mHaveRestOctets = mHaveRestOctets;
+    msg.mRestOctet = mRestOctet;
+    return msg;
+}
+
+L3SystemInformationType1::Builder L3SystemInformationType1::builder() {
+    return Builder{};
+}
+
 // ── L3SystemInformationType2 ───────────────────────────────────────────
 
 Expected<L3SystemInformationType2> L3SystemInformationType2::parse(BitReader& br) {
@@ -1136,6 +1151,20 @@ void L3SystemInformationType2::text(std::ostream& os) const {
     mRACHControlParameters.text(os);
 }
 
+// ── L3SystemInformationType2 Builder ───────────────────────────────────
+
+L3SystemInformationType2 L3SystemInformationType2::Builder::build() const {
+    L3SystemInformationType2 msg;
+    msg.mBCCHFrequencyList = mBCCHFrequencyList;
+    msg.mNCCPermitted = mNCCPermitted;
+    msg.mRACHControlParameters = mRACHControlParameters;
+    return msg;
+}
+
+L3SystemInformationType2::Builder L3SystemInformationType2::builder() {
+    return Builder{};
+}
+
 // ── L3SystemInformationType2bis ────────────────────────────────────────
 
 Expected<L3SystemInformationType2bis> L3SystemInformationType2bis::parse(BitReader& br) {
@@ -1165,6 +1194,19 @@ void L3SystemInformationType2bis::text(std::ostream& os) const {
     mRACHControlParameters.text(os);
 }
 
+// ── L3SystemInformationType2bis Builder ────────────────────────────────
+
+L3SystemInformationType2bis L3SystemInformationType2bis::Builder::build() const {
+    L3SystemInformationType2bis msg;
+    msg.mBCCHFrequencyList = mBCCHFrequencyList;
+    msg.mRACHControlParameters = mRACHControlParameters;
+    return msg;
+}
+
+L3SystemInformationType2bis::Builder L3SystemInformationType2bis::builder() {
+    return Builder{};
+}
+
 // ── L3SystemInformationType2ter ────────────────────────────────────────
 
 Expected<L3SystemInformationType2ter> L3SystemInformationType2ter::parse(BitReader& br) {
@@ -1184,6 +1226,18 @@ void L3SystemInformationType2ter::write(BitWriter& bw) const {
 void L3SystemInformationType2ter::text(std::ostream& os) const {
     os << "SystemInformationType2ter: ";
     mBCCHFrequencyList.text(os);
+}
+
+// ── L3SystemInformationType2ter Builder ────────────────────────────────
+
+L3SystemInformationType2ter L3SystemInformationType2ter::Builder::build() const {
+    L3SystemInformationType2ter msg;
+    msg.mBCCHFrequencyList = mBCCHFrequencyList;
+    return msg;
+}
+
+L3SystemInformationType2ter::Builder L3SystemInformationType2ter::builder() {
+    return Builder{};
 }
 
 // ── L3SystemInformationType3 ───────────────────────────────────────────
@@ -1246,6 +1300,24 @@ void L3SystemInformationType3::text(std::ostream& os) const {
     os << " ";
     mRACHControlParameters.text(os);
     mRestOctets.text(os);
+}
+
+// ── L3SystemInformationType3 Builder ───────────────────────────────────
+
+L3SystemInformationType3 L3SystemInformationType3::Builder::build() const {
+    L3SystemInformationType3 msg;
+    msg.mCI = mCI;
+    msg.mLAI = mLAI;
+    msg.mControlChannelDescription = mControlChannelDescription;
+    msg.mCellOptions = mCellOptions;
+    msg.mCellSelectionParameters = mCellSelectionParameters;
+    msg.mRACHControlParameters = mRACHControlParameters;
+    msg.mRestOctets = mRestOctets;
+    return msg;
+}
+
+L3SystemInformationType3::Builder L3SystemInformationType3::builder() {
+    return Builder{};
 }
 
 // ── L3SystemInformationType4 ───────────────────────────────────────────
@@ -1313,6 +1385,23 @@ void L3SystemInformationType4::text(std::ostream& os) const {
     mRACHControlParameters.text(os);
 }
 
+// ── L3SystemInformationType4 Builder ───────────────────────────────────
+
+L3SystemInformationType4 L3SystemInformationType4::Builder::build() const {
+    L3SystemInformationType4 msg;
+    msg.mLAI = mLAI;
+    msg.mCellSelectionParameters = mCellSelectionParameters;
+    msg.mRACHControlParameters = mRACHControlParameters;
+    msg.mHaveCBCH = mHaveCBCH;
+    msg.mCBCHChannelDescription = mCBCHChannelDescription;
+    msg.mRestOctets = mRestOctets;
+    return msg;
+}
+
+L3SystemInformationType4::Builder L3SystemInformationType4::builder() {
+    return Builder{};
+}
+
 // ── L3SystemInformationType5 ───────────────────────────────────────────
 
 Expected<L3SystemInformationType5> L3SystemInformationType5::parse(BitReader& br) {
@@ -1332,6 +1421,18 @@ void L3SystemInformationType5::write(BitWriter& bw) const {
 void L3SystemInformationType5::text(std::ostream& os) const {
     os << "SystemInformationType5: ";
     mBCCHFrequencyList.text(os);
+}
+
+// ── L3SystemInformationType5 Builder ───────────────────────────────────
+
+L3SystemInformationType5 L3SystemInformationType5::Builder::build() const {
+    L3SystemInformationType5 msg;
+    msg.mBCCHFrequencyList = mBCCHFrequencyList;
+    return msg;
+}
+
+L3SystemInformationType5::Builder L3SystemInformationType5::builder() {
+    return Builder{};
 }
 
 // ── L3SystemInformationType5bis ────────────────────────────────────────
@@ -1355,6 +1456,18 @@ void L3SystemInformationType5bis::text(std::ostream& os) const {
     mBCCHFrequencyList.text(os);
 }
 
+// ── L3SystemInformationType5bis Builder ────────────────────────────────
+
+L3SystemInformationType5bis L3SystemInformationType5bis::Builder::build() const {
+    L3SystemInformationType5bis msg;
+    msg.mBCCHFrequencyList = mBCCHFrequencyList;
+    return msg;
+}
+
+L3SystemInformationType5bis::Builder L3SystemInformationType5bis::builder() {
+    return Builder{};
+}
+
 // ── L3SystemInformationType5ter ────────────────────────────────────────
 
 Expected<L3SystemInformationType5ter> L3SystemInformationType5ter::parse(BitReader& br) {
@@ -1374,6 +1487,18 @@ void L3SystemInformationType5ter::write(BitWriter& bw) const {
 void L3SystemInformationType5ter::text(std::ostream& os) const {
     os << "SystemInformationType5ter: ";
     mBCCHFrequencyList.text(os);
+}
+
+// ── L3SystemInformationType5ter Builder ────────────────────────────────
+
+L3SystemInformationType5ter L3SystemInformationType5ter::Builder::build() const {
+    L3SystemInformationType5ter msg;
+    msg.mBCCHFrequencyList = mBCCHFrequencyList;
+    return msg;
+}
+
+L3SystemInformationType5ter::Builder L3SystemInformationType5ter::builder() {
+    return Builder{};
 }
 
 // ── L3SystemInformationType6 ───────────────────────────────────────────
@@ -1403,6 +1528,21 @@ void L3SystemInformationType6::text(std::ostream& os) const {
     mCellOptions.text(os);
     os << " ";
     mNCCPermitted.text(os);
+}
+
+// ── L3SystemInformationType6 Builder ───────────────────────────────────
+
+L3SystemInformationType6 L3SystemInformationType6::Builder::build() const {
+    L3SystemInformationType6 msg;
+    msg.mCI = mCI;
+    msg.mLAI = mLAI;
+    msg.mCellOptions = mCellOptions;
+    msg.mNCCPermitted = mNCCPermitted;
+    return msg;
+}
+
+L3SystemInformationType6::Builder L3SystemInformationType6::builder() {
+    return Builder{};
 }
 
 // ── L3SystemInformationType7 ───────────────────────────────────────────
@@ -1455,6 +1595,19 @@ void L3SystemInformationType7::text(std::ostream& os) const {
     os << "SystemInformationType7: ";
     mRACHControl.text(os);
     os << " cells=" << mCellChannelDescriptions.size();
+}
+
+// ── L3SystemInformationType7 Builder ───────────────────────────────────
+
+L3SystemInformationType7 L3SystemInformationType7::Builder::build() const {
+    L3SystemInformationType7 msg;
+    msg.mRACHControl = mRACHControl;
+    msg.mCellChannelDescriptions = mCellChannelDescriptions;
+    return msg;
+}
+
+L3SystemInformationType7::Builder L3SystemInformationType7::builder() {
+    return Builder{};
 }
 
 // ── L3SystemInformationType8 ───────────────────────────────────────────
@@ -1522,6 +1675,20 @@ void L3SystemInformationType8::text(std::ostream& os) const {
     os << " cells=" << mCellChannelDescriptions.size();
 }
 
+// ── L3SystemInformationType8 Builder ───────────────────────────────────
+
+L3SystemInformationType8 L3SystemInformationType8::Builder::build() const {
+    L3SystemInformationType8 msg;
+    msg.mNCCPermitted = mNCCPermitted;
+    msg.mRACHControl = mRACHControl;
+    msg.mCellChannelDescriptions = mCellChannelDescriptions;
+    return msg;
+}
+
+L3SystemInformationType8::Builder L3SystemInformationType8::builder() {
+    return Builder{};
+}
+
 // ── L3SystemInformationType9 ───────────────────────────────────────────
 
 Expected<L3SystemInformationType9> L3SystemInformationType9::parse(BitReader& br) {
@@ -1545,6 +1712,20 @@ void L3SystemInformationType9::text(std::ostream& os) const {
     mCellSelectionParameters.text(os);
     os << " ";
     mCellOptions.text(os);
+}
+
+// ── L3SystemInformationType9 Builder ───────────────────────────────────
+
+L3SystemInformationType9 L3SystemInformationType9::Builder::build() const {
+    L3SystemInformationType9 msg;
+    msg.mCI = mCI;
+    msg.mCellSelectionParameters = mCellSelectionParameters;
+    msg.mCellOptions = mCellOptions;
+    return msg;
+}
+
+L3SystemInformationType9::Builder L3SystemInformationType9::builder() {
+    return Builder{};
 }
 
 // ── L3SystemInformationType13 ──────────────────────────────────────────
@@ -1572,6 +1753,18 @@ void L3SystemInformationType13::text(std::ostream& os) const {
     mRestOctets.text(os);
 }
 
+// ── L3SystemInformationType13 Builder ──────────────────────────────────
+
+L3SystemInformationType13 L3SystemInformationType13::Builder::build() const {
+    L3SystemInformationType13 msg;
+    msg.mRestOctets = mRestOctets;
+    return msg;
+}
+
+L3SystemInformationType13::Builder L3SystemInformationType13::builder() {
+    return Builder{};
+}
+
 // ── L3SystemInformationType16 ──────────────────────────────────────────
 
 Expected<L3SystemInformationType16> L3SystemInformationType16::parse(BitReader& br) {
@@ -1595,6 +1788,20 @@ void L3SystemInformationType16::text(std::ostream& os) const {
     mCellSelectionParameters.text(os);
     os << " ";
     mCellOptions.text(os);
+}
+
+// ── L3SystemInformationType16 Builder ──────────────────────────────────
+
+L3SystemInformationType16 L3SystemInformationType16::Builder::build() const {
+    L3SystemInformationType16 msg;
+    msg.mCI = mCI;
+    msg.mCellSelectionParameters = mCellSelectionParameters;
+    msg.mCellOptions = mCellOptions;
+    return msg;
+}
+
+L3SystemInformationType16::Builder L3SystemInformationType16::builder() {
+    return Builder{};
 }
 
 // ── L3SystemInformationType17 ──────────────────────────────────────────
@@ -1647,6 +1854,19 @@ void L3SystemInformationType17::text(std::ostream& os) const {
     os << "SystemInformationType17: ";
     mRACHControl.text(os);
     os << " cells=" << mCellChannelDescriptions.size();
+}
+
+// ── L3SystemInformationType17 Builder ──────────────────────────────────
+
+L3SystemInformationType17 L3SystemInformationType17::Builder::build() const {
+    L3SystemInformationType17 msg;
+    msg.mRACHControl = mRACHControl;
+    msg.mCellChannelDescriptions = mCellChannelDescriptions;
+    return msg;
+}
+
+L3SystemInformationType17::Builder L3SystemInformationType17::builder() {
+    return Builder{};
 }
 
 // ── L3ImmediateAssignment ──────────────────────────────────────────────

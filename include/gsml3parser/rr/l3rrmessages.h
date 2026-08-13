@@ -669,6 +669,8 @@ class L3SystemInformationType1 {
     L3RACHControlParameters mRACHControlParameters;
     bool mHaveRestOctets{false};
     uint8_t mRestOctet{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x19;
 
@@ -687,6 +689,24 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType1> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3FrequencyList mCellChannelDescription{};
+        L3RACHControlParameters mRACHControlParameters{};
+        bool mHaveRestOctets{false};
+        uint8_t mRestOctet{0};
+
+        /// Set the cell channel description (frequency list).
+        Builder& cellChannelDescription(L3FrequencyList v) { mCellChannelDescription = v; return *this; }
+        /// Set RACH control parameters.
+        Builder& rachControlParameters(L3RACHControlParameters v) { mRACHControlParameters = v; return *this; }
+        /// Set optional rest octet (sets mHaveRestOctets flag).
+        Builder& restOctet(uint8_t v) { mRestOctet = v; mHaveRestOctets = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType1 build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 2 (GSM 04.08 9.1.32) ─────────────────────
@@ -695,6 +715,8 @@ class L3SystemInformationType2 {
     L3BCCHFrequencyList mBCCHFrequencyList;
     L3NCCPermitted mNCCPermitted;
     L3RACHControlParameters mRACHControlParameters;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x1a;
 
@@ -712,6 +734,23 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType2> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3BCCHFrequencyList mBCCHFrequencyList{};
+        L3NCCPermitted mNCCPermitted{};
+        L3RACHControlParameters mRACHControlParameters{};
+
+        /// Set BCCH frequency list.
+        Builder& bcchFrequencyList(L3BCCHFrequencyList v) { mBCCHFrequencyList = v; return *this; }
+        /// Set NCC permitted.
+        Builder& nccPermitted(L3NCCPermitted v) { mNCCPermitted = v; return *this; }
+        /// Set RACH control parameters.
+        Builder& rachControlParameters(L3RACHControlParameters v) { mRACHControlParameters = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType2 build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 2bis (GSM 04.08 9.1.33) ──────────────────
@@ -719,6 +758,8 @@ public:
 class L3SystemInformationType2bis {
     L3BCCHFrequencyList mBCCHFrequencyList;
     L3RACHControlParameters mRACHControlParameters;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x02;
 
@@ -736,12 +777,28 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType2bis> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3BCCHFrequencyList mBCCHFrequencyList{};
+        L3RACHControlParameters mRACHControlParameters{};
+
+        /// Set BCCH frequency list.
+        Builder& bcchFrequencyList(L3BCCHFrequencyList v) { mBCCHFrequencyList = v; return *this; }
+        /// Set RACH control parameters.
+        Builder& rachControlParameters(L3RACHControlParameters v) { mRACHControlParameters = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType2bis build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 2ter (GSM 04.08 9.1.34) ──────────────────
 
 class L3SystemInformationType2ter {
     L3BCCHFrequencyList mBCCHFrequencyList;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x03;
 
@@ -758,6 +815,17 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType2ter> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3BCCHFrequencyList mBCCHFrequencyList{};
+
+        /// Set BCCH frequency list.
+        Builder& bcchFrequencyList(L3BCCHFrequencyList v) { mBCCHFrequencyList = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType2ter build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 3 (GSM 04.08 9.1.35) ──────────────────────
@@ -770,6 +838,8 @@ class L3SystemInformationType3 {
     L3CellSelectionParameters mCellSelectionParameters;
     L3RACHControlParameters mRACHControlParameters;
     L3SI3RestOctets mRestOctets;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x1b;
 
@@ -791,6 +861,35 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType3> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3CellIdentity mCI{};
+        L3LocationAreaIdentity mLAI{};
+        L3ControlChannelDescription mControlChannelDescription{};
+        L3CellOptionsBCCH mCellOptions{};
+        L3CellSelectionParameters mCellSelectionParameters{};
+        L3RACHControlParameters mRACHControlParameters{};
+        L3SI3RestOctets mRestOctets{};
+
+        /// Set cell identity.
+        Builder& cellIdentity(L3CellIdentity v) { mCI = v; return *this; }
+        /// Set location area identity.
+        Builder& locationAreaIdentity(L3LocationAreaIdentity v) { mLAI = v; return *this; }
+        /// Set control channel description.
+        Builder& controlChannelDescription(L3ControlChannelDescription v) { mControlChannelDescription = v; return *this; }
+        /// Set cell options for BCCH.
+        Builder& cellOptions(L3CellOptionsBCCH v) { mCellOptions = v; return *this; }
+        /// Set cell selection parameters.
+        Builder& cellSelectionParameters(L3CellSelectionParameters v) { mCellSelectionParameters = v; return *this; }
+        /// Set RACH control parameters.
+        Builder& rachControlParameters(L3RACHControlParameters v) { mRACHControlParameters = v; return *this; }
+        /// Set rest octets (optional SI3 extensions).
+        Builder& restOctets(L3SI3RestOctets v) { mRestOctets = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType3 build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 4 (GSM 04.08 9.1.36) ─────────────────────
@@ -802,6 +901,8 @@ class L3SystemInformationType4 {
     bool mHaveCBCH{false};
     L3ChannelDescription mCBCHChannelDescription;
     L3SIType4RestOctets mRestOctets;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x1c;
 
@@ -822,12 +923,38 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType4> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3LocationAreaIdentity mLAI{};
+        L3CellSelectionParameters mCellSelectionParameters{};
+        L3RACHControlParameters mRACHControlParameters{};
+        bool mHaveCBCH{false};
+        L3ChannelDescription mCBCHChannelDescription{};
+        L3SIType4RestOctets mRestOctets{};
+
+        /// Set location area identity.
+        Builder& locationAreaIdentity(L3LocationAreaIdentity v) { mLAI = v; return *this; }
+        /// Set cell selection parameters.
+        Builder& cellSelectionParameters(L3CellSelectionParameters v) { mCellSelectionParameters = v; return *this; }
+        /// Set RACH control parameters.
+        Builder& rachControlParameters(L3RACHControlParameters v) { mRACHControlParameters = v; return *this; }
+        /// Set CBCH channel description (sets mHaveCBCH flag).
+        Builder& cbchChannelDescription(L3ChannelDescription v) { mCBCHChannelDescription = v; mHaveCBCH = true; return *this; }
+        /// Set rest octets.
+        Builder& restOctets(L3SIType4RestOctets v) { mRestOctets = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType4 build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 5 (GSM 04.08 9.1.37) ─────────────────────
 
 class L3SystemInformationType5 {
     L3BCCHFrequencyList mBCCHFrequencyList;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x1d;
 
@@ -842,12 +969,25 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType5> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3BCCHFrequencyList mBCCHFrequencyList{};
+
+        /// Set BCCH frequency list.
+        Builder& bcchFrequencyList(L3BCCHFrequencyList v) { mBCCHFrequencyList = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType5 build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 5bis (GSM 04.08 9.1.38) ──────────────────
 
 class L3SystemInformationType5bis {
     L3BCCHFrequencyList mBCCHFrequencyList;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x05;
 
@@ -862,12 +1002,25 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType5bis> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3BCCHFrequencyList mBCCHFrequencyList{};
+
+        /// Set BCCH frequency list.
+        Builder& bcchFrequencyList(L3BCCHFrequencyList v) { mBCCHFrequencyList = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType5bis build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 5ter (GSM 04.08 9.1.39) ──────────────────
 
 class L3SystemInformationType5ter {
     L3BCCHFrequencyList mBCCHFrequencyList;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x06;
 
@@ -882,6 +1035,17 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType5ter> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3BCCHFrequencyList mBCCHFrequencyList{};
+
+        /// Set BCCH frequency list.
+        Builder& bcchFrequencyList(L3BCCHFrequencyList v) { mBCCHFrequencyList = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType5ter build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 6 (GSM 04.08 9.1.40) ─────────────────────
@@ -891,6 +1055,8 @@ class L3SystemInformationType6 {
     L3LocationAreaIdentity mLAI;
     L3CellOptionsSACCH mCellOptions;
     L3NCCPermitted mNCCPermitted;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x1e;
 
@@ -908,6 +1074,26 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType6> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3CellIdentity mCI{};
+        L3LocationAreaIdentity mLAI{};
+        L3CellOptionsSACCH mCellOptions{};
+        L3NCCPermitted mNCCPermitted{};
+
+        /// Set cell identity.
+        Builder& cellIdentity(L3CellIdentity v) { mCI = v; return *this; }
+        /// Set location area identity.
+        Builder& locationAreaIdentity(L3LocationAreaIdentity v) { mLAI = v; return *this; }
+        /// Set cell options for SACCH.
+        Builder& cellOptions(L3CellOptionsSACCH v) { mCellOptions = v; return *this; }
+        /// Set NCC permitted.
+        Builder& nccPermitted(L3NCCPermitted v) { mNCCPermitted = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType6 build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 7 (GSM 04.08 9.1.41) ─────────────────────
@@ -915,6 +1101,8 @@ public:
 class L3SystemInformationType7 {
     L3RACHControlParameters mRACHControl;
     std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x1f;
 
@@ -930,6 +1118,22 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType7> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3RACHControlParameters mRACHControl{};
+        std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+
+        /// Set RACH control parameters.
+        Builder& rachControl(L3RACHControlParameters v) { mRACHControl = v; return *this; }
+        /// Add a cell channel description.
+        Builder& addCellChannelDescription(L3CellChannelDescription v) { mCellChannelDescriptions.push_back(std::move(v)); return *this; }
+        /// Set all cell channel descriptions.
+        Builder& cellChannelDescriptions(std::vector<L3CellChannelDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType7 build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 8 (GSM 04.08 9.1.42) ─────────────────────
@@ -938,6 +1142,8 @@ class L3SystemInformationType8 {
     L3NCCPermitted mNCCPermitted;
     L3RACHControlParameters mRACHControl;
     std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x18;
 
@@ -954,6 +1160,25 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType8> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3NCCPermitted mNCCPermitted{};
+        L3RACHControlParameters mRACHControl{};
+        std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+
+        /// Set NCC permitted.
+        Builder& nccPermitted(L3NCCPermitted v) { mNCCPermitted = v; return *this; }
+        /// Set RACH control parameters.
+        Builder& rachControl(L3RACHControlParameters v) { mRACHControl = v; return *this; }
+        /// Add a cell channel description.
+        Builder& addCellChannelDescription(L3CellChannelDescription v) { mCellChannelDescriptions.push_back(std::move(v)); return *this; }
+        /// Set all cell channel descriptions.
+        Builder& cellChannelDescriptions(std::vector<L3CellChannelDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType8 build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 9 (GSM 04.08 9.1.43) ─────────────────────
@@ -962,6 +1187,8 @@ class L3SystemInformationType9 {
     L3CellIdentity mCI;
     L3CellSelectionParameters mCellSelectionParameters;
     L3CellOptionsBCCH mCellOptions;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x04;
 
@@ -978,12 +1205,31 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType9> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3CellIdentity mCI{};
+        L3CellSelectionParameters mCellSelectionParameters{};
+        L3CellOptionsBCCH mCellOptions{};
+
+        /// Set cell identity.
+        Builder& cellIdentity(L3CellIdentity v) { mCI = v; return *this; }
+        /// Set cell selection parameters.
+        Builder& cellSelectionParameters(L3CellSelectionParameters v) { mCellSelectionParameters = v; return *this; }
+        /// Set cell options for BCCH.
+        Builder& cellOptions(L3CellOptionsBCCH v) { mCellOptions = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType9 build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 13 (GSM 04.08 9.1.43a) ────────────────────
 
 class L3SystemInformationType13 {
     L3SI13RestOctets mRestOctets;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x00;
 
@@ -997,6 +1243,17 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType13> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3SI13RestOctets mRestOctets{};
+
+        /// Set rest octets.
+        Builder& restOctets(L3SI13RestOctets v) { mRestOctets = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType13 build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 16 (GSM 04.08 9.1.43b) ───────────────────
@@ -1005,6 +1262,8 @@ class L3SystemInformationType16 {
     L3CellIdentity mCI;
     L3CellSelectionParameters mCellSelectionParameters;
     L3CellOptionsBCCH mCellOptions;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x3d;
 
@@ -1021,6 +1280,23 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType16> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3CellIdentity mCI{};
+        L3CellSelectionParameters mCellSelectionParameters{};
+        L3CellOptionsBCCH mCellOptions{};
+
+        /// Set cell identity.
+        Builder& cellIdentity(L3CellIdentity v) { mCI = v; return *this; }
+        /// Set cell selection parameters.
+        Builder& cellSelectionParameters(L3CellSelectionParameters v) { mCellSelectionParameters = v; return *this; }
+        /// Set cell options for BCCH.
+        Builder& cellOptions(L3CellOptionsBCCH v) { mCellOptions = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType16 build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── System Information Type 17 (GSM 04.08 9.1.43c) ───────────────────
@@ -1028,6 +1304,8 @@ public:
 class L3SystemInformationType17 {
     L3RACHControlParameters mRACHControl;
     std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x3e;
 
@@ -1043,6 +1321,22 @@ public:
     [[nodiscard]] static Expected<L3SystemInformationType17> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        L3RACHControlParameters mRACHControl{};
+        std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+
+        /// Set RACH control parameters.
+        Builder& rachControl(L3RACHControlParameters v) { mRACHControl = v; return *this; }
+        /// Add a cell channel description.
+        Builder& addCellChannelDescription(L3CellChannelDescription v) { mCellChannelDescriptions.push_back(std::move(v)); return *this; }
+        /// Set all cell channel descriptions.
+        Builder& cellChannelDescriptions(std::vector<L3CellChannelDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3SystemInformationType17 build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── Immediate Assignment (GSM 04.08 9.1.19) ───────────────────────────
