@@ -816,4 +816,205 @@ void L3AuthenticationReject::text(std::ostream& os) const {
     os << "AuthenticationReject";
 }
 
+// ── Builder implementations ───────────────────────────────────────────
+
+// L3CMServiceAccept Builder
+L3CMServiceAccept L3CMServiceAccept::Builder::build() const {
+    return L3CMServiceAccept{};
+}
+
+L3CMServiceAccept::Builder L3CMServiceAccept::builder() {
+    return Builder{};
+}
+
+// L3CMServiceAbort Builder
+L3CMServiceAbort L3CMServiceAbort::Builder::build() const {
+    return L3CMServiceAbort{};
+}
+
+L3CMServiceAbort::Builder L3CMServiceAbort::builder() {
+    return Builder{};
+}
+
+// L3AuthenticationReject Builder
+L3AuthenticationReject L3AuthenticationReject::Builder::build() const {
+    return L3AuthenticationReject{};
+}
+
+L3AuthenticationReject::Builder L3AuthenticationReject::builder() {
+    return Builder{};
+}
+
+// L3TMSIReallocationComplete Builder
+L3TMSIReallocationComplete L3TMSIReallocationComplete::Builder::build() const {
+    return L3TMSIReallocationComplete{};
+}
+
+L3TMSIReallocationComplete::Builder L3TMSIReallocationComplete::builder() {
+    return Builder{};
+}
+
+// L3IMSIDetachIndication Builder
+L3IMSIDetachIndication L3IMSIDetachIndication::Builder::build() const {
+    L3IMSIDetachIndication msg;
+    msg.mClassmark = m_classmark;
+    msg.mMobileIdentity = m_mobileIdentity;
+    return msg;
+}
+
+L3IMSIDetachIndication::Builder L3IMSIDetachIndication::builder() {
+    return Builder{};
+}
+
+// L3LocationUpdatingReject Builder
+L3LocationUpdatingReject L3LocationUpdatingReject::Builder::build() const {
+    return L3LocationUpdatingReject{m_cause};
+}
+
+L3LocationUpdatingReject::Builder L3LocationUpdatingReject::builder() {
+    return Builder{};
+}
+
+// L3AuthenticationRequest Builder
+L3AuthenticationRequest L3AuthenticationRequest::Builder::build() const {
+    L3AuthenticationRequest msg;
+    msg.mCKSN = m_cksn;
+    msg.mRAND = m_rand;
+    return msg;
+}
+
+L3AuthenticationRequest::Builder L3AuthenticationRequest::builder() {
+    return Builder{};
+}
+
+// L3AuthenticationResponse Builder
+L3AuthenticationResponse L3AuthenticationResponse::Builder::build() const {
+    return L3AuthenticationResponse{m_sres};
+}
+
+L3AuthenticationResponse::Builder L3AuthenticationResponse::builder() {
+    return Builder{};
+}
+
+// L3CMServiceReject Builder
+L3CMServiceReject L3CMServiceReject::Builder::build() const {
+    return L3CMServiceReject{m_cause};
+}
+
+L3CMServiceReject::Builder L3CMServiceReject::builder() {
+    return Builder{};
+}
+
+// L3MMStatus Builder
+L3MMStatus L3MMStatus::Builder::build() const {
+    L3MMStatus msg;
+    msg.mCause = m_cause;
+    return msg;
+}
+
+L3MMStatus::Builder L3MMStatus::builder() {
+    return Builder{};
+}
+
+// L3IdentityRequest Builder
+L3IdentityRequest L3IdentityRequest::Builder::build() const {
+    return L3IdentityRequest{m_type};
+}
+
+L3IdentityRequest::Builder L3IdentityRequest::builder() {
+    return Builder{};
+}
+
+// L3IdentityResponse Builder
+L3IdentityResponse L3IdentityResponse::Builder::build() const {
+    L3IdentityResponse msg;
+    msg.mMobileID = m_mobileId;
+    return msg;
+}
+
+L3IdentityResponse::Builder L3IdentityResponse::builder() {
+    return Builder{};
+}
+
+// L3LocationUpdatingRequest Builder
+L3LocationUpdatingRequest L3LocationUpdatingRequest::Builder::build() const {
+    L3LocationUpdatingRequest msg;
+    msg.mUpdateType = m_updateType;
+    msg.mCKSN = m_cksn;
+    msg.mClassmark = m_classmark;
+    msg.mMobileIdentity = m_mobileIdentity;
+    msg.mLAI = m_lai;
+    return msg;
+}
+
+L3LocationUpdatingRequest::Builder L3LocationUpdatingRequest::builder() {
+    return Builder{};
+}
+
+// L3MMInformation Builder
+L3MMInformation L3MMInformation::Builder::build() const {
+    L3MMInformation msg;
+    msg.mShortName = m_shortName;
+    msg.mTime = m_time;
+    return msg;
+}
+
+L3MMInformation::Builder L3MMInformation::builder() {
+    return Builder{};
+}
+
+// L3CMServiceRequest Builder
+L3CMServiceRequest L3CMServiceRequest::Builder::build() const {
+    L3CMServiceRequest msg;
+    msg.mClassmark = m_classmark;
+    msg.mMobileIdentity = m_mobileIdentity;
+    msg.mServiceType = m_serviceType;
+    return msg;
+}
+
+L3CMServiceRequest::Builder L3CMServiceRequest::builder() {
+    return Builder{};
+}
+
+// L3CMRequest Builder
+L3CMRequest L3CMRequest::Builder::build() const {
+    L3CMRequest msg;
+    msg.mCKSN = m_cksn;
+    msg.mHaveServiceType = m_haveServiceType;
+    msg.mServiceType = m_serviceType;
+    msg.mClassmark = m_classmark;
+    msg.mMobileIdentity = m_mobileIdentity;
+    return msg;
+}
+
+L3CMRequest::Builder L3CMRequest::builder() {
+    return Builder{};
+}
+
+// L3PagingMM Builder
+L3PagingMM L3PagingMM::Builder::build() const {
+    L3PagingMM msg;
+    msg.mMobileIdentity = m_mobileIdentity;
+    return msg;
+}
+
+L3PagingMM::Builder L3PagingMM::builder() {
+    return Builder{};
+}
+
+// L3CMReestablishmentRequest Builder
+L3CMReestablishmentRequest L3CMReestablishmentRequest::Builder::build() const {
+    L3CMReestablishmentRequest msg;
+    msg.mCKSN = m_cksn;
+    msg.mClassmark = m_classmark;
+    msg.mMobileID = m_mobileId;
+    msg.mHaveLAI = m_haveLAI;
+    msg.mLAI = m_lai;
+    return msg;
+}
+
+L3CMReestablishmentRequest::Builder L3CMReestablishmentRequest::builder() {
+    return Builder{};
+}
+
 } // namespace gsml3parser

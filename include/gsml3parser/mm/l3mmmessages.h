@@ -47,7 +47,22 @@ enum class LocationUpdateType : uint8_t {
 class L3IMSIDetachIndication {
 public:
     static constexpr int MTI = 0x01;
+
+    struct Builder {
+        L3MobileStationClassmark1 m_classmark;
+        L3MobileIdentity m_mobileIdentity;
+
+        /// Set the mobile station classmark.
+        Builder& classmark(L3MobileStationClassmark1 v) { m_classmark = v; return *this; }
+        /// Set the mobile identity.
+        Builder& mobileIdentity(L3MobileIdentity v) { m_mobileIdentity = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3IMSIDetachIndication build() const;
+    };
+
+    static Builder builder();
 private:
+    friend struct Builder;
     L3MobileStationClassmark1 mClassmark;
     L3MobileIdentity mMobileIdentity;
 public:
@@ -99,9 +114,22 @@ public:
 class L3LocationUpdatingReject {
 private:
     MMRejectCause mCause{MMRejectCause::Zero};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x04;
     explicit L3LocationUpdatingReject(MMRejectCause cause) : mCause(cause) {}
+
+    struct Builder {
+        MMRejectCause m_cause{MMRejectCause::Zero};
+
+        /// Set the MM reject cause.
+        Builder& cause(MMRejectCause v) { m_cause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3LocationUpdatingReject build() const;
+    };
+
+    static Builder builder();
     size_t bodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3LocationUpdatingReject> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -120,8 +148,33 @@ private:
     L3MobileStationClassmark1 mClassmark;
     L3MobileIdentity mMobileIdentity;
     L3LocationAreaIdentity mLAI;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x08;
+
+    struct Builder {
+        unsigned m_updateType{0};
+        unsigned m_cksn{0};
+        L3MobileStationClassmark1 m_classmark;
+        L3MobileIdentity m_mobileIdentity;
+        L3LocationAreaIdentity m_lai;
+
+        /// Set update type: 0=Normal, 1=Periodic, 2=IMSI Attach.
+        Builder& updateType(unsigned v) { m_updateType = v; return *this; }
+        /// Set CKSN value.
+        Builder& cksn(unsigned v) { m_cksn = v; return *this; }
+        /// Set classmark.
+        Builder& classmark(L3MobileStationClassmark1 v) { m_classmark = v; return *this; }
+        /// Set mobile identity.
+        Builder& mobileIdentity(L3MobileIdentity v) { m_mobileIdentity = std::move(v); return *this; }
+        /// Set location area identity.
+        Builder& lai(L3LocationAreaIdentity v) { m_lai = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3LocationUpdatingRequest build() const;
+    };
+
+    static Builder builder();
     const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
     const L3LocationAreaIdentity& lai() const { return mLAI; }
     size_t bodyLength() const;
@@ -140,6 +193,16 @@ public:
 class L3AuthenticationReject {
 public:
     static constexpr int MTI = 0x11;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3AuthenticationReject build() const;
+    };
+
+    static Builder builder();
+private:
+    friend struct Builder;
+public:
     size_t bodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3AuthenticationReject> parse(BitReader&);
     void write(BitWriter&) const;
@@ -155,10 +218,26 @@ class L3AuthenticationRequest {
 private:
     unsigned mCKSN{0};
     std::vector<uint8_t> mRAND;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x12;
     L3AuthenticationRequest() = default;
     L3AuthenticationRequest(unsigned ckSN, const std::vector<uint8_t>& rand) : mCKSN(ckSN), mRAND(rand) {}
+
+    struct Builder {
+        unsigned m_cksn{0};
+        std::vector<uint8_t> m_rand;
+
+        /// Set CKSN value.
+        Builder& cksn(unsigned v) { m_cksn = v; return *this; }
+        /// Set RAND vector.
+        Builder& rand(std::vector<uint8_t> v) { m_rand = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3AuthenticationRequest build() const;
+    };
+
+    static Builder builder();
     size_t bodyLength() const { return 17; }
     [[nodiscard]] static Expected<L3AuthenticationRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -173,10 +252,23 @@ public:
 class L3AuthenticationResponse {
 private:
     uint32_t mSRES{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x14;
     L3AuthenticationResponse() = default;
     explicit L3AuthenticationResponse(uint32_t sres) : mSRES(sres) {}
+
+    struct Builder {
+        uint32_t m_sres{0};
+
+        /// Set SRES value.
+        Builder& sres(uint32_t v) { m_sres = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3AuthenticationResponse build() const;
+    };
+
+    static Builder builder();
     uint32_t sres() const { return mSRES; }
     size_t bodyLength() const { return 4; }
     [[nodiscard]] static Expected<L3AuthenticationResponse> parse(BitReader& br);
@@ -192,6 +284,16 @@ public:
 class L3CMServiceAccept {
 public:
     static constexpr int MTI = 0x21;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3CMServiceAccept build() const;
+    };
+
+    static Builder builder();
+private:
+    friend struct Builder;
+public:
     size_t bodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3CMServiceAccept> parse(BitReader&);
     void write(BitWriter&) const;
@@ -206,9 +308,22 @@ public:
 class L3CMServiceReject {
 private:
     MMRejectCause mCause{MMRejectCause::Zero};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x22;
     explicit L3CMServiceReject(MMRejectCause cause) : mCause(cause) {}
+
+    struct Builder {
+        MMRejectCause m_cause{MMRejectCause::Zero};
+
+        /// Set the MM reject cause.
+        Builder& cause(MMRejectCause v) { m_cause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CMServiceReject build() const;
+    };
+
+    static Builder builder();
     size_t bodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3CMServiceReject> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -223,6 +338,16 @@ public:
 class L3CMServiceAbort {
 public:
     static constexpr int MTI = 0x23;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3CMServiceAbort build() const;
+    };
+
+    static Builder builder();
+private:
+    friend struct Builder;
+public:
     size_t bodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3CMServiceAbort> parse(BitReader&);
     void write(BitWriter&) const;
@@ -239,8 +364,27 @@ private:
     L3MobileStationClassmark2 mClassmark;
     L3MobileIdentity mMobileIdentity;
     L3CMServiceType mServiceType;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x24;
+
+    struct Builder {
+        L3MobileStationClassmark2 m_classmark;
+        L3MobileIdentity m_mobileIdentity;
+        L3CMServiceType m_serviceType;
+
+        /// Set the classmark.
+        Builder& classmark(L3MobileStationClassmark2 v) { m_classmark = v; return *this; }
+        /// Set the mobile identity.
+        Builder& mobileIdentity(L3MobileIdentity v) { m_mobileIdentity = std::move(v); return *this; }
+        /// Set the service type.
+        Builder& serviceType(L3CMServiceType v) { m_serviceType = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CMServiceRequest build() const;
+    };
+
+    static Builder builder();
     const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
     L3CMServiceType::TypeCode serviceType() const { return mServiceType.type(); }
     size_t bodyLength() const;
@@ -257,8 +401,21 @@ public:
 class L3MMStatus {
 private:
     MMRejectCause mCause{MMRejectCause::Zero};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x31;
+
+    struct Builder {
+        MMRejectCause m_cause{MMRejectCause::Zero};
+
+        /// Set the MM reject cause.
+        Builder& cause(MMRejectCause v) { m_cause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3MMStatus build() const;
+    };
+
+    static Builder builder();
     MMRejectCause cause() const { return mCause; }
     size_t bodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3MMStatus> parse(BitReader& br);
@@ -275,8 +432,24 @@ class L3MMInformation {
 private:
     L3NetworkName mShortName;
     L3TimeZoneAndTime mTime;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x32;
+
+    struct Builder {
+        L3NetworkName m_shortName;
+        L3TimeZoneAndTime m_time;
+
+        /// Set the network short name.
+        Builder& shortName(L3NetworkName v) { m_shortName = v; return *this; }
+        /// Set the time zone and time.
+        Builder& time(L3TimeZoneAndTime v) { m_time = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3MMInformation build() const;
+    };
+
+    static Builder builder();
     const L3NetworkName& shortName() const { return mShortName; }
     const L3TimeZoneAndTime& time() const { return mTime; }
     size_t bodyLength() const;
@@ -293,9 +466,22 @@ public:
 class L3IdentityRequest {
 private:
     MobileIDType mType{MobileIDType::NoID};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x18;
     explicit L3IdentityRequest(MobileIDType type) : mType(type) {}
+
+    struct Builder {
+        MobileIDType m_type{MobileIDType::NoID};
+
+        /// Set the identity type (IMSI, IMEI, etc.).
+        Builder& type(MobileIDType v) { m_type = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3IdentityRequest build() const;
+    };
+
+    static Builder builder();
     size_t bodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3IdentityRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -310,8 +496,21 @@ public:
 class L3IdentityResponse {
 private:
     L3MobileIdentity mMobileID;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x19;
+
+    struct Builder {
+        L3MobileIdentity m_mobileId;
+
+        /// Set the mobile identity.
+        Builder& mobileId(L3MobileIdentity v) { m_mobileId = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3IdentityResponse build() const;
+    };
+
+    static Builder builder();
     const L3MobileIdentity& mobileId() const { return mMobileID; }
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3IdentityResponse> parse(BitReader& br);
@@ -361,6 +560,16 @@ public:
 class L3TMSIReallocationComplete {
 public:
     static constexpr int MTI = 0x1b;
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3TMSIReallocationComplete build() const;
+    };
+
+    static Builder builder();
+private:
+    friend struct Builder;
+public:
     size_t bodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3TMSIReallocationComplete> parse(BitReader&);
     void write(BitWriter&) const;
@@ -379,9 +588,32 @@ class L3CMRequest {
     L3CMServiceType mServiceType;
     L3MobileStationClassmark2 mClassmark;
     L3MobileIdentity mMobileIdentity;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x20;
     L3CMRequest() = default;
+
+    struct Builder {
+        unsigned m_cksn{0};
+        bool m_haveServiceType{false};
+        L3CMServiceType m_serviceType;
+        L3MobileStationClassmark2 m_classmark;
+        L3MobileIdentity m_mobileIdentity;
+
+        /// Set CKSN value.
+        Builder& cksn(unsigned v) { m_cksn = v; return *this; }
+        /// Set service type (sets mHaveServiceType flag).
+        Builder& serviceType(L3CMServiceType v) { m_serviceType = v; m_haveServiceType = true; return *this; }
+        /// Set the classmark.
+        Builder& classmark(L3MobileStationClassmark2 v) { m_classmark = v; return *this; }
+        /// Set the mobile identity.
+        Builder& mobileIdentity(L3MobileIdentity v) { m_mobileIdentity = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CMRequest build() const;
+    };
+
+    static Builder builder();
     unsigned cksn() const { return mCKSN; }
     bool haveServiceType() const { return mHaveServiceType; }
     L3CMServiceType::TypeCode serviceType() const { return mServiceType.type(); }
@@ -400,9 +632,22 @@ public:
 // Carries: Mobile Identity (TMSI or IMSI of paged subscriber)
 class L3PagingMM {
     L3MobileIdentity mMobileIdentity;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x06;
     L3PagingMM() = default;
+
+    struct Builder {
+        L3MobileIdentity m_mobileIdentity;
+
+        /// Set the mobile identity.
+        Builder& mobileIdentity(L3MobileIdentity v) { m_mobileIdentity = std::move(v); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3PagingMM build() const;
+    };
+
+    static Builder builder();
     const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3PagingMM> parse(BitReader& br);
@@ -422,8 +667,31 @@ private:
     L3MobileIdentity mMobileID;
     bool mHaveLAI{false};
     L3LocationAreaIdentity mLAI;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x28;
+
+    struct Builder {
+        unsigned m_cksn{0};
+        L3MobileStationClassmark2 m_classmark;
+        L3MobileIdentity m_mobileId;
+        bool m_haveLAI{false};
+        L3LocationAreaIdentity m_lai;
+
+        /// Set CKSN value.
+        Builder& cksn(unsigned v) { m_cksn = v; return *this; }
+        /// Set the classmark.
+        Builder& classmark(L3MobileStationClassmark2 v) { m_classmark = v; return *this; }
+        /// Set the mobile identity.
+        Builder& mobileId(L3MobileIdentity v) { m_mobileId = std::move(v); return *this; }
+        /// Set location area identity (sets mHaveLAI flag).
+        Builder& lai(L3LocationAreaIdentity v) { m_lai = v; m_haveLAI = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CMReestablishmentRequest build() const;
+    };
+
+    static Builder builder();
     const L3MobileIdentity& mobileId() const { return mMobileID; }
     unsigned cksn() const { return mCKSN; }
     size_t bodyLength() const;

@@ -39,6 +39,7 @@ add_executable(gsml3parser_tests
     test_ls_messages.cpp
     test_extended_messages.cpp
     test_rr_builders.cpp
+    test_mm_builders.cpp
 )
 
 find_package(Threads REQUIRED)
