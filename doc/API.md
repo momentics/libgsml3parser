@@ -39,6 +39,7 @@
 33. [Timer Framework](#33-timer-framework)
 34. [Transaction Framework](#34-transaction-framework)
 35. [Protocol State Machines](#35-protocol-state-machines)
+36. [Channel Pool — Logical Channel Management](#36-channel-pool-logical-channel-management)
 
 ---
 
@@ -2656,6 +2657,145 @@ protected:
 | Heap allocations | None on hot path |
 | Virtual dispatch | Only at base class level; derived impl uses switch statements |
 | Thread safety | NOT thread-safe; one instance per MS |
+
+---
+
+## 36. Channel Pool — Logical Channel Management
+
+**File:** `gsml3parser/stack/channel_pool.h`
+
+Manages a pool of logical channels for BTS operation. Provides O(1) channel allocation via per-type free-lists, Request Reference (RA) decoding from RACH bursts, and Very Early Assignment (VEA) fallback logic.
+
+### 36.1 ChannelDescriptor
+
+Describes a logical channel with type, transceiver index, timeslot, and ARFCN.
+
+```cpp
+struct ChannelDescriptor {
+    ChannelType type{ChannelType::UndefinedCHType};
+    uint8_t trxNumber{};
+    uint8_t timeslot{};
+    uint16_t arfcn{};
+    bool operator==(const ChannelDescriptor&) const = default;
+};
+```
+
+### 36.2 decodeChannelNeeded()
+
+Decodes the Request Reference (RA) byte from a RACH burst into the required channel type, following GSM 04.08 Table 9.9.
+
+```cpp
+ChannelType decodeChannelNeeded(uint8_t ra, bool neci = false, bool vea = false);
+```
+
+| Parameter | Description |
+|-----------|-------------|
+| `ra` | 8-bit Request Reference from Channel Request message |
+| `neci` | Non-Extended Channel Indicator (reserved for future extended decoding) |
+| `vea` | Very Early Assignment enabled; when true, MO calls get TCH directly |
+
+**Establishment cause mapping (bits 6-5 of RA):**
+
+| Bits 6-5 | Cause | Channel (VEA=off) | Channel (VEA=on) |
+|----------|-------|-------------------|-------------------|
+| `00` | MO Call | SDCCH | TCHF |
+| `01` | Emergency Call | TCHF | TCHF |
+| `10` | Answer to Paging | TCHF | TCHF |
+| `11` | Location Updating | SDCCH | SDCCH |
+
+### 36.3 isLocationUpdatingRequest()
+
+```cpp
+bool isLocationUpdatingRequest(uint8_t ra, bool neci = false);
+```
+
+Returns `true` when establishment cause bits (6-5) equal `11`.
+
+### 36.4 ChannelPool
+
+```cpp
+class ChannelPool {
+public:
+    void addChannel(ChannelDescriptor desc);
+    std::optional<ChannelDescriptor> allocate(ChannelType type);
+    bool release(const ChannelDescriptor& desc);
+    bool removeChannel(const ChannelDescriptor& desc);
+    bool isFree(const ChannelDescriptor& desc) const;
+    size_t freeCount(ChannelType type) const;
+    size_t totalCount() const;
+    size_t allocatedCount(ChannelType type) const;
+    std::optional<ChannelDescriptor> allocateVEA(uint8_t ra);
+    std::vector<ChannelDescriptor> freeChannels(ChannelType type) const;
+};
+```
+
+| Method | Description | Complexity |
+|--------|-------------|------------|
+| `addChannel(desc)` | Register a channel (cold path, init time) | O(1) amortized |
+| `allocate(type)` | Pop from per-type free-list | O(1) |
+| `release(desc)` | Return channel to free-list | O(N) find + O(1) push |
+| `removeChannel(desc)` | Permanently remove from pool | O(N) |
+| `isFree(desc)` | Check if channel is available | O(N) |
+| `freeCount(type)` | Number of free channels of type | O(1) |
+| `totalCount()` | Total channels (free + allocated) | O(T) |
+| `allocatedCount(type)` | In-use channels of type | O(1) |
+| `allocateVEA(ra)` | VEA: try TCH, fall back SDCCH | O(1) |
+| `freeChannels(type)` | List all free channels (diagnostic) | O(1) copy |
+
+### 36.5 VEA Procedure
+
+Very Early Assignment (GSM 05.08) skips the intermediate SDCCH assignment for MO calls:
+
+```cpp
+ChannelPool pool;
+pool.addChannel({ChannelType::TCHFType, 1, 0, 200});
+pool.addChannel({ChannelType::SDCCHType, 0, 0, 100});
+
+// RA=0x00 (MO call): VEA allocates TCHF directly
+auto ch = pool.allocateVEA(0x00);
+// ch->type == ChannelType::TCHFType
+
+// After TCH exhausted, falls back to SDCCH
+pool.allocate(ChannelType::TCHFType); // consume the TCH
+auto fallback = pool.allocateVEA(0x00);
+// fallback->type == ChannelType::SDCCHType
+```
+
+### 36.6 Usage Example
+
+```cpp
+#include <gsml3parser/stack/channel_pool.h>
+
+using namespace gsml3parser;
+
+// Initialize channel pool at BTS startup
+ChannelPool pool;
+pool.addChannel({ChannelType::SDCCHType, 0, 0, 100});
+pool.addChannel({ChannelType::TCHFType, 1, 0, 200});
+pool.addChannel({ChannelType::TCHFType, 1, 1, 201});
+
+// Handle incoming Channel Request on RACH
+uint8_t ra = 0x03; // establishment cause from RACH burst
+ChannelType needed = decodeChannelNeeded(ra, false, true);
+
+auto ch = pool.allocate(needed);
+if (ch) {
+    // Build ImmediateAssignment with allocated channel
+    // Send to MS...
+}
+
+// After call completed, release the channel
+pool.release(*ch);
+```
+
+### 36.7 Performance Characteristics
+
+| Metric | Value |
+|--------|-------|
+| `sizeof(ChannelDescriptor)` | 8 bytes (with padding) |
+| allocate() complexity | O(1) — vector pop_back on free-list |
+| Heap allocations | None on hot path (allocate/release). addChannel() grows internal vectors. |
+| Thread safety | NOT thread-safe; caller must provide synchronization for multi-threaded access |
 
 ---
 
