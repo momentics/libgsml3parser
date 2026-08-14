@@ -36,6 +36,7 @@
 30. [Extended PD Messages](#30-extended-pd-messages)
 31. [Test Procedure PD Messages](#31-test-procedure-pd-messages)
 32. [MSContext — Per-Subscriber State](#32-mscontext-per-subscriber-state)
+33. [Timer Framework](#33-timer-framework)
 
 ---
 
@@ -2239,6 +2240,120 @@ ctx.setClassmark(cm);
 L3LocationAreaIdentity lai("262", "42", 1234);
 ctx.setLAI(lai);
 ctx.setRegistered(true);
+```
+
+---
+
+## 33. Timer Framework
+
+The timer framework provides GSM Layer 3 protocol timers as defined in 3GPP TS 24.008 and TS 44.018. It includes timer identifiers, a single-timer class, and a manager that tracks up to 32 concurrent timers per MS using fixed-size arrays (zero heap allocation).
+
+**Header:** `#include <gsml3parser/stack/l3_timer.h>`
+
+### 33.1 L3TimerId Enumerations
+
+| Timer ID | Default Duration | Description | Spec Reference |
+|----------|-----------------|-------------|----------------|
+| `T3101` | 3000ms | CM service request retransmission | 3GPP TS 24.008 10.5.4 |
+| `T3102` | 3000ms | Identity response retransmission | 3GPP TS 24.008 10.5.6 |
+| `T3103` | 5000ms | Location updating request retransmission | 3GPP TS 24.008 10.5.12 |
+| `T3106` | 3000ms | Authentication response retransmission | 3GPP TS 24.008 10.5.18 |
+| `T3108` | 3000ms | TMSI reallocation complete retransmission | 3GPP TS 24.008 10.5.23 |
+| `T3109` | 30000ms | Paging response retransmission (etom × 5s) | 3GPP TS 24.008 10.5.26 |
+| `T3111` | 3000ms | CM reestablishment request retransmission | 3GPP TS 24.008 10.5.34 |
+| `T3112` | 3000ms | IMSI detach indication retransmission | 3GPP TS 24.008 10.5.36 |
+| `T3113` | 3000ms | MM status retransmission | 3GPP TS 24.008 10.5.38 |
+| `T3310` | 5000ms | GPRS attach request retransmission | 3GPP TS 24.008 10.5.76 |
+| `T3311` | 30000ms | Routing area update retransmission (etor × 5s) | 3GPP TS 24.008 10.5.78 |
+| `T3312` | 3000ms | P-TMSI reallocation complete retransmission | 3GPP TS 24.008 10.5.80 |
+| `T3314` | 3000ms | GPRS service request retransmission | 3GPP TS 24.008 10.5.84 |
+| `T3315` | 3000ms | Authentication and ciphering resp retransmission | 3GPP TS 24.008 10.5.86 |
+| `T3320` | 3000ms | Activate PDP context request retransmission | 3GPP TS 24.008 10.5.96 |
+| `T3321` | 3000ms | Deactivate PDP context request retransmission | 3GPP TS 24.008 10.5.98 |
+| `T3322` | 3000ms | Modify PDP context request retransmission | 3GPP TS 24.008 10.5.100 |
+| `T3334` | 3000ms | GMM status retransmission | 3GPP TS 24.008 10.5.112 |
+| `T3395` | 3000ms | Packet reservation request retransmission | 3GPP TS 24.008 10.5.130 |
+
+### 33.2 Free Functions
+
+| Function | Description |
+|----------|-------------|
+| `l3TimerDefault(L3TimerId)` | Returns the default duration for a timer ID (O(1) lookup) |
+| `l3TimerName(L3TimerId)` | Returns human-readable timer name (e.g. "T3101") |
+
+### 33.3 L3Timer Class
+
+Single timer instance with start/stop/expired semantics.
+
+| Method | Description |
+|--------|-------------|
+| `L3Timer(id)` | Construct with default expiry from spec |
+| `L3Timer(id, expiry)` | Construct with custom expiry duration |
+| `start()` | Start or restart the timer; returns true if first start |
+| `stop()` | Stop the timer without firing |
+| `tick(delta)` | Advance by delta; returns true if expired |
+| `isRunning()` | Returns true if timer is currently running |
+| `remaining()` | Returns remaining time (zero if not running) |
+| `id()` | Returns the timer's L3TimerId |
+| `expiry()` | Returns the configured expiry duration |
+
+### 33.4 TimerManager Class
+
+Manages up to 32 named timers for one MS context using fixed-size arrays.
+
+| Method | Description |
+|--------|-------------|
+| `start(id)` | Start timer with default expiry; returns true if first start |
+| `start(id, expiry)` | Start timer with custom expiry |
+| `stop(id)` | Stop a specific timer |
+| `stopAll()` | Stop all running timers |
+| `tick(delta, callback)` | Advance all timers; invoke callback for each expired (zero allocation) |
+| `tick(delta, span)` | Advance all timers; fill pre-allocated span with expired IDs |
+| `isRunning(id)` | Check if a specific timer is running |
+| `remaining(id)` | Get remaining time for a specific timer |
+| `get(id)` | Get the L3Timer object for direct access |
+| `runningCount()` | Number of currently running timers |
+
+### 33.5 Performance Characteristics
+
+| Metric | Value |
+|--------|-------|
+| Memory footprint | `sizeof(TimerManager)` ≈ 1.2 KB (32 timers × ~36 bytes + 32 bytes init flags) |
+| Heap allocations | **Zero** — all storage is `std::array` |
+| `tick()` complexity | O(32) = constant, iterates fixed array |
+| `start()` / `stop()` | O(1) — direct index into array |
+| Thread safety | NOT thread-safe. One instance per MS, single-thread access |
+
+### 33.6 Example
+
+```cpp
+#include <gsml3parser/stack/l3_timer.h>
+
+using namespace gsml3parser;
+
+// --- Callback-based tick (no heap allocation) ---
+TimerManager tm;
+tm.start(L3TimerId::T3101);  // CM service request, default 3s
+tm.start(L3TimerId::T3106, 5000ms); // custom expiry
+
+// In event loop, advance time:
+tm.tick(std::chrono::milliseconds(100), [](L3TimerId expiredId) {
+    // Handle timer expiry — retransmit or abort procedure
+    handleExpired(expiredId);
+});
+
+// --- Span-based tick (caller provides buffer) ---
+std::array<L3TimerId, 32> expired;
+size_t n = tm.tick(std::chrono::milliseconds(500), expired);
+for (size_t i = 0; i < n; ++i) {
+    handleExpired(expired[i]);
+}
+
+// Check individual timer state
+if (tm.isRunning(L3TimerId::T3101)) {
+    auto remaining = tm.remaining(L3TimerId::T3101);
+    // ...
+}
 ```
 
 ---
