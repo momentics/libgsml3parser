@@ -52,11 +52,11 @@ std::string format_via_ostream(const T& val) {
 // ── Formatter specializations must live in namespace std (MSVC requirement)
 
 #define GSML3PARSER_FORMATTER(T)                                                \
-template<> struct std::formatter<T> : std::formatter<std::string_view> {        \
+template<> struct formatter<T> : formatter<std::string_view> {                  \
     template<typename FormatCtx>                                                \
     auto format(const T& val, FormatCtx& ctx) const {                           \
         std::string s = gsml3parser::detail::format_via_ostream(val);           \
-        return std::formatter<std::string_view>::format(s, ctx);                \
+        return formatter<std::string_view>::format(s, ctx);                     \
     }                                                                           \
 };
 

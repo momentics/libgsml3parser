@@ -21,7 +21,7 @@ jobs:
           -DCMAKE_INSTALL_PREFIX=install
           -DBUILD_SHARED_LIBS=OFF
           -DBUILD_TESTS=ON
-          -DBUILD_EXAMPLES=OFF
+          -DBUILD_EXAMPLES=ON
 
       - name: Build Static Library
         run: cmake --build build_static --config Release --parallel
