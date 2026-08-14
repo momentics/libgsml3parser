@@ -1,6 +1,6 @@
 # libgsml3parser - Full API Reference
 
-> Version 0.10.0 | C++20 | Thread-safe | Zero heap allocation on hot path | No external dependencies
+> Version 0.11.0 | C++20 | Thread-safe | Zero heap allocation on hot path | No external dependencies
 
 ## Table of Contents
 
@@ -94,7 +94,7 @@ Include everything with a single header:
 
 ### 1.5 Stack Modules for BTS Development
 
-Version 0.10.0 introduces the **stack module** namespace (`gsml3parser::stack/`), providing high-level primitives for building a software Base Transceiver Station (BTS) on top of the L3 parser:
+Version 0.11.0 introduces the **stack module** namespace (`gsml3parser::stack/`), providing high-level primitives for building a software Base Transceiver Station (BTS) on top of the L3 parser:
 
 | Module | Header | Purpose |
 |--------|--------|---------|
