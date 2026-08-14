@@ -24,7 +24,9 @@
 /// allowing BTS implementations to register handlers per message type.
 #pragma once
 
+#include <array>
 #include <functional>
+#include <optional>
 #include <unordered_map>
 #include <cstdint>
 #include <span>
@@ -69,6 +71,20 @@ public:
     /// @return true if a handler was invoked, false on parse error or no handler.
     bool dispatchRaw(std::span<const uint8_t> data, void* context = nullptr);
 
+    /// Register a handler that matches on TI (Transaction Identifier).
+    /// Used for CC/SS messages where the same message type can belong to
+    /// different concurrent transactions.
+    /// @param ti Transaction Identifier (0-7).
+    /// @param handler Callback invoked when a CC/SS message with matching TI is dispatched via dispatchWithTI().
+    void registerTIHandler(uint8_t ti, MessageHandler handler);
+
+    /// Dispatch with TI awareness: for CC/SS messages, tries TI-specific handler first.
+    /// Falls back to specific handler (PD+MTI), then domain handler, then global fallback.
+    /// Performance: TI lookup is O(1) via std::array<MessageHandler, 8>.
+    /// @param msg The parsed L3 message.
+    /// @param context Optional user context passed to handlers.
+    void dispatchWithTI(const ParsedMessage& msg, void* context = nullptr);
+
 private:
     struct HandlerKey {
         L3PD pd;
@@ -84,6 +100,9 @@ private:
     std::unordered_map<HandlerKey, MessageHandler, HandlerKeyHash> mHandlers;
     std::unordered_map<L3PD, MessageHandler> mDomainHandlers;
     MessageHandler mFallback;
+
+    // TI-indexed handlers for CC/SS messages — O(1) lookup.
+    std::array<std::optional<MessageHandler>, 8> mTIHandlers{};
 };
 
 } // namespace gsml3parser

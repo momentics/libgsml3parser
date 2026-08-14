@@ -299,4 +299,8 @@ template<typename T>
 [[nodiscard]] L3PD messagePD(const ParsedMessage& msg);
 [[nodiscard]] int messageMTI(const ParsedMessage& msg);
 
+/// Extract Transaction Identifier (TI) from CC/SS messages.
+/// Returns 0 for non-CC/non-SS message types (TI is not applicable).
+[[nodiscard]] uint8_t messageTI(const ParsedMessage& msg);
+
 } // namespace gsml3parser

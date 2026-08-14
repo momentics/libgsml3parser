@@ -64,4 +64,24 @@ bool ProtocolDispatcher::dispatchRaw(std::span<const uint8_t> data, void* contex
     return true;
 }
 
+void ProtocolDispatcher::registerTIHandler(uint8_t ti, MessageHandler handler) {
+    if (ti < 8) {
+        mTIHandlers[ti] = std::move(handler);
+    }
+}
+
+void ProtocolDispatcher::dispatchWithTI(const ParsedMessage& msg, void* context) {
+    L3PD pd = messagePD(msg);
+
+    if (pd == L3PD::CallControl || pd == L3PD::NonCallSS) {
+        uint8_t ti = messageTI(msg);
+        if (ti < 8 && mTIHandlers[ti].has_value()) {
+            (*mTIHandlers[ti])(msg, context);
+            return;
+        }
+    }
+
+    dispatch(msg, context);
+}
+
 } // namespace gsml3parser

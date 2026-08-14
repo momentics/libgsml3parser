@@ -574,6 +574,51 @@ struct MTIVisitor {
     int operator()(const L3TestProcedureMessage& msg) const { return msg.mti(); }
 };
 
+// Extracts Transaction Identifier from CC/SS messages; returns 0 for all other PDs.
+struct TIVisitor {
+    uint8_t operator()(const CCM& v) const { return static_cast<uint8_t>(std::visit(*this, v)); }
+    uint8_t operator()(const SSM& v) const { return static_cast<uint8_t>(std::visit(*this, v)); }
+    uint8_t operator()(const RRM&) const { return 0; }
+    uint8_t operator()(const MMM&) const { return 0; }
+    uint8_t operator()(const GMM&) const { return 0; }
+    uint8_t operator()(const SM&) const { return 0; }
+    uint8_t operator()(const SMS&) const { return 0; }
+    uint8_t operator()(const BCCM&) const { return 0; }
+    uint8_t operator()(const GCCM&) const { return 0; }
+    uint8_t operator()(const LSM&) const { return 0; }
+    uint8_t operator()(const EXTENDED&) const { return 0; }
+    uint8_t operator()(const TESTPROC&) const { return 0; }
+
+    uint8_t operator()(const L3Setup& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3EmergencySetup& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3CallProceeding& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3Alerting& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3Connect& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3ConnectAcknowledge& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3CallConfirmed& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3Disconnect& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3Release& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3ReleaseComplete& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3StartDTMF& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3StopDTMF& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3StopDTMFAcknowledge& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3StartDTMFAcknowledge& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3StartDTMFReject& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3Hold& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3HoldReject& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3CCStatus& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3Progress& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3Facility& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3Modify& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3UnitData& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3UnitDataAck& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3ErrorIndication& v) const { return static_cast<uint8_t>(v.ti()); }
+
+    uint8_t operator()(const L3SupServFacilityMessage& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3SupServRegisterMessage& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3SupServReleaseCompleteMessage& v) const { return static_cast<uint8_t>(v.ti()); }
+};
+
 } // anonymous namespace
 
 std::string_view messageName(const ParsedMessage& msg) {
@@ -588,6 +633,10 @@ L3PD messagePD(const ParsedMessage& msg) {
 
 int messageMTI(const ParsedMessage& msg) {
     return std::visit(MTIVisitor{}, msg);
+}
+
+uint8_t messageTI(const ParsedMessage& msg) {
+    return std::visit(TIVisitor{}, msg);
 }
 
 } // namespace gsml3parser
