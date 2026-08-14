@@ -24,7 +24,7 @@ target_link_libraries(example_bts_sysinfo PRIVATE gsml3parser)
 add_executable(example_bts_dispatcher example_bts_dispatcher.cpp)
 target_link_libraries(example_bts_dispatcher PRIVATE gsml3parser)
 
-# ── Phase 7: Full BTS procedure examples ────────────────────────────────
+# ── Full BTS procedure examples ────────────────────────────────
 
 add_executable(example_bts_rach_assignment example_bts_rach_assignment.cpp)
 target_link_libraries(example_bts_rach_assignment PRIVATE gsml3parser)

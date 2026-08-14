@@ -51,6 +51,7 @@ add_executable(gsml3parser_tests
     test_transaction.cpp
     test_state_machine.cpp
     test_channel_pool.cpp
+    test_bts_procedures.cpp
 )
 
 find_package(Threads REQUIRED)
