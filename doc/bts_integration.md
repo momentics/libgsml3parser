@@ -660,21 +660,21 @@ DEREGISTERED ── CMServiceRequest ──► SERVICE_REQUEST
 
 ```
 IDLE ── Setup ──► SETUP_RECEIVED ──► PROCEEDING ──► ALERTING
-                                                               │
-                                                      Connect  │
-                                                               ▼
-                                                             CONNECT
-                                                               │
-                                                    CallConfirmed │
-                                                               ▼
-                                                            ACTIVE
-                                                               │
-                                                    Disconnect  │
-                                                               ▼
-                                                   DISCONNECT_RECEIVED
-                                                               │
-                                                              ▼
-                                                           RELEASE
+                                                       │
+                                              Connect  │
+                                                       ▼
+                                                     CONNECT
+                                                       │
+                                         CallConfirmed │
+                                                       ▼
+                                                    ACTIVE
+                                                       │
+                                           Disconnect  │
+                                                       ▼
+                                           DISCONNECT_RECEIVED
+                                                       │
+                                                       ▼
+                                                   RELEASE
 ```
 
 ## Comparison with Existing BTS Frameworks
