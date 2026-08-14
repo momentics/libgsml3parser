@@ -27,7 +27,7 @@
 // All GMM message type identifiers verified against osmo-ttcn3-hacks L3_Templates.ttcn
 //   and 3GPP TS 24.008 Table 10.4 (GPRS Mobility Management).
 // GMM header format verified: PD=8('1000'B), Skip(4 bits) in byte 0;
-//   MessageType(8 bits, raw — no NSD field) in byte 1.
+//   MessageType(8 bits, raw - no NSD field) in byte 1.
 // This differs from MM/CC/SS where MTI is 6-bit shifted left by 2.
 // Message structures verified against L3_Templates.ttcn templates:
 //   ts_GMM_ATTACH_REQ, tr_GMM_ATTACH_ACCEPT, ts_GMM_ATTACH_COMPL, tr_GMM_ATTACH_REJECT,
@@ -128,7 +128,7 @@ TEST(GoldenGMMTest, HeaderEncoding) {
 }
 
 // =====================================================================
-// GMM Attach Complete (GSM 24.008 9.4.3) — minimal message
+// GMM Attach Complete (GSM 24.008 9.4.3) - minimal message
 // Reference: L3_Templates.ttcn ts_GMM_ATTACH_COMPL (line 2645)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -160,7 +160,7 @@ TEST(GoldenGMMTest, AttachComplete_RoundTrip) {
 }
 
 // =====================================================================
-// GMM Attach Reject (GSM 24.008 9.4.4) — with cause
+// GMM Attach Reject (GSM 24.008 9.4.4) - with cause
 // Reference: L3_Templates.ttcn tr_GMM_ATTACH_REJECT (line 2625)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -195,7 +195,7 @@ TEST(GoldenGMMTest, AttachReject_RoundTrip) {
 }
 
 // =====================================================================
-// GMM Routing Area Update Complete (GSM 24.008 9.4.16) — minimal
+// GMM Routing Area Update Complete (GSM 24.008 9.4.16) - minimal
 // Reference: L3_Templates.ttcn ts_GMM_RAU_COMPL (line 2778)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -223,7 +223,7 @@ TEST(GoldenGMMTest, RAUpdateComplete_RoundTrip) {
 }
 
 // =====================================================================
-// GMM P-TMSI Reallocation Complete (GSM 24.008 9.4.8) — minimal
+// GMM P-TMSI Reallocation Complete (GSM 24.008 9.4.8) - minimal
 // Reference: L3_Templates.ttcn ts_GMM_PTMSI_REALL_COMPL (line 2795)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -251,7 +251,7 @@ TEST(GoldenGMMTest, PTMSIRreallocComplete_RoundTrip) {
 }
 
 // =====================================================================
-// GMM Auth And Ciphering Reject (GSM 24.008 9.4.9) — minimal
+// GMM Auth And Ciphering Reject (GSM 24.008 9.4.9) - minimal
 // Reference: OpenBTS GPRSL3Messages.h AuthenticationAndCipheringRej=0x14
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -279,7 +279,7 @@ TEST(GoldenGMMTest, AuthCipherReject_RoundTrip) {
 }
 
 // =====================================================================
-// GMM Service Accept (GSM 24.008 9.4.21) — minimal
+// GMM Service Accept (GSM 24.008 9.4.21) - minimal
 // Reference: L3_Templates.ttcn tr_GMM_SERVICE_ACC (line 3120)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -307,7 +307,7 @@ TEST(GoldenGMMTest, ServiceAccept_RoundTrip) {
 }
 
 // =====================================================================
-// GMM Status (GSM 24.008 9.4.24) — with cause
+// GMM Status (GSM 24.008 9.4.24) - with cause
 // Reference: 3GPP TS 24.008 Table 10.4, bidirectional message
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -339,7 +339,7 @@ TEST(GoldenGMMTest, GMMStatus_RoundTrip) {
 }
 
 // =====================================================================
-// GMM Information (GSM 24.008) — minimal
+// GMM Information (GSM 24.008) - minimal
 // Reference: OpenBTS GPRSL3Messages.h GMMInformation=0x21
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -367,7 +367,7 @@ TEST(GoldenGMMTest, GMMInformation_RoundTrip) {
 }
 
 // =====================================================================
-// GMM Detach Accept (GSM 24.008 9.4.6) — minimal
+// GMM Detach Accept (GSM 24.008 9.4.6) - minimal
 // Reference: L3_Templates.ttcn ts_GMM_DET_ACCEPT_MO (line 3154)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -395,7 +395,7 @@ TEST(GoldenGMMTest, DetachAccept_RoundTrip) {
 }
 
 // =====================================================================
-// GMM Attach Accept (GSM 24.008 9.4.2) — golden parse
+// GMM Attach Accept (GSM 24.008 9.4.2) - golden parse
 // Reference: L3_Templates.ttcn tr_GMM_ATTACH_ACCEPT (line 2586)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -437,7 +437,7 @@ TEST(GoldenGMMTest, AttachAccept_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Detach Request (GSM 24.008 9.4.5) — golden parse
+// GMM Detach Request (GSM 24.008 9.4.5) - golden parse
 // Reference: L3_Templates.ttcn ts_GMM_DET_REQ_MO (line 3004)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -458,7 +458,7 @@ TEST(GoldenGMMTest, DetachRequest_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Routing Area Update Request (GSM 24.008 9.4.12) — golden parse
+// GMM Routing Area Update Request (GSM 24.008 9.4.12) - golden parse
 // Reference: L3_Templates.ttcn ts_GMM_RAU_REQ (line 2662)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -493,7 +493,7 @@ TEST(GoldenGMMTest, RAUpdateRequest_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Routing Area Update Accept (GSM 24.008 9.4.15) — golden parse
+// GMM Routing Area Update Accept (GSM 24.008 9.4.15) - golden parse
 // Reference: L3_Templates.ttcn tr_GMM_RAU_ACCEPT (line 2738)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -533,7 +533,7 @@ TEST(GoldenGMMTest, RAUpdateAccept_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Routing Area Update Reject (GSM 24.008 9.4.17) — golden parse
+// GMM Routing Area Update Reject (GSM 24.008 9.4.17) - golden parse
 // Reference: L3_Templates.ttcn tr_GMM_RAU_REJECT (line 2717)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -555,7 +555,7 @@ TEST(GoldenGMMTest, RAUpdateReject_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Service Request (GSM 24.008 9.4.20) — golden parse
+// GMM Service Request (GSM 24.008 9.4.20) - golden parse
 // Reference: L3_Templates.ttcn ts_GMM_SERVICE_REQ (line 3095)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -588,7 +588,7 @@ TEST(GoldenGMMTest, ServiceRequest_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Service Reject (GSM 24.008 9.4.22) — golden parse
+// GMM Service Reject (GSM 24.008 9.4.22) - golden parse
 // Reference: L3_Templates.ttcn tr_GMM_SERVICE_REJ (line 3137)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -610,7 +610,7 @@ TEST(GoldenGMMTest, ServiceReject_GoldenParse) {
 }
 
 // =====================================================================
-// GMM P-TMSI Reallocation Command (GSM 24.008 9.4.8) — golden parse
+// GMM P-TMSI Reallocation Command (GSM 24.008 9.4.8) - golden parse
 // Reference: 3GPP TS 24.008 9.4.8 message structure
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -648,7 +648,7 @@ TEST(GoldenGMMTest, PTMSIRereallocCommand_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Authentication And Ciphering Request (GSM 24.008 9.4.9) — golden parse
+// GMM Authentication And Ciphering Request (GSM 24.008 9.4.9) - golden parse
 // Reference: L3_Templates.ttcn tr_GMM_AUTH_REQ (line 2862)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -687,7 +687,7 @@ TEST(GoldenGMMTest, AuthAndCipheringRequest_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Authentication And Ciphering Response (GSM 24.008 9.4.9) — golden parse
+// GMM Authentication And Ciphering Response (GSM 24.008 9.4.9) - golden parse
 // Reference: L3_Templates.ttcn ts_GMM_AUTH_RESP_2G (line 2886)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -718,7 +718,7 @@ TEST(GoldenGMMTest, AuthAndCipheringResponse_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Identity Request (GSM 24.008 9.4.7) — golden parse
+// GMM Identity Request (GSM 24.008 9.4.7) - golden parse
 // Reference: L3_Templates.ttcn tr_GMM_ID_REQ (line 2831)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -740,7 +740,7 @@ TEST(GoldenGMMTest, GMMIdentityRequest_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Identity Response (GSM 24.008 9.4.10) — golden parse
+// GMM Identity Response (GSM 24.008 9.4.10) - golden parse
 // Reference: L3_Templates.ttcn ts_GMM_ID_RESP (line 2847)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
@@ -765,7 +765,7 @@ TEST(GoldenGMMTest, GMMIdentityResponse_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Authentication And Ciphering Failure (GSM 24.008 9.4.23) — golden parse
+// GMM Authentication And Ciphering Failure (GSM 24.008 9.4.23) - golden parse
 // Reference: L3_Templates.ttcn ts_GMM_AUTH_FAIL_UMTS_AKA_RESYNC (line 2908)
 // Hex breakdown:
 //   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00

@@ -19,9 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// SMS L3 Messages (TS 24.008 9.6) — parse/write implementation
+// SMS L3 Messages (TS 24.008 9.6) - parse/write implementation
 // Spec: 3GPP TS 24.008 sections 9.6.1-9.6.14, Table 10.6a
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — SMS-TS-* templates
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - SMS-TS-* templates
 
 #include "gsml3parser/sms/l3smsl3messages.h"
 #include <sstream>
@@ -264,7 +264,7 @@ void L3SMSProvidedReplyExpected::text(std::ostream& os) const {
 }
 
 // ── L3SMSSubmitRep (24.008 9.6.3) ─────────────────────────────────────
-// Body: [TP-PID(1)] | TP-DCS(1) | [TP-Ud(LV)] — same structure as ProvidedReplyExpected
+// Body: [TP-PID(1)] | TP-DCS(1) | [TP-Ud(LV)] - same structure as ProvidedReplyExpected
 
 size_t L3SMSSubmitRep::bodyLength() const {
     size_t len = 0;
@@ -336,7 +336,7 @@ Expected<L3SMSDeliver> L3SMSDeliver::parse(BitReader& br) {
     if (!tpMr) return Expected<L3SMSDeliver>::error(tpMr.error());
     msg.mTpMr = static_cast<uint8_t>(tpMr.value());
 
-    // Optional TP-OA (LV) — only parse if enough bytes remain for required fields after it.
+    // Optional TP-OA (LV) - only parse if enough bytes remain for required fields after it.
     // Required after TP-OA: TP-PID(1) + TP-DCS(1) + SCTS(7) = 9 bytes minimum.
     size_t remainingBytes = br.remainingBits() / 8;
     if (remainingBytes >= 10) {
@@ -455,7 +455,7 @@ Expected<L3SMSDeliverRep> L3SMSDeliverRep::parse(BitReader& br) {
     if (!tpMr) return Expected<L3SMSDeliverRep>::error(tpMr.error());
     msg.mTpMr = static_cast<uint8_t>(tpMr.value());
 
-    // Optional TP-DA (LV) — only parse if enough bytes remain for required fields after it.
+    // Optional TP-DA (LV) - only parse if enough bytes remain for required fields after it.
     // Required after TP-DA: TP-PID(1) + TP-DCS(1) = 2 bytes minimum.
     size_t remainingBytes = br.remainingBits() / 8;
     if (remainingBytes >= 3) {

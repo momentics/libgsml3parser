@@ -19,9 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// BCC (Broadcast Call Control) Message Classes — GSM L3 broadcast call messages
+// BCC (Broadcast Call Control) Message Classes - GSM L3 broadcast call messages
 // Spec: 3GPP TS 44.018 sections 9.6, Table 10.4.3
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — ts_ML3_MO_BCC (line 3813)
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - ts_ML3_MO_BCC (line 3813)
 //            ETSI TS 102 225 (TETRA BCC), 3GPP TS 44.018 for GSM broadcast calls
 //
 // L3 header (per 44.018 10.2, PD=0x01):
@@ -301,7 +301,7 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// BCC Call Confirmed — TS 44.018 §9.6.2.5, Table 10.4.3
+// BCC Call Confirmed - TS 44.018 §9.6.2.5, Table 10.4.3
 // Direction: MT
 class L3BCCCallConfirmed {
     unsigned mTi{0};
@@ -335,7 +335,7 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// BCC Connect Acknowledge — TS 44.018 §9.6.2.10, Table 10.4.3
+// BCC Connect Acknowledge - TS 44.018 §9.6.2.10, Table 10.4.3
 // Direction: MT
 class L3BCCConnectAcknowledge {
     unsigned mTi{0};

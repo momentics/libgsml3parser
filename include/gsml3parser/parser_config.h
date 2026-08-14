@@ -43,7 +43,7 @@ struct L3Frame {
 using PDHandler = std::function<std::unique_ptr<L3Message>(const L3Frame&)>;
 
 /**
- * ParserConfig — an immutable, thread-safe parser configuration.
+ * ParserConfig - an immutable, thread-safe parser configuration.
  *
  * Pure data struct with no internal synchronization.  Safe for concurrent
  * read access from multiple threads.  Modifications return a new config

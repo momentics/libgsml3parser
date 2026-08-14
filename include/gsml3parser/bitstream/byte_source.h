@@ -92,15 +92,15 @@ public:
  *
  * Uses std::atomic with acquire/release ordering for correct behaviour
  * on weakly-ordered architectures (ARM, PowerPC).  On x86-64 (TSO) the
- * compiler emits plain loads/stores — zero overhead.
+ * compiler emits plain loads/stores - zero overhead.
  *
  * Single-producer, single-consumer is fully safe without locks.
  * Multi-producer or multi-consumer requires external synchronization.
  */
 class RingBuffer : public ByteSource {
     std::vector<uint8_t> mBuf;
-    std::atomic<size_t> mHead{0};  // write position — owned by producer
-    std::atomic<size_t> mTail{0};  // read position  — owned by consumer
+    std::atomic<size_t> mHead{0};  // write position - owned by producer
+    std::atomic<size_t> mTail{0};  // read position  - owned by consumer
     size_t mCapacity{};
 
 public:

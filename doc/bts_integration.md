@@ -31,21 +31,21 @@ libgsml3parser sits between the BTS application logic and the physical/radio lay
 
 ### Outbound Flow (BTS → MS)
 
-1. **Decide** — State machine or application logic determines what to send
-2. **Build** — Create an L3 message using the Builder API
-3. **Serialize** — Convert to raw bytes with `writeL3Bytes()`
-4. **Frame** — Wrap in LAPDm header with `lapdm::wrapL3()`
-5. **Transmit** — Send frame bytes to the radio layer
-6. **Track** — Create a Transaction, start a Timer (if expecting response)
+1. **Decide** - State machine or application logic determines what to send
+2. **Build** - Create an L3 message using the Builder API
+3. **Serialize** - Convert to raw bytes with `writeL3Bytes()`
+4. **Frame** - Wrap in LAPDm header with `lapdm::wrapL3()`
+5. **Transmit** - Send frame bytes to the radio layer
+6. **Track** - Create a Transaction, start a Timer (if expecting response)
 
 ### Inbound Flow (MS → BTS)
 
-1. **Receive** — Get raw bytes from the radio layer
-2. **Unframe** — Extract L3 payload with `lapdm::unwrapL3()`
-3. **Parse** — Convert to typed C++ object with `parseL3()`
-4. **Dispatch** — Route to handler via `ProtocolDispatcher`
-5. **Correlate** — Match against pending Transactions via `TransactionManager`
-6. **Advance** — Feed message into FSM, stop timers, update MSContext
+1. **Receive** - Get raw bytes from the radio layer
+2. **Unframe** - Extract L3 payload with `lapdm::unwrapL3()`
+3. **Parse** - Convert to typed C++ object with `parseL3()`
+4. **Dispatch** - Route to handler via `ProtocolDispatcher`
+5. **Correlate** - Match against pending Transactions via `TransactionManager`
+6. **Advance** - Feed message into FSM, stop timers, update MSContext
 
 ## Building a BTS with libgsml3parser
 
@@ -206,7 +206,7 @@ void handleChannelRequest(MsSession* session, const ParsedMessage& msg) {
     // Allocate from pool
     auto ch = btsChannels.allocate(needed);
     if (!ch) {
-        // Pool exhausted — send Immediate Assignment Reject
+        // Pool exhausted - send Immediate Assignment Reject
         sendImmediateAssignmentReject(session, ra);
         return;
     }
@@ -286,7 +286,7 @@ void handleAuthResponse(MsSession* session, const ParsedMessage& msg) {
     auto* resp = tryGet<L3AuthenticationResponse>(msg);
     if (!resp) return;
 
-    // Stop timer — we got a response
+    // Stop timer - we got a response
     session->timers.stop(L3TimerId::T3106);
 
     // Verify SRES against expected response from AuC
@@ -348,7 +348,7 @@ Build and broadcast SI messages on BCCH:
 
 ```cpp
 void broadcastSystemInfo() {
-    // SI Type 3 — Full cell description (most important for MS camp-on)
+    // SI Type 3 - Full cell description (most important for MS camp-on)
     auto si3 = L3SystemInformationType3::builder()
         .cellIdentity(L3CellIdentity(0x1234))
         .locationAreaIdentity(L3LocationAreaIdentity("250", "01", 0x5678))
@@ -401,7 +401,7 @@ auto msg = parseL3(rawData.subspan(2)).value();
 // Match against pending transactions
 Transaction* tx = session->txns.match(*header, *msg);
 if (tx) {
-    // Found matching transaction — this is the expected response
+    // Found matching transaction - this is the expected response
     tx->complete();
 
     // Stop the associated timer
@@ -436,12 +436,12 @@ void handleTimerExpired(MsSession* session, L3TimerId timerId) {
             retransmitOrAbort(session, timerId);
             break;
         case L3TimerId::T3106:
-            // Authentication failed — no response
+            // Authentication failed - no response
             session->ctx.setAuthenticated(false);
             sendAuthenticationReject(session);
             break;
         case L3TimerId::T3109:
-            // Paging response timeout — release channel
+            // Paging response timeout - release channel
             releaseChannelForMs(session);
             break;
         default:
@@ -525,7 +525,7 @@ session->timers.stopAll();
 The library provides RR, MM, and CC state machine skeletons with standard transitions:
 
 ```cpp
-// RR State Machine — handles channel setup, handover, ciphering
+// RR State Machine - handles channel setup, handover, ciphering
 RRStateMachine rrFsm;
 rrFsm.setState(RRStateMachine::State::IDLE);
 
@@ -594,7 +594,7 @@ void processMessage(MsSession* session, const ParsedMessage& msg) {
             break;
         }
         default:
-            // GMM, SM, SMS — handled by domain-specific logic
+            // GMM, SM, SMS - handled by domain-specific logic
             break;
     }
 }
@@ -775,7 +775,7 @@ For LAPDm operations:
 ```cpp
 auto payload = unwrapL3(frame);
 if (!payload) {
-    // Frame too short or malformed — drop and log
+    // Frame too short or malformed - drop and log
     return;
 }
 ```
@@ -785,14 +785,14 @@ For stack module operations:
 ```cpp
 auto ch = pool.allocate(ChannelType::SDCCHType);
 if (!ch) {
-    // No channels available — reject or queue
+    // No channels available - reject or queue
     sendImmediateAssignmentReject(session, ra);
     return;
 }
 
 auto txId = session->txns.create(pd, mti, ti, timerId);
 if (!txId) {
-    // Transaction pool full — cleanup first
+    // Transaction pool full - cleanup first
     session->txns.cleanup();
     txId = session->txns.create(pd, mti, ti, timerId);
 }
@@ -805,7 +805,7 @@ if (!txId) {
 - **TimerManager**: Fixed-size `std::array`, no dynamic allocation, tick() uses callback or span
 - **TransactionManager**: O(1) TI lookup for CC/SS, bounded scan (≤ 16) for others
 - **ChannelPool**: O(1) allocate via per-type free-list, cold-path add/remove
-- **FSM dispatch**: `switch(PD) + switch(MTI)` — compile-time resolved, no vtable on critical path
+- **FSM dispatch**: `switch(PD) + switch(MTI)` - compile-time resolved, no vtable on critical path
 - **Thread safety**: Each MS session is accessed from one thread. `ChannelPool` requires external synchronization for multi-threaded access.
 - **Arena allocator**: Use `Arena` for high-throughput batch parsing to reduce malloc pressure
 - **Streaming**: Use `L3StreamProcessor` with `RingBuffer` for continuous frame processing
@@ -827,8 +827,8 @@ if (!txId) {
 
 ## See Also
 
-- [README.md](../README.md) — Library overview and quick start
-- [doc/API.md](API.md) — Full API reference (all 36 sections)
-- [doc/bts_architecture.md](bts_architecture.md) — Architecture overview and scaling guide
-- [doc/builder_coverage.md](builder_coverage.md) — Complete Builder coverage table
-- `examples/` directory — Working BTS example programs
+- [README.md](../README.md) - Library overview and quick start
+- [doc/API.md](API.md) - Full API reference (all 36 sections)
+- [doc/bts_architecture.md](bts_architecture.md) - Architecture overview and scaling guide
+- [doc/builder_coverage.md](builder_coverage.md) - Complete Builder coverage table
+- `examples/` directory - Working BTS example programs

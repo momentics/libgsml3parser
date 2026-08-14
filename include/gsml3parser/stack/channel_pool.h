@@ -55,7 +55,7 @@ namespace gsml3parser {
 /// Describes an allocated logical channel.
 /// Contains channel type, transceiver index, TDMA timeslot, and ARFCN.
 ///
-/// 3GPP TS 04.08 10.5.2.5 — Channel Description element.
+/// 3GPP TS 04.08 10.5.2.5 - Channel Description element.
 struct ChannelDescriptor {
     ChannelType type{ChannelType::UndefinedCHType};
     uint8_t trxNumber{};
@@ -70,10 +70,10 @@ struct ChannelDescriptor {
 ///
 /// The RA byte encodes the establishment cause and access category.
 /// Establishment cause bits (6-5) determine the channel type:
-///   00 — Mobile Originating call → TCH (with VEA) or SDCCH (without VEA)
-///   01 — Emergency call → TCH always
-///   10 — Answer to Paging → TCH
-///   11 — Location Updating → SDCCH
+///   00 - Mobile Originating call → TCH (with VEA) or SDCCH (without VEA)
+///   01 - Emergency call → TCH always
+///   10 - Answer to Paging → TCH
+///   11 - Location Updating → SDCCH
 ///
 /// @param ra The 8-bit RA value from the Channel Request message.
 /// @param neci Non-Extended Channel Indicator (0 = legacy, 1 = NECI extended).
@@ -101,7 +101,7 @@ struct ChannelDescriptor {
 /// At runtime, allocate() pops from the front of the appropriate free-list,
 /// and release() pushes channels back to the list.
 ///
-/// 3GPP TS 04.08 — Radio Resource Management channel assignment procedures.
+/// 3GPP TS 04.08 - Radio Resource Management channel assignment procedures.
 ///
 /// Thread safety: NOT thread-safe. For multi-threaded access, the caller must
 /// provide external synchronization (e.g., one ChannelPool per BTS instance,
@@ -163,7 +163,7 @@ public:
     /// VEA attempts to allocate a full-rate TCH (TCHFType) directly for MO calls,
     /// skipping the intermediate SDCCH assignment. If no TCH is available, falls
     /// back to SDCCH. The channel type needed is decoded from the RA value.
-    /// 3GPP TS 05.08 — Very Early Assignment procedure.
+    /// 3GPP TS 05.08 - Very Early Assignment procedure.
     [[nodiscard]] std::optional<ChannelDescriptor> allocateVEA(uint8_t ra);
 
     /// Get all free channels of a given type. Returns by value (called rarely).
@@ -187,7 +187,7 @@ private:
     bool removeFromFreeList(ChannelType type, const ChannelDescriptor& desc);
 
     // Per-type bucket of free channel descriptors. Indexed by ChannelType enum value.
-    // allocate() pops from the back of the vector — O(1).
+    // allocate() pops from the back of the vector - O(1).
     std::unordered_map<ChannelType, std::vector<ChannelDescriptor>> mFreeByType;
 
     // Per-type bucket of allocated (in-use) channel descriptors.

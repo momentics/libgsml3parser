@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
     if (result) {
         const auto& msg = *result;
 
-        // Typed access via tryGet — covers all 9 PD domains
+        // Typed access via tryGet - covers all 9 PD domains
         if (auto* cr = tryGet<L3ChannelRelease>(msg)) {
             std::cout << "RR: Channel Release detected\n";
         } else if (auto* paging = tryGet<L3PagingRequestType1>(msg)) {

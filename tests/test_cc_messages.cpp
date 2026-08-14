@@ -188,7 +188,7 @@ TEST(CCRoundTripTest, Disconnect_UserBusy) {
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=100101(Disconnect=0x25), NSD=00
 // Reference: L3_Templates.ttcn ts_ML3_MO_CC_DISC (line 1760): calledPartyNumberBcd + cause
-// Reference: L3_Templates.ttcn ts_Called() — CalledPartyNumber IEI='5E'O, numberingPlan='0000'B
+// Reference: L3_Templates.ttcn ts_Called() - CalledPartyNumber IEI='5E'O, numberingPlan='0000'B
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.7: Disconnect body = BCD-CalledPartyNumber(MANDATORY) + [Cause].
 //   Called-Party-Number is ALWAYS present in Disconnect (mandatory per spec).
 //   Called-Party-Number TLV: IEI=0x5E, length(1), typeOfNumber|numberingPlan(1), BCD digits.

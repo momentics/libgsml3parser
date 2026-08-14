@@ -124,7 +124,7 @@ Expected<ExtractedFrame> L3Framer::tryExtract() {
         }
         size_t l2len = static_cast<size_t>(mBuf[mPos]);
         if (l2len == 0 || l2len > mConfig.maxMessageLength) {
-            // Invalid length — skip one byte and try again.
+            // Invalid length - skip one byte and try again.
             mPos++;
             return Expected<ExtractedFrame>::error(
                 {ParseError::Code::InvalidValue, "L2 length out of range"});
@@ -188,7 +188,7 @@ Expected<ExtractedFrame> L3Framer::tryExtract() {
             }
 
             if (frameLen == 0) {
-                // No boundary found — need more data.
+                // No boundary found - need more data.
                 return Expected<ExtractedFrame>::error(
                     {ParseError::Code::TruncatedInput, "variable-length frame, need more data"});
             }
@@ -211,7 +211,7 @@ Expected<ExtractedFrame> L3Framer::tryExtract() {
     {
         auto hdrResult = parseL3Header(std::span<const uint8_t>(mBuf.data() + mPos, frameLen));
         if (!hdrResult || !hdrResult.value().isValid()) {
-            // Invalid PD — skip this byte and try again.
+            // Invalid PD - skip this byte and try again.
             mPos++;
             return Expected<ExtractedFrame>::error(
                 {ParseError::Code::InvalidPD, "invalid L3 header in frame"});
@@ -246,7 +246,7 @@ Expected<ExtractedFrame> L3Framer::nextFrame() {
             continue;
         }
 
-        // TruncatedInput — try to fill the buffer.
+        // TruncatedInput - try to fill the buffer.
         bool gotData = fillBuffer();
 
         if (!gotData) {

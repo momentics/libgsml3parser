@@ -26,7 +26,7 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 
 ## Detailed Table
 
-### RR — All 98 classes have Builder (OK)
+### RR - All 98 classes have Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
@@ -129,7 +129,7 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | RR | L3VGCSSNeighCellInfo | Yes | No | OK |
 | RR | L3VGCSUplinkGrant | Yes | No | OK |
 
-### MM — All 20 classes have Builder (OK)
+### MM - All 20 classes have Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
@@ -154,7 +154,7 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | MM | L3TMSIReallocationCommand | Yes | No | OK |
 | MM | L3TMSIReallocationComplete | Yes | No | OK |
 
-### CC — All 24 classes have Builder (OK)
+### CC - All 24 classes have Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
@@ -183,7 +183,7 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | CC | L3UnitData | Yes | No | OK |
 | CC | L3UnitDataAck | Yes | No | OK |
 
-### GMM — All 23 classes have Builder (OK)
+### GMM - All 23 classes have Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
@@ -211,7 +211,7 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | GMM | L3ServiceReject | Yes | No | OK |
 | GMM | L3ServiceRequest | Yes | No | OK |
 
-### SM — All 29 classes have Builder (OK)
+### SM - All 29 classes have Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
@@ -245,7 +245,7 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | SM | L3SMNotification | Yes | No | OK |
 | SM | L3SMStatus | Yes | Yes | OK |
 
-### SMS — All 9 classes have Builder (OK)
+### SMS - All 9 classes have Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
@@ -259,7 +259,7 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | SMS | L3RPError | Yes | No | OK |
 | SMS | L3RPSMMA | Yes | No | OK |
 
-### SMSL3 — All 14 classes have Builder (OK)
+### SMSL3 - All 14 classes have Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
@@ -278,7 +278,7 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | SMSL3 | L3SMSSubmitRep | Yes | No | OK |
 | SMSL3 | L3SMSTSReject | Yes | No | OK |
 
-### BCC — All 8 classes have Builder (OK)
+### BCC - All 8 classes have Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
@@ -291,7 +291,7 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | BCC | L3BCCReleaseComplete | Yes | No | OK |
 | BCC | L3BCCSetup | Yes | No | OK |
 
-### GCC — All 8 classes have Builder (OK)
+### GCC - All 8 classes have Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
@@ -304,14 +304,14 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | GCC | L3GCCReleaseComplete | Yes | No | OK |
 | GCC | L3GCCSetup | Yes | No | OK |
 
-### LS — All 2 classes have Builder (OK)
+### LS - All 2 classes have Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
 | LS | L3LocationServiceProviderMessage | Yes | No | OK |
 | LS | L3LocationServiceRequest | Yes | No | OK |
 
-### SS — All 3 classes have Builder (OK)
+### SS - All 3 classes have Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
@@ -319,13 +319,13 @@ Scanned all `class L3*` message types across 13 domain headers. For each class, 
 | SS | L3SupServRegisterMessage | Yes | Yes | OK |
 | SS | L3SupServReleaseCompleteMessage | Yes | Yes | OK |
 
-### Extended — All 1 class has Builder (OK)
+### Extended - All 1 class has Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|
 | Extended | L3ExtendedMessage | Yes | Yes | OK |
 
-### TestProc — All 1 class has Builder (OK)
+### TestProc - All 1 class has Builder (OK)
 
 | Domain | Message Class | Has Builder | Has Param Constructor | Action |
 |--------|--------------|-------------|----------------------|--------|

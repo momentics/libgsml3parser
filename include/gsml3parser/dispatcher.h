@@ -101,7 +101,7 @@ private:
     std::unordered_map<L3PD, MessageHandler> mDomainHandlers;
     MessageHandler mFallback;
 
-    // TI-indexed handlers for CC/SS messages — O(1) lookup.
+    // TI-indexed handlers for CC/SS messages - O(1) lookup.
     std::array<std::optional<MessageHandler>, 8> mTIHandlers{};
 };
 

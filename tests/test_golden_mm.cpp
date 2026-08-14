@@ -39,9 +39,9 @@
 // [GOLDEN VERIFICATION]
 // All byte-level parse test data cross-checked against osmo-ttcn3-hacks reference:
 //   - MM MTI values verified against L3_Templates.ttcn templates (tr_CM_SERV_ACC, tr_CM_SERV_REJ,
-//     ts_LU_ACCEPT, ts_LU_REQ, tr_MT_MM_AUTH_REQ, ts_ML3_MT_MM_AUTH_RESP) — all match GSM 24.008 Table 10.5.3
+//     ts_LU_ACCEPT, ts_LU_REQ, tr_MT_MM_AUTH_REQ, ts_ML3_MT_MM_AUTH_RESP) - all match GSM 24.008 Table 10.5.3
 //   - MM header byte layout verified: PD=5('0101'B), skip(4 bits) in byte 0;
-//     MTI(6 bits)|NSD(2 bits) in byte 1 — matches GSM 24.008 Table 11.2
+//     MTI(6 bits)|NSD(2 bits) in byte 1 - matches GSM 24.008 Table 11.2
 //   - LocationUpdatingRequest (ts_LU_REQ line 356): LAI is RAW (not LV!), then CM1-LV, then MI-LV
 //   - LocationUpdatingAccept (ts_LU_ACCEPT line 385): LAI is RAW (not LV!), then optional MI + FOP
 //   - TMSIReallocationCommand: LAI RAW + MI-LV + FollowOnProceed(4 bits)
@@ -304,7 +304,7 @@ TEST(GoldenMM, IMSIDetachIndication_Parse) {
 // =====================================================================
 // MM PARSE FROM HEX: MM Status (GSM 24.008 9.2.15)
 // Reference: L3_Templates.ttcn tr_ML3_MT_MM_STATUS template
-// Structure: cause(8 bits, GSM 24.008 10.5.3.6) — only one mandatory IE
+// Structure: cause(8 bits, GSM 24.008 10.5.3.6) - only one mandatory IE
 // Spec-verified: PD=5(MM), MTI=0x31(MMStatus) per GSM 24.008 Table 10.5.3
 // cause=0x60 = Invalid_Mandatory_Information (GSM 24.008 10.5.3.6 Table)
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.15: MMStatus body = cause(1 octet).

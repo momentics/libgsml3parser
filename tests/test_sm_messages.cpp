@@ -27,7 +27,7 @@
 // All SM message type identifiers verified against osmo-ttcn3-hacks L3_Templates.ttcn
 //   and 3GPP TS 24.008 Table 10.4a (GPRS Session Management).
 // SM header format verified: PD=0x0A('1010'B), Skip(4 bits) in byte 0;
-//   MessageType(8 bits, raw — no NSD field) in byte 1.
+//   MessageType(8 bits, raw - no NSD field) in byte 1.
 // This follows the same encoding as GMM (PD=0x08).
 // Message structures verified against L3_Templates.ttcn templates:
 //   ts_SM_ACT_PDP_REQ, tr_SM_ACT_PDP_ACCEPT, tr_SM_ACT_PDP_REJ,
@@ -75,7 +75,7 @@ TEST(GoldenSMTest, MessageTypeValues) {
     EXPECT_EQ(L3ModifyPDPContextAccept::MTI, 0x49);
     EXPECT_EQ(L3ModifyPDPContextReject::MTI, 0x4c);
     EXPECT_EQ(L3SMStatus::MTI, 0x55);
-    // SM message type values — additional messages (GSM 24.008 Table 10.4a)
+    // SM message type values - additional messages (GSM 24.008 Table 10.4a)
     EXPECT_EQ(L3RequestPDPContextActivation::MTI, 0x44);
     EXPECT_EQ(L3RequestPDPContextActivationReject::MTI, 0x45);
     EXPECT_EQ(L3ModifyPDPContextRequestMS::MTI, 0x4A);
@@ -396,7 +396,7 @@ TEST(GoldenSMTest, SMStatus) {
 }
 
 // =====================================================================
-// Round-trip tests — construct → writeL3Hex → parseL3Hex → verify fields
+// Round-trip tests - construct → writeL3Hex → parseL3Hex → verify fields
 // =====================================================================
 
 // ── L3TMGI IE roundtrip test ──

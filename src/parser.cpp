@@ -695,9 +695,9 @@ Expected<SMS> parseL3SMS(BitReader& reader, int mti) {
         case L3CPAck::MTI:        return L3CPAck::parse(reader).map([](L3CPAck v){ return SMS(std::move(v)); });
         // CP-ERROR (24.011 8.1.4)
         case L3CPErr::MTI:        return L3CPErr::parse(reader).map([](L3CPErr v){ return SMS(std::move(v)); });
-        // CP-STATUS (24.011 8.1.5) — MTI 0x12 overlaps with SMSProvidedReplyExpected; CP takes precedence
+        // CP-STATUS (24.011 8.1.5) - MTI 0x12 overlaps with SMSProvidedReplyExpected; CP takes precedence
         case L3CPStatus::MTI:     return L3CPStatus::parse(reader).map([](L3CPStatus v){ return SMS(std::move(v)); });
-        // CP-SMT (24.011 8.1.6) — MTI 0x13 overlaps with SMSSubmitRep; CP takes precedence
+        // CP-SMT (24.011 8.1.6) - MTI 0x13 overlaps with SMSSubmitRep; CP takes precedence
         case L3CPSMT::MTI:        return L3CPSMT::parse(reader).map([](L3CPSMT v){ return SMS(std::move(v)); });
         // SMS Status Report (24.008 9.6.1)
         case L3SMSStatusReport::MTI: return L3SMSStatusReport::parse(reader).map([](L3SMSStatusReport v){ return SMS(std::move(v)); });

@@ -19,10 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// GMM Messages — parse/write/text implementation
+// GMM Messages - parse/write/text implementation
 // Spec: 3GPP TS 24.008 sections 9.4, Table 10.4
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — GMM message templates
-//            ref/OpenBTS/SGSNGGSN/GPRSL3Messages.h — L3GmmMsg::MessageType
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - GMM message templates
+//            ref/OpenBTS/SGSNGGSN/GPRSL3Messages.h - L3GmmMsg::MessageType
 
 #include "gsml3parser/gmm/l3gmmmessages.h"
 #include <sstream>

@@ -1,4 +1,4 @@
-# libgsml3parser — Full API Reference
+# libgsml3parser - Full API Reference
 
 > Version 0.10.0 | C++20 | Thread-safe | Zero heap allocation on hot path | No external dependencies
 
@@ -35,11 +35,11 @@
 29. [SMS L3 Messages](#29-sms-l3-messages)
 30. [Extended PD Messages](#30-extended-pd-messages)
 31. [Test Procedure PD Messages](#31-test-procedure-pd-messages)
-32. [MSContext — Per-Subscriber State](#32-mscontext-per-subscriber-state)
+32. [MSContext - Per-Subscriber State](#32-mscontext-per-subscriber-state)
 33. [Timer Framework](#33-timer-framework)
 34. [Transaction Framework](#34-transaction-framework)
 35. [Protocol State Machines](#35-protocol-state-machines)
-36. [Channel Pool — Logical Channel Management](#36-channel-pool-logical-channel-management)
+36. [Channel Pool - Logical Channel Management](#36-channel-pool-logical-channel-management)
 
 ---
 
@@ -330,7 +330,7 @@ struct ParserConfig {
 | `withLogLevel(lvl)` | Return new config with changed log level |
 | `withPDHandler(pd, h)` | Return new config with handler registered |
 
-**Thread safety:** Safe for concurrent read access from any number of threads. Builder methods return new instances — the original is never modified.
+**Thread safety:** Safe for concurrent read access from any number of threads. Builder methods return new instances - the original is never modified.
 
 **Usage example:**
 
@@ -339,7 +339,7 @@ ParserConfig cfg;
 cfg = cfg.withLogLevel(LogLevel::ERR)
          .withPDHandler(L3PD::SMS, mySmsHandler);
 
-// Parse with config — no mutex acquired
+// Parse with config - no mutex acquired
 auto result = parseL3Hex("060D", cfg);
 ```
 
@@ -413,7 +413,7 @@ The top-level variant that wraps all domains:
 using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM, EXTENDED, TESTPROC>;
 ```
 
-Stored on the stack — no heap allocation. `sizeof(ParsedMessage)` is guaranteed < 8 KB via `static_assert`. The variant spans 12 protocol domains.
+Stored on the stack - no heap allocation. `sizeof(ParsedMessage)` is guaranteed < 8 KB via `static_assert`. The variant spans 12 protocol domains.
 
 **Usage:**
 
@@ -451,7 +451,7 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
 | `data` | Raw L3 message bytes (header + body) |
 | `cfg` | Parser configuration (optional, defaults to empty) |
 
-Returns `Expected<ParsedMessage>` — the parsed variant on success, or `ParseError` on failure.
+Returns `Expected<ParsedMessage>` - the parsed variant on success, or `ParseError` on failure.
 
 Handles short messages automatically: 1-byte Channel Request, 4-byte Handover Access, 7-byte Synchronization Channel Information.
 
@@ -483,7 +483,7 @@ Serialize a ParsedMessage to a hex-encoded string.
 Expected<std::string> writeL3Hex(const ParsedMessage& msg);
 ```
 
-Uses inline encoding with lookup table — no `std::ostringstream` or `std::iomanip`.
+Uses inline encoding with lookup table - no `std::ostringstream` or `std::iomanip`.
 
 ### 7.5 writeL3Bytes()
 
@@ -530,7 +530,7 @@ if (original) {
 
 ### 8.1 tryGet<T>()
 
-Compile-time typed access — no `dynamic_cast` needed.
+Compile-time typed access - no `dynamic_cast` needed.
 
 ```cpp
 template<typename T> const T* tryGet(const ParsedMessage& msg);
@@ -643,7 +643,7 @@ public:
 | `freeSpace()` | Free slots in the buffer |
 | `read(buf, maxSize)` | Read up to `maxSize` bytes |
 
-**Thread safety:** Single-producer, single-consumer is fully safe without locks. Uses `std::atomic` with acquire/release ordering for correct behaviour on weakly-ordered architectures (ARM, PowerPC). On x86-64 (TSO) the compiler emits plain loads/stores — zero overhead. Multi-producer or multi-consumer requires external synchronization.
+**Thread safety:** Single-producer, single-consumer is fully safe without locks. Uses `std::atomic` with acquire/release ordering for correct behaviour on weakly-ordered architectures (ARM, PowerPC). On x86-64 (TSO) the compiler emits plain loads/stores - zero overhead. Multi-producer or multi-consumer requires external synchronization.
 
 ### 9.5 L3Framer
 
@@ -985,7 +985,7 @@ Builder patterns are implemented for all message types across all 12 protocol do
 | **Extended** | `L3ExtendedMessage` |
 | **TestProcedure** | `L3TestProcedureMessage` |
 
-### Example — Building an Immediate Assignment
+### Example - Building an Immediate Assignment
 
 ```cpp
 using namespace gsml3parser;
@@ -1000,7 +1000,7 @@ ParsedMessage pm{RRM{std::move(msg)}};
 auto bytes = writeL3Bytes(pm);
 ```
 
-### Example — Building a Paging Request Type 2
+### Example - Building a Paging Request Type 2
 
 ```cpp
 auto msg = L3PagingRequestType2::builder()
@@ -1012,7 +1012,7 @@ ParsedMessage pm{RRM{std::move(msg)}};
 auto hex = writeL3Hex(pm);
 ```
 
-### Example — Building a Setup (CC) Message
+### Example - Building a Setup (CC) Message
 
 ```cpp
 auto msg = L3Setup::builder()
@@ -1077,7 +1077,7 @@ if (msg) {
 
 **File:** `gsml3parser/types.h`
 
-### L3PD — Protocol Discriminator
+### L3PD - Protocol Discriminator
 
 ```cpp
 enum class L3PD : int8_t {
@@ -1091,7 +1091,7 @@ enum class L3PD : int8_t {
 };
 ```
 
-### Primitive — Interlayer Primitives
+### Primitive - Interlayer Primitives
 
 ```cpp
 enum class Primitive : uint8_t {
@@ -1104,7 +1104,7 @@ enum class Primitive : uint8_t {
 };
 ```
 
-### SAPI — Service Access Point Indicator
+### SAPI - Service Access Point Indicator
 
 ```cpp
 enum class SAPI : uint8_t {
@@ -1166,7 +1166,7 @@ enum class GSMAlphabet : uint8_t {
 
 **File:** `gsml3parser/enums.h`
 
-### RRCause — RR Cause Codes
+### RRCause - RR Cause Codes
 
 3GPP TS 24.008 10.5.2.31. Values: `Normal_Event`, `Unspecified`, `Channel_Unacceptable`, `Timer_Expired`, `No_Activity_On_The_Radio`, `Preemptive_Release`, `Handover_Impossible`, `Channel_Mode_Unacceptable`, `Frequency_Not_Implemented`, `Leaving_Group_Call_Area`, `Lower_Layer_Failure`, and protocol error codes.
 
@@ -1174,7 +1174,7 @@ enum class GSMAlphabet : uint8_t {
 const char* RRCause2Str(RRCause cause);
 ```
 
-### MMRejectCause — MM Reject Cause Codes
+### MMRejectCause - MM Reject Cause Codes
 
 3GPP TS 24.008 10.5.3.6. Values: `IMSI_Unknown_In_HLR`, `Illegal_MS`, `IMSI_Unknown_In_VLR`, `IMEI_Not_Accepted`, `Illegal_ME`, `PLMN_Not_Allowed`, `Location_Area_Not_Allowed`, `Roaming_Not_Allowed_In_LA`, `Network_Failure`, `MAC_Failure`, `Congestion`, and protocol error codes.
 
@@ -1182,7 +1182,7 @@ const char* RRCause2Str(RRCause cause);
 const char* MMRejectCause2Str(MMRejectCause cause);
 ```
 
-### CCCause — CC Cause Codes
+### CCCause - CC Cause Codes
 
 3GPP TS 24.008 10.5.4.11 / ISDN Q.931. Values: `Unassigned_Number`, `No_Route_To_Destination`, `Normal_Call_Clearing`, `User_Busy`, `Call_Rejected`, `No_Channel_Available`, `Network_Out_Of_Order`, `Requested_Facility_Not_Subscribed`, and 40+ more.
 
@@ -1194,7 +1194,7 @@ const char* CCCause2Str(CCCause cause);
 
 Indicates where the cause originated: `User`, `Private_Serving_Local`, `Public_Serving_Local`, `Transit`, `Public_Serving_Remote`, `Private_Serving_Remote`, `International`, `Beyond_Inter_Networking`.
 
-### BSSCause — BSS Cause Codes
+### BSSCause - BSS Cause Codes
 
 3GPP TS 48.008 3.2.2.5. Values: `Radio_Interface_Failure`, `Uplink_Quality`, `Downlink_Quality`, `Handover_Successful`, `Better_Cell`, `No_Radio_Resource_Available`, `CCCH_Overload`, and more.
 
@@ -1325,7 +1325,7 @@ Cell parameters and handover reference for handover procedures.
 
 ## 19. Radio Resource Messages
 
-**File:** `gsml3parser/rr/l3rrmessages.h` — 95 message types in the `RRM` variant.
+**File:** `gsml3parser/rr/l3rrmessages.h` - 95 message types in the `RRM` variant.
 
 Each message is a plain struct with:
 - `parse(BitReader&)` → `Expected<Self>` (static method)
@@ -1377,7 +1377,7 @@ Each message is a plain struct with:
 |---------|-----|-----------|-------------|
 | `L3ChannelRelease` | 0x0D | DL | Cause [+ GPRS resumption] |
 | `L3ImmediateAssignment` | 0x3F | DL | PageMode, channel desc, TA, mobile alloc |
-| `L3ImmediateAssignmentExtended` | — | DL | Extended immediate assignment |
+| `L3ImmediateAssignmentExtended` | - | DL | Extended immediate assignment |
 | `L3ImmediateAssignmentReject` | 0x3A | DL | Wait indication entries |
 | `L3AdditionalAssignment` | 0x01 | DL | Additional channel assignment |
 | `L3PhysicalInformation` | 0x26 | DL | Timing advance command |
@@ -1494,22 +1494,22 @@ Each message is a plain struct with:
 | `L3SystemInformationType10` | 10 bytes | CI + LAI + CellOptions + CellSelectionParameters |
 | `L3SystemInformationType10bis` | 10 bytes | CI + LAI + CellOptions + CellSelectionParameters |
 | `L3SystemInformationType10ter` | 10 bytes | CI + LAI + CellOptions + CellSelectionParameters |
-| `L3NotificationFACCH` | — | FACCH notification |
-| `L3UplinkFree` | — | FACCH uplink free |
+| `L3NotificationFACCH` | - | FACCH notification |
+| `L3UplinkFree` | - | FACCH uplink free |
 | `L3EnhancedMeasurementRepUL` | variable | FACCH measurement report UL |
 | `L3MeasurementInfoDL` | variable | FACCH measurement info DL |
-| `L3VBSVGCSRecon` | — | VBS/VGCS reconfiguration |
-| `L3VBSVGCSRecon2` | — | VBS/VGCS reconfiguration 2 |
-| `L3VGCSAddInfo` | — | VGCS additional info |
-| `L3VGCSMSInfo` | — | VGCS SMS info |
-| `L3VGCSSNeighCellInfo` | — | VGCS neighbor cell info |
-| `L3NotifyAppData` | — | Notify application data |
+| `L3VBSVGCSRecon` | - | VBS/VGCS reconfiguration |
+| `L3VBSVGCSRecon2` | - | VBS/VGCS reconfiguration 2 |
+| `L3VGCSAddInfo` | - | VGCS additional info |
+| `L3VGCSMSInfo` | - | VGCS SMS info |
+| `L3VGCSSNeighCellInfo` | - | VGCS neighbor cell info |
+| `L3NotifyAppData` | - | Notify application data |
 
 ---
 
 ## 20. Mobility Management Messages
 
-**File:** `gsml3parser/mm/l3mmmessages.h` — 18 message types in the `MMM` variant.
+**File:** `gsml3parser/mm/l3mmmessages.h` - 18 message types in the `MMM` variant.
 
 ### MM Information Elements
 
@@ -1551,7 +1551,7 @@ Each message is a plain struct with:
 
 ## 21. Call Control Messages
 
-**File:** `gsml3parser/cc/l3ccmessages.h` — 20 message types in the `CCM` variant.
+**File:** `gsml3parser/cc/l3ccmessages.h` - 20 message types in the `CCM` variant.
 
 ### CC Information Elements
 
@@ -1562,14 +1562,14 @@ Each message is a plain struct with:
 | `L3BearerCapability` | 0x04 | TLV | Bearer capability (coding, mode, rate) |
 | `L3BackupBearerCapability` | 0x7c | TLV | Backup bearer capability |
 | `L3SupportedCodecList` | 0x40 | TLV | AMR codec set and mode preferences |
-| `L3BCDDigits` | — | V | BCD-encoded digit string utility |
+| `L3BCDDigits` | - | V | BCD-encoded digit string utility |
 | `L3CalledPartyBCDNumber` | 0x5e | TLV | Called party number |
 | `L3CallingPartyBCDNumber` | 0x5c | TLV | Calling party number |
 | `L3ConnectedNumber` | 0x9c | TLV | Connected party number (GSM 04.08 10.5.4.7) |
 | `L3RedirectingNumber` | 0x97 | TLV | Redirecting number (GSM 04.08 10.5.4.13) |
 | `L3SubAddress` | 0x9a/0x9b | TLV | Calling/Called party sub-address (GSM 04.08 10.5.4.3) |
 | `L3CauseElement` | 0x08 | TLV | CC cause code + location + diagnostic |
-| `L3CallState` | — | V | Call state flags (speech, DTMF, hold, etc.) |
+| `L3CallState` | - | V | Call state flags (speech, DTMF, hold, etc.) |
 | `L3ProgressIndicator` | 0x1e | TLV | Progress cause and location |
 | `L3KeypadFacility` | 0x2c | TV | DTMF digit indicator |
 | `L3Signal` | 0x34 | TV | Signal type indicator (GSM 04.08 10.5.4.23) |
@@ -1585,7 +1585,7 @@ Each message is a plain struct with:
 | `L3AllowedActions` | 0x92 | TLV | Allowed actions bitmask (GSM 04.08 10.5.4.2) |
 | `L3CCCapabilities` | 0x51 | TLV | CC capabilities (GSM 04.08 10.5.4.4) |
 | `L3SupServFacilityIE` | 0x1c | TLV | Supplementary service facility data |
-| `L3SupServVersionIndicator` | — | V | SS version indicator (GSM 04.08 10.5.4.24) |
+| `L3SupServVersionIndicator` | - | V | SS version indicator (GSM 04.08 10.5.4.24) |
 
 #### IE Encoding Formats
 
@@ -1648,7 +1648,7 @@ MTI values are the 6-bit messageType field (GSM 04.08 Table 10.3). In the L3 hea
 
 ## 22. Supplementary Services Messages
 
-**File:** `gsml3parser/ss/l3ssmessages.h` — 3 message types in the `SSM` variant.
+**File:** `gsml3parser/ss/l3ssmessages.h` - 3 message types in the `SSM` variant.
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -1702,7 +1702,7 @@ enum class SSErrorCode : uint8_t {
 std::string_view ssErrorCodeName(SSErrorCode code);
 ```
 
-### L3FacilityOpCode — TCAP Component Parser
+### L3FacilityOpCode - TCAP Component Parser
 
 Parses the TCAP-level component from raw SS Facility data. Supports all four TCAP component types:
 
@@ -1752,7 +1752,7 @@ if (msg) {
 }
 ```
 
-### L3USSDData — USSD Message IE
+### L3USSDData - USSD Message IE
 
 Parses USSD-specific content from SS Facility data. Handles GSM 7-bit alphabet encoding and UCS2.
 
@@ -1814,7 +1814,7 @@ if (ussd) {
 
 ## 23. GPRS Mobility Management Messages
 
-**File:** `gsml3parser/gmm/l3gmmmessages.h` — 19 message types in the `GMM` variant.
+**File:** `gsml3parser/gmm/l3gmmmessages.h` - 19 message types in the `GMM` variant.
 **Spec:** 3GPP TS 24.008 sections 9.4, Table 10.4.
 **PD:** `0x08` (GPRSMobilityManagement).
 
@@ -1826,16 +1826,16 @@ if (ussd) {
 |----|-----|--------|-------------|
 | `L3PDPContextStatus` | 0x32 | TLV | PDP context activation bitmap (16 contexts) |
 | `L3T3302Timer` | 0x1b | TLV | T3302 timer value (GPRS Timer 2 encoding) |
-| `L3MSNetworkCapability` | — | V | MS network capability bit string |
-| `L3RoutingAreaIdentification` | — | V | MCC/MNC BCD(3) + LAC(2) + RAC(1) = 6 octets |
+| `L3MSNetworkCapability` | - | V | MS network capability bit string |
+| `L3RoutingAreaIdentification` | - | V | MCC/MNC BCD(3) + LAC(2) + RAC(1) = 6 octets |
 | `L3DRXParameter` | 0x1a | TV | DRX cycle code + timer settings (2 octets) |
-| `L3GMMCKSN` | — | bit-field | Ciphering key sequence number (3 bits) |
+| `L3GMMCKSN` | - | bit-field | Ciphering key sequence number (3 bits) |
 | `L3GMMCauseIE` | 0x25 | TLV | GMM cause value |
 | `L3AuthRAND` | 0x15 | TLV | 128-bit authentication challenge |
 | `L3AuthRES` | 0x16 | TLV | 32-bit authentication response |
 | `L3AuthFailureParam` | 0x30 | TLV | AUTS failure parameter (variable) |
 | `L3PTMSISignature` | 0x13 | TV | P-TMSI signature (3 octets) |
-| `L3GMMStatusCause` | — | V | GMM status cause octet |
+| `L3GMMStatusCause` | - | V | GMM status cause octet |
 
 ### GMM Enums
 
@@ -1880,7 +1880,7 @@ if (ussd) {
 
 ## 24. GPRS Session Management Messages
 
-**File:** `gsml3parser/sm/l3smmessages.h` — 29 message types in the `SM` variant.
+**File:** `gsml3parser/sm/l3smmessages.h` - 29 message types in the `SM` variant.
 **Spec:** 3GPP TS 24.008 sections 9.5, Table 10.4a.
 **PD:** `0x0a` (GPRSSessionManagement).
 
@@ -1896,7 +1896,7 @@ if (ussd) {
 | `L3ProtocolConfigOptions` | 0x3C | TLV | Protocol config options (e.g. IPCP=0xC029 for IPv4) |
 | `L3SMCauseIE` | 0x27 | TV | SM cause value |
 | `L3BackOffTimer` | 0x28 | TV | Back-off timer value (GPRS Timer 2 encoding) |
-| `L3PDPHandle` | — | bit-field | PDP context identifier (4 bits, 0–15) |
+| `L3PDPHandle` | - | bit-field | PDP context identifier (4 bits, 0–15) |
 | `L3TMGI` | 0x42 | TLV | Temporary Mobile Group Identity: PLMN(3) + ServiceID(2) + SessionID(1) |
 
 ### SM Enums
@@ -1908,7 +1908,7 @@ if (ussd) {
 | `QoSElementType` | 18 values | QoSClass, MaxBitRate UL/DL, Delay, DeliveryOrder, SopClass, ResidualErrorRate, PeakThroughput, MeanThroughput, TrafficClass, GuaranteedBitRate, SRB rate, GPRS/External Priority |
 | `SMCause` | 17 codes | SM cause values (ReqAccepted, Unsupported_PDP_Address_Type, PDP_Auth_Failed, IE_Invalid, etc.) |
 
-### SM Messages — Primary PDP Context
+### SM Messages - Primary PDP Context
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -1922,21 +1922,21 @@ if (ussd) {
 | `L3ModifyPDPContextReject` | 0x4c | Bidir | PDP handle, SM cause, [Back-off timer] |
 | `L3SMStatus` | 0x55 | Bidir | SM cause |
 
-### SM Messages — Request PDP Context Activation (Net-initiated)
+### SM Messages - Request PDP Context Activation (Net-initiated)
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
 | `L3RequestPDPContextActivation` | 0x44 | DL | PDP handle, [PDP address], APN, QoS, [PCO] |
 | `L3RequestPDPContextActivationReject` | 0x45 | UL | PDP handle, SM cause |
 
-### SM Messages — Bidirectional Modify (MS-initiated variants)
+### SM Messages - Bidirectional Modify (MS-initiated variants)
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
 | `L3ModifyPDPContextRequestMS` | 0x4A | UL | PDP handle, QoS, [PCO] |
 | `L3ModifyPDPContextAcceptNet` | 0x4B | DL | PDP handle, QoS, [PCO] |
 
-### SM Messages — Secondary PDP Context
+### SM Messages - Secondary PDP Context
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -1944,7 +1944,7 @@ if (ussd) {
 | `L3ActivateSecondaryPDPContextAccept` | 0x4E | UL | PDP handle, [PDP address], QoS, [PCO] |
 | `L3ActivateSecondaryPDPContextReject` | 0x4F | UL | PDP handle, SM cause |
 
-### SM Messages — Always Active (AA) PDP Context
+### SM Messages - Always Active (AA) PDP Context
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -1954,7 +1954,7 @@ if (ussd) {
 | `L3DeactivateAAPDPContextRequest` | 0x53 | DL | PDP handle |
 | `L3DeactivateAAPDPContextAccept` | 0x54 | UL | PDP handle |
 
-### SM Messages — MBMS Context
+### SM Messages - MBMS Context
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -1964,7 +1964,7 @@ if (ussd) {
 | `L3RequestMBMSContextActivation` | 0x59 | DL | TMGI, QoS, [PCO] |
 | `L3RequestMBMSContextActivationReject` | 0x5A | UL | SM cause |
 
-### SM Messages — Network-Initiated Secondary & Notification
+### SM Messages - Network-Initiated Secondary & Notification
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -1976,7 +1976,7 @@ if (ussd) {
 
 ## 25. SMS Messages
 
-**File:** `gsml3parser/sms/l3smsmessages.h` — 5 CP messages; `gsml3parser/sms/l3smsl3messages.h` — 14 L3 messages; total 19 in the `SMS` variant.
+**File:** `gsml3parser/sms/l3smsmessages.h` - 5 CP messages; `gsml3parser/sms/l3smsl3messages.h` - 14 L3 messages; total 19 in the `SMS` variant.
 **Spec:** 3GPP TS 24.011 sections 7-8, 3GPP TS 23.040 (CP/RP/TP layers); 3GPP TS 24.008 sections 9.6, Table 10.6a (SMS L3 primitives).
 **PD:** `0x09` (SMS).
 
@@ -2045,7 +2045,7 @@ The SMS layer uses a three-level encapsulation: L3 header → CP message → RP 
 
 ## 26. Broadcast Call Control Messages
 
-**File:** `gsml3parser/bcc/l3bccmessages.h` — 6 message types in the `BCCM` variant.
+**File:** `gsml3parser/bcc/l3bccmessages.h` - 6 message types in the `BCCM` variant.
 **Spec:** 3GPP TS 44.018 sections 9.6, Table 10.4.3.
 **PD:** `0x01` (BroadcastCallControl).
 
@@ -2066,7 +2066,7 @@ Each message stores the body as an opaque octet sequence for basic infrastructur
 
 ## 27. Group Call Control Messages
 
-**File:** `gsml3parser/gcc/l3gccmessages.h` — 7 message types in the `GCCM` variant.
+**File:** `gsml3parser/gcc/l3gccmessages.h` - 7 message types in the `GCCM` variant.
 **Spec:** 3GPP TS 44.018 sections 9.7, Table 10.4.4.
 **PD:** `0x00` (GroupCallControl).
 
@@ -2088,7 +2088,7 @@ Each message stores the body as an opaque octet sequence for basic infrastructur
 
 ## 28. Location Services Messages
 
-**File:** `gsml3parser/ls/l3lsmessages.h` — 2 message types in the `LSM` variant.
+**File:** `gsml3parser/ls/l3lsmessages.h` - 2 message types in the `LSM` variant.
 **Spec:** 3GPP TS 44.031 / TS 24.027 / TS 24.028.
 **PD:** `0x0c` (Location).
 
@@ -2103,7 +2103,7 @@ Location Services messages carry mobile location service parameters between the 
 
 ## 29. SMS L3 Messages
 
-**File:** `gsml3parser/sms/l3smsl3messages.h` — 14 message types, part of the `SMS` variant.
+**File:** `gsml3parser/sms/l3smsl3messages.h` - 14 message types, part of the `SMS` variant.
 **Spec:** 3GPP TS 24.008 sections 9.6.1–9.6.14, Table 10.6a.
 **PD:** `0x09` (SMS).
 
@@ -2117,7 +2117,7 @@ These are L3-level SMS primitives used for SMS-on-CS fallback, status reporting,
 | `RPDisposalType` | 4 values | NoFurtherAction, DisplayToUser, StoreInSIM, DeleteFromMS |
 | `SMSCause` | 8 codes | SMS-specific cause values (NoCause, SMSSystemFailure, etc.) |
 
-### SMS L3 Messages — Status Report Flow
+### SMS L3 Messages - Status Report Flow
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -2125,14 +2125,14 @@ These are L3-level SMS primitives used for SMS-on-CS fallback, status reporting,
 | `L3SMSProvidedReplyExpected` | 0x12 | DL | [TP-PID], TP-DCS, [TP-Ud] |
 | `L3SMSSubmitRep` | 0x13 | DL | [TP-PID], TP-DCS, [TP-Ud] |
 
-### SMS L3 Messages — Deliver Flow
+### SMS L3 Messages - Deliver Flow
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
 | `L3SMSDeliver` | 0x14 | DL | TP-MTI, TP-MR, [TP-OA], TP-PID, TP-DCS, SCTS, [TP-Ud] |
 | `L3SMSDeliverRep` | 0x15 | UL | TP-MTI, TP-MR, [TP-DA], TP-PID, TP-DCS, [TP-Ud] |
 
-### SMS L3 Messages — Status Ack/Reject
+### SMS L3 Messages - Status Ack/Reject
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -2140,14 +2140,14 @@ These are L3-level SMS primitives used for SMS-on-CS fallback, status reporting,
 | `L3SMSStatusReportReject` | 0x17 | DL | TP-MR, SM-Cause |
 | `L3SMSTSReject` | 0x18 | DL | SM-Cause |
 
-### SMS L3 Messages — Submit Control
+### SMS L3 Messages - Submit Control
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
 | `L3SMSSubmitDeferred` | 0x19 | DL | [TP-PID], TP-DCS, [TP-Ud] |
 | `L3SMSSubmitReject` | 0x1A | DL | SM-Cause |
 
-### SMS L3 Messages — Service Centre & Notification
+### SMS L3 Messages - Service Centre & Notification
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -2160,7 +2160,7 @@ These are L3-level SMS primitives used for SMS-on-CS fallback, status reporting,
 
 ## 30. Extended PD Messages
 
-**File:** `gsml3parser/extended/l3extendedmessages.h` — 1 placeholder type in the `EXTENDED` variant.
+**File:** `gsml3parser/extended/l3extendedmessages.h` - 1 placeholder type in the `EXTENDED` variant.
 **Spec:** GSM 04.08 §10.2.
 **PD:** `0x0e` (Extended).
 
@@ -2179,7 +2179,7 @@ The Extended PD provides infrastructure for future extended protocol discriminat
 
 ## 31. Test Procedure PD Messages
 
-**File:** `gsml3parser/testproc/l3testproceduremessages.h` — 1 placeholder type in the `TESTPROC` variant.
+**File:** `gsml3parser/testproc/l3testproceduremessages.h` - 1 placeholder type in the `TESTPROC` variant.
 **Spec:** GSM 04.08 §10.2.
 **PD:** `0x0f` (TestProcedure).
 
@@ -2196,7 +2196,7 @@ The Test Procedure PD provides infrastructure for test procedure messages used i
 
 ---
 
-## 32. MSContext — Per-Subscriber State
+## 32. MSContext - Per-Subscriber State
 
 MSContext aggregates all state associated with a single mobile station: identity (TMSI/IMSI), channel assignment, classmark, location area, and protocol-layer flags (ciphering, registration, authentication). This is the primary object through which a BTS tracks each subscriber.
 
@@ -2207,7 +2207,7 @@ MSContext aggregates all state associated with a single mobile station: identity
 | Property | Value |
 |----------|-------|
 | `sizeof(MSContext)` | ≤ 256 bytes (enforced by `static_assert`) |
-| Heap allocations | **Zero** — all fields stored inline |
+| Heap allocations | **Zero** - all fields stored inline |
 | Hot path methods | O(1), no virtual dispatch, no heap |
 | Thread safety | NOT thread-safe. One instance per MS, single-thread access |
 
@@ -2224,7 +2224,7 @@ Fields are ordered by access frequency: hot fields (identity, channel, flags) fi
 
 | Method | Description |
 |--------|-------------|
-| `identity()` | Returns `const L3MobileIdentity&` — current primary identity |
+| `identity()` | Returns `const L3MobileIdentity&` - current primary identity |
 | `setTMSI(uint32_t tmsi)` | Update or set TMSI |
 | `setIMSI(std::string_view digits)` | Update or set IMSI |
 
@@ -2354,9 +2354,9 @@ Manages up to 32 named timers for one MS context using fixed-size arrays.
 | Metric | Value |
 |--------|-------|
 | Memory footprint | `sizeof(TimerManager)` ≈ 1.2 KB (32 timers × ~36 bytes + 32 bytes init flags) |
-| Heap allocations | **Zero** — all storage is `std::array` |
+| Heap allocations | **Zero** - all storage is `std::array` |
 | `tick()` complexity | O(32) = constant, iterates fixed array |
-| `start()` / `stop()` | O(1) — direct index into array |
+| `start()` / `stop()` | O(1) - direct index into array |
 | Thread safety | NOT thread-safe. One instance per MS, single-thread access |
 
 ### 33.6 Example
@@ -2373,7 +2373,7 @@ tm.start(L3TimerId::T3106, 5000ms); // custom expiry
 
 // In event loop, advance time:
 tm.tick(std::chrono::milliseconds(100), [](L3TimerId expiredId) {
-    // Handle timer expiry — retransmit or abort procedure
+    // Handle timer expiry - retransmit or abort procedure
     handleExpired(expiredId);
 });
 
@@ -2525,12 +2525,12 @@ tm.cleanup();
 
 ## 35. Protocol State Machines
 
-**File:** `gsml3parser/stack/state_machine.h` — FSM base class and RR/MM/CC skeleton implementations.
+**File:** `gsml3parser/stack/state_machine.h` - FSM base class and RR/MM/CC skeleton implementations.
 **Spec:** 3GPP TS 24.008 Chapters 4-6 (RR, MM, CC procedures).
 
 The state machine framework provides a base class for protocol state machines with message and timer event processing, plus concrete skeleton implementations for the three main GSM Layer 3 sublayers: Radio Resource (RR), Mobility Management (MM), and Call Control (CC).
 
-### 35.1 SMAction — State Machine Actions
+### 35.1 SMAction - State Machine Actions
 
 | Action | Description |
 |--------|-------------|
@@ -2542,7 +2542,7 @@ The state machine framework provides a base class for protocol state machines wi
 | `PushSubstate` | Push a sub-state machine onto the stack (for nested procedures) |
 | `PopSubstate` | Pop back to the parent state machine |
 
-### 35.2 SMResult — Processing Result
+### 35.2 SMResult - Processing Result
 
 The `SMResult` struct is returned from every `processMessage()` and `processTimer()` call:
 
@@ -2556,7 +2556,7 @@ struct SMResult {
 
 **Important:** `SMResult` does NOT contain `ParsedMessage`. The FSM returns action + next state; the caller builds response messages externally via Builder API. `sizeof(SMResult) <= 16 bytes`.
 
-### 35.3 ProtocolStateMachine — Base Class
+### 35.3 ProtocolStateMachine - Base Class
 
 ```cpp
 class ProtocolStateMachine {
@@ -2692,7 +2692,7 @@ protected:
 
 ---
 
-## 36. Channel Pool — Logical Channel Management
+## 36. Channel Pool - Logical Channel Management
 
 **File:** `gsml3parser/stack/channel_pool.h`
 
@@ -2825,7 +2825,7 @@ pool.release(*ch);
 | Metric | Value |
 |--------|-------|
 | `sizeof(ChannelDescriptor)` | 8 bytes (with padding) |
-| allocate() complexity | O(1) — vector pop_back on free-list |
+| allocate() complexity | O(1) - vector pop_back on free-list |
 | Heap allocations | None on hot path (allocate/release). addChannel() grows internal vectors. |
 | Thread safety | NOT thread-safe; caller must provide synchronization for multi-threaded access |
 

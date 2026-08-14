@@ -19,9 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// SMS L3 Messages (TS 24.008 9.6) — TE-to-MS SMS primitives
+// SMS L3 Messages (TS 24.008 9.6) - TE-to-MS SMS primitives
 // Spec: 3GPP TS 24.008 sections 9.6.1-9.6.14, Table 10.6a
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — SMS-TS-* templates
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - SMS-TS-* templates
 //
 // These are L3-level SMS primitives used for SMS-on-CS fallback and status
 // reporting. They share PD=0x09 with CP-layer messages but operate in a
@@ -30,7 +30,7 @@
 //
 // L3 header (per 24.008 10.5.1):
 //   Byte 0: PD(4)=0x09(SMS) | Skip(4)
-//   Byte 1: MTI(8 bits, raw — no NSD field)
+//   Byte 1: MTI(8 bits, raw - no NSD field)
 
 #pragma once
 

@@ -52,7 +52,7 @@ namespace gsml3parser {
 /// Per-subscriber state context. Holds identity, channel assignment,
 /// classmark, and protocol-layer state for one mobile station.
 ///
-/// 3GPP TS 24.008 — Mobility Management sublayer data.
+/// 3GPP TS 24.008 - Mobility Management sublayer data.
 ///
 /// Thread safety: NOT thread-safe. One instance per MS, accessed from a single thread.
 /// Memory: sizeof(MSContext) <= 256 bytes, zero heap allocations.
@@ -125,7 +125,7 @@ public:
 
     /// Store MS classmark.
     /// @param cm The L3MobileStationClassmark1 to store.
-    /// 3GPP TS 24.008 9.1.22 — Mobile Station Classmark 1.
+    /// 3GPP TS 24.008 9.1.22 - Mobile Station Classmark 1.
     void setClassmark(const L3MobileStationClassmark1& cm);
 
     /// Get stored classmark.
@@ -134,7 +134,7 @@ public:
 
     /// Location Area Identity known for this MS.
     /// @return The LAI if previously set, std::nullopt otherwise.
-    /// 3GPP TS 24.008 10.5.1.3 — Location Area Identity.
+    /// 3GPP TS 24.008 10.5.1.3 - Location Area Identity.
     std::optional<L3LocationAreaIdentity> lai() const noexcept;
 
     /// Set LAI.
@@ -151,7 +151,7 @@ public:
 
     /// Get timing advance value.
     /// @return The timing advance (0-63) if set, std::nullopt otherwise.
-    /// 3GPP TS 24.008 10.5.2.40 — Timing Advance value.
+    /// 3GPP TS 24.008 10.5.2.40 - Timing Advance value.
     std::optional<uint8_t> timingAdvance() const noexcept;
 
     /// Set timing advance value.

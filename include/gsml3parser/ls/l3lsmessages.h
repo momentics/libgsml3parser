@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Location Services (LS) Message Classes — 3GPP TS 44.031 / TS 24.027/24.028
+// Location Services (LS) Message Classes - 3GPP TS 44.031 / TS 24.027/24.028
 // PD=0x0c, used for mobile location services in GSM networks.
 
 #pragma once
@@ -35,7 +35,7 @@
 
 namespace gsml3parser {
 
-// Location Service Request — TS 44.031 §9.1.2
+// Location Service Request - TS 44.031 §9.1.2
 // Direction: Both
 // Carries: location service request parameters
 class L3LocationServiceRequest {
@@ -70,7 +70,7 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// Location Service Provider Message — TS 44.031 §9.1.3
+// Location Service Provider Message - TS 44.031 §9.1.3
 // Direction: Both
 // Carries: location service provider data
 class L3LocationServiceProviderMessage {

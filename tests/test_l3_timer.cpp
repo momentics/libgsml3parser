@@ -87,11 +87,11 @@ TEST(L3TimerTest, StartAndExpired_firesAfterDuration) {
     timer.start();
     EXPECT_TRUE(timer.isRunning());
 
-    // Tick 99ms — should not expire yet
+    // Tick 99ms - should not expire yet
     EXPECT_FALSE(timer.tick(99ms));
     EXPECT_TRUE(timer.isRunning());
 
-    // Tick 2ms more — should expire (total 101ms > 100ms)
+    // Tick 2ms more - should expire (total 101ms > 100ms)
     EXPECT_TRUE(timer.tick(2ms));
     EXPECT_FALSE(timer.isRunning());
 }
@@ -307,7 +307,7 @@ TEST(TimerManagerTest, NoHeapAllocationsDuringTick) {
     tm.start(L3TimerId::T3106, 400ms);
     tm.start(L3TimerId::T3108, 500ms);
 
-    // Tick with callback — no allocations
+    // Tick with callback - no allocations
     std::vector<L3TimerId> callbackExpired;
     tm.tick(150ms, [&](L3TimerId id) {
         callbackExpired.push_back(id);
@@ -317,7 +317,7 @@ TEST(TimerManagerTest, NoHeapAllocationsDuringTick) {
     EXPECT_EQ(callbackExpired.size(), 1u);
     EXPECT_EQ(callbackExpired[0], L3TimerId::T3101);
 
-    // Tick with span — no allocations
+    // Tick with span - no allocations
     std::array<L3TimerId, 32> spanExpired;
     size_t count = tm.tick(300ms, std::span<L3TimerId>(spanExpired));
     // After 1800ms total: T3103 (300ms), T3106 (400ms), T3108 (500ms) all expire

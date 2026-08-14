@@ -95,7 +95,7 @@ TEST(ThreadingTest, ConcurrentParseWithConfig) {
     EXPECT_EQ(failCount.load(), 0);
 }
 
-// ── Test: ParserConfig is immutable — concurrent reads are safe ────────
+// ── Test: ParserConfig is immutable - concurrent reads are safe ────────
 
 TEST(ThreadingTest, ConcurrentConfigRead) {
     constexpr int NumThreads = 8;
@@ -109,7 +109,7 @@ TEST(ThreadingTest, ConcurrentConfigRead) {
     for (int t = 0; t < NumThreads; ++t) {
         threads.emplace_back([&cfg, &errorCount]() {
             for (int i = 0; i < 1000; ++i) {
-                // Concurrent read — should be safe since config is immutable
+                // Concurrent read - should be safe since config is immutable
                 auto level = cfg.getLogLevel();
                 if (level != LogLevel::DEBUG) {
                     errorCount.fetch_add(1);
@@ -125,7 +125,7 @@ TEST(ThreadingTest, ConcurrentConfigRead) {
     EXPECT_EQ(errorCount.load(), 0);
 }
 
-// ── Test: Arena allocator — each thread has its own arena, no conflicts ─
+// ── Test: Arena allocator - each thread has its own arena, no conflicts ─
 
 TEST(ThreadingTest, ConcurrentArenaNoConflict) {
     constexpr int NumThreads = 4;
@@ -161,7 +161,7 @@ TEST(ThreadingTest, ConcurrentArenaNoConflict) {
                 errorCount.fetch_add(1);
             }
 
-            // Allocate again after reset — should reuse memory
+            // Allocate again after reset - should reuse memory
             void* p = arena.allocate(64);
             if (!p) {
                 errorCount.fetch_add(1);
@@ -176,7 +176,7 @@ TEST(ThreadingTest, ConcurrentArenaNoConflict) {
     EXPECT_EQ(errorCount.load(), 0);
 }
 
-// ── Test: BitReader/BitWriter with Arena — concurrent allocation ───────
+// ── Test: BitReader/BitWriter with Arena - concurrent allocation ───────
 
 TEST(ThreadingTest, ConcurrentArenaBitIO) {
     constexpr int NumThreads = 4;
@@ -220,14 +220,14 @@ TEST(ThreadingTest, HeavyConcurrentParse) {
     constexpr int NumThreads = 8;
     constexpr int IterationsPerThread = 100;
 
-    // Shared read-only pool — concurrent reads are safe.
+    // Shared read-only pool - concurrent reads are safe.
     const std::vector<std::vector<uint8_t>> msgPool = {
         {0x60, 0x0D, 0x00},                             // RR ChannelRelease (valid)
         {0x50, 0x84},                                    // MM CMServiceAccept (valid)
         {0x30, 0x94, 0x08, 0x02, 0x16, 0x21},          // CC Disconnect (valid)
         {0xB0, 0xE8},                                    // SS Facility (valid)
-        {},                                              // empty — expected to fail (TruncatedInput)
-        {0x20, 0x01},                                    // invalid PD=0x02 — expected to fail (InvalidPD)
+        {},                                              // empty - expected to fail (TruncatedInput)
+        {0x20, 0x01},                                    // invalid PD=0x02 - expected to fail (InvalidPD)
     };
 
     std::atomic<int> parseCount{0};
@@ -263,7 +263,7 @@ TEST(ThreadingTest, HeavyConcurrentParse) {
     // Per thread t: msgIdx = (t+i) % 6, i=0..99.
     // 100/6 = 16 full cycles + 4 remainder residues.
     // Each full cycle hits all 6 residues; 4 valid per cycle => 64 valid from base.
-    // 4 remainder residues starting at t%6 — count how many are in {0,1,2,3}.
+    // 4 remainder residues starting at t%6 - count how many are in {0,1,2,3}.
     // Thread 0 (rem 0,1,2,3): 4 valid extras => 68
     // Thread 1 (rem 1,2,3,4): 3 valid extras => 67
     // Thread 2 (rem 2,3,4,5): 2 valid extras => 66
@@ -284,7 +284,7 @@ TEST(ThreadingTest, ConcurrentBitReader) {
     std::atomic<int> errorCount{0};
     std::vector<std::thread> threads;
 
-    // Shared read-only buffer — BitReader is non-owning, reads should be safe
+    // Shared read-only buffer - BitReader is non-owning, reads should be safe
     std::vector<uint8_t> sharedBuffer(256);
     std::vector<uint8_t> writerBuf(256, 0);
     BitWriter writer(writerBuf.data(), writerBuf.size() * 8);

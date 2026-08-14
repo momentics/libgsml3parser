@@ -19,9 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// SM IE — parse/write/text implementation
+// SM IE - parse/write/text implementation
 // Spec: 3GPP TS 24.008 section 10.5.8
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — SM IE templates
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - SM IE templates
 //            ts_PdpType, ts_ApnTLV, ts_QoS_Elt, ts_PcoTLV
 
 #include "gsml3parser/sm/l3smelements.h"

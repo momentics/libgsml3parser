@@ -235,7 +235,7 @@ TEST(GSMSpecTest, RestOctetPaddingPattern) {
 TEST(GSMSpecTest, SI2_RestOctets) {
     // Reference: GSM_SystemInformation.ttcn SystemInformationType2:
     //   bcch_freq_list(16) + ncc_permitted(1) + rach_control(3) = 20 bytes fixed
-    // SI2 has NO rest_octets field — body is exactly 20 bytes.
+    // SI2 has NO rest_octets field - body is exactly 20 bytes.
     L3SystemInformationType2 msg;
     EXPECT_EQ(msg.l2BodyLength(), 20u);
     EXPECT_EQ(msg.fullBodyLength(), 20u);
@@ -244,7 +244,7 @@ TEST(GSMSpecTest, SI2_RestOctets) {
 TEST(GSMSpecTest, SI2bis_RestOctets) {
     // Reference: GSM_SystemInformation.ttcn SystemInformationType2bis:
     //   extd_bcch_freq_list(16) + rach_control(3) + rest_octets(0..1)
-    // SI2bis has NO ncc_permitted — only 19 bytes fixed.
+    // SI2bis has NO ncc_permitted - only 19 bytes fixed.
     // fullBodyLength = 19 fixed + 1 max rest = 20 bytes.
     // Library l2BodyLength returns 20 (includes phantom ncc_permitted),
     // but reference fixed body is 19 bytes.
@@ -256,7 +256,7 @@ TEST(GSMSpecTest, SI2bis_RestOctets) {
 TEST(GSMSpecTest, SI2ter_RestOctets) {
     // Reference: GSM_SystemInformation.ttcn SystemInformationType2ter:
     //   extd_bcch_freq_list(16) + rest_octets(0..4)
-    // SI2ter has NO RachControlParameters and NO NCCPermitted — only 16 bytes fixed.
+    // SI2ter has NO RachControlParameters and NO NCCPermitted - only 16 bytes fixed.
     // fullBodyLength = 16 fixed + 4 max rest = 20 bytes.
     L3SystemInformationType2ter msg;
     EXPECT_EQ(msg.l2BodyLength(), 16u);

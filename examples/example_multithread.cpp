@@ -21,7 +21,7 @@
 
 // Multi-threaded parse benchmark across all 12 PD domains (RR, MM, CC, SS,
 // GMM, SM, SMS, BCC, GCC, LS, EXT, TST).  Each thread uses its own immutable ParserConfig
-// — no mutex needed for configuration.  Round-trip serialization is verified
+// - no mutex needed for configuration.  Round-trip serialization is verified
 // per message.
 
 #include <gsml3parser/gsml3parser.hpp>
@@ -35,7 +35,7 @@ using namespace gsml3parser;
 
 namespace {
 
-// Shared counters — each thread uses its own ParserConfig (immutable, no mutex).
+// Shared counters - each thread uses its own ParserConfig (immutable, no mutex).
 struct ThreadStats {
     std::atomic<uint64_t> parsed{0};
     std::atomic<uint64_t> errors{0};
@@ -70,7 +70,7 @@ std::vector<std::string> sExampleHexes = {
     };
 
 void workerThread(int id, ThreadStats& stats, int iterations) {
-    // Each thread creates its own immutable ParserConfig — no mutex needed.
+    // Each thread creates its own immutable ParserConfig - no mutex needed.
     ParserConfig cfg;
     cfg = cfg.withLogLevel(LogLevel::ERR);
 

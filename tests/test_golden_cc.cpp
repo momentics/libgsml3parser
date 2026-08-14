@@ -37,14 +37,14 @@
 //   - CC MTI values verified against L3_Templates.ttcn (ts_ML3_MO_CC_SETUP, tr_ML3_MT_CC_CALL_PROC,
 //     tr_ML3_MT_CC_ALERTING, ts_ML3_MO_CC_CONNECT, ts_ML3_MO_CC_CALL_CONF, ts_ML3_MO_CC_EMERG_SETUP,
 //     ts_ML3_MO_CC_CONNECT_ACK, ts_ML3_MO_CC_DISC, tr_ML3_MT_CC_RELEASE, ts_ML3_MO_CC_REL_COMPL,
-//     ts_ML3_MO_CC_START_DTMF) — all match GSM 24.008 Table 10.5.4
+//     ts_ML3_MO_CC_START_DTMF) - all match GSM 24.008 Table 10.5.4
 //   - Cause TLV encoding verified against L3_Templates.ttcn ts_ML3_Cause (line 60):
 //     IEI=0x08, oct3=[location(4)|spare(1)|codingStandard(2)|ext1(1)],
-//     oct4=[causeValue(7)|ext3(1)=1] — matches GSM 24.008 10.5.4.11
+//     oct4=[causeValue(7)|ext3(1)=1] - matches GSM 24.008 10.5.4.11
 //   - Cause LV encoding verified against L3_Templates.ttcn ts_ML3_Cause_LV (line 78):
-//     No IEI, length(1) + oct3 + oct4 — matches GSM 24.008 10.5.4.11
+//     No IEI, length(1) + oct3 + oct4 - matches GSM 24.008 10.5.4.11
 //   - CC header byte layout verified: PD=3('0011'B), TI(3 bits), TIF(1 bit) in byte 0;
-//     MTI(6 bits)|NSD(2 bits) in byte 1 — matches GSM 24.008 Table 11.2
+//     MTI(6 bits)|NSD(2 bits) in byte 1 - matches GSM 24.008 Table 11.2
 //   - CC Cause values (CCCause enum) verified against ITU-T Q.763 / GSM 24.008 Table 10.5.4.11:
 //     16=Normal_Call_Clearing, 17=User_Busy, 31=Normal_Unspecified, 95=Semantic_Error, etc.
 //   - CC CauseLocation values verified against GSM 24.008 Table 10.5.4.11:
@@ -334,7 +334,7 @@ TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
 // CC PARSE FROM HEX: Disconnect with CalledPartyNumber + Cause (GSM 24.008 9.3.7)
 // Reference: L3_Templates.ttcn ts_ML3_MO_CC_DISC (line 1760):
 //   messageType := '100101'B (MTI=0x25), calledPartyNumberBcd, cause := ts_ML3_Cause_LV(cause)
-// Reference: L3_Templates.ttcn ts_Called() — CalledPartyNumber IEI='5E'O, numberingPlan='0000'B
+// Reference: L3_Templates.ttcn ts_Called() - CalledPartyNumber IEI='5E'O, numberingPlan='0000'B
 // Spec-verified: Disconnect with BCD-CalledPartyNumber(TLV) + Cause(TLV) per GSM 24.008 9.3.7
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.7: Disconnect body = BCD-CalledPartyNumber(MANDATORY) + [Cause].
 //   Called-Party-Number is ALWAYS present in Disconnect (mandatory per spec).

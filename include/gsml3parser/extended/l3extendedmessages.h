@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Extended PD (PD=0x0e) Message Classes — GSM 04.08 §10.2
+// Extended PD (PD=0x0e) Message Classes - GSM 04.08 §10.2
 // Placeholder for future extended protocol discriminators.
 // MTI is determined at parse time from the L3 header.
 

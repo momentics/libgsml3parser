@@ -151,7 +151,7 @@ TEST(GoldenBCCGCCTest, GCCHeaderEncoding) {
 }
 
 // =====================================================================
-// BCC Setup (GSM 44.018 9.6.2.2) — message with body
+// BCC Setup (GSM 44.018 9.6.2.2) - message with body
 // Reference: L3_Templates.ttcn ts_ML3_MO_BCC (line 3813)
 // Hex breakdown:
 //   0x10 = PD(4)=0x01(BCC), TI(3)=0, TIF(1)=0
@@ -192,7 +192,7 @@ TEST(GoldenBCCGCCTest, BCCSetup_RoundTrip) {
 }
 
 // =====================================================================
-// BCC Release Complete (GSM 44.018 9.6.2.9) — minimal message
+// BCC Release Complete (GSM 44.018 9.6.2.9) - minimal message
 // Reference: L3_Templates.ttcn ts_ML3_MO_BCC wrapper
 // Hex breakdown:
 //   0x10 = PD(4)=0x01(BCC), TI(3)=0, TIF(1)=0
@@ -223,7 +223,7 @@ TEST(GoldenBCCGCCTest, BCCReleaseComplete_RoundTrip) {
 }
 
 // =====================================================================
-// BCC Proceeding (GSM 44.018 9.6.2.3) — with body
+// BCC Proceeding (GSM 44.018 9.6.2.3) - with body
 // Reference: L3_Templates.ttcn ts_ML3_MO_BCC wrapper
 // Hex breakdown:
 //   0x10 = PD(4)=0x01(BCC), TI(3)=0, TIF(1)=0
@@ -243,7 +243,7 @@ TEST(GoldenBCCGCCTest, BCCProceeding_GoldenParse) {
 }
 
 // =====================================================================
-// BCC Connect (GSM 44.018 9.6.2.6) — minimal
+// BCC Connect (GSM 44.018 9.6.2.6) - minimal
 // Hex breakdown:
 //   0x10 = PD(4)=0x01(BCC), TI(3)=0, TIF(1)=0
 //   0x14 = MTI(6)=0x05(Connect)<<2, NSD(2)=0
@@ -258,7 +258,7 @@ TEST(GoldenBCCGCCTest, BCCConnect_Minimal) {
 }
 
 // =====================================================================
-// BCC Disconnect (GSM 44.018 9.6.2.7) — minimal
+// BCC Disconnect (GSM 44.018 9.6.2.7) - minimal
 // Hex breakdown:
 //   0x10 = PD(4)=0x01(BCC), TI(3)=0, TIF(1)=0
 //   0x18 = MTI(6)=0x06(Disconnect)<<2, NSD(2)=0
@@ -273,7 +273,7 @@ TEST(GoldenBCCGCCTest, BCCDisconnect_Minimal) {
 }
 
 // =====================================================================
-// BCC Release (GSM 44.018 9.6.2.8) — minimal
+// BCC Release (GSM 44.018 9.6.2.8) - minimal
 // Hex breakdown:
 //   0x10 = PD(4)=0x01(BCC), TI(3)=0, TIF(1)=0
 //   0x1C = MTI(6)=0x07(Release)<<2, NSD(2)=0
@@ -288,7 +288,7 @@ TEST(GoldenBCCGCCTest, BCCRelease_Minimal) {
 }
 
 // =====================================================================
-// GCC Setup (GSM 44.018 9.7.2.2) — message with body
+// GCC Setup (GSM 44.018 9.7.2.2) - message with body
 // Reference: L3_Templates.ttcn ts_ML3_MO_GCC (line 3840)
 // Hex breakdown:
 //   0x00 = PD(4)=0x00(GCC), TI(3)=0, TIF(1)=0
@@ -329,7 +329,7 @@ TEST(GoldenBCCGCCTest, GCCSetup_RoundTrip) {
 }
 
 // =====================================================================
-// GCC Acknowledge (GSM 44.018 9.7.2.3) — minimal
+// GCC Acknowledge (GSM 44.018 9.7.2.3) - minimal
 // Hex breakdown:
 //   0x00 = PD(4)=0x00(GCC), TI(3)=0, TIF(1)=0
 //   0x08 = MTI(6)=0x02(Acknowledge)<<2, NSD(2)=0
@@ -344,7 +344,7 @@ TEST(GoldenBCCGCCTest, GCCAcknowledge_Minimal) {
 }
 
 // =====================================================================
-// GCC Proceeding (GSM 44.018 9.7.2.4) — minimal
+// GCC Proceeding (GSM 44.018 9.7.2.4) - minimal
 // Hex breakdown:
 //   0x00 = PD(4)=0x00(GCC), TI(3)=0, TIF(1)=0
 //   0x04 = MTI(6)=0x01(Proceeding)<<2, NSD(2)=0
@@ -359,7 +359,7 @@ TEST(GoldenBCCGCCTest, GCCProceeding_Minimal) {
 }
 
 // =====================================================================
-// GCC Connect (GSM 44.018 9.7.2.6) — minimal
+// GCC Connect (GSM 44.018 9.7.2.6) - minimal
 // Hex breakdown:
 //   0x00 = PD(4)=0x00(GCC), TI(3)=0, TIF(1)=0
 //   0x14 = MTI(6)=0x05(Connect)<<2, NSD(2)=0
@@ -374,7 +374,7 @@ TEST(GoldenBCCGCCTest, GCCConnect_Minimal) {
 }
 
 // =====================================================================
-// GCC Disconnect (GSM 44.018 9.7.2.7) — minimal
+// GCC Disconnect (GSM 44.018 9.7.2.7) - minimal
 // Hex breakdown:
 //   0x00 = PD(4)=0x00(GCC), TI(3)=0, TIF(1)=0
 //   0x18 = MTI(6)=0x06(Disconnect)<<2, NSD(2)=0
@@ -389,7 +389,7 @@ TEST(GoldenBCCGCCTest, GCCDisconnect_Minimal) {
 }
 
 // =====================================================================
-// GCC Release (GSM 44.018 9.7.2.8) — minimal
+// GCC Release (GSM 44.018 9.7.2.8) - minimal
 // Hex breakdown:
 //   0x00 = PD(4)=0x00(GCC), TI(3)=0, TIF(1)=0
 //   0x1C = MTI(6)=0x07(Release)<<2, NSD(2)=0
@@ -404,7 +404,7 @@ TEST(GoldenBCCGCCTest, GCCRelease_Minimal) {
 }
 
 // =====================================================================
-// GCC Release Complete (GSM 44.018 9.7.2.9) — minimal
+// GCC Release Complete (GSM 44.018 9.7.2.9) - minimal
 // Hex breakdown:
 //   0x00 = PD(4)=0x00(GCC), TI(3)=0, TIF(1)=0
 //   0x28 = MTI(6)=0x0a(ReleaseComplete)<<2, NSD(2)=0
@@ -654,7 +654,7 @@ TEST(GoldenBCCGCCTest, GCCTextOutput) {
     EXPECT_NE(oss.str().find("GCCReleaseComplete"), std::string::npos);
 }
 
-// BCC Call Confirmed — TS 44.018 §9.6.2.5, MTI=0x04
+// BCC Call Confirmed - TS 44.018 §9.6.2.5, MTI=0x04
 TEST(GoldenBCCGCCTest, BCCCallConfirmed_Minimal) {
     uint8_t data[] = {0x10, 0x10};
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -670,7 +670,7 @@ TEST(GoldenBCCGCCTest, BCCCallConfirmed_RoundTrip) {
     EXPECT_EQ(messageMTI(*rt), L3BCCCallConfirmed::MTI);
 }
 
-// BCC Connect Acknowledge — TS 44.018 §9.6.2.10, MTI=0x09
+// BCC Connect Acknowledge - TS 44.018 §9.6.2.10, MTI=0x09
 TEST(GoldenBCCGCCTest, BCCConnectAcknowledge_Minimal) {
     uint8_t data[] = {0x10, 0x24};
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -686,7 +686,7 @@ TEST(GoldenBCCGCCTest, BCCConnectAcknowledge_RoundTrip) {
     EXPECT_EQ(messageMTI(*rt), L3BCCConnectAcknowledge::MTI);
 }
 
-// GCC Call Confirmed — TS 44.018 §9.7.2.5, MTI=0x03
+// GCC Call Confirmed - TS 44.018 §9.7.2.5, MTI=0x03
 TEST(GoldenBCCGCCTest, GCCCallConfirmed_Minimal) {
     uint8_t data[] = {0x00, 0x0C};
     auto msg = parseL3(std::span<const uint8_t>(data));

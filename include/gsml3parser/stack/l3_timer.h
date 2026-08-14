@@ -27,7 +27,7 @@
 ///
 /// Thread safety: NOT thread-safe. One instance per MS, accessed from a single thread.
 /// Performance: tick() avoids heap allocation via callback or pre-allocated span.
-/// Internal storage is std::array — no dynamic allocation.
+/// Internal storage is std::array - no dynamic allocation.
 ///
 /// Example:
 /// @code
@@ -54,25 +54,25 @@ namespace gsml3parser {
 /// GSM Layer 3 timer identifiers (3GPP TS 24.008 / TS 44.018).
 /// Each timer corresponds to a protocol retransmission or timeout period.
 enum class L3TimerId : uint8_t {
-    T3101 = 0,   /// CM service request retransmission (3s) — 3GPP TS 24.008 10.5.4
-    T3102,       /// Identity response retransmission (3s) — 3GPP TS 24.008 10.5.6
-    T3103,       /// Location updating request retransmission (5s) — 3GPP TS 24.008 10.5.12
-    T3106,       /// Authentication response retransmission (3s) — 3GPP TS 24.008 10.5.18
-    T3108,       /// TMSI reallocation complete retransmission (3s) — 3GPP TS 24.008 10.5.23
-    T3109,       /// Paging response retransmission (etom * 5s) — 3GPP TS 24.008 10.5.26
-    T3111,       /// CM reestablishment request retransmission (3s) — 3GPP TS 24.008 10.5.34
-    T3112,       /// IMSI detach indication retransmission (3s) — 3GPP TS 24.008 10.5.36
-    T3113,       /// MM status retransmission (3s) — 3GPP TS 24.008 10.5.38
-    T3310,       /// GPRS attach request retransmission (5s) — 3GPP TS 24.008 10.5.76
-    T3311,       /// Routing area update retransmission (etor * 5s) — 3GPP TS 24.008 10.5.78
-    T3312,       /// P-TMSI reallocation complete retransmission (3s) — 3GPP TS 24.008 10.5.80
-    T3314,       /// GPRS service request retransmission (3s) — 3GPP TS 24.008 10.5.84
-    T3315,       /// Authentication and ciphering resp retransmission (3s) — 3GPP TS 24.008 10.5.86
-    T3320,       /// Activate PDP context request retransmission (3s) — 3GPP TS 24.008 10.5.96
-    T3321,       /// Deactivate PDP context request retransmission (3s) — 3GPP TS 24.008 10.5.98
-    T3322,       /// Modify PDP context request retransmission (3s) — 3GPP TS 24.008 10.5.100
-    T3334,       /// GMM status retransmission (3s) — 3GPP TS 24.008 10.5.112
-    T3395,       /// Packet reservation request retransmission (3s) — 3GPP TS 24.008 10.5.130
+    T3101 = 0,   /// CM service request retransmission (3s) - 3GPP TS 24.008 10.5.4
+    T3102,       /// Identity response retransmission (3s) - 3GPP TS 24.008 10.5.6
+    T3103,       /// Location updating request retransmission (5s) - 3GPP TS 24.008 10.5.12
+    T3106,       /// Authentication response retransmission (3s) - 3GPP TS 24.008 10.5.18
+    T3108,       /// TMSI reallocation complete retransmission (3s) - 3GPP TS 24.008 10.5.23
+    T3109,       /// Paging response retransmission (etom * 5s) - 3GPP TS 24.008 10.5.26
+    T3111,       /// CM reestablishment request retransmission (3s) - 3GPP TS 24.008 10.5.34
+    T3112,       /// IMSI detach indication retransmission (3s) - 3GPP TS 24.008 10.5.36
+    T3113,       /// MM status retransmission (3s) - 3GPP TS 24.008 10.5.38
+    T3310,       /// GPRS attach request retransmission (5s) - 3GPP TS 24.008 10.5.76
+    T3311,       /// Routing area update retransmission (etor * 5s) - 3GPP TS 24.008 10.5.78
+    T3312,       /// P-TMSI reallocation complete retransmission (3s) - 3GPP TS 24.008 10.5.80
+    T3314,       /// GPRS service request retransmission (3s) - 3GPP TS 24.008 10.5.84
+    T3315,       /// Authentication and ciphering resp retransmission (3s) - 3GPP TS 24.008 10.5.86
+    T3320,       /// Activate PDP context request retransmission (3s) - 3GPP TS 24.008 10.5.96
+    T3321,       /// Deactivate PDP context request retransmission (3s) - 3GPP TS 24.008 10.5.98
+    T3322,       /// Modify PDP context request retransmission (3s) - 3GPP TS 24.008 10.5.100
+    T3334,       /// GMM status retransmission (3s) - 3GPP TS 24.008 10.5.112
+    T3395,       /// Packet reservation request retransmission (3s) - 3GPP TS 24.008 10.5.130
     Unknown = 0xFF
 };
 
@@ -92,7 +92,7 @@ enum class L3TimerId : uint8_t {
 /// Single timer instance with start/stop/expired semantics.
 /// Uses std::chrono::steady_clock for monotonic time measurement.
 ///
-/// 3GPP TS 24.008 — Protocol timer definitions.
+/// 3GPP TS 24.008 - Protocol timer definitions.
 ///
 /// Memory: No heap allocations. All state stored inline (~24 bytes).
 class L3Timer {
@@ -160,10 +160,10 @@ private:
 
 /// Manages a set of named timers for one MS context.
 ///
-/// Uses fixed-size arrays indexed by timer enum value — no heap allocation.
+/// Uses fixed-size arrays indexed by timer enum value - no heap allocation.
 /// Maximum 32 concurrent timers per MS (sufficient for all defined L3TimerId values).
 ///
-/// 3GPP TS 24.008 — Multiple protocol timers may run concurrently per MS.
+/// 3GPP TS 24.008 - Multiple protocol timers may run concurrently per MS.
 ///
 /// Thread safety: NOT thread-safe. One instance per MS, accessed from a single thread.
 /// Performance: tick() uses callback or span to avoid heap allocation on the hot path.
@@ -241,7 +241,7 @@ public:
 private:
     static constexpr size_t MAX_TIMERS = 32;
 
-    // Fixed-size array — no heap allocation. Index by enum value.
+    // Fixed-size array - no heap allocation. Index by enum value.
     std::array<L3Timer, MAX_TIMERS> mTimers{};
 
     // Tracks which timer slots have been initialized (configured with a real ID).

@@ -87,7 +87,7 @@ void L3StreamProcessor::processUntilEOF(FrameHandler& handler) {
                 mStats.truncatedInputs++;
                 break; // No more data available.
             }
-            // Other errors (corrupt frames) — continue processing.
+            // Other errors (corrupt frames) - continue processing.
             mStats.parseErrors++;
             handler.onError(err, {});
             continue;

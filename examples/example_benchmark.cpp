@@ -24,6 +24,7 @@
 // domain stream benchmark with all message types interleaved.
 
 #include <chrono>
+#include <cinttypes>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -68,8 +69,8 @@ static void runParseBenchmark(const char* label, std::span<const uint8_t> single
     double secs = std::chrono::duration<double>(end - start).count();
     uint64_t perSec = secs > 0 ? static_cast<uint64_t>(iterations / secs) : 0;
 
-    printf("  %-40s %llu msgs  %8.4f s  %llu msg/s  (ok=%llu err=%llu)\n",
-           label, iterations, secs, perSec, ok, errs);
+    printf("  %-40s %" PRIu64 " msgs  %8.4f s  %" PRIu64 " msg/s  (ok=%" PRIu64 " err=%" PRIu64 ")\n",
+            label, iterations, secs, perSec, ok, errs);
 }
 
 static void runStreamBenchmark(const char* label, std::span<const uint8_t> singleMsg, uint64_t iterations) {
@@ -99,53 +100,53 @@ static void runStreamBenchmark(const char* label, std::span<const uint8_t> singl
     double secs = std::chrono::duration<double>(end - start).count();
     uint64_t perSec = secs > 0 ? static_cast<uint64_t>(handler.count / secs) : 0;
 
-    printf("  %-40s %llu msgs  %8.4f s  %llu msg/s\n",
-           label, handler.count, secs, perSec);
+    printf("  %-40s %" PRIu64 " msgs  %8.4f s  %" PRIu64 " msg/s\n",
+            label, handler.count, secs, perSec);
 }
 
 int main() {
     printf("=== libgsml3parser Benchmark (12 PD Domains) ===\n\n");
 
     // Representative messages for each PD domain.
-    // RR: Channel Release (3 bytes) — PD=0x6, MTI=0x0D
+    // RR: Channel Release (3 bytes) - PD=0x6, MTI=0x0D
     uint8_t rrMsg[] = {0x60, 0x0D, 0x00};
 
-    // MM: CM Service Accept (2 bytes) — PD=0x5, MTI=0x21
+    // MM: CM Service Accept (2 bytes) - PD=0x5, MTI=0x21
     uint8_t mmMsg[] = {0x50, 0x84};
 
-    // CC: Disconnect (6 bytes) — PD=0x3, TI=7, TIF=0, MTI=0x25
+    // CC: Disconnect (6 bytes) - PD=0x3, TI=7, TIF=0, MTI=0x25
     uint8_t ccMsg[] = {0x3E, 0x94, 0x08, 0x02, 0x16, 0x21};
 
-    // SS: SupServ Facility (2 bytes) — PD=0xB, MTI=0x3A
+    // SS: SupServ Facility (2 bytes) - PD=0xB, MTI=0x3A
     uint8_t ssMsg[] = {0xB0, 0xE8};
 
-    // GMM: GMM Status (3 bytes) — PD=0x8, MTI=0x20
+    // GMM: GMM Status (3 bytes) - PD=0x8, MTI=0x20
     uint8_t gmmMsg[] = {0x80, 0x20, 0x05};
 
-    // SM: SM Status (4 bytes) — PD=0xA, MTI=0x55
+    // SM: SM Status (4 bytes) - PD=0xA, MTI=0x55
     uint8_t smMsg[] = {0xA0, 0x55, 0x32, 0x01};
 
-    // SMS: CP Ack (4 bytes) — PD=0x9, MTI=0x04
+    // SMS: CP Ack (4 bytes) - PD=0x9, MTI=0x04
     uint8_t smsMsg[] = {0x90, 0x04, 0x01, 0x02};
 
-    // BCC: Setup (2 bytes) — PD=0x1, MTI=0x01
+    // BCC: Setup (2 bytes) - PD=0x1, MTI=0x01
     uint8_t bccMsg[] = {0x10, 0x01};
 
-    // GCC: Setup (3 bytes) — PD=0x0, MTI=0x01
+    // GCC: Setup (3 bytes) - PD=0x0, MTI=0x01
     uint8_t gccMsg[] = {0x00, 0x01, 0x02};
 
-    // LS: LocationServiceRequest (2 bytes) — PD=0x0c, MTI=0x01
+    // LS: LocationServiceRequest (2 bytes) - PD=0x0c, MTI=0x01
     uint8_t lsMsg[] = {0xC0, 0x01};
 
-    // EXT: ExtendedMessage (2 bytes) — PD=0x0e, MTI=0x01
+    // EXT: ExtendedMessage (2 bytes) - PD=0x0e, MTI=0x01
     uint8_t extMsg[] = {0xE0, 0x01};
 
-    // TST: TestProcedureMessage (2 bytes) — PD=0x0f, MTI=0x01
+    // TST: TestProcedureMessage (2 bytes) - PD=0x0f, MTI=0x01
     uint8_t tstMsg[] = {0xF0, 0x01};
 
     uint64_t iterations = 500000;
 
-    printf("--- parseL3() Benchmark (%llu iterations each) ---\n", iterations);
+    printf("--- parseL3() Benchmark (%" PRIu64 " iterations each) ---\n", iterations);
     runParseBenchmark("RR ChannelRelease", rrMsg, iterations);
     runParseBenchmark("MM CMServiceAccept", mmMsg, iterations);
     runParseBenchmark("CC Disconnect", ccMsg, iterations);
@@ -159,7 +160,7 @@ int main() {
     runParseBenchmark("EXT ExtendedMessage", extMsg, iterations);
     runParseBenchmark("TST TestProcedureMessage", tstMsg, iterations);
 
-    printf("\n--- L3StreamProcessor Benchmark (%llu iterations each) ---\n", iterations);
+    printf("\n--- L3StreamProcessor Benchmark (%" PRIu64 " iterations each) ---\n", iterations);
     runStreamBenchmark("RR ChannelRelease", rrMsg, iterations);
     runStreamBenchmark("MM CMServiceAccept", mmMsg, iterations);
     runStreamBenchmark("CC Disconnect", ccMsg, iterations);
@@ -216,7 +217,7 @@ int main() {
         double secs = std::chrono::duration<double>(end - start).count();
         uint64_t perSec = secs > 0 ? static_cast<uint64_t>(handler.count / secs) : 0;
 
-        printf("  %-40s %llu msgs  %8.4f s  %llu msg/s\n",
+        printf("  %-40s %" PRIu64 " msgs  %8.4f s  %" PRIu64 " msg/s\n",
                 "Mixed (all 12 PD domains)", handler.count, secs, perSec);
     }
 

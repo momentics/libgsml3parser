@@ -45,7 +45,7 @@ struct ParseError {
         UnsupportedFeature,
     };
 
-    // Inline buffer for small-string optimization — no heap allocation.
+    // Inline buffer for small-string optimization - no heap allocation.
     static constexpr std::size_t InlineCapacity = 47;
 
     Code code{Code::Ok};
@@ -257,7 +257,7 @@ public:
         return Expected{std::move(err)};
     }
 
-    // Convert from Expected<U> — propagates error, discards value.
+    // Convert from Expected<U> - propagates error, discards value.
     template <typename U>
     constexpr Expected(const Expected<U>& other) {
         if (other.has_value()) {

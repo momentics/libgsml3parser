@@ -19,14 +19,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// SM Message Classes — GSM L3 GPRS Session Management messages
+// SM Message Classes - GSM L3 GPRS Session Management messages
 // Spec: 3GPP TS 24.008 sections 9.5, Table 10.4a
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — SM message templates
-//            ref/OpenBTS/SGSNGGSN/GPRSL3Messages.h — L3SmMsg::MessageType enum
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - SM message templates
+//            ref/OpenBTS/SGSNGGSN/GPRSL3Messages.h - L3SmMsg::MessageType enum
 //
 // L3 header (per 24.008 10.4a):
 //   Byte 0: PD(4)=0x0A(SM) | Skip(4)
-//   Byte 1: MessageType(8 bits, raw — no NSD field)
+//   Byte 1: MessageType(8 bits, raw - no NSD field)
 //   Body: [message-specific fields]
 
 #pragma once

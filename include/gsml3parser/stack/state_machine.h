@@ -30,11 +30,11 @@
 /// messages. The caller builds response messages externally via Builder API.
 /// This keeps SMResult small (~16 bytes) and copyable.
 ///
-/// 3GPP TS 24.008 — Layer 3 specification.
-/// 3GPP TS 44.018 — Mobile radio interface layer 3 specification.
+/// 3GPP TS 24.008 - Layer 3 specification.
+/// 3GPP TS 44.018 - Mobile radio interface layer 3 specification.
 ///
 /// Thread safety: NOT thread-safe. One instance per MS, accessed from a single thread.
-/// Performance: handle_message_impl() uses switch(PD) + switch(MTI) dispatch —
+/// Performance: handle_message_impl() uses switch(PD) + switch(MTI) dispatch -
 /// compile-time resolved, no vtable lookup on the critical path.
 /// Memory: SMResult contains no heap-allocated data (~16 bytes).
 ///
@@ -103,7 +103,7 @@ static_assert(sizeof(SMResult) <= 16, "SMResult must remain small for stack effi
 /// handle_timer_impl() to define transitions. The base class provides a generic
 /// processMessage/processTimer interface that delegates to the derived impl.
 ///
-/// 3GPP TS 24.008 — State machine behavior for RR, MM, CC procedures.
+/// 3GPP TS 24.008 - State machine behavior for RR, MM, CC procedures.
 ///
 /// Thread safety: NOT thread-safe. One instance per MS, accessed from a single thread.
 /// Performance: processMessage() dispatches via virtual call to derived impl, but the
@@ -169,7 +169,7 @@ protected:
 ///   ACTIVE + MeasurementReport        -> ACTIVE (no transition, for developer handling)
 ///   Any state + unexpected message    -> None (stay in current state)
 ///
-/// 3GPP TS 24.008 4.1 — Radio Resource Management procedures.
+/// 3GPP TS 24.008 4.1 - Radio Resource Management procedures.
 ///
 /// Thread safety: NOT thread-safe. One instance per MS, accessed from a single thread.
 class RRStateMachine : public ProtocolStateMachine {
@@ -215,7 +215,7 @@ protected:
 ///   LOCATION_UPDATE + (accept trigger)  -> REGISTERED
 ///   Any state + unexpected message      -> None (stay in current state)
 ///
-/// 3GPP TS 24.008 4.2 — Mobility Management procedures.
+/// 3GPP TS 24.008 4.2 - Mobility Management procedures.
 ///
 /// Thread safety: NOT thread-safe. One instance per MS, accessed from a single thread.
 class MMStateMachine : public ProtocolStateMachine {
@@ -261,7 +261,7 @@ protected:
 ///   DISCONNECT_RECEIVED       -> RELEASE (developer sends Release)
 ///   Any state + unexpected    -> None (stay in current state)
 ///
-/// 3GPP TS 24.008 6.1 — Call Control procedures.
+/// 3GPP TS 24.008 6.1 - Call Control procedures.
 ///
 /// Thread safety: NOT thread-safe. One instance per MS, accessed from a single thread.
 class CCStateMachine : public ProtocolStateMachine {

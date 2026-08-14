@@ -19,14 +19,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// SMS CP (Control Part) & RP (Relay Part) Messages — GSM L3 SMS layer
+// SMS CP (Control Part) & RP (Relay Part) Messages - GSM L3 SMS layer
 // Spec: 3GPP TS 24.008 sections 9.6, Table 10.6a; 3GPP TS 24.011 sections 7-8
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — SMS templates (lines 3513-3739)
-//            ref/OpenBTS/SMS/SMSMessages.h — CP/RP/TP message classes
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - SMS templates (lines 3513-3739)
+//            ref/OpenBTS/SMS/SMSMessages.h - CP/RP/TP message classes
 //
 // L3 header (per 24.008 10.5.1):
 //   Byte 0: PD(4)=0x09(SMS) | Skip(4)
-//   Byte 1: CP-MTI(8 bits, raw — no NSD field)
+//   Byte 1: CP-MTI(8 bits, raw - no NSD field)
 //   Body: CP message body (contains RPDU which may contain TPDU)
 //
 // CP-MTI values (Table 10.6a):

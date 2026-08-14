@@ -19,9 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// SM Information Elements — GSM L3 GPRS Session Management IE definitions
+// SM Information Elements - GSM L3 GPRS Session Management IE definitions
 // Spec: 3GPP TS 24.008 section 10.5.8, Table 10.5a
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — SM IE templates
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - SM IE templates
 //
 // Bit layout (per spec):
 //   PDPAddress: TLV(IEI=0x08) | Length(1) | PDPType(1) | Address(variable)
@@ -269,7 +269,7 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── TMGI — Temporary Mobile Group Identity (GSM 24.008 10.5.6.14) ──────
+// ── TMGI - Temporary Mobile Group Identity (GSM 24.008 10.5.6.14) ──────
 // TLV format: IEI=0x42 | Length(1)=6 | PLMN Identity(3) | Service ID(2) | Session ID(1)
 
 class L3TMGI {

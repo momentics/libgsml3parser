@@ -27,7 +27,7 @@
 // All SMS CP message type identifiers verified against osmo-ttcn3-hacks L3_Templates.ttcn
 //   and 3GPP TS 24.008 Table 10.6a (SMS Control Part).
 // SMS header format verified: PD=9('1001'B), Skip(4 bits) in byte 0;
-//   CP-MTI(8 bits, raw — no NSD field) in byte 1.
+//   CP-MTI(8 bits, raw - no NSD field) in byte 1.
 // Message structures verified against L3_Templates.ttcn templates:
 //   ts_CP_DATA_MO, ts_CP_ACK_MO, ts_CP_ERROR_MO, tr_CP_DATA_MT,
 //   ts_RP_DATA_MO, ts_RP_ACK_MO, ts_RP_ERROR_MO, ts_RP_SMMA_MO,
@@ -110,7 +110,7 @@ TEST(GoldenSMSTest, HeaderEncoding) {
 }
 
 // =====================================================================
-// SMS CP-ACK (GSM 24.011 8.1.3) — minimal message
+// SMS CP-ACK (GSM 24.011 8.1.3) - minimal message
 // Reference: L3_Templates.ttcn ts_CP_ACK_MO (line 3658)
 // Hex breakdown:
 //   0x90 = PD(4)=0x09(SMS), Skip(4)=0x00
@@ -142,7 +142,7 @@ TEST(GoldenSMSTest, CPAck_RoundTrip) {
 }
 
 // =====================================================================
-// SMS CP-ERROR (GSM 24.011 8.1.4) — with cause
+// SMS CP-ERROR (GSM 24.011 8.1.4) - with cause
 // Reference: L3_Templates.ttcn ts_CP_ERROR_MO (line 3664)
 // Hex breakdown:
 //   0x90 = PD(4)=0x09(SMS), Skip(4)=0x00
@@ -174,7 +174,7 @@ TEST(GoldenSMSTest, CPErr_RoundTrip) {
 }
 
 // =====================================================================
-// SMS CP-DATA (GSM 24.011 8.1.2) — with RPDU payload
+// SMS CP-DATA (GSM 24.011 8.1.2) - with RPDU payload
 // Reference: L3_Templates.ttcn ts_CP_DATA_MO (line 3648)
 // Hex breakdown:
 //   0x90 = PD(4)=0x09(SMS), Skip(4)=0x00
@@ -213,7 +213,7 @@ TEST(GoldenSMSTest, CPData_RoundTrip) {
 }
 
 // =====================================================================
-// SMS CP-STATUS (GSM 24.011 8.1.5) — minimal message
+// SMS CP-STATUS (GSM 24.011 8.1.5) - minimal message
 // Reference: 3GPP TS 24.011 section 8.1.5
 // Hex breakdown:
 //   0x90 = PD(4)=0x09(SMS), Skip(4)=0x00
@@ -248,7 +248,7 @@ TEST(GoldenSMSTest, CPStatus_RoundTrip) {
 }
 
 // =====================================================================
-// SMS CP-SMT (GSM 24.011 8.1.6) — with RPDU payload
+// SMS CP-SMT (GSM 24.011 8.1.6) - with RPDU payload
 // Reference: 3GPP TS 24.011 section 8.1.6
 // Hex breakdown:
 //   0x90 = PD(4)=0x09(SMS), Skip(4)=0x00
@@ -343,7 +343,7 @@ TEST(GoldenSMSTest, MessagePD) {
 }
 
 // =====================================================================
-// SMS RP-ACK (GSM 24.011 7.3.2) — parse from raw bytes
+// SMS RP-ACK (GSM 24.011 7.3.2) - parse from raw bytes
 // Reference: L3_Templates.ttcn ts_RP_ACK_MO (line 3572)
 // Hex breakdown (within CP-DATA RPDU):
 //   0x02 = Spare(5)=0 | RP-MTI(3)=2 (RP-ACK MO)
@@ -383,7 +383,7 @@ TEST(GoldenSMSTest, RPAck_RoundTrip) {
 }
 
 // =====================================================================
-// SMS RP-ERROR (GSM 24.011 7.3.4) — parse from raw bytes
+// SMS RP-ERROR (GSM 24.011 7.3.4) - parse from raw bytes
 // Reference: L3_Templates.ttcn ts_RP_ERROR_MO (line 3590)
 // Hex breakdown (within CP-DATA RPDU):
 //   0x04 = Spare(5)=0 | RP-MTI(3)=4 (RP-ERROR MO)
@@ -427,7 +427,7 @@ TEST(GoldenSMSTest, RPError_RoundTrip) {
 }
 
 // =====================================================================
-// SMS RP-SMMA (GSM 24.011 7.3.3) — parse from raw bytes
+// SMS RP-SMMA (GSM 24.011 7.3.3) - parse from raw bytes
 // Reference: L3_Templates.ttcn ts_RP_SMMA_MO (line 3635)
 // Hex breakdown (within CP-DATA RPDU):
 //   0x06 = Spare(5)=0 | RP-MTI(3)=6 (RP-SMMA MO)
@@ -467,7 +467,7 @@ TEST(GoldenSMSTest, RPSMMA_RoundTrip) {
 }
 
 // =====================================================================
-// SMS TP Deliver (GSM 23.040 9.2.2.1) — parse minimal TPDU
+// SMS TP Deliver (GSM 23.040 9.2.2.1) - parse minimal TPDU
 // Reference: L3_Templates.ttcn tr_SMS_DELIVER (line 3489)
 // Hex breakdown (TPDU within RP-User-Data):
 //   0x00 = TP-MTI(2)=00(Deliver) | mms(1)=0 | lp(1)=0 | spare(1)=0 | sri(1)=0 | udhi(1)=0 | rp(1)=0
@@ -505,7 +505,7 @@ TEST(GoldenSMSTest, TPDeliver_Parse) {
 }
 
 // =====================================================================
-// SMS TP Submit (GSM 23.040 9.2.2.2) — parse minimal TPDU
+// SMS TP Submit (GSM 23.040 9.2.2.2) - parse minimal TPDU
 // Reference: L3_Templates.ttcn ts_SMS_SUBMIT (line 3467)
 // Hex breakdown (TPDU within RP-User-Data):
 //   0x61 = TP-MTI(2)=01(Submit) | rd(1)=1 | vpf(2)=00 | srr(1)=0 | udhi(1)=0 | rp(1)=0
@@ -664,7 +664,7 @@ TEST(GoldenSMSTest, TPEnumStrings) {
 }
 
 // =====================================================================
-// SMS TP Status Report (GSM 23.040 9.2.2.3) — minimal parse
+// SMS TP Status Report (GSM 23.040 9.2.2.3) - minimal parse
 // Reference: 3GPP TS 23.040 section 9.2.2.3
 // =====================================================================
 
@@ -688,7 +688,7 @@ TEST(GoldenSMSTest, TPStatusReport_Parse) {
 }
 
 // =====================================================================
-// SMS TP Command (GSM 23.040 9.2.2.5) — minimal parse
+// SMS TP Command (GSM 23.040 9.2.2.5) - minimal parse
 // Reference: 3GPP TS 23.040 section 9.2.2.5
 // =====================================================================
 
@@ -708,7 +708,7 @@ TEST(GoldenSMSTest, TPCommand_Parse) {
 }
 
 // =====================================================================
-// SMS TP Address (GSM 23.040 9.1.2.4) — parse LV format
+// SMS TP Address (GSM 23.040 9.1.2.4) - parse LV format
 // Reference: L3_Templates.ttcn TP_DA and TP_OA templates
 // =====================================================================
 

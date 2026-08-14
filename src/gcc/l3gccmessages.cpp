@@ -19,9 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// GCC Messages — parse/write/text implementation
+// GCC Messages - parse/write/text implementation
 // Spec: 3GPP TS 44.018 sections 9.7, Table 10.4.4
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — ts_ML3_MO_GCC (line 3840)
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - ts_ML3_MO_GCC (line 3840)
 
 #include "gsml3parser/gcc/l3gccmessages.h"
 #include <sstream>

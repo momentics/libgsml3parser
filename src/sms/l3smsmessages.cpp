@@ -19,10 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// SMS CP & RP Messages — parse/write implementation
+// SMS CP & RP Messages - parse/write implementation
 // Spec: 3GPP TS 24.008 section 9.6, Table 10.6a; 3GPP TS 24.011 sections 7-8
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — SMS templates (lines 3513-3739)
-//            ref/OpenBTS/SMS/SMSMessages.h — CP/RP message classes
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - SMS templates (lines 3513-3739)
+//            ref/OpenBTS/SMS/SMSMessages.h - CP/RP message classes
 
 #include "gsml3parser/sms/l3smsmessages.h"
 #include <sstream>

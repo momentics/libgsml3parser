@@ -133,7 +133,7 @@ TEST(Visitor, tryGet_SSM_ReleaseComplete) {
 }
 
 // =====================================================================
-// tryGet on top-level ParsedMessage — correct domain returns pointer
+// tryGet on top-level ParsedMessage - correct domain returns pointer
 // =====================================================================
 
 TEST(Visitor, tryGet_ParsedMessage_RR) {
@@ -157,7 +157,7 @@ TEST(Visitor, tryGet_ParsedMessage_SS) {
 }
 
 // =====================================================================
-// tryGet on top-level ParsedMessage — wrong domain returns nullptr
+// tryGet on top-level ParsedMessage - wrong domain returns nullptr
 // =====================================================================
 
 TEST(Visitor, tryGet_ParsedMessage_WrongDomain_RR_ask_MM) {
@@ -484,7 +484,7 @@ TEST(Visitor, tryGet_GCC_ReleaseComplete) {
 }
 
 // =====================================================================
-// tryGet on top-level ParsedMessage — GMM/SM/SMS/BCC/GCC domains
+// tryGet on top-level ParsedMessage - GMM/SM/SMS/BCC/GCC domains
 // =====================================================================
 
 TEST(Visitor, tryGet_ParsedMessage_GMM) {
@@ -513,7 +513,7 @@ TEST(Visitor, tryGet_ParsedMessage_GCC) {
 }
 
 // =====================================================================
-// tryGet on top-level ParsedMessage — wrong domain returns nullptr
+// tryGet on top-level ParsedMessage - wrong domain returns nullptr
 // =====================================================================
 
 TEST(Visitor, tryGet_ParsedMessage_WrongDomain_GMM_ask_RR) {

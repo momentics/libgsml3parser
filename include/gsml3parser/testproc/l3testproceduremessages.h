@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Test Procedure PD (PD=0x0f) Message Classes — GSM 04.08 §10.2
+// Test Procedure PD (PD=0x0f) Message Classes - GSM 04.08 §10.2
 // Placeholder for test procedure messages used in network testing.
 // MTI is determined at parse time from the L3 header.
 

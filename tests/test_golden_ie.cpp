@@ -51,7 +51,7 @@
 // [GOLDEN VERIFICATION]
 // All IE byte-level encodings cross-checked against osmo-ttcn3-hacks reference:
 //   - LAI MCC/MNC BCD encoding verified against GSM_Types.ttcn TC_selftest_BcdMccMnc (line 497):
-//     MCC=262, MNC=42 -> '262F42'H -> HEXORDER(low) -> {0x62, 0xF2, 0x24} — matches TTCN-3!
+//     MCC=262, MNC=42 -> '262F42'H -> HEXORDER(low) -> {0x62, 0xF2, 0x24} - matches TTCN-3!
 //   - MobileIdentity TMSI type octet: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x08
 //     Verified against L3_Templates.ttcn ts_MI_TMSI (CmIdentityType: TMSI='100'B)
 //   - MobileIdentity IMSI type octet: spare(4)=0|type(3)=001(IMSI)|oe(1)=1 = 0x03
@@ -72,9 +72,9 @@
 //   - GSM timing constants verified against GSM_Types.ttcn:
 //     GsmMaxFrameNumber=26*51*2048=2715648, GSM_FRAME_DURATION=0.12/26.0=4.615ms
 //   - Rest octet padding 0x2B verified against GSM_RestOctets.ttcn PADDING_PATTERN('00101011'B)
-//   - ChannelDescription: typeAndOffset(5)|TN(3)|TSC(3)|h(1)|spare(2)|ARFCN(10) — 24 bits MSB-first
-//   - CellDescriptionV: bcc(3)|ncc(3)|arfcn(10) — 16 bits LSB-first (GSM_RR_Types.ttcn FIELDORDER(lsb))
-//   - RequestReference: RA(8)|T1p(5)|T3(6)|T2(5) — verified against GSM_RR_Types.ttcn f_compute_ReqRef
+//   - ChannelDescription: typeAndOffset(5)|TN(3)|TSC(3)|h(1)|spare(2)|ARFCN(10) - 24 bits MSB-first
+//   - CellDescriptionV: bcc(3)|ncc(3)|arfcn(10) - 16 bits LSB-first (GSM_RR_Types.ttcn FIELDORDER(lsb))
+//   - RequestReference: RA(8)|T1p(5)|T3(6)|T2(5) - verified against GSM_RR_Types.ttcn f_compute_ReqRef
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -158,7 +158,7 @@ TEST(GoldenIE, CellIdentity_Encoding) {
 //   Octet 1 = MCC_digit2(high)|MCC_digit1(low), e.g. MCC=262 -> '26' -> nibble-swapped -> 0x62
 //   Octet 2 = MNC_digit3_or_F(high)|MCC_digit3(low), e.g. MNC=42,F,2 -> '2F' -> swapped -> 0xF2
 //   Octet 3 = MNC_digit2(high)|MNC_digit1(low), e.g. '42' -> swapped -> 0x24
-//   TTCN-3 cross-check: enc_BcdMccMnc('262F42'H) = '62F224'O — matches!
+//   TTCN-3 cross-check: enc_BcdMccMnc('262F42'H) = '62F224'O - matches!
 // =====================================================================
 
 TEST(GoldenIE, LAI_Default) {
@@ -910,7 +910,7 @@ TEST(GoldenIE, RACHControlParameters_RefValues) {
 //   cbq3(2) + spare(2) + bs_pa_mfrms(3) + t3212(8)
 // [GSM SPEC VERIFIED] GSM 24.008 10.5.2.11: 3 octets exactly (24 bits).
 //   Octet 1: msc_r99(1)|att(1)|bs_ag_blks_res(3)|ccch_conf(3)|si22ind(1)|cbq3(2)
-//   Octet 2-3: spare(2)|bs_pa_mfrms(3)|t3212(8) — t3212 spans bits of octet 2 and 3
+//   Octet 2-3: spare(2)|bs_pa_mfrms(3)|t3212(8) - t3212 spans bits of octet 2 and 3
 // Reference values from BTS_Tests.ttcn ts_SI3_default ctrl_chan_desc:
 //   msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1(1CCCH combined), si22ind=0,
 //   cbq3=0(IU mode not supported), spare=0, bs_pa_mfrms=0, t3212=1(6 minutes)

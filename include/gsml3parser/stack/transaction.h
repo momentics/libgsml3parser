@@ -23,11 +23,11 @@
 ///
 /// Provides transaction tracking with O(1) TI-based lookup for CC/SS messages
 /// and PD+MTI matching for other protocol discriminators. Uses fixed-size arrays
-/// internally — zero heap allocation on hot paths.
+/// internally - zero heap allocation on hot paths.
 ///
 /// Thread safety: NOT thread-safe. One instance per MS, accessed from a single thread.
 /// Performance: match() is O(1) for CC/SS via TI index, O(K) for others (K < MAX_TRANSACTIONS).
-/// Internal storage is std::array — no dynamic allocation.
+/// Internal storage is std::array - no dynamic allocation.
 ///
 /// Example:
 /// @code
@@ -61,12 +61,12 @@ enum class TransactionState : uint8_t {
 
 /// A single L3 transaction: request metadata for correlating responses.
 ///
-/// IMPORTANT: This class stores ONLY metadata (PD, MTI, TI) — NOT the full
+/// IMPORTANT: This class stores ONLY metadata (PD, MTI, TI) - NOT the full
 /// ParsedMessage (~8KB variant). Storing ParsedMessage by value in every
 /// Transaction would be catastrophic for memory at scale (millions of MS).
 /// The caller handles response messages externally.
 ///
-/// 3GPP TS 24.008 — Transaction Identifier (TI) for CC/SS correlation;
+/// 3GPP TS 24.008 - Transaction Identifier (TI) for CC/SS correlation;
 /// PD+MTI matching for other protocol layers.
 ///
 /// Memory: sizeof(Transaction) <= 48 bytes, zero heap allocations.
@@ -99,7 +99,7 @@ class Transaction {
     [[nodiscard]] TransactionState state() const noexcept;
 
     /// Mark transaction as completed. The caller is responsible for handling
-    /// the response message externally — it is NOT stored in this object.
+    /// the response message externally - it is NOT stored in this object.
     void complete() noexcept;
 
     /// Mark transaction as expired (timer fired with no response).
@@ -137,15 +137,15 @@ static_assert(sizeof(Transaction) <= 48, "Transaction too large for cache effici
 
 /// Manages pending transactions for one MS.
 ///
-/// Uses fixed-size arrays — zero heap allocation on hot paths. Supports up to
+/// Uses fixed-size arrays - zero heap allocation on hot paths. Supports up to
 /// MAX_TRANSACTIONS (16) concurrent transactions per MS, which is sufficient for
 /// typical BTS workloads where < 4 concurrent transactions are expected.
 ///
-/// 3GPP TS 24.008 — Multiple CC/SS dialogs may be active simultaneously per MS.
+/// 3GPP TS 24.008 - Multiple CC/SS dialogs may be active simultaneously per MS.
 ///
 /// Thread safety: NOT thread-safe. One instance per MS, accessed from a single thread.
 /// Performance: O(1) lookup by TI for CC/SS via array[8], O(K) by PD+MTI where K < 16.
-/// Internal storage is std::array — no dynamic allocation.
+/// Internal storage is std::array - no dynamic allocation.
 class TransactionManager {
  public:
     TransactionManager() = default;
@@ -201,7 +201,7 @@ class TransactionManager {
  private:
     static constexpr size_t MAX_TRANSACTIONS = 16;
 
-    // Fixed-size array — no heap allocation. Each slot holds a transaction.
+    // Fixed-size array - no heap allocation. Each slot holds a transaction.
     std::array<Transaction, MAX_TRANSACTIONS> mTransactions{};
 
     // Tracks which slots are occupied (have a valid transaction).

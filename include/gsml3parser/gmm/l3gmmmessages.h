@@ -19,14 +19,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// GMM Message Classes — GSM L3 GPRS Mobility Management messages
+// GMM Message Classes - GSM L3 GPRS Mobility Management messages
 // Spec: 3GPP TS 24.008 sections 9.4, Table 10.4
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — GMM message templates
-//            ref/OpenBTS/SGSNGGSN/GPRSL3Messages.h — L3GmmMsg::MessageType enum
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - GMM message templates
+//            ref/OpenBTS/SGSNGGSN/GPRSL3Messages.h - L3GmmMsg::MessageType enum
 //
 // L3 header (per 24.008 10.4):
 //   Byte 0: PD(4)=0x08(GMM) | Skip(4)
-//   Byte 1: MessageType(8 bits, raw — no NSD field)
+//   Byte 1: MessageType(8 bits, raw - no NSD field)
 //   Body: [message-specific fields]
 
 #pragma once
@@ -479,7 +479,7 @@ public:
 };
 
 // ── Routing Area Update Reject (GSM 24.008 9.4.17) ────────────────────
-// SGSN->MS: forceToStandby(1)|spare(3)|gmmCause(4) — actually cause is TLV
+// SGSN->MS: forceToStandby(1)|spare(3)|gmmCause(4) - actually cause is TLV
 
 class L3RoutingAreaUpdateReject {
     bool mForceToStandby{false};
@@ -923,7 +923,7 @@ public:
 };
 
 // ── GMM Status (GSM 24.008 9.4.24) ────────────────────────────────────
-// Bidirectional: direction(1)|spare(3)|cause(4) — or full cause byte
+// Bidirectional: direction(1)|spare(3)|cause(4) - or full cause byte
 
 class L3GMMStatus {
     GMMCause mCause{GMMCause::Unspecified};

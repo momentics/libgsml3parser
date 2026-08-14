@@ -579,7 +579,7 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// CM-Request — 3GPP TS 24.008 §9.2.8
+// CM-Request - 3GPP TS 24.008 §9.2.8
 // Direction: Both
 // Carries: CKSN, optional CM-Service-Type, Classmark Container(s), Mobile Identity
 class L3CMRequest {
@@ -627,7 +627,7 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// MM-Paging — 3GPP TS 24.008 §9.2.12
+// MM-Paging - 3GPP TS 24.008 §9.2.12
 // Direction: DL
 // Carries: Mobile Identity (TMSI or IMSI of paged subscriber)
 class L3PagingMM {

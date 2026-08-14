@@ -20,7 +20,7 @@
 // SOFTWARE.
 
 // Extended PD (0x0e) and TestProcedure PD (0x0f) message tests.
-// Reference: GSM 04.08 §10.2 — Protocol Discriminator values
+// Reference: GSM 04.08 §10.2 - Protocol Discriminator values
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>

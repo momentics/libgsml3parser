@@ -19,9 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// SMS TP Elements — parse/write implementation
+// SMS TP Elements - parse/write implementation
 // Spec: 3GPP TS 23.040 sections 7.2, 9.2; 3GPP TS 24.008 section 9.6
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — TPDU templates
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - TPDU templates
 
 #include "gsml3parser/sms/l3smselements.h"
 #include <sstream>

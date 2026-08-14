@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-/// MSContext implementation — per-subscriber state for GSM L3 protocol handling.
+/// MSContext implementation - per-subscriber state for GSM L3 protocol handling.
 #include "gsml3parser/stack/ms_context.h"
 
 namespace gsml3parser {

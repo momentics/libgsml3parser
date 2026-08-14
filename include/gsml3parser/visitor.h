@@ -39,7 +39,7 @@ constexpr bool is_variant_alternative_v<T, std::variant<Types...>> =
 
 } // namespace detail
 
-// ── Compile-time typed access — no dynamic_cast needed. ────────────────
+// ── Compile-time typed access - no dynamic_cast needed. ────────────────
 
 template<typename T>
 [[nodiscard]] const T* tryGet(const RRM& v) {

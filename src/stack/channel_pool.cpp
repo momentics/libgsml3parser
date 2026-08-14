@@ -32,10 +32,10 @@ ChannelType decodeChannelNeeded(uint8_t ra, bool neci, bool vea) {
     (void)neci; // NECI extension reserved for future use; legacy decoding applied
 
     // Establishment cause: bits 6-5 of RA byte (GSM 04.08 5.1.3)
-    //   00 — Mobile Originating (normal call)
-    //   01 — Emergency Call
-    //   10 — Answer to Paging
-    //   11 — Location Updating
+    //   00 - Mobile Originating (normal call)
+    //   01 - Emergency Call
+    //   10 - Answer to Paging
+    //   11 - Location Updating
     uint8_t establishmentCause = (ra >> 5) & 0x03;
 
     switch (establishmentCause) {
@@ -99,7 +99,7 @@ std::optional<ChannelDescriptor> ChannelPool::allocate(ChannelType type) {
         return std::nullopt;
     }
 
-    // Pop from back of vector — O(1), no reallocation
+    // Pop from back of vector - O(1), no reallocation
     ChannelDescriptor ch = std::move(fit->second.back());
     fit->second.pop_back();
 

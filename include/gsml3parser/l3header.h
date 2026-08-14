@@ -30,7 +30,7 @@
 
 namespace gsml3parser {
 
-/** Decoded L3 protocol header — PD, MTI, TI, TIF. */
+/** Decoded L3 protocol header - PD, MTI, TI, TIF. */
 struct L3Header {
     L3PD pd;
     int mti{};

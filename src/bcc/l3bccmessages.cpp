@@ -19,9 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// BCC Messages — parse/write/text implementation
+// BCC Messages - parse/write/text implementation
 // Spec: 3GPP TS 44.018 sections 9.6, Table 10.4.3
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — ts_ML3_MO_BCC (line 3813)
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - ts_ML3_MO_BCC (line 3813)
 
 #include "gsml3parser/bcc/l3bccmessages.h"
 #include <sstream>

@@ -251,7 +251,7 @@ TEST(RingBuffer, ConcurrentProducerConsumer) {
     ASSERT_EQ(std::memcmp(received.data(), expected.data(), expected.size()), 0);
 }
 
-// Stress test: tiny buffer, large data volume — maximizes wrap-around and contention.
+// Stress test: tiny buffer, large data volume - maximizes wrap-around and contention.
 TEST(RingBuffer, ConcurrentStressTinyBuffer) {
     RingBuffer rb(64);
     constexpr size_t kChunks = 500;

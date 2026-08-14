@@ -34,11 +34,11 @@ namespace gsml3parser {
 /** Duration of a GSM frame in microseconds */
 constexpr unsigned gFrameMicroseconds = 4615;
 
-/** The GSM hyperframe — 2^21 frames ≈ 3h 28m 53s */
+/** The GSM hyperframe - 2^21 frames ≈ 3h 28m 53s */
 constexpr uint32_t gHyperframe = 2048u * 26u * 51u;
 
 /**
- * GSM frame clock value — GSM 05.02 4.3
+ * GSM frame clock value - GSM 05.02 4.3
  */
 class Time {
 private:
@@ -94,10 +94,10 @@ std::string data2hex(const char* data, unsigned nbytes);
 
 // ── RACH tables ─────────────────────────────────────────────────────────
 
-/** "T" parameter — GSM 04.08 10.5.2.29, indexed by TxInteger */
+/** "T" parameter - GSM 04.08 10.5.2.29, indexed by TxInteger */
 extern const unsigned RACHSpreadSlots[16];
 
-/** "S" parameter — GSM 04.08 3.3.1.1.2, indexed by TxInteger */
+/** "S" parameter - GSM 04.08 3.3.1.1.2, indexed by TxInteger */
 extern const unsigned RACHWaitSParam[16];
 extern const unsigned RACHWaitSParamCombined[16];
 

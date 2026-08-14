@@ -58,7 +58,7 @@
 using namespace gsml3parser;
 
 // =====================================================================
-// parseL3() — raw byte span parsing for each domain
+// parseL3() - raw byte span parsing for each domain
 // =====================================================================
 
 TEST(ParserTest, ParseL3_RR_ChannelRelease) {
@@ -169,7 +169,7 @@ TEST(ParserTest, ParseL3_SS_Facility) {
 }
 
 // =====================================================================
-// parseL3Hex() — hex string parsing for each domain
+// parseL3Hex() - hex string parsing for each domain
 // =====================================================================
 
 TEST(ParserTest, ParseL3Hex_RR) {
@@ -208,7 +208,7 @@ TEST(ParserTest, ParseL3Hex_WithSpaces) {
 }
 
 // =====================================================================
-// Error handling — invalid data returns error, not exception or nullptr
+// Error handling - invalid data returns error, not exception or nullptr
 // =====================================================================
 
 TEST(ParserTest, EmptyInput) {
@@ -269,7 +269,7 @@ TEST(ParserTest, TruncatedBody) {
 }
 
 // =====================================================================
-// writeL3() — binary serialization
+// writeL3() - binary serialization
 // =====================================================================
 
 TEST(ParserTest, WriteL3_RR) {
@@ -318,7 +318,7 @@ TEST(ParserTest, WriteL3_BufferTooSmall) {
 }
 
 // =====================================================================
-// writeL3Hex() — hex serialization
+// writeL3Hex() - hex serialization
 // =====================================================================
 
 TEST(ParserTest, WriteL3Hex_RR) {
@@ -343,7 +343,7 @@ TEST(ParserTest, WriteL3Hex_CC) {
 }
 
 // =====================================================================
-// writeL3Bytes() — raw byte vector serialization
+// writeL3Bytes() - raw byte vector serialization
 // =====================================================================
 
 // GSM 04.08 9.1.7: Channel Release (RR, MTI=0x0D)
@@ -399,7 +399,7 @@ TEST(ParserTest, RoundTrip_SS_Facility) {
 }
 
 // =====================================================================
-// ParserConfig integration — custom log level does not break parsing
+// ParserConfig integration - custom log level does not break parsing
 // =====================================================================
 
 TEST(ParserTest, ParseWithConfig) {
@@ -412,7 +412,7 @@ TEST(ParserTest, ParseWithConfig) {
 }
 
 // =====================================================================
-// Short messages — ChannelRequest (1 byte), HandoverAccess (4 bytes)
+// Short messages - ChannelRequest (1 byte), HandoverAccess (4 bytes)
 // =====================================================================
 
 TEST(ParserTest, ShortMessage_ChannelRequest) {
@@ -499,7 +499,7 @@ TEST(ParserTest, UnknownMTI_LS) {
 // =====================================================================
 
 TEST(ParserTest, ParseL3Hex_SM) {
-    // SM: ActivatePDPContextRequest — PD=0x0a, MTI=0x41, body: pdpType(4)|spare(4)=0xF (IPv4), then QoS IE
+    // SM: ActivatePDPContextRequest - PD=0x0a, MTI=0x41, body: pdpType(4)|spare(4)=0xF (IPv4), then QoS IE
     auto res = parseL3Hex("A041 0F");
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::GPRSSessionManagement);
@@ -507,7 +507,7 @@ TEST(ParserTest, ParseL3Hex_SM) {
 }
 
 TEST(ParserTest, ParseL3Hex_LS) {
-    // LS: LocationServiceRequest — PD=0x0c, MTI=0x01, empty body
+    // LS: LocationServiceRequest - PD=0x0c, MTI=0x01, empty body
     auto res = parseL3Hex("C001");
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::Location);

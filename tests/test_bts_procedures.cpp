@@ -399,7 +399,7 @@ TEST(BTSProceduresTest, ChannelPool_exhaustion_returnsNullopt) {
     EXPECT_EQ(pool.freeCount(ChannelType::SDCCHType), 0u);
     EXPECT_EQ(pool.allocatedCount(ChannelType::SDCCHType), 2u);
 
-    // Third allocation should fail — pool exhausted
+    // Third allocation should fail - pool exhausted
     auto ch3 = pool.allocate(ChannelType::SDCCHType);
     ASSERT_FALSE(ch3.has_value());
 
@@ -452,7 +452,7 @@ TEST(BTSProceduresTest, MultiMSContexts_independentState) {
         EXPECT_EQ(contexts[i].isCiphered(), i % 4 == 0);
     }
 
-    // Modify one context — others should be unaffected
+    // Modify one context - others should be unaffected
     contexts[0].setTMSI(0xFFFFFFFF);
     EXPECT_EQ(contexts[1].identity().isTMSI(), true);
     EXPECT_NE(contexts[0].identity().tmsi(), contexts[1].identity().tmsi());
@@ -524,7 +524,7 @@ TEST(BTSProceduresTest, Stress_TransactionManager_100Transactions_O1Lookup) {
 
     EXPECT_EQ(txnMgr.pendingCount(), NUM_CC + NUM_MM);
 
-    // Match each CC transaction by TI — O(1) lookup
+    // Match each CC transaction by TI - O(1) lookup
     for (size_t i = 0; i < NUM_CC; ++i) {
         ParsedMessage msg = makeCCConnect();
         L3Header header = makeHeader(L3PD::CallControl, L3Connect::MTI, static_cast<unsigned>(i));
@@ -567,7 +567,7 @@ TEST(BTSProceduresTest, Stress_TimerManager_tickNoAllocation) {
     auto tStart = std::chrono::high_resolution_clock::now();
 
     for (size_t i = 0; i < NUM_TICKS; ++i) {
-        // Use callback-based tick — zero heap allocation
+        // Use callback-based tick - zero heap allocation
         tm.tick(1ms, [](L3TimerId) {
             // Expiry handler: no-op for stress test
         });
@@ -862,7 +862,7 @@ TEST(BTSProceduresTest, VEA_Allocation_Integration) {
     ctx.assignChannel(ch->type, ch->trxNumber, ch->timeslot, ch->arfcn);
     EXPECT_EQ(ctx.channelType(), ChannelType::TCHFType);
 
-    // No TCH left — next VEA should fall back to SDCCH
+    // No TCH left - next VEA should fall back to SDCCH
     auto ch2 = pool.allocateVEA(ra);
     ASSERT_TRUE(ch2.has_value());
     EXPECT_EQ(ch2->type, ChannelType::SDCCHType);

@@ -3525,7 +3525,7 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// System Information Type 2quater — GSM 04.08 §9.1.34a
+// System Information Type 2quater - GSM 04.08 §9.1.34a
 // Direction: DL (BCCH)
 // Carries: extended BCCH freq list, RACH ctrl params, CBCH description
 // MTI=0x07 per GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_2quater('00000111'B)

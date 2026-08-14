@@ -1,6 +1,6 @@
 ﻿# libgsml3parser
 
-**GSM Layer 3 Signalling Library — Parse, Build, and Frame L3 Messages for Software BTS**
+**GSM Layer 3 Signalling Library - Parse, Build, and Frame L3 Messages for Software BTS**
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
@@ -30,29 +30,29 @@ The library is self-contained with zero external dependencies beyond the C++20 s
 
 ## Features
 
-- **Full L3 message parsing** — Binary data to typed C++ objects with compile-time dispatch via `std::variant`
-- **Fluent Builder API** — Construct any L3 message from scratch with chainable setters and `build()` (all 12 domains)
-- **Message generation** — Typed C++ objects to binary data (for test harnesses, fuzzing, replay)
-- **LAPDm framing** — Wrap/unwrap L3 messages in LAPDm UI frames (GSM 04.06) for Um interface transmission
-- **ProtocolDispatcher** — Callback-based message routing with O(1) PD+MTI lookup, domain handlers, and fallback
-- **std::format support** — `enum_formatters.h` provides `std::formatter` specializations for all protocol enums
-- **Expected<T> result type** — Zero-allocation errors with structured error codes and bit-position tracking
-- **Immutable ParserConfig** — No mutex on parse path, thread-safe by design
-- **Zero heap allocation on hot path** — `ParsedMessage` variant on stack, no `std::unique_ptr` in parse/serialise
-- **Compile-time message dispatch** — `std::variant` + `std::visit`, no `dynamic_cast`, no RTTI
-- **Bit-level I/O** — Bounds-checked `BitReader`/`BitWriter`, MSB-first bit ordering
-- **Bitstream I/O** — `ByteSource` hierarchy (Span, File, RingBuffer) for streaming from any source
-- **L3Framer** — Automatic frame boundary detection in raw byte streams
-- **L3StreamProcessor** — High-throughput streaming parser with `FrameHandler` callback interface
-- **Human-readable output** — Every message type has a `.text()` method for logging and debugging
-- **PD handler registry** — Custom handlers for unsupported PD domains via immutable config builder
-- **Arena allocator** — Bump allocator for high-throughput batch parsing
-- **Zero external dependencies** — No networking, no SIP, no radio stack
-- **Fuzzing-ready** — Clean parse/generate API suitable for libFuzzer integration
-- **Comprehensive test suite** — Golden test vectors cross-validated against osmo-ttcn3-hacks TTCN-3 reference
-- **Spec-compliant** — Follows GSM 04.08 / 3GPP TS 24.008, GSM 04.07 / 3GPP TS 24.007, GSM 04.80 / 3GPP TS 24.080, 3GPP TS 44.018, 3GPP TS 44.031 / 24.027 / 24.028
-- **V/TV/TLV/LV formats** — Correct handling of all GSM 04.07 IE encoding formats
-- **Short messages** — Synchronization Channel Information, Channel Request, Handover Access
+- **Full L3 message parsing** - Binary data to typed C++ objects with compile-time dispatch via `std::variant`
+- **Fluent Builder API** - Construct any L3 message from scratch with chainable setters and `build()` (all 12 domains)
+- **Message generation** - Typed C++ objects to binary data (for test harnesses, fuzzing, replay)
+- **LAPDm framing** - Wrap/unwrap L3 messages in LAPDm UI frames (GSM 04.06) for Um interface transmission
+- **ProtocolDispatcher** - Callback-based message routing with O(1) PD+MTI lookup, domain handlers, and fallback
+- **std::format support** - `enum_formatters.h` provides `std::formatter` specializations for all protocol enums
+- **Expected<T> result type** - Zero-allocation errors with structured error codes and bit-position tracking
+- **Immutable ParserConfig** - No mutex on parse path, thread-safe by design
+- **Zero heap allocation on hot path** - `ParsedMessage` variant on stack, no `std::unique_ptr` in parse/serialise
+- **Compile-time message dispatch** - `std::variant` + `std::visit`, no `dynamic_cast`, no RTTI
+- **Bit-level I/O** - Bounds-checked `BitReader`/`BitWriter`, MSB-first bit ordering
+- **Bitstream I/O** - `ByteSource` hierarchy (Span, File, RingBuffer) for streaming from any source
+- **L3Framer** - Automatic frame boundary detection in raw byte streams
+- **L3StreamProcessor** - High-throughput streaming parser with `FrameHandler` callback interface
+- **Human-readable output** - Every message type has a `.text()` method for logging and debugging
+- **PD handler registry** - Custom handlers for unsupported PD domains via immutable config builder
+- **Arena allocator** - Bump allocator for high-throughput batch parsing
+- **Zero external dependencies** - No networking, no SIP, no radio stack
+- **Fuzzing-ready** - Clean parse/generate API suitable for libFuzzer integration
+- **Comprehensive test suite** - Golden test vectors cross-validated against osmo-ttcn3-hacks TTCN-3 reference
+- **Spec-compliant** - Follows GSM 04.08 / 3GPP TS 24.008, GSM 04.07 / 3GPP TS 24.007, GSM 04.80 / 3GPP TS 24.080, 3GPP TS 44.018, 3GPP TS 44.031 / 24.027 / 24.028
+- **V/TV/TLV/LV formats** - Correct handling of all GSM 04.07 IE encoding formats
+- **Short messages** - Synchronization Channel Information, Channel Request, Handover Access
 
 ## Quick Start
 
@@ -97,7 +97,7 @@ int main() {
     auto msg = gsml3parser::parseL3Hex("060D00");
 
     if (msg) {
-        // Compile-time typed access — no dynamic_cast needed
+        // Compile-time typed access - no dynamic_cast needed
         if (auto* cr = gsml3parser::tryGet<gsml3parser::L3ChannelRelease>(*msg)) {
             std::cout << "Channel Release, cause: "
                       << static_cast<int>(cr->cause()) << "\n";
@@ -121,7 +121,7 @@ int main() {
 
 int main() {
     std::span<const uint8_t> data{
-        0x50, 0x84  // CM Service Accept (MM) — PD=0x05 high nibble, NSD=1
+        0x50, 0x84  // CM Service Accept (MM) - PD=0x05 high nibble, NSD=1
     };
 
     auto msg = gsml3parser::parseL3(data);
@@ -271,7 +271,7 @@ Custom handlers for unsupported Protocol Discriminators can be registered via an
 // Create immutable config with custom handler for SMS (PD=0x09)
 gsml3parser::ParserConfig cfg;
 cfg = cfg.withPDHandler(gsml3parser::L3PD::SMS,
-    /* PDHandler callback — receives L3Header + body span */);
+    /* PDHandler callback - receives L3Header + body span */);
 
 // Parse with the configured parser
 auto result = gsml3parser::parseL3(data, cfg);
@@ -301,7 +301,7 @@ processor.processUntilEOF(gsml3parser::FrameHandler{
 #include <gsml3parser/gsml3parser.hpp>
 #include <thread>
 
-// Each thread uses its own immutable ParserConfig — no mutex needed.
+// Each thread uses its own immutable ParserConfig - no mutex needed.
 void parseThread(std::vector<uint8_t> frames) {
     gsml3parser::ParserConfig cfg;
     cfg = cfg.withLogLevel(gsml3parser::LogLevel::ERR);
@@ -326,17 +326,17 @@ ByteSource (Span/File/RingBuffer)
 
 The library follows a layered design:
 
-1. **Bit-level I/O** — `BitReader` and `BitWriter` provide bounds-checked, MSB-first bit operations over byte buffers. No heap allocation.
+1. **Bit-level I/O** - `BitReader` and `BitWriter` provide bounds-checked, MSB-first bit operations over byte buffers. No heap allocation.
 
-2. **Message types** — Each L3 message is a plain C++ struct with `parse(BitReader&)` and `write(BitWriter&)` methods. No inheritance hierarchies for IEs.
+2. **Message types** - Each L3 message is a plain C++ struct with `parse(BitReader&)` and `write(BitWriter&)` methods. No inheritance hierarchies for IEs.
 
-3. **Variant dispatch** — `ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM, EXTENDED, TESTPROC>` holds the parsed result on the stack (12 domains). `tryGet<T>()` provides compile-time typed access.
+3. **Variant dispatch** - `ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM, EXTENDED, TESTPROC>` holds the parsed result on the stack (12 domains). `tryGet<T>()` provides compile-time typed access.
 
-4. **Streaming** — `ByteSource` → `L3Framer` → `L3StreamProcessor` pipeline processes raw byte streams with automatic frame boundary detection.
+4. **Streaming** - `ByteSource` → `L3Framer` → `L3StreamProcessor` pipeline processes raw byte streams with automatic frame boundary detection.
 
 ## Supported Messages
 
-### Group Call Control (PD=0x00) — 7 message types
+### Group Call Control (PD=0x00) - 7 message types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -348,7 +348,7 @@ The library follows a layered design:
 | `L3GCCRelease` | 0x07 | MT | Group call release |
 | `L3GCCReleaseComplete` | 0x0a | Bidir | Group call release complete |
 
-### Broadcast Call Control (PD=0x01) — 6 message types
+### Broadcast Call Control (PD=0x01) - 6 message types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -359,7 +359,7 @@ The library follows a layered design:
 | `L3BCCRelease` | 0x07 | MT | Broadcast call release |
 | `L3BCCReleaseComplete` | 0x0a | Bidir | Broadcast call release complete |
 
-### Call Control (PD=0x03) — 20 message types, 26 IE types
+### Call Control (PD=0x03) - 20 message types, 26 IE types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -415,7 +415,7 @@ The library follows a layered design:
 | `L3SupServFacilityIE` | TLV | Supplementary service facility data |
 | `L3SupServVersionIndicator` | V | SS version indicator |
 
-### Mobility Management (PD=0x05) — 18 message types
+### Mobility Management (PD=0x05) - 18 message types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -438,7 +438,7 @@ The library follows a layered design:
 | `L3TMSIReallocationCommand` | 0x1A | DL | New TMSI assignment |
 | `L3TMSIReallocationComplete` | 0x1B | UL | TMSI reallocation complete |
 
-### Radio Resource (PD=0x06) — 95 message types
+### Radio Resource (PD=0x06) - 95 message types
 
 **Paging:**
 
@@ -466,9 +466,9 @@ The library follows a layered design:
 | `L3SystemInformationType7` | 0x15 | BA list type 3 |
 | `L3SystemInformationType8` | 0x16 | NCC permitted (SACCH) |
 | `L3SystemInformationType9` | 0x17 | CI, cell selection, BCCH cell options |
-| `L3SystemInformationType10` | — | Short: CI + LAI + CellOptions + CellSelParams |
-| `L3SystemInformationType10bis` | — | Short: CI + LAI + CellOptions + CellSelParams |
-| `L3SystemInformationType10ter` | — | Short: CI + LAI + CellOptions + CellSelParams |
+| `L3SystemInformationType10` | - | Short: CI + LAI + CellOptions + CellSelParams |
+| `L3SystemInformationType10bis` | - | Short: CI + LAI + CellOptions + CellSelParams |
+| `L3SystemInformationType10ter` | - | Short: CI + LAI + CellOptions + CellSelParams |
 | `L3SystemInformationType13` | 0x00 | Cell desc, BA list type 1, rest octets |
 | `L3SystemInformationType13alt` | 0x44 | SACCH alternative format |
 | `L3SystemInformationType14` | 0x01 | CellIdentity + CellSelectionParameters |
@@ -489,7 +489,7 @@ The library follows a layered design:
 |---------|-----|-----------|-------------|
 | `L3ChannelRelease` | 0x0D | DL | Cause [+ GPRS resumption] |
 | `L3ImmediateAssignment` | 0x3F | DL | PageMode, channel desc, TA, mobile alloc |
-| `L3ImmediateAssignmentExtended` | — | DL | Extended immediate assignment |
+| `L3ImmediateAssignmentExtended` | - | DL | Extended immediate assignment |
 | `L3ImmediateAssignmentReject` | 0x3A | DL | Wait indication entries |
 | `L3AdditionalAssignment` | 0x01 | DL | Additional channel assignment |
 | `L3PhysicalInformation` | 0x26 | DL | Timing advance command |
@@ -577,7 +577,7 @@ The library follows a layered design:
 | `L3VGCSSNeighCellInfo` | VGCS neighbor cell info |
 | `L3NotifyAppData` | Notify application data |
 
-### GPRS Mobility Management (PD=0x08) — 19 message types
+### GPRS Mobility Management (PD=0x08) - 19 message types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -622,7 +622,7 @@ The library follows a layered design:
 | `L3PTMSISignature` | P-TMSI signature (3 octets) |
 | `L3GMMStatusCause` | GMM status cause octet |
 
-### SMS (PD=0x09) — 5 CP messages, 14 SMS L3 messages, 4 TP types, 4 RP types
+### SMS (PD=0x09) - 5 CP messages, 14 SMS L3 messages, 4 TP types, 4 RP types
 
 **Control Part (CP) Messages:**
 
@@ -680,7 +680,7 @@ The library follows a layered design:
 | `TPDCS` | Data coding scheme (Default, 8-bit, UCS2) |
 | `TPPID` | Protocol identifier (GSM, X121, Telex, etc.) |
 
-### GPRS Session Management (PD=0x0a) — 29 message types
+### GPRS Session Management (PD=0x0a) - 29 message types
 
 **Primary PDP Context:**
 
@@ -759,7 +759,7 @@ The library follows a layered design:
 | `L3PDPHandle` | PDP context identifier (0–15) |
 | `L3TMGI` | Temporary Mobile Group Identity: PLMN(3) + ServiceID(2) + SessionID(1) |
 
-### Supplementary Services (PD=0x0b) — 3 message types, 2 enums, 2 IEs
+### Supplementary Services (PD=0x0b) - 3 message types, 2 enums, 2 IEs
 
 **Messages:**
 
@@ -783,20 +783,20 @@ The library follows a layered design:
 | `L3FacilityOpCode` | TCAP component parser (Invoke/ReturnResult/ReturnError/Reject) |
 | `L3USSDData` | USSD message with GSM 7-bit encode/decode, UCS2, DCS handling |
 
-### Location Services (PD=0x0c) — 2 message types
+### Location Services (PD=0x0c) - 2 message types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
 | `L3LocationServiceRequest` | 0x01 | Bidir | Location service request parameters |
 | `L3LocationServiceProviderMessage` | 0x02 | Bidir | Location service provider data |
 
-### Extended PD (PD=0x0e) — 1 placeholder type
+### Extended PD (PD=0x0e) - 1 placeholder type
 
 | Message | Description |
 |---------|-------------|
 | `L3ExtendedMessage` | Raw-body placeholder for extended protocol discriminators; MTI determined at parse time |
 
-### Test Procedure PD (PD=0x0f) — 1 placeholder type
+### Test Procedure PD (PD=0x0f) - 1 placeholder type
 
 | Message | Description |
 |---------|-------------|
@@ -810,11 +810,11 @@ The parser API returns `Expected<T>` instead of raw pointers or exceptions, prov
 auto result = gsml3parser::parseL3Hex("060D");
 
 if (result) {
-    // Success — access the message via operator*
+    // Success - access the message via operator*
     const auto& msg = *result;
     std::cout << gsml3parser::messageName(msg) << "\n";
 } else {
-    // Failure — inspect the error details
+    // Failure - inspect the error details
     const auto& err = result.error();
     std::cerr << "Error " << static_cast<int>(err.code)
               << " at bit " << err.bitPosition
@@ -839,10 +839,10 @@ Error codes (`ParseError::Code`):
 
 The library is designed for multi-threaded use:
 
-- **`ParserConfig`** — Immutable configuration struct. No mutex, no atomic operations. Safe for concurrent read access from any number of threads. Builder methods (`withLogLevel`, `withPDHandler`) return new config instances.
-- **`BitReader`/`BitWriter`** — Plain value types with no shared state. Each thread creates its own instance.
-- **`parseL3()`** — Stateless function. Thread-safe when called with separate `ParserConfig` instances or a shared read-only config.
-- **`Arena`** — NOT thread-safe. Each thread must use its own `Arena` instance.
+- **`ParserConfig`** - Immutable configuration struct. No mutex, no atomic operations. Safe for concurrent read access from any number of threads. Builder methods (`withLogLevel`, `withPDHandler`) return new config instances.
+- **`BitReader`/`BitWriter`** - Plain value types with no shared state. Each thread creates its own instance.
+- **`parseL3()`** - Stateless function. Thread-safe when called with separate `ParserConfig` instances or a shared read-only config.
+- **`Arena`** - NOT thread-safe. Each thread must use its own `Arena` instance.
 
 For maximum performance in multi-threaded parsers, create one `ParserConfig` per thread:
 

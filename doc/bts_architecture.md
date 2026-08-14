@@ -253,9 +253,9 @@ At 10,000 concurrent MS sessions: ~27.7 MB for stack modules (fits in L3 cache r
 ### Cache Behavior
 
 - **MSContext fields ordered by access frequency**: identity and channel type are accessed on every message; LAI and classmark only during setup
-- **TimerManager tick()** iterates a contiguous `std::array<L3Timer, 32>` — single cache line per ~4 timers
-- **TransactionManager match()** for CC/SS: direct array index into `mTiIndex[8]` — no pointer chasing
-- **FSM dispatch**: `switch(PD) + switch(MTI)` compiled to jump table — O(1), no branch misprediction on hot path
+- **TimerManager tick()** iterates a contiguous `std::array<L3Timer, 32>` - single cache line per ~4 timers
+- **TransactionManager match()** for CC/SS: direct array index into `mTiIndex[8]` - no pointer chasing
+- **FSM dispatch**: `switch(PD) + switch(MTI)` compiled to jump table - O(1), no branch misprediction on hot path
 
 ### Allocation-Free Hot Paths
 
@@ -290,7 +290,7 @@ The following operations perform zero heap allocations:
 The one-thread-per-MS model scales to millions of sessions when combined with an event-driven architecture:
 
 ```cpp
-// MS session registry — thread-safe lookup by identity
+// MS session registry - thread-safe lookup by identity
 class MsRegistry {
 public:
     // Create or retrieve session for TMSI

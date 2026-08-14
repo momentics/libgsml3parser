@@ -19,10 +19,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// SMS TP (Transport Part) Elements — GSM L3 SMS TPDU structures
+// SMS TP (Transport Part) Elements - GSM L3 SMS TPDU structures
 // Spec: 3GPP TS 23.040 sections 7.2, 9.2
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — TPDU templates
-//            ref/OpenBTS/SMS/SMSMessages.h — TP layer classes
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - TPDU templates
+//            ref/OpenBTS/SMS/SMSMessages.h - TP layer classes
 //
 // Bit layout (per GSM 03.40):
 //   TP-Header-Octet: TP-MTI(2) | direction-specific fields(6)
@@ -105,7 +105,7 @@ struct TPSCTimeStamp {
     void text(std::ostream& os) const;
 };
 
-// ── TP Address (GSM 03.40 9.1.2.4) — used for TP-DA and TP-OA ─────────
+// ── TP Address (GSM 03.40 9.1.2.4) - used for TP-DA and TP-OA ─────────
 // LV format: Length(1) | TON_NPI(1) | BCD-digits(variable)
 // Length = number of following octets (TON_NPI + digits), excluding length byte itself
 

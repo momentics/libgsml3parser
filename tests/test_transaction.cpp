@@ -94,11 +94,11 @@ TEST(TransactionTest, Cancel_setsState) {
 TEST(TransactionTest, Matches_byTI_forCC) {
     Transaction tx(L3PD::CallControl, L3Setup::MTI, 2, L3TimerId::T3101);
 
-    // Same TI — should match regardless of MTI difference
+    // Same TI - should match regardless of MTI difference
     ParsedMessage connectMsg = makeCCConnect();
     EXPECT_TRUE(tx.matches(connectMsg, 2));
 
-    // Different TI — should not match
+    // Different TI - should not match
     EXPECT_FALSE(tx.matches(connectMsg, 5));
 }
 
@@ -109,7 +109,7 @@ TEST(TransactionTest, Matches_byPD_MTI_forRR) {
     ParsedMessage msg = makeRRPagingResponse();
     EXPECT_TRUE(tx.matches(msg));
 
-    // Different PD — should not match
+    // Different PD - should not match
     ParsedMessage ccMsg = makeCCSetup();
     EXPECT_FALSE(tx.matches(ccMsg));
 }
@@ -118,7 +118,7 @@ TEST(TransactionTest, Matches_byPD_MTI_forRR) {
 TEST(TransactionTest, NoMatch_wrongMTI) {
     Transaction tx(L3PD::MobilityManagement, L3CMServiceRequest::MTI, 0, L3TimerId::T3101);
 
-    // Different PD entirely — no match
+    // Different PD entirely - no match
     ParsedMessage rrMsg = makeRRPagingResponse();
     EXPECT_FALSE(tx.matches(rrMsg));
 }
@@ -204,12 +204,12 @@ TEST(TransactionManagerTest, NoMatch_returnsNullopt) {
     TransactionManager tm;
     tm.create(L3PD::CallControl, L3Setup::MTI, 1, L3TimerId::T3101);
 
-    // Different TI — no match for CC
+    // Different TI - no match for CC
     ParsedMessage msg = makeCCSetup();
     L3Header header = makeHeader(L3PD::CallControl, L3Setup::MTI, 5);
     EXPECT_EQ(tm.match(header, msg), nullptr);
 
-    // Different PD — no match for non-CC path
+    // Different PD - no match for non-CC path
     EXPECT_EQ(tm.match(makeRRPagingResponse()), nullptr);
 }
 
@@ -322,7 +322,7 @@ TEST(TransactionManagerTest, Get_returnsNulloptForFinished) {
 
     if (Transaction* tx = tm.get(*id)) tx->cancel();
 
-    // Cancelled transaction is no longer pending — get returns nullptr
+    // Cancelled transaction is no longer pending - get returns nullptr
     EXPECT_EQ(tm.get(*id), nullptr);
 }
 

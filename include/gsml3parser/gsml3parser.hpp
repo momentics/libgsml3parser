@@ -21,7 +21,7 @@
 
 #pragma once
 
-// Umbrella header — single include for full gsml3parser API.
+// Umbrella header - single include for full gsml3parser API.
 
 #include "gsml3parser/expected.h"
 #include "gsml3parser/bitreader.h"

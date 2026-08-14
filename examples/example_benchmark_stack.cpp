@@ -57,7 +57,7 @@ void printHeader(const std::string& name) {
 
 // Benchmark 1: MSContext allocation and access.
 void benchmarkMSContext() {
-    printHeader("MSContext — 10K allocations");
+    printHeader("MSContext - 10K allocations");
 
     constexpr int N = 10000;
 
@@ -84,7 +84,7 @@ void benchmarkMSContext() {
     auto t2 = Clock::now();
     for (int i = 0; i < N; ++i) {
         sum += contexts[i].identity().tmsi();
-        if (contexts[i].isAuthenticated()) ++authCount;
+        if (contexts[i].isAuthenticated()) authCount = authCount + 1;
     }
     auto t3 = Clock::now();
 
@@ -105,7 +105,7 @@ void benchmarkMSContext() {
 
 // Benchmark 2: TimerManager tick throughput.
 void benchmarkTimerManager() {
-    printHeader("TimerManager — tick throughput");
+    printHeader("TimerManager - tick throughput");
 
     constexpr int N = 1000;
     constexpr int TICKS = 10000;
@@ -124,7 +124,7 @@ void benchmarkTimerManager() {
     for (int tick = 0; tick < TICKS; ++tick) {
         for (int i = 0; i < N; ++i) {
             managers[i].tick(std::chrono::milliseconds(1), [&expiredCount](L3TimerId) {
-                ++expiredCount;
+                expiredCount = expiredCount + 1;
             });
         }
     }
@@ -155,7 +155,7 @@ void benchmarkTimerManager() {
 
 // Benchmark 3: TransactionManager create/match/cleanup.
 void benchmarkTransactionManager() {
-    printHeader("TransactionManager — O(1) TI lookup");
+    printHeader("TransactionManager - O(1) TI lookup");
 
     constexpr int N = 1000;
 
@@ -177,7 +177,7 @@ void benchmarkTransactionManager() {
     volatile int matched = 0;
     for (int i = 0; i < N; ++i) {
         if (managers[i].match(header, testMsg)) {
-            ++matched;
+            matched = matched + 1;
         }
     }
     auto t3 = Clock::now();
@@ -199,7 +199,7 @@ void benchmarkTransactionManager() {
 
 // Benchmark 4: ChannelPool allocate/release cycles.
 void benchmarkChannelPool() {
-    printHeader("ChannelPool — allocate/release stress");
+    printHeader("ChannelPool - allocate/release stress");
 
     constexpr int NUM_CHANNELS = 100;
     constexpr int CYCLES = 10000;
@@ -258,7 +258,7 @@ void benchmarkChannelPool() {
 
 // Benchmark 5: State machine dispatch throughput.
 void benchmarkStateMachine() {
-    printHeader("State Machine — message dispatch");
+    printHeader("State Machine - message dispatch");
 
     constexpr int N = 10000;
 
@@ -323,7 +323,7 @@ void benchmarkStateMachine() {
 
 // Benchmark 6: ProtocolDispatcher throughput.
 void benchmarkDispatcher() {
-    printHeader("ProtocolDispatcher — message routing");
+    printHeader("ProtocolDispatcher - message routing");
 
     constexpr int N = 10000;
 
@@ -331,13 +331,13 @@ void benchmarkDispatcher() {
     volatile int handled = 0;
 
     dispatcher.registerHandler(L3PD::RadioResource, L3PagingResponse::MTI,
-        [&handled](const ParsedMessage&, void*) { ++handled; });
+        [&handled](const ParsedMessage&, void*) { handled = handled + 1; });
 
     dispatcher.registerHandler(L3PD::MobilityManagement, L3CMServiceRequest::MTI,
-        [&handled](const ParsedMessage&, void*) { ++handled; });
+        [&handled](const ParsedMessage&, void*) { handled = handled + 1; });
 
     dispatcher.registerHandler(L3PD::CallControl, L3Setup::MTI,
-        [&handled](const ParsedMessage&, void*) { ++handled; });
+        [&handled](const ParsedMessage&, void*) { handled = handled + 1; });
 
     auto pr = L3PagingResponse::builder().mobileId(L3MobileIdentity(0x12345678)).build();
     ParsedMessage prMsg{RRM{std::move(pr)}};
@@ -367,7 +367,7 @@ void benchmarkDispatcher() {
 
 // Benchmark 7: Combined full-stack stress test.
 void benchmarkFullStack() {
-    printHeader("Full Stack — combined stress test");
+    printHeader("Full Stack - combined stress test");
 
     constexpr int NUM_MS = 1000;
     constexpr int MSGS_PER_MS = 10;

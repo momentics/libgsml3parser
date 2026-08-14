@@ -1076,7 +1076,7 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// CC Facility — 3GPP TS 24.008 §9.3.21
+// CC Facility - 3GPP TS 24.008 §9.3.21
 // Direction: Both
 // Carries: TI, facility body (TCAP components for supplementary services)
 class L3Facility {
@@ -1112,7 +1112,7 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// CC Modify — 3GPP TS 24.008 §9.3.15
+// CC Modify - 3GPP TS 24.008 §9.3.15
 // Direction: Both
 // Carries: TI, Bearer Capability, Called/Calling Party Number, etc.
 class L3Modify {
@@ -1167,7 +1167,7 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// CC UnitData — 3GPP TS 24.008 §9.3.16
+// CC UnitData - 3GPP TS 24.008 §9.3.16
 // Direction: Both
 // Carries: TI, User Data, Bearer Capability
 class L3UnitData {
@@ -1211,7 +1211,7 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// CC UnitDataAck — 3GPP TS 24.008 §9.3.16a
+// CC UnitDataAck - 3GPP TS 24.008 §9.3.16a
 // Direction: MT
 // Carries: TI
 class L3UnitDataAck {
@@ -1242,7 +1242,7 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// CC ErrorIndication — 3GPP TS 24.008 §9.3.16b
+// CC ErrorIndication - 3GPP TS 24.008 §9.3.16b
 // Direction: Both
 // Carries: TI, Diagnostic
 class L3ErrorIndication {

@@ -220,7 +220,7 @@ TEST(GoldenRR, PagingRequestType2_Parse) {
 // Reference: L3_Templates.ttcn tr_PAGING_REQ3 (line 583):
 //   discriminator := '0110'B (PD=6=RR), messageType := '00100100'B (MTI=0x24)
 // Reference: GSM_RR_Types.ttcn PagingRequestType3 (line 587):
-//   type record length(4) of GsmTmsi GsmTmsi4; — exactly 4 raw TMSIs
+//   type record length(4) of GsmTmsi GsmTmsi4; - exactly 4 raw TMSIs
 //   ChannelNeeded12 chan_needed, PageMode page_mode, GsmTmsi4 mi
 // Spec-verified: PD=6(RR), MTI=0x24(PagingRequestType3) per 3GPP TS 44.018 Table 10.4.1
 // [GSM SPEC VERIFIED] PagingRequestType3 body = ChannelNeeded12(8 bits) + PageMode(4 bits)
@@ -270,7 +270,7 @@ TEST(GoldenRR, PagingResponse_Parse) {
     // CKSN is 4 bits (GSM 24.008 10.5.1.2), padded to octet boundary before CM2-LV
     // Reference: L3_Templates.ttcn ts_PAG_RESP (line 610):
     //   cipheringKeySequenceNumber := { '000'B, '0'B } (4 bits)
-    //   spare1_4 := '0000'B (4 bits) — these 4+4 bits pack into ONE octet
+    //   spare1_4 := '0000'B (4 bits) - these 4+4 bits pack into ONE octet
     // Reference: GSM_RR_Types.ttcn PagingResponse record:
     //   OCT4 cipheringKeySequenceNumber, mobileStationClassmark2LV, MobileIdentityLV
     //   CKSN(4 bits) + implicit padding(4 bits) = 1 octet before CM2-LV
@@ -1916,7 +1916,7 @@ TEST(GoldenRR, NotifyAppData_RoundTrip) {
 }
 
 // =====================================================================
-// RR MESSAGE TYPE VALUES — Additional messages
+// RR MESSAGE TYPE VALUES - Additional messages
 // Reference: GSM_RR_Types.ttcn RrMessageType enum
 // Spec-verified: 3GPP TS 44.018 Table 10.4.1
 // =====================================================================

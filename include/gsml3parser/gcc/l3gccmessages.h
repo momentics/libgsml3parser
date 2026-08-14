@@ -19,9 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// GCC (Group Call Control) Message Classes — GSM L3 group call messages
+// GCC (Group Call Control) Message Classes - GSM L3 group call messages
 // Spec: 3GPP TS 44.018 sections 9.7, Table 10.4.4
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn — ts_ML3_MO_GCC (line 3840)
+// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - ts_ML3_MO_GCC (line 3840)
 //            ETSI TS 102 225 (TETRA GCC), 3GPP TS 44.018 for GSM group calls
 //
 // L3 header (per 44.018 10.2, PD=0x00):
@@ -344,7 +344,7 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// GCC Call Confirmed — TS 44.018 §9.7.2.5, Table 10.4.4
+// GCC Call Confirmed - TS 44.018 §9.7.2.5, Table 10.4.4
 // Direction: MT
 class L3GCCCallConfirmed {
     unsigned mTi{0};
