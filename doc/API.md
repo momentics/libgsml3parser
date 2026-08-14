@@ -38,6 +38,7 @@
 32. [MSContext — Per-Subscriber State](#32-mscontext-per-subscriber-state)
 33. [Timer Framework](#33-timer-framework)
 34. [Transaction Framework](#34-transaction-framework)
+35. [Protocol State Machines](#35-protocol-state-machines)
 
 ---
 
@@ -2485,6 +2486,175 @@ tm.cleanup();
 | CC/SS match() complexity | O(1) via TI index |
 | Non-CC/SS match() complexity | O(K), K < 16 |
 | Heap allocations | None (std::array storage) |
+| Thread safety | NOT thread-safe; one instance per MS |
+
+---
+
+## 35. Protocol State Machines
+
+**File:** `gsml3parser/stack/state_machine.h` — FSM base class and RR/MM/CC skeleton implementations.
+**Spec:** 3GPP TS 24.008 Chapters 4-6 (RR, MM, CC procedures).
+
+The state machine framework provides a base class for protocol state machines with message and timer event processing, plus concrete skeleton implementations for the three main GSM Layer 3 sublayers: Radio Resource (RR), Mobility Management (MM), and Call Control (CC).
+
+### 35.1 SMAction — State Machine Actions
+
+| Action | Description |
+|--------|-------------|
+| `None` | Stay in current state, no side effect |
+| `Transition` | Move to the next state specified by `nextState` |
+| `SendResponse` | Transition and signal that a response message should be built externally |
+| `Reject` | Signal that a reject/status message should be sent; stay in current state |
+| `ReleaseChannel` | Signal that the logical channel should be released |
+| `PushSubstate` | Push a sub-state machine onto the stack (for nested procedures) |
+| `PopSubstate` | Pop back to the parent state machine |
+
+### 35.2 SMResult — Processing Result
+
+The `SMResult` struct is returned from every `processMessage()` and `processTimer()` call:
+
+```cpp
+struct SMResult {
+    SMAction action{SMAction::None};
+    std::optional<int> nextState;
+    bool causesTransition() const noexcept;
+};
+```
+
+**Important:** `SMResult` does NOT contain `ParsedMessage`. The FSM returns action + next state; the caller builds response messages externally via Builder API. `sizeof(SMResult) <= 16 bytes`.
+
+### 35.3 ProtocolStateMachine — Base Class
+
+```cpp
+class ProtocolStateMachine {
+public:
+    virtual ~ProtocolStateMachine() = default;
+    void setState(int state);
+    int state() const;
+    SMResult processMessage(const ParsedMessage& msg);
+    SMResult processTimer(L3TimerId timerId);
+    virtual std::string_view debugName() const = 0;
+
+protected:
+    virtual SMResult handle_message_impl(int state, const ParsedMessage& msg) = 0;
+    virtual SMResult handle_timer_impl(int state, L3TimerId timerId) = 0;
+};
+```
+
+### 35.4 RRStateMachine States
+
+| State | Description |
+|-------|-------------|
+| `IDLE` | No dedicated channel assigned |
+| `CHANNEL_REQUESTED` | RACH received, waiting for AGCH |
+| `CHANNEL_ASSIGNED` | Immediate Assignment sent, waiting for SABM |
+| `LINK_ESTABLISHED` | LAPDm link established (UA received) |
+| `WAITING_MM` | Waiting for MM procedure (CM Service Request) |
+| `ACTIVE` | Full communication on DCCH |
+| `CIPHER_MODE` | Ciphering mode procedure in progress |
+| `HANDOVER` | Handover procedure in progress |
+| `CHANNEL_RELEASE` | Channel release in progress |
+
+**Default RR transitions:**
+```
+IDLE + ChannelRequest           -> CHANNEL_REQUESTED
+CHANNEL_ASSIGNED + PagingResp   -> WAITING_MM
+LINK_ESTABLISHED + (any MM msg) -> WAITING_MM
+WAITING_MM + CMServiceAccept    -> ACTIVE
+ACTIVE + ChannelRelease         -> CHANNEL_RELEASE
+ACTIVE + HandoverCommand        -> HANDOVER
+CIPHER_MODE + CipherModeComplete-> ACTIVE
+T3109 expiry (CHANNEL_ASSIGNED) -> CHANNEL_RELEASE
+```
+
+### 35.5 MMStateMachine States
+
+| State | Description |
+|-------|-------------|
+| `DEREGISTERED`    | MS not registered in VLR |
+| `SERVICE_REQUEST` | CM Service Request received |
+| `WAITING_IDENTITY`| Identity Request sent, awaiting response |
+| `IDENTITY_VERIFIED`| IMSI/TMSI known and verified |
+| `AUTHENTICATION`  | Authentication Request sent, awaiting response |
+| `AUTHENTICATED`   | Authentication complete |
+| `LOCATION_UPDATE` | Location Updating in progress |
+| `REGISTERED`      | Fully registered, ready for calls |
+
+**Default MM transitions:**
+```
+DEREGISTERED + CMServiceRequest       -> SERVICE_REQUEST
+SERVICE_REQUEST + IdentityResponse    -> IDENTITY_VERIFIED
+IDENTITY_VERIFIED + AuthResponse      -> AUTHENTICATED
+AUTHENTICATION + AuthResponse         -> AUTHENTICATED
+AUTHENTICATED + LocationUpdatingReq   -> LOCATION_UPDATE
+LOCATION_UPDATE + CMServiceAccept     -> REGISTERED
+T3101/T3102 expiry (SERVICE_REQUEST)  -> DEREGISTERED
+T3106 expiry (AUTHENTICATION)         -> DEREGISTERED
+```
+
+### 35.6 CCStateMachine States
+
+| State | Description |
+|-------|-------------|
+| `IDLE`                | No call in progress |
+| `SETUP_RECEIVED`      | Setup message received |
+| `PROCEEDING`          | Call Proceeding sent |
+| `ALERTING`            | Alerting sent |
+| `CONNECT`             | Connect received |
+| `ACTIVE`              | Bidirectional speech path established |
+| `DISCONNECT_RECEIVED` | Disconnect received |
+| `RELEASE`             | Release in progress |
+
+**Default CC transitions:**
+```
+IDLE + Setup              -> SETUP_RECEIVED
+SETUP_RECEIVED            -> PROCEEDING (auto-transition)
+PROCEEDING + Alerting     -> ALERTING
+ALERTING + Connect        -> CONNECT
+CONNECT + CallConfirmed   -> ACTIVE
+ACTIVE + Disconnect       -> DISCONNECT_RECEIVED
+DISCONNECT_RECEIVED       -> RELEASE (auto-transition)
+T3101 expiry (SETUP_RECEIVED/PROCEEDING/ALERTING) -> IDLE
+```
+
+### 35.7 Usage Example
+
+```cpp
+#include <gsml3parser/stack/state_machine.h>
+
+// Use the default RR state machine
+RRStateMachine rrFsm;
+rrFsm.setState(RRStateMachine::State::IDLE);
+
+// Process incoming messages
+auto msg = parseL3(buffer).value();
+SMResult result = rrFsm.processMessage(msg);
+
+if (result.action == SMAction::Transition) {
+    int newState = result.nextState.value();
+    // Handle state change, build response messages as needed
+}
+
+// Custom FSM: inherit and override specific transitions
+class MyRRFSM : public RRStateMachine {
+protected:
+    SMResult handle_message_impl(int state, const ParsedMessage& msg) override {
+        if (state == State::ACTIVE && messagePD(msg) == L3PD::MobilityManagement) {
+            return {SMAction::SendResponse, static_cast<int>(State::CIPHER_MODE)};
+        }
+        return RRStateMachine::handle_message_impl(state, msg);
+    }
+};
+```
+
+### 35.8 Performance Characteristics
+
+| Metric | Value |
+|--------|-------|
+| `sizeof(SMResult)` | <= 16 bytes |
+| Message dispatch | O(1) via switch(PD) + switch(MTI), compile-time resolved |
+| Heap allocations | None on hot path |
+| Virtual dispatch | Only at base class level; derived impl uses switch statements |
 | Thread safety | NOT thread-safe; one instance per MS |
 
 ---
