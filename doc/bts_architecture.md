@@ -5,23 +5,23 @@ This document describes the recommended architecture for building a software Bas
 ## 1. Architecture Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          BTS Application Layer                          │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐   │
-│  │ Roaming  │  │ Auth     │  │ Handover │  │ Call Control Policy  │   │
-│  │ Decisions│  │ (AuC)    │  │ Decisions│  │ (routing, CLIP, etc.)│   │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └──────────┬───────────┘   │
-│       │              │              │                   │               │
-│       └──────────────┴──────────────┴───────────────────┘               │
-│                                 │                                       │
-├─────────────────────────────────┼───────────────────────────────────────┤
-│                    libgsml3parser Stack Modules                         │
+┌────────────────────────────────────────────────────────────────────────┐
+│                          BTS Application Layer                         │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐    │
+│  │ Roaming  │  │ Auth     │  │ Handover │  │ Call Control Policy  │    │
+│  │ Decisions│  │ (AuC)    │  │ Decisions│  │ (routing, CLIP, etc.)│    │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └──────────┬───────────┘    │
+│       │             │             │                   │                │
+│       └─────────────┴─────────────┴───────────────────┘                │
+│                                 │                                      │
+├─────────────────────────────────┼──────────────────────────────────────┤
+│                    libgsml3parser Stack Modules                        │
 │  ┌──────────────────────────────▼──────────────────────────────┐       │
-│  │                      MsSession (per-MS)                      │       │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐  │       │
-│  │  │MSContext │  │TimerMgr  │  │Txn Mgr   │  │ FSMs:      │  │       │
-│  │  │(≤256B)   │  │(≤1.2KB)  │  │(≤768B)   │  │ RR/MM/CC   │  │       │
-│  │  └──────────┘  └──────────┘  └──────────┘  └────────────┘  │       │
+│  │                      MsSession (per-MS)                     │       │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐   │       │
+│  │  │MSContext │  │TimerMgr  │  │Txn Mgr   │  │ FSMs:      │   │       │
+│  │  │(≤256B)   │  │(≤1.2KB)  │  │(≤768B)   │  │ RR/MM/CC   │   │       │
+│  │  └──────────┘  └──────────┘  └──────────┘  └────────────┘   │       │
 │  └───────────────────────────┬─────────────────────────────────┘       │
 │                              │                                         │
 │  ┌───────────────────────────▼─────────────────────────────────┐       │
@@ -32,26 +32,26 @@ This document describes the recommended architecture for building a software Bas
 ├──────────────────────────────┼─────────────────────────────────────────┤
 │                    libgsml3parser Core API                             │
 │  ┌───────────────────────────▼─────────────────────────────────┐       │
-│  │  parseL3() ←→ ParsedMessage (stack variant, < 8 KB)        │       │
+│  │  parseL3() ←→ ParsedMessage (stack variant, < 8 KB)         │       │
 │  │  writeL3Bytes() → raw bytes                                 │       │
 │  │  Builder API → construct L3 messages                        │       │
-│  │  lapdm::wrapL3() / unwrapL3() → LAPDm framing              │       │
+│  │  lapdm::wrapL3() / unwrapL3() → LAPDm framing               │       │
 │  └───────────────────────────┬─────────────────────────────────┘       │
 │                              │                                         │
 ├──────────────────────────────┼─────────────────────────────────────────┤
-│                    Shared BTS Resources                                 │
+│                    Shared BTS Resources                                │
 │  ┌───────────────────────────▼─────────────────────────────────┐       │
-│  │                   ChannelPool (global)                       │       │
+│  │                   ChannelPool (global)                      │       │
 │  │         SDCCH, TCHF, TCHH allocation / VEA                  │       │
 │  └───────────────────────────┬─────────────────────────────────┘       │
 │                              │                                         │
 ├──────────────────────────────┼─────────────────────────────────────────┤
-│                      Radio / PHY Layer                                  │
+│                      Radio / PHY Layer                                 │
 │  ┌───────────────────────────▼─────────────────────────────────┐       │
 │  │  Um Interface: BCCH, CCCH, DCCH, TCH timeslots              │       │
 │  │  SDR Backend: GNU Radio, LMS7002, URHFD, etc.               │       │
 │  └─────────────────────────────────────────────────────────────┘       │
-└─────────────────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## 2. Data Flow Between Components
@@ -182,21 +182,21 @@ public:
 ┌──────────────────────────────────────────────────────────────┐
 │                      Main Event Loop                         │
 │                                                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │ Thread Pool │  │ Timer Wheel │  │  ChannelPool (BTS)  │  │
-│  │ (MS workers)│  │ (global)    │  │  (external sync)    │  │
-│  └──────┬──────┘  └──────┬──────┘  └─────────────────────┘  │
-│         │                │                                    │
-│   ┌─────▼─────┐    ┌────▼────┐                               │
-│   │ MS #1     │    │ MS #N   │                               │
-│   │ ┌───────┐ │    │ ┌───────┐ │                             │
-│   │ │ctx    │ │    │ │ctx    │ │  Each MS session owns:      │
-│   │ │timers │ │    │ │timers │ │  - MSContext                │
-│   │ │txns   │ │    │ │txns   │ │  - TimerManager             │
-│   │ │fsm[]  │ │    │ │fsm[]  │ │  - TransactionManager       │
-│   │ │disp   │ │    │ │disp   │ │  - ProtocolStateMachine ×3  │
-│   │ └───────┘ │    │ └───────┘ │  - ProtocolDispatcher       │
-│   └───────────┘    └───────────┘                              │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐   │
+│  │ Thread Pool │  │ Timer Wheel │  │  ChannelPool (BTS)  │   │
+│  │ (MS workers)│  │ (global)    │  │  (external sync)    │   │
+│  └──────┬──────┘  └──────┬──────┘  └─────────────────────┘   │
+│         │                │                                   │
+│   ┌─────▼─────┐     ┌────▼──────┐                            │
+│   │ MS #1     │     │   MS #N   │                            │
+│   │ ┌───────┐ │     │ ┌───────┐ │                            │
+│   │ │ctx    │ │     │ │ctx    │ │  Each MS session owns:     │
+│   │ │timers │ │     │ │timers │ │  - MSContext               │
+│   │ │txns   │ │     │ │txns   │ │  - TimerManager            │
+│   │ │fsm[]  │ │     │ │fsm[]  │ │  - TransactionManager      │
+│   │ │disp   │ │     │ │disp   │ │  - ProtocolStateMachine ×3 │
+│   │ └───────┘ │     │ └───────┘ │  - ProtocolDispatcher      │
+│   └───────────┘     └───────────┘                            │
 └──────────────────────────────────────────────────────────────┘
 ```
 

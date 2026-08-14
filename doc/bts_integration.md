@@ -10,21 +10,21 @@ libgsml3parser sits between the BTS application logic and the physical/radio lay
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      BTS Application Logic                          │
 │  (roaming decisions, authentication, handover, call control policy) │
-└───────────────────────┬─────────────────────────┬───────────────────┘
-                        │                         │
-      ┌─────────────────▼──────────┐ ┌───────────▼──────────────────┐
-      │    STACK MODULES           │ │     CORE PARSER API          │
-      │  (per-MS state management) │ │  (parse, serialize, build)   │
-      │                           │ │                              │
-      │  MSContext                │ │  Builder Pattern             │
-      │  TimerManager             │ │  ProtocolDispatcher           │
-      │  TransactionManager       │ │  writeL3Bytes() / parseL3()   │
-      │  RR/MM/CC StateMachine    │ │  lapdm::wrapL3() / unwrapL3() │
-      │  ChannelPool              │ │                              │
-      └───────────┬───────────────┘ └──────────┬───────────────────┘
+└───────────────────────┬────────────────────────┬────────────────────┘
+                        │                        │
+      ┌─────────────────▼──────────┐ ┌───────────▼───────────────────┐
+      │    STACK MODULES           │ │     CORE PARSER API           │
+      │  (per-MS state management) │ │  (parse, serialize, build)    │
+      │                            │ │                               │
+      │  MSContext                 │ │  Builder Pattern              │
+      │  TimerManager              │ │  ProtocolDispatcher           │
+      │  TransactionManager        │ │  writeL3Bytes() / parseL3()   │
+      │  RR/MM/CC StateMachine     │ │  lapdm::wrapL3() / unwrapL3() │
+      │  ChannelPool               │ │                               │
+      └───────────┬────────────────┘ └─────────┬─────────────────────┘
                   │                            │
       ┌───────────▼────────────────────────────▼───────────────────┐
-      │                    Radio / Um Interface                     │
+      │                    Radio / Um Interface                    │
       │            (air interface, L1/PHY, SDR backend)            │
       └────────────────────────────────────────────────────────────┘
 ```
