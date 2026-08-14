@@ -92,6 +92,38 @@ Include everything with a single header:
 #include <gsml3parser/gsml3parser.hpp>
 ```
 
+### 1.5 Stack Modules for BTS Development
+
+Version 0.10.0 introduces the **stack module** namespace (`gsml3parser::stack/`), providing high-level primitives for building a software Base Transceiver Station (BTS) on top of the L3 parser:
+
+| Module | Header | Purpose |
+|--------|--------|---------|
+| **MSContext** | `stack/ms_context.h` | Per-subscriber state: identity, channel, flags (≤ 256 bytes, zero allocations) |
+| **Timer Framework** | `stack/l3_timer.h` | Protocol timers (T3101–T3395), TimerManager with callback/span-based tick (zero heap) |
+| **Transaction Framework** | `stack/transaction.h` | Request-response correlation: O(1) TI lookup for CC/SS, PD+MTI scan for others |
+| **Protocol State Machines** | `stack/state_machine.h` | RR/MM/CC FSM skeletons with switch-based O(1) dispatch |
+| **Channel Pool** | `stack/channel_pool.h` | Logical channel allocation/release, RA decoding, VEA support |
+
+All stack modules follow the same design principles: zero heap allocations on hot paths, fixed-size internal storage, and one-instance-per-MS thread model. See [`doc/bts_architecture.md`](bts_architecture.md) for the complete architecture guide and scaling recommendations.
+
+```cpp
+// Minimal BTS setup using stack modules:
+#include <gsml3parser/gsml3parser.hpp>
+
+using namespace gsml3parser;
+
+auto ctx     = MSContext::createWithTMSI(0x12345678u);
+TimerManager timers;
+TransactionManager transactions;
+RRStateMachine rrFsm;
+ChannelPool channels;
+
+// Register channels, start timers, process messages...
+channels.addChannel({ChannelType::SDCCHType, 0, 0, 100});
+timers.start(L3TimerId::T3101);
+rrFsm.setState(RRStateMachine::State::IDLE);
+```
+
 ---
 
 ## 2. Core Types
