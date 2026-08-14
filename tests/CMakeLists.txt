@@ -48,6 +48,7 @@ add_executable(gsml3parser_tests
     test_bts_pipeline.cpp
     test_ms_context.cpp
     test_l3_timer.cpp
+    test_transaction.cpp
 )
 
 find_package(Threads REQUIRED)

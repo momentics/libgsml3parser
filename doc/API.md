@@ -37,6 +37,7 @@
 31. [Test Procedure PD Messages](#31-test-procedure-pd-messages)
 32. [MSContext — Per-Subscriber State](#32-mscontext-per-subscriber-state)
 33. [Timer Framework](#33-timer-framework)
+34. [Transaction Framework](#34-transaction-framework)
 
 ---
 
@@ -2355,6 +2356,136 @@ if (tm.isRunning(L3TimerId::T3101)) {
     // ...
 }
 ```
+
+---
+
+## 34. Transaction Framework
+
+The transaction framework provides request-response correlation for L3 messaging. It tracks outgoing requests and matches incoming responses using either TI (Transaction Identifier) for CC/SS protocols or PD+MTI for other protocol discriminators.
+
+### 34.1 Overview
+
+| Component | Description |
+|-----------|-------------|
+| `Transaction` | Single transaction metadata: PD, MTI, TI, timer ID, state |
+| `TransactionManager` | Manages up to 16 concurrent transactions per MS |
+| `TransactionState` | Pending, Completed, Expired, Cancelled |
+
+### 34.2 Matching Semantics
+
+| Protocol Discriminator | Matching Strategy | Complexity |
+|------------------------|-------------------|------------|
+| `CallControl` (PD=0x03) | TI-based lookup via `mTiIndex[8]` | O(1) |
+| `NonCallSS` (PD=0x0b) | TI-based lookup via `mTiIndex[8]` | O(1) |
+| All other PDs | PD + MTI comparison | O(K), K < 16 |
+
+### 34.3 API Reference
+
+#### TransactionState
+
+```cpp
+enum class TransactionState : uint8_t {
+    Pending,      // Waiting for response
+    Completed,    // Response received successfully
+    Expired,      // Timer expired, no response
+    Cancelled     // Manually cancelled
+};
+```
+
+#### Transaction
+
+```cpp
+class Transaction {
+public:
+    Transaction(L3PD pd, int mti, uint8_t ti, L3TimerId timerId);
+
+    L3PD requestPD() const noexcept;
+    int requestMTI() const noexcept;
+    uint8_t ti() const noexcept;
+    L3TimerId timerId() const noexcept;
+    TransactionState state() const noexcept;
+
+    void complete() noexcept;
+    void expire() noexcept;
+    void cancel() noexcept;
+
+    // Match with TI (for CC/SS protocols)
+    bool matches(const ParsedMessage& msg, uint8_t ti) const;
+
+    // Match without TI (for non-CC/SS protocols)
+    bool matches(const ParsedMessage& msg) const;
+
+    std::chrono::steady_clock::time_point createdAt() const noexcept;
+};
+```
+
+#### TransactionManager
+
+```cpp
+class TransactionManager {
+public:
+    TransactionManager() = default;
+
+    // Create a new pending transaction. Returns unique ID or nullopt if full.
+    std::optional<uint32_t> create(L3PD pd, int mti, uint8_t ti, L3TimerId timerId);
+
+    // Get transaction by ID. Returns nullptr if not found or not pending.
+    Transaction* get(uint32_t id) noexcept;
+
+    // Match with L3 header (full TI support for CC/SS).
+    Transaction* match(const L3Header& header, const ParsedMessage& msg);
+
+    // Match without header (PD+MTI scan only).
+    Transaction* match(const ParsedMessage& msg);
+
+    // Expire all pending transactions with the given timer ID.
+    void onTimerExpired(L3TimerId timerId) noexcept;
+
+    // Remove finished transactions. Returns count removed.
+    size_t cleanup() noexcept;
+
+    size_t pendingCount() const noexcept;
+    size_t totalCount() const noexcept;
+};
+```
+
+### 34.4 Usage Example
+
+```cpp
+#include <gsml3parser/stack/transaction.h>
+
+TransactionManager tm;
+
+// BTS sends Setup, expects Connect
+auto txId = tm.create(L3PD::CallControl, L3Setup::MTI, /*ti=*/1, L3TimerId::T3101);
+// Start timer T3101...
+
+// Later: response arrives
+auto header = parseL3Header(incomingBytes).value();
+auto msg = parseL3(incomingBytes.subspan(2)).value();
+
+Transaction* tx = tm.match(header, msg);
+if (tx) {
+    // Correlated with our Setup request!
+    tx->complete();
+    // Stop timer T3101...
+}
+
+// Timer expiry handler:
+tm.onTimerExpired(L3TimerId::T3101);
+tm.cleanup();
+```
+
+### 34.5 Performance Characteristics
+
+| Metric | Value |
+|--------|-------|
+| `sizeof(Transaction)` | <= 48 bytes |
+| Max concurrent transactions | 16 per MS |
+| CC/SS match() complexity | O(1) via TI index |
+| Non-CC/SS match() complexity | O(K), K < 16 |
+| Heap allocations | None (std::array storage) |
+| Thread safety | NOT thread-safe; one instance per MS |
 
 ---
 
