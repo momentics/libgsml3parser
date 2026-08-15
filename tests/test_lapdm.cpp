@@ -509,7 +509,7 @@ TEST(LAPDmEntityTest, ActiveSide_SABME_ThenReceivesUA) {
     MockLAPDmEntity btsMock;
     btsMock.entity.open(SAPI::SAPI3, true);
 
-    btsMock.entity.sendSABME();
+    (void)btsMock.entity.sendSABME();
     EXPECT_EQ(btsMock.entity.state(), LAPDmState::AwaitingEstablish);
 
     // Simulate MS responding with UA
@@ -530,7 +530,7 @@ TEST(LAPDmEntityTest, DISC_Release) {
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkEstablished);
 
     // Send DISC
-    mock.entity.sendDISC();
+    (void)mock.entity.sendDISC();
     EXPECT_EQ(mock.entity.state(), LAPDmState::AwaitingRelease);
 
     // Peer responds with UA
@@ -860,7 +860,7 @@ TEST(LAPDmEntityTest, T200_NoRetransmission_WhenAcknowledged) {
 
     uint8_t data[10];
     std::fill(std::begin(data), std::end(data), 0xAB);
-    mock.entity.sendData(std::span(data));
+    (void)mock.entity.sendData(std::span(data));
 
     // Acknowledge with RR(NR=1)
     auto rr = encodeFrame(makeRRFrame(SAPI::SAPI0, 1, false));
@@ -881,7 +881,7 @@ TEST(LAPDmEntityTest, T200_AbnormalRelease_AfterN200) {
 
     uint8_t data[10];
     std::fill(std::begin(data), std::end(data), 0xAB);
-    mock.entity.sendData(std::span(data));
+    (void)mock.entity.sendData(std::span(data));
 
     // Tick T200 more than N200 times (SACCH has N200=5)
     for (unsigned i = 0; i <= 5; i++) {
@@ -905,7 +905,7 @@ TEST(LAPDmEntityTest, SABME_T200_Expiry_AbnormalRelease) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
 
-    mock.entity.sendSABME();
+    (void)mock.entity.sendSABME();
     EXPECT_EQ(mock.entity.state(), LAPDmState::AwaitingEstablish);
 
     // Use SDCCH profile (N200=23, T200=900ms). Tick past limit.
@@ -925,7 +925,7 @@ TEST(LAPDmEntityTest, T200_Incremental_Ticks) {
 
     uint8_t data[10];
     std::fill(std::begin(data), std::end(data), 0xAB);
-    mock.entity.sendData(std::span(data));
+    (void)mock.entity.sendData(std::span(data));
 
     // SDCCH T200 = 900ms. Tick 400ms -- should NOT expire
     bool expired1 = mock.entity.tickT200(std::chrono::milliseconds(400));
@@ -1076,7 +1076,7 @@ TEST(LAPDmEntityTest, SACCH_Profile_N200_Limit) {
 
     uint8_t data[10];
     std::fill(std::begin(data), std::end(data), 0xAB);
-    mock.entity.sendData(std::span(data));
+    (void)mock.entity.sendData(std::span(data));
 
     // 5 retransmissions (N200=5) + 1 final expiry -> abnormal release
     for (unsigned i = 0; i <= 5; i++) {

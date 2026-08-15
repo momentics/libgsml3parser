@@ -16,11 +16,11 @@ libgsml3parser sits between the BTS application logic and the physical/radio lay
       │    STACK MODULES           │ │     CORE PARSER API           │
       │  (per-MS state management) │ │  (parse, serialize, build)    │
       │                            │ │                               │
-       │  MSContext                 │ │  Builder Pattern              │
-       │  TimerManager              │ │  ProtocolDispatcher           │
-       │  TransactionManager        │ │  writeL3Bytes() / parseL3()   │
-       │  RR/MM/CC StateMachine     │ │  LAPDmEntity (full LAPDm FSM) │
-       │  ChannelPool               │ │                               │
+      │  MSContext                 │ │  Builder Pattern              │
+      │  TimerManager              │ │  ProtocolDispatcher           │
+      │  TransactionManager        │ │  writeL3Bytes() / parseL3()   │
+      │  RR/MM/CC StateMachine     │ │  LAPDmEntity (full LAPDm FSM) │
+      │  ChannelPool               │ │                               │
       └───────────┬────────────────┘ └─────────┬─────────────────────┘
                   │                            │
       ┌───────────▼────────────────────────────▼───────────────────┐
