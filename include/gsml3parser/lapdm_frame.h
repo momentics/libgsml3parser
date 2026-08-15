@@ -328,7 +328,7 @@ struct LAPDmFrame {
         LAPDmAddressField{sapi, command, true},
         LAPDmControlFormat::I_Format,
         LAPDmUFrameType::UI,
-        nr & 0x07u, ns & 0x07u, pf, m,
+        static_cast<uint8_t>(nr & 0x07u), static_cast<uint8_t>(ns & 0x07u), pf, m,
         LAPDmSFrameType::RR,
         info
     };
@@ -341,7 +341,7 @@ struct LAPDmFrame {
         LAPDmAddressField{sapi, false, true},
         LAPDmControlFormat::S_Format,
         LAPDmUFrameType::UI,
-        nr & 0x07u, 0, pf, false,
+        static_cast<uint8_t>(nr & 0x07u), 0, pf, false,
         LAPDmSFrameType::RR,
         {}
     };
@@ -354,7 +354,7 @@ struct LAPDmFrame {
         LAPDmAddressField{sapi, false, true},
         LAPDmControlFormat::S_Format,
         LAPDmUFrameType::UI,
-        nr & 0x07u, 0, pf, false,
+        static_cast<uint8_t>(nr & 0x07u), 0, pf, false,
         LAPDmSFrameType::REJ,
         {}
     };
