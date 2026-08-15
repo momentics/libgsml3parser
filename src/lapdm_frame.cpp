@@ -70,8 +70,6 @@ Expected<LAPDmFrame> LAPDmFrame::decode(std::span<const uint8_t> data) {
 
     // ── U-frame or S-frame: Fixed bit 0 = 1 ──
     // Try matching known U-frame control bytes first (all F=0/F=1 variants).
-    bool fBit = (ctrl & 0x04u) != 0;
-
     if (ctrl == 0x03 || ctrl == 0x07) {
         // UI frame: [Address][Control][Info...]
         bool pf = (ctrl == 0x07);
