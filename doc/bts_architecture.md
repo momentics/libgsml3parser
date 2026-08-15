@@ -32,7 +32,7 @@ This document describes the recommended architecture for building a software Bas
 ├──────────────────────────────┼───────────────────────────────────────┤
 │                    libgsml3parser Core API                           │
 │  ┌───────────────────────────▼─────────────────────────────────┐     │
-│  │  parseL3() ←-> ParsedMessage (stack variant, < 8 KB)        │     │
+│  │  parseL3() <--> ParsedMessage (stack variant, < 8 KB)       │     │
 │  │  writeL3Bytes() -> raw bytes                                │     │
 │  │  Builder API -> construct L3 messages                       │     │
 │  │  lapdm::wrapL3() / unwrapL3() -> LAPDm framing              │     │
