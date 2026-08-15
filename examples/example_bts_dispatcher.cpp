@@ -257,14 +257,15 @@ void demoFullPipeline() {
     for (const auto& frame : frames) {
         auto l3Bytes = hexToBytes(frame.hexPayload);
 
-        // Wrap in LAPDm (simulates receiving from PHY).
-        auto lapdmFrame = gsml3parser::lapdm::wrapL3(l3Bytes, SAPI::SAPI0, false);
+        // Wrap in LAPDm UI frame (simulates receiving from PHY).
+        auto uiFrame = gsml3parser::lapdm::makeUIFrame(SAPI::SAPI0, false, l3Bytes);
+        auto lapdmFrame = gsml3parser::lapdm::encodeFrame(uiFrame);
 
-        // Unwrap and dispatch.
-        auto payload = gsml3parser::lapdm::unwrapL3(lapdmFrame);
-        if (!payload) continue;
+        // Decode and dispatch.
+        auto decoded = gsml3parser::lapdm::LAPDmFrame::decode(lapdmFrame);
+        if (!decoded) continue;
 
-        auto msg = parseL3(*payload);
+        auto msg = parseL3((*decoded).info);
         if (!msg) continue;
 
         std::cout << "  Frame \"" << frame.name << "\" -> ";
@@ -281,11 +282,12 @@ void demoFullPipeline() {
         ParsedMessage pm{RRM{std::move(ia)}};
         auto bytes = writeL3Bytes(pm);
         if (bytes) {
-            // Wrap and unwrap through LAPDm.
-            auto lapdmFrame = gsml3parser::lapdm::wrapL3(*bytes, SAPI::SAPI0);
-            auto unwrapped = gsml3parser::lapdm::unwrapL3(lapdmFrame);
-            if (unwrapped) {
-                auto reparsed = parseL3(*unwrapped);
+            // Wrap and decode through LAPDm.
+            auto uiFrame = gsml3parser::lapdm::makeUIFrame(SAPI::SAPI0, false, *bytes);
+            auto lapdmFrame = gsml3parser::lapdm::encodeFrame(uiFrame);
+            auto decoded = gsml3parser::lapdm::LAPDmFrame::decode(lapdmFrame);
+            if (decoded) {
+                auto reparsed = parseL3((*decoded).info);
                 if (reparsed) disp.dispatch(*reparsed);
             }
         }

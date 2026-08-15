@@ -48,6 +48,7 @@
 #include "gsml3parser/bitstream/stream_processor.h"
 #include "gsml3parser/enum_formatters.h"
 #include "gsml3parser/lapdm.h"
+#include "gsml3parser/lapdm_entity.h"
 #include "gsml3parser/dispatcher.h"
 #include "gsml3parser/stack/ms_context.h"
 #include "gsml3parser/stack/l3_timer.h"

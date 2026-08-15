@@ -97,19 +97,20 @@ void demoImmediateAssignment() {
     std::cout << "    [1]=" << std::hex << static_cast<int>((*l3Bytes)[1])
               << " (MTI=ImmediateAssignment)\n";
 
-    // 3. Wrap in LAPDm frame.
-    auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0, false);
+    // 3. Wrap in LAPDm UI frame.
+    auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+    auto lapdmFrame = encodeFrame(uiFrame);
     std::cout << "  LAPDm frame (" << lapdmFrame.size() << "): "
               << bytesToHex(lapdmFrame) << "\n\n";
 
     // 4. Round-trip verification.
-    auto unwrapped = unwrapL3(lapdmFrame);
-    if (!unwrapped) {
-        std::cerr << "  ERROR: unwrapL3 failed\n";
+    auto decoded = LAPDmFrame::decode(lapdmFrame);
+    if (!decoded) {
+        std::cerr << "  ERROR: LAPDmFrame::decode failed\n";
         std::exit(1);
     }
 
-    auto reparsed = parseL3(*unwrapped);
+    auto reparsed = parseL3((*decoded).info);
     if (!reparsed) {
         std::cerr << "  ERROR: parseL3 failed\n";
         std::exit(1);
@@ -147,11 +148,13 @@ void demoTimedAssignment() {
         std::exit(1);
     }
 
-    auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0);
+    auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+    auto lapdmFrame = encodeFrame(uiFrame);
 
     // Round-trip.
-    auto unwrapped = unwrapL3(lapdmFrame);
-    auto reparsed = parseL3(*unwrapped);
+    auto decoded = LAPDmFrame::decode(lapdmFrame);
+    auto reparsed = decoded ? parseL3((*decoded).info) : Expected<ParsedMessage>::error(
+        ParseError(ParseError::Code::TruncatedInput, "decode failed"));
 
     if (!reparsed) {
         std::cerr << "  ERROR: round-trip failed\n";
@@ -186,9 +189,11 @@ void demoAssignmentReject() {
     std::cout << "  Reject L3 bytes (" << (*l3Bytes).size() << "): "
               << bytesToHex(*l3Bytes) << "\n";
 
-    auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0);
-    auto unwrapped = unwrapL3(lapdmFrame);
-    auto reparsed = parseL3(*unwrapped);
+    auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+    auto lapdmFrame = encodeFrame(uiFrame);
+    auto decoded = LAPDmFrame::decode(lapdmFrame);
+    auto reparsed = decoded ? parseL3((*decoded).info) : Expected<ParsedMessage>::error(
+        ParseError(ParseError::Code::TruncatedInput, "decode failed"));
 
     if (!reparsed) {
         std::cerr << "  ERROR: round-trip failed\n";

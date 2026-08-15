@@ -43,22 +43,25 @@ static ParsedMessage pipelineRoundTrip(const ParsedMessage& msg) {
         return ParsedMessage{RRM{L3ChannelRelease{RRCause::Normal_Event}}};
     }
 
-    auto lapdmFrame = wrapL3(l3Bytes.value(), SAPI::SAPI0);
-    if (lapdmFrame.size() != l3Bytes.value().size() + 2) {
-        ADD_FAILURE() << "wrapL3 size mismatch";
+    // Encode L3 payload in a LAPDm UI frame.
+    auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+    auto lapdmFrame = encodeFrame(uiFrame);
+    if (lapdmFrame.size() != (*l3Bytes).size() + 2) {
+        ADD_FAILURE() << "encodeFrame size mismatch";
         return ParsedMessage{RRM{L3ChannelRelease{RRCause::Normal_Event}}};
     }
 
-    auto unwrapped = unwrapL3(lapdmFrame);
-    if (!unwrapped) {
-        ADD_FAILURE() << "unwrapL3 failed";
+    // Decode the LAPDm frame and extract L3 payload.
+    auto decoded = LAPDmFrame::decode(lapdmFrame);
+    if (!decoded) {
+        ADD_FAILURE() << "LAPDmFrame::decode failed";
         return ParsedMessage{RRM{L3ChannelRelease{RRCause::Normal_Event}}};
     }
-    if (unwrapped.value() != l3Bytes.value()) {
-        ADD_FAILURE() << "unwrapL3 content mismatch";
+    if (std::vector<uint8_t>((*decoded).info.begin(), (*decoded).info.end()) != *l3Bytes) {
+        ADD_FAILURE() << "decoded info content mismatch";
     }
 
-    auto reparsed = parseL3(unwrapped.value());
+    auto reparsed = parseL3((*decoded).info);
     if (!reparsed) {
         ADD_FAILURE() << "parseL3 failed after pipeline round-trip";
         return ParsedMessage{RRM{L3ChannelRelease{RRCause::Normal_Event}}};
@@ -297,11 +300,12 @@ TEST(BTSPipeline, DispatcherWithPipeline) {
         auto l3Bytes = writeL3Bytes(pm);
         ASSERT_TRUE(l3Bytes);
 
-        auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0);
-        auto unwrapped = unwrapL3(lapdmFrame);
-        ASSERT_TRUE(unwrapped);
+        auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+        auto lapdmFrame = encodeFrame(uiFrame);
+        auto decoded = LAPDmFrame::decode(lapdmFrame);
+        ASSERT_TRUE(decoded);
 
-        EXPECT_TRUE(disp.dispatchRaw(*unwrapped));
+        EXPECT_TRUE(disp.dispatchRaw((*decoded).info));
     }
     EXPECT_TRUE(releaseCalled);
 
@@ -314,11 +318,12 @@ TEST(BTSPipeline, DispatcherWithPipeline) {
         auto l3Bytes = writeL3Bytes(pm);
         ASSERT_TRUE(l3Bytes);
 
-        auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0);
-        auto unwrapped = unwrapL3(lapdmFrame);
-        ASSERT_TRUE(unwrapped);
+        auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+        auto lapdmFrame = encodeFrame(uiFrame);
+        auto decoded = LAPDmFrame::decode(lapdmFrame);
+        ASSERT_TRUE(decoded);
 
-        EXPECT_TRUE(disp.dispatchRaw(*unwrapped));
+        EXPECT_TRUE(disp.dispatchRaw((*decoded).info));
     }
     EXPECT_TRUE(pagingCalled);
 
@@ -344,21 +349,24 @@ TEST(BTSPipeline, MultiSAPIL3Messages) {
     ASSERT_TRUE(l3Bytes);
 
     // Frame on SAPI0 (signaling).
-    auto frame0 = wrapL3(*l3Bytes, SAPI::SAPI0);
+    auto uiFrame0 = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+    auto frame0 = encodeFrame(uiFrame0);
     EXPECT_EQ(frame0[0], 0x01); // SAPI0, CR=0, EA=1
     EXPECT_EQ(frame0[1], 0x03); // UI
 
     // Frame on SAPI3 (data).
-    auto frame3 = wrapL3(*l3Bytes, SAPI::SAPI3);
+    auto uiFrame3 = makeUIFrame(SAPI::SAPI3, false, *l3Bytes);
+    auto frame3 = encodeFrame(uiFrame3);
     EXPECT_EQ(frame3[0], 0x31); // SAPI3, CR=0, EA=1
     EXPECT_EQ(frame3[1], 0x03); // UI
 
-    // Both unwrap to the same L3 payload.
-    auto unwrapped0 = unwrapL3(frame0);
-    auto unwrapped3 = unwrapL3(frame3);
-    ASSERT_TRUE(unwrapped0);
-    ASSERT_TRUE(unwrapped3);
-    EXPECT_EQ(*unwrapped0, *unwrapped3);
+    // Both decode to the same L3 payload.
+    auto decoded0 = LAPDmFrame::decode(frame0);
+    auto decoded3 = LAPDmFrame::decode(frame3);
+    ASSERT_TRUE(decoded0);
+    ASSERT_TRUE(decoded3);
+    EXPECT_EQ(std::vector<uint8_t>((*decoded0).info.begin(), (*decoded0).info.end()),
+              std::vector<uint8_t>((*decoded3).info.begin(), (*decoded3).info.end()));
 }
 
 // Domain handler integration: catch-all for all RR messages
@@ -389,11 +397,12 @@ TEST(BTSPipeline, DomainHandlerFullPipeline) {
         auto l3Bytes = writeL3Bytes(pm);
         ASSERT_TRUE(l3Bytes);
 
-        auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0);
-        auto unwrapped = unwrapL3(lapdmFrame);
-        ASSERT_TRUE(unwrapped);
+        auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+        auto lapdmFrame = encodeFrame(uiFrame);
+        auto decoded = LAPDmFrame::decode(lapdmFrame);
+        ASSERT_TRUE(decoded);
 
-        EXPECT_TRUE(disp.dispatchRaw(*unwrapped));
+        EXPECT_TRUE(disp.dispatchRaw((*decoded).info));
     }
 
     // Send MM messages through pipeline.
@@ -403,11 +412,12 @@ TEST(BTSPipeline, DomainHandlerFullPipeline) {
         auto l3Bytes = writeL3Bytes(pm);
         ASSERT_TRUE(l3Bytes);
 
-        auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0);
-        auto unwrapped = unwrapL3(lapdmFrame);
-        ASSERT_TRUE(unwrapped);
+        auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+        auto lapdmFrame = encodeFrame(uiFrame);
+        auto decoded = LAPDmFrame::decode(lapdmFrame);
+        ASSERT_TRUE(decoded);
 
-        EXPECT_TRUE(disp.dispatchRaw(*unwrapped));
+        EXPECT_TRUE(disp.dispatchRaw((*decoded).info));
     }
 
     EXPECT_EQ(rrCount, 3);
@@ -417,7 +427,7 @@ TEST(BTSPipeline, DomainHandlerFullPipeline) {
 // LAPDm frame validation: detect malformed frames in pipeline
 TEST(BTSPipeline, MalformedLAPDmFrame) {
     uint8_t shortFrame[] = {0x01};
-    auto result = unwrapL3(std::span<const uint8_t>(shortFrame));
+    auto result = LAPDmFrame::decode(std::span<const uint8_t>(shortFrame));
     ASSERT_FALSE(result);
     EXPECT_EQ(result.error().code, ParseError::Code::TruncatedInput);
 }
@@ -457,11 +467,12 @@ TEST(BTSPipeline, PipelineWithContext) {
     auto l3Bytes = writeL3Bytes(pm);
     ASSERT_TRUE(l3Bytes);
 
-    auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0);
-    auto unwrapped = unwrapL3(lapdmFrame);
-    ASSERT_TRUE(unwrapped);
+    auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+    auto lapdmFrame = encodeFrame(uiFrame);
+    auto decoded = LAPDmFrame::decode(lapdmFrame);
+    ASSERT_TRUE(decoded);
 
-    EXPECT_TRUE(disp.dispatchRaw(*unwrapped, &state));
+    EXPECT_TRUE(disp.dispatchRaw((*decoded).info, &state));
     EXPECT_EQ(state.msgCount, 1);
     EXPECT_TRUE(state.releaseReceived);
 }

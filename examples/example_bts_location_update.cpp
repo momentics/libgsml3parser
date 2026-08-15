@@ -113,12 +113,14 @@ void step2_assignSDCCH() {
         std::exit(1);
     }
 
-    auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0);
+    auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+    auto lapdmFrame = encodeFrame(uiFrame);
     std::cout << "  ImmediateAssignment sent (" << (*l3Bytes).size()
               << " L3 bytes, " << lapdmFrame.size() << " LAPDm bytes)\n";
 
-    auto unwrapped = unwrapL3(lapdmFrame);
-    auto reparsed = parseL3(*unwrapped);
+    auto decoded = LAPDmFrame::decode(lapdmFrame);
+    auto reparsed = decoded ? parseL3((*decoded).info) : Expected<ParsedMessage>::error(
+        ParseError(ParseError::Code::TruncatedInput, "decode failed"));
     if (reparsed && tryGet<L3ImmediateAssignment>(*reparsed)) {
         std::cout << "  Round-trip verified\n";
     }
@@ -271,9 +273,11 @@ void step6_locationUpdatingRequest() {
                   << " bytes)\n";
     }
 
-    auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0);
-    auto unwrapped = unwrapL3(lapdmFrame);
-    auto reparsed = parseL3(*unwrapped);
+    auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+    auto lapdmFrame = encodeFrame(uiFrame);
+    auto decoded = LAPDmFrame::decode(lapdmFrame);
+    auto reparsed = decoded ? parseL3((*decoded).info) : Expected<ParsedMessage>::error(
+        ParseError(ParseError::Code::TruncatedInput, "decode failed"));
 
     if (reparsed) {
         auto* lur2 = tryGet<L3LocationUpdatingRequest>(*reparsed);

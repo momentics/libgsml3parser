@@ -70,7 +70,8 @@ void phase1_sendPaging() {
         std::exit(1);
     }
 
-    auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0, false);
+    auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+    auto lapdmFrame = encodeFrame(uiFrame);
     std::cout << "  PagingRequestType2 sent for TMSI=0x12345678\n";
     std::cout << "  L3 bytes (" << (*l3Bytes).size() << "): "
               << bytesToHex(*l3Bytes) << "\n";
@@ -98,9 +99,11 @@ void phase2_receivePagingResponse() {
         std::exit(1);
     }
 
-    auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0);
-    auto unwrapped = unwrapL3(lapdmFrame);
-    auto reparsed = parseL3(*unwrapped);
+    auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+    auto lapdmFrame = encodeFrame(uiFrame);
+    auto decoded = LAPDmFrame::decode(lapdmFrame);
+    auto reparsed = decoded ? parseL3((*decoded).info) : Expected<ParsedMessage>::error(
+        ParseError(ParseError::Code::TruncatedInput, "decode failed"));
 
     if (!reparsed) {
         std::cerr << "  ERROR: round-trip failed\n";

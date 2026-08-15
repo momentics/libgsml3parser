@@ -36,6 +36,7 @@ set(CORE_SOURCES
     src/bitstream/stream_processor.cpp
     src/lapdm.cpp
     src/lapdm_frame.cpp
+    src/lapdm_entity.cpp
     src/dispatcher.cpp
     src/stack/ms_context.cpp
     src/stack/l3_timer.cpp
@@ -140,6 +141,7 @@ set(PUBLIC_HEADERS
     include/gsml3parser/bitstream/stream_processor.h
     include/gsml3parser/lapdm.h
     include/gsml3parser/lapdm_frame.h
+    include/gsml3parser/lapdm_entity.h
     include/gsml3parser/dispatcher.h
     include/gsml3parser/stack/ms_context.h
     include/gsml3parser/stack/l3_timer.h

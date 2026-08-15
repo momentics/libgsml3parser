@@ -58,14 +58,15 @@ bool roundTrip(const char* name, ParsedMessage&& pm) {
         return false;
     }
 
-    auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0, false);
-    auto unwrapped = unwrapL3(lapdmFrame);
-    if (!unwrapped) {
-        std::cerr << "  ERROR: unwrapL3 failed for " << name << "\n";
+    auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+    auto lapdmFrame = encodeFrame(uiFrame);
+    auto decoded = LAPDmFrame::decode(lapdmFrame);
+    if (!decoded) {
+        std::cerr << "  ERROR: LAPDmFrame::decode failed for " << name << "\n";
         return false;
     }
 
-    auto reparsed = parseL3(*unwrapped);
+    auto reparsed = parseL3((*decoded).info);
     if (!reparsed) {
         std::cerr << "  ERROR: parseL3 failed for " << name << "\n";
         return false;
@@ -142,9 +143,11 @@ void demoSI3() {
 
     ParsedMessage pm{RRM{std::move(si3b)}};
     auto l3Bytes = writeL3Bytes(pm);
-    auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0);
-    auto unwrapped = unwrapL3(lapdmFrame);
-    auto reparsed = parseL3(*unwrapped);
+    auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+    auto lapdmFrame = encodeFrame(uiFrame);
+    auto decoded = LAPDmFrame::decode(lapdmFrame);
+    auto reparsed = decoded ? parseL3((*decoded).info) : Expected<ParsedMessage>::error(
+        ParseError(ParseError::Code::TruncatedInput, "decode failed"));
 
     if (reparsed) {
         auto* parsed = tryGet<L3SystemInformationType3>(*reparsed);
@@ -223,7 +226,7 @@ void demoBroadcastCycle() {
             std::cerr << "  ERROR: failed to serialize " << name << "\n";
             std::exit(1);
         }
-        auto frame = wrapL3(*bytes, SAPI::SAPI0);
+        auto frame = encodeFrame(makeUIFrame(SAPI::SAPI0, false, *bytes));
         frames.push_back(std::move(frame));
 
         std::cout << "  " << name << ": LAPDm frame[" << frames.back().size()
@@ -233,8 +236,9 @@ void demoBroadcastCycle() {
     // Verify each frame can be unwrapped and parsed.
     std::cout << "\n  Verifying all frames:\n";
     for (size_t i = 0; i < frames.size(); ++i) {
-        auto payload = unwrapL3(frames[i]);
-        auto parsed = parseL3(*payload);
+        auto d = LAPDmFrame::decode(frames[i]);
+        auto parsed = d ? parseL3((*d).info) : Expected<ParsedMessage>::error(
+            ParseError(ParseError::Code::TruncatedInput, "decode failed"));
         if (!parsed) {
             std::cerr << "  ERROR: frame " << i << " failed to parse\n";
             std::exit(1);

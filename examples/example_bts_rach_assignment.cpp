@@ -119,7 +119,8 @@ void step2_allocateChannelAndBuildIA() {
     std::cout << "  L3 bytes (" << (*l3Bytes).size() << "): "
               << bytesToHex(*l3Bytes) << "\n";
 
-    auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0, false);
+    auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+    auto lapdmFrame = encodeFrame(uiFrame);
     std::cout << "  LAPDm frame (" << lapdmFrame.size() << "): "
               << bytesToHex(lapdmFrame) << "\n";
 
@@ -277,14 +278,15 @@ void step7_roundtripVerification() {
         std::exit(1);
     }
 
-    auto lapdmFrame = wrapL3(*l3Bytes, SAPI::SAPI0);
-    auto unwrapped = unwrapL3(lapdmFrame);
-    if (!unwrapped) {
-        std::cerr << "  ERROR: unwrapL3 failed\n";
+    auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
+    auto lapdmFrame = encodeFrame(uiFrame);
+    auto decoded = LAPDmFrame::decode(lapdmFrame);
+    if (!decoded) {
+        std::cerr << "  ERROR: LAPDmFrame::decode failed\n";
         std::exit(1);
     }
 
-    auto reparsed = parseL3(*unwrapped);
+    auto reparsed = parseL3((*decoded).info);
     if (!reparsed) {
         std::cerr << "  ERROR: parseL3 failed\n";
         std::exit(1);
