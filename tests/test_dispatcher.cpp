@@ -32,12 +32,12 @@ TEST(DispatcherTest, SpecificHandlerCalled) {
     bool called = false;
     ProtocolDispatcher disp;
     disp.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
-        [&](const ParsedMessage& msg, void*) {
+        makeSharedHandler([&](const ParsedMessage& msg, void*) {
             auto* cr = tryGet<L3ChannelRelease>(msg);
             ASSERT_TRUE(cr);
             EXPECT_EQ(cr->cause(), RRCause::Normal_Event);
             called = true;
-        });
+        }));
 
     // "600d00" = RR PD(0x60), MTI=0x0D(ChannelRelease), cause=0x00
     auto msg = parseL3Hex("600d00");
@@ -51,7 +51,7 @@ TEST(DispatcherTest, DomainHandlerFallback) {
     bool domainCalled = false;
     ProtocolDispatcher disp;
     disp.registerDomainHandler(L3PD::RadioResource,
-        [&](const ParsedMessage&, void*) { domainCalled = true; });
+        makeSharedHandler([&](const ParsedMessage&, void*) { domainCalled = true; }));
 
     auto msg = parseL3Hex("600d00");
     ASSERT_TRUE(msg);
@@ -64,7 +64,7 @@ TEST(DispatcherTest, DispatchRawBytes) {
     bool called = false;
     ProtocolDispatcher disp;
     disp.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
-        [&](const ParsedMessage&, void*) { called = true; });
+        makeSharedHandler([&](const ParsedMessage&, void*) { called = true; }));
 
     uint8_t data[] = {0x60, 0x0D, 0x00};
     EXPECT_TRUE(disp.dispatchRaw(std::span<const uint8_t>(data)));
@@ -77,9 +77,9 @@ TEST(DispatcherTest, SpecificOverridesDomain) {
     bool domainCalled = false;
     ProtocolDispatcher disp;
     disp.registerDomainHandler(L3PD::RadioResource,
-        [&](const ParsedMessage&, void*) { domainCalled = true; });
+        makeSharedHandler([&](const ParsedMessage&, void*) { domainCalled = true; }));
     disp.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
-        [&](const ParsedMessage&, void*) { specificCalled = true; });
+        makeSharedHandler([&](const ParsedMessage&, void*) { specificCalled = true; }));
 
     auto msg = parseL3Hex("600d00");
     ASSERT_TRUE(msg);
@@ -92,7 +92,7 @@ TEST(DispatcherTest, SpecificOverridesDomain) {
 TEST(DispatcherTest, GlobalFallback) {
     bool fallbackCalled = false;
     ProtocolDispatcher disp;
-    disp.setFallbackHandler([&](const ParsedMessage&, void*) { fallbackCalled = true; });
+    disp.setFallbackHandler(makeSharedHandler([&](const ParsedMessage&, void*) { fallbackCalled = true; }));
 
     auto msg = parseL3Hex("600d00");
     ASSERT_TRUE(msg);
@@ -111,12 +111,12 @@ TEST(DispatcherTest, DispatchRawInvalidData) {
 TEST(DispatcherTest, TIHandler_calledForMatchingTI) {
     bool tiCalled = false;
     ProtocolDispatcher disp;
-    disp.registerTIHandler(3, [&](const ParsedMessage& msg, void*) {
+    disp.registerTIHandler(3, makeSharedHandler([&](const ParsedMessage& msg, void*) {
         auto* d = tryGet<L3Disconnect>(msg);
         ASSERT_TRUE(d);
         EXPECT_EQ(d->ti(), 3u);
         tiCalled = true;
-    });
+    }));
 
     L3Disconnect disc(CCCause::Normal_Call_Clearing);
     disc.ti(3);
@@ -132,9 +132,9 @@ TEST(DispatcherTest, TIHandler_specificOverridesGeneral) {
     ProtocolDispatcher disp;
 
     disp.registerHandler(L3PD::CallControl, L3Disconnect::MTI,
-        [&](const ParsedMessage&, void*) { specificCalled = true; });
+        makeSharedHandler([&](const ParsedMessage&, void*) { specificCalled = true; }));
     disp.registerTIHandler(5,
-        [&](const ParsedMessage&, void*) { tiCalled = true; });
+        makeSharedHandler([&](const ParsedMessage&, void*) { tiCalled = true; }));
 
     L3Disconnect disc(CCCause::Normal_Call_Clearing);
     disc.ti(5);
@@ -150,8 +150,8 @@ TEST(DispatcherTest, DispatchWithTI_routesCorrectly) {
     bool ti7Called = false;
     ProtocolDispatcher disp;
 
-    disp.registerTIHandler(0, [&](const ParsedMessage&, void*) { ti0Called = true; });
-    disp.registerTIHandler(7, [&](const ParsedMessage&, void*) { ti7Called = true; });
+    disp.registerTIHandler(0, makeSharedHandler([&](const ParsedMessage&, void*) { ti0Called = true; }));
+    disp.registerTIHandler(7, makeSharedHandler([&](const ParsedMessage&, void*) { ti7Called = true; }));
 
     L3Disconnect disc1(CCCause::Normal_Call_Clearing);
     disc1.ti(0);
@@ -173,12 +173,12 @@ TEST(DispatcherTest, NoTIHandler_fallsBackToSpecific) {
     ProtocolDispatcher disp;
 
     disp.registerHandler(L3PD::CallControl, L3Disconnect::MTI,
-        [&](const ParsedMessage& msg, void*) {
+        makeSharedHandler([&](const ParsedMessage& msg, void*) {
             auto* d = tryGet<L3Disconnect>(msg);
             ASSERT_TRUE(d);
             EXPECT_EQ(d->ti(), 4u);
             specificCalled = true;
-        });
+        }));
 
     L3Disconnect disc(CCCause::Normal_Call_Clearing);
     disc.ti(4);
@@ -193,7 +193,7 @@ TEST(DispatcherTest, DispatchWithTI_nonCC_ignoresTI) {
     ProtocolDispatcher disp;
 
     disp.registerDomainHandler(L3PD::RadioResource,
-        [&](const ParsedMessage&, void*) { domainCalled = true; });
+        makeSharedHandler([&](const ParsedMessage&, void*) { domainCalled = true; }));
 
     auto msg = parseL3Hex("600d00"); // RR ChannelRelease
     ASSERT_TRUE(msg);

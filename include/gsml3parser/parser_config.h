@@ -40,6 +40,12 @@ struct L3Frame {
     std::span<const uint8_t> data;
 };
 
+/**
+ * Custom per-PD message handler.  This is NOT on the hot parsing path;
+ * parseL3() uses compile-time dispatch via switch statements.  PDHandlers
+ * are only invoked when explicitly registered via ParserConfig.withPDHandler().
+ * std::function overhead is acceptable here since registration is a cold-path operation.
+ */
 using PDHandler = std::function<std::unique_ptr<L3Message>(const L3Frame&)>;
 
 /**

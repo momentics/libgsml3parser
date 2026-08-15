@@ -331,13 +331,13 @@ void benchmarkDispatcher() {
     volatile int handled = 0;
 
     dispatcher.registerHandler(L3PD::RadioResource, L3PagingResponse::MTI,
-        [&handled](const ParsedMessage&, void*) { handled = handled + 1; });
+        makeSharedHandler([&handled](const ParsedMessage&, void*) { handled = handled + 1; }));
 
     dispatcher.registerHandler(L3PD::MobilityManagement, L3CMServiceRequest::MTI,
-        [&handled](const ParsedMessage&, void*) { handled = handled + 1; });
+        makeSharedHandler([&handled](const ParsedMessage&, void*) { handled = handled + 1; }));
 
     dispatcher.registerHandler(L3PD::CallControl, L3Setup::MTI,
-        [&handled](const ParsedMessage&, void*) { handled = handled + 1; });
+        makeSharedHandler([&handled](const ParsedMessage&, void*) { handled = handled + 1; }));
 
     auto pr = L3PagingResponse::builder().mobileId(L3MobileIdentity(0x12345678)).build();
     ParsedMessage prMsg{RRM{std::move(pr)}};

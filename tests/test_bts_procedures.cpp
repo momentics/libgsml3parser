@@ -652,19 +652,17 @@ TEST(BTSProceduresTest, DispatcherIntegration_withMSContext) {
     bool pagingResponseReceived = false;
 
     disp.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
-        [&](const ParsedMessage& msg, void* userCtx) {
-            auto* c = static_cast<MSContext*>(userCtx);
-            EXPECT_EQ(c->identity().isTMSI(), true);
-            c->releaseChannel();
+        makeSharedHandler([&ctx, &channelReleaseReceived](const ParsedMessage& msg, void*) {
+            EXPECT_EQ(ctx.identity().isTMSI(), true);
+            ctx.releaseChannel();
             channelReleaseReceived = true;
-        });
+        }));
 
     disp.registerHandler(L3PD::RadioResource, L3PagingResponse::MTI,
-        [&](const ParsedMessage& msg, void* userCtx) {
-            auto* c = static_cast<MSContext*>(userCtx);
-            c->assignChannel(ChannelType::SDCCHType, 0, 0, 100);
+        makeSharedHandler([&ctx, &pagingResponseReceived](const ParsedMessage& msg, void*) {
+            ctx.assignChannel(ChannelType::SDCCHType, 0, 0, 100);
             pagingResponseReceived = true;
-        });
+        }));
 
     // Dispatch Paging Response
     ParsedMessage pagingResp = makeRRPagingResponse();

@@ -231,18 +231,18 @@ void step6_dispatcherIntegration() {
     bool pagingResponseReceived = false;
 
     dispatcher.registerHandler(L3PD::RadioResource, L3ChannelRequest::MTI,
-        [&channelRequestReceived](const ParsedMessage& msg, void*) {
+        makeSharedHandler([&channelRequestReceived](const ParsedMessage& msg, void*) {
             if (tryGet<L3ChannelRequest>(msg)) {
                 channelRequestReceived = true;
             }
-        });
+        }));
 
     dispatcher.registerHandler(L3PD::RadioResource, L3PagingResponse::MTI,
-        [&pagingResponseReceived](const ParsedMessage& msg, void*) {
+        makeSharedHandler([&pagingResponseReceived](const ParsedMessage& msg, void*) {
             if (tryGet<L3PagingResponse>(msg)) {
                 pagingResponseReceived = true;
             }
-        });
+        }));
 
     auto chanReq = L3ChannelRequest(0x05);
     ParsedMessage crMsg{RRM{std::move(chanReq)}};

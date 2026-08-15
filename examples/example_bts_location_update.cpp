@@ -392,16 +392,16 @@ void step9_dispatcherIntegration() {
     int handledCount = 0;
 
     dispatcher.registerHandler(L3PD::MobilityManagement, L3CMServiceRequest::MTI,
-        [&handledCount](const ParsedMessage&, void*) { ++handledCount; });
+        makeSharedHandler([&handledCount](const ParsedMessage&, void*) { ++handledCount; }));
 
     dispatcher.registerHandler(L3PD::MobilityManagement, L3IdentityResponse::MTI,
-        [&handledCount](const ParsedMessage&, void*) { ++handledCount; });
+        makeSharedHandler([&handledCount](const ParsedMessage&, void*) { ++handledCount; }));
 
     dispatcher.registerHandler(L3PD::MobilityManagement, L3AuthenticationResponse::MTI,
-        [&handledCount](const ParsedMessage&, void*) { ++handledCount; });
+        makeSharedHandler([&handledCount](const ParsedMessage&, void*) { ++handledCount; }));
 
     dispatcher.registerHandler(L3PD::MobilityManagement, L3LocationUpdatingRequest::MTI,
-        [&handledCount](const ParsedMessage&, void*) { ++handledCount; });
+        makeSharedHandler([&handledCount](const ParsedMessage&, void*) { ++handledCount; }));
 
     auto cmr = L3CMServiceRequest::builder().classmark(L3MobileStationClassmark2{}).build();
     dispatcher.dispatch(ParsedMessage{MMM{std::move(cmr)}}, nullptr);

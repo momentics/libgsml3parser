@@ -35,49 +35,6 @@ L3StreamProcessor::L3StreamProcessor(std::unique_ptr<ByteSource> source, ParserC
     : mOwnedSource(std::move(source)), mSource(mOwnedSource.get()),
       mFramer(*mOwnedSource, std::move(fcfg)), mConfig(std::move(cfg)) {}
 
-bool L3StreamProcessor::processOne(std::function<void(const ParsedMessage&)> handler) {
-    auto frameResult = mFramer.nextFrame();
-    if (!frameResult) {
-        const auto& err = frameResult.error();
-        if (err.code == ParseError::Code::TruncatedInput) {
-            mStats.truncatedInputs++;
-        }
-        return false;
-    }
-
-    const auto& frame = frameResult.value();
-    mStats.totalBytes += frame.data.size();
-    mStats.totalFrames++;
-
-    auto msgResult = parseL3(frame.data, mConfig);
-    if (!msgResult) {
-        mStats.parseErrors++;
-        return false;
-    }
-
-    mStats.parsedOk++;
-
-    // Categorize by protocol discriminator.
-    switch (messagePD(*msgResult)) {
-        case L3PD::RadioResource:          mStats.rrMessages++; break;
-        case L3PD::MobilityManagement:     mStats.mmMessages++; break;
-        case L3PD::CallControl:            mStats.ccMessages++; break;
-        case L3PD::NonCallSS:              mStats.ssMessages++; break;
-        case L3PD::GPRSMobilityManagement: mStats.gmmMessages++; break;
-        case L3PD::GPRSSessionManagement:  mStats.smMessages++; break;
-        case L3PD::SMS:                    mStats.smsMessages++; break;
-        case L3PD::BroadcastCallControl:   mStats.bccMessages++; break;
-        case L3PD::GroupCallControl:       mStats.gccMessages++; break;
-        case L3PD::Location:               mStats.lsMessages++; break;
-        case L3PD::Extended:               mStats.extendedMessages++; break;
-        case L3PD::TestProcedure:          mStats.testprocMessages++; break;
-        default:                           mStats.unsupportedPD++; break;
-    }
-
-    if (handler) handler(*msgResult);
-    return true;
-}
-
 void L3StreamProcessor::processUntilEOF(FrameHandler& handler) {
     while (true) {
         auto frameResult = mFramer.nextFrame();

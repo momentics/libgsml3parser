@@ -269,24 +269,24 @@ TEST(BTSPipeline, DispatcherWithPipeline) {
     ProtocolDispatcher disp;
 
     disp.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
-        [&](const ParsedMessage& msg, void*) {
+        makeSharedHandler([&](const ParsedMessage& msg, void*) {
             auto* cr = tryGet<L3ChannelRelease>(msg);
             ASSERT_TRUE(cr);
             EXPECT_EQ(cr->cause(), RRCause::Normal_Event);
             releaseCalled = true;
-        });
+        }));
 
     disp.registerHandler(L3PD::RadioResource, L3PagingRequestType2::MTI,
-        [&](const ParsedMessage& msg, void*) {
+        makeSharedHandler([&](const ParsedMessage& msg, void*) {
             auto* pr = tryGet<L3PagingRequestType2>(msg);
             ASSERT_TRUE(pr);
             EXPECT_EQ(pr->tmsis()[0], 0x12345678u);
             pagingCalled = true;
-        });
+        }));
 
-    disp.setFallbackHandler([&](const ParsedMessage&, void*) {
+    disp.setFallbackHandler(makeSharedHandler([&](const ParsedMessage&, void*) {
         fallbackCalled = true;
-    });
+    }));
 
     // Build and dispatch ChannelRelease through full pipeline.
     {
@@ -369,16 +369,16 @@ TEST(BTSPipeline, DomainHandlerFullPipeline) {
     ProtocolDispatcher disp;
 
     disp.registerDomainHandler(L3PD::RadioResource,
-        [&](const ParsedMessage& msg, void*) {
+        makeSharedHandler([&](const ParsedMessage& msg, void*) {
             EXPECT_EQ(messagePD(msg), L3PD::RadioResource);
             rrCount++;
-        });
+        }));
 
     disp.registerDomainHandler(L3PD::MobilityManagement,
-        [&](const ParsedMessage& msg, void*) {
+        makeSharedHandler([&](const ParsedMessage& msg, void*) {
             EXPECT_EQ(messagePD(msg), L3PD::MobilityManagement);
             mmCount++;
-        });
+        }));
 
     // Send multiple RR messages through pipeline.
     for (int i = 0; i < 3; ++i) {
@@ -445,11 +445,10 @@ TEST(BTSPipeline, PipelineWithContext) {
     ProtocolDispatcher disp;
 
     disp.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
-        [&](const ParsedMessage&, void* ctx) {
-            auto* ch = static_cast<ChannelState*>(ctx);
-            ch->msgCount++;
-            ch->releaseReceived = true;
-        });
+        makeSharedHandler([&state](const ParsedMessage&, void*) {
+            state.msgCount++;
+            state.releaseReceived = true;
+        }));
 
     auto release = L3ChannelRelease::builder()
         .cause(RRCause::Preemptive_Release)

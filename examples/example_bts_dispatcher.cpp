@@ -75,18 +75,18 @@ void demoSpecificHandlers() {
 
     // Handler for Channel Release (RR MTI=0x0D).
     disp.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
-        [&](const ParsedMessage& msg, void*) {
+        makeSharedHandler([&](const ParsedMessage& msg, void*) {
             ++stats.specific;
             auto* cr = tryGet<L3ChannelRelease>(msg);
             std::cout << "  [SPECIFIC] ChannelRelease received\n";
             if (cr) {
                 std::cout << "    cause=" << static_cast<int>(cr->cause()) << "\n";
             }
-        });
+        }));
 
     // Handler for Paging Request Type 2 (RR MTI=0x22).
     disp.registerHandler(L3PD::RadioResource, L3PagingRequestType2::MTI,
-        [&](const ParsedMessage& msg, void*) {
+        makeSharedHandler([&](const ParsedMessage& msg, void*) {
             ++stats.specific;
             auto* pag = tryGet<L3PagingRequestType2>(msg);
             std::cout << "  [SPECIFIC] PagingRequestType2 received\n";
@@ -97,7 +97,7 @@ void demoSpecificHandlers() {
                               << std::setfill('0') << tmsis[0] << "\n";
                 }
             }
-        });
+        }));
 
     // Simulate incoming messages.
     std::cout << "  Dispatching ChannelRelease (hex: 600d00):\n";
@@ -132,19 +132,19 @@ void demoDomainFallback() {
 
     // Register only ChannelRelease as specific handler.
     disp.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
-        [&](const ParsedMessage& msg, void*) {
+        makeSharedHandler([&](const ParsedMessage& msg, void*) {
             ++stats.specific;
             std::cout << "  [SPECIFIC] ChannelRelease\n";
-        });
+        }));
 
     // Register domain handler for all RR messages.
     disp.registerDomainHandler(L3PD::RadioResource,
-        [&](const ParsedMessage& msg, void*) {
+        makeSharedHandler([&](const ParsedMessage& msg, void*) {
             ++stats.domain;
             std::cout << "  [DOMAIN] Unregistered RR message: "
                       << messageName(msg)
                       << " (MTI=0x" << std::hex << messageMTI(msg) << std::dec << ")\n";
-        });
+        }));
 
     // Dispatch ChannelRelease -> goes to specific handler.
     std::cout << "  Sending ChannelRelease (600d00):\n";
@@ -178,18 +178,18 @@ void demoGlobalFallback() {
 
     // Register a specific RR handler.
     disp.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
-        [&](const ParsedMessage&, void*) {
+        makeSharedHandler([&](const ParsedMessage&, void*) {
             ++stats.specific;
             std::cout << "  [SPECIFIC] ChannelRelease\n";
-        });
+        }));
 
     // Global fallback for anything else.
-    disp.setFallbackHandler([&](const ParsedMessage& msg, void*) {
+    disp.setFallbackHandler(makeSharedHandler([&](const ParsedMessage& msg, void*) {
         ++stats.fallback;
         std::cout << "  [FALLBACK] Unhandled: " << messageName(msg)
                   << " (PD=" << messagePD(msg)
                   << ", MTI=0x" << std::hex << messageMTI(msg) << std::dec << ")\n";
-    });
+    }));
 
     // ChannelRelease -> specific handler.
     std::cout << "  Sending RR ChannelRelease:\n";
@@ -226,22 +226,22 @@ void demoFullPipeline() {
 
     // Register handlers for several RR types.
     disp.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
-        [&](const ParsedMessage&, void*) {
+        makeSharedHandler([&](const ParsedMessage&, void*) {
             std::cout << "  [HANDLER] ChannelRelease\n";
             ++handled;
-        });
+        }));
 
     disp.registerHandler(L3PD::RadioResource, L3PagingRequestType2::MTI,
-        [&](const ParsedMessage& msg, void*) {
+        makeSharedHandler([&](const ParsedMessage& msg, void*) {
             std::cout << "  [HANDLER] PagingRequestType2\n";
             ++handled;
-        });
+        }));
 
     // Global fallback.
-    disp.setFallbackHandler([&](const ParsedMessage& msg, void*) {
+    disp.setFallbackHandler(makeSharedHandler([&](const ParsedMessage& msg, void*) {
         std::cout << "  [FALLBACK] " << messageName(msg) << "\n";
         ++handled;
-    });
+    }));
 
     // Simulate receiving LAPDm frames from the air interface.
     struct IncomingFrame {
@@ -303,22 +303,22 @@ void demoPriority() {
     int specific = 0, domain = 0, fallback = 0;
 
     // Register all three levels.
-    disp.setFallbackHandler([&](const ParsedMessage&, void*) {
+    disp.setFallbackHandler(makeSharedHandler([&](const ParsedMessage&, void*) {
         ++fallback;
         std::cout << "  [FALLBACK]\n";
-    });
+    }));
 
     disp.registerDomainHandler(L3PD::RadioResource,
-        [&](const ParsedMessage&, void*) {
+        makeSharedHandler([&](const ParsedMessage&, void*) {
             ++domain;
             std::cout << "  [DOMAIN]\n";
-        });
+        }));
 
     disp.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
-        [&](const ParsedMessage&, void*) {
+        makeSharedHandler([&](const ParsedMessage&, void*) {
             ++specific;
             std::cout << "  [SPECIFIC]\n";
-        });
+        }));
 
     // ChannelRelease should hit specific handler.
     std::cout << "  ChannelRelease -> ";

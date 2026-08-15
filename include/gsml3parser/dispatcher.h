@@ -25,29 +25,29 @@
 #pragma once
 
 #include <array>
-#include <functional>
-#include <optional>
 #include <cstdint>
 #include <span>
+#include "gsml3parser/flat_handler.h"
 #include "gsml3parser/message_types.h"
 #include "gsml3parser/visitor.h"
 #include "gsml3parser/parser.h"
 
 namespace gsml3parser {
 
-/// Signature for a message handler callback.
-/// @param msg The parsed L3 message.
-/// @param context User-provided context pointer (e.g., channel state).
-using MessageHandler = std::function<void(const ParsedMessage& msg, void* context)>;
+/// Zero-overhead message handler callback (replaces std::function).
+using MessageHandler = FlatHandler;
 
 /// Dispatches incoming L3 messages to registered type-specific handlers.
 class ProtocolDispatcher {
 public:
+    ProtocolDispatcher() = default;
+    ~ProtocolDispatcher();
+
     /// Register a handler for a specific message type.
     /// The handler is called when a message of the given PD + MTI is dispatched.
     /// @param pd Protocol Discriminator domain.
     /// @param mti Message Type Indicator.
-    /// @param handler Callback function.
+    /// @param handler Callback function (wrap lambdas with makeHandler/makeSharedHandler).
     void registerHandler(L3PD pd, int mti, MessageHandler handler);
 
     /// @brief Register a catch-all handler for all messages in a PD domain.
@@ -87,16 +87,16 @@ public:
 private:
     // Per-PD, per-MTI handler table. L3PD has 16 values (0x00..0x0f), MTI fits in 0..255.
     // O(1) direct array index — no hash, no heap allocation for nodes.
-    std::array<std::array<std::optional<MessageHandler>, 256>, 16> mHandlers{};
+    std::array<std::array<MessageHandler, 256>, 16> mHandlers{};
 
     // Domain-level fallback handlers, indexed by L3PD (16 entries).
     // O(1) direct array index.
-    std::array<std::optional<MessageHandler>, 16> mDomainHandlers{};
+    std::array<MessageHandler, 16> mDomainHandlers{};
 
-    MessageHandler mFallback;
+    MessageHandler mFallback{};
 
     // TI-indexed handlers for CC/SS messages - O(1) lookup.
-    std::array<std::optional<MessageHandler>, 8> mTIHandlers{};
+    std::array<MessageHandler, 8> mTIHandlers{};
 };
 
 } // namespace gsml3parser

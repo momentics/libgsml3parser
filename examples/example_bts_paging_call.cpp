@@ -358,16 +358,16 @@ void phase8_dispatcherFlow() {
     } stats;
 
     dispatcher.registerHandler(L3PD::RadioResource, L3PagingResponse::MTI,
-        [&stats](const ParsedMessage&, void*) { ++stats.pagingResponses; });
+        makeSharedHandler([&stats](const ParsedMessage&, void*) { ++stats.pagingResponses; }));
 
     dispatcher.registerHandler(L3PD::MobilityManagement, L3CMServiceRequest::MTI,
-        [&stats](const ParsedMessage&, void*) { ++stats.cmServiceRequests; });
+        makeSharedHandler([&stats](const ParsedMessage&, void*) { ++stats.cmServiceRequests; }));
 
     dispatcher.registerHandler(L3PD::MobilityManagement, L3AuthenticationResponse::MTI,
-        [&stats](const ParsedMessage&, void*) { ++stats.authResponses; });
+        makeSharedHandler([&stats](const ParsedMessage&, void*) { ++stats.authResponses; }));
 
     dispatcher.registerHandler(L3PD::CallControl, L3Setup::MTI,
-        [&stats](const ParsedMessage&, void*) { ++stats.setups; });
+        makeSharedHandler([&stats](const ParsedMessage&, void*) { ++stats.setups; }));
 
     auto pr = L3PagingResponse::builder().mobileId(L3MobileIdentity(0x12345678)).build();
     dispatcher.dispatch(ParsedMessage{RRM{std::move(pr)}}, nullptr);

@@ -22,14 +22,16 @@
 #pragma once
 
 #include <cstddef>
+#include <concepts>
 #include <cstdint>
-#include <functional>
 #include <memory>
 #include <utility>
 
 #include "gsml3parser/expected.h"
 #include "gsml3parser/parser_config.h"
 #include "gsml3parser/message_types.h"
+#include "gsml3parser/parser.h"
+#include "gsml3parser/visitor.h"
 #include "gsml3parser/bitstream/byte_source.h"
 #include "gsml3parser/bitstream/framer.h"
 
@@ -102,7 +104,9 @@ class L3StreamProcessor {
      * Non-blocking: process one frame if available.
      * @return true if a frame was processed (success or error).
      */
-    bool processOne(std::function<void(const ParsedMessage&)> handler);
+    template<typename F>
+        requires std::is_invocable_v<F, const ParsedMessage&>
+    bool processOne(F&& handler);
 
     /** Blocking: process all frames until the source is exhausted. */
     void processUntilEOF(FrameHandler& handler);
@@ -136,5 +140,52 @@ public:
     L3StreamBuilder& ringBufferSize(size_t v);
     [[nodiscard]] std::unique_ptr<L3StreamProcessor> build();
 };
+
+// ── Template method definitions (must be in header) ────────────────────
+
+template<typename F>
+    requires std::is_invocable_v<F, const ParsedMessage&>
+bool L3StreamProcessor::processOne(F&& handler) {
+    auto frameResult = mFramer.nextFrame();
+    if (!frameResult) {
+        const auto& err = frameResult.error();
+        if (err.code == ParseError::Code::TruncatedInput) {
+            mStats.truncatedInputs++;
+        }
+        return false;
+    }
+
+    const auto& frame = frameResult.value();
+    mStats.totalBytes += frame.data.size();
+    mStats.totalFrames++;
+
+    auto msgResult = parseL3(frame.data, mConfig);
+    if (!msgResult) {
+        mStats.parseErrors++;
+        return false;
+    }
+
+    mStats.parsedOk++;
+
+    // Categorize by protocol discriminator. O(1) switch dispatch.
+    switch (messagePD(*msgResult)) {
+        case L3PD::RadioResource:          mStats.rrMessages++; break;
+        case L3PD::MobilityManagement:     mStats.mmMessages++; break;
+        case L3PD::CallControl:            mStats.ccMessages++; break;
+        case L3PD::NonCallSS:              mStats.ssMessages++; break;
+        case L3PD::GPRSMobilityManagement: mStats.gmmMessages++; break;
+        case L3PD::GPRSSessionManagement:  mStats.smMessages++; break;
+        case L3PD::SMS:                    mStats.smsMessages++; break;
+        case L3PD::BroadcastCallControl:   mStats.bccMessages++; break;
+        case L3PD::GroupCallControl:       mStats.gccMessages++; break;
+        case L3PD::Location:               mStats.lsMessages++; break;
+        case L3PD::Extended:               mStats.extendedMessages++; break;
+        case L3PD::TestProcedure:          mStats.testprocMessages++; break;
+        default:                           mStats.unsupportedPD++; break;
+    }
+
+    handler(*msgResult);
+    return true;
+}
 
 } // namespace gsml3parser

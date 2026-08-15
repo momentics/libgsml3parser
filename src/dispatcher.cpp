@@ -23,9 +23,22 @@
 
 namespace gsml3parser {
 
+ProtocolDispatcher::~ProtocolDispatcher() {
+    // Destroy all shared handlers to avoid memory leaks.
+    for (auto& pd_arr : mHandlers)
+        for (auto& h : pd_arr)
+            destroySharedHandler(h);
+    for (auto& h : mDomainHandlers)
+        destroySharedHandler(h);
+    for (auto& h : mTIHandlers)
+        destroySharedHandler(h);
+    destroySharedHandler(mFallback);
+}
+
 void ProtocolDispatcher::registerHandler(L3PD pd, int mti, MessageHandler handler) {
     int pidx = static_cast<int>(pd);
     if (pidx >= 0 && pidx < 16 && mti >= 0 && mti < 256) {
+        destroySharedHandler(mHandlers[static_cast<size_t>(pidx)][static_cast<size_t>(mti)]);
         mHandlers[static_cast<size_t>(pidx)][static_cast<size_t>(mti)] = std::move(handler);
     }
 }
@@ -33,11 +46,13 @@ void ProtocolDispatcher::registerHandler(L3PD pd, int mti, MessageHandler handle
 void ProtocolDispatcher::registerDomainHandler(L3PD pd, MessageHandler handler) {
     int pidx = static_cast<int>(pd);
     if (pidx >= 0 && pidx < 16) {
+        destroySharedHandler(mDomainHandlers[static_cast<size_t>(pidx)]);
         mDomainHandlers[static_cast<size_t>(pidx)] = std::move(handler);
     }
 }
 
 void ProtocolDispatcher::setFallbackHandler(MessageHandler handler) {
+    destroySharedHandler(mFallback);
     mFallback = std::move(handler);
 }
 
@@ -49,8 +64,8 @@ void ProtocolDispatcher::dispatch(const ParsedMessage& msg, void* context) {
     // O(1) direct array lookup for specific handler.
     if (pidx >= 0 && pidx < 16 && mti >= 0 && mti < 256) {
         auto& h = mHandlers[static_cast<size_t>(pidx)][static_cast<size_t>(mti)];
-        if (h.has_value()) {
-            h.value()(msg, context);
+        if (h) {
+            h(msg, context);
             return;
         }
     }
@@ -58,8 +73,8 @@ void ProtocolDispatcher::dispatch(const ParsedMessage& msg, void* context) {
     // O(1) direct array lookup for domain handler.
     if (pidx >= 0 && pidx < 16) {
         auto& dh = mDomainHandlers[static_cast<size_t>(pidx)];
-        if (dh.has_value()) {
-            dh.value()(msg, context);
+        if (dh) {
+            dh(msg, context);
             return;
         }
     }
@@ -78,6 +93,7 @@ bool ProtocolDispatcher::dispatchRaw(std::span<const uint8_t> data, void* contex
 
 void ProtocolDispatcher::registerTIHandler(uint8_t ti, MessageHandler handler) {
     if (ti < 8) {
+        destroySharedHandler(mTIHandlers[ti]);
         mTIHandlers[ti] = std::move(handler);
     }
 }
@@ -87,8 +103,8 @@ void ProtocolDispatcher::dispatchWithTI(const ParsedMessage& msg, void* context)
 
     if (pd == L3PD::CallControl || pd == L3PD::NonCallSS) {
         uint8_t ti = messageTI(msg);
-        if (ti < 8 && mTIHandlers[ti].has_value()) {
-            (*mTIHandlers[ti])(msg, context);
+        if (ti < 8 && mTIHandlers[ti]) {
+            mTIHandlers[ti](msg, context);
             return;
         }
     }
