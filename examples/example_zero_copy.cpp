@@ -108,27 +108,28 @@ int main() {
     }
 
     // --- Demo 3: Performance comparison vs L3StreamProcessor ---
-    printf("--- Performance Comparison ---\n");
+    // Both paths use callback-by-reference (zero per-frame moves).
+    //
+    // Zero-copy advantage is proportional to frame size: with small frames
+    // (3-6 bytes) parsing dominates and both are similar.  With large frames
+    // the ByteSource->buffer memcpy in L3Framer becomes significant.
+    printf("--- Performance Comparison (callback path, fair) ---\n");
     {
         uint64_t iterations = 50000;
         auto data = buildL2Data(msgs, iterations);
 
-        // Zero-copy processor.
-        auto t1Start = std::chrono::high_resolution_clock::now();
+        // Zero-copy processor: callback-based forEach (no per-frame moves).
         ZeroCopyStreamProcessor zc(std::span<const uint8_t>(data), true);
-        size_t zcCount = 0;
-        while (auto msg = zc.nextMessage()) {
-            (void)msg;
-            ++zcCount;
-        }
+        auto t1Start = std::chrono::high_resolution_clock::now();
+        zc.forEach([](const ParsedMessage&) {});
         auto t1End = std::chrono::high_resolution_clock::now();
         double zcTime = std::chrono::duration<double>(t1End - t1Start).count();
 
-        printf("  ZeroCopyStreamProcessor:  %zu msgs  %.4f s  %" PRIu64 " msg/s\n",
-               zcCount, zcTime,
-               zcTime > 0 ? static_cast<uint64_t>(zcCount / zcTime) : 0);
+        printf("  ZeroCopyStreamProcessor:  %" PRIu64 " msgs  %.4f s  %" PRIu64 " msg/s\n",
+               zc.stats().parsedOk, zcTime,
+               zcTime > 0 ? static_cast<uint64_t>(zc.stats().parsedOk / zcTime) : 0);
 
-        // Reference: standard L3StreamProcessor.
+        // Reference: standard L3StreamProcessor (callback-by-reference).
         SpanByteSource src(data);
         struct CounterHandler : public FrameHandler {
             size_t count{0};
@@ -148,8 +149,15 @@ int main() {
                refTime > 0 ? static_cast<uint64_t>(handler.count / refTime) : 0);
 
         if (refTime > 0 && zcTime > 0) {
-            printf("  Speedup:                  %.2fx\n", refTime / zcTime);
+            printf("  Ratio:                    %.2fx\n", refTime / zcTime);
         }
+
+        // Note: with small test frames (3-6 bytes), parseL3() dominates both
+        // paths and framing overhead is negligible.  Zero-copy shines when:
+        //  - Frames are large (hundreds of bytes) so memcpy matters.
+        //  - Data arrives in large contiguous chunks (memory-mapped files, DMA).
+        //  - Avoiding ByteSource abstraction layer is beneficial.
+        printf("  (parseL3 dominates; zero-copy benefit scales with frame size)\n");
     }
 
     printf("\n=== Demo complete ===\n");

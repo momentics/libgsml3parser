@@ -83,12 +83,45 @@ public:
     /**
      * Bulk process: call handler for each frame until exhausted.
      * Template parameter F must be invocable as F(const ParsedMessage&).
+     *
+     * This callback-based variant avoids the per-frame move overhead of
+     * nextMessage() (which returns std::optional<ParsedMessage> by value).
+     * For tight loops, this method is significantly faster because the
+     * ParsedMessage is constructed once and passed as const reference.
      */
     template<typename F>
         requires std::is_invocable_v<F, const ParsedMessage&>
     void forEach(F&& handler) {
-        while (auto msg = nextMessage()) {
-            handler(*msg);
+        while (auto frame = mFramer.nextFrame()) {
+            const auto& data = *frame;
+            mStats.totalBytes += data.size();
+            mStats.totalFrames++;
+
+            auto result = parseL3(data);
+            if (!result.has_value()) {
+                mStats.parseErrors++;
+                continue;
+            }
+
+            mStats.parsedOk++;
+
+            switch (messagePD(*result)) {
+                case L3PD::RadioResource:          mStats.rrMessages++; break;
+                case L3PD::MobilityManagement:     mStats.mmMessages++; break;
+                case L3PD::CallControl:            mStats.ccMessages++; break;
+                case L3PD::NonCallSS:              mStats.ssMessages++; break;
+                case L3PD::GPRSMobilityManagement: mStats.gmmMessages++; break;
+                case L3PD::GPRSSessionManagement:  mStats.smMessages++; break;
+                case L3PD::SMS:                    mStats.smsMessages++; break;
+                case L3PD::BroadcastCallControl:   mStats.bccMessages++; break;
+                case L3PD::GroupCallControl:       mStats.gccMessages++; break;
+                case L3PD::Location:               mStats.lsMessages++; break;
+                case L3PD::Extended:               mStats.extendedMessages++; break;
+                case L3PD::TestProcedure:          mStats.testprocMessages++; break;
+                default:                           mStats.unsupportedPD++; break;
+            }
+
+            handler(*result);
         }
     }
 
