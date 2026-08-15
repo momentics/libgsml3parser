@@ -83,7 +83,7 @@ static_assert(sizeof(FlatHandler) == 2 * sizeof(void*),
 template<typename F>
     requires std::is_invocable_v<F, const ParsedMessage&, void*>
 constexpr FlatHandler makeHandler(F f) noexcept {
-    return FlatHandler{[](const ParsedMessage* msg, void*) {
+    return FlatHandler{[f](const ParsedMessage* msg, void*) {
         f(*msg, nullptr);
     }, nullptr};
 }
