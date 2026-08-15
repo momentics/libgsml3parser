@@ -160,7 +160,7 @@ TEST(RingBuffer, OverflowBehaviour) {
     std::memset(data, 0xAB, sizeof(data));
 
     // Bitmask ring buffer rounds capacity to power-of-two and sacrifices one slot.
-    // RingBuffer(8) → physical=8, effective=7. Can accept at most 7 bytes.
+    // RingBuffer(8) -> physical=8, effective=7. Can accept at most 7 bytes.
     size_t w = rb.write(data, sizeof(data));
     ASSERT_EQ(w, 7u);
 

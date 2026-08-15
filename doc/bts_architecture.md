@@ -32,10 +32,10 @@ This document describes the recommended architecture for building a software Bas
 ├──────────────────────────────┼─────────────────────────────────────────┤
 │                    libgsml3parser Core API                             │
 │  ┌───────────────────────────▼─────────────────────────────────┐       │
-│  │  parseL3() ←→ ParsedMessage (stack variant, < 8 KB)         │       │
-│  │  writeL3Bytes() → raw bytes                                 │       │
-│  │  Builder API → construct L3 messages                        │       │
-│  │  lapdm::wrapL3() / unwrapL3() → LAPDm framing               │       │
+│  │  parseL3() ←-> ParsedMessage (stack variant, < 8 KB)        │       │
+│  │  writeL3Bytes() -> raw bytes                                │       │
+│  │  Builder API -> construct L3 messages                       │       │
+│  │  lapdm::wrapL3() / unwrapL3() -> LAPDm framing              │       │
 │  └───────────────────────────┬─────────────────────────────────┘       │
 │                              │                                         │
 ├──────────────────────────────┼─────────────────────────────────────────┤
@@ -56,7 +56,7 @@ This document describes the recommended architecture for building a software Bas
 
 ## 2. Data Flow Between Components
 
-### Inbound Message Path (MS → BTS)
+### Inbound Message Path (MS -> BTS)
 
 ```
 Radio RX
@@ -82,10 +82,10 @@ LAPDm Frame (raw bytes from PHY)
   │
   └─ ProtocolDispatcher::dispatch(msg) ─► application handler
           │
-          └─ handler builds response → send outbound
+          └─ handler builds response -> send outbound
 ```
 
-### Outbound Message Path (BTS → MS)
+### Outbound Message Path (BTS -> MS)
 
 ```
 Application Decision (e.g., "send Paging Request")
@@ -118,7 +118,7 @@ Event Loop Tick (every 10-100ms)
   │     │       └─ for each expired timer:
   │     │             ├─ callback(L3TimerId)
   │     │             ├─ TransactionManager::onTimerExpired(id)
-  │     │             ├─ FSM::processTimer(id) → SMResult
+  │     │             ├─ FSM::processTimer(id) -> SMResult
   │     │             └─ application: retransmit or abort
   │     │
   │     └─ TransactionManager::cleanup() (periodic)
@@ -161,8 +161,8 @@ public:
 
 | Layer | libgsml3parser Output | PHY Input |
 |-------|----------------------|-----------|
-| BCCH/PAGCH | `lapdm::wrapL3()` → byte vector | Raw bytes for broadcast |
-| AGCH/SDCCH | `lapdm::wrapL3()` → byte vector | Raw bytes for dedicated channel |
+| BCCH/PAGCH | `lapdm::wrapL3()` -> byte vector | Raw bytes for broadcast |
+| AGCH/SDCCH | `lapdm::wrapL3()` -> byte vector | Raw bytes for dedicated channel |
 | TCH | Application-level speech/data | Encoded speech frames (AMR/G.723) |
 | RACH | PHY delivers raw 1-byte Channel Request | Parse with `parseL3()` |
 
@@ -170,7 +170,7 @@ public:
 
 | Framework | Integration Approach |
 |-----------|---------------------|
-| **GNU Radio** | Custom block that calls `unwrapL3()` → `parseL3()` on RX, `writeL3Bytes()` → `wrapL3()` on TX |
+| **GNU Radio** | Custom block that calls `unwrapL3()` -> `parseL3()` on RX, `writeL3Bytes()` -> `wrapL3()` on TX |
 | **srsRAN** | Replace L3 encode/decode in `srsgsbts` with libgsml3parser equivalents |
 | **Limesuite / ADALM-Pluto** | Use as PHY backend; libgsml3parser handles all L2/L3 processing |
 

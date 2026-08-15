@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![Build](https://github.com/momentics/libgsml3parser/actions/workflows/build-release.yml/badge.svg)](https://github.com/momentics/libgsml3parser/actions/workflows/build-release.yml)
-[![Version](https://img.shields.io/badge/Version-0.11.0-blue.svg)](https://github.com/momentics/libgsml3parser/releases)
+[![Version](https://img.shields.io/badge/Version-0.12.0-blue.svg)](https://github.com/momentics/libgsml3parser/releases)
 
 ## Overview
 
@@ -34,7 +34,7 @@ The library is self-contained with zero external dependencies beyond the C++20 s
 - **Fluent Builder API** - Construct any L3 message from scratch with chainable setters and `build()` (all 12 domains)
 - **Message generation** - Typed C++ objects to binary data (for test harnesses, fuzzing, replay)
 - **LAPDm framing** - Wrap/unwrap L3 messages in LAPDm UI frames (GSM 04.06) for Um interface transmission
-- **ProtocolDispatcher** - Callback-based message routing with O(1) PD+MTI lookup, domain handlers, and fallback
+- **ProtocolDispatcher** - Callback-based message routing with O(1) fixed-array PD+MTI lookup (no hash map), domain handlers, TI-based dispatch, and fallback
 - **std::format support** - `enum_formatters.h` provides `std::formatter` specializations for all protocol enums
 - **Expected<T> result type** - Zero-allocation errors with structured error codes and bit-position tracking
 - **Immutable ParserConfig** - No mutex on parse path, thread-safe by design
@@ -44,6 +44,10 @@ The library is self-contained with zero external dependencies beyond the C++20 s
 - **Bitstream I/O** - `ByteSource` hierarchy (Span, File, RingBuffer) for streaming from any source
 - **L3Framer** - Automatic frame boundary detection in raw byte streams
 - **L3StreamProcessor** - High-throughput streaming parser with `FrameHandler` callback interface
+- **Zero-copy stream processing** - `InlineFramer` and `ZeroCopyStreamProcessor` parse directly from memory spans without intermediate copies
+- **FlatHandler callbacks** - Zero-overhead message handlers (16 bytes vs 40+ for `std::function`) with `makeHandler()`/`makeSharedHandler()` factories
+- **ShardedChannelPool** - Thread-safe channel pool with N independent shards and per-shard `shared_mutex` for million-concurrent-MS scaling
+- **Bitmask-optimized RingBuffer** - Power-of-two capacity with `& mMask` wrap-around (1 CPU cycle vs 20-80 for modulo)
 - **Human-readable output** - Every message type has a `.text()` method for logging and debugging
 - **PD handler registry** - Custom handlers for unsupported PD domains via immutable config builder
 - **Arena allocator** - Bump allocator for high-throughput batch parsing
@@ -254,7 +258,7 @@ The `examples/` directory contains complete BTS workflow demonstrations:
 
 | Example | Description |
 |---------|-------------|
-| `example_bts_paging.cpp` | Full paging cycle: Builder → L3 bytes → LAPDm → unwrap → parse |
+| `example_bts_paging.cpp` | Full paging cycle: Builder -> L3 bytes -> LAPDm -> unwrap -> parse |
 | `example_bts_channel_assignment.cpp` | Channel Request handling and Immediate Assignment response |
 | `example_bts_sysinfo.cpp` | System Information (SI1–SI4) construction for BCCH broadcast |
 | `example_bts_dispatcher.cpp` | ProtocolDispatcher with multiple message handlers |
@@ -319,9 +323,9 @@ void parseThread(std::vector<uint8_t> frames) {
 
 ```
 ByteSource (Span/File/RingBuffer)
-    → L3Framer (frame boundary detection)
-    → parseL3() → Expected<ParsedMessage>
-    → std::visit / tryGet<T>() for typed access
+    -> L3Framer (frame boundary detection)
+    -> parseL3() -> Expected<ParsedMessage>
+    -> std::visit / tryGet<T>() for typed access
 ```
 
 The library follows a layered design:
@@ -332,7 +336,33 @@ The library follows a layered design:
 
 3. **Variant dispatch** - `ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM, EXTENDED, TESTPROC>` holds the parsed result on the stack (12 domains). `tryGet<T>()` provides compile-time typed access.
 
-4. **Streaming** - `ByteSource` → `L3Framer` → `L3StreamProcessor` pipeline processes raw byte streams with automatic frame boundary detection.
+4. **Streaming** - `ByteSource` -> `L3Framer` -> `L3StreamProcessor` pipeline processes raw byte streams with automatic frame boundary detection.
+
+## Performance
+
+The library has been optimized for high-throughput, low-latency L3 parsing at scale:
+
+| Optimization | Before | After | Impact |
+|--------------|--------|-------|--------|
+| Handler dispatch | `std::unordered_map` (hash + alloc) | `std::array[16][256]` (O(1) index) | ~64 KB fixed, L2-cache resident |
+| Callback type | `std::function` (40+ bytes, virtual call) | `FlatHandler` (16 bytes, direct call) | 2.5x smaller, no type erasure |
+| Channel pool | `std::unordered_map<ChannelType>` | `std::array[32]` | O(1) index, no hash |
+| RingBuffer wrap | `% capacity` (20-80 cycles) | `& mask` (1 cycle) | 20-80x faster per wrap |
+| processOne() | `std::function` parameter | template `<F>` | Compiler inlines handler |
+| Zero-copy parsing | ByteSource -> buffer copy -> parse | span -> parse directly | Eliminates memcpy on hot path |
+
+Run the benchmarks with `-DBUILD_EXAMPLES=ON`:
+
+```bash
+# Standard benchmark (parse + stream processing, all 12 PD domains)
+./build/Release/examples/example_benchmark.exe
+
+# Multi-threaded benchmark (concurrent parsing across all domains)
+./build/Release/examples/example_multithread.exe
+
+# Zero-copy benchmark (InlineFramer + ZeroCopyStreamProcessor)
+./build/Release/examples/example_zero_copy.exe
+```
 
 ## Supported Messages
 

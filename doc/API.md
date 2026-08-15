@@ -1,6 +1,6 @@
 # libgsml3parser - Full API Reference
 
-> Version 0.11.0 | C++20 | Thread-safe | Zero heap allocation on hot path | No external dependencies
+> Version 0.12.0 | C++20 | Thread-safe | Zero heap allocation on hot path | No external dependencies
 
 ## Table of Contents
 
@@ -40,6 +40,11 @@
 34. [Transaction Framework](#34-transaction-framework)
 35. [Protocol State Machines](#35-protocol-state-machines)
 36. [Channel Pool - Logical Channel Management](#36-channel-pool-logical-channel-management)
+37. [FlatHandler - Zero-Overhead Callbacks](#37-flathandler-zero-overhead-callbacks)
+38. [ShardedChannelPool - Thread-Safe Channel Pool](#38-shardedchannelpool-thread-safe-channel-pool)
+39. [InlineFramer - Zero-Copy Frame Extraction](#39-inlineframer-zero-copy-frame-extraction)
+40. [ZeroCopyStreamProcessor - Zero-Copy Stream Parsing](#40-zerocopystreamparser-zero-copy-stream-parsing)
+41. [Performance Optimizations Summary](#41-performance-optimizations-summary)
 
 ---
 
@@ -879,41 +884,54 @@ auto reparsed = parseL3(*payload);
 
 **File:** `gsml3parser/dispatcher.h`
 
-Callback-based message routing for BTS-style protocol handling. Dispatches incoming L3 messages to registered type-specific handlers using O(1) hash-map lookup on PD+MTI keys.
+Callback-based message routing for BTS-style protocol handling. Dispatches incoming L3 messages to registered type-specific handlers using O(1) fixed-array lookup on PD+MTI keys (no hash map, no heap allocation for handler storage).
 
 ### MessageHandler
 
+The `MessageHandler` alias now uses `FlatHandler` — a zero-overhead callback type that eliminates `std::function` virtual dispatch overhead. Each `FlatHandler` is exactly two machine words (16 bytes on 64-bit).
+
 ```cpp
-using MessageHandler = std::function<void(const ParsedMessage& msg, void* context)>;
+using MessageHandler = FlatHandler;
 ```
 
-| Parameter | Description |
-|-----------|-------------|
-| `msg` | The parsed L3 message |
-| `context` | User-provided context pointer (e.g., channel state, MS context) |
+To create handlers from lambdas, use the factory functions:
+
+| Factory | Use Case | Allocation |
+|---------|----------|------------|
+| `makeHandler(lambda)` | Non-capturing lambdas and static functions | Zero (compile-time resolved) |
+| `makeSharedHandler(lambda)` | Capturing lambdas | One heap allocation (shared_ptr managed) |
 
 ### ProtocolDispatcher
 
 ```cpp
 class ProtocolDispatcher {
 public:
+    ProtocolDispatcher() = default;
+    ~ProtocolDispatcher();
+
     void registerHandler(L3PD pd, int mti, MessageHandler handler);
     void registerDomainHandler(L3PD pd, MessageHandler handler);
     void setFallbackHandler(MessageHandler handler);
     void dispatch(const ParsedMessage& msg, void* context = nullptr);
     bool dispatchRaw(std::span<const uint8_t> data, void* context = nullptr);
+    void registerTIHandler(uint8_t ti, MessageHandler handler);
+    void dispatchWithTI(const ParsedMessage& msg, void* context = nullptr);
 };
 ```
 
-| Method | Description |
-|--------|-------------|
-| `registerHandler(pd, mti, h)` | Register handler for a specific PD + MTI combination |
-| `registerDomainHandler(pd, h)` | Catch-all handler for all messages in a PD domain |
-| `setFallbackHandler(h)` | Global fallback for unregistered message types |
-| `dispatch(msg, ctx)` | Route a parsed message to the matching handler |
-| `dispatchRaw(data, ctx)` | Parse raw bytes and dispatch in one call. Returns `true` if a handler was invoked. |
+| Method | Description | Complexity |
+|--------|-------------|------------|
+| `registerHandler(pd, mti, h)` | Register handler for a specific PD + MTI combination | O(1) array index |
+| `registerDomainHandler(pd, h)` | Catch-all handler for all messages in a PD domain | O(1) array index |
+| `setFallbackHandler(h)` | Global fallback for unregistered message types | O(1) |
+| `dispatch(msg, ctx)` | Route a parsed message to the matching handler | O(1) array lookup |
+| `dispatchRaw(data, ctx)` | Parse raw bytes and dispatch in one call | O(1) + parse cost |
+| `registerTIHandler(ti, h)` | Register handler by Transaction Identifier (CC/SS) | O(1) array index |
+| `dispatchWithTI(msg, ctx)` | Dispatch with TI awareness for CC/SS messages | O(1) TI lookup |
 
-**Dispatch priority:** Specific handler (PD+MTI) → Domain handler (PD) → Fallback handler.
+**Internal storage:** `std::array<std::array<MessageHandler, 256>, 16>` — fixed 64 KB handler table, no heap allocations.
+
+**Dispatch priority:** Specific handler (PD+MTI) -> Domain handler (PD) -> Fallback handler.
 
 **Thread safety:** NOT thread-safe. Each thread should create its own `ProtocolDispatcher` instance.
 
@@ -922,17 +940,19 @@ public:
 ```cpp
 gsml3parser::ProtocolDispatcher dispatcher;
 
-// Specific handler for Channel Release (RR, MTI=0x0D)
+// Non-capturing lambda: use makeHandler (zero allocation)
 dispatcher.registerHandler(gsml3parser::L3PD::RadioResource, 0x0D,
-    [](const gsml3parser::ParsedMessage& msg, void*) {
+    gsml3parser::makeHandler([](const gsml3parser::ParsedMessage& msg, void*) {
         // Handle channel release...
-    });
+    }));
 
-// Domain-wide fallback for all RR messages
+// Capturing lambda: use makeSharedHandler (heap allocation)
+int counter = 0;
 dispatcher.registerDomainHandler(gsml3parser::L3PD::RadioResource,
-    [](const gsml3parser::ParsedMessage& msg, void*) {
+    gsml3parser::makeSharedHandler([&counter](const gsml3parser::ParsedMessage& msg, void*) {
         std::cout << "RR message: " << gsml3parser::messageName(msg) << "\n";
-    });
+        ++counter;
+    }));
 
 // Dispatch parsed message
 auto msg = gsml3parser::parseL3Hex("600d00");
@@ -1328,10 +1348,10 @@ Cell parameters and handover reference for handover procedures.
 **File:** `gsml3parser/rr/l3rrmessages.h` - 95 message types in the `RRM` variant.
 
 Each message is a plain struct with:
-- `parse(BitReader&)` → `Expected<Self>` (static method)
-- `write(BitWriter&) const` → void
-- `mti() const` → returns MTI value
-- `text(std::ostream&) const` → human-readable output
+- `parse(BitReader&)` -> `Expected<Self>` (static method)
+- `write(BitWriter&) const` -> void
+- `mti() const` -> returns MTI value
+- `text(std::ostream&) const` -> human-readable output
 
 ### Short Messages (no standard L3 header)
 
@@ -1980,7 +2000,7 @@ if (ussd) {
 **Spec:** 3GPP TS 24.011 sections 7-8, 3GPP TS 23.040 (CP/RP/TP layers); 3GPP TS 24.008 sections 9.6, Table 10.6a (SMS L3 primitives).
 **PD:** `0x09` (SMS).
 
-The SMS layer uses a three-level encapsulation: L3 header → CP message → RP message → TP PDU. Additionally, the SMS L3 messages (MTI=0x11–0x1E) provide TE-to-MS SMS primitives for status reporting, deliver/reply, and notification flows.
+The SMS layer uses a three-level encapsulation: L3 header -> CP message -> RP message -> TP PDU. Additionally, the SMS L3 messages (MTI=0x11–0x1E) provide TE-to-MS SMS primitives for status reporting, deliver/reply, and notification flows.
 
 ### CP Cause Codes
 
@@ -2828,6 +2848,353 @@ pool.release(*ch);
 | allocate() complexity | O(1) - vector pop_back on free-list |
 | Heap allocations | None on hot path (allocate/release). addChannel() grows internal vectors. |
 | Thread safety | NOT thread-safe; caller must provide synchronization for multi-threaded access |
+
+---
+
+## 37. FlatHandler - Zero-Overhead Callbacks
+
+**File:** `gsml3parser/flat_handler.h`
+
+`FlatHandler` replaces `std::function<void(const ParsedMessage&, void*)>` with a zero-overhead callback type. Each instance is exactly two machine words (16 bytes on 64-bit), compared to 40+ bytes for `std::function`. Invocations use direct function pointer calls — no virtual dispatch, no type erasure overhead.
+
+### FlatHandler Struct
+
+```cpp
+struct FlatHandler {
+    using Callback = void (*)(const ParsedMessage*, void*);
+
+    Callback fn{nullptr};
+    void* ctx{nullptr};
+
+    constexpr FlatHandler() noexcept = default;
+    constexpr FlatHandler(Callback f, void* c) noexcept;
+
+    void operator()(const ParsedMessage& msg, void* userCtx = nullptr) const;
+    bool operator==(const FlatHandler& other) const noexcept;
+    explicit operator bool() const noexcept;
+};
+
+static_assert(sizeof(FlatHandler) == 2 * sizeof(void*));
+```
+
+| Method | Description | Complexity |
+|--------|-------------|------------|
+| `operator()(msg, ctx)` | Invoke handler. Direct function pointer call. | O(1) single indirect call |
+| `operator==` | Compare two handlers (fn + ctx equality) | O(1) |
+| `operator bool` | True if fn is not nullptr | O(1) |
+
+### Factory Functions
+
+#### makeHandler (Zero Allocation)
+
+For non-capturing lambdas and static functions:
+
+```cpp
+template<typename F>
+    requires std::is_invocable_v<F, const ParsedMessage&, void*>
+constexpr FlatHandler makeHandler(F f) noexcept;
+```
+
+No heap allocation. The lambda is converted to a function pointer at compile time.
+
+#### makeSharedHandler (Heap Allocation)
+
+For capturing lambdas:
+
+```cpp
+template<typename F>
+    requires std::is_invocable_v<F, const ParsedMessage&, void*>
+FlatHandler makeSharedHandler(F f);
+```
+
+Stores the capturing lambda in a `shared_ptr`-controlled heap allocation. The `shared_ptr` is accessible through the handler's `ctx` pointer.
+
+#### destroySharedHandler
+
+```cpp
+void destroySharedHandler(FlatHandler& h);
+```
+
+Destroys the heap allocation created by `makeSharedHandler`. Call when replacing or removing a handler to avoid memory leaks. Safe to call on empty handlers. The `ProtocolDispatcher` destructor calls this automatically for all registered handlers.
+
+### Usage Example
+
+```cpp
+#include <gsml3parser/flat_handler.h>
+
+// Non-capturing: zero allocation
+FlatHandler h1 = makeHandler([](const ParsedMessage& msg, void*) {
+    std::cout << messageName(msg) << "\n";
+});
+h1(parsedMsg);
+
+// Capturing: heap allocation via shared_ptr
+int count = 0;
+FlatHandler h2 = makeSharedHandler([&count](const ParsedMessage& msg, void*) {
+    ++count;
+});
+h2(parsedMsg);
+```
+
+### Performance Characteristics
+
+| Metric | Value |
+|--------|-------|
+| `sizeof(FlatHandler)` | 16 bytes (two pointers) vs 40+ bytes for std::function |
+| Invocation overhead | Single indirect call vs virtual dispatch + type erasure |
+| Default construction | Zero-cost (nullptr, nullptr) |
+
+---
+
+## 38. ShardedChannelPool - Thread-Safe Channel Pool
+
+**File:** `gsml3parser/stack/sharded_channel_pool.h`
+
+Thread-safe sharded channel pool for high-concurrency BTS scenarios. Partitions channels across N shards using a hash of the channel descriptor. Each shard has its own `std::shared_mutex`, so threads operating on different shards never contend.
+
+### Template Parameter
+
+```cpp
+template<int N = 16>
+class ShardedChannelPool;
+```
+
+| Parameter | Constraint | Description |
+|-----------|------------|-------------|
+| `N` | Power of two, ≥ 2 | Number of shards (commonly 4, 8, 16, or 32) |
+
+Explicit template instantiations are provided for N = 4, 8, 16, and 32.
+
+### API
+
+```cpp
+void addChannel(ChannelDescriptor desc);
+std::optional<ChannelDescriptor> allocate(ChannelType type);
+bool release(const ChannelDescriptor& desc);
+size_t freeCount(ChannelType type) const;
+size_t totalCount() const;
+```
+
+| Method | Description | Complexity | Lock Type |
+|--------|-------------|------------|-----------|
+| `addChannel(desc)` | Add channel to the hashed shard | O(1) hash + lock | Exclusive |
+| `allocate(type)` | Scan all shards for free channel | O(N) worst case | Exclusive per shard |
+| `release(desc)` | Return channel to its shard | O(1) hash + lock | Exclusive |
+| `freeCount(type)` | Total free across all shards | O(N) | Shared |
+| `totalCount()` | Total channels across all shards | O(N) | Shared |
+
+### Hash Function
+
+The shard index is computed from `(trxNumber, timeslot, arfcn)` using a simple XOR-shift hash followed by a bitmask (`hash & (N-1)`). This ensures:
+- O(1) computation (no modulo division)
+- Deterministic: same channel always maps to same shard
+- Even distribution for typical BTS channel layouts
+
+### Thread Safety
+
+All public methods are thread-safe. Multiple threads can concurrently call `allocate()`, `release()`, `addChannel()` etc. Read-only operations use shared locks (`std::shared_lock`) for better concurrency.
+
+**Performance:** With N=16 or N=32 and millions of channels, expected contention is negligible when the hash distributes work evenly.
+
+### Usage Example
+
+```cpp
+#include <gsml3parser/stack/sharded_channel_pool.h>
+#include <thread>
+
+using namespace gsml3parser;
+
+ShardedChannelPool<16> pool;
+
+// Pre-populate channels
+for (int trx = 0; trx < 4; ++trx) {
+    for (int ts = 0; ts < 16; ++ts) {
+        pool.addChannel({ChannelType::SDCCHType, static_cast<uint8_t>(trx),
+                         static_cast<uint8_t>(ts), 100 + trx * 16 + ts});
+    }
+}
+
+// Concurrent allocation from multiple threads
+std::vector<std::thread> workers;
+for (int i = 0; i < 8; ++i) {
+    workers.emplace_back([&pool]() {
+        auto ch = pool.allocate(ChannelType::SDCCHType);
+        if (ch) {
+            // Use channel...
+            pool.release(*ch);
+        }
+    });
+}
+for (auto& t : workers) t.join();
+```
+
+### Performance Characteristics
+
+| Metric | Value |
+|--------|-------|
+| `sizeof(ShardedChannelPool<16>)` | 16 × sizeof(ChannelPool + shared_mutex) |
+| Hash computation | O(1) bitmask, no division |
+| Contention | Only when two threads hash to the same shard |
+
+---
+
+## 39. InlineFramer - Zero-Copy Frame Extraction
+
+**File:** `gsml3parser/bitstream/inline_framer.h` (header-only)
+
+Zero-copy L3 frame extractor for contiguous memory buffers. Unlike `L3Framer` which reads from a `ByteSource` and copies data into an internal buffer, `InlineFramer` operates directly on the caller's `std::span`, yielding non-owning views into the original data with zero allocations.
+
+### API
+
+```cpp
+class InlineFramer {
+public:
+    explicit InlineFramer(std::span<const uint8_t> data, bool useL2Length = false);
+
+    [[nodiscard]] std::optional<std::span<const uint8_t>> nextFrame() noexcept;
+    [[nodiscard]] constexpr size_t remaining() const noexcept;
+    void reset() noexcept;
+    void setMaxFrameLength(size_t len) noexcept;
+};
+```
+
+| Method | Description | Complexity |
+|--------|-------------|------------|
+| `nextFrame()` | Extract next frame as a span into original data | O(1) for L2 length, O(L) for header-based scanning |
+| `remaining()` | Unconsumed bytes | O(1) |
+| `reset()` | Reset to beginning of buffer | O(1) |
+
+### Framing Modes
+
+| Mode | Description |
+|------|-------------|
+| **L2 length** (`useL2Length=true`) | Each frame preceded by a single length octet. Most common for test data and buffered streams. |
+| **Header-based** (`useL2Length=false`) | Frame length derived from PD+MTI fixed-length table, or next-header scanning for variable-length messages. |
+
+### Usage Example
+
+```cpp
+#include <gsml3parser/bitstream/inline_framer.h>
+
+// Buffer with L2-framed data: [len][msg...][len][msg...]
+std::vector<uint8_t> buffer = {3, 0x60, 0x0D, 0x00, 2, 0x50, 0x84};
+
+InlineFramer framer(std::span{buffer}, true /* L2 length mode */);
+
+while (auto frame = framer.nextFrame()) {
+    // 'frame' is a span into the original buffer — zero copies!
+    auto msg = parseL3(*frame);
+    if (msg) {
+        std::cout << messageName(*msg) << "\n";
+    }
+}
+```
+
+### Thread Safety
+
+NOT thread-safe. One instance per buffer, single-threaded use. Safe for concurrent use when each thread has its own `InlineFramer` instance operating on separate memory regions.
+
+---
+
+## 40. ZeroCopyStreamProcessor - Zero-Copy Stream Parsing
+
+**File:** `gsml3parser/bitstream/zero_copy_processor.h` (header-only)
+
+Zero-copy L3 stream processor for contiguous buffers. Parses L3 messages directly from a memory span without any intermediate copying. Ideal for high-throughput scenarios where data arrives in large contiguous chunks (e.g., memory-mapped files, DMA buffers).
+
+### API
+
+```cpp
+class ZeroCopyStreamProcessor {
+public:
+    explicit ZeroCopyStreamProcessor(std::span<const uint8_t> data, bool useL2Length = false);
+
+    [[nodiscard]] std::optional<ParsedMessage> nextMessage();
+
+    template<typename F>
+        requires std::is_invocable_v<F, const ParsedMessage&>
+    void forEach(F&& handler);
+
+    [[nodiscard]] const StreamStats& stats() const noexcept;
+    void resetStats() noexcept;
+    [[nodiscard]] size_t remaining() const noexcept;
+    void reset() noexcept;
+};
+```
+
+| Method | Description |
+|--------|-------------|
+| `nextMessage()` | Parse next L3 message. Returns `std::nullopt` when buffer exhausted or parse error. |
+| `forEach(handler)` | Bulk process all remaining messages, invoking handler for each. |
+| `stats()` | Access accumulated stream statistics (frame count, per-PD counts, errors). |
+| `remaining()` | Unconsumed bytes in the buffer. |
+| `reset()` | Reset to beginning of buffer. |
+
+### Usage Example
+
+```cpp
+#include <gsml3parser/bitstream/zero_copy_processor.h>
+
+std::vector<uint8_t> data = { /* L2-framed L3 messages */ };
+
+ZeroCopyStreamProcessor proc(std::span{data}, true);
+
+// Iterate one by one
+while (auto msg = proc.nextMessage()) {
+    std::cout << messageName(*msg) << "\n";
+}
+
+// Or bulk process with forEach
+proc.reset();
+size_t count = 0;
+proc.forEach([&count](const ParsedMessage& msg) {
+    (void)msg;
+    ++count;
+});
+std::cout << "Parsed " << count << " messages\n";
+```
+
+### Performance
+
+Zero-copy parsing avoids the `memcpy` overhead of `L3StreamProcessor`'s internal buffering. For large contiguous buffers, expect 2-5x speedup depending on frame sizes and CPU cache characteristics.
+
+### Thread Safety
+
+NOT thread-safe. Safe for concurrent use when each thread has its own instance operating on separate memory regions.
+
+---
+
+## 41. Performance Optimizations Summary
+
+The following optimizations have been applied to achieve high-throughput, low-latency L3 parsing at scale:
+
+### Fixed-Array Handler Tables (ProtocolDispatcher)
+
+`std::unordered_map<HandlerKey, MessageHandler>` replaced with `std::array<std::array<MessageHandler, 256>, 16>`. Eliminates hash computation, node allocation, and pointer chasing on the dispatch hot path. The handler table is ~64 KB and fits in L2 cache.
+
+### FlatHandler (Zero-Overhead Callbacks)
+
+`std::function<void(const ParsedMessage&, void*)>` replaced with `FlatHandler` — a two-word struct with direct function pointer calls. Factory functions `makeHandler()` and `makeSharedHandler()` provide ergonomic lambda wrapping.
+
+### Fixed-Array Channel Pool
+
+`ChannelPool` uses `std::array<std::vector<ChannelDescriptor>, 32>` instead of `std::unordered_map<ChannelType, vector>`. O(1) direct index lookup for all channel operations.
+
+### ShardedChannelPool (Thread-Safe Concurrency)
+
+`ShardedChannelPool<N>` partitions channels across N shards with per-shard `std::shared_mutex`. Enables near-linear scaling with thread count when the hash distributes work evenly.
+
+### RingBuffer Bitmask Optimization
+
+Ring buffer index wrap-around uses `idx & mMask` (1 CPU cycle) instead of `idx % mCapacity` (20-80 CPU cycles). Capacity is rounded up to the next power of two; one slot is sacrificed for full/empty distinction (standard lock-free ring buffer pattern).
+
+### Zero-Copy Stream Processing
+
+`InlineFramer` and `ZeroCopyStreamProcessor` operate directly on caller-owned memory spans, eliminating intermediate buffer copies. `L3StreamProcessor::processOne()` is now a template method, allowing compiler inlining of the handler lambda.
+
+### Template-Based processOne
+
+`L3StreamProcessor::processOne(F&& handler)` is a template method with C++20 concepts constraint. The compiler can inline and optimize the handler call, eliminating `std::function` type-erasure overhead for this hot path.
 
 ---
 

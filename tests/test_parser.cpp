@@ -194,7 +194,7 @@ TEST(ParserTest, ParseL3Hex_CC) {
 }
 
 TEST(ParserTest, ParseL3Hex_SS) {
-    // raw MTI=0xE8 → messageType=(0xE8&0xFC)>>2 = 0x3A = Facility
+    // raw MTI=0xE8 -> messageType=(0xE8&0xFC)>>2 = 0x3A = Facility
     auto res = parseL3Hex("BEE8");
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::NonCallSS);
@@ -359,7 +359,7 @@ TEST(ParserTest, WriteL3Bytes_ReturnsRawBytes) {
 }
 
 // =====================================================================
-// Round-trip: construct → writeL3Hex → parseL3Hex → verify type
+// Round-trip: construct -> writeL3Hex -> parseL3Hex -> verify type
 // =====================================================================
 
 TEST(ParserTest, RoundTrip_RR_ChannelRelease) {
@@ -444,7 +444,7 @@ TEST(ParserTest, ParseL3Hex_CaseInsensitive) {
 }
 
 // =====================================================================
-// Binary round-trip: construct → writeL3 → parseL3 → verify
+// Binary round-trip: construct -> writeL3 -> parseL3 -> verify
 // =====================================================================
 
 TEST(ParserTest, BinaryRoundTrip) {

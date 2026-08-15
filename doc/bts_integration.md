@@ -29,7 +29,7 @@ libgsml3parser sits between the BTS application logic and the physical/radio lay
       └────────────────────────────────────────────────────────────┘
 ```
 
-### Outbound Flow (BTS → MS)
+### Outbound Flow (BTS -> MS)
 
 1. **Decide** - State machine or application logic determines what to send
 2. **Build** - Create an L3 message using the Builder API
@@ -38,7 +38,7 @@ libgsml3parser sits between the BTS application logic and the physical/radio lay
 5. **Transmit** - Send frame bytes to the radio layer
 6. **Track** - Create a Transaction, start a Timer (if expecting response)
 
-### Inbound Flow (MS → BTS)
+### Inbound Flow (MS -> BTS)
 
 1. **Receive** - Get raw bytes from the radio layer
 2. **Unframe** - Extract L3 payload with `lapdm::unwrapL3()`
@@ -189,7 +189,7 @@ void processIncomingFrame(MsSession* session, std::span<const uint8_t> rawFrame)
 
 ## Typical BTS Procedures
 
-### Channel Assignment (RACH → Immediate Assignment)
+### Channel Assignment (RACH -> Immediate Assignment)
 
 Handle a Channel Request and respond with an Immediate Assignment:
 
@@ -699,7 +699,7 @@ libgsml3parser can replace the TRX-layer message handling in osmo-bts while keep
 |--------|-------------------|--------|----------------|
 | L3 parsing | Custom C++ structs | Custom C++ classes | Standardized variant hierarchy |
 | Message generation | Manual byte construction | Builder-like patterns | Fluent Builder API for all 190+ types |
-| Round-trip testing | Limited | Protocol-level tests | Full parse→serialize→parse round-trips |
+| Round-trip testing | Limited | Protocol-level tests | Full parse->serialize->parse round-trips |
 | Performance | N/A | Optimized C++ | Zero-alloc hot paths, cache-friendly layout |
 
 For srsRAN integration: drop in libgsml3parser as the L3 parse/generate library, link against `libgsml3parser.a`, and use `ProtocolDispatcher` + FSM skeletons as the message routing backbone.

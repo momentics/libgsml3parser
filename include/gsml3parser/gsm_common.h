@@ -72,10 +72,10 @@ int FNCompare(int32_t v1, int32_t v2);
 
 // ── GSM alphabet tables ─────────────────────────────────────────────────
 
-/** GSM 7-bit alphabet → ISO-8859-1 mapping */
+/** GSM 7-bit alphabet -> ISO-8859-1 mapping */
 extern const unsigned char gGSMAlphabet[];
 
-/** BCD → ASCII mapping */
+/** BCD -> ASCII mapping */
 extern const char gBCDAlphabet[];
 
 unsigned char encodeGSMChar(unsigned char ascii);

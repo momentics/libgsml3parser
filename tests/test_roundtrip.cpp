@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Round-trip tests: construct message → serialize → parse → verify fields.
+// Round-trip tests: construct message -> serialize -> parse -> verify fields.
 // Derived from osmo-ttcn3-hacks reference: L3_Templates.ttcn, GSM_RR_Types.ttcn,
 // GSM_SystemInformation.ttcn, GSM_RestOctets.ttcn.
 //

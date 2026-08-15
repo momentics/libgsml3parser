@@ -32,6 +32,7 @@
 
 #include "gsml3parser/parser.h"
 #include "gsml3parser/bitstream/stream_processor.h"
+#include "gsml3parser/bitstream/zero_copy_processor.h"
 #include "gsml3parser/visitor.h"
 
 using namespace gsml3parser;
@@ -102,6 +103,60 @@ static void runStreamBenchmark(const char* label, std::span<const uint8_t> singl
 
     printf("  %-40s %" PRIu64 " msgs  %8.4f s  %" PRIu64 " msg/s\n",
             label, handler.count, secs, perSec);
+}
+
+// Build an L2-length-prefixed stream for zero-copy benchmarks.
+static std::vector<uint8_t> buildL2Stream(const uint8_t* msgs[], size_t nMsgs, uint64_t iterations) {
+    // Compute total cycle size (length byte + each message).
+    size_t cycleSize = 0;
+    for (size_t i = 0; i < nMsgs; ++i) {
+        auto result = parseL3(std::span<const uint8_t>(msgs[i], 10)); // rough probe
+        cycleSize += 1; // length byte
+        // Find actual message size by scanning for known lengths.
+    }
+    // Simpler: just build from raw data with known sizes.
+    (void)nMsgs;
+    return {};
+}
+
+static void runZeroCopyBenchmark(const char* label, std::span<const uint8_t> data) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    ZeroCopyStreamProcessor proc(data, true);
+    uint64_t count = 0;
+    while (auto msg = proc.nextMessage()) {
+        (void)msg;
+        ++count;
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+
+    double secs = std::chrono::duration<double>(end - start).count();
+    uint64_t perSec = secs > 0 ? static_cast<uint64_t>(count / secs) : 0;
+
+    printf("  %-40s %" PRIu64 " msgs  %8.4f s  %" PRIu64 " msg/s  (ok=%" PRIu64 " err=%" PRIu64 ")\n",
+            label, count + proc.stats().parseErrors, secs, perSec,
+            proc.stats().parsedOk, proc.stats().parseErrors);
+}
+
+// Build L2-framed data: each message preceded by its length byte.
+static std::vector<uint8_t> buildL2Data(const std::vector<std::pair<const uint8_t*, size_t>>& msgs, uint64_t iterations) {
+    size_t cycleSize = 0;
+    for (const auto& [p, n] : msgs) {
+        (void)p;
+        cycleSize += 1 + n; // length byte + message
+    }
+    std::vector<uint8_t> data(cycleSize * iterations);
+    uint8_t* ptr = data.data();
+    for (uint64_t i = 0; i < iterations; ++i) {
+        for (const auto& [p, n] : msgs) {
+            *ptr = static_cast<uint8_t>(n);
+            ++ptr;
+            std::memcpy(ptr, p, n);
+            ptr += n;
+        }
+    }
+    return data;
 }
 
 int main() {
@@ -219,6 +274,21 @@ int main() {
 
         printf("  %-40s %" PRIu64 " msgs  %8.4f s  %" PRIu64 " msg/s\n",
                 "Mixed (all 12 PD domains)", handler.count, secs, perSec);
+    }
+
+    // Zero-copy benchmark: compare against L3StreamProcessor for mixed stream.
+    printf("\n--- ZeroCopyStreamProcessor Benchmark (All 12 PD Domains) ---\n");
+    {
+        std::vector<std::pair<const uint8_t*, size_t>> allMsgs{
+            {rrMsg, sizeof(rrMsg)},   {mmMsg, sizeof(mmMsg)},   {ccMsg, sizeof(ccMsg)},
+            {ssMsg, sizeof(ssMsg)},   {gmmMsg, sizeof(gmmMsg)}, {smMsg, sizeof(smMsg)},
+            {smsMsg, sizeof(smsMsg)}, {bccMsg, sizeof(bccMsg)}, {gccMsg, sizeof(gccMsg)},
+            {lsMsg, sizeof(lsMsg)},   {extMsg, sizeof(extMsg)}, {tstMsg, sizeof(tstMsg)},
+        };
+        uint64_t mixedIters = iterations / 12;
+        auto l2Data = buildL2Data(allMsgs, mixedIters);
+
+        runZeroCopyBenchmark("Zero-copy (all 12 PD domains)", std::span<const uint8_t>(l2Data));
     }
 
     printf("\n=== Benchmark complete ===\n");

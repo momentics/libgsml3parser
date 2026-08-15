@@ -25,6 +25,7 @@
 // per message.
 
 #include <gsml3parser/gsml3parser.hpp>
+#include <gsml3parser/stack/sharded_channel_pool.h>
 #include <atomic>
 #include <chrono>
 #include <iostream>
@@ -135,6 +136,52 @@ void workerThread(int id, ThreadStats& stats, int iterations) {
     stats.tstCount.fetch_add(localTST, std::memory_order_relaxed);
 }
 
+// Demonstrate ShardedChannelPool for concurrent channel allocation.
+void demoShardedChannelPool() {
+    std::cout << "=== ShardedChannelPool Demo ===\n";
+
+    constexpr int NumThreads = 8;
+    constexpr int OpsPerThread = 1000;
+    ShardedChannelPool<16> pool;
+
+    // Pre-populate with channels across all shards.
+    for (int trx = 0; trx < 4; ++trx) {
+        for (int ts = 0; ts < 16; ++ts) {
+            pool.addChannel({ChannelType::SDCCHType, static_cast<uint8_t>(trx),
+                             static_cast<uint8_t>(ts), static_cast<uint16_t>(100 + trx * 16 + ts)});
+        }
+    }
+
+    std::cout << "  Initial total channels: " << pool.totalCount() << "\n";
+    std::cout << "  Free SDCCH channels:    " << pool.freeCount(ChannelType::SDCCHType) << "\n";
+
+    // Concurrent allocate and release from multiple threads.
+    std::atomic<int> allocs{0}, releases{0};
+    std::vector<std::thread> threads;
+    threads.reserve(NumThreads);
+
+    for (int i = 0; i < NumThreads; ++i) {
+        threads.emplace_back([&pool, &allocs, &releases, i, OpsPerThread]() {
+            for (int j = 0; j < OpsPerThread; ++j) {
+                auto ch = pool.allocate(ChannelType::SDCCHType);
+                if (ch) {
+                    allocs.fetch_add(1, std::memory_order_relaxed);
+                    pool.release(*ch);
+                    releases.fetch_add(1, std::memory_order_relaxed);
+                }
+            }
+        });
+    }
+
+    for (auto& t : threads) t.join();
+
+    std::cout << "  Total allocations:  " << allocs.load() << "\n";
+    std::cout << "  Total releases:     " << releases.load() << "\n";
+    std::cout << "  Final total channels: " << pool.totalCount() << "\n";
+    std::cout << "  Final free SDCCH:   " << pool.freeCount(ChannelType::SDCCHType) << "\n";
+    std::cout << "ShardedChannelPool demo complete\n\n";
+}
+
 } // anonymous namespace
 
 int main(int argc, char* argv[]) {
@@ -188,5 +235,7 @@ int main(int argc, char* argv[]) {
         std::cout << "  Throughput: " << static_cast<int64_t>(throughput) << " msgs/sec\n";
     }
 
+    std::cout << "\n";
+    demoShardedChannelPool();
     return 0;
 }

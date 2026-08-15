@@ -70,10 +70,10 @@ struct ChannelDescriptor {
 ///
 /// The RA byte encodes the establishment cause and access category.
 /// Establishment cause bits (6-5) determine the channel type:
-///   00 - Mobile Originating call → TCH (with VEA) or SDCCH (without VEA)
-///   01 - Emergency call → TCH always
-///   10 - Answer to Paging → TCH
-///   11 - Location Updating → SDCCH
+///   00 - Mobile Originating call -> TCH (with VEA) or SDCCH (without VEA)
+///   01 - Emergency call -> TCH always
+///   10 - Answer to Paging -> TCH
+///   11 - Location Updating -> SDCCH
 ///
 /// @param ra The 8-bit RA value from the Channel Request message.
 /// @param neci Non-Extended Channel Indicator (0 = legacy, 1 = NECI extended).

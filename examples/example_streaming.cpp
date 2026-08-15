@@ -192,12 +192,60 @@ void demoBuilder() {
     std::cout << "Builder demo complete\n\n";
 }
 
+// Demo 4: Zero-copy InlineFramer for contiguous buffers.
+void demoInlineFramer() {
+    std::cout << "=== InlineFramer (Zero-Copy) Demo ===\n";
+
+    // Build L2-framed buffer: [len][msg...][len][msg...]
+    std::vector<std::pair<std::string, std::string>> hexMessages{
+        {"RR",   "600D00"},             // Channel Release
+        {"MM",   "5084"},               // CM Service Accept
+        {"CC",   "3E9408021621"},       // Disconnect (TI=7)
+        {"SMS",  "90040102"},            // CP Ack
+    };
+
+    std::vector<uint8_t> buffer;
+    for (const auto& [label, hex] : hexMessages) {
+        auto bytes = hexToBytes(hex);
+        uint8_t len = static_cast<uint8_t>(bytes.size());
+        buffer.push_back(len);
+        buffer.insert(buffer.end(), bytes.begin(), bytes.end());
+    }
+
+    // InlineFramer operates directly on the buffer — zero copies.
+    InlineFramer framer(std::span{buffer}, true /* L2 length mode */);
+
+    int frameNum = 0;
+    while (auto frame = framer.nextFrame()) {
+        std::cout << "  Frame[" << frameNum++ << "] (" << frame->size() << "B): ";
+        // Parse the frame using parseL3.
+        auto result = parseL3(*frame);
+        if (result) {
+            std::cout << messageName(*result) << "\n";
+        } else {
+            std::cout << "(parse error: " << result.error().message << ")\n";
+        }
+    }
+
+    // Verify zero-copy: framer returns spans into the original buffer.
+    framer.reset();
+    if (auto firstFrame = framer.nextFrame()) {
+        // The span points directly into our buffer — no allocation occurred.
+        bool pointsToBuffer = (firstFrame->data() >= buffer.data() &&
+                               firstFrame->data() < buffer.data() + buffer.size());
+        std::cout << "  Zero-copy verified: " << (pointsToBuffer ? "yes" : "no") << "\n";
+    }
+
+    std::cout << "InlineFramer demo complete\n\n";
+}
+
 } // anonymous namespace
 
 int main() {
     demoSpanSource();
     demoRingBuffer();
     demoBuilder();
+    demoInlineFramer();
 
     std::cout << "All streaming demos completed successfully.\n";
     return 0;

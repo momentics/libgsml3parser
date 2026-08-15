@@ -91,7 +91,7 @@ using namespace gsml3parser;
 // For 2-digit MNC, the high nibble of octet 2 is set to 'F'.
 
 TEST(GSMSpecTest, MCCMNC_Encoding_2DigitMNC) {
-    // MCC=250, MNC=01 → expected bytes: 52, F0, 10
+    // MCC=250, MNC=01 -> expected bytes: 52, F0, 10
     //   Octet 1: '5'<<4 | '2' = 0x52
     //   Octet 2: 'F'<<4 | '0' = 0xF0  (F filler for 2-digit MNC)
     //   Octet 3: '1'<<4 | '0' = 0x10
@@ -112,7 +112,7 @@ TEST(GSMSpecTest, MCCMNC_Encoding_2DigitMNC) {
 }
 
 TEST(GSMSpecTest, MCCMNC_Encoding_3DigitMNC) {
-    // MCC=250, MNC=012 → expected bytes: 52, 20, 10
+    // MCC=250, MNC=012 -> expected bytes: 52, 20, 10
     //   Octet 1: '5'<<4 | '2' = 0x52
     //   Octet 2: '2'<<4 | '0' = 0x20  (MNC digit 3 + MCC digit 3)
     //   Octet 3: '1'<<4 | '0' = 0x10
@@ -133,8 +133,8 @@ TEST(GSMSpecTest, MCCMNC_Encoding_3DigitMNC) {
 TEST(GSMSpecTest, MCCMNC_Ref_262_42) {
     // Reference from GSM_Types.ttcn TC_selftest_BcdMccMnc:
     //   match('62F224'O, decmatch BcdMccMnc:'262F42'H)
-    // MCC=262, MNC=42 (2-digit, so 'F' filler) → BCD hex '262F42'H
-    // With HEXORDER(low) nibble-swap → octets 0x62, 0xF2, 0x24
+    // MCC=262, MNC=42 (2-digit, so 'F' filler) -> BCD hex '262F42'H
+    // With HEXORDER(low) nibble-swap -> octets 0x62, 0xF2, 0x24
     //   Byte 0: MCC digit 2('6') | MCC digit 1('2') = 0x62
     //   Byte 1: filler('F') | MCC digit 3('2') = 0xF2
     //   Byte 2: MNC digit 2('4') | MNC digit 1('2') = 0x24
@@ -149,8 +149,8 @@ TEST(GSMSpecTest, MCCMNC_Ref_262_42) {
     EXPECT_EQ(buf[0], 0x62);
     EXPECT_EQ(buf[1], 0xF2);
     // GSM 24.008 Fig 10.5.13: raw BCD = MNC_digit2('4')<<4 | MNC_digit1('2') = 0x42
-    // Wire format applies HEXORDER(low) nibble-swap: 0x42 → 0x24
-    // Reference GSM_Types.ttcn TC_selftest_BcdMccMnc: '262F42'H → '62F224'O
+    // Wire format applies HEXORDER(low) nibble-swap: 0x42 -> 0x24
+    // Reference GSM_Types.ttcn TC_selftest_BcdMccMnc: '262F42'H -> '62F224'O
     EXPECT_EQ(buf[2], 0x24);
 }
 
@@ -167,7 +167,7 @@ TEST(GSMSpecTest, MCCMNC_RoundTrip) {
     orig.write(writer);
 
     // Wire format (HEXORDER low nibble swap): MNC digit 2 in high, digit 1 in low
-    // MNC="01": digit 2=1, digit 1=0 → byte = 0x10
+    // MNC="01": digit 2=1, digit 1=0 -> byte = 0x10
     EXPECT_EQ(buf[0], 0x52);
     EXPECT_EQ(buf[1], 0xF0);
     EXPECT_EQ(buf[2], 0x10);
@@ -188,14 +188,14 @@ TEST(GSMSpecTest, MCCMNC_RoundTrip) {
 // Odd-length numbers get a trailing 'F' nibble.
 
 TEST(GSMSpecTest, BCD_EvenDigits) {
-    // "1234567890" → bytes: 12, 34, 56, 78, 90
+    // "1234567890" -> bytes: 12, 34, 56, 78, 90
     L3CalledPartyBCDNumber num("1234567890");
     EXPECT_STREQ(num.digits(), "1234567890");
     EXPECT_EQ(num.lengthV(), 6u);
 }
 
 TEST(GSMSpecTest, BCD_OddDigits) {
-    // "123456789" → bytes: 12, 34, 56, 78, 9F (F padding nibble)
+    // "123456789" -> bytes: 12, 34, 56, 78, 9F (F padding nibble)
     L3CalledPartyBCDNumber num("123456789");
     EXPECT_STREQ(num.digits(), "123456789");
     EXPECT_EQ(num.lengthV(), 6u);
@@ -295,7 +295,7 @@ TEST(GSMSpecTest, RxLev_Conversion) {
 }
 
 TEST(GSMSpecTest, RxQual_Conversion) {
-    // RxQual → BER thresholds from GSM_Types.ttcn ber2rxqual
+    // RxQual -> BER thresholds from GSM_Types.ttcn ber2rxqual
     //   RxQual 0: BER < 0.2
     //   RxQual 1: BER < 0.4
     //   RxQual 2: BER < 0.8
@@ -655,7 +655,7 @@ TEST(GSMSpecTest, RACHTables) {
 // ── data2hex utility ───────────────────────────────────────────────────
 
 TEST(GSMSpecTest, Data2Hex) {
-    // Reference format: PD=0x06(RR) high nibble, skip=0 → 0x60; MTI=0x19(SI1); body=0x0D
+    // Reference format: PD=0x06(RR) high nibble, skip=0 -> 0x60; MTI=0x19(SI1); body=0x0D
     uint8_t data[] = {0x60, 0x19, 0x0D};
     std::string hex = data2hex(data, 3);
     EXPECT_EQ(hex, "60190D");

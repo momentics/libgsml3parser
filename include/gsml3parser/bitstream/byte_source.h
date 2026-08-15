@@ -115,8 +115,8 @@ public:
      * next power of two, and one slot is sacrificed to distinguish full from
      * empty.  Effective capacity = rounded_power_of_two - 1.
      *
-     * For example: RingBuffer(8) → physical=8, effective=7.
-     *              RingBuffer(9) → physical=16, effective=15.
+     * For example: RingBuffer(8) -> physical=8, effective=7.
+     *              RingBuffer(9) -> physical=16, effective=15.
      */
     explicit RingBuffer(size_t capacity = 262144);
 

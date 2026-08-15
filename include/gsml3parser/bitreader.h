@@ -73,7 +73,7 @@ public:
         uint32_t mask = ~0u >> (32 - nbits);
 
         if (mBitOffset == 0) {
-            // ── Byte-aligned: load ceil(nbits/8) bytes, extract top nbits → LSB ──
+            // ── Byte-aligned: load ceil(nbits/8) bytes, extract top nbits -> LSB ──
             unsigned toLoad = fieldSpanBytes(0, nbits);
             if (toLoad > 4) toLoad = 4;
             unsigned actual;

@@ -396,7 +396,7 @@ TEST(GoldenSMTest, SMStatus) {
 }
 
 // =====================================================================
-// Round-trip tests - construct → writeL3Hex → parseL3Hex → verify fields
+// Round-trip tests - construct -> writeL3Hex -> parseL3Hex -> verify fields
 // =====================================================================
 
 // ── L3TMGI IE roundtrip test ──
@@ -824,7 +824,7 @@ TEST(RoundTripTest, SMNotification_RT) {
 // =====================================================================
 
 // GSM 24.008 9.5.1: ActivatePDPContextRequest round-trip.
-// Construct with IPv4, APN="internet", QoS=requested → serialize → parse → verify.
+// Construct with IPv4, APN="internet", QoS=requested -> serialize -> parse -> verify.
 TEST(RoundTripTest, ActivatePDPContextRequest_Full) {
     L3ActivatePDPContextRequest msg;
     // We construct via parse since there's no public constructor for all fields.

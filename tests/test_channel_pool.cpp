@@ -34,7 +34,7 @@ TEST(DecodeChannelNeededTest, MO_Call_returnsTCH_withVEA) {
 
 // MO call without VEA returns SDCCH
 TEST(DecodeChannelNeededTest, MO_Call_returnsSDCCH_withoutVEA) {
-    // RA=0x00: establishment cause 00 (MO call), no VEA → SDCCH
+    // RA=0x00: establishment cause 00 (MO call), no VEA -> SDCCH
     EXPECT_EQ(decodeChannelNeeded(0x00, false, false), ChannelType::SDCCHType);
 }
 
