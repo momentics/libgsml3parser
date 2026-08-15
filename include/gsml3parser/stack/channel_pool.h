@@ -43,9 +43,9 @@
 /// @endcode
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <optional>
-#include <unordered_map>
 #include <vector>
 
 #include "gsml3parser/types.h"
@@ -188,11 +188,11 @@ private:
 
     // Per-type bucket of free channel descriptors. Indexed by ChannelType enum value.
     // allocate() pops from the back of the vector - O(1).
-    std::unordered_map<ChannelType, std::vector<ChannelDescriptor>> mFreeByType;
+    std::array<std::vector<ChannelDescriptor>, kMaxChannelTypes> mFreeByType{};
 
     // Per-type bucket of allocated (in-use) channel descriptors.
     // Used for tracking total count and release validation.
-    std::unordered_map<ChannelType, std::vector<ChannelDescriptor>> mAllocatedByType;
+    std::array<std::vector<ChannelDescriptor>, kMaxChannelTypes> mAllocatedByType{};
 };
 
 } // namespace gsml3parser

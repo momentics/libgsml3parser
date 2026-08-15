@@ -69,7 +69,8 @@ bool isLocationUpdatingRequest(uint8_t ra, bool neci) {
 // ── ChannelPool Implementation ─────────────────────────────────────────
 
 void ChannelPool::addChannel(ChannelDescriptor desc) {
-    mFreeByType[desc.type].push_back(std::move(desc));
+    size_t idx = static_cast<size_t>(desc.type);
+    mFreeByType[idx].push_back(std::move(desc));
 }
 
 bool ChannelPool::removeChannel(const ChannelDescriptor& desc) {
@@ -83,7 +84,8 @@ bool ChannelPool::removeChannel(const ChannelDescriptor& desc) {
     }
 
     // Remove from allocated list
-    auto& allocs = mAllocatedByType[desc.type];
+    size_t idx = static_cast<size_t>(desc.type);
+    auto& allocs = mAllocatedByType[idx];
     auto it = std::find(allocs.begin(), allocs.end(), desc);
     if (it != allocs.end()) {
         allocs.erase(it);
@@ -94,22 +96,24 @@ bool ChannelPool::removeChannel(const ChannelDescriptor& desc) {
 }
 
 std::optional<ChannelDescriptor> ChannelPool::allocate(ChannelType type) {
-    auto fit = mFreeByType.find(type);
-    if (fit == mFreeByType.end() || fit->second.empty()) {
+    size_t idx = static_cast<size_t>(type);
+    auto& freeVec = mFreeByType[idx];
+    if (freeVec.empty()) {
         return std::nullopt;
     }
 
     // Pop from back of vector - O(1), no reallocation
-    ChannelDescriptor ch = std::move(fit->second.back());
-    fit->second.pop_back();
+    ChannelDescriptor ch = std::move(freeVec.back());
+    freeVec.pop_back();
 
     // Track as allocated
-    mAllocatedByType[ch.type].push_back(ch);
+    mAllocatedByType[static_cast<size_t>(ch.type)].push_back(ch);
     return ch;
 }
 
 bool ChannelPool::release(const ChannelDescriptor& desc) {
-    auto& allocs = mAllocatedByType[desc.type];
+    size_t idx = static_cast<size_t>(desc.type);
+    auto& allocs = mAllocatedByType[idx];
     auto it = std::find(allocs.begin(), allocs.end(), desc);
     if (it == allocs.end()) {
         return false;
@@ -119,33 +123,28 @@ bool ChannelPool::release(const ChannelDescriptor& desc) {
     allocs.erase(it);
 
     // Return to free list
-    mFreeByType[desc.type].push_back(desc);
+    mFreeByType[idx].push_back(desc);
     return true;
 }
 
 bool ChannelPool::isFree(const ChannelDescriptor& desc) const {
-    auto fit = mFreeByType.find(desc.type);
-    if (fit == mFreeByType.end()) {
-        return false;
-    }
-    return std::any_of(fit->second.begin(), fit->second.end(),
+    size_t idx = static_cast<size_t>(desc.type);
+    const auto& freeVec = mFreeByType[idx];
+    return std::any_of(freeVec.begin(), freeVec.end(),
                        [&desc](const ChannelDescriptor& ch) { return ch == desc; });
 }
 
 size_t ChannelPool::freeCount(ChannelType type) const {
-    auto fit = mFreeByType.find(type);
-    if (fit == mFreeByType.end()) {
-        return 0;
-    }
-    return fit->second.size();
+    size_t idx = static_cast<size_t>(type);
+    return mFreeByType[idx].size();
 }
 
 size_t ChannelPool::totalCount() const {
     size_t total = 0;
-    for (auto& [type, channels] : mFreeByType) {
+    for (const auto& channels : mFreeByType) {
         total += channels.size();
     }
-    for (auto& [type, channels] : mAllocatedByType) {
+    for (const auto& channels : mAllocatedByType) {
         total += channels.size();
     }
     return total;
@@ -175,43 +174,29 @@ std::optional<ChannelDescriptor> ChannelPool::allocateVEA(uint8_t ra) {
 }
 
 std::vector<ChannelDescriptor> ChannelPool::freeChannels(ChannelType type) const {
-    auto fit = mFreeByType.find(type);
-    if (fit == mFreeByType.end()) {
-        return {};
-    }
-    return fit->second;
+    size_t idx = static_cast<size_t>(type);
+    return mFreeByType[idx];
 }
 
 size_t ChannelPool::allocatedCount(ChannelType type) const {
-    auto ait = mAllocatedByType.find(type);
-    if (ait == mAllocatedByType.end()) {
-        return 0;
-    }
-    return ait->second.size();
+    size_t idx = static_cast<size_t>(type);
+    return mAllocatedByType[idx].size();
 }
 
 bool ChannelPool::knowsChannel(const ChannelDescriptor& desc) const {
-    auto fit = mFreeByType.find(desc.type);
-    if (fit != mFreeByType.end()) {
-        for (auto& ch : fit->second) {
-            if (ch == desc) return true;
-        }
+    size_t idx = static_cast<size_t>(desc.type);
+    for (const auto& ch : mFreeByType[idx]) {
+        if (ch == desc) return true;
     }
-    auto ait = mAllocatedByType.find(desc.type);
-    if (ait != mAllocatedByType.end()) {
-        for (auto& ch : ait->second) {
-            if (ch == desc) return true;
-        }
+    for (const auto& ch : mAllocatedByType[idx]) {
+        if (ch == desc) return true;
     }
     return false;
 }
 
 bool ChannelPool::removeFromFreeList(ChannelType type, const ChannelDescriptor& desc) {
-    auto fit = mFreeByType.find(type);
-    if (fit == mFreeByType.end()) {
-        return false;
-    }
-    auto& vec = fit->second;
+    size_t idx = static_cast<size_t>(type);
+    auto& vec = mFreeByType[idx];
     auto it = std::find(vec.begin(), vec.end(), desc);
     if (it != vec.end()) {
         vec.erase(it);

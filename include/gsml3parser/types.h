@@ -159,6 +159,11 @@ enum class ChannelType : uint8_t {
     UndefinedCHType
 };
 
+// Ensure ChannelType values fit in a fixed-size array for O(1) indexing.
+static_assert(static_cast<uint8_t>(ChannelType::UndefinedCHType) < 32,
+              "ChannelType values must fit in 32-element array");
+constexpr int kMaxChannelTypes = 32;
+
 std::ostream& operator<<(std::ostream& os, ChannelType ch);
 
 // GSM 7-bit alphabet - GSM 03.38 6.2.1

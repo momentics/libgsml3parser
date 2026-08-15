@@ -27,7 +27,6 @@
 #include <array>
 #include <functional>
 #include <optional>
-#include <unordered_map>
 #include <cstdint>
 #include <span>
 #include "gsml3parser/message_types.h"
@@ -86,19 +85,14 @@ public:
     void dispatchWithTI(const ParsedMessage& msg, void* context = nullptr);
 
 private:
-    struct HandlerKey {
-        L3PD pd;
-        int mti;
-        bool operator==(const HandlerKey& o) const { return pd == o.pd && mti == o.mti; }
-    };
-    struct HandlerKeyHash {
-        std::size_t operator()(const HandlerKey& k) const {
-            return static_cast<std::size_t>(k.pd) * 257 + k.mti;
-        }
-    };
+    // Per-PD, per-MTI handler table. L3PD has 16 values (0x00..0x0f), MTI fits in 0..255.
+    // O(1) direct array index — no hash, no heap allocation for nodes.
+    std::array<std::array<std::optional<MessageHandler>, 256>, 16> mHandlers{};
 
-    std::unordered_map<HandlerKey, MessageHandler, HandlerKeyHash> mHandlers;
-    std::unordered_map<L3PD, MessageHandler> mDomainHandlers;
+    // Domain-level fallback handlers, indexed by L3PD (16 entries).
+    // O(1) direct array index.
+    std::array<std::optional<MessageHandler>, 16> mDomainHandlers{};
+
     MessageHandler mFallback;
 
     // TI-indexed handlers for CC/SS messages - O(1) lookup.

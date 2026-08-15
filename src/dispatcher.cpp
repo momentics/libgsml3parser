@@ -24,11 +24,17 @@
 namespace gsml3parser {
 
 void ProtocolDispatcher::registerHandler(L3PD pd, int mti, MessageHandler handler) {
-    mHandlers[{pd, mti}] = std::move(handler);
+    int pidx = static_cast<int>(pd);
+    if (pidx >= 0 && pidx < 16 && mti >= 0 && mti < 256) {
+        mHandlers[static_cast<size_t>(pidx)][static_cast<size_t>(mti)] = std::move(handler);
+    }
 }
 
 void ProtocolDispatcher::registerDomainHandler(L3PD pd, MessageHandler handler) {
-    mDomainHandlers[pd] = std::move(handler);
+    int pidx = static_cast<int>(pd);
+    if (pidx >= 0 && pidx < 16) {
+        mDomainHandlers[static_cast<size_t>(pidx)] = std::move(handler);
+    }
 }
 
 void ProtocolDispatcher::setFallbackHandler(MessageHandler handler) {
@@ -38,18 +44,24 @@ void ProtocolDispatcher::setFallbackHandler(MessageHandler handler) {
 void ProtocolDispatcher::dispatch(const ParsedMessage& msg, void* context) {
     L3PD pd = messagePD(msg);
     int mti = messageMTI(msg);
-    HandlerKey key{pd, mti};
+    int pidx = static_cast<int>(pd);
 
-    auto it = mHandlers.find(key);
-    if (it != mHandlers.end()) {
-        it->second(msg, context);
-        return;
+    // O(1) direct array lookup for specific handler.
+    if (pidx >= 0 && pidx < 16 && mti >= 0 && mti < 256) {
+        auto& h = mHandlers[static_cast<size_t>(pidx)][static_cast<size_t>(mti)];
+        if (h.has_value()) {
+            h.value()(msg, context);
+            return;
+        }
     }
 
-    auto dit = mDomainHandlers.find(pd);
-    if (dit != mDomainHandlers.end()) {
-        dit->second(msg, context);
-        return;
+    // O(1) direct array lookup for domain handler.
+    if (pidx >= 0 && pidx < 16) {
+        auto& dh = mDomainHandlers[static_cast<size_t>(pidx)];
+        if (dh.has_value()) {
+            dh.value()(msg, context);
+            return;
+        }
     }
 
     if (mFallback) {
