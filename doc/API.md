@@ -492,7 +492,7 @@ Uses inline encoding with lookup table - no `std::ostringstream` or `std::iomani
 
 ### 7.5 writeL3Bytes()
 
-Serialize a ParsedMessage to a `std::vector<uint8_t>` of raw bytes (header + body). Returns bytes ready for LAPDm framing and over-the-air transmission.
+Serialize a ParsedMessage to a `std::vector<uint8_t>` of raw bytes (header + body). Returns bytes ready for `LAPDmEntity.sendUI()`/`sendData()` and over-the-air transmission.
 
 ```cpp
 Expected<std::vector<uint8_t>> writeL3Bytes(const ParsedMessage& msg);
@@ -500,7 +500,7 @@ Expected<std::vector<uint8_t>> writeL3Bytes(const ParsedMessage& msg);
 
 | Return | Description |
 |--------|-------------|
-| `std::vector<uint8_t>` | Raw L3 bytes, ready for LAPDm wrapping or direct transmission |
+| `std::vector<uint8_t>` | Raw L3 bytes, ready for LAPDmEntity.sendUI()/sendData() or direct transmission |
 
 **Usage:**
 
@@ -509,7 +509,7 @@ auto msg = parseL3Hex("060D00");
 if (msg) {
     auto bytes = writeL3Bytes(*msg);
     if (bytes) {
-        // bytes->data() is ready for LAPDm framing
+        // bytes->data() is ready for LAPDmEntity.sendUI()/sendData()
     }
 }
 ```
@@ -792,90 +792,247 @@ public:
 
 ---
 
-## 11. LAPDm Framing
+## 11. LAPDm Protocol
 
-**File:** `gsml3parser/lapdm.h`
-**Namespace:** `gsml3parser::lapdm`
-**Spec:** GSM 04.06 / 3GPP TS 24.022
+**Files:** `gsml3parser/lapdm_frame.h`, `gsml3parser/lapdm_entity.h`
+**Namespace:** `gsml3parser::lapdm` (frame types), `gsml3parser` (entity)
+**Spec:** GSM 04.06 / 3GPP TS 45.006
 
-Wraps L3 messages in LAPDm (Link Access Protocol for DM channel) frames for transmission over the Um interface, and unwraps incoming LAPDm frames to extract L3 payloads.
+Full LAPDm protocol implementation with frame encoding/decoding, state machine, I-frame segmentation/reassembly, T200 timer with retransmission, and contention resolution. Zero-allocation callbacks follow the FlatHandler pattern.
 
-### makeAddress()
+### 11.1 LAPDm Frame Types
 
-Encode a LAPDm address field byte from SAPI, C/R, and EA bits.
+**File:** `gsml3parser/lapdm_frame.h`
+
+#### LAPDmControlFormat
+
+Frame format discriminator (GSM 04.06 4.4):
+
+| Value | Description |
+|-------|-------------|
+| `I_Format` | Information frame — carries user data with sequence numbers |
+| `S_Format` | Supervisory frame — RR, REJ for flow control |
+| `U_Format` | Unnumbered frame — UI, SABME, UA, DM, DISC |
+
+#### LAPDmUFrameType
+
+Unnumbered frame types (GSM 04.06 4.4.2.2):
+
+| Value | Control Byte | Description |
+|-------|-------------|-------------|
+| `UI` | `0x03` | Unnumbered Information — unacknowledged data |
+| `SABME` | `0x2F` | Set Asynchronous Balanced Mode Extended — link establishment |
+| `UA` | `0x63` | Unnumbered Acknowledgement — response to SABME/DISC |
+| `DM` | `0x0F` | Disconnected Mode — reject when no link available |
+| `DISC` | `0x08` | Disconnect — normal link release |
+
+#### LAPDmSFrameType
+
+Supervisory frame types (GSM 04.06 4.4.2.1):
+
+| Value | Description |
+|-------|-------------|
+| `RR` | Receive Ready — acknowledges I-frames up to NR-1 |
+| `REJ` | Reject — requests retransmission from NR |
+
+#### Field Structures
+
+All field encode/decode methods are `constexpr` for compile-time evaluation:
+
+| Struct | Purpose | Spec |
+|--------|---------|------|
+| `LAPDmAddressField` | `[SAPI(7:4)][C/R(3)][Reserved(2:1)=00][EA(0)]` | GSM 04.06 4.2.1 |
+| `LAPDmIControlField` | `[NR(7:5)][P/F(4)][NS(2:0)][Fixed(3)=0]` | GSM 04.06 4.4.1 |
+| `LAPDmSControlField` | `[NR(7:5)][P/F(4)][Function(1:0)][Fixed(3)=1]` | GSM 04.06 4.4.2.1 |
+| `LAPDmLengthField` | `[M(7)][Reserved(6)=0][Length(5:0)]` | GSM 04.06 5.5.2 |
+
+#### LAPDmFrame
+
+Non-owning, zero-copy view over the input buffer. The `info` span points into the original buffer passed to `decode()`. Never store as a class member.
 
 ```cpp
-uint8_t makeAddress(SAPI sapi, bool cr, bool ea = true);
-```
+struct LAPDmFrame {
+    LAPDmAddressField address;
+    LAPDmControlFormat format;
+    LAPDmUFrameType uType;     // U-frames
+    uint8_t nr, ns;            // sequence numbers (I/S frames)
+    bool pf, m;                // Poll/Final, Message complete
+    LAPDmSFrameType sType;     // S-frames
+    std::span<const uint8_t> info; // zero-copy payload
 
-| Parameter | Description |
-|-----------|-------------|
-| `sapi` | Service Access Point (SAPI0=signalling, SAPI3=data) |
-| `cr` | Command (0) or Response (1) bit |
-| `ea` | Extended Address bit (normally 1 for L3 messages) |
-
-Bit layout: `[SAPI(7:4)][C/R(3)][reserved(2:1)][EA(0)]`.
-
-### ControlField
-
-```cpp
-enum class ControlField : uint8_t {
-    UI = 0x03,       // Unnumbered Information (most L3 messages)
-    SABME = 0x2F,    // Set Asynchronous Balanced Mode Extended
-    UA = 0x63,       // Unnumbered Acknowledgement
-    DM = 0x0F,       // Disconnected Mode
+    SAPI sapi() const noexcept;
+    bool isCommand() const noexcept;
+    bool hasInfo() const noexcept;
+    size_t infoSize() const noexcept;
+    static Expected<LAPDmFrame> decode(std::span<const uint8_t> data);
 };
 ```
 
-NOTE: DISC shares the same bit pattern as UI (0x03). They are distinguished by protocol context.
+#### Frame Factory Functions
 
-### wrapL3()
+All factory functions are `constexpr`:
 
-Wrap an L3 message body in a LAPDm UI frame header. Output is `[address_field][control_field][l3_body...]`.
+| Function | Description | Spec |
+|----------|-------------|------|
+| `makeUIFrame(sapi, command, info)` | Unnumbered Information frame | GSM 04.06 5.2.1 |
+| `makeSABMEFrame(sapi, command, info)` | Link establishment (with optional payload) | GSM 04.06 5.4.1 |
+| `makeUAFrame(sapi, pf, info)` | Unnumbered Acknowledgement | GSM 04.06 5.4.1.2 |
+| `makeDMFrame(sapi, pf)` | Disconnected Mode response | GSM 04.06 5.4.6 |
+| `makeDISCFrame(sapi, command)` | Normal link release | GSM 04.06 5.4.4 |
+| `makeIFrame(sapi, command, nr, ns, pf, m, info)` | Information frame with segmentation | GSM 04.06 5.5.2 |
+| `makeRRFrame(sapi, nr, pf)` | Receive Ready supervisory | GSM 04.06 5.3.2 |
+| `makeREJFrame(sapi, nr, pf)` | Reject supervisory | GSM 04.06 5.3.3 |
 
-```cpp
-std::vector<uint8_t> wrapL3(std::span<const uint8_t> l3Body, SAPI sapi = SAPI::SAPI0, bool cr = false);
-```
+#### Encoding Functions
 
-### unwrapL3()
-
-Unwrap a LAPDm frame and extract the L3 payload. Validates that the frame is at least 2 bytes.
-
-```cpp
-Expected<std::vector<uint8_t>> unwrapL3(std::span<const uint8_t> lapdmFrame);
-```
-
-Returns `TruncatedInput` error if fewer than 2 bytes provided.
-
-### extractSAPI() / extractCR()
-
-Decode individual fields from a LAPDm address byte.
-
-```cpp
-SAPI extractSAPI(uint8_t addrByte);
-bool extractCR(uint8_t addrByte);
-```
-
-### isUIFrame()
-
-Check if a LAPDm frame carries a UI control field.
-
-```cpp
-bool isUIFrame(std::span<const uint8_t> lapdmFrame);
-```
+| Function | Description |
+|----------|-------------|
+| `encodeFrame(frame)` | Serialize to `std::vector<uint8_t>` (heap allocation) |
+| `encodeFrameToBuffer(frame, out, outSize)` | Zero-allocation encode into pre-allocated buffer |
 
 **Usage:**
 
 ```cpp
-auto msg = parseL3Hex("600d00");
-auto l3Bytes = writeL3Bytes(*msg);
+using namespace gsml3parser::lapdm;
 
-// Wrap in LAPDm UI frame (SAPI0, command)
-auto frame = gsml3parser::lapdm::wrapL3(*l3Bytes, SAPI::SAPI0, false);
+// Encode a UI frame for SAPI0
+uint8_t l3Data[] = {0x60, 0x0D, 0x00}; // Channel Release
+auto uiFrame = makeUIFrame(SAPI::SAPI0, true, std::span(l3Data));
+auto encoded = encodeFrame(uiFrame);
 
-// Unwrap on the receiving side
-auto payload = gsml3parser::lapdm::unwrapL3(frame);
-auto reparsed = parseL3(*payload);
+// Decode received frame (zero-copy)
+auto decoded = LAPDmFrame::decode(std::span(encoded));
+if (decoded && decoded->format == LAPDmControlFormat::U_Format &&
+    decoded->uType == LAPDmUFrameType::UI) {
+    // Process payload from decoded->info
+}
+```
+
+### 11.2 LAPDmEntity -- Full Protocol State Machine
+
+**File:** `gsml3parser/lapdm_entity.h`
+
+#### LAPDmState
+
+Protocol states (GSM 04.06 3.5.2):
+
+| State | Description |
+|-------|-------------|
+| `Unused` | Initial state before `open()` |
+| `LinkReleased` | No link, idle |
+| `AwaitingEstablish` | Waiting for UA response to SABME |
+| `AwaitingRelease` | Waiting for UA response to DISC |
+| `LinkEstablished` | Normal data transfer (ABM mode) |
+| `ContentionResolution` | Contention resolution phase (SAPI0 only) |
+
+#### LAPDmChannelProfile
+
+Channel-specific parameters:
+
+```cpp
+struct LAPDmChannelProfile {
+    size_t n201;        // Max I-frame payload in octets
+    unsigned n200;      // Max retransmissions
+    uint32_t t200Ms;    // T200 timer in milliseconds
+
+    static LAPDmChannelProfile SDCCH(); // n201=20, n200=23, t200=900ms
+    static LAPDmChannelProfile SACCH(); // n201=18, n200=5,  t200=3600ms
+    static LAPDmChannelProfile FACCH(); // n201=20, n200=34, t200=900ms
+};
+```
+
+| Channel | N201 (octets) | N200 (retries) | T200 (ms) | Max timeout |
+|---------|---------------|----------------|-----------|-------------|
+| SDCCH   | 20            | 23             | 900       | 20.7s       |
+| SACCH   | 18            | 5              | 3600      | 18.0s       |
+| FACCH   | 20            | 34             | 900       | 30.6s       |
+
+#### Callback Types
+
+Zero-allocation callbacks (FlatHandler-style):
+
+```cpp
+using L3ReceiveFn = void (*)(SAPI sapi, Primitive prim, std::span<const uint8_t> l3Data, void* ctx);
+using L1TransmitFn = void (*)(std::span<const uint8_t> frameBytes, void* ctx);
+```
+
+#### LAPDmEntity Public API
+
+| Method | Description | Spec |
+|--------|-------------|------|
+| `LAPDmEntity(profile, l3Cb, l1Cb, ctx)` | Construct with callbacks | — |
+| `open(sapi, commandBit)` | Transition to LinkReleased | GSM 04.06 3.5.2 |
+| `receiveFrame(frameBytes)` | Process incoming frame through FSM | GSM 04.06 5.x |
+| `sendUI(sapi, l3Data)` | Send unacknowledged UI frame | GSM 04.06 5.2.1 |
+| `sendData(l3Data)` | Send acknowledged I-frames (segmented) | GSM 04.06 5.5.2 |
+| `sendSABME()` | Initiate link establishment | GSM 04.06 5.4.1 |
+| `sendDISC()` | Initiate normal link release | GSM 04.06 5.4.4 |
+| `hardRelease()` | Immediate transition to LinkReleased | — |
+| `tickT200(elapsed)` | Advance T200 timer, triggers retransmission | GSM 04.06 4.3.2 |
+| `state()` | Current protocol state | — |
+| `sapi()` | Configured SAPI | — |
+| `isEstablished()` | True if LinkEstablished or ContentionResolution | — |
+| `framesSent()` / `framesReceived()` / `retransmissions()` | Protocol counters | — |
+| `hasOutstandingFrame()` | True if I-frame awaiting ACK (k=1) | GSM 04.06 4.3.1 |
+| `resetStats()` | Reset all statistics | — |
+
+#### State Transition Diagram
+
+```
+Unused ──open()──> LinkReleased
+                 │  ^
+          SABME  │  │ DISC/UA
+           from   │  │
+            MS    │  │
+                  ▼  │
+         AwaitingEstablish ──UA──> LinkEstablished
+                  │                      │
+             T200 expiry                  │ sendDISC()
+                  │                      ▼
+                  ▼             AwaitingRelease ──UA──> LinkReleased
+             LinkReleased                          │
+                                                 T200 expiry
+                                                      ▼
+                                                 LinkReleased
+```
+
+#### Performance Characteristics
+
+| Metric | Value |
+|--------|-------|
+| `sizeof(LAPDmEntity)` | < 512 bytes (enforced by `static_assert`) |
+| Heap allocations | Zero on `receiveFrame()` hot path |
+| Callbacks | Raw function pointer + void* ctx — zero heap per instance |
+| Dynamic buffers | `mPendingFrame`, `mReassemblyBuffer` lazy-allocated |
+| Thread safety | NOT thread-safe; one instance per SAPI per logical channel |
+
+**Usage:**
+
+```cpp
+#include <gsml3parser/lapdm_entity.h>
+
+using namespace gsml3parser;
+
+// Callbacks (static functions for zero-allocation)
+static void onL3(SAPI sapi, Primitive prim, std::span<const uint8_t> data, void* ctx) {
+    // Handle L3 message delivery
+}
+static void onL1(std::span<const uint8_t> frame, void* ctx) {
+    // Send encoded frame to PHY/radio layer
+}
+
+// Create entity for SDCCH channel
+auto profile = LAPDmChannelProfile::SDCCH();
+LAPDmEntity entity(profile, onL3, onL1, nullptr);
+
+entity.open(SAPI::SAPI0, true); // BTS side (command bit = true)
+
+// Send unacknowledged UI data
+uint8_t l3Data[] = {0x60, 0x0D, 0x00};
+entity.sendUI(SAPI::SAPI0, std::span(l3Data));
+
+// In event loop: tick T200 timer periodically
+entity.tickT200(std::chrono::milliseconds(100));
 ```
 
 ---
@@ -3204,7 +3361,7 @@ The library implements encodings defined by:
 
 | Standard | Scope | Coverage |
 |----------|-------|----------|
-| **GSM 04.06 / 3GPP TS 24.022** | LAPDm framing for Um interface | `wrapL3()`/`unwrapL3()` UI frame construction, address field encoding (SAPI/C/R/EA), control field extraction |
+| **GSM 04.06 / 3GPP TS 45.006** | LAPDm protocol for Um interface | `LAPDmFrame` zero-copy decode, `LAPDmEntity` full state machine (SABME/UA/DISC), I-frame segmentation/reassembly, T200 retransmission, contention resolution |
 | **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | Full RR, MM, CC, GMM, SM (29 types), SMS L3 (14 types) message parsing and generation |
 | **GSM 04.07 / 3GPP TS 24.007** | Information element encoding rules | V, TV, TLV, LV formats; H/L rest octet padding (0x2B); bit ordering |
 | **GSM 04.80 / 3GPP TS 24.080** | Supplementary services on mobile | Facility, Register, Release Complete messages; SSOpCode/SSErrorCode enums; L3FacilityOpCode TCAP parser; L3USSDData IE |

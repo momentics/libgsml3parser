@@ -33,7 +33,7 @@ The library is self-contained with zero external dependencies beyond the C++20 s
 - **Full L3 message parsing** - Binary data to typed C++ objects with compile-time dispatch via `std::variant`
 - **Fluent Builder API** - Construct any L3 message from scratch with chainable setters and `build()` (all 12 domains)
 - **Message generation** - Typed C++ objects to binary data (for test harnesses, fuzzing, replay)
-- **LAPDm framing** - Wrap/unwrap L3 messages in LAPDm UI frames (GSM 04.06) for Um interface transmission
+- **Full LAPDm protocol** - State machine with SABME/UA/DISC, I-frame segmentation/reassembly, T200 retransmission, contention resolution (GSM 04.06)
 - **ProtocolDispatcher** - Callback-based message routing with O(1) fixed-array PD+MTI lookup (no hash map), domain handlers, TI-based dispatch, and fallback
 - **std::format support** - `enum_formatters.h` provides `std::formatter` specializations for all protocol enums
 - **Expected<T> result type** - Zero-allocation errors with structured error codes and bit-position tracking
@@ -182,36 +182,41 @@ int main() {
 }
 ```
 
-Raw bytes from `writeL3Bytes()` are ready for LAPDm framing and over-the-air transmission.
+Raw bytes from `writeL3Bytes()` are ready for `LAPDmEntity.sendUI()`/`sendData()` and over-the-air transmission.
 
-### LAPDm Framing
+### LAPDm Protocol Entity
 
-Wrap L3 messages in LAPDm frames (GSM 04.06) for transmission over the Um interface:
+Full LAPDm state machine for reliable L2 link management (GSM 04.06):
 
 ```cpp
 #include <gsml3parser/gsml3parser.hpp>
-#include <gsml3parser/lapdm.h>
+#include <gsml3parser/lapdm_entity.h>
 
 using namespace gsml3parser;
-using namespace gsml3parser::lapdm;
+
+// Zero-allocation callbacks (FlatHandler-style)
+static void onL3(SAPI sapi, Primitive prim, std::span<const uint8_t> data, void* ctx) {
+    // Handle L3 message delivery from UI or reassembled I-frames
+}
+static void onL1(std::span<const uint8_t> frame, void* ctx) {
+    // Send encoded LAPDm frame to PHY/radio layer
+}
 
 int main() {
-    auto msg = parseL3Hex("600d00"); // Channel Release
-    ASSERT_TRUE(msg);
+    auto profile = LAPDmChannelProfile::SDCCH();
+    LAPDmEntity entity(profile, onL3, onL1, nullptr);
 
-    auto l3Bytes = writeL3Bytes(*msg);
-    ASSERT_TRUE(l3Bytes);
+    entity.open(SAPI::SAPI0, true); // BTS side (command bit)
 
-    // Wrap in LAPDm UI frame (SAPI0, command)
-    auto frame = wrapL3(*l3Bytes, SAPI::SAPI0, false);
-    // frame: [0x01][0x03][0x60][0x0D][0x00]
+    // Send unacknowledged UI data
+    uint8_t l3Data[] = {0x60, 0x0D, 0x00};
+    entity.sendUI(SAPI::SAPI0, std::span(l3Data));
 
-    // Unwrap on the receiving side
-    auto payload = unwrapL3(frame);
-    ASSERT_TRUE(payload);
+    // Send acknowledged data (segmented if needed)
+    entity.sendData(std::span(l3Data));
 
-    auto reparsed = parseL3(*payload);
-    // reparsed contains the original Channel Release
+    // In event loop: tick T200 timer periodically
+    entity.tickT200(std::chrono::milliseconds(100));
 }
 ```
 
@@ -262,6 +267,7 @@ The `examples/` directory contains complete BTS workflow demonstrations:
 | `example_bts_channel_assignment.cpp` | Channel Request handling and Immediate Assignment response |
 | `example_bts_sysinfo.cpp` | System Information (SI1–SI4) construction for BCCH broadcast |
 | `example_bts_dispatcher.cpp` | ProtocolDispatcher with multiple message handlers |
+| `example_lapdm_entity.cpp` | Full LAPDmEntity lifecycle: SABME/UA, UI data, DISC release |
 
 Build with `-DBUILD_EXAMPLES=ON`.
 

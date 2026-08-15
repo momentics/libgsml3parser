@@ -16,11 +16,11 @@ libgsml3parser sits between the BTS application logic and the physical/radio lay
       │    STACK MODULES           │ │     CORE PARSER API           │
       │  (per-MS state management) │ │  (parse, serialize, build)    │
       │                            │ │                               │
-      │  MSContext                 │ │  Builder Pattern              │
-      │  TimerManager              │ │  ProtocolDispatcher           │
-      │  TransactionManager        │ │  writeL3Bytes() / parseL3()   │
-      │  RR/MM/CC StateMachine     │ │  lapdm::wrapL3() / unwrapL3() │
-      │  ChannelPool               │ │                               │
+       │  MSContext                 │ │  Builder Pattern              │
+       │  TimerManager              │ │  ProtocolDispatcher           │
+       │  TransactionManager        │ │  writeL3Bytes() / parseL3()   │
+       │  RR/MM/CC StateMachine     │ │  LAPDmEntity (full LAPDm FSM) │
+       │  ChannelPool               │ │                               │
       └───────────┬────────────────┘ └─────────┬─────────────────────┘
                   │                            │
       ┌───────────▼────────────────────────────▼───────────────────┐
@@ -34,15 +34,14 @@ libgsml3parser sits between the BTS application logic and the physical/radio lay
 1. **Decide** - State machine or application logic determines what to send
 2. **Build** - Create an L3 message using the Builder API
 3. **Serialize** - Convert to raw bytes with `writeL3Bytes()`
-4. **Frame** - Wrap in LAPDm header with `lapdm::wrapL3()`
-5. **Transmit** - Send frame bytes to the radio layer
-6. **Track** - Create a Transaction, start a Timer (if expecting response)
+4. **Frame & Transmit** - Pass to `LAPDmEntity.sendUI()` (unacknowledged) or `.sendData()` (acknowledged, segmented). The entity encodes LAPDm frames and invokes the `L1TransmitFn` callback, which delivers frame bytes to the radio layer.
+5. **Track** - Create a Transaction, start a Timer (if expecting response)
 
 ### Inbound Flow (MS -> BTS)
 
-1. **Receive** - Get raw bytes from the radio layer
-2. **Unframe** - Extract L3 payload with `lapdm::unwrapL3()`
-3. **Parse** - Convert to typed C++ object with `parseL3()`
+1. **Receive** - Get raw LAPDm frame bytes from the radio layer
+2. **Process** - Pass to `LAPDmEntity.receiveFrame()`. The entity decodes the frame, runs the FSM, handles I-frame reassembly, and invokes the `L3ReceiveFn` callback with complete L3 messages.
+3. **Parse** - In the callback, convert L3 bytes to typed C++ object with `parseL3()`
 4. **Dispatch** - Route to handler via `ProtocolDispatcher`
 5. **Correlate** - Match against pending Transactions via `TransactionManager`
 6. **Advance** - Feed message into FSM, stop timers, update MSContext
@@ -66,6 +65,7 @@ struct MsSession {
     MMStateMachine mmFsm;       // Mobility Management state machine
     CCStateMachine ccFsm;       // Call Control state machine
     ProtocolDispatcher dispatch; // Message router
+    LAPDmEntity lapdm;          // LAPDm state machine (one per SAPI per channel)
 };
 ```
 
@@ -147,43 +147,57 @@ void setupDispatcher(ProtocolDispatcher& disp, MsSession* session) {
 The main event loop for a single MS channel:
 
 ```cpp
-void processIncomingFrame(MsSession* session, std::span<const uint8_t> rawFrame) {
-    // 1. Unwrap LAPDm
-    auto l3Payload = gsml3parser::lapdm::unwrapL3(rawFrame);
-    if (!l3Payload) return;
+// L3 callback: invoked by LAPDmEntity when a complete L3 message arrives
+static void onL3(SAPI sapi, Primitive prim, std::span<const uint8_t> l3Data, void* ctx) {
+    MsSession* session = static_cast<MsSession*>(ctx);
 
-    // 2. Parse L3 header and message
-    auto header = parseL3Header(*l3Payload);
+    // Parse L3 header and message
+    auto header = parseL3Header(l3Data);
     if (!header) return;
 
-    auto msg = parseL3(l3Payload->subspan(2)); // skip 2-byte header
+    auto msg = parseL3(l3Data.subspan(2)); // skip 2-byte header
     if (!msg) return;
 
-    // 3. Advance timers
-    static auto lastTick = std::chrono::steady_clock::now();
-    auto now = std::chrono::steady_clock::now();
-    auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTick);
-    lastTick = now;
-
-    session->timers.tick(delta, [&session](L3TimerId expiredId) {
-        handleTimerExpired(session, expiredId);
-    });
-
-    // 4. Try to correlate with pending transaction
+    // Try to correlate with pending transaction
     Transaction* tx = session->txns.match(*header, *msg);
     if (tx) {
-        // This is a response to our request
         stopTimerForTransaction(session, tx);
     }
 
-    // 5. Feed into state machines
+    // Feed into state machines
     auto rrResult = session->rrFsm.processMessage(*msg);
     if (rrResult.causesTransition()) {
         handleRrTransition(session, rrResult);
     }
 
-    // 6. Dispatch to application handlers
+    // Dispatch to application handlers
     session->dispatch.dispatch(*msg, session);
+}
+
+// L1 callback: invoked by LAPDmEntity when a frame needs transmission
+static void onL1(std::span<const uint8_t> frameBytes, void* ctx) {
+    MsSession* session = static_cast<MsSession*>(ctx);
+    // Send encoded LAPDm frame to radio/PHY layer
+    radioTransmit(session, frameBytes);
+}
+
+void processIncomingFrame(MsSession* session, std::span<const uint8_t> rawFrame) {
+    // 1. Advance T200 timer for LAPDm retransmissions
+    static auto lastTick = std::chrono::steady_clock::now();
+    auto now = std::chrono::steady_clock::now();
+    auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTick);
+    lastTick = now;
+
+    session->lapdm.tickT200(delta);
+
+    // 2. Advance L3 timers
+    session->timers.tick(delta, [&session](L3TimerId expiredId) {
+        handleTimerExpired(session, expiredId);
+    });
+
+    // 3. Feed raw LAPDm frame to the entity — it handles decode, FSM,
+    //    I-frame reassembly, and invokes onL3() with complete messages
+    session->lapdm.receiveFrame(rawFrame);
 }
 ```
 
@@ -244,9 +258,10 @@ void pageMs(uint32_t tmsi, ChannelType wantedChannel) {
 
     ParsedMessage pm{RRM{std::move(paging)}};
     auto bytes = writeL3Bytes(pm);
-    auto frame = wrapL3(*bytes, SAPI::SAPI0, false);
 
-    // Broadcast on BCCH/PAGCH
+    // For broadcast (BCCH/PAGCH), use LAPDmEntity or encode directly:
+    auto uiFrame = gsml3parser::lapdm::makeUIFrame(SAPI::SAPI0, false, std::span(*bytes));
+    auto frame = gsml3parser::lapdm::encodeFrame(uiFrame);
     bcchTransmitter.send(frame.data(), frame.size());
 }
 ```
@@ -360,7 +375,8 @@ void broadcastSystemInfo() {
 
     ParsedMessage pm{RRM{std::move(si3)}};
     auto bytes = writeL3Bytes(pm);
-    auto frame = wrapL3(*bytes, SAPI::SAPI0, false);
+    auto uiFrame = gsml3parser::lapdm::makeUIFrame(SAPI::SAPI0, false, std::span(*bytes));
+    auto frame = gsml3parser::lapdm::encodeFrame(uiFrame);
 
     // Broadcast periodically on BCCH
     bcchTransmitter.broadcast(frame);
@@ -517,6 +533,102 @@ session->timers.stopAll();
 | T3111 | 3s | CM reestablishment request |
 | T3112 | 3s | IMSI detach indication |
 | T3113 | 3s | MM status retransmission |
+
+## LAPDm Link Management
+
+Each logical channel (SAPI) needs its own `LAPDmEntity` instance. The entity manages the full LAPDm protocol state machine per GSM 04.06.
+
+### Opening a Channel
+
+```cpp
+#include <gsml3parser/lapdm_entity.h>
+
+using namespace gsml3parser;
+
+// Create entity with channel profile and callbacks
+auto profile = LAPDmChannelProfile::SDCCH(); // N201=20, N200=23, T200=900ms
+LAPDmEntity entity(profile, onL3Callback, onL1Callback, sessionPtr);
+
+// Open for SAPI0, BTS side (command bit = true)
+entity.open(SAPI::SAPI0, true);
+// State: LinkReleased
+```
+
+### Link Establishment
+
+**Passive (BTS waiting for MS SABME):** The entity automatically handles incoming SABME frames. When `receiveFrame()` processes a SABME, it sends UA and transitions to `LinkEstablished`, invoking the L3 callback with `L3_ESTABLISH_INDICATION`.
+
+**Active (BTS initiates, e.g., SAPI3 for SMS):**
+```cpp
+auto result = entity.sendSABME();
+if (result) {
+    // State: AwaitingEstablish
+    // T200 timer started automatically
+}
+// When UA arrives via receiveFrame(), state -> LinkEstablished,
+// L3 callback fires with L3_ESTABLISH_CONFIRM
+```
+
+### Data Transfer
+
+```cpp
+// Unacknowledged (UI frame) — works in any state
+entity.sendUI(SAPI::SAPI0, l3Bytes);
+
+// Acknowledged (I-frames with segmentation) — requires LinkEstablished
+entity.sendData(l3Bytes);
+```
+
+### Link Release
+
+```cpp
+// Normal release: send DISC, wait for UA
+auto result = entity.sendDISC();
+if (result) {
+    // State: AwaitingRelease
+    // When UA arrives, state -> LinkReleased, L3_RELEASE_CONFIRM fired
+}
+
+// Hard release: immediate, no frames sent
+entity.hardRelease();
+// State: LinkReleased
+```
+
+## T200 Timer Integration
+
+The `LAPDmEntity` manages the T200 timer internally. You must call `tickT200()` from your event loop to advance the timer. When T200 expires, the entity retransmits the pending frame (up to N200 times) or performs an abnormal release.
+
+### Event Loop Integration
+
+```cpp
+// In your main event loop, called every 10-100ms:
+void eventLoopTick(MsSession* session, std::chrono::milliseconds delta) {
+    // Advance LAPDm T200 timer
+    bool retransmitted = session->lapdm.tickT200(delta);
+    if (retransmitted) {
+        // A frame was retransmitted or abnormal release occurred
+        logDebug("LAPDm T200 action: retransmit={}", retransmitted);
+    }
+
+    // Advance L3 timers
+    session->timers.tick(delta, [session](L3TimerId expiredId) {
+        handleTimerExpired(session, expiredId);
+    });
+}
+```
+
+### Monitoring Retransmissions
+
+```cpp
+// Check protocol statistics for diagnostics
+unsigned framesSent = entity.framesSent();
+unsigned retransmissions = entity.retransmissions();
+bool outstanding = entity.hasOutstandingFrame(); // k=1 constraint
+
+if (retransmissions > 10) {
+    logWarning("High retransmission count: {}", retransmissions);
+}
+```
 
 ## State Machine Integration
 
@@ -719,24 +831,28 @@ ParsedMessage pm{RRM{std::move(paging)}};
 // 2. Serialize to raw bytes
 auto l3Bytes = writeL3Bytes(pm);
 
-// 3. Wrap in LAPDm frame
-auto frame = wrapL3(*l3Bytes, SAPI::SAPI0, false);
+// 3. Encode in LAPDm UI frame using the new API
+auto uiFrame = gsml3parser::lapdm::makeUIFrame(SAPI::SAPI0, false, std::span(*l3Bytes));
+auto frame = gsml3parser::lapdm::encodeFrame(uiFrame);
 
 // --- Simulate transmission over the air and MS response ---
 
-// 4. Receive MS response (Paging Response)
+// 4. Receive MS response frame (Paging Response wrapped in LAPDm)
 std::vector<uint8_t> msFrame = {/* from radio */};
 
-// 5. Unwrap LAPDm
-auto payload = unwrapL3(msFrame);
+// 5. Feed to LAPDmEntity — it handles decode, FSM, reassembly, and invokes L3 callback
+session->lapdm.receiveFrame(msFrame);
 
-// 6. Parse L3 header + message
-auto header = parseL3Header(*payload);
-auto msg = parseL3(payload->subspan(2));
+// In the L3 callback (onL3), parse and dispatch:
+// auto header = parseL3Header(l3Data);
+// auto msg = parseL3(l3Data.subspan(2));
+// session->dispatch.dispatch(*msg, session);
 
-// 7. Create MS session
+// 6. Create MS session and initialize LAPDmEntity
 MsSession* session = createSession();
 session->ctx = MSContext::createWithTMSI(0xDEADBEEF);
+session->lapdm = LAPDmEntity(LAPDmChannelProfile::SDCCH(), onL3, onL1, session);
+session->lapdm.open(SAPI::SAPI0, true); // BTS side
 
 // 8. Feed into RR state machine
 auto result = session->rrFsm.processMessage(*msg);
@@ -773,8 +889,8 @@ if (!msg) {
 For LAPDm operations:
 
 ```cpp
-auto payload = unwrapL3(frame);
-if (!payload) {
+auto decoded = gsml3parser::lapdm::LAPDmFrame::decode(frame);
+if (!decoded) {
     // Frame too short or malformed - drop and log
     return;
 }
@@ -815,7 +931,8 @@ if (!txId) {
 | Module | Key Types | Purpose |
 |--------|-----------|---------|
 | `parser.h` | `parseL3()`, `writeL3Bytes()` | Parse and serialize L3 messages |
-| `lapdm.h` | `wrapL3()`, `unwrapL3()` | LAPDm framing (GSM 04.06) |
+| `lapdm_frame.h` | `LAPDmFrame`, `encodeFrame()`, `makeUIFrame()` | LAPDm frame types, zero-copy decode |
+| `lapdm_entity.h` | `LAPDmEntity`, `LAPDmState`, `LAPDmChannelProfile` | Full LAPDm state machine (GSM 04.06) |
 | `dispatcher.h` | `ProtocolDispatcher` | Message routing with TI support |
 | `visitor.h` | `tryGet<T>()`, `messageName()` | Type access and metadata |
 | Builder API | `MessageType::builder()` | Construct L3 messages fluently |
