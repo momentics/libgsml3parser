@@ -41,6 +41,7 @@ set(CORE_SOURCES
     src/stack/state_machine.cpp
     src/stack/transaction.cpp
     src/stack/channel_pool.cpp
+    src/stack/sharded_channel_pool.cpp
 )
 
 set(RR_SOURCES
@@ -143,6 +144,7 @@ set(PUBLIC_HEADERS
     include/gsml3parser/stack/state_machine.h
     include/gsml3parser/stack/transaction.h
     include/gsml3parser/stack/channel_pool.h
+    include/gsml3parser/stack/sharded_channel_pool.h
 )
 
 # ── Library target ────────────────────────────────────────────────────

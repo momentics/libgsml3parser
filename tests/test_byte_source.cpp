@@ -159,13 +159,14 @@ TEST(RingBuffer, OverflowBehaviour) {
     uint8_t data[16];
     std::memset(data, 0xAB, sizeof(data));
 
-    // Buffer capacity is 8; can accept at most 8 bytes.
+    // Bitmask ring buffer rounds capacity to power-of-two and sacrifices one slot.
+    // RingBuffer(8) → physical=8, effective=7. Can accept at most 7 bytes.
     size_t w = rb.write(data, sizeof(data));
-    ASSERT_EQ(w, 8u);
+    ASSERT_EQ(w, 7u);
 
     uint8_t buf[32];
     size_t r = rb.read(buf, sizeof(buf));
-    ASSERT_EQ(r, 8u);
+    ASSERT_EQ(r, 7u);
 }
 
 TEST(RingBuffer, PartialReads) {
@@ -307,5 +308,18 @@ TEST(RingBuffer, AtomicsAreLockFree) {
     // On 32-bit x86 it may fall back to a mutex, which is still correct but slower.
     EXPECT_TRUE(std::atomic<size_t>::is_always_lock_free)
         << "atomic<size_t> is not lock-free on this platform; "
-           "RingBuffer will use a fallback lock (still correct but slower)";
+            "RingBuffer will use a fallback lock (still correct but slower)";
+}
+
+// Capacity is rounded up to next power of two with one sacrificed slot.
+TEST(RingBuffer, CapacityRoundedToPowerOfTwo) {
+    RingBuffer rb(7);   // should round to cap=8, effective=7
+    uint8_t data[7];
+    for (int i = 0; i < 7; i++) data[i] = static_cast<uint8_t>(i);
+    size_t w = rb.write(data, 7);
+    EXPECT_EQ(w, 7u);   // all 7 bytes accepted
+    uint8_t buf[16];
+    size_t r = rb.read(buf, sizeof(buf));
+    EXPECT_EQ(r, 7u);
+    for (int i = 0; i < 7; i++) EXPECT_EQ(buf[i], data[i]);
 }

@@ -55,11 +55,24 @@ size_t FileByteSource::read(uint8_t* buf, size_t maxSize) {
 
 // ── RingBuffer ─────────────────────────────────────────────────────────
 
-RingBuffer::RingBuffer(size_t capacity)
-    : mBuf(capacity + 1), mCapacity(capacity + 1) {
-    // Allocate capacity+1 bytes; the extra slot distinguishes full from empty.
-    // mCapacity is the physical buffer size (capacity + 1).
-    // mHead and mTail are in-class initialized to 0 via std::atomic<size_t>{0}.
+RingBuffer::RingBuffer(size_t capacity) {
+    // Round up to next power of two, minimum 2.
+    size_t cap = capacity;
+    if (cap < 2) cap = 2;
+    cap--;
+    cap |= cap >> 1;
+    cap |= cap >> 2;
+    cap |= cap >> 4;
+    cap |= cap >> 8;
+    cap |= cap >> 16;
+#if defined(_WIN64) || defined(__x86_64__) || defined(__aarch64__)
+    cap |= cap >> 32;
+#endif
+    cap++;
+
+    mMask = cap - 1;           // bitmask for wrap-around
+    mCapacity = cap - 1;       // effective capacity (sacrifice one slot)
+    mBuf.resize(cap, 0);       // physical size = cap
 }
 
 size_t RingBuffer::write(const uint8_t* data, size_t len) {
@@ -68,16 +81,17 @@ size_t RingBuffer::write(const uint8_t* data, size_t len) {
     if (len > free) len = free;
 
     // Write in at most two segments (linear region, then wrap).
+    // Bitmask wrap: O(1) bitwise AND vs 20-80 cycle modulo.
     size_t head = mHead.load(std::memory_order_relaxed);
-    size_t first = mCapacity - head;
+    size_t first = (mMask + 1) - head;  // bytes until end of buffer
     if (first > len) first = len;
     std::memcpy(mBuf.data() + head, data, first);
-    head = (head + first) % mCapacity;
+    head = (head + first) & mMask;       // bitmask wrap
 
     size_t second = len - first;
     if (second > 0) {
         std::memcpy(mBuf.data() + head, data + first, second);
-        head = (head + second) % mCapacity;
+        head = (head + second) & mMask;  // bitmask wrap
     }
     // Release: ensures all memcpy stores to mBuf are visible before mHead update.
     mHead.store(head, std::memory_order_release);
@@ -90,14 +104,11 @@ size_t RingBuffer::available() const noexcept {
     // the latest mTail published by the consumer.
     size_t head = mHead.load(std::memory_order_acquire);
     size_t tail = mTail.load(std::memory_order_acquire);
-    if (head >= tail)
-        return head - tail;
-    else
-        return mCapacity - tail + head;
+    return head >= tail ? (head - tail) : ((mMask + 1) - tail + head);
 }
 
 size_t RingBuffer::freeSpace() const noexcept {
-    return mCapacity - 1 - available();
+    return mCapacity - available();  // mCapacity = effective capacity
 }
 
 size_t RingBuffer::read(uint8_t* buf, size_t maxSize) {
@@ -106,16 +117,17 @@ size_t RingBuffer::read(uint8_t* buf, size_t maxSize) {
     if (maxSize > avail) maxSize = avail;
 
     // Read in at most two segments.
+    // Bitmask wrap: O(1) bitwise AND vs 20-80 cycle modulo.
     size_t tail = mTail.load(std::memory_order_relaxed);
-    size_t first = mCapacity - tail;
+    size_t first = (mMask + 1) - tail;  // bytes until end of buffer
     if (first > maxSize) first = maxSize;
     std::memcpy(buf, mBuf.data() + tail, first);
-    tail = (tail + first) % mCapacity;
+    tail = (tail + first) & mMask;       // bitmask wrap
 
     size_t second = maxSize - first;
     if (second > 0) {
         std::memcpy(buf + first, mBuf.data() + tail, second);
-        tail = (tail + second) % mCapacity;
+        tail = (tail + second) & mMask;  // bitmask wrap
     }
     // Release: ensures all memcpy loads from mBuf complete before mTail update.
     mTail.store(tail, std::memory_order_release);

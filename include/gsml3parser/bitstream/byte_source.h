@@ -94,6 +94,11 @@ public:
  * on weakly-ordered architectures (ARM, PowerPC).  On x86-64 (TSO) the
  * compiler emits plain loads/stores - zero overhead.
  *
+ * Index wrap-around uses a bitmask (& mMask) instead of modulo arithmetic,
+ * replacing a 20-80 cycle division with a single-cycle bitwise AND.
+ * Capacity is rounded up to the next power of two; one slot is sacrificed
+ * to distinguish full from empty (standard ring-buffer pattern).
+ *
  * Single-producer, single-consumer is fully safe without locks.
  * Multi-producer or multi-consumer requires external synchronization.
  */
@@ -101,9 +106,18 @@ class RingBuffer : public ByteSource {
     std::vector<uint8_t> mBuf;
     std::atomic<size_t> mHead{0};  // write position - owned by producer
     std::atomic<size_t> mTail{0};  // read position  - owned by consumer
-    size_t mCapacity{};
+    size_t mMask{};     // = physical_size - 1 (power-of-two minus one)
+    size_t mCapacity{}; // effective capacity = mMask (sacrificed slot)
 
 public:
+    /**
+     * Construct a ring buffer.  The requested @p capacity is rounded up to the
+     * next power of two, and one slot is sacrificed to distinguish full from
+     * empty.  Effective capacity = rounded_power_of_two - 1.
+     *
+     * For example: RingBuffer(8) → physical=8, effective=7.
+     *              RingBuffer(9) → physical=16, effective=15.
+     */
     explicit RingBuffer(size_t capacity = 262144);
 
     /**

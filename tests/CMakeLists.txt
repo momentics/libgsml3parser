@@ -52,6 +52,7 @@ add_executable(gsml3parser_tests
     test_state_machine.cpp
     test_channel_pool.cpp
     test_bts_procedures.cpp
+    test_sharded_channel_pool.cpp
 )
 
 find_package(Threads REQUIRED)
