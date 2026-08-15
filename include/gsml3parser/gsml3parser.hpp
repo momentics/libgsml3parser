@@ -54,3 +54,7 @@
 #include "gsml3parser/stack/state_machine.h"
 #include "gsml3parser/stack/transaction.h"
 #include "gsml3parser/stack/channel_pool.h"
+#include "gsml3parser/flat_handler.h"
+#include "gsml3parser/stack/sharded_channel_pool.h"
+#include "gsml3parser/bitstream/inline_framer.h"
+#include "gsml3parser/bitstream/zero_copy_processor.h"
