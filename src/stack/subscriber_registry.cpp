@@ -20,6 +20,7 @@
 // SOFTWARE.
 
 #include "gsml3parser/stack/subscriber_registry.h"
+#include <mutex>
 
 namespace gsml3parser {
 

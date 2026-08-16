@@ -49,6 +49,7 @@ size_t writeTLV(uint8_t* buf, size_t offset, uint8_t type, const uint8_t* val, u
 }
 
 // Write a TL16V IE (type + 2-byte length + value) for large payloads like L3Info.
+[[maybe_unused]]
 size_t writeTL16V(uint8_t* buf, size_t offset, uint8_t type, const uint8_t* val, uint16_t len) {
     buf[offset] = type;
     buf[offset + 1] = static_cast<uint8_t>((len >> 8) & 0xff);
