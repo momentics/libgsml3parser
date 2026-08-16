@@ -35,6 +35,11 @@ public:
 
     void reset();
 
+    /// Get remaining capacity without performing an allocation.
+    /// Useful for deciding whether to reset the arena before the next batch
+    /// of message processing to avoid unbounded growth.
+    [[nodiscard]] size_t remaining() const { return mBuffer.size() - mOffset; }
+
     size_t used() const { return mOffset; }
 
     size_t capacity() const { return mBuffer.size(); }

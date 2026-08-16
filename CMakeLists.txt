@@ -44,6 +44,7 @@ set(CORE_SOURCES
     src/stack/transaction.cpp
     src/stack/channel_pool.cpp
     src/stack/sharded_channel_pool.cpp
+    src/stack/procedure_types.cpp
 )
 
 set(RR_SOURCES
@@ -149,6 +150,7 @@ set(PUBLIC_HEADERS
     include/gsml3parser/stack/transaction.h
     include/gsml3parser/stack/channel_pool.h
     include/gsml3parser/stack/sharded_channel_pool.h
+    include/gsml3parser/stack/procedure_types.h
     include/gsml3parser/flat_handler.h
     include/gsml3parser/bitstream/inline_framer.h
     include/gsml3parser/bitstream/zero_copy_processor.h
