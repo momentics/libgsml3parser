@@ -154,6 +154,61 @@ The `examples/` directory contains complete BTS workflow demonstrations:
 | `example_bts_dispatcher.cpp` | ProtocolDispatcher with multiple message handlers |
 | `example_lapdm_entity.cpp` | Full LAPDmEntity lifecycle: SABME/UA, UI data, DISC release |
 
+### BTS Procedure Framework — High-Level Protocol Procedures
+
+The highest level of abstraction: pre-built protocol procedures that encapsulate FSM, timers, transactions, and response generation. Instead of manually assembling message sequences, feed L3 messages into a `ProcedureRunner` and let the framework manage the protocol flow:
+
+```cpp
+#include <gsml3parser/gsml3parser.hpp>
+
+using namespace gsml3parser;
+
+// Create subscriber session
+SubscriberRegistry registry;
+auto* session = registry.createByTMSI(0x12345678);
+
+// Arena for zero-heap-allocation response building
+Arena arena(65536);
+
+// Feed incoming L3 messages — procedures start automatically.
+// The ResponseSink callback builds responses into the Arena buffer.
+auto result = session->procedures.feed(incomingMessage, session,
+    [&](SMAction action, const ParsedMessage& msg, const SubscriberSession* sess) {
+        uint8_t buf[512];
+        int n = ResponseBuilder::buildCMServiceAccept({buf, sizeof(buf)});
+        if (n > 0) sendToMS(buf, n);
+    });
+
+// Feed external decisions (e.g., VLR accept/reject, AuC RAND)
+session->procedures.feedExternal(procedure::ProcedureType::LocationUpdate, vlrDecisionBytes);
+```
+
+**Available procedures:**
+
+| Procedure | Spec | Description |
+|-----------|------|-------------|
+| `LocationUpdateProcedure` | TS 24.008 4.4.1 | Full location updating with auth + VLR decision |
+| `AuthenticationProcedure` | TS 24.008 4.4.2 | RAND/SRES exchange with external AuC integration |
+| `CallSetupMOPercedure` | TS 24.008 6.1 | Mobile Originated Call (RACH -> Active) |
+| `CallSetupMTPercedure` | TS 24.008 6.1 | Mobile Terminated Call (Paging -> Active) |
+| `ChannelAssignmentProcedure` | TS 04.08 9.1.2 | RACH -> Immediate Assignment -> Channel seizure |
+| `CipheringModeProcedure` | TS 24.008 4.4.3 | A5 ciphering activation |
+| `PagingProcedure` | TS 04.08 9.1.25 | Paging request (Type1/2/3) with T3109 retransmission |
+| `HandoverProcedure` | TS 04.08 9.1.40 | Handover command/response flow |
+
+**Abis/RSL Interface:**
+
+Parse and construct A-bis RSL messages for BSC integration:
+
+```cpp
+auto rslMsg = RSLParser::parse(rawRSLBytes);
+auto l3Payload = RSLParser::extractL3(rslMsg.value());
+// ... process L3 message through ProcedureRunner ...
+auto response = RSLBuilder::buildDataInd(chanNr, linkId, responseL3Bytes);
+```
+
+See `examples/example_procedure_location_update.cpp` and [doc/bts_architecture.md](doc/bts_architecture.md) for full examples.
+
 ## Architecture
 
 ```
@@ -265,7 +320,7 @@ if (result) {
 
 | Document | Topic |
 |----------|-------|
-| [doc/API.md](doc/API.md) | Full API reference (41 sections) |
+| [doc/API.md](doc/API.md) | Full API reference (57 sections) |
 | [doc/bts_architecture.md](doc/bts_architecture.md) | BTS architecture, threading model, scaling to millions of MS |
 | [doc/bts_integration.md](doc/bts_integration.md) | Step-by-step integration guide with code examples |
 | [doc/messages.md](doc/messages.md) | Complete catalog of 200+ message types |

@@ -52,6 +52,7 @@ void LocationUpdateProcedure::transitionTo(State s) {
 }
 
 void LocationUpdateProcedure::fail(const std::string_view& reason) {
+    (void)reason;
     stopTimer();
     transitionTo(State::FAILED);
 }

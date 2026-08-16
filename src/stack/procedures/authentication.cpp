@@ -49,6 +49,7 @@ void AuthenticationProcedure::transitionTo(State s) {
 }
 
 void AuthenticationProcedure::fail(const std::string_view& reason) {
+    (void)reason;
     stopTimer();
     transitionTo(State::FAILED);
 }

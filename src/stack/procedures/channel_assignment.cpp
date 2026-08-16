@@ -49,6 +49,7 @@ void ChannelAssignmentProcedure::transitionTo(State s) {
 }
 
 void ChannelAssignmentProcedure::fail(const std::string_view& reason) {
+    (void)reason;
     stopTimer();
     transitionTo(State::FAILED);
 }

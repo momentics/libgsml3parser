@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Tests for RSLBuilder: validates build→parse round-trip for all message types,
+// Tests for RSLBuilder: validates build->parse round-trip for all message types,
 // span overload correctness, and proper encoding of TLV information elements.
 // 3GPP coverage: TS 48.058 (A-bis RSL), GSM 04.08 (L3 encapsulation in RSL).
 

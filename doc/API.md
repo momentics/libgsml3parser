@@ -50,7 +50,17 @@
 44. [RSL Types - A-bis RSL Type Definitions](#44-rsl-types-abis-rsl-type-definitions)
 45. [RSL Parser - A-bis RSL Message Parsing](#45-rsl-parser-abis-rsl-message-parsing)
 46. [RSL Builder - A-bis RSL Message Construction](#46-rsl-builder-abis-rsl-message-construction)
-47. [Performance Optimizations Summary](#47-performance-optimizations-summary)
+47. [Procedure Framework - Protocol Procedure Base Class](#47-procedure-framework-protocol-procedure-base-class)
+48. [Procedure Runner - Concurrent Procedure Manager](#48-procedure-runner-concurrent-procedure-manager)
+49. [Location Update Procedure](#49-location-update-procedure)
+50. [Authentication Procedure](#50-authentication-procedure)
+51. [Call Setup MO Procedure](#51-call-setup-mo-procedure)
+52. [Call Setup MT Procedure](#52-call-setup-mt-procedure)
+53. [Channel Assignment Procedure](#53-channel-assignment-procedure)
+54. [Ciphering Mode Procedure](#54-ciphering-mode-procedure)
+55. [Paging Procedure](#55-paging-procedure)
+56. [Handover Procedure](#56-handover-procedure)
+57. [Performance Optimizations Summary](#57-performance-optimizations-summary)
 
 ---
 
@@ -3574,29 +3584,29 @@ Defines all RSL enumerations and structures for A-bis message parsing and constr
 
 | Enum | Value | Direction | Description |
 |------|-------|-----------|-------------|
-| `RSLL3MessageType::DataReq` | `0x21` | BSC→BTS | Numbered L3 data |
-| `RSLL3MessageType::DataInd` | `0x22` | BTS→BSC | Numbered L3 data |
-| `RSLL3MessageType::UnitDataReq` | `0x41` | BSC→BTS | Unnumbered L3 data |
-| `RSLL3MessageType::UnitDataInd` | `0x42` | BTS→BSC | Unnumbered L3 data |
+| `RSLL3MessageType::DataReq` | `0x21` | BSC->BTS | Numbered L3 data |
+| `RSLL3MessageType::DataInd` | `0x22` | BTS->BSC | Numbered L3 data |
+| `RSLL3MessageType::UnitDataReq` | `0x41` | BSC->BTS | Unnumbered L3 data |
+| `RSLL3MessageType::UnitDataInd` | `0x42` | BTS->BSC | Unnumbered L3 data |
 
 ### DCHAN Message Types
 
 | Enum | Value | Direction | Description |
 |------|-------|-----------|-------------|
-| `RSLDChanMessageType::ChanActiv` | `0x01` | BSC→BTS | Channel activation |
-| `RSLDChanMessageType::ChanActivAck` | `0x11` | BTS→BSC | Activation ACK |
-| `RSLDChanMessageType::ChanActivNack` | `0x12` | BTS→BSC | Activation NACK |
-| `RSLDChanMessageType::RFChanRelAck` | `0x15` | BTS→BSC | Release ACK |
-| `RSLDChanMessageType::MeasRes` | `0x24` | BTS→BSC | Measurement result |
+| `RSLDChanMessageType::ChanActiv` | `0x01` | BSC->BTS | Channel activation |
+| `RSLDChanMessageType::ChanActivAck` | `0x11` | BTS->BSC | Activation ACK |
+| `RSLDChanMessageType::ChanActivNack` | `0x12` | BTS->BSC | Activation NACK |
+| `RSLDChanMessageType::RFChanRelAck` | `0x15` | BTS->BSC | Release ACK |
+| `RSLDChanMessageType::MeasRes` | `0x24` | BTS->BSC | Measurement result |
 
 ### CCHAN Message Types
 
 | Enum | Value | Direction | Description |
 |------|-------|-----------|-------------|
-| `RSLCChanMessageType::BCCHInfo` | `0x01` | BSC→BTS | System information |
-| `RSLCChanMessageType::PagingCmd` | `0x03` | BSC→BTS | Paging command |
-| `RSLCChanMessageType::CCCHLoadInd` | `0x13` | BTS→BSC | CCCH load report |
-| `RSLCChanMessageType::ChanRqd` | `0x16` | BTS→BSC | Channel required |
+| `RSLCChanMessageType::BCCHInfo` | `0x01` | BSC->BTS | System information |
+| `RSLCChanMessageType::PagingCmd` | `0x03` | BSC->BTS | Paging command |
+| `RSLCChanMessageType::CCCHLoadInd` | `0x13` | BTS->BSC | CCCH load report |
+| `RSLCChanMessageType::ChanRqd` | `0x16` | BTS->BSC | Channel required |
 
 ### Information Elements
 
@@ -3611,9 +3621,9 @@ L3Info uses TL16V encoding (16-bit length) for large payloads.
 
 ### Helper Functions
 
-- `rslDiscriminatorName(disc)` → string_view
-- `rslIEName(ie)` → string_view
-- `rslErrorCauseName(cause)` → string_view
+- `rslDiscriminatorName(disc)` -> string_view
+- `rslIEName(ie)` -> string_view
+- `rslErrorCauseName(cause)` -> string_view
 
 ---
 
@@ -3662,7 +3672,7 @@ Extract encryption parameters from ENCR_CMD. Returns `optional<RSLEncryptionInfo
 **Source:** `src/abis/rsl_builder.cpp`
 **3GPP:** TS 48.058 (A-bis interface)
 
-Constructs serialized RSL messages for BTS→BSC communication. Every method has both vector and span overloads for zero-allocation building.
+Constructs serialized RSL messages for BTS->BSC communication. Every method has both vector and span overloads for zero-allocation building.
 
 ### RLL Messages
 
@@ -3692,7 +3702,434 @@ Every method has a `static int buildXxx(std::span<uint8_t> out, ...)` overload t
 
 ---
 
-## 47. Performance Optimizations Summary
+## 47. Procedure Framework - Protocol Procedure Base Class
+
+**File:** `gsml3parser/stack/procedure.h`
+**Namespace:** `gsml3parser`
+**Spec:** 3GPP TS 24.008 (procedure lifecycle), TS 04.08
+
+Abstract base class for protocol procedures and the ResponseSink callback mechanism. Each procedure encapsulates a complete GSM Layer 3 protocol flow with its own internal state machine, timers, and message sequence logic. BTS applications feed incoming L3 messages via `feed()`, receive external data via `feedExternal()`, and manage timeouts via `tick()`.
+
+### ResponseSink
+
+Callback type for building protocol responses without heap allocation on the hot path:
+
+```cpp
+using ResponseSink = std::function<void(SMAction action, const ParsedMessage& incomingMsg,
+                                           const SubscriberSession* session)>;
+```
+
+The BTS application provides this callback when calling `Procedure::feed()`. Inside the callback, invoke `ResponseBuilder` and write bytes into a pre-allocated buffer (Arena).
+
+**Performance:** `std::function` uses Small Buffer Optimization for lambdas with small capture (~20-32 bytes). Ensure your lambda closure fits in SBO for zero-allocation on the hot path.
+
+### ProcedureStepResult
+
+Terminal result from each procedure step:
+
+```cpp
+struct ProcedureStepResult {
+    enum class Action : uint8_t {
+        Continue,           ///< Procedure continues; awaiting next message
+        SendResponse,       ///< Build and send response(s) via ResponseSink
+        WaitingExternal,    ///< Needs external data (RAND from AuC, BSC decision)
+        Completed,          ///< Procedure finished successfully
+        Failed              ///< Procedure terminated with an error
+    };
+
+    Action action{Action::Continue};
+    procedure::ProcedureResult finalResult{};  ///< Populated when Completed or Failed
+};
+
+static_assert(sizeof(ProcedureStepResult) <= 32);
+```
+
+### Procedure Base Class
+
+Abstract interface that all concrete procedures implement:
+
+| Method | Description |
+|--------|-------------|
+| `type()` | Returns the `procedure::ProcedureType` identifier |
+| `state()` | Returns the current `procedure::ProcedureState` |
+| `feed(msg, session, sink)` | Process an incoming L3 message; returns step result |
+| `feedExternal(data, sink)` | Provide external data (RAND, VLR decision); resume procedure |
+| `tick(delta)` | Advance procedure timers; may return `Failed` on timeout |
+| `cancel()` | Explicitly abort the procedure |
+
+**Thread safety:** NOT thread-safe. One instance per logical procedure, single-thread access.
+**Memory:** Zero heap allocations for state. Pre-allocated buffers for RAND/SRES data.
+
+### Usage Example
+
+```cpp
+#include <gsml3parser/stack/procedure.h>
+
+using namespace gsml3parser;
+
+auto proc = ProcedureFactory::createLocationUpdate();
+auto result = proc->feed(incomingMsg, session,
+    [](SMAction action, const ParsedMessage& msg, const SubscriberSession* sess) {
+        // Build response via ResponseBuilder into Arena buffer
+    });
+
+if (result.action == ProcedureStepResult::Action::Completed) {
+    std::cout << "Procedure finished: " << result.finalResult.reason << "\n";
+}
+```
+
+---
+
+## 48. Procedure Runner - Concurrent Procedure Manager
+
+**File:** `gsml3parser/stack/procedure_runner.h`
+**Namespace:** `gsml3parser`
+**Spec:** 3GPP TS 24.008 (procedure orchestration)
+
+Manages concurrent protocol procedures for a single subscriber. Routes incoming L3 messages to the correct active procedure based on Protocol Discriminator (PD), auto-creates new procedures when no matching procedure is active, and automatically cleans up completed/failed procedure slots for reuse.
+
+### ProcedureRunner API
+
+```cpp
+class ProcedureRunner {
+public:
+    ProcedureRunner() = default;
+
+    /// Feed incoming L3 message; routes to active procedure or starts new one.
+    ProcedureStepResult feed(const ParsedMessage& msg, SubscriberSession* session,
+                               ResponseSink&& sink);
+
+    /// Feed external data to an active procedure by type.
+    ProcedureStepResult feedExternal(procedure::ProcedureType type,
+                                       std::span<const uint8_t> data,
+                                       ResponseSink&& sink = {});
+
+    /// Tick all active procedures; auto-cleans terminal slots.
+    size_t tickAll(std::chrono::milliseconds delta);
+
+    /// Get active procedure by type, or nullptr.
+    [[nodiscard]] Procedure* getActive(procedure::ProcedureType type) noexcept;
+
+    /// Number of currently active procedures.
+    [[nodiscard]] size_t activeCount() const noexcept;
+
+    /// Cancel all active procedures and free their slots.
+    void cancelAll() noexcept;
+};
+```
+
+| Method | Description | Slot Cleanup |
+|--------|-------------|--------------|
+| `feed(msg, session, sink)` | Route message to active procedure or auto-create | Auto-frees on Completed/Failed |
+| `feedExternal(type, data, sink)` | Send external data by ProcedureType | Auto-frees on Completed/Failed |
+| `tickAll(delta)` | Advance all timers; returns count of Failed procedures | Auto-frees terminal slots |
+| `getActive(type)` | Lookup running procedure | None |
+| `activeCount()` | Count active slots | None |
+| `cancelAll()` | Cancel and free all slots | Frees all |
+
+**Internal storage:** Fixed `std::array<ProcedureSlot, 8>` — no heap allocation for the runner itself. Procedures are heap-allocated via `unique_ptr`.
+
+### ProcedureFactory
+
+Static factory for creating specific procedure instances:
+
+| Factory Method | Returns | Spec |
+|----------------|---------|------|
+| `createLocationUpdate()` | `LocationUpdateProcedure` | TS 24.008 4.4.1 |
+| `createAuthentication()` | `AuthenticationProcedure` | TS 24.008 4.4.2 |
+| `createCipheringMode(algo)` | `CipheringModeProcedure` | TS 24.008 4.4.3 |
+| `createCallSetupMO()` | `CallSetupMOPercedure` | TS 24.008 6.1 |
+| `createCallSetupMT(number)` | `CallSetupMTPercedure` | TS 24.008 6.1 |
+| `createChannelAssignment(type)` | `ChannelAssignmentProcedure` | TS 04.08 9.1.2 |
+| `createPaging(identity)` | `PagingProcedure` | TS 04.08 9.1.25 |
+| `createHandover(target)` | `HandoverProcedure` | TS 04.08 9.1.40 |
+
+### Usage Example
+
+```cpp
+#include <gsml3parser/stack/procedure_runner.h>
+
+using namespace gsml3parser;
+
+SubscriberRegistry registry;
+auto* session = registry.createByTMSI(0x12345678);
+ProcedureRunner runner;
+
+// Feed incoming message — procedure auto-created and started.
+Arena arena(65536);
+auto result = runner.feed(incomingMsg, session,
+    [&](SMAction action, const ParsedMessage& msg, const SubscriberSession* sess) {
+        uint8_t buf[512];
+        int n = ResponseBuilder::buildCMServiceAccept({buf, sizeof(buf)});
+        if (n > 0) sendToMS(buf, n);
+    });
+
+// Feed external decision from VLR.
+runner.feedExternal(procedure::ProcedureType::LocationUpdate, acceptBytes);
+
+// Tick timers every 100ms.
+size_t failed = runner.tickAll(std::chrono::milliseconds(100));
+```
+
+---
+
+## 49. Location Update Procedure
+
+**File:** `gsml3parser/stack/procedures/location_update.h`
+**Spec:** 3GPP TS 24.008 4.4.1
+
+Full location updating flow with identity check, optional authentication, VLR/BSC decision via `feedExternal()`, and TMSI reallocation.
+
+### State Machine
+
+| State | Trigger | Next State | Response |
+|-------|---------|------------|----------|
+| `INIT` | CMServiceRequest/PagingResponse | `IDENTITY_CHECK` | — |
+| `IDENTITY_CHECK` | TMSI known | `AUTH_CHECK` | — |
+| `IDENTITY_CHECK` | TMSI unknown | `REQUEST_IDENTITY` | `buildIdentityRequest(IMSI)` |
+| `REQUEST_IDENTITY` | IdentityResponse | `AUTH_CHECK` | — |
+| `AUTH_CHECK` | Auth needed | `SEND_AUTH` | — |
+| `AUTH_CHECK` | Auth skipped | `LU_REQUEST` | — |
+| `SEND_AUTH` | — | `WAIT_AUTH` (T3106 started) | `buildAuthenticationRequest(rand)` |
+| `WAIT_AUTH` | AuthenticationResponse | `VERIFY_AUTH` | — |
+| `VERIFY_AUTH` | SRES matches | `LU_REQUEST` | — |
+| `VERIFY_AUTH` | SRES mismatch | `REJECT` | — |
+| `LU_REQUEST` | — | `WAITING_EXTERNAL` | — (forward to VLR) |
+| `WAITING_EXTERNAL` | feedExternal: accept | `SEND_ACCEPT` | `buildLocationUpdatingAccept(lai, newTmsi)` |
+| `WAITING_EXTERNAL` | feedExternal: reject | `SEND_REJECT` | `buildLocationUpdatingReject(cause)` |
+| Any | Timer expired | `FAILED` | — |
+
+### Internal State
+
+| Member | Type | Purpose |
+|--------|------|---------|
+| `mRandBuffer` | `array<uint8_t, 32>` | Pre-allocated RAND from AuC |
+| `mExpectedSRES` | `array<uint8_t, 4>` | Expected SRES for verification |
+| `mLAI` | `L3LocationAreaIdentity` | LAI from MSContext |
+| `mNewTmsi` | `optional<uint32_t>` | New TMSI assignment from VLR |
+
+### Timers
+
+| Timer | Default | Used During |
+|-------|---------|-------------|
+| `T3106` | 3000ms | Authentication phase |
+| `T3103` | 5000ms | Location update request |
+| `T3108` | 3000ms | TMSI reallocation complete |
+
+---
+
+## 50. Authentication Procedure
+
+**File:** `gsml3parser/stack/procedures/authentication.h`
+**Spec:** 3GPP TS 24.008 4.4.2
+
+Standalone authentication exchange: receives RAND+SRES from AuC via `feedExternal()`, sends AuthenticationRequest, verifies MS response.
+
+### State Machine
+
+| State | Trigger | Next State | Response |
+|-------|---------|------------|----------|
+| `INIT` | feedExternal (RAND+SRES) | `SEND_AUTH_REQ` | — |
+| `SEND_AUTH_REQ` | — | `WAIT_RESPONSE` (T3106 started) | `buildAuthenticationRequest(rand)` |
+| `WAIT_RESPONSE` | AuthenticationResponse | `VERIFY_SRES` | — |
+| `VERIFY_SRES` | SRES matches | `COMPLETED` | — |
+| `VERIFY_SRES` | SRES mismatch | `FAILED` | — |
+
+### Internal State
+
+| Member | Type | Purpose |
+|--------|------|---------|
+| `mRandBuffer` | `array<uint8_t, 32>` | RAND from AuC |
+| `mExpectedSRES` | `array<uint8_t, 4>` | Expected SRES for comparison |
+
+### Timer
+
+| Timer | Default | Used During |
+|-------|---------|-------------|
+| `T3106` | 3000ms | Authentication response wait |
+
+---
+
+## 51. Call Setup MO Procedure
+
+**File:** `gsml3parser/stack/procedures/call_setup_mo.h`
+**Spec:** 3GPP TS 24.008 6.1
+
+Mobile-Originated Call establishment: CMServiceAccept through Setup, Proceeding, TCH assignment, Alerting, Connect, to Active speech path.
+
+### State Machine
+
+| State | Trigger | Next State | Response |
+|-------|---------|------------|----------|
+| `INIT` | CMServiceRequest(Call) | `SERVICE_ACCEPT` | — |
+| `SERVICE_ACCEPT` | — | `WAIT_SETUP` | `buildCMServiceAccept()` |
+| `WAIT_SETUP` | Setup (T3101 started) | `PROCEEDING` | — |
+| `PROCEEDING` | — | `ASSIGN_TCH` | `buildCallProceeding(ti)` |
+| `ASSIGN_TCH` | — | `WAIT_ASSIGN_COMPLETE` | `buildAssignmentCommand(channel)` |
+| `WAIT_ASSIGN_COMPLETE` | AssignmentComplete | `ALERTING` | — |
+| `ALERTING` | — | `CONNECT` | `buildAlerting(ti)` |
+| `CONNECT` | — | `ACTIVE` | `buildConnect(ti)` |
+| `ACTIVE` | ConnectAcknowledge | `COMPLETED` | — |
+
+### Internal State
+
+| Member | Type | Purpose |
+|--------|------|---------|
+| `mTI` | `uint8_t` | Transaction Identifier from Setup |
+
+### Timers
+
+| Timer | Default | Used During |
+|-------|---------|-------------|
+| `T3101` | 3000ms | Call setup phases (Setup, Assignment) |
+
+---
+
+## 52. Call Setup MT Procedure
+
+**File:** `gsml3parser/stack/procedures/call_setup_mt.h`
+**Spec:** 3GPP TS 24.008 6.1
+
+Mobile-Terminated Call establishment: Paging (up to 3 attempts with T3109), SDCCH assignment, Setup delivery, CallConfirmed, TCH assignment, to Active speech path.
+
+### State Machine
+
+| State | Trigger | Next State | Response |
+|-------|---------|------------|----------|
+| `INIT` | feedExternal (trigger) | `PAGE` | — |
+| `PAGE` | — | `WAIT_PAGE_RESPONSE` (T3109 started) | `buildPagingRequestType1/2/3()` |
+| `WAIT_PAGE_RESPONSE` | PagingResponse | `ASSIGN_SDCCH` | — |
+| `ASSIGN_SDCCH` | — | `SEND_SETUP` | `buildImmediateAssignment(channel)` |
+| `SEND_SETUP` | — | `WAIT_CONFIRMED` (T3101 started) | `buildSetup(calledNumber)` |
+| `WAIT_CONFIRMED` | CallConfirmed | `ASSIGN_TCH` | — |
+| Remaining states | Same as MO | `COMPLETED` | Same responses as MO |
+
+### Internal State
+
+| Member | Type | Purpose |
+|--------|------|---------|
+| `mCalledNumber` | `std::string` | Dialed number for Setup message |
+| `mTI` | `uint8_t` | Transaction Identifier |
+| `mPageAttempt` | `uint8_t` | Current paging attempt (max 3) |
+
+### Timers
+
+| Timer | Default | Used During |
+|-------|---------|-------------|
+| `T3109` | 30000ms | Paging response wait |
+| `T3101` | 3000ms | Call setup phases |
+
+---
+
+## 53. Channel Assignment Procedure
+
+**File:** `gsml3parser/stack/procedures/channel_assignment.h`
+**Spec:** 3GPP TS 04.08 9.1.2 / 9.1.35
+
+Channel assignment: receives ChannelRequest or PagingResponse, sends ImmediateAssignment, waits for MS to seize the channel.
+
+### State Machine
+
+| State | Trigger | Next State | Response |
+|-------|---------|------------|----------|
+| `INIT` | ChannelRequest/PagingResponse | `ALLOCATE_CHANNEL` | — |
+| `ALLOCATE_CHANNEL` | pool.allocate(type) | `SEND_IMMEDIATE_ASSIGNMENT` | — |
+| `SEND_IMMEDIATE_ASSIGNMENT` | — | `WAIT_SEIZURE` (T3101 started) | `buildImmediateAssignment(channel, ta)` |
+| `WAIT_SEIZURE` | First L3 msg on new channel | `COMPLETED` | — |
+| `WAIT_SEIZURE` | T3101 expired | `FAILED` (release channel) | — |
+
+### Internal State
+
+| Member | Type | Purpose |
+|--------|------|---------|
+| `mTargetType` | `ChannelType` | Target channel type to assign |
+
+### Timer
+
+| Timer | Default | Used During |
+|-------|---------|-------------|
+| `T3101` | 3000ms | Channel seizure wait |
+
+---
+
+## 54. Ciphering Mode Procedure
+
+**File:** `gsml3parser/stack/procedures/ciphering_mode.h`
+**Spec:** 3GPP TS 24.008 4.4.3 / TS 04.08 9.1.37
+
+Short procedure to activate ciphering: receives algorithm and key via `feedExternal()`, sends CipheringModeCommand, waits for CipheringModeComplete from MS.
+
+### State Machine
+
+| State | Trigger | Next State | Response |
+|-------|---------|------------|----------|
+| `INIT` | feedExternal (algo + key) | `SEND_COMMAND` | — |
+| `SEND_COMMAND` | — | `WAIT_COMPLETE` | `buildCipheringModeCommand(algo)` |
+| `WAIT_COMPLETE` | CipheringModeComplete | `COMPLETED` | — |
+
+### Internal State
+
+| Member | Type | Purpose |
+|--------|------|---------|
+| `mCipherAlgo` | `uint8_t` | Algorithm ID (0=A5/0, 1=A5/1, etc.) |
+
+---
+
+## 55. Paging Procedure
+
+**File:** `gsml3parser/stack/procedures/paging.h`
+**Spec:** 3GPP TS 04.08 9.1.25
+
+Network-initiated paging of MS with up to 3 attempts (Type1, Type2, Type3) using T3109 timer between each attempt. Created via `ProcedureFactory::createPaging()`, not through auto-start.
+
+### State Machine
+
+| State | Trigger | Next State | Response |
+|-------|---------|------------|----------|
+| `INIT` | feedExternal (trigger) | `SEND_PAGE1` | — |
+| `SEND_PAGE1` | — | `WAIT_PAGE1` (T3109 started) | PagingRequestType1 |
+| `WAIT_PAGE1` | T3109 expired | `SEND_PAGE2` | — |
+| `SEND_PAGE2` | — | `WAIT_PAGE2` (T3109 restarted) | PagingRequestType2 |
+| `WAIT_PAGE2` | T3109 expired | `SEND_PAGE3` | — |
+| `SEND_PAGE3` | — | `WAIT_PAGE3` (T3109 restarted) | PagingRequestType3 |
+| `WAIT_PAGE3` | PagingResponse | `COMPLETED` | — |
+| `WAIT_PAGE3` | T3109 expired | `FAILED` | — |
+
+### Internal State
+
+| Member | Type | Purpose |
+|--------|------|---------|
+| `mIdentity` | `L3MobileIdentity` | Identity to page |
+| `mPageAttempt` | `uint8_t` | Current attempt (max 3) |
+
+---
+
+## 56. Handover Procedure
+
+**File:** `gsml3parser/stack/procedures/handover.h`
+**Spec:** 3GPP TS 04.08 9.1.40
+
+Handover: receives target channel via `feedExternal()`, sends HandoverCommand, waits for HandoverComplete or HandoverFailure from MS. After completion, updates MSContext with new channel assignment.
+
+### State Machine
+
+| State | Trigger | Next State | Response |
+|-------|---------|------------|----------|
+| `INIT` | feedExternal (target channel) | `SEND_HO_CMD` | — |
+| `SEND_HO_CMD` | — | `WAIT_HO_COMPLETE` (T3101 started) | `buildHandoverCommand(target)` |
+| `WAIT_HO_COMPLETE` | HandoverComplete | `COMPLETED` | — |
+| `WAIT_HO_COMPLETE` | HandoverFailure | `FAILED` | — |
+| `WAIT_HO_COMPLETE` | T3101 expired | `FAILED` | — |
+
+### Internal State
+
+| Member | Type | Purpose |
+|--------|------|---------|
+| `mTargetChannel` | `L3ChannelDescription` | Target channel for handover |
+
+---
+
+## 57. Performance Optimizations Summary
 
 The following optimizations have been applied to achieve high-throughput, low-latency L3 parsing at scale:
 

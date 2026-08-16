@@ -121,7 +121,7 @@ TEST(LocationUpdateProcedure, LUP_IdentityCheck_KnownTMSI_SkipsIdentityRequest) 
     auto sess = makeSessionWithTMSI(0x12345678u);
 
     // INIT -> IDENTITY_CHECK
-    lup.feed(makeCMServiceRequest(), &sess, {});
+    (void)lup.feed(makeCMServiceRequest(), &sess, {});
 
     bool sinkCalled = false;
     auto result = lup.feed(makeCMServiceRequest(), &sess,
@@ -142,7 +142,7 @@ TEST(LocationUpdateProcedure, LUP_IdentityCheck_UnknownTMSI_SendsIdentityRequest
     SubscriberSession sess; // no TMSI set
 
     // INIT -> IDENTITY_CHECK
-    lup.feed(makeCMServiceRequest(), &sess, {});
+    (void)lup.feed(makeCMServiceRequest(), &sess, {});
 
     bool sinkCalled = false;
     auto result = lup.feed(makeCMServiceRequest(), &sess,
@@ -162,10 +162,10 @@ TEST(LocationUpdateProcedure, LUP_IdentityResponse_Valid_AdvancesToAuthCheck) {
     SubscriberSession sess;
 
     // INIT -> IDENTITY_CHECK
-    lup.feed(makeCMServiceRequest(), &sess, {});
+    (void)lup.feed(makeCMServiceRequest(), &sess, {});
 
     // IDENTITY_CHECK -> REQUEST_IDENTITY (no TMSI, sink called)
-    lup.feed(makeCMServiceRequest(), &sess, {});
+    (void)lup.feed(makeCMServiceRequest(), &sess, {});
 
     // Feed IdentityResponse in REQUEST_IDENTITY state -> AUTH_CHECK
     auto result = lup.feed(makeIdentityResponse(), &sess, {});
@@ -182,8 +182,8 @@ TEST(LocationUpdateProcedure, LUP_AuthCheck_NeedAuth_SendsAuthenticationRequest)
     auto sess = makeSessionWithTMSI(0x12345678u);
 
     // INIT -> IDENTITY_CHECK -> AUTH_CHECK (TMSI known)
-    lup.feed(makeCMServiceRequest(), &sess, {});
-    lup.feed(makeCMServiceRequest(), &sess, {});
+    (void)lup.feed(makeCMServiceRequest(), &sess, {});
+    (void)lup.feed(makeCMServiceRequest(), &sess, {});
 
     // Feed RAND via feedExternal in AUTH_CHECK
     std::array<uint8_t, 16> rand{};
@@ -200,15 +200,15 @@ TEST(LocationUpdateProcedure, LUP_AuthResponse_ValidSRES_AdvancesToLURequest) {
     auto sess = makeSessionWithTMSI(0x12345678u);
 
     // INIT -> IDENTITY_CHECK -> AUTH_CHECK
-    lup.feed(makeCMServiceRequest(), &sess, {});
-    lup.feed(makeCMServiceRequest(), &sess, {});
+    (void)lup.feed(makeCMServiceRequest(), &sess, {});
+    (void)lup.feed(makeCMServiceRequest(), &sess, {});
 
     // Feed RAND + expected SRES (0xDEADBEEF) via feedExternal -> SEND_AUTH
     auto randSRES = makeRandSRES(0xDEADBEEFu);
-    lup.feedExternal(std::span<const uint8_t>(randSRES), {});
+    (void)lup.feedExternal(std::span<const uint8_t>(randSRES), {});
 
     // Simulate reaching WAIT_AUTH for SRES verification.
-    lup.feedExternal(std::span<const uint8_t>(), {});
+    (void)lup.feedExternal(std::span<const uint8_t>(), {});
 
     // Feed auth response with matching SRES -> should advance to LU_REQUEST.
     auto result = lup.feed(makeAuthResponse(0xDEADBEEFu), &sess, {});
@@ -224,15 +224,15 @@ TEST(LocationUpdateProcedure, LUP_AuthResponse_InvalidSRES_GoesToReject) {
     auto sess = makeSessionWithTMSI(0x12345678u);
 
     // INIT -> IDENTITY_CHECK -> AUTH_CHECK
-    lup.feed(makeCMServiceRequest(), &sess, {});
-    lup.feed(makeCMServiceRequest(), &sess, {});
+    (void)lup.feed(makeCMServiceRequest(), &sess, {});
+    (void)lup.feed(makeCMServiceRequest(), &sess, {});
 
     // Feed RAND + expected SRES (0x11111111) via feedExternal -> SEND_AUTH
     auto randSRES = makeRandSRES(0x11111111u);
-    lup.feedExternal(std::span<const uint8_t>(randSRES), {});
+    (void)lup.feedExternal(std::span<const uint8_t>(randSRES), {});
 
     // Simulate reaching WAIT_AUTH for SRES verification.
-    lup.feedExternal(std::span<const uint8_t>(), {});
+    (void)lup.feedExternal(std::span<const uint8_t>(), {});
 
     // Feed auth response with mismatched SRES -> should trigger reject path.
     auto result = lup.feed(makeAuthResponse(0xFFFFFFFFu), &sess, {});

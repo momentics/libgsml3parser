@@ -70,6 +70,7 @@ add_executable(gsml3parser_tests
     test_rsl_types.cpp
     test_rsl_parser.cpp
     test_rsl_builder.cpp
+    test_high_load_stress.cpp
 )
 
 find_package(Threads REQUIRED)

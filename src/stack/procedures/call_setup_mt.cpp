@@ -51,6 +51,7 @@ void CallSetupMTPercedure::transitionTo(State s) {
 }
 
 void CallSetupMTPercedure::fail(const std::string_view& reason) {
+    (void)reason;
     stopTimer();
     transitionTo(State::FAILED);
 }

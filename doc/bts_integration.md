@@ -1,6 +1,6 @@
 # BTS Integration Guide
 
-This guide explains how to integrate libgsml3parser into a software Base Transceiver Station (BTS) implementation. It covers the full message lifecycle: building L3 messages, framing them in LAPDm, dispatching incoming messages, managing timers and transactions, driving protocol state machines, and handling typical BTS scenarios.
+This guide explains how to integrate libgsml3parser into a software Base Transceiver Station (BTS) implementation. It covers the full message lifecycle using the Procedure Framework: managing subscriber sessions, feeding L3 messages into procedures, building responses with ResponseBuilder, handling timers and external data, and integrating with A-bis RSL.
 
 ## Architecture Overview
 
@@ -9,71 +9,53 @@ libgsml3parser sits between the BTS application logic and the physical/radio lay
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      BTS Application Logic                          │
-│  (roaming decisions, authentication, handover, call control policy) │
+│  (AuC/HLR integration, VLR/BSC decisions, call control policy)      │
 └───────────────────────┬────────────────────────┬────────────────────┘
                         │                        │
+      feedExternal()    │                        │  sendToMS()
+                        │                        │
       ┌─────────────────▼──────────┐ ┌───────────▼───────────────────┐
-      │    STACK MODULES           │ │     CORE PARSER API           │
-      │  (per-MS state management) │ │  (parse, serialize, build)    │
+      │    PROCEDURE FRAMEWORK     │ │     CORE PARSER API           │
+      │  (per-MS procedure mgmt)   │ │  (parse, serialize, build)    │
       │                            │ │                               │
-      │  MSContext                 │ │  Builder Pattern              │
-      │  TimerManager              │ │  ProtocolDispatcher           │
-      │  TransactionManager        │ │  writeL3Bytes() / parseL3()   │
-      │  RR/MM/CC StateMachine     │ │  LAPDmEntity (full LAPDm FSM) │
-      │  ChannelPool               │ │                               │
+      │  SubscriberRegistry        │ │  ResponseBuilder              │
+      │  ProcedureRunner           │ │  RSLParser / RSLBuilder       │
+      │  + Concrete Procedures     │ │  parseL3() / writeL3Bytes()   │
       └───────────┬────────────────┘ └─────────┬─────────────────────┘
                   │                            │
       ┌───────────▼────────────────────────────▼───────────────────┐
-      │                    Radio / Um Interface                    │
+      │              Radio / Um Interface / A-bis RSL              │
       │            (air interface, L1/PHY, SDR backend)            │
       └────────────────────────────────────────────────────────────┘
 ```
 
 ### Outbound Flow (BTS -> MS)
 
-1. **Decide** - State machine or application logic determines what to send
-2. **Build** - Create an L3 message using the Builder API
-3. **Serialize** - Convert to raw bytes with `writeL3Bytes()`
-4. **Frame & Transmit** - Pass to `LAPDmEntity.sendUI()` (unacknowledged) or `.sendData()` (acknowledged, segmented). The entity encodes LAPDm frames and invokes the `L1TransmitFn` callback, which delivers frame bytes to the radio layer.
-5. **Track** - Create a Transaction, start a Timer (if expecting response)
+1. **Procedure decides** - ProcedureRunner feeds message, procedure determines response needed
+2. **ResponseSink fires** - Callback invokes ResponseBuilder to construct L3 response bytes
+3. **Arena buffer** - Bytes written into pre-allocated Arena buffer (zero heap allocation)
+4. **Frame & Transmit** - Pass to `LAPDmEntity.sendUI()` (unacknowledged) or `.sendData()` (acknowledged, segmented)
+5. **A-bis encapsulation** (optional) - Wrap L3 bytes in RSL via `RSLBuilder::buildDataInd()`
 
 ### Inbound Flow (MS -> BTS)
 
-1. **Receive** - Get raw LAPDm frame bytes from the radio layer
-2. **Process** - Pass to `LAPDmEntity.receiveFrame()`. The entity decodes the frame, runs the FSM, handles I-frame reassembly, and invokes the `L3ReceiveFn` callback with complete L3 messages.
+1. **Receive** - Get raw LAPDm frame bytes from the radio layer or A-bis RSL
+2. **Process LAPDm** - Pass to `LAPDmEntity.receiveFrame()`. The entity decodes the frame and invokes the `L3ReceiveFn` callback with complete L3 messages.
 3. **Parse** - In the callback, convert L3 bytes to typed C++ object with `parseL3()`
-4. **Dispatch** - Route to handler via `ProtocolDispatcher`
-5. **Correlate** - Match against pending Transactions via `TransactionManager`
-6. **Advance** - Feed message into FSM, stop timers, update MSContext
+4. **Find Session** - Look up `SubscriberSession` via `SubscriberRegistry.findByLink()` or `findByTMSI()`
+5. **Feed Procedure** - Route message to `ProcedureRunner::feed()` — procedure auto-creates or routes to active procedure
+6. **Handle Result** - Check `ProcedureStepResult`: Continue, SendResponse, WaitingExternal, Completed, Failed
 
 ## Building a BTS with libgsml3parser
 
-### Step 1: Define per-MS state
-
-Each mobile station gets its own context bundle:
+### Step 1: Initialize subscriber registry and channel pool
 
 ```cpp
 #include <gsml3parser/gsml3parser.hpp>
 
 using namespace gsml3parser;
 
-struct MsSession {
-    MSContext ctx;              // Identity, channel, flags
-    TimerManager timers;        // Protocol timers (T3101, T3106, ...)
-    TransactionManager txns;    // Pending request-response pairs
-    RRStateMachine rrFsm;       // Radio Resource state machine
-    MMStateMachine mmFsm;       // Mobility Management state machine
-    CCStateMachine ccFsm;       // Call Control state machine
-    ProtocolDispatcher dispatch; // Message router
-    LAPDmEntity lapdm;          // LAPDm state machine (one per SAPI per channel)
-};
-```
-
-### Step 2: Initialize channel pool (global, shared)
-
-The `ChannelPool` is shared across all MS sessions at the BTS level:
-
-```cpp
+// Global channel pool (shared across all MS sessions)
 ChannelPool btsChannels;
 
 void initBts() {
@@ -91,448 +73,398 @@ void initBts() {
                                     static_cast<uint16_t>(200 + trx * 10 + ts)});
         }
     }
+}
+```
 
-    // Register TCHH channels (traffic, half-rate)
-    for (int trx = 0; trx < 3; ++trx) {
-        btsChannels.addChannel({ChannelType::TCHHType,
-                                static_cast<uint8_t>(trx), 0,
-                                static_cast<uint16_t>(300 + trx)});
+### Step 2: Define the ResponseSink callback
+
+The `ResponseSink` callback is invoked by procedures when they need to send a response to the MS. This is where you call `ResponseBuilder` and send the bytes over the radio.
+
+```cpp
+// Arena for zero-heap-allocation response building
+Arena arena(65536);
+
+void onResponse(SMAction action, const ParsedMessage& incomingMsg,
+                const SubscriberSession* session) {
+    if (action != SMAction::SendResponse) return;
+
+    uint8_t buf[512];
+    int n = 0;
+
+    // Determine which response to build based on the incoming message type.
+    auto pd = messagePD(incomingMsg);
+    auto mti = messageMTI(incomingMsg);
+
+    if (pd == L3PD::MobilityManagement) {
+        if (mti == L3CMServiceRequest::MTI) {
+            n = ResponseBuilder::buildCMServiceAccept({buf, sizeof(buf)});
+        }
+    } else if (pd == L3PD::CallControl) {
+        if (mti == L3Setup::MTI) {
+            if (auto* setup = tryGet<L3Setup>(incomingMsg)) {
+                n = ResponseBuilder::buildCallProceeding({buf, sizeof(buf)}, setup->ti());
+            }
+        }
+    }
+
+    if (n > 0 && session) {
+        sendToMS(session, buf, n);  // Your function to transmit L3 bytes
     }
 }
 ```
 
-### Step 3: Register message handlers
+### Step 3: Process incoming frames with ProcedureRunner
 
-Wire up the dispatcher for each MS session:
-
-```cpp
-void setupDispatcher(ProtocolDispatcher& disp, MsSession* session) {
-    // RR handlers
-    disp.registerHandler(L3PD::RadioResource, L3PagingResponse::MTI,
-        [session](const ParsedMessage& msg, void*) {
-            handlePagingResponse(session, msg);
-        });
-
-    disp.registerHandler(L3PD::RadioResource, L3MeasurementReport::MTI,
-        [session](const ParsedMessage& msg, void*) {
-            handleMeasurementReport(session, msg);
-        });
-
-    // MM handlers
-    disp.registerHandler(L3PD::MobilityManagement, L3CMServiceRequest::MTI,
-        [session](const ParsedMessage& msg, void*) {
-            handleCMServiceRequest(session, msg);
-        });
-
-    disp.registerHandler(L3PD::MobilityManagement, L3AuthenticationResponse::MTI,
-        [session](const ParsedMessage& msg, void*) {
-            handleAuthResponse(session, msg);
-        });
-
-    // CC handlers
-    disp.registerHandler(L3PD::CallControl, L3Setup::MTI,
-        [session](const ParsedMessage& msg, void*) {
-            handleCallSetup(session, msg);
-        });
-
-    // Fallback: log unexpected messages
-    disp.setFallbackHandler([](const ParsedMessage& msg, void*) {
-        logWarning("Unhandled message: {}", messageName(msg));
-    });
-}
-```
-
-### Step 4: Process incoming frames
-
-The main event loop for a single MS channel:
+The main event loop processes incoming L3 messages by feeding them into the subscriber's `ProcedureRunner`:
 
 ```cpp
 // L3 callback: invoked by LAPDmEntity when a complete L3 message arrives
 static void onL3(SAPI sapi, Primitive prim, std::span<const uint8_t> l3Data, void* ctx) {
-    MsSession* session = static_cast<MsSession*>(ctx);
+    auto* btsCtx = static_cast<BtsContext*>(ctx);
 
-    // Parse L3 header and message
-    auto header = parseL3Header(l3Data);
-    if (!header) return;
-
-    auto msg = parseL3(l3Data.subspan(2)); // skip 2-byte header
+    // Parse L3 message
+    auto msg = parseL3(l3Data);
     if (!msg) return;
 
-    // Try to correlate with pending transaction
-    Transaction* tx = session->txns.match(*header, *msg);
-    if (tx) {
-        stopTimerForTransaction(session, tx);
+    // Find the subscriber session for this link
+    SubscriberSession* session = btsCtx->registry.findByLink(
+        /*trx=*/0, /*ts=*/5, /*lapdmLink=*/3);
+    if (!session) return;
+
+    // Feed into ProcedureRunner — auto-creates or routes to active procedure
+    auto result = session->procedures.feed(*msg, session, onResponse);
+
+    switch (result.action) {
+        case ProcedureStepResult::Action::Continue:
+            // Procedure continues, awaiting next message
+            break;
+
+        case ProcedureStepResult::Action::SendResponse:
+            // Response already built and sent via onResponse callback
+            break;
+
+        case ProcedureStepResult::Action::WaitingExternal:
+            // Procedure needs external data (RAND from AuC, VLR decision)
+            // Call feedExternal() when the data is available
+            handleWaitingExternal(session, result);
+            break;
+
+        case ProcedureStepResult::Action::Completed:
+            // Procedure finished successfully; slot freed automatically
+            logInfo("Procedure completed: {}", result.finalResult.reason);
+            break;
+
+        case ProcedureStepResult::Action::Failed:
+            // Procedure failed (timeout, error); slot freed automatically
+            logWarning("Procedure failed: {}", result.finalResult.reason);
+            break;
     }
-
-    // Feed into state machines
-    auto rrResult = session->rrFsm.processMessage(*msg);
-    if (rrResult.causesTransition()) {
-        handleRrTransition(session, rrResult);
-    }
-
-    // Dispatch to application handlers
-    session->dispatch.dispatch(*msg, session);
-}
-
-// L1 callback: invoked by LAPDmEntity when a frame needs transmission
-static void onL1(std::span<const uint8_t> frameBytes, void* ctx) {
-    MsSession* session = static_cast<MsSession*>(ctx);
-    // Send encoded LAPDm frame to radio/PHY layer
-    radioTransmit(session, frameBytes);
-}
-
-void processIncomingFrame(MsSession* session, std::span<const uint8_t> rawFrame) {
-    // 1. Advance T200 timer for LAPDm retransmissions
-    static auto lastTick = std::chrono::steady_clock::now();
-    auto now = std::chrono::steady_clock::now();
-    auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTick);
-    lastTick = now;
-
-    session->lapdm.tickT200(delta);
-
-    // 2. Advance L3 timers
-    session->timers.tick(delta, [&session](L3TimerId expiredId) {
-        handleTimerExpired(session, expiredId);
-    });
-
-    // 3. Feed raw LAPDm frame to the entity — it handles decode, FSM,
-    //    I-frame reassembly, and invokes onL3() with complete messages
-    session->lapdm.receiveFrame(rawFrame);
 }
 ```
 
-## Typical BTS Procedures
+### Step 4: Event loop with timer management
+
+```cpp
+void eventLoop() {
+    auto lastTick = std::chrono::steady_clock::now();
+
+    while (running) {
+        auto now = std::chrono::steady_clock::now();
+        auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTick);
+        lastTick = now;
+
+        // 1. Process incoming radio frames
+        processRadioFrames();
+
+        // 2. Tick all session timers and procedure timers
+        registry.forEach([delta](SubscriberSession* sess) {
+            // Tick LAPDm T200 timer
+            sess->lapdm.tickT200(delta);
+
+            // Tick L3 timers
+            sess->timers.tick(delta, [sess](L3TimerId expiredId) {
+                handleTimerExpired(sess, expiredId);
+            });
+
+            // Tick procedure timers
+            size_t failed = sess->procedures.tickAll(delta);
+            if (failed > 0) {
+                logWarning("{} procedures timed out", failed);
+            }
+        });
+
+        // 3. Periodic broadcasts (System Information)
+        if (siCounter++ % SI_INTERVAL == 0) {
+            broadcastSystemInfo();
+        }
+
+        // 4. Reset arena periodically to reclaim memory
+        if (arena.used() > 32768) arena.reset();
+
+        // 5. Yield
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+}
+```
+
+## Typical BTS Procedures with ProcedureRunner
 
 ### Channel Assignment (RACH -> Immediate Assignment)
 
-Handle a Channel Request and respond with an Immediate Assignment:
+The `ChannelAssignmentProcedure` handles the full channel assignment flow automatically:
 
 ```cpp
-void handleChannelRequest(MsSession* session, const ParsedMessage& msg) {
-    auto* cr = tryGet<L3ChannelRequest>(msg);
-    if (!cr) return;
+// MS sends Channel Request on RACH. The LAPDm callback invokes parseL3().
+// ProcedureRunner auto-creates a ChannelAssignmentProcedure for RR messages.
 
-    uint8_t ra = cr->requestReference();
+auto msg = parseL3(l3Data).value();
+auto* session = registry.findByLink(trx, ts, lapdmLink);
 
-    // Decode needed channel type from RA
-    ChannelType needed = decodeChannelNeeded(ra, false, /*vea=*/true);
+// Feed the message — procedure auto-starts and handles everything:
+// 1. Allocates channel from pool (via internal logic or your callback)
+// 2. Builds ImmediateAssignment via ResponseSink
+// 3. Starts T3101 timer for channel seizure
+// 4. Returns Continue, waiting for MS to seize the channel
+auto result = session->procedures.feed(*msg, session, onResponse);
 
-    // Allocate from pool
-    auto ch = btsChannels.allocate(needed);
-    if (!ch) {
-        // Pool exhausted - send Immediate Assignment Reject
-        sendImmediateAssignmentReject(session, ra);
-        return;
-    }
-
-    // Update MSContext
-    session->ctx.assignChannel(ch->type, ch->trxNumber, ch->timeslot, ch->arfcn);
-
-    // Build Immediate Assignment
-    auto ia = L3ImmediateAssignment::builder()
-        .pageMode(L3PageMode(0))
-        .requestReference(ra)
-        .channelDescription(buildChannelDesc(*ch))
-        .timingAdvance(L3TimingAdvance(session->ctx.timingAdvance().value_or(0)))
-        .build();
-
-    sendL3Message(session, RRM{std::move(ia)});
-
-    // Start timer: wait for Paging Response / SABM
-    session->timers.start(L3TimerId::T3109);
-
-    // Advance RR state machine
-    session->rrFsm.setState(RRStateMachine::State::CHANNEL_ASSIGNED);
-}
-```
-
-### Paging a Mobile Station
-
-Send a Paging Request Type 2 to page a mobile by TMSI:
-
-```cpp
-void pageMs(uint32_t tmsi, ChannelType wantedChannel) {
-    auto paging = L3PagingRequestType2::builder()
-        .addTMSI(tmsi, wantedChannel)
-        .build();
-
-    ParsedMessage pm{RRM{std::move(paging)}};
-    auto bytes = writeL3Bytes(pm);
-
-    // For broadcast (BCCH/PAGCH), use LAPDmEntity or encode directly:
-    auto uiFrame = gsml3parser::lapdm::makeUIFrame(SAPI::SAPI0, false, std::span(*bytes));
-    auto frame = gsml3parser::lapdm::encodeFrame(uiFrame);
-    bcchTransmitter.send(frame.data(), frame.size());
-}
-```
-
-### Authentication Procedure
-
-Full authentication flow with timer and transaction management:
-
-```cpp
-void startAuthentication(MsSession* session) {
-    // Generate RAND (128-bit challenge) from AuC
-    uint8_t rand[16] = {/* from auth center */};
-    uint8_t ksn = 0;
-
-    session->mmFsm.setState(MMStateMachine::State::AUTHENTICATION);
-
-    auto authReq = L3AuthenticationRequest::builder()
-        .cksn(ksn)
-        .rand(rand)
-        .build();
-
-    // Create transaction: expect AuthenticationResponse
-    auto txId = session->txns.create(
-        L3PD::MobilityManagement,
-        L3AuthenticationRequest::MTI,
-        0,  // TI not used for MM
-        L3TimerId::T3106
-    );
-
-    // Start timer T3106 (3s default)
-    session->timers.start(L3TimerId::T3106);
-
-    sendL3Message(session, MMM{std::move(authReq)});
-}
-
-void handleAuthResponse(MsSession* session, const ParsedMessage& msg) {
-    auto* resp = tryGet<L3AuthenticationResponse>(msg);
-    if (!resp) return;
-
-    // Stop timer - we got a response
-    session->timers.stop(L3TimerId::T3106);
-
-    // Verify SRES against expected response from AuC
-    uint32_t sres = resp->sres();
-    if (sres == expectedSRES) {
-        session->ctx.setAuthenticated(true);
-        session->mmFsm.setState(MMStateMachine::State::AUTHENTICATED);
-
-        // Mark transaction as completed
-        Transaction* tx = session->txns.match(msg);
-        if (tx) tx->complete();
-    } else {
-        sendAuthenticationReject(session);
-        session->mmFsm.setState(MMStateMachine::State::DEREGISTERED);
-    }
-}
+// Later, when MS seizes the channel (first L3 message on new channel):
+auto seizeMsg = parseL3(seizeData).value();
+result = session->procedures.feed(*seizeMsg, session, onResponse);
+// result.action == Completed — procedure finished, slot freed
 ```
 
 ### Location Update Procedure
 
-Full location update with TMSI reallocation:
+Full location update with authentication and VLR decision:
 
 ```cpp
-void handleLocationUpdateRequest(MsSession* session, const ParsedMessage& msg) {
-    auto* lur = tryGet<L3LocationUpdatingRequest>(msg);
-    if (!lur) return;
+// 1. MS sends CMServiceRequest (Location Updating)
+auto cmReq = parseL3(incomingData).value();
+auto result = session->procedures.feed(cmReq, session, onResponse);
+// Auto-creates LocationUpdateProcedure, returns Continue or SendResponse
 
-    // Verify identity, check VLR
-    session->mmFsm.setState(MMStateMachine::State::LOCATION_UPDATE);
+// 2. Procedure may request Identity or Authentication
+//    ResponseSink builds IdentityRequest or AuthenticationRequest automatically
 
-    // Assign new TMSI
-    uint32_t newTmsi = allocateTmsi();
-    session->ctx.setTMSI(newTmsi);
-    session->ctx.setRegistered(true);
+// 3. AuC provides RAND + expected SRES
+std::array<uint8_t, 20> authData;
+// First 16 bytes: RAND, next 4 bytes: expected SRES
+memcpy(authData.data(), randBytes, 16);
+memcpy(authData.data() + 16, expectedSres, 4);
 
-    // Send Location Updating Accept with new TMSI
-    auto accept = L3LocationUpdatingAccept::builder()
-        .lai(session->ctx.lai().value_or(L3LocationAreaIdentity{}))
-        .mobileIdentity(L3MobileIdentity(newTmsi))
-        .build();
+result = session->procedures.feedExternal(
+    procedure::ProcedureType::Authentication, authData);
+// Procedure sends AuthenticationRequest via ResponseSink
 
-    sendL3Message(session, MMM{std::move(accept)});
+// 4. MS responds with AuthenticationResponse
+auto authResp = parseL3(authResponseData).value();
+result = session->procedures.feed(authResp, session, onResponse);
+// Procedure verifies SRES internally
 
-    // Start T3108 timer for TMSI reallocation complete
-    session->txns.create(
-        L3PD::MobilityManagement,
-        L3LocationUpdatingAccept::MTI,
-        0, L3TimerId::T3108
-    );
-    session->timers.start(L3TimerId::T3108);
+// 5. VLR provides accept decision with new TMSI
+std::array<uint8_t, 8> vlrDecision;
+// Contains: accept flag + new TMSI (4 bytes)
+vlrDecision[0] = 1; // accept
+memcpy(vlrDecision.data() + 1, &newTmsi, 4);
 
-    session->mmFsm.setState(MMStateMachine::State::REGISTERED);
+result = session->procedures.feedExternal(
+    procedure::ProcedureType::LocationUpdate, vlrDecision);
+// Procedure sends LocationUpdatingAccept via ResponseSink
+// result.action == Completed
+```
+
+### Call Setup (Mobile Originated)
+
+Full MOC flow through ProcedureRunner:
+
+```cpp
+// 1. MS sends CMServiceRequest (MO Call)
+auto cmReq = parseL3(incomingData).value();
+auto result = session->procedures.feed(cmReq, session, onResponse);
+// Auto-creates CallSetupMOPercedure
+
+// 2. Procedure sends CMServiceAccept via ResponseSink
+// 3. MS sends Setup
+auto setup = parseL3(setupData).value();
+result = session->procedures.feed(setup, session, onResponse);
+// Procedure sends CallProceeding, then AssignmentCommand
+
+// 4. MS sends AssignmentComplete
+auto assignComplete = parseL3(assignCompleteData).value();
+result = session->procedures.feed(assignComplete, session, onResponse);
+// Procedure sends Alerting, then Connect
+
+// 5. MS sends ConnectAcknowledge
+auto connAck = parseL3(connAckData).value();
+result = session->procedures.feed(connAck, session, onResponse);
+// result.action == Completed — call is active, speech path established
+```
+
+## External System Integration (feedExternal)
+
+Procedures use `feedExternal()` to receive data from external systems (AuC, HLR, VLR, BSC). This is the primary integration point for BTS business logic.
+
+### AuC Integration (Authentication)
+
+```cpp
+// When procedure enters WaitingExternal state for Authentication:
+void onAuthNeeded(SubscriberSession* session) {
+    // Query AuC for RAND + SRES triplet
+    auto triplet = aucQuery(session->context.identity().digits());
+
+    // Feed RAND + expected SRES to the procedure
+    std::array<uint8_t, 20> data;
+    memcpy(data.data(), triplet.rand.data(), 16);
+    memcpy(data.data() + 16, triplet.sres.data(), 4);
+
+    auto result = session->procedures.feedExternal(
+        procedure::ProcedureType::Authentication, data);
+    // Procedure sends AuthenticationRequest to MS via ResponseSink
 }
 ```
 
-### System Information Broadcast
-
-Build and broadcast SI messages on BCCH:
+### VLR Integration (Location Update)
 
 ```cpp
-void broadcastSystemInfo() {
-    // SI Type 3 - Full cell description (most important for MS camp-on)
-    auto si3 = L3SystemInformationType3::builder()
-        .cellIdentity(L3CellIdentity(0x1234))
-        .locationAreaIdentity(L3LocationAreaIdentity("250", "01", 0x5678))
-        .controlChannelDescription(buildControlChannelDesc())
-        .cellOptions(L3CellOptionsBCCH{})
-        .cellSelectionParameters(L3CellSelectionParameters{})
-        .rachControlParameters(L3RACHControlParameters{})
-        .build();
+void onLocationUpdateDecision(SubscriberSession* session, bool accept, uint32_t newTmsi) {
+    std::array<uint8_t, 8> decision;
+    decision[0] = accept ? 1 : 0;
+    if (accept) {
+        memcpy(decision.data() + 1, &newTmsi, 4);
+    } else {
+        decision[5] = static_cast<uint8_t>(MMRejectCause::Congestion);
+    }
 
-    ParsedMessage pm{RRM{std::move(si3)}};
-    auto bytes = writeL3Bytes(pm);
-    auto uiFrame = gsml3parser::lapdm::makeUIFrame(SAPI::SAPI0, false, std::span(*bytes));
-    auto frame = gsml3parser::lapdm::encodeFrame(uiFrame);
+    auto result = session->procedures.feedExternal(
+        procedure::ProcedureType::LocationUpdate, decision);
 
-    // Broadcast periodically on BCCH
-    bcchTransmitter.broadcast(frame);
-}
-```
-
-## Message Correlation
-
-The `TransactionManager` provides request-response correlation for L3 messaging. When the BTS sends a request message and expects a response, it creates a Transaction to track the pending exchange:
-
-### Creating Transactions
-
-```cpp
-// CC message with TI-based correlation
-auto txId = session->txns.create(
-    L3PD::CallControl,        // PD
-    L3Setup::MTI,             // MTI of request
-    1,                        // Transaction Identifier (0-7)
-    L3TimerId::T3101          // Timer to associate
-);
-
-// MM message with PD+MTI correlation (TI not used)
-auto txId2 = session->txns.create(
-    L3PD::MobilityManagement,
-    L3IdentityRequest::MTI,
-    0,                        // TI=0 for non-CC/SS
-    L3TimerId::T3102
-);
-```
-
-### Matching Incoming Messages
-
-```cpp
-// Parse the L3 header to get PD, MTI, and TI
-auto header = parseL3Header(rawData).value();
-auto msg = parseL3(rawData.subspan(2)).value();
-
-// Match against pending transactions
-Transaction* tx = session->txns.match(*header, *msg);
-if (tx) {
-    // Found matching transaction - this is the expected response
-    tx->complete();
-
-    // Stop the associated timer
-    session->timers.stop(tx->timerId());
-
-    // Clean up finished transactions periodically
-    if (session->txns.totalCount() > 8) {
-        session->txns.cleanup();
+    if (result.action == ProcedureStepResult::Action::Completed) {
+        logInfo("Location update completed");
+    } else if (result.action == ProcedureStepResult::Action::Failed) {
+        logWarning("Location update rejected");
     }
 }
 ```
 
-### Matching Strategies
-
-| Protocol Discriminator | Matching Strategy | Complexity |
-|------------------------|-------------------|------------|
-| `CallControl` (PD=0x03) | TI-based lookup via `mTiIndex[8]` | O(1) |
-| `NonCallSS` (PD=0x0b) | TI-based lookup via `mTiIndex[8]` | O(1) |
-| All other PDs | PD + MTI comparison | O(K), K ≤ 16 |
-
-### Timer Expiry Handling
+### BSC Integration (Handover)
 
 ```cpp
-void handleTimerExpired(MsSession* session, L3TimerId timerId) {
-    // Expire all transactions associated with this timer
-    session->txns.onTimerExpired(timerId);
-
-    // Handle based on which timer expired
-    switch (timerId) {
-        case L3TimerId::T3101:
-            // CM Service Request retransmission or abort
-            retransmitOrAbort(session, timerId);
-            break;
-        case L3TimerId::T3106:
-            // Authentication failed - no response
-            session->ctx.setAuthenticated(false);
-            sendAuthenticationReject(session);
-            break;
-        case L3TimerId::T3109:
-            // Paging response timeout - release channel
-            releaseChannelForMs(session);
-            break;
-        default:
-            logWarning("Unhandled timer expiry: {}", l3TimerName(timerId));
-            break;
+void onHandoverDecision(SubscriberSession* session, const L3ChannelDescription& target) {
+    auto proc = session->procedures.getActive(procedure::ProcedureType::Handover);
+    if (!proc) {
+        // Create handover procedure explicitly
+        auto hoProc = ProcedureFactory::createHandover(target);
+        // Feed external trigger data to start the procedure
     }
 
-    // Clean up expired transactions
-    session->txns.cleanup();
+    // Feed target channel to the handover procedure
+    std::array<uint8_t, 16> targetData{};
+    // Encode target channel description into bytes
+    auto result = session->procedures.feedExternal(
+        procedure::ProcedureType::Handover, targetData);
+    // Procedure sends HandoverCommand via ResponseSink
 }
 ```
 
-## Timer Management
+## Abis/RSL Integration
 
-The `TimerManager` integrates into your event loop using either callback-based or span-based tick:
+When the BTS communicates with a BSC over the A-bis interface (TS 48.058), RSL messages wrap L3 payloads. Use `RSLParser` to extract L3 from inbound RSL, and `RSLBuilder` to encapsulate outbound L3.
 
-### Callback-Based Tick (Recommended)
-
-Zero heap allocation. The callback is invoked for each expired timer:
+### Inbound RSL (BSC -> BTS)
 
 ```cpp
-// In your event loop, called every 10-100ms:
-void eventLoopTick(MsSession* session, std::chrono::milliseconds delta) {
-    session->timers.tick(delta, [session](L3TimerId expiredId) {
-        handleTimerExpired(session, expiredId);
-    });
+void onRslMessage(std::span<const uint8_t> rslBytes) {
+    // Parse RSL message
+    auto parsed = RSLParser::parse(rslBytes);
+    if (!parsed) return;
+
+    // Extract L3 payload (if present)
+    auto l3Payload = RSLParser::extractL3(*parsed);
+    if (!l3Payload) return;  // Control message without L3 data
+
+    // Parse L3 message
+    auto msg = parseL3(*l3Payload);
+    if (!msg) return;
+
+    // Find session and feed to ProcedureRunner
+    uint8_t chanNr = parsed->chanNr;
+    uint8_t linkId = parsed->linkId;
+    auto* session = registry.findByLink(/*trx from chanNr*/, /*ts from chanNr*/, linkId);
+    if (!session) return;
+
+    auto result = session->procedures.feed(*msg, session, onResponse);
 }
 ```
 
-### Span-Based Tick (Batch Processing)
+### Outbound RSL (BTS -> BSC)
 
-Caller provides a pre-allocated buffer:
+When the ResponseSink builds a response, encapsulate it in RSL for the BSC:
 
 ```cpp
-std::array<L3TimerId, 32> expired;
-size_t n = session->timers.tick(delta, expired);
-for (size_t i = 0; i < n; ++i) {
-    handleTimerExpired(session, expired[i]);
+void onResponseWithRsl(SMAction action, const ParsedMessage& incomingMsg,
+                       const SubscriberSession* session) {
+    if (action != SMAction::SendResponse) return;
+
+    // Build L3 response into buffer
+    uint8_t l3Buf[512];
+    int l3Len = ResponseBuilder::buildCMServiceAccept({l3Buf, sizeof(l3Buf)});
+    if (l3Len <= 0) return;
+
+    // Encapsulate in RSL DATA_IND for BSC
+    uint8_t rslBuf[1024];
+    int rslLen = RSLBuilder::buildDataInd({rslBuf, sizeof(rslBuf)},
+        session->channel.value().arfcn, session->lapdmLink,
+        {l3Buf, static_cast<size_t>(l3Len)});
+
+    if (rslLen > 0) {
+        sendToBsc(rslBuf, rslLen);  // Your A-bis transport function
+    }
 }
 ```
 
-### Timer Lifecycle
+### RSL Control Messages
+
+Handle DCHAN and CCHAN control messages:
 
 ```cpp
-// Start with default duration from spec
-session->timers.start(L3TimerId::T3101);        // 3000ms
+void onRslControl(std::span<const uint8_t> rslBytes) {
+    auto parsed = RSLParser::parse(rslBytes).value();
 
-// Start with custom duration
-session->timers.start(L3TimerId::T3109, 15000ms); // 15s paging response
+    switch (parsed.msgType) {
+        case static_cast<uint8_t>(RSLDChanMessageType::ChanActiv): {
+            // Channel activation from BSC
+            auto mode = RSLParser::getChannelMode(parsed);
+            if (mode) {
+                activateChannel(parsed.chanNr, *mode);
+                // Send ACK back
+                uint8_t ackBuf[64];
+                int n = RSLBuilder::buildChanActivAck({ackBuf, sizeof(ackBuf)},
+                    parsed.chanNr, getCurrentFrameNumber());
+                sendToBsc(ackBuf, n);
+            }
+            break;
+        }
 
-// Check state
-if (session->timers.isRunning(L3TimerId::T3101)) {
-    auto remaining = session->timers.remaining(L3TimerId::T3101);
+        case static_cast<uint8_t>(RSLDChanMessageType::RFChanRel): {
+            // RF channel release from BSC
+            releaseChannel(parsed.chanNr);
+            uint8_t ackBuf[64];
+            int n = RSLBuilder::buildRFChanRelAck({ackBuf, sizeof(ackBuf)}, parsed.chanNr);
+            sendToBsc(ackBuf, n);
+            break;
+        }
+
+        case static_cast<uint8_t>(RSLCChanMessageType::PagingCmd): {
+            // Paging command from BSC — extract L3 and page the MS
+            auto l3 = RSLParser::extractL3(parsed);
+            if (l3) {
+                broadcastPaging(*l3);
+            }
+            break;
+        }
+    }
 }
-
-// Stop when response arrives
-session->timers.stop(L3TimerId::T3101);
-
-// Stop all (e.g., on channel release)
-session->timers.stopAll();
 ```
-
-### Timer Reference Table
-
-| Timer | Default | Used For |
-|-------|---------|----------|
-| T3101 | 3s | CM service request retransmission |
-| T3102 | 3s | Identity response retransmission |
-| T3103 | 5s | Location updating request retransmission |
-| T3106 | 3s | Authentication response retransmission |
-| T3108 | 3s | TMSI reallocation complete retransmission |
-| T3109 | 30s | Paging response (etom × 5s) |
-| T3111 | 3s | CM reestablishment request |
-| T3112 | 3s | IMSI detach indication |
-| T3113 | 3s | MM status retransmission |
 
 ## LAPDm Link Management
 
@@ -541,16 +473,9 @@ Each logical channel (SAPI) needs its own `LAPDmEntity` instance. The entity man
 ### Opening a Channel
 
 ```cpp
-#include <gsml3parser/lapdm_entity.h>
-
-using namespace gsml3parser;
-
-// Create entity with channel profile and callbacks
 auto profile = LAPDmChannelProfile::SDCCH(); // N201=20, N200=23, T200=900ms
 LAPDmEntity entity(profile, onL3Callback, onL1Callback, sessionPtr);
-
-// Open for SAPI0, BTS side (command bit = true)
-entity.open(SAPI::SAPI0, true);
+entity.open(SAPI::SAPI0, true); // BTS side (command bit = true)
 // State: LinkReleased
 ```
 
@@ -562,11 +487,9 @@ entity.open(SAPI::SAPI0, true);
 ```cpp
 auto result = entity.sendSABME();
 if (result) {
-    // State: AwaitingEstablish
-    // T200 timer started automatically
+    // State: AwaitingEstablish, T200 timer started automatically
 }
-// When UA arrives via receiveFrame(), state -> LinkEstablished,
-// L3 callback fires with L3_ESTABLISH_CONFIRM
+// When UA arrives via receiveFrame(), state -> LinkEstablished
 ```
 
 ### Data Transfer
@@ -584,292 +507,69 @@ entity.sendData(l3Bytes);
 ```cpp
 // Normal release: send DISC, wait for UA
 auto result = entity.sendDISC();
-if (result) {
-    // State: AwaitingRelease
-    // When UA arrives, state -> LinkReleased, L3_RELEASE_CONFIRM fired
-}
 
 // Hard release: immediate, no frames sent
 entity.hardRelease();
 // State: LinkReleased
 ```
 
-## T200 Timer Integration
+## Timer Management
 
-The `LAPDmEntity` manages the T200 timer internally. You must call `tickT200()` from your event loop to advance the timer. When T200 expires, the entity retransmits the pending frame (up to N200 times) or performs an abnormal release.
+Timers are managed at two levels: LAPDm T200 timer (per link) and L3 protocol timers (per session).
 
 ### Event Loop Integration
 
 ```cpp
-// In your main event loop, called every 10-100ms:
-void eventLoopTick(MsSession* session, std::chrono::milliseconds delta) {
+void eventLoopTick(SubscriberSession* session, std::chrono::milliseconds delta) {
     // Advance LAPDm T200 timer
     bool retransmitted = session->lapdm.tickT200(delta);
-    if (retransmitted) {
-        // A frame was retransmitted or abnormal release occurred
-        logDebug("LAPDm T200 action: retransmit={}", retransmitted);
-    }
 
     // Advance L3 timers
     session->timers.tick(delta, [session](L3TimerId expiredId) {
         handleTimerExpired(session, expiredId);
     });
+
+    // Advance procedure timers (managed by ProcedureRunner)
+    size_t failed = session->procedures.tickAll(delta);
 }
 ```
 
-### Monitoring Retransmissions
+### Timer Reference Table
+
+| Timer | Default | Used For |
+|-------|---------|----------|
+| T3101 | 3s | CM service request retransmission |
+| T3102 | 3s | Identity response retransmission |
+| T3103 | 5s | Location updating request retransmission |
+| T3106 | 3s | Authentication response retransmission |
+| T3108 | 3s | TMSI reallocation complete retransmission |
+| T3109 | 30s | Paging response (etom × 5s) |
+| T3111 | 3s | CM reestablishment request |
+| T3112 | 3s | IMSI detach indication |
+| T3113 | 3s | MM status retransmission |
+
+## System Information Broadcast
+
+Build and broadcast SI messages on BCCH:
 
 ```cpp
-// Check protocol statistics for diagnostics
-unsigned framesSent = entity.framesSent();
-unsigned retransmissions = entity.retransmissions();
-bool outstanding = entity.hasOutstandingFrame(); // k=1 constraint
+void broadcastSystemInfo() {
+    auto si3 = L3SystemInformationType3::builder()
+        .cellIdentity(L3CellIdentity(0x1234))
+        .locationAreaIdentity(L3LocationAreaIdentity("250", "01", 0x5678))
+        .controlChannelDescription(buildControlChannelDesc())
+        .cellOptions(L3CellOptionsBCCH{})
+        .cellSelectionParameters(L3CellSelectionParameters{})
+        .rachControlParameters(L3RACHControlParameters{})
+        .build();
 
-if (retransmissions > 10) {
-    logWarning("High retransmission count: {}", retransmissions);
+    ParsedMessage pm{RRM{std::move(si3)}};
+    auto bytes = writeL3Bytes(pm).value();
+    auto uiFrame = gsml3parser::lapdm::makeUIFrame(SAPI::SAPI0, false, std::span(bytes));
+    auto frame = gsml3parser::lapdm::encodeFrame(uiFrame);
+
+    bcchTransmitter.broadcast(frame.data(), frame.size());
 }
-```
-
-## State Machine Integration
-
-### Using Default FSM Skeletons
-
-The library provides RR, MM, and CC state machine skeletons with standard transitions:
-
-```cpp
-// RR State Machine - handles channel setup, handover, ciphering
-RRStateMachine rrFsm;
-rrFsm.setState(RRStateMachine::State::IDLE);
-
-auto result = rrFsm.processMessage(channelRequestMsg);
-if (result.action == SMAction::Transition) {
-    int newState = result.nextState.value();
-    // Handle transition, e.g., send Immediate Assignment
-}
-```
-
-### Custom FSM with Override
-
-Inherit from a skeleton and override specific transitions:
-
-```cpp
-class MyRRFSM : public RRStateMachine {
-protected:
-    SMResult handle_message_impl(int state, const ParsedMessage& msg) override {
-        // Custom: in ACTIVE state, start ciphering on MM messages
-        if (state == State::ACTIVE && messagePD(msg) == L3PD::MobilityManagement) {
-            return {SMAction::Transition, static_cast<int>(State::CIPHER_MODE)};
-        }
-
-        // Custom: handle handover decision based on measurement reports
-        if (state == State::ACTIVE) {
-            if (auto* report = tryGet<L3MeasurementReport>(msg)) {
-                if (shouldHandover(report)) {
-                    return {SMAction::Transition, static_cast<int>(State::HANDOVER)};
-                }
-            }
-        }
-
-        // Fall back to default transitions
-        return RRStateMachine::handle_message_impl(state, msg);
-    }
-};
-```
-
-### Coordinating Multiple FSMs
-
-A typical MS session runs three FSMs in parallel:
-
-```cpp
-void processMessage(MsSession* session, const ParsedMessage& msg) {
-    L3PD pd = messagePD(msg);
-
-    switch (pd) {
-        case L3PD::RadioResource: {
-            auto result = session->rrFsm.processMessage(msg);
-            handleSmResult(session, result, "RR");
-            break;
-        }
-        case L3PD::MobilityManagement: {
-            auto result = session->mmFsm.processMessage(msg);
-            handleSmResult(session, result, "MM");
-
-            // MM acceptance may enable CC
-            if (session->mmFsm.state() == MMStateMachine::State::REGISTERED) {
-                session->ccFsm.setState(CCStateMachine::State::IDLE);
-            }
-            break;
-        }
-        case L3PD::CallControl: {
-            auto result = session->ccFsm.processMessage(msg);
-            handleSmResult(session, result, "CC");
-            break;
-        }
-        default:
-            // GMM, SM, SMS - handled by domain-specific logic
-            break;
-    }
-}
-```
-
-### FSM State Transition Diagrams
-
-#### RR State Machine
-
-```
-                    ChannelRequest
-IDLE ──────────────────────────────► CHANNEL_REQUESTED
-                                              │
-                                    (send ImmediateAssignment)
-                                              │
-                                     PagingResponse / SABM
-                                              │
-                                              ▼
-                                  CHANNEL_ASSIGNED ──► LINK_ESTABLISHED
-                                              │                    │
-                                    T3109 expiry           MM messages
-                                              │                    │
-                                              ▼                    ▼
-                                     CHANNEL_RELEASE    WAITING_MM ──► ACTIVE
-                                                                       │
-                                                        ┌──────────────┤
-                                                        │              │
-                                               CipherModeCmd  HandoverCmd
-                                                        │              │
-                                                        ▼              ▼
-                                                   CIPHER_MODE   HANDOVER
-                                                        │              │
-                                              CipherModeComplete  HO Complete
-                                                        │              │
-                                                        ▼              ▼
-                                                      ACTIVE ◄─────────┘
-```
-
-#### MM State Machine
-
-```
-DEREGISTERED ── CMServiceRequest ──► SERVICE_REQUEST
-                                           │
-                                  IdentityResponse
-                                           │
-                                           ▼
-                                      IDENTITY_VERIFIED
-                                           │
-                                   (send AuthRequest)
-                                           │
-                                  AuthenticationResponse
-                                           │
-                                           ▼
-                                        AUTHENTICATED
-                                           │
-                                    LocationUpdatingReq
-                                           │
-                                           ▼
-                                     LOCATION_UPDATE ──► REGISTERED
-```
-
-#### CC State Machine
-
-```
-IDLE ── Setup ──► SETUP_RECEIVED ──► PROCEEDING ──► ALERTING
-                                                       │
-                                              Connect  │
-                                                       ▼
-                                                     CONNECT
-                                                       │
-                                         CallConfirmed │
-                                                       ▼
-                                                    ACTIVE
-                                                       │
-                                           Disconnect  │
-                                                       ▼
-                                           DISCONNECT_RECEIVED
-                                                       │
-                                                       ▼
-                                                   RELEASE
-```
-
-## Comparison with Existing BTS Frameworks
-
-### osmo-bts
-
-| Aspect | osmo-bts | libgsml3parser |
-|--------|----------|----------------|
-| Language | C (libosmocore) | C++20 |
-| Message types | Hand-coded parsers per message | `std::variant` with 190+ typed messages |
-| Type safety | Enum-based, manual casting | Compile-time `std::visit`, `tryGet<T>()` |
-| Memory model | Heap-allocated structs | Stack-allocated variants, zero-alloc hot paths |
-| Builder API | None (manual struct construction) | Fluent builder for every message type |
-| State machines | Implicit in handler code | Explicit FSM skeletons with O(1) dispatch |
-| Timer management | Custom osmo_timer | Spec-aligned L3Timer with TimerManager |
-
-libgsml3parser can replace the TRX-layer message handling in osmo-bts while keeping the existing LAPDm and Abis layers.
-
-### OpenBTS / srsRAN
-
-| Aspect | OpenBTS (BTS.cpp) | srsRAN | libgsml3parser |
-|--------|-------------------|--------|----------------|
-| L3 parsing | Custom C++ structs | Custom C++ classes | Standardized variant hierarchy |
-| Message generation | Manual byte construction | Builder-like patterns | Fluent Builder API for all 190+ types |
-| Round-trip testing | Limited | Protocol-level tests | Full parse->serialize->parse round-trips |
-| Performance | N/A | Optimized C++ | Zero-alloc hot paths, cache-friendly layout |
-
-For srsRAN integration: drop in libgsml3parser as the L3 parse/generate library, link against `libgsml3parser.a`, and use `ProtocolDispatcher` + FSM skeletons as the message routing backbone.
-
-## Full Pipeline Example
-
-Complete round-trip with all stack modules:
-
-```cpp
-// 1. Build a Paging Request Type 2
-auto paging = L3PagingRequestType2::builder()
-    .addTMSI(0xDEADBEEF, ChannelType::SDCCHType)
-    .build();
-
-ParsedMessage pm{RRM{std::move(paging)}};
-
-// 2. Serialize to raw bytes
-auto l3Bytes = writeL3Bytes(pm);
-
-// 3. Encode in LAPDm UI frame using the new API
-auto uiFrame = gsml3parser::lapdm::makeUIFrame(SAPI::SAPI0, false, std::span(*l3Bytes));
-auto frame = gsml3parser::lapdm::encodeFrame(uiFrame);
-
-// --- Simulate transmission over the air and MS response ---
-
-// 4. Receive MS response frame (Paging Response wrapped in LAPDm)
-std::vector<uint8_t> msFrame = {/* from radio */};
-
-// 5. Feed to LAPDmEntity — it handles decode, FSM, reassembly, and invokes L3 callback
-session->lapdm.receiveFrame(msFrame);
-
-// In the L3 callback (onL3), parse and dispatch:
-// auto header = parseL3Header(l3Data);
-// auto msg = parseL3(l3Data.subspan(2));
-// session->dispatch.dispatch(*msg, session);
-
-// 6. Create MS session and initialize LAPDmEntity
-MsSession* session = createSession();
-session->ctx = MSContext::createWithTMSI(0xDEADBEEF);
-session->lapdm = LAPDmEntity(LAPDmChannelProfile::SDCCH(), onL3, onL1, session);
-session->lapdm.open(SAPI::SAPI0, true); // BTS side
-
-// 8. Feed into RR state machine
-auto result = session->rrFsm.processMessage(*msg);
-assert(result.causesTransition());
-
-// 9. Allocate channel for MS
-auto ch = btsChannels.allocate(ChannelType::SDCCHType);
-session->ctx.assignChannel(ch->type, ch->trxNumber, ch->timeslot, ch->arfcn);
-
-// 10. Send Immediate Assignment
-auto ia = L3ImmediateAssignment::builder()
-    .channelDescription(buildChannelDesc(*ch))
-    .build();
-sendL3Message(session, RRM{std::move(ia)});
-
-// 11. Start timer for next expected message
-session->timers.start(L3TimerId::T3109);
 ```
 
 ## Error Handling in Production
@@ -886,31 +586,24 @@ if (!msg) {
 }
 ```
 
-For LAPDm operations:
+For RSL operations:
 
 ```cpp
-auto decoded = gsml3parser::lapdm::LAPDmFrame::decode(frame);
-if (!decoded) {
-    // Frame too short or malformed - drop and log
+auto parsed = RSLParser::parse(rslBytes);
+if (!parsed) {
+    logError("RSL parse failed: {}", parsed.error().message);
     return;
 }
 ```
 
-For stack module operations:
+For procedure results:
 
 ```cpp
-auto ch = pool.allocate(ChannelType::SDCCHType);
-if (!ch) {
-    // No channels available - reject or queue
-    sendImmediateAssignmentReject(session, ra);
-    return;
-}
-
-auto txId = session->txns.create(pd, mti, ti, timerId);
-if (!txId) {
-    // Transaction pool full - cleanup first
-    session->txns.cleanup();
-    txId = session->txns.create(pd, mti, ti, timerId);
+auto result = session->procedures.feed(msg, session, onResponse);
+if (result.action == ProcedureStepResult::Action::Failed) {
+    logWarning("Procedure {} failed: {}",
+        procedureTypeName(result.finalResult.type),
+        result.finalResult.reason);
 }
 ```
 
@@ -918,34 +611,39 @@ if (!txId) {
 
 - **Zero heap allocation on parse path**: `ParsedMessage` is a stack-allocated variant (< 8 KB)
 - **MSContext ≤ 256 bytes**: Fits in L1 cache; millions of contexts fit in L3 cache
+- **ProcedureStepResult ≤ 32 bytes**: Compact result, no heap allocation
+- **ResponseBuilder span overload**: Writes directly into caller's Arena buffer, zero heap cost
+- **RSLParser**: Fixed-size IE array (32 max), all pointers into original buffer — zero heap
 - **TimerManager**: Fixed-size `std::array`, no dynamic allocation, tick() uses callback or span
-- **TransactionManager**: O(1) TI lookup for CC/SS, bounded scan (≤ 16) for others
-- **ChannelPool**: O(1) allocate via per-type free-list, cold-path add/remove
-- **FSM dispatch**: `switch(PD) + switch(MTI)` - compile-time resolved, no vtable on critical path
-- **Thread safety**: Each MS session is accessed from one thread. `ChannelPool` requires external synchronization for multi-threaded access.
-- **Arena allocator**: Use `Arena` for high-throughput batch parsing to reduce malloc pressure
-- **Streaming**: Use `L3StreamProcessor` with `RingBuffer` for continuous frame processing
+- **ProcedureRunner**: Fixed `std::array<ProcedureSlot, 8>`, bounded scan for routing
+- **SubscriberRegistry**: Hash map lookups O(1), `forEach` iterates single index
+- **Thread safety**: Each MS session is accessed from one thread. `ShardedChannelPool` and `ShardedSubscriberRegistry` provide thread-safe variants for multi-threaded scenarios.
+- **Arena allocator**: Use `Arena` for high-throughput response building to reduce malloc pressure
 
 ## API Reference Summary
 
 | Module | Key Types | Purpose |
 |--------|-----------|---------|
 | `parser.h` | `parseL3()`, `writeL3Bytes()` | Parse and serialize L3 messages |
-| `lapdm_frame.h` | `LAPDmFrame`, `encodeFrame()`, `makeUIFrame()` | LAPDm frame types, zero-copy decode |
 | `lapdm_entity.h` | `LAPDmEntity`, `LAPDmState`, `LAPDmChannelProfile` | Full LAPDm state machine (GSM 04.06) |
-| `dispatcher.h` | `ProtocolDispatcher` | Message routing with TI support |
 | `visitor.h` | `tryGet<T>()`, `messageName()` | Type access and metadata |
 | Builder API | `MessageType::builder()` | Construct L3 messages fluently |
 | `stack/ms_context.h` | `MSContext` | Per-subscriber state (≤ 256 bytes) |
 | `stack/l3_timer.h` | `L3Timer`, `TimerManager` | Protocol timers, zero-alloc tick |
 | `stack/transaction.h` | `Transaction`, `TransactionManager` | Request-response correlation |
-| `stack/state_machine.h` | `RR/MM/CCStateMachine` | Protocol FSM skeletons |
+| `stack/state_machine.h` | `RR/MM/CCStateMachine` | Protocol FSM skeletons (response-aware) |
 | `stack/channel_pool.h` | `ChannelPool`, `decodeChannelNeeded()` | Channel allocation, VEA |
+| `stack/response_builder.h` | `ResponseBuilder` | Factory for L3 response messages |
+| `stack/procedure.h` | `Procedure`, `ProcedureStepResult`, `ResponseSink` | Base class for protocol procedures |
+| `stack/procedure_runner.h` | `ProcedureRunner`, `ProcedureFactory` | Concurrent procedure management |
+| `stack/subscriber_registry.h` | `SubscriberSession`, `SubscriberRegistry` | Per-MS session management |
+| `abis/rsl_types.h` | `RSLDiscriminator`, `RSL_IE`, `RSLChannelNumber` | A-bis RSL type definitions |
+| `abis/rsl_parser.h` | `RSLParser`, `RSLParsedMessage` | Parse RSL messages, extract L3 |
+| `abis/rsl_builder.h` | `RSLBuilder` | Construct RSL messages for BSC |
 
 ## See Also
 
 - [README.md](../README.md) - Library overview and quick start
-- [doc/API.md](API.md) - Full API reference (all 36 sections)
+- [doc/API.md](API.md) - Full API reference (57 sections)
 - [doc/bts_architecture.md](bts_architecture.md) - Architecture overview and scaling guide
-- [doc/builder_coverage.md](builder_coverage.md) - Complete Builder coverage table
 - `examples/` directory - Working BTS example programs

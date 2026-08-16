@@ -1,58 +1,57 @@
 # BTS Architecture on libgsml3parser
 
-This document describes the recommended architecture for building a software Base Transceiver Station (BTS) using libgsml3parser as the L3 protocol stack. It covers component relationships, data flow, threading model, performance characteristics, and scaling guidelines.
+This document describes the recommended architecture for building a software Base Transceiver Station (BTS) using libgsml3parser as the L3 protocol stack. It covers component relationships, data flow, threading model, performance characteristics, and scaling guidelines with the Procedure Framework.
 
 ## 1. Architecture Diagram
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
-│                          BTS Application Layer                       │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────────┐  │
-│  │ Roaming  │  │ Auth     │  │ Handover │  │ Call Control Policy  │  │
-│  │ Decisions│  │ (AuC)    │  │ Decisions│  │ (routing, CLIP, etc.)│  │
-│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └──────────┬───────────┘  │
-│       │             │             │                   │              │
-│       └─────────────┴─────────────┴───────────────────┘              │
-│                                 │                                    │
-├─────────────────────────────────┼────────────────────────────────────┤
-│                    libgsml3parser Stack Modules                      │
-│  ┌──────────────────────────────▼──────────────────────────────┐     │
-│  │                      MsSession (per-MS)                     │     │
-│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌────────────┐   │     │
-│  │  │MSContext │  │TimerMgr  │  │Txn Mgr   │  │ FSMs:      │   │     │
-│  │  │(≤256B)   │  │(≤1.2KB)  │  │(≤768B)   │  │ RR/MM/CC   │   │     │
-│  │  └──────────┘  └──────────┘  └──────────┘  └────────────┘   │     │
-│  └───────────────────────────┬─────────────────────────────────┘     │
-│                              │                                       │
-│  ┌───────────────────────────▼─────────────────────────────────┐     │
-│  │              ResponseBuilder + ProtocolDispatcher            │     │
-│  │  FSM returns SendResponse action -> ResponseBuilder builds   │     │
-│  │  the L3 response bytes (zero-heap via Arena pre-allocation)  │     │
-│  └───────────────────────────┬─────────────────────────────────┘     │
-│                              │                                       │
+│                     BTS Application (Your Code)                      │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────────┐   │
+│  │ AuC/HLR     │  │ VLR/BSC      │  │ SIP/Media Gateway (OpenBTS)│   │
+│  │ Integration │  │ Decision API │  │ or RSL transport (osmo-bts)│   │
+│  └──────┬──────┘  └──────┬───────┘  └──────────────┬─────────────┘   │
+│         │                │                         │                 │
+│         └────────────────┼─────────────────────────┘                 │
+│                          │ feedExternal()                            │
+├──────────────────────────┼───────────────────────────────────────────┤
+│              Procedure Framework                                     │
+│  ┌───────────────────────▼──────────────────────────────────┐        │
+│  │                   ProcedureRunner                        │        │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐  │        │
+│  │  │ Location     │ │ Call Setup   │ │ Channel          │  │        │
+│  │  │ Update Proc  │ │ MO/MT Proc   │ │ Assignment Proc  │  │        │
+│  │  │ (auto FSM)   │ │ (auto FSM)   │ │ (auto FSM)       │  │        │
+│  │  └──────────────┘ └──────────────┘ └──────────────────┘  │        │
+│  └───────────────────────────┬──────────────────────────────┘        │
+│                              │ feed() / tick()                       │
 ├──────────────────────────────┼───────────────────────────────────────┤
-│                    libgsml3parser Core API                           │
-│  ┌───────────────────────────▼─────────────────────────────────┐     │
-│  │  parseL3() <--> ParsedMessage (stack variant, < 8 KB)       │     │
-│  │  writeL3Bytes() -> raw bytes                                │     │
-│  │  Builder API -> construct L3 messages                       │     │
-│  │  ResponseBuilder -> build protocol responses                │     │
-│  │  lapdm::wrapL3() / unwrapL3() -> LAPDm framing              │     │
-│  └───────────────────────────┬─────────────────────────────────┘     │
-│                              │                                       │
-├──────────────────────────────┼───────────────────────────────────────┤
-│                    Shared BTS Resources                              │
-│  ┌───────────────────────────▼─────────────────────────────────┐     │
-│  │                   ChannelPool (global)                      │     │
-│  │         SDCCH, TCHF, TCHH allocation / VEA                  │     │
-│  └───────────────────────────┬─────────────────────────────────┘     │
-│                              │                                       │
-├──────────────────────────────┼───────────────────────────────────────┤
-│                      Radio / PHY Layer                               │
-│  ┌───────────────────────────▼─────────────────────────────────┐     │
-│  │  Um Interface: BCCH, CCCH, DCCH, TCH timeslots              │     │
-│  │  SDR Backend: GNU Radio, LMS7002, URHFD, etc.               │     │
-│  └─────────────────────────────────────────────────────────────┘     │
+│                      SubscriberRegistry                              │
+│  ┌───────────────────────────▼──────────────────────────────────┐    │
+│  │  SubscriberSession [per-MS]                                  │    │
+│  │  ├─ MSContext (identity, channel, flags)                     │    │
+│  │  ├─ RR/MM/CC State Machines (response-aware)                 │    │
+│  │  ├─ TimerManager + TransactionManager                        │    │
+│  │  └─ ProcedureRunner (active procedures)                      │    │
+│  └──────────────────────────────────────────────────────────────┘    │
+├──────────────────────────────────────────────────────────────────────┤
+│             Response Builder                                         │
+│  Auto-generates L3 response messages from FSM transitions            │
+│  Zero-heap-allocation via Arena pre-allocated buffers                │
+├──────────────────────────────────────────────────────────────────────┤
+│                    Core Parser / Serializer API                      │
+│  parseL3() / writeL3Bytes() / Builder API / LAPDm / Dispatcher       │
+├──────────────────────────────────────────────────────────────────────┤
+│              Shared BTS Resources                                    │
+│  ChannelPool (SDCCH, TCHF, TCHH allocation / VEA)                    │
+│  ShardedChannelPool (thread-safe, million-MS scaling)                │
+├──────────────────────────────────────────────────────────────────────┤
+│              Abis/RSL Interface                                      │
+│  RSLParser (BSC->BTS: extract L3 from RSL)                           │
+│  RSLBuilder (BTS->BSC: wrap L3 in RSL, MEAS_RES, ACK/NACK)           │
+├──────────────────────────────────────────────────────────────────────┤
+│              Radio / PHY Layer                                       │
+│  [User's SDR / hardware integration]                                 │
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -60,52 +59,51 @@ This document describes the recommended architecture for building a software Bas
 
 ### Inbound Message Path (MS -> BTS)
 
+Using the Procedure Framework (recommended):
+
 ```
 Radio RX
   │
   ▼
 LAPDm Frame (raw bytes from PHY)
   │
-  ├─ lapdm::unwrapL3() ───► L3 payload bytes
+  ├─ LAPDmEntity.receiveFrame() ─► L3 payload via L3ReceiveFn callback
   │
-  ├─ parseL3Header() ─────► L3Header { pd, mti, ti }
+  ├─ parseL3() ────────────────► ParsedMessage (stack variant)
   │
-  ├─ parseL3() ───────────► ParsedMessage (stack variant)
+  ├─ SubscriberRegistry.findByLink(trx, ts, lapdmLink) ─► SubscriberSession*
   │
-  ├─ TimerManager::tick() ─► advance timers, fire expired callbacks
-  │
-  ├─ TransactionManager::match(header, msg) ─► correlated Transaction*
+  ├─ session->procedures.feed(msg, session, responseSink)
   │       │
-  │       └─ if matched: tx->complete(), stop associated timer
+  │       ├─ Auto-create procedure if none active (ProcedureFactory)
+  │       ├─ Route to active procedure by PD
+  │       ├─ Procedure processes message internally (FSM + timers)
+  │       └─ Returns ProcedureStepResult:
+  │             ├─ Continue     -> await next message
+  │             ├─ SendResponse -> responseSink callback fires
+  │             │                  ResponseBuilder builds L3 response bytes
+  │             │                  Arena buffer written, sent to MS
+  │             ├─ WaitingExternal -> procedure blocks on external data
+  │             ├─ Completed    -> slot freed automatically
+  │             └─ Failed       -> slot freed automatically
   │
-  ├─ ProtocolStateMachine::processMessage(msg) ─► SMResult { action, nextState }
-  │       │
-  │       ├─ if action == Transition: update MSContext
-  │       └─ if action == SendResponse: ResponseBuilder builds response bytes
-  │
-  └─ ProtocolDispatcher::dispatch(msg) ─► application handler
-          │
-          └─ handler builds response -> send outbound
+  └─ (optional) ProtocolDispatcher.dispatch() for custom handlers
 ```
 
 ### Outbound Message Path (BTS -> MS)
 
 ```
-Application Decision (e.g., "send Paging Request")
+Application Decision or Procedure ResponseSink callback
   │
-  ├─ Builder API: MessageType::builder().field(v).build()
+  ├─ ResponseBuilder::buildXxx(span, ...) ─► Arena buffer bytes
   │
-  ├─ Wrap in ParsedMessage variant
+  ├─ wrap in ParsedMessage variant
   │
-  ├─ writeL3Bytes(msg) ───► raw L3 bytes
+  ├─ writeL3Bytes(msg) ───► raw L3 bytes (if not already serialized)
   │
-  ├─ lapdm::wrapL3(bytes, SAPI, CR) ───► LAPDm frame
+  ├─ LAPDmEntity.sendUI() or sendData() ───► LAPDm frame to PHY
   │
-  ├─ (if expecting response:)
-  │     ├─ TransactionManager::create(pd, mti, ti, timerId)
-  │     └─ TimerManager::start(timerId)
-  │
-  └─ Radio TX: send frame bytes to PHY layer
+  └─ Radio TX: send frame bytes
 ```
 
 ### Timer Event Path
@@ -115,18 +113,38 @@ Event Loop Tick (every 10-100ms)
   │
   ├─ Calculate delta since last tick
   │
-  ├─ For each MsSession:
-  │     ├─ TimerManager::tick(delta, callback)
-  │     │       │
-  │     │       └─ for each expired timer:
-  │     │             ├─ callback(L3TimerId)
-  │     │             ├─ TransactionManager::onTimerExpired(id)
-  │     │             ├─ FSM::processTimer(id) -> SMResult
-  │     │             └─ application: retransmit or abort
-  │     │
-  │     └─ TransactionManager::cleanup() (periodic)
+  ├─ SubscriberRegistry.tickAllTimers(delta, expiredOut)
+  │       │
+  │       └─ For each session:
+  │             ├─ TimerManager::tick() -> expired timer IDs
+  │             └─ TransactionManager::onTimerExpired()
   │
-  └─ ChannelPool diagnostics (freeCount, allocatedCount)
+  ├─ For each session:
+  │     └─ session->procedures.tickAll(delta)
+  │             │
+  │             └─ Each procedure advances internal timers
+  │                   Timer expiry -> Failed state -> slot auto-freed
+  │
+  └─ LAPDmEntity.tickT200() per active link
+```
+
+### External Data Flow (AuC/HLR/VLR -> BTS)
+
+```
+VLR accepts Location Update
+  │
+  ├─ runner.feedExternal(ProcedureType::LocationUpdate, acceptData)
+  │       │
+  │       ├─ Procedure wakes from WaitingExternal
+  │       ├─ Sends LocationUpdatingAccept via ResponseSink
+  │       └─ Returns Completed -> slot freed
+  │
+AuC provides RAND+SRES for Authentication
+  │
+  ├─ runner.feedExternal(ProcedureType::Authentication, randSresData)
+  │       │
+  │       ├─ Procedure sends AuthenticationRequest via ResponseSink
+  │       └─ Waits for MS response on next feed()
 ```
 
 ## 3. Integration with PHY/SDR Layer
@@ -179,29 +197,39 @@ public:
 
 ## 4. Thread Model
 
-### One-Thread-Per-MS Model (Recommended)
+### Event Loop with SubscriberRegistry (Recommended)
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                      Main Event Loop                         │
-│                                                              │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐   │
-│  │ Thread Pool │  │ Timer Wheel │  │  ChannelPool (BTS)  │   │
-│  │ (MS workers)│  │ (global)    │  │  (external sync)    │   │
-│  └──────┬──────┘  └──────┬──────┘  └─────────────────────┘   │
-│         │                │                                   │
-│   ┌─────▼─────┐     ┌────▼──────┐                            │
-│   │ MS #1     │     │   MS #N   │                            │
-│   │ ┌───────┐ │     │ ┌───────┐ │                            │
-│   │ │ctx    │ │     │ │ctx    │ │  Each MS session owns:     │
-│   │ │timers │ │     │ │timers │ │  - MSContext               │
-│   │ │txns   │ │     │ │txns   │ │  - TimerManager            │
-│   │ │fsm[]  │ │     │ │fsm[]  │ │  - TransactionManager      │
-│   │ │disp   │ │     │ │disp   │ │  - ProtocolStateMachine ×3 │
-│   │ └───────┘ │     │ └───────┘ │  - ProtocolDispatcher      │
-│   └───────────┘     └───────────┘                            │
-└──────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                     Main Event Loop                        │
+│                                                            │
+│  ┌──────────────┐                                          │
+│  │ Timer Wheel  │                                          │
+│  │  (global)    │                                          │
+│  └──────┬───────┘                                          │
+│         │                                                  │
+│         ▼                                                  │
+│  ┌────────────────────────────────────────────────────┐    │
+│  │           SubscriberRegistry (global)              │    │
+│  │                                                    │    │
+│  │  ┌────────────────┐  ┌────────────────┐            │    │
+│  │  │   Session #1   │  │   Session #N   │            │    │
+│  │  │ ┌────────────┐ │  │ ┌────────────┐ │            │    │
+│  │  │ │   context  │ │  │ │   context  │ │            │    │
+│  │  │ │   timers   │ │  │ │   timers   │ │            │    │
+│  │  │ │     sm[]   │ │  │ │     sm[]   │ │            │    │
+│  │  │ │ procedures │ │  │ │ procedures │ │            │    │
+│  │  │ └────────────┘ │  │ └────────────┘ │            │    │
+│  │  └────────────────┘  └────────────────┘            │    │
+│  └────────────────────────────────────────────────────┘    │
+│         ▲                                                  │
+│         └──────────────────────────────────────────────────┘
+│                                │
+│                   tickAllTimers() / procedures.tickAll()
+└─────────────────────────────────────────────────────────────┘
 ```
+
+Each `SubscriberSession` is accessed from a single thread (the event loop). The `SubscriberRegistry` provides O(1) lookup by TMSI, IMSI, or LAPDm link. For high-concurrency scenarios, use `ShardedSubscriberRegistry<N>` with per-shard mutexes.
 
 ### Thread Safety Matrix
 
@@ -211,29 +239,30 @@ public:
 | `TimerManager` | **No** | One thread per MS |
 | `TransactionManager` | **No** | One thread per MS |
 | `ProtocolStateMachine` (RR/MM/CC) | **No** | One thread per MS |
+| `ProcedureRunner` | **No** | One instance per session, one thread |
+| `Procedure` instances | **No** | Owned by ProcedureRunner, one thread |
+| `SubscriberRegistry` | **No** | Single event loop thread |
+| `ShardedSubscriberRegistry<N>` | **Yes** | Per-shard shared_mutex |
+| `ChannelPool` | **No** | External synchronization required |
+| `ShardedChannelPool<N>` | **Yes** | Per-shard shared_mutex |
+| `parseL3()` / `writeL3Bytes()` | **Yes** | Stateless functions |
+| `Builder API` | **Yes** | Each builder independent |
+| `ResponseBuilder` | **Yes** | Stateless static methods |
+| `RSLParser` / `RSLBuilder` | **Yes** | Stateless static methods |
 | `ProtocolDispatcher` | **No** | One instance per MS, one thread |
-| `ChannelPool` | **No** | External synchronization required. Single global pool accessed by all MS threads. |
-| `parseL3()` / `writeL3Bytes()` | **Yes** | Stateless functions, safe for concurrent use |
-| `Builder API` | **Yes** | Each builder is independent, no shared state |
-| `ParsedMessage` | **Yes** (read) | Immutable after construction; safe to share read-only |
 
 ### Synchronization Strategy
 
 ```cpp
-// ChannelPool requires external synchronization
-std::mutex channelPoolMutex;
+// For single-thread event loop: no synchronization needed for SubscriberRegistry
+SubscriberRegistry registry;
 
-// Safe allocation from any MS thread:
-std::optional<ChannelDescriptor> safeAllocate(ChannelType type) {
-    std::lock_guard<std::mutex> lock(channelPoolMutex);
-    return btsChannels.allocate(type);
-}
+// For multi-thread scenarios, use ShardedSubscriberRegistry
+ShardedSubscriberRegistry<16> shardedRegistry;
 
-// Safe release:
-bool safeRelease(const ChannelDescriptor& desc) {
-    std::lock_guard<std::mutex> lock(channelPoolMutex);
-    return btsChannels.release(desc);
-}
+// Thread-safe channel allocation from any MS thread:
+ShardedChannelPool<16> btsChannels;
+auto ch = btsChannels.allocate(ChannelType::SDCCHType);
 ```
 
 ## 5. Performance Considerations
@@ -248,10 +277,10 @@ bool safeRelease(const ChannelDescriptor& desc) {
 | `RRStateMachine` | ~16 bytes | Virtual table pointer + state int |
 | `MMStateMachine` | ~16 bytes | Virtual table pointer + state int |
 | `CCStateMachine` | ~16 bytes | Virtual table pointer + state int |
-| `ProtocolDispatcher` | ~512 bytes | Handler map + TI handlers |
-| **Total per MS** | **~2,770 bytes** | Plus ParsedMessage (~8 KB) on stack during processing |
+| `ProcedureRunner` | ~128 bytes | 8 × ProcedureSlot (unique_ptr + bool) |
+| **Total per MS** | **~2,400 bytes** | Plus ParsedMessage (~8 KB) on stack during processing |
 
-At 10,000 concurrent MS sessions: ~27.7 MB for stack modules (fits in L3 cache range).
+At 10,000 concurrent MS sessions: ~24 MB for stack modules (fits in L3 cache range).
 
 ### Cache Behavior
 
@@ -259,6 +288,7 @@ At 10,000 concurrent MS sessions: ~27.7 MB for stack modules (fits in L3 cache r
 - **TimerManager tick()** iterates a contiguous `std::array<L3Timer, 32>` - single cache line per ~4 timers
 - **TransactionManager match()** for CC/SS: direct array index into `mTiIndex[8]` - no pointer chasing
 - **FSM dispatch**: `switch(PD) + switch(MTI)` compiled to jump table - O(1), no branch misprediction on hot path
+- **ProcedureRunner slots**: Fixed `std::array<ProcedureSlot, 8>` - sequential scan for routing
 
 ### Allocation-Free Hot Paths
 
@@ -267,49 +297,76 @@ The following operations perform zero heap allocations:
 | Operation | Component | Guarantee |
 |-----------|-----------|-----------|
 | `parseL3()` | Parser | ParsedMessage on stack, BitReader over span |
-| `writeL3Bytes()` | Serializer | Returns vector (one allocation), not on per-message hot path if pre-allocated |
 | `TimerManager::tick(callback)` | Timer | Fixed array iteration, callback invocation |
 | `TimerManager::tick(span)` | Timer | Fixed array iteration, span write |
 | `TransactionManager::match()` | Transaction | Array index + bounded scan |
 | `ChannelPool::allocate()` | ChannelPool | Vector pop_back (no reallocation for single pop) |
 | `FSM::processMessage()` | StateMachine | Switch dispatch, returns SMResult by value |
-| `MSContext` getters/setters | Context | Inline field access |
+| `ProcedureRunner::feed()` | Runner | Fixed array scan, delegates to Procedure |
+| `ResponseBuilder::buildXxx(span)` | ResponseBuilder | Writes to caller buffer, zero heap |
+| `RSLParser::parse()` | RSLParser | Fixed IE array, span pointers into original data |
 
 ### Dispatch Complexity
 
 | Operation | Complexity | Mechanism |
 |-----------|-----------|-----------|
-| `ProtocolDispatcher::dispatch()` | O(1) | `unordered_map<HandlerKey, Handler>` |
+| `ProtocolDispatcher::dispatch()` | O(1) | `std::array[16][256]` handler table |
 | `TransactionManager::match()` CC/SS | O(1) | `mTiIndex[ti]` direct array access |
 | `TransactionManager::match()` other | O(K), K ≤ 16 | Bounded linear scan of `mTransactions` |
 | `ChannelPool::allocate()` | O(1) | Per-type free-list `pop_back()` |
 | `FSM::handle_message_impl()` | O(1) | `switch(PD) + switch(MTI)` jump table |
 | `TimerManager::tick()` | O(32) = O(1) | Fixed array of 32 timers |
+| `ProcedureRunner::feed()` | O(8) = O(1) | Fixed array of procedure slots |
+| `SubscriberRegistry::findByTMSI()` | O(1) | Hash map lookup |
+| `ShardedSubscriberRegistry::findByTMSI()` | O(1) | Hash + per-shard lock |
 
-## 6. Scaling Guidelines
+## 6. Abis/RSL Integration
+
+The A-bis RSL interface allows libgsml3parser-based BTS to communicate with an external BSC over the A-bis interface (TS 48.058).
+
+### RSL Message Flow
+
+```
+BSC ──[RLL DATA_REQ]──► BTS: RSLParser::parse() -> extract L3 -> ProcedureRunner::feed()
+BTS ──[RLL DATA_IND]──► BSC: ResponseBuilder bytes -> RSLBuilder::buildDataInd() -> send
+
+BSC ──[DCHAN CHAN_ACTIV]──► BTS: RSLParser::parse() -> getChannelMode() -> activate channel
+BTS ──[DCHAN CHAN_ACTIV_ACK]──► BSC: RSLBuilder::buildChanActivAck() -> send
+
+BTS ──[DCHAN MEAS_RES]──► BSC: RSLBuilder::buildMeasRes(rxlev, rxqual) -> send
+BTS ──[CCHAN CCCH_LOAD_IND]──► BSC: RSLBuilder::buildCCCHLoadInd() -> send
+```
+
+### Integration Points
+
+| Direction | RSL Message | libgsml3parser Component |
+|-----------|------------|-------------------------|
+| BSC->BTS | RLL DATA_REQ | `RSLParser::parse()` -> `extractL3()` -> `parseL3()` -> `ProcedureRunner::feed()` |
+| BTS->BSC | RLL DATA_IND | `ResponseBuilder` bytes -> `RSLBuilder::buildDataInd()` -> PHY |
+| BSC->BTS | DCHAN CHAN_ACTIV | `RSLParser::parse()` -> `getChannelMode()` -> `ChannelPool` activate |
+| BTS->BSC | DCHAN CHAN_ACTIV_ACK | `RSLBuilder::buildChanActivAck()` -> PHY |
+| BTS->BSC | DCHAN MEAS_RES | `RSLBuilder::buildMeasRes()` -> PHY |
+| BSC->BTS | CCHAN PAGING_CMD | `RSLParser::parse()` -> `extractL3()` -> paging procedure |
+
+## 7. Scaling Guidelines
 
 ### Managing Millions of MS Contexts
 
-The one-thread-per-MS model scales to millions of sessions when combined with an event-driven architecture:
+The event loop model scales to millions of sessions with `ShardedSubscriberRegistry`:
 
 ```cpp
-// MS session registry - thread-safe lookup by identity
-class MsRegistry {
-public:
-    // Create or retrieve session for TMSI
-    std::shared_ptr<MsSession> getOrCreate(uint32_t tmsi);
+// Sharded registry for multi-threaded access
+ShardedSubscriberRegistry<16> registry;
 
-    // Remove session (channel released, timer expired)
-    void remove(uint32_t tmsi);
+// Create session (hash-based shard selection, per-shard lock)
+auto* session = registry.createByTMSI(0x12345678);
 
-    // Iterate all sessions for broadcast operations (e.g., paging)
-    template<typename F>
-    void forEach(F&& func);
+// Find session (shared lock, no contention with other shards)
+auto* found = registry.findByTMSI(0x12345678);
 
-private:
-    std::unordered_map<uint32_t, std::shared_ptr<MsSession>> mSessions;
-    std::shared_mutex mMutex; // Reader-writer lock
-};
+// Tick all timers across all shards
+std::array<L3TimerId, 4096> expired;
+size_t n = registry.tickAllTimers(std::chrono::milliseconds(100), expired);
 ```
 
 ### Event Loop Design
@@ -319,20 +376,20 @@ class BtsEventLoop {
 public:
     void run() {
         auto lastTick = std::chrono::steady_clock::now();
+        Arena arena(65536);
 
         while (running) {
             auto now = std::chrono::steady_clock::now();
             auto delta = std::chrono::duration_cast<std::chrono::milliseconds>(now - lastTick);
             lastTick = now;
 
-            // 1. Process incoming frames from radio
+            // 1. Process incoming frames from radio or A-bis RSL
             processRadioFrames();
+            processRslMessages();
 
-            // 2. Advance timers for all active sessions
-            registry.forEach([this, delta](auto& session) {
-                session->timers.tick(delta, [session](L3TimerId id) {
-                    handleTimerExpired(session.get(), id);
-                });
+            // 2. Tick all session timers and procedures
+            registry.forEach([&delta](SubscriberSession* sess) {
+                sess->procedures.tickAll(delta);
             });
 
             // 3. Periodic broadcasts (System Information)
@@ -340,7 +397,10 @@ public:
                 broadcastSystemInfo();
             }
 
-            // 4. Yield to allow other threads
+            // 4. Reset arena periodically to reclaim memory
+            if (arena.used() > 32768) arena.reset();
+
+            // 5. Yield to allow other threads
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
         }
     }
@@ -351,9 +411,9 @@ public:
 
 | Scale | MS Sessions | Stack Module Memory | ParsedMessage (stack, transient) |
 |-------|------------|-------------------|-------------------------------|
-| Small cell | 100 | ~277 KB | 800 KB peak |
-| Macro cell | 10,000 | ~27.7 MB | 80 MB peak |
-| Large deployment | 1,000,000 | ~2.7 GB | 8 GB peak (transient) |
+| Small cell | 100 | ~240 KB | 800 KB peak |
+| Macro cell | 10,000 | ~24 MB | 80 MB peak |
+| Large deployment | 1,000,000 | ~2.4 GB | 8 GB peak (transient) |
 
 For large deployments, ParsedMessage is only on-stack during message processing (microseconds), so peak concurrent usage is much lower than the theoretical maximum.
 
@@ -364,33 +424,38 @@ A typical macro cell BTS might have:
 - 24 TCHF channels (full-rate traffic, across 3 TRX × 8 timeslots)
 - 3 TCHH channels (half-rate traffic)
 
-The `ChannelPool` handles this with negligible memory overhead (~1 KB for the unordered_map entries).
+The `ShardedChannelPool<16>` handles this with negligible memory overhead and thread-safe allocation.
 
 ### Transaction Limits
 
 Each MS can have up to 16 concurrent pending transactions (`TransactionManager::MAX_TRANSACTIONS = 16`). For typical BTS workloads, < 4 concurrent transactions per MS is expected. The `cleanup()` method should be called periodically or when `totalCount()` approaches the limit.
 
-## 7. Deployment Checklist
+## 8. Deployment Checklist
 
 - [ ] Build with C++20, Release mode (`-O2` or `/O2`)
 - [ ] Verify `sizeof(MSContext) <= 256` via `static_assert`
+- [ ] Verify `sizeof(ProcedureStepResult) <= 32` via `static_assert`
 - [ ] Configure `ChannelPool` with available channels at startup
-- [ ] Set up `ProtocolDispatcher` handlers for expected message types
-- [ ] Integrate `TimerManager::tick()` into event loop (10-100ms interval)
-- [ ] Implement `TransactionManager::cleanup()` on timer expiry or periodically
-- [ ] Provide external synchronization for shared `ChannelPool`
+- [ ] Initialize `SubscriberRegistry` (or `ShardedSubscriberRegistry<N>` for multi-threaded)
+- [ ] Set up `ResponseSink` callback to build responses via `ResponseBuilder` into Arena buffer
+- [ ] Integrate `ProcedureRunner::tickAll()` into event loop (10-100ms interval)
+- [ ] Implement `feedExternal()` handlers for AuC/HLR/VLR decisions
+- [ ] If using A-bis: set up `RSLParser` -> `parseL3()` -> `ProcedureRunner::feed()` pipeline
+- [ ] If using A-bis: set up `ResponseBuilder` -> `RSLBuilder` -> PHY outbound pipeline
+- [ ] Provide external synchronization for shared `ChannelPool` (or use `ShardedChannelPool`)
 - [ ] Set up PHY backend (SDR, GNU Radio block, etc.)
 - [ ] Configure System Information broadcast schedule
-- [ ] Add logging for FSM state transitions and timer expirations
+- [ ] Add logging for procedure state transitions and timer expirations
 
-## 8. References
+## 9. References
 
 | Document | Topic |
 |----------|-------|
-| [doc/API.md](API.md) | Full API reference (36 sections) |
-| [doc/bts_integration.md](bts_integration.md) | Step-by-step integration guide |
-| [doc/builder_coverage.md](builder_coverage.md) | Builder pattern coverage table |
+| [doc/API.md](API.md) | Full API reference (57 sections) |
+| [doc/bts_integration.md](bts_integration.md) | Step-by-step integration guide with ProcedureRunner |
+| [README.md](../README.md) | Library overview and quick start |
 | 3GPP TS 24.008 | Mobile radio interface L3 specification |
 | 3GPP TS 44.018 | Group call and broadcast call control |
 | GSM 04.06 / 3GPP TS 24.022 | LAPDm framing for Um interface |
 | GSM 04.08 | Layer 3 specification (legacy reference) |
+| 3GPP TS 48.058 | A-bis RSL specification |

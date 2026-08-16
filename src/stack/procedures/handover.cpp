@@ -49,6 +49,7 @@ void HandoverProcedure::transitionTo(State s) {
 }
 
 void HandoverProcedure::fail(const std::string_view& reason) {
+    (void)reason;
     stopTimer();
     transitionTo(State::FAILED);
 }

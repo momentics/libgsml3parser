@@ -49,6 +49,7 @@ void PagingProcedure::transitionTo(State s) {
 }
 
 void PagingProcedure::fail(const std::string_view& reason) {
+    (void)reason;
     stopTimer();
     transitionTo(State::FAILED);
 }

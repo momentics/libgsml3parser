@@ -48,6 +48,7 @@ void CallSetupMOPercedure::transitionTo(State s) {
 }
 
 void CallSetupMOPercedure::fail(const std::string_view& reason) {
+    (void)reason;
     stopTimer();
     transitionTo(State::FAILED);
 }
