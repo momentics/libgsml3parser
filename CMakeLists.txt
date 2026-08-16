@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-# set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
+set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 
 project(gsml3parser
     VERSION 0.14.0

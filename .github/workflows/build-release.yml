@@ -11,6 +11,9 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      CMAKE_BUILD_PARALLEL_LEVEL: 2
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
