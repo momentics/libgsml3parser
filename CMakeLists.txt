@@ -47,6 +47,16 @@ set(CORE_SOURCES
     src/stack/procedure_types.cpp
     src/stack/response_builder.cpp
     src/stack/subscriber_registry.cpp
+    src/stack/procedure.cpp
+    src/stack/procedure_runner.cpp
+    src/stack/procedures/location_update.cpp
+    src/stack/procedures/authentication.cpp
+    src/stack/procedures/call_setup_mo.cpp
+    src/stack/procedures/call_setup_mt.cpp
+    src/stack/procedures/channel_assignment.cpp
+    src/stack/procedures/ciphering_mode.cpp
+    src/stack/procedures/paging.cpp
+    src/stack/procedures/handover.cpp
 )
 
 set(RR_SOURCES
@@ -154,8 +164,17 @@ set(PUBLIC_HEADERS
     include/gsml3parser/stack/sharded_channel_pool.h
     include/gsml3parser/stack/procedure_types.h
     include/gsml3parser/stack/response_builder.h
+    include/gsml3parser/stack/procedure.h
     include/gsml3parser/stack/procedure_runner.h
     include/gsml3parser/stack/subscriber_registry.h
+    include/gsml3parser/stack/procedures/location_update.h
+    include/gsml3parser/stack/procedures/authentication.h
+    include/gsml3parser/stack/procedures/call_setup_mo.h
+    include/gsml3parser/stack/procedures/call_setup_mt.h
+    include/gsml3parser/stack/procedures/channel_assignment.h
+    include/gsml3parser/stack/procedures/ciphering_mode.h
+    include/gsml3parser/stack/procedures/paging.h
+    include/gsml3parser/stack/procedures/handover.h
     include/gsml3parser/flat_handler.h
     include/gsml3parser/bitstream/inline_framer.h
     include/gsml3parser/bitstream/zero_copy_processor.h

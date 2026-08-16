@@ -55,8 +55,18 @@ add_executable(gsml3parser_tests
     test_sharded_channel_pool.cpp
     test_zero_copy.cpp
     test_procedure_types.cpp
+    test_procedure_location_update.cpp
     test_response_builder.cpp
     test_subscriber_registry.cpp
+    test_procedure_authentication.cpp
+    test_procedure_call_setup_mo.cpp
+    test_procedure_call_setup_mt.cpp
+    test_procedure_channel_assignment.cpp
+    test_procedure_ciphering_mode.cpp
+    test_procedure_paging.cpp
+    test_procedure_handover.cpp
+    test_procedure_runner.cpp
+    test_procedure_integration.cpp
 )
 
 find_package(Threads REQUIRED)
