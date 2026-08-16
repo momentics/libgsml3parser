@@ -46,7 +46,8 @@
 40. [ShardedChannelPool - Thread-Safe Channel Pool](#40-shardedchannelpool-thread-safe-channel-pool)
 41. [InlineFramer - Zero-Copy Frame Extraction](#41-inlineframer-zero-copy-frame-extraction)
 42. [ZeroCopyStreamProcessor - Zero-Copy Stream Parsing](#42-zerocopystreamparser-zero-copy-stream-parsing)
-43. [Performance Optimizations Summary](#43-performance-optimizations-summary)
+43. [Subscriber Registry - Subscriber Session Management](#43-subscriber-registry-subscriber-session-management)
+44. [Performance Optimizations Summary](#44-performance-optimizations-summary)
 
 ---
 
@@ -3458,7 +3459,97 @@ NOT thread-safe. Safe for concurrent use when each thread has its own instance o
 
 ---
 
-## 43. Performance Optimizations Summary
+## 43. Subscriber Registry - Subscriber Session Management
+
+**File:** `gsml3parser/stack/subscriber_registry.h`
+
+Manages per-subscriber sessions for software BTS implementations. Each session aggregates MSContext, RR/MM/CC state machines, timers, transactions, and a ProcedureRunner into a single object indexed by TMSI, IMSI, and LAPDm link.
+
+### SubscriberSession
+
+Aggregates all per-MS state:
+
+| Member | Type | Purpose |
+|--------|------|---------|
+| `context` | `MSContext` | Identity, channel, flags (≤256B) |
+| `rrSM` | `RRStateMachine` | Radio Resource FSM |
+| `mmSM` | `MMStateMachine` | Mobility Management FSM |
+| `ccSM` | `CCStateMachine` | Call Control FSM |
+| `timers` | `TimerManager` | Protocol timers (≤32 concurrent) |
+| `transactions` | `TransactionManager` | Request-response correlation |
+| `procedures` | `ProcedureRunner` | Active protocol procedures |
+| `channel` | `optional<ChannelDescriptor>` | Current channel assignment |
+| `lapdmLink` | `uint8_t` | LAPDm link ID for routing |
+
+Size: `sizeof(SubscriberSession) < 4096 bytes`, all components inline.
+
+### SubscriberRegistry API
+
+```cpp
+// Create sessions by identity.
+SubscriberSession* createByTMSI(uint32_t tmsi);
+SubscriberSession* createByIMSI(std::string_view imsi);
+
+// Lookup by any index.
+SubscriberSession* findByTMSI(uint32_t tmsi) noexcept;
+SubscriberSession* findByIMSI(std::string_view imsi) noexcept;
+SubscriberSession* findByLink(uint8_t trx, uint8_t ts, uint8_t lapdmLink) noexcept;
+
+// Channel management (maintains link index).
+void assignChannel(SubscriberSession* session, ChannelDescriptor desc, uint8_t lapdmLink);
+void releaseChannel(SubscriberSession* session);
+
+// Lifecycle.
+bool remove(SubscriberSession* session) noexcept;
+void clear() noexcept;
+size_t count() const noexcept;
+
+// Timer management.
+size_t tickAllTimers(std::chrono::milliseconds delta, std::span<L3TimerId> expiredOut);
+
+// Iterate all sessions (guaranteed single visit).
+template<typename F> void forEach(F&& callback);
+```
+
+### ShardedSubscriberRegistry
+
+Thread-safe variant that partitions sessions across N shards:
+
+```cpp
+ShardedSubscriberRegistry<16> registry;  // 16 shards
+
+// Thread-safe operations.
+auto* s1 = registry.createByTMSI(0x12345678);
+auto* s2 = registry.findByTMSI(0x12345678);  // shared_lock
+registry.remove(s1);  // unique_lock
+```
+
+Explicit instantiations provided for N=4, 8, 16, 32.
+
+### Example
+
+```cpp
+SubscriberRegistry registry;
+auto* session = registry.createByTMSI(0x12345678);
+
+// Assign channel when MS seizes SDCCH.
+ChannelDescriptor ch{ChannelType::SDCCHType, 0, 5, 100};
+registry.assignChannel(session, ch, /*lapdmLink=*/3);
+
+// Route incoming message to session via link.
+auto* target = registry.findByLink(0, 5, 3);
+
+// Tick all timers.
+std::array<L3TimerId, 256> expired;
+size_t n = registry.tickAllTimers(100ms, expired);
+
+// Clean up when procedure completes.
+registry.remove(session);
+```
+
+---
+
+## 44. Performance Optimizations Summary
 
 The following optimizations have been applied to achieve high-throughput, low-latency L3 parsing at scale:
 

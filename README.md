@@ -78,6 +78,7 @@ What sets this library apart: ready-to-use per-subscriber state management primi
 | **TransactionManager** | Request-response correlation, O(1) TI lookup | ~768 bytes |
 | **RR/MM/CC StateMachine** | Protocol FSM skeletons with O(1) dispatch | ~16 bytes each |
 | **ChannelPool** | Logical channel allocation/release, VEA support | global |
+| **SubscriberRegistry** | Per-MS session management, TMSI/IMSI/link indexes | < 4 KB/session |
 
 Total per-MS footprint: **~2.7 KB** (fits L3 cache at 10K concurrent sessions). See [BTS Architecture Guide](doc/bts_architecture.md) for scaling to millions.
 

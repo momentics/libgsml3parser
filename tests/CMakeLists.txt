@@ -56,6 +56,7 @@ add_executable(gsml3parser_tests
     test_zero_copy.cpp
     test_procedure_types.cpp
     test_response_builder.cpp
+    test_subscriber_registry.cpp
 )
 
 find_package(Threads REQUIRED)

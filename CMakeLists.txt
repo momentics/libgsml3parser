@@ -46,6 +46,7 @@ set(CORE_SOURCES
     src/stack/sharded_channel_pool.cpp
     src/stack/procedure_types.cpp
     src/stack/response_builder.cpp
+    src/stack/subscriber_registry.cpp
 )
 
 set(RR_SOURCES
@@ -153,6 +154,8 @@ set(PUBLIC_HEADERS
     include/gsml3parser/stack/sharded_channel_pool.h
     include/gsml3parser/stack/procedure_types.h
     include/gsml3parser/stack/response_builder.h
+    include/gsml3parser/stack/procedure_runner.h
+    include/gsml3parser/stack/subscriber_registry.h
     include/gsml3parser/flat_handler.h
     include/gsml3parser/bitstream/inline_framer.h
     include/gsml3parser/bitstream/zero_copy_processor.h

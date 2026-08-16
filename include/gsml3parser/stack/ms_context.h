@@ -174,8 +174,11 @@ public:
     /// @param v True to mark as authenticated, false otherwise.
     void setAuthenticated(bool v) noexcept;
 
-private:
+    /// Default constructor creates an empty context with all fields zero-initialized.
+    /// Use createWithTMSI() or createWithIMSI() for properly identified contexts.
     MSContext() = default;
+
+private:
 
     // ── Hot fields (accessed on every message) ──────────────────────────
     L3MobileIdentity mIdentity{};

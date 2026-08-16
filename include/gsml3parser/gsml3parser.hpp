@@ -57,6 +57,8 @@
 #include "gsml3parser/stack/response_builder.h"
 #include "gsml3parser/stack/transaction.h"
 #include "gsml3parser/stack/channel_pool.h"
+#include "gsml3parser/stack/procedure_runner.h"
+#include "gsml3parser/stack/subscriber_registry.h"
 #include "gsml3parser/flat_handler.h"
 #include "gsml3parser/stack/sharded_channel_pool.h"
 #include "gsml3parser/bitstream/inline_framer.h"
