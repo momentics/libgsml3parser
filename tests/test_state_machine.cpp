@@ -25,6 +25,8 @@
 #include <gsml3parser/mm/l3mmmessages.h>
 #include <gsml3parser/cc/l3ccmessages.h>
 #include <gsml3parser/visitor.h>
+#include <gsml3parser/stack/response_builder.h>
+#include <gsml3parser/parser.h>
 
 using namespace gsml3parser;
 
@@ -183,14 +185,14 @@ TEST(ProtocolStateMachineTest, CausesTransition_check) {
 
 // ── RR State Machine tests ───────────────────────────────────────────────
 
-// IDLE + ChannelRequest -> CHANNEL_REQUESTED
+// IDLE + ChannelRequest -> CHANNEL_REQUESTED (SendResponse: build ImmediateAssignment)
 TEST(RRStateMachineTest, Idle_receivesChannelRequest_transitionsToRequested) {
     RRStateMachine fsm;
     fsm.setState(RRStateMachine::State::IDLE);
     auto msg = makeRRChannelRequest();
     SMResult result = fsm.processMessage(msg);
 
-    EXPECT_EQ(result.action, SMAction::Transition);
+    EXPECT_EQ(result.action, SMAction::SendResponse);
     EXPECT_EQ(result.nextState, static_cast<int>(RRStateMachine::State::CHANNEL_REQUESTED));
     EXPECT_EQ(fsm.state(), RRStateMachine::State::CHANNEL_REQUESTED);
 }
@@ -225,11 +227,22 @@ TEST(RRStateMachineTest, DebugName_returnsCorrectString) {
     EXPECT_EQ(fsm.debugName(), "RRStateMachine");
 }
 
-// ACTIVE + unexpected message type -> no transition
-TEST(RRStateMachineTest, UnexpectedMessage_noTransition) {
+// ACTIVE + CC Setup -> SendResponse (build CallProceeding)
+TEST(RRStateMachineTest, Active_receivesCCSetup_actionSendResponse) {
     RRStateMachine fsm;
     fsm.setState(RRStateMachine::State::ACTIVE);
     auto msg = makeCCSetup();
+    SMResult result = fsm.processMessage(msg);
+
+    EXPECT_EQ(result.action, SMAction::SendResponse);
+    EXPECT_EQ(fsm.state(), RRStateMachine::State::ACTIVE);
+}
+
+// ACTIVE + non-RR/non-CC/non-MM unexpected message type -> no transition
+TEST(RRStateMachineTest, UnexpectedMessage_noTransition) {
+    RRStateMachine fsm;
+    fsm.setState(RRStateMachine::State::ACTIVE);
+    auto msg = makeMMCMServiceRequest();
     SMResult result = fsm.processMessage(msg);
 
     EXPECT_EQ(result.action, SMAction::None);
@@ -247,14 +260,14 @@ TEST(RRStateMachineTest, CipheringModeComplete_staysActive) {
     EXPECT_EQ(fsm.state(), RRStateMachine::State::ACTIVE);
 }
 
-// ACTIVE + ChannelRelease -> CHANNEL_RELEASE
+// ACTIVE + ChannelRelease -> CHANNEL_RELEASE (SendResponse: build ChannelRelease)
 TEST(RRStateMachineTest, Active_receivesChannelRelease_transitionsToRelease) {
     RRStateMachine fsm;
     fsm.setState(RRStateMachine::State::ACTIVE);
     auto msg = makeRRChannelRelease();
     SMResult result = fsm.processMessage(msg);
 
-    EXPECT_EQ(result.action, SMAction::Transition);
+    EXPECT_EQ(result.action, SMAction::SendResponse);
     EXPECT_EQ(result.nextState, static_cast<int>(RRStateMachine::State::CHANNEL_RELEASE));
     EXPECT_EQ(fsm.state(), RRStateMachine::State::CHANNEL_RELEASE);
 }
@@ -341,16 +354,16 @@ TEST(RRStateMachineTest, TimerExpiry_active_noTransition) {
 
 // ── MM State Machine tests ───────────────────────────────────────────────
 
-// DEREGISTERED + CMServiceRequest -> SERVICE_REQUEST
-TEST(MMStateMachineTest, Deregistered_receivesCMServiceRequest_transitionsToServiceRequest) {
+// DEREGISTERED + CMServiceRequest -> WAITING_IDENTITY (SendResponse: build IdentityRequest)
+TEST(MMStateMachineTest, Deregistered_receivesCMServiceRequest_transitionsToWaitingIdentity) {
     MMStateMachine fsm;
     fsm.setState(MMStateMachine::State::DEREGISTERED);
     auto msg = makeMMCMServiceRequest();
     SMResult result = fsm.processMessage(msg);
 
-    EXPECT_EQ(result.action, SMAction::Transition);
-    EXPECT_EQ(result.nextState, static_cast<int>(MMStateMachine::State::SERVICE_REQUEST));
-    EXPECT_EQ(fsm.state(), MMStateMachine::State::SERVICE_REQUEST);
+    EXPECT_EQ(result.action, SMAction::SendResponse);
+    EXPECT_EQ(result.nextState, static_cast<int>(MMStateMachine::State::WAITING_IDENTITY));
+    EXPECT_EQ(fsm.state(), MMStateMachine::State::WAITING_IDENTITY);
 }
 
 // debugName() returns "MMStateMachine"
@@ -370,38 +383,38 @@ TEST(MMStateMachineTest, UnexpectedMessage_noTransition) {
     EXPECT_EQ(fsm.state(), MMStateMachine::State::DEREGISTERED);
 }
 
-// SERVICE_REQUEST + IdentityResponse -> IDENTITY_VERIFIED
+// SERVICE_REQUEST + IdentityResponse -> IDENTITY_VERIFIED (SendResponse: build AuthenticationRequest)
 TEST(MMStateMachineTest, ServiceRequest_receivesIdentityResponse_transitionsToVerified) {
     MMStateMachine fsm;
     fsm.setState(MMStateMachine::State::SERVICE_REQUEST);
     auto msg = makeMMIdentityResponse();
     SMResult result = fsm.processMessage(msg);
 
-    EXPECT_EQ(result.action, SMAction::Transition);
+    EXPECT_EQ(result.action, SMAction::SendResponse);
     EXPECT_EQ(result.nextState, static_cast<int>(MMStateMachine::State::IDENTITY_VERIFIED));
     EXPECT_EQ(fsm.state(), MMStateMachine::State::IDENTITY_VERIFIED);
 }
 
-// IDENTITY_VERIFIED + AuthenticationResponse -> AUTHENTICATED
+// IDENTITY_VERIFIED + AuthenticationResponse -> AUTHENTICATED (SendResponse)
 TEST(MMStateMachineTest, IdentityVerified_receivesAuthResponse_transitionsToAuthenticated) {
     MMStateMachine fsm;
     fsm.setState(MMStateMachine::State::IDENTITY_VERIFIED);
     auto msg = makeMMAuthenticationResponse();
     SMResult result = fsm.processMessage(msg);
 
-    EXPECT_EQ(result.action, SMAction::Transition);
+    EXPECT_EQ(result.action, SMAction::SendResponse);
     EXPECT_EQ(result.nextState, static_cast<int>(MMStateMachine::State::AUTHENTICATED));
     EXPECT_EQ(fsm.state(), MMStateMachine::State::AUTHENTICATED);
 }
 
-// AUTHENTICATION + AuthenticationResponse -> AUTHENTICATED
+// AUTHENTICATION + AuthenticationResponse -> AUTHENTICATED (SendResponse)
 TEST(MMStateMachineTest, Authentication_receivesAuthResponse_transitionsToAuthenticated) {
     MMStateMachine fsm;
     fsm.setState(MMStateMachine::State::AUTHENTICATION);
     auto msg = makeMMAuthenticationResponse();
     SMResult result = fsm.processMessage(msg);
 
-    EXPECT_EQ(result.action, SMAction::Transition);
+    EXPECT_EQ(result.action, SMAction::SendResponse);
     EXPECT_EQ(result.nextState, static_cast<int>(MMStateMachine::State::AUTHENTICATED));
     EXPECT_EQ(fsm.state(), MMStateMachine::State::AUTHENTICATED);
 }
@@ -418,26 +431,26 @@ TEST(MMStateMachineTest, Authenticated_receivesLocationUpdate_transitionsToUpdat
     EXPECT_EQ(fsm.state(), MMStateMachine::State::LOCATION_UPDATE);
 }
 
-// LOCATION_UPDATE + CMServiceAccept -> REGISTERED
+// LOCATION_UPDATE + CMServiceAccept -> REGISTERED (SendResponse: build LocationUpdatingAccept)
 TEST(MMStateMachineTest, LocationUpdate_receivesAccept_transitionsToRegistered) {
     MMStateMachine fsm;
     fsm.setState(MMStateMachine::State::LOCATION_UPDATE);
     auto msg = makeMMCMServiceAccept();
     SMResult result = fsm.processMessage(msg);
 
-    EXPECT_EQ(result.action, SMAction::Transition);
+    EXPECT_EQ(result.action, SMAction::SendResponse);
     EXPECT_EQ(result.nextState, static_cast<int>(MMStateMachine::State::REGISTERED));
     EXPECT_EQ(fsm.state(), MMStateMachine::State::REGISTERED);
 }
 
-// WAITING_IDENTITY + IdentityResponse -> IDENTITY_VERIFIED
+// WAITING_IDENTITY + IdentityResponse -> IDENTITY_VERIFIED (SendResponse: build AuthenticationRequest)
 TEST(MMStateMachineTest, WaitingIdentity_receivesIdentityResponse_transitionsToVerified) {
     MMStateMachine fsm;
     fsm.setState(MMStateMachine::State::WAITING_IDENTITY);
     auto msg = makeMMIdentityResponse();
     SMResult result = fsm.processMessage(msg);
 
-    EXPECT_EQ(result.action, SMAction::Transition);
+    EXPECT_EQ(result.action, SMAction::SendResponse);
     EXPECT_EQ(result.nextState, static_cast<int>(MMStateMachine::State::IDENTITY_VERIFIED));
     EXPECT_EQ(fsm.state(), MMStateMachine::State::IDENTITY_VERIFIED);
 }
@@ -505,62 +518,62 @@ TEST(CCStateMachineTest, UnexpectedMessage_noTransition) {
     EXPECT_EQ(fsm.state(), CCStateMachine::State::IDLE);
 }
 
-// SETUP_RECEIVED -> PROCEEDING (automatic transition on any message processing)
+// SETUP_RECEIVED -> PROCEEDING (SendResponse: build CallProceeding)
 TEST(CCStateMachineTest, SetupReceived_transitionsToProceeding) {
     CCStateMachine fsm;
     fsm.setState(CCStateMachine::State::SETUP_RECEIVED);
     auto msg = makeCCSetup();
     SMResult result = fsm.processMessage(msg);
 
-    EXPECT_EQ(result.action, SMAction::Transition);
+    EXPECT_EQ(result.action, SMAction::SendResponse);
     EXPECT_EQ(result.nextState, static_cast<int>(CCStateMachine::State::PROCEEDING));
     EXPECT_EQ(fsm.state(), CCStateMachine::State::PROCEEDING);
 }
 
-// PROCEEDING + Alerting -> ALERTING
+// PROCEEDING + Alerting -> ALERTING (SendResponse: build Alerting)
 TEST(CCStateMachineTest, Proceeding_receivesAlerting_transitionsToAlerting) {
     CCStateMachine fsm;
     fsm.setState(CCStateMachine::State::PROCEEDING);
     auto msg = makeCCAlerting();
     SMResult result = fsm.processMessage(msg);
 
-    EXPECT_EQ(result.action, SMAction::Transition);
+    EXPECT_EQ(result.action, SMAction::SendResponse);
     EXPECT_EQ(result.nextState, static_cast<int>(CCStateMachine::State::ALERTING));
     EXPECT_EQ(fsm.state(), CCStateMachine::State::ALERTING);
 }
 
-// ALERTING + Connect -> CONNECT
+// ALERTING + Connect -> CONNECT (SendResponse: build Connect)
 TEST(CCStateMachineTest, Alerting_receivesConnect_transitionsToConnect) {
     CCStateMachine fsm;
     fsm.setState(CCStateMachine::State::ALERTING);
     auto msg = makeCCConnect();
     SMResult result = fsm.processMessage(msg);
 
-    EXPECT_EQ(result.action, SMAction::Transition);
+    EXPECT_EQ(result.action, SMAction::SendResponse);
     EXPECT_EQ(result.nextState, static_cast<int>(CCStateMachine::State::CONNECT));
     EXPECT_EQ(fsm.state(), CCStateMachine::State::CONNECT);
 }
 
-// ACTIVE + Disconnect -> DISCONNECT_RECEIVED
+// ACTIVE + Disconnect -> DISCONNECT_RECEIVED (SendResponse: build Release)
 TEST(CCStateMachineTest, Active_receivesDisconnect_transitionsToDisconnectReceived) {
     CCStateMachine fsm;
     fsm.setState(CCStateMachine::State::ACTIVE);
     auto msg = makeCCDisconnect();
     SMResult result = fsm.processMessage(msg);
 
-    EXPECT_EQ(result.action, SMAction::Transition);
+    EXPECT_EQ(result.action, SMAction::SendResponse);
     EXPECT_EQ(result.nextState, static_cast<int>(CCStateMachine::State::DISCONNECT_RECEIVED));
     EXPECT_EQ(fsm.state(), CCStateMachine::State::DISCONNECT_RECEIVED);
 }
 
-// DISCONNECT_RECEIVED -> RELEASE (automatic transition)
+// DISCONNECT_RECEIVED -> RELEASE (SendResponse: build Release)
 TEST(CCStateMachineTest, DisconnectReceived_transitionsToRelease) {
     CCStateMachine fsm;
     fsm.setState(CCStateMachine::State::DISCONNECT_RECEIVED);
     auto msg = makeCCDisconnect();
     SMResult result = fsm.processMessage(msg);
 
-    EXPECT_EQ(result.action, SMAction::Transition);
+    EXPECT_EQ(result.action, SMAction::SendResponse);
     EXPECT_EQ(result.nextState, static_cast<int>(CCStateMachine::State::RELEASE));
     EXPECT_EQ(fsm.state(), CCStateMachine::State::RELEASE);
 }
@@ -640,33 +653,319 @@ TEST(CCStateMachineTest, FullCallSetupSequence) {
     EXPECT_EQ(fsm.state(), CCStateMachine::State::CONNECT);
 }
 
-// Full MM flow: DEREGISTERED -> SERVICE_REQUEST -> IDENTITY_VERIFIED -> AUTHENTICATED -> REGISTERED
+// Full MM flow: DEREGISTERED -> WAITING_IDENTITY -> IDENTITY_VERIFIED -> AUTHENTICATED -> REGISTERED
 TEST(MMStateMachineTest, FullRegistrationSequence) {
     MMStateMachine fsm;
     fsm.setState(MMStateMachine::State::DEREGISTERED);
 
-    // CM Service Request
+    // CM Service Request -> WAITING_IDENTITY (SendResponse: IdentityRequest)
     auto cmReq = makeMMCMServiceRequest();
     auto r1 = fsm.processMessage(cmReq);
-    EXPECT_EQ(fsm.state(), MMStateMachine::State::SERVICE_REQUEST);
+    EXPECT_EQ(fsm.state(), MMStateMachine::State::WAITING_IDENTITY);
+    EXPECT_EQ(r1.action, SMAction::SendResponse);
 
-    // Identity Response
+    // Identity Response -> IDENTITY_VERIFIED (SendResponse: AuthenticationRequest)
     auto idResp = makeMMIdentityResponse();
     auto r2 = fsm.processMessage(idResp);
     EXPECT_EQ(fsm.state(), MMStateMachine::State::IDENTITY_VERIFIED);
+    EXPECT_EQ(r2.action, SMAction::SendResponse);
 
-    // Authentication Response (skips AUTHENTICATION state, goes directly)
+    // Authentication Response -> AUTHENTICATED (SendResponse)
     auto authResp = makeMMAuthenticationResponse();
     auto r3 = fsm.processMessage(authResp);
     EXPECT_EQ(fsm.state(), MMStateMachine::State::AUTHENTICATED);
+    EXPECT_EQ(r3.action, SMAction::SendResponse);
 
-    // Location Updating Request
+    // Location Updating Request -> LOCATION_UPDATE (Transition, no response)
     auto locReq = makeMMLocationUpdatingRequest();
     auto r4 = fsm.processMessage(locReq);
     EXPECT_EQ(fsm.state(), MMStateMachine::State::LOCATION_UPDATE);
+    EXPECT_EQ(r4.action, SMAction::Transition);
 
-    // CM Service Accept (location update accepted)
+    // CM Service Accept (location update accepted) -> REGISTERED (SendResponse: LocationUpdatingAccept)
     auto cmAccept = makeMMCMServiceAccept();
     auto r5 = fsm.processMessage(cmAccept);
     EXPECT_EQ(fsm.state(), MMStateMachine::State::REGISTERED);
+    EXPECT_EQ(r5.action, SMAction::SendResponse);
+}
+
+// ── Response-aware FSM integration tests (Step 1.5, 1.7, 1.9) ─────────────
+
+// RR: WAITING_MM + CMServiceRequest returns SendResponse action
+TEST(RRStateMachineTest, WaitingMM_CMServiceRequest_Action_SendResponse) {
+    RRStateMachine fsm;
+    fsm.setState(RRStateMachine::State::WAITING_MM);
+    auto msg = makeMMCMServiceRequest();
+    SMResult result = fsm.processMessage(msg);
+
+    EXPECT_EQ(result.action, SMAction::SendResponse);
+    EXPECT_EQ(result.nextState, static_cast<int>(RRStateMachine::State::ACTIVE));
+    EXPECT_TRUE(result.causesTransition());
+}
+
+// RR: ACTIVE + CC Setup returns SendResponse (build CallProceeding)
+TEST(RRStateMachineTest, Active_Setup_Action_SendResponse) {
+    RRStateMachine fsm;
+    fsm.setState(RRStateMachine::State::ACTIVE);
+    auto msg = makeCCSetup();
+    SMResult result = fsm.processMessage(msg);
+
+    EXPECT_EQ(result.action, SMAction::SendResponse);
+    EXPECT_EQ(fsm.state(), RRStateMachine::State::ACTIVE);
+}
+
+// RR: CHANNEL_RELEASE returns ReleaseChannel action
+TEST(RRStateMachineTest, ChannelRelease_IncomingMsg_Action_ReleaseChannel) {
+    RRStateMachine fsm;
+    fsm.setState(RRStateMachine::State::CHANNEL_RELEASE);
+    auto msg = makeRRChannelRequest();
+    SMResult result = fsm.processMessage(msg);
+
+    EXPECT_EQ(result.action, SMAction::ReleaseChannel);
+}
+
+// RR: ResponseBuilder CMServiceAccept is parseable after FSM SendResponse
+TEST(RRStateMachineTest, ResponseBuilder_CMServiceAccept_Parseable) {
+    auto bytes = ResponseBuilder::buildCMServiceAccept();
+    ASSERT_TRUE(bytes.has_value());
+    auto parsed = parseL3(std::span<const uint8_t>(bytes.value().data(), bytes.value().size()));
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_EQ(messageMTI(*parsed), L3CMServiceAccept::MTI);
+}
+
+// RR: ResponseBuilder CallProceeding has correct TI from Setup
+TEST(RRStateMachineTest, ResponseBuilder_CallProceeding_TI_Correct) {
+    auto bytes = ResponseBuilder::buildCallProceeding(3);
+    ASSERT_TRUE(bytes.has_value());
+    auto parsed = parseL3(std::span<const uint8_t>(bytes.value().data(), bytes.value().size()));
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_EQ(messageMTI(*parsed), L3CallProceeding::MTI);
+}
+
+// RR: Transitions without response return action != SendResponse
+TEST(RRStateMachineTest, NoSendResponse_WhenNoTransition) {
+    RRStateMachine fsm;
+    fsm.setState(RRStateMachine::State::ACTIVE);
+    auto msg = makeRRMeasurementReport();
+    SMResult result = fsm.processMessage(msg);
+
+    EXPECT_NE(result.action, SMAction::SendResponse);
+    EXPECT_EQ(result.action, SMAction::None);
+}
+
+// RR: Full cycle: message -> FSM(SendResponse) -> ResponseBuilder -> parseL3
+TEST(RRStateMachineTest, FullCycle_Message_Response_Parse) {
+    RRStateMachine fsm;
+    fsm.setState(RRStateMachine::State::IDLE);
+    auto msg = makeRRChannelRequest();
+    SMResult result = fsm.processMessage(msg);
+
+    EXPECT_EQ(result.action, SMAction::SendResponse);
+    EXPECT_EQ(fsm.state(), RRStateMachine::State::CHANNEL_REQUESTED);
+
+    // Build ImmediateAssignment response
+    auto ch = L3ChannelDescription(TDMA_SDCCH, 0, 1, 100);
+    auto respBytes = ResponseBuilder::buildImmediateAssignment(ch, 32);
+    ASSERT_TRUE(respBytes.has_value());
+    auto parsed = parseL3(std::span<const uint8_t>(respBytes.value().data(), respBytes.value().size()));
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_EQ(messageMTI(*parsed), L3ImmediateAssignment::MTI);
+}
+
+// RR: Span overload writes to pre-allocated buffer with correct byte count
+TEST(RRStateMachineTest, ResponseBuilder_SpanOverload_ZeroAlloc) {
+    uint8_t buf[512];
+    auto ch = L3ChannelDescription(TDMA_SDCCH, 0, 1, 100);
+    int n = ResponseBuilder::buildImmediateAssignment({buf, sizeof(buf)}, ch, 32);
+    ASSERT_GT(n, 0);
+
+    auto parsed = parseL3({buf, static_cast<size_t>(n)});
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_EQ(messageMTI(*parsed), L3ImmediateAssignment::MTI);
+}
+
+// MM: SERVICE_REQUEST + CMServiceRequest returns SendResponse (IdentityRequest)
+TEST(MMStateMachineTest, ServiceRequest_Action_SendResponse_IdentityRequest) {
+    MMStateMachine fsm;
+    fsm.setState(MMStateMachine::State::SERVICE_REQUEST);
+    auto msg = makeMMIdentityResponse();
+    SMResult result = fsm.processMessage(msg);
+
+    EXPECT_EQ(result.action, SMAction::SendResponse);
+    EXPECT_EQ(result.nextState, static_cast<int>(MMStateMachine::State::IDENTITY_VERIFIED));
+}
+
+// MM: IDENTITY_VERIFIED returns SendResponse (AuthenticationRequest)
+TEST(MMStateMachineTest, IdentityVerified_Action_SendResponse_AuthRequest) {
+    MMStateMachine fsm;
+    fsm.setState(MMStateMachine::State::IDENTITY_VERIFIED);
+    auto msg = makeMMAuthenticationResponse();
+    SMResult result = fsm.processMessage(msg);
+
+    EXPECT_EQ(result.action, SMAction::SendResponse);
+    EXPECT_EQ(result.nextState, static_cast<int>(MMStateMachine::State::AUTHENTICATED));
+}
+
+// MM: LOCATION_UPDATE returns SendResponse (LocationUpdatingAccept)
+TEST(MMStateMachineTest, LocationUpdate_TriggerAccept_Action_SendResponse) {
+    MMStateMachine fsm;
+    fsm.setState(MMStateMachine::State::LOCATION_UPDATE);
+    auto msg = makeMMCMServiceAccept();
+    SMResult result = fsm.processMessage(msg);
+
+    EXPECT_EQ(result.action, SMAction::SendResponse);
+    EXPECT_EQ(result.nextState, static_cast<int>(MMStateMachine::State::REGISTERED));
+}
+
+// MM: All MM responses are parseable
+TEST(MMStateMachineTest, ResponseBuilder_AllResponses_Parseable) {
+    auto cmAccept = ResponseBuilder::buildCMServiceAccept();
+    ASSERT_TRUE(cmAccept.has_value());
+
+    auto idReq = ResponseBuilder::buildIdentityRequest(MobileIDType::IMSI);
+    ASSERT_TRUE(idReq.has_value());
+
+    std::array<uint8_t, 16> rand{};
+    auto authReq = ResponseBuilder::buildAuthenticationRequest(rand);
+    ASSERT_TRUE(authReq.has_value());
+
+    auto lai = L3LocationAreaIdentity("244", "15", 1234);
+    auto luAccept = ResponseBuilder::buildLocationUpdatingAccept(lai);
+    ASSERT_TRUE(luAccept.has_value());
+
+    auto luReject = ResponseBuilder::buildLocationUpdatingReject(MMRejectCause::Congestion);
+    ASSERT_TRUE(luReject.has_value());
+}
+
+// MM: LOCATION_UPDATE state returns Continue (not SendResponse) for LocationUpdatingRequest
+TEST(MMStateMachineTest, NoSendResponse_WhenWaitingVLR) {
+    MMStateMachine fsm;
+    fsm.setState(MMStateMachine::State::AUTHENTICATED);
+    auto msg = makeMMLocationUpdatingRequest();
+    SMResult result = fsm.processMessage(msg);
+
+    EXPECT_EQ(result.action, SMAction::Transition);
+    EXPECT_NE(result.action, SMAction::SendResponse);
+}
+
+// MM: Full registration flow with SendResponse actions verified
+TEST(MMStateMachineTest, FullRegistrationFlow_SendResponseActions) {
+    MMStateMachine fsm;
+    fsm.setState(MMStateMachine::State::DEREGISTERED);
+
+    auto r1 = fsm.processMessage(makeMMCMServiceRequest());
+    EXPECT_EQ(r1.action, SMAction::SendResponse);
+    EXPECT_EQ(fsm.state(), MMStateMachine::State::WAITING_IDENTITY);
+
+    auto r2 = fsm.processMessage(makeMMIdentityResponse());
+    EXPECT_EQ(r2.action, SMAction::SendResponse);
+    EXPECT_EQ(fsm.state(), MMStateMachine::State::IDENTITY_VERIFIED);
+
+    auto r3 = fsm.processMessage(makeMMAuthenticationResponse());
+    EXPECT_EQ(r3.action, SMAction::SendResponse);
+    EXPECT_EQ(fsm.state(), MMStateMachine::State::AUTHENTICATED);
+
+    auto r4 = fsm.processMessage(makeMMLocationUpdatingRequest());
+    EXPECT_EQ(r4.action, SMAction::Transition);
+    EXPECT_EQ(fsm.state(), MMStateMachine::State::LOCATION_UPDATE);
+
+    auto r5 = fsm.processMessage(makeMMCMServiceAccept());
+    EXPECT_EQ(r5.action, SMAction::SendResponse);
+    EXPECT_EQ(fsm.state(), MMStateMachine::State::REGISTERED);
+}
+
+// CC: SETUP_RECEIVED returns SendResponse (CallProceeding)
+TEST(CCStateMachineTest, SetupReceived_Setup_Action_SendResponse_CallProceeding) {
+    CCStateMachine fsm;
+    fsm.setState(CCStateMachine::State::SETUP_RECEIVED);
+    auto msg = makeCCSetup();
+    SMResult result = fsm.processMessage(msg);
+
+    EXPECT_EQ(result.action, SMAction::SendResponse);
+    EXPECT_EQ(result.nextState, static_cast<int>(CCStateMachine::State::PROCEEDING));
+
+    auto bytes = ResponseBuilder::buildCallProceeding(7);
+    ASSERT_TRUE(bytes.has_value());
+}
+
+// CC: PROCEEDING returns SendResponse (Alerting)
+TEST(CCStateMachineTest, Proceeding_TriggerAlert_Action_SendResponse_Alerting) {
+    CCStateMachine fsm;
+    fsm.setState(CCStateMachine::State::PROCEEDING);
+    auto msg = makeCCAlerting();
+    SMResult result = fsm.processMessage(msg);
+
+    EXPECT_EQ(result.action, SMAction::SendResponse);
+    EXPECT_EQ(result.nextState, static_cast<int>(CCStateMachine::State::ALERTING));
+
+    auto bytes = ResponseBuilder::buildAlerting(7);
+    ASSERT_TRUE(bytes.has_value());
+}
+
+// CC: ACTIVE + Disconnect returns SendResponse (Release)
+TEST(CCStateMachineTest, Active_Disconnect_Action_SendResponse_Release) {
+    CCStateMachine fsm;
+    fsm.setState(CCStateMachine::State::ACTIVE);
+    auto msg = makeCCDisconnect();
+    SMResult result = fsm.processMessage(msg);
+
+    EXPECT_EQ(result.action, SMAction::SendResponse);
+    EXPECT_EQ(result.nextState, static_cast<int>(CCStateMachine::State::DISCONNECT_RECEIVED));
+
+    auto bytes = ResponseBuilder::buildRelease(7, CCCause::Normal_Call_Clearing);
+    ASSERT_TRUE(bytes.has_value());
+}
+
+// CC: RELEASE + Release returns SendResponse (ReleaseComplete)
+TEST(CCStateMachineTest, Release_Release_Action_SendResponse_ReleaseComplete) {
+    CCStateMachine fsm;
+    fsm.setState(CCStateMachine::State::RELEASE);
+    auto msg = ParsedMessage{CCM{L3Release::builder().ti(0).build()}};
+    SMResult result = fsm.processMessage(msg);
+
+    EXPECT_EQ(result.action, SMAction::SendResponse);
+    EXPECT_EQ(result.nextState, static_cast<int>(CCStateMachine::State::IDLE));
+
+    auto bytes = ResponseBuilder::buildReleaseComplete(0);
+    ASSERT_TRUE(bytes.has_value());
+}
+
+// CC: Full call setup with SendResponse flow verified
+TEST(CCStateMachineTest, FullCallSetup_SendResponseFlow) {
+    CCStateMachine fsm;
+    fsm.setState(CCStateMachine::State::IDLE);
+
+    auto r1 = fsm.processMessage(makeCCSetup());
+    EXPECT_EQ(r1.action, SMAction::Transition);
+    EXPECT_EQ(fsm.state(), CCStateMachine::State::SETUP_RECEIVED);
+
+    auto r2 = fsm.processMessage(makeCCSetup());
+    EXPECT_EQ(r2.action, SMAction::SendResponse);
+    EXPECT_EQ(fsm.state(), CCStateMachine::State::PROCEEDING);
+
+    auto r3 = fsm.processMessage(makeCCAlerting());
+    EXPECT_EQ(r3.action, SMAction::SendResponse);
+    EXPECT_EQ(fsm.state(), CCStateMachine::State::ALERTING);
+
+    auto r4 = fsm.processMessage(makeCCConnect());
+    EXPECT_EQ(r4.action, SMAction::SendResponse);
+    EXPECT_EQ(fsm.state(), CCStateMachine::State::CONNECT);
+}
+
+// CC: Full call teardown with SendResponse flow verified
+TEST(CCStateMachineTest, FullCallTeardown_SendResponseFlow) {
+    CCStateMachine fsm;
+    fsm.setState(CCStateMachine::State::ACTIVE);
+
+    auto r1 = fsm.processMessage(makeCCDisconnect());
+    EXPECT_EQ(r1.action, SMAction::SendResponse);
+    EXPECT_EQ(fsm.state(), CCStateMachine::State::DISCONNECT_RECEIVED);
+
+    auto r2 = fsm.processMessage(makeCCDisconnect());
+    EXPECT_EQ(r2.action, SMAction::SendResponse);
+    EXPECT_EQ(fsm.state(), CCStateMachine::State::RELEASE);
+
+    auto r3 = fsm.processMessage(ParsedMessage{CCM{L3Release::builder().ti(0).build()}});
+    EXPECT_EQ(r3.action, SMAction::SendResponse);
+    EXPECT_EQ(fsm.state(), CCStateMachine::State::IDLE);
 }

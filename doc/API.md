@@ -15,43 +15,44 @@
 9. [Bitstream I/O](#9-bitstream-io)
 10. [Arena Allocator](#10-arena-allocator)
 11. [Procedure Types](#11-procedure-types)
-12. [LAPDm Framing](#12-lapdm-framing)
-13. [Protocol Dispatcher](#13-protocol-dispatcher)
-14. [Builder Pattern](#14-builder-pattern)
-15. [Enum Formatters](#15-enum-formatters)
-16. [Data Types](#16-data-types)
-17. [Enumerations](#17-enumerations)
-18. [Protocol Types](#18-protocol-types)
-19. [Common Information Elements](#19-common-information-elements)
-20. [Radio Resource Messages](#20-radio-resource-messages)
-21. [Mobility Management Messages](#21-mobility-management-messages)
-22. [Call Control Messages](#22-call-control-messages)
-23. [Supplementary Services Messages](#23-supplementary-services-messages)
-24. [GPRS Mobility Management Messages](#24-gprs-mobility-management-messages)
-25. [GPRS Session Management Messages](#25-gprs-session-management-messages)
-26. [SMS Messages](#26-sms-messages)
-27. [Broadcast Call Control Messages](#27-broadcast-call-control-messages)
-28. [Group Call Control Messages](#28-group-call-control-messages)
-29. [Location Services Messages](#29-location-services-messages)
-30. [SMS L3 Messages](#30-sms-l3-messages)
-31. [Extended PD Messages](#31-extended-pd-messages)
-32. [Test Procedure PD Messages](#32-test-procedure-pd-messages)
-33. [MSContext - Per-Subscriber State](#33-mscontext-per-subscriber-state)
-34. [Timer Framework](#34-timer-framework)
-35. [Transaction Framework](#35-transaction-framework)
-36. [Protocol State Machines](#36-protocol-state-machines)
-37. [Channel Pool - Logical Channel Management](#37-channel-pool-logical-channel-management)
-38. [FlatHandler - Zero-Overhead Callbacks](#38-flathandler-zero-overhead-callbacks)
-39. [ShardedChannelPool - Thread-Safe Channel Pool](#39-shardedchannelpool-thread-safe-channel-pool)
-40. [InlineFramer - Zero-Copy Frame Extraction](#40-inlineframer-zero-copy-frame-extraction)
-41. [ZeroCopyStreamProcessor - Zero-Copy Stream Parsing](#41-zerocopystreamparser-zero-copy-stream-parsing)
-42. [Performance Optimizations Summary](#42-performance-optimizations-summary)
+12. [Response Builder](#12-response-builder)
+13. [LAPDm Framing](#13-lapdm-framing)
+14. [Protocol Dispatcher](#14-protocol-dispatcher)
+15. [Builder Pattern](#15-builder-pattern)
+16. [Enum Formatters](#16-enum-formatters)
+17. [Data Types](#17-data-types)
+18. [Enumerations](#18-enumerations)
+19. [Protocol Types](#19-protocol-types)
+20. [Common Information Elements](#20-common-information-elements)
+21. [Radio Resource Messages](#21-radio-resource-messages)
+22. [Mobility Management Messages](#22-mobility-management-messages)
+23. [Call Control Messages](#23-call-control-messages)
+24. [Supplementary Services Messages](#24-supplementary-services-messages)
+25. [GPRS Mobility Management Messages](#25-gprs-mobility-management-messages)
+26. [GPRS Session Management Messages](#26-gprs-session-management-messages)
+27. [SMS Messages](#27-sms-messages)
+28. [Broadcast Call Control Messages](#28-broadcast-call-control-messages)
+29. [Group Call Control Messages](#29-group-call-control-messages)
+30. [Location Services Messages](#30-location-services-messages)
+31. [SMS L3 Messages](#31-sms-l3-messages)
+32. [Extended PD Messages](#32-extended-pd-messages)
+33. [Test Procedure PD Messages](#33-test-procedure-pd-messages)
+34. [MSContext - Per-Subscriber State](#34-mscontext-per-subscriber-state)
+35. [Timer Framework](#35-timer-framework)
+36. [Transaction Framework](#36-transaction-framework)
+37. [Protocol State Machines](#37-protocol-state-machines)
+38. [Channel Pool - Logical Channel Management](#38-channel-pool-logical-channel-management)
+39. [FlatHandler - Zero-Overhead Callbacks](#39-flathandler-zero-overhead-callbacks)
+40. [ShardedChannelPool - Thread-Safe Channel Pool](#40-shardedchannelpool-thread-safe-channel-pool)
+41. [InlineFramer - Zero-Copy Frame Extraction](#41-inlineframer-zero-copy-frame-extraction)
+42. [ZeroCopyStreamProcessor - Zero-Copy Stream Parsing](#42-zerocopystreamparser-zero-copy-stream-parsing)
+43. [Performance Optimizations Summary](#43-performance-optimizations-summary)
 
 ---
 
 ## 1. Getting Started
 
-### 1.1 Build Requirements
+### Build Requirements
 
 | Requirement | Minimum Version |
 |-------------|-----------------|
@@ -59,7 +60,7 @@
 | CMake | 3.20+ |
 | Standard Library | C++20 (libstdc++ or libc++) |
 
-### 1.2 Build
+### Build
 
 ```bash
 mkdir build && cd build
@@ -76,7 +77,7 @@ CMake options:
 | `BUILD_EXAMPLES` | OFF | Build example programs |
 | `ENABLE_FUZZING` | OFF | Build fuzzing target |
 
-### 1.3 CMake Integration
+### CMake Integration
 
 ```cmake
 find_package(gsml3parser REQUIRED)
@@ -90,7 +91,7 @@ add_subdirectory(libgsml3parser)
 target_link_libraries(myapp PRIVATE gsml3parser::parser)
 ```
 
-### 1.4 Umbrella Header
+### Umbrella Header
 
 Include everything with a single header:
 
@@ -98,7 +99,7 @@ Include everything with a single header:
 #include <gsml3parser/gsml3parser.hpp>
 ```
 
-### 1.5 Stack Modules for BTS Development
+### Stack Modules for BTS Development
 
 Version 0.11.0 introduces the **stack module** namespace (`gsml3parser::stack/`), providing high-level primitives for building a software Base Transceiver Station (BTS) on top of the L3 parser:
 
@@ -134,7 +135,7 @@ rrFsm.setState(RRStateMachine::State::IDLE);
 
 ## 2. Core Types
 
-### 2.1 ParseError
+### ParseError
 
 **File:** `gsml3parser/expected.h`
 
@@ -160,7 +161,7 @@ struct ParseError {
 | `bitPosition` | Bit offset in input where the error occurred |
 | `failed()` | Returns `true` if `code != Ok` |
 
-### 2.2 Expected<T>
+### Expected<T>
 
 **File:** `gsml3parser/expected.h`
 
@@ -237,7 +238,7 @@ auto roundTripped = msg.and_then(writeL3Hex)
 
 ## 3. Bit-Level I/O
 
-### 3.1 BitReader
+### BitReader
 
 **File:** `gsml3parser/bitreader.h`
 
@@ -269,7 +270,7 @@ public:
 
 **Bit ordering:** MSB-first within each octet (bit 7 is read first).
 
-### 3.2 BitWriter
+### BitWriter
 
 **File:** `gsml3parser/bitwriter.h`
 
@@ -311,7 +312,7 @@ size_t bitsWritten = writer.position();
 
 ## 4. Parser Configuration
 
-### 4.1 ParserConfig
+### ParserConfig
 
 **File:** `gsml3parser/parser_config.h`
 
@@ -353,7 +354,7 @@ auto result = parseL3Hex("060D", cfg);
 
 ## 5. L3 Header Parsing
 
-### 5.1 L3Header
+### L3Header
 
 **File:** `gsml3parser/l3header.h`
 
@@ -369,7 +370,7 @@ struct L3Header {
 };
 ```
 
-### 5.2 parseL3Header()
+### parseL3Header()
 
 Parse a 2-byte L3 header from raw data.
 
@@ -390,7 +391,7 @@ Returns `TruncatedInput` error if fewer than 2 bytes provided. Returns `InvalidP
 
 ## 6. Message Variants
 
-### 6.1 Domain Variants
+### Domain Variants
 
 **File:** `gsml3parser/message_types.h`
 
@@ -411,7 +412,7 @@ using EXTENDED = std::variant<L3ExtendedMessage>;
 using TESTPROC = std::variant<L3TestProcedureMessage>;
 ```
 
-### 6.2 ParsedMessage
+### ParsedMessage
 
 The top-level variant that wraps all domains:
 
@@ -444,7 +445,7 @@ if (msg) {
 
 **File:** `gsml3parser/parser.h`
 
-### 7.1 parseL3()
+### parseL3()
 
 Parse a complete L3 message from raw bytes.
 
@@ -461,7 +462,7 @@ Returns `Expected<ParsedMessage>` - the parsed variant on success, or `ParseErro
 
 Handles short messages automatically: 1-byte Channel Request, 4-byte Handover Access, 7-byte Synchronization Channel Information.
 
-### 7.2 parseL3Hex()
+### parseL3Hex()
 
 Parse a complete L3 message from a hex-encoded string.
 
@@ -471,7 +472,7 @@ Expected<ParsedMessage> parseL3Hex(std::string_view hex, const ParserConfig& cfg
 
 Whitespace in the hex string is ignored.
 
-### 7.3 writeL3()
+### writeL3()
 
 Serialize a ParsedMessage to raw bytes.
 
@@ -481,7 +482,7 @@ Expected<size_t> writeL3(const ParsedMessage& msg, uint8_t* out, size_t maxlen);
 
 Returns number of bytes written on success. Returns `InvalidValue` error if buffer too small.
 
-### 7.4 writeL3Hex()
+### writeL3Hex()
 
 Serialize a ParsedMessage to a hex-encoded string.
 
@@ -491,7 +492,7 @@ Expected<std::string> writeL3Hex(const ParsedMessage& msg);
 
 Uses inline encoding with lookup table - no `std::ostringstream` or `std::iomanip`.
 
-### 7.5 writeL3Bytes()
+### writeL3Bytes()
 
 Serialize a ParsedMessage to a `std::vector<uint8_t>` of raw bytes (header + body). Returns bytes ready for `LAPDmEntity.sendUI()`/`sendData()` and over-the-air transmission.
 
@@ -515,7 +516,7 @@ if (msg) {
 }
 ```
 
-### 7.6 Round-trip Pattern
+### Round-trip Pattern
 
 ```cpp
 auto original = parseL3Hex("06270460001");
@@ -534,7 +535,7 @@ if (original) {
 
 **File:** `gsml3parser/visitor.h`
 
-### 8.1 tryGet<T>()
+### tryGet<T>()
 
 Compile-time typed access - no `dynamic_cast` needed.
 
@@ -556,7 +557,7 @@ if (msg) {
 }
 ```
 
-### 8.2 messageName()
+### messageName()
 
 Returns a human-readable name for the message type.
 
@@ -564,7 +565,7 @@ Returns a human-readable name for the message type.
 std::string_view messageName(const ParsedMessage& msg);
 ```
 
-### 8.3 messagePD()
+### messagePD()
 
 Returns the Protocol Discriminator of the message.
 
@@ -572,7 +573,7 @@ Returns the Protocol Discriminator of the message.
 L3PD messagePD(const ParsedMessage& msg);
 ```
 
-### 8.4 messageMTI()
+### messageMTI()
 
 Returns the Message Type Indicator value.
 
@@ -584,7 +585,7 @@ int messageMTI(const ParsedMessage& msg);
 
 ## 9. Bitstream I/O
 
-### 9.1 ByteSource
+### ByteSource
 
 **File:** `gsml3parser/bitstream/byte_source.h`
 
@@ -600,7 +601,7 @@ public:
 
 Returns bytes actually read. Zero indicates EOF. May block.
 
-### 9.2 SpanByteSource
+### SpanByteSource
 
 Reads from a contiguous memory span. Non-blocking.
 
@@ -613,7 +614,7 @@ public:
 };
 ```
 
-### 9.3 FileByteSource
+### FileByteSource
 
 Reads from a C `FILE*`. Takes ownership and closes on destruction.
 
@@ -627,7 +628,7 @@ public:
 };
 ```
 
-### 9.4 RingBuffer
+### RingBuffer
 
 Lock-free-ish ring buffer for producer/consumer streaming.
 
@@ -651,7 +652,7 @@ public:
 
 **Thread safety:** Single-producer, single-consumer is fully safe without locks. Uses `std::atomic` with acquire/release ordering for correct behaviour on weakly-ordered architectures (ARM, PowerPC). On x86-64 (TSO) the compiler emits plain loads/stores - zero overhead. Multi-producer or multi-consumer requires external synchronization.
 
-### 9.5 L3Framer
+### L3Framer
 
 **File:** `gsml3parser/bitstream/framer.h`
 
@@ -679,7 +680,7 @@ public:
 | `skip(nbytes)` | Skip N bytes for error recovery |
 | `buffered()` | Bytes buffered but not yet consumed |
 
-### 9.6 L3StreamProcessor
+### L3StreamProcessor
 
 **File:** `gsml3parser/bitstream/stream_processor.h`
 
@@ -705,7 +706,7 @@ public:
 | `stats()` | Running statistics |
 | `resetStats()` | Reset all counters |
 
-### 9.7 FrameHandler
+### FrameHandler
 
 Callback interface for processed frames.
 
@@ -719,7 +720,7 @@ public:
 };
 ```
 
-### 9.8 StreamStats
+### StreamStats
 
 Running statistics for stream processing.
 
@@ -731,7 +732,7 @@ struct StreamStats {
 };
 ```
 
-### 9.9 L3StreamBuilder
+### L3StreamBuilder
 
 Fluent builder for `L3StreamProcessor`.
 
@@ -803,7 +804,7 @@ public:
 
 Foundation types for the Procedure Framework. Defines procedure type identifiers, lifecycle states, and result structures used by `ProcedureRunner` to manage protocol-level message exchanges.
 
-### 11.1 ProcedureType
+### ProcedureType
 
 Protocol procedure types mapped to 3GPP specification chapters:
 
@@ -821,7 +822,7 @@ Protocol procedure types mapped to 3GPP specification chapters:
 | `0x0A` | `IMSIDetach` | TS 24.008 4.4.6 | IMSI detach procedure |
 | `0xFF` | `Unknown` | — | Unrecognized or unsupported procedure |
 
-### 11.2 ProcedureState
+### ProcedureState
 
 Lifecycle states for a managed procedure instance:
 
@@ -834,7 +835,7 @@ Lifecycle states for a managed procedure instance:
 | `Failed` | Procedure terminated with an error condition |
 | `TimedOut` | Procedure exceeded its allowed duration without completion |
 
-### 11.3 ProcedureResult
+### ProcedureResult
 
 Terminal result structure for completed or failed procedures:
 
@@ -848,7 +849,7 @@ struct ProcedureResult {
 static_assert(sizeof(ProcedureResult) <= 64);
 ```
 
-### 11.4 Helper Functions
+### Helper Functions
 
 | Function | Description |
 |----------|-------------|
@@ -860,7 +861,75 @@ static_assert(sizeof(ProcedureResult) <= 64);
 
 ---
 
-## 12. LAPDm Protocol
+## 12. Response Builder
+
+**File:** `gsml3parser/stack/response_builder.h`
+**Namespace:** `gsml3parser`
+**Spec:** 3GPP TS 04.08 (message formats), TS 24.008 (procedure context)
+
+Factory for building L3 response messages. Used after the FSM returns a `SendResponse` action to generate the corresponding protocol message. Each method provides two overloads: a vector-returning version for convenience and a span-writing version for zero-heap-allocation high-throughput paths.
+
+### Design Pattern
+
+```
+FSM.processMessage(msg) -> SMResult{action: SendResponse, nextState: X}
+  |
+  v
+ResponseBuilder::build<Method>(params) -> bytes
+  |
+  v
+sendToMS(bytes)
+```
+
+### RR Responses
+
+| Method | Response Message | Spec |
+|--------|-----------------|------|
+| `buildImmediateAssignment(channel, ta, requestRef?)` | ImmediateAssignment | TS 04.08 9.1.19 |
+| `buildAssignmentCommand(channel, mode?)` | AssignmentCommand | TS 04.08 9.1.2 |
+| `buildChannelRelease(cause?)` | ChannelRelease | TS 04.08 9.1.7 |
+| `buildCipheringModeCommand(algo)` | CipheringModeCommand | TS 04.08 9.1.9 |
+| `buildPhysicalInformation(ta)` | PhysicalInformation | TS 04.08 9.1.12 |
+
+### MM Responses
+
+| Method | Response Message | Spec |
+|--------|-----------------|------|
+| `buildCMServiceAccept()` | CM Service Accept | TS 04.08 9.2.5 |
+| `buildCMServiceReject(cause?)` | CM Service Reject | TS 04.08 9.2.6 |
+| `buildIdentityRequest(type)` | IdentityRequest | TS 04.08 9.2.10 |
+| `buildAuthenticationRequest(rand)` | AuthenticationRequest | TS 04.08 9.2.2 |
+| `buildLocationUpdatingAccept(lai, newTmsi?)` | LocationUpdatingAccept | TS 04.08 9.2.13 |
+| `buildLocationUpdatingReject(cause)` | LocationUpdatingReject | TS 04.08 9.2.14 |
+| `buildTMSIReallocationCommand(lai, tmsi)` | TMSIReallocationCommand | TS 04.08 9.2.17 |
+
+### CC Responses
+
+| Method | Response Message | Spec |
+|--------|-----------------|------|
+| `buildCallProceeding(ti)` | CallProceeding | TS 04.08 9.3.3 |
+| `buildAlerting(ti)` | Alerting | TS 04.08 9.3.1 |
+| `buildConnect(ti)` | Connect | TS 04.08 9.3.5 |
+| `buildConnectAcknowledge(ti)` | ConnectAcknowledge | TS 04.08 9.3.6 |
+| `buildDisconnect(ti, cause)` | Disconnect | TS 04.08 9.3.7 |
+| `buildRelease(ti, cause)` | Release | TS 04.08 9.3.19 |
+| `buildReleaseComplete(ti)` | ReleaseComplete | TS 04.08 9.3.19 |
+
+### Zero-Allocation Usage with Arena
+
+```cpp
+Arena arena(65536);
+auto* buf = static_cast<uint8_t*>(arena.allocate(512));
+int n = ResponseBuilder::buildCMServiceAccept({buf, 512});
+if (n > 0) sendToMS(buf, n);
+```
+
+**Thread safety:** All methods are stateless and safe for concurrent use.
+**Memory:** Vector overloads allocate one `std::vector` per call; span overloads write directly into caller-provided buffers with zero heap cost.
+
+---
+
+## 13. LAPDm Protocol
 
 **Files:** `gsml3parser/lapdm_frame.h`, `gsml3parser/lapdm_entity.h`
 **Namespace:** `gsml3parser::lapdm` (frame types), `gsml3parser` (entity)
@@ -868,7 +937,7 @@ static_assert(sizeof(ProcedureResult) <= 64);
 
 Full LAPDm protocol implementation with frame encoding/decoding, state machine, I-frame segmentation/reassembly, T200 timer with retransmission, and contention resolution. Zero-allocation callbacks follow the FlatHandler pattern.
 
-### 12.1 LAPDm Frame Types
+### LAPDm Frame Types
 
 **File:** `gsml3parser/lapdm_frame.h`
 
@@ -976,7 +1045,7 @@ if (decoded && decoded->format == LAPDmControlFormat::U_Format &&
 }
 ```
 
-### 12.2 LAPDmEntity -- Full Protocol State Machine
+### LAPDmEntity -- Full Protocol State Machine
 
 **File:** `gsml3parser/lapdm_entity.h`
 
@@ -1105,7 +1174,7 @@ entity.tickT200(std::chrono::milliseconds(100));
 
 ---
 
-## 13. Protocol Dispatcher
+## 14. Protocol Dispatcher
 
 **File:** `gsml3parser/dispatcher.h`
 
@@ -1190,7 +1259,7 @@ dispatcher.dispatchRaw(std::span<const uint8_t>(data));
 
 ---
 
-## 14. Builder Pattern
+## 15. Builder Pattern
 
 Every L3 message type provides a fluent `Builder` interface for constructing messages from scratch. Each message class exposes a static `builder()` factory method that returns a builder with chainable setters matching the message's Information Elements, and a `build()` method that returns the constructed message object.
 
@@ -1270,7 +1339,7 @@ ParsedMessage pm{CCM{std::move(msg)}};
 
 ---
 
-## 15. Enum Formatters
+## 16. Enum Formatters
 
 **File:** `gsml3parser/enum_formatters.h`
 
@@ -1318,7 +1387,7 @@ if (msg) {
 
 ---
 
-## 16. Data Types
+## 17. Data Types
 
 **File:** `gsml3parser/types.h`
 
@@ -1407,7 +1476,7 @@ enum class GSMAlphabet : uint8_t {
 
 ---
 
-## 17. Enumerations
+## 18. Enumerations
 
 **File:** `gsml3parser/enums.h`
 
@@ -1449,7 +1518,7 @@ const char* BSSCause2Str(BSSCause cause);
 
 ---
 
-## 18. Protocol Types
+## 19. Protocol Types
 
 **File:** `gsml3parser/protocol_types.h`
 
@@ -1487,7 +1556,7 @@ public:
 
 ---
 
-## 19. Common Information Elements
+## 20. Common Information Elements
 
 **File:** `gsml3parser/common/l3common.h`
 
@@ -1568,7 +1637,7 @@ Cell parameters and handover reference for handover procedures.
 
 ---
 
-## 20. Radio Resource Messages
+## 21. Radio Resource Messages
 
 **File:** `gsml3parser/rr/l3rrmessages.h` - 95 message types in the `RRM` variant.
 
@@ -1752,7 +1821,7 @@ Each message is a plain struct with:
 
 ---
 
-## 21. Mobility Management Messages
+## 22. Mobility Management Messages
 
 **File:** `gsml3parser/mm/l3mmmessages.h` - 18 message types in the `MMM` variant.
 
@@ -1794,7 +1863,7 @@ Each message is a plain struct with:
 
 ---
 
-## 22. Call Control Messages
+## 23. Call Control Messages
 
 **File:** `gsml3parser/cc/l3ccmessages.h` - 20 message types in the `CCM` variant.
 
@@ -1891,7 +1960,7 @@ MTI values are the 6-bit messageType field (GSM 04.08 Table 10.3). In the L3 hea
 
 ---
 
-## 23. Supplementary Services Messages
+## 24. Supplementary Services Messages
 
 **File:** `gsml3parser/ss/l3ssmessages.h` - 3 message types in the `SSM` variant.
 
@@ -2057,7 +2126,7 @@ if (ussd) {
 
 ---
 
-## 24. GPRS Mobility Management Messages
+## 25. GPRS Mobility Management Messages
 
 **File:** `gsml3parser/gmm/l3gmmmessages.h` - 19 message types in the `GMM` variant.
 **Spec:** 3GPP TS 24.008 sections 9.4, Table 10.4.
@@ -2123,7 +2192,7 @@ if (ussd) {
 
 ---
 
-## 25. GPRS Session Management Messages
+## 26. GPRS Session Management Messages
 
 **File:** `gsml3parser/sm/l3smmessages.h` - 29 message types in the `SM` variant.
 **Spec:** 3GPP TS 24.008 sections 9.5, Table 10.4a.
@@ -2219,7 +2288,7 @@ if (ussd) {
 
 ---
 
-## 26. SMS Messages
+## 27. SMS Messages
 
 **File:** `gsml3parser/sms/l3smsmessages.h` - 5 CP messages; `gsml3parser/sms/l3smsl3messages.h` - 14 L3 messages; total 19 in the `SMS` variant.
 **Spec:** 3GPP TS 24.011 sections 7-8, 3GPP TS 23.040 (CP/RP/TP layers); 3GPP TS 24.008 sections 9.6, Table 10.6a (SMS L3 primitives).
@@ -2288,7 +2357,7 @@ The SMS layer uses a three-level encapsulation: L3 header -> CP message -> RP me
 
 ---
 
-## 27. Broadcast Call Control Messages
+## 28. Broadcast Call Control Messages
 
 **File:** `gsml3parser/bcc/l3bccmessages.h` - 6 message types in the `BCCM` variant.
 **Spec:** 3GPP TS 44.018 sections 9.6, Table 10.4.3.
@@ -2309,7 +2378,7 @@ Each message stores the body as an opaque octet sequence for basic infrastructur
 
 ---
 
-## 28. Group Call Control Messages
+## 29. Group Call Control Messages
 
 **File:** `gsml3parser/gcc/l3gccmessages.h` - 7 message types in the `GCCM` variant.
 **Spec:** 3GPP TS 44.018 sections 9.7, Table 10.4.4.
@@ -2331,7 +2400,7 @@ Each message stores the body as an opaque octet sequence for basic infrastructur
 
 ---
 
-## 29. Location Services Messages
+## 30. Location Services Messages
 
 **File:** `gsml3parser/ls/l3lsmessages.h` - 2 message types in the `LSM` variant.
 **Spec:** 3GPP TS 44.031 / TS 24.027 / TS 24.028.
@@ -2346,7 +2415,7 @@ Location Services messages carry mobile location service parameters between the 
 
 ---
 
-## 30. SMS L3 Messages
+## 31. SMS L3 Messages
 
 **File:** `gsml3parser/sms/l3smsl3messages.h` - 14 message types, part of the `SMS` variant.
 **Spec:** 3GPP TS 24.008 sections 9.6.1–9.6.14, Table 10.6a.
@@ -2403,7 +2472,7 @@ These are L3-level SMS primitives used for SMS-on-CS fallback, status reporting,
 
 ---
 
-## 31. Extended PD Messages
+## 32. Extended PD Messages
 
 **File:** `gsml3parser/extended/l3extendedmessages.h` - 1 placeholder type in the `EXTENDED` variant.
 **Spec:** GSM 04.08 §10.2.
@@ -2422,7 +2491,7 @@ The Extended PD provides infrastructure for future extended protocol discriminat
 
 ---
 
-## 32. Test Procedure PD Messages
+## 33. Test Procedure PD Messages
 
 **File:** `gsml3parser/testproc/l3testproceduremessages.h` - 1 placeholder type in the `TESTPROC` variant.
 **Spec:** GSM 04.08 §10.2.
@@ -2441,13 +2510,13 @@ The Test Procedure PD provides infrastructure for test procedure messages used i
 
 ---
 
-## 33. MSContext - Per-Subscriber State
+## 34. MSContext - Per-Subscriber State
 
 MSContext aggregates all state associated with a single mobile station: identity (TMSI/IMSI), channel assignment, classmark, location area, and protocol-layer flags (ciphering, registration, authentication). This is the primary object through which a BTS tracks each subscriber.
 
 **Header:** `#include <gsml3parser/stack/ms_context.h>`
 
-### 34. Performance Characteristics
+### Performance Characteristics
 
 | Property | Value |
 |----------|-------|
@@ -2458,14 +2527,14 @@ MSContext aggregates all state associated with a single mobile station: identity
 
 Fields are ordered by access frequency: hot fields (identity, channel, flags) first, cold fields (LAI, classmark) last. This layout minimizes cache line misses for the typical message processing path.
 
-### 34. Factory Methods
+### Factory Methods
 
 | Method | Description |
 |--------|-------------|
 | `MSContext::createWithTMSI(uint32_t tmsi)` | Create context with TMSI identity |
 | `MSContext::createWithIMSI(std::string_view imsiDigits)` | Create context with IMSI identity |
 
-### 34. Identity API
+### Identity API
 
 | Method | Description |
 |--------|-------------|
@@ -2473,7 +2542,7 @@ Fields are ordered by access frequency: hot fields (identity, channel, flags) fi
 | `setTMSI(uint32_t tmsi)` | Update or set TMSI |
 | `setIMSI(std::string_view digits)` | Update or set IMSI |
 
-### 34. Channel Assignment API
+### Channel Assignment API
 
 | Method | Description |
 |--------|-------------|
@@ -2484,7 +2553,7 @@ Fields are ordered by access frequency: hot fields (identity, channel, flags) fi
 | `timeslot()` | Returns TDMA timeslot number |
 | `arfcn()` | Returns ARFCN value |
 
-### 34. State Flags API
+### State Flags API
 
 | Method | Description |
 |--------|-------------|
@@ -2495,7 +2564,7 @@ Fields are ordered by access frequency: hot fields (identity, channel, flags) fi
 | `classmark()` / `setClassmark(cm)` | MS Classmark 1 storage |
 | `lai()` / `setLAI(lai)` | Location Area Identity storage |
 
-### 34. Example
+### Example
 
 ```cpp
 #include <gsml3parser/stack/ms_context.h>
@@ -2524,13 +2593,13 @@ ctx.setRegistered(true);
 
 ---
 
-## 34. Timer Framework
+## 35. Timer Framework
 
 The timer framework provides GSM Layer 3 protocol timers as defined in 3GPP TS 24.008 and TS 44.018. It includes timer identifiers, a single-timer class, and a manager that tracks up to 32 concurrent timers per MS using fixed-size arrays (zero heap allocation).
 
 **Header:** `#include <gsml3parser/stack/l3_timer.h>`
 
-### 35. L3TimerId Enumerations
+### L3TimerId Enumerations
 
 | Timer ID | Default Duration | Description | Spec Reference |
 |----------|-----------------|-------------|----------------|
@@ -2554,14 +2623,14 @@ The timer framework provides GSM Layer 3 protocol timers as defined in 3GPP TS 2
 | `T3334` | 3000ms | GMM status retransmission | 3GPP TS 24.008 10.5.112 |
 | `T3395` | 3000ms | Packet reservation request retransmission | 3GPP TS 24.008 10.5.130 |
 
-### 35. Free Functions
+### Free Functions
 
 | Function | Description |
 |----------|-------------|
 | `l3TimerDefault(L3TimerId)` | Returns the default duration for a timer ID (O(1) lookup) |
 | `l3TimerName(L3TimerId)` | Returns human-readable timer name (e.g. "T3101") |
 
-### 35. L3Timer Class
+### L3Timer Class
 
 Single timer instance with start/stop/expired semantics.
 
@@ -2577,7 +2646,7 @@ Single timer instance with start/stop/expired semantics.
 | `id()` | Returns the timer's L3TimerId |
 | `expiry()` | Returns the configured expiry duration |
 
-### 35. TimerManager Class
+### TimerManager Class
 
 Manages up to 32 named timers for one MS context using fixed-size arrays.
 
@@ -2594,7 +2663,7 @@ Manages up to 32 named timers for one MS context using fixed-size arrays.
 | `get(id)` | Get the L3Timer object for direct access |
 | `runningCount()` | Number of currently running timers |
 
-### 35. Performance Characteristics
+### Performance Characteristics
 
 | Metric | Value |
 |--------|-------|
@@ -2604,7 +2673,7 @@ Manages up to 32 named timers for one MS context using fixed-size arrays.
 | `start()` / `stop()` | O(1) - direct index into array |
 | Thread safety | NOT thread-safe. One instance per MS, single-thread access |
 
-### 35. Example
+### Example
 
 ```cpp
 #include <gsml3parser/stack/l3_timer.h>
@@ -2638,11 +2707,11 @@ if (tm.isRunning(L3TimerId::T3101)) {
 
 ---
 
-## 35. Transaction Framework
+## 36. Transaction Framework
 
 The transaction framework provides request-response correlation for L3 messaging. It tracks outgoing requests and matches incoming responses using either TI (Transaction Identifier) for CC/SS protocols or PD+MTI for other protocol discriminators.
 
-### 36. Overview
+### Overview
 
 | Component | Description |
 |-----------|-------------|
@@ -2650,7 +2719,7 @@ The transaction framework provides request-response correlation for L3 messaging
 | `TransactionManager` | Manages up to 16 concurrent transactions per MS |
 | `TransactionState` | Pending, Completed, Expired, Cancelled |
 
-### 36. Matching Semantics
+### Matching Semantics
 
 | Protocol Discriminator | Matching Strategy | Complexity |
 |------------------------|-------------------|------------|
@@ -2658,7 +2727,7 @@ The transaction framework provides request-response correlation for L3 messaging
 | `NonCallSS` (PD=0x0b) | TI-based lookup via `mTiIndex[8]` | O(1) |
 | All other PDs | PD + MTI comparison | O(K), K < 16 |
 
-### 36. API Reference
+### API Reference
 
 #### TransactionState
 
@@ -2728,7 +2797,7 @@ public:
 };
 ```
 
-### 36. Usage Example
+### Usage Example
 
 ```cpp
 #include <gsml3parser/stack/transaction.h>
@@ -2755,7 +2824,7 @@ tm.onTimerExpired(L3TimerId::T3101);
 tm.cleanup();
 ```
 
-### 36. Performance Characteristics
+### Performance Characteristics
 
 | Metric | Value |
 |--------|-------|
@@ -2768,14 +2837,14 @@ tm.cleanup();
 
 ---
 
-## 36. Protocol State Machines
+## 37. Protocol State Machines
 
 **File:** `gsml3parser/stack/state_machine.h` - FSM base class and RR/MM/CC skeleton implementations.
 **Spec:** 3GPP TS 24.008 Chapters 4-6 (RR, MM, CC procedures).
 
 The state machine framework provides a base class for protocol state machines with message and timer event processing, plus concrete skeleton implementations for the three main GSM Layer 3 sublayers: Radio Resource (RR), Mobility Management (MM), and Call Control (CC).
 
-### 37. SMAction - State Machine Actions
+### SMAction - State Machine Actions
 
 | Action | Description |
 |--------|-------------|
@@ -2787,7 +2856,7 @@ The state machine framework provides a base class for protocol state machines wi
 | `PushSubstate` | Push a sub-state machine onto the stack (for nested procedures) |
 | `PopSubstate` | Pop back to the parent state machine |
 
-### 37. SMResult - Processing Result
+### SMResult - Processing Result
 
 The `SMResult` struct is returned from every `processMessage()` and `processTimer()` call:
 
@@ -2801,7 +2870,7 @@ struct SMResult {
 
 **Important:** `SMResult` does NOT contain `ParsedMessage`. The FSM returns action + next state; the caller builds response messages externally via Builder API. `sizeof(SMResult) <= 16 bytes`.
 
-### 37. ProtocolStateMachine - Base Class
+### ProtocolStateMachine - Base Class
 
 ```cpp
 class ProtocolStateMachine {
@@ -2819,7 +2888,7 @@ protected:
 };
 ```
 
-### 37. RRStateMachine States
+### RRStateMachine States
 
 | State | Description |
 |-------|-------------|
@@ -2845,7 +2914,7 @@ CIPHER_MODE + CipherModeComplete-> ACTIVE
 T3109 expiry (CHANNEL_ASSIGNED) -> CHANNEL_RELEASE
 ```
 
-### 37. MMStateMachine States
+### MMStateMachine States
 
 | State | Description |
 |-------|-------------|
@@ -2870,7 +2939,7 @@ T3101/T3102 expiry (SERVICE_REQUEST)  -> DEREGISTERED
 T3106 expiry (AUTHENTICATION)         -> DEREGISTERED
 ```
 
-### 37. CCStateMachine States
+### CCStateMachine States
 
 | State | Description |
 |-------|-------------|
@@ -2895,7 +2964,7 @@ DISCONNECT_RECEIVED       -> RELEASE (auto-transition)
 T3101 expiry (SETUP_RECEIVED/PROCEEDING/ALERTING) -> IDLE
 ```
 
-### 37. Usage Example
+### Usage Example
 
 ```cpp
 #include <gsml3parser/stack/state_machine.h>
@@ -2925,7 +2994,7 @@ protected:
 };
 ```
 
-### 37. Performance Characteristics
+### Performance Characteristics
 
 | Metric | Value |
 |--------|-------|
@@ -2937,13 +3006,13 @@ protected:
 
 ---
 
-## 37. Channel Pool - Logical Channel Management
+## 38. Channel Pool - Logical Channel Management
 
 **File:** `gsml3parser/stack/channel_pool.h`
 
 Manages a pool of logical channels for BTS operation. Provides O(1) channel allocation via per-type free-lists, Request Reference (RA) decoding from RACH bursts, and Very Early Assignment (VEA) fallback logic.
 
-### 38. ChannelDescriptor
+### ChannelDescriptor
 
 Describes a logical channel with type, transceiver index, timeslot, and ARFCN.
 
@@ -2957,7 +3026,7 @@ struct ChannelDescriptor {
 };
 ```
 
-### 38. decodeChannelNeeded()
+### decodeChannelNeeded()
 
 Decodes the Request Reference (RA) byte from a RACH burst into the required channel type, following GSM 04.08 Table 9.9.
 
@@ -2980,7 +3049,7 @@ ChannelType decodeChannelNeeded(uint8_t ra, bool neci = false, bool vea = false)
 | `10` | Answer to Paging | TCHF | TCHF |
 | `11` | Location Updating | SDCCH | SDCCH |
 
-### 38. isLocationUpdatingRequest()
+### isLocationUpdatingRequest()
 
 ```cpp
 bool isLocationUpdatingRequest(uint8_t ra, bool neci = false);
@@ -2988,7 +3057,7 @@ bool isLocationUpdatingRequest(uint8_t ra, bool neci = false);
 
 Returns `true` when establishment cause bits (6-5) equal `11`.
 
-### 38. ChannelPool
+### ChannelPool
 
 ```cpp
 class ChannelPool {
@@ -3019,7 +3088,7 @@ public:
 | `allocateVEA(ra)` | VEA: try TCH, fall back SDCCH | O(1) |
 | `freeChannels(type)` | List all free channels (diagnostic) | O(1) copy |
 
-### 38. VEA Procedure
+### VEA Procedure
 
 Very Early Assignment (GSM 05.08) skips the intermediate SDCCH assignment for MO calls:
 
@@ -3038,7 +3107,7 @@ auto fallback = pool.allocateVEA(0x00);
 // fallback->type == ChannelType::SDCCHType
 ```
 
-### 38. Usage Example
+### Usage Example
 
 ```cpp
 #include <gsml3parser/stack/channel_pool.h>
@@ -3065,7 +3134,7 @@ if (ch) {
 pool.release(*ch);
 ```
 
-### 38. Performance Characteristics
+### Performance Characteristics
 
 | Metric | Value |
 |--------|-------|
@@ -3076,7 +3145,7 @@ pool.release(*ch);
 
 ---
 
-## 38. FlatHandler - Zero-Overhead Callbacks
+## 39. FlatHandler - Zero-Overhead Callbacks
 
 **File:** `gsml3parser/flat_handler.h`
 
@@ -3171,7 +3240,7 @@ h2(parsedMsg);
 
 ---
 
-## 39. ShardedChannelPool - Thread-Safe Channel Pool
+## 40. ShardedChannelPool - Thread-Safe Channel Pool
 
 **File:** `gsml3parser/stack/sharded_channel_pool.h`
 
@@ -3263,7 +3332,7 @@ for (auto& t : workers) t.join();
 
 ---
 
-## 40. InlineFramer - Zero-Copy Frame Extraction
+## 41. InlineFramer - Zero-Copy Frame Extraction
 
 **File:** `gsml3parser/bitstream/inline_framer.h` (header-only)
 
@@ -3321,7 +3390,7 @@ NOT thread-safe. One instance per buffer, single-threaded use. Safe for concurre
 
 ---
 
-## 41. ZeroCopyStreamProcessor - Zero-Copy Stream Parsing
+## 42. ZeroCopyStreamProcessor - Zero-Copy Stream Parsing
 
 **File:** `gsml3parser/bitstream/zero_copy_processor.h` (header-only)
 
@@ -3389,7 +3458,7 @@ NOT thread-safe. Safe for concurrent use when each thread has its own instance o
 
 ---
 
-## 42. Performance Optimizations Summary
+## 43. Performance Optimizations Summary
 
 The following optimizations have been applied to achieve high-throughput, low-latency L3 parsing at scale:
 

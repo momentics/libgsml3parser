@@ -54,6 +54,7 @@
 #include "gsml3parser/stack/ms_context.h"
 #include "gsml3parser/stack/l3_timer.h"
 #include "gsml3parser/stack/state_machine.h"
+#include "gsml3parser/stack/response_builder.h"
 #include "gsml3parser/stack/transaction.h"
 #include "gsml3parser/stack/channel_pool.h"
 #include "gsml3parser/flat_handler.h"

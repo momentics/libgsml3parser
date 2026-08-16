@@ -66,6 +66,14 @@ SMResult RRStateMachine::handle_message_impl(int state, const ParsedMessage& msg
                 if (pd == L3PD::MobilityManagement && mti == L3CMServiceAccept::MTI) {
                     return {SMAction::Transition, static_cast<int>(State::ACTIVE)};
                 }
+                if (pd == L3PD::MobilityManagement && mti == L3CMServiceRequest::MTI) {
+                    return {SMAction::SendResponse, static_cast<int>(State::ACTIVE)};
+                }
+                break;
+            case State::ACTIVE:
+                if (pd == L3PD::CallControl && mti == L3Setup::MTI) {
+                    return {SMAction::SendResponse, State::ACTIVE};
+                }
                 break;
             default:
                 break;
@@ -76,7 +84,7 @@ SMResult RRStateMachine::handle_message_impl(int state, const ParsedMessage& msg
     switch (state) {
         case State::IDLE:
             if (mti == L3ChannelRequest::MTI) {
-                return {SMAction::Transition, static_cast<int>(State::CHANNEL_REQUESTED)};
+                return {SMAction::SendResponse, static_cast<int>(State::CHANNEL_REQUESTED)};
             }
             break;
 
@@ -96,6 +104,9 @@ SMResult RRStateMachine::handle_message_impl(int state, const ParsedMessage& msg
             if (pd == L3PD::MobilityManagement && mti == L3CMServiceAccept::MTI) {
                 return {SMAction::Transition, static_cast<int>(State::ACTIVE)};
             }
+            if (pd == L3PD::MobilityManagement && mti == L3CMServiceRequest::MTI) {
+                return {SMAction::SendResponse, static_cast<int>(State::ACTIVE)};
+            }
             break;
 
         case State::ACTIVE:
@@ -103,7 +114,7 @@ SMResult RRStateMachine::handle_message_impl(int state, const ParsedMessage& msg
                 case L3CipheringModeComplete::MTI:
                     return {SMAction::None, std::nullopt};
                 case L3ChannelRelease::MTI:
-                    return {SMAction::Transition, static_cast<int>(State::CHANNEL_RELEASE)};
+                    return {SMAction::SendResponse, static_cast<int>(State::CHANNEL_RELEASE)};
                 case L3MeasurementReport::MTI:
                     return {SMAction::None, std::nullopt};
                 case L3HandoverCommand::MTI:
@@ -123,7 +134,7 @@ SMResult RRStateMachine::handle_message_impl(int state, const ParsedMessage& msg
             break;
 
         case State::CHANNEL_RELEASE:
-            break;
+            return {SMAction::ReleaseChannel, std::nullopt};
     }
 
     return {SMAction::None, std::nullopt};
@@ -156,31 +167,31 @@ SMResult MMStateMachine::handle_message_impl(int state, const ParsedMessage& msg
     switch (state) {
         case State::DEREGISTERED:
             if (mti == L3CMServiceRequest::MTI) {
-                return {SMAction::Transition, static_cast<int>(State::SERVICE_REQUEST)};
+                return {SMAction::SendResponse, static_cast<int>(State::WAITING_IDENTITY)};
             }
             break;
 
         case State::SERVICE_REQUEST:
             if (mti == L3IdentityResponse::MTI) {
-                return {SMAction::Transition, static_cast<int>(State::IDENTITY_VERIFIED)};
+                return {SMAction::SendResponse, static_cast<int>(State::IDENTITY_VERIFIED)};
             }
             break;
 
         case State::WAITING_IDENTITY:
             if (mti == L3IdentityResponse::MTI) {
-                return {SMAction::Transition, static_cast<int>(State::IDENTITY_VERIFIED)};
+                return {SMAction::SendResponse, static_cast<int>(State::IDENTITY_VERIFIED)};
             }
             break;
 
         case State::IDENTITY_VERIFIED:
             if (mti == L3AuthenticationResponse::MTI) {
-                return {SMAction::Transition, static_cast<int>(State::AUTHENTICATED)};
+                return {SMAction::SendResponse, static_cast<int>(State::AUTHENTICATED)};
             }
             break;
 
         case State::AUTHENTICATION:
             if (mti == L3AuthenticationResponse::MTI) {
-                return {SMAction::Transition, static_cast<int>(State::AUTHENTICATED)};
+                return {SMAction::SendResponse, static_cast<int>(State::AUTHENTICATED)};
             }
             break;
 
@@ -192,7 +203,7 @@ SMResult MMStateMachine::handle_message_impl(int state, const ParsedMessage& msg
 
         case State::LOCATION_UPDATE:
             if (mti == L3CMServiceAccept::MTI) {
-                return {SMAction::Transition, static_cast<int>(State::REGISTERED)};
+                return {SMAction::SendResponse, static_cast<int>(State::REGISTERED)};
             }
             break;
 
@@ -244,17 +255,17 @@ SMResult CCStateMachine::handle_message_impl(int state, const ParsedMessage& msg
             break;
 
         case State::SETUP_RECEIVED:
-            return {SMAction::Transition, static_cast<int>(State::PROCEEDING)};
+            return {SMAction::SendResponse, static_cast<int>(State::PROCEEDING)};
 
         case State::PROCEEDING:
             if (mti == L3Alerting::MTI) {
-                return {SMAction::Transition, static_cast<int>(State::ALERTING)};
+                return {SMAction::SendResponse, static_cast<int>(State::ALERTING)};
             }
             break;
 
         case State::ALERTING:
             if (mti == L3Connect::MTI) {
-                return {SMAction::Transition, static_cast<int>(State::CONNECT)};
+                return {SMAction::SendResponse, static_cast<int>(State::CONNECT)};
             }
             break;
 
@@ -266,14 +277,20 @@ SMResult CCStateMachine::handle_message_impl(int state, const ParsedMessage& msg
 
         case State::ACTIVE:
             if (mti == L3Disconnect::MTI) {
-                return {SMAction::Transition, static_cast<int>(State::DISCONNECT_RECEIVED)};
+                return {SMAction::SendResponse, static_cast<int>(State::DISCONNECT_RECEIVED)};
+            }
+            if (mti == L3ConnectAcknowledge::MTI) {
+                return {SMAction::Transition, static_cast<int>(State::ACTIVE)};
             }
             break;
 
         case State::DISCONNECT_RECEIVED:
-            return {SMAction::Transition, static_cast<int>(State::RELEASE)};
+            return {SMAction::SendResponse, static_cast<int>(State::RELEASE)};
 
         case State::RELEASE:
+            if (mti == L3Release::MTI) {
+                return {SMAction::SendResponse, static_cast<int>(State::IDLE)};
+            }
             break;
     }
 

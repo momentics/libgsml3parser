@@ -55,6 +55,7 @@ add_executable(gsml3parser_tests
     test_sharded_channel_pool.cpp
     test_zero_copy.cpp
     test_procedure_types.cpp
+    test_response_builder.cpp
 )
 
 find_package(Threads REQUIRED)

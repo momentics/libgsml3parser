@@ -25,8 +25,9 @@ This document describes the recommended architecture for building a software Bas
 │  └───────────────────────────┬─────────────────────────────────┘     │
 │                              │                                       │
 │  ┌───────────────────────────▼─────────────────────────────────┐     │
-│  │                   ProtocolDispatcher                        │     │
-│  │              (per-MS, O(1) PD+MTI routing)                  │     │
+│  │              ResponseBuilder + ProtocolDispatcher            │     │
+│  │  FSM returns SendResponse action -> ResponseBuilder builds   │     │
+│  │  the L3 response bytes (zero-heap via Arena pre-allocation)  │     │
 │  └───────────────────────────┬─────────────────────────────────┘     │
 │                              │                                       │
 ├──────────────────────────────┼───────────────────────────────────────┤
@@ -35,6 +36,7 @@ This document describes the recommended architecture for building a software Bas
 │  │  parseL3() <--> ParsedMessage (stack variant, < 8 KB)       │     │
 │  │  writeL3Bytes() -> raw bytes                                │     │
 │  │  Builder API -> construct L3 messages                       │     │
+│  │  ResponseBuilder -> build protocol responses                │     │
 │  │  lapdm::wrapL3() / unwrapL3() -> LAPDm framing              │     │
 │  └───────────────────────────┬─────────────────────────────────┘     │
 │                              │                                       │
@@ -78,7 +80,8 @@ LAPDm Frame (raw bytes from PHY)
   │
   ├─ ProtocolStateMachine::processMessage(msg) ─► SMResult { action, nextState }
   │       │
-  │       └─ if transition: update MSContext, build response
+  │       ├─ if action == Transition: update MSContext
+  │       └─ if action == SendResponse: ResponseBuilder builds response bytes
   │
   └─ ProtocolDispatcher::dispatch(msg) ─► application handler
           │

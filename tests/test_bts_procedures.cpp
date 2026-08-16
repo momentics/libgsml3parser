@@ -324,34 +324,37 @@ TEST(BTSProceduresTest, MMStateMachine_authFlow) {
     TransactionManager txnMgr;
     MSContext ctx = MSContext::createWithTMSI(0xCAFEBABE);
 
-    // DEREGISTERED -> SERVICE_REQUEST (CM Service Request)
+    // DEREGISTERED -> WAITING_IDENTITY (CM Service Request, SendResponse: IdentityRequest)
     fsm.setState(MMStateMachine::State::DEREGISTERED);
     auto r1 = fsm.processMessage(makeMMCMServiceRequest());
-    EXPECT_EQ(fsm.state(), MMStateMachine::State::SERVICE_REQUEST);
+    EXPECT_EQ(fsm.state(), MMStateMachine::State::WAITING_IDENTITY);
+    EXPECT_EQ(r1.action, SMAction::SendResponse);
 
     // Start T3101 timer for CM service request
     tm.start(L3TimerId::T3101);
 
-    // SERVICE_REQUEST -> IDENTITY_VERIFIED (Identity Response)
+    // WAITING_IDENTITY -> IDENTITY_VERIFIED (Identity Response, SendResponse: AuthRequest)
     auto idTxn = txnMgr.create(L3PD::MobilityManagement, L3IdentityResponse::MTI, 0, L3TimerId::T3102);
     ASSERT_TRUE(idTxn.has_value());
     tm.start(L3TimerId::T3102);
 
     auto r2 = fsm.processMessage(makeMMIdentityResponse());
     EXPECT_EQ(fsm.state(), MMStateMachine::State::IDENTITY_VERIFIED);
+    EXPECT_EQ(r2.action, SMAction::SendResponse);
     tm.stop(L3TimerId::T3102);
 
     if (Transaction* tx = txnMgr.get(*idTxn)) {
         tx->complete();
     }
 
-    // IDENTITY_VERIFIED -> AUTHENTICATED (Authentication Response)
+    // IDENTITY_VERIFIED -> AUTHENTICATED (Authentication Response, SendResponse)
     auto authTxn = txnMgr.create(L3PD::MobilityManagement, L3AuthenticationResponse::MTI, 0, L3TimerId::T3106);
     ASSERT_TRUE(authTxn.has_value());
     tm.start(L3TimerId::T3106);
 
     auto r3 = fsm.processMessage(makeMMAuthenticationResponse());
     EXPECT_EQ(fsm.state(), MMStateMachine::State::AUTHENTICATED);
+    EXPECT_EQ(r3.action, SMAction::SendResponse);
     tm.stop(L3TimerId::T3106);
     ctx.setAuthenticated(true);
 
@@ -364,9 +367,10 @@ TEST(BTSProceduresTest, MMStateMachine_authFlow) {
         ParsedMessage{MMM{L3LocationUpdatingRequest::builder().updateType(0).build()}});
     EXPECT_EQ(fsm.state(), MMStateMachine::State::LOCATION_UPDATE);
 
-    // LOCATION_UPDATE -> REGISTERED (CM Service Accept as proxy for Location Updating Accept)
+    // LOCATION_UPDATE -> REGISTERED (CM Service Accept as proxy for Location Updating Accept, SendResponse)
     auto r5 = fsm.processMessage(makeMMCMServiceAccept());
     EXPECT_EQ(fsm.state(), MMStateMachine::State::REGISTERED);
+    EXPECT_EQ(r5.action, SMAction::SendResponse);
     ctx.setRegistered(true);
 
     // Verify final state
