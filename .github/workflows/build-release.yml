@@ -11,29 +11,46 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    env:
-      CMAKE_BUILD_PARALLEL_LEVEL: 2
-
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure Static Build
+      - name: Configure Static Build (lib only)
         run: >
-          cmake -B build_static -DCMAKE_BUILD_TYPE=Release
+          cmake -B build_static_lib -DCMAKE_BUILD_TYPE=Release
           -DCMAKE_INSTALL_PREFIX=install
           -DBUILD_SHARED_LIBS=OFF
-          -DBUILD_TESTS=ON
-          -DBUILD_EXAMPLES=ON
+          -DBUILD_TESTS=OFF
+          -DBUILD_EXAMPLES=OFF
 
       - name: Build Static Library
-        run: cmake --build build_static --config Release --parallel
-
-      - name: Run Tests
-        run: ctest --test-dir build_static --output-on-failure --parallel
+        run: cmake --build build_static_lib --config Release --parallel 2
 
       - name: Install Static Library
-        run: cmake --install build_static
+        run: cmake --install build_static_lib
+
+      - name: Configure Static Build (tests)
+        run: >
+          cmake -B build_static_tests -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_SHARED_LIBS=OFF
+          -DBUILD_TESTS=ON
+          -DBUILD_EXAMPLES=OFF
+
+      - name: Build Tests
+        run: cmake --build build_static_tests --config Release --parallel 1
+
+      - name: Run Tests
+        run: ctest --test-dir build_static_tests --output-on-failure --parallel 2
+
+      - name: Configure Static Build (examples)
+        run: >
+          cmake -B build_static_examples -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_SHARED_LIBS=OFF
+          -DBUILD_TESTS=OFF
+          -DBUILD_EXAMPLES=ON
+
+      - name: Build Examples
+        run: cmake --build build_static_examples --config Release --parallel 1
 
       - name: Configure Shared Build
         run: >
@@ -44,7 +61,7 @@ jobs:
           -DBUILD_EXAMPLES=OFF
 
       - name: Build Shared Library
-        run: cmake --build build_shared --config Release --parallel
+        run: cmake --build build_shared --config Release --parallel 2
 
       - name: Install Shared Library
         run: cmake --install build_shared
