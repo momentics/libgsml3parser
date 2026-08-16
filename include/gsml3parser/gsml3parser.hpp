@@ -73,3 +73,6 @@
 #include "gsml3parser/stack/sharded_channel_pool.h"
 #include "gsml3parser/bitstream/inline_framer.h"
 #include "gsml3parser/bitstream/zero_copy_processor.h"
+#include "gsml3parser/abis/rsl_types.h"
+#include "gsml3parser/abis/rsl_parser.h"
+#include "gsml3parser/abis/rsl_builder.h"

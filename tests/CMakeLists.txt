@@ -67,6 +67,9 @@ add_executable(gsml3parser_tests
     test_procedure_handover.cpp
     test_procedure_runner.cpp
     test_procedure_integration.cpp
+    test_rsl_types.cpp
+    test_rsl_parser.cpp
+    test_rsl_builder.cpp
 )
 
 find_package(Threads REQUIRED)

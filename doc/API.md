@@ -47,7 +47,10 @@
 41. [InlineFramer - Zero-Copy Frame Extraction](#41-inlineframer-zero-copy-frame-extraction)
 42. [ZeroCopyStreamProcessor - Zero-Copy Stream Parsing](#42-zerocopystreamparser-zero-copy-stream-parsing)
 43. [Subscriber Registry - Subscriber Session Management](#43-subscriber-registry-subscriber-session-management)
-44. [Performance Optimizations Summary](#44-performance-optimizations-summary)
+44. [RSL Types - A-bis RSL Type Definitions](#44-rsl-types-abis-rsl-type-definitions)
+45. [RSL Parser - A-bis RSL Message Parsing](#45-rsl-parser-abis-rsl-message-parsing)
+46. [RSL Builder - A-bis RSL Message Construction](#46-rsl-builder-abis-rsl-message-construction)
+47. [Performance Optimizations Summary](#47-performance-optimizations-summary)
 
 ---
 
@@ -3549,7 +3552,147 @@ registry.remove(session);
 
 ---
 
-## 44. Performance Optimizations Summary
+## 44. RSL Types - A-bis RSL Type Definitions
+
+**Header:** `include/gsml3parser/abis/rsl_types.h`
+**Source:** `src/abis/rsl_types.cpp`
+**3GPP:** TS 48.058 (A-bis interface)
+
+Defines all RSL enumerations and structures for A-bis message parsing and construction.
+
+### Discriminators
+
+| Enum | Value | Description |
+|------|-------|-------------|
+| `RSLDiscriminator::RLL` | `0x00` | Radio Link Layer (L3 data transport) |
+| `RSLDiscriminator::CommonChannel` | `0x40` | CCHAN - common channel control |
+| `RSLDiscriminator::DedicatedChannel` | `0x60` | DCHAN - dedicated channel control |
+| `RSLDiscriminator::TRX` | `0xa0` | Transceiver-level management |
+| `RSLDiscriminator::IPAccess` | `0xc0` | ip.access vendor-specific |
+
+### RLL Message Types
+
+| Enum | Value | Direction | Description |
+|------|-------|-----------|-------------|
+| `RSLL3MessageType::DataReq` | `0x21` | BSC→BTS | Numbered L3 data |
+| `RSLL3MessageType::DataInd` | `0x22` | BTS→BSC | Numbered L3 data |
+| `RSLL3MessageType::UnitDataReq` | `0x41` | BSC→BTS | Unnumbered L3 data |
+| `RSLL3MessageType::UnitDataInd` | `0x42` | BTS→BSC | Unnumbered L3 data |
+
+### DCHAN Message Types
+
+| Enum | Value | Direction | Description |
+|------|-------|-----------|-------------|
+| `RSLDChanMessageType::ChanActiv` | `0x01` | BSC→BTS | Channel activation |
+| `RSLDChanMessageType::ChanActivAck` | `0x11` | BTS→BSC | Activation ACK |
+| `RSLDChanMessageType::ChanActivNack` | `0x12` | BTS→BSC | Activation NACK |
+| `RSLDChanMessageType::RFChanRelAck` | `0x15` | BTS→BSC | Release ACK |
+| `RSLDChanMessageType::MeasRes` | `0x24` | BTS→BSC | Measurement result |
+
+### CCHAN Message Types
+
+| Enum | Value | Direction | Description |
+|------|-------|-----------|-------------|
+| `RSLCChanMessageType::BCCHInfo` | `0x01` | BSC→BTS | System information |
+| `RSLCChanMessageType::PagingCmd` | `0x03` | BSC→BTS | Paging command |
+| `RSLCChanMessageType::CCCHLoadInd` | `0x13` | BTS→BSC | CCCH load report |
+| `RSLCChanMessageType::ChanRqd` | `0x16` | BTS→BSC | Channel required |
+
+### Information Elements
+
+The `RSL_IE` enum defines 24 IE types (ChanNr, LinkIdent, ActType, ChanMode, EncrInfo, L3Info, etc.).
+L3Info uses TL16V encoding (16-bit length) for large payloads.
+
+### Structures
+
+- **`RSLChannelNumber`** - Encode/decode dedicated channel numbers. Static methods: `encode(cbits, ts)`, `getCBits()`, `getTimeslot()`, `isDedicated()`. Constants: `BCCH=0x00`, `RACH=0x40`, `PCH_AGCH=0x60`.
+- **`RSLChannelMode`** - 5-byte channel mode (spdInd, chanRT, dtxDTU, chanRate). Methods: `isSignalling()`, `isSpeech()`, `isData()`.
+- **`RSLEncryptionInfo`** - algorithmId + key span for A5 ciphering.
+
+### Helper Functions
+
+- `rslDiscriminatorName(disc)` → string_view
+- `rslIEName(ie)` → string_view
+- `rslErrorCauseName(cause)` → string_view
+
+---
+
+## 45. RSL Parser - A-bis RSL Message Parsing
+
+**Header:** `include/gsml3parser/abis/rsl_parser.h`
+**Source:** `src/abis/rsl_parser.cpp`
+**3GPP:** TS 48.058 (A-bis interface)
+
+Zero-heap-allocation parser for A-bis RSL messages. Extracts L3 payloads from RLL and control messages.
+
+### `RSLParsedMessage`
+
+Fixed-size result struct (~544 bytes on 64-bit). Contains:
+- `discriminator`, `msgType`, `chanNr`, `linkId` - header fields
+- `l3Payload` - extracted L3 bytes (span into original buffer)
+- `informationElements[MAX_IE=32]` - parsed TLV IEs (pointers into original buffer)
+- `rawData` - full message span for debugging
+
+### `RSLParser::parse(data)`
+
+Parse raw RSL bytes into structured message. Returns `Expected<RSLParsedMessage>`.
+Validates discriminator, header size, and TLV boundaries.
+
+### `RSLParser::extractL3(parsed)`
+
+Return L3 payload from parsed message. Returns `optional<span<const uint8_t>>`.
+
+### `RSLParser::findIE(parsed, ieType)`
+
+Find IE by type code. Returns pointer or nullptr.
+
+### `RSLParser::getChannelMode(parsed)`
+
+Extract ChannelMode from CHAN_ACTIV. Returns `optional<RSLChannelMode>`.
+
+### `RSLParser::getEncryptionInfo(parsed)`
+
+Extract encryption parameters from ENCR_CMD. Returns `optional<RSLEncryptionInfo>`.
+
+---
+
+## 46. RSL Builder - A-bis RSL Message Construction
+
+**Header:** `include/gsml3parser/abis/rsl_builder.h`
+**Source:** `src/abis/rsl_builder.cpp`
+**3GPP:** TS 48.058 (A-bis interface)
+
+Constructs serialized RSL messages for BTS→BSC communication. Every method has both vector and span overloads for zero-allocation building.
+
+### RLL Messages
+
+- `buildDataReq(chanNr, linkId, l3Payload)` - Encapsulate L3 in DATA_REQ
+- `buildDataInd(chanNr, linkId, l3Payload)` - Encapsulate L3 in DATA_IND
+- `buildUnitDataReq(chanNr, linkId, l3Payload)` - Connectionless DATA_REQ
+- `buildUnitDataInd(chanNr, linkId, l3Payload)` - Connectionless DATA_IND
+
+### DCHAN Messages
+
+- `buildChanActivAck(chanNr, frameNumber)` - Channel activation acknowledgment
+- `buildChanActivNack(chanNr, cause)` - Channel activation rejection
+- `buildRFChanRelAck(chanNr)` - RF channel release acknowledgment
+- `buildConnFail(chanNr, cause)` - Connection failure report
+- `buildMeasRes(chanNr, measNr, rxlev, rxqual, l1Info)` - Measurement results
+- `buildHandoDet(chanNr, accessDelay)` - Handover detection
+
+### CCHAN Messages
+
+- `buildCCCHLoadInd(chanNr, pagingLoad, rachTotal, rachBusy, rachAccess)` - CCCH load statistics
+- `buildChanRqd(chanNr, reqRef, accessDelay)` - Channel required from RACH
+- `buildDeleteInd(chanNr, fullImmAssInfo)` - Immediate assignment deletion
+
+### Span Overloads
+
+Every method has a `static int buildXxx(std::span<uint8_t> out, ...)` overload that writes directly into a pre-allocated Arena buffer, returning byte count or -1 on error.
+
+---
+
+## 47. Performance Optimizations Summary
 
 The following optimizations have been applied to achieve high-throughput, low-latency L3 parsing at scale:
 

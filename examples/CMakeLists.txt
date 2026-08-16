@@ -55,13 +55,17 @@ target_link_libraries(example_procedure_location_update PRIVATE gsml3parser)
 add_executable(example_procedure_call_setup example_procedure_call_setup.cpp)
 target_link_libraries(example_procedure_call_setup PRIVATE gsml3parser)
 
+add_executable(example_rsl_pipeline example_rsl_pipeline.cpp)
+target_link_libraries(example_rsl_pipeline PRIVATE gsml3parser)
+
 if(MSVC)
     foreach(_tgt example_parse_file example_streaming example_multithread example_benchmark
                   example_bts_paging example_bts_channel_assignment example_bts_sysinfo
                   example_bts_dispatcher example_bts_rach_assignment example_bts_paging_call
                   example_bts_location_update example_benchmark_stack example_zero_copy
                   example_lapdm_entity example_subscriber_registry
-                  example_procedure_location_update example_procedure_call_setup)
+                  example_procedure_location_update example_procedure_call_setup
+                  example_rsl_pipeline)
         target_compile_definitions(${_tgt} PRIVATE _CRT_SECURE_NO_WARNINGS)
         target_compile_options(${_tgt} PRIVATE /bigobj)
     endforeach()

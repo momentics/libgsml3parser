@@ -57,6 +57,9 @@ set(CORE_SOURCES
     src/stack/procedures/ciphering_mode.cpp
     src/stack/procedures/paging.cpp
     src/stack/procedures/handover.cpp
+    src/abis/rsl_types.cpp
+    src/abis/rsl_parser.cpp
+    src/abis/rsl_builder.cpp
 )
 
 set(RR_SOURCES
@@ -178,6 +181,9 @@ set(PUBLIC_HEADERS
     include/gsml3parser/flat_handler.h
     include/gsml3parser/bitstream/inline_framer.h
     include/gsml3parser/bitstream/zero_copy_processor.h
+    include/gsml3parser/abis/rsl_types.h
+    include/gsml3parser/abis/rsl_parser.h
+    include/gsml3parser/abis/rsl_builder.h
 )
 
 # ── Library target ────────────────────────────────────────────────────
