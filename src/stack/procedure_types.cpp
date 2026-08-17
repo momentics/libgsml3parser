@@ -34,9 +34,11 @@ std::string_view procedureTypeName(ProcedureType type)
         case ProcedureType::ChannelAssignment:   return "ChannelAssignment";
         case ProcedureType::Handover:            return "Handover";
         case ProcedureType::Paging:              return "Paging";
-        case ProcedureType::CMServiceRequest:    return "CMServiceRequest";
-        case ProcedureType::IMSIDetach:          return "IMSIDetach";
-        case ProcedureType::Unknown:             return "?";
+        case ProcedureType::CMServiceRequest:       return "CMServiceRequest";
+        case ProcedureType::IMSIDetach:             return "IMSIDetach";
+        case ProcedureType::CallRelease:            return "CallRelease";
+        case ProcedureType::PeriodicLocationUpdate: return "PeriodicLocationUpdate";
+        case ProcedureType::Unknown:                return "?";
     }
     return "?";
 }

@@ -58,6 +58,8 @@ enum class ProcedureType : uint8_t {
     Paging = 0x08,            ///< TS 04.08 9.1.25 - Network-initiated paging of MS
     CMServiceRequest = 0x09,  ///< TS 24.008 4.7 - CM service request procedure
     IMSIDetach = 0x0A,        ///< TS 24.008 4.4.6 - IMSI detach procedure
+    CallRelease = 0x0B,       ///< TS 24.008 6.1 - Call release (disconnect -> release complete)
+    PeriodicLocationUpdate = 0x0C, ///< TS 24.008 4.4.1 - Periodic location updating
     Unknown = 0xFF            ///< Unrecognized or unsupported procedure type
 };
 

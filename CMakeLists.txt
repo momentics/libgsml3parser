@@ -57,6 +57,9 @@ set(CORE_SOURCES
     src/stack/procedures/ciphering_mode.cpp
     src/stack/procedures/paging.cpp
     src/stack/procedures/handover.cpp
+    src/stack/procedures/call_release.cpp
+    src/stack/procedures/imsi_detach.cpp
+    src/stack/procedure_orchestrator.cpp
     src/abis/rsl_types.cpp
     src/abis/rsl_parser.cpp
     src/abis/rsl_builder.cpp
@@ -180,6 +183,9 @@ set(PUBLIC_HEADERS
     include/gsml3parser/stack/procedures/ciphering_mode.h
     include/gsml3parser/stack/procedures/paging.h
     include/gsml3parser/stack/procedures/handover.h
+    include/gsml3parser/stack/procedures/call_release.h
+    include/gsml3parser/stack/procedures/imsi_detach.h
+    include/gsml3parser/stack/procedure_orchestrator.h
     include/gsml3parser/flat_handler.h
     include/gsml3parser/bitstream/inline_framer.h
     include/gsml3parser/bitstream/zero_copy_processor.h

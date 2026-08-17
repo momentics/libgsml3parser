@@ -183,6 +183,14 @@ public:
     /// Create a Handover procedure (TS 04.08 9.1.40).
     /// @param target The target channel descriptor for handover.
     [[nodiscard]] static std::unique_ptr<Procedure> createHandover(const L3ChannelDescription& target);
+
+    /// Create a Call Release procedure (TS 24.008 6.1).
+    /// @param ti Transaction Identifier (0-7).
+    /// @param cause CC cause for the disconnect message.
+    [[nodiscard]] static std::unique_ptr<Procedure> createCallRelease(uint8_t ti, CCCause cause);
+
+    /// Create an IMSI Detach procedure (TS 24.008 4.4.6).
+    [[nodiscard]] static std::unique_ptr<Procedure> createIMSIDetach();
 };
 
 } // namespace gsml3parser

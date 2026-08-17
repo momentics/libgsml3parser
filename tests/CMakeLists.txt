@@ -71,6 +71,9 @@ add_executable(gsml3parser_tests
     test_rsl_parser.cpp
     test_rsl_builder.cpp
     test_high_load_stress.cpp
+    test_procedure_call_release.cpp
+    test_procedure_imsi_detach.cpp
+    test_procedure_orchestrator.cpp
 )
 
 find_package(Threads REQUIRED)

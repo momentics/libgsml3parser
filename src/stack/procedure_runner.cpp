@@ -30,6 +30,8 @@
 #include "gsml3parser/stack/procedures/ciphering_mode.h"
 #include "gsml3parser/stack/procedures/paging.h"
 #include "gsml3parser/stack/procedures/handover.h"
+#include "gsml3parser/stack/procedures/call_release.h"
+#include "gsml3parser/stack/procedures/imsi_detach.h"
 
 namespace gsml3parser {
 
@@ -182,9 +184,15 @@ std::unique_ptr<Procedure> ProcedureRunner::autoCreateProcedure(
                 return ProcedureFactory::createLocationUpdate();
             }
         }
+        if (mti == L3IMSIDetachIndication::MTI) {
+            return ProcedureFactory::createIMSIDetach();
+        }
     } else if (pd == L3PD::CallControl) {
         if (mti == L3Setup::MTI) {
             return ProcedureFactory::createCallSetupMO();
+        }
+        if (mti == L3Disconnect::MTI) {
+            return ProcedureFactory::createCallRelease(0, CCCause::Normal_Call_Clearing);
         }
     }
     return nullptr;
@@ -222,6 +230,14 @@ std::unique_ptr<Procedure> ProcedureFactory::createPaging(const L3MobileIdentity
 
 std::unique_ptr<Procedure> ProcedureFactory::createHandover(const L3ChannelDescription& target) {
     return std::make_unique<HandoverProcedure>(target);
+}
+
+std::unique_ptr<Procedure> ProcedureFactory::createCallRelease(uint8_t ti, CCCause cause) {
+    return std::make_unique<CallReleaseProcedure>(ti, cause);
+}
+
+std::unique_ptr<Procedure> ProcedureFactory::createIMSIDetach() {
+    return std::make_unique<IMSIDetachProcedure>();
 }
 
 } // namespace gsml3parser
