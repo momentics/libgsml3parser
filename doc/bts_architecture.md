@@ -299,34 +299,24 @@ public:
 
 ### Integration Points
 
-| Layer | libgsml3parser Output | PHY Input |
-|-------|----------------------|-----------|
-| BCCH/PAGCH | `lapdm::wrapL3()` -> byte vector | Raw bytes for broadcast |
-| AGCH/SDCCH | `lapdm::wrapL3()` -> byte vector | Raw bytes for dedicated channel |
-| TCH | Application-level speech/data | Encoded speech frames (AMR/G.723) |
-| RACH | PHY delivers raw 1-byte Channel Request | Parse with `parseL3()` |
-
-### SDR Frameworks
-
-| Framework | Integration Approach |
-|-----------|---------------------|
-| **GNU Radio** | Custom block that calls `unwrapL3()` -> `parseL3()` on RX, `writeL3Bytes()` -> `wrapL3()` on TX |
-| **srsRAN** | Replace L3 encode/decode in `srsgsbts` with libgsml3parser equivalents |
-| **Limesuite / ADALM-Pluto** | Use as PHY backend; libgsml3parser handles all L2/L3 processing |
-
-### Integration Points
-
 The library provides well-defined integration points for external systems that a BTS developer must connect. Each integration point uses strongly-typed data structures (no raw byte parsing).
 
 | External System | Integration Point | API |
 |----------------|-------------------|-----|
-| **PHY / Radio** | `sendToRadio(std::span<const uint8_t>)` | After ResponseBuilder writes to Arena buffer, pass bytes to PHY transmit callback |
-| **PHY / Radio** | `onRadioFrameReceived(std::span<const uint8_t>)` | PHY receive callback invokes LAPDmEntity -> parseL3() -> orchestrator.feed() |
-| **AuC** | `orchestrator.feedExternalTyped(AuthChallenge{rand, expectedSres})` | Query AuC for RAND(16B) + SRES(4B), feed as typed struct to procedure |
-| **VLR / HLR** | `orchestrator.feedExternalTyped(VLRDecision{accept, newTmsi, rejectCause})` | VLR accept/reject decision with optional TMSI assignment |
-| **Ciphering (A5)** | After `CipheringModeComplete` received from MS | BTS enables A5/XOR at L2 level; library does not implement ciphering algorithms |
-| **BSC (A-bis RSL)** | `RSLParser::parse()` -> `extractL3()` -> `orchestrator.feed()` | Inbound: BSC sends RLL DATA_REQ, extract L3 and feed to orchestrator |
-| **BSC (A-bis RSL)** | `ResponseBuilder` bytes -> `RSLBuilder::buildDataInd()` -> send | Outbound: wrap L3 response in RSL DATA_IND for BSC |
+| **PHY / Radio (TX)** | `sendToRadio(std::span<const uint8_t>)` | After ResponseBuilder writes to Arena buffer, pass bytes to PHY transmit callback. For BCCH/PAGCH: `lapdm::wrapL3()` -> byte vector for broadcast. For AGCH/SDCCH: same pattern for dedicated channel. |
+| **PHY / Radio (RX)** | `onRadioFrameReceived(std::span<const uint8_t>)` | PHY receive callback invokes LAPDmEntity -> parseL3() -> orchestrator.feed(). RACH: PHY delivers raw 1-byte Channel Request, parsed with `parseL3()`. |
+| **AuC** | `orchestrator.feedExternalTyped(AuthChallenge{rand, expectedSres})` | Query AuC for RAND(16B) + SRES(4B), feed as typed struct to procedure. The library does not implement authentication algorithms (COMP128, MIL-STD-1889A). |
+| **VLR / HLR** | `orchestrator.feedExternalTyped(VLRDecision{accept, newTmsi, rejectCause})` | VLR accept/reject decision with optional TMSI assignment. For IMSI detach: `feedExternalTyped(VLRDecision{accept: true})`. |
+| **Ciphering (A5)** | After `CipheringModeComplete` received from MS | BTS enables A5/XOR at L2 level on affected logical channels. Library does not implement ciphering algorithms (A5/1, A5/2, A5/3). |
+| **BSC (A-bis RSL, Inbound)** | `RSLParser::parse()` -> `extractL3()` -> `orchestrator.feed()` | BSC sends RLL DATA_REQ; extract L3 payload and feed to orchestrator. DCHAN CHAN_ACTIV: parse channel mode and activate via ChannelPool. CCHAN PAGING_CMD: extract identity and trigger PagingProcedure. |
+| **BSC (A-bis RSL, Outbound)** | `ResponseBuilder` bytes -> `RSLBuilder::buildDataInd()` -> PHY | Wrap L3 response in RSL DATA_IND for BSC. DCHAN CHAN_ACTIV_ACK, DCHAN MEAS_RES, CCHAN CCCH_LOAD_IND built via RSLBuilder. |
+| **SDR: GNU Radio** | Custom block | Call `unwrapL3()` -> `parseL3()` on RX path; `writeL3Bytes()` -> `wrapL3()` on TX path. |
+| **SDR: srsRAN** | Replace L3 module | Swap `srsgsbts` L3 encode/decode with libgsml3parser equivalents. |
+| **SDR: Limesuite / ADALM-Pluto** | PHY backend | Use as hardware transport; libgsml3parser handles all L2/L3 processing. |
+
+### TCH Traffic Channel
+
+When a call reaches the connected state (`ResponseToken::Connect`), the library is no longer involved in user data flow. The BTS application switches to its speech codec pipeline (AMR, FR, HR) for TCH timeslots. The library only manages subsequent call control signaling (Disconnect, Release).
 
 ## 5. Thread Model
 
