@@ -6,8 +6,8 @@
 // Shows: session creation, message feeding, external data (auth/VLR), and completion.
 
 #include <gsml3parser/gsml3parser.hpp>
+#include <gsml3parser/stack/typed_external_data.h>
 
-#include <array>
 #include <iostream>
 
 using namespace gsml3parser;
@@ -51,15 +51,10 @@ int main() {
 
     // 4. Feed external auth data (16-byte RAND + 4-byte expected SRES).
     std::cout << "\n--- Step 3: FeedExternal auth data (RAND + SRES) ---\n";
-    std::array<uint8_t, 20> authData{};
-    for (int i = 0; i < 16; ++i) authData[static_cast<size_t>(i)] = static_cast<uint8_t>(i + 1);
-    authData[16] = 0xDE; authData[17] = 0xAD;
-    authData[18] = 0xBE; authData[19] = 0xEF;
 
-    auto r3 = runner.feedExternal(procedure::ProcedureType::LocationUpdate,
-                                   std::span{authData}, responseSink);
+    auto r3 = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, AuthChallenge{}, responseSink);
     std::cout << "Action: " << static_cast<int>(r3.action)
-              << " (SendResponse=" << static_cast<int>(ProcedureStepResult::Action::SendResponse) << ")\n";
+              << " (SendResponseWithToken=" << static_cast<int>(ProcedureStepResult::Action::SendResponseWithToken) << ")\n";
 
     // 5. Feed to advance AUTH_CHECK -> SEND_AUTH -> WAIT_AUTH.
     std::cout << "\n--- Step 4: Advance past auth check ---\n";
@@ -85,9 +80,7 @@ int main() {
 
     // 8. Feed VLR accept decision -> COMPLETED.
     std::cout << "\n--- Step 7: FeedExternal VLR accept ---\n";
-    std::array<uint8_t, 5> acceptData{1, 0x78, 0x56, 0x34, 0x12};
-    auto r7 = runner.feedExternal(procedure::ProcedureType::LocationUpdate,
-                                   std::span{acceptData}, responseSink);
+    auto r7 = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, VLRDecision{true, 0x12345678u, MMRejectCause::Zero}, responseSink);
     std::cout << "Action: " << static_cast<int>(r7.action)
               << " (Completed=" << static_cast<int>(ProcedureStepResult::Action::Completed) << ")\n";
 

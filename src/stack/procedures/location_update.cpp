@@ -38,40 +38,23 @@ procedure::ProcedureState LocationUpdateProcedure::state() const {
     return mProcState;
 }
 
-void LocationUpdateProcedure::transitionTo(State s) {
+void LocationUpdateProcedure::doTransitionTo(State s) {
     mCurrentState = s;
-    if (s == State::COMPLETED) {
-        mProcState = procedure::ProcedureState::Completed;
-    } else if (s == State::FAILED) {
-        mProcState = procedure::ProcedureState::Failed;
-    } else if (s == State::WAITING_EXTERNAL) {
-        mProcState = procedure::ProcedureState::WaitingExternal;
-    } else {
-        mProcState = procedure::ProcedureState::InProgress;
-    }
+    if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;
+    else if (s == State::FAILED) mProcState = procedure::ProcedureState::Failed;
+    else if (s == State::WAITING_EXTERNAL) mProcState = procedure::ProcedureState::WaitingExternal;
+    else mProcState = procedure::ProcedureState::InProgress;
 }
 
-void LocationUpdateProcedure::fail(const std::string_view& reason) {
+void LocationUpdateProcedure::doFail(std::string_view reason) {
     (void)reason;
-    stopTimer();
-    transitionTo(State::FAILED);
+    mCurrentState = State::FAILED;
+    mProcState = procedure::ProcedureState::Failed;
 }
 
-void LocationUpdateProcedure::complete() {
-    stopTimer();
-    transitionTo(State::COMPLETED);
-}
-
-void LocationUpdateProcedure::startTimer(L3TimerId id, std::chrono::milliseconds duration) {
-    mCurrentTimer = id;
-    mTimerRemaining = duration;
-    mTimerRunning = true;
-}
-
-void LocationUpdateProcedure::stopTimer() noexcept {
-    mTimerRunning = false;
-    mCurrentTimer = L3TimerId::Unknown;
-    mTimerRemaining = std::chrono::milliseconds(0);
+void LocationUpdateProcedure::doComplete() {
+    mCurrentState = State::COMPLETED;
+    mProcState = procedure::ProcedureState::Completed;
 }
 
 ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
@@ -82,7 +65,6 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
 
     switch (mCurrentState) {
         case State::INIT: {
-            // Accept CMServiceRequest or PagingResponse to start the procedure
             auto pd = messagePD(msg);
             if (pd == L3PD::MobilityManagement || pd == L3PD::RadioResource) {
                 transitionTo(State::IDENTITY_CHECK);
@@ -94,15 +76,13 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
         }
 
         case State::IDENTITY_CHECK: {
-            // Check if TMSI is known from session context
             if (session && session->context.identity().isTMSI()) {
                 transitionTo(State::AUTH_CHECK);
             } else {
                 transitionTo(State::REQUEST_IDENTITY);
-                result.action = ProcedureStepResult::Action::SendResponse;
-                if (sink) {
-                    sink(SMAction::SendResponse, msg, session);
-                }
+                result.action = ProcedureStepResult::Action::SendResponseWithToken;
+                result.responseToken = ResponseToken::IdentityRequest;
+                if (sink) sink(SMAction::SendResponse, msg, session);
             }
             break;
         }
@@ -119,11 +99,10 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
         case State::AUTH_CHECK: {
             if (mHasRand) {
                 transitionTo(State::SEND_AUTH);
-                result.action = ProcedureStepResult::Action::SendResponse;
+                result.action = ProcedureStepResult::Action::SendResponseWithToken;
+                result.responseToken = ResponseToken::AuthenticationRequest;
                 startTimer(L3TimerId::T3106, std::chrono::milliseconds(3000));
-                if (sink) {
-                    sink(SMAction::SendResponse, msg, session);
-                }
+                if (sink) sink(SMAction::SendResponse, msg, session);
             } else {
                 transitionTo(State::LU_REQUEST);
             }
@@ -131,7 +110,6 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
         }
 
         case State::SEND_AUTH: {
-            // After auth request sent, wait for MS response
             transitionTo(State::WAIT_AUTH);
             break;
         }
@@ -151,14 +129,16 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
                         } else {
                             mRejectCause = MMRejectCause::MAC_Failure;
                             transitionTo(State::SEND_REJECT);
-                            result.action = ProcedureStepResult::Action::SendResponse;
+                            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+                            result.responseToken = ResponseToken::LocationUpdatingReject;
                             if (sink) sink(SMAction::SendResponse, msg, session);
                             break;
                         }
                     } else {
                         mRejectCause = MMRejectCause::MAC_Failure;
                         transitionTo(State::SEND_REJECT);
-                        result.action = ProcedureStepResult::Action::SendResponse;
+                        result.action = ProcedureStepResult::Action::SendResponseWithToken;
+                        result.responseToken = ResponseToken::LocationUpdatingReject;
                         if (sink) sink(SMAction::SendResponse, msg, session);
                         break;
                     }
@@ -170,7 +150,6 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
         }
 
         case State::VERIFY_AUTH:
-            // Transitions handled in WAIT_AUTH
             break;
 
         case State::LU_REQUEST: {
@@ -178,29 +157,36 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
                 mLAI = session->context.lai().value_or(L3LocationAreaIdentity{});
             }
             transitionTo(State::WAITING_EXTERNAL);
+            result.action = ProcedureStepResult::Action::WaitingExternal;
             startTimer(L3TimerId::T3103, std::chrono::milliseconds(5000));
             break;
         }
 
         case State::WAITING_EXTERNAL:
-            // Waiting for feedExternal() call from BTS application
             break;
 
-        case State::SEND_ACCEPT:
+        case State::SEND_ACCEPT: {
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::LocationUpdatingAccept;
+            if (sink) sink(SMAction::SendResponse, msg, session);
             complete();
             result.action = ProcedureStepResult::Action::Completed;
             result.finalResult = {type(), mProcState, "accept_sent"};
             break;
+        }
 
-        case State::SEND_REJECT:
+        case State::SEND_REJECT: {
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::LocationUpdatingReject;
+            if (sink) sink(SMAction::SendResponse, msg, session);
             fail("reject_sent");
             result.action = ProcedureStepResult::Action::Failed;
             result.finalResult = {type(), mProcState, "reject_sent"};
             break;
+        }
 
         case State::COMPLETED:
         case State::FAILED:
-            // Terminal states — no further processing
             break;
     }
 
@@ -215,99 +201,58 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
     return result;
 }
 
-ProcedureStepResult LocationUpdateProcedure::feedExternal(
-    std::span<const uint8_t> data, ResponseSink&& sink) {
+ProcedureStepResult LocationUpdateProcedure::feedExternalTyped(
+    const ExternalData& data, ResponseSink&& sink) {
     ProcedureStepResult result;
 
-    // Handle RAND + SRES data (first 16 bytes = RAND, next 4 bytes = expected SRES)
-    if (mCurrentState == State::AUTH_CHECK || mCurrentState == State::INIT) {
-        if (data.size() >= 16) {
-            std::memcpy(mRandBuffer.data(), data.data(), std::min(data.size(), mRandBuffer.size()));
+    std::visit([&](const auto& typedData) {
+        using T = std::decay_t<decltype(typedData)>;
+        if constexpr (std::is_same_v<T, AuthChallenge>) {
+            std::memcpy(mRandBuffer.data(), typedData.rand.data(), 16);
             mHasRand = true;
-        }
-        if (data.size() >= 20) {
-            std::memcpy(mExpectedSRES.data(), data.data() + 16, 4);
+            std::memcpy(mExpectedSRES.data(), typedData.expectedSres.data(), 4);
             mHasExpectedSRES = true;
-        }
-        // If we're in AUTH_CHECK and now have RAND, transition to SEND_AUTH
-        if (mCurrentState == State::AUTH_CHECK && mHasRand) {
-            mCurrentState = State::SEND_AUTH;
-            result.action = ProcedureStepResult::Action::SendResponse;
-            startTimer(L3TimerId::T3106, std::chrono::milliseconds(3000));
-            if (sink) {
-                sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
+
+            if (mCurrentState == State::AUTH_CHECK && mHasRand) {
+                transitionTo(State::SEND_AUTH);
+                result.action = ProcedureStepResult::Action::SendResponseWithToken;
+                result.responseToken = ResponseToken::AuthenticationRequest;
+                startTimer(L3TimerId::T3106, std::chrono::milliseconds(3000));
+                if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
+            }
+        } else if constexpr (std::is_same_v<T, VLRDecision>) {
+            if (mCurrentState == State::WAITING_EXTERNAL) {
+                stopTimer();
+                if (typedData.accept) {
+                    mNewTmsi = typedData.newTmsi;
+                    transitionTo(State::SEND_ACCEPT);
+                    result.action = ProcedureStepResult::Action::SendResponseWithToken;
+                    result.responseToken = ResponseToken::LocationUpdatingAccept;
+                    if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
+                    complete();
+                    result.action = ProcedureStepResult::Action::Completed;
+                    result.finalResult = {type(), mProcState, "vlr_accept"};
+                } else {
+                    mRejectCause = typedData.rejectCause;
+                    transitionTo(State::SEND_REJECT);
+                    result.action = ProcedureStepResult::Action::SendResponseWithToken;
+                    result.responseToken = ResponseToken::LocationUpdatingReject;
+                    if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
+                }
             }
         }
-        return result;
-    }
+        // Other ExternalData types are not handled by this procedure.
+    }, data);
 
-    // Handle VLR Accept/Reject decision
-    // Convention: first byte = 0 for Reject, 1 for Accept
-    // Remaining bytes: for Accept, optional TMSI (4 bytes) + LAI data
-    if (mCurrentState == State::WAITING_EXTERNAL && !data.empty()) {
-        bool accept = (data[0] != 0);
-        stopTimer();
-
-        if (accept) {
-            if (data.size() >= 5) {
-                mNewTmsi = static_cast<uint32_t>(data[1]) |
-                           (static_cast<uint32_t>(data[2]) << 8) |
-                           (static_cast<uint32_t>(data[3]) << 16) |
-                           (static_cast<uint32_t>(data[4]) << 24);
-            }
-            result.action = ProcedureStepResult::Action::SendResponse;
-            if (sink) {
-                sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
-            }
-            complete();
-            result.action = ProcedureStepResult::Action::Completed;
-            result.finalResult = {type(), mProcState, "vlr_accept"};
-        } else {
-            if (data.size() >= 2) {
-                mRejectCause = static_cast<MMRejectCause>(data[1]);
-            }
-            transitionTo(State::SEND_REJECT);
-            result.action = ProcedureStepResult::Action::SendResponse;
-            if (sink) {
-                sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
-            }
-        }
-
-        if (mProcState == procedure::ProcedureState::Completed) {
-            result.action = ProcedureStepResult::Action::Completed;
-            result.finalResult = {type(), mProcState, "vlr_accept"};
-        } else if (mProcState == procedure::ProcedureState::Failed) {
-            result.action = ProcedureStepResult::Action::Failed;
-            result.finalResult = {type(), mProcState, "vlr_reject"};
-        }
-
-        return result;
-    }
-
-    return {ProcedureStepResult::Action::Continue};
+    return result;
 }
 
 ProcedureStepResult LocationUpdateProcedure::tick(std::chrono::milliseconds delta) {
-    if (!mTimerRunning) {
-        return {ProcedureStepResult::Action::Continue};
-    }
-
-    mTimerRemaining -= delta;
-    if (mTimerRemaining <= std::chrono::milliseconds(0)) {
-        stopTimer();
-        fail("timer_expired");
-        ProcedureStepResult result;
-        result.action = ProcedureStepResult::Action::Failed;
-        result.finalResult = {type(), mProcState, "timer_expired"};
-        return result;
-    }
-
-    return {ProcedureStepResult::Action::Continue};
+    return static_cast<ProcedureStateMixin<LocationUpdateProcedure, State>&>(*this).doTick(delta);
 }
 
 void LocationUpdateProcedure::cancel() noexcept {
-    stopTimer();
-    fail("cancelled");
+    static_cast<ProcedureStateMixin<LocationUpdateProcedure, State>&>(*this).doCancel();
 }
 
 } // namespace gsml3parser

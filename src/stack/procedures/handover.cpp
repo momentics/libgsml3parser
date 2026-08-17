@@ -37,38 +37,22 @@ procedure::ProcedureState HandoverProcedure::state() const {
     return mProcState;
 }
 
-void HandoverProcedure::transitionTo(State s) {
+void HandoverProcedure::doTransitionTo(State s) {
     mCurrentState = s;
-    if (s == State::COMPLETED) {
-        mProcState = procedure::ProcedureState::Completed;
-    } else if (s == State::FAILED) {
-        mProcState = procedure::ProcedureState::Failed;
-    } else {
-        mProcState = procedure::ProcedureState::InProgress;
-    }
+    if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;
+    else if (s == State::FAILED) mProcState = procedure::ProcedureState::Failed;
+    else mProcState = procedure::ProcedureState::InProgress;
 }
 
-void HandoverProcedure::fail(const std::string_view& reason) {
+void HandoverProcedure::doFail(std::string_view reason) {
     (void)reason;
-    stopTimer();
-    transitionTo(State::FAILED);
+    mCurrentState = State::FAILED;
+    mProcState = procedure::ProcedureState::Failed;
 }
 
-void HandoverProcedure::complete() {
-    stopTimer();
-    transitionTo(State::COMPLETED);
-}
-
-void HandoverProcedure::startTimer(L3TimerId id, std::chrono::milliseconds duration) {
-    mCurrentTimer = id;
-    mTimerRemaining = duration;
-    mTimerRunning = true;
-}
-
-void HandoverProcedure::stopTimer() noexcept {
-    mTimerRunning = false;
-    mCurrentTimer = L3TimerId::Unknown;
-    mTimerRemaining = std::chrono::milliseconds(0);
+void HandoverProcedure::doComplete() {
+    mCurrentState = State::COMPLETED;
+    mProcState = procedure::ProcedureState::Completed;
 }
 
 ProcedureStepResult HandoverProcedure::feed(const ParsedMessage& msg,
@@ -84,7 +68,8 @@ ProcedureStepResult HandoverProcedure::feed(const ParsedMessage& msg,
             break;
 
         case State::SEND_HO_CMD:
-            result.action = ProcedureStepResult::Action::SendResponse;
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::HandoverCommand;
             startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
             transitionTo(State::WAIT_HO_COMPLETE);
             if (sink) sink(SMAction::SendResponse, msg, session);
@@ -110,42 +95,30 @@ ProcedureStepResult HandoverProcedure::feed(const ParsedMessage& msg,
     return result;
 }
 
-ProcedureStepResult HandoverProcedure::feedExternal(
-    std::span<const uint8_t> data, ResponseSink&& sink) {
-    (void)data;
+ProcedureStepResult HandoverProcedure::feedExternalTyped(
+    const ExternalData& data, ResponseSink&& sink) {
     ProcedureStepResult result;
 
-    if (mCurrentState == State::INIT) {
-        transitionTo(State::SEND_HO_CMD);
-        result.action = ProcedureStepResult::Action::SendResponse;
-        startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
-        if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
+    if (const auto* target = std::get_if<HandoverTarget>(&data)) {
+        (void)target;
+        if (mCurrentState == State::INIT) {
+            transitionTo(State::SEND_HO_CMD);
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::HandoverCommand;
+            startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
+            if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
+        }
     }
 
     return result;
 }
 
 ProcedureStepResult HandoverProcedure::tick(std::chrono::milliseconds delta) {
-    if (!mTimerRunning) {
-        return {ProcedureStepResult::Action::Continue};
-    }
-
-    mTimerRemaining -= delta;
-    if (mTimerRemaining <= std::chrono::milliseconds(0)) {
-        stopTimer();
-        fail("timer_expired");
-        ProcedureStepResult result;
-        result.action = ProcedureStepResult::Action::Failed;
-        result.finalResult = {type(), mProcState, "timer_expired"};
-        return result;
-    }
-
-    return {ProcedureStepResult::Action::Continue};
+    return static_cast<ProcedureStateMixin<HandoverProcedure, State>&>(*this).doTick(delta);
 }
 
 void HandoverProcedure::cancel() noexcept {
-    stopTimer();
-    fail("cancelled");
+    static_cast<ProcedureStateMixin<HandoverProcedure, State>&>(*this).doCancel();
 }
 
 } // namespace gsml3parser

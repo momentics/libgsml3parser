@@ -28,6 +28,7 @@
 #include <gsml3parser/common/l3common.h>
 #include <gsml3parser/rr/l3rrmessages.h>
 #include <gsml3parser/visitor.h>
+#include <gsml3parser/stack/typed_external_data.h>
 
 #include <chrono>
 #include <cstdint>
@@ -61,13 +62,13 @@ TEST(PagingProcedureTest, Pag_Init_FeedExternal_StartsPage1) {
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Initiated);
 
     bool sinkCalled = false;
-    auto res = proc.feedExternal({},
+    auto res = proc.feedExternalTyped(PagingTrigger{},
         [&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
             EXPECT_EQ(action, SMAction::SendResponse);
             sinkCalled = true;
         });
 
-    EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_TRUE(sinkCalled);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::InProgress);
 }
@@ -77,7 +78,7 @@ TEST(PagingProcedureTest, Pag_PageResponse_Completes) {
     L3MobileIdentity identity(0xDEADBEEFu);
     PagingProcedure proc(identity);
 
-    [[maybe_unused]] auto _r = proc.feedExternal({});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{});
     feedStep(proc, makeDummyMsg());
 
     auto res = proc.feed(makePagingResponse(), nullptr, nullptr);
@@ -91,7 +92,7 @@ TEST(PagingProcedureTest, Pag_Tick_RetriesPaging) {
     L3MobileIdentity identity(0xABCDEF01u);
     PagingProcedure proc(identity);
 
-    [[maybe_unused]] auto _r = proc.feedExternal({});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{});
     feedStep(proc, makeDummyMsg());
 
     // In WAIT_PAGE1 with T3109 running (5000ms). Tick past expiry to trigger retry.
@@ -118,7 +119,7 @@ TEST(PagingProcedureTest, Pag_Cancel_Aborts) {
     L3MobileIdentity identity(0x11223344u);
     PagingProcedure proc(identity);
 
-    [[maybe_unused]] auto _r = proc.feedExternal({});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{});
     proc.cancel();
 
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Failed);

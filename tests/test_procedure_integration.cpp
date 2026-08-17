@@ -30,6 +30,7 @@
 #include "gsml3parser/mm/l3mmmessages.h"
 #include "gsml3parser/rr/l3rrmessages.h"
 #include "gsml3parser/cc/l3ccmessages.h"
+#include <gsml3parser/stack/typed_external_data.h>
 
 #include <chrono>
 #include <array>
@@ -82,7 +83,7 @@ TEST(Integration, LocationUpdate_FullFlow_WithRegistry) {
 
     // Step 4: Feed MM message -> LU_REQUEST -> WAITING_EXTERNAL + timer T3103
     auto result4 = runner.feed(mmMsg, session, noopSink);
-    EXPECT_EQ(result4.action, ProcedureStepResult::Action::Continue);
+    EXPECT_EQ(result4.action, ProcedureStepResult::Action::WaitingExternal);
 
     // Verify procedure is in WaitingExternal state
     auto* luProc = runner.getActive(procedure::ProcedureType::LocationUpdate);
@@ -92,15 +93,15 @@ TEST(Integration, LocationUpdate_FullFlow_WithRegistry) {
     // Step 5: Feed external VLR accept data -> WAITING_EXTERNAL -> SEND_ACCEPT -> Completed
     // Convention: first byte = 1 for Accept, followed by optional TMSI (4 bytes)
     std::array<uint8_t, 5> acceptData{1, 0x78, 0x56, 0x34, 0x12};
-    auto result5 = runner.feedExternal(procedure::ProcedureType::LocationUpdate, acceptData,
+    auto result5 = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, VLRDecision{true, std::nullopt, MMRejectCause::Zero},
                                         noopSink);
 
     // The accept path leads to SEND_ACCEPT which transitions to COMPLETED
     EXPECT_TRUE(result5.action == ProcedureStepResult::Action::Completed ||
-                result5.action == ProcedureStepResult::Action::SendResponse);
+                result5.action == ProcedureStepResult::Action::SendResponseWithToken);
 
     // If it returned SendResponse (SEND_ACCEPT state), feed one more time to reach COMPLETED
-    if (result5.action == ProcedureStepResult::Action::SendResponse) {
+    if (result5.action == ProcedureStepResult::Action::SendResponseWithToken) {
         auto result6 = runner.feed(mmMsg, session, noopSink);
         EXPECT_EQ(result6.action, ProcedureStepResult::Action::Completed);
     }
@@ -128,7 +129,7 @@ TEST(Integration, CallSetupMO_FullFlow_WithRegistry) {
     // Step 1: Feed CMServiceRequest (MM PD) -> INIT -> SERVICE_ACCEPT + SendResponse
     auto cmReq = makeCMServiceRequest(L3CMServiceType::MobileOriginatedCall);
     auto result1 = proc->feed(cmReq, session, noopSink);
-    EXPECT_EQ(result1.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(result1.action, ProcedureStepResult::Action::SendResponseWithToken);
 
     // Step 2: Advance SERVICE_ACCEPT -> WAIT_SETUP
     ParsedMessage emptyMM{MMM{L3MMStatus{}}};
@@ -138,11 +139,11 @@ TEST(Integration, CallSetupMO_FullFlow_WithRegistry) {
     // Step 3: Feed Setup (CC PD) -> WAIT_SETUP -> PROCEEDING + SendResponse + timer T3101
     ParsedMessage setupMsg{CCM{L3Setup{}}};
     auto result3 = proc->feed(setupMsg, session, noopSink);
-    EXPECT_EQ(result3.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(result3.action, ProcedureStepResult::Action::SendResponseWithToken);
 
     // Step 4: Advance PROCEEDING -> ASSIGN_TCH + SendResponse + timer T3101
     auto result4 = proc->feed(setupMsg, session, noopSink);
-    EXPECT_EQ(result4.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(result4.action, ProcedureStepResult::Action::SendResponseWithToken);
 
     // Step 5: Advance ASSIGN_TCH -> WAIT_ASSIGN_COMPLETE
     auto result5 = proc->feed(setupMsg, session, noopSink);
@@ -151,15 +152,15 @@ TEST(Integration, CallSetupMO_FullFlow_WithRegistry) {
     // Step 6: Feed AssignmentComplete (RR PD) -> WAIT_ASSIGN_COMPLETE -> ALERTING + SendResponse
     ParsedMessage assignComplete{RRM{L3AssignmentComplete{}}};
     auto result6 = proc->feed(assignComplete, session, noopSink);
-    EXPECT_EQ(result6.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(result6.action, ProcedureStepResult::Action::SendResponseWithToken);
 
     // Step 7: Advance ALERTING -> CONNECT + SendResponse
     auto result7 = proc->feed(setupMsg, session, noopSink);
-    EXPECT_EQ(result7.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(result7.action, ProcedureStepResult::Action::SendResponseWithToken);
 
     // Step 8: Advance CONNECT -> ACTIVE + SendResponse
     auto result8 = proc->feed(setupMsg, session, noopSink);
-    EXPECT_EQ(result8.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(result8.action, ProcedureStepResult::Action::SendResponseWithToken);
 
     // Step 9: Feed ConnectAcknowledge (CC PD) -> ACTIVE -> COMPLETED
     ParsedMessage connAck{CCM{L3ConnectAcknowledge{}}};

@@ -24,6 +24,7 @@
 
 #include <gtest/gtest.h>
 #include <gsml3parser/stack/procedures/authentication.h>
+#include <gsml3parser/stack/typed_external_data.h>
 #include <gsml3parser/message_types.h>
 #include <gsml3parser/mm/l3mmmessages.h>
 #include <gsml3parser/visitor.h>
@@ -46,15 +47,15 @@ static ParsedMessage makeAuthResponse(uint32_t sres) {
     return ParsedMessage{MMM{L3AuthenticationResponse::builder().sres(sres).build()}};
 }
 
-// Build external data: 16-byte RAND + 4-byte SRES (total 20 bytes)
-static std::array<uint8_t, 20> makeExternalAuthData(uint32_t sres) {
-    std::array<uint8_t, 20> data{};
-    for (int i = 0; i < 16; ++i) data[static_cast<size_t>(i)] = static_cast<uint8_t>(i);
-    data[16] = static_cast<uint8_t>(sres & 0xFF);
-    data[17] = static_cast<uint8_t>((sres >> 8) & 0xFF);
-    data[18] = static_cast<uint8_t>((sres >> 16) & 0xFF);
-    data[19] = static_cast<uint8_t>((sres >> 24) & 0xFF);
-    return data;
+// Build AuthChallenge: 16-byte RAND + 4-byte SRES
+static AuthChallenge makeAuthChallenge(uint32_t sres) {
+    AuthChallenge chal{};
+    for (int i = 0; i < 16; ++i) chal.rand[static_cast<size_t>(i)] = static_cast<uint8_t>(i);
+    chal.expectedSres[0] = static_cast<uint8_t>(sres & 0xFF);
+    chal.expectedSres[1] = static_cast<uint8_t>((sres >> 8) & 0xFF);
+    chal.expectedSres[2] = static_cast<uint8_t>((sres >> 16) & 0xFF);
+    chal.expectedSres[3] = static_cast<uint8_t>((sres >> 24) & 0xFF);
+    return chal;
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────
@@ -77,19 +78,20 @@ TEST(AuthenticationProcedureTest, AuthP_Init_NoData_StaysInit) {
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Initiated);
 }
 
-// [TS 24.008 4.4.2] feedExternal with RAND+SRES triggers SendResponse (AuthenticationRequest).
+// [TS 24.008 4.4.2] feedExternalTyped with AuthChallenge triggers SendResponseWithToken (AuthenticationRequest).
 TEST(AuthenticationProcedureTest, AuthP_FeedExternal_RAND_SendsAuthRequest) {
     AuthenticationProcedure proc;
-    auto extData = makeExternalAuthData(0xDEADBEEF);
+    auto chal = makeAuthChallenge(0xDEADBEEF);
 
     bool sinkCalled = false;
-    auto res = proc.feedExternal(std::span(extData),
+    auto res = proc.feedExternalTyped(chal,
         [&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
             EXPECT_EQ(action, SMAction::SendResponse);
             sinkCalled = true;
         });
 
-    EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
+    EXPECT_EQ(res.responseToken, ResponseToken::AuthenticationRequest);
     EXPECT_TRUE(sinkCalled);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::InProgress);
 }
@@ -98,10 +100,10 @@ TEST(AuthenticationProcedureTest, AuthP_FeedExternal_RAND_SendsAuthRequest) {
 TEST(AuthenticationProcedureTest, AuthP_AuthResponse_ValidSRES_Completes) {
     AuthenticationProcedure proc;
     constexpr uint32_t kSRES = 0x12345678u;
-    auto extData = makeExternalAuthData(kSRES);
+    auto chal = makeAuthChallenge(kSRES);
 
-    // Phase 1: feedExternal to load RAND+SRES -> SEND_AUTH_REQ
-    [[maybe_unused]] auto _r1 = proc.feedExternal(std::span(extData));
+    // Phase 1: feedExternalTyped to load RAND+SRES -> SEND_AUTH_REQ
+    [[maybe_unused]] auto _r1 = proc.feedExternalTyped(chal);
 
     // Phase 2: feed to advance SEND_AUTH_REQ -> WAIT_RESPONSE (starts T3106)
     feedStep(proc, makeAuthResponse(0));
@@ -119,9 +121,9 @@ TEST(AuthenticationProcedureTest, AuthP_AuthResponse_InvalidSRES_Fails) {
     AuthenticationProcedure proc;
     constexpr uint32_t kExpectedSRES = 0x12345678u;
     constexpr uint32_t kWrongSRES = 0xDEADBEEFu;
-    auto extData = makeExternalAuthData(kExpectedSRES);
+    auto chal = makeAuthChallenge(kExpectedSRES);
 
-    [[maybe_unused]] auto _r1 = proc.feedExternal(std::span(extData));
+    [[maybe_unused]] auto _r1 = proc.feedExternalTyped(chal);
     feedStep(proc, makeAuthResponse(0));
 
     auto res = proc.feed(makeAuthResponse(kWrongSRES), nullptr, nullptr);
@@ -133,9 +135,9 @@ TEST(AuthenticationProcedureTest, AuthP_AuthResponse_InvalidSRES_Fails) {
 // [TS 24.008 4.4.2] T3106 timer expiry causes authentication failure.
 TEST(AuthenticationProcedureTest, AuthP_Tick_TimerExpired_Fails) {
     AuthenticationProcedure proc;
-    auto extData = makeExternalAuthData(0x12345678u);
+    auto chal = makeAuthChallenge(0x12345678u);
 
-    [[maybe_unused]] auto _r1 = proc.feedExternal(std::span(extData));
+    [[maybe_unused]] auto _r1 = proc.feedExternalTyped(chal);
     feedStep(proc, makeAuthResponse(0));
 
     // Timer starts at 3000ms; tick past it.
@@ -148,9 +150,9 @@ TEST(AuthenticationProcedureTest, AuthP_Tick_TimerExpired_Fails) {
 // [TS 24.008 4.4.2] cancel() aborts the procedure and sets Failed state.
 TEST(AuthenticationProcedureTest, AuthP_Cancel_Aborts) {
     AuthenticationProcedure proc;
-    auto extData = makeExternalAuthData(0x12345678u);
+    auto chal = makeAuthChallenge(0x12345678u);
 
-    [[maybe_unused]] auto _r1 = proc.feedExternal(std::span(extData));
+    [[maybe_unused]] auto _r1 = proc.feedExternalTyped(chal);
     proc.cancel();
 
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Failed);

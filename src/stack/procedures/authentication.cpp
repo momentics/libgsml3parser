@@ -37,38 +37,22 @@ procedure::ProcedureState AuthenticationProcedure::state() const {
     return mProcState;
 }
 
-void AuthenticationProcedure::transitionTo(State s) {
+void AuthenticationProcedure::doTransitionTo(State s) {
     mCurrentState = s;
-    if (s == State::COMPLETED) {
-        mProcState = procedure::ProcedureState::Completed;
-    } else if (s == State::FAILED) {
-        mProcState = procedure::ProcedureState::Failed;
-    } else {
-        mProcState = procedure::ProcedureState::InProgress;
-    }
+    if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;
+    else if (s == State::FAILED) mProcState = procedure::ProcedureState::Failed;
+    else mProcState = procedure::ProcedureState::InProgress;
 }
 
-void AuthenticationProcedure::fail(const std::string_view& reason) {
+void AuthenticationProcedure::doFail(std::string_view reason) {
     (void)reason;
-    stopTimer();
-    transitionTo(State::FAILED);
+    mCurrentState = State::FAILED;
+    mProcState = procedure::ProcedureState::Failed;
 }
 
-void AuthenticationProcedure::complete() {
-    stopTimer();
-    transitionTo(State::COMPLETED);
-}
-
-void AuthenticationProcedure::startTimer(L3TimerId id, std::chrono::milliseconds duration) {
-    mCurrentTimer = id;
-    mTimerRemaining = duration;
-    mTimerRunning = true;
-}
-
-void AuthenticationProcedure::stopTimer() noexcept {
-    mTimerRunning = false;
-    mCurrentTimer = L3TimerId::Unknown;
-    mTimerRemaining = std::chrono::milliseconds(0);
+void AuthenticationProcedure::doComplete() {
+    mCurrentState = State::COMPLETED;
+    mProcState = procedure::ProcedureState::Completed;
 }
 
 ProcedureStepResult AuthenticationProcedure::feed(const ParsedMessage& msg,
@@ -78,16 +62,14 @@ ProcedureStepResult AuthenticationProcedure::feed(const ParsedMessage& msg,
 
     switch (mCurrentState) {
         case State::INIT:
-            // Wait for feedExternal to provide RAND+SRES first
             break;
 
         case State::SEND_AUTH_REQ: {
-            result.action = ProcedureStepResult::Action::SendResponse;
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::AuthenticationRequest;
             startTimer(L3TimerId::T3106, std::chrono::milliseconds(3000));
             transitionTo(State::WAIT_RESPONSE);
-            if (sink) {
-                sink(SMAction::SendResponse, msg, session);
-            }
+            if (sink) sink(SMAction::SendResponse, msg, session);
             break;
         }
 
@@ -117,7 +99,6 @@ ProcedureStepResult AuthenticationProcedure::feed(const ParsedMessage& msg,
                         result.finalResult = {type(), mProcState, "invalid_response"};
                     }
                 } else {
-                    // No expected SRES — trust the response (for testing)
                     complete();
                     result.action = ProcedureStepResult::Action::Completed;
                     result.finalResult = {type(), mProcState, "auth_no_verify"};
@@ -127,7 +108,6 @@ ProcedureStepResult AuthenticationProcedure::feed(const ParsedMessage& msg,
         }
 
         case State::VERIFY_SRES:
-            // Handled in WAIT_RESPONSE
             break;
 
         case State::COMPLETED:
@@ -138,24 +118,21 @@ ProcedureStepResult AuthenticationProcedure::feed(const ParsedMessage& msg,
     return result;
 }
 
-ProcedureStepResult AuthenticationProcedure::feedExternal(
-    std::span<const uint8_t> data, ResponseSink&& sink) {
+ProcedureStepResult AuthenticationProcedure::feedExternalTyped(
+    const ExternalData& data, ResponseSink&& sink) {
     ProcedureStepResult result;
 
-    if (data.size() >= 16) {
-        std::memcpy(mRandBuffer.data(), data.data(), std::min(data.size(), mRandBuffer.size()));
+    if (const auto* chal = std::get_if<AuthChallenge>(&data)) {
+        std::memcpy(mRandBuffer.data(), chal->rand.data(), 16);
         mHasRand = true;
-    }
-    if (data.size() >= 20) {
-        std::memcpy(mExpectedSRES.data(), data.data() + 16, 4);
+        std::memcpy(mExpectedSRES.data(), chal->expectedSres.data(), 4);
         mHasExpectedSRES = true;
-    }
 
-    if (mCurrentState == State::INIT && mHasRand) {
-        transitionTo(State::SEND_AUTH_REQ);
-        result.action = ProcedureStepResult::Action::SendResponse;
-        if (sink) {
-            sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
+        if (mCurrentState == State::INIT && mHasRand) {
+            transitionTo(State::SEND_AUTH_REQ);
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::AuthenticationRequest;
+            if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
         }
     }
 
@@ -163,26 +140,11 @@ ProcedureStepResult AuthenticationProcedure::feedExternal(
 }
 
 ProcedureStepResult AuthenticationProcedure::tick(std::chrono::milliseconds delta) {
-    if (!mTimerRunning) {
-        return {ProcedureStepResult::Action::Continue};
-    }
-
-    mTimerRemaining -= delta;
-    if (mTimerRemaining <= std::chrono::milliseconds(0)) {
-        stopTimer();
-        fail("timer_expired");
-        ProcedureStepResult result;
-        result.action = ProcedureStepResult::Action::Failed;
-        result.finalResult = {type(), mProcState, "timer_expired"};
-        return result;
-    }
-
-    return {ProcedureStepResult::Action::Continue};
+    return static_cast<ProcedureStateMixin<AuthenticationProcedure, State>&>(*this).doTick(delta);
 }
 
 void AuthenticationProcedure::cancel() noexcept {
-    stopTimer();
-    fail("cancelled");
+    static_cast<ProcedureStateMixin<AuthenticationProcedure, State>&>(*this).doCancel();
 }
 
 } // namespace gsml3parser

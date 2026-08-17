@@ -36,38 +36,22 @@ procedure::ProcedureState CallSetupMOPercedure::state() const {
     return mProcState;
 }
 
-void CallSetupMOPercedure::transitionTo(State s) {
+void CallSetupMOPercedure::doTransitionTo(State s) {
     mCurrentState = s;
-    if (s == State::COMPLETED) {
-        mProcState = procedure::ProcedureState::Completed;
-    } else if (s == State::FAILED) {
-        mProcState = procedure::ProcedureState::Failed;
-    } else {
-        mProcState = procedure::ProcedureState::InProgress;
-    }
+    if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;
+    else if (s == State::FAILED) mProcState = procedure::ProcedureState::Failed;
+    else mProcState = procedure::ProcedureState::InProgress;
 }
 
-void CallSetupMOPercedure::fail(const std::string_view& reason) {
+void CallSetupMOPercedure::doFail(std::string_view reason) {
     (void)reason;
-    stopTimer();
-    transitionTo(State::FAILED);
+    mCurrentState = State::FAILED;
+    mProcState = procedure::ProcedureState::Failed;
 }
 
-void CallSetupMOPercedure::complete() {
-    stopTimer();
-    transitionTo(State::COMPLETED);
-}
-
-void CallSetupMOPercedure::startTimer(L3TimerId id, std::chrono::milliseconds duration) {
-    mCurrentTimer = id;
-    mTimerRemaining = duration;
-    mTimerRunning = true;
-}
-
-void CallSetupMOPercedure::stopTimer() noexcept {
-    mTimerRunning = false;
-    mCurrentTimer = L3TimerId::Unknown;
-    mTimerRemaining = std::chrono::milliseconds(0);
+void CallSetupMOPercedure::doComplete() {
+    mCurrentState = State::COMPLETED;
+    mProcState = procedure::ProcedureState::Completed;
 }
 
 ProcedureStepResult CallSetupMOPercedure::feed(const ParsedMessage& msg,
@@ -80,17 +64,18 @@ ProcedureStepResult CallSetupMOPercedure::feed(const ParsedMessage& msg,
 
     switch (mCurrentState) {
         case State::INIT:
-            // Accept CMServiceRequest or Setup directly (auto-created from Setup by ProcedureRunner).
             if (pd == L3PD::MobilityManagement && mti == L3CMServiceRequest::MTI) {
                 transitionTo(State::SERVICE_ACCEPT);
-                result.action = ProcedureStepResult::Action::SendResponse;
+                result.action = ProcedureStepResult::Action::SendResponseWithToken;
+                result.responseToken = ResponseToken::CMServiceAccept;
                 if (sink) sink(SMAction::SendResponse, msg, session);
             } else if (pd == L3PD::CallControl && mti == L3Setup::MTI) {
                 const auto* setup = tryGet<L3Setup>(msg);
                 if (setup) mTI = static_cast<uint8_t>(setup->ti());
                 startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
                 transitionTo(State::PROCEEDING);
-                result.action = ProcedureStepResult::Action::SendResponse;
+                result.action = ProcedureStepResult::Action::SendResponseWithToken;
+                result.responseToken = ResponseToken::CallProceeding;
                 if (sink) sink(SMAction::SendResponse, msg, session);
             }
             break;
@@ -105,14 +90,16 @@ ProcedureStepResult CallSetupMOPercedure::feed(const ParsedMessage& msg,
                 if (setup) mTI = static_cast<uint8_t>(setup->ti());
                 startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
                 transitionTo(State::PROCEEDING);
-                result.action = ProcedureStepResult::Action::SendResponse;
+                result.action = ProcedureStepResult::Action::SendResponseWithToken;
+                result.responseToken = ResponseToken::CallProceeding;
                 if (sink) sink(SMAction::SendResponse, msg, session);
             }
             break;
 
         case State::PROCEEDING:
             transitionTo(State::ASSIGN_TCH);
-            result.action = ProcedureStepResult::Action::SendResponse;
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::AssignmentCommand;
             startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
@@ -124,20 +111,23 @@ ProcedureStepResult CallSetupMOPercedure::feed(const ParsedMessage& msg,
         case State::WAIT_ASSIGN_COMPLETE:
             if (pd == L3PD::RadioResource && mti == L3AssignmentComplete::MTI) {
                 transitionTo(State::ALERTING);
-                result.action = ProcedureStepResult::Action::SendResponse;
+                result.action = ProcedureStepResult::Action::SendResponseWithToken;
+                result.responseToken = ResponseToken::Alerting;
                 if (sink) sink(SMAction::SendResponse, msg, session);
             }
             break;
 
         case State::ALERTING:
             transitionTo(State::CONNECT);
-            result.action = ProcedureStepResult::Action::SendResponse;
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::Connect;
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
 
         case State::CONNECT:
             transitionTo(State::ACTIVE);
-            result.action = ProcedureStepResult::Action::SendResponse;
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::ConnectAcknowledge;
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
 
@@ -158,26 +148,11 @@ ProcedureStepResult CallSetupMOPercedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult CallSetupMOPercedure::tick(std::chrono::milliseconds delta) {
-    if (!mTimerRunning) {
-        return {ProcedureStepResult::Action::Continue};
-    }
-
-    mTimerRemaining -= delta;
-    if (mTimerRemaining <= std::chrono::milliseconds(0)) {
-        stopTimer();
-        fail("timer_expired");
-        ProcedureStepResult result;
-        result.action = ProcedureStepResult::Action::Failed;
-        result.finalResult = {type(), mProcState, "timer_expired"};
-        return result;
-    }
-
-    return {ProcedureStepResult::Action::Continue};
+    return static_cast<ProcedureStateMixin<CallSetupMOPercedure, State>&>(*this).doTick(delta);
 }
 
 void CallSetupMOPercedure::cancel() noexcept {
-    stopTimer();
-    fail("cancelled");
+    static_cast<ProcedureStateMixin<CallSetupMOPercedure, State>&>(*this).doCancel();
 }
 
 } // namespace gsml3parser

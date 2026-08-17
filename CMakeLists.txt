@@ -169,6 +169,8 @@ set(PUBLIC_HEADERS
     include/gsml3parser/stack/response_builder.h
     include/gsml3parser/stack/procedure.h
     include/gsml3parser/stack/procedure_runner.h
+    include/gsml3parser/stack/typed_external_data.h
+    include/gsml3parser/stack/procedure_state_mixin.h
     include/gsml3parser/stack/subscriber_registry.h
     include/gsml3parser/stack/procedures/location_update.h
     include/gsml3parser/stack/procedures/authentication.h

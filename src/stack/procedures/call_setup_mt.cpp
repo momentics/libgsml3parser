@@ -39,38 +39,22 @@ procedure::ProcedureState CallSetupMTPercedure::state() const {
     return mProcState;
 }
 
-void CallSetupMTPercedure::transitionTo(State s) {
+void CallSetupMTPercedure::doTransitionTo(State s) {
     mCurrentState = s;
-    if (s == State::COMPLETED) {
-        mProcState = procedure::ProcedureState::Completed;
-    } else if (s == State::FAILED) {
-        mProcState = procedure::ProcedureState::Failed;
-    } else {
-        mProcState = procedure::ProcedureState::InProgress;
-    }
+    if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;
+    else if (s == State::FAILED) mProcState = procedure::ProcedureState::Failed;
+    else mProcState = procedure::ProcedureState::InProgress;
 }
 
-void CallSetupMTPercedure::fail(const std::string_view& reason) {
+void CallSetupMTPercedure::doFail(std::string_view reason) {
     (void)reason;
-    stopTimer();
-    transitionTo(State::FAILED);
+    mCurrentState = State::FAILED;
+    mProcState = procedure::ProcedureState::Failed;
 }
 
-void CallSetupMTPercedure::complete() {
-    stopTimer();
-    transitionTo(State::COMPLETED);
-}
-
-void CallSetupMTPercedure::startTimer(L3TimerId id, std::chrono::milliseconds duration) {
-    mCurrentTimer = id;
-    mTimerRemaining = duration;
-    mTimerRunning = true;
-}
-
-void CallSetupMTPercedure::stopTimer() noexcept {
-    mTimerRunning = false;
-    mCurrentTimer = L3TimerId::Unknown;
-    mTimerRemaining = std::chrono::milliseconds(0);
+void CallSetupMTPercedure::doComplete() {
+    mCurrentState = State::COMPLETED;
+    mProcState = procedure::ProcedureState::Completed;
 }
 
 ProcedureStepResult CallSetupMTPercedure::feed(const ParsedMessage& msg,
@@ -83,35 +67,39 @@ ProcedureStepResult CallSetupMTPercedure::feed(const ParsedMessage& msg,
 
     switch (mCurrentState) {
         case State::INIT:
-            // Triggered via feedExternal, not feed
             break;
 
-        case State::PAGE:
-            result.action = ProcedureStepResult::Action::SendResponse;
+        case State::PAGE: {
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::PagingRequestType1;
             startTimer(L3TimerId::T3109, std::chrono::milliseconds(5000));
             transitionTo(State::WAIT_PAGE_RESPONSE);
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
+        }
 
         case State::WAIT_PAGE_RESPONSE:
             if (pd == L3PD::RadioResource && mti == L3PagingResponse::MTI) {
                 stopTimer();
                 transitionTo(State::ASSIGN_SDCCH);
-                result.action = ProcedureStepResult::Action::SendResponse;
+                result.action = ProcedureStepResult::Action::SendResponseWithToken;
+                result.responseToken = ResponseToken::ImmediateAssignment;
                 if (sink) sink(SMAction::SendResponse, msg, session);
             }
             break;
 
         case State::ASSIGN_SDCCH:
             transitionTo(State::SEND_SETUP);
-            result.action = ProcedureStepResult::Action::SendResponse;
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::Setup;
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
 
         case State::SEND_SETUP:
             startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
             transitionTo(State::WAIT_CONFIRMED);
-            result.action = ProcedureStepResult::Action::SendResponse;
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::Setup;
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
 
@@ -125,7 +113,8 @@ ProcedureStepResult CallSetupMTPercedure::feed(const ParsedMessage& msg,
         case State::ASSIGN_TCH:
             startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
             transitionTo(State::WAIT_ASSIGN_COMPLETE);
-            result.action = ProcedureStepResult::Action::SendResponse;
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::AssignmentCommand;
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
 
@@ -133,20 +122,23 @@ ProcedureStepResult CallSetupMTPercedure::feed(const ParsedMessage& msg,
             if (pd == L3PD::RadioResource && mti == L3AssignmentComplete::MTI) {
                 stopTimer();
                 transitionTo(State::ALERTING);
-                result.action = ProcedureStepResult::Action::SendResponse;
+                result.action = ProcedureStepResult::Action::SendResponseWithToken;
+                result.responseToken = ResponseToken::Alerting;
                 if (sink) sink(SMAction::SendResponse, msg, session);
             }
             break;
 
         case State::ALERTING:
             transitionTo(State::CONNECT);
-            result.action = ProcedureStepResult::Action::SendResponse;
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::Connect;
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
 
         case State::CONNECT:
             transitionTo(State::ACTIVE);
-            result.action = ProcedureStepResult::Action::SendResponse;
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::ConnectAcknowledge;
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
 
@@ -166,14 +158,15 @@ ProcedureStepResult CallSetupMTPercedure::feed(const ParsedMessage& msg,
     return result;
 }
 
-ProcedureStepResult CallSetupMTPercedure::feedExternal(
-    std::span<const uint8_t> data, ResponseSink&& sink) {
+ProcedureStepResult CallSetupMTPercedure::feedExternalTyped(
+    const ExternalData& data, ResponseSink&& sink) {
     (void)data;
     ProcedureStepResult result;
 
     if (mCurrentState == State::INIT) {
         transitionTo(State::PAGE);
-        result.action = ProcedureStepResult::Action::SendResponse;
+        result.action = ProcedureStepResult::Action::SendResponseWithToken;
+        result.responseToken = ResponseToken::PagingRequestType1;
         startTimer(L3TimerId::T3109, std::chrono::milliseconds(5000));
         mPageAttempt = 1;
         if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3PagingRequestType1{}}}, nullptr);
@@ -190,9 +183,11 @@ ProcedureStepResult CallSetupMTPercedure::tick(std::chrono::milliseconds delta) 
     mTimerRemaining -= delta;
     if (mTimerRemaining <= std::chrono::milliseconds(0)) {
         stopTimer();
-        // Retry paging up to MAX_PAGE_ATTEMPTS
         if (mCurrentState == State::WAIT_PAGE_RESPONSE && mPageAttempt < MAX_PAGE_ATTEMPTS) {
             ++mPageAttempt;
+            ResponseToken token = ResponseToken::PagingRequestType1;
+            if (mPageAttempt == 2) token = ResponseToken::PagingRequestType2;
+            else if (mPageAttempt >= 3) token = ResponseToken::PagingRequestType3;
             startTimer(L3TimerId::T3109, std::chrono::milliseconds(5000));
             return {ProcedureStepResult::Action::Continue};
         }
@@ -207,8 +202,7 @@ ProcedureStepResult CallSetupMTPercedure::tick(std::chrono::milliseconds delta) 
 }
 
 void CallSetupMTPercedure::cancel() noexcept {
-    stopTimer();
-    fail("cancelled");
+    static_cast<ProcedureStateMixin<CallSetupMTPercedure, State>&>(*this).doCancel();
 }
 
 } // namespace gsml3parser

@@ -28,6 +28,7 @@
 #include <gsml3parser/common/l3common.h>
 #include <gsml3parser/rr/l3rrmessages.h>
 #include <gsml3parser/visitor.h>
+#include <gsml3parser/stack/typed_external_data.h>
 
 #include <chrono>
 #include <cstdint>
@@ -67,13 +68,13 @@ TEST(HandoverProcedureTest, HO_Init_FeedExternal_SendsCommand) {
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Initiated);
 
     bool sinkCalled = false;
-    auto res = proc.feedExternal({},
+    auto res = proc.feedExternalTyped(HandoverTarget{},
         [&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
             EXPECT_EQ(action, SMAction::SendResponse);
             sinkCalled = true;
         });
 
-    EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_TRUE(sinkCalled);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::InProgress);
 }
@@ -82,7 +83,7 @@ TEST(HandoverProcedureTest, HO_Init_FeedExternal_SendsCommand) {
 TEST(HandoverProcedureTest, HO_HandoverComplete_Completes) {
     HandoverProcedure proc(makeTargetChannel());
 
-    [[maybe_unused]] auto _r = proc.feedExternal({});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(HandoverTarget{});
     feedStep(proc, makeDummyMsg());
 
     auto res = proc.feed(makeHandoverComplete(), nullptr, nullptr);
@@ -96,7 +97,7 @@ TEST(HandoverProcedureTest, HO_HandoverComplete_Completes) {
 TEST(HandoverProcedureTest, HO_HandoverFailure_Fails) {
     HandoverProcedure proc(makeTargetChannel());
 
-    [[maybe_unused]] auto _r = proc.feedExternal({});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(HandoverTarget{});
     feedStep(proc, makeDummyMsg());
 
     auto res = proc.feed(makeHandoverFailure(), nullptr, nullptr);
@@ -109,7 +110,7 @@ TEST(HandoverProcedureTest, HO_HandoverFailure_Fails) {
 TEST(HandoverProcedureTest, HO_Cancel_Aborts) {
     HandoverProcedure proc(makeTargetChannel());
 
-    [[maybe_unused]] auto _r = proc.feedExternal({});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(HandoverTarget{});
     proc.cancel();
 
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Failed);

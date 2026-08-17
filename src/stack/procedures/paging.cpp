@@ -37,38 +37,22 @@ procedure::ProcedureState PagingProcedure::state() const {
     return mProcState;
 }
 
-void PagingProcedure::transitionTo(State s) {
+void PagingProcedure::doTransitionTo(State s) {
     mCurrentState = s;
-    if (s == State::COMPLETED) {
-        mProcState = procedure::ProcedureState::Completed;
-    } else if (s == State::FAILED) {
-        mProcState = procedure::ProcedureState::Failed;
-    } else {
-        mProcState = procedure::ProcedureState::InProgress;
-    }
+    if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;
+    else if (s == State::FAILED) mProcState = procedure::ProcedureState::Failed;
+    else mProcState = procedure::ProcedureState::InProgress;
 }
 
-void PagingProcedure::fail(const std::string_view& reason) {
+void PagingProcedure::doFail(std::string_view reason) {
     (void)reason;
-    stopTimer();
-    transitionTo(State::FAILED);
+    mCurrentState = State::FAILED;
+    mProcState = procedure::ProcedureState::Failed;
 }
 
-void PagingProcedure::complete() {
-    stopTimer();
-    transitionTo(State::COMPLETED);
-}
-
-void PagingProcedure::startTimer(L3TimerId id, std::chrono::milliseconds duration) {
-    mCurrentTimer = id;
-    mTimerRemaining = duration;
-    mTimerRunning = true;
-}
-
-void PagingProcedure::stopTimer() noexcept {
-    mTimerRunning = false;
-    mCurrentTimer = L3TimerId::Unknown;
-    mTimerRemaining = std::chrono::milliseconds(0);
+void PagingProcedure::doComplete() {
+    mCurrentState = State::COMPLETED;
+    mProcState = procedure::ProcedureState::Completed;
 }
 
 ProcedureStepResult PagingProcedure::feed(const ParsedMessage& msg,
@@ -83,13 +67,15 @@ ProcedureStepResult PagingProcedure::feed(const ParsedMessage& msg,
         case State::INIT:
             break;
 
-        case State::SEND_PAGE1:
-            result.action = ProcedureStepResult::Action::SendResponse;
+        case State::SEND_PAGE1: {
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::PagingRequestType1;
             startTimer(L3TimerId::T3109, std::chrono::milliseconds(5000));
             transitionTo(State::WAIT_PAGE1);
             mPageAttempt = 1;
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
+        }
 
         case State::WAIT_PAGE1:
             if (pd == L3PD::RadioResource && mti == L3PagingResponse::MTI) {
@@ -99,13 +85,15 @@ ProcedureStepResult PagingProcedure::feed(const ParsedMessage& msg,
             }
             break;
 
-        case State::SEND_PAGE2:
-            result.action = ProcedureStepResult::Action::SendResponse;
+        case State::SEND_PAGE2: {
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::PagingRequestType2;
             startTimer(L3TimerId::T3109, std::chrono::milliseconds(5000));
             transitionTo(State::WAIT_PAGE2);
             mPageAttempt = 2;
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
+        }
 
         case State::WAIT_PAGE2:
             if (pd == L3PD::RadioResource && mti == L3PagingResponse::MTI) {
@@ -115,13 +103,15 @@ ProcedureStepResult PagingProcedure::feed(const ParsedMessage& msg,
             }
             break;
 
-        case State::SEND_PAGE3:
-            result.action = ProcedureStepResult::Action::SendResponse;
+        case State::SEND_PAGE3: {
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::PagingRequestType3;
             startTimer(L3TimerId::T3109, std::chrono::milliseconds(5000));
             transitionTo(State::WAIT_PAGE3);
             mPageAttempt = 3;
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
+        }
 
         case State::WAIT_PAGE3:
             if (pd == L3PD::RadioResource && mti == L3PagingResponse::MTI) {
@@ -139,17 +129,20 @@ ProcedureStepResult PagingProcedure::feed(const ParsedMessage& msg,
     return result;
 }
 
-ProcedureStepResult PagingProcedure::feedExternal(
-    std::span<const uint8_t> data, ResponseSink&& sink) {
-    (void)data;
+ProcedureStepResult PagingProcedure::feedExternalTyped(
+    const ExternalData& data, ResponseSink&& sink) {
     ProcedureStepResult result;
 
-    if (mCurrentState == State::INIT) {
-        transitionTo(State::SEND_PAGE1);
-        result.action = ProcedureStepResult::Action::SendResponse;
-        startTimer(L3TimerId::T3109, std::chrono::milliseconds(5000));
-        mPageAttempt = 1;
-        if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3PagingRequestType1{}}}, nullptr);
+    if (const auto* trigger = std::get_if<PagingTrigger>(&data)) {
+        (void)trigger;
+        if (mCurrentState == State::INIT) {
+            transitionTo(State::SEND_PAGE1);
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::PagingRequestType1;
+            startTimer(L3TimerId::T3109, std::chrono::milliseconds(5000));
+            mPageAttempt = 1;
+            if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3PagingRequestType1{}}}, nullptr);
+        }
     }
 
     return result;
@@ -164,7 +157,6 @@ ProcedureStepResult PagingProcedure::tick(std::chrono::milliseconds delta) {
     if (mTimerRemaining <= std::chrono::milliseconds(0)) {
         stopTimer();
 
-        // Advance to next paging attempt
         switch (mCurrentState) {
             case State::WAIT_PAGE1:
                 transitionTo(State::SEND_PAGE2);
@@ -193,8 +185,7 @@ ProcedureStepResult PagingProcedure::tick(std::chrono::milliseconds delta) {
 }
 
 void PagingProcedure::cancel() noexcept {
-    stopTimer();
-    fail("cancelled");
+    static_cast<ProcedureStateMixin<PagingProcedure, State>&>(*this).doCancel();
 }
 
 } // namespace gsml3parser

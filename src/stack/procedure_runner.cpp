@@ -107,11 +107,11 @@ ProcedureStepResult ProcedureRunner::feed(const ParsedMessage& msg,
     return {ProcedureStepResult::Action::Continue};
 }
 
-ProcedureStepResult ProcedureRunner::feedExternal(procedure::ProcedureType type,
-    std::span<const uint8_t> data, ResponseSink&& sink) {
+ProcedureStepResult ProcedureRunner::feedExternalTyped(procedure::ProcedureType type,
+    const ExternalData& data, ResponseSink&& sink) {
     for (size_t i = 0; i < MAX_PROCEDURES; ++i) {
         if (mSlots[i].active && mSlots[i].proc && mSlots[i].proc->type() == type) {
-            ProcedureStepResult result = mSlots[i].proc->feedExternal(data, std::move(sink));
+            ProcedureStepResult result = mSlots[i].proc->feedExternalTyped(data, std::move(sink));
             cleanupSlotIfTerminal(i);
             return result;
         }

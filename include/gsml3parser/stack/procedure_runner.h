@@ -90,13 +90,13 @@ public:
     ProcedureStepResult feed(const ParsedMessage& msg, SubscriberSession* session,
                               ResponseSink&& sink);
 
-    /// Feed external data to an active procedure by type.
+    /// Feed typed external data to an active procedure by type.
     /// @param type The ProcedureType of the target procedure.
-    /// @param data External data bytes (procedure-specific).
+    /// @param data Strongly-typed external data variant (AuthChallenge, VLRDecision, etc.).
     /// @param sink Optional response callback.
     /// @return ProcedureStepResult from the target procedure. Slot is auto-freed on Completed/Failed.
-    ProcedureStepResult feedExternal(procedure::ProcedureType type, std::span<const uint8_t> data,
-                                      ResponseSink&& sink = {});
+    ProcedureStepResult feedExternalTyped(procedure::ProcedureType type, const ExternalData& data,
+                                            ResponseSink&& sink = {});
 
     /// Tick all active procedures' timers. Auto-cleans slots for Completed/Failed procedures.
     /// @param delta Elapsed time in milliseconds.

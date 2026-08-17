@@ -27,6 +27,7 @@
 #include <gsml3parser/message_types.h>
 #include <gsml3parser/rr/l3rrmessages.h>
 #include <gsml3parser/visitor.h>
+#include <gsml3parser/stack/typed_external_data.h>
 
 #include <chrono>
 #include <cstdint>
@@ -59,13 +60,13 @@ TEST(CipheringModeProcedureTest, CMP_Init_FeedExternal_SendsCommand) {
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Initiated);
 
     bool sinkCalled = false;
-    auto res = proc.feedExternal({},
+    auto res = proc.feedExternalTyped(CipheringParameters{},
         [&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
             EXPECT_EQ(action, SMAction::SendResponse);
             sinkCalled = true;
         });
 
-    EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_TRUE(sinkCalled);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::InProgress);
 }
@@ -74,7 +75,7 @@ TEST(CipheringModeProcedureTest, CMP_Init_FeedExternal_SendsCommand) {
 TEST(CipheringModeProcedureTest, CMP_CipheringModeComplete_Completes) {
     CipheringModeProcedure proc(2); // A5/2 algorithm
 
-    [[maybe_unused]] auto _r = proc.feedExternal({});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(CipheringParameters{});
     feedStep(proc, makeDummyMsg());
 
     auto res = proc.feed(makeCipheringModeComplete(), nullptr, nullptr);
@@ -88,7 +89,7 @@ TEST(CipheringModeProcedureTest, CMP_CipheringModeComplete_Completes) {
 TEST(CipheringModeProcedureTest, CMP_Tick_TimerExpired_Fails) {
     CipheringModeProcedure proc(3); // A5/3 (GEA/1) algorithm
 
-    [[maybe_unused]] auto _r = proc.feedExternal({});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(CipheringParameters{});
     feedStep(proc, makeDummyMsg());
 
     // Timer is running at 3000ms. Tick past expiry.
@@ -102,7 +103,7 @@ TEST(CipheringModeProcedureTest, CMP_Tick_TimerExpired_Fails) {
 TEST(CipheringModeProcedureTest, CMP_Cancel_Aborts) {
     CipheringModeProcedure proc(0); // No ciphering (A5/0)
 
-    [[maybe_unused]] auto _r = proc.feedExternal({});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(CipheringParameters{});
     proc.cancel();
 
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Failed);

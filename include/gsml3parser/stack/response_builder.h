@@ -48,14 +48,18 @@
 #include <cstdint>
 #include <optional>
 #include <span>
+#include <string>
 #include <vector>
 
 #include "gsml3parser/expected.h"
 #include "gsml3parser/types.h"
 #include "gsml3parser/enums.h"
 #include "gsml3parser/common/l3common.h"
+#include "gsml3parser/stack/procedure.h"
 
 namespace gsml3parser {
+
+class SubscriberSession;
 
 /// Factory for building L3 response messages. All methods are stateless static functions.
 ///
@@ -346,6 +350,32 @@ public:
     /// @param ti Transaction Identifier.
     /// @return Number of bytes written, or -1 on error.
     [[nodiscard]] static int buildReleaseComplete(std::span<uint8_t> out, uint8_t ti);
+
+    // RR: Paging requests (TS 04.08 9.1.25)
+    [[nodiscard]] static Expected<std::vector<uint8_t>> buildPagingRequestType1(const L3MobileIdentity& identity);
+    [[nodiscard]] static int buildPagingRequestType1(std::span<uint8_t> out, const L3MobileIdentity& identity);
+
+    [[nodiscard]] static Expected<std::vector<uint8_t>> buildPagingRequestType2(const L3MobileIdentity& identity);
+    [[nodiscard]] static int buildPagingRequestType2(std::span<uint8_t> out, const L3MobileIdentity& identity);
+
+    [[nodiscard]] static Expected<std::vector<uint8_t>> buildPagingRequestType3(const L3MobileIdentity& identity);
+    [[nodiscard]] static int buildPagingRequestType3(std::span<uint8_t> out, const L3MobileIdentity& identity);
+
+    // RR: Handover Command (TS 04.08 9.1.40)
+    [[nodiscard]] static Expected<std::vector<uint8_t>> buildHandoverCommand(const L3ChannelDescription& channel);
+    [[nodiscard]] static int buildHandoverCommand(std::span<uint8_t> out, const L3ChannelDescription& channel);
+
+    // CC: Setup (TS 24.008 9.3.2)
+    [[nodiscard]] static Expected<std::vector<uint8_t>> buildSetup(const std::string& calledNumber, uint8_t ti);
+    [[nodiscard]] static int buildSetup(std::span<uint8_t> out, const std::string& calledNumber, uint8_t ti);
+
+    // Build response bytes from ResponseToken + session context (zero-heap-allocation path).
+    /// @param token The ResponseToken indicating which message to build.
+    /// @param out Pre-allocated output buffer (Arena-provided).
+    /// @param session Optional session context for parameters (TMSI, LAI, TI, etc.).
+    /// @return Number of bytes written, or -1 on error.
+    [[nodiscard]] static int buildResponseFromToken(ResponseToken token, std::span<uint8_t> out,
+                                                     const SubscriberSession* session = nullptr);
 };
 
 } // namespace gsml3parser

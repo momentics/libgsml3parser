@@ -53,9 +53,11 @@
 #include <functional>
 #include <memory>
 #include <span>
+#include <variant>
 
 #include "gsml3parser/stack/procedure_types.h"
 #include "gsml3parser/stack/state_machine.h"
+#include "gsml3parser/stack/typed_external_data.h"
 
 namespace gsml3parser {
 
@@ -78,20 +80,59 @@ class SubscriberSession;
 using ResponseSink = std::function<void(SMAction action, const ParsedMessage& incomingMsg,
                                           const SubscriberSession* session)>;
 
+/// Response token indicates which L3 message type the caller should build.
+/// Used together with ResponseBuilder::buildResponseFromToken() to generate
+/// response bytes in a pre-allocated Arena buffer (zero heap allocation).
+///
+/// Each value maps to a specific GSM L3 message type defined in 3GPP TS 04.08.
+/// The token is small (uint8_t) so it fits inline in ProcedureStepResult without
+/// increasing its size beyond the 32-byte cache-line budget.
+enum class ResponseToken : uint8_t {
+    None = 0,
+    // RR responses:
+    ImmediateAssignment,
+    AssignmentCommand,
+    ChannelRelease,
+    CipheringModeCommand,
+    PhysicalInformation,
+    HandoverCommand,
+    PagingRequestType1,
+    PagingRequestType2,
+    PagingRequestType3,
+    // MM responses:
+    CMServiceAccept,
+    CMServiceReject,
+    IdentityRequest,
+    AuthenticationRequest,
+    LocationUpdatingAccept,
+    LocationUpdatingReject,
+    TMSIReallocationCommand,
+    // CC responses:
+    CallProceeding,
+    Alerting,
+    Connect,
+    ConnectAcknowledge,
+    Disconnect,
+    Release,
+    ReleaseComplete,
+    Setup,
+};
+
 /// Result of processing a single message step within a procedure. Reports
 /// whether the procedure should continue, send a response, wait for external
 /// data, or has reached a terminal state. Does NOT contain response bytes —
-/// responses are generated via the ResponseSink callback.
+/// responses are generated via the ResponseToken + ResponseBuilder pattern.
 struct ProcedureStepResult {
     enum class Action : uint8_t {
-        Continue,           ///< Procedure continues; awaiting next message
-        SendResponse,       ///< Build and send response(s) via ResponseSink, then continue
-        WaitingExternal,    ///< Needs external data (RAND from AuC, BSC decision)
-        Completed,          ///< Procedure finished successfully
-        Failed              ///< Procedure terminated with an error
+        Continue,               ///< Procedure continues; awaiting next message
+        SendResponseWithToken,  ///< Build response using responseToken + ResponseBuilder
+        WaitingExternal,        ///< Needs external data (RAND from AuC, BSC decision)
+        Completed,              ///< Procedure finished successfully
+        Failed                  ///< Procedure terminated with an error
     };
 
     Action action{Action::Continue};
+    ResponseToken responseToken{ResponseToken::None};  ///< Which message to build when action == SendResponseWithToken
     procedure::ProcedureResult finalResult{};  ///< Populated when action is Completed or Failed
 };
 
@@ -128,13 +169,13 @@ public:
                                                       SubscriberSession* session,
                                                       ResponseSink&& sink) = 0;
 
-    /// Feed external data into the procedure (e.g., RAND from AuC, Accept/Reject from BSC).
+    /// Feed typed external data into the procedure (e.g., AuthChallenge from AuC, VLRDecision from BSC).
     /// Call this when the procedure has entered WaitingExternal state.
-    /// @param data Procedure-specific external data bytes.
+    /// @param data Strongly-typed external data variant (AuthChallenge, VLRDecision, etc.).
     /// @param sink Optional callback for generating responses after external data is received.
     /// @return Continue if the procedure resumed, or Completed/Failed if it reached a terminal state.
-    [[nodiscard]] virtual ProcedureStepResult feedExternal(
-        std::span<const uint8_t> data, ResponseSink&& sink = {});
+    [[nodiscard]] virtual ProcedureStepResult feedExternalTyped(
+        const ExternalData& data, ResponseSink&& sink = {});
 
     /// Tick procedure timers. Call periodically from the event loop.
     /// @param delta Elapsed time in milliseconds since last tick.

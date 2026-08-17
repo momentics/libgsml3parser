@@ -37,38 +37,22 @@ procedure::ProcedureState CipheringModeProcedure::state() const {
     return mProcState;
 }
 
-void CipheringModeProcedure::transitionTo(State s) {
+void CipheringModeProcedure::doTransitionTo(State s) {
     mCurrentState = s;
-    if (s == State::COMPLETED) {
-        mProcState = procedure::ProcedureState::Completed;
-    } else if (s == State::FAILED) {
-        mProcState = procedure::ProcedureState::Failed;
-    } else {
-        mProcState = procedure::ProcedureState::InProgress;
-    }
+    if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;
+    else if (s == State::FAILED) mProcState = procedure::ProcedureState::Failed;
+    else mProcState = procedure::ProcedureState::InProgress;
 }
 
-void CipheringModeProcedure::fail(const std::string_view& reason) {
+void CipheringModeProcedure::doFail(std::string_view reason) {
     (void)reason;
-    stopTimer();
-    transitionTo(State::FAILED);
+    mCurrentState = State::FAILED;
+    mProcState = procedure::ProcedureState::Failed;
 }
 
-void CipheringModeProcedure::complete() {
-    stopTimer();
-    transitionTo(State::COMPLETED);
-}
-
-void CipheringModeProcedure::startTimer(L3TimerId id, std::chrono::milliseconds duration) {
-    mCurrentTimer = id;
-    mTimerRemaining = duration;
-    mTimerRunning = true;
-}
-
-void CipheringModeProcedure::stopTimer() noexcept {
-    mTimerRunning = false;
-    mCurrentTimer = L3TimerId::Unknown;
-    mTimerRemaining = std::chrono::milliseconds(0);
+void CipheringModeProcedure::doComplete() {
+    mCurrentState = State::COMPLETED;
+    mProcState = procedure::ProcedureState::Completed;
 }
 
 ProcedureStepResult CipheringModeProcedure::feed(const ParsedMessage& msg,
@@ -81,11 +65,11 @@ ProcedureStepResult CipheringModeProcedure::feed(const ParsedMessage& msg,
 
     switch (mCurrentState) {
         case State::INIT:
-            // Wait for feedExternal to provide cipher parameters
             break;
 
         case State::SEND_COMMAND:
-            result.action = ProcedureStepResult::Action::SendResponse;
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::CipheringModeCommand;
             startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
             transitionTo(State::WAIT_COMPLETE);
             if (sink) sink(SMAction::SendResponse, msg, session);
@@ -107,42 +91,30 @@ ProcedureStepResult CipheringModeProcedure::feed(const ParsedMessage& msg,
     return result;
 }
 
-ProcedureStepResult CipheringModeProcedure::feedExternal(
-    std::span<const uint8_t> data, ResponseSink&& sink) {
-    (void)data;
+ProcedureStepResult CipheringModeProcedure::feedExternalTyped(
+    const ExternalData& data, ResponseSink&& sink) {
     ProcedureStepResult result;
 
-    if (mCurrentState == State::INIT) {
-        transitionTo(State::SEND_COMMAND);
-        result.action = ProcedureStepResult::Action::SendResponse;
-        startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
-        if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
+    if (const auto* params = std::get_if<CipheringParameters>(&data)) {
+        (void)params;
+        if (mCurrentState == State::INIT) {
+            transitionTo(State::SEND_COMMAND);
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::CipheringModeCommand;
+            startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
+            if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
+        }
     }
 
     return result;
 }
 
 ProcedureStepResult CipheringModeProcedure::tick(std::chrono::milliseconds delta) {
-    if (!mTimerRunning) {
-        return {ProcedureStepResult::Action::Continue};
-    }
-
-    mTimerRemaining -= delta;
-    if (mTimerRemaining <= std::chrono::milliseconds(0)) {
-        stopTimer();
-        fail("timer_expired");
-        ProcedureStepResult result;
-        result.action = ProcedureStepResult::Action::Failed;
-        result.finalResult = {type(), mProcState, "timer_expired"};
-        return result;
-    }
-
-    return {ProcedureStepResult::Action::Continue};
+    return static_cast<ProcedureStateMixin<CipheringModeProcedure, State>&>(*this).doTick(delta);
 }
 
 void CipheringModeProcedure::cancel() noexcept {
-    stopTimer();
-    fail("cancelled");
+    static_cast<ProcedureStateMixin<CipheringModeProcedure, State>&>(*this).doCancel();
 }
 
 } // namespace gsml3parser

@@ -40,7 +40,7 @@ int main() {
 
     auto r1 = runner.feed(setupMsg, session, responseSink);
     std::cout << "Action: " << static_cast<int>(r1.action)
-              << " (SendResponse=" << static_cast<int>(ProcedureStepResult::Action::SendResponse) << ")\n";
+              << " (SendResponseWithToken=" << static_cast<int>(ProcedureStepResult::Action::SendResponseWithToken) << ")\n";
     std::cout << "Active procedures: " << runner.activeCount() << "\n";
 
     auto* moc = runner.getActive(procedure::ProcedureType::CallSetup_MO);

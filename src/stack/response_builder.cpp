@@ -28,6 +28,7 @@
 #include "gsml3parser/rr/l3rrmessages.h"
 #include "gsml3parser/mm/l3mmmessages.h"
 #include "gsml3parser/cc/l3ccmessages.h"
+#include "gsml3parser/stack/subscriber_registry.h"
 
 namespace gsml3parser {
 
@@ -472,6 +473,206 @@ int ResponseBuilder::buildReleaseComplete(std::span<uint8_t> out, uint8_t ti)
         return static_cast<int>(bytes.size());
     }
     return -1;
+}
+
+// Paging requests
+
+Expected<std::vector<uint8_t>> ResponseBuilder::buildPagingRequestType1(const L3MobileIdentity& identity)
+{
+    auto msg = L3PagingRequestType1::builder()
+        .addMobileId(identity, ChannelType::SDCCHType)
+        .build();
+    ParsedMessage pm{RRM{std::move(msg)}};
+    return writeL3Bytes(pm);
+}
+
+int ResponseBuilder::buildPagingRequestType1(std::span<uint8_t> out, const L3MobileIdentity& identity)
+{
+    auto result = buildPagingRequestType1(identity);
+    if (result) {
+        const auto& bytes = result.value();
+        if (bytes.size() > out.size()) return -1;
+        std::memcpy(out.data(), bytes.data(), bytes.size());
+        return static_cast<int>(bytes.size());
+    }
+    return -1;
+}
+
+Expected<std::vector<uint8_t>> ResponseBuilder::buildPagingRequestType2(const L3MobileIdentity& identity)
+{
+    uint32_t tmsi = identity.isTMSI() ? identity.tmsi() : 0x12345678u;
+    auto msg = L3PagingRequestType2::builder()
+        .addTMSI(tmsi, ChannelType::SDCCHType)
+        .build();
+    ParsedMessage pm{RRM{std::move(msg)}};
+    return writeL3Bytes(pm);
+}
+
+int ResponseBuilder::buildPagingRequestType2(std::span<uint8_t> out, const L3MobileIdentity& identity)
+{
+    auto result = buildPagingRequestType2(identity);
+    if (result) {
+        const auto& bytes = result.value();
+        if (bytes.size() > out.size()) return -1;
+        std::memcpy(out.data(), bytes.data(), bytes.size());
+        return static_cast<int>(bytes.size());
+    }
+    return -1;
+}
+
+Expected<std::vector<uint8_t>> ResponseBuilder::buildPagingRequestType3(const L3MobileIdentity& identity)
+{
+    uint32_t tmsi = identity.isTMSI() ? identity.tmsi() : 0x12345678u;
+    auto msg = L3PagingRequestType3::builder()
+        .addTMSI(tmsi, ChannelType::SDCCHType)
+        .build();
+    ParsedMessage pm{RRM{std::move(msg)}};
+    return writeL3Bytes(pm);
+}
+
+int ResponseBuilder::buildPagingRequestType3(std::span<uint8_t> out, const L3MobileIdentity& identity)
+{
+    auto result = buildPagingRequestType3(identity);
+    if (result) {
+        const auto& bytes = result.value();
+        if (bytes.size() > out.size()) return -1;
+        std::memcpy(out.data(), bytes.data(), bytes.size());
+        return static_cast<int>(bytes.size());
+    }
+    return -1;
+}
+
+// Handover Command
+
+Expected<std::vector<uint8_t>> ResponseBuilder::buildHandoverCommand(const L3ChannelDescription& channel)
+{
+    (void)channel;
+    auto msg = L3HandoverCommand::builder().build();
+    ParsedMessage pm{RRM{std::move(msg)}};
+    return writeL3Bytes(pm);
+}
+
+int ResponseBuilder::buildHandoverCommand(std::span<uint8_t> out, const L3ChannelDescription& channel)
+{
+    auto result = buildHandoverCommand(channel);
+    if (result) {
+        const auto& bytes = result.value();
+        if (bytes.size() > out.size()) return -1;
+        std::memcpy(out.data(), bytes.data(), bytes.size());
+        return static_cast<int>(bytes.size());
+    }
+    return -1;
+}
+
+// CC: Setup
+
+Expected<std::vector<uint8_t>> ResponseBuilder::buildSetup(const std::string& calledNumber, uint8_t ti)
+{
+    (void)calledNumber;
+    auto msg = L3Setup::builder()
+        .ti(ti)
+        .build();
+    ParsedMessage pm{CCM{std::move(msg)}};
+    return writeL3Bytes(pm);
+}
+
+int ResponseBuilder::buildSetup(std::span<uint8_t> out, const std::string& calledNumber, uint8_t ti)
+{
+    auto result = buildSetup(calledNumber, ti);
+    if (result) {
+        const auto& bytes = result.value();
+        if (bytes.size() > out.size()) return -1;
+        std::memcpy(out.data(), bytes.data(), bytes.size());
+        return static_cast<int>(bytes.size());
+    }
+    return -1;
+}
+
+// Build response from token
+
+int ResponseBuilder::buildResponseFromToken(ResponseToken token, std::span<uint8_t> out,
+                                              const SubscriberSession* session)
+{
+    switch (token) {
+        case ResponseToken::None:
+            return 0;
+
+        // RR responses
+        case ResponseToken::ImmediateAssignment: {
+            L3ChannelDescription ch(TDMA_SDCCH, 0, 1, 100);
+            return buildImmediateAssignment(out, ch, 0);
+        }
+        case ResponseToken::AssignmentCommand: {
+            L3ChannelDescription ch(TDMA_TCHF, 0, 0, 100);
+            return buildAssignmentCommand(out, ch);
+        }
+        case ResponseToken::ChannelRelease:
+            return buildChannelRelease(out, RRCause::Normal_Event);
+        case ResponseToken::CipheringModeCommand:
+            return buildCipheringModeCommand(out, session ? 1 : 0);
+        case ResponseToken::PhysicalInformation:
+            return buildPhysicalInformation(out, 0);
+        case ResponseToken::HandoverCommand: {
+            L3ChannelDescription ch(TDMA_TCHF, 0, 0, 150);
+            return buildHandoverCommand(out, ch);
+        }
+        case ResponseToken::PagingRequestType1:
+        case ResponseToken::PagingRequestType2:
+        case ResponseToken::PagingRequestType3: {
+            L3MobileIdentity identity;
+            if (session) identity = session->context.identity();
+            if (token == ResponseToken::PagingRequestType1) return buildPagingRequestType1(out, identity);
+            if (token == ResponseToken::PagingRequestType2) return buildPagingRequestType2(out, identity);
+            return buildPagingRequestType3(out, identity);
+        }
+
+        // MM responses
+        case ResponseToken::CMServiceAccept:
+            return buildCMServiceAccept(out);
+        case ResponseToken::CMServiceReject:
+            return buildCMServiceReject(out, MMRejectCause::Zero);
+        case ResponseToken::IdentityRequest:
+            return buildIdentityRequest(out, MobileIDType::IMSI);
+        case ResponseToken::AuthenticationRequest: {
+            std::array<uint8_t, 16> rand{};
+            for (int i = 0; i < 16; ++i) rand[static_cast<size_t>(i)] = static_cast<uint8_t>(i);
+            return buildAuthenticationRequest(out, rand);
+        }
+        case ResponseToken::LocationUpdatingAccept: {
+            L3LocationAreaIdentity lai{};
+            if (session) lai = session->context.lai().value_or(L3LocationAreaIdentity{});
+            return buildLocationUpdatingAccept(out, lai);
+        }
+        case ResponseToken::LocationUpdatingReject:
+            return buildLocationUpdatingReject(out, MMRejectCause::Zero);
+        case ResponseToken::TMSIReallocationCommand: {
+            L3LocationAreaIdentity lai{};
+            if (session) lai = session->context.lai().value_or(L3LocationAreaIdentity{});
+            uint32_t tmsi = session ? session->context.identity().tmsi() : 0;
+            return buildTMSIReallocationCommand(out, lai, tmsi);
+        }
+
+        // CC responses
+        case ResponseToken::CallProceeding:
+            return buildCallProceeding(out, session ? 1 : 0);
+        case ResponseToken::Alerting:
+            return buildAlerting(out, session ? 1 : 0);
+        case ResponseToken::Connect:
+            return buildConnect(out, session ? 1 : 0);
+        case ResponseToken::ConnectAcknowledge:
+            return buildConnectAcknowledge(out, session ? 1 : 0);
+        case ResponseToken::Disconnect:
+            return buildDisconnect(out, session ? 1 : 0, CCCause::Normal_Call_Clearing);
+        case ResponseToken::Release:
+            return buildRelease(out, session ? 1 : 0, CCCause::Normal_Call_Clearing);
+        case ResponseToken::ReleaseComplete:
+            return buildReleaseComplete(out, session ? 1 : 0);
+        case ResponseToken::Setup:
+            return buildSetup(out, "", session ? 1 : 0);
+
+        default:
+            return -1;
+    }
 }
 
 } // namespace gsml3parser

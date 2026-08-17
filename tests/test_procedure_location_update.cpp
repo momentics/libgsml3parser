@@ -34,6 +34,7 @@
 
 #include "gsml3parser/stack/procedures/location_update.h"
 #include "gsml3parser/stack/subscriber_registry.h"
+#include "gsml3parser/stack/typed_external_data.h"
 #include "gsml3parser/message_types.h"
 #include "gsml3parser/visitor.h"
 #include "gsml3parser/mm/l3mmmessages.h"
@@ -64,25 +65,25 @@ static ParsedMessage makeAuthResponse(uint32_t sres) {
         .build()}};
 }
 
-// Helper: build 20-byte RAND+SRES external data (16 bytes RAND + 4 bytes SRES LE).
-static std::array<uint8_t, 20> makeRandSRES(uint32_t sres) {
-    std::array<uint8_t, 20> data{};
-    for (int i = 0; i < 16; ++i) data[i] = static_cast<uint8_t>(0xA0 + i);
-    data[16] = static_cast<uint8_t>(sres & 0xFF);
-    data[17] = static_cast<uint8_t>((sres >> 8) & 0xFF);
-    data[18] = static_cast<uint8_t>((sres >> 16) & 0xFF);
-    data[19] = static_cast<uint8_t>((sres >> 24) & 0xFF);
-    return data;
+// Helper: build AuthChallenge external data.
+static AuthChallenge makeAuthChallenge(uint32_t sres) {
+    AuthChallenge chal{};
+    for (int i = 0; i < 16; ++i) chal.rand[static_cast<size_t>(i)] = static_cast<uint8_t>(0xA0 + i);
+    chal.expectedSres[0] = static_cast<uint8_t>(sres & 0xFF);
+    chal.expectedSres[1] = static_cast<uint8_t>((sres >> 8) & 0xFF);
+    chal.expectedSres[2] = static_cast<uint8_t>((sres >> 16) & 0xFF);
+    chal.expectedSres[3] = static_cast<uint8_t>((sres >> 24) & 0xFF);
+    return chal;
 }
 
-// Helper: build Accept external data (byte 0 = 1 for accept).
-static std::array<uint8_t, 1> makeAcceptData() {
-    return {1u};
+// Helper: build Accept VLRDecision.
+static VLRDecision makeAcceptData() {
+    return VLRDecision{true, std::nullopt, MMRejectCause::Zero};
 }
 
-// Helper: build Reject external data (byte 0 = 0 for reject).
-static std::array<uint8_t, 1> makeRejectData() {
-    return {0u};
+// Helper: build Reject VLRDecision.
+static VLRDecision makeRejectData() {
+    return VLRDecision{false, std::nullopt, MMRejectCause::Zero};
 }
 
 // Helper: create a session with a known TMSI identity.
@@ -150,7 +151,8 @@ TEST(LocationUpdateProcedure, LUP_IdentityCheck_UnknownTMSI_SendsIdentityRequest
             sinkCalled = true;
         });
 
-    EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponseWithToken);
+    EXPECT_EQ(result.responseToken, ResponseToken::IdentityRequest);
     EXPECT_TRUE(sinkCalled);
 }
 
@@ -185,11 +187,12 @@ TEST(LocationUpdateProcedure, LUP_AuthCheck_NeedAuth_SendsAuthenticationRequest)
     (void)lup.feed(makeCMServiceRequest(), &sess, {});
     (void)lup.feed(makeCMServiceRequest(), &sess, {});
 
-    // Feed RAND via feedExternal in AUTH_CHECK
-    std::array<uint8_t, 16> rand{};
-    auto result = lup.feedExternal(std::span<const uint8_t>(rand), {});
+    // Feed AuthChallenge via feedExternalTyped in AUTH_CHECK
+    AuthChallenge chal{};
+    auto result = lup.feedExternalTyped(chal, {});
 
-    EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponseWithToken);
+    EXPECT_EQ(result.responseToken, ResponseToken::AuthenticationRequest);
 }
 
 // LUP_AuthResponse_ValidSRES_AdvancesToLURequest
@@ -203,12 +206,12 @@ TEST(LocationUpdateProcedure, LUP_AuthResponse_ValidSRES_AdvancesToLURequest) {
     (void)lup.feed(makeCMServiceRequest(), &sess, {});
     (void)lup.feed(makeCMServiceRequest(), &sess, {});
 
-    // Feed RAND + expected SRES (0xDEADBEEF) via feedExternal -> SEND_AUTH
-    auto randSRES = makeRandSRES(0xDEADBEEFu);
-    (void)lup.feedExternal(std::span<const uint8_t>(randSRES), {});
+    // Feed AuthChallenge (0xDEADBEEF) via feedExternalTyped -> SEND_AUTH
+    auto chal = makeAuthChallenge(0xDEADBEEFu);
+    (void)lup.feedExternalTyped(chal, {});
 
     // Simulate reaching WAIT_AUTH for SRES verification.
-    (void)lup.feedExternal(std::span<const uint8_t>(), {});
+    (void)lup.feedExternalTyped(AuthChallenge{}, {});
 
     // Feed auth response with matching SRES -> should advance to LU_REQUEST.
     auto result = lup.feed(makeAuthResponse(0xDEADBEEFu), &sess, {});
@@ -227,12 +230,12 @@ TEST(LocationUpdateProcedure, LUP_AuthResponse_InvalidSRES_GoesToReject) {
     (void)lup.feed(makeCMServiceRequest(), &sess, {});
     (void)lup.feed(makeCMServiceRequest(), &sess, {});
 
-    // Feed RAND + expected SRES (0x11111111) via feedExternal -> SEND_AUTH
-    auto randSRES = makeRandSRES(0x11111111u);
-    (void)lup.feedExternal(std::span<const uint8_t>(randSRES), {});
+    // Feed AuthChallenge (0x11111111) via feedExternalTyped -> SEND_AUTH
+    auto chal = makeAuthChallenge(0x11111111u);
+    (void)lup.feedExternalTyped(chal, {});
 
     // Simulate reaching WAIT_AUTH for SRES verification.
-    (void)lup.feedExternal(std::span<const uint8_t>(), {});
+    (void)lup.feedExternalTyped(AuthChallenge{}, {});
 
     // Feed auth response with mismatched SRES -> should trigger reject path.
     auto result = lup.feed(makeAuthResponse(0xFFFFFFFFu), &sess, {});
@@ -255,9 +258,9 @@ TEST(LocationUpdateProcedure, LUP_WaitingExternal_FeedAccept_CompletesWithLocati
 
     EXPECT_EQ(lup.state(), ProcedureState::WaitingExternal);
 
-    // Feed Accept decision via feedExternal
+    // Feed Accept VLRDecision via feedExternalTyped
     bool sinkCalled = false;
-    auto acceptResult = lup.feedExternal(makeAcceptData(),
+    auto acceptResult = lup.feedExternalTyped(makeAcceptData(),
         [&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
         });
@@ -282,15 +285,15 @@ TEST(LocationUpdateProcedure, LUP_WaitingExternal_FeedReject_FailsWithLocationUp
 
     EXPECT_EQ(lup.state(), ProcedureState::WaitingExternal);
 
-    // Feed Reject decision via feedExternal
+    // Feed Reject VLRDecision via feedExternalTyped
     bool sinkCalled = false;
-    auto rejectResult = lup.feedExternal(makeRejectData(),
+    auto rejectResult = lup.feedExternalTyped(makeRejectData(),
         [&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
         });
 
     EXPECT_TRUE(sinkCalled);
-    EXPECT_EQ(rejectResult.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(rejectResult.action, ProcedureStepResult::Action::SendResponseWithToken);
 }
 
 // LUP_Tick_T3106Expired_Fails
@@ -304,9 +307,9 @@ TEST(LocationUpdateProcedure, LUP_Tick_T3106Expired_Fails) {
     advance(lup, makeCMServiceRequest(), &sess);
     advance(lup, makeCMServiceRequest(), &sess);
 
-    // Feed RAND via feedExternal -> SEND_AUTH (starts T3106 at 3000ms)
-    std::array<uint8_t, 16> rand{};
-    [[maybe_unused]] auto _ = lup.feedExternal(std::span<const uint8_t>(rand), {});
+    // Feed AuthChallenge via feedExternalTyped -> SEND_AUTH (starts T3106 at 3000ms)
+    AuthChallenge chal{};
+    [[maybe_unused]] auto _ = lup.feedExternalTyped(chal, {});
 
     // Tick past timer expiry (T3106 = 3000ms default)
     auto result = lup.tick(4000ms);
@@ -358,9 +361,9 @@ TEST(LocationUpdateProcedure, LUP_FullFlow_WithAuth_CompletesSuccessfully) {
     advance(lup, makeCMServiceRequest(), &sess);
     EXPECT_EQ(lup.state(), ProcedureState::WaitingExternal);
 
-    // Step 5: Feed Accept via feedExternal -> completes procedure.
+    // Step 5: Feed Accept VLRDecision via feedExternalTyped -> completes procedure.
     bool sinkCalled = false;
-    auto r5 = lup.feedExternal(makeAcceptData(),
+    auto r5 = lup.feedExternalTyped(makeAcceptData(),
         [&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
         });

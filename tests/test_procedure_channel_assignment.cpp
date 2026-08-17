@@ -79,7 +79,7 @@ TEST(ChannelAssignmentProcedureTest, CAP_SendImmediateAssignment_WaitSeizure) {
             sinkCalled = true;
         });
 
-    EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_TRUE(sinkCalled);
 
     // SEND_IMMEDIATE_ASSIGNMENT -> WAIT_SEIZURE

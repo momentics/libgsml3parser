@@ -30,6 +30,7 @@
 #include "gsml3parser/mm/l3mmmessages.h"
 #include "gsml3parser/rr/l3rrmessages.h"
 #include "gsml3parser/cc/l3ccmessages.h"
+#include <gsml3parser/stack/typed_external_data.h>
 
 #include <chrono>
 #include <array>
@@ -123,7 +124,7 @@ TEST(PR_Feed, Setup_CreatesCallSetupMO) {
     ParsedMessage msg{CCM{L3Setup{}}};
     auto result = runner.feed(msg, &session, {});
 
-    EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_NE(runner.getActive(procedure::ProcedureType::CallSetup_MO), nullptr);
     EXPECT_EQ(runner.activeCount(), 1u);
 }
@@ -152,7 +153,7 @@ TEST(PR_Feed, RoutesToActiveProcedure) {
     EXPECT_EQ(runner.activeCount(), 1u);
     EXPECT_EQ(runner.getActive(procedure::ProcedureType::ChannelAssignment), firstProc);
     // Second feed advances from ALLOCATE_CHANNEL to SEND_IMMEDIATE_ASSIGNMENT
-    EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponseWithToken);
 }
 
 // Test: tickAll advances timers and returns the count of procedures that failed
@@ -245,7 +246,7 @@ TEST(PR_FeedExternal, RoutesToCorrectProcedure) {
 
     // feedExternal for LocationUpdate type when no LU is active should return Continue
     std::array<uint8_t, 1> dummyData{0x00};
-    auto result = runner.feedExternal(procedure::ProcedureType::LocationUpdate, dummyData);
+    auto result = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, VLRDecision{});
     EXPECT_EQ(result.action, ProcedureStepResult::Action::Continue);
 
     // ChannelAssignment should still be active (wasn't affected)
@@ -279,6 +280,6 @@ TEST(PR_ResponseSink, CalledOnSendResponse) {
     ParsedMessage msg2{RRM{L3ClassmarkChange{}}};
     auto result = runner.feed(msg2, &session, std::move(sink));
 
-    EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponse);
+    EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_TRUE(sinkCalled.load());
 }

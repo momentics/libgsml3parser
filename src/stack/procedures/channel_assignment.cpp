@@ -37,38 +37,22 @@ procedure::ProcedureState ChannelAssignmentProcedure::state() const {
     return mProcState;
 }
 
-void ChannelAssignmentProcedure::transitionTo(State s) {
+void ChannelAssignmentProcedure::doTransitionTo(State s) {
     mCurrentState = s;
-    if (s == State::COMPLETED) {
-        mProcState = procedure::ProcedureState::Completed;
-    } else if (s == State::FAILED) {
-        mProcState = procedure::ProcedureState::Failed;
-    } else {
-        mProcState = procedure::ProcedureState::InProgress;
-    }
+    if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;
+    else if (s == State::FAILED) mProcState = procedure::ProcedureState::Failed;
+    else mProcState = procedure::ProcedureState::InProgress;
 }
 
-void ChannelAssignmentProcedure::fail(const std::string_view& reason) {
+void ChannelAssignmentProcedure::doFail(std::string_view reason) {
     (void)reason;
-    stopTimer();
-    transitionTo(State::FAILED);
+    mCurrentState = State::FAILED;
+    mProcState = procedure::ProcedureState::Failed;
 }
 
-void ChannelAssignmentProcedure::complete() {
-    stopTimer();
-    transitionTo(State::COMPLETED);
-}
-
-void ChannelAssignmentProcedure::startTimer(L3TimerId id, std::chrono::milliseconds duration) {
-    mCurrentTimer = id;
-    mTimerRemaining = duration;
-    mTimerRunning = true;
-}
-
-void ChannelAssignmentProcedure::stopTimer() noexcept {
-    mTimerRunning = false;
-    mCurrentTimer = L3TimerId::Unknown;
-    mTimerRemaining = std::chrono::milliseconds(0);
+void ChannelAssignmentProcedure::doComplete() {
+    mCurrentState = State::COMPLETED;
+    mProcState = procedure::ProcedureState::Completed;
 }
 
 ProcedureStepResult ChannelAssignmentProcedure::feed(const ParsedMessage& msg,
@@ -89,7 +73,8 @@ ProcedureStepResult ChannelAssignmentProcedure::feed(const ParsedMessage& msg,
 
         case State::ALLOCATE_CHANNEL:
             transitionTo(State::SEND_IMMEDIATE_ASSIGNMENT);
-            result.action = ProcedureStepResult::Action::SendResponse;
+            result.action = ProcedureStepResult::Action::SendResponseWithToken;
+            result.responseToken = ResponseToken::ImmediateAssignment;
             startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
@@ -99,7 +84,6 @@ ProcedureStepResult ChannelAssignmentProcedure::feed(const ParsedMessage& msg,
             break;
 
         case State::WAIT_SEIZURE:
-            // Any L3 message on the new channel indicates seizure success
             complete();
             result.action = ProcedureStepResult::Action::Completed;
             result.finalResult = {type(), mProcState, "channel_seized"};
@@ -114,26 +98,11 @@ ProcedureStepResult ChannelAssignmentProcedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult ChannelAssignmentProcedure::tick(std::chrono::milliseconds delta) {
-    if (!mTimerRunning) {
-        return {ProcedureStepResult::Action::Continue};
-    }
-
-    mTimerRemaining -= delta;
-    if (mTimerRemaining <= std::chrono::milliseconds(0)) {
-        stopTimer();
-        fail("timer_expired");
-        ProcedureStepResult result;
-        result.action = ProcedureStepResult::Action::Failed;
-        result.finalResult = {type(), mProcState, "timer_expired"};
-        return result;
-    }
-
-    return {ProcedureStepResult::Action::Continue};
+    return static_cast<ProcedureStateMixin<ChannelAssignmentProcedure, State>&>(*this).doTick(delta);
 }
 
 void ChannelAssignmentProcedure::cancel() noexcept {
-    stopTimer();
-    fail("cancelled");
+    static_cast<ProcedureStateMixin<ChannelAssignmentProcedure, State>&>(*this).doCancel();
 }
 
 } // namespace gsml3parser
