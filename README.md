@@ -17,6 +17,17 @@ Building a software GSM Base Transceiver Station (BTS) requires implementing the
 
 libgsml3parser fills the gap: a **type-safe, zero-allocation C++20 library** that provides everything from raw L3 parse/serialize up to per-subscriber state machines, timers, and transaction correlation — ready to connect to any SDR backend.
 
+## What You Save
+
+| Without libgsml3parser | With libgsml3parser |
+|------------------------|---------------------|
+| Hand-roll binary parsers for 200+ message types | `parseL3Hex("060D00")` — one call, typed result |
+| Manual byte construction for responses | Fluent builder: `.pageMode(TMSI).tmsi(…).build()` |
+| Scatter/gather FSM logic across handlers | Pre-built `ProcedureOrchestrator` auto-chains Location Update, Auth, Call Setup |
+| Track timers with raw `std::map` + cron jobs | `TimerManager` — O(1) tick, zero allocation, all GSM timers built-in |
+| Correlate request/response with custom TI tables | `TransactionManager` — O(1) lookup, 0.002 µs per match |
+| Debug hex dumps by eye | `std::format` support for every enum, `Expected<T>` with bit-position errors |
+
 ## Who Is This For?
 
 | Audience | What You Get |
@@ -82,6 +93,34 @@ What sets this library apart: ready-to-use per-subscriber state management primi
 
 Total per-MS footprint: **~2.7 KB** (fits L3 cache at 10K concurrent sessions). See [BTS Architecture Guide](doc/bts_architecture.md) for scaling to millions.
 
+## Performance
+
+Numbers that matter for a real-time radio stack:
+
+| Metric | Result |
+|--------|--------|
+| **L3 parse throughput** | 6.4 – 13.2 M msg/s (per message type, single core) |
+| **Mixed-domain stream** | 7.7 M msg/s (all 12 PD domains) |
+| **Full BTS stack** (1K MS, timers, FSM, dispatch) | **103 M msg/s** |
+| **TimerManager tick** | 80.3 M ticks/sec |
+| **Transaction lookup** | 0.002 µs per match |
+| **State machine dispatch** | 0.007 µs per message |
+| **ChannelPool alloc+release** | 0.008 µs per cycle |
+
+| Optimization | Impact |
+|--------------|--------|
+| Handler dispatch `std::array[16][256]` | O(1) index, ~64 KB L2-cache resident |
+| `FlatHandler` callbacks (16 bytes) | 2.5x smaller than `std::function`, no type erasure |
+| RingBuffer `& mask` wrap | 1 CPU cycle vs 20-80 for modulo |
+| Zero-copy parsing | span -> parse directly, no memcpy |
+| Per-MS stack modules | ~2.7 KB per session (10K sessions = ~27 MB) |
+
+```bash
+./build/Release/examples/example_benchmark.exe      # all 12 PD domains
+./build/Release/examples/example_multithread.exe    # concurrent parsing
+./build/Release/examples/example_zero_copy.exe      # InlineFramer + ZeroCopyStreamProcessor
+```
+
 ## How It Compares
 
 | Aspect | osmo-bts (C) | OpenBTS / srsRAN | libgsml3parser |
@@ -114,16 +153,20 @@ cmake --build . --config Release --parallel
 
 ### Using in Your Project
 
+One include, one link:
+
 ```cmake
 find_package(gsml3parser REQUIRED)
 target_link_libraries(myapp PRIVATE gsml3parser::parser)
 ```
 
+```cpp
+#include <gsml3parser/gsml3parser.hpp>  // single header — full API
+```
+
 ### Parsing a Message
 
 ```cpp
-#include <gsml3parser/gsml3parser.hpp>
-
 auto msg = gsml3parser::parseL3Hex("060D00");
 if (msg) {
     std::cout << gsml3parser::messageName(*msg) << "\n";
@@ -141,6 +184,34 @@ auto msg = L3ImmediateAssignment::builder()
 ParsedMessage pm{RRM{std::move(msg)}};
 auto bytes = writeL3Bytes(pm);  // ready for LAPDmEntity.sendUI()
 ```
+
+### Error Handling with Context
+
+Every parse failure includes the error code and exact bit position:
+
+```cpp
+auto result = gsml3parser::parseL3Hex("060D");
+
+if (result) {
+    std::cout << gsml3parser::messageName(*result) << "\n";
+} else {
+    const auto& err = result.error();
+    std::cerr << "Error " << static_cast<int>(err.code)
+              << " at bit " << err.bitPosition
+              << ": " << err.message << "\n";
+}
+```
+
+| Code | Meaning |
+|------|---------|
+| `Ok` | Parse succeeded |
+| `TruncatedInput` | Input data too short |
+| `InvalidPD` | Unknown Protocol Discriminator |
+| `InvalidMTI` | Message Type Indicator not recognized |
+| `LengthMismatch` | Declared length does not match actual data |
+| `InvalidIE` | Malformed Information Element |
+| `InvalidValue` | Field value outside valid range |
+| `UnsupportedFeature` | Feature not yet implemented |
 
 ### BTS Examples
 
@@ -251,24 +322,6 @@ Layered design, bottom to top:
 
 **Full message catalog:** [doc/messages.md](doc/messages.md)
 
-## Performance
-
-Optimized for high-throughput, low-latency L3 parsing at scale:
-
-| Optimization | Impact |
-|--------------|--------|
-| Handler dispatch `std::array[16][256]` | O(1) index, ~64 KB L2-cache resident |
-| `FlatHandler` callbacks (16 bytes) | 2.5x smaller than `std::function`, no type erasure |
-| RingBuffer `& mask` wrap | 1 CPU cycle vs 20-80 for modulo |
-| Zero-copy parsing | span -> parse directly, no memcpy |
-| Per-MS stack modules | ~2.7 KB per session (10K sessions = ~27 MB) |
-
-```bash
-./build/Release/examples/example_benchmark.exe      # all 12 PD domains
-./build/Release/examples/example_multithread.exe    # concurrent parsing
-./build/Release/examples/example_zero_copy.exe      # InlineFramer + ZeroCopyStreamProcessor
-```
-
 ## Key Features
 
 - **Full L3 message parsing** — Binary to typed C++ objects with compile-time dispatch via `std::variant`
@@ -290,32 +343,6 @@ Optimized for high-throughput, low-latency L3 parsing at scale:
 - **Zero external dependencies** — C++20 standard library only
 - **Fuzzing-ready** — Clean parse/generate API suitable for libFuzzer
 - **Spec-compliant** — GSM 04.08 / 3GPP TS 24.008, GSM 04.06, GSM 04.07, 3GPP TS 24.080, TS 44.018, TS 44.031
-
-## Error Handling
-
-```cpp
-auto result = gsml3parser::parseL3Hex("060D");
-
-if (result) {
-    std::cout << gsml3parser::messageName(*result) << "\n";
-} else {
-    const auto& err = result.error();
-    std::cerr << "Error " << static_cast<int>(err.code)
-              << " at bit " << err.bitPosition
-              << ": " << err.message << "\n";
-}
-```
-
-| Code | Meaning |
-|------|---------|
-| `Ok` | Parse succeeded |
-| `TruncatedInput` | Input data too short |
-| `InvalidPD` | Unknown Protocol Discriminator |
-| `InvalidMTI` | Message Type Indicator not recognized |
-| `LengthMismatch` | Declared length does not match actual data |
-| `InvalidIE` | Malformed Information Element |
-| `InvalidValue` | Field value outside valid range |
-| `UnsupportedFeature` | Feature not yet implemented |
 
 ## Thread Safety
 
