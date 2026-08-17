@@ -18,6 +18,7 @@ option(BUILD_TESTS "Build unit tests" OFF)
 option(BUILD_EXAMPLES "Build examples" OFF)
 option(BUILD_BENCHMARKS "Build performance benchmarks" OFF)
 option(ENABLE_FUZZING "Build fuzzing target" OFF)
+option(ENABLE_ASAN "Enable AddressSanitizer for debug builds (MSVC 2022 17.8+)" OFF)
 
 # ── Source files ──────────────────────────────────────────────────────
 
@@ -233,6 +234,12 @@ if(MSVC)
 else()
     target_compile_options(gsml3parser PRIVATE -Wall -Wextra -Wpedantic)
     target_compile_options(gsml3parser PRIVATE $<$<CONFIG:Release>:-O2>)
+endif()
+
+if(ENABLE_ASAN AND MSVC)
+    target_compile_options(gsml3parser PRIVATE /fsanitize=address)
+    target_link_options(gsml3parser PRIVATE /fsanitize=address)
+    set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT ProgramDatabase)
 endif()
 
 # ── Install ───────────────────────────────────────────────────────────
