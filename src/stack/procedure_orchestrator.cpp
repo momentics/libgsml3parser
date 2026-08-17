@@ -384,7 +384,7 @@ ProcedureStepResult ProcedureOrchestrator::handleIdentityVerification(
 
 ProcedureStepResult ProcedureOrchestrator::handleLocationUpdatePhase(
     const ParsedMessage& msg, SubscriberSession* session) {
-    (void)msg;
+    (void)msg; (void)session;
     // In the orchestrator flow, LocationUpdate phase waits for external VLR decision.
     // The feed() path just returns WaitingExternal.
     ProcedureStepResult result;
@@ -436,6 +436,7 @@ ProcedureStepResult ProcedureOrchestrator::handleCallReleasePhase(
 
 ProcedureStepResult ProcedureOrchestrator::handleExternalDataLocationUpdate(
     const ExternalData& data, ResponseSink&& sink) {
+    (void)sink;
     ProcedureStepResult result;
 
     if (const auto* vlr = std::get_if<VLRDecision>(&data)) {

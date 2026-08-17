@@ -185,9 +185,6 @@ ProcedureStepResult CallSetupMTPercedure::tick(std::chrono::milliseconds delta) 
         stopTimer();
         if (mCurrentState == State::WAIT_PAGE_RESPONSE && mPageAttempt < MAX_PAGE_ATTEMPTS) {
             ++mPageAttempt;
-            ResponseToken token = ResponseToken::PagingRequestType1;
-            if (mPageAttempt == 2) token = ResponseToken::PagingRequestType2;
-            else if (mPageAttempt >= 3) token = ResponseToken::PagingRequestType3;
             startTimer(L3TimerId::T3109, std::chrono::milliseconds(5000));
             return {ProcedureStepResult::Action::Continue};
         }
