@@ -15,10 +15,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ── Static library install ──────────────────────────────────────
+
       - name: Configure Static Build (lib only)
         run: >
           cmake -B build_static_lib -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_INSTALL_PREFIX=install
+          -DCMAKE_INSTALL_PREFIX=install_static
           -DBUILD_SHARED_LIBS=OFF
           -DBUILD_TESTS=OFF
           -DBUILD_EXAMPLES=OFF
@@ -28,6 +30,24 @@ jobs:
 
       - name: Install Static Library
         run: cmake --install build_static_lib
+
+      # ── Shared library install ──────────────────────────────────────
+
+      - name: Configure Shared Build
+        run: >
+          cmake -B build_shared -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_INSTALL_PREFIX=install_shared
+          -DBUILD_SHARED_LIBS=ON
+          -DBUILD_TESTS=OFF
+          -DBUILD_EXAMPLES=OFF
+
+      - name: Build Shared Library
+        run: cmake --build build_shared --config Release --parallel 2
+
+      - name: Install Shared Library
+        run: cmake --install build_shared
+
+      # ── Tests (linked against static lib) ──────────────────────────
 
       - name: Configure Static Build (tests)
         run: >
@@ -42,6 +62,8 @@ jobs:
       - name: Run Tests
         run: ctest --test-dir build_static_tests --output-on-failure --parallel 2
 
+      # ── Examples (linked against static lib) ───────────────────────
+
       - name: Configure Static Build (examples)
         run: >
           cmake -B build_static_examples -DCMAKE_BUILD_TYPE=Release
@@ -52,24 +74,40 @@ jobs:
       - name: Build Examples
         run: cmake --build build_static_examples --config Release --parallel 1
 
-      - name: Configure Shared Build
-        run: >
-          cmake -B build_shared -DCMAKE_BUILD_TYPE=Release
-          -DCMAKE_INSTALL_PREFIX=install
-          -DBUILD_SHARED_LIBS=ON
-          -DBUILD_TESTS=OFF
-          -DBUILD_EXAMPLES=OFF
-
-      - name: Build Shared Library
-        run: cmake --build build_shared --config Release --parallel 2
-
-      - name: Install Shared Library
-        run: cmake --install build_shared
+      # ── Assemble release package ───────────────────────────────────
 
       - name: Create Archive
         run: |
           PKG="gsml3parser-${{ github.ref_name }}-linux-x86_64"
-          tar czf "${PKG}.tar.gz" -C install .
+          mkdir -p "$PKG/include" "$PKG/lib" "$PKG/doc" "$PKG/bin/tests" "$PKG/bin/examples"
+
+          # Headers
+          cp -r install_static/include/gsml3parser "$PKG/include/"
+
+          # CMake config files
+          cp -r install_static/lib/cmake "$PKG/lib/" 2>/dev/null || true
+
+          # COPYING license
+          cp install_static/share/licenses/gsml3parser/COPYING "$PKG/" 2>/dev/null || true
+
+          # Static library (.a)
+          cp install_static/lib/libgsml3parser.a "$PKG/lib/"
+
+          # Shared library (.so + symlink)
+          cp -P install_shared/lib/libgsml3parser.so* "$PKG/lib/"
+
+          # API documentation
+          cp doc/API.md "$PKG/doc/"
+
+          # Test binaries
+          cp build_static_tests/tests/gsml3parser_tests "$PKG/bin/tests/"
+
+          # Example binaries
+          for exe in build_static_examples/examples/example_*; do
+            [ -f "$exe" ] && cp "$exe" "$PKG/bin/examples/"
+          done
+
+          tar czf "${PKG}.tar.gz" "$PKG"
 
       - name: Publish Release Assets
         uses: softprops/action-gh-release@v2
