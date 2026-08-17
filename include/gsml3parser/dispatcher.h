@@ -43,6 +43,9 @@ public:
     ProtocolDispatcher() = default;
     ~ProtocolDispatcher();
 
+    ProtocolDispatcher(const ProtocolDispatcher&) = delete;
+    ProtocolDispatcher& operator=(const ProtocolDispatcher&) = delete;
+
     /// Register a handler for a specific message type.
     /// The handler is called when a message of the given PD + MTI is dispatched.
     /// @param pd Protocol Discriminator domain.
