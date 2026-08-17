@@ -1,50 +1,54 @@
 # BTS Integration Guide
 
-This guide explains how to integrate libgsml3parser into a software Base Transceiver Station (BTS) implementation. It covers the full message lifecycle using the Procedure Framework: managing subscriber sessions, feeding L3 messages into procedures, building responses with ResponseBuilder, handling timers and external data, and integrating with A-bis RSL.
+This guide explains how to integrate libgsml3parser into a software Base Transceiver Station (BTS) implementation using the **BTS Stack Mode** API. It covers the full message lifecycle: managing subscriber sessions, feeding L3 messages through `ProcedureOrchestrator`, building responses with `ResponseToken` + `ResponseBuilder`, handling typed external data from AuC/VLR, and integrating with A-bis RSL.
+
+For L3-only parsing without state management, see [L3 Parser Mode](bts_architecture.md#mode-a-l3-parser-mode) in the architecture guide.
 
 ## Architecture Overview
 
-libgsml3parser sits between the BTS application logic and the physical/radio layer. The library provides two layers of capability:
+libgsml3parser sits between the BTS application logic and the physical/radio layer. In BTS Stack Mode, `ProcedureOrchestrator` manages compound procedure chains automatically, returning `ResponseToken` values that the caller uses with `ResponseBuilder` to construct response bytes in a pre-allocated Arena buffer (zero heap allocation).
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                      BTS Application Logic                          │
-│  (AuC/HLR integration, VLR/BSC decisions, call control policy)      │
-└───────────────────────┬────────────────────────┬────────────────────┘
-                        │                        │
-      feedExternal()    │                        │  sendToMS()
-                        │                        │
-      ┌─────────────────▼──────────┐ ┌───────────▼───────────────────┐
-      │    PROCEDURE FRAMEWORK     │ │     CORE PARSER API           │
-      │  (per-MS procedure mgmt)   │ │  (parse, serialize, build)    │
-      │                            │ │                               │
-      │  SubscriberRegistry        │ │  ResponseBuilder              │
-      │  ProcedureRunner           │ │  RSLParser / RSLBuilder       │
-      │  + Concrete Procedures     │ │  parseL3() / writeL3Bytes()   │
-      └───────────┬────────────────┘ └─────────┬─────────────────────┘
-                  │                            │
-      ┌───────────▼────────────────────────────▼───────────────────┐
-      │              Radio / Um Interface / A-bis RSL              │
-      │            (air interface, L1/PHY, SDR backend)            │
-      └────────────────────────────────────────────────────────────┘
+│  AuC: AuthChallenge{rand, expectedSres}     VLR: VLRDecision{...}   │
+└───────────────────────┬──────────────────────┬──────────────────────┘
+                        │ feedExternalTyped()  │ feedExternalTyped()
+    ┌───────────────────▼──────────────────────▼──────────────────────┐
+    │              ProcedureOrchestrator                              │
+    │                                                                 │
+    │  feed(msg, session) ──► auto-chain sub-procedures               │
+    │  Returns: ProcedureStepResult{action, responseToken,finalResult}│
+    │                                                                 │
+    │  ResponseToken ──► ResponseBuilder::buildResponseFromToken()    │
+    │                        writes to Arena buffer (zero heap alloc) │
+    └───────────┬─────────────────────────────────────────────────────┘
+                │ Arena bytes
+    ┌───────────▼─────────────────────────────────────────────────────┐
+    │              LAPDmEntity -> PHY / Radio / A-bis RSL             │
+    └─────────────────────────────────────────────────────────────────┘
 ```
-
-### Outbound Flow (BTS -> MS)
-
-1. **Procedure decides** - ProcedureRunner feeds message, procedure determines response needed
-2. **ResponseSink fires** - Callback invokes ResponseBuilder to construct L3 response bytes
-3. **Arena buffer** - Bytes written into pre-allocated Arena buffer (zero heap allocation)
-4. **Frame & Transmit** - Pass to `LAPDmEntity.sendUI()` (unacknowledged) or `.sendData()` (acknowledged, segmented)
-5. **A-bis encapsulation** (optional) - Wrap L3 bytes in RSL via `RSLBuilder::buildDataInd()`
 
 ### Inbound Flow (MS -> BTS)
 
-1. **Receive** - Get raw LAPDm frame bytes from the radio layer or A-bis RSL
-2. **Process LAPDm** - Pass to `LAPDmEntity.receiveFrame()`. The entity decodes the frame and invokes the `L3ReceiveFn` callback with complete L3 messages.
-3. **Parse** - In the callback, convert L3 bytes to typed C++ object with `parseL3()`
-4. **Find Session** - Look up `SubscriberSession` via `SubscriberRegistry.findByLink()` or `findByTMSI()`
-5. **Feed Procedure** - Route message to `ProcedureRunner::feed()` — procedure auto-creates or routes to active procedure
-6. **Handle Result** - Check `ProcedureStepResult`: Continue, SendResponse, WaitingExternal, Completed, Failed
+1. **Receive** — Get raw LAPDm frame bytes from the radio layer or A-bis RSL
+2. **Process LAPDm** — Pass to `LAPDmEntity.receiveFrame()`. The entity decodes the frame and invokes the `L3ReceiveFn` callback with complete L3 messages.
+3. **Parse** — In the callback, convert L3 bytes to typed C++ object with `parseL3()`
+4. **Find Session** — Look up `SubscriberSession` via `SubscriberRegistry.findByLink()` or `findByTMSI()`
+5. **Feed Orchestrator** — Route message to `ProcedureOrchestrator::feed()` — orchestrator auto-chains sub-procedures
+6. **Handle Result** — Check `ProcedureStepResult`:
+   - `Continue` — procedure awaits next message
+   - `SendResponseWithToken` — build response using `result.responseToken` + `ResponseBuilder::buildResponseFromToken()`
+   - `WaitingExternal` — query AuC/VLR, then call `feedExternalTyped(typedData)`
+   - `Completed` — chain finished successfully
+   - `Failed` — chain aborted (timeout, error)
+
+### Outbound Flow (BTS -> MS)
+
+1. **Orchestrator returns token** — `ProcedureStepResult.action == SendResponseWithToken`, `result.responseToken` indicates message type
+2. **Build response** — Call `ResponseBuilder::buildResponseFromToken(token, arenaBuffer, session)` — zero heap allocation
+3. **Frame & Transmit** — Pass to `LAPDmEntity.sendUI()` (unacknowledged) or `.sendData()` (acknowledged, segmented)
+4. **A-bis encapsulation** (optional) — Wrap L3 bytes in RSL via `RSLBuilder::buildDataInd()`
 
 ## Building a BTS with libgsml3parser
 
@@ -57,6 +61,9 @@ using namespace gsml3parser;
 
 // Global channel pool (shared across all MS sessions)
 ChannelPool btsChannels;
+
+// Subscriber registry with per-session orchestrators
+ShardedSubscriberRegistry<16> registry;
 
 void initBts() {
     // Register SDCCH channels (control)
@@ -76,49 +83,14 @@ void initBts() {
 }
 ```
 
-### Step 2: Define the ResponseSink callback
+### Step 2: Process incoming frames with ProcedureOrchestrator
 
-The `ResponseSink` callback is invoked by procedures when they need to send a response to the MS. This is where you call `ResponseBuilder` and send the bytes over the radio.
+The main event loop processes incoming L3 messages by feeding them into the subscriber's `ProcedureOrchestrator`. The orchestrator manages compound procedure chains (e.g., CMServiceRequest → Authentication → CipheringMode → LocationUpdate) automatically.
 
 ```cpp
 // Arena for zero-heap-allocation response building
 Arena arena(65536);
 
-void onResponse(SMAction action, const ParsedMessage& incomingMsg,
-                const SubscriberSession* session) {
-    if (action != SMAction::SendResponse) return;
-
-    uint8_t buf[512];
-    int n = 0;
-
-    // Determine which response to build based on the incoming message type.
-    auto pd = messagePD(incomingMsg);
-    auto mti = messageMTI(incomingMsg);
-
-    if (pd == L3PD::MobilityManagement) {
-        if (mti == L3CMServiceRequest::MTI) {
-            n = ResponseBuilder::buildCMServiceAccept({buf, sizeof(buf)});
-        }
-    } else if (pd == L3PD::CallControl) {
-        if (mti == L3Setup::MTI) {
-            if (auto* setup = tryGet<L3Setup>(incomingMsg)) {
-                n = ResponseBuilder::buildCallProceeding({buf, sizeof(buf)}, setup->ti());
-            }
-        }
-    }
-
-    if (n > 0 && session) {
-        sendToMS(session, buf, n);  // Your function to transmit L3 bytes
-    }
-}
-```
-
-### Step 3: Process incoming frames with ProcedureRunner
-
-The main event loop processes incoming L3 messages by feeding them into the subscriber's `ProcedureRunner`:
-
-```cpp
-// L3 callback: invoked by LAPDmEntity when a complete L3 message arrives
 static void onL3(SAPI sapi, Primitive prim, std::span<const uint8_t> l3Data, void* ctx) {
     auto* btsCtx = static_cast<BtsContext*>(ctx);
 
@@ -127,36 +99,100 @@ static void onL3(SAPI sapi, Primitive prim, std::span<const uint8_t> l3Data, voi
     if (!msg) return;
 
     // Find the subscriber session for this link
-    SubscriberSession* session = btsCtx->registry.findByLink(
-        /*trx=*/0, /*ts=*/5, /*lapdmLink=*/3);
+    SubscriberSession* session = btsCtx->registry.findByLink(0, 5, 3);
     if (!session) return;
 
-    // Feed into ProcedureRunner — auto-creates or routes to active procedure
-    auto result = session->procedures.feed(*msg, session, onResponse);
+    // Feed into ProcedureOrchestrator — auto-chains sub-procedures.
+    auto result = session->orchestrator.feed(*msg, session);
 
     switch (result.action) {
         case ProcedureStepResult::Action::Continue:
             // Procedure continues, awaiting next message
             break;
 
-        case ProcedureStepResult::Action::SendResponse:
-            // Response already built and sent via onResponse callback
+        case ProcedureStepResult::Action::SendResponseWithToken:
+            // Build response from token into Arena buffer (zero heap allocation)
+            uint8_t respBuf[512];
+            int n = ResponseBuilder::buildResponseFromToken(
+                result.responseToken, {respBuf, sizeof(respBuf)}, session);
+            if (n > 0) {
+                sendToMS(session, respBuf, n);
+            }
             break;
 
         case ProcedureStepResult::Action::WaitingExternal:
             // Procedure needs external data (RAND from AuC, VLR decision)
-            // Call feedExternal() when the data is available
             handleWaitingExternal(session, result);
             break;
 
         case ProcedureStepResult::Action::Completed:
-            // Procedure finished successfully; slot freed automatically
             logInfo("Procedure completed: {}", result.finalResult.reason);
             break;
 
         case ProcedureStepResult::Action::Failed:
-            // Procedure failed (timeout, error); slot freed automatically
             logWarning("Procedure failed: {}", result.finalResult.reason);
+            break;
+    }
+}
+```
+
+### Step 3: Handle external data with typed structures
+
+When a procedure enters `WaitingExternal` state, query the appropriate external system (AuC, VLR) and feed the result using strongly-typed structures.
+
+```cpp
+void handleWaitingExternal(SubscriberSession* session, const ProcedureStepResult& result) {
+    auto* proc = session->orchestrator.activeProcedure();
+    if (!proc) return;
+
+    switch (proc->type()) {
+        case procedure::ProcedureType::Authentication: {
+            // Query AuC for RAND + expected SRES triplet
+            auto triplet = aucQuery(session->context.identity().digits());
+
+            AuthChallenge chal{};
+            std::memcpy(chal.rand.data(), triplet.rand.data(), 16);
+            std::memcpy(chal.expectedSres.data(), triplet.sres.data(), 4);
+
+            auto feedResult = session->orchestrator.feedExternalTyped(chal);
+            if (feedResult.action == ProcedureStepResult::Action::SendResponseWithToken) {
+                uint8_t buf[512];
+                int n = ResponseBuilder::buildResponseFromToken(
+                    feedResult.responseToken, {buf, sizeof(buf)}, session);
+                if (n > 0) sendToMS(session, buf, n);
+            }
+            break;
+        }
+
+        case procedure::ProcedureType::LocationUpdate: {
+            // Query VLR for accept/reject decision
+            auto vlrResult = vlrQuery(session->context.identity().digits());
+
+            if (vlrResult.accept) {
+                VLRDecision decision{true, vlrResult.newTmsi, MMRejectCause::Zero};
+                auto feedResult = session->orchestrator.feedExternalTyped(decision);
+                if (feedResult.action == ProcedureStepResult::Action::SendResponseWithToken) {
+                    uint8_t buf[512];
+                    int n = ResponseBuilder::buildResponseFromToken(
+                        feedResult.responseToken, {buf, sizeof(buf)}, session);
+                    if (n > 0) sendToMS(session, buf, n);
+                }
+            } else {
+                VLRDecision decision{false, std::nullopt, vlrResult.cause};
+                auto feedResult = session->orchestrator.feedExternalTyped(decision);
+                if (feedResult.action == ProcedureStepResult::Action::SendResponseWithToken) {
+                    uint8_t buf[512];
+                    int n = ResponseBuilder::buildResponseFromToken(
+                        feedResult.responseToken, {buf, sizeof(buf)}, session);
+                    if (n > 0) sendToMS(session, buf, n);
+                }
+            }
+            break;
+        }
+
+        default:
+            logWarning("Unhandled WaitingExternal for procedure type 0x{:02X}",
+                       static_cast<uint8_t>(proc->type()));
             break;
     }
 }
@@ -176,20 +212,12 @@ void eventLoop() {
         // 1. Process incoming radio frames
         processRadioFrames();
 
-        // 2. Tick all session timers and procedure timers
+        // 2. Tick all session orchestrators and LAPDm timers
         registry.forEach([delta](SubscriberSession* sess) {
-            // Tick LAPDm T200 timer
             sess->lapdm.tickT200(delta);
-
-            // Tick L3 timers
-            sess->timers.tick(delta, [sess](L3TimerId expiredId) {
-                handleTimerExpired(sess, expiredId);
-            });
-
-            // Tick procedure timers
-            size_t failed = sess->procedures.tickAll(delta);
+            size_t failed = sess->orchestrator.tickAll(delta);
             if (failed > 0) {
-                logWarning("{} procedures timed out", failed);
+                logWarning("{} procedures timed out for session", failed);
             }
         });
 
@@ -207,141 +235,139 @@ void eventLoop() {
 }
 ```
 
-## Typical BTS Procedures with ProcedureRunner
+## Typical BTS Procedures with ProcedureOrchestrator
 
-### Channel Assignment (RACH -> Immediate Assignment)
+### Location Update (Full Chain)
 
-The `ChannelAssignmentProcedure` handles the full channel assignment flow automatically:
-
-```cpp
-// MS sends Channel Request on RACH. The LAPDm callback invokes parseL3().
-// ProcedureRunner auto-creates a ChannelAssignmentProcedure for RR messages.
-
-auto msg = parseL3(l3Data).value();
-auto* session = registry.findByLink(trx, ts, lapdmLink);
-
-// Feed the message — procedure auto-starts and handles everything:
-// 1. Allocates channel from pool (via internal logic or your callback)
-// 2. Builds ImmediateAssignment via ResponseSink
-// 3. Starts T3101 timer for channel seizure
-// 4. Returns Continue, waiting for MS to seize the channel
-auto result = session->procedures.feed(*msg, session, onResponse);
-
-// Later, when MS seizes the channel (first L3 message on new channel):
-auto seizeMsg = parseL3(seizeData).value();
-result = session->procedures.feed(*seizeMsg, session, onResponse);
-// result.action == Completed — procedure finished, slot freed
-```
-
-### Location Update Procedure
-
-Full location update with authentication and VLR decision:
+The orchestrator automatically chains: CMServiceRequest → [Identity] → Authentication → CipheringMode → LocationUpdate.
 
 ```cpp
 // 1. MS sends CMServiceRequest (Location Updating)
 auto cmReq = parseL3(incomingData).value();
-auto result = session->procedures.feed(cmReq, session, onResponse);
-// Auto-creates LocationUpdateProcedure, returns Continue or SendResponse
+auto result = session->orchestrator.feed(cmReq, session);
+// Orchestrator starts chain: CMServiceRequest phase
+// Returns SendResponseWithToken + ResponseToken::CMServiceAccept
 
-// 2. Procedure may request Identity or Authentication
-//    ResponseSink builds IdentityRequest or AuthenticationRequest automatically
+// Build and send CM Service Accept
+uint8_t buf[512];
+int n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
+sendToMS(session, buf, n);
 
-// 3. AuC provides RAND + expected SRES
-std::array<uint8_t, 20> authData;
-// First 16 bytes: RAND, next 4 bytes: expected SRES
-memcpy(authData.data(), randBytes, 16);
-memcpy(authData.data() + 16, expectedSres, 4);
+// 2. Orchestrator transitions to Authentication phase automatically
+//    Returns WaitingExternal — need AuC data
+AuthChallenge chal{};
+std::memcpy(chal.rand.data(), aucRandBytes, 16);
+std::memcpy(chal.expectedSres.data(), aucSresBytes, 4);
+result = session->orchestrator.feedExternalTyped(chal);
+// Returns SendResponseWithToken + ResponseToken::AuthenticationRequest
 
-result = session->procedures.feedExternal(
-    procedure::ProcedureType::Authentication, authData);
-// Procedure sends AuthenticationRequest via ResponseSink
-
-// 4. MS responds with AuthenticationResponse
+// 3. MS responds with AuthenticationResponse
 auto authResp = parseL3(authResponseData).value();
-result = session->procedures.feed(authResp, session, onResponse);
-// Procedure verifies SRES internally
+result = session->orchestrator.feed(authResp, session);
+// Orchestrator verifies SRES internally, transitions to CipheringMode
 
-// 5. VLR provides accept decision with new TMSI
-std::array<uint8_t, 8> vlrDecision;
-// Contains: accept flag + new TMSI (4 bytes)
-vlrDecision[0] = 1; // accept
-memcpy(vlrDecision.data() + 1, &newTmsi, 4);
+// 4. Ciphering phase
+CipheringParameters cipher{1, true}; // A5/1 enabled
+result = session->orchestrator.feedExternalTyped(cipher);
+// Returns SendResponseWithToken + ResponseToken::CipheringModeCommand
 
-result = session->procedures.feedExternal(
-    procedure::ProcedureType::LocationUpdate, vlrDecision);
-// Procedure sends LocationUpdatingAccept via ResponseSink
-// result.action == Completed
+// 5. MS sends CipheringModeComplete
+auto cipherComplete = parseL3(cipherCompleteData).value();
+result = session->orchestrator.feed(cipherComplete, session);
+// Transitions to LocationUpdate phase, returns WaitingExternal — need VLR decision
+
+// 6. VLR accepts
+VLRDecision vlr{true, 0x87654321u, MMRejectCause::Zero};
+result = session->orchestrator.feedExternalTyped(vlr);
+// Returns SendResponseWithToken + ResponseToken::LocationUpdatingAccept
+
+// 7. Build and send Location Updating Accept
+n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
+sendToMS(session, buf, n);
+// Chain completed successfully
 ```
 
-### Call Setup (Mobile Originated)
+### Call Setup MO (Full Chain)
 
-Full MOC flow through ProcedureRunner:
+The orchestrator chains: CMServiceRequest(MO_Call) → CallSetupMO.
 
 ```cpp
 // 1. MS sends CMServiceRequest (MO Call)
 auto cmReq = parseL3(incomingData).value();
-auto result = session->procedures.feed(cmReq, session, onResponse);
-// Auto-creates CallSetupMOPercedure
+auto result = session->orchestrator.feed(cmReq, session);
+// Returns SendResponseWithToken + ResponseToken::CMServiceAccept
 
-// 2. Procedure sends CMServiceAccept via ResponseSink
-// 3. MS sends Setup
+// 2. MS sends Setup
 auto setup = parseL3(setupData).value();
-result = session->procedures.feed(setup, session, onResponse);
-// Procedure sends CallProceeding, then AssignmentCommand
+result = session->orchestrator.feed(setup, session);
+// Returns SendResponseWithToken + ResponseToken::CallProceeding
 
-// 4. MS sends AssignmentComplete
+// 3. MS sends AssignmentComplete (after TCH assignment)
 auto assignComplete = parseL3(assignCompleteData).value();
-result = session->procedures.feed(assignComplete, session, onResponse);
-// Procedure sends Alerting, then Connect
+result = session->orchestrator.feed(assignComplete, session);
+// Returns SendResponseWithToken + ResponseToken::Alerting
+
+// 4. MS sends Connect
+auto connect = parseL3(connectData).value();
+result = session->orchestrator.feed(connect, session);
+// Returns SendResponseWithToken + ResponseToken::Connect
 
 // 5. MS sends ConnectAcknowledge
 auto connAck = parseL3(connAckData).value();
-result = session->procedures.feed(connAck, session, onResponse);
+result = session->orchestrator.feed(connAck, session);
 // result.action == Completed — call is active, speech path established
 ```
 
-## External System Integration (feedExternal)
+### Paging Procedure
 
-Procedures use `feedExternal()` to receive data from external systems (AuC, HLR, VLR, BSC). This is the primary integration point for BTS business logic.
+For network-initiated paging:
+
+```cpp
+PagingTrigger trigger;
+trigger.identity = L3MobileIdentity(0x12345678u); // TMSI
+trigger.targetChannel = ChannelType::SDCCHType;
+
+auto result = session->orchestrator.feedExternalTyped(trigger);
+// Returns SendResponseWithToken + ResponseToken::PagingRequestType2
+
+uint8_t buf[512];
+int n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
+broadcastPaging(buf, n); // Send on PAGCH
+```
+
+## External System Integration (feedExternalTyped)
+
+Procedures use `feedExternalTyped(const ExternalData&)` to receive data from external systems. The `ExternalData` variant holds strongly-typed structures:
 
 ### AuC Integration (Authentication)
 
 ```cpp
-// When procedure enters WaitingExternal state for Authentication:
 void onAuthNeeded(SubscriberSession* session) {
-    // Query AuC for RAND + SRES triplet
     auto triplet = aucQuery(session->context.identity().digits());
 
-    // Feed RAND + expected SRES to the procedure
-    std::array<uint8_t, 20> data;
-    memcpy(data.data(), triplet.rand.data(), 16);
-    memcpy(data.data() + 16, triplet.sres.data(), 4);
+    AuthChallenge chal{};
+    std::memcpy(chal.rand.data(), triplet.rand.data(), 16);   // 128-bit RAND
+    std::memcpy(chal.expectedSres.data(), triplet.sres.data(), 4); // 32-bit SRES
 
-    auto result = session->procedures.feedExternal(
-        procedure::ProcedureType::Authentication, data);
-    // Procedure sends AuthenticationRequest to MS via ResponseSink
+    auto result = session->orchestrator.feedExternalTyped(chal);
+    // Procedure sends AuthenticationRequest to MS via ResponseToken
 }
 ```
 
 ### VLR Integration (Location Update)
 
 ```cpp
-void onLocationUpdateDecision(SubscriberSession* session, bool accept, uint32_t newTmsi) {
-    std::array<uint8_t, 8> decision;
-    decision[0] = accept ? 1 : 0;
-    if (accept) {
-        memcpy(decision.data() + 1, &newTmsi, 4);
-    } else {
-        decision[5] = static_cast<uint8_t>(MMRejectCause::Congestion);
-    }
+void onLocationUpdateDecision(SubscriberSession* session, bool accept,
+                               std::optional<uint32_t> newTmsi, MMRejectCause cause) {
+    VLRDecision decision{accept, newTmsi, accept ? MMRejectCause::Zero : cause};
 
-    auto result = session->procedures.feedExternal(
-        procedure::ProcedureType::LocationUpdate, decision);
+    auto result = session->orchestrator.feedExternalTyped(decision);
 
-    if (result.action == ProcedureStepResult::Action::Completed) {
-        logInfo("Location update completed");
-    } else if (result.action == ProcedureStepResult::Action::Failed) {
-        logWarning("Location update rejected");
+    if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {
+        uint8_t buf[512];
+        int n = ResponseBuilder::buildResponseFromToken(
+            result.responseToken, {buf, sizeof(buf)}, session);
+        if (n > 0) sendToMS(session, buf, n);
     }
 }
 ```
@@ -349,20 +375,19 @@ void onLocationUpdateDecision(SubscriberSession* session, bool accept, uint32_t 
 ### BSC Integration (Handover)
 
 ```cpp
-void onHandoverDecision(SubscriberSession* session, const L3ChannelDescription& target) {
-    auto proc = session->procedures.getActive(procedure::ProcedureType::Handover);
-    if (!proc) {
-        // Create handover procedure explicitly
-        auto hoProc = ProcedureFactory::createHandover(target);
-        // Feed external trigger data to start the procedure
-    }
+void onHandoverDecision(SubscriberSession* session,
+                         const L3ChannelDescription& target, const L3CellDescription& cell) {
+    HandoverTarget ho{target, cell};
 
-    // Feed target channel to the handover procedure
-    std::array<uint8_t, 16> targetData{};
-    // Encode target channel description into bytes
-    auto result = session->procedures.feedExternal(
-        procedure::ProcedureType::Handover, targetData);
-    // Procedure sends HandoverCommand via ResponseSink
+    auto result = session->orchestrator.feedExternalTyped(ho);
+    // Procedure sends HandoverCommand via ResponseToken::HandoverCommand
+
+    if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {
+        uint8_t buf[512];
+        int n = ResponseBuilder::buildResponseFromToken(
+            result.responseToken, {buf, sizeof(buf)}, session);
+        if (n > 0) sendToMS(session, buf, n);
+    }
 }
 ```
 
@@ -374,50 +399,33 @@ When the BTS communicates with a BSC over the A-bis interface (TS 48.058), RSL m
 
 ```cpp
 void onRslMessage(std::span<const uint8_t> rslBytes) {
-    // Parse RSL message
     auto parsed = RSLParser::parse(rslBytes);
     if (!parsed) return;
 
-    // Extract L3 payload (if present)
     auto l3Payload = RSLParser::extractL3(*parsed);
-    if (!l3Payload) return;  // Control message without L3 data
+    if (!l3Payload) return; // Control message without L3 data
 
-    // Parse L3 message
     auto msg = parseL3(*l3Payload);
     if (!msg) return;
 
-    // Find session and feed to ProcedureRunner
     uint8_t chanNr = parsed->chanNr;
     uint8_t linkId = parsed->linkId;
     auto* session = registry.findByLink(/*trx from chanNr*/, /*ts from chanNr*/, linkId);
     if (!session) return;
 
-    auto result = session->procedures.feed(*msg, session, onResponse);
-}
-```
+    auto result = session->orchestrator.feed(*msg, session);
 
-### Outbound RSL (BTS -> BSC)
-
-When the ResponseSink builds a response, encapsulate it in RSL for the BSC:
-
-```cpp
-void onResponseWithRsl(SMAction action, const ParsedMessage& incomingMsg,
-                       const SubscriberSession* session) {
-    if (action != SMAction::SendResponse) return;
-
-    // Build L3 response into buffer
-    uint8_t l3Buf[512];
-    int l3Len = ResponseBuilder::buildCMServiceAccept({l3Buf, sizeof(l3Buf)});
-    if (l3Len <= 0) return;
-
-    // Encapsulate in RSL DATA_IND for BSC
-    uint8_t rslBuf[1024];
-    int rslLen = RSLBuilder::buildDataInd({rslBuf, sizeof(rslBuf)},
-        session->channel.value().arfcn, session->lapdmLink,
-        {l3Buf, static_cast<size_t>(l3Len)});
-
-    if (rslLen > 0) {
-        sendToBsc(rslBuf, rslLen);  // Your A-bis transport function
+    if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {
+        uint8_t l3Buf[512];
+        int l3Len = ResponseBuilder::buildResponseFromToken(
+            result.responseToken, {l3Buf, sizeof(l3Buf)}, session);
+        if (l3Len > 0) {
+            uint8_t rslBuf[1024];
+            int rslLen = RSLBuilder::buildDataInd({rslBuf, sizeof(rslBuf)},
+                session->channel.value().arfcn, session->lapdmLink,
+                {l3Buf, static_cast<size_t>(l3Len)});
+            if (rslLen > 0) sendToBsc(rslBuf, rslLen);
+        }
     }
 }
 ```
@@ -432,11 +440,9 @@ void onRslControl(std::span<const uint8_t> rslBytes) {
 
     switch (parsed.msgType) {
         case static_cast<uint8_t>(RSLDChanMessageType::ChanActiv): {
-            // Channel activation from BSC
             auto mode = RSLParser::getChannelMode(parsed);
             if (mode) {
                 activateChannel(parsed.chanNr, *mode);
-                // Send ACK back
                 uint8_t ackBuf[64];
                 int n = RSLBuilder::buildChanActivAck({ackBuf, sizeof(ackBuf)},
                     parsed.chanNr, getCurrentFrameNumber());
@@ -446,7 +452,6 @@ void onRslControl(std::span<const uint8_t> rslBytes) {
         }
 
         case static_cast<uint8_t>(RSLDChanMessageType::RFChanRel): {
-            // RF channel release from BSC
             releaseChannel(parsed.chanNr);
             uint8_t ackBuf[64];
             int n = RSLBuilder::buildRFChanRelAck({ackBuf, sizeof(ackBuf)}, parsed.chanNr);
@@ -455,11 +460,8 @@ void onRslControl(std::span<const uint8_t> rslBytes) {
         }
 
         case static_cast<uint8_t>(RSLCChanMessageType::PagingCmd): {
-            // Paging command from BSC — extract L3 and page the MS
             auto l3 = RSLParser::extractL3(parsed);
-            if (l3) {
-                broadcastPaging(*l3);
-            }
+            if (l3) broadcastPaging(*l3);
             break;
         }
     }
@@ -477,19 +479,6 @@ auto profile = LAPDmChannelProfile::SDCCH(); // N201=20, N200=23, T200=900ms
 LAPDmEntity entity(profile, onL3Callback, onL1Callback, sessionPtr);
 entity.open(SAPI::SAPI0, true); // BTS side (command bit = true)
 // State: LinkReleased
-```
-
-### Link Establishment
-
-**Passive (BTS waiting for MS SABME):** The entity automatically handles incoming SABME frames. When `receiveFrame()` processes a SABME, it sends UA and transitions to `LinkEstablished`, invoking the L3 callback with `L3_ESTABLISH_INDICATION`.
-
-**Active (BTS initiates, e.g., SAPI3 for SMS):**
-```cpp
-auto result = entity.sendSABME();
-if (result) {
-    // State: AwaitingEstablish, T200 timer started automatically
-}
-// When UA arrives via receiveFrame(), state -> LinkEstablished
 ```
 
 ### Data Transfer
@@ -515,7 +504,7 @@ entity.hardRelease();
 
 ## Timer Management
 
-Timers are managed at two levels: LAPDm T200 timer (per link) and L3 protocol timers (per session).
+Timers are managed at two levels: LAPDm T200 timer (per link) and L3 protocol timers (managed by ProcedureOrchestrator).
 
 ### Event Loop Integration
 
@@ -524,13 +513,8 @@ void eventLoopTick(SubscriberSession* session, std::chrono::milliseconds delta) 
     // Advance LAPDm T200 timer
     bool retransmitted = session->lapdm.tickT200(delta);
 
-    // Advance L3 timers
-    session->timers.tick(delta, [session](L3TimerId expiredId) {
-        handleTimerExpired(session, expiredId);
-    });
-
-    // Advance procedure timers (managed by ProcedureRunner)
-    size_t failed = session->procedures.tickAll(delta);
+    // Advance procedure timers (managed by orchestrator)
+    size_t failed = session->orchestrator.tickAll(delta);
 }
 ```
 
@@ -586,20 +570,10 @@ if (!msg) {
 }
 ```
 
-For RSL operations:
+For orchestrator results:
 
 ```cpp
-auto parsed = RSLParser::parse(rslBytes);
-if (!parsed) {
-    logError("RSL parse failed: {}", parsed.error().message);
-    return;
-}
-```
-
-For procedure results:
-
-```cpp
-auto result = session->procedures.feed(msg, session, onResponse);
+auto result = session->orchestrator.feed(msg, session);
 if (result.action == ProcedureStepResult::Action::Failed) {
     logWarning("Procedure {} failed: {}",
         procedureTypeName(result.finalResult.type),
@@ -611,14 +585,15 @@ if (result.action == ProcedureStepResult::Action::Failed) {
 
 - **Zero heap allocation on parse path**: `ParsedMessage` is a stack-allocated variant (< 8 KB)
 - **MSContext ≤ 256 bytes**: Fits in L1 cache; millions of contexts fit in L3 cache
-- **ProcedureStepResult ≤ 32 bytes**: Compact result, no heap allocation
+- **ProcedureStepResult ≤ 32 bytes**: Compact result with `ResponseToken` (uint8_t), no heap allocation
+- **SubscriberSession < 4096 bytes**: All components stored inline
 - **ResponseBuilder span overload**: Writes directly into caller's Arena buffer, zero heap cost
+- **ResponseToken pattern**: Procedure returns token (1 byte); caller builds response in pre-allocated buffer
+- **TypedExternalData**: Small structures (≤ 64 bytes) passed by const reference — no copy overhead
+- **ProcedureOrchestrator**: No `std::vector<ParsedMessage>` storage; stores only last ResponseToken
 - **RSLParser**: Fixed-size IE array (32 max), all pointers into original buffer — zero heap
-- **TimerManager**: Fixed-size `std::array`, no dynamic allocation, tick() uses callback or span
-- **ProcedureRunner**: Fixed `std::array<ProcedureSlot, 8>`, bounded scan for routing
-- **SubscriberRegistry**: Hash map lookups O(1), `forEach` iterates single index
+- **TimerManager**: Fixed-size `std::array`, no dynamic allocation
 - **Thread safety**: Each MS session is accessed from one thread. `ShardedChannelPool` and `ShardedSubscriberRegistry` provide thread-safe variants for multi-threaded scenarios.
-- **Arena allocator**: Use `Arena` for high-throughput response building to reduce malloc pressure
 
 ## API Reference Summary
 
@@ -631,11 +606,14 @@ if (result.action == ProcedureStepResult::Action::Failed) {
 | `stack/ms_context.h` | `MSContext` | Per-subscriber state (≤ 256 bytes) |
 | `stack/l3_timer.h` | `L3Timer`, `TimerManager` | Protocol timers, zero-alloc tick |
 | `stack/transaction.h` | `Transaction`, `TransactionManager` | Request-response correlation |
-| `stack/state_machine.h` | `RR/MM/CCStateMachine` | Protocol FSM skeletons (response-aware) |
+| `stack/state_machine.h` | `RR/MM/CCStateMachine` | Protocol FSM skeletons |
 | `stack/channel_pool.h` | `ChannelPool`, `decodeChannelNeeded()` | Channel allocation, VEA |
-| `stack/response_builder.h` | `ResponseBuilder` | Factory for L3 response messages |
-| `stack/procedure.h` | `Procedure`, `ProcedureStepResult`, `ResponseSink` | Base class for protocol procedures |
+| `stack/response_builder.h` | `ResponseBuilder`, `buildResponseFromToken()` | Factory for L3 response messages |
+| `stack/procedure.h` | `Procedure`, `ProcedureStepResult`, `ResponseToken`, `ResponseSink` | Base class for protocol procedures |
+| `stack/typed_external_data.h` | `ExternalData`, `AuthChallenge`, `VLRDecision`, `PagingTrigger`, etc. | Type-safe external data structures |
 | `stack/procedure_runner.h` | `ProcedureRunner`, `ProcedureFactory` | Concurrent procedure management |
+| `stack/procedure_orchestrator.h` | `ProcedureOrchestrator` | Auto-chained compound procedures |
+| `stack/procedure_state_mixin.h` | `ProcedureStateMixin<Derived, State>` | CRTP mixin for common procedure code |
 | `stack/subscriber_registry.h` | `SubscriberSession`, `SubscriberRegistry` | Per-MS session management |
 | `abis/rsl_types.h` | `RSLDiscriminator`, `RSL_IE`, `RSLChannelNumber` | A-bis RSL type definitions |
 | `abis/rsl_parser.h` | `RSLParser`, `RSLParsedMessage` | Parse RSL messages, extract L3 |
@@ -644,6 +622,6 @@ if (result.action == ProcedureStepResult::Action::Failed) {
 ## See Also
 
 - [README.md](../README.md) - Library overview and quick start
-- [doc/API.md](API.md) - Full API reference (57 sections)
-- [doc/bts_architecture.md](bts_architecture.md) - Architecture overview and scaling guide
+- [doc/API.md](API.md) - Full API reference
+- [doc/bts_architecture.md](bts_architecture.md) - Architecture overview, two usage modes, and scaling guide
 - `examples/` directory - Working BTS example programs

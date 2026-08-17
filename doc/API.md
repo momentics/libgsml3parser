@@ -1,6 +1,6 @@
 # libgsml3parser - Full API Reference
 
-> Version 0.14.0 | C++20 | Thread-safe | Zero heap allocation on hot path | No external dependencies
+> Version 0.15.0 | C++20 | Thread-safe | Zero heap allocation on hot path | No external dependencies
 
 ## Table of Contents
 
@@ -52,15 +52,20 @@
 46. [RSL Builder - A-bis RSL Message Construction](#46-rsl-builder-abis-rsl-message-construction)
 47. [Procedure Framework - Protocol Procedure Base Class](#47-procedure-framework-protocol-procedure-base-class)
 48. [Procedure Runner - Concurrent Procedure Manager](#48-procedure-runner-concurrent-procedure-manager)
-49. [Location Update Procedure](#49-location-update-procedure)
-50. [Authentication Procedure](#50-authentication-procedure)
-51. [Call Setup MO Procedure](#51-call-setup-mo-procedure)
-52. [Call Setup MT Procedure](#52-call-setup-mt-procedure)
-53. [Channel Assignment Procedure](#53-channel-assignment-procedure)
-54. [Ciphering Mode Procedure](#54-ciphering-mode-procedure)
-55. [Paging Procedure](#55-paging-procedure)
-56. [Handover Procedure](#56-handover-procedure)
-57. [Performance Optimizations Summary](#57-performance-optimizations-summary)
+49. [Typed External Data - Strongly-Typed External Data Structures](#49-typed-external-data-strongly-typed-external-data-structures)
+50. [ProcedureStateMixin - CRTP Mixin for Common Procedure Code](#50-procedurestatemixin-crtp-mixin-for-common-procedure-code)
+51. [Procedure Orchestrator - Chained Protocol Procedures](#51-procedure-orchestrator-chained-protocol-procedures)
+52. [Location Update Procedure](#52-location-update-procedure)
+53. [Authentication Procedure](#53-authentication-procedure)
+54. [Call Setup MO Procedure](#54-call-setup-mo-procedure)
+55. [Call Setup MT Procedure](#55-call-setup-mt-procedure)
+56. [Channel Assignment Procedure](#56-channel-assignment-procedure)
+57. [Ciphering Mode Procedure](#57-ciphering-mode-procedure)
+58. [Paging Procedure](#58-paging-procedure)
+59. [Handover Procedure](#59-handover-procedure)
+60. [Call Release Procedure](#60-call-release-procedure)
+61. [IMSI Detach Procedure](#61-imsi-detach-procedure)
+62. [Performance Optimizations Summary](#62-performance-optimizations-summary)
 
 ---
 
@@ -834,6 +839,8 @@ Protocol procedure types mapped to 3GPP specification chapters:
 | `0x08` | `Paging` | TS 04.08 9.1.25 | Network-initiated paging of MS |
 | `0x09` | `CMServiceRequest` | TS 24.008 4.7 | CM service request procedure |
 | `0x0A` | `IMSIDetach` | TS 24.008 4.4.6 | IMSI detach procedure |
+| `0x0B` | `CallRelease` | TS 24.008 6.1 | Call release (disconnect → release complete) |
+| `0x0C` | `PeriodicLocationUpdate` | TS 24.008 4.4.1 | Periodic location updating |
 | `0xFF` | `Unknown` | — | Unrecognized or unsupported procedure |
 
 ### ProcedureState
@@ -928,6 +935,27 @@ sendToMS(bytes)
 | `buildDisconnect(ti, cause)` | Disconnect | TS 04.08 9.3.7 |
 | `buildRelease(ti, cause)` | Release | TS 04.08 9.3.19 |
 | `buildReleaseComplete(ti)` | ReleaseComplete | TS 04.08 9.3.19 |
+
+### RR Paging & Handover Responses
+
+| Method | Response Message | Spec |
+|--------|-----------------|------|
+| `buildPagingRequestType1(identity)` | PagingRequestType1 | TS 04.08 9.1.25 |
+| `buildPagingRequestType2(identity)` | PagingRequestType2 | TS 04.08 9.1.25 |
+| `buildPagingRequestType3(identity)` | PagingRequestType3 | TS 04.08 9.1.25 |
+| `buildHandoverCommand(channel)` | HandoverCommand | TS 04.08 9.1.40 |
+
+### CC Setup Response
+
+| Method | Response Message | Spec |
+|--------|-----------------|------|
+| `buildSetup(calledNumber, ti)` | Setup | TS 24.008 9.3.2 |
+
+### Token-Based Response Building
+
+| Method | Description |
+|--------|-------------|
+| `buildResponseFromToken(token, out, session)` | Build response bytes from `ResponseToken` + session context into pre-allocated buffer (zero heap allocation). Dispatches to the appropriate `buildXxx()` method based on token value. Returns byte count or -1 on error. |
 
 ### Zero-Allocation Usage with Arena
 
@@ -3716,12 +3744,60 @@ Callback type for building protocol responses without heap allocation on the hot
 
 ```cpp
 using ResponseSink = std::function<void(SMAction action, const ParsedMessage& incomingMsg,
-                                           const SubscriberSession* session)>;
+                                            const SubscriberSession* session)>;
 ```
 
 The BTS application provides this callback when calling `Procedure::feed()`. Inside the callback, invoke `ResponseBuilder` and write bytes into a pre-allocated buffer (Arena).
 
 **Performance:** `std::function` uses Small Buffer Optimization for lambdas with small capture (~20-32 bytes). Ensure your lambda closure fits in SBO for zero-allocation on the hot path.
+
+### ResponseToken
+
+Enum that indicates which L3 message type the caller should build when `ProcedureStepResult.action == SendResponseWithToken`. Used with `ResponseBuilder::buildResponseFromToken()` to generate response bytes in a pre-allocated Arena buffer (zero heap allocation).
+
+```cpp
+enum class ResponseToken : uint8_t {
+    None = 0,
+    // RR responses:
+    ImmediateAssignment, AssignmentCommand, ChannelRelease,
+    CipheringModeCommand, PhysicalInformation, HandoverCommand,
+    PagingRequestType1, PagingRequestType2, PagingRequestType3,
+    // MM responses:
+    CMServiceAccept, CMServiceReject, IdentityRequest,
+    AuthenticationRequest, LocationUpdatingAccept, LocationUpdatingReject,
+    TMSIReallocationCommand,
+    // CC responses:
+    CallProceeding, Alerting, Connect, ConnectAcknowledge,
+    Disconnect, Release, ReleaseComplete, Setup,
+};
+```
+
+| Token | Message | Spec |
+|-------|---------|------|
+| `ImmediateAssignment` | ImmediateAssignment | TS 04.08 9.1.19 |
+| `AssignmentCommand` | AssignmentCommand | TS 04.08 9.1.2 |
+| `ChannelRelease` | ChannelRelease | TS 04.08 9.1.7 |
+| `CipheringModeCommand` | CipheringModeCommand | TS 04.08 9.1.9 |
+| `PhysicalInformation` | PhysicalInformation | TS 04.08 9.1.12 |
+| `HandoverCommand` | HandoverCommand | TS 04.08 9.1.40 |
+| `PagingRequestType1/2/3` | PagingRequestType1/2/3 | TS 04.08 9.1.25 |
+| `CMServiceAccept` | CM Service Accept | TS 04.08 9.2.5 |
+| `CMServiceReject` | CM Service Reject | TS 04.08 9.2.6 |
+| `IdentityRequest` | IdentityRequest | TS 04.08 9.2.10 |
+| `AuthenticationRequest` | AuthenticationRequest | TS 04.08 9.2.2 |
+| `LocationUpdatingAccept` | LocationUpdatingAccept | TS 04.08 9.2.13 |
+| `LocationUpdatingReject` | LocationUpdatingReject | TS 04.08 9.2.14 |
+| `TMSIReallocationCommand` | TMSIReallocationCommand | TS 04.08 9.2.17 |
+| `CallProceeding` | CallProceeding | TS 04.08 9.3.3 |
+| `Alerting` | Alerting | TS 04.08 9.3.1 |
+| `Connect` | Connect | TS 04.08 9.3.5 |
+| `ConnectAcknowledge` | ConnectAcknowledge | TS 04.08 9.3.6 |
+| `Disconnect` | Disconnect | TS 04.08 9.3.7 |
+| `Release` | Release | TS 04.08 9.3.19 |
+| `ReleaseComplete` | ReleaseComplete | TS 04.08 9.3.19 |
+| `Setup` | Setup | TS 24.008 9.3.2 |
+
+**Memory:** `sizeof(ResponseToken) == 1` byte (uint8_t). Fits inline in `ProcedureStepResult` without exceeding the 32-byte budget.
 
 ### ProcedureStepResult
 
@@ -3730,19 +3806,28 @@ Terminal result from each procedure step:
 ```cpp
 struct ProcedureStepResult {
     enum class Action : uint8_t {
-        Continue,           ///< Procedure continues; awaiting next message
-        SendResponse,       ///< Build and send response(s) via ResponseSink
-        WaitingExternal,    ///< Needs external data (RAND from AuC, BSC decision)
-        Completed,          ///< Procedure finished successfully
-        Failed              ///< Procedure terminated with an error
+        Continue,               ///< Procedure continues; awaiting next message
+        SendResponseWithToken,  ///< Build response using responseToken + ResponseBuilder
+        WaitingExternal,        ///< Needs external data (RAND from AuC, BSC decision)
+        Completed,              ///< Procedure finished successfully
+        Failed                  ///< Procedure terminated with an error
     };
 
     Action action{Action::Continue};
+    ResponseToken responseToken{ResponseToken::None};  ///< Which message to build when action == SendResponseWithToken
     procedure::ProcedureResult finalResult{};  ///< Populated when Completed or Failed
 };
 
 static_assert(sizeof(ProcedureStepResult) <= 32);
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `action` | `Action` (uint8_t) | What the caller should do next |
+| `responseToken` | `ResponseToken` (uint8_t) | Which L3 message to build; valid when `action == SendResponseWithToken` |
+| `finalResult` | `ProcedureResult` | Populated when `action` is `Completed` or `Failed` |
+
+**Memory:** `sizeof(ProcedureStepResult) <= 32` bytes. The `responseToken` field (1 byte) replaces the old `SendResponse` action, keeping the struct within the cache-line budget for millions of concurrent calls.
 
 ### Procedure Base Class
 
@@ -3753,7 +3838,7 @@ Abstract interface that all concrete procedures implement:
 | `type()` | Returns the `procedure::ProcedureType` identifier |
 | `state()` | Returns the current `procedure::ProcedureState` |
 | `feed(msg, session, sink)` | Process an incoming L3 message; returns step result |
-| `feedExternal(data, sink)` | Provide external data (RAND, VLR decision); resume procedure |
+| `feedExternalTyped(data, sink)` | Provide typed external data (`AuthChallenge`, `VLRDecision`, etc.); resume procedure |
 | `tick(delta)` | Advance procedure timers; may return `Failed` on timeout |
 | `cancel()` | Explicitly abort the procedure |
 
@@ -3799,10 +3884,10 @@ public:
     ProcedureStepResult feed(const ParsedMessage& msg, SubscriberSession* session,
                                ResponseSink&& sink);
 
-    /// Feed external data to an active procedure by type.
-    ProcedureStepResult feedExternal(procedure::ProcedureType type,
-                                       std::span<const uint8_t> data,
-                                       ResponseSink&& sink = {});
+    /// Feed typed external data to an active procedure by type.
+    ProcedureStepResult feedExternalTyped(procedure::ProcedureType type,
+                                             const ExternalData& data,
+                                             ResponseSink&& sink = {});
 
     /// Tick all active procedures; auto-cleans terminal slots.
     size_t tickAll(std::chrono::milliseconds delta);
@@ -3821,7 +3906,7 @@ public:
 | Method | Description | Slot Cleanup |
 |--------|-------------|--------------|
 | `feed(msg, session, sink)` | Route message to active procedure or auto-create | Auto-frees on Completed/Failed |
-| `feedExternal(type, data, sink)` | Send external data by ProcedureType | Auto-frees on Completed/Failed |
+| `feedExternalTyped(type, data, sink)` | Send typed external data (`ExternalData` variant) by ProcedureType | Auto-frees on Completed/Failed |
 | `tickAll(delta)` | Advance all timers; returns count of Failed procedures | Auto-frees terminal slots |
 | `getActive(type)` | Lookup running procedure | None |
 | `activeCount()` | Count active slots | None |
@@ -3843,6 +3928,8 @@ Static factory for creating specific procedure instances:
 | `createChannelAssignment(type)` | `ChannelAssignmentProcedure` | TS 04.08 9.1.2 |
 | `createPaging(identity)` | `PagingProcedure` | TS 04.08 9.1.25 |
 | `createHandover(target)` | `HandoverProcedure` | TS 04.08 9.1.40 |
+| `createCallRelease(ti, cause)` | `CallReleaseProcedure` | TS 24.008 6.1 |
+| `createIMSIDetach()` | `IMSIDetachProcedure` | TS 24.008 4.4.6 |
 
 ### Usage Example
 
@@ -3864,8 +3951,9 @@ auto result = runner.feed(incomingMsg, session,
         if (n > 0) sendToMS(buf, n);
     });
 
-// Feed external decision from VLR.
-runner.feedExternal(procedure::ProcedureType::LocationUpdate, acceptBytes);
+// Feed typed external decision from VLR.
+VLRDecision vlr{true, 0x87654321u, MMRejectCause::Zero};
+runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, vlr);
 
 // Tick timers every 100ms.
 size_t failed = runner.tickAll(std::chrono::milliseconds(100));
@@ -3873,7 +3961,272 @@ size_t failed = runner.tickAll(std::chrono::milliseconds(100));
 
 ---
 
-## 49. Location Update Procedure
+## 49. Typed External Data - Strongly-Typed External Data Structures
+
+**File:** `gsml3parser/stack/typed_external_data.h`
+**Namespace:** `gsml3parser`
+**Spec:** 3GPP TS 24.008 (authentication, location update), TS 04.08 (paging, ciphering)
+
+Replaces the opaque `std::span<const uint8_t>` parameter with named, self-documenting structures. Each structure corresponds to a specific type of external data that a BTS application feeds into a procedure via `feedExternalTyped()`. All structures are small (≤ 64 bytes) and passed by const reference to avoid copies.
+
+### AuthChallenge
+
+Authentication challenge data from AuC. Contains RAND (128-bit per TS 24.008) and expected SRES for verification.
+
+```cpp
+struct AuthChallenge {
+    std::array<uint8_t, 16> rand{};       // 128-bit RAND per GSM spec
+    std::array<uint8_t, 4> expectedSres{}; // Expected signed response
+};
+static_assert(sizeof(AuthChallenge) <= 32);
+```
+
+### VLRDecision
+
+VLR decision for location update accept/reject. When accept is true, optional newTmsi may be assigned to the MS. When accept is false, rejectCause indicates the reason.
+
+```cpp
+struct VLRDecision {
+    bool accept{false};
+    std::optional<uint32_t> newTmsi;
+    MMRejectCause rejectCause{MMRejectCause::Zero};
+};
+```
+
+### PagingTrigger
+
+Trigger data for network-initiated paging. Contains the mobile identity to page and the target channel type.
+
+```cpp
+struct PagingTrigger {
+    L3MobileIdentity identity;
+    ChannelType targetChannel{ChannelType::SDCCHType};
+};
+```
+
+### CipheringParameters
+
+Ciphering activation parameters. `algorithmSelector` determines the ciphering algorithm (0=A5/0, 1=A5/1, etc.).
+
+```cpp
+struct CipheringParameters {
+    uint8_t algorithmSelector{0};
+    bool enableCiphering{true};
+};
+static_assert(sizeof(CipheringParameters) <= 16);
+```
+
+### HandoverTarget
+
+Handover target cell and channel description. Used by the network to instruct MS to switch to a new channel.
+
+```cpp
+struct HandoverTarget {
+    L3ChannelDescription channel;
+    L3CellDescription cell;
+};
+```
+
+### ExternalData Variant
+
+Unified variant for all external data types. Always pass by `const&` to avoid copying the variant (~64 bytes).
+
+```cpp
+using ExternalData = std::variant<
+    AuthChallenge,
+    VLRDecision,
+    PagingTrigger,
+    CipheringParameters,
+    HandoverTarget
+>;
+```
+
+### Usage Example
+
+```cpp
+#include <gsml3parser/stack/typed_external_data.h>
+
+// Feed authentication challenge from AuC:
+AuthChallenge chal{};
+std::memcpy(chal.rand.data(), aucRand, 16);
+std::memcpy(chal.expectedSres.data(), aucSres, 4);
+auto result = orchestrator.feedExternalTyped(chal);
+
+// Feed VLR accept decision:
+VLRDecision vlr{true, 0x12345678u, MMRejectCause::Zero};
+auto result2 = orchestrator.feedExternalTyped(vlr);
+```
+
+### Performance Characteristics
+
+| Metric | Value |
+|--------|-------|
+| `sizeof(AuthChallenge)` | ≤ 32 bytes |
+| `sizeof(CipheringParameters)` | ≤ 16 bytes |
+| `sizeof(ExternalData)` | ~64 bytes (dominated by largest alternative) |
+| Heap allocations | Zero when passed by const reference |
+
+---
+
+## 50. ProcedureStateMixin - CRTP Mixin for Common Procedure Code
+
+**File:** `gsml3parser/stack/procedure_state_mixin.h` (header-only template)
+**Namespace:** `gsml3parser`
+**Spec:** 3GPP TS 24.008 - Procedure lifecycle and timer management
+
+CRTP mixin that eliminates ~50 lines of duplicated code per procedure (`transitionTo`, `fail`, `complete`, `startTimer`, `stopTimer`, `tick`, `cancel`). Each derived procedure inherits from both `Procedure` and `ProcedureStateMixin<XxxProcedure, State>` via multiple inheritance.
+
+### Template Signature
+
+```cpp
+template<typename Derived, typename StateEnum>
+class ProcedureStateMixin {
+protected:
+    StateEnum mCurrentState{};
+    procedure::ProcedureState mProcState{procedure::ProcedureState::Initiated};
+    std::chrono::milliseconds mTimerRemaining{0};
+    L3TimerId mCurrentTimer{L3TimerId::Unknown};
+    bool mTimerRunning{false};
+
+    void transitionTo(StateEnum s);
+    void fail(std::string_view reason);
+    void complete();
+    void startTimer(L3TimerId id, std::chrono::milliseconds duration);
+    void stopTimer() noexcept;
+
+public:
+    [[nodiscard]] ProcedureStepResult doTick(std::chrono::milliseconds delta);
+    void doCancel() noexcept;
+};
+```
+
+### Derived Class Hooks
+
+Each procedure that uses the mixin must implement three private hooks:
+
+| Hook | Called By | Purpose |
+|------|-----------|---------|
+| `doTransitionTo(State s)` | `transitionTo()` | Map internal state to `ProcedureState` |
+| `doFail(std::string_view reason)` | `fail()`, `doTick()` (timeout) | Transition to FAILED state |
+| `doComplete()` | `complete()` | Transition to COMPLETED state |
+
+### Usage Pattern
+
+```cpp
+class LocationUpdateProcedure : public Procedure,
+                                 public ProcedureStateMixin<LocationUpdateProcedure, State> {
+public:
+    [[nodiscard]] ProcedureStepResult tick(std::chrono::milliseconds delta) override {
+        return static_cast<ProcedureStateMixin<LocationUpdateProcedure, State>&>(*this).doTick(delta);
+    }
+    void cancel() noexcept override {
+        static_cast<ProcedureStateMixin<LocationUpdateProcedure, State>&>(*this).doCancel();
+    }
+private:
+    void doTransitionTo(State s) { /* map State -> ProcedureState */ }
+    void doFail(std::string_view reason) { mCurrentState = State::FAILED; }
+    void doComplete() { mCurrentState = State::COMPLETED; }
+};
+```
+
+### Performance Characteristics
+
+| Metric | Value |
+|--------|-------|
+| Code size reduction | ~50 lines per procedure eliminated |
+| Memory overhead | ~20 bytes per procedure instance (state + timer fields) |
+| Runtime overhead | Zero — all methods resolved at compile time via CRTP |
+| Header-only | Yes — no .cpp file needed |
+
+---
+
+## 51. Procedure Orchestrator - Chained Protocol Procedures
+
+**File:** `gsml3parser/stack/procedure_orchestrator.h` / `gsml3parser/stack/procedure_orchestrator.cpp`
+**Namespace:** `gsml3parser`
+**Spec:** 3GPP TS 24.008 - Compound procedure chains (Location Update, Call Setup)
+
+Manages compound procedure chains such as Location Update (CMServiceRequest → Identity → Authentication → CipheringMode → LocationUpdate) and Call Setup MO (CMServiceRequest → CallSetupMO). The orchestrator owns a single active `Procedure` at any time, transitions between phases based on procedure outcomes, and updates the `SubscriberSession` FSM states to stay in sync.
+
+**Does NOT store `ParsedMessage` (~8 KB variant) internally.** Instead stores the last `ResponseToken` and provides `buildPendingResponse()` for zero-allocation response building. This is critical for high-load BTS: avoids heap allocation per response.
+
+### API
+
+```cpp
+class ProcedureOrchestrator {
+public:
+    ProcedureOrchestrator() = default;
+
+    [[nodiscard]] ProcedureStepResult feed(const ParsedMessage& msg, SubscriberSession* session);
+    [[nodiscard]] ProcedureStepResult feedExternalTyped(const ExternalData& data, ResponseSink&& sink = {});
+    size_t tickAll(std::chrono::milliseconds delta);
+    void cancelAll() noexcept;
+
+    [[nodiscard]] Procedure* activeProcedure() noexcept;
+    [[nodiscard]] const Procedure* activeProcedure() const noexcept;
+    [[nodiscard]] ResponseToken lastResponseToken() const noexcept;
+    [[nodiscard]] int buildPendingResponse(std::span<uint8_t> out,
+                                             const SubscriberSession* session) const;
+    [[nodiscard]] procedure::ProcedureType chainPhase() const noexcept;
+};
+```
+
+| Method | Description |
+|--------|-------------|
+| `feed(msg, session)` | Feed incoming L3 message; orchestrator auto-chains sub-procedures |
+| `feedExternalTyped(data, sink)` | Feed typed external data to the active chain (AuthChallenge, VLRDecision, etc.) |
+| `tickAll(delta)` | Tick all timers for the active chain; returns count of failed procedures |
+| `cancelAll()` | Cancel all active procedures in the chain |
+| `activeProcedure()` | Get the current active procedure, or nullptr if in an inline phase |
+| `lastResponseToken()` | Get the last response token generated by the chain |
+| `buildPendingResponse(out, session)` | Build the pending response into a pre-allocated buffer (zero heap allocation) |
+| `chainPhase()` | Get the current chain phase (ProcedureType) |
+
+### Supported Chains
+
+| Chain Type | Phases |
+|------------|--------|
+| Location Update | CMServiceRequest → [IdentityVerification] → Authentication → CipheringMode → LocationUpdate |
+| Call Setup MO | CMServiceRequest → CallSetupMO |
+| Call Setup MT | Paging → ChannelAssignment → CallSetupMT |
+| IMSI Detach | CMServiceRequest → IMSIDetach |
+| Call Release | Disconnect → Release → ReleaseComplete |
+
+### Usage Example
+
+```cpp
+#include <gsml3parser/stack/procedure_orchestrator.h>
+
+using namespace gsml3parser;
+
+ProcedureOrchestrator orchestrator;
+auto result = orchestrator.feed(incomingMsg, session);
+
+if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {
+    uint8_t buf[512];
+    int n = orchestrator.buildPendingResponse({buf, sizeof(buf)}, session);
+    if (n > 0) sendToRadio(buf, n);
+}
+
+// Feed external data when procedure enters WaitingExternal:
+if (result.action == ProcedureStepResult::Action::WaitingExternal) {
+    AuthChallenge chal{};
+    // ... fill chal from AuC ...
+    auto r2 = orchestrator.feedExternalTyped(chal);
+}
+```
+
+### Performance Characteristics
+
+| Metric | Value |
+|--------|-------|
+| Heap allocations during feed() | Zero (uses unique_ptr for current procedure only) |
+| ParsedMessage storage | None — stores only ResponseToken (1 byte) |
+| Thread safety | NOT thread-safe; one instance per subscriber chain |
+
+---
+
+## 52. Location Update Procedure
 
 **File:** `gsml3parser/stack/procedures/location_update.h`
 **Spec:** 3GPP TS 24.008 4.4.1
@@ -3903,7 +4256,7 @@ Full location updating flow with identity check, optional authentication, VLR/BS
 
 | Member | Type | Purpose |
 |--------|------|---------|
-| `mRandBuffer` | `array<uint8_t, 32>` | Pre-allocated RAND from AuC |
+| `mRandBuffer` | `array<uint8_t, 16>` | Pre-allocated RAND from AuC (128-bit per TS 24.008) |
 | `mExpectedSRES` | `array<uint8_t, 4>` | Expected SRES for verification |
 | `mLAI` | `L3LocationAreaIdentity` | LAI from MSContext |
 | `mNewTmsi` | `optional<uint32_t>` | New TMSI assignment from VLR |
@@ -3918,7 +4271,7 @@ Full location updating flow with identity check, optional authentication, VLR/BS
 
 ---
 
-## 50. Authentication Procedure
+## 53. Authentication Procedure
 
 **File:** `gsml3parser/stack/procedures/authentication.h`
 **Spec:** 3GPP TS 24.008 4.4.2
@@ -3939,7 +4292,7 @@ Standalone authentication exchange: receives RAND+SRES from AuC via `feedExterna
 
 | Member | Type | Purpose |
 |--------|------|---------|
-| `mRandBuffer` | `array<uint8_t, 32>` | RAND from AuC |
+| `mRandBuffer` | `array<uint8_t, 16>` | RAND from AuC (128-bit per TS 24.008) |
 | `mExpectedSRES` | `array<uint8_t, 4>` | Expected SRES for comparison |
 
 ### Timer
@@ -3950,7 +4303,7 @@ Standalone authentication exchange: receives RAND+SRES from AuC via `feedExterna
 
 ---
 
-## 51. Call Setup MO Procedure
+## 54. Call Setup MO Procedure
 
 **File:** `gsml3parser/stack/procedures/call_setup_mo.h`
 **Spec:** 3GPP TS 24.008 6.1
@@ -3985,7 +4338,7 @@ Mobile-Originated Call establishment: CMServiceAccept through Setup, Proceeding,
 
 ---
 
-## 52. Call Setup MT Procedure
+## 55. Call Setup MT Procedure
 
 **File:** `gsml3parser/stack/procedures/call_setup_mt.h`
 **Spec:** 3GPP TS 24.008 6.1
@@ -4021,7 +4374,7 @@ Mobile-Terminated Call establishment: Paging (up to 3 attempts with T3109), SDCC
 
 ---
 
-## 53. Channel Assignment Procedure
+## 56. Channel Assignment Procedure
 
 **File:** `gsml3parser/stack/procedures/channel_assignment.h`
 **Spec:** 3GPP TS 04.08 9.1.2 / 9.1.35
@@ -4052,7 +4405,7 @@ Channel assignment: receives ChannelRequest or PagingResponse, sends ImmediateAs
 
 ---
 
-## 54. Ciphering Mode Procedure
+## 57. Ciphering Mode Procedure
 
 **File:** `gsml3parser/stack/procedures/ciphering_mode.h`
 **Spec:** 3GPP TS 24.008 4.4.3 / TS 04.08 9.1.37
@@ -4075,7 +4428,7 @@ Short procedure to activate ciphering: receives algorithm and key via `feedExter
 
 ---
 
-## 55. Paging Procedure
+## 58. Paging Procedure
 
 **File:** `gsml3parser/stack/procedures/paging.h`
 **Spec:** 3GPP TS 04.08 9.1.25
@@ -4104,7 +4457,7 @@ Network-initiated paging of MS with up to 3 attempts (Type1, Type2, Type3) using
 
 ---
 
-## 56. Handover Procedure
+## 59. Handover Procedure
 
 **File:** `gsml3parser/stack/procedures/handover.h`
 **Spec:** 3GPP TS 04.08 9.1.40
@@ -4129,7 +4482,62 @@ Handover: receives target channel via `feedExternal()`, sends HandoverCommand, w
 
 ---
 
-## 57. Performance Optimizations Summary
+## 60. Call Release Procedure
+
+**File:** `gsml3parser/stack/procedures/call_release.h` / `call_release.cpp`
+**Spec:** 3GPP TS 24.008 6.1
+
+Call release procedure for terminating an active call. Manages the Disconnect → Release → ReleaseComplete message exchange.
+
+### State Machine
+
+| State | Trigger | Next State | Response |
+|-------|---------|------------|----------|
+| `INIT` | Disconnect message from MS | `SEND_RELEASE` | — |
+| `SEND_RELEASE` | — | `WAIT_RELEASE_COMPLETE` (T3101 started) | `buildRelease(ti, cause)` via `ResponseToken::Release` |
+| `WAIT_RELEASE_COMPLETE` | ReleaseComplete from MS | `COMPLETED` | — |
+| `WAIT_RELEASE_COMPLETE` | T3101 expired | `FAILED` | — |
+
+### Internal State
+
+| Member | Type | Purpose |
+|--------|------|---------|
+| `mTI` | `uint8_t` | Transaction Identifier from Disconnect message |
+| `mCause` | `CCCause` | CC cause code for Release message |
+
+### Timer
+
+| Timer | Default | Used During |
+|-------|---------|-------------|
+| `T3101` | 3000ms | Release Complete wait |
+
+---
+
+## 61. IMSI Detach Procedure
+
+**File:** `gsml3parser/stack/procedures/imsi_detach.h` / `imsi_detach.cpp`
+**Spec:** 3GPP TS 24.008 4.4.6
+
+IMSI detach procedure: MS signals intent to detach from the network. BTS sends CMServiceAccept and waits for confirmation or timeout.
+
+### State Machine
+
+| State | Trigger | Next State | Response |
+|-------|---------|------------|----------|
+| `INIT` | IMSIDetachIndication from MS | `SEND_CM_SERVICE_ACCEPT` | — |
+| `SEND_CM_SERVICE_ACCEPT` | — | `WAIT_DETACH_COMPLETE` (T3112 started) | `buildCMServiceAccept()` via `ResponseToken::CMServiceAccept` |
+| `WAIT_DETACH_COMPLETE` | Confirmation or any L3 message | `COMPLETED` | — |
+| `WAIT_DETACH_COMPLETE` | T3112 expired | `COMPLETED` | — |
+
+### Timer
+
+| Timer | Default | Used During |
+|-------|---------|-------------|
+| `T3112` | 3000ms | Detach confirmation wait |
+
+---
+
+## 62. Performance Optimizations Summary
 
 The following optimizations have been applied to achieve high-throughput, low-latency L3 parsing at scale:
 

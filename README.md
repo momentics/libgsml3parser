@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![Build](https://github.com/momentics/libgsml3parser/actions/workflows/build-release.yml/badge.svg)](https://github.com/momentics/libgsml3parser/actions/workflows/build-release.yml)
-[![Version](https://img.shields.io/badge/Version-0.14.0-blue.svg)](https://github.com/momentics/libgsml3parser/releases)
+[![Version](https://img.shields.io/badge/Version-0.15.0-blue.svg)](https://github.com/momentics/libgsml3parser/releases)
 
 ## Why This Library?
 
@@ -156,31 +156,35 @@ The `examples/` directory contains complete BTS workflow demonstrations:
 
 ### BTS Procedure Framework — High-Level Protocol Procedures
 
-The highest level of abstraction: pre-built protocol procedures that encapsulate FSM, timers, transactions, and response generation. Instead of manually assembling message sequences, feed L3 messages into a `ProcedureRunner` and let the framework manage the protocol flow:
+The highest level of abstraction: pre-built protocol procedures that encapsulate FSM, timers, transactions, and response generation. Instead of manually assembling message sequences, feed L3 messages into a `ProcedureOrchestrator` (for compound chains) or `ProcedureRunner` (for individual procedures). The framework returns a `ResponseToken` indicating which message to build, and the caller uses `ResponseBuilder::buildResponseFromToken()` to generate bytes in a pre-allocated Arena buffer (zero heap allocation):
 
 ```cpp
 #include <gsml3parser/gsml3parser.hpp>
 
 using namespace gsml3parser;
 
-// Create subscriber session
+// Create subscriber session with orchestrator for compound procedure chains
 SubscriberRegistry registry;
 auto* session = registry.createByTMSI(0x12345678);
 
-// Arena for zero-heap-allocation response building
-Arena arena(65536);
+// Feed incoming L3 messages — orchestrator auto-chains sub-procedures.
+auto result = session->orchestrator.feed(incomingMessage, session);
 
-// Feed incoming L3 messages — procedures start automatically.
-// The ResponseSink callback builds responses into the Arena buffer.
-auto result = session->procedures.feed(incomingMessage, session,
-    [&](SMAction action, const ParsedMessage& msg, const SubscriberSession* sess) {
-        uint8_t buf[512];
-        int n = ResponseBuilder::buildCMServiceAccept({buf, sizeof(buf)});
-        if (n > 0) sendToMS(buf, n);
-    });
+if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {
+    uint8_t buf[512];
+    int n = ResponseBuilder::buildResponseFromToken(
+        result.responseToken, {buf, sizeof(buf)}, session);
+    if (n > 0) sendToMS(buf, n);
+}
 
-// Feed external decisions (e.g., VLR accept/reject, AuC RAND)
-session->procedures.feedExternal(procedure::ProcedureType::LocationUpdate, vlrDecisionBytes);
+// Feed typed external decisions (e.g., VLR accept/reject, AuC RAND+SRES)
+VLRDecision vlr{true, 0x87654321u, MMRejectCause::Zero};
+session->orchestrator.feedExternalTyped(vlr);
+
+AuthChallenge chal{};
+std::memcpy(chal.rand.data(), aucRand, 16);
+std::memcpy(chal.expectedSres.data(), aucSres, 4);
+session->orchestrator.feedExternalTyped(chal);
 ```
 
 **Available procedures:**
@@ -195,6 +199,8 @@ session->procedures.feedExternal(procedure::ProcedureType::LocationUpdate, vlrDe
 | `CipheringModeProcedure` | TS 24.008 4.4.3 | A5 ciphering activation |
 | `PagingProcedure` | TS 04.08 9.1.25 | Paging request (Type1/2/3) with T3109 retransmission |
 | `HandoverProcedure` | TS 04.08 9.1.40 | Handover command/response flow |
+| `CallReleaseProcedure` | TS 24.008 6.1 | Call release (disconnect → release complete) |
+| `IMSIDetachProcedure` | TS 24.008 4.4.6 | IMSI detach procedure |
 
 **Abis/RSL Interface:**
 
@@ -207,7 +213,7 @@ auto l3Payload = RSLParser::extractL3(rslMsg.value());
 auto response = RSLBuilder::buildDataInd(chanNr, linkId, responseL3Bytes);
 ```
 
-See `examples/example_procedure_location_update.cpp` and [doc/bts_architecture.md](doc/bts_architecture.md) for full examples.
+See `examples/` directory, [doc/bts_integration.md](doc/bts_integration.md) (step-by-step integration guide), and [doc/bts_architecture.md](doc/bts_architecture.md) for full examples.
 
 ## Architecture
 
@@ -278,6 +284,8 @@ Optimized for high-throughput, low-latency L3 parsing at scale:
 - **Bitstream I/O** — `ByteSource` hierarchy (Span, File, RingBuffer) for streaming
 - **Zero-copy stream processing** — `InlineFramer` and `ZeroCopyStreamProcessor`
 - **ShardedChannelPool** — Thread-safe channel pool for million-concurrent-MS scaling
+- **ProcedureOrchestrator** — Auto-chains compound procedures (Location Update, Call Setup) with zero-alloc ResponseToken pattern
+- **TypedExternalData** — Strongly-typed structures (`AuthChallenge`, `VLRDecision`) replace raw byte arrays for external data
 - **Arena allocator** — Bump allocator for high-throughput batch parsing
 - **Zero external dependencies** — C++20 standard library only
 - **Fuzzing-ready** — Clean parse/generate API suitable for libFuzzer
@@ -322,7 +330,7 @@ if (result) {
 |----------|-------|
 | [doc/API.md](doc/API.md) | Full API reference (57 sections) |
 | [doc/bts_architecture.md](doc/bts_architecture.md) | BTS architecture, threading model, scaling to millions of MS |
-| [doc/bts_integration.md](doc/bts_integration.md) | Step-by-step integration guide with code examples |
+| [doc/bts_integration.md](doc/bts_integration.md) | **Primary guide for BTS developers**: ProcedureOrchestrator, ResponseToken pattern, typed external data |
 | [doc/messages.md](doc/messages.md) | Complete catalog of 200+ message types |
 
 ## Build Requirements

@@ -2,7 +2,125 @@
 
 This document describes the recommended architecture for building a software Base Transceiver Station (BTS) using libgsml3parser as the L3 protocol stack. It covers component relationships, data flow, threading model, performance characteristics, and scaling guidelines with the Procedure Framework.
 
-## 1. Architecture Diagram
+## 1. Two Usage Modes
+
+libgsml3parser supports two distinct usage modes, each targeting a different audience and providing a different subset of library capabilities. Choosing the correct mode determines which headers you include and which components you instantiate.
+
+### Mode A: L3 Parser Mode
+
+For traffic analyzers, protocol sniffers, test tools, fuzzing frameworks, and any application that needs to parse or construct GSM L3 messages without managing per-subscriber state. This mode depends only on the core parser/serializer API and has zero dependency on stack modules.
+
+**Components used:**
+
+| Component | Header | Purpose |
+|-----------|--------|---------|
+| `parseL3()` / `writeL3Bytes()` | `parser.h` | Binary to typed objects and back |
+| `ProtocolDispatcher` | `dispatcher.h` | O(1) PD+MTI callback routing |
+| Builder API (`MessageType::builder()`) | per-domain headers | Construct any L3 message from scratch |
+| `tryGet<T>()` / `messageName()` | `visitor.h` | Compile-time typed access via std::variant |
+| `L3Framer` / `L3StreamProcessor` | `bitstream/*.h` | Streaming parse from byte sources |
+| `BitReader` / `BitWriter` | `bitreader.h` / `bitwriter.h` | Bit-level I/O |
+
+**Architecture:**
+
+```
+┌─────────────────────────────────────────────────────┐
+│                  L3 Parser Mode                     │
+│                                                     │
+│  Raw Bytes ──► parseL3() ──► ParsedMessage          │
+│  ParsedMessage ──► writeL3Bytes() ──► Bytes         │
+│  ParsedMessage ──► ProtocolDispatcher ──► Callbacks │
+│                                                     │
+│  ByteSource ──► L3Framer ──► StreamProcessor        │
+└─────────────────────────────────────────────────────┘
+```
+
+**Example:**
+
+```cpp
+#include <gsml3parser/gsml3parser.hpp>
+
+auto msg = gsml3parser::parseL3Hex("060D00");
+if (msg) {
+    std::cout << gsml3parser::messageName(*msg) << "\n";
+    auto bytes = gsml3parser::writeL3Bytes(*msg);
+}
+```
+
+### Mode B: BTS Stack Mode
+
+For software BTS developers who need a complete Layer 3 signaling stack. This mode includes all Parser Mode capabilities plus per-subscriber state management, protocol procedures with automatic FSM transitions, typed external data integration, and zero-allocation response building.
+
+**Additional components (on top of Parser Mode):**
+
+| Component | Header | Purpose |
+|-----------|--------|---------|
+| `ProcedureOrchestrator` | `stack/procedure_orchestrator.h` | Auto-chains compound procedures (LU, Call Setup) |
+| `ProcedureRunner` | `stack/procedure_runner.h` | Concurrent procedure management per subscriber |
+| `SubscriberSession` + `SubscriberRegistry` | `stack/subscriber_registry.h` | Per-MS state management (< 4 KB/session) |
+| `ResponseBuilder` + `ResponseToken` | `stack/response_builder.h` | Zero-allocation response generation |
+| `TypedExternalData` (`AuthChallenge`, `VLRDecision`, etc.) | `stack/typed_external_data.h` | Type-safe external data integration |
+| `ProcedureStateMixin<Derived, State>` | `stack/procedure_state_mixin.h` | CRTP mixin eliminating procedure code duplication |
+| `ChannelPool` / `ShardedChannelPool` | `stack/channel_pool.h` | Logical channel allocation/release |
+| `TimerManager` / `TransactionManager` | `stack/l3_timer.h` / `stack/transaction.h` | Protocol timers and request-response correlation |
+| `LAPDmEntity` | `lapdm_entity.h` | Full LAPDm state machine (GSM 04.06) |
+
+**Architecture:**
+
+```
+┌───────────────────────────────────────────────────────────────────┐
+│                      BTS Application Logic                        │
+│    AuC ──► AuthChallenge{rand, sres}        VLR ──► VLRDecision   │
+└────────────────────┬──────────────────────────┬───────────────────┘
+                     │ feedExternalTyped()      │ feedExternalTyped()
+┌────────────────────▼──────────────────────────▼───────────────────┐
+│                    BTS Stack Mode                                 │
+│  ┌─────────────────────────────────────────────────────────────┐  │
+│  │              ProcedureOrchestrator                          │  │
+│  │  CMServiceReq → [Identity] → Auth → Ciphering → LU Accept   │  │
+│  └───────────────────┬─────────────────────────────────────────┘  │
+│                      │ feed() / tickAll()                         │
+│  ┌───────────────────▼─────────────────────────────────────────┐  │
+│  │                  SubscriberSession                          │  │
+│  │  MSContext + RR/MM/CC FSM + TimerManager + TransactionMgr   │  │
+│  │  ProcedureRunner (up to 8 concurrent procedures)            │  │
+│  └─────────────────────────────────────────────────────────────┘  │
+│                      │                                            │
+│  ResponseToken ──► ResponseBuilder::buildResponseFromToken()      │
+│                      │ span<uint8_t> (Arena buffer, zero alloc)   │
+└──────────────────────┼────────────────────────────────────────────┘
+                       │ sendToRadio(span<uint8_t>)
+┌──────────────────────▼────────────────────────────────────────────┐
+│              Radio / PHY Layer (User's SDR backend)               │
+└───────────────────────────────────────────────────────────────────┘
+```
+
+### Module Dependencies
+
+```
+BTS Stack Mode (all modules)
+├── ProcedureOrchestrator
+│   ├── ProcedureRunner
+│   │   ├── Procedure (base class) + 10 concrete procedures
+│   │   │   └── ProcedureStateMixin<Derived, State> (CRTP)
+│   │   ├── ResponseBuilder + ResponseToken
+│   │   └── TypedExternalData (ExternalData variant)
+│   ├── SubscriberSession
+│   │   ├── MSContext (identity, channel, flags)
+│   │   ├── RR/MM/CC StateMachine (protocol FSM)
+│   │   ├── TimerManager (T3101–T3395)
+│   │   └── TransactionManager (request-response correlation)
+│   └── ChannelPool / ShardedChannelPool
+├── LAPDmEntity (L2 framing + state machine)
+└── L3 Parser Mode (core, shared by both modes)
+    ├── parseL3() / writeL3Bytes()
+    ├── BitReader / BitWriter
+    ├── ProtocolDispatcher + FlatHandler
+    ├── Builder API (200+ message types across 12 PD domains)
+    └── ByteSource / L3Framer / StreamProcessor
+```
+
+## 2. BTS Stack Architecture Diagram
 
 ```
 ┌──────────────────────────────────────────────────────────────────────┐
@@ -55,7 +173,7 @@ This document describes the recommended architecture for building a software Bas
 └──────────────────────────────────────────────────────────────────────┘
 ```
 
-## 2. Data Flow Between Components
+## 3. Data Flow Between Components
 
 ### Inbound Message Path (MS -> BTS)
 
@@ -80,10 +198,10 @@ LAPDm Frame (raw bytes from PHY)
   │       ├─ Procedure processes message internally (FSM + timers)
   │       └─ Returns ProcedureStepResult:
   │             ├─ Continue     -> await next message
-  │             ├─ SendResponse -> responseSink callback fires
-  │             │                  ResponseBuilder builds L3 response bytes
-  │             │                  Arena buffer written, sent to MS
-  │             ├─ WaitingExternal -> procedure blocks on external data
+   │             ├─ SendResponseWithToken -> result.responseToken set;
+   │             │                  caller builds via ResponseBuilder::buildResponseFromToken()
+   │             │                  Arena buffer written, sent to MS
+   │             ├─ WaitingExternal -> procedure blocks on external data
   │             ├─ Completed    -> slot freed automatically
   │             └─ Failed       -> slot freed automatically
   │
@@ -132,22 +250,23 @@ Event Loop Tick (every 10-100ms)
 
 ```
 VLR accepts Location Update
-  │
-  ├─ runner.feedExternal(ProcedureType::LocationUpdate, acceptData)
-  │       │
-  │       ├─ Procedure wakes from WaitingExternal
-  │       ├─ Sends LocationUpdatingAccept via ResponseSink
-  │       └─ Returns Completed -> slot freed
-  │
+   │
+   ├─ orchestrator.feedExternalTyped(VLRDecision{accept: true, newTmsi: 0x12345678})
+   │       │
+   │       ├─ Procedure wakes from WaitingExternal
+   │       ├─ Returns SendResponseWithToken + ResponseToken::LocationUpdatingAccept
+   │       ├─ Caller builds via ResponseBuilder::buildResponseFromToken()
+   │       └─ Next feed() -> Completed, slot freed
+   │
 AuC provides RAND+SRES for Authentication
-  │
-  ├─ runner.feedExternal(ProcedureType::Authentication, randSresData)
-  │       │
-  │       ├─ Procedure sends AuthenticationRequest via ResponseSink
-  │       └─ Waits for MS response on next feed()
+   │
+   ├─ orchestrator.feedExternalTyped(AuthChallenge{rand: [16], expectedSres: [4]})
+   │       │
+   │       ├─ Returns SendResponseWithToken + ResponseToken::AuthenticationRequest
+   │       └─ Waits for MS response on next feed()
 ```
 
-## 3. Integration with PHY/SDR Layer
+## 4. Integration with PHY/SDR Layer
 
 libgsml3parser does not include a PHY layer. It interfaces with the radio through raw byte buffers at the LAPDm framing boundary.
 
@@ -195,7 +314,21 @@ public:
 | **srsRAN** | Replace L3 encode/decode in `srsgsbts` with libgsml3parser equivalents |
 | **Limesuite / ADALM-Pluto** | Use as PHY backend; libgsml3parser handles all L2/L3 processing |
 
-## 4. Thread Model
+### Integration Points
+
+The library provides well-defined integration points for external systems that a BTS developer must connect. Each integration point uses strongly-typed data structures (no raw byte parsing).
+
+| External System | Integration Point | API |
+|----------------|-------------------|-----|
+| **PHY / Radio** | `sendToRadio(std::span<const uint8_t>)` | After ResponseBuilder writes to Arena buffer, pass bytes to PHY transmit callback |
+| **PHY / Radio** | `onRadioFrameReceived(std::span<const uint8_t>)` | PHY receive callback invokes LAPDmEntity -> parseL3() -> orchestrator.feed() |
+| **AuC** | `orchestrator.feedExternalTyped(AuthChallenge{rand, expectedSres})` | Query AuC for RAND(16B) + SRES(4B), feed as typed struct to procedure |
+| **VLR / HLR** | `orchestrator.feedExternalTyped(VLRDecision{accept, newTmsi, rejectCause})` | VLR accept/reject decision with optional TMSI assignment |
+| **Ciphering (A5)** | After `CipheringModeComplete` received from MS | BTS enables A5/XOR at L2 level; library does not implement ciphering algorithms |
+| **BSC (A-bis RSL)** | `RSLParser::parse()` -> `extractL3()` -> `orchestrator.feed()` | Inbound: BSC sends RLL DATA_REQ, extract L3 and feed to orchestrator |
+| **BSC (A-bis RSL)** | `ResponseBuilder` bytes -> `RSLBuilder::buildDataInd()` -> send | Outbound: wrap L3 response in RSL DATA_IND for BSC |
+
+## 5. Thread Model
 
 ### Event Loop with SubscriberRegistry (Recommended)
 
@@ -265,7 +398,7 @@ ShardedChannelPool<16> btsChannels;
 auto ch = btsChannels.allocate(ChannelType::SDCCHType);
 ```
 
-## 5. Performance Considerations
+## 6. Performance Considerations
 
 ### Memory Footprint Per MS
 
@@ -320,7 +453,7 @@ The following operations perform zero heap allocations:
 | `SubscriberRegistry::findByTMSI()` | O(1) | Hash map lookup |
 | `ShardedSubscriberRegistry::findByTMSI()` | O(1) | Hash + per-shard lock |
 
-## 6. Abis/RSL Integration
+## 7. Abis/RSL Integration
 
 The A-bis RSL interface allows libgsml3parser-based BTS to communicate with an external BSC over the A-bis interface (TS 48.058).
 
@@ -348,7 +481,7 @@ BTS ──[CCHAN CCCH_LOAD_IND]──► BSC: RSLBuilder::buildCCCHLoadInd() -> 
 | BTS->BSC | DCHAN MEAS_RES | `RSLBuilder::buildMeasRes()` -> PHY |
 | BSC->BTS | CCHAN PAGING_CMD | `RSLParser::parse()` -> `extractL3()` -> paging procedure |
 
-## 7. Scaling Guidelines
+## 8. Scaling Guidelines
 
 ### Managing Millions of MS Contexts
 
@@ -430,24 +563,27 @@ The `ShardedChannelPool<16>` handles this with negligible memory overhead and th
 
 Each MS can have up to 16 concurrent pending transactions (`TransactionManager::MAX_TRANSACTIONS = 16`). For typical BTS workloads, < 4 concurrent transactions per MS is expected. The `cleanup()` method should be called periodically or when `totalCount()` approaches the limit.
 
-## 8. Deployment Checklist
+## 9. Deployment Checklist
 
 - [ ] Build with C++20, Release mode (`-O2` or `/O2`)
 - [ ] Verify `sizeof(MSContext) <= 256` via `static_assert`
 - [ ] Verify `sizeof(ProcedureStepResult) <= 32` via `static_assert`
+- [ ] Verify `sizeof(SubscriberSession) < 4096` via `static_assert`
 - [ ] Configure `ChannelPool` with available channels at startup
 - [ ] Initialize `SubscriberRegistry` (or `ShardedSubscriberRegistry<N>` for multi-threaded)
-- [ ] Set up `ResponseSink` callback to build responses via `ResponseBuilder` into Arena buffer
-- [ ] Integrate `ProcedureRunner::tickAll()` into event loop (10-100ms interval)
-- [ ] Implement `feedExternal()` handlers for AuC/HLR/VLR decisions
-- [ ] If using A-bis: set up `RSLParser` -> `parseL3()` -> `ProcedureRunner::feed()` pipeline
-- [ ] If using A-bis: set up `ResponseBuilder` -> `RSLBuilder` -> PHY outbound pipeline
+- [ ] Choose usage mode: L3 Parser Mode (parse/build only) or BTS Stack Mode (full procedures)
+- [ ] For BTS Stack Mode: create `ProcedureOrchestrator` per subscriber session
+- [ ] Implement `feedExternalTyped()` handlers: query AuC for `AuthChallenge`, VLR for `VLRDecision`
+- [ ] Handle `ResponseToken` from `ProcedureStepResult`: call `ResponseBuilder::buildResponseFromToken()` into Arena buffer
+- [ ] Integrate `orchestrator.tickAll()` or `runner.tickAll()` into event loop (10-100ms interval)
+- [ ] If using A-bis: set up `RSLParser` -> `parseL3()` -> `orchestrator.feed()` pipeline
+- [ ] If using A-bis: set up Arena buffer -> `RSLBuilder::buildDataInd()` -> PHY outbound pipeline
 - [ ] Provide external synchronization for shared `ChannelPool` (or use `ShardedChannelPool`)
-- [ ] Set up PHY backend (SDR, GNU Radio block, etc.)
+- [ ] Set up PHY backend with `sendToRadio(span)` and `onRadioFrameReceived(span)` callbacks
 - [ ] Configure System Information broadcast schedule
-- [ ] Add logging for procedure state transitions and timer expirations
+- [ ] Add logging for procedure state transitions, ResponseToken values, and timer expirations
 
-## 9. References
+## 10. References
 
 | Document | Topic |
 |----------|-------|
