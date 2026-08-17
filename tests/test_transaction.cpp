@@ -27,6 +27,7 @@
 #include <gsml3parser/visitor.h>
 
 #include <chrono>
+#include <vector>
 
 using namespace gsml3parser;
 using namespace std::chrono_literals;
@@ -399,4 +400,97 @@ TEST(TransactionManagerTest, Cleanup_removesAllFinishedStates) {
     EXPECT_EQ(removed, 3u);
     EXPECT_EQ(tm.totalCount(), 0u);
     EXPECT_EQ(tm.pendingCount(), 0u);
+}
+
+// Regression: create()/get() must stay consistent when a slot is reused
+// after cleanup. IDs are slot-based and stable; a reused slot legitimately
+// reassigns the old (finished) transaction's ID.
+TEST(TransactionManagerTest, Get_slotReuse_afterCleanup) {
+    TransactionManager tm;
+    auto id1 = tm.create(L3PD::CallControl, L3Setup::MTI, 1, L3TimerId::T3101);
+    ASSERT_TRUE(id1.has_value());
+    if (Transaction* tx = tm.get(*id1)) tx->complete();
+    tm.cleanup();
+
+    // Slot 0 is free again; the new transaction reuses it.
+    auto id2 = tm.create(L3PD::CallControl, L3Connect::MTI, 2, L3TimerId::T3101);
+    ASSERT_TRUE(id2.has_value());
+
+    // The new transaction must be reachable by its ID (previously returned nullptr).
+    Transaction* tx2 = tm.get(*id2);
+    ASSERT_NE(tx2, nullptr);
+    EXPECT_EQ(tx2->ti(), 2);
+    EXPECT_EQ(tx2->state(), TransactionState::Pending);
+}
+
+// Regression: filling the pool and reusing finished slots must not shift
+// live transactions, so every outstanding ID keeps resolving to its own
+// transaction (the old compaction-based design broke this).
+TEST(TransactionManagerTest, Get_fullPool_slotReuse_idsStable) {
+    TransactionManager tm;
+    std::vector<uint32_t> ids;
+    for (size_t i = 0; i < 16; ++i) {
+        auto id = tm.create(L3PD::CallControl, L3Setup::MTI, static_cast<uint8_t>(i % 8), L3TimerId::T3101);
+        ASSERT_TRUE(id.has_value());
+        ids.push_back(*id);
+    }
+
+    // Finish the first transaction and recycle its slot without cleanup.
+    if (Transaction* tx = tm.get(ids[0])) tx->complete();
+    auto newId = tm.create(L3PD::CallControl, L3Connect::MTI, 7, L3TimerId::T3101);
+    ASSERT_TRUE(newId.has_value());
+    EXPECT_EQ(*newId, 1u); // slot 0 + 1
+
+    // Every surviving transaction must still resolve to its own record.
+    for (size_t i = 1; i < ids.size(); ++i) {
+        Transaction* tx = tm.get(ids[i]);
+        ASSERT_NE(tx, nullptr);
+        EXPECT_EQ(tx->ti(), static_cast<uint8_t>(i % 8));
+        EXPECT_EQ(tx->state(), TransactionState::Pending);
+    }
+
+    // The reused slot now serves the new transaction.
+    Transaction* fresh = tm.get(*newId);
+    ASSERT_NE(fresh, nullptr);
+    EXPECT_EQ(fresh->requestMTI(), L3Connect::MTI);
+    EXPECT_EQ(tm.pendingCount(), 16u);
+}
+
+// Regression: a stale TI index entry must never redirect a match to a
+// transaction that was created in a reused slot.
+TEST(TransactionManagerTest, Match_staleTIIndex_afterSlotReuse) {
+    TransactionManager tm;
+    // Fill all 16 slots: two rounds of TIs 0-7. The second round's
+    // transactions (slots 8-15) own the TI index entries (latest wins).
+    for (int round = 0; round < 2; ++round) {
+        for (size_t i = 0; i < 8; ++i) {
+            auto id = tm.create(L3PD::CallControl, L3Setup::MTI, static_cast<uint8_t>(i), L3TimerId::T3101);
+            ASSERT_TRUE(id.has_value());
+        }
+    }
+
+    // The slot-8 transaction (TI=0, id = 8 + 1) owns the TI=0 index entry.
+    // Finish it without cleanup so the stale entry is still in place when
+    // the slot gets reused.
+    Transaction* owner = tm.get(9);
+    ASSERT_NE(owner, nullptr);
+    EXPECT_EQ(owner->ti(), 0);
+    owner->complete();
+
+    // Pool is full: the next create must reuse slot 8 in place.
+    auto newId = tm.create(L3PD::CallControl, L3Connect::MTI, 5, L3TimerId::T3101);
+    ASSERT_TRUE(newId.has_value());
+    EXPECT_EQ(*newId, 9u); // slot 8 + 1
+
+    // A response for the old TI=0 must not be delivered to the new TI=5 transaction.
+    ParsedMessage msg = makeCCConnect();
+    L3Header staleHeader = makeHeader(L3PD::CallControl, L3Connect::MTI, 0);
+    EXPECT_EQ(tm.match(staleHeader, msg), nullptr);
+
+    // A response for TI=5 must match the new transaction.
+    L3Header freshHeader = makeHeader(L3PD::CallControl, L3Connect::MTI, 5);
+    Transaction* tx = tm.match(freshHeader, msg);
+    ASSERT_NE(tx, nullptr);
+    EXPECT_EQ(tx->ti(), 5);
+    EXPECT_EQ(tx->requestMTI(), L3Connect::MTI);
 }

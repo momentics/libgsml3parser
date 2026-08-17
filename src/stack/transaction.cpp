@@ -113,37 +113,17 @@ void TransactionManager::rebuildTiIndex() noexcept {
 }
 
 std::optional<size_t> TransactionManager::findSlot() noexcept {
+    // Pass 1: prefer a completely free slot.
     for (size_t i = 0; i < MAX_TRANSACTIONS; ++i) {
         if (!mOccupied[i]) return i;
     }
 
-    // Compact: move pending transactions to the front, clearing finished ones.
-    size_t write = 0;
-    for (size_t read = 0; read < MAX_TRANSACTIONS; ++read) {
-        if (!mOccupied[read]) continue;
-        if (mTransactions[read].state() == TransactionState::Pending) {
-            if (write != read) {
-                mTransactions[write] = mTransactions[read];
-                mOccupied[write] = true;
-                mOccupied[read] = false;
-            }
-            ++write;
-        } else {
-            mOccupied[read] = false;
-            --mCount;
-        }
-    }
-
-    while (write < MAX_TRANSACTIONS) {
-        mOccupied[write] = false;
-        ++write;
-    }
-
-    rebuildTiIndex();
-
-    if (mCount < MAX_TRANSACTIONS) {
-        for (size_t i = 0; i < MAX_TRANSACTIONS; ++i) {
-            if (!mOccupied[i]) return i;
+    // Pass 2: pool is full - reuse a slot that still holds a finished
+    // (non-pending) transaction. Reusing a slot in place never moves a live
+    // transaction, so every outstanding transaction ID stays valid.
+    for (size_t i = 0; i < MAX_TRANSACTIONS; ++i) {
+        if (mOccupied[i] && mTransactions[i].state() != TransactionState::Pending) {
+            return i;
         }
     }
 
@@ -151,13 +131,27 @@ std::optional<size_t> TransactionManager::findSlot() noexcept {
 }
 
 std::optional<uint32_t> TransactionManager::create(L3PD pd, int mti, uint8_t ti, L3TimerId timerId) {
-    size_t slot = findSlot().value_or(MAX_TRANSACTIONS);
-    if (slot >= MAX_TRANSACTIONS) return std::nullopt;
+    auto slotOpt = findSlot();
+    if (!slotOpt) return std::nullopt;
+    size_t slot = *slotOpt;
 
-    uint32_t id = mNextId++;
+    // If the slot still holds a finished transaction, drop its stale TI index
+    // entry (if any) so match() can never redirect a response for the old TI
+    // to the transaction we are about to place in this slot.
+    if (mOccupied[slot]) {
+        const Transaction& old = mTransactions[slot];
+        if ((old.requestPD() == L3PD::CallControl || old.requestPD() == L3PD::NonCallSS) &&
+            old.ti() < 8 && mTiIndex[old.ti()] == slot) {
+            mTiIndex[old.ti()] = std::nullopt;
+        }
+    }
+
+    const bool wasFree = !mOccupied[slot];
     mTransactions[slot] = Transaction(pd, mti, ti, timerId);
     mOccupied[slot] = true;
-    ++mCount;
+    if (wasFree) {
+        ++mCount;
+    }
 
     // Update TI index for CC/SS transactions.
     if (pd == L3PD::CallControl || pd == L3PD::NonCallSS) {
@@ -166,7 +160,10 @@ std::optional<uint32_t> TransactionManager::create(L3PD pd, int mti, uint8_t ti,
         }
     }
 
-    return id;
+    // Stable slot-based ID: slot + 1 (1-based, 0 reserved as invalid).
+    // The transaction never leaves its slot, so the ID stays valid for its
+    // entire lifetime.
+    return static_cast<uint32_t>(slot) + 1;
 }
 
 Transaction* TransactionManager::get(uint32_t id) noexcept {
@@ -189,7 +186,8 @@ Transaction* TransactionManager::match(const L3Header& header, const ParsedMessa
                 size_t slot = *slotOpt;
                 if (mOccupied[slot] &&
                     mTransactions[slot].state() == TransactionState::Pending &&
-                    mTransactions[slot].requestPD() == pd) {
+                    mTransactions[slot].requestPD() == pd &&
+                    mTransactions[slot].ti() == ti) {
                     return &mTransactions[slot];
                 }
             }

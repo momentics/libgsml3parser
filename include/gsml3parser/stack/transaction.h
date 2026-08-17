@@ -152,17 +152,26 @@ class TransactionManager {
 
     /// Create and track a new pending transaction.
     /// @param pd Protocol Discriminator of the request.
-    /// @param mti Message Type Indicator of the request.
+    /// @param mti Message Type Indicator of the request message.
     /// @param ti Transaction Identifier (0-7 for CC/SS, 0 for others).
-    /// @param timerId Timer to associate with this transaction.
-    /// @return Unique transaction ID on success, std::nullopt if pool is full.
-    /// When the pool reaches MAX_TRANSACTIONS, finished transactions are
-    /// automatically compacted before attempting insertion.
+    /// @param timerId Timer to associate with this transaction for expiry tracking.
+    /// @return Stable transaction ID on success, std::nullopt if the pool is full.
+    ///
+    /// ID contract: the ID is the internal slot index plus one (1-based; 0 is
+    /// reserved as the invalid sentinel). A transaction never moves between
+    /// slots, so its ID stays valid for the entire lifetime of the
+    /// transaction. When the pool is full, a slot that still holds a finished
+    /// transaction is reused in place; the finished transaction's ID is then
+    /// legitimately reassigned (the same way a file descriptor is recycled).
+    /// IDs of live transactions are never invalidated by other operations.
     std::optional<uint32_t> create(L3PD pd, int mti, uint8_t ti, L3TimerId timerId);
 
-    /// Get a transaction by its unique ID.
-    /// @param id The transaction ID returned by create().
-    /// @return Pointer to the transaction if found and still pending, nullptr otherwise.
+    /// Get a transaction by its ID.
+    /// @param id The transaction ID returned by create(). 0 is never a valid ID.
+    /// @return Pointer to the transaction if it is still tracked and pending;
+    ///         nullptr if the ID is unknown, the transaction finished, or its
+    ///         slot was reused by a newer transaction.
+    /// O(1) direct slot lookup - no scanning, no allocation.
     Transaction* get(uint32_t id) noexcept;
 
     /// Try to match an incoming message against pending transactions using L3 header info.
@@ -211,14 +220,17 @@ class TransactionManager {
     // of the pending CC/SS transaction with that TI, or nullopt if none.
     std::array<std::optional<size_t>, 8> mTiIndex{};
 
-    uint32_t mNextId{1};
     size_t mCount{0};
 
     /// Rebuild the TI index from current pending transactions.
     void rebuildTiIndex() noexcept;
 
-    /// Find a free slot, compacting finished transactions if necessary.
-    /// @return The slot index, or std::nullopt if no space available.
+    /// Find a slot for a new transaction without moving any live transaction.
+    /// Prefers a completely free slot; if none exists, reuses a slot that
+    /// still holds a finished (non-pending) transaction. In-place reuse never
+    /// shifts live transactions, so all outstanding transaction IDs remain
+    /// valid.
+    /// @return The slot index, or std::nullopt if every slot holds a pending transaction.
     std::optional<size_t> findSlot() noexcept;
 };
 
