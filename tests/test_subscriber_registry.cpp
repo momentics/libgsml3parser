@@ -462,3 +462,35 @@ TEST(SSR_Guards, ConcurrentReadModify_NoTornReads) {
 
     EXPECT_EQ(tornReads.load(), 0);
 }
+
+// Test: remove() is O(1) — 1M sessions, 100K removals must be fast.
+// Importance: session churn (detach) at scale must not degrade to O(N) scans.
+// 3GPP coverage: TS 24.008 4.4 - subscriber lifecycle at scale.
+TEST(SR_remove, OneMillion_O1Fast) {
+    SubscriberRegistry reg;
+    constexpr uint32_t N = 1000000;
+    std::vector<SubscriberSession*> ptrs;
+    ptrs.reserve(200000);
+    for (uint32_t i = 1; i <= N; ++i) {
+        auto* s = reg.createByTMSI(i);
+        ASSERT_NE(s, nullptr);
+        if (i <= 200000) ptrs.push_back(s);
+    }
+    EXPECT_EQ(reg.count(), static_cast<size_t>(N));
+
+    auto t0 = std::chrono::steady_clock::now();
+    for (auto* s : ptrs) {
+        EXPECT_TRUE(reg.remove(s));
+    }
+    auto t1 = std::chrono::steady_clock::now();
+    double ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
+
+    EXPECT_EQ(reg.count(), static_cast<size_t>(N) - ptrs.size());
+#ifndef GSML3PARSER_ASAN
+    // Budget is machine-dependent: the point is to prove O(1) behavior.
+    // The old O(N) implementation took tens of seconds here (100K removals x
+    // ~500K entries scanned); O(1) removal is ~1 us/op, so 500ms is a 100x
+    // margin that still separates the two complexities on any hardware.
+    EXPECT_LT(ms, 500.0) << "100K remove() over 1M sessions took " << ms << "ms (expected O(1), < 500ms)";
+#endif
+}

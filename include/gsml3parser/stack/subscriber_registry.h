@@ -80,6 +80,11 @@ public:
     std::optional<ChannelDescriptor> channel;
     uint8_t lapdmLink{0};
 
+    /// TMSI under which this session is keyed in the owning SubscriberRegistry.
+    /// Set by createByTMSI()/createByIMSI(); used by remove() for O(1) lookup.
+    /// 0 means "not assigned" (standalone session not owned by a registry).
+    uint32_t assignedTmsi{0};
+
     SubscriberSession() = default;
 };
 
@@ -142,6 +147,7 @@ public:
     /// Remove a subscriber session (detach, channel release).
     /// @param session Session pointer to remove.
     /// @return true if session was found and removed.
+    /// Performance: O(1) via session->assignedTmsi (no linear scan).
     bool remove(SubscriberSession* session) noexcept;
 
     /// Remove all sessions (emergency shutdown).

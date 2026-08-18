@@ -490,6 +490,10 @@ auto* found = registry.findByTMSI(0x12345678);
 // Tick all timers across all shards
 std::array<L3TimerId, 4096> expired;
 size_t n = registry.tickAllTimers(std::chrono::milliseconds(100), expired);
+
+// Remove session (detach) — O(1) via session->assignedTmsi reverse index,
+// so high session churn at scale does not degrade to O(N) scans.
+registry.remove(session);
 ```
 
 ### Event Loop Design

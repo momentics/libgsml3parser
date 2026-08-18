@@ -31,6 +31,7 @@ SubscriberSession* SubscriberRegistry::createByTMSI(uint32_t tmsi) {
     if (!inserted) return nullptr;
 
     it->second.session.context.setTMSI(tmsi);
+    it->second.session.assignedTmsi = tmsi;
     return &it->second.session;
 }
 
@@ -50,6 +51,7 @@ SubscriberSession* SubscriberRegistry::createByIMSI(std::string_view imsi) {
     if (!inserted) return nullptr;
 
     tmsiIt->second.session.context.setIMSI(imsi);
+    tmsiIt->second.session.assignedTmsi = tmsi;
     mByIMSI.emplace(std::move(key), tmsi);
     return &tmsiIt->second.session;
 }
@@ -130,20 +132,22 @@ void SubscriberRegistry::releaseChannel(SubscriberSession* session) noexcept {
 }
 
 bool SubscriberRegistry::remove(SubscriberSession* session) noexcept {
-    for (auto it = mByTMSI.begin(); it != mByTMSI.end(); ++it) {
-        if (&it->second.session == session && it->second.active) {
-            releaseChannel(session);
-            if (session->context.identity().isIMSI()) {
-                mByIMSI.erase(std::string(session->context.identity().digits()));
-            }
-            // Erase the entry so memory is reclaimed (previously the entry
-            // stayed in the map with active=false, leaking on every removal).
-            // The session pointer is invalidated by this call.
-            mByTMSI.erase(it);
-            return true;
-        }
+    // O(1): derive the TMSI key from the session and look it up directly.
+    if (!session) return false;
+    uint32_t tmsi = session->assignedTmsi;
+    auto it = mByTMSI.find(tmsi);
+    if (it == mByTMSI.end() || &it->second.session != session || !it->second.active) {
+        return false;
     }
-    return false;
+    releaseChannel(session);
+    if (session->context.identity().isIMSI()) {
+        mByIMSI.erase(std::string(session->context.identity().digits()));
+    }
+    // Erase the entry so memory is reclaimed (previously the entry
+    // stayed in the map with active=false, leaking on every removal).
+    // The session pointer is invalidated by this call.
+    mByTMSI.erase(it);
+    return true;
 }
 
 void SubscriberRegistry::clear() noexcept {

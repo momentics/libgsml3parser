@@ -3521,6 +3521,7 @@ Aggregates all per-MS state:
 | `procedures` | `ProcedureRunner` | Active protocol procedures |
 | `channel` | `optional<ChannelDescriptor>` | Current channel assignment |
 | `lapdmLink` | `uint8_t` | LAPDm link ID for routing |
+| `assignedTmsi` | `uint32_t` | TMSI key in the owning registry (set by `createByTMSI`/`createByIMSI`; 0 = not owned) |
 
 Size: `sizeof(SubscriberSession) < 4096 bytes`, all components inline.
 
@@ -3541,6 +3542,8 @@ void assignChannel(SubscriberSession* session, ChannelDescriptor desc, uint8_t l
 void releaseChannel(SubscriberSession* session);
 
 // Lifecycle.
+// remove() is O(1): it derives the TMSI key from session->assignedTmsi and
+// looks it up directly (no linear scan over all sessions).
 bool remove(SubscriberSession* session) noexcept;
 void clear() noexcept;
 size_t count() const noexcept;
