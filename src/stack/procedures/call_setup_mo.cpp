@@ -55,7 +55,7 @@ void CallSetupMOPercedure::doComplete() {
 }
 
 ProcedureStepResult CallSetupMOPercedure::feed(const ParsedMessage& msg,
-    SubscriberSession* session, ResponseSink&& sink) {
+    SubscriberSession* session, ResponseSink sink) {
     (void)session;
     ProcedureStepResult result;
 

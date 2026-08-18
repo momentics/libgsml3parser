@@ -276,7 +276,7 @@ ProcedureStepResult ProcedureOrchestrator::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult ProcedureOrchestrator::feedExternalTyped(const ExternalData& data,
-                                                               ResponseSink&& sink) {
+                                                               ResponseSink sink) {
     if (mCurrentProcedure) {
         ProcedureStepResult result = mCurrentProcedure->feedExternalTyped(data, std::move(sink));
         if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {
@@ -435,7 +435,7 @@ ProcedureStepResult ProcedureOrchestrator::handleCallReleasePhase(
 // ── External data handlers for inline phases ─────────────────────────────
 
 ProcedureStepResult ProcedureOrchestrator::handleExternalDataLocationUpdate(
-    const ExternalData& data, ResponseSink&& sink) {
+    const ExternalData& data, ResponseSink sink) {
     (void)sink;
     ProcedureStepResult result;
 
@@ -471,14 +471,14 @@ ProcedureStepResult ProcedureOrchestrator::handleExternalDataLocationUpdate(
 }
 
 ProcedureStepResult ProcedureOrchestrator::handleExternalDataIMSIDetach(
-    const ExternalData& data, ResponseSink&& sink) {
+    const ExternalData& data, ResponseSink sink) {
     (void)data;
     (void)sink;
     return {ProcedureStepResult::Action::Continue};
 }
 
 ProcedureStepResult ProcedureOrchestrator::handleExternalDataCallRelease(
-    const ExternalData& data, ResponseSink&& sink) {
+    const ExternalData& data, ResponseSink sink) {
     (void)data;
     (void)sink;
     return {ProcedureStepResult::Action::Continue};

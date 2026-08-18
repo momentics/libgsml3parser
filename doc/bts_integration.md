@@ -18,7 +18,7 @@ libgsml3parser sits between the BTS application logic and the physical/radio lay
     │              ProcedureOrchestrator                              │
     │                                                                 │
     │  feed(msg, session) ──► auto-chain sub-procedures               │
-    │  Returns: ProcedureStepResult{action, responseToken,finalResult}│
+    │  Returns: ProcedureStepResult{action,responseToken,finalResult} │
     │                                                                 │
     │  ResponseToken ──► ResponseBuilder::buildResponseFromToken()    │
     │                        writes to Arena buffer (zero heap alloc) │
@@ -85,7 +85,7 @@ void initBts() {
 
 ### Step 2: Process incoming frames with ProcedureOrchestrator
 
-The main event loop processes incoming L3 messages by feeding them into the subscriber's `ProcedureOrchestrator`. The orchestrator manages compound procedure chains (e.g., CMServiceRequest → Authentication → CipheringMode → LocationUpdate) automatically.
+The main event loop processes incoming L3 messages by feeding them into the subscriber's `ProcedureOrchestrator`. The orchestrator manages compound procedure chains (e.g., CMServiceRequest -> Authentication -> CipheringMode -> LocationUpdate) automatically.
 
 ```cpp
 // Arena for zero-heap-allocation response building
@@ -239,7 +239,7 @@ void eventLoop() {
 
 ### Location Update (Full Chain)
 
-The orchestrator automatically chains: CMServiceRequest → [Identity] → Authentication → CipheringMode → LocationUpdate.
+The orchestrator automatically chains: CMServiceRequest -> [Identity] -> Authentication -> CipheringMode -> LocationUpdate.
 
 ```cpp
 // 1. MS sends CMServiceRequest (Location Updating)
@@ -289,7 +289,7 @@ sendToMS(session, buf, n);
 
 ### Call Setup MO (Full Chain)
 
-The orchestrator chains: CMServiceRequest(MO_Call) → CallSetupMO.
+The orchestrator chains: CMServiceRequest(MO_Call) -> CallSetupMO.
 
 ```cpp
 // 1. MS sends CMServiceRequest (MO Call)
@@ -609,7 +609,8 @@ if (result.action == ProcedureStepResult::Action::Failed) {
 | `stack/state_machine.h` | `RR/MM/CCStateMachine` | Protocol FSM skeletons |
 | `stack/channel_pool.h` | `ChannelPool`, `decodeChannelNeeded()` | Channel allocation, VEA |
 | `stack/response_builder.h` | `ResponseBuilder`, `buildResponseFromToken()` | Factory for L3 response messages |
-| `stack/procedure.h` | `Procedure`, `ProcedureStepResult`, `ResponseToken`, `ResponseSink` | Base class for protocol procedures |
+| `stack/response_sink.h` | `ResponseSink`, `makeResponseSink()` | Zero-overhead response callback (fn+ctx, 16 bytes, refcounted captures) |
+| `stack/procedure.h` | `Procedure`, `ProcedureStepResult`, `ResponseToken` | Base class for protocol procedures |
 | `stack/typed_external_data.h` | `ExternalData`, `AuthChallenge`, `VLRDecision`, `PagingTrigger`, etc. | Type-safe external data structures |
 | `stack/procedure_runner.h` | `ProcedureRunner`, `ProcedureFactory` | Concurrent procedure management |
 | `stack/procedure_orchestrator.h` | `ProcedureOrchestrator` | Auto-chained compound procedures |

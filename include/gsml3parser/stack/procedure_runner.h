@@ -88,7 +88,7 @@ public:
     /// @param sink Response callback invoked when the procedure needs to send a response.
     /// @return ProcedureStepResult from the target procedure. Slot is auto-freed on Completed/Failed.
     ProcedureStepResult feed(const ParsedMessage& msg, SubscriberSession* session,
-                              ResponseSink&& sink);
+                              ResponseSink sink);
 
     /// Feed typed external data to an active procedure by type.
     /// @param type The ProcedureType of the target procedure.
@@ -96,7 +96,7 @@ public:
     /// @param sink Optional response callback.
     /// @return ProcedureStepResult from the target procedure. Slot is auto-freed on Completed/Failed.
     ProcedureStepResult feedExternalTyped(procedure::ProcedureType type, const ExternalData& data,
-                                            ResponseSink&& sink = {});
+                                            ResponseSink sink = {});
 
     /// Tick all active procedures' timers. Auto-cleans slots for Completed/Failed procedures.
     /// @param delta Elapsed time in milliseconds.

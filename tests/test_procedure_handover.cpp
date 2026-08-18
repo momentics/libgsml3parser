@@ -37,7 +37,7 @@ using namespace gsml3parser;
 using namespace std::chrono_literals;
 
 inline void feedStep(Procedure& p, const ParsedMessage& msg) {
-    [[maybe_unused]] auto r = p.feed(msg, nullptr, nullptr);
+    [[maybe_unused]] auto r = p.feed(msg, nullptr, ResponseSink{});
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -69,10 +69,10 @@ TEST(HandoverProcedureTest, HO_Init_FeedExternal_SendsCommand) {
 
     bool sinkCalled = false;
     auto res = proc.feedExternalTyped(HandoverTarget{},
-        [&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
             EXPECT_EQ(action, SMAction::SendResponse);
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_TRUE(sinkCalled);
@@ -86,7 +86,7 @@ TEST(HandoverProcedureTest, HO_HandoverComplete_Completes) {
     [[maybe_unused]] auto _r = proc.feedExternalTyped(HandoverTarget{});
     feedStep(proc, makeDummyMsg());
 
-    auto res = proc.feed(makeHandoverComplete(), nullptr, nullptr);
+    auto res = proc.feed(makeHandoverComplete(), nullptr, ResponseSink{});
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::Completed);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Completed);
@@ -100,7 +100,7 @@ TEST(HandoverProcedureTest, HO_HandoverFailure_Fails) {
     [[maybe_unused]] auto _r = proc.feedExternalTyped(HandoverTarget{});
     feedStep(proc, makeDummyMsg());
 
-    auto res = proc.feed(makeHandoverFailure(), nullptr, nullptr);
+    auto res = proc.feed(makeHandoverFailure(), nullptr, ResponseSink{});
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::Failed);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Failed);

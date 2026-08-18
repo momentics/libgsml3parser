@@ -38,7 +38,7 @@ using namespace std::chrono_literals;
 
 /// Discard feed() result to suppress [[nodiscard]] warning on intermediate steps.
 inline void feedStep(Procedure& p, const ParsedMessage& msg) {
-    [[maybe_unused]] auto r = p.feed(msg, nullptr, nullptr);
+    [[maybe_unused]] auto r = p.feed(msg, nullptr, ResponseSink{});
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -72,10 +72,10 @@ TEST(CallSetupMOPercedureTest, MOC_Init_CMServiceRequest_SendsAccept) {
 
     bool sinkCalled = false;
     auto res = proc.feed(makeCMServiceRequest(), nullptr,
-        [&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
             EXPECT_EQ(action, SMAction::SendResponse);
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_TRUE(sinkCalled);
@@ -93,9 +93,9 @@ TEST(CallSetupMOPercedureTest, MOC_WaitSetup_Setup_Proceeding) {
 
     bool sinkCalled = false;
     auto res = proc.feed(makeSetup(), nullptr,
-        [&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_TRUE(sinkCalled);
@@ -113,9 +113,9 @@ TEST(CallSetupMOPercedureTest, MOC_Proceeding_AssignTCH) {
     // PROCEEDING -> ASSIGN_TCH
     bool sinkCalled = false;
     auto res = proc.feed(makeDummyMsg(), nullptr,
-        [&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_TRUE(sinkCalled);
@@ -134,9 +134,9 @@ TEST(CallSetupMOPercedureTest, MOC_AssignComplete_Alerting) {
     // WAIT_ASSIGN_COMPLETE -> ALERTING
     bool sinkCalled = false;
     auto res = proc.feed(makeAssignmentComplete(), nullptr,
-        [&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_TRUE(sinkCalled);
@@ -157,7 +157,7 @@ TEST(CallSetupMOPercedureTest, MOC_ConnectAck_Completes) {
     feedStep(proc, makeDummyMsg());
 
     // ACTIVE -> COMPLETED on ConnectAcknowledge
-    auto res = proc.feed(makeConnectAcknowledge(), nullptr, nullptr);
+    auto res = proc.feed(makeConnectAcknowledge(), nullptr, ResponseSink{});
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::Completed);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Completed);
@@ -169,61 +169,61 @@ TEST(CallSetupMOPercedureTest, MOC_FullFlow_Completes) {
 
     // 1. INIT -> SERVICE_ACCEPT (CMServiceRequest)
     {
-        auto r = proc.feed(makeCMServiceRequest(), nullptr, nullptr);
+        auto r = proc.feed(makeCMServiceRequest(), nullptr, ResponseSink{});
         EXPECT_EQ(r.action, ProcedureStepResult::Action::SendResponseWithToken);
     }
 
     // 2. SERVICE_ACCEPT -> WAIT_SETUP
     {
-        auto r = proc.feed(makeDummyMsg(), nullptr, nullptr);
+        auto r = proc.feed(makeDummyMsg(), nullptr, ResponseSink{});
         EXPECT_EQ(r.action, ProcedureStepResult::Action::Continue);
     }
 
     // 3. WAIT_SETUP -> PROCEEDING (Setup)
     {
-        auto r = proc.feed(makeSetup(), nullptr, nullptr);
+        auto r = proc.feed(makeSetup(), nullptr, ResponseSink{});
         EXPECT_EQ(r.action, ProcedureStepResult::Action::SendResponseWithToken);
     }
 
     // 4. PROCEEDING -> ASSIGN_TCH
     {
-        auto r = proc.feed(makeDummyMsg(), nullptr, nullptr);
+        auto r = proc.feed(makeDummyMsg(), nullptr, ResponseSink{});
         EXPECT_EQ(r.action, ProcedureStepResult::Action::SendResponseWithToken);
     }
 
     // 5. ASSIGN_TCH -> WAIT_ASSIGN_COMPLETE
     {
-        auto r = proc.feed(makeDummyMsg(), nullptr, nullptr);
+        auto r = proc.feed(makeDummyMsg(), nullptr, ResponseSink{});
         EXPECT_EQ(r.action, ProcedureStepResult::Action::Continue);
     }
 
     // 6. WAIT_ASSIGN_COMPLETE -> ALERTING (AssignmentComplete)
     {
-        auto r = proc.feed(makeAssignmentComplete(), nullptr, nullptr);
+        auto r = proc.feed(makeAssignmentComplete(), nullptr, ResponseSink{});
         EXPECT_EQ(r.action, ProcedureStepResult::Action::SendResponseWithToken);
     }
 
     // 7. ALERTING -> CONNECT
     {
-        auto r = proc.feed(makeDummyMsg(), nullptr, nullptr);
+        auto r = proc.feed(makeDummyMsg(), nullptr, ResponseSink{});
         EXPECT_EQ(r.action, ProcedureStepResult::Action::SendResponseWithToken);
     }
 
     // 8. CONNECT -> ACTIVE
     {
-        auto r = proc.feed(makeDummyMsg(), nullptr, nullptr);
+        auto r = proc.feed(makeDummyMsg(), nullptr, ResponseSink{});
         EXPECT_EQ(r.action, ProcedureStepResult::Action::SendResponseWithToken);
     }
 
     // 9. ACTIVE -> (advance to next feed)
     {
-        auto r = proc.feed(makeDummyMsg(), nullptr, nullptr);
+        auto r = proc.feed(makeDummyMsg(), nullptr, ResponseSink{});
         EXPECT_EQ(r.action, ProcedureStepResult::Action::Continue);
     }
 
     // 10. ACTIVE -> COMPLETED (ConnectAcknowledge)
     {
-        auto r = proc.feed(makeConnectAcknowledge(), nullptr, nullptr);
+        auto r = proc.feed(makeConnectAcknowledge(), nullptr, ResponseSink{});
         EXPECT_EQ(r.action, ProcedureStepResult::Action::Completed);
     }
 

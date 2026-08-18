@@ -56,7 +56,7 @@ void PagingProcedure::doComplete() {
 }
 
 ProcedureStepResult PagingProcedure::feed(const ParsedMessage& msg,
-    SubscriberSession* session, ResponseSink&& sink) {
+    SubscriberSession* session, ResponseSink sink) {
     (void)session;
     ProcedureStepResult result;
 
@@ -130,7 +130,7 @@ ProcedureStepResult PagingProcedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult PagingProcedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink&& sink) {
+    const ExternalData& data, ResponseSink sink) {
     ProcedureStepResult result;
 
     if (const auto* trigger = std::get_if<PagingTrigger>(&data)) {

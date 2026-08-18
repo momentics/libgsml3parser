@@ -58,7 +58,7 @@ void LocationUpdateProcedure::doComplete() {
 }
 
 ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
-    SubscriberSession* session, ResponseSink&& sink) {
+    SubscriberSession* session, ResponseSink sink) {
     (void)session;
 
     ProcedureStepResult result;
@@ -207,7 +207,7 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult LocationUpdateProcedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink&& sink) {
+    const ExternalData& data, ResponseSink sink) {
     ProcedureStepResult result;
 
     std::visit([&](const auto& typedData) {

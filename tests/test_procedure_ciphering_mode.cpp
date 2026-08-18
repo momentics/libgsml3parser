@@ -36,7 +36,7 @@ using namespace gsml3parser;
 using namespace std::chrono_literals;
 
 inline void feedStep(Procedure& p, const ParsedMessage& msg) {
-    [[maybe_unused]] auto r = p.feed(msg, nullptr, nullptr);
+    [[maybe_unused]] auto r = p.feed(msg, nullptr, ResponseSink{});
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -61,10 +61,10 @@ TEST(CipheringModeProcedureTest, CMP_Init_FeedExternal_SendsCommand) {
 
     bool sinkCalled = false;
     auto res = proc.feedExternalTyped(CipheringParameters{},
-        [&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
             EXPECT_EQ(action, SMAction::SendResponse);
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_TRUE(sinkCalled);
@@ -78,7 +78,7 @@ TEST(CipheringModeProcedureTest, CMP_CipheringModeComplete_Completes) {
     [[maybe_unused]] auto _r = proc.feedExternalTyped(CipheringParameters{});
     feedStep(proc, makeDummyMsg());
 
-    auto res = proc.feed(makeCipheringModeComplete(), nullptr, nullptr);
+    auto res = proc.feed(makeCipheringModeComplete(), nullptr, ResponseSink{});
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::Completed);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Completed);

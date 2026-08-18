@@ -35,7 +35,7 @@ using namespace gsml3parser;
 using namespace std::chrono_literals;
 
 inline void feedStep(Procedure& p, const ParsedMessage& msg) {
-    [[maybe_unused]] auto r = p.feed(msg, nullptr, nullptr);
+    [[maybe_unused]] auto r = p.feed(msg, nullptr, ResponseSink{});
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -61,7 +61,7 @@ TEST(ChannelAssignmentProcedureTest, CAP_Init_ChannelRequest_Allocates) {
     EXPECT_EQ(proc.targetChannelType(), ChannelType::SDCCHType);
     EXPECT_EQ(proc.type(), procedure::ProcedureType::ChannelAssignment);
 
-    auto res = proc.feed(makeChannelRequest(), nullptr, nullptr);
+    auto res = proc.feed(makeChannelRequest(), nullptr, ResponseSink{});
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::Continue);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::InProgress);
@@ -75,15 +75,15 @@ TEST(ChannelAssignmentProcedureTest, CAP_SendImmediateAssignment_WaitSeizure) {
 
     bool sinkCalled = false;
     auto res = proc.feed(makeDummyMsg(), nullptr,
-        [&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_TRUE(sinkCalled);
 
     // SEND_IMMEDIATE_ASSIGNMENT -> WAIT_SEIZURE
-    res = proc.feed(makeDummyMsg(), nullptr, nullptr);
+    res = proc.feed(makeDummyMsg(), nullptr, ResponseSink{});
     EXPECT_EQ(res.action, ProcedureStepResult::Action::Continue);
 }
 
@@ -96,7 +96,7 @@ TEST(ChannelAssignmentProcedureTest, CAP_Seizure_Completes) {
     feedStep(proc, makeDummyMsg());
 
     // Any message on new channel indicates seizure.
-    auto res = proc.feed(makeDummyMsg(), nullptr, nullptr);
+    auto res = proc.feed(makeDummyMsg(), nullptr, ResponseSink{});
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::Completed);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Completed);
@@ -134,7 +134,7 @@ TEST(ChannelAssignmentProcedureTest, CAP_Cancel_Aborts) {
 TEST(ChannelAssignmentProcedureTest, CAP_PagingResponse_Allocates) {
     ChannelAssignmentProcedure proc(ChannelType::SDCCHType);
 
-    auto res = proc.feed(makePagingResponse(), nullptr, nullptr);
+    auto res = proc.feed(makePagingResponse(), nullptr, ResponseSink{});
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::Continue);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::InProgress);
@@ -144,6 +144,6 @@ TEST(ChannelAssignmentProcedureTest, CAP_PagingResponse_Allocates) {
     feedStep(proc, makeDummyMsg());
 
     // Seizure completes.
-    auto res2 = proc.feed(makeDummyMsg(), nullptr, nullptr);
+    auto res2 = proc.feed(makeDummyMsg(), nullptr, ResponseSink{});
     EXPECT_EQ(res2.action, ProcedureStepResult::Action::Completed);
 }

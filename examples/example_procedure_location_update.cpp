@@ -24,11 +24,12 @@ int main() {
     ProcedureRunner& runner = session->procedures;
     int sinkCalls = 0;
 
-    auto responseSink = [&sinkCalls](SMAction action, const ParsedMessage&, const SubscriberSession*) {
-        (void)action;
-        ++sinkCalls;
-        std::cout << "  [ResponseSink called #" << sinkCalls << "]\n";
-    };
+    ResponseSink responseSink = makeResponseSink(
+        [&sinkCalls](SMAction action, const ParsedMessage&, const SubscriberSession*) {
+            (void)action;
+            ++sinkCalls;
+            std::cout << "  [ResponseSink called #" << sinkCalls << "]\n";
+        });
 
     // 2. Feed CMServiceRequest(LocationUpdateRequest) -> auto-creates LU procedure.
     std::cout << "\n--- Step 1: CMServiceRequest(LocationUpdating) ---\n";

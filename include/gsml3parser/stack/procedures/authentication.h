@@ -37,9 +37,9 @@ public:
     [[nodiscard]] procedure::ProcedureState state() const override;
     [[nodiscard]] ProcedureStepResult feed(const ParsedMessage& msg,
                                               SubscriberSession* session,
-                                              ResponseSink&& sink) override;
+                                              ResponseSink sink) override;
     [[nodiscard]] ProcedureStepResult feedExternalTyped(
-        const ExternalData& data, ResponseSink&& sink = {}) override;
+        const ExternalData& data, ResponseSink sink = {}) override;
     [[nodiscard]] ProcedureStepResult tick(std::chrono::milliseconds delta) override;
     void cancel() noexcept override;
 

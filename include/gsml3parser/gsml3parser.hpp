@@ -58,6 +58,7 @@
 #include "gsml3parser/stack/transaction.h"
 #include "gsml3parser/stack/channel_pool.h"
 #include "gsml3parser/stack/procedure_types.h"
+#include "gsml3parser/stack/response_sink.h"
 #include "gsml3parser/stack/procedure.h"
 #include "gsml3parser/stack/procedure_runner.h"
 #include "gsml3parser/stack/subscriber_registry.h"

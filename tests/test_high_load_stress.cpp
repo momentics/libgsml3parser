@@ -318,14 +318,14 @@ TEST(Stress, ResponseToken_Arena_100K_ZeroAlloc) {
 
         ResponseToken capturedToken{ResponseToken::None};
         auto result = sess.procedures.feed(msg, &sess,
-            [&arena, &stackBuf](SMAction, const ParsedMessage&, const SubscriberSession*) {
+            makeResponseSink([&arena, &stackBuf](SMAction, const ParsedMessage&, const SubscriberSession*) {
                 // Sink callback: build CMServiceAccept into stack buffer, then Arena
                 int n = ResponseBuilder::buildCMServiceAccept({stackBuf, sizeof(stackBuf)});
                 if (n > 0) {
                     auto* p = static_cast<uint8_t*>(arena.allocate(static_cast<size_t>(n)));
                     if (p) std::memcpy(p, stackBuf, static_cast<size_t>(n));
                 }
-            });
+            }));
 
         // Capture token from feed result
         if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {

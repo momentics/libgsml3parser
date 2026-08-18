@@ -65,7 +65,7 @@ void CallReleaseProcedure::doComplete() {
 }
 
 ProcedureStepResult CallReleaseProcedure::feed(const ParsedMessage& msg,
-    SubscriberSession* session, ResponseSink&& sink) {
+    SubscriberSession* session, ResponseSink sink) {
     (void)session;
 
     ProcedureStepResult result;
@@ -132,7 +132,7 @@ ProcedureStepResult CallReleaseProcedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult CallReleaseProcedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink&& sink) {
+    const ExternalData& data, ResponseSink sink) {
     (void)data;
     (void)sink;
     return {ProcedureStepResult::Action::Continue};

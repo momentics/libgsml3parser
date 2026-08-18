@@ -66,6 +66,7 @@ add_executable(gsml3parser_tests
     test_procedure_paging.cpp
     test_procedure_handover.cpp
     test_procedure_runner.cpp
+    test_response_sink.cpp
     test_procedure_integration.cpp
     test_rsl_types.cpp
     test_rsl_parser.cpp

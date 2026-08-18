@@ -54,7 +54,7 @@ void IMSIDetachProcedure::doComplete() {
 }
 
 ProcedureStepResult IMSIDetachProcedure::feed(const ParsedMessage& msg,
-    SubscriberSession* session, ResponseSink&& sink) {
+    SubscriberSession* session, ResponseSink sink) {
     ProcedureStepResult result;
 
     switch (mCurrentState) {
@@ -106,7 +106,7 @@ ProcedureStepResult IMSIDetachProcedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult IMSIDetachProcedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink&& sink) {
+    const ExternalData& data, ResponseSink sink) {
     (void)data;
     (void)sink;
     return {ProcedureStepResult::Action::Continue};

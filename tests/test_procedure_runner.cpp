@@ -268,13 +268,13 @@ TEST(PR_ResponseSink, CalledOnSendResponse) {
 
     // Track sink invocations
     std::atomic<bool> sinkCalled{false};
-    auto sink = [&sinkCalled](SMAction action, const ParsedMessage& incomingMsg,
+    auto sink = makeResponseSink([&sinkCalled](SMAction action, const ParsedMessage& incomingMsg,
                               const SubscriberSession* sess) {
         (void)action;
         (void)incomingMsg;
         (void)sess;
         sinkCalled.store(true);
-    };
+    });
 
     // Second feed -> ALLOCATE_CHANNEL->SEND_IMMEDIATE_ASSIGNMENT + SendResponse
     ParsedMessage msg2{RRM{L3ClassmarkChange{}}};

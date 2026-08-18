@@ -270,7 +270,7 @@ session->orchestrator.feedExternalTyped(chal);
 | `CipheringModeProcedure` | TS 24.008 4.4.3 | A5 ciphering activation |
 | `PagingProcedure` | TS 04.08 9.1.25 | Paging request (Type1/2/3) with T3109 retransmission |
 | `HandoverProcedure` | TS 04.08 9.1.40 | Handover command/response flow |
-| `CallReleaseProcedure` | TS 24.008 6.1 | Call release (disconnect → release complete) |
+| `CallReleaseProcedure` | TS 24.008 6.1 | Call release (disconnect -> release complete) |
 | `IMSIDetachProcedure` | TS 24.008 4.4.6 | IMSI detach procedure |
 
 **Abis/RSL Interface:**

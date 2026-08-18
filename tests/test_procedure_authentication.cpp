@@ -38,7 +38,7 @@ using namespace gsml3parser;
 using namespace std::chrono_literals;
 
 inline void feedStep(Procedure& p, const ParsedMessage& msg) {
-    [[maybe_unused]] auto r = p.feed(msg, nullptr, nullptr);
+    [[maybe_unused]] auto r = p.feed(msg, nullptr, ResponseSink{});
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -71,9 +71,9 @@ TEST(AuthenticationProcedureTest, AuthP_Init_NoData_StaysInit) {
 
     bool sinkCalled = false;
     auto res = proc.feed(makeAuthResponse(0x12345678), nullptr,
-        [&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::Continue);
     EXPECT_FALSE(sinkCalled);
@@ -87,10 +87,10 @@ TEST(AuthenticationProcedureTest, AuthP_FeedExternal_RAND_SendsAuthRequest) {
 
     bool sinkCalled = false;
     auto res = proc.feedExternalTyped(chal,
-        [&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
             EXPECT_EQ(action, SMAction::SendResponse);
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_EQ(res.responseToken, ResponseToken::AuthenticationRequest);
@@ -111,7 +111,7 @@ TEST(AuthenticationProcedureTest, AuthP_AuthResponse_ValidSRES_Completes) {
     feedStep(proc, makeAuthResponse(0));
 
     // Phase 3: feed correct AuthenticationResponse -> COMPLETE
-    auto res = proc.feed(makeAuthResponse(kSRES), nullptr, nullptr);
+    auto res = proc.feed(makeAuthResponse(kSRES), nullptr, ResponseSink{});
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::Completed);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Completed);
@@ -128,7 +128,7 @@ TEST(AuthenticationProcedureTest, AuthP_AuthResponse_InvalidSRES_Fails) {
     [[maybe_unused]] auto _r1 = proc.feedExternalTyped(chal);
     feedStep(proc, makeAuthResponse(0));
 
-    auto res = proc.feed(makeAuthResponse(kWrongSRES), nullptr, nullptr);
+    auto res = proc.feed(makeAuthResponse(kWrongSRES), nullptr, ResponseSink{});
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::Failed);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Failed);

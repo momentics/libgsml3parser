@@ -58,7 +58,7 @@ void CallSetupMTPercedure::doComplete() {
 }
 
 ProcedureStepResult CallSetupMTPercedure::feed(const ParsedMessage& msg,
-    SubscriberSession* session, ResponseSink&& sink) {
+    SubscriberSession* session, ResponseSink sink) {
     (void)session;
     ProcedureStepResult result;
 
@@ -159,7 +159,7 @@ ProcedureStepResult CallSetupMTPercedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult CallSetupMTPercedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink&& sink) {
+    const ExternalData& data, ResponseSink sink) {
     (void)data;
     ProcedureStepResult result;
 

@@ -38,7 +38,7 @@ using namespace gsml3parser;
 using namespace std::chrono_literals;
 
 inline void feedStep(Procedure& p, const ParsedMessage& msg) {
-    [[maybe_unused]] auto r = p.feed(msg, nullptr, nullptr);
+    [[maybe_unused]] auto r = p.feed(msg, nullptr, ResponseSink{});
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -74,10 +74,10 @@ TEST(CallSetupMTPercedureTest, MTC_Init_FeedExternal_StartsPaging) {
 
     bool sinkCalled = false;
     auto res = proc.feedExternalTyped(PagingTrigger{},
-        [&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
             EXPECT_EQ(action, SMAction::SendResponse);
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_TRUE(sinkCalled);
@@ -93,9 +93,9 @@ TEST(CallSetupMTPercedureTest, MTC_PageResponse_AssignSDCCH) {
 
     bool sinkCalled = false;
     auto res = proc.feed(makePagingResponse(), nullptr,
-        [&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_TRUE(sinkCalled);
@@ -111,7 +111,7 @@ TEST(CallSetupMTPercedureTest, MTC_CallConfirmed_AssignTCH) {
     feedStep(proc, makeDummyMsg());
     feedStep(proc, makeDummyMsg());
 
-    auto res = proc.feed(makeCallConfirmed(), nullptr, nullptr);
+    auto res = proc.feed(makeCallConfirmed(), nullptr, ResponseSink{});
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::Continue);
 }
@@ -133,7 +133,7 @@ TEST(CallSetupMTPercedureTest, MTC_ConnectAck_Completes) {
     feedStep(proc, makeDummyMsg());
     feedStep(proc, makeDummyMsg());
 
-    auto res = proc.feed(makeConnectAcknowledge(), nullptr, nullptr);
+    auto res = proc.feed(makeConnectAcknowledge(), nullptr, ResponseSink{});
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::Completed);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Completed);

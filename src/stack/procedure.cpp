@@ -23,7 +23,7 @@
 
 namespace gsml3parser {
 
-ProcedureStepResult Procedure::feedExternalTyped(const ExternalData& data, ResponseSink&& sink) {
+ProcedureStepResult Procedure::feedExternalTyped(const ExternalData& data, ResponseSink sink) {
     (void)data;
     (void)sink;
     return {ProcedureStepResult::Action::Continue};

@@ -128,9 +128,9 @@ TEST(LocationUpdateProcedure, LUP_IdentityCheck_KnownTMSI_SkipsIdentityRequest) 
 
     bool sinkCalled = false;
     auto result = lup.feed(makeCMServiceRequest(), &sess,
-        [&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
-        });
+        }));
 
     // TMSI known, skip to AUTH_CHECK without sending IdentityRequest.
     EXPECT_EQ(lup.state(), ProcedureState::InProgress);
@@ -149,9 +149,9 @@ TEST(LocationUpdateProcedure, LUP_IdentityCheck_UnknownTMSI_SendsIdentityRequest
 
     bool sinkCalled = false;
     auto result = lup.feed(makeCMServiceRequest(), &sess,
-        [&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_EQ(result.responseToken, ResponseToken::IdentityRequest);
@@ -263,9 +263,9 @@ TEST(LocationUpdateProcedure, LUP_WaitingExternal_FeedAccept_CompletesWithLocati
     // Feed Accept VLRDecision via feedExternalTyped
     bool sinkCalled = false;
     auto acceptResult = lup.feedExternalTyped(makeAcceptData(),
-        [&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_TRUE(sinkCalled);
     EXPECT_EQ(acceptResult.action, ProcedureStepResult::Action::Completed);
@@ -290,9 +290,9 @@ TEST(LocationUpdateProcedure, LUP_WaitingExternal_FeedReject_FailsWithLocationUp
     // Feed Reject VLRDecision via feedExternalTyped
     bool sinkCalled = false;
     auto rejectResult = lup.feedExternalTyped(makeRejectData(),
-        [&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_TRUE(sinkCalled);
     EXPECT_EQ(rejectResult.action, ProcedureStepResult::Action::SendResponseWithToken);
@@ -366,9 +366,9 @@ TEST(LocationUpdateProcedure, LUP_FullFlow_WithAuth_CompletesSuccessfully) {
     // Step 5: Feed Accept VLRDecision via feedExternalTyped -> completes procedure.
     bool sinkCalled = false;
     auto r5 = lup.feedExternalTyped(makeAcceptData(),
-        [&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
+        makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
-        });
+        }));
 
     EXPECT_TRUE(sinkCalled);
     EXPECT_EQ(r5.action, ProcedureStepResult::Action::Completed);

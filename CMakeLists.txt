@@ -171,6 +171,7 @@ set(PUBLIC_HEADERS
     include/gsml3parser/stack/sharded_channel_pool.h
     include/gsml3parser/stack/procedure_types.h
     include/gsml3parser/stack/response_builder.h
+    include/gsml3parser/stack/response_sink.h
     include/gsml3parser/stack/procedure.h
     include/gsml3parser/stack/procedure_runner.h
     include/gsml3parser/stack/typed_external_data.h

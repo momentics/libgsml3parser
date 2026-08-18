@@ -86,7 +86,7 @@ void ProcedureRunner::cleanupSlotIfTerminal(size_t idx) noexcept {
 }
 
 ProcedureStepResult ProcedureRunner::feed(const ParsedMessage& msg,
-    SubscriberSession* session, ResponseSink&& sink) {
+    SubscriberSession* session, ResponseSink sink) {
     auto pd = messagePD(msg);
 
     // Try to route to an active procedure matching the PD
@@ -110,7 +110,7 @@ ProcedureStepResult ProcedureRunner::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult ProcedureRunner::feedExternalTyped(procedure::ProcedureType type,
-    const ExternalData& data, ResponseSink&& sink) {
+    const ExternalData& data, ResponseSink sink) {
     for (size_t i = 0; i < MAX_PROCEDURES; ++i) {
         if (mSlots[i].active && mSlots[i].proc && mSlots[i].proc->type() == type) {
             ProcedureStepResult result = mSlots[i].proc->feedExternalTyped(data, std::move(sink));

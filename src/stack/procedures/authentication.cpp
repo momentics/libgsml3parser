@@ -56,7 +56,7 @@ void AuthenticationProcedure::doComplete() {
 }
 
 ProcedureStepResult AuthenticationProcedure::feed(const ParsedMessage& msg,
-    SubscriberSession* session, ResponseSink&& sink) {
+    SubscriberSession* session, ResponseSink sink) {
     (void)session;
     ProcedureStepResult result;
 
@@ -124,7 +124,7 @@ ProcedureStepResult AuthenticationProcedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult AuthenticationProcedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink&& sink) {
+    const ExternalData& data, ResponseSink sink) {
     ProcedureStepResult result;
 
     if (const auto* chal = std::get_if<AuthChallenge>(&data)) {

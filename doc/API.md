@@ -839,7 +839,7 @@ Protocol procedure types mapped to 3GPP specification chapters:
 | `0x08` | `Paging` | TS 04.08 9.1.25 | Network-initiated paging of MS |
 | `0x09` | `CMServiceRequest` | TS 24.008 4.7 | CM service request procedure |
 | `0x0A` | `IMSIDetach` | TS 24.008 4.4.6 | IMSI detach procedure |
-| `0x0B` | `CallRelease` | TS 24.008 6.1 | Call release (disconnect → release complete) |
+| `0x0B` | `CallRelease` | TS 24.008 6.1 | Call release (disconnect -> release complete) |
 | `0x0C` | `PeriodicLocationUpdate` | TS 24.008 4.4.1 | Periodic location updating |
 | `0xFF` | `Unknown` | — | Unrecognized or unsupported procedure |
 
@@ -2705,7 +2705,7 @@ Manages up to 32 named timers for one MS context using fixed-size arrays.
 | `get(id)` | Get the L3Timer object for direct access |
 | `runningCount()` | Number of currently running timers |
 | `setOwner(void*)` | Set the owning object reported to the active-change observer |
-| `setOnActiveChange(fn, ctx)` | Register a zero-alloc observer fired on 0→>0 / >0→0 running-timer transitions |
+| `setOnActiveChange(fn, ctx)` | Register a zero-alloc observer fired on 0->>0 / >0->0 running-timer transitions |
 
 ### Performance Characteristics
 
@@ -3752,16 +3752,27 @@ Abstract base class for protocol procedures and the ResponseSink callback mechan
 
 ### ResponseSink
 
-Callback type for building protocol responses without heap allocation on the hot path:
+Zero-overhead callback type for building protocol responses without heap allocation on the hot path (`gsml3parser/stack/response_sink.h`):
 
 ```cpp
-using ResponseSink = std::function<void(SMAction action, const ParsedMessage& incomingMsg,
-                                            const SubscriberSession* session)>;
+struct ResponseSink {
+    using Callback = void (*)(SMAction, const ParsedMessage&, const SubscriberSession*, void*);
+    Callback fn{nullptr};
+    void* ctx{nullptr};
+    // RAII copy/move with atomic refcounting for capturing lambdas
+    void operator()(SMAction action, const ParsedMessage& msg, const SubscriberSession* session) const;
+    explicit operator bool() const noexcept;
+};
+
+static_assert(sizeof(ResponseSink) == 2 * sizeof(void*)); // 16 bytes on 64-bit
+
+template<typename F>
+ResponseSink makeResponseSink(F f); // wraps a capturing callable (one heap allocation at creation)
 ```
 
 The BTS application provides this callback when calling `Procedure::feed()`. Inside the callback, invoke `ResponseBuilder` and write bytes into a pre-allocated buffer (Arena).
 
-**Performance:** `std::function` uses Small Buffer Optimization for lambdas with small capture (~20-32 bytes). Ensure your lambda closure fits in SBO for zero-allocation on the hot path.
+**Performance:** `ResponseSink` is exactly two machine words (16 bytes) with direct function-pointer invocation — no virtual dispatch, no type erasure, no per-call heap allocation (replaces `std::function`, which was 40+ bytes and could heap-allocate). Capturing lambdas are wrapped with `makeResponseSink()` (one heap allocation at creation, shared by all copies via an atomic refcount); stateless callbacks use the zero-allocation two-argument constructor `ResponseSink{fn, ctx}`.
 
 ### ResponseToken
 
@@ -3866,9 +3877,9 @@ using namespace gsml3parser;
 
 auto proc = ProcedureFactory::createLocationUpdate();
 auto result = proc->feed(incomingMsg, session,
-    [](SMAction action, const ParsedMessage& msg, const SubscriberSession* sess) {
+    makeResponseSink([](SMAction action, const ParsedMessage& msg, const SubscriberSession* sess) {
         // Build response via ResponseBuilder into Arena buffer
-    });
+    }));
 
 if (result.action == ProcedureStepResult::Action::Completed) {
     std::cout << "Procedure finished: " << result.finalResult.reason << "\n";
@@ -3894,12 +3905,12 @@ public:
 
     /// Feed incoming L3 message; routes to active procedure or starts new one.
     ProcedureStepResult feed(const ParsedMessage& msg, SubscriberSession* session,
-                               ResponseSink&& sink);
+                               ResponseSink sink);
 
     /// Feed typed external data to an active procedure by type.
     ProcedureStepResult feedExternalTyped(procedure::ProcedureType type,
                                              const ExternalData& data,
-                                             ResponseSink&& sink = {});
+                                             ResponseSink sink = {});
 
     /// Tick all active procedures; auto-cleans terminal slots.
     size_t tickAll(std::chrono::milliseconds delta);
@@ -4158,7 +4169,7 @@ private:
 **Namespace:** `gsml3parser`
 **Spec:** 3GPP TS 24.008 - Compound procedure chains (Location Update, Call Setup)
 
-Manages compound procedure chains such as Location Update (CMServiceRequest → Identity → Authentication → CipheringMode → LocationUpdate) and Call Setup MO (CMServiceRequest → CallSetupMO). The orchestrator owns a single active `Procedure` at any time, transitions between phases based on procedure outcomes, and updates the `SubscriberSession` FSM states to stay in sync.
+Manages compound procedure chains such as Location Update (CMServiceRequest -> Identity -> Authentication -> CipheringMode -> LocationUpdate) and Call Setup MO (CMServiceRequest -> CallSetupMO). The orchestrator owns a single active `Procedure` at any time, transitions between phases based on procedure outcomes, and updates the `SubscriberSession` FSM states to stay in sync.
 
 **Does NOT store `ParsedMessage` (~8 KB variant) internally.** Instead stores the last `ResponseToken` and provides `buildPendingResponse()` for zero-allocation response building. This is critical for high-load BTS: avoids heap allocation per response.
 
@@ -4170,7 +4181,7 @@ public:
     ProcedureOrchestrator() = default;
 
     [[nodiscard]] ProcedureStepResult feed(const ParsedMessage& msg, SubscriberSession* session);
-    [[nodiscard]] ProcedureStepResult feedExternalTyped(const ExternalData& data, ResponseSink&& sink = {});
+    [[nodiscard]] ProcedureStepResult feedExternalTyped(const ExternalData& data, ResponseSink sink = {});
     size_t tickAll(std::chrono::milliseconds delta);
     void cancelAll() noexcept;
 
@@ -4198,11 +4209,11 @@ public:
 
 | Chain Type | Phases |
 |------------|--------|
-| Location Update | CMServiceRequest → [IdentityVerification] → Authentication → CipheringMode → LocationUpdate |
-| Call Setup MO | CMServiceRequest → CallSetupMO |
-| Call Setup MT | Paging → ChannelAssignment → CallSetupMT |
-| IMSI Detach | CMServiceRequest → IMSIDetach |
-| Call Release | Disconnect → Release → ReleaseComplete |
+| Location Update | CMServiceRequest -> [IdentityVerification] -> Authentication -> CipheringMode -> LocationUpdate |
+| Call Setup MO | CMServiceRequest -> CallSetupMO |
+| Call Setup MT | Paging -> ChannelAssignment -> CallSetupMT |
+| IMSI Detach | CMServiceRequest -> IMSIDetach |
+| Call Release | Disconnect -> Release -> ReleaseComplete |
 
 ### Usage Example
 
@@ -4499,7 +4510,7 @@ Handover: receives target channel via `feedExternal()`, sends HandoverCommand, w
 **File:** `gsml3parser/stack/procedures/call_release.h` / `call_release.cpp`
 **Spec:** 3GPP TS 24.008 6.1
 
-Call release procedure for terminating an active call. Manages the Disconnect → Release → ReleaseComplete message exchange.
+Call release procedure for terminating an active call. Manages the Disconnect -> Release -> ReleaseComplete message exchange.
 
 ### State Machine
 
@@ -4560,6 +4571,10 @@ The following optimizations have been applied to achieve high-throughput, low-la
 ### FlatHandler (Zero-Overhead Callbacks)
 
 `std::function<void(const ParsedMessage&, void*)>` replaced with `FlatHandler` — a two-word struct with direct function pointer calls. Factory functions `makeHandler()` and `makeSharedHandler()` provide ergonomic lambda wrapping.
+
+### ResponseSink (Zero-Overhead Procedure Callbacks)
+
+`std::function` replaced with `ResponseSink` — a two-word struct (16 bytes) with direct function pointer calls, used by `Procedure::feed()`/`feedExternalTyped()` and the runner/orchestrator. `makeResponseSink()` wraps capturing lambdas with one heap allocation at creation (refcounted, shared by copies); invocation is allocation-free.
 
 ### Fixed-Array Channel Pool
 

@@ -49,7 +49,8 @@ static ParsedMessage makeCMServiceRequest(L3CMServiceType::TypeCode svcType) {
 }
 
 // Helper: generic empty response sink used in integration tests.
-static inline void noopSink(SMAction, const ParsedMessage&, const SubscriberSession*) {}
+// Stateless callback via the zero-allocation fn+ctx path (no shared holder).
+static const ResponseSink noopSink{[](SMAction, const ParsedMessage&, const SubscriberSession*, void*) {}, nullptr};
 
 // Test: Full Location Update flow through ProcedureRunner with SubscriberRegistry.
 // Creates a session via registry, feeds CMServiceRequest to auto-create LU procedure,

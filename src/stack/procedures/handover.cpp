@@ -56,7 +56,7 @@ void HandoverProcedure::doComplete() {
 }
 
 ProcedureStepResult HandoverProcedure::feed(const ParsedMessage& msg,
-    SubscriberSession* session, ResponseSink&& sink) {
+    SubscriberSession* session, ResponseSink sink) {
     (void)session;
     ProcedureStepResult result;
 
@@ -96,7 +96,7 @@ ProcedureStepResult HandoverProcedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult HandoverProcedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink&& sink) {
+    const ExternalData& data, ResponseSink sink) {
     ProcedureStepResult result;
 
     if (const auto* target = std::get_if<HandoverTarget>(&data)) {

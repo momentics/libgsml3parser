@@ -77,7 +77,7 @@ For software BTS developers who need a complete Layer 3 signaling stack. This mo
 │                    BTS Stack Mode                                 │
 │  ┌─────────────────────────────────────────────────────────────┐  │
 │  │              ProcedureOrchestrator                          │  │
-│  │  CMServiceReq → [Identity] → Auth → Ciphering → LU Accept   │  │
+│  │  CMServiceReq->[Identity]->Auth->Ciphering->LU Accept       │  │
 │  └───────────────────┬─────────────────────────────────────────┘  │
 │                      │ feed() / tickAll()                         │
 │  ┌───────────────────▼─────────────────────────────────────────┐  │

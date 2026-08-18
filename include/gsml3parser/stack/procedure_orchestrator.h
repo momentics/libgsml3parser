@@ -74,7 +74,7 @@ public:
     /// @param data Strongly-typed external data (AuthChallenge, VLRDecision, etc.).
     /// @param sink Optional response callback.
     /// @return ProcedureStepResult from the active procedure or phase handler.
-    [[nodiscard]] ProcedureStepResult feedExternalTyped(const ExternalData& data, ResponseSink&& sink = {});
+    [[nodiscard]] ProcedureStepResult feedExternalTyped(const ExternalData& data, ResponseSink sink = {});
 
     /// Tick all timers for the active chain.
     /// @param delta Elapsed time in milliseconds.
@@ -138,9 +138,9 @@ private:
     [[nodiscard]] ProcedureStepResult handleCallReleasePhase(const ParsedMessage& msg, SubscriberSession* session);
 
     // External data handlers for inline phases
-    [[nodiscard]] ProcedureStepResult handleExternalDataLocationUpdate(const ExternalData& data, ResponseSink&& sink);
-    [[nodiscard]] ProcedureStepResult handleExternalDataIMSIDetach(const ExternalData& data, ResponseSink&& sink);
-    [[nodiscard]] ProcedureStepResult handleExternalDataCallRelease(const ExternalData& data, ResponseSink&& sink);
+    [[nodiscard]] ProcedureStepResult handleExternalDataLocationUpdate(const ExternalData& data, ResponseSink sink);
+    [[nodiscard]] ProcedureStepResult handleExternalDataIMSIDetach(const ExternalData& data, ResponseSink sink);
+    [[nodiscard]] ProcedureStepResult handleExternalDataCallRelease(const ExternalData& data, ResponseSink sink);
 
     // Detect chain type from incoming message
     [[nodiscard]] ChainPhase detectChainPhase(const ParsedMessage& msg) const;
