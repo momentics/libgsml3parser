@@ -280,7 +280,7 @@ public:
 | Method | Description |
 |--------|-------------|
 | `readField(nbits)` | Read `nbits` bits, advance position. Returns error if past end. |
-| `peekField(nbits)` | Read without advancing. Returns 0 for out-of-bounds bits. |
+| `peekField(nbits)` | Read without advancing. `nbits` is clamped to 32 (return type is `uint32_t`), so requesting more than 32 bits is safe (no undefined behavior). Returns 0 when no bits are available (empty/null buffer) or for out-of-bounds bits. |
 | `hasMore()` | True if more bits available |
 | `remainingBits()` | Number of unread bits remaining |
 | `position()` | Current bit position |
@@ -288,6 +288,12 @@ public:
 | `readBytes(out, count)` | Read whole bytes into buffer. Optimized for aligned reads. |
 
 **Bit ordering:** MSB-first within each octet (bit 7 is read first).
+
+> **Safety notes:** `peekField(nbits)` clamps `nbits` to 32 (its return type is
+> `uint32_t`), so requesting more than 32 bits is safe and never triggers undefined
+> behavior. When no bits are available (empty or null buffer), `peekField` returns 0
+> instead of performing a negative shift. `readField(nbits)` rejects `nbits > 32` with an
+> error and reads at most the bits that remain.
 
 ### BitWriter
 

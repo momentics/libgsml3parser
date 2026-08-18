@@ -119,8 +119,16 @@ public:
         return Expected<uint32_t>::hold(val);
     }
 
+    /// Peek at the next \p nbits bits without advancing the position.
+    /// Returns the value right-aligned, zero-extended if fewer than \p nbits
+    /// bits remain. \p nbits is clamped to 32 (the return type is uint32_t),
+    /// so requesting more than 32 bits is safe (no undefined behavior).
+    /// Returns 0 when no bits are available (empty/null buffer).
     [[nodiscard]] uint32_t peekField(unsigned nbits) const {
         if (nbits == 0) return 0u;
+        // peekField returns uint32_t, so it can never expose more than 32 bits.
+        // Clamp nbits to 32 up-front so every right/left shift below has a
+        // non-negative count (a shift count >= the type width is undefined behavior).
         if (nbits > 32) nbits = 32;
 
         size_t limit = mPos + nbits;
@@ -136,6 +144,7 @@ public:
             if (toLoad > 4) toLoad = 4;
             unsigned actual;
             uint32_t loaded = loadN(mBuf, mByteIndex, totalBytes, toLoad, actual);
+            if (actual == 0) return 0u;   // no bytes available (null/empty buffer) -> avoid negative shift
             uint32_t val = (loaded >> (actual * 8 - actualNbits)) & mask;
             return val << (nbits - actualNbits);
         }
@@ -146,6 +155,7 @@ public:
         if (availBytes >= needBytes && needBytes <= 4) {
             unsigned actual;
             uint32_t loaded = loadN(mBuf, mByteIndex, totalBytes, needBytes, actual);
+            if (actual == 0) return 0u;   // no bytes available (null/empty buffer) -> avoid negative shift
             uint32_t val = (loaded >> (actual * 8 - mBitOffset - actualNbits)) & mask;
             return val << (nbits - actualNbits);
         } else if (mBitOffset + actualNbits <= 32) {
@@ -154,6 +164,7 @@ public:
             if (toLoad > 4) toLoad = 4;
             unsigned actual;
             uint32_t loaded = loadN(mBuf, mByteIndex, totalBytes, toLoad, actual);
+            if (actual == 0) return 0u;   // no bytes available (null/empty buffer) -> avoid negative shift
             uint32_t val = (loaded >> (actual * 8 - mBitOffset - actualNbits)) & mask;
             return val << (nbits - actualNbits);
         }

@@ -234,3 +234,38 @@ TEST(BitReaderTest, PeekPastEndReturnsZero) {
     EXPECT_EQ(br.peekField(8), 0u);
     EXPECT_EQ(br.peekField(1), 0u);
 }
+
+// Regression: peekField with nbits > 32 clamps to 32 (returns top 32 bits), no UB.
+TEST(BitReaderTest, PeekFieldOver32Bits_ClampsTo32) {
+    uint8_t buf[] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC, 0xDE, 0xF0};
+    BitReader br(buf, 64);
+    EXPECT_EQ(br.peekField(40), 0x12345678u) << "peekField(40) clamps to 32 -> top 32 bits";
+    EXPECT_EQ(br.position(), 0u) << "peek must not advance";
+    BitReader br2(buf, 64);
+    (void)br2.readField(4);
+    EXPECT_EQ(br2.peekField(40), 0x23456789u) << "misaligned peekField(40) clamps to 32";
+    EXPECT_EQ(br2.position(), 4u);
+}
+
+// Regression: peekField on an empty/null buffer must return 0 WITHOUT undefined
+// behavior (previously `actual == 0` produced a negative right-shift).
+TEST(BitReaderTest, PeekFieldEmptyBuffer_ReturnsZeroNoUB) {
+    uint8_t buf[] = {0x00};
+    BitReader brEmpty(buf, 0);            // zero total bits
+    EXPECT_EQ(brEmpty.peekField(8), 0u);
+    EXPECT_EQ(brEmpty.peekField(40), 0u);
+    BitReader brNull(nullptr, 0);         // null buffer, zero bits
+    EXPECT_EQ(brNull.peekField(8), 0u);
+    EXPECT_EQ(brNull.peekField(32), 0u);
+}
+
+// Regression: a null buffer with a non-zero declared bit count must still return 0
+// WITHOUT undefined behavior. This exercises the `actual == 0` guard in the
+// aligned branch (loadN yields zero bytes, so the right-shift count would
+// otherwise be negative).
+TEST(BitReaderTest, PeekFieldNullBufferWithBits_ReturnsZeroNoUB) {
+    BitReader br(nullptr, 16);            // null buffer, 16 declared bits
+    EXPECT_EQ(br.peekField(8), 0u);
+    EXPECT_EQ(br.peekField(16), 0u);
+    EXPECT_EQ(br.peekField(40), 0u);
+}
