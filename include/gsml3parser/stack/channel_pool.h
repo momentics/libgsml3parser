@@ -28,9 +28,11 @@
 /// Thread safety: NOT thread-safe. For multi-threaded access, the caller must
 /// provide external synchronization (e.g., one ChannelPool per BTS instance,
 /// protected by the event loop).
-/// Performance: allocate() is O(1) via per-type free-list. Internal storage
-/// uses std::unordered_map + std::vector but only grows during channel
-/// registration (not on hot path). addChannel() and removeChannel() are cold-path.
+/// Performance: allocate() is O(1) via per-type free-list. release() is O(1)
+/// via per-type unordered_set find/erase. Internal storage uses std::array of
+/// per-type vectors (free) and std::array of per-type unordered_sets
+/// (allocated); both only grow during channel registration (not on hot path).
+/// addChannel() and removeChannel() are cold-path.
 ///
 /// Example:
 /// @code
@@ -45,7 +47,9 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <optional>
+#include <unordered_set>
 #include <vector>
 
 #include "gsml3parser/types.h"
@@ -64,6 +68,28 @@ struct ChannelDescriptor {
 
     bool operator==(const ChannelDescriptor&) const = default;
 };
+
+} // namespace gsml3parser
+
+namespace std {
+
+/// Hash for ChannelDescriptor (type, trx, timeslot, arfcn) — unique composite key.
+/// Enables O(1) find/erase in std::unordered_set<ChannelDescriptor>.
+/// Must be defined before ChannelPool (its unordered_set member instantiates this).
+template <>
+struct hash<gsml3parser::ChannelDescriptor> {
+    size_t operator()(const gsml3parser::ChannelDescriptor& d) const noexcept {
+        uint64_t key = (static_cast<uint64_t>(d.arfcn) << 24)
+                     | (static_cast<uint64_t>(d.timeslot) << 16)
+                     | (static_cast<uint64_t>(d.trxNumber) << 8)
+                     | static_cast<uint64_t>(d.type);
+        return hash<uint64_t>{}(key);
+    }
+};
+
+} // namespace std
+
+namespace gsml3parser {
 
 /// Decodes Request Reference (RA) from a RACH burst into the needed
 /// channel type, following GSM 04.08 Table 9.9.
@@ -98,16 +124,18 @@ struct ChannelDescriptor {
 ///
 /// Channels are grouped by type in per-type free-lists for O(1) allocation.
 /// During BTS initialization, addChannel() registers available channels.
-/// At runtime, allocate() pops from the front of the appropriate free-list,
-/// and release() pushes channels back to the list.
+/// At runtime, allocate() pops from the back of the appropriate free-list,
+/// and release() pushes channels back to the list (O(1) set lookup).
 ///
 /// 3GPP TS 04.08 - Radio Resource Management channel assignment procedures.
 ///
 /// Thread safety: NOT thread-safe. For multi-threaded access, the caller must
 /// provide external synchronization (e.g., one ChannelPool per BTS instance,
 /// protected by the event loop).
-/// Performance: allocate() is O(1) via per-type free-list pop_front.
-/// Internal storage uses std::unordered_map + std::vector but only grows
+/// Performance: allocate() is O(1) via per-type free-list pop_back.
+/// release() is O(1) via per-type unordered_set find/erase.
+/// Internal storage uses std::array of per-type vectors (free) and
+/// std::array of per-type unordered_sets (allocated); both only grow
 /// during channel registration (not on hot path).
 class ChannelPool {
 public:
@@ -123,6 +151,7 @@ public:
     /// @param desc The channel descriptor to remove.
     /// @return True if the channel was found and removed, false otherwise.
     /// If the channel was allocated, it is simply forgotten; if free, it is removed from the free-list.
+    /// Performance: O(1) if allocated (set erase); O(N) free-list scan if free (cold path).
     bool removeChannel(const ChannelDescriptor& desc);
 
     /// Allocate a channel of the requested type. Returns nullopt if none available.
@@ -136,6 +165,7 @@ public:
     /// @param desc The channel descriptor to release.
     /// @return True if the channel was known to this pool and released, false otherwise.
     /// Restores the channel to the free-list for its type.
+    /// Performance: O(1) via per-type unordered_set find/erase + free-list push.
     bool release(const ChannelDescriptor& desc);
 
     /// Check if a specific channel is currently free (available for allocation).
@@ -176,7 +206,7 @@ public:
     /// Number of currently allocated (in-use) channels of a given type.
     /// @param type The channel type to query.
     /// @return Count of allocated channels that have not been released.
-    /// O(1) via vector::size() on the allocated list.
+    /// O(1) via unordered_set::size() on the allocated set.
     [[nodiscard]] size_t allocatedCount(ChannelType type) const;
 
 private:
@@ -192,7 +222,8 @@ private:
 
     // Per-type bucket of allocated (in-use) channel descriptors.
     // Used for tracking total count and release validation.
-    std::array<std::vector<ChannelDescriptor>, kMaxChannelTypes> mAllocatedByType{};
+    // unordered_set gives O(1) find/erase for release() (was O(N) vector scan).
+    std::array<std::unordered_set<ChannelDescriptor>, kMaxChannelTypes> mAllocatedByType{};
 };
 
 } // namespace gsml3parser

@@ -22,6 +22,9 @@
 #include <gtest/gtest.h>
 #include <gsml3parser/stack/channel_pool.h>
 
+#include <chrono>
+#include <vector>
+
 using namespace gsml3parser;
 
 // ── RA Decoding Tests (GSM 04.08 Table 9.9) ────────────────────────────
@@ -318,4 +321,40 @@ TEST(ChannelPoolTest, MultipleTypes_coexistIndependently) {
     EXPECT_EQ(pool.freeCount(ChannelType::SDCCHType), 0u);
     EXPECT_EQ(pool.freeCount(ChannelType::TCHFType), 0u);
     EXPECT_EQ(pool.freeCount(ChannelType::TCHHType), 0u);
+}
+
+// ── Performance / Scaling Tests ────────────────────────────────────────
+
+// Test: release() is O(1) — 100K channels allocated, 100K releases must be fast.
+// Importance: release was O(N) linear scan; at scale it degrades the hot path.
+// 3GPP coverage: TS 04.08 channel assignment/release at scale.
+TEST(ChannelPoolTest, Release_O1Fast) {
+    ChannelPool pool;
+    constexpr int N = 100000;
+    std::vector<ChannelDescriptor> allocated;
+    allocated.reserve(N);
+    for (int i = 0; i < N; ++i) {
+        // Unique descriptor per index via mixed-radix decomposition so that no
+        // two channels collide (arfcn 16 bits, trx 8 bits, timeslot 3 bits cover
+        // far more than 100K distinct channels).
+        pool.addChannel({ChannelType::SDCCHType,
+                         static_cast<uint8_t>((i / 65536) % 256),
+                         static_cast<uint8_t>((i / (65536 * 256)) % 8),
+                         static_cast<uint16_t>(i % 65536)});
+    }
+    for (int i = 0; i < N; ++i) {
+        auto ch = pool.allocate(ChannelType::SDCCHType);
+        ASSERT_TRUE(ch.has_value());
+        allocated.push_back(*ch);
+    }
+    auto t0 = std::chrono::steady_clock::now();
+    int ok = 0;
+    for (auto& ch : allocated) if (pool.release(ch)) ++ok;
+    auto t1 = std::chrono::steady_clock::now();
+    double ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
+    EXPECT_EQ(ok, N);
+    EXPECT_EQ(pool.freeCount(ChannelType::SDCCHType), static_cast<size_t>(N));
+#ifndef GSML3PARSER_ASAN
+    EXPECT_LT(ms, 100.0) << "100K release() took " << ms << "ms (expected O(1), < 100ms)";
+#endif
 }

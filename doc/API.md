@@ -3123,8 +3123,8 @@ public:
 |--------|-------------|------------|
 | `addChannel(desc)` | Register a channel (cold path, init time) | O(1) amortized |
 | `allocate(type)` | Pop from per-type free-list | O(1) |
-| `release(desc)` | Return channel to free-list | O(N) find + O(1) push |
-| `removeChannel(desc)` | Permanently remove from pool | O(N) |
+| `release(desc)` | Return channel to free-list | O(1) find/erase (per-type unordered_set) + O(1) push |
+| `removeChannel(desc)` | Permanently remove from pool | O(1) if allocated; O(N) free-list scan if free (cold path) |
 | `isFree(desc)` | Check if channel is available | O(N) |
 | `freeCount(type)` | Number of free channels of type | O(1) |
 | `totalCount()` | Total channels (free + allocated) | O(T) |
@@ -3184,7 +3184,8 @@ pool.release(*ch);
 |--------|-------|
 | `sizeof(ChannelDescriptor)` | 8 bytes (with padding) |
 | allocate() complexity | O(1) - vector pop_back on free-list |
-| Heap allocations | None on hot path (allocate/release). addChannel() grows internal vectors. |
+| release() complexity | O(1) - unordered_set find/erase on allocated set + free-list push |
+| Heap allocations | Amortized O(1) on hot path (allocate/release). addChannel() grows internal vectors; the allocated set may rehash as channels are allocated. |
 | Thread safety | NOT thread-safe; caller must provide synchronization for multi-threaded access |
 
 ---
@@ -4578,7 +4579,7 @@ The following optimizations have been applied to achieve high-throughput, low-la
 
 ### Fixed-Array Channel Pool
 
-`ChannelPool` uses `std::array<std::vector<ChannelDescriptor>, 32>` instead of `std::unordered_map<ChannelType, vector>`. O(1) direct index lookup for all channel operations.
+`ChannelPool` uses `std::array<std::vector<ChannelDescriptor>, 32>` (free-lists) + `std::array<std::unordered_set<ChannelDescriptor>, 32>` (allocated tracking) instead of `std::unordered_map<ChannelType, vector>`. O(1) direct index lookup, O(1) `allocate()` (vector pop_back) and O(1) `release()` (unordered_set find/erase).
 
 ### ShardedChannelPool (Thread-Safe Concurrency)
 
