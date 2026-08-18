@@ -313,3 +313,152 @@ TEST(SSR_tickAllTimers, Parallel_Correct) {
     size_t n = reg.tickAllTimers(100ms, expired);
     EXPECT_EQ(n, 3u);
 }
+
+// Test: remove() reclaims the session entry (no unbounded growth).
+// Importance: A long-running BTS with session churn must not leak memory;
+// previously removed entries stayed in the map forever with active=false,
+// which also made the TMSI un-reusable (createByTMSI returned nullptr).
+// 3GPP: TS 24.008 4.4 - subscriber data lifecycle at scale.
+TEST(SR_remove, ReclaimsEntry_MemoryStable) {
+    SubscriberRegistry reg;
+    const int N = 1000;
+
+    // Create and remove in batches; the registry must stay empty afterwards.
+    for (int batch = 0; batch < 10; ++batch) {
+        for (int i = 0; i < N; ++i) {
+            auto* sess = reg.createByTMSI(static_cast<uint32_t>(batch * N + i + 1));
+            ASSERT_NE(sess, nullptr);
+        }
+        for (int i = 0; i < N; ++i) {
+            auto* sess = reg.findByTMSI(static_cast<uint32_t>(batch * N + i + 1));
+            ASSERT_NE(sess, nullptr);
+            EXPECT_TRUE(reg.remove(sess));
+        }
+        EXPECT_EQ(reg.count(), 0u) << "Batch " << batch << " left sessions behind";
+    }
+
+    // After full removal, every TMSI must be reusable (entry was erased,
+    // not just flagged inactive).
+    for (int i = 0; i < N; ++i) {
+        auto* sess = reg.createByTMSI(static_cast<uint32_t>(i + 1));
+        ASSERT_NE(sess, nullptr) << "TMSI " << (i + 1) << " not reusable after removal";
+    }
+    EXPECT_EQ(reg.count(), static_cast<size_t>(N));
+}
+
+// Test: auto-assigned TMSI (createByIMSI) never collides with user-assigned
+// TMSIs, even after removals changed the map size.
+// Importance: The old size()+1 scheme collided after removals and returned
+// nullptr for valid new IMSIs; the high-water-mark scheme must not.
+TEST(SR_createByIMSI, AutoTMSI_NoCollisionAfterRemovals) {
+    SubscriberRegistry reg;
+
+    // Occupy TMSI 1 and 2, then remove TMSI 1 (map size drops to 1).
+    auto* s1 = reg.createByTMSI(1);
+    ASSERT_NE(s1, nullptr);
+    (void)reg.createByTMSI(2);
+    EXPECT_TRUE(reg.remove(s1));
+
+    // Old scheme would compute size()+1 = 2 -> collision -> nullptr.
+    // New scheme must find a free TMSI (1) and succeed.
+    auto* a = reg.createByIMSI("244050000000001");
+    ASSERT_NE(a, nullptr) << "Auto TMSI allocation collided after a removal";
+    auto* b = reg.createByIMSI("244050000000002");
+    ASSERT_NE(b, nullptr);
+    EXPECT_NE(a, b);
+
+    // Both IMSI indexes resolve to distinct sessions.
+    EXPECT_EQ(reg.findByIMSI("244050000000001"), a);
+    EXPECT_EQ(reg.findByIMSI("244050000000002"), b);
+}
+
+// Test: findLocked returns the session with an engaged shared guard, and the
+// guard releases the shard lock on destruction.
+// Importance: concurrent-read safety requires the lock to be held for the
+// whole lifetime of the session access.
+TEST(SSR_findLocked, ReturnsSessionAndEngagedGuard) {
+    ShardedSubscriberRegistry<4> reg;
+    auto* sess = reg.createByTMSI(0x77777777);
+    ASSERT_NE(sess, nullptr);
+
+    {
+        auto locked = reg.findLocked(0x77777777);
+        EXPECT_EQ(locked.session, sess);
+        EXPECT_TRUE(locked.guard.engaged());
+        // Session is usable while the guard is alive.
+        EXPECT_EQ(locked.session->context.identity().tmsi(), 0x77777777u);
+    }
+    // Guard destroyed here; shard lock released.
+
+    // Non-existing TMSI: null session, guard still engaged (released on exit).
+    auto missing = reg.findLocked(0x99999999);
+    EXPECT_EQ(missing.session, nullptr);
+    EXPECT_TRUE(missing.guard.engaged());
+}
+
+// Test: lockForTMSI grants exclusive access to the shard's registry for
+// modification without deadlocking (no re-entrant locking).
+TEST(SSR_lockForTMSI, ExclusiveAccess_ModifyUnderLock) {
+    ShardedSubscriberRegistry<4> reg;
+
+    {
+        auto locked = reg.lockForTMSI(0x12340000);
+        EXPECT_TRUE(locked.guard.engaged());
+        auto* sess = locked.registry.createByTMSI(0x12340000);
+        ASSERT_NE(sess, nullptr);
+        sess->lapdmLink = 7;
+    }
+    // Lock released; the session is still findable.
+    auto* found = reg.findByTMSI(0x12340000);
+    ASSERT_NE(found, nullptr);
+    EXPECT_EQ(found->lapdmLink, 7u);
+}
+
+// Test: concurrent readers (findLocked) and writers (lockForTMSI) do not
+// tear reads or deadlock.
+// Importance: this is the core concurrent-access model for multi-threaded
+// BTS deployments (per-shard shared_mutex discipline).
+TEST(SSR_Guards, ConcurrentReadModify_NoTornReads) {
+    ShardedSubscriberRegistry<16> reg;
+    constexpr int kSessions = 256;
+    constexpr int kIters = 2000;
+
+    for (int i = 0; i < kSessions; ++i) {
+        auto* sess = reg.createByTMSI(static_cast<uint32_t>(i + 1));
+        ASSERT_NE(sess, nullptr);
+    }
+
+    std::atomic<int> tornReads{0};
+    std::atomic<bool> stop{false};
+
+    // Writers: modify lapdmLink under the exclusive shard lock.
+    auto writer = [&]() {
+        for (int i = 0; i < kIters; ++i) {
+            uint32_t tmsi = static_cast<uint32_t>((i % kSessions) + 1);
+            auto locked = reg.lockForTMSI(tmsi);
+            auto* sess = locked.registry.findByTMSI(tmsi);
+            if (sess) sess->lapdmLink = static_cast<uint8_t>(i & 0xFF);
+        }
+    };
+
+    // Readers: read under the shared shard lock; a torn read would mean the
+    // lock discipline is broken (writer changed the field mid-read).
+    auto reader = [&]() {
+        for (int i = 0; i < kIters && !stop; ++i) {
+            uint32_t tmsi = static_cast<uint32_t>((i % kSessions) + 1);
+            auto locked = reg.findLocked(tmsi);
+            if (!locked.session) { tornReads.fetch_add(1); continue; }
+            uint8_t a = locked.session->lapdmLink;
+            uint8_t b = locked.session->lapdmLink;
+            if (a != b) tornReads.fetch_add(1);
+        }
+    };
+
+    std::thread w1(writer);
+    std::thread w2(writer);
+    std::thread r1(reader);
+    std::thread r2(reader);
+    w1.join(); w2.join(); r1.join(); r2.join();
+
+    EXPECT_EQ(tornReads.load(), 0);
+}

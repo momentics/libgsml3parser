@@ -237,7 +237,9 @@ else()
 endif()
 
 if(ENABLE_ASAN AND MSVC)
-    target_compile_options(gsml3parser PRIVATE /fsanitize=address)
+    # /Zi: MSVC warns C5072 (ASan without debug info) in Release; /Zi also
+    # produces more detailed ASan error reports.
+    target_compile_options(gsml3parser PRIVATE /fsanitize=address /Zi)
     target_link_options(gsml3parser PRIVATE /fsanitize=address)
     set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT ProgramDatabase)
 endif()

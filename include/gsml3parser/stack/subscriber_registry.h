@@ -182,6 +182,11 @@ private:
 
     // LAPDm link key (trx:8 | ts:8 | lapdmLink:8) -> session pointer
     std::unordered_map<uint32_t, SubscriberSession*> mByLink;
+
+    // High-water mark for auto-assigned TMSIs (createByIMSI). Advances past
+    // any in-use TMSI so auto-assignment never collides with user-assigned
+    // values. TMSI 0 is reserved (all-zero TMSI per TS 24.008) and skipped.
+    uint32_t mNextAutoTmsi{1};
 };
 
 /// Thread-safe, high-concurrency subscriber registry.
@@ -193,6 +198,21 @@ private:
 /// 3GPP TS 24.008 - Scalable subscriber data management.
 /// Thread safety: thread-safe via per-shard shared_mutex.
 /// Memory: N independent SubscriberRegistry instances + mutex overhead.
+///
+/// CONCURRENT ACCESS MODEL (read before using from multiple threads):
+///   - Lookups (findByTMSI/findByIMSI/findByLink) are internally locked and
+///     return a raw pointer. The pointer is only safe to dereference while
+///     the session cannot be modified or removed by another thread.
+///   - For concurrent read access, use findLocked(): it returns the session
+///     together with a SharedGuard that keeps the shard's shared lock held
+///     for the guard's lifetime. Use the session only while the guard lives.
+///   - For concurrent modification (create/assign/remove), use lockForTMSI():
+///     it returns the shard's registry together with a UniqueGuard holding
+///     the exclusive lock. Do NOT call the locking lookup APIs while holding
+///     the UniqueGuard (the shard mutex is not recursive).
+///   - Single-threaded (event-loop) use of the raw pointer APIs remains safe
+///     and lock-free with respect to other threads only if no other thread
+///     touches the same registry concurrently.
 template<int N = 16>
 class ShardedSubscriberRegistry {
     static_assert((N & (N - 1)) == 0, "N must be a power of two");
@@ -208,6 +228,58 @@ class ShardedSubscriberRegistry {
 public:
     ShardedSubscriberRegistry() = default;
 
+    /// RAII guard holding a SHARED lock on one shard (concurrent readers).
+    /// Movable, non-copyable. Releases the lock on destruction.
+    class SharedGuard {
+        std::shared_lock<std::shared_mutex> mLock;
+    public:
+        SharedGuard() = default;
+        explicit SharedGuard(Shard& shard) : mLock(shard.mutex) {}
+        SharedGuard(SharedGuard&&) noexcept = default;
+        SharedGuard& operator=(SharedGuard&&) noexcept = default;
+        SharedGuard(const SharedGuard&) = delete;
+        SharedGuard& operator=(const SharedGuard&) = delete;
+
+        /// True if this guard holds a shard lock.
+        [[nodiscard]] bool engaged() const noexcept {
+            return mLock.owns_lock();
+        }
+    };
+
+    /// RAII guard holding an EXCLUSIVE lock on one shard (modification).
+    /// Movable, non-copyable. Releases the lock on destruction.
+    class UniqueGuard {
+        std::unique_lock<std::shared_mutex> mLock;
+    public:
+        UniqueGuard() = default;
+        explicit UniqueGuard(Shard& shard) : mLock(shard.mutex) {}
+        UniqueGuard(UniqueGuard&&) noexcept = default;
+        UniqueGuard& operator=(UniqueGuard&&) noexcept = default;
+        UniqueGuard(const UniqueGuard&) = delete;
+        UniqueGuard& operator=(const UniqueGuard&) = delete;
+
+        /// True if this guard holds a shard lock.
+        [[nodiscard]] bool engaged() const noexcept {
+            return mLock.owns_lock();
+        }
+    };
+
+    /// Result of findLocked(): a session pointer plus the guard that keeps
+    /// its shard locked for concurrent-read safety. Keep the guard alive
+    /// for as long as the session pointer is used.
+    struct LockedSession {
+        SubscriberSession* session{nullptr};
+        SharedGuard guard;
+    };
+
+    /// Result of lockForTMSI(): direct access to the shard's registry plus
+    /// the exclusive guard. Use the registry (not the outer locking APIs)
+    /// while the guard is alive.
+    struct LockedShard {
+        SubscriberRegistry& registry;
+        UniqueGuard guard;
+    };
+
     /// Create session by TMSI. Thread-safe. O(1) hash + per-shard lock.
     /// @param tmsi 32-bit TMSI identifier.
     /// @return Pointer to created session, or nullptr if duplicate.
@@ -216,7 +288,26 @@ public:
     /// Find session by TMSI. Thread-safe. Uses shared lock.
     /// @param tmsi 32-bit TMSI to look up.
     /// @return Pointer to session, or nullptr if not found.
+    /// @note The returned pointer is safe to dereference concurrently only
+    ///       while the session cannot be modified/removed elsewhere; for
+    ///       guaranteed concurrent-read safety use findLocked() instead.
     [[nodiscard]] SubscriberSession* findByTMSI(uint32_t tmsi) noexcept;
+
+    /// Find session by TMSI and hold the shard's SHARED lock for concurrent
+    /// read safety. The returned LockedSession keeps the lock engaged until
+    /// its SharedGuard is destroyed; use the session pointer only while the
+    /// guard is alive.
+    /// @param tmsi 32-bit TMSI to look up.
+    /// @return LockedSession with session (nullptr if not found) and guard.
+    [[nodiscard]] LockedSession findLocked(uint32_t tmsi);
+
+    /// Acquire the shard's EXCLUSIVE lock for the TMSI's shard and expose
+    /// that shard's registry for modification (createByTMSI, assignChannel,
+    /// remove, ...). Do not call this class's locking APIs while the guard
+    /// is alive (the shard mutex is not recursive).
+    /// @param tmsi Any TMSI whose shard should be locked.
+    /// @return LockedShard with registry reference and exclusive guard.
+    [[nodiscard]] LockedShard lockForTMSI(uint32_t tmsi);
 
     /// Find session by IMSI. Thread-safe. Scans all shards (cold path).
     /// @param imsi BCD digit string of IMSI.

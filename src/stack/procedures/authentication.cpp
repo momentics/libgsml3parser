@@ -82,8 +82,13 @@ ProcedureStepResult AuthenticationProcedure::feed(const ParsedMessage& msg,
                 if (mHasExpectedSRES) {
                     const auto* authResp = tryGet<L3AuthenticationResponse>(msg);
                     if (authResp) {
-                        uint32_t expected = mExpectedSRES[0] | (mExpectedSRES[1] << 8) |
-                                           (mExpectedSRES[2] << 16) | (mExpectedSRES[3] << 24);
+                        // SRES is compared big-endian: expectedSres[0] is the MSB,
+                        // matching the 32-bit SRES IE encoding of TS 24.008 10.5.1.22
+                        // (first octet on the wire is the most significant).
+                        uint32_t expected = (static_cast<uint32_t>(mExpectedSRES[0]) << 24) |
+                                           (static_cast<uint32_t>(mExpectedSRES[1]) << 16) |
+                                           (static_cast<uint32_t>(mExpectedSRES[2]) << 8) |
+                                            static_cast<uint32_t>(mExpectedSRES[3]);
                         if (authResp->sres() == expected) {
                             complete();
                             result.action = ProcedureStepResult::Action::Completed;

@@ -91,8 +91,14 @@ public:
                 // 'actual' bytes packed at MSB. Field starts at bit mBitOffset of first byte.
                 // Shift right so the field lands at LSB.
                 val = (loaded >> (actual * 8 - mBitOffset - nbits)) & mask;
-            } else if (availBytes >= 1 && mBitOffset + nbits <= 32) {
-                unsigned toLoad = std::min<unsigned>(availBytes, 4u);
+            } else if (mBitOffset + nbits <= 32) {
+                // Load exactly the bytes the field spans (at most 4). This is
+                // always in-bounds: mPos + nbits <= mTotalBits guarantees the
+                // spanned bytes exist. Using the full span (not the remaining
+                // byte count) keeps the right-shift amount non-negative even
+                // when the field ends exactly at the last bit of the buffer.
+                unsigned toLoad = fieldSpanBytes(mBitOffset, nbits);
+                if (toLoad > 4) toLoad = 4;
                 unsigned actual;
                 uint32_t loaded = loadN(mBuf, mByteIndex, totalBytes, toLoad, actual);
                 val = (loaded >> (actual * 8 - mBitOffset - nbits)) & mask;
@@ -120,6 +126,7 @@ public:
         size_t limit = mPos + nbits;
         if (limit > mTotalBits) limit = mTotalBits;
         unsigned actualNbits = static_cast<unsigned>(limit - mPos);
+        if (actualNbits == 0) return 0u;
 
         size_t totalBytes = mBuf ? (mTotalBits + 7) / 8 : 0;
         uint32_t mask = ~0u >> (32 - actualNbits);
@@ -141,8 +148,10 @@ public:
             uint32_t loaded = loadN(mBuf, mByteIndex, totalBytes, needBytes, actual);
             uint32_t val = (loaded >> (actual * 8 - mBitOffset - actualNbits)) & mask;
             return val << (nbits - actualNbits);
-        } else if (availBytes >= 1 && mBitOffset + actualNbits <= 32) {
-            unsigned toLoad = std::min<unsigned>(availBytes, 4u);
+        } else if (mBitOffset + actualNbits <= 32) {
+            // Load the full spanned bytes (see readField for the in-bounds proof).
+            unsigned toLoad = fieldSpanBytes(mBitOffset, actualNbits);
+            if (toLoad > 4) toLoad = 4;
             unsigned actual;
             uint32_t loaded = loadN(mBuf, mByteIndex, totalBytes, toLoad, actual);
             uint32_t val = (loaded >> (actual * 8 - mBitOffset - actualNbits)) & mask;

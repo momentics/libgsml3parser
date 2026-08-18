@@ -35,14 +35,22 @@ SubscriberSession* SubscriberRegistry::createByTMSI(uint32_t tmsi) {
 }
 
 SubscriberSession* SubscriberRegistry::createByIMSI(std::string_view imsi) {
-    if (mByIMSI.count(std::string(imsi))) return nullptr;
+    std::string key(imsi);
+    if (mByIMSI.count(key) != 0) return nullptr;
 
-    uint32_t tmsi = static_cast<uint32_t>(mByTMSI.size() + 1);
+    // Allocate a unique TMSI: advance the high-water mark past any in-use
+    // value (user-assigned TMSIs may occupy arbitrary slots) and skip the
+    // reserved all-zero TMSI.
+    uint32_t tmsi = mNextAutoTmsi++;
+    while (tmsi == 0 || mByTMSI.count(tmsi) != 0) {
+        tmsi = mNextAutoTmsi++;
+    }
+
     auto [tmsiIt, inserted] = mByTMSI.emplace(tmsi, SessionEntry{});
     if (!inserted) return nullptr;
 
     tmsiIt->second.session.context.setIMSI(imsi);
-    mByIMSI[std::string(imsi)] = tmsi;
+    mByIMSI.emplace(std::move(key), tmsi);
     return &tmsiIt->second.session;
 }
 
@@ -122,14 +130,16 @@ void SubscriberRegistry::releaseChannel(SubscriberSession* session) noexcept {
 }
 
 bool SubscriberRegistry::remove(SubscriberSession* session) noexcept {
-    for (auto& [tmsi, entry] : mByTMSI) {
-        if (&entry.session == session && entry.active) {
+    for (auto it = mByTMSI.begin(); it != mByTMSI.end(); ++it) {
+        if (&it->second.session == session && it->second.active) {
             releaseChannel(session);
             if (session->context.identity().isIMSI()) {
-                std::string imsiStr(session->context.identity().digits());
-                mByIMSI.erase(imsiStr);
+                mByIMSI.erase(std::string(session->context.identity().digits()));
             }
-            entry.active = false;
+            // Erase the entry so memory is reclaimed (previously the entry
+            // stayed in the map with active=false, leaking on every removal).
+            // The session pointer is invalidated by this call.
+            mByTMSI.erase(it);
             return true;
         }
     }
@@ -137,9 +147,8 @@ bool SubscriberRegistry::remove(SubscriberSession* session) noexcept {
 }
 
 void SubscriberRegistry::clear() noexcept {
-    for (auto& [tmsi, entry] : mByTMSI) {
-        entry.active = false;
-    }
+    // Erase all entries to release memory (previously only flagged inactive).
+    mByTMSI.clear();
     mByIMSI.clear();
     mByLink.clear();
 }
@@ -180,6 +189,24 @@ SubscriberSession* ShardedSubscriberRegistry<N>::findByTMSI(uint32_t tmsi) noexc
     int idx = shardIndex(hashTMSI(tmsi));
     std::shared_lock lock(mShards[idx].mutex);
     return mShards[idx].registry.findByTMSI(tmsi);
+}
+
+template<int N>
+typename ShardedSubscriberRegistry<N>::LockedSession
+ShardedSubscriberRegistry<N>::findLocked(uint32_t tmsi) {
+    int idx = shardIndex(hashTMSI(tmsi));
+    LockedSession ls;
+    ls.guard = SharedGuard(mShards[idx]);
+    ls.session = mShards[idx].registry.findByTMSI(tmsi);
+    return ls;
+}
+
+template<int N>
+typename ShardedSubscriberRegistry<N>::LockedShard
+ShardedSubscriberRegistry<N>::lockForTMSI(uint32_t tmsi) {
+    int idx = shardIndex(hashTMSI(tmsi));
+    LockedShard ls{mShards[idx].registry, UniqueGuard(mShards[idx])};
+    return ls;
 }
 
 template<int N>

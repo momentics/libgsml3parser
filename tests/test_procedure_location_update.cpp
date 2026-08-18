@@ -66,13 +66,15 @@ static ParsedMessage makeAuthResponse(uint32_t sres) {
 }
 
 // Helper: build AuthChallenge external data.
+// SRES bytes are stored big-endian (octet 0 = MSB), matching the wire
+// encoding of the SRES IE (TS 24.008 10.5.1.22).
 static AuthChallenge makeAuthChallenge(uint32_t sres) {
     AuthChallenge chal{};
     for (int i = 0; i < 16; ++i) chal.rand[static_cast<size_t>(i)] = static_cast<uint8_t>(0xA0 + i);
-    chal.expectedSres[0] = static_cast<uint8_t>(sres & 0xFF);
-    chal.expectedSres[1] = static_cast<uint8_t>((sres >> 8) & 0xFF);
-    chal.expectedSres[2] = static_cast<uint8_t>((sres >> 16) & 0xFF);
-    chal.expectedSres[3] = static_cast<uint8_t>((sres >> 24) & 0xFF);
+    chal.expectedSres[0] = static_cast<uint8_t>((sres >> 24) & 0xFF);
+    chal.expectedSres[1] = static_cast<uint8_t>((sres >> 16) & 0xFF);
+    chal.expectedSres[2] = static_cast<uint8_t>((sres >> 8) & 0xFF);
+    chal.expectedSres[3] = static_cast<uint8_t>(sres & 0xFF);
     return chal;
 }
 

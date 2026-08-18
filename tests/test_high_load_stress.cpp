@@ -75,8 +75,11 @@ TEST(Stress, _10000Sessions_CreateAndLookup_AllFound) {
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
 
     // Total create + lookup should complete quickly (< 1 second is generous)
+    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x)
+#ifndef GSML3PARSER_ASAN
     EXPECT_LT(elapsed.count(), 1000)
         << "10K create + lookup took " << elapsed.count() << "ms";
+#endif
 }
 
 // Test: tickAllTimers for 10,000 sessions completes in under 50ms.
@@ -105,9 +108,12 @@ TEST(Stress, _10000Sessions_TimerTick_Fast) {
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
 
     EXPECT_EQ(count, 0u) << "No timers should expire with 1ms delta";
+    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x)
+#ifndef GSML3PARSER_ASAN
     EXPECT_LT(elapsed.count(), 50)
         << "tickAllTimers for 10K sessions took " << elapsed.count()
         << "ms (expected < 50ms)";
+#endif
 }
 
 // Test: ShardedSubscriberRegistry handles concurrent create + lookup from 8 threads.
@@ -180,9 +186,12 @@ TEST(Stress, ResponseBuilder_10000Builds_ZeroAlloc_Span) {
     auto t1 = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
 
+    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x)
+#ifndef GSML3PARSER_ASAN
     EXPECT_LT(elapsed.count(), 500)
         << "10K ResponseBuilder span builds took " << elapsed.count()
         << "ms (expected < 500ms)";
+#endif
 
     // Verify arena usage is reasonable
     EXPECT_GT(arena.used(), 0u) << "Arena should have been used";
@@ -264,9 +273,12 @@ TEST(Stress, _100KSessions_ProcedureRunner_Feed_Fast) {
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
 
     // 100K create + feed must complete in under 500ms on modern hardware
+    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x)
+#ifndef GSML3PARSER_ASAN
     EXPECT_LT(elapsed.count(), 500)
         << "100K sessions create + ProcedureRunner::feed took "
         << elapsed.count() << "ms (expected < 500ms)";
+#endif
 
     // Verify all sessions were created
     size_t totalCount = 0;
@@ -350,9 +362,12 @@ TEST(Stress, ResponseToken_Arena_100K_ZeroAlloc) {
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
 
     // 100K feed + build iterations must complete in under 2 seconds
+    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x)
+#ifndef GSML3PARSER_ASAN
     EXPECT_LT(elapsed.count(), 2000)
         << "100K ResponseToken + Arena builds took " << elapsed.count()
         << "ms (expected < 2000ms)";
+#endif
 
     // Verify arena was used (some tokens should produce responses)
     EXPECT_GT(arena.used(), 0u) << "Arena should have accumulated data";

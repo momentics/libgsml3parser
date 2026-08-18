@@ -159,3 +159,78 @@ TEST(BitReaderTest, EmptyBuffer) {
     auto res = br.readField(1);
     EXPECT_FALSE(res.has_value());
 }
+
+// Regression: misaligned field ending exactly at the last bit of the buffer
+// must return the correct value (previously triggered a negative right-shift,
+// i.e. undefined behavior, and returned 0x00 instead of 0xA5).
+TEST(BitReaderTest, MisalignedFieldEndingAtBufferEnd) {
+    // 12 bits total. After reading 4 bits, 8 bits remain starting at bit 4.
+    uint8_t buf[] = {0xAA, 0x5C};
+    BitReader br(buf, 12);
+    auto r1 = br.readField(4);
+    ASSERT_TRUE(r1.has_value());
+    EXPECT_EQ(r1.value(), 0xAu);
+    auto r2 = br.readField(8);
+    ASSERT_TRUE(r2.has_value());
+    EXPECT_EQ(r2.value(), 0xA5u);
+    EXPECT_EQ(br.position(), 12u);
+}
+
+// Regression: peekField of a misaligned field ending at the buffer end.
+TEST(BitReaderTest, MisalignedPeekEndingAtBufferEnd) {
+    uint8_t buf[] = {0xAA, 0x5C};
+    BitReader br(buf, 12);
+    (void)br.readField(4);
+    uint32_t p = br.peekField(8);
+    EXPECT_EQ(p, 0xA5u);
+    EXPECT_EQ(br.position(), 4u);
+}
+
+// Regression: 16-bit misaligned field ending exactly at the buffer end.
+TEST(BitReaderTest, Misaligned16BitEndingAtBufferEnd) {
+    // 24 bits total. After 4 bits, 20 bits remain; read 16 of them.
+    uint8_t buf[] = {0x12, 0x34, 0x56};
+    BitReader br(buf, 24);
+    auto r1 = br.readField(4);
+    ASSERT_TRUE(r1.has_value());
+    EXPECT_EQ(r1.value(), 0x1u);
+    auto r2 = br.readField(16);
+    ASSERT_TRUE(r2.has_value());
+    EXPECT_EQ(r2.value(), 0x2345u);
+    EXPECT_EQ(br.position(), 20u);
+}
+
+// Regression: 32-bit misaligned field ending exactly at the buffer end.
+TEST(BitReaderTest, Misaligned32BitEndingAtBufferEnd) {
+    // 40 bits total. After 4 bits, 36 bits remain; read 32 of them.
+    uint8_t buf[] = {0xAB, 0xCD, 0xEF, 0x01, 0x23};
+    BitReader br(buf, 40);
+    auto r1 = br.readField(4);
+    ASSERT_TRUE(r1.has_value());
+    EXPECT_EQ(r1.value(), 0xAu);
+    auto r2 = br.readField(32);
+    ASSERT_TRUE(r2.has_value());
+    EXPECT_EQ(r2.value(), 0xBCDEF012u);
+    EXPECT_EQ(br.position(), 36u);
+}
+
+// Regression: misaligned readBytes ending exactly at the buffer end.
+TEST(BitReaderTest, MisalignedReadBytesEndingAtBufferEnd) {
+    uint8_t buf[] = {0xAA, 0x5C};
+    BitReader br(buf, 12);
+    (void)br.readField(4);
+    uint8_t out = 0;
+    auto res = br.readBytes(&out, 1);
+    ASSERT_TRUE(res.has_value());
+    EXPECT_EQ(out, 0xA5u);
+    EXPECT_EQ(br.position(), 12u);
+}
+
+// peekField past the end must return 0 without undefined behavior.
+TEST(BitReaderTest, PeekPastEndReturnsZero) {
+    uint8_t buf[] = {0xFF};
+    BitReader br(buf, 8);
+    (void)br.readField(8);
+    EXPECT_EQ(br.peekField(8), 0u);
+    EXPECT_EQ(br.peekField(1), 0u);
+}

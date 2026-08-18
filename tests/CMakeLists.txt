@@ -91,11 +91,16 @@ if(MSVC)
 endif()
 
 if(ENABLE_ASAN AND MSVC)
-    target_compile_options(gsml3parser_tests PRIVATE /fsanitize=address)
+    # GSML3PARSER_ASAN: lets tests skip wall-clock performance budgets, which
+    # are not meaningful under a sanitizer (2-3x slowdown).
+    target_compile_definitions(gsml3parser_tests PRIVATE GSML3PARSER_ASAN)
+    # /Zi is required: MSVC emits C5072 (ASan without debug info) in Release,
+    # which gtest's /WX escalates to an error; /Zi also improves ASan reports.
+    target_compile_options(gsml3parser_tests PRIVATE /fsanitize=address /Zi)
     target_link_options(gsml3parser_tests PRIVATE /fsanitize=address)
     # gtest must be compiled with ASAN to avoid LNK2038 mismatches
-    target_compile_options(gtest PRIVATE /fsanitize=address)
-    target_compile_options(gtest_main PRIVATE /fsanitize=address)
+    target_compile_options(gtest PRIVATE /fsanitize=address /Zi)
+    target_compile_options(gtest_main PRIVATE /fsanitize=address /Zi)
     target_link_options(gtest PRIVATE /fsanitize=address)
     target_link_options(gtest_main PRIVATE /fsanitize=address)
 

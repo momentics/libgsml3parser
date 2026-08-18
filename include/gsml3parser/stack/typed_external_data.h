@@ -57,9 +57,17 @@ namespace gsml3parser {
 
 /// Authentication challenge data from AuC.
 /// Contains RAND (128-bit per TS 24.008) and expected SRES for verification.
+///
+/// Byte order (CRITICAL for integration):
+///   - rand: 16 octets in wire order (octet 0 is the first octet of the
+///     RAND IE, TS 24.008 10.5.1.21).
+///   - expectedSres: 4 octets, BIG-ENDIAN — octet 0 is the most significant
+///     byte, matching the 32-bit SRES IE encoding of TS 24.008 10.5.1.22
+///     (the same order the MS sends in Authentication Response).
+///     Example: SRES 0xABCD1234 -> expectedSres = {0xAB, 0xCD, 0x12, 0x34}.
 struct AuthChallenge {
-    std::array<uint8_t, 16> rand{};       // 128-bit RAND per GSM spec
-    std::array<uint8_t, 4> expectedSres{}; // Expected signed response
+    std::array<uint8_t, 16> rand{};       // 128-bit RAND per GSM spec (wire order)
+    std::array<uint8_t, 4> expectedSres{}; // Expected SRES, big-endian (octet 0 = MSB)
 };
 static_assert(sizeof(AuthChallenge) <= 32);
 

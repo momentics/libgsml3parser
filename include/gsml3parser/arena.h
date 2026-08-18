@@ -27,26 +27,61 @@
 
 namespace gsml3parser {
 
+/// Segmented bump (arena) allocator.
+///
+/// Allocations are carved out of a sequence of fixed-size blocks. Because
+/// blocks are never moved or reallocated, every pointer returned by
+/// allocate() stays valid until the next reset() or the arena's
+/// destruction. This is the key difference from a single growing buffer,
+/// whose reallocation would silently invalidate all outstanding pointers.
+///
+/// Thread safety: NOT thread-safe. One Arena per thread/owner.
+/// Memory: blocks are heap-allocated once and reused until reset().
 class Arena {
 public:
+    /// Create an arena whose first block has `initialCapacity` bytes.
     explicit Arena(size_t initialCapacity = 4096);
 
+    Arena(const Arena&) = delete;
+    Arena& operator=(const Arena&) = delete;
+    Arena(Arena&&) noexcept = default;
+    Arena& operator=(Arena&&) noexcept = default;
+
+    /// Carve `bytes` out of the arena, aligned to `alignment`.
+    /// @param bytes Number of bytes to allocate (must be > 0).
+    /// @param alignment Required alignment; must be a power of two.
+    /// @return Pointer to the allocated region, or nullptr if bytes == 0
+    ///         or alignment is not a power of two.
+    /// @note The pointer remains valid until the next reset() or the
+    ///       arena's destruction, even if further allocations follow.
     void* allocate(size_t bytes, size_t alignment = alignof(std::max_align_t));
 
+    /// Release all blocks and reset the usage counter.
+    /// All previously returned pointers become invalid.
     void reset();
 
-    /// Get remaining capacity without performing an allocation.
-    /// Useful for deciding whether to reset the arena before the next batch
-    /// of message processing to avoid unbounded growth.
-    [[nodiscard]] size_t remaining() const { return mBuffer.size() - mOffset; }
+    /// Bytes remaining in the current (last) block.
+    /// Useful for deciding whether to reset the arena before the next
+    /// batch of message processing to avoid unbounded growth.
+    [[nodiscard]] size_t remaining() const;
 
-    size_t used() const { return mOffset; }
+    /// Total bytes handed out by allocate() since the last reset().
+    [[nodiscard]] size_t used() const noexcept { return mUsed; }
 
-    size_t capacity() const { return mBuffer.size(); }
+    /// Total capacity across all blocks.
+    [[nodiscard]] size_t capacity() const;
 
 private:
-    std::vector<uint8_t> mBuffer;
-    size_t mOffset = 0;
+    struct Block {
+        std::vector<uint8_t> data;
+        size_t offset{0};
+    };
+
+    /// Minimum block size for newly created blocks (amortizes small allocs).
+    static constexpr size_t kMinBlockSize = 65536;
+
+    std::vector<Block> mBlocks;
+    size_t mUsed{0};
 };
 
 } // namespace gsml3parser
