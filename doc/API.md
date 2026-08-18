@@ -715,7 +715,9 @@ High-throughput streaming parser with statistics tracking.
 class L3StreamProcessor {
 public:
     L3StreamProcessor(ByteSource& source, ParserConfig cfg = {}, FrameConfig fcfg = {});
-    bool processOne(std::function<void(const ParsedMessage&)> handler);
+    template<typename F>
+        requires std::is_invocable_v<F, const ParsedMessage&>
+    bool processOne(F&& handler);
     void processUntilEOF(FrameHandler& handler);
     void processN(size_t count, FrameHandler& handler);
     [[nodiscard]] const StreamStats& stats() const;
