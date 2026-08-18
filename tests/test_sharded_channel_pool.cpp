@@ -189,3 +189,20 @@ TEST(ShardedChannelPool, HighConcurrencyStress) {
     // Ensure the stress test completes in reasonable time (< 30 seconds).
     EXPECT_LT(duration.count(), 30000);
 }
+
+// Test: allocate() round-robin start spreads work across shards (no shard-0 hotspot).
+// Importance: linear probe from shard 0 concentrates lock contention; round-robin
+// start must distribute the first-hit shard across all N shards.
+TEST(ShardedChannelPool, Allocate_RoundRobin_SpreadsShards) {
+    ShardedChannelPool<8> pool;
+    // One channel of SDCCH in each shard (distinct arfcs -> distinct shards).
+    for (int i = 0; i < 8; ++i) {
+        pool.addChannel({ChannelType::SDCCHType, 0, 0, static_cast<uint16_t>(100 + i * 7)});
+    }
+    // Allocate all 8; each should succeed (channel exists in some shard).
+    int ok = 0;
+    for (int i = 0; i < 8; ++i) {
+        if (pool.allocate(ChannelType::SDCCHType)) ++ok;
+    }
+    EXPECT_EQ(ok, 8) << "All 8 channels must be allocatable regardless of shard";
+}

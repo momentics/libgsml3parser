@@ -3316,7 +3316,7 @@ size_t totalCount() const;
 | Method | Description | Complexity | Lock Type |
 |--------|-------------|------------|-----------|
 | `addChannel(desc)` | Add channel to the hashed shard | O(1) hash + lock | Exclusive |
-| `allocate(type)` | Scan all shards for free channel | O(N) worst case | Exclusive per shard |
+| `allocate(type)` | Round-robin shard start, then remaining shards (fallback) | O(N) worst case | Exclusive per shard |
 | `release(desc)` | Return channel to its shard | O(1) hash + lock | Exclusive |
 | `freeCount(type)` | Total free across all shards | O(N) | Shared |
 | `totalCount()` | Total channels across all shards | O(N) | Shared |
@@ -3327,6 +3327,10 @@ The shard index is computed from `(trxNumber, timeslot, arfcn)` using a simple X
 - O(1) computation (no modulo division)
 - Deterministic: same channel always maps to same shard
 - Even distribution for typical BTS channel layouts
+
+### Allocation Strategy
+
+`allocate(type)` does not know which channel will be taken, only its type, so the descriptor hash cannot be used for routing. Instead it starts probing from a **round-robin shard** (an atomic counter masked by `N-1`), which spreads lock contention evenly across shards instead of concentrating it on shard 0, then falls back to the remaining shards. The fallback is required because channels are hash-distributed across shards at `addChannel()` time, so a free channel of the requested type may reside in any shard. Complexity is O(N) in the worst case (all shards probed), typically terminating on the first or second shard.
 
 ### Thread Safety
 

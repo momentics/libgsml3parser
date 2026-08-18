@@ -36,6 +36,7 @@
 #pragma once
 
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <mutex>
 #include <optional>
@@ -58,6 +59,10 @@ class ShardedChannelPool {
 
     std::array<Shard, N> mShards{};
 
+    // Round-robin starting shard for allocate(): spreads lock contention across
+    // shards instead of always probing shard 0 first.
+    std::atomic<uint32_t> mRrCounter{0};
+
 public:
     ShardedChannelPool() = default;
 
@@ -66,8 +71,11 @@ public:
     void addChannel(ChannelDescriptor desc);
 
     /// Allocate a channel of the requested type from any shard that has one.
-    /// Scans all shards in order until a free channel is found.
-    /// Thread-safe. O(N) worst case (all shards locked sequentially).
+    /// Starts probing from a round-robin shard to spread lock contention across
+    /// shards, then falls back to the remaining shards (channels are
+    /// hash-distributed at addChannel time, so a free one may be in any shard).
+    /// Thread-safe. Performance: O(N) worst case (a free channel may reside in
+    /// any shard); typically terminates on the first or second shard.
     /// @param type The channel type to allocate.
     /// @return A ChannelDescriptor if found, std::nullopt otherwise.
     [[nodiscard]] std::optional<ChannelDescriptor> allocate(ChannelType type);
@@ -113,12 +121,15 @@ inline void ShardedChannelPool<N>::addChannel(ChannelDescriptor desc) {
 
 template<int N>
 inline std::optional<ChannelDescriptor> ShardedChannelPool<N>::allocate(ChannelType type) {
-    for (int i = 0; i < N; ++i) {
-        {
-            std::unique_lock lock(mShards[i].mutex);
-            auto ch = mShards[i].pool.allocate(type);
-            if (ch) return ch;
-        }
+    // Start from a round-robin shard to spread lock contention, then probe the
+    // remaining shards (channels are hash-distributed, so a free one may be in
+    // any shard). N is a power of two, so the mask replaces modulo.
+    const uint32_t start = mRrCounter.fetch_add(1, std::memory_order_relaxed) & static_cast<uint32_t>(N - 1);
+    for (uint32_t offset = 0; offset < N; ++offset) {
+        const int idx = static_cast<int>((start + offset) & static_cast<uint32_t>(N - 1));
+        std::unique_lock lock(mShards[idx].mutex);
+        auto ch = mShards[idx].pool.allocate(type);
+        if (ch) return ch;
     }
     return std::nullopt;
 }

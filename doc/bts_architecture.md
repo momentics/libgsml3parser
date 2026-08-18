@@ -442,6 +442,7 @@ The following operations perform zero heap allocations:
 | `ProcedureRunner::feed()` | O(8) = O(1) | Fixed array of procedure slots |
 | `SubscriberRegistry::findByTMSI()` | O(1) | Hash map lookup |
 | `ShardedSubscriberRegistry::findByTMSI()` | O(1) | Hash + per-shard lock |
+| `ShardedChannelPool::allocate()` | O(N) worst, typically O(1) | Round-robin shard start + fallback (channels hash-distributed) |
 
 ## 7. Abis/RSL Integration
 
@@ -553,7 +554,7 @@ A typical macro cell BTS might have:
 - 24 TCHF channels (full-rate traffic, across 3 TRX × 8 timeslots)
 - 3 TCHH channels (half-rate traffic)
 
-The `ShardedChannelPool<16>` handles this with negligible memory overhead and thread-safe allocation.
+The `ShardedChannelPool<16>` handles this with negligible memory overhead and thread-safe allocation. `allocate()` starts probing from a round-robin shard (atomic counter) to spread lock contention across shards, then falls back to the remaining shards because channels are hash-distributed at `addChannel()` time; worst case is O(N) shards, typically the first or second shard.
 
 ### Transaction Limits
 
