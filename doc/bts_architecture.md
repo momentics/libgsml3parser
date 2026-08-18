@@ -233,7 +233,7 @@ Event Loop Tick (every 10-100ms)
   │
   ├─ SubscriberRegistry.tickAllTimers(delta, expiredOut)
   │       │
-  │       └─ For each session:
+  │       └─ For each session WITH >=1 running timer (active-timer index, O(active)):
   │             ├─ TimerManager::tick() -> expired timer IDs
   │             └─ TransactionManager::onTimerExpired()
   │
@@ -352,7 +352,7 @@ When a call reaches the connected state (`ResponseToken::Connect`), the library 
 └─────────────────────────────────────────────────────────────┘
 ```
 
-Each `SubscriberSession` is accessed from a single thread (the event loop). The `SubscriberRegistry` provides O(1) lookup by TMSI, IMSI, or LAPDm link. For high-concurrency scenarios, use `ShardedSubscriberRegistry<N>` with per-shard mutexes.
+Each `SubscriberSession` is accessed from a single thread (the event loop). The `SubscriberRegistry` provides O(1) lookup by TMSI, IMSI, or LAPDm link, and `tickAllTimers()` ticks only sessions with running timers (O(active) via an active-timer index, not O(all)). For high-concurrency scenarios, use `ShardedSubscriberRegistry<N>` with per-shard mutexes.
 
 ### Thread Safety Matrix
 
@@ -487,7 +487,9 @@ auto* session = registry.createByTMSI(0x12345678);
 // Find session (shared lock, no contention with other shards)
 auto* found = registry.findByTMSI(0x12345678);
 
-// Tick all timers across all shards
+// Tick all timers across all shards — O(active): only sessions with >=1
+// running timer are ticked (active-timer index), so a large number of idle
+// sessions does not slow the tick.
 std::array<L3TimerId, 4096> expired;
 size_t n = registry.tickAllTimers(std::chrono::milliseconds(100), expired);
 

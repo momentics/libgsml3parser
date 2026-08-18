@@ -201,6 +201,7 @@ public:
     /// or per-event-loop-tick). The callback is responsible for handling expiry.
     template<typename Callback>
     void tick(std::chrono::milliseconds delta, Callback&& onExpired) {
+        bool wasActive = runningCount() > 0;
         for (size_t i = 0; i < MAX_TIMERS; ++i) {
             if (mInitialized[i] && mTimers[i].isRunning()) {
                 L3TimerId tid = mTimers[i].id();
@@ -209,6 +210,7 @@ public:
                 }
             }
         }
+        if (wasActive && runningCount() == 0) notifyActive(false);
     }
 
     /// Advance all timers by `delta`. Fills the pre-allocated output buffer with expired IDs.
@@ -238,6 +240,22 @@ public:
     /// @return Count of active (running) timers.
     [[nodiscard]] size_t runningCount() const noexcept;
 
+    /// Set the owning object (e.g. SubscriberSession) reported to the active-change observer.
+    /// @param owner Pointer to the owning object, or nullptr.
+    /// @note No heap allocation. The pointer must outlive this TimerManager.
+    void setOwner(void* owner) noexcept { mOwner = owner; }
+
+    /// Register a callback invoked when the running-timer count crosses 0 (active=true)
+    /// or drops to 0 (active=false).
+    /// @param fn Callback with signature void(void* owner, void* ctx, bool active), or nullptr.
+    /// @param ctx Opaque context passed back to fn (e.g. the owning SubscriberRegistry).
+    /// @note No heap allocation. fn is invoked from start()/stop()/stopAll()/tick() on the
+    ///       calling thread and must not block; it must not re-enter this TimerManager.
+    void setOnActiveChange(void (*fn)(void*, void*, bool), void* ctx) noexcept {
+        mOnActiveChange = fn;
+        mActiveCtx = ctx;
+    }
+
 private:
     static constexpr size_t MAX_TIMERS = 32;
 
@@ -246,6 +264,17 @@ private:
 
     // Tracks which timer slots have been initialized (configured with a real ID).
     std::array<bool, MAX_TIMERS> mInitialized{};
+
+    // Active-change observer (fn + ctx, no heap). Fired on 0 -> >0 (active) and
+    // >0 -> 0 (inactive) running-timer count transitions.
+    void* mOwner{nullptr};
+    void* mActiveCtx{nullptr};
+    void (*mOnActiveChange)(void*, void*, bool){nullptr};
+
+    // Invoke the observer (no-op if none registered).
+    void notifyActive(bool active) const noexcept {
+        if (mOnActiveChange) mOnActiveChange(mOwner, mActiveCtx, active);
+    }
 
     [[nodiscard]] size_t index(L3TimerId id) const noexcept {
         return static_cast<size_t>(static_cast<uint8_t>(id));

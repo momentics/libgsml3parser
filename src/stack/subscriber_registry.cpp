@@ -26,12 +26,27 @@ namespace gsml3parser {
 
 // ── SubscriberRegistry ──────────────────────────────────────────────
 
+/// Trampoline: forwards TimerManager active-change to the owning SubscriberRegistry.
+void registryTimerActiveFn(void* owner, void* ctx, bool active) {
+    auto* reg = static_cast<SubscriberRegistry*>(ctx);
+    auto* session = static_cast<SubscriberSession*>(owner);
+    reg->handleTimerActive(session, active);
+}
+
+void SubscriberRegistry::handleTimerActive(SubscriberSession* session, bool active) {
+    std::lock_guard lock(mActiveMutex);
+    if (active) mActiveTimerSessions.insert(session);
+    else mActiveTimerSessions.erase(session);
+}
+
 SubscriberSession* SubscriberRegistry::createByTMSI(uint32_t tmsi) {
     auto [it, inserted] = mByTMSI.emplace(tmsi, SessionEntry{});
     if (!inserted) return nullptr;
 
     it->second.session.context.setTMSI(tmsi);
     it->second.session.assignedTmsi = tmsi;
+    it->second.session.timers.setOwner(&it->second.session);
+    it->second.session.timers.setOnActiveChange(&registryTimerActiveFn, this);
     return &it->second.session;
 }
 
@@ -52,6 +67,8 @@ SubscriberSession* SubscriberRegistry::createByIMSI(std::string_view imsi) {
 
     tmsiIt->second.session.context.setIMSI(imsi);
     tmsiIt->second.session.assignedTmsi = tmsi;
+    tmsiIt->second.session.timers.setOwner(&tmsiIt->second.session);
+    tmsiIt->second.session.timers.setOnActiveChange(&registryTimerActiveFn, this);
     mByIMSI.emplace(std::move(key), tmsi);
     return &tmsiIt->second.session;
 }
@@ -143,6 +160,9 @@ bool SubscriberRegistry::remove(SubscriberSession* session) noexcept {
     if (session->context.identity().isIMSI()) {
         mByIMSI.erase(std::string(session->context.identity().digits()));
     }
+    // Remove from the active-timer index before destroying the session, so
+    // tickAllTimers() never ticks a destroyed session (use-after-free).
+    handleTimerActive(session, false);
     // Erase the entry so memory is reclaimed (previously the entry
     // stayed in the map with active=false, leaking on every removal).
     // The session pointer is invalidated by this call.
@@ -155,6 +175,8 @@ void SubscriberRegistry::clear() noexcept {
     mByTMSI.clear();
     mByIMSI.clear();
     mByLink.clear();
+    std::lock_guard lock(mActiveMutex);
+    mActiveTimerSessions.clear();
 }
 
 size_t SubscriberRegistry::count() const noexcept {
@@ -167,11 +189,17 @@ size_t SubscriberRegistry::count() const noexcept {
 
 size_t SubscriberRegistry::tickAllTimers(std::chrono::milliseconds delta,
                                           std::span<L3TimerId> expiredOut) {
+    // Snapshot active sessions under the lock, then tick WITHOUT holding it:
+    // a timer expiring during tick fires the observer, which re-locks mActiveMutex
+    // (non-recursive) — holding it here would deadlock.
+    {
+        std::lock_guard lock(mActiveMutex);
+        mActiveSnapshot.assign(mActiveTimerSessions.begin(), mActiveTimerSessions.end());
+    }
     size_t written = 0;
-    for (auto& [tmsi, entry] : mByTMSI) {
-        if (!entry.active) continue;
+    for (auto* session : mActiveSnapshot) {
         std::array<L3TimerId, 32> localBuf{};
-        size_t n = entry.session.timers.tick(delta, std::span<L3TimerId>{localBuf});
+        size_t n = session->timers.tick(delta, std::span<L3TimerId>{localBuf});
         for (size_t j = 0; j < n && written < expiredOut.size(); ++j, ++written) {
             expiredOut[written] = localBuf[j];
         }

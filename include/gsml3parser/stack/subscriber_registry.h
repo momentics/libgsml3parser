@@ -45,11 +45,14 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
+#include <mutex>
 #include <shared_mutex>
 #include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
+#include <vector>
 
 #include "gsml3parser/stack/ms_context.h"
 #include "gsml3parser/stack/state_machine.h"
@@ -89,6 +92,11 @@ public:
 };
 
 static_assert(sizeof(SubscriberSession) < 4096, "SubscriberSession too large");
+
+/// Trampoline: forwards TimerManager active-change notifications to the owning
+/// SubscriberRegistry (see SubscriberRegistry::handleTimerActive). Defined in
+/// subscriber_registry.cpp; friend of SubscriberRegistry.
+void registryTimerActiveFn(void* owner, void* ctx, bool active);
 
 /// BTS subscriber registry. Manages multiple SubscriberSession instances and provides
 /// TMSI, IMSI and LAPDm link lookup indexes. Analogous to MMUserMap in OpenBTS.
@@ -170,6 +178,7 @@ public:
     /// @param delta Time advance in milliseconds.
     /// @param expiredOut Pre-allocated span for expired L3TimerId entries.
     /// @return Number of expired timer entries written.
+    /// Performance: O(active) — only sessions with running timers are ticked, not all sessions.
     size_t tickAllTimers(std::chrono::milliseconds delta,
                          std::span<L3TimerId> expiredOut);
 
@@ -193,6 +202,13 @@ private:
     // any in-use TMSI so auto-assignment never collides with user-assigned
     // values. TMSI 0 is reserved (all-zero TMSI per TS 24.008) and skipped.
     uint32_t mNextAutoTmsi{1};
+
+    // Sessions with >=1 running timer. Ticked by tickAllTimers() — O(active), not O(all).
+    std::unordered_set<SubscriberSession*> mActiveTimerSessions;
+    std::mutex mActiveMutex; // protects mActiveTimerSessions (observer may fire from app thread)
+    mutable std::vector<SubscriberSession*> mActiveSnapshot; // scratch for tickAllTimers
+    void handleTimerActive(SubscriberSession* session, bool active);
+    friend void registryTimerActiveFn(void* owner, void* ctx, bool active);
 };
 
 /// Thread-safe, high-concurrency subscriber registry.

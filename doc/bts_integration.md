@@ -592,7 +592,7 @@ if (result.action == ProcedureStepResult::Action::Failed) {
 - **TypedExternalData**: Small structures (≤ 64 bytes) passed by const reference — no copy overhead
 - **ProcedureOrchestrator**: No `std::vector<ParsedMessage>` storage; stores only last ResponseToken
 - **RSLParser**: Fixed-size IE array (32 max), all pointers into original buffer — zero heap
-- **TimerManager**: Fixed-size `std::array`, no dynamic allocation
+- **TimerManager**: Fixed-size `std::array`, no dynamic allocation; optional zero-alloc active-change observer (`setOnActiveChange`) lets `SubscriberRegistry` track which sessions have running timers so `tickAllTimers()` is O(active)
 - **Thread safety**: Each MS session is accessed from one thread. `ShardedChannelPool` and `ShardedSubscriberRegistry` provide thread-safe variants for multi-threaded scenarios.
 
 ## API Reference Summary

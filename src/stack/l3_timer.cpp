@@ -158,6 +158,7 @@ bool TimerManager::start(L3TimerId id, std::chrono::milliseconds expiry) {
         return false; // invalid timer ID (e.g. Unknown = 0xFF)
     }
 
+    bool wasActive = runningCount() > 0;
     bool firstStart = !mInitialized[idx];
     if (!mInitialized[idx]) {
         mTimers[idx].reconfigure(id, expiry);
@@ -166,25 +167,31 @@ bool TimerManager::start(L3TimerId id, std::chrono::milliseconds expiry) {
         mTimers[idx].reconfigure(id, expiry);
     }
     mTimers[idx].start();
+    if (!wasActive && runningCount() > 0) notifyActive(true);
     return firstStart;
 }
 
 void TimerManager::stop(L3TimerId id) noexcept {
     size_t idx = index(id);
     if (idx < MAX_TIMERS && mInitialized[idx]) {
+        bool wasActive = runningCount() > 0;
         mTimers[idx].stop();
+        if (wasActive && runningCount() == 0) notifyActive(false);
     }
 }
 
 void TimerManager::stopAll() noexcept {
+    bool wasActive = runningCount() > 0;
     for (size_t i = 0; i < MAX_TIMERS; ++i) {
         if (mInitialized[i]) {
             mTimers[i].stop();
         }
     }
+    if (wasActive && runningCount() == 0) notifyActive(false);
 }
 
 size_t TimerManager::tick(std::chrono::milliseconds delta, std::span<L3TimerId> out) {
+    bool wasActive = runningCount() > 0;
     size_t count = 0;
     for (size_t i = 0; i < MAX_TIMERS; ++i) {
         if (mInitialized[i] && mTimers[i].isRunning()) {
@@ -196,6 +203,7 @@ size_t TimerManager::tick(std::chrono::milliseconds delta, std::span<L3TimerId> 
             }
         }
     }
+    if (wasActive && runningCount() == 0) notifyActive(false);
     return count;
 }
 

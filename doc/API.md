@@ -2704,15 +2704,17 @@ Manages up to 32 named timers for one MS context using fixed-size arrays.
 | `remaining(id)` | Get remaining time for a specific timer |
 | `get(id)` | Get the L3Timer object for direct access |
 | `runningCount()` | Number of currently running timers |
+| `setOwner(void*)` | Set the owning object reported to the active-change observer |
+| `setOnActiveChange(fn, ctx)` | Register a zero-alloc observer fired on 0→>0 / >0→0 running-timer transitions |
 
 ### Performance Characteristics
 
 | Metric | Value |
 |--------|-------|
-| Memory footprint | `sizeof(TimerManager)` ≈ 1.2 KB (32 timers × ~36 bytes + 32 bytes init flags) |
-| Heap allocations | **Zero** - all storage is `std::array` |
+| Memory footprint | `sizeof(TimerManager)` ≈ 1.2 KB (32 timers × ~36 bytes + 32 bytes init flags + 3 observer words) |
+| Heap allocations | **Zero** - all storage is `std::array`; observer is a plain fn pointer + context |
 | `tick()` complexity | O(32) = constant, iterates fixed array |
-| `start()` / `stop()` | O(1) - direct index into array |
+| `start()` / `stop()` | O(1) - direct index into array (plus O(32) running-count check for active-change detection) |
 | Thread safety | NOT thread-safe. One instance per MS, single-thread access |
 
 ### Example
@@ -3549,6 +3551,9 @@ void clear() noexcept;
 size_t count() const noexcept;
 
 // Timer management.
+// tickAllTimers() is O(active): it ticks only sessions with at least one running
+// timer (active-timer index), not all sessions. Sessions register/unregister
+// themselves automatically when their first timer starts / last timer stops.
 size_t tickAllTimers(std::chrono::milliseconds delta, std::span<L3TimerId> expiredOut);
 
 // Iterate all sessions (guaranteed single visit).

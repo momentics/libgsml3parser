@@ -373,3 +373,27 @@ TEST(Stress, ResponseToken_Arena_100K_ZeroAlloc) {
     EXPECT_GT(arena.used(), 0u) << "Arena should have accumulated data";
     EXPECT_LT(arena.used(), arena.capacity()) << "Arena must not be full";
 }
+
+// Test: tickAllTimers ticks ONLY sessions with active timers (O(active), not O(all)).
+// Importance: at 1M sessions with few active timers, a full scan is a real-time
+// bottleneck; the active-index must skip inactive sessions.
+// 3GPP coverage: TS 24.008 timer management at scale.
+TEST(Stress, tickAllTimers_OnlyActive_Scales) {
+    ShardedSubscriberRegistry<32> reg;
+    constexpr uint32_t N = 200000;
+    constexpr uint32_t ACTIVE = 200;
+    for (uint32_t i = 1; i <= N; ++i) {
+        auto* s = reg.createByTMSI(i);
+        ASSERT_NE(s, nullptr);
+        if (i <= ACTIVE) s->timers.start(L3TimerId::T3101, std::chrono::milliseconds(100));
+    }
+    std::vector<L3TimerId> expired(N);
+    auto t0 = std::chrono::steady_clock::now();
+    size_t n = reg.tickAllTimers(std::chrono::milliseconds(150), {expired.data(), expired.size()});
+    auto t1 = std::chrono::steady_clock::now();
+    double ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
+    EXPECT_EQ(n, ACTIVE) << "Only the " << ACTIVE << " active timers should expire";
+#ifndef GSML3PARSER_ASAN
+    EXPECT_LT(ms, 50.0) << "tickAllTimers over 200K sessions (200 active) took " << ms << "ms";
+#endif
+}
