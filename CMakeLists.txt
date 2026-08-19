@@ -16,7 +16,6 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 option(BUILD_SHARED_LIBS "Build shared library" OFF)
 option(BUILD_TESTS "Build unit tests" OFF)
 option(BUILD_EXAMPLES "Build examples" OFF)
-option(BUILD_BENCHMARKS "Build performance benchmarks" OFF)
 option(ENABLE_FUZZING "Build fuzzing target" OFF)
 option(ENABLE_ASAN "Enable AddressSanitizer for debug builds (MSVC 2022 17.8+)" OFF)
 
@@ -230,10 +229,10 @@ target_compile_definitions(gsml3parser PRIVATE
 
 if(MSVC)
     target_compile_definitions(gsml3parser PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_options(gsml3parser PRIVATE /W4 /WX- /bigobj)
+    target_compile_options(gsml3parser PRIVATE /W4 /WX /bigobj)
     target_compile_options(gsml3parser PRIVATE $<$<CONFIG:Release>:/O2>)
 else()
-    target_compile_options(gsml3parser PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(gsml3parser PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(gsml3parser PRIVATE $<$<CONFIG:Release>:-O2>)
 endif()
 
@@ -303,10 +302,4 @@ endif()
 
 if(BUILD_EXAMPLES)
     add_subdirectory(examples)
-endif()
-
-# ── Benchmarks ────────────────────────────────────────────────────────
-
-if(BUILD_BENCHMARKS)
-    add_subdirectory(benchmarks)
 endif()
