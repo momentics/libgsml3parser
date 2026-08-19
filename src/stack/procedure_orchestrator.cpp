@@ -321,6 +321,10 @@ void ProcedureOrchestrator::cancelAll() noexcept {
         mCurrentProcedure.reset();
     }
     mCurrentPhase = ChainPhase::None;
+    // Clear pending response parameters so a later chain never reuses stale values
+    // (e.g. an old RAND or channel from the cancelled chain). Must run before
+    // mSession is cleared.
+    if (mSession) mSession->response.reset();
     mSession = nullptr;
     mLastToken = ResponseToken::None;
     mChainType = procedure::ProcedureType::Unknown;

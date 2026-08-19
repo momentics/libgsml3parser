@@ -60,13 +60,15 @@
 #include "gsml3parser/stack/transaction.h"
 #include "gsml3parser/stack/procedure_runner.h"
 #include "gsml3parser/stack/channel_pool.h"
+#include "gsml3parser/stack/response_context.h"
 
 namespace gsml3parser {
 
 /// Active session context for a single subscriber. Aggregates MSContext, FSMs,
-/// timers, transactions and ProcedureRunner into one object for convenient
-/// lifecycle management. All components stored inline (no unique_ptr) to
-/// minimize cache misses during session traversal.
+/// timers, transactions, ProcedureRunner and ResponseContext into one object for
+/// convenient lifecycle management. All components stored inline (no unique_ptr) to
+/// minimize cache misses during session traversal. The ResponseContext field is the
+/// single source of truth for response parameters (see response_context.h).
 ///
 /// 3GPP TS 24.008 - Per-MS state aggregation.
 /// Memory: sizeof(SubscriberSession) < 4096 bytes.
@@ -79,6 +81,9 @@ public:
     TimerManager timers;
     TransactionManager transactions;
     ProcedureRunner procedures;
+
+    /// Parameters for building protocol responses (populated by the active procedure).
+    ResponseContext response;
 
     std::optional<ChannelDescriptor> channel;
     uint8_t lapdmLink{0};

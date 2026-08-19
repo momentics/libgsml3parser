@@ -101,6 +101,9 @@ ProcedureStepResult ProcedureRunner::feed(const ParsedMessage& msg,
     auto newProc = autoCreateProcedure(msg, session);
     slotIdx = insertSlot(std::move(newProc));
     if (slotIdx.has_value()) {
+        // A new chain is starting: clear stale response parameters left over from any
+        // previously completed chain so the new procedure begins from a clean context.
+        if (session) session->response.reset();
         ProcedureStepResult result = mSlots[slotIdx.value()].proc->feed(msg, session, std::move(sink));
         cleanupSlotIfTerminal(slotIdx.value());
         return result;

@@ -37,6 +37,7 @@
 #include <chrono>
 #include <cstdint>
 #include <array>
+#include <cstring>
 
 using namespace gsml3parser;
 using namespace std::chrono_literals;
@@ -204,4 +205,24 @@ TEST(ProcedureOrchestrator, UnknownMessage_NoChain) {
     // Feed a message that doesn't start any known chain
     auto result = orchestrator.feed(ParsedMessage{RRM{L3ChannelRequest::builder().build()}}, &session);
     EXPECT_EQ(result.action, ProcedureStepResult::Action::Continue);
+}
+
+TEST(ProcedureOrchestrator, ResponseContext_Reset_OnNewChain) {
+    SubscriberSession session;
+    session.context.setTMSI(0x12345678u);
+
+    // Simulate a previously completed chain that left stale response parameters behind
+    // (e.g. an old RAND and channel that must not leak into the next chain).
+    std::memset(session.response.rand.data(), 0xAB, 16);
+    session.response.hasRand = true;
+    session.response.channel = L3ChannelDescription(TDMA_SDCCH, 0, 1, 100);
+    session.response.hasChannel = true;
+
+    // Start a new chain: the runner auto-creates a LocationUpdate procedure and must
+    // reset the response context so the new chain begins from a clean state.
+    [[maybe_unused]] auto result = session.procedures.feed(makeCMServiceRequestLU(), &session, {});
+
+    // Stale parameters from the previous (completed) chain must be cleared.
+    EXPECT_FALSE(session.response.hasRand);
+    EXPECT_FALSE(session.response.hasChannel);
 }
