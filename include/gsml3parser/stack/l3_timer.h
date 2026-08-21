@@ -174,14 +174,17 @@ public:
 
     /// Start a timer with its default expiry duration.
     /// @param id The timer identifier to start.
-    /// @return True if this is the first start (not a restart of an already running timer).
-    ///         False if the timer was already running and has been restarted.
+    /// @return True if the timer was NOT running before this call (a fresh start),
+    ///         False if it was already running (a restart).
+    ///         Returns false for invalid IDs (e.g. Unknown = 0xFF).
     bool start(L3TimerId id);
 
     /// Start a timer with a custom expiry duration.
     /// @param id The timer identifier to start.
     /// @param expiry Custom expiry duration in milliseconds.
-    /// @return True if this is the first start (not a restart).
+    /// @return True if the timer was NOT running before this call (a fresh start),
+    ///         False if it was already running (a restart).
+    ///         Returns false for invalid IDs (e.g. Unknown = 0xFF).
     bool start(L3TimerId id, std::chrono::milliseconds expiry);
 
     /// Stop a specific timer.
@@ -216,8 +219,12 @@ public:
     /// Advance all timers by `delta`. Fills the pre-allocated output buffer with expired IDs.
     /// @param delta Time elapsed since the last tick.
     /// @param out Pre-allocated span to receive expired timer IDs.
-    ///            The caller must ensure sufficient capacity (max ~32 entries).
-    /// @return The number of expired timer IDs written to `out`.
+    ///            The caller must provide capacity for at least the number of running
+    ///            timers (maximum 32 = MAX_TIMERS) to receive every expired ID.
+    /// @return The number of expired timer IDs actually written to `out`.
+    ///         If the buffer is smaller than the number of expired timers, only the
+    ///         first `out.size()` IDs are written and that count is returned; the
+    ///         unreported timers still expire (their running state is cleared).
     /// This overload avoids heap allocation by using a caller-provided buffer.
     size_t tick(std::chrono::milliseconds delta, std::span<L3TimerId> out);
 

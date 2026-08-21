@@ -159,13 +159,9 @@ bool TimerManager::start(L3TimerId id, std::chrono::milliseconds expiry) {
     }
 
     bool wasActive = runningCount() > 0;
-    bool firstStart = !mInitialized[idx];
-    if (!mInitialized[idx]) {
-        mTimers[idx].reconfigure(id, expiry);
-        mInitialized[idx] = true;
-    } else {
-        mTimers[idx].reconfigure(id, expiry);
-    }
+    bool firstStart = !mTimers[idx].isRunning(); // true when the timer was not running before this call
+    mTimers[idx].reconfigure(id, expiry);
+    mInitialized[idx] = true;
     mTimers[idx].start();
     if (!wasActive && runningCount() > 0) notifyActive(true);
     return firstStart;
@@ -198,8 +194,11 @@ size_t TimerManager::tick(std::chrono::milliseconds delta, std::span<L3TimerId> 
             if (mTimers[i].tick(delta)) {
                 if (count < out.size()) {
                     out[count] = mTimers[i].id();
+                    ++count; // increment only on a successful write
                 }
-                ++count;
+                // If `out` is full, the timer still expired (state updated above),
+                // but its ID is not reported; the contract is to return the
+                // number of IDs actually written.
             }
         }
     }

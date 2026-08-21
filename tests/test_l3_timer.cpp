@@ -205,6 +205,40 @@ TEST(TimerManagerTest, TickWithSpan_fillsBuffer) {
     EXPECT_EQ(expired[1], L3TimerId::T3102);
 }
 
+// tick() with an undersized span buffer returns the number of IDs actually written
+TEST(TimerManagerTest, TickSpan_BufferFull_ReturnsWritten) {
+    TimerManager tm;
+    tm.start(L3TimerId::T3101, 100ms);
+    tm.start(L3TimerId::T3102, 100ms);
+
+    // Buffer holds only 1 entry, but 2 timers expire on this tick.
+    std::array<L3TimerId, 1> expired;
+    size_t count = tm.tick(200ms, std::span<L3TimerId>(expired));
+
+    // Contract: return the number of IDs written (1), not the number expired (2).
+    EXPECT_EQ(count, 1u);
+    EXPECT_EQ(expired[0], L3TimerId::T3101);
+
+    // Both timers still expired: their running state is cleared regardless
+    // of whether their ID fit into the output buffer.
+    EXPECT_FALSE(tm.isRunning(L3TimerId::T3101));
+    EXPECT_FALSE(tm.isRunning(L3TimerId::T3102));
+    EXPECT_EQ(tm.runningCount(), 0u);
+}
+
+// start() reports a fresh start (true) when restarting an expired or stopped timer
+TEST(TimerManagerTest, StartAfterExpiry_reportsFreshStart) {
+    TimerManager tm;
+    EXPECT_TRUE(tm.start(L3TimerId::T3101, 100ms)); // fresh start: was not running
+
+    tm.tick(200ms, [](L3TimerId) {}); // let it expire
+    EXPECT_FALSE(tm.isRunning(L3TimerId::T3101));
+
+    // The expired timer is not running, so this is a fresh start again.
+    EXPECT_TRUE(tm.start(L3TimerId::T3101, 100ms));
+    EXPECT_TRUE(tm.isRunning(L3TimerId::T3101));
+}
+
 // stopAll() stops every running timer in the manager
 TEST(TimerManagerTest, StopAll_clearsAllTimers) {
     TimerManager tm;
