@@ -75,7 +75,9 @@ TEST(HandoverProcedureTest, HO_Init_FeedExternal_SendsCommand) {
         }));
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
-    EXPECT_TRUE(sinkCalled);
+    // The sink is an observability hook invoked only from feed() with the real
+    // incoming message; feedExternalTyped never invokes it (see response_sink.h).
+    EXPECT_FALSE(sinkCalled);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::InProgress);
 }
 

@@ -97,15 +97,12 @@ TEST(Integration, LocationUpdate_FullFlow_WithRegistry) {
     auto result5 = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, session, VLRDecision{true, std::nullopt, MMRejectCause::Zero},
                                         noopSink);
 
-    // The accept path leads to SEND_ACCEPT which transitions to COMPLETED
-    EXPECT_TRUE(result5.action == ProcedureStepResult::Action::Completed ||
-                result5.action == ProcedureStepResult::Action::SendResponseWithToken);
-
-    // If it returned SendResponse (SEND_ACCEPT state), feed one more time to reach COMPLETED
-    if (result5.action == ProcedureStepResult::Action::SendResponseWithToken) {
-        auto result6 = runner.feed(mmMsg, session, noopSink);
-        EXPECT_EQ(result6.action, ProcedureStepResult::Action::Completed);
-    }
+    // The accept path terminates the procedure WITH the LocationUpdatingAccept
+    // response: action stays SendResponseWithToken (rule in procedure.h) and the
+    // terminal state is reported via finalResult — no extra feed is needed.
+    EXPECT_EQ(result5.action, ProcedureStepResult::Action::SendResponseWithToken);
+    EXPECT_EQ(result5.responseToken, ResponseToken::LocationUpdatingAccept);
+    EXPECT_EQ(result5.finalResult.state, procedure::ProcedureState::Completed);
 
     // After completion, slot is auto-cleaned
     EXPECT_EQ(runner.activeCount(), 0u);

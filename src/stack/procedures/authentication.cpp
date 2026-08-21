@@ -25,7 +25,6 @@
 
 #include "gsml3parser/stack/subscriber_registry.h"
 #include "gsml3parser/mm/l3mmmessages.h"
-#include "gsml3parser/rr/l3rrmessages.h"
 
 namespace gsml3parser {
 
@@ -125,6 +124,10 @@ ProcedureStepResult AuthenticationProcedure::feed(const ParsedMessage& msg,
 
 ProcedureStepResult AuthenticationProcedure::feedExternalTyped(
     const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
+    // The sink is never invoked here: feedExternalTyped has no incoming L3 message,
+    // so the response is signaled solely by the token in the returned result
+    // (see response_sink.h).
+    (void)sink;
     ProcedureStepResult result;
 
     if (const auto* chal = std::get_if<AuthChallenge>(&data)) {
@@ -142,9 +145,11 @@ ProcedureStepResult AuthenticationProcedure::feedExternalTyped(
 
         if (mCurrentState == State::INIT && mHasRand) {
             transitionTo(State::SEND_AUTH_REQ);
+            // The sink is not invoked on the external-data path (no incoming L3
+            // message); the response is signaled by the token in the result
+            // (see response_sink.h).
             result.action = ProcedureStepResult::Action::SendResponseWithToken;
             result.responseToken = ResponseToken::AuthenticationRequest;
-            if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
         }
     }
 

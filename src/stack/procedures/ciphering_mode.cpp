@@ -93,6 +93,10 @@ ProcedureStepResult CipheringModeProcedure::feed(const ParsedMessage& msg,
 
 ProcedureStepResult CipheringModeProcedure::feedExternalTyped(
     const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
+    // The sink is never invoked here: feedExternalTyped has no incoming L3 message,
+    // so the response is signaled solely by the token in the returned result
+    // (see response_sink.h).
+    (void)sink;
     ProcedureStepResult result;
 
     if (const auto* params = std::get_if<CipheringParameters>(&data)) {
@@ -106,7 +110,6 @@ ProcedureStepResult CipheringModeProcedure::feedExternalTyped(
                 session->response.cipherAlgo = params->algorithmSelector;
                 session->response.hasCipherAlgo = true;
             }
-            if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
         }
     }
 

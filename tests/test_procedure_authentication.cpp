@@ -94,7 +94,9 @@ TEST(AuthenticationProcedureTest, AuthP_FeedExternal_RAND_SendsAuthRequest) {
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_EQ(res.responseToken, ResponseToken::AuthenticationRequest);
-    EXPECT_TRUE(sinkCalled);
+    // The sink is an observability hook invoked only from feed() with the real
+    // incoming message; feedExternalTyped never invokes it (see response_sink.h).
+    EXPECT_FALSE(sinkCalled);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::InProgress);
 }
 

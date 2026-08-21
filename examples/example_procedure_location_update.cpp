@@ -51,9 +51,17 @@ int main() {
     std::cout << "Action: " << static_cast<int>(r2.action) << "\n";
 
     // 4. Feed external auth data (16-byte RAND + 4-byte expected SRES).
+    // The expected SRES must match the AuthenticationResponse fed in step 5
+    // (0xEFBEADDE, big-endian bytes) so the flow reaches the VLR decision.
     std::cout << "\n--- Step 3: FeedExternal auth data (RAND + SRES) ---\n";
 
-    auto r3 = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, session, AuthChallenge{}, responseSink);
+    AuthChallenge chal{};
+    for (int i = 0; i < 16; ++i) chal.rand[static_cast<size_t>(i)] = static_cast<uint8_t>(0xA0 + i);
+    chal.expectedSres[0] = 0xEF;
+    chal.expectedSres[1] = 0xBE;
+    chal.expectedSres[2] = 0xAD;
+    chal.expectedSres[3] = 0xDE;
+    auto r3 = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, session, chal, responseSink);
     std::cout << "Action: " << static_cast<int>(r3.action)
               << " (SendResponseWithToken=" << static_cast<int>(ProcedureStepResult::Action::SendResponseWithToken) << ")\n";
 
@@ -80,14 +88,17 @@ int main() {
     }
 
     // 8. Feed VLR accept decision -> COMPLETED.
+    // Under the response/terminal rule (procedure.h) the accept step keeps
+    // action == SendResponseWithToken (the LocationUpdatingAccept must still be
+    // built) and reports the terminal state via finalResult.
     std::cout << "\n--- Step 7: FeedExternal VLR accept ---\n";
     auto r7 = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, session, VLRDecision{true, 0x12345678u, MMRejectCause::Zero}, responseSink);
     std::cout << "Action: " << static_cast<int>(r7.action)
-              << " (Completed=" << static_cast<int>(ProcedureStepResult::Action::Completed) << ")\n";
+              << " (SendResponseWithToken=" << static_cast<int>(ProcedureStepResult::Action::SendResponseWithToken) << ")\n";
 
     // 9. Verify completion and auto-cleanup.
     std::cout << "\n--- Result ---\n";
-    if (r7.action == ProcedureStepResult::Action::Completed) {
+    if (r7.finalResult.state == procedure::ProcedureState::Completed) {
         std::cout << "Location update completed successfully!\n";
         std::cout << "  Reason: " << r7.finalResult.reason << "\n";
     }

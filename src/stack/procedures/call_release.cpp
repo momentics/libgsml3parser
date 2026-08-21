@@ -100,22 +100,25 @@ ProcedureStepResult CallReleaseProcedure::feed(const ParsedMessage& msg,
             auto pd = messagePD(msg);
             auto mti = messageMTI(msg);
             if (pd == L3PD::CallControl && mti == L3Release::MTI) {
+                // Terminal with response: keep action == SendResponseWithToken per the
+                // response/terminal rule (procedure.h); the terminal state is reported
+                // via finalResult only.
                 result.action = ProcedureStepResult::Action::SendResponseWithToken;
                 result.responseToken = ResponseToken::ReleaseComplete;
                 if (sink) sink(SMAction::SendResponse, msg, session);
                 complete();
-                result.action = ProcedureStepResult::Action::Completed;
                 result.finalResult = {type(), mProcState, "release_complete_sent"};
             }
             break;
         }
 
         case State::SEND_RELEASE_COMPLETE: {
+            // Terminal with response: keep SendResponseWithToken; report the
+            // terminal state via finalResult only.
             result.action = ProcedureStepResult::Action::SendResponseWithToken;
             result.responseToken = ResponseToken::ReleaseComplete;
             if (sink) sink(SMAction::SendResponse, msg, session);
             complete();
-            result.action = ProcedureStepResult::Action::Completed;
             result.finalResult = {type(), mProcState, "release_complete_sent"};
             break;
         }
@@ -125,12 +128,24 @@ ProcedureStepResult CallReleaseProcedure::feed(const ParsedMessage& msg,
             break;
     }
 
+    // Terminal-state reporting: when the procedure finished WITH a response in this
+    // step (responseToken set), keep action == SendResponseWithToken per the
+    // response/terminal rule (procedure.h) — only report the terminal state via
+    // finalResult. Otherwise report the terminal action itself.
     if (mProcState == procedure::ProcedureState::Completed) {
-        result.action = ProcedureStepResult::Action::Completed;
-        result.finalResult = {type(), mProcState, "ok"};
+        if (result.responseToken == ResponseToken::None) {
+            result.action = ProcedureStepResult::Action::Completed;
+        }
+        if (result.finalResult.state == procedure::ProcedureState::Initiated) {
+            result.finalResult = {type(), mProcState, "ok"};
+        }
     } else if (mProcState == procedure::ProcedureState::Failed) {
-        result.action = ProcedureStepResult::Action::Failed;
-        result.finalResult = {type(), mProcState, "procedure_failed"};
+        if (result.responseToken == ResponseToken::None) {
+            result.action = ProcedureStepResult::Action::Failed;
+        }
+        if (result.finalResult.state == procedure::ProcedureState::Initiated) {
+            result.finalResult = {type(), mProcState, "procedure_failed"};
+        }
     }
 
     return result;

@@ -94,12 +94,24 @@ ProcedureStepResult IMSIDetachProcedure::feed(const ParsedMessage& msg,
             break;
     }
 
+    // Terminal-state reporting: when the procedure finished WITH a response in this
+    // step (responseToken set), keep action == SendResponseWithToken per the
+    // response/terminal rule (procedure.h) — only report the terminal state via
+    // finalResult. Otherwise report the terminal action itself.
     if (mProcState == procedure::ProcedureState::Completed) {
-        result.action = ProcedureStepResult::Action::Completed;
-        result.finalResult = {type(), mProcState, "ok"};
+        if (result.responseToken == ResponseToken::None) {
+            result.action = ProcedureStepResult::Action::Completed;
+        }
+        if (result.finalResult.state == procedure::ProcedureState::Initiated) {
+            result.finalResult = {type(), mProcState, "ok"};
+        }
     } else if (mProcState == procedure::ProcedureState::Failed) {
-        result.action = ProcedureStepResult::Action::Failed;
-        result.finalResult = {type(), mProcState, "procedure_failed"};
+        if (result.responseToken == ResponseToken::None) {
+            result.action = ProcedureStepResult::Action::Failed;
+        }
+        if (result.finalResult.state == procedure::ProcedureState::Initiated) {
+            result.finalResult = {type(), mProcState, "procedure_failed"};
+        }
     }
 
     return result;

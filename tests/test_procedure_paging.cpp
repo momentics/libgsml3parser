@@ -69,7 +69,9 @@ TEST(PagingProcedureTest, Pag_Init_FeedExternal_StartsPage1) {
         }));
 
     EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
-    EXPECT_TRUE(sinkCalled);
+    // The sink is an observability hook invoked only from feed() with the real
+    // incoming message; feedExternalTyped never invokes it (see response_sink.h).
+    EXPECT_FALSE(sinkCalled);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::InProgress);
 }
 

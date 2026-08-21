@@ -133,6 +133,11 @@ ProcedureStepResult PagingProcedure::feedExternalTyped(
     const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
     ProcedureStepResult result;
 
+    // The sink is never invoked here: feedExternalTyped has no incoming L3 message,
+    // so the response is signaled solely by the token in the returned result
+    // (see response_sink.h).
+    (void)sink;
+
     if (const auto* trigger = std::get_if<PagingTrigger>(&data)) {
         if (mCurrentState == State::INIT) {
             transitionTo(State::SEND_PAGE1);
@@ -145,7 +150,6 @@ ProcedureStepResult PagingProcedure::feedExternalTyped(
                 session->response.identity = trigger->identity;
                 session->response.hasIdentity = true;
             }
-            if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3PagingRequestType1{}}}, nullptr);
         }
     }
 

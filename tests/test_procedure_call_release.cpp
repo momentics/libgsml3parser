@@ -54,10 +54,14 @@ TEST(CallReleaseProcedure, NormalFlow) {
     EXPECT_EQ(r1.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_EQ(r1.responseToken, ResponseToken::Disconnect);
 
-    // Feed Release message - triggers SEND_RELEASE_COMPLETE -> COMPLETED
+    // Feed Release message - triggers SEND_RELEASE_COMPLETE -> COMPLETED.
+    // Terminal with response: action stays SendResponseWithToken (rule in
+    // procedure.h) so the caller still builds the ReleaseComplete; the terminal
+    // state is reported via finalResult.
     auto r2 = proc.feed(makeRelease(), nullptr, {});
-    EXPECT_EQ(r2.action, ProcedureStepResult::Action::Completed);
+    EXPECT_EQ(r2.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_EQ(r2.responseToken, ResponseToken::ReleaseComplete);
+    EXPECT_EQ(r2.finalResult.state, procedure::ProcedureState::Completed);
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Completed);
 }
 

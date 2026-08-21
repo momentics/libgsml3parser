@@ -262,9 +262,13 @@ ProcedureStepResult ProcedureOrchestrator::feed(const ParsedMessage& msg,
                 if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {
                     mLastToken = result.responseToken;
                 }
-                if (result.action == ProcedureStepResult::Action::Completed) {
+                // Terminal state is reported via finalResult (see the response/terminal
+                // rule in procedure.h): a procedure may finish WITH a pending response
+                // token in the same step, so action alone is not a terminal indicator.
+                if (result.finalResult.state == procedure::ProcedureState::Completed) {
                     onProcedureCompleted(result);
-                } else if (result.action == ProcedureStepResult::Action::Failed) {
+                } else if (result.finalResult.state == procedure::ProcedureState::Failed ||
+                           result.finalResult.state == procedure::ProcedureState::TimedOut) {
                     onProcedureFailed(result);
                 }
                 return result;
@@ -285,9 +289,13 @@ ProcedureStepResult ProcedureOrchestrator::feedExternalTyped(const ExternalData&
         if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {
             mLastToken = result.responseToken;
         }
-        if (result.action == ProcedureStepResult::Action::Completed) {
+        // Terminal state is reported via finalResult (see the response/terminal
+        // rule in procedure.h): a procedure may finish WITH a pending response
+        // token in the same step, so action alone is not a terminal indicator.
+        if (result.finalResult.state == procedure::ProcedureState::Completed) {
             onProcedureCompleted(result);
-        } else if (result.action == ProcedureStepResult::Action::Failed) {
+        } else if (result.finalResult.state == procedure::ProcedureState::Failed ||
+                   result.finalResult.state == procedure::ProcedureState::TimedOut) {
             onProcedureFailed(result);
         }
         return result;
@@ -402,9 +410,11 @@ ProcedureStepResult ProcedureOrchestrator::handleLocationUpdatePhase(
 ProcedureStepResult ProcedureOrchestrator::handleIMSIDetachPhase(
     const ParsedMessage& msg, SubscriberSession* session) {
     (void)msg;
-    (void)session;
 
     ProcedureStepResult result;
+    // Terminal with response: keep action == SendResponseWithToken per the
+    // response/terminal rule (procedure.h) so the caller still builds the
+    // CMServiceAccept; the terminal state is reported via finalResult only.
     result.action = ProcedureStepResult::Action::SendResponseWithToken;
     result.responseToken = ResponseToken::CMServiceAccept;
     mLastToken = ResponseToken::CMServiceAccept;
@@ -413,18 +423,18 @@ ProcedureStepResult ProcedureOrchestrator::handleIMSIDetachPhase(
         session->mmSM.setState(MMStateMachine::State::DEREGISTERED);
     }
 
-    result.action = ProcedureStepResult::Action::Completed;
     result.finalResult = {procedure::ProcedureType::IMSIDetach,
                           procedure::ProcedureState::Completed, "imsi_detach_accept"};
-    return result;
+    return result;   // action stays SendResponseWithToken
 }
 
 ProcedureStepResult ProcedureOrchestrator::handleCallReleasePhase(
     const ParsedMessage& msg, SubscriberSession* session) {
     (void)msg;
-    (void)session;
 
     ProcedureStepResult result;
+    // Terminal with response: keep SendResponseWithToken so the caller still
+    // builds the Release; the terminal state is reported via finalResult only.
     result.action = ProcedureStepResult::Action::SendResponseWithToken;
     result.responseToken = ResponseToken::Release;
     mLastToken = ResponseToken::Release;
@@ -433,10 +443,9 @@ ProcedureStepResult ProcedureOrchestrator::handleCallReleasePhase(
         session->ccSM.setState(CCStateMachine::State::RELEASE);
     }
 
-    result.action = ProcedureStepResult::Action::Completed;
     result.finalResult = {procedure::ProcedureType::CallRelease,
                           procedure::ProcedureState::Completed, "release_sent"};
-    return result;
+    return result;   // action stays SendResponseWithToken
 }
 
 // ── External data handlers for inline phases ─────────────────────────────
@@ -454,6 +463,9 @@ ProcedureStepResult ProcedureOrchestrator::handleExternalDataLocationUpdate(
             mSession->response.mmCause = vlr->rejectCause;
         }
         if (vlr->accept) {
+            // Terminal with response: keep action == SendResponseWithToken per the
+            // response/terminal rule (procedure.h) so the caller still builds the
+            // LocationUpdatingAccept; the terminal state is reported via finalResult.
             result.action = ProcedureStepResult::Action::SendResponseWithToken;
             result.responseToken = ResponseToken::LocationUpdatingAccept;
             mLastToken = ResponseToken::LocationUpdatingAccept;
@@ -462,10 +474,11 @@ ProcedureStepResult ProcedureOrchestrator::handleExternalDataLocationUpdate(
                 mSession->mmSM.setState(MMStateMachine::State::REGISTERED);
             }
 
-            result.action = ProcedureStepResult::Action::Completed;
             result.finalResult = {procedure::ProcedureType::LocationUpdate,
                                   procedure::ProcedureState::Completed, "vlr_accept"};
         } else {
+            // Terminal with response (reject): keep SendResponseWithToken; report the
+            // terminal Failed state via finalResult only.
             result.action = ProcedureStepResult::Action::SendResponseWithToken;
             result.responseToken = ResponseToken::LocationUpdatingReject;
             mLastToken = ResponseToken::LocationUpdatingReject;
@@ -474,7 +487,6 @@ ProcedureStepResult ProcedureOrchestrator::handleExternalDataLocationUpdate(
                 mSession->mmSM.setState(MMStateMachine::State::DEREGISTERED);
             }
 
-            result.action = ProcedureStepResult::Action::Failed;
             result.finalResult = {procedure::ProcedureType::LocationUpdate,
                                   procedure::ProcedureState::Failed, "vlr_reject"};
         }

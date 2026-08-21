@@ -27,6 +27,12 @@
 /// (one heap allocation at creation, shared by all copies); non-capturing callables use
 /// a plain function pointer with user context.
 ///
+/// Semantics: the sink is an observability hook, NOT the response-building mechanism
+/// (responses are built from the ResponseToken in the ProcedureStepResult). It is
+/// invoked only from Procedure::feed() with the real incoming L3 message.
+/// Procedure::feedExternalTyped() never invokes it — there is no incoming L3 message
+/// on that path, and the response is signaled by the token in the result instead.
+///
 /// Thread safety: copies may be shared across threads (refcount is atomic). The invoked
 /// callback itself is the user's responsibility to make thread-safe.
 /// Memory: sizeof(ResponseSink) == 2 * sizeof(void*).

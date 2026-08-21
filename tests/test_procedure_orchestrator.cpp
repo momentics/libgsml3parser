@@ -146,8 +146,12 @@ TEST(ProcedureOrchestrator, IMSIDetach_FullFlow) {
     ProcedureOrchestrator orchestrator;
 
     auto result = orchestrator.feed(makeIMSIDetachIndication(), &session);
-    EXPECT_EQ(result.action, ProcedureStepResult::Action::Completed);
+    // Terminal with response: action stays SendResponseWithToken (rule in
+    // procedure.h) so the caller still builds the CMServiceAccept; the terminal
+    // state is reported via finalResult.
+    EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_EQ(result.responseToken, ResponseToken::CMServiceAccept);
+    EXPECT_EQ(result.finalResult.state, procedure::ProcedureState::Completed);
 }
 
 TEST(ProcedureOrchestrator, CallRelease_Flow) {
@@ -156,8 +160,12 @@ TEST(ProcedureOrchestrator, CallRelease_Flow) {
     ProcedureOrchestrator orchestrator;
 
     auto result = orchestrator.feed(makeDisconnect(), &session);
-    EXPECT_EQ(result.action, ProcedureStepResult::Action::Completed);
+    // Terminal with response: action stays SendResponseWithToken (rule in
+    // procedure.h) so the caller still builds the Release; the terminal state
+    // is reported via finalResult.
+    EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_EQ(result.responseToken, ResponseToken::Release);
+    EXPECT_EQ(result.finalResult.state, procedure::ProcedureState::Completed);
 }
 
 TEST(ProcedureOrchestrator, BuildPendingResponse_ZeroAlloc) {

@@ -73,6 +73,10 @@ class SubscriberSession;
 /// Inside the callback, invoke ResponseBuilder and write bytes into your buffer
 /// (Arena, socket buffer, etc.).
 ///
+/// The sink is an observability hook invoked only from feed() with the real
+/// incoming message; feedExternalTyped() never invokes it (the response on that
+/// path is signaled by the token in the ProcedureStepResult).
+///
 /// ResponseSink is a zero-overhead fn+ctx callback (exactly two machine words,
 /// sizeof == 16 on 64-bit); invocation is a direct function-pointer call with
 /// no per-call heap allocation. Wrap capturing lambdas with makeResponseSink()
@@ -122,18 +126,29 @@ enum class ResponseToken : uint8_t {
 /// whether the procedure should continue, send a response, wait for external
 /// data, or has reached a terminal state. Does NOT contain response bytes —
 /// responses are generated via the ResponseToken + ResponseBuilder pattern.
+///
+/// **Response/terminal rule:** if a procedure must send a response,
+/// `action == SendResponseWithToken` is ALWAYS the case — even when the
+/// procedure reaches a terminal state in the same step. The terminal state is
+/// reported exclusively through `finalResult` (state == Completed/Failed).
+/// Caller contract:
+///   1. if `action == SendResponseWithToken` -> build the response from
+///      `responseToken` (ResponseBuilder::buildResponseFromToken);
+///   2. if `finalResult.state` is terminal (Completed/Failed/TimedOut) ->
+///      release the procedure.
 struct ProcedureStepResult {
     enum class Action : uint8_t {
         Continue,               ///< Procedure continues; awaiting next message
         SendResponseWithToken,  ///< Build response using responseToken + ResponseBuilder
+                                 ///< (kept even when the procedure terminates in this step)
         WaitingExternal,        ///< Needs external data (RAND from AuC, BSC decision)
-        Completed,              ///< Procedure finished successfully
-        Failed                  ///< Procedure terminated with an error
+        Completed,              ///< Procedure finished successfully (no response pending)
+        Failed                  ///< Procedure terminated with an error (no response pending)
     };
 
     Action action{Action::Continue};
     ResponseToken responseToken{ResponseToken::None};  ///< Which message to build when action == SendResponseWithToken
-    procedure::ProcedureResult finalResult{};  ///< Populated when action is Completed or Failed
+    procedure::ProcedureResult finalResult{};  ///< Sole terminal indicator (see the response/terminal rule above)
 };
 
 static_assert(sizeof(ProcedureStepResult) <= 32, "ProcedureStepResult must stay small");

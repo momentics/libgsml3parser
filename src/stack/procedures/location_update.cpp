@@ -26,7 +26,6 @@
 #include "gsml3parser/stack/subscriber_registry.h"
 #include "gsml3parser/stack/response_builder.h"
 #include "gsml3parser/mm/l3mmmessages.h"
-#include "gsml3parser/rr/l3rrmessages.h"
 
 namespace gsml3parser {
 
@@ -171,21 +170,24 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
             break;
 
         case State::SEND_ACCEPT: {
+            // Terminal with response: keep action == SendResponseWithToken per the
+            // response/terminal rule (procedure.h); the terminal state is reported
+            // via finalResult only.
             result.action = ProcedureStepResult::Action::SendResponseWithToken;
             result.responseToken = ResponseToken::LocationUpdatingAccept;
             if (sink) sink(SMAction::SendResponse, msg, session);
             complete();
-            result.action = ProcedureStepResult::Action::Completed;
             result.finalResult = {type(), mProcState, "accept_sent"};
             break;
         }
 
         case State::SEND_REJECT: {
+            // Terminal with response (reject): keep SendResponseWithToken; report the
+            // terminal Failed state via finalResult only.
             result.action = ProcedureStepResult::Action::SendResponseWithToken;
             result.responseToken = ResponseToken::LocationUpdatingReject;
             if (sink) sink(SMAction::SendResponse, msg, session);
             fail("reject_sent");
-            result.action = ProcedureStepResult::Action::Failed;
             result.finalResult = {type(), mProcState, "reject_sent"};
             break;
         }
@@ -195,12 +197,24 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
             break;
     }
 
+    // Terminal-state reporting: when the procedure finished WITH a response in this
+    // step (responseToken set), keep action == SendResponseWithToken per the
+    // response/terminal rule (procedure.h) — only report the terminal state via
+    // finalResult. Otherwise report the terminal action itself.
     if (mProcState == procedure::ProcedureState::Completed) {
-        result.action = ProcedureStepResult::Action::Completed;
-        result.finalResult = {type(), mProcState, "ok"};
+        if (result.responseToken == ResponseToken::None) {
+            result.action = ProcedureStepResult::Action::Completed;
+        }
+        if (result.finalResult.state == procedure::ProcedureState::Initiated) {
+            result.finalResult = {type(), mProcState, "ok"};
+        }
     } else if (mProcState == procedure::ProcedureState::Failed) {
-        result.action = ProcedureStepResult::Action::Failed;
-        result.finalResult = {type(), mProcState, "procedure_failed"};
+        if (result.responseToken == ResponseToken::None) {
+            result.action = ProcedureStepResult::Action::Failed;
+        }
+        if (result.finalResult.state == procedure::ProcedureState::Initiated) {
+            result.finalResult = {type(), mProcState, "procedure_failed"};
+        }
     }
 
     return result;
@@ -208,6 +222,10 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
 
 ProcedureStepResult LocationUpdateProcedure::feedExternalTyped(
     const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
+    // The sink is never invoked here: feedExternalTyped has no incoming L3 message,
+    // so the response is signaled solely by the token in the returned result
+    // (see response_sink.h).
+    (void)sink;
     ProcedureStepResult result;
 
     std::visit([&](const auto& typedData) {
@@ -226,10 +244,12 @@ ProcedureStepResult LocationUpdateProcedure::feedExternalTyped(
 
             if (mCurrentState == State::AUTH_CHECK && mHasRand) {
                 transitionTo(State::SEND_AUTH);
+                // The sink is an observability hook invoked only from feed() with the
+                // real incoming message; on this external-data path the response is
+                // signaled by the token in the result (see response_sink.h).
                 result.action = ProcedureStepResult::Action::SendResponseWithToken;
                 result.responseToken = ResponseToken::AuthenticationRequest;
                 startTimer(L3TimerId::T3106, std::chrono::milliseconds(3000));
-                if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
             }
         } else if constexpr (std::is_same_v<T, VLRDecision>) {
             if (mCurrentState == State::WAITING_EXTERNAL) {
@@ -243,18 +263,23 @@ ProcedureStepResult LocationUpdateProcedure::feedExternalTyped(
                 if (typedData.accept) {
                     mNewTmsi = typedData.newTmsi;
                     transitionTo(State::SEND_ACCEPT);
+                    // Terminal with response: keep action == SendResponseWithToken per
+                    // the response/terminal rule (procedure.h); the terminal state is
+                    // reported via finalResult only. The sink is not invoked on the
+                    // external-data path (no incoming L3 message; see response_sink.h).
                     result.action = ProcedureStepResult::Action::SendResponseWithToken;
                     result.responseToken = ResponseToken::LocationUpdatingAccept;
-                    if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
                     complete();
-                    result.action = ProcedureStepResult::Action::Completed;
                     result.finalResult = {type(), mProcState, "vlr_accept"};
                 } else {
                     mRejectCause = typedData.rejectCause;
                     transitionTo(State::SEND_REJECT);
+                    // Terminal with response (reject): keep SendResponseWithToken;
+                    // report the terminal Failed state via finalResult only.
                     result.action = ProcedureStepResult::Action::SendResponseWithToken;
                     result.responseToken = ResponseToken::LocationUpdatingReject;
-                    if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
+                    fail("vlr_reject");
+                    result.finalResult = {type(), mProcState, "vlr_reject"};
                 }
             }
         }

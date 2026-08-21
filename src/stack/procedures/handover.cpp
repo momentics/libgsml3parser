@@ -99,6 +99,11 @@ ProcedureStepResult HandoverProcedure::feedExternalTyped(
     const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
     ProcedureStepResult result;
 
+    // The sink is never invoked here: feedExternalTyped has no incoming L3 message,
+    // so the response is signaled solely by the token in the returned result
+    // (see response_sink.h).
+    (void)sink;
+
     if (const auto* target = std::get_if<HandoverTarget>(&data)) {
         if (mCurrentState == State::INIT) {
             transitionTo(State::SEND_HO_CMD);
@@ -110,7 +115,6 @@ ProcedureStepResult HandoverProcedure::feedExternalTyped(
                 session->response.hoChannel = target->channel;
                 session->response.hasHoChannel = true;
             }
-            if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
         }
     }
 

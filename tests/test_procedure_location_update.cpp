@@ -260,15 +260,21 @@ TEST(LocationUpdateProcedure, LUP_WaitingExternal_FeedAccept_CompletesWithLocati
 
     EXPECT_EQ(lup.state(), ProcedureState::WaitingExternal);
 
-    // Feed Accept VLRDecision via feedExternalTyped
+    // Feed Accept VLRDecision via feedExternalTyped.
+    // The sink is not invoked from feedExternalTyped (no incoming L3 message);
+    // the response is signaled by the token in the result (see response_sink.h).
     bool sinkCalled = false;
     auto acceptResult = lup.feedExternalTyped(makeAcceptData(), &sess,
         makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
         }));
 
-    EXPECT_TRUE(sinkCalled);
-    EXPECT_EQ(acceptResult.action, ProcedureStepResult::Action::Completed);
+    // Terminal with response: action stays SendResponseWithToken (rule in
+    // procedure.h); the terminal state is reported via finalResult.
+    EXPECT_FALSE(sinkCalled);
+    EXPECT_EQ(acceptResult.action, ProcedureStepResult::Action::SendResponseWithToken);
+    EXPECT_EQ(acceptResult.responseToken, ResponseToken::LocationUpdatingAccept);
+    EXPECT_EQ(acceptResult.finalResult.state, ProcedureState::Completed);
     EXPECT_EQ(lup.state(), ProcedureState::Completed);
 }
 
@@ -287,15 +293,22 @@ TEST(LocationUpdateProcedure, LUP_WaitingExternal_FeedReject_FailsWithLocationUp
 
     EXPECT_EQ(lup.state(), ProcedureState::WaitingExternal);
 
-    // Feed Reject VLRDecision via feedExternalTyped
+    // Feed Reject VLRDecision via feedExternalTyped.
+    // The sink is not invoked from feedExternalTyped (no incoming L3 message);
+    // the response is signaled by the token in the result (see response_sink.h).
     bool sinkCalled = false;
     auto rejectResult = lup.feedExternalTyped(makeRejectData(), &sess,
         makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
         }));
 
-    EXPECT_TRUE(sinkCalled);
+    // Terminal with response (reject): action stays SendResponseWithToken; the
+    // terminal Failed state is reported via finalResult.
+    EXPECT_FALSE(sinkCalled);
     EXPECT_EQ(rejectResult.action, ProcedureStepResult::Action::SendResponseWithToken);
+    EXPECT_EQ(rejectResult.responseToken, ResponseToken::LocationUpdatingReject);
+    EXPECT_EQ(rejectResult.finalResult.state, ProcedureState::Failed);
+    EXPECT_EQ(lup.state(), ProcedureState::Failed);
 }
 
 // LUP_Tick_T3106Expired_Fails
@@ -364,13 +377,19 @@ TEST(LocationUpdateProcedure, LUP_FullFlow_WithAuth_CompletesSuccessfully) {
     EXPECT_EQ(lup.state(), ProcedureState::WaitingExternal);
 
     // Step 5: Feed Accept VLRDecision via feedExternalTyped -> completes procedure.
+    // The sink is not invoked from feedExternalTyped (no incoming L3 message);
+    // the response is signaled by the token in the result (see response_sink.h).
     bool sinkCalled = false;
     auto r5 = lup.feedExternalTyped(makeAcceptData(), &sess,
         makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
         }));
 
-    EXPECT_TRUE(sinkCalled);
-    EXPECT_EQ(r5.action, ProcedureStepResult::Action::Completed);
+    // Terminal with response: action stays SendResponseWithToken (rule in
+    // procedure.h); the terminal state is reported via finalResult.
+    EXPECT_FALSE(sinkCalled);
+    EXPECT_EQ(r5.action, ProcedureStepResult::Action::SendResponseWithToken);
+    EXPECT_EQ(r5.responseToken, ResponseToken::LocationUpdatingAccept);
+    EXPECT_EQ(r5.finalResult.state, ProcedureState::Completed);
     EXPECT_EQ(lup.state(), ProcedureState::Completed);
 }

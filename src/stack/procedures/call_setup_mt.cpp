@@ -182,6 +182,10 @@ ProcedureStepResult CallSetupMTPercedure::feed(const ParsedMessage& msg,
 ProcedureStepResult CallSetupMTPercedure::feedExternalTyped(
     const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
     (void)data;
+    // The sink is never invoked here: feedExternalTyped has no incoming L3 message,
+    // so the response is signaled solely by the token in the returned result
+    // (see response_sink.h).
+    (void)sink;
     ProcedureStepResult result;
 
     if (mCurrentState == State::INIT) {
@@ -196,7 +200,6 @@ ProcedureStepResult CallSetupMTPercedure::feedExternalTyped(
             session->response.identity = session->context.identity();
             session->response.hasIdentity = true;
         }
-        if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3PagingRequestType1{}}}, nullptr);
     }
 
     return result;
