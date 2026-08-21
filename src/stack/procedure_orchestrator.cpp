@@ -278,7 +278,10 @@ ProcedureStepResult ProcedureOrchestrator::feed(const ParsedMessage& msg,
 ProcedureStepResult ProcedureOrchestrator::feedExternalTyped(const ExternalData& data,
                                                                ResponseSink sink) {
     if (mCurrentProcedure) {
-        ProcedureStepResult result = mCurrentProcedure->feedExternalTyped(data, std::move(sink));
+        // The orchestrator owns the session (mSession); pass it so the active
+        // procedure can populate session->response with real parameters.
+        ProcedureStepResult result =
+            mCurrentProcedure->feedExternalTyped(data, mSession, std::move(sink));
         if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {
             mLastToken = result.responseToken;
         }
@@ -444,6 +447,12 @@ ProcedureStepResult ProcedureOrchestrator::handleExternalDataLocationUpdate(
     ProcedureStepResult result;
 
     if (const auto* vlr = std::get_if<VLRDecision>(&data)) {
+        // Expose the VLR decision on the session so the builder uses the real
+        // new TMSI / reject cause (never fabricated values).
+        if (mSession) {
+            mSession->response.newTmsi = vlr->newTmsi;
+            mSession->response.mmCause = vlr->rejectCause;
+        }
         if (vlr->accept) {
             result.action = ProcedureStepResult::Action::SendResponseWithToken;
             result.responseToken = ResponseToken::LocationUpdatingAccept;

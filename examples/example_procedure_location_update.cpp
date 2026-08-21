@@ -53,7 +53,7 @@ int main() {
     // 4. Feed external auth data (16-byte RAND + 4-byte expected SRES).
     std::cout << "\n--- Step 3: FeedExternal auth data (RAND + SRES) ---\n";
 
-    auto r3 = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, AuthChallenge{}, responseSink);
+    auto r3 = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, session, AuthChallenge{}, responseSink);
     std::cout << "Action: " << static_cast<int>(r3.action)
               << " (SendResponseWithToken=" << static_cast<int>(ProcedureStepResult::Action::SendResponseWithToken) << ")\n";
 
@@ -81,7 +81,7 @@ int main() {
 
     // 8. Feed VLR accept decision -> COMPLETED.
     std::cout << "\n--- Step 7: FeedExternal VLR accept ---\n";
-    auto r7 = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, VLRDecision{true, 0x12345678u, MMRejectCause::Zero}, responseSink);
+    auto r7 = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, session, VLRDecision{true, 0x12345678u, MMRejectCause::Zero}, responseSink);
     std::cout << "Action: " << static_cast<int>(r7.action)
               << " (Completed=" << static_cast<int>(ProcedureStepResult::Action::Completed) << ")\n";
 

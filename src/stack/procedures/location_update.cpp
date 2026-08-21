@@ -207,7 +207,7 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult LocationUpdateProcedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink sink) {
+    const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
     ProcedureStepResult result;
 
     std::visit([&](const auto& typedData) {
@@ -217,6 +217,12 @@ ProcedureStepResult LocationUpdateProcedure::feedExternalTyped(
             mHasRand = true;
             std::memcpy(mExpectedSRES.data(), typedData.expectedSres.data(), 4);
             mHasExpectedSRES = true;
+
+            // Expose the RAND on the session (real parameters for the builder).
+            if (session) {
+                std::memcpy(session->response.rand.data(), typedData.rand.data(), 16);
+                session->response.hasRand = true;
+            }
 
             if (mCurrentState == State::AUTH_CHECK && mHasRand) {
                 transitionTo(State::SEND_AUTH);
@@ -228,6 +234,12 @@ ProcedureStepResult LocationUpdateProcedure::feedExternalTyped(
         } else if constexpr (std::is_same_v<T, VLRDecision>) {
             if (mCurrentState == State::WAITING_EXTERNAL) {
                 stopTimer();
+                // Expose the VLR decision on the session so the builder uses the
+                // real new TMSI / reject cause (never fabricated values).
+                if (session) {
+                    session->response.newTmsi = typedData.newTmsi;
+                    session->response.mmCause = typedData.rejectCause;
+                }
                 if (typedData.accept) {
                     mNewTmsi = typedData.newTmsi;
                     transitionTo(State::SEND_ACCEPT);

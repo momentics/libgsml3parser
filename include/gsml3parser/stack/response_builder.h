@@ -369,13 +369,29 @@ public:
     [[nodiscard]] static Expected<std::vector<uint8_t>> buildSetup(const std::string& calledNumber, uint8_t ti);
     [[nodiscard]] static int buildSetup(std::span<uint8_t> out, const std::string& calledNumber, uint8_t ti);
 
+    /// Build Setup directly from a BCD digit buffer (zero heap allocation).
+    ///
+    /// Hot-path variant of buildSetup() for callers that already hold the called
+    /// number in a fixed buffer (e.g. ResponseContext::calledNumber). Avoids the
+    /// std::string copy of the cold-path overload.
+    /// @param out Pre-allocated output buffer.
+    /// @param digits BCD digits in wire order (null-terminated not required).
+    /// @param len Number of valid digits in @p digits.
+    /// @param ti Transaction Identifier (0-7).
+    /// @return Number of bytes written, or -1 on error (buffer too small / len == 0).
+    [[nodiscard]] static int buildSetupZeroAlloc(std::span<uint8_t> out,
+        const char* digits, size_t len, uint8_t ti);
+
     // Build response bytes from ResponseToken + session context (zero-heap-allocation path).
+    /// All response parameters (RAND, TI, channel, identity, called number, causes) are
+    /// read from the session's ResponseContext, which the active procedure populates.
+    /// Returns -1 (instead of fabricating values) when a required parameter is missing.
     /// @param token The ResponseToken indicating which message to build.
     /// @param out Pre-allocated output buffer (Arena-provided).
-    /// @param session Optional session context for parameters (TMSI, LAI, TI, etc.).
-    /// @return Number of bytes written, or -1 on error.
+    /// @param session Session context providing the response parameters (required).
+    /// @return Number of bytes written, or -1 on error (missing parameter / buffer too small).
     [[nodiscard]] static int buildResponseFromToken(ResponseToken token, std::span<uint8_t> out,
-                                                     const SubscriberSession* session = nullptr);
+                                                     const SubscriberSession* session);
 };
 
 } // namespace gsml3parser

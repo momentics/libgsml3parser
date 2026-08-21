@@ -130,17 +130,21 @@ ProcedureStepResult PagingProcedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult PagingProcedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink sink) {
+    const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
     ProcedureStepResult result;
 
     if (const auto* trigger = std::get_if<PagingTrigger>(&data)) {
-        (void)trigger;
         if (mCurrentState == State::INIT) {
             transitionTo(State::SEND_PAGE1);
             result.action = ProcedureStepResult::Action::SendResponseWithToken;
             result.responseToken = ResponseToken::PagingRequestType1;
             startTimer(L3TimerId::T3109, std::chrono::milliseconds(5000));
             mPageAttempt = 1;
+            // Expose the paged identity on the session (real parameter).
+            if (session) {
+                session->response.identity = trigger->identity;
+                session->response.hasIdentity = true;
+            }
             if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3PagingRequestType1{}}}, nullptr);
         }
     }

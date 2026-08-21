@@ -37,15 +37,49 @@
 #include "gsml3parser/arena.h"
 
 #include <array>
+#include <atomic>
 #include <chrono>
+#include <cstring>
 #include <future>
 #include <set>
 #include <thread>
 #include <type_traits>
 #include <vector>
 
+// The CRT allocation hook is only used on plain MSVC builds. Under ASAN the
+// sanitizer intercepts allocations (and the ASAN CRT declares _CRT_ALLOC_HOOK
+// differently), so the hook is disabled there.
+#if defined(_MSC_VER) && !defined(GSML3PARSER_ASAN)
+#include <crtdbg.h>
+#endif
+
 using namespace gsml3parser;
 using namespace std::chrono_literals;
+
+#if defined(_MSC_VER) && !defined(GSML3PARSER_ASAN)
+namespace {
+// CRT hook stage values (crtdbg.h enum constants are debug-only, so use the
+// documented numeric values): 0 = new block allocated, 2 = block reallocated.
+constexpr int kCrtAllocStage = 0;
+constexpr int kCrtReallocStage = 2;
+
+// Counts all heap allocations while the alloc hook is active. Used to prove the
+// ResponseBuilder span path performs zero heap allocations (ASAN alone cannot
+// detect ordinary allocations, only memory errors).
+std::atomic<long> gAllocCount{0};
+void __cdecl allocHook(int stage, size_t /*size*/, int /*type*/,
+                       int /*allocationId*/, const unsigned char* /*file*/, int /*line*/) {
+    if (stage == kCrtAllocStage || stage == kCrtReallocStage) {
+        gAllocCount.fetch_add(1, std::memory_order_relaxed);
+    }
+}
+/// RAII guard that installs the allocation-counting hook for its lifetime.
+struct AllocHookGuard {
+    _CRT_ALLOC_HOOK old{_CrtSetAllocHook(allocHook)};
+    ~AllocHookGuard() { _CrtSetAllocHook(old); }
+};
+} // namespace
+#endif
 
 // Test: create 10,000 sessions and verify each can be looked up by TMSI.
 // Importance: Validates that SubscriberRegistry handles large subscriber counts
@@ -372,6 +406,91 @@ TEST(Stress, ResponseToken_Arena_100K_ZeroAlloc) {
     // Verify arena was used (some tokens should produce responses)
     EXPECT_GT(arena.used(), 0u) << "Arena should have accumulated data";
     EXPECT_LT(arena.used(), arena.capacity()) << "Arena must not be full";
+}
+
+// Test: the ResponseBuilder span (zero-heap-allocation) path performs ZERO heap
+// allocations across every span overload and every ResponseToken. This is the
+// core guarantee of the high-throughput build path (feed/tick/build must not
+// allocate). Uses MSVC CRT allocation hooks to count actual heap allocations
+// (ASAN reports memory errors, not the fact of allocation, so it cannot prove
+// this). 3GPP: TS 24.008 / TS 04.08 - response construction without heap pressure.
+TEST(Stress, ResponseBuilder_Span_ZeroHeapAllocations) {
+#if defined(_MSC_VER) && !defined(GSML3PARSER_ASAN)
+    SubscriberSession sess;
+    // Populate the response context so every token path has real parameters.
+    std::memset(sess.response.rand.data(), 0xAB, 16);
+    sess.response.hasRand = true;
+    sess.response.ti = 3;
+    sess.response.ccCause = CCCause::Normal_Call_Clearing;
+    std::memcpy(sess.response.calledNumber.data(), "12345678", 8);
+    sess.response.calledNumber[8] = '\0';
+    sess.response.calledNumberLen = 8;
+    sess.response.hasCalledNumber = true;
+    sess.response.channel = L3ChannelDescription(TDMA_SDCCH, 0, 1, 100);
+    sess.response.hasChannel = true;
+    sess.response.cipherAlgo = 1;
+    sess.response.hasCipherAlgo = true;
+    sess.response.identity = L3MobileIdentity{0x12345678u};
+    sess.response.hasIdentity = true;
+    sess.response.hoChannel = L3ChannelDescription(TDMA_TCHF, 0, 0, 150);
+    sess.response.hasHoChannel = true;
+    auto lai = L3LocationAreaIdentity("244", "15", 1234);
+
+    uint8_t buf[512];
+    AllocHookGuard guard;
+    gAllocCount = 0;
+    for (int i = 0; i < 1000; ++i) {
+        // Exercise every span overload directly (zero-alloc build path).
+        EXPECT_GT(ResponseBuilder::buildCMServiceAccept({buf, sizeof(buf)}), 0);
+        EXPECT_GT(ResponseBuilder::buildAuthenticationRequest(
+            {buf, sizeof(buf)}, std::span<const uint8_t>{sess.response.rand.data(), 16}), 0);
+        EXPECT_GT(ResponseBuilder::buildResponseFromToken(
+            ResponseToken::Setup, {buf, sizeof(buf)}, &sess), 0);
+        EXPECT_GT(ResponseBuilder::buildImmediateAssignment(
+            {buf, sizeof(buf)}, sess.response.channel, 0), 0);
+        EXPECT_GT(ResponseBuilder::buildAssignmentCommand(
+            {buf, sizeof(buf)}, sess.response.channel), 0);
+        EXPECT_GT(ResponseBuilder::buildChannelRelease({buf, sizeof(buf)}), 0);
+        EXPECT_GT(ResponseBuilder::buildCipheringModeCommand({buf, sizeof(buf)}, 1), 0);
+        EXPECT_GT(ResponseBuilder::buildPhysicalInformation({buf, sizeof(buf)}, 0), 0);
+        EXPECT_GT(ResponseBuilder::buildHandoverCommand(
+            {buf, sizeof(buf)}, sess.response.hoChannel), 0);
+        EXPECT_GT(ResponseBuilder::buildPagingRequestType1(
+            {buf, sizeof(buf)}, sess.response.identity), 0);
+        EXPECT_GT(ResponseBuilder::buildPagingRequestType2(
+            {buf, sizeof(buf)}, sess.response.identity), 0);
+        EXPECT_GT(ResponseBuilder::buildPagingRequestType3(
+            {buf, sizeof(buf)}, sess.response.identity), 0);
+        EXPECT_GT(ResponseBuilder::buildCMServiceReject({buf, sizeof(buf)}), 0);
+        EXPECT_GT(ResponseBuilder::buildIdentityRequest(
+            {buf, sizeof(buf)}, MobileIDType::IMSI), 0);
+        EXPECT_GT(ResponseBuilder::buildLocationUpdatingAccept(
+            {buf, sizeof(buf)}, lai), 0);
+        EXPECT_GT(ResponseBuilder::buildLocationUpdatingReject(
+            {buf, sizeof(buf)}, MMRejectCause::Congestion), 0);
+        EXPECT_GT(ResponseBuilder::buildTMSIReallocationCommand(
+            {buf, sizeof(buf)}, lai, 0x12345678u), 0);
+        EXPECT_GT(ResponseBuilder::buildCallProceeding({buf, sizeof(buf)}, 3), 0);
+        EXPECT_GT(ResponseBuilder::buildAlerting({buf, sizeof(buf)}, 3), 0);
+        EXPECT_GT(ResponseBuilder::buildConnect({buf, sizeof(buf)}, 3), 0);
+        EXPECT_GT(ResponseBuilder::buildConnectAcknowledge({buf, sizeof(buf)}, 3), 0);
+        EXPECT_GT(ResponseBuilder::buildDisconnect(
+            {buf, sizeof(buf)}, 3, CCCause::Normal_Call_Clearing), 0);
+        EXPECT_GT(ResponseBuilder::buildRelease(
+            {buf, sizeof(buf)}, 3, CCCause::Normal_Call_Clearing), 0);
+        EXPECT_GT(ResponseBuilder::buildReleaseComplete({buf, sizeof(buf)}, 3), 0);
+
+        // Exercise buildResponseFromToken for every token (session-parameter path).
+        for (int t = 1; t <= 24; ++t) {
+            (void)ResponseBuilder::buildResponseFromToken(
+                static_cast<ResponseToken>(t), {buf, sizeof(buf)}, &sess);
+        }
+    }
+    EXPECT_EQ(gAllocCount.load(), 0L)
+        << "span path must not allocate on the heap";
+#else
+    GTEST_SKIP() << "CRT alloc hooks are MSVC-only";
+#endif
 }
 
 // Test: tickAllTimers ticks ONLY sessions with active timers (O(active), not O(all)).

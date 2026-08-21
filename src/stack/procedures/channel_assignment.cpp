@@ -26,6 +26,21 @@
 
 namespace gsml3parser {
 
+namespace {
+// Map a logical ChannelType to a TypeAndOffset for L3ChannelDescription.
+// Used to expose the real assignment target on the session's ResponseContext.
+TypeAndOffset typeAndOffsetFor(ChannelType ch) {
+    switch (ch) {
+        case ChannelType::SDCCHType: return TDMA_SDCCH;
+        case ChannelType::TCHFType:  return TDMA_TCHF;
+        case ChannelType::TCHHType:  return TDMA_TCHH;
+        case ChannelType::SACCHType: return TDMA_SACCH;
+        case ChannelType::CBCHType:  return TDMA_CBCH;
+        default:                     return TDMA_SDCCH;
+    }
+}
+} // namespace
+
 ChannelAssignmentProcedure::ChannelAssignmentProcedure(ChannelType target)
     : mTargetType(target) {}
 
@@ -76,6 +91,13 @@ ProcedureStepResult ChannelAssignmentProcedure::feed(const ParsedMessage& msg,
             result.action = ProcedureStepResult::Action::SendResponseWithToken;
             result.responseToken = ResponseToken::ImmediateAssignment;
             startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
+            // Expose the target channel on the session (real assignment target)
+            // so the builder sends the correct ImmediateAssignment.
+            if (session) {
+                session->response.channel =
+                    L3ChannelDescription(typeAndOffsetFor(mTargetType), 0, 1, 100);
+                session->response.hasChannel = true;
+            }
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
 

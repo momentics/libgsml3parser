@@ -92,6 +92,17 @@ ProcedureStepResult CallSetupMTPercedure::feed(const ParsedMessage& msg,
             transitionTo(State::SEND_SETUP);
             result.action = ProcedureStepResult::Action::SendResponseWithToken;
             result.responseToken = ResponseToken::Setup;
+            // Expose the dialed number + TI on the session so the builder sends
+            // the real called party (never a fabricated/empty number).
+            if (session && !mCalledNumber.empty()) {
+                session->response.ti = mTI;
+                size_t n = mCalledNumber.size();
+                if (n > 19) n = 19;  // leave room for the null terminator
+                std::memcpy(session->response.calledNumber.data(), mCalledNumber.data(), n);
+                session->response.calledNumber[n] = '\0';
+                session->response.calledNumberLen = static_cast<uint8_t>(n);
+                session->response.hasCalledNumber = true;
+            }
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
 
@@ -100,6 +111,16 @@ ProcedureStepResult CallSetupMTPercedure::feed(const ParsedMessage& msg,
             transitionTo(State::WAIT_CONFIRMED);
             result.action = ProcedureStepResult::Action::SendResponseWithToken;
             result.responseToken = ResponseToken::Setup;
+            // Expose the dialed number + TI on the session (real parameters).
+            if (session && !mCalledNumber.empty()) {
+                session->response.ti = mTI;
+                size_t n = mCalledNumber.size();
+                if (n > 19) n = 19;  // leave room for the null terminator
+                std::memcpy(session->response.calledNumber.data(), mCalledNumber.data(), n);
+                session->response.calledNumber[n] = '\0';
+                session->response.calledNumberLen = static_cast<uint8_t>(n);
+                session->response.hasCalledNumber = true;
+            }
             if (sink) sink(SMAction::SendResponse, msg, session);
             break;
 
@@ -159,7 +180,7 @@ ProcedureStepResult CallSetupMTPercedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult CallSetupMTPercedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink sink) {
+    const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
     (void)data;
     ProcedureStepResult result;
 
@@ -169,6 +190,12 @@ ProcedureStepResult CallSetupMTPercedure::feedExternalTyped(
         result.responseToken = ResponseToken::PagingRequestType1;
         startTimer(L3TimerId::T3109, std::chrono::milliseconds(5000));
         mPageAttempt = 1;
+        // Expose the paged identity on the session (the MS's own identity) so
+        // the builder pages the real subscriber (never a fabricated TMSI).
+        if (session) {
+            session->response.identity = session->context.identity();
+            session->response.hasIdentity = true;
+        }
         if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3PagingRequestType1{}}}, nullptr);
     }
 

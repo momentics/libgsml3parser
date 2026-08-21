@@ -22,8 +22,10 @@
 #pragma once
 
 #include <array>
+#include <cstddef>
 #include <cstdint>
 #include <ostream>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -42,7 +44,10 @@ const char* rrMessageName(int mti);
 // ── Paging Request Type 1 (GSM 04.08 9.1.22) ──────────────────────────
 
 class L3PagingRequestType1 {
-    std::vector<L3MobileIdentity> mMobileIDs;
+    // Up to 2 paged mobiles (GSM 04.08 9.1.22) stored inline so the message is
+    // constructible with zero heap allocation on the response path.
+    std::array<L3MobileIdentity, 2> mMobileIDs{};
+    size_t mMobileIdCount{0};
     std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
 public:
     static constexpr int MTI = 0x21;
@@ -50,7 +55,8 @@ public:
     L3PagingRequestType1() = default;
 
     class Builder {
-        std::vector<L3MobileIdentity> mMobileIds;
+        std::array<L3MobileIdentity, 2> mMobileIds{};
+        size_t mCount{0};
         std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
     public:
         Builder& addMobileId(const L3MobileIdentity& id, ChannelType type);
@@ -59,7 +65,7 @@ public:
 
     static Builder builder();
 
-    const std::vector<L3MobileIdentity>& mobileIds() const { return mMobileIDs; }
+    std::span<const L3MobileIdentity> mobileIds() const { return {mMobileIDs.data(), mMobileIdCount}; }
     const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
 
     size_t bodyLength() const;
@@ -74,7 +80,9 @@ public:
 // ── Paging Request Type 2 (GSM 04.08 9.1.23) ──────────────────────────
 
 class L3PagingRequestType2 {
-    std::vector<uint32_t> mTMSIs;
+    // Exactly 2 paged TMSIs (GSM 04.08 9.1.23) stored inline for zero-heap
+    // construction on the response path.
+    std::array<uint32_t, 2> mTMSIs{};
     std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
 public:
     static constexpr int MTI = 0x22;
@@ -82,7 +90,8 @@ public:
     L3PagingRequestType2() = default;
 
     class Builder {
-        std::vector<uint32_t> mTMSIs;
+        std::array<uint32_t, 2> mTMSIs{};
+        size_t mCount{0};
         std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
     public:
         Builder& addTMSI(uint32_t tmsi, ChannelType type);
@@ -91,7 +100,7 @@ public:
 
     static Builder builder();
 
-    const std::vector<uint32_t>& tmsis() const { return mTMSIs; }
+    std::span<const uint32_t> tmsis() const { return mTMSIs; }
     const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
 
     size_t bodyLength() const;
@@ -106,7 +115,9 @@ public:
 // ── Paging Request Type 3 (GSM 04.08 9.1.24) ──────────────────────────
 
 class L3PagingRequestType3 {
-    std::vector<uint32_t> mTMSIs;
+    // Exactly 4 paged TMSIs (GSM 04.08 9.1.24) stored inline for zero-heap
+    // construction on the response path.
+    std::array<uint32_t, 4> mTMSIs{};
     std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
 public:
     static constexpr int MTI = 0x24;
@@ -114,7 +125,8 @@ public:
     L3PagingRequestType3() = default;
 
     class Builder {
-        std::vector<uint32_t> mTMSIs;
+        std::array<uint32_t, 4> mTMSIs{};
+        size_t mCount{0};
         std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
     public:
         Builder& addTMSI(uint32_t tmsi, ChannelType type);
@@ -123,7 +135,7 @@ public:
 
     static Builder builder();
 
-    const std::vector<uint32_t>& tmsis() const { return mTMSIs; }
+    std::span<const uint32_t> tmsis() const { return mTMSIs; }
     const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
 
     size_t bodyLength() const;

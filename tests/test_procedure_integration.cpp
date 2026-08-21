@@ -94,7 +94,7 @@ TEST(Integration, LocationUpdate_FullFlow_WithRegistry) {
     // Step 5: Feed external VLR accept data -> WAITING_EXTERNAL -> SEND_ACCEPT -> Completed
     // Convention: first byte = 1 for Accept, followed by optional TMSI (4 bytes)
     std::array<uint8_t, 5> acceptData{1, 0x78, 0x56, 0x34, 0x12};
-    auto result5 = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, VLRDecision{true, std::nullopt, MMRejectCause::Zero},
+    auto result5 = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, session, VLRDecision{true, std::nullopt, MMRejectCause::Zero},
                                         noopSink);
 
     // The accept path leads to SEND_ACCEPT which transitions to COMPLETED

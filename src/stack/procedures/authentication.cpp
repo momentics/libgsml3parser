@@ -124,7 +124,7 @@ ProcedureStepResult AuthenticationProcedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult AuthenticationProcedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink sink) {
+    const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
     ProcedureStepResult result;
 
     if (const auto* chal = std::get_if<AuthChallenge>(&data)) {
@@ -132,6 +132,13 @@ ProcedureStepResult AuthenticationProcedure::feedExternalTyped(
         mHasRand = true;
         std::memcpy(mExpectedSRES.data(), chal->expectedSres.data(), 4);
         mHasExpectedSRES = true;
+
+        // Expose the RAND on the session so ResponseBuilder builds the
+        // AuthenticationRequest from real parameters (never a fabricated RAND).
+        if (session) {
+            std::memcpy(session->response.rand.data(), chal->rand.data(), 16);
+            session->response.hasRand = true;
+        }
 
         if (mCurrentState == State::INIT && mHasRand) {
             transitionTo(State::SEND_AUTH_REQ);

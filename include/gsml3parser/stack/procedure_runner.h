@@ -91,12 +91,17 @@ public:
                               ResponseSink sink);
 
     /// Feed typed external data to an active procedure by type.
+    ///
+    /// The runner does NOT store a session from feed(); the caller owns the
+    /// session (e.g. via SubscriberRegistry::findByTMSI) and passes it here so
+    /// the target procedure can populate session->response.
     /// @param type The ProcedureType of the target procedure.
+    /// @param session Pointer to the subscriber session (for ResponseContext population).
     /// @param data Strongly-typed external data variant (AuthChallenge, VLRDecision, etc.).
     /// @param sink Optional response callback.
     /// @return ProcedureStepResult from the target procedure. Slot is auto-freed on Completed/Failed.
-    ProcedureStepResult feedExternalTyped(procedure::ProcedureType type, const ExternalData& data,
-                                            ResponseSink sink = {});
+    ProcedureStepResult feedExternalTyped(procedure::ProcedureType type, SubscriberSession* session,
+                                            const ExternalData& data, ResponseSink sink = {});
 
     /// Tick all active procedures' timers. Auto-cleans slots for Completed/Failed procedures.
     /// @param delta Elapsed time in milliseconds.

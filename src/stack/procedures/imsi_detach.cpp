@@ -106,8 +106,9 @@ ProcedureStepResult IMSIDetachProcedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult IMSIDetachProcedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink sink) {
+    const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
     (void)data;
+    (void)session;
     (void)sink;
     return {ProcedureStepResult::Action::Continue};
 }

@@ -86,7 +86,7 @@ TEST(AuthenticationProcedureTest, AuthP_FeedExternal_RAND_SendsAuthRequest) {
     auto chal = makeAuthChallenge(0xDEADBEEF);
 
     bool sinkCalled = false;
-    auto res = proc.feedExternalTyped(chal,
+    auto res = proc.feedExternalTyped(chal, nullptr,
         makeResponseSink([&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
             EXPECT_EQ(action, SMAction::SendResponse);
             sinkCalled = true;
@@ -105,7 +105,7 @@ TEST(AuthenticationProcedureTest, AuthP_AuthResponse_ValidSRES_Completes) {
     auto chal = makeAuthChallenge(kSRES);
 
     // Phase 1: feedExternalTyped to load RAND+SRES -> SEND_AUTH_REQ
-    [[maybe_unused]] auto _r1 = proc.feedExternalTyped(chal);
+    [[maybe_unused]] auto _r1 = proc.feedExternalTyped(chal, nullptr);
 
     // Phase 2: feed to advance SEND_AUTH_REQ -> WAIT_RESPONSE (starts T3106)
     feedStep(proc, makeAuthResponse(0));
@@ -125,7 +125,7 @@ TEST(AuthenticationProcedureTest, AuthP_AuthResponse_InvalidSRES_Fails) {
     constexpr uint32_t kWrongSRES = 0xDEADBEEFu;
     auto chal = makeAuthChallenge(kExpectedSRES);
 
-    [[maybe_unused]] auto _r1 = proc.feedExternalTyped(chal);
+    [[maybe_unused]] auto _r1 = proc.feedExternalTyped(chal, nullptr);
     feedStep(proc, makeAuthResponse(0));
 
     auto res = proc.feed(makeAuthResponse(kWrongSRES), nullptr, ResponseSink{});
@@ -139,7 +139,7 @@ TEST(AuthenticationProcedureTest, AuthP_Tick_TimerExpired_Fails) {
     AuthenticationProcedure proc;
     auto chal = makeAuthChallenge(0x12345678u);
 
-    [[maybe_unused]] auto _r1 = proc.feedExternalTyped(chal);
+    [[maybe_unused]] auto _r1 = proc.feedExternalTyped(chal, nullptr);
     feedStep(proc, makeAuthResponse(0));
 
     // Timer starts at 3000ms; tick past it.
@@ -154,7 +154,7 @@ TEST(AuthenticationProcedureTest, AuthP_Cancel_Aborts) {
     AuthenticationProcedure proc;
     auto chal = makeAuthChallenge(0x12345678u);
 
-    [[maybe_unused]] auto _r1 = proc.feedExternalTyped(chal);
+    [[maybe_unused]] auto _r1 = proc.feedExternalTyped(chal, nullptr);
     proc.cancel();
 
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Failed);

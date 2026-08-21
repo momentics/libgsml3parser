@@ -191,7 +191,7 @@ TEST(LocationUpdateProcedure, LUP_AuthCheck_NeedAuth_SendsAuthenticationRequest)
 
     // Feed AuthChallenge via feedExternalTyped in AUTH_CHECK
     AuthChallenge chal{};
-    auto result = lup.feedExternalTyped(chal, {});
+    auto result = lup.feedExternalTyped(chal, &sess, {});
 
     EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponseWithToken);
     EXPECT_EQ(result.responseToken, ResponseToken::AuthenticationRequest);
@@ -210,10 +210,10 @@ TEST(LocationUpdateProcedure, LUP_AuthResponse_ValidSRES_AdvancesToLURequest) {
 
     // Feed AuthChallenge (0xDEADBEEF) via feedExternalTyped -> SEND_AUTH
     auto chal = makeAuthChallenge(0xDEADBEEFu);
-    (void)lup.feedExternalTyped(chal, {});
+    (void)lup.feedExternalTyped(chal, &sess, {});
 
     // Simulate reaching WAIT_AUTH for SRES verification.
-    (void)lup.feedExternalTyped(AuthChallenge{}, {});
+    (void)lup.feedExternalTyped(AuthChallenge{}, &sess, {});
 
     // Feed auth response with matching SRES -> should advance to LU_REQUEST.
     auto result = lup.feed(makeAuthResponse(0xDEADBEEFu), &sess, {});
@@ -234,10 +234,10 @@ TEST(LocationUpdateProcedure, LUP_AuthResponse_InvalidSRES_GoesToReject) {
 
     // Feed AuthChallenge (0x11111111) via feedExternalTyped -> SEND_AUTH
     auto chal = makeAuthChallenge(0x11111111u);
-    (void)lup.feedExternalTyped(chal, {});
+    (void)lup.feedExternalTyped(chal, &sess, {});
 
     // Simulate reaching WAIT_AUTH for SRES verification.
-    (void)lup.feedExternalTyped(AuthChallenge{}, {});
+    (void)lup.feedExternalTyped(AuthChallenge{}, &sess, {});
 
     // Feed auth response with mismatched SRES -> should trigger reject path.
     auto result = lup.feed(makeAuthResponse(0xFFFFFFFFu), &sess, {});
@@ -262,7 +262,7 @@ TEST(LocationUpdateProcedure, LUP_WaitingExternal_FeedAccept_CompletesWithLocati
 
     // Feed Accept VLRDecision via feedExternalTyped
     bool sinkCalled = false;
-    auto acceptResult = lup.feedExternalTyped(makeAcceptData(),
+    auto acceptResult = lup.feedExternalTyped(makeAcceptData(), &sess,
         makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
         }));
@@ -289,7 +289,7 @@ TEST(LocationUpdateProcedure, LUP_WaitingExternal_FeedReject_FailsWithLocationUp
 
     // Feed Reject VLRDecision via feedExternalTyped
     bool sinkCalled = false;
-    auto rejectResult = lup.feedExternalTyped(makeRejectData(),
+    auto rejectResult = lup.feedExternalTyped(makeRejectData(), &sess,
         makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
         }));
@@ -311,7 +311,7 @@ TEST(LocationUpdateProcedure, LUP_Tick_T3106Expired_Fails) {
 
     // Feed AuthChallenge via feedExternalTyped -> SEND_AUTH (starts T3106 at 3000ms)
     AuthChallenge chal{};
-    [[maybe_unused]] auto _ = lup.feedExternalTyped(chal, {});
+    [[maybe_unused]] auto _ = lup.feedExternalTyped(chal, &sess, {});
 
     // Tick past timer expiry (T3106 = 3000ms default)
     auto result = lup.tick(4000ms);
@@ -365,7 +365,7 @@ TEST(LocationUpdateProcedure, LUP_FullFlow_WithAuth_CompletesSuccessfully) {
 
     // Step 5: Feed Accept VLRDecision via feedExternalTyped -> completes procedure.
     bool sinkCalled = false;
-    auto r5 = lup.feedExternalTyped(makeAcceptData(),
+    auto r5 = lup.feedExternalTyped(makeAcceptData(), &sess,
         makeResponseSink([&sinkCalled](SMAction, const ParsedMessage&, const SubscriberSession*) {
             sinkCalled = true;
         }));

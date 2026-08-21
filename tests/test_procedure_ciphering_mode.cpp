@@ -60,7 +60,7 @@ TEST(CipheringModeProcedureTest, CMP_Init_FeedExternal_SendsCommand) {
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Initiated);
 
     bool sinkCalled = false;
-    auto res = proc.feedExternalTyped(CipheringParameters{},
+    auto res = proc.feedExternalTyped(CipheringParameters{}, nullptr,
         makeResponseSink([&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
             EXPECT_EQ(action, SMAction::SendResponse);
             sinkCalled = true;
@@ -75,7 +75,7 @@ TEST(CipheringModeProcedureTest, CMP_Init_FeedExternal_SendsCommand) {
 TEST(CipheringModeProcedureTest, CMP_CipheringModeComplete_Completes) {
     CipheringModeProcedure proc(2); // A5/2 algorithm
 
-    [[maybe_unused]] auto _r = proc.feedExternalTyped(CipheringParameters{});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(CipheringParameters{}, nullptr);
     feedStep(proc, makeDummyMsg());
 
     auto res = proc.feed(makeCipheringModeComplete(), nullptr, ResponseSink{});
@@ -89,7 +89,7 @@ TEST(CipheringModeProcedureTest, CMP_CipheringModeComplete_Completes) {
 TEST(CipheringModeProcedureTest, CMP_Tick_TimerExpired_Fails) {
     CipheringModeProcedure proc(3); // A5/3 (GEA/1) algorithm
 
-    [[maybe_unused]] auto _r = proc.feedExternalTyped(CipheringParameters{});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(CipheringParameters{}, nullptr);
     feedStep(proc, makeDummyMsg());
 
     // Timer is running at 3000ms. Tick past expiry.
@@ -103,7 +103,7 @@ TEST(CipheringModeProcedureTest, CMP_Tick_TimerExpired_Fails) {
 TEST(CipheringModeProcedureTest, CMP_Cancel_Aborts) {
     CipheringModeProcedure proc(0); // No ciphering (A5/0)
 
-    [[maybe_unused]] auto _r = proc.feedExternalTyped(CipheringParameters{});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(CipheringParameters{}, nullptr);
     proc.cancel();
 
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Failed);

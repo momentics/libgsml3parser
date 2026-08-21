@@ -71,7 +71,14 @@ ProcedureStepResult CallSetupMOPercedure::feed(const ParsedMessage& msg,
                 if (sink) sink(SMAction::SendResponse, msg, session);
             } else if (pd == L3PD::CallControl && mti == L3Setup::MTI) {
                 const auto* setup = tryGet<L3Setup>(msg);
-                if (setup) mTI = static_cast<uint8_t>(setup->ti());
+                if (setup) {
+                    mTI = static_cast<uint8_t>(setup->ti());
+                    // Expose the TI on the session (real value from the Setup header).
+                    if (session) {
+                        session->response.ti = mTI;
+                        session->response.ccCause = CCCause::Normal_Call_Clearing;
+                    }
+                }
                 startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
                 transitionTo(State::PROCEEDING);
                 result.action = ProcedureStepResult::Action::SendResponseWithToken;
@@ -87,7 +94,14 @@ ProcedureStepResult CallSetupMOPercedure::feed(const ParsedMessage& msg,
         case State::WAIT_SETUP:
             if (pd == L3PD::CallControl && mti == L3Setup::MTI) {
                 const auto* setup = tryGet<L3Setup>(msg);
-                if (setup) mTI = static_cast<uint8_t>(setup->ti());
+                if (setup) {
+                    mTI = static_cast<uint8_t>(setup->ti());
+                    // Expose the TI on the session (real value from the Setup header).
+                    if (session) {
+                        session->response.ti = mTI;
+                        session->response.ccCause = CCCause::Normal_Call_Clearing;
+                    }
+                }
                 startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
                 transitionTo(State::PROCEEDING);
                 result.action = ProcedureStepResult::Action::SendResponseWithToken;

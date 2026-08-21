@@ -73,7 +73,7 @@ TEST(CallSetupMTPercedureTest, MTC_Init_FeedExternal_StartsPaging) {
     EXPECT_EQ(proc.type(), procedure::ProcedureType::CallSetup_MT);
 
     bool sinkCalled = false;
-    auto res = proc.feedExternalTyped(PagingTrigger{},
+    auto res = proc.feedExternalTyped(PagingTrigger{}, nullptr,
         makeResponseSink([&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
             EXPECT_EQ(action, SMAction::SendResponse);
             sinkCalled = true;
@@ -88,7 +88,7 @@ TEST(CallSetupMTPercedureTest, MTC_Init_FeedExternal_StartsPaging) {
 TEST(CallSetupMTPercedureTest, MTC_PageResponse_AssignSDCCH) {
     CallSetupMTPercedure proc("9876543210");
 
-    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{}, nullptr);
     feedStep(proc, makeDummyMsg());
 
     bool sinkCalled = false;
@@ -105,7 +105,7 @@ TEST(CallSetupMTPercedureTest, MTC_PageResponse_AssignSDCCH) {
 TEST(CallSetupMTPercedureTest, MTC_CallConfirmed_AssignTCH) {
     CallSetupMTPercedure proc("5555555555");
 
-    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{}, nullptr);
     feedStep(proc, makeDummyMsg());
     feedStep(proc, makePagingResponse());
     feedStep(proc, makeDummyMsg());
@@ -120,7 +120,7 @@ TEST(CallSetupMTPercedureTest, MTC_CallConfirmed_AssignTCH) {
 TEST(CallSetupMTPercedureTest, MTC_ConnectAck_Completes) {
     CallSetupMTPercedure proc("1111111111");
 
-    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{}, nullptr);
     feedStep(proc, makeDummyMsg());
     feedStep(proc, makePagingResponse());
     feedStep(proc, makeDummyMsg());
@@ -143,7 +143,7 @@ TEST(CallSetupMTPercedureTest, MTC_ConnectAck_Completes) {
 TEST(CallSetupMTPercedureTest, MTC_Tick_PagingRetry_Retries) {
     CallSetupMTPercedure proc("2222222222");
 
-    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{}, nullptr);
     feedStep(proc, makeDummyMsg());
 
     // Now in WAIT_PAGE_RESPONSE with T3109 running (5000ms).
@@ -165,7 +165,7 @@ TEST(CallSetupMTPercedureTest, MTC_Tick_PagingRetry_Retries) {
 TEST(CallSetupMTPercedureTest, MTC_Cancel_Aborts) {
     CallSetupMTPercedure proc("3333333333");
 
-    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{}, nullptr);
     proc.cancel();
 
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Failed);

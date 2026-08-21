@@ -66,9 +66,14 @@ void CallReleaseProcedure::doComplete() {
 
 ProcedureStepResult CallReleaseProcedure::feed(const ParsedMessage& msg,
     SubscriberSession* session, ResponseSink sink) {
-    (void)session;
-
     ProcedureStepResult result;
+
+    // Expose the release parameters on the session (real TI/cause) so the
+    // builder sends the correct Disconnect / ReleaseComplete (no fabrication).
+    if (session) {
+        session->response.ti = mTI;
+        session->response.ccCause = mCause;
+    }
 
     switch (mCurrentState) {
         case State::INIT: {
@@ -132,8 +137,9 @@ ProcedureStepResult CallReleaseProcedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult CallReleaseProcedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink sink) {
+    const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
     (void)data;
+    (void)session;
     (void)sink;
     return {ProcedureStepResult::Action::Continue};
 }

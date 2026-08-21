@@ -387,7 +387,7 @@ TEST(FullRoundTrip, MM_Domain) {
     expectRoundTrip(ParsedMessage{MMM{L3MMStatus::builder().cause(MMRejectCause::Zero).build()}},
         L3PD::MobilityManagement, L3MMStatus::MTI, "L3MMStatus");
 
-    expectRoundTrip(ParsedMessage{MMM{L3AuthenticationRequest{0, {}}}},
+    expectRoundTrip(ParsedMessage{MMM{L3AuthenticationRequest{0, std::vector<uint8_t>{}}}},
         L3PD::MobilityManagement, L3AuthenticationRequest::MTI, "L3AuthenticationRequest");
 
     expectRoundTrip(ParsedMessage{MMM{L3AuthenticationResponse{0}}},

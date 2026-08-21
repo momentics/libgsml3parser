@@ -172,11 +172,17 @@ public:
 
     /// Feed typed external data into the procedure (e.g., AuthChallenge from AuC, VLRDecision from BSC).
     /// Call this when the procedure has entered WaitingExternal state.
+    ///
+    /// The procedure uses @p session to populate the session's ResponseContext
+    /// (session->response) with the parameters needed to build the resulting
+    /// protocol response (e.g. RAND from an AuthChallenge, new TMSI from a
+    /// VLRDecision). Pass nullptr when no session is associated.
     /// @param data Strongly-typed external data variant (AuthChallenge, VLRDecision, etc.).
+    /// @param session Pointer to the subscriber session (for ResponseContext population).
     /// @param sink Optional callback for generating responses after external data is received.
     /// @return Continue if the procedure resumed, or Completed/Failed if it reached a terminal state.
     [[nodiscard]] virtual ProcedureStepResult feedExternalTyped(
-        const ExternalData& data, ResponseSink sink = {});
+        const ExternalData& data, SubscriberSession* session, ResponseSink sink = {});
 
     /// Tick procedure timers. Call periodically from the event loop.
     /// @param delta Elapsed time in milliseconds since last tick.

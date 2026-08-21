@@ -763,7 +763,6 @@ Expected<L3AuthenticationRequest> L3AuthenticationRequest::parse(BitReader& br) 
         if (!ck) return Expected<L3AuthenticationRequest>::error(ck.error());
         msg.mCKSN = ck.value();
     }
-    msg.mRAND.resize(16);
     for (size_t i = 0; i < 16; ++i) {
         auto rb = br.readField(8);
         if (!rb) return Expected<L3AuthenticationRequest>::error(rb.error());

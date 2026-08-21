@@ -68,7 +68,7 @@ TEST(HandoverProcedureTest, HO_Init_FeedExternal_SendsCommand) {
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Initiated);
 
     bool sinkCalled = false;
-    auto res = proc.feedExternalTyped(HandoverTarget{},
+    auto res = proc.feedExternalTyped(HandoverTarget{}, nullptr,
         makeResponseSink([&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
             EXPECT_EQ(action, SMAction::SendResponse);
             sinkCalled = true;
@@ -83,7 +83,7 @@ TEST(HandoverProcedureTest, HO_Init_FeedExternal_SendsCommand) {
 TEST(HandoverProcedureTest, HO_HandoverComplete_Completes) {
     HandoverProcedure proc(makeTargetChannel());
 
-    [[maybe_unused]] auto _r = proc.feedExternalTyped(HandoverTarget{});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(HandoverTarget{}, nullptr);
     feedStep(proc, makeDummyMsg());
 
     auto res = proc.feed(makeHandoverComplete(), nullptr, ResponseSink{});
@@ -97,7 +97,7 @@ TEST(HandoverProcedureTest, HO_HandoverComplete_Completes) {
 TEST(HandoverProcedureTest, HO_HandoverFailure_Fails) {
     HandoverProcedure proc(makeTargetChannel());
 
-    [[maybe_unused]] auto _r = proc.feedExternalTyped(HandoverTarget{});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(HandoverTarget{}, nullptr);
     feedStep(proc, makeDummyMsg());
 
     auto res = proc.feed(makeHandoverFailure(), nullptr, ResponseSink{});
@@ -110,7 +110,7 @@ TEST(HandoverProcedureTest, HO_HandoverFailure_Fails) {
 TEST(HandoverProcedureTest, HO_Cancel_Aborts) {
     HandoverProcedure proc(makeTargetChannel());
 
-    [[maybe_unused]] auto _r = proc.feedExternalTyped(HandoverTarget{});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(HandoverTarget{}, nullptr);
     proc.cancel();
 
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Failed);

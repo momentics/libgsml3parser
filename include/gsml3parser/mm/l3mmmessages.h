@@ -21,8 +21,10 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
 #include <ostream>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -217,22 +219,41 @@ public:
 class L3AuthenticationRequest {
 private:
     unsigned mCKSN{0};
-    std::vector<uint8_t> mRAND;
+    // Fixed 128-bit RAND (TS 24.008 10.5.1.21) stored inline so the message is
+    // trivially copyable and constructible with zero heap allocation.
+    std::array<uint8_t, 16> mRAND{};
 
     friend struct Builder;
 public:
     static constexpr int MTI = 0x12;
     L3AuthenticationRequest() = default;
-    L3AuthenticationRequest(unsigned ckSN, const std::vector<uint8_t>& rand) : mCKSN(ckSN), mRAND(rand) {}
+    explicit L3AuthenticationRequest(unsigned ckSN) : mCKSN(ckSN) {}
+    L3AuthenticationRequest(unsigned ckSN, const std::vector<uint8_t>& rand) : mCKSN(ckSN) {
+        for (size_t i = 0; i < mRAND.size() && i < rand.size(); ++i) mRAND[i] = rand[i];
+    }
+    L3AuthenticationRequest(unsigned ckSN, std::span<const uint8_t> rand) : mCKSN(ckSN) {
+        for (size_t i = 0; i < mRAND.size() && i < rand.size(); ++i) mRAND[i] = rand[i];
+    }
+
+    /// RAND as a zero-copy span (128-bit, wire order).
+    [[nodiscard]] std::span<const uint8_t> rand() const { return mRAND; }
 
     struct Builder {
         unsigned m_cksn{0};
-        std::vector<uint8_t> m_rand;
+        std::array<uint8_t, 16> m_rand{};
 
         /// Set CKSN value.
         Builder& cksn(unsigned v) { m_cksn = v; return *this; }
-        /// Set RAND vector.
-        Builder& rand(std::vector<uint8_t> v) { m_rand = std::move(v); return *this; }
+        /// Set RAND from a vector (cold path; copies up to 16 octets).
+        Builder& rand(const std::vector<uint8_t>& v) {
+            for (size_t i = 0; i < m_rand.size() && i < v.size(); ++i) m_rand[i] = v[i];
+            return *this;
+        }
+        /// Set RAND from a span (zero heap allocation).
+        Builder& rand(std::span<const uint8_t> v) {
+            for (size_t i = 0; i < m_rand.size() && i < v.size(); ++i) m_rand[i] = v[i];
+            return *this;
+        }
         /// Build the final message.
         [[nodiscard]] L3AuthenticationRequest build() const;
     };

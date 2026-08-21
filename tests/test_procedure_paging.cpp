@@ -62,7 +62,7 @@ TEST(PagingProcedureTest, Pag_Init_FeedExternal_StartsPage1) {
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Initiated);
 
     bool sinkCalled = false;
-    auto res = proc.feedExternalTyped(PagingTrigger{},
+    auto res = proc.feedExternalTyped(PagingTrigger{}, nullptr,
         makeResponseSink([&sinkCalled](SMAction action, const ParsedMessage&, const SubscriberSession*) {
             EXPECT_EQ(action, SMAction::SendResponse);
             sinkCalled = true;
@@ -78,7 +78,7 @@ TEST(PagingProcedureTest, Pag_PageResponse_Completes) {
     L3MobileIdentity identity(0xDEADBEEFu);
     PagingProcedure proc(identity);
 
-    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{}, nullptr);
     feedStep(proc, makeDummyMsg());
 
     auto res = proc.feed(makePagingResponse(), nullptr, ResponseSink{});
@@ -92,7 +92,7 @@ TEST(PagingProcedureTest, Pag_Tick_RetriesPaging) {
     L3MobileIdentity identity(0xABCDEF01u);
     PagingProcedure proc(identity);
 
-    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{}, nullptr);
     feedStep(proc, makeDummyMsg());
 
     // In WAIT_PAGE1 with T3109 running (5000ms). Tick past expiry to trigger retry.
@@ -119,7 +119,7 @@ TEST(PagingProcedureTest, Pag_Cancel_Aborts) {
     L3MobileIdentity identity(0x11223344u);
     PagingProcedure proc(identity);
 
-    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{});
+    [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{}, nullptr);
     proc.cancel();
 
     EXPECT_EQ(proc.state(), procedure::ProcedureState::Failed);

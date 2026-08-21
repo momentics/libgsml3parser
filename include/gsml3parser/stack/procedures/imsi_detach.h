@@ -60,7 +60,7 @@ public:
                                              SubscriberSession* session,
                                              ResponseSink sink) override;
     [[nodiscard]] ProcedureStepResult feedExternalTyped(
-        const ExternalData& data, ResponseSink sink = {}) override;
+        const ExternalData& data, SubscriberSession* session, ResponseSink sink = {}) override;
     [[nodiscard]] ProcedureStepResult tick(std::chrono::milliseconds delta) override;
     void cancel() noexcept override;
 

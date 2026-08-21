@@ -92,16 +92,20 @@ ProcedureStepResult CipheringModeProcedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult CipheringModeProcedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink sink) {
+    const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
     ProcedureStepResult result;
 
     if (const auto* params = std::get_if<CipheringParameters>(&data)) {
-        (void)params;
         if (mCurrentState == State::INIT) {
             transitionTo(State::SEND_COMMAND);
             result.action = ProcedureStepResult::Action::SendResponseWithToken;
             result.responseToken = ResponseToken::CipheringModeCommand;
             startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
+            // Expose the ciphering algorithm on the session (real parameter).
+            if (session) {
+                session->response.cipherAlgo = params->algorithmSelector;
+                session->response.hasCipherAlgo = true;
+            }
             if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
         }
     }

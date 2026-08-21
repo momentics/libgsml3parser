@@ -156,26 +156,25 @@ const char* rrMessageName(int mti) {
 L3PagingRequestType1::Builder L3PagingRequestType1::builder() { return Builder{}; }
 
 L3PagingRequestType1::Builder& L3PagingRequestType1::Builder::addMobileId(const L3MobileIdentity& id, ChannelType type) {
-    mMobileIds.push_back(id);
-    if (mMobileIds.size() <= 2) {
-        mChannelsNeeded[mMobileIds.size() - 1] = type;
+    if (mCount < mMobileIds.size()) {
+        mMobileIds[mCount] = id;
+        mChannelsNeeded[mCount] = type;
+        ++mCount;
     }
     return *this;
 }
 
 L3PagingRequestType1 L3PagingRequestType1::Builder::build() {
     L3PagingRequestType1 msg;
-    if (mMobileIds.empty()) {
-        msg.mMobileIDs.emplace_back();
-    } else {
-        msg.mMobileIDs = std::move(mMobileIds);
-    }
+    msg.mMobileIDs = mMobileIds;
+    // Always page at least one (default) identity, matching the legacy behavior.
+    msg.mMobileIdCount = (mCount == 0) ? 1 : mCount;
     msg.mChannelsNeeded = mChannelsNeeded;
     return msg;
 }
 
 size_t L3PagingRequestType1::bodyLength() const {
-    int sz = static_cast<int>(mMobileIDs.size());
+    size_t sz = mMobileIdCount;
     size_t len = 1;
     len += mMobileIDs[0].lengthV() + 1;
     if (sz > 1) len += 2 + mMobileIDs[1].lengthV();
@@ -190,12 +189,13 @@ Expected<L3PagingRequestType1> L3PagingRequestType1::parse(BitReader& br) {
     msg.mChannelsNeeded[0] = channelNeededType(r.value());
     r = br.readField(4); if (!r) return Expected<L3PagingRequestType1>::error(r.error());
 
-    L3MobileIdentity id;
     {
         auto lenR = br.readField(8); if (!lenR) return Expected<L3PagingRequestType1>::error(lenR.error());
         auto res = L3MobileIdentity::parse(br, lenR.value());
         if (!res) return Expected<L3PagingRequestType1>::error(res.error());
-        msg.mMobileIDs.push_back(std::move(res.value()));
+        if (msg.mMobileIdCount < msg.mMobileIDs.size()) {
+            msg.mMobileIDs[msg.mMobileIdCount++] = std::move(res.value());
+        }
     }
 
     if (br.hasMore()) {
@@ -205,7 +205,9 @@ Expected<L3PagingRequestType1> L3PagingRequestType1::parse(BitReader& br) {
             auto lenR = br.readField(8); if (!lenR) return Expected<L3PagingRequestType1>::error(lenR.error());
             auto res = L3MobileIdentity::parse(br, lenR.value());
             if (!res) return Expected<L3PagingRequestType1>::error(res.error());
-            msg.mMobileIDs.push_back(std::move(res.value()));
+            if (msg.mMobileIdCount < msg.mMobileIDs.size()) {
+                msg.mMobileIDs[msg.mMobileIdCount++] = std::move(res.value());
+            }
         }
     }
 
@@ -213,7 +215,7 @@ Expected<L3PagingRequestType1> L3PagingRequestType1::parse(BitReader& br) {
 }
 
 void L3PagingRequestType1::write(BitWriter& bw) const {
-    int sz = static_cast<int>(mMobileIDs.size());
+    size_t sz = mMobileIdCount;
     bw.writeField(channelNeededCode(mChannelsNeeded[sz > 1 ? 1 : 0]), 2);
     bw.writeField(channelNeededCode(mChannelsNeeded[0]), 2);
     bw.writeField(0x0, 4);
@@ -228,8 +230,8 @@ void L3PagingRequestType1::write(BitWriter& bw) const {
 
 void L3PagingRequestType1::text(std::ostream& os) const {
     os << "PagingRequestType1: ";
-    for (const auto& id : mMobileIDs) {
-        id.text(os);
+    for (size_t i = 0; i < mMobileIdCount; ++i) {
+        mMobileIDs[i].text(os);
     }
 }
 
@@ -238,22 +240,18 @@ void L3PagingRequestType1::text(std::ostream& os) const {
 L3PagingRequestType2::Builder L3PagingRequestType2::builder() { return Builder{}; }
 
 L3PagingRequestType2::Builder& L3PagingRequestType2::Builder::addTMSI(uint32_t tmsi, ChannelType type) {
-    mTMSIs.push_back(tmsi);
-    if (mTMSIs.size() <= 2) {
-        mChannelsNeeded[mTMSIs.size() - 1] = type;
+    if (mCount < mTMSIs.size()) {
+        mTMSIs[mCount] = tmsi;
+        mChannelsNeeded[mCount] = type;
+        ++mCount;
     }
     return *this;
 }
 
 L3PagingRequestType2 L3PagingRequestType2::Builder::build() {
     L3PagingRequestType2 msg;
-    if (mTMSIs.empty()) {
-        msg.mTMSIs.push_back(0);
-        msg.mTMSIs.push_back(0);
-    } else {
-        msg.mTMSIs = std::move(mTMSIs);
-        while (msg.mTMSIs.size() < 2) msg.mTMSIs.push_back(0);
-    }
+    // The fixed 2-TMSI layout is zero-padded, matching the legacy behavior.
+    msg.mTMSIs = mTMSIs;
     msg.mChannelsNeeded = mChannelsNeeded;
     return msg;
 }
@@ -270,9 +268,9 @@ Expected<L3PagingRequestType2> L3PagingRequestType2::parse(BitReader& br) {
     msg.mChannelsNeeded[0] = channelNeededType(r.value());
     r = br.readField(4); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
 
-    for (int i = 0; i < 2; ++i) {
+    for (size_t i = 0; i < msg.mTMSIs.size(); ++i) {
         r = br.readField(32); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
-        msg.mTMSIs.push_back(r.value());
+        msg.mTMSIs[i] = static_cast<uint32_t>(r.value());
     }
 
     return Expected<L3PagingRequestType2>::hold(std::move(msg));
@@ -299,21 +297,18 @@ void L3PagingRequestType2::text(std::ostream& os) const {
 L3PagingRequestType3::Builder L3PagingRequestType3::builder() { return Builder{}; }
 
 L3PagingRequestType3::Builder& L3PagingRequestType3::Builder::addTMSI(uint32_t tmsi, ChannelType type) {
-    mTMSIs.push_back(tmsi);
-    if (mTMSIs.size() <= 2) {
-        mChannelsNeeded[mTMSIs.size() - 1] = type;
+    if (mCount < mTMSIs.size()) {
+        mTMSIs[mCount] = tmsi;
+        mChannelsNeeded[mCount] = type;
+        ++mCount;
     }
     return *this;
 }
 
 L3PagingRequestType3 L3PagingRequestType3::Builder::build() {
     L3PagingRequestType3 msg;
-    if (mTMSIs.empty()) {
-        for (int i = 0; i < 4; i++) msg.mTMSIs.push_back(0);
-    } else {
-        msg.mTMSIs = std::move(mTMSIs);
-        while (msg.mTMSIs.size() < 4) msg.mTMSIs.push_back(0);
-    }
+    // The fixed 4-TMSI layout is zero-padded, matching the legacy behavior.
+    msg.mTMSIs = mTMSIs;
     msg.mChannelsNeeded = mChannelsNeeded;
     return msg;
 }
@@ -330,9 +325,9 @@ Expected<L3PagingRequestType3> L3PagingRequestType3::parse(BitReader& br) {
     msg.mChannelsNeeded[0] = channelNeededType(r.value());
     r = br.readField(4); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
 
-    for (int i = 0; i < 4; ++i) {
+    for (size_t i = 0; i < msg.mTMSIs.size(); ++i) {
         r = br.readField(32); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
-        msg.mTMSIs.push_back(r.value());
+        msg.mTMSIs[i] = static_cast<uint32_t>(r.value());
     }
 
     return Expected<L3PagingRequestType3>::hold(std::move(msg));

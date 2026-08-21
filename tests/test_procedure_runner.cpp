@@ -246,7 +246,7 @@ TEST(PR_FeedExternal, RoutesToCorrectProcedure) {
 
     // feedExternal for LocationUpdate type when no LU is active should return Continue
     std::array<uint8_t, 1> dummyData{0x00};
-    auto result = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, VLRDecision{});
+    auto result = runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, &session, VLRDecision{});
     EXPECT_EQ(result.action, ProcedureStepResult::Action::Continue);
 
     // ChannelAssignment should still be active (wasn't affected)

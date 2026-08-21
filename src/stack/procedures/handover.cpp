@@ -96,16 +96,20 @@ ProcedureStepResult HandoverProcedure::feed(const ParsedMessage& msg,
 }
 
 ProcedureStepResult HandoverProcedure::feedExternalTyped(
-    const ExternalData& data, ResponseSink sink) {
+    const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
     ProcedureStepResult result;
 
     if (const auto* target = std::get_if<HandoverTarget>(&data)) {
-        (void)target;
         if (mCurrentState == State::INIT) {
             transitionTo(State::SEND_HO_CMD);
             result.action = ProcedureStepResult::Action::SendResponseWithToken;
             result.responseToken = ResponseToken::HandoverCommand;
             startTimer(L3TimerId::T3101, std::chrono::milliseconds(3000));
+            // Expose the handover target channel on the session (real parameter).
+            if (session) {
+                session->response.hoChannel = target->channel;
+                session->response.hasHoChannel = true;
+            }
             if (sink) sink(SMAction::SendResponse, ParsedMessage{RRM{L3ChannelRequest{}}}, nullptr);
         }
     }

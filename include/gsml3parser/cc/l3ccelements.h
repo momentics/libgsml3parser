@@ -84,8 +84,13 @@ public:
 #ifndef GSML3PARSER_L3BCD_DIGITS_DEFINED
 #define GSML3PARSER_L3BCD_DIGITS_DEFINED
 class L3BCDDigits {
+public:
+    /// Maximum number of BCD digits that fit in the fixed inline buffer.
     static constexpr size_t maxDigits = 20;
+
+private:
     char mDigits[maxDigits + 1]{};
+
 public:
     L3BCDDigits() = default;
     explicit L3BCDDigits(const char* wDigits);
