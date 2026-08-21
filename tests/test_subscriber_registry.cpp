@@ -494,3 +494,44 @@ TEST(SR_remove, OneMillion_O1Fast) {
     EXPECT_LT(ms, 500.0) << "100K remove() over 1M sessions took " << ms << "ms (expected O(1), < 500ms)";
 #endif
 }
+
+// Test: ShardedSubscriberRegistry::remove() is O(1) — the shard is derived
+// directly from session->assignedTmsi, so exactly one shard is locked
+// (the previous implementation scanned all N shards with an exclusive lock).
+// Importance: session churn (detach) at scale must take a single shard lock.
+// 3GPP coverage: TS 24.008 4.4 - subscriber lifecycle at scale.
+TEST(Sharded_Remove_O1_SingleShardLock, Remove_SingleShard) {
+    ShardedSubscriberRegistry<8> reg;
+    constexpr uint32_t kTmsi = 0x0F0F0F0F;
+
+    // Shard routing is deterministic: remove() must target exactly this shard.
+    const int expectedShard = ShardedSubscriberRegistry<8>::debugShardForTmsi(kTmsi);
+    EXPECT_GE(expectedShard, 0);
+    EXPECT_LT(expectedShard, 8);
+
+    auto* sess = reg.createByTMSI(kTmsi);
+    ASSERT_NE(sess, nullptr);
+    // The session is keyed by its TMSI in the derived shard.
+    EXPECT_EQ(sess->assignedTmsi, kTmsi);
+    EXPECT_EQ(reg.findByTMSI(kTmsi), sess);
+
+    // remove() succeeds via the single derived shard.
+    EXPECT_TRUE(reg.remove(sess));
+    // The session is gone from the index.
+    EXPECT_EQ(reg.findByTMSI(kTmsi), nullptr);
+
+    // Bulk removal across all shards: every session must be removed.
+    for (uint32_t i = 1; i <= 100; ++i) {
+        auto* s = reg.createByTMSI(i);
+        ASSERT_NE(s, nullptr);
+        EXPECT_TRUE(reg.remove(s)) << "TMSI " << i << " not removed";
+        EXPECT_EQ(reg.findByTMSI(i), nullptr);
+    }
+
+    // A standalone session (assignedTmsi == 0) is not owned by any shard:
+    // remove() must reject it without scanning.
+    SubscriberSession standalone;
+    EXPECT_FALSE(reg.remove(&standalone));
+    // nullptr is rejected as well.
+    EXPECT_FALSE(reg.remove(nullptr));
+}

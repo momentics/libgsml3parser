@@ -348,10 +348,22 @@ public:
     /// @return Pointer to session, or nullptr if not found.
     [[nodiscard]] SubscriberSession* findByLink(uint8_t trx, uint8_t ts, uint8_t lapdmLink) noexcept;
 
-    /// Remove session. Thread-safe. O(1) hash + per-shard lock.
-    /// @param session Session pointer to remove.
-    /// @return true if session was found and removed.
+    /// Remove session. Thread-safe. O(1): the shard is derived directly from
+    /// session->assignedTmsi, so exactly one shard is locked (no full-shard scan).
+    /// @param session Session pointer to remove (must have been created by this
+    ///                registry, i.e. assignedTmsi != 0).
+    /// @return true if session was found and removed; false for nullptr,
+    ///         unowned sessions (assignedTmsi == 0), or already-removed sessions.
     bool remove(SubscriberSession* session) noexcept;
+
+    /// Diagnostics: compute the shard index a TMSI is routed to.
+    /// Deterministic and identical to the routing used by createByTMSI(),
+    /// findByTMSI() and remove() (single-shard O(1) path).
+    /// @param tmsi 32-bit TMSI identifier.
+    /// @return Shard index in [0, N).
+    [[nodiscard]] static constexpr int debugShardForTmsi(uint32_t tmsi) noexcept {
+        return shardIndex(hashTMSI(tmsi));
+    }
 
     /// Tick all timers across all shards. Thread-safe. Each shard ticked independently.
     /// @param delta Time advance in milliseconds.

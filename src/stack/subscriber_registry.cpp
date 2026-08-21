@@ -262,11 +262,12 @@ SubscriberSession* ShardedSubscriberRegistry<N>::findByLink(uint8_t trx, uint8_t
 
 template<int N>
 bool ShardedSubscriberRegistry<N>::remove(SubscriberSession* session) noexcept {
-    for (auto& shard : mShards) {
-        std::unique_lock lock(shard.mutex);
-        if (shard.registry.remove(session)) return true;
-    }
-    return false;
+    // O(1): the session's TMSI is known, so the owning shard is derived
+    // directly — exactly one shard is locked, no full-shard scan.
+    if (!session || session->assignedTmsi == 0) return false;
+    int idx = shardIndex(hashTMSI(session->assignedTmsi));
+    std::unique_lock lock(mShards[idx].mutex);
+    return mShards[idx].registry.remove(session);
 }
 
 template<int N>
