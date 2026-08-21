@@ -37,6 +37,12 @@ procedure::ProcedureState CipheringModeProcedure::state() const {
     return mProcState;
 }
 
+bool CipheringModeProcedure::matches(const ParsedMessage& msg) const {
+    // This procedure waits for the MS Ciphering Mode Complete (TS 04.08 9.2.26).
+    return messagePD(msg) == L3PD::RadioResource &&
+           messageMTI(msg) == L3CipheringModeComplete::MTI;
+}
+
 void CipheringModeProcedure::doTransitionTo(State s) {
     mCurrentState = s;
     if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;

@@ -52,6 +52,16 @@ procedure::ProcedureState ChannelAssignmentProcedure::state() const {
     return mProcState;
 }
 
+bool ChannelAssignmentProcedure::matches(const ParsedMessage& msg) const {
+    // Trigger messages for the assignment (TS 04.08 9.1.2 / 9.1.35):
+    // ChannelRequest or PagingResponse on the RR PD. Once allocation has
+    // started the procedure advances on any RR message; those catch-all
+    // messages are routed by the runner's PD-based fallback.
+    if (messagePD(msg) != L3PD::RadioResource) return false;
+    const int mti = messageMTI(msg);
+    return mti == L3ChannelRequest::MTI || mti == L3PagingResponse::MTI;
+}
+
 void ChannelAssignmentProcedure::doTransitionTo(State s) {
     mCurrentState = s;
     if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;

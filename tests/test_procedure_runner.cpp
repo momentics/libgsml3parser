@@ -156,6 +156,47 @@ TEST(PR_Feed, RoutesToActiveProcedure) {
     EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponseWithToken);
 }
 
+// Test: An active CallRelease procedure receives its own CC messages (Disconnect,
+// Release) instead of the runner auto-creating a duplicate procedure.
+// Importance: CallRelease and CallSetup_MO share the Call Control PD; the runner
+// must use precise PD+MTI matching (Procedure::matches) so the active release flow
+// is not shadowed by a second auto-created procedure for the same PD.
+// 3GPP: TS 24.008 6.1 - Clear command procedure (Disconnect -> Release -> ReleaseComplete).
+TEST(ProcedureRunner, CallRelease_RoutedCorrectly) {
+    ProcedureRunner runner;
+    SubscriberSession session;
+
+    // First L3Disconnect auto-creates the CallRelease procedure (via
+    // ProcedureFactory::createCallRelease) and sends the Disconnect response.
+    ParsedMessage disc1{CCM{L3Disconnect{}}};
+    auto result1 = runner.feed(disc1, &session, {});
+    EXPECT_EQ(result1.action, ProcedureStepResult::Action::SendResponseWithToken);
+    EXPECT_EQ(result1.responseToken, ResponseToken::Disconnect);
+    EXPECT_EQ(runner.activeCount(), 1u);
+
+    auto* release = runner.getActive(procedure::ProcedureType::CallRelease);
+    ASSERT_NE(release, nullptr);
+
+    // A repeated L3Disconnect must be routed to the active CallRelease (precise
+    // PD+MTI match), not auto-create a second procedure.
+    ParsedMessage disc2{CCM{L3Disconnect{}}};
+    auto result2 = runner.feed(disc2, &session, {});
+    EXPECT_EQ(runner.activeCount(), 1u);
+    EXPECT_EQ(runner.getActive(procedure::ProcedureType::CallRelease), release);
+    // WAIT_RELEASE only reacts to L3Release; the retransmission is ignored.
+    EXPECT_EQ(result2.action, ProcedureStepResult::Action::Continue);
+
+    // L3Release must reach the same CallRelease and complete it with the
+    // ReleaseComplete response (terminal state reported via finalResult).
+    ParsedMessage relMsg{CCM{L3Release{}}};
+    auto result3 = runner.feed(relMsg, &session, {});
+    EXPECT_EQ(result3.action, ProcedureStepResult::Action::SendResponseWithToken);
+    EXPECT_EQ(result3.responseToken, ResponseToken::ReleaseComplete);
+    EXPECT_EQ(result3.finalResult.state, procedure::ProcedureState::Completed);
+    // Terminal procedure is auto-cleaned from its slot.
+    EXPECT_EQ(runner.activeCount(), 0u);
+}
+
 // Test: tickAll advances timers and returns the count of procedures that failed
 // due to timeout.
 // Importance: Timer management is critical for protocol compliance; expired procedures

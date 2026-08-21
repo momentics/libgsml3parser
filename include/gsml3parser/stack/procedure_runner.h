@@ -72,9 +72,15 @@ class SubscriberSession;
 /// Manager for concurrent protocol procedures belonging to one subscriber.
 ///
 /// Maintains a fixed-size array of procedure slots. Each slot holds a unique_ptr<Procedure>
-/// and an active flag. Incoming messages are routed to the matching active procedure
-/// based on the message's Protocol Discriminator (PD). If no active procedure matches,
-/// a new procedure is auto-created using ProcedureFactory.
+/// and an active flag. Incoming messages are routed in two stages:
+///   1. Precise routing: the first active procedure whose Procedure::matches() accepts
+///      the message (PD + MTI) receives it. This disambiguates procedures that share a
+///      Protocol Discriminator (e.g. CallRelease vs CallSetup_MO, both CC).
+///   2. PD fallback: if no procedure explicitly matches, the message is routed to the
+///      active procedure of the PD's default type. This keeps catch-all procedures
+///      working (e.g. ChannelAssignment advances on any RR message mid-assignment).
+/// If neither stage finds an active procedure, a new one is auto-created using
+/// ProcedureFactory.
 ///
 /// After each feed() call, if the result action is Completed or Failed, the slot is
 /// automatically freed (proc.reset(), active=false) for reuse by subsequent procedures.
@@ -131,6 +137,8 @@ private:
     std::array<ProcedureSlot, MAX_PROCEDURES> mSlots{};
 
     /// Find an active slot whose procedure matches the PD of the incoming message.
+    /// Used as the routing fallback after the precise Procedure::matches() scan:
+    /// it serves catch-all procedures that advance on any message of their PD.
     /// @param pd The Protocol Discriminator to match against.
     /// @return Slot index, or std::nullopt if no match found.
     [[nodiscard]] std::optional<size_t> findActiveSlotByPD(L3PD pd) noexcept;

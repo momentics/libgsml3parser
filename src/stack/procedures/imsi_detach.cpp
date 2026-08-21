@@ -35,6 +35,13 @@ procedure::ProcedureState IMSIDetachProcedure::state() const {
     return mProcState;
 }
 
+bool IMSIDetachProcedure::matches(const ParsedMessage& msg) const {
+    // Any MM message is accepted: the procedure is triggered by the IMSI Detach
+    // Indication and its WAIT_DETACH_COMPLETE state treats the next MM message
+    // as the detach completion (TS 24.008 4.4.6).
+    return messagePD(msg) == L3PD::MobilityManagement;
+}
+
 void IMSIDetachProcedure::doTransitionTo(State s) {
     mCurrentState = s;
     if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;

@@ -46,6 +46,16 @@ CCCause CallReleaseProcedure::cause() const noexcept {
     return mCause;
 }
 
+bool CallReleaseProcedure::matches(const ParsedMessage& msg) const {
+    // Accepts the CC clear-command messages this procedure processes:
+    // Disconnect (triggers the release flow) and Release (completes it).
+    // Precise PD+MTI matching lets the runner route these to an active
+    // CallRelease instead of shadowing it with a CallSetup_MO (same CC PD).
+    if (messagePD(msg) != L3PD::CallControl) return false;
+    const int mti = messageMTI(msg);
+    return mti == L3Disconnect::MTI || mti == L3Release::MTI;
+}
+
 void CallReleaseProcedure::doTransitionTo(State s) {
     mCurrentState = s;
     if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;

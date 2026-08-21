@@ -38,6 +38,7 @@ public:
     [[nodiscard]] ProcedureStepResult feed(const ParsedMessage& msg,
                                               SubscriberSession* session,
                                               ResponseSink sink) override;
+    [[nodiscard]] bool matches(const ParsedMessage& msg) const override;
     [[nodiscard]] ProcedureStepResult tick(std::chrono::milliseconds delta) override;
     void cancel() noexcept override;
 

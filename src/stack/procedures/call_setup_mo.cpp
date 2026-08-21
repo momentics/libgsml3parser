@@ -36,6 +36,18 @@ procedure::ProcedureState CallSetupMOPercedure::state() const {
     return mProcState;
 }
 
+bool CallSetupMOPercedure::matches(const ParsedMessage& msg) const {
+    // Messages this procedure processes (TS 24.008 6.1, MO direction):
+    // CMServiceRequest (service request), Setup (call request),
+    // AssignmentComplete (TCH assigned), ConnectAcknowledge (call active).
+    const auto pd = messagePD(msg);
+    const int mti = messageMTI(msg);
+    if (pd == L3PD::MobilityManagement) return mti == L3CMServiceRequest::MTI;
+    if (pd == L3PD::CallControl) return mti == L3Setup::MTI || mti == L3ConnectAcknowledge::MTI;
+    if (pd == L3PD::RadioResource) return mti == L3AssignmentComplete::MTI;
+    return false;
+}
+
 void CallSetupMOPercedure::doTransitionTo(State s) {
     mCurrentState = s;
     if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;

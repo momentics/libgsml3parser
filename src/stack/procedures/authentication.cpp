@@ -36,6 +36,12 @@ procedure::ProcedureState AuthenticationProcedure::state() const {
     return mProcState;
 }
 
+bool AuthenticationProcedure::matches(const ParsedMessage& msg) const {
+    // This procedure waits for the MS AuthenticationResponse (TS 24.008 10.5.1.22).
+    return messagePD(msg) == L3PD::MobilityManagement &&
+           messageMTI(msg) == L3AuthenticationResponse::MTI;
+}
+
 void AuthenticationProcedure::doTransitionTo(State s) {
     mCurrentState = s;
     if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;

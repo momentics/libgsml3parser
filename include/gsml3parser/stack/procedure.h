@@ -185,6 +185,25 @@ public:
                                                       SubscriberSession* session,
                                                       ResponseSink sink) = 0;
 
+    /// Report whether this procedure accepts the given incoming L3 message.
+    ///
+    /// ProcedureRunner uses matches() for precise message routing: when several
+    /// procedures are active, the message is fed to the first procedure whose
+    /// matches() returns true. This disambiguates procedures that share a
+    /// Protocol Discriminator (e.g. CallRelease and CallSetup_MO are both CC),
+    /// so an active release flow receives its Disconnect/Release messages
+    /// instead of a duplicate procedure being auto-created for the same PD.
+    ///
+    /// The base implementation returns false. Each concrete procedure overrides
+    /// it for the PD + MTI combinations it actually processes. matches() declares
+    /// the procedure's message set statically (independent of the current state);
+    /// procedures that advance on any message of a given PD in intermediate
+    /// states (e.g. ChannelAssignment) are still reached via the runner's
+    /// PD-based fallback routing.
+    /// @param msg The parsed L3 message to test.
+    /// @return True if this procedure accepts the message.
+    [[nodiscard]] virtual bool matches(const ParsedMessage&) const { return false; }
+
     /// Feed typed external data into the procedure (e.g., AuthChallenge from AuC, VLRDecision from BSC).
     /// Call this when the procedure has entered WaitingExternal state.
     ///

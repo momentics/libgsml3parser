@@ -37,6 +37,12 @@ procedure::ProcedureState PagingProcedure::state() const {
     return mProcState;
 }
 
+bool PagingProcedure::matches(const ParsedMessage& msg) const {
+    // This procedure waits for the MS Paging Response (TS 04.08 9.1.25).
+    return messagePD(msg) == L3PD::RadioResource &&
+           messageMTI(msg) == L3PagingResponse::MTI;
+}
+
 void PagingProcedure::doTransitionTo(State s) {
     mCurrentState = s;
     if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;

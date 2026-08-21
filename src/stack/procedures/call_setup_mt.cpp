@@ -39,6 +39,17 @@ procedure::ProcedureState CallSetupMTPercedure::state() const {
     return mProcState;
 }
 
+bool CallSetupMTPercedure::matches(const ParsedMessage& msg) const {
+    // Messages this procedure processes (TS 24.008 6.1, MT direction):
+    // PagingResponse (MS answers the page), CallConfirmed (SDCCH assigned),
+    // AssignmentComplete (TCH assigned), ConnectAcknowledge (call active).
+    const auto pd = messagePD(msg);
+    const int mti = messageMTI(msg);
+    if (pd == L3PD::RadioResource) return mti == L3PagingResponse::MTI || mti == L3AssignmentComplete::MTI;
+    if (pd == L3PD::CallControl) return mti == L3CallConfirmed::MTI || mti == L3ConnectAcknowledge::MTI;
+    return false;
+}
+
 void CallSetupMTPercedure::doTransitionTo(State s) {
     mCurrentState = s;
     if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;

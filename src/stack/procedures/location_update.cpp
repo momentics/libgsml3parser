@@ -37,6 +37,17 @@ procedure::ProcedureState LocationUpdateProcedure::state() const {
     return mProcState;
 }
 
+bool LocationUpdateProcedure::matches(const ParsedMessage& msg) const {
+    // Messages this procedure processes (TS 24.008 4.4.1):
+    // CMServiceRequest (trigger), IdentityResponse (identity check),
+    // AuthenticationResponse (SRES verification).
+    if (messagePD(msg) != L3PD::MobilityManagement) return false;
+    const int mti = messageMTI(msg);
+    return mti == L3CMServiceRequest::MTI ||
+           mti == L3IdentityResponse::MTI ||
+           mti == L3AuthenticationResponse::MTI;
+}
+
 void LocationUpdateProcedure::doTransitionTo(State s) {
     mCurrentState = s;
     if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;

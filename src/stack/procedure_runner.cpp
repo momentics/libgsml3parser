@@ -87,10 +87,23 @@ void ProcedureRunner::cleanupSlotIfTerminal(size_t idx) noexcept {
 
 ProcedureStepResult ProcedureRunner::feed(const ParsedMessage& msg,
     SubscriberSession* session, ResponseSink sink) {
-    auto pd = messagePD(msg);
+    // Precise routing first: an active procedure that explicitly accepts this
+    // message (PD + MTI, see Procedure::matches) takes priority. This
+    // disambiguates procedures that share a Protocol Discriminator — e.g. an
+    // active CallRelease must receive its CC Disconnect/Release messages
+    // instead of the runner auto-creating a duplicate procedure for the PD.
+    for (size_t i = 0; i < MAX_PROCEDURES; ++i) {
+        if (mSlots[i].active && mSlots[i].proc && mSlots[i].proc->matches(msg)) {
+            ProcedureStepResult result = mSlots[i].proc->feed(msg, session, std::move(sink));
+            cleanupSlotIfTerminal(i);
+            return result;
+        }
+    }
 
-    // Try to route to an active procedure matching the PD
-    auto slotIdx = findActiveSlotByPD(pd);
+    // Fallback: route to the active procedure of the PD's default type. This
+    // keeps catch-all procedures working (e.g. ChannelAssignment advances its
+    // state machine on any RR message once allocation has started).
+    auto slotIdx = findActiveSlotByPD(messagePD(msg));
     if (slotIdx.has_value()) {
         ProcedureStepResult result = mSlots[slotIdx.value()].proc->feed(msg, session, std::move(sink));
         cleanupSlotIfTerminal(slotIdx.value());

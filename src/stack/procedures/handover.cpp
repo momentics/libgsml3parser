@@ -37,6 +37,14 @@ procedure::ProcedureState HandoverProcedure::state() const {
     return mProcState;
 }
 
+bool HandoverProcedure::matches(const ParsedMessage& msg) const {
+    // This procedure waits for the MS Handover Complete or Handover Failure
+    // (TS 04.08 9.1.40).
+    if (messagePD(msg) != L3PD::RadioResource) return false;
+    const int mti = messageMTI(msg);
+    return mti == L3HandoverComplete::MTI || mti == L3HandoverFailure::MTI;
+}
+
 void HandoverProcedure::doTransitionTo(State s) {
     mCurrentState = s;
     if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;
