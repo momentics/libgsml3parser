@@ -1242,8 +1242,9 @@ To create handlers from lambdas, use the factory functions:
 
 | Factory | Use Case | Allocation |
 |---------|----------|------------|
-| `makeHandler(lambda)` | Non-capturing lambdas and static functions | Zero (compile-time resolved) |
-| `makeSharedHandler(lambda)` | Capturing lambdas | One heap allocation (shared_ptr managed) |
+| `makeHandler(lambda)` | Non-capturing lambdas (stateless callables only; function pointers are rejected at compile time) | Zero (compile-time resolved) |
+| `makeSharedHandler(lambda)` | Capturing lambdas | Heap allocation (shared_ptr managed) |
+| `FlatHandler{fn, ctx}` constructor | Plain function pointers with a user context | Zero |
 
 ### ProtocolDispatcher
 
@@ -3234,15 +3235,22 @@ static_assert(sizeof(FlatHandler) == 2 * sizeof(void*));
 
 #### makeHandler (Zero Allocation)
 
-For non-capturing lambdas and static functions:
+For non-capturing lambdas (stateless callables):
 
 ```cpp
 template<typename F>
-    requires std::is_invocable_v<F, const ParsedMessage&, void*>
-constexpr FlatHandler makeHandler(F f) noexcept;
+    requires (std::is_invocable_v<F, const ParsedMessage&, void*> &&
+              std::is_default_constructible_v<F> &&
+              !std::is_pointer_v<F> &&
+              !std::is_function_v<std::decay_t<F>>)
+FlatHandler makeHandler(F) noexcept;
 ```
 
 No heap allocation. The lambda is converted to a function pointer at compile time.
+Function pointers and function types are rejected (C10): a default-constructed
+function pointer is null and would crash on the first invocation. For plain
+function pointers with a user context, use the constructor directly:
+`FlatHandler h{myFunction, myCtx};`
 
 #### makeSharedHandler (Heap Allocation)
 

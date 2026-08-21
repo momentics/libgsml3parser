@@ -42,6 +42,7 @@ add_executable(gsml3parser_tests
     test_cc_builders.cpp
     test_lapdm.cpp
     test_dispatcher.cpp
+    test_flat_handler.cpp
     test_gmm_builders.cpp
     test_sm_builders.cpp
     test_full_roundtrip.cpp
