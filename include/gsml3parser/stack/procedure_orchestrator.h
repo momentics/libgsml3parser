@@ -51,6 +51,7 @@
 #include <memory>
 #include <span>
 
+#include "gsml3parser/stack/l3_timer.h"
 #include "gsml3parser/stack/procedure.h"
 #include "gsml3parser/stack/procedure_types.h"
 #include "gsml3parser/stack/typed_external_data.h"
@@ -76,9 +77,12 @@ public:
     /// @return ProcedureStepResult from the active procedure or phase handler.
     [[nodiscard]] ProcedureStepResult feedExternalTyped(const ExternalData& data, ResponseSink sink = {});
 
-    /// Tick all timers for the active chain.
+    /// Tick all timers for the active chain: the active Procedure's own timer
+    /// and the phase timer of inline phases (T3103 while the LocationUpdate
+    /// phase waits for the VLR decision). A phase-timer expiry cancels the
+    /// whole chain and is reported as one failure.
     /// @param delta Elapsed time in milliseconds.
-    /// @return Number of procedures that failed due to timeout.
+    /// @return Number of failures (procedure timeout and/or phase-timer expiry).
     size_t tickAll(std::chrono::milliseconds delta);
 
     /// Cancel all active procedures in the chain.
@@ -125,7 +129,16 @@ private:
     ResponseToken mLastToken{ResponseToken::None};
     procedure::ProcedureType mChainType{procedure::ProcedureType::Unknown};
 
+    // Phase timer for inline phases (no Procedure object to carry its own
+    // timer). Started in transitionToPhase() for LocationUpdate (T3103, 5s);
+    // expiry in tickAll() cancels the chain. Stopped by cancelAll(), on phase
+    // completion, and on any transition out of the timed phase.
+    L3TimerId mPhaseTimer{L3TimerId::Unknown};
+    std::chrono::milliseconds mPhaseTimerRemaining{0};
+    bool mPhaseTimerRunning{false};
+
     void transitionToPhase(ChainPhase phase);
+    void stopPhaseTimer() noexcept;
     std::unique_ptr<Procedure> createProcedureForPhase(ChainPhase phase);
     void onProcedureCompleted(const ProcedureStepResult& result);
     void onProcedureFailed(const ProcedureStepResult& result);

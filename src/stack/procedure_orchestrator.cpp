@@ -126,6 +126,24 @@ void ProcedureOrchestrator::transitionToPhase(ChainPhase phase) {
     } else {
         mCurrentProcedure.reset();
     }
+
+    // Phase timer for inline phases (no Procedure object to carry its own
+    // timer). Entering LocationUpdate starts T3103 (5s, TS 24.008 10.5.12):
+    // the VLR must deliver its decision within this window. Any other phase
+    // stops the timer.
+    if (phase == ChainPhase::LocationUpdate) {
+        mPhaseTimer = L3TimerId::T3103;
+        mPhaseTimerRemaining = std::chrono::milliseconds(5000);
+        mPhaseTimerRunning = true;
+    } else {
+        stopPhaseTimer();
+    }
+}
+
+void ProcedureOrchestrator::stopPhaseTimer() noexcept {
+    mPhaseTimer = L3TimerId::Unknown;
+    mPhaseTimerRemaining = std::chrono::milliseconds(0);
+    mPhaseTimerRunning = false;
 }
 
 std::unique_ptr<Procedure> ProcedureOrchestrator::createProcedureForPhase(ChainPhase phase) {
@@ -165,6 +183,8 @@ void ProcedureOrchestrator::onProcedureCompleted(const ProcedureStepResult& resu
             break;
         case ChainPhase::LocationUpdate:
             if (mSession) mSession->mmSM.setState(MMStateMachine::State::REGISTERED);
+            // The VLR answered: stop T3103 so it cannot cancel the finished chain.
+            stopPhaseTimer();
             break;
         case ChainPhase::CallSetupMO:
         case ChainPhase::CallSetupMT:
@@ -317,13 +337,30 @@ ProcedureStepResult ProcedureOrchestrator::feedExternalTyped(const ExternalData&
 }
 
 size_t ProcedureOrchestrator::tickAll(std::chrono::milliseconds delta) {
-    if (!mCurrentProcedure) return 0;
-    ProcedureStepResult result = mCurrentProcedure->tick(delta);
-    if (result.action == ProcedureStepResult::Action::Failed) {
-        onProcedureFailed(result);
-        return 1;
+    size_t failed = 0;
+    // Inline phases (LocationUpdate waiting for the VLR decision) have no
+    // Procedure object; their timeout is the phase timer started in
+    // transitionToPhase(). Expiry cancels the whole chain.
+    if (mPhaseTimerRunning) {
+        mPhaseTimerRemaining -= delta;
+        if (mPhaseTimerRemaining <= std::chrono::milliseconds(0)) {
+            mPhaseTimerRunning = false;
+            ProcedureStepResult timeout;
+            timeout.action = ProcedureStepResult::Action::Failed;
+            timeout.finalResult = {mChainType, procedure::ProcedureState::TimedOut,
+                                   "phase_timer_expired"};
+            onProcedureFailed(timeout);
+            ++failed;
+        }
     }
-    return 0;
+    if (mCurrentProcedure) {
+        ProcedureStepResult result = mCurrentProcedure->tick(delta);
+        if (result.action == ProcedureStepResult::Action::Failed) {
+            onProcedureFailed(result);
+            ++failed;
+        }
+    }
+    return failed;
 }
 
 void ProcedureOrchestrator::cancelAll() noexcept {
@@ -332,6 +369,7 @@ void ProcedureOrchestrator::cancelAll() noexcept {
         mCurrentProcedure.reset();
     }
     mCurrentPhase = ChainPhase::None;
+    stopPhaseTimer();
     // Clear pending response parameters so a later chain never reuses stale values
     // (e.g. an old RAND or channel from the cancelled chain). Must run before
     // mSession is cleared.
@@ -383,13 +421,19 @@ ProcedureStepResult ProcedureOrchestrator::handleIdentityVerification(
     auto mti = messageMTI(msg);
 
     if (pd == L3PD::MobilityManagement && mti == L3IdentityResponse::MTI) {
-        // Identity received; advance to authentication
+        // Identity received: the phase is no longer waiting for an
+        // IdentityResponse, so no IdentityRequest token is returned (C4).
+        // The chain advances to Authentication and the caller needs no response.
         if (session) {
             session->mmSM.setState(MMStateMachine::State::IDENTITY_VERIFIED);
         }
         transitionToPhase(ChainPhase::Authentication);
+        ProcedureStepResult r;
+        r.action = ProcedureStepResult::Action::Continue;
+        return r;
     }
 
+    // The phase is still waiting for the IdentityResponse: (re)send the request.
     ProcedureStepResult result;
     result.action = ProcedureStepResult::Action::SendResponseWithToken;
     result.responseToken = ResponseToken::IdentityRequest;
@@ -476,6 +520,8 @@ ProcedureStepResult ProcedureOrchestrator::handleExternalDataLocationUpdate(
 
             result.finalResult = {procedure::ProcedureType::LocationUpdate,
                                   procedure::ProcedureState::Completed, "vlr_accept"};
+            // The VLR answered: stop T3103 so it cannot cancel the finished chain.
+            stopPhaseTimer();
         } else {
             // Terminal with response (reject): keep SendResponseWithToken; report the
             // terminal Failed state via finalResult only.
@@ -489,6 +535,8 @@ ProcedureStepResult ProcedureOrchestrator::handleExternalDataLocationUpdate(
 
             result.finalResult = {procedure::ProcedureType::LocationUpdate,
                                   procedure::ProcedureState::Failed, "vlr_reject"};
+            // The VLR answered: stop T3103 so it cannot cancel the finished chain.
+            stopPhaseTimer();
         }
     }
 

@@ -76,6 +76,52 @@ static ParsedMessage makeDisconnect() {
     return ParsedMessage{CCM{L3Disconnect::builder().ti(3).build()}};
 }
 
+static ParsedMessage makeAuthenticationResponse() {
+    // SRES matches the big-endian expectedSres {0xAB, 0xCD, 0xEF, 0x01} of the
+    // AuthChallenge used in driveToLocationUpdatePhase() (TS 24.008 10.5.1.22).
+    return ParsedMessage{MMM{L3AuthenticationResponse::builder().sres(0xABCDEF01u).build()}};
+}
+
+static ParsedMessage makeCipheringModeComplete() {
+    return ParsedMessage{RRM{L3CipheringModeComplete::builder().build()}};
+}
+
+// Drive a Location Update chain (TMSI-known) all the way to the inline
+// LocationUpdate phase, i.e. the point where the orchestrator waits for the
+// VLR decision with the T3103 phase timer running.
+static void driveToLocationUpdatePhase(ProcedureOrchestrator& orchestrator,
+                                       SubscriberSession& session) {
+    session.context.setTMSI(0x12345678u);
+
+    // CMServiceRequest -> CMServiceAccept; chain auto-advances to Authentication.
+    [[maybe_unused]] auto r1 = orchestrator.feed(makeCMServiceRequestLU(), &session);
+
+    // AuthChallenge -> AuthenticationRequest (auth procedure leaves INIT).
+    AuthChallenge chal{};
+    for (int i = 0; i < 16; ++i) chal.rand[i] = static_cast<uint8_t>(i);
+    chal.expectedSres[0] = 0xAB;
+    chal.expectedSres[1] = 0xCD;
+    chal.expectedSres[2] = 0xEF;
+    chal.expectedSres[3] = 0x01;
+    [[maybe_unused]] auto r2 = orchestrator.feedExternalTyped(chal);
+
+    // AuthenticationResponse: the first feed is consumed by the SEND_AUTH_REQ
+    // state (re-sends the request), the second verifies the SRES and completes
+    // the procedure -> chain advances to CipheringMode.
+    [[maybe_unused]] auto r3 = orchestrator.feed(makeAuthenticationResponse(), &session);
+    [[maybe_unused]] auto r4 = orchestrator.feed(makeAuthenticationResponse(), &session);
+
+    // CipheringParameters -> CipheringModeCommand (ciphering procedure leaves INIT).
+    CipheringParameters cipherParams{0, true};
+    [[maybe_unused]] auto r5 = orchestrator.feedExternalTyped(cipherParams);
+
+    // CipheringModeComplete: the first feed is consumed by the SEND_COMMAND
+    // state (re-sends the command), the second completes the procedure ->
+    // inline LocationUpdate phase with T3103 (5s) running.
+    [[maybe_unused]] auto r6 = orchestrator.feed(makeCipheringModeComplete(), &session);
+    [[maybe_unused]] auto r7 = orchestrator.feed(makeCipheringModeComplete(), &session);
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 TEST(ProcedureOrchestrator, CMServiceRequest_SendsAccept) {
@@ -233,4 +279,77 @@ TEST(ProcedureOrchestrator, ResponseContext_Reset_OnNewChain) {
     // Stale parameters from the previous (completed) chain must be cleared.
     EXPECT_FALSE(session.response.hasRand);
     EXPECT_FALSE(session.response.hasChannel);
+}
+
+TEST(ProcedureOrchestrator, IdentityVerification_ResponseReceived_NoRequestToken) {
+    SubscriberSession session;
+    // No TMSI/IMSI known: the chain must go through identity verification.
+    ProcedureOrchestrator orchestrator;
+
+    // Step 1: CMServiceRequest -> CMServiceAccept; chain advances to IdentityVerification.
+    auto r1 = orchestrator.feed(makeCMServiceRequestLU(), &session);
+    EXPECT_EQ(r1.responseToken, ResponseToken::CMServiceAccept);
+
+    // Step 2: IdentityResponse received -> the phase is no longer waiting, so the
+    // result must NOT carry an IdentityRequest token (C4 fix). The chain advances
+    // to Authentication and the caller needs no response.
+    auto r2 = orchestrator.feed(makeIdentityResponse(), &session);
+    EXPECT_EQ(r2.action, ProcedureStepResult::Action::Continue);
+    EXPECT_EQ(r2.responseToken, ResponseToken::None);
+    // FSM: WAITING_IDENTITY -> IDENTITY_VERIFIED -> AUTHENTICATION.
+    EXPECT_EQ(session.mmSM.state(), MMStateMachine::State::AUTHENTICATION);
+}
+
+TEST(ProcedureOrchestrator, IdentityVerification_UnexpectedMessage_ResendsRequest) {
+    SubscriberSession session;
+    ProcedureOrchestrator orchestrator;
+
+    // Start the chain; without a known identity it advances to IdentityVerification.
+    [[maybe_unused]] auto r1 = orchestrator.feed(makeCMServiceRequestLU(), &session);
+
+    // A message that is not the awaited IdentityResponse: the phase is still
+    // waiting, so the IdentityRequest is (re)sent.
+    auto r2 = orchestrator.feed(ParsedMessage{RRM{L3ChannelRequest::builder().build()}}, &session);
+    EXPECT_EQ(r2.action, ProcedureStepResult::Action::SendResponseWithToken);
+    EXPECT_EQ(r2.responseToken, ResponseToken::IdentityRequest);
+    EXPECT_EQ(orchestrator.lastResponseToken(), ResponseToken::IdentityRequest);
+}
+
+TEST(ProcedureOrchestrator, LocationUpdate_TimerExpiry) {
+    SubscriberSession session;
+    ProcedureOrchestrator orchestrator;
+
+    // Drive the chain to the inline LocationUpdate phase (T3103 = 5s running).
+    driveToLocationUpdatePhase(orchestrator, session);
+
+    // Tick well past the T3103 expiry without a VLR decision: the chain is
+    // cancelled and reported as one timeout failure (C15 fix).
+    size_t failed = orchestrator.tickAll(std::chrono::milliseconds(6000));
+    EXPECT_EQ(failed, 1u);
+    EXPECT_EQ(orchestrator.lastResponseToken(), ResponseToken::None);
+    // The chain was cancelled before the VLR answered: MM FSM stays in LOCATION_UPDATE.
+    EXPECT_EQ(session.mmSM.state(), MMStateMachine::State::LOCATION_UPDATE);
+
+    // The phase timer is stopped after expiry: further ticks report no failure.
+    EXPECT_EQ(orchestrator.tickAll(std::chrono::milliseconds(1000)), 0u);
+}
+
+TEST(ProcedureOrchestrator, LocationUpdate_TimerStopsOnVlrDecision) {
+    SubscriberSession session;
+    ProcedureOrchestrator orchestrator;
+
+    driveToLocationUpdatePhase(orchestrator, session);
+
+    // Ticking within the T3103 window must not expire the chain.
+    EXPECT_EQ(orchestrator.tickAll(std::chrono::milliseconds(4000)), 0u);
+
+    // VLR accept terminates the phase: T3103 is stopped, so a later tick past
+    // the original deadline must not cancel the finished chain.
+    VLRDecision vlr{true, std::nullopt, MMRejectCause::Zero};
+    auto result = orchestrator.feedExternalTyped(vlr);
+    EXPECT_EQ(result.action, ProcedureStepResult::Action::SendResponseWithToken);
+    EXPECT_EQ(result.responseToken, ResponseToken::LocationUpdatingAccept);
+    EXPECT_EQ(result.finalResult.state, procedure::ProcedureState::Completed);
+
+    EXPECT_EQ(orchestrator.tickAll(std::chrono::milliseconds(10000)), 0u);
 }
