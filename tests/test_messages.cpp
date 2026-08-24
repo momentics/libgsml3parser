@@ -207,8 +207,8 @@ TEST(MessagesTest, RR_SystemInformationType2ter) {
 TEST(MessagesTest, RR_SystemInformationType4) {
     L3SystemInformationType4 msg;
     EXPECT_EQ(msg.mti(), L3SystemInformationType4::MTI);
-    // Reference GSM_SystemInformation.ttcn: LAI(5) + CellSelPar(2) + RachCtrl(3) = 10 bytes
-    EXPECT_EQ(msg.l2BodyLength(), 10u);
+    // Reference GSM_SystemInformation.ttcn: LAI(5) + CellSelPar(2) + RachCtrl(3) + RestOctets(1) = 11 bytes
+    EXPECT_EQ(msg.l2BodyLength(), 11u);
 }
 
 TEST(MessagesTest, RR_SystemInformationType5) {

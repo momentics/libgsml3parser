@@ -165,11 +165,6 @@ L3StreamBuilder& L3StreamBuilder::logLevel(LogLevel lvl) {
     return *this;
 }
 
-L3StreamBuilder& L3StreamBuilder::pdHandler(L3PD pd, PDHandler handler) {
-    mConfig = mConfig.withPDHandler(pd, std::move(handler));
-    return *this;
-}
-
 L3StreamBuilder& L3StreamBuilder::useL2Length(bool v) {
     mFrameConfig.useL2Length = v;
     return *this;

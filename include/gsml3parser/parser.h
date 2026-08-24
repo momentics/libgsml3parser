@@ -37,7 +37,7 @@ namespace gsml3parser {
  * Parse a complete L3 message from a raw byte span.
  *
  * @param data  Span of raw L3 message bytes (header + body).
- * @param cfg   Parser configuration (log level, custom PD handlers).
+ * @param cfg   Parser configuration (log level).
  * @return      Expected<ParsedMessage> holding the parsed variant, or ParseError on failure.
  */
 [[nodiscard]] Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfig& cfg = {});
@@ -46,7 +46,7 @@ namespace gsml3parser {
  * Parse a complete L3 message from a hex-encoded string.
  *
  * @param hex   Hex-encoded L3 message (e.g. "060D00").
- * @param cfg   Parser configuration (log level, custom PD handlers).
+ * @param cfg   Parser configuration (log level).
  * @return      Expected<ParsedMessage> holding the parsed variant, or ParseError on failure.
  */
 [[nodiscard]] Expected<ParsedMessage> parseL3Hex(std::string_view hex, const ParserConfig& cfg = {});

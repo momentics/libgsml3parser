@@ -666,12 +666,25 @@ TEST(GSMSpecTest, Data2Hex) {
 // GSM 04.08 10.2: PD=0x06(RR) in high nibble, skip=0, MTI=0x19(SystemInformationType1)
 // Reference: GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_1 = '00011001'B
 TEST(GSMSpecTest, ParseHexWithVariousFormats) {
-    auto msg1 = parseL3Hex("601900");
+    // SI1 has a long fixed body, so serialize a complete SI1 first; the
+    // format variants below (no spaces / spaces) must parse identically.
+    ParsedMessage si1{RRM{L3SystemInformationType1{}}};
+    auto hex = writeL3Hex(si1);
+    ASSERT_TRUE(hex);
+    const std::string h = hex.value();
+
+    auto msg1 = parseL3Hex(h);
     ASSERT_TRUE(msg1);
     EXPECT_EQ(messagePD(*msg1), L3PD::RadioResource);
 
     // Spaces between bytes
-    auto msg2 = parseL3Hex("60 19 00");
+    std::string spaced;
+    spaced.reserve(h.size() + h.size() / 2);
+    for (size_t i = 0; i < h.size(); i += 2) {
+        spaced.append(h, i, 2);
+        spaced.push_back(' ');
+    }
+    auto msg2 = parseL3Hex(spaced);
     ASSERT_TRUE(msg2);
     EXPECT_EQ(messagePD(*msg2), L3PD::RadioResource);
 

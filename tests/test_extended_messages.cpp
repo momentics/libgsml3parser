@@ -24,6 +24,7 @@
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
+#include <gsml3parser/l3header.h>
 #include <gsml3parser/extended/l3extendedmessages.h>
 #include <gsml3parser/testproc/l3testproceduremessages.h>
 #include <gsml3parser/visitor.h>

@@ -463,15 +463,16 @@ bool L3BCCHFrequencyList::contains(unsigned arfcn) const {
 }
 
 Expected<L3BCCHFrequencyList> L3BCCHFrequencyList::parse(BitReader& br) {
-    auto r = br.readField(8); if (!r) return Expected<L3BCCHFrequencyList>::error(r.error()); // skip header byte (3 bits + 5 spare)
+    // GSM 04.08 10.5.2.22: 16-octet BCCH_Freq_List (base + 112-bit bitmap),
+    // same raw layout as L3FrequencyList.
     std::vector<uint8_t> raw(16);
-    auto rb = br.readBytes(raw.data(), 16); if (!rb) return Expected<L3BCCHFrequencyList>::error(rb.error());
+    auto r = br.readBytes(raw.data(), 16); if (!r) return Expected<L3BCCHFrequencyList>::error(r.error());
     return Expected<L3BCCHFrequencyList>::hold(L3BCCHFrequencyList(frequencyListFromRaw(raw)));
 }
 
 void L3BCCHFrequencyList::write(BitWriter& bw) const {
-    bw.writeField(0, 3); // BA-IND, EXT-IND, Spare
-    bw.writeField(0, 5); // padding to byte boundary
+    // GSM 04.08 10.5.2.22: 16-octet BCCH_Freq_List (base + 112-bit bitmap),
+    // same raw layout as L3FrequencyList.
     std::vector<uint8_t> raw = frequencyListToRaw(mARFCNs);
     bw.writeBytes(raw.data(), raw.size());
 }
@@ -1451,7 +1452,9 @@ void L3SI3RestOctets::text(std::ostream& os) const {
 // ── L3SIType4RestOctets ────────────────────────────────────────────────
 
 size_t L3SIType4RestOctets::lengthV() const {
-    if (!mHaveGPRS) return 0;
+    // The rest octet is always present (GSM 04.08 9.1.35): without GPRS it
+    // still occupies 1 byte (5 used bits + padding), with GPRS 9 bits -> 2 bytes.
+    if (!mHaveGPRS) return 1;
     int bits = 1 + 1 + 1 + 3 + 1 + 2;
     return (bits + 7) / 8;
 }

@@ -71,12 +71,28 @@ TEST(ParserTest, ParseL3_RR_ChannelRelease) {
 }
 
 TEST(ParserTest, ParseL3_RR_SI1) {
-    // RR header: PD=0x06, MTI=0x19 (SystemInformationType1), body: 1 byte rest octet
-    uint8_t data[] = {0x60, 0x19, 0x2B};
-    auto res = parseL3(std::span<const uint8_t>(data));
+    // SI1 has a long fixed body (cell channel description + RACH control
+    // parameters), so build a complete message and parse its serialized bytes.
+    ParsedMessage orig{RRM{L3SystemInformationType1{}}};
+    auto hex = writeL3Hex(orig);
+    ASSERT_TRUE(hex);
+    std::string h = hex.value();
+    std::vector<uint8_t> data(h.size() / 2);
+    for (size_t i = 0; i < data.size(); ++i)
+        data[i] = static_cast<uint8_t>(std::strtoul(h.substr(i * 2, 2).c_str(), nullptr, 16));
+    auto res = parseL3(data);
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::RadioResource);
     EXPECT_NE(tryGet<L3SystemInformationType1>(*res), nullptr);
+}
+
+TEST(ParserTest, TruncatedSI1_ReturnsError) {
+    // SI1 header with only a 1-byte body: truncated input must be a hard
+    // error (TruncatedInput), never a silently default-constructed message.
+    uint8_t data[] = {0x60, 0x19, 0x2B};
+    auto res = parseL3(std::span<const uint8_t>(data));
+    EXPECT_FALSE(res);
+    EXPECT_EQ(res.error().code, ParseError::Code::TruncatedInput);
 }
 
 TEST(ParserTest, ParseL3_RR_ClassmarkEnquiry) {

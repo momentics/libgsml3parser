@@ -21,32 +21,9 @@
 
 #pragma once
 
-#include <array>
-#include <cstdint>
-#include <functional>
-#include <memory>
-
 #include "types.h"
-#include "l3header.h"
 
 namespace gsml3parser {
-
-/** Base class for all L3 messages. */
-class L3Message {};
-
-/** Raw L3 frame: header + payload bytes. */
-struct L3Frame {
-    L3Header header;
-    std::span<const uint8_t> data;
-};
-
-/**
- * Custom per-PD message handler.  This is NOT on the hot parsing path;
- * parseL3() uses compile-time dispatch via switch statements.  PDHandlers
- * are only invoked when explicitly registered via ParserConfig.withPDHandler().
- * std::function overhead is acceptable here since registration is a cold-path operation.
- */
-using PDHandler = std::function<std::unique_ptr<L3Message>(const L3Frame&)>;
 
 /**
  * ParserConfig - an immutable, thread-safe parser configuration.
@@ -54,37 +31,21 @@ using PDHandler = std::function<std::unique_ptr<L3Message>(const L3Frame&)>;
  * Pure data struct with no internal synchronization.  Safe for concurrent
  * read access from multiple threads.  Modifications return a new config
  * instance (immutable builder pattern), eliminating the need for mutexes.
+ *
+ * Reserved for future parser options (log level and similar).
  */
 struct ParserConfig {
     LogLevel logLevel{LogLevel::WARNING};
-    std::array<PDHandler, 16> pdHandlers{};
 
     [[nodiscard]] LogLevel getLogLevel() const noexcept
     {
         return logLevel;
     }
 
-    [[nodiscard]] const PDHandler* getPDHandler(L3PD pd) const noexcept
-    {
-        int idx = static_cast<int>(pd);
-        if (idx < 0 || idx > 15) return nullptr;
-        const auto& h = pdHandlers[idx];
-        return h ? &h : nullptr;
-    }
-
     [[nodiscard]] ParserConfig withLogLevel(LogLevel lvl) const noexcept
     {
         ParserConfig cfg = *this;
         cfg.logLevel = lvl;
-        return cfg;
-    }
-
-    [[nodiscard]] ParserConfig withPDHandler(L3PD pd, PDHandler handler) const
-    {
-        int idx = static_cast<int>(pd);
-        if (idx < 0 || idx > 15) return *this;
-        ParserConfig cfg = *this;
-        cfg.pdHandlers[idx] = std::move(handler);
         return cfg;
     }
 };

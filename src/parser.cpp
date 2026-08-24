@@ -801,12 +801,27 @@ Expected<TESTPROC> parseL3TestProc(BitReader& reader, uint8_t mti) {
 } // namespace detail
 
 Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfig& cfg) {
+    (void)cfg;   // Reserved for future parser options (e.g. log level).
     if (data.empty()) {
         return Expected<ParsedMessage>::error(
             ParseError{ParseError::Code::TruncatedInput, "Empty input"});
     }
 
-    // Handle short messages (no standard L3 header).
+    // ── Short-message heuristic (intentional simplification) ─────────────
+    /// Handle short messages (no standard 2-octet L3 header).
+    ///
+    /// GSM 04.08 defines RR short messages that carry no standard L3 header,
+    /// so they are disambiguated by total frame length:
+    ///   - 1 byte  -> ChannelRequest (GSM 04.08 9.1.3)
+    ///   - 4 bytes -> HandoverAccess (GSM 04.08 9.1.38)
+    ///   - 7 bytes -> SynchronizationChannelInformation (GSM 04.08 9.1.39)
+    ///
+    /// This length-based interpretation is an intentional simplification:
+    /// a standard-header message of exactly 1/4/7 bytes is indistinguishable
+    /// from a short message by length alone. The branches below therefore try
+    /// the standard RR/BCC/GCC parse first (or in a dedicated branch) and only
+    /// fall back to the short-message interpretation when the standard parse
+    /// fails, which keeps the heuristic safe for all known message types.
     if (data.size() == 1) {
         uint8_t pdNibble = (data[0] >> 4) & 0x0F;
         if (pdNibble == 0x06 || pdNibble == 0x05 || pdNibble == 0x03 || pdNibble == 0x0b ||
@@ -889,23 +904,8 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
         case L3PD::RadioResource: {
             auto rrRes = detail::parseL3RR(reader, hdr.mti);
             if (rrRes) return rrRes.map([](RRM v){ return ParsedMessage(std::move(v)); });
-            // For truncated body, create default message for known SI types.
-            switch (hdr.mti) {
-                case L3SystemInformationType1::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType1{})));
-                case L3SystemInformationType2::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType2{})));
-                case L3SystemInformationType2bis::MTI: return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType2bis{})));
-                case L3SystemInformationType2ter::MTI: return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType2ter{})));
-                case L3SystemInformationType3::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType3{})));
-                case L3SystemInformationType4::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType4{})));
-                case L3SystemInformationType5::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType5{})));
-                case L3SystemInformationType5bis::MTI: return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType5bis{})));
-                case L3SystemInformationType5ter::MTI: return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType5ter{})));
-                case L3SystemInformationType6::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType6{})));
-                case L3SystemInformationType7::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType7{})));
-                case L3SystemInformationType8::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType8{})));
-                case L3SystemInformationType9::MTI:  return Expected<ParsedMessage>::hold(ParsedMessage(RRM(L3SystemInformationType9{})));
-                default: break;
-            }
+            // Truncated body (e.g. incomplete SI message) is a hard error:
+            // never fabricate a default-constructed message (C11).
             return Expected<ParsedMessage>::error(rrRes.error());
         }
 
@@ -954,11 +954,6 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
                 .map([](TESTPROC v){ return ParsedMessage(std::move(v)); });
 
         default: {
-            auto* handler = cfg.getPDHandler(hdr.pd);
-            if (handler) {
-                return Expected<ParsedMessage>::error(
-                    ParseError{ParseError::Code::UnsupportedFeature, "Custom PD handler not yet wired"});
-            }
             // For 7-byte data with unsupported PD, try SynchronizationChannelInformation.
             if (data.size() == 7) {
                 BitReader rawReader(data.data(), 56);

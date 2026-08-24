@@ -134,7 +134,6 @@ public:
     L3StreamBuilder& source(std::span<const uint8_t> data);
     L3StreamBuilder& sourceFile(const char* path);
     L3StreamBuilder& logLevel(LogLevel lvl);
-    L3StreamBuilder& pdHandler(L3PD pd, PDHandler handler);
     L3StreamBuilder& useL2Length(bool v);
     L3StreamBuilder& maxMessageLength(size_t v);
     L3StreamBuilder& ringBufferSize(size_t v);

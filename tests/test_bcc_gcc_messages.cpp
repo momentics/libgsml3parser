@@ -42,6 +42,7 @@
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
+#include <gsml3parser/l3header.h>
 #include <gsml3parser/bcc/l3bccmessages.h>
 #include <gsml3parser/gcc/l3gccmessages.h>
 #include <gsml3parser/visitor.h>

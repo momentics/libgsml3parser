@@ -1107,10 +1107,10 @@ public:
 
     const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
 
-    size_t bodyLength() const { return 17; }
+    size_t bodyLength() const { return 16; }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 17; }
+    [[nodiscard]] size_t l2BodyLength() const { return 16; }
     [[nodiscard]] static Expected<L3SystemInformationType5> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -1140,10 +1140,10 @@ public:
 
     const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
 
-    size_t bodyLength() const { return 17; }
+    size_t bodyLength() const { return 16; }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 17; }
+    [[nodiscard]] size_t l2BodyLength() const { return 16; }
     [[nodiscard]] static Expected<L3SystemInformationType5bis> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -1173,10 +1173,10 @@ public:
 
     const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
 
-    size_t bodyLength() const { return 17; }
+    size_t bodyLength() const { return 16; }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 17; }
+    [[nodiscard]] size_t l2BodyLength() const { return 16; }
     [[nodiscard]] static Expected<L3SystemInformationType5ter> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
