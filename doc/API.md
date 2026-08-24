@@ -346,21 +346,18 @@ Immutable, thread-safe parser configuration. No mutex, no atomic operations. Pur
 ```cpp
 struct ParserConfig {
     LogLevel logLevel{LogLevel::WARNING};
-    std::array<PDHandler, 16> pdHandlers{};
 
     [[nodiscard]] constexpr LogLevel getLogLevel() const;
-    [[nodiscard]] const PDHandler* getPDHandler(L3PD pd) const;
     [[nodiscard]] ParserConfig withLogLevel(LogLevel lvl) const;
-    [[nodiscard]] ParserConfig withPDHandler(L3PD pd, PDHandler handler) const;
 };
 ```
 
 | Method | Description |
 |--------|-------------|
 | `getLogLevel()` | Current log level |
-| `getPDHandler(pd)` | Get custom handler for a PD (returns nullptr if none) |
 | `withLogLevel(lvl)` | Return new config with changed log level |
-| `withPDHandler(pd, h)` | Return new config with handler registered |
+
+The struct is reserved for future parser options (log level and similar). It intentionally carries no per-PD handler table: all 12 protocol domains are parsed by the built-in domain parsers in `parseL3()`.
 
 **Thread safety:** Safe for concurrent read access from any number of threads. Builder methods return new instances - the original is never modified.
 
@@ -368,8 +365,7 @@ struct ParserConfig {
 
 ```cpp
 ParserConfig cfg;
-cfg = cfg.withLogLevel(LogLevel::ERR)
-         .withPDHandler(L3PD::SMS, mySmsHandler);
+cfg = cfg.withLogLevel(LogLevel::ERR);
 
 // Parse with config - no mutex acquired
 auto result = parseL3Hex("060D", cfg);
@@ -445,7 +441,7 @@ The top-level variant that wraps all domains:
 using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM, EXTENDED, TESTPROC>;
 ```
 
-Stored on the stack - no heap allocation. `sizeof(ParsedMessage)` is guaranteed < 8 KB via `static_assert`. The variant spans 12 protocol domains.
+Stored on the stack - no heap allocation. `sizeof(ParsedMessage) = 416` bytes (guaranteed < 8 KB via `static_assert`). The variant spans 12 protocol domains.
 
 **Usage:**
 
@@ -705,6 +701,11 @@ public:
 | `skip(nbytes)` | Skip N bytes for error recovery |
 | `buffered()` | Bytes buffered but not yet consumed |
 
+**Framing modes:**
+
+- **L2 length mode** (`useL2Length = true`): each frame is preceded by a length octet. Deterministic; recommended for production streams.
+- **Header-based mode** (default): the frame length is derived from PD + MTI. All 12 protocol domains are supported, including BCC (PD=0x01), GCC (PD=0x00) and LS (PD=0x0c): BCC/GCC use the CC-style 6-bit MTI (byte 1 = MTI<<2 | NSD), LS uses a raw 8-bit MTI. Messages with a known fixed body length (e.g. BCC Setup/CallConfirmed/ConnectAcknowledge, GCC Setup/CallConfirmed, LS LocationServiceRequest, RR ChannelRelease, MM CMServiceAccept) are framed exactly. Variable-length messages (SI, SMS, Setup with IEs, ...) rely on a boundary heuristic that scans for the next plausible L3 header; for BCC/GCC/LS messages the scan accepts any of the 12 valid PDs, for other PDs it uses a conservative list to avoid false boundaries inside message bodies. Use L2 length mode when deterministic framing of variable-length messages is required.
+
 ### L3StreamProcessor
 
 **File:** `gsml3parser/bitstream/stream_processor.h`
@@ -756,6 +757,9 @@ struct StreamStats {
     uint64_t totalBytes{}, totalFrames{}, parsedOk{}, parseErrors{};
     uint64_t truncatedInputs{}, unsupportedPD{};
     uint64_t rrMessages{}, mmMessages{}, ccMessages{}, ssMessages{};
+    uint64_t gmmMessages{}, smMessages{}, smsMessages{};
+    uint64_t bccMessages{}, gccMessages{}, lsMessages{};
+    uint64_t extendedMessages{}, testprocMessages{};
 };
 ```
 
@@ -770,7 +774,6 @@ public:
     L3StreamBuilder& source(std::span<const uint8_t> data);
     L3StreamBuilder& sourceFile(const char* path);
     L3StreamBuilder& logLevel(LogLevel lvl);
-    L3StreamBuilder& pdHandler(L3PD pd, PDHandler handler);
     L3StreamBuilder& useL2Length(bool v);
     L3StreamBuilder& maxMessageLength(size_t v);
     L3StreamBuilder& ringBufferSize(size_t v);
@@ -963,7 +966,51 @@ sendToMS(bytes)
 
 | Method | Description |
 |--------|-------------|
-| `buildResponseFromToken(token, out, session)` | Build response bytes from `ResponseToken` + session context into pre-allocated buffer (zero heap allocation). Dispatches to the appropriate `buildXxx()` method based on token value. Returns byte count or -1 on error. |
+| `buildResponseFromToken(token, out, session)` | Build response bytes from `ResponseToken` + session context into pre-allocated buffer (zero heap allocation). Dispatches to the appropriate `buildXxx()` method based on token value. Returns byte count or -1 on error. `session` is required: every response parameter is read from the session's `ResponseContext` (see below). The method returns -1 when a required parameter is missing instead of fabricating a value. |
+| `buildSetupZeroAlloc(out, digits, len, ti)` | Build a CC Setup directly from a fixed-size BCD digit buffer (zero heap allocation). Used by the hot path; the `std::string`-based `buildSetup` overload remains for cold-path callers. |
+
+### ResponseContext — Single Source of Response Parameters
+
+**File:** `gsml3parser/stack/response_context.h`
+
+Per-session parameters required to construct protocol responses. The active procedure populates it as it progresses (via `feed()` / `feedExternalTyped()`); `ResponseBuilder::buildResponseFromToken()` consumes it to build the exact bytes to transmit. This makes the session the single source of truth for response parameters and eliminates fabricated/hardcoded values on the response path.
+
+```cpp
+struct ResponseContext {
+    // Authentication (TS 24.008 10.5.1.21)
+    std::array<uint8_t, 16> rand{};   // 128-bit RAND in wire order
+    bool hasRand{false};
+    // Call Control (TS 24.008 9.3)
+    uint8_t ti{0};
+    CCCause ccCause{CCCause::Normal_Call_Clearing};
+    std::array<char, 20> calledNumber{};
+    uint8_t calledNumberLen{0};
+    bool hasCalledNumber{false};
+    // Mobility Management (TS 24.008 9.2)
+    MMRejectCause mmCause{MMRejectCause::Zero};
+    std::optional<uint32_t> newTmsi;
+    // Radio Resource (TS 04.08 9.1)
+    L3ChannelDescription channel{};
+    bool hasChannel{false};
+    uint8_t cipherAlgo{0};
+    bool hasCipherAlgo{false};
+    // Paging (TS 04.08 9.1.25)
+    L3MobileIdentity identity{};
+    bool hasIdentity{false};
+    // Handover (TS 04.08 9.1.40)
+    L3ChannelDescription hoChannel{};
+    bool hasHoChannel{false};
+
+    void reset() noexcept;   // clear all pending parameters
+};
+```
+
+- **Ownership:** one instance per `SubscriberSession`, stored inline as `session->response` (`sizeof(ResponseContext) <= 160` bytes, fixed arrays, zero heap).
+- **Population rule:** each procedure writes the parameters it learns (RAND from `AuthChallenge`, new TMSI / reject cause from `VLRDecision`, channel from a channel request, TI + called number from a `Setup`, etc.) before returning a `SendResponseWithToken` result.
+- **Reset rule:** the context is reset when a new procedure chain starts (`ProcedureRunner::feed()` auto-creation) and on `ProcedureOrchestrator::cancelAll()`. It is deliberately NOT reset in `onProcedureCompleted`/`onProcedureFailed`, because the caller may still build the response from the returned token after the procedure has terminated.
+- **Missing-parameter rule:** `buildResponseFromToken()` returns -1 if the token requires a parameter that is not present (e.g. `hasRand == false` for `AuthenticationRequest`), never a fabricated value.
+
+**Thread safety:** NOT thread-safe. One instance per session, single-threaded.
 
 ### Zero-Allocation Usage with Arena
 
@@ -3542,6 +3589,7 @@ Aggregates all per-MS state:
 | `timers` | `TimerManager` | Protocol timers (≤32 concurrent) |
 | `transactions` | `TransactionManager` | Request-response correlation |
 | `procedures` | `ProcedureRunner` | Active protocol procedures |
+| `response` | `ResponseContext` | Parameters for building protocol responses (populated by the active procedure; consumed by `ResponseBuilder::buildResponseFromToken`) |
 | `channel` | `optional<ChannelDescriptor>` | Current channel assignment |
 | `lapdmLink` | `uint8_t` | LAPDm link ID for routing |
 | `assignedTmsi` | `uint32_t` | TMSI key in the owning registry (set by `createByTMSI`/`createByIMSI`; 0 = not owned) |
@@ -3765,7 +3813,7 @@ Every method has a `static int buildXxx(std::span<uint8_t> out, ...)` overload t
 **Namespace:** `gsml3parser`
 **Spec:** 3GPP TS 24.008 (procedure lifecycle), TS 04.08
 
-Abstract base class for protocol procedures and the ResponseSink callback mechanism. Each procedure encapsulates a complete GSM Layer 3 protocol flow with its own internal state machine, timers, and message sequence logic. BTS applications feed incoming L3 messages via `feed()`, receive external data via `feedExternal()`, and manage timeouts via `tick()`.
+Abstract base class for protocol procedures and the ResponseSink callback mechanism. Each procedure encapsulates a complete GSM Layer 3 protocol flow with its own internal state machine, timers, and message sequence logic. BTS applications feed incoming L3 messages via `feed()`, receive external data via `feedExternalTyped()`, and manage timeouts via `tick()`.
 
 ### ResponseSink
 
@@ -3788,6 +3836,8 @@ ResponseSink makeResponseSink(F f); // wraps a capturing callable (one heap allo
 ```
 
 The BTS application provides this callback when calling `Procedure::feed()`. Inside the callback, invoke `ResponseBuilder` and write bytes into a pre-allocated buffer (Arena).
+
+The sink is an observability hook, not the response-building mechanism itself: it is invoked only from `feed()` with the real incoming message. `feedExternalTyped()` never invokes the sink — on that path the response to send is signaled by the `ResponseToken` in the returned `ProcedureStepResult`.
 
 **Performance:** `ResponseSink` is exactly two machine words (16 bytes) with direct function-pointer invocation — no virtual dispatch, no type erasure, no per-call heap allocation (replaces `std::function`, which was 40+ bytes and could heap-allocate). Capturing lambdas are wrapped with `makeResponseSink()` (one heap allocation at creation, shared by all copies via an atomic refcount); stateless callbacks use the zero-allocation two-argument constructor `ResponseSink{fn, ctx}`.
 
@@ -3848,14 +3898,15 @@ struct ProcedureStepResult {
     enum class Action : uint8_t {
         Continue,               ///< Procedure continues; awaiting next message
         SendResponseWithToken,  ///< Build response using responseToken + ResponseBuilder
+                                 ///< (kept even when the procedure terminates in this step)
         WaitingExternal,        ///< Needs external data (RAND from AuC, BSC decision)
-        Completed,              ///< Procedure finished successfully
-        Failed                  ///< Procedure terminated with an error
+        Completed,              ///< Procedure finished successfully (no response pending)
+        Failed                  ///< Procedure terminated with an error (no response pending)
     };
 
     Action action{Action::Continue};
     ResponseToken responseToken{ResponseToken::None};  ///< Which message to build when action == SendResponseWithToken
-    procedure::ProcedureResult finalResult{};  ///< Populated when Completed or Failed
+    procedure::ProcedureResult finalResult{};  ///< Sole terminal indicator
 };
 
 static_assert(sizeof(ProcedureStepResult) <= 32);
@@ -3865,7 +3916,14 @@ static_assert(sizeof(ProcedureStepResult) <= 32);
 |-------|------|-------------|
 | `action` | `Action` (uint8_t) | What the caller should do next |
 | `responseToken` | `ResponseToken` (uint8_t) | Which L3 message to build; valid when `action == SendResponseWithToken` |
-| `finalResult` | `ProcedureResult` | Populated when `action` is `Completed` or `Failed` |
+| `finalResult` | `ProcedureResult` | Sole terminal indicator; `state` is Completed/Failed/TimedOut when the procedure is done |
+
+**Response/terminal rule:** if a procedure must send a response, `action == SendResponseWithToken` is ALWAYS the case — even when the procedure reaches a terminal state in the same step. The terminal state is reported exclusively through `finalResult` (state == Completed/Failed). Caller contract:
+
+1. if `action == SendResponseWithToken` → build the response from `responseToken` (`ResponseBuilder::buildResponseFromToken`);
+2. if `finalResult.state` is terminal (Completed/Failed/TimedOut) → release the procedure.
+
+A result may therefore carry both a token to build and a terminal `finalResult` (e.g. LocationUpdate VLR-accept: `action == SendResponseWithToken`, `responseToken == LocationUpdatingAccept`, `finalResult.state == Completed`).
 
 **Memory:** `sizeof(ProcedureStepResult) <= 32` bytes. The `responseToken` field (1 byte) replaces the old `SendResponse` action, keeping the struct within the cache-line budget for millions of concurrent calls.
 
@@ -3878,7 +3936,8 @@ Abstract interface that all concrete procedures implement:
 | `type()` | Returns the `procedure::ProcedureType` identifier |
 | `state()` | Returns the current `procedure::ProcedureState` |
 | `feed(msg, session, sink)` | Process an incoming L3 message; returns step result |
-| `feedExternalTyped(data, sink)` | Provide typed external data (`AuthChallenge`, `VLRDecision`, etc.); resume procedure |
+| `matches(msg)` | Report whether this procedure accepts the given message (PD + MTI). Used by `ProcedureRunner` for precise routing when several procedures are active; base implementation returns `false` |
+| `feedExternalTyped(data, session, sink)` | Provide typed external data (`AuthChallenge`, `VLRDecision`, etc.); resume procedure. `session` (nullable) lets the procedure populate the session's `ResponseContext` with the parameters the resulting response needs |
 | `tick(delta)` | Advance procedure timers; may return `Failed` on timeout |
 | `cancel()` | Explicitly abort the procedure |
 
@@ -3921,13 +3980,20 @@ public:
     ProcedureRunner() = default;
 
     /// Feed incoming L3 message; routes to active procedure or starts new one.
+    /// Routing: the first active procedure whose matches(msg) returns true
+    /// receives the message (disambiguates procedures sharing a PD, e.g.
+    /// CallRelease vs CallSetup_MO); if none matches, the message is routed by
+    /// PD and a new procedure is auto-created when no slot for that PD exists.
     ProcedureStepResult feed(const ParsedMessage& msg, SubscriberSession* session,
-                               ResponseSink sink);
+                                ResponseSink sink);
 
     /// Feed typed external data to an active procedure by type.
+    /// @p session is passed through to the procedure so it can populate the
+    /// session's ResponseContext with the response parameters it learns.
     ProcedureStepResult feedExternalTyped(procedure::ProcedureType type,
-                                             const ExternalData& data,
-                                             ResponseSink sink = {});
+                                              SubscriberSession* session,
+                                              const ExternalData& data,
+                                              ResponseSink sink = {});
 
     /// Tick all active procedures; auto-cleans terminal slots.
     size_t tickAll(std::chrono::milliseconds delta);
@@ -3945,8 +4011,8 @@ public:
 
 | Method | Description | Slot Cleanup |
 |--------|-------------|--------------|
-| `feed(msg, session, sink)` | Route message to active procedure or auto-create | Auto-frees on Completed/Failed |
-| `feedExternalTyped(type, data, sink)` | Send typed external data (`ExternalData` variant) by ProcedureType | Auto-frees on Completed/Failed |
+| `feed(msg, session, sink)` | Route message to active procedure (via `matches()`, then PD fallback) or auto-create. Starting a new procedure resets the session's `ResponseContext` | Auto-frees on Completed/Failed |
+| `feedExternalTyped(type, session, data, sink)` | Send typed external data (`ExternalData` variant) by ProcedureType; `session` (nullable) is forwarded to the procedure for `ResponseContext` population | Auto-frees on Completed/Failed |
 | `tickAll(delta)` | Advance all timers; returns count of Failed procedures | Auto-frees terminal slots |
 | `getActive(type)` | Lookup running procedure | None |
 | `activeCount()` | Count active slots | None |
@@ -3991,9 +4057,10 @@ auto result = runner.feed(incomingMsg, session,
         if (n > 0) sendToMS(buf, n);
     });
 
-// Feed typed external decision from VLR.
+// Feed typed external decision from VLR (session lets the procedure record
+// newTmsi/rejectCause into session->response for the Accept/Reject build).
 VLRDecision vlr{true, 0x87654321u, MMRejectCause::Zero};
-runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, vlr);
+runner.feedExternalTyped(procedure::ProcedureType::LocationUpdate, session, vlr);
 
 // Tick timers every 100ms.
 size_t failed = runner.tickAll(std::chrono::milliseconds(100));
@@ -4188,7 +4255,7 @@ private:
 
 Manages compound procedure chains such as Location Update (CMServiceRequest -> Identity -> Authentication -> CipheringMode -> LocationUpdate) and Call Setup MO (CMServiceRequest -> CallSetupMO). The orchestrator owns a single active `Procedure` at any time, transitions between phases based on procedure outcomes, and updates the `SubscriberSession` FSM states to stay in sync.
 
-**Does NOT store `ParsedMessage` (~8 KB variant) internally.** Instead stores the last `ResponseToken` and provides `buildPendingResponse()` for zero-allocation response building. This is critical for high-load BTS: avoids heap allocation per response.
+**Does NOT store `ParsedMessage` (416-byte variant) internally.** Instead stores the last `ResponseToken` and provides `buildPendingResponse()` for zero-allocation response building. This is critical for high-load BTS: avoids heap allocation per response.
 
 ### API
 
@@ -4213,14 +4280,16 @@ public:
 
 | Method | Description |
 |--------|-------------|
-| `feed(msg, session)` | Feed incoming L3 message; orchestrator auto-chains sub-procedures |
-| `feedExternalTyped(data, sink)` | Feed typed external data to the active chain (AuthChallenge, VLRDecision, etc.) |
-| `tickAll(delta)` | Tick all timers for the active chain; returns count of failed procedures |
-| `cancelAll()` | Cancel all active procedures in the chain |
+| `feed(msg, session)` | Feed incoming L3 message; orchestrator auto-chains sub-procedures. The orchestrator keeps the session and forwards it to the active procedure (including `feedExternalTyped`), so procedures can populate `session->response` |
+| `feedExternalTyped(data, sink)` | Feed typed external data to the active chain (AuthChallenge, VLRDecision, etc.); the stored session is passed to the procedure for `ResponseContext` population |
+| `tickAll(delta)` | Tick the active procedure's timers plus the inline-phase timer (T3103, 5 s, started when the LocationUpdate phase begins); returns count of failed procedures. A phase-timer expiry fails the chain with `finalResult.state == TimedOut` |
+| `cancelAll()` | Cancel all active procedures in the chain, stop the phase timer, and reset the session's `ResponseContext` |
 | `activeProcedure()` | Get the current active procedure, or nullptr if in an inline phase |
 | `lastResponseToken()` | Get the last response token generated by the chain |
 | `buildPendingResponse(out, session)` | Build the pending response into a pre-allocated buffer (zero heap allocation) |
 | `chainPhase()` | Get the current chain phase (ProcedureType) |
+
+**Identity phase semantics:** while the chain awaits an `IdentityResponse`, `feed()` returns `SendResponseWithToken(IdentityRequest)`. Once the `IdentityResponse` arrives, the chain transitions to Authentication and returns `Continue` (no response) — an `IdentityRequest` is never sent after the identity has already been received.
 
 ### Supported Chains
 
@@ -4271,7 +4340,7 @@ if (result.action == ProcedureStepResult::Action::WaitingExternal) {
 **File:** `gsml3parser/stack/procedures/location_update.h`
 **Spec:** 3GPP TS 24.008 4.4.1
 
-Full location updating flow with identity check, optional authentication, VLR/BSC decision via `feedExternal()`, and TMSI reallocation.
+Full location updating flow with identity check, optional authentication, VLR/BSC decision via `feedExternalTyped(VLRDecision, session)`, and TMSI reallocation. On the VLR decision the procedure records `newTmsi`/`rejectCause` into `session->response` so the Accept/Reject can be built from real parameters.
 
 ### State Machine
 
@@ -4288,8 +4357,8 @@ Full location updating flow with identity check, optional authentication, VLR/BS
 | `VERIFY_AUTH` | SRES matches | `LU_REQUEST` | — |
 | `VERIFY_AUTH` | SRES mismatch | `REJECT` | — |
 | `LU_REQUEST` | — | `WAITING_EXTERNAL` | — (forward to VLR) |
-| `WAITING_EXTERNAL` | feedExternal: accept | `SEND_ACCEPT` | `buildLocationUpdatingAccept(lai, newTmsi)` |
-| `WAITING_EXTERNAL` | feedExternal: reject | `SEND_REJECT` | `buildLocationUpdatingReject(cause)` |
+| `WAITING_EXTERNAL` | feedExternalTyped: accept | `SEND_ACCEPT` | `buildLocationUpdatingAccept(lai, newTmsi)` |
+| `WAITING_EXTERNAL` | feedExternalTyped: reject | `SEND_REJECT` | `buildLocationUpdatingReject(cause)` |
 | Any | Timer expired | `FAILED` | — |
 
 ### Internal State
@@ -4316,13 +4385,13 @@ Full location updating flow with identity check, optional authentication, VLR/BS
 **File:** `gsml3parser/stack/procedures/authentication.h`
 **Spec:** 3GPP TS 24.008 4.4.2
 
-Standalone authentication exchange: receives RAND+SRES from AuC via `feedExternal()`, sends AuthenticationRequest, verifies MS response.
+Standalone authentication exchange: receives RAND+SRES from AuC via `feedExternalTyped(AuthChallenge, session)`, sends AuthenticationRequest, verifies MS response. The received RAND is copied into `session->response.rand` (`hasRand = true`) so the AuthenticationRequest is built from the real AuC RAND, never a fabricated one.
 
 ### State Machine
 
 | State | Trigger | Next State | Response |
 |-------|---------|------------|----------|
-| `INIT` | feedExternal (RAND+SRES) | `SEND_AUTH_REQ` | — |
+| `INIT` | feedExternalTyped (AuthChallenge) | `SEND_AUTH_REQ` | — |
 | `SEND_AUTH_REQ` | — | `WAIT_RESPONSE` (T3106 started) | `buildAuthenticationRequest(rand)` |
 | `WAIT_RESPONSE` | AuthenticationResponse | `VERIFY_SRES` | — |
 | `VERIFY_SRES` | SRES matches | `COMPLETED` | — |
@@ -4389,7 +4458,7 @@ Mobile-Terminated Call establishment: Paging (up to 3 attempts with T3109), SDCC
 
 | State | Trigger | Next State | Response |
 |-------|---------|------------|----------|
-| `INIT` | feedExternal (trigger) | `PAGE` | — |
+| `INIT` | feedExternalTyped (PagingTrigger) | `PAGE` | — |
 | `PAGE` | — | `WAIT_PAGE_RESPONSE` (T3109 started) | `buildPagingRequestType1/2/3()` |
 | `WAIT_PAGE_RESPONSE` | PagingResponse | `ASSIGN_SDCCH` | — |
 | `ASSIGN_SDCCH` | — | `SEND_SETUP` | `buildImmediateAssignment(channel)` |
@@ -4450,13 +4519,13 @@ Channel assignment: receives ChannelRequest or PagingResponse, sends ImmediateAs
 **File:** `gsml3parser/stack/procedures/ciphering_mode.h`
 **Spec:** 3GPP TS 24.008 4.4.3 / TS 04.08 9.1.37
 
-Short procedure to activate ciphering: receives algorithm and key via `feedExternal()`, sends CipheringModeCommand, waits for CipheringModeComplete from MS.
+Short procedure to activate ciphering: receives algorithm and key via `feedExternalTyped(CipheringParameters, session)`, sends CipheringModeCommand, waits for CipheringModeComplete from MS. The algorithm selector is recorded into `session->response.cipherAlgo`.
 
 ### State Machine
 
 | State | Trigger | Next State | Response |
 |-------|---------|------------|----------|
-| `INIT` | feedExternal (algo + key) | `SEND_COMMAND` | — |
+| `INIT` | feedExternalTyped (CipheringParameters) | `SEND_COMMAND` | — |
 | `SEND_COMMAND` | — | `WAIT_COMPLETE` | `buildCipheringModeCommand(algo)` |
 | `WAIT_COMPLETE` | CipheringModeComplete | `COMPLETED` | — |
 
@@ -4479,7 +4548,7 @@ Network-initiated paging of MS with up to 3 attempts (Type1, Type2, Type3) using
 
 | State | Trigger | Next State | Response |
 |-------|---------|------------|----------|
-| `INIT` | feedExternal (trigger) | `SEND_PAGE1` | — |
+| `INIT` | feedExternalTyped (PagingTrigger) | `SEND_PAGE1` | — |
 | `SEND_PAGE1` | — | `WAIT_PAGE1` (T3109 started) | PagingRequestType1 |
 | `WAIT_PAGE1` | T3109 expired | `SEND_PAGE2` | — |
 | `SEND_PAGE2` | — | `WAIT_PAGE2` (T3109 restarted) | PagingRequestType2 |
@@ -4502,13 +4571,13 @@ Network-initiated paging of MS with up to 3 attempts (Type1, Type2, Type3) using
 **File:** `gsml3parser/stack/procedures/handover.h`
 **Spec:** 3GPP TS 04.08 9.1.40
 
-Handover: receives target channel via `feedExternal()`, sends HandoverCommand, waits for HandoverComplete or HandoverFailure from MS. After completion, updates MSContext with new channel assignment.
+Handover: receives target channel via `feedExternalTyped(HandoverTarget, session)`, sends HandoverCommand, waits for HandoverComplete or HandoverFailure from MS. The target channel is recorded into `session->response.hoChannel`. After completion, updates MSContext with new channel assignment.
 
 ### State Machine
 
 | State | Trigger | Next State | Response |
 |-------|---------|------------|----------|
-| `INIT` | feedExternal (target channel) | `SEND_HO_CMD` | — |
+| `INIT` | feedExternalTyped (HandoverTarget) | `SEND_HO_CMD` | — |
 | `SEND_HO_CMD` | — | `WAIT_HO_COMPLETE` (T3101 started) | `buildHandoverCommand(target)` |
 | `WAIT_HO_COMPLETE` | HandoverComplete | `COMPLETED` | — |
 | `WAIT_HO_COMPLETE` | HandoverFailure | `FAILED` | — |

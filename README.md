@@ -1,4 +1,4 @@
-﻿# libgsml3parser
+# libgsml3parser
 
 **GSM Layer 3 Protocol Stack — Parse, Build, and Run a Software BTS in C++20**
 
@@ -25,7 +25,7 @@ libgsml3parser fills the gap: a **type-safe, zero-allocation C++20 library** tha
 | Manual byte construction for responses | Fluent builder: `.pageMode(TMSI).tmsi(…).build()` |
 | Scatter/gather FSM logic across handlers | Pre-built `ProcedureOrchestrator` auto-chains Location Update, Auth, Call Setup |
 | Track timers with raw `std::map` + cron jobs | `TimerManager` — O(1) tick, zero allocation, all GSM timers built-in |
-| Correlate request/response with custom TI tables | `TransactionManager` — O(1) lookup, 0.002 µs per match |
+| Correlate request/response with custom TI tables | `TransactionManager` — O(1) lookup, 0.004 µs per match |
 | Debug hex dumps by eye | `std::format` support for every enum, `Expected<T>` with bit-position errors |
 
 ## Who Is This For?
@@ -84,14 +84,14 @@ What sets this library apart: ready-to-use per-subscriber state management primi
 
 | Module | Purpose | Size |
 |--------|---------|------|
-| **MSContext** | Per-MS identity, channel, flags | ≤ 256 bytes |
+| **MSContext** | Per-MS identity, channel, flags | 92 bytes |
 | **TimerManager** | Protocol timers T3101–T3395, zero-alloc tick | ~1.2 KB |
 | **TransactionManager** | Request-response correlation, O(1) TI lookup | ~768 bytes |
 | **RR/MM/CC StateMachine** | Protocol FSM skeletons with O(1) dispatch | ~16 bytes each |
 | **ChannelPool** | Logical channel allocation/release, VEA support | global |
 | **SubscriberRegistry** | Per-MS session management, TMSI/IMSI/link indexes | < 4 KB/session |
 
-Total per-MS footprint: **~2.7 KB** (fits L3 cache at 10K concurrent sessions). See [BTS Architecture Guide](doc/bts_architecture.md) for scaling to millions.
+Total per-MS footprint: **~1.7 KB** (10K concurrent sessions ≈ 17 MB). See [BTS Architecture Guide](doc/bts_architecture.md) for scaling to millions.
 
 ## Performance
 
@@ -99,13 +99,15 @@ Numbers that matter for a real-time radio stack:
 
 | Metric | Result |
 |--------|--------|
-| **L3 parse throughput** | 6.4 – 13.2 M msg/s (per message type, single core) |
-| **Mixed-domain stream** | 7.7 M msg/s (all 12 PD domains) |
-| **Full BTS stack** (1K MS, timers, FSM, dispatch) | **103 M msg/s** |
-| **TimerManager tick** | 80.3 M ticks/sec |
-| **Transaction lookup** | 0.002 µs per match |
-| **State machine dispatch** | 0.007 µs per message |
-| **ChannelPool alloc+release** | 0.008 µs per cycle |
+| **L3 parse throughput** | 9.9 – 38.8 M msg/s (per message type, single core) |
+| **Mixed-domain stream** | 8.7 M msg/s (all 12 PD domains) |
+| **Full BTS stack** (1K MS, timers, FSM, dispatch) | **78 M msg/s** (single core) |
+| **TimerManager tick** | 45.1 M ticks/sec |
+| **Transaction lookup** | 0.004 µs per match |
+| **State machine dispatch** | 0.008 µs per message |
+| **ChannelPool alloc+release** | 0.070 µs per cycle |
+
+Numbers measured with `example_benchmark` / `example_benchmark_stack` (Release, single core, MSVC 2026).
 
 | Optimization | Impact |
 |--------------|--------|
@@ -113,12 +115,13 @@ Numbers that matter for a real-time radio stack:
 | `FlatHandler` callbacks (16 bytes) | 2.5x smaller than `std::function`, no type erasure |
 | RingBuffer `& mask` wrap | 1 CPU cycle vs 20-80 for modulo |
 | Zero-copy parsing | span -> parse directly, no memcpy |
-| Per-MS stack modules | ~2.7 KB per session (10K sessions = ~27 MB) |
+| Per-MS stack modules | ~1.7 KB per session (10K sessions = ~17 MB) |
 
 ```bash
-./build/Release/examples/example_benchmark.exe      # all 12 PD domains
-./build/Release/examples/example_multithread.exe    # concurrent parsing
-./build/Release/examples/example_zero_copy.exe      # InlineFramer + ZeroCopyStreamProcessor
+./build/Release/examples/example_benchmark.exe       # all 12 PD domains (parse + stream)
+./build/Release/examples/example_benchmark_stack.exe # full BTS stack (1K MS) component benchmarks
+./build/Release/examples/example_multithread.exe     # concurrent parsing
+./build/Release/examples/example_zero_copy.exe       # InlineFramer + ZeroCopyStreamProcessor
 ```
 
 ## How It Compares
@@ -231,15 +234,18 @@ The highest level of abstraction: pre-built protocol procedures that encapsulate
 
 ```cpp
 #include <gsml3parser/gsml3parser.hpp>
+#include <gsml3parser/stack/procedure_orchestrator.h>
 
 using namespace gsml3parser;
 
-// Create subscriber session with orchestrator for compound procedure chains
+// Create subscriber session; the BTS application keeps one orchestrator
+// per session for compound procedure chains.
 SubscriberRegistry registry;
 auto* session = registry.createByTMSI(0x12345678);
+ProcedureOrchestrator orchestrator;   // app-owned, one per session
 
 // Feed incoming L3 messages — orchestrator auto-chains sub-procedures.
-auto result = session->orchestrator.feed(incomingMessage, session);
+auto result = orchestrator.feed(incomingMessage, session);
 
 if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {
     uint8_t buf[512];
@@ -248,14 +254,16 @@ if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {
     if (n > 0) sendToMS(buf, n);
 }
 
-// Feed typed external decisions (e.g., VLR accept/reject, AuC RAND+SRES)
+// Feed typed external decisions (e.g., VLR accept/reject, AuC RAND+SRES).
+// The orchestrator forwards the session, so the procedure records the
+// response parameters (RAND, new TMSI, ...) into session->response.
 VLRDecision vlr{true, 0x87654321u, MMRejectCause::Zero};
-session->orchestrator.feedExternalTyped(vlr);
+orchestrator.feedExternalTyped(vlr);
 
 AuthChallenge chal{};
 std::memcpy(chal.rand.data(), aucRand, 16);
 std::memcpy(chal.expectedSres.data(), aucSres, 4);
-session->orchestrator.feedExternalTyped(chal);
+orchestrator.feedExternalTyped(chal);
 ```
 
 **Available procedures:**
@@ -299,7 +307,7 @@ Layered design, bottom to top:
 
 1. **Bit-level I/O** — `BitReader`/`BitWriter`, bounds-checked, MSB-first, no heap
 2. **Message types** — plain C++ structs with `parse()` and `write()`, no inheritance
-3. **Variant dispatch** — `ParsedMessage` holds 12 domains on the stack (`sizeof < 8 KB`)
+3. **Variant dispatch** — `ParsedMessage` holds 12 domains on the stack (`sizeof(ParsedMessage) = 416 bytes`, static_assert < 8 KB)
 4. **Streaming** — `ByteSource` -> `L3Framer` -> `L3StreamProcessor` pipeline
 5. **Stack modules** — MSContext, TimerManager, FSMs for BTS state management
 
@@ -355,7 +363,7 @@ Layered design, bottom to top:
 
 | Document | Topic |
 |----------|-------|
-| [doc/API.md](doc/API.md) | Full API reference (57 sections) |
+| [doc/API.md](doc/API.md) | Full API reference (62 sections) |
 | [doc/bts_architecture.md](doc/bts_architecture.md) | BTS architecture, threading model, scaling to millions of MS |
 | [doc/bts_integration.md](doc/bts_integration.md) | **Primary guide for BTS developers**: ProcedureOrchestrator, ResponseToken pattern, typed external data |
 | [doc/messages.md](doc/messages.md) | Complete catalog of 200+ message types |

@@ -69,6 +69,24 @@ size_t fixedBodyLength(int pd, int mti) {
                 case 0x25: return 1;  // CC Status (min body)
                 default:   return VARIABLE;
             }
+        case 0x01: // Broadcast Call Control (6-bit MTI, shifted; see bcc/l3bccmessages.h)
+            switch (mti) {
+                case 0x00: return 0;  // BCC Setup (header-only in known vectors)
+                case 0x04: return 0;  // BCC Call Confirmed (no body)
+                case 0x09: return 0;  // BCC Connect Acknowledge (no body)
+                default:   return VARIABLE;
+            }
+        case 0x00: // Group Call Control (6-bit MTI, shifted; see gcc/l3gccmessages.h)
+            switch (mti) {
+                case 0x00: return 1;  // GCC Setup (1-byte opaque body in known vectors)
+                case 0x03: return 0;  // GCC Call Confirmed (no body)
+                default:   return VARIABLE;
+            }
+        case 0x0c: // Location Services (8-bit MTI, no shift; see ls/l3lsmessages.h)
+            switch (mti) {
+                case 0x01: return 0;  // Location Service Request (header-only in known vectors)
+                default:   return VARIABLE;
+            }
         default:
             return VARIABLE;
     }
@@ -156,8 +174,10 @@ Expected<ExtractedFrame> L3Framer::tryExtract() {
         int rawMti = b1;
         int mti = rawMti;
 
-        // Adjust MTI for MM/CC/SS (6-bit messageType).
-        if (pd == 0x05 || pd == 0x03 || pd == 0x0b) {
+        // Adjust MTI for MM/CC/SS/BCC/GCC (6-bit messageType + 2-bit NSD).
+        // BCC (0x01) and GCC (0x00) use the same CC-style header (TS 44.018 10.2).
+        // LS (0x0c) carries a raw 8-bit MTI and needs no adjustment.
+        if (pd == 0x05 || pd == 0x03 || pd == 0x0b || pd == 0x01 || pd == 0x00) {
             mti = (rawMti & 0xFC) >> 2;
         }
 
@@ -171,16 +191,31 @@ Expected<ExtractedFrame> L3Framer::tryExtract() {
             // We attempt a greedy approach: parse the header and as much body
             // as we can, looking for a natural boundary.
             // For now, use a heuristic: scan for the next plausible L3 header.
+            //
+            // Boundary candidates depend on the PD of the message being framed
+            // (C17): while framing BCC (0x01), GCC (0x00) or LS (0x0c)
+            // messages, any of the 12 valid PDs may start the next message, so
+            // the full list is used. For all other PDs the original list is
+            // kept: 0x00/0x01/0x0c high nibbles occur frequently inside
+            // variable-length bodies (e.g. GMM/SMS cause octets) and listing
+            // them unconditionally would create false frame boundaries.
+            const bool callControlLike = (pd == 0x00 || pd == 0x01 || pd == 0x0c);
             frameLen = 0;
             for (size_t i = mPos + 2; i + 1 < mEnd && i < mPos + 2 + mConfig.maxMessageLength; ++i) {
                 uint8_t candidatePd = (mBuf[i] >> 4) & 0x0F;
                 // Check if this looks like a valid L3 header start.
-                // Valid PDs: 0x03, 0x05, 0x06, 0x0b, 0x08, 0x09, 0x0a, 0x0e, 0x0f.
-                if (candidatePd == 0x03 || candidatePd == 0x05 ||
+                // Base valid PDs: 0x03, 0x05, 0x06, 0x0b, 0x08, 0x09, 0x0a, 0x0e, 0x0f.
+                // Extended with 0x00 (GCC), 0x01 (BCC), 0x0c (LS) when framing
+                // BCC/GCC/LS messages.
+                const bool plausible =
+                    candidatePd == 0x03 || candidatePd == 0x05 ||
                     candidatePd == 0x06 || candidatePd == 0x0b ||
                     candidatePd == 0x08 || candidatePd == 0x09 ||
                     candidatePd == 0x0a || candidatePd == 0x0e ||
-                    candidatePd == 0x0f) {
+                    candidatePd == 0x0f ||
+                    (callControlLike &&
+                     (candidatePd == 0x00 || candidatePd == 0x01 || candidatePd == 0x0c));
+                if (plausible) {
                     // This might be the start of the next message.
                     frameLen = i - mPos;
                     break;

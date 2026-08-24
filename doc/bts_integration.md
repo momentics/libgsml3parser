@@ -40,8 +40,10 @@ libgsml3parser sits between the BTS application logic and the physical/radio lay
    - `Continue` — procedure awaits next message
    - `SendResponseWithToken` — build response using `result.responseToken` + `ResponseBuilder::buildResponseFromToken()`
    - `WaitingExternal` — query AuC/VLR, then call `feedExternalTyped(typedData)`
-   - `Completed` — chain finished successfully
-   - `Failed` — chain aborted (timeout, error)
+   - `Completed` — chain finished successfully (no response pending)
+   - `Failed` — chain aborted (timeout, error; no response pending)
+
+   **Response/terminal rule:** if a procedure must send a response, `action == SendResponseWithToken` is always the case — even when the procedure terminates in the same step. The terminal state is reported exclusively through `finalResult` (state == Completed/Failed/TimedOut). So after building a response, always check `finalResult.state`: if it is terminal, release the procedure/chain.
 
 ### Outbound Flow (BTS -> MS)
 
@@ -62,8 +64,16 @@ using namespace gsml3parser;
 // Global channel pool (shared across all MS sessions)
 ChannelPool btsChannels;
 
-// Subscriber registry with per-session orchestrators
+// Subscriber registry (sessions are created on demand)
 ShardedSubscriberRegistry<16> registry;
+
+// App-owned per-session orchestrators: one ProcedureOrchestrator (48 bytes)
+// per subscriber. SubscriberSession does not embed the orchestrator.
+std::unordered_map<uint32_t, ProcedureOrchestrator> orchestrators; // keyed by TMSI
+
+ProcedureOrchestrator& orchestratorFor(SubscriberSession* session) {
+    return orchestrators[session->assignedTmsi];
+}
 
 void initBts() {
     // Register SDCCH channels (control)
@@ -87,9 +97,14 @@ void initBts() {
 
 The main event loop processes incoming L3 messages by feeding them into the subscriber's `ProcedureOrchestrator`. The orchestrator manages compound procedure chains (e.g., CMServiceRequest -> Authentication -> CipheringMode -> LocationUpdate) automatically.
 
+Note: `SubscriberSession` does not embed the orchestrator — the BTS application owns one `ProcedureOrchestrator` (48 bytes) per session. The examples below use `orchestratorFor(session)` as the app-side lookup (e.g. a map keyed by TMSI, or a parallel structure alongside the registry).
+
 ```cpp
 // Arena for zero-heap-allocation response building
 Arena arena(65536);
+
+// App-side per-session orchestrator storage (illustrative).
+ProcedureOrchestrator& orchestratorFor(SubscriberSession* session);
 
 static void onL3(SAPI sapi, Primitive prim, std::span<const uint8_t> l3Data, void* ctx) {
     auto* btsCtx = static_cast<BtsContext*>(ctx);
@@ -102,8 +117,9 @@ static void onL3(SAPI sapi, Primitive prim, std::span<const uint8_t> l3Data, voi
     SubscriberSession* session = btsCtx->registry.findByLink(0, 5, 3);
     if (!session) return;
 
-    // Feed into ProcedureOrchestrator — auto-chains sub-procedures.
-    auto result = session->orchestrator.feed(*msg, session);
+    // Feed into the session's ProcedureOrchestrator — auto-chains sub-procedures.
+    auto& orchestrator = orchestratorFor(session);
+    auto result = orchestrator.feed(*msg, session);
 
     switch (result.action) {
         case ProcedureStepResult::Action::Continue:
@@ -111,18 +127,26 @@ static void onL3(SAPI sapi, Primitive prim, std::span<const uint8_t> l3Data, voi
             break;
 
         case ProcedureStepResult::Action::SendResponseWithToken:
-            // Build response from token into Arena buffer (zero heap allocation)
+            // Build response from token into Arena buffer (zero heap allocation).
+            // Response parameters come from session->response (ResponseContext),
+            // which the active procedure populated as it progressed.
             uint8_t respBuf[512];
             int n = ResponseBuilder::buildResponseFromToken(
                 result.responseToken, {respBuf, sizeof(respBuf)}, session);
             if (n > 0) {
                 sendToMS(session, respBuf, n);
             }
+            // The procedure may have terminated in the same step: the terminal
+            // state is reported via finalResult, not via action.
+            if (result.finalResult.state == procedure::ProcedureState::Completed ||
+                result.finalResult.state == procedure::ProcedureState::Failed) {
+                logInfo("Chain terminated after response: {}", result.finalResult.reason);
+            }
             break;
 
         case ProcedureStepResult::Action::WaitingExternal:
             // Procedure needs external data (RAND from AuC, VLR decision)
-            handleWaitingExternal(session, result);
+            handleWaitingExternal(session, orchestrator, result);
             break;
 
         case ProcedureStepResult::Action::Completed:
@@ -141,8 +165,10 @@ static void onL3(SAPI sapi, Primitive prim, std::span<const uint8_t> l3Data, voi
 When a procedure enters `WaitingExternal` state, query the appropriate external system (AuC, VLR) and feed the result using strongly-typed structures.
 
 ```cpp
-void handleWaitingExternal(SubscriberSession* session, const ProcedureStepResult& result) {
-    auto* proc = session->orchestrator.activeProcedure();
+void handleWaitingExternal(SubscriberSession* session,
+                           ProcedureOrchestrator& orchestrator,
+                           const ProcedureStepResult& result) {
+    auto* proc = orchestrator.activeProcedure();
     if (!proc) return;
 
     switch (proc->type()) {
@@ -154,7 +180,7 @@ void handleWaitingExternal(SubscriberSession* session, const ProcedureStepResult
             std::memcpy(chal.rand.data(), triplet.rand.data(), 16);
             std::memcpy(chal.expectedSres.data(), triplet.sres.data(), 4);
 
-            auto feedResult = session->orchestrator.feedExternalTyped(chal);
+            auto feedResult = orchestrator.feedExternalTyped(chal);
             if (feedResult.action == ProcedureStepResult::Action::SendResponseWithToken) {
                 uint8_t buf[512];
                 int n = ResponseBuilder::buildResponseFromToken(
@@ -170,7 +196,7 @@ void handleWaitingExternal(SubscriberSession* session, const ProcedureStepResult
 
             if (vlrResult.accept) {
                 VLRDecision decision{true, vlrResult.newTmsi, MMRejectCause::Zero};
-                auto feedResult = session->orchestrator.feedExternalTyped(decision);
+                auto feedResult = orchestrator.feedExternalTyped(decision);
                 if (feedResult.action == ProcedureStepResult::Action::SendResponseWithToken) {
                     uint8_t buf[512];
                     int n = ResponseBuilder::buildResponseFromToken(
@@ -179,7 +205,7 @@ void handleWaitingExternal(SubscriberSession* session, const ProcedureStepResult
                 }
             } else {
                 VLRDecision decision{false, std::nullopt, vlrResult.cause};
-                auto feedResult = session->orchestrator.feedExternalTyped(decision);
+                auto feedResult = orchestrator.feedExternalTyped(decision);
                 if (feedResult.action == ProcedureStepResult::Action::SendResponseWithToken) {
                     uint8_t buf[512];
                     int n = ResponseBuilder::buildResponseFromToken(
@@ -212,14 +238,18 @@ void eventLoop() {
         // 1. Process incoming radio frames
         processRadioFrames();
 
-        // 2. Tick all session orchestrators and LAPDm timers
+        // 2. Tick all session orchestrators and LAPDm timers.
+        //    (LAPDm entities are per-link and app-owned; the orchestrator is
+        //     app-owned per session — see Step 2.)
         registry.forEach([delta](SubscriberSession* sess) {
-            sess->lapdm.tickT200(delta);
-            size_t failed = sess->orchestrator.tickAll(delta);
+            size_t failed = orchestratorFor(sess).tickAll(delta);
             if (failed > 0) {
                 logWarning("{} procedures timed out for session", failed);
             }
         });
+        for (auto& link : activeLapdmLinks) {
+            link.entity.tickT200(delta);
+        }
 
         // 3. Periodic broadcasts (System Information)
         if (siCounter++ % SI_INTERVAL == 0) {
@@ -242,9 +272,12 @@ void eventLoop() {
 The orchestrator automatically chains: CMServiceRequest -> [Identity] -> Authentication -> CipheringMode -> LocationUpdate.
 
 ```cpp
+// App-owned orchestrator for this session (see Step 2).
+auto& orchestrator = orchestratorFor(session);
+
 // 1. MS sends CMServiceRequest (Location Updating)
 auto cmReq = parseL3(incomingData).value();
-auto result = session->orchestrator.feed(cmReq, session);
+auto result = orchestrator.feed(cmReq, session);
 // Orchestrator starts chain: CMServiceRequest phase
 // Returns SendResponseWithToken + ResponseToken::CMServiceAccept
 
@@ -258,28 +291,31 @@ sendToMS(session, buf, n);
 AuthChallenge chal{};
 std::memcpy(chal.rand.data(), aucRandBytes, 16);
 std::memcpy(chal.expectedSres.data(), aucSresBytes, 4);
-result = session->orchestrator.feedExternalTyped(chal);
+result = orchestrator.feedExternalTyped(chal);
 // Returns SendResponseWithToken + ResponseToken::AuthenticationRequest
+// (the procedure recorded RAND into session->response)
 
 // 3. MS responds with AuthenticationResponse
 auto authResp = parseL3(authResponseData).value();
-result = session->orchestrator.feed(authResp, session);
+result = orchestrator.feed(authResp, session);
 // Orchestrator verifies SRES internally, transitions to CipheringMode
 
 // 4. Ciphering phase
 CipheringParameters cipher{1, true}; // A5/1 enabled
-result = session->orchestrator.feedExternalTyped(cipher);
+result = orchestrator.feedExternalTyped(cipher);
 // Returns SendResponseWithToken + ResponseToken::CipheringModeCommand
 
 // 5. MS sends CipheringModeComplete
 auto cipherComplete = parseL3(cipherCompleteData).value();
-result = session->orchestrator.feed(cipherComplete, session);
+result = orchestrator.feed(cipherComplete, session);
 // Transitions to LocationUpdate phase, returns WaitingExternal — need VLR decision
 
 // 6. VLR accepts
 VLRDecision vlr{true, 0x87654321u, MMRejectCause::Zero};
-result = session->orchestrator.feedExternalTyped(vlr);
+result = orchestrator.feedExternalTyped(vlr);
 // Returns SendResponseWithToken + ResponseToken::LocationUpdatingAccept
+// (newTmsi recorded into session->response; action stays SendResponseWithToken
+//  even though the chain terminates in this step — see finalResult.state)
 
 // 7. Build and send Location Updating Accept
 n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
@@ -292,30 +328,33 @@ sendToMS(session, buf, n);
 The orchestrator chains: CMServiceRequest(MO_Call) -> CallSetupMO.
 
 ```cpp
+auto& orchestrator = orchestratorFor(session);
+
 // 1. MS sends CMServiceRequest (MO Call)
 auto cmReq = parseL3(incomingData).value();
-auto result = session->orchestrator.feed(cmReq, session);
+auto result = orchestrator.feed(cmReq, session);
 // Returns SendResponseWithToken + ResponseToken::CMServiceAccept
 
 // 2. MS sends Setup
 auto setup = parseL3(setupData).value();
-result = session->orchestrator.feed(setup, session);
+result = orchestrator.feed(setup, session);
 // Returns SendResponseWithToken + ResponseToken::CallProceeding
+// (TI from the Setup header is recorded into session->response.ti)
 
 // 3. MS sends AssignmentComplete (after TCH assignment)
 auto assignComplete = parseL3(assignCompleteData).value();
-result = session->orchestrator.feed(assignComplete, session);
+result = orchestrator.feed(assignComplete, session);
 // Returns SendResponseWithToken + ResponseToken::Alerting
 
 // 4. MS sends Connect
 auto connect = parseL3(connectData).value();
-result = session->orchestrator.feed(connect, session);
+result = orchestrator.feed(connect, session);
 // Returns SendResponseWithToken + ResponseToken::Connect
 
 // 5. MS sends ConnectAcknowledge
 auto connAck = parseL3(connAckData).value();
-result = session->orchestrator.feed(connAck, session);
-// result.action == Completed — call is active, speech path established
+result = orchestrator.feed(connAck, session);
+// finalResult.state == Completed — call is active, speech path established
 ```
 
 ### Paging Procedure
@@ -323,12 +362,15 @@ result = session->orchestrator.feed(connAck, session);
 For network-initiated paging:
 
 ```cpp
+auto& orchestrator = orchestratorFor(session);
+
 PagingTrigger trigger;
 trigger.identity = L3MobileIdentity(0x12345678u); // TMSI
 trigger.targetChannel = ChannelType::SDCCHType;
 
-auto result = session->orchestrator.feedExternalTyped(trigger);
+auto result = orchestrator.feedExternalTyped(trigger);
 // Returns SendResponseWithToken + ResponseToken::PagingRequestType2
+// (identity recorded into session->response — the page is built from it)
 
 uint8_t buf[512];
 int n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
@@ -337,7 +379,11 @@ broadcastPaging(buf, n); // Send on PAGCH
 
 ## External System Integration (feedExternalTyped)
 
-Procedures use `feedExternalTyped(const ExternalData&)` to receive data from external systems. The `ExternalData` variant holds strongly-typed structures:
+Procedures receive data from external systems via `feedExternalTyped()`. The `ExternalData` variant holds strongly-typed structures.
+
+**Session and ResponseContext:** the procedure-level signature is `feedExternalTyped(const ExternalData& data, SubscriberSession* session, ResponseSink sink = {})` — the session (nullable) lets the procedure record the parameters it learns into `session->response` (`ResponseContext`): the RAND from an `AuthChallenge`, the new TMSI / reject cause from a `VLRDecision`, the ciphering algorithm selector, the paging identity, the handover target channel, and so on. `ResponseBuilder::buildResponseFromToken()` then reads exactly those values, so responses are built from real parameters (and it returns -1 rather than fabricating a value when one is missing). `ProcedureOrchestrator` stores the session from `feed()` and forwards it automatically, so application code just calls `orchestrator.feedExternalTyped(data)` on the session's app-owned orchestrator; `ProcedureRunner::feedExternalTyped(type, session, data, sink)` takes the session explicitly.
+
+**ResponseSink note:** the sink is an observability hook invoked only from `feed()` with the real incoming message. `feedExternalTyped()` never invokes it — the response on that path is signaled by the token in the result.
 
 ### AuC Integration (Authentication)
 
@@ -349,8 +395,10 @@ void onAuthNeeded(SubscriberSession* session) {
     std::memcpy(chal.rand.data(), triplet.rand.data(), 16);   // 128-bit RAND
     std::memcpy(chal.expectedSres.data(), triplet.sres.data(), 4); // 32-bit SRES
 
-    auto result = session->orchestrator.feedExternalTyped(chal);
+    auto& orchestrator = orchestratorFor(session);
+    auto result = orchestrator.feedExternalTyped(chal);
     // Procedure sends AuthenticationRequest to MS via ResponseToken
+    // (RAND is recorded into session->response.rand)
 }
 ```
 
@@ -361,7 +409,8 @@ void onLocationUpdateDecision(SubscriberSession* session, bool accept,
                                std::optional<uint32_t> newTmsi, MMRejectCause cause) {
     VLRDecision decision{accept, newTmsi, accept ? MMRejectCause::Zero : cause};
 
-    auto result = session->orchestrator.feedExternalTyped(decision);
+    auto& orchestrator = orchestratorFor(session);
+    auto result = orchestrator.feedExternalTyped(decision);
 
     if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {
         uint8_t buf[512];
@@ -379,8 +428,10 @@ void onHandoverDecision(SubscriberSession* session,
                          const L3ChannelDescription& target, const L3CellDescription& cell) {
     HandoverTarget ho{target, cell};
 
-    auto result = session->orchestrator.feedExternalTyped(ho);
+    auto& orchestrator = orchestratorFor(session);
+    auto result = orchestrator.feedExternalTyped(ho);
     // Procedure sends HandoverCommand via ResponseToken::HandoverCommand
+    // (target channel recorded into session->response.hoChannel)
 
     if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {
         uint8_t buf[512];
@@ -413,7 +464,8 @@ void onRslMessage(std::span<const uint8_t> rslBytes) {
     auto* session = registry.findByLink(/*trx from chanNr*/, /*ts from chanNr*/, linkId);
     if (!session) return;
 
-    auto result = session->orchestrator.feed(*msg, session);
+    auto& orchestrator = orchestratorFor(session);
+    auto result = orchestrator.feed(*msg, session);
 
     if (result.action == ProcedureStepResult::Action::SendResponseWithToken) {
         uint8_t l3Buf[512];
@@ -510,11 +562,11 @@ Timers are managed at two levels: LAPDm T200 timer (per link) and L3 protocol ti
 
 ```cpp
 void eventLoopTick(SubscriberSession* session, std::chrono::milliseconds delta) {
-    // Advance LAPDm T200 timer
-    bool retransmitted = session->lapdm.tickT200(delta);
+    // Advance LAPDm T200 timer (per-link entity, app-owned)
+    bool retransmitted = lapdmEntityFor(session).tickT200(delta);
 
-    // Advance procedure timers (managed by orchestrator)
-    size_t failed = session->orchestrator.tickAll(delta);
+    // Advance procedure timers (managed by the app-owned orchestrator)
+    size_t failed = orchestratorFor(session).tickAll(delta);
 }
 ```
 
@@ -573,7 +625,7 @@ if (!msg) {
 For orchestrator results:
 
 ```cpp
-auto result = session->orchestrator.feed(msg, session);
+auto result = orchestratorFor(session).feed(msg, session);
 if (result.action == ProcedureStepResult::Action::Failed) {
     logWarning("Procedure {} failed: {}",
         procedureTypeName(result.finalResult.type),
@@ -583,9 +635,10 @@ if (result.action == ProcedureStepResult::Action::Failed) {
 
 ## Performance Considerations
 
-- **Zero heap allocation on parse path**: `ParsedMessage` is a stack-allocated variant (< 8 KB)
-- **MSContext ≤ 256 bytes**: Fits in L1 cache; millions of contexts fit in L3 cache
+- **Zero heap allocation on parse path**: `ParsedMessage` is a stack-allocated variant (416 bytes, static_assert < 8 KB)
+- **MSContext 92 bytes**: Fits in L1 cache; millions of contexts fit in L3 cache
 - **ProcedureStepResult ≤ 32 bytes**: Compact result with `ResponseToken` (uint8_t), no heap allocation
+- **ResponseContext ≤ 160 bytes**: Fixed arrays, zero heap; single source of response parameters on the session
 - **SubscriberSession < 4096 bytes**: All components stored inline
 - **ResponseBuilder span overload**: Writes directly into caller's Arena buffer, zero heap cost
 - **ResponseToken pattern**: Procedure returns token (1 byte); caller builds response in pre-allocated buffer
@@ -608,7 +661,8 @@ if (result.action == ProcedureStepResult::Action::Failed) {
 | `stack/transaction.h` | `Transaction`, `TransactionManager` | Request-response correlation |
 | `stack/state_machine.h` | `RR/MM/CCStateMachine` | Protocol FSM skeletons |
 | `stack/channel_pool.h` | `ChannelPool`, `decodeChannelNeeded()` | Channel allocation, VEA |
-| `stack/response_builder.h` | `ResponseBuilder`, `buildResponseFromToken()` | Factory for L3 response messages |
+| `stack/response_builder.h` | `ResponseBuilder`, `buildResponseFromToken()`, `buildSetupZeroAlloc()` | Factory for L3 response messages (parameters from `ResponseContext`) |
+| `stack/response_context.h` | `ResponseContext` | Per-session response parameters (RAND, TI, channel, identity, ...), populated by the active procedure |
 | `stack/response_sink.h` | `ResponseSink`, `makeResponseSink()` | Zero-overhead response callback (fn+ctx, 16 bytes, refcounted captures) |
 | `stack/procedure.h` | `Procedure`, `ProcedureStepResult`, `ResponseToken` | Base class for protocol procedures |
 | `stack/typed_external_data.h` | `ExternalData`, `AuthChallenge`, `VLRDecision`, `PagingTrigger`, etc. | Type-safe external data structures |

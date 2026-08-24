@@ -81,10 +81,10 @@ For software BTS developers who need a complete Layer 3 signaling stack. This mo
 │  └───────────────────┬─────────────────────────────────────────┘  │
 │                      │ feed() / tickAll()                         │
 │  ┌───────────────────▼─────────────────────────────────────────┐  │
-│  │                  SubscriberSession                          │  │
-│  │  MSContext + RR/MM/CC FSM + TimerManager + TransactionMgr   │  │
-│  │  ProcedureRunner (up to 8 concurrent procedures)            │  │
-│  └─────────────────────────────────────────────────────────────┘  │
+ │  │                  SubscriberSession                          │  │
+ │  │  MSContext + RR/MM/CC FSM + TimerManager + TransactionMgr   │  │
+ │  │  ResponseContext (response parameters) + ProcedureRunner    │  │
+ │  └─────────────────────────────────────────────────────────────┘  │
 │                      │                                            │
 │  ResponseToken ──► ResponseBuilder::buildResponseFromToken()      │
 │                      │ span<uint8_t> (Arena buffer, zero alloc)   │
@@ -130,9 +130,9 @@ BTS Stack Mode (all modules)
 │  │ Integration │  │ Decision API │  │ or RSL transport (osmo-bts)│   │
 │  └──────┬──────┘  └──────┬───────┘  └──────────────┬─────────────┘   │
 │         │                │                         │                 │
-│         └────────────────┼─────────────────────────┘                 │
-│                          │ feedExternal()                            │
-├──────────────────────────┼───────────────────────────────────────────┤
+ │         └────────────────┼─────────────────────────┘                 │
+ │                          │ feedExternalTyped()                       │
+ ├──────────────────────────┼───────────────────────────────────────────┤
 │              Procedure Framework                                     │
 │  ┌───────────────────────▼──────────────────────────────────┐        │
 │  │                   ProcedureRunner                        │        │
@@ -146,11 +146,13 @@ BTS Stack Mode (all modules)
 ├──────────────────────────────┼───────────────────────────────────────┤
 │                      SubscriberRegistry                              │
 │  ┌───────────────────────────▼──────────────────────────────────┐    │
-│  │  SubscriberSession [per-MS]                                  │    │
-│  │  ├─ MSContext (identity, channel, flags)                     │    │
-│  │  ├─ RR/MM/CC State Machines (response-aware)                 │    │
-│  │  ├─ TimerManager + TransactionManager                        │    │
-│  │  └─ ProcedureRunner (active procedures)                      │    │
+ │  │  SubscriberSession [per-MS]                                  │    │
+ │  │  ├─ MSContext (identity, channel, flags)                     │    │
+ │  │  ├─ RR/MM/CC State Machines (response-aware)                 │    │
+ │  │  ├─ TimerManager + TransactionManager                        │    │
+ │  │  ├─ ResponseContext (response parameters, populated by       │    │
+ │  │  │  the active procedure; consumed by ResponseBuilder)       │    │
+ │  │  └─ ProcedureRunner (active procedures)                      │    │
 │  └──────────────────────────────────────────────────────────────┘    │
 ├──────────────────────────────────────────────────────────────────────┤
 │             Response Builder                                         │
@@ -191,19 +193,24 @@ LAPDm Frame (raw bytes from PHY)
   │
   ├─ SubscriberRegistry.findByLink(trx, ts, lapdmLink) ─► SubscriberSession*
   │
-  ├─ session->procedures.feed(msg, session, responseSink)
-  │       │
-  │       ├─ Auto-create procedure if none active (ProcedureFactory)
-  │       ├─ Route to active procedure by PD
-  │       ├─ Procedure processes message internally (FSM + timers)
-  │       └─ Returns ProcedureStepResult:
-  │             ├─ Continue     -> await next message
+   ├─ session->procedures.feed(msg, session, responseSink)
+   │       │
+   │       ├─ Auto-create procedure if none active (ProcedureFactory);
+   │       │    starting a new procedure resets session->response (ResponseContext)
+   │       ├─ Route to active procedure: first one whose matches(msg) returns
+   │       │    true (disambiguates procedures sharing a PD, e.g. CallRelease
+   │       │    vs CallSetup_MO), else PD-based fallback
+   │       ├─ Procedure processes message internally (FSM + timers) and records
+   │       │    response parameters it learns into session->response
+   │       └─ Returns ProcedureStepResult:
+   │             ├─ Continue     -> await next message
    │             ├─ SendResponseWithToken -> result.responseToken set;
    │             │                  caller builds via ResponseBuilder::buildResponseFromToken()
+   │             │                  (parameters read from session->response)
    │             │                  Arena buffer written, sent to MS
    │             ├─ WaitingExternal -> procedure blocks on external data
-  │             ├─ Completed    -> slot freed automatically
-  │             └─ Failed       -> slot freed automatically
+   │             ├─ Completed    -> slot freed automatically (no response pending)
+   │             └─ Failed       -> slot freed automatically (no response pending)
   │
   └─ (optional) ProtocolDispatcher.dispatch() for custom handlers
 ```
@@ -254,14 +261,18 @@ VLR accepts Location Update
    ├─ orchestrator.feedExternalTyped(VLRDecision{accept: true, newTmsi: 0x12345678})
    │       │
    │       ├─ Procedure wakes from WaitingExternal
+   │       ├─ Records newTmsi/rejectCause into session->response
    │       ├─ Returns SendResponseWithToken + ResponseToken::LocationUpdatingAccept
+   │       │    (action stays SendResponseWithToken even though the procedure
+   │       │    terminates in the same step; terminal state is in finalResult)
    │       ├─ Caller builds via ResponseBuilder::buildResponseFromToken()
-   │       └─ Next feed() -> Completed, slot freed
+   │       └─ Chain completed (finalResult.state == Completed), slot freed
    │
 AuC provides RAND+SRES for Authentication
    │
    ├─ orchestrator.feedExternalTyped(AuthChallenge{rand: [16], expectedSres: [4]})
    │       │
+   │       ├─ Copies RAND into session->response.rand (hasRand = true)
    │       ├─ Returns SendResponseWithToken + ResponseToken::AuthenticationRequest
    │       └─ Waits for MS response on next feed()
 ```
@@ -392,18 +403,22 @@ auto ch = btsChannels.allocate(ChannelType::SDCCHType);
 
 ### Memory Footprint Per MS
 
+Measured sizes (MSVC 2026, Release, x64):
+
 | Component | Size | Notes |
 |-----------|------|-------|
-| `MSContext` | ≤ 256 bytes | Enforced by `static_assert`. All inline storage. |
-| `TimerManager` | ~1,248 bytes | 32 × L3Timer (~36B) + 32B init flags |
-| `TransactionManager` | ~768 bytes | 16 × Transaction (≤48B) + metadata |
-| `RRStateMachine` | ~16 bytes | Virtual table pointer + state int |
-| `MMStateMachine` | ~16 bytes | Virtual table pointer + state int |
-| `CCStateMachine` | ~16 bytes | Virtual table pointer + state int |
-| `ProcedureRunner` | ~128 bytes | 8 × ProcedureSlot (unique_ptr + bool) |
-| **Total per MS** | **~2,400 bytes** | Plus ParsedMessage (~8 KB) on stack during processing |
+| `MSContext` | 92 bytes | All inline storage. |
+| `TimerManager` | 1,080 bytes | 32 × L3Timer + init flags + active index |
+| `TransactionManager` | 536 bytes | 16 × Transaction (24B) + TI index + metadata |
+| `RRStateMachine` | 16 bytes | Virtual table pointer + state int |
+| `MMStateMachine` | 16 bytes | Virtual table pointer + state int |
+| `CCStateMachine` | 16 bytes | Virtual table pointer + state int |
+| `ProcedureRunner` | 128 bytes | 8 × ProcedureSlot (unique_ptr + bool) |
+| `ResponseContext` | 124 bytes | Response parameters (fixed arrays, ≤ 160 budget) |
+| `ProcedureOrchestrator` | ~100 bytes | Active chain state + phase timer |
+| **Total per MS** | **2,032 bytes** (`sizeof(SubscriberSession)`) | Enforced `< 4096` via `static_assert`; plus `ParsedMessage` (416 bytes) on stack during processing |
 
-At 10,000 concurrent MS sessions: ~24 MB for stack modules (fits in L3 cache range).
+At 10,000 concurrent MS sessions: ~20 MB for sessions (fits comfortably in DRAM; hot per-session data stays cache-resident under normal load).
 
 ### Cache Behavior
 
@@ -539,11 +554,13 @@ public:
 
 ### Memory Budget Planning
 
+Per-MS stack footprint is ~1.7 KB (measured: 1708 bytes per session, `sizeof(SubscriberSession) < 4096`); `sizeof(ParsedMessage) = 416` bytes.
+
 | Scale | MS Sessions | Stack Module Memory | ParsedMessage (stack, transient) |
 |-------|------------|-------------------|-------------------------------|
-| Small cell | 100 | ~240 KB | 800 KB peak |
-| Macro cell | 10,000 | ~24 MB | 80 MB peak |
-| Large deployment | 1,000,000 | ~2.4 GB | 8 GB peak (transient) |
+| Small cell | 100 | ~170 KB | ~42 KB peak |
+| Macro cell | 10,000 | ~17 MB | ~4.2 MB peak |
+| Large deployment | 1,000,000 | ~1.7 GB | ~416 MB peak (transient) |
 
 For large deployments, ParsedMessage is only on-stack during message processing (microseconds), so peak concurrent usage is much lower than the theoretical maximum.
 
@@ -560,12 +577,18 @@ The `ShardedChannelPool<16>` handles this with negligible memory overhead and th
 
 Each MS can have up to 16 concurrent pending transactions (`TransactionManager::MAX_TRANSACTIONS = 16`). For typical BTS workloads, < 4 concurrent transactions per MS is expected. The `cleanup()` method should be called periodically or when `totalCount()` approaches the limit.
 
+### Known Limitations
+
+- **Registry storage:** `SubscriberRegistry`/`ShardedSubscriberRegistry` use `std::unordered_map` (pointer chasing) for their TMSI/IMSI/link indexes. At 1M+ sessions this costs roughly ~2 GB of RAM and is cache-unfriendly. If further optimization is required, replace the indexes with a flat/open-addressing hash table (out of scope of the current design; the session objects themselves are already contiguous-friendly and the hot paths — lookup, O(1) remove, O(active) timer tick — are index-driven).
+- **L3Framer header-based mode:** for variable-length messages (SI, SMS, Setup with IEs, ...) the framer uses a boundary heuristic that scans for the next plausible L3 header. Fixed-length messages (including BCC/GCC/LS header-only forms) are framed exactly. For deterministic framing of variable-length messages use the L2-length mode (`FrameConfig::useL2Length = true`), which is what production LAPDm/A-bis paths provide.
+
 ## 9. Deployment Checklist
 
 - [ ] Build with C++20, Release mode (`-O2` or `/O2`)
-- [ ] Verify `sizeof(MSContext) <= 256` via `static_assert`
+- [ ] Verify `sizeof(MSContext) <= 256` via `static_assert` (measured: 92 bytes)
 - [ ] Verify `sizeof(ProcedureStepResult) <= 32` via `static_assert`
-- [ ] Verify `sizeof(SubscriberSession) < 4096` via `static_assert`
+- [ ] Verify `sizeof(SubscriberSession) < 4096` via `static_assert` (measured: 2032 bytes)
+- [ ] Verify `sizeof(ResponseContext) <= 160` via `static_assert` (measured: 124 bytes)
 - [ ] Configure `ChannelPool` with available channels at startup
 - [ ] Initialize `SubscriberRegistry` (or `ShardedSubscriberRegistry<N>` for multi-threaded)
 - [ ] Choose usage mode: L3 Parser Mode (parse/build only) or BTS Stack Mode (full procedures)
@@ -584,7 +607,7 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
 
 | Document | Topic |
 |----------|-------|
-| [doc/API.md](API.md) | Full API reference (57 sections) |
+| [doc/API.md](API.md) | Full API reference (62 sections) |
 | [doc/bts_integration.md](bts_integration.md) | Step-by-step integration guide with ProcedureRunner |
 | [README.md](../README.md) | Library overview and quick start |
 | 3GPP TS 24.008 | Mobile radio interface L3 specification |
