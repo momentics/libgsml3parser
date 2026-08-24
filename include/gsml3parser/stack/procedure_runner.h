@@ -38,8 +38,9 @@
 ///   if (result.action == ProcedureStepResult::Action::Completed) {
 ///       // Procedure finished; slot automatically freed
 ///   }
-///   // Feed external data:
-///   runner.feedExternal(ProcedureType::LocationUpdate, randBytes);
+///   // Feed external data (typed):
+///   runner.feedExternalTyped(ProcedureType::LocationUpdate, session,
+///       ExternalData{VLRDecision{true, 0x12345678u, MMRejectCause::Zero}});
 ///   // Tick all procedures:
 ///   size_t failed = runner.tickAll(std::chrono::milliseconds(100));
 /// @endcode

@@ -37,6 +37,7 @@
 #include <gsml3parser/rr/l3rrmessages.h>
 #include <gsml3parser/mm/l3mmmessages.h>
 #include <gsml3parser/cc/l3ccmessages.h>
+#include <gsml3parser/benchmark_hw.h>
 
 #include <array>
 #include <chrono>
@@ -466,6 +467,8 @@ TEST(BTSProceduresTest, MultiMSContexts_independentState) {
 
 // Benchmark: 1000 MSContext creations should fit in L3 cache (~256 KB) with zero heap allocations
 TEST(BTSProceduresTest, Stress_1000MSContexts_noAllocations) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
     constexpr size_t N = 1000;
 
     // Verify MSContext size constraint
@@ -503,6 +506,8 @@ TEST(BTSProceduresTest, Stress_1000MSContexts_noAllocations) {
 
 // Benchmark: TransactionManager handles 100 transactions with O(1) TI lookup
 TEST(BTSProceduresTest, Stress_TransactionManager_100Transactions_O1Lookup) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
     TransactionManager txnMgr;
     TimerManager tm;
 
@@ -555,6 +560,8 @@ TEST(BTSProceduresTest, Stress_TransactionManager_100Transactions_O1Lookup) {
 
 // Benchmark: TimerManager tick() performs zero heap allocations over 10000 iterations
 TEST(BTSProceduresTest, Stress_TimerManager_tickNoAllocation) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
     TimerManager tm;
 
     // Start all available timers to maximize work per tick
@@ -599,6 +606,8 @@ TEST(BTSProceduresTest, Stress_TimerManager_tickNoAllocation) {
 
 // Benchmark: ChannelPool handles 100 channels with rapid allocate/release cycles
 TEST(BTSProceduresTest, Stress_ChannelPool_100Channels_allocateRelease) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
     ChannelPool pool;
     constexpr size_t NUM_CHANNELS = 100;
     constexpr size_t NUM_CYCLES = 1000;
@@ -742,6 +751,8 @@ TEST(BTSProceduresTest, FullCC_CallFlow) {
 
 // Combined stress test: all components working together under load
 TEST(BTSProceduresTest, Stress_FullStack_Integration) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
     constexpr size_t NUM_MS = 100;
 
     struct MSState {
@@ -814,6 +825,8 @@ TEST(BTSProceduresTest, Stress_FullStack_Integration) {
 
 // Timer tick with span overload under stress
 TEST(BTSProceduresTest, Stress_TimerManager_tickSpanOverload) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
     TimerManager tm;
 
     // Start many timers with short expiry

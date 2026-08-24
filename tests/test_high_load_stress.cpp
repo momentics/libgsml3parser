@@ -35,6 +35,7 @@
 #include "gsml3parser/mm/l3mmmessages.h"
 #include "gsml3parser/common/l3common.h"
 #include "gsml3parser/arena.h"
+#include "gsml3parser/benchmark_hw.h"
 
 #include <array>
 #include <chrono>
@@ -57,6 +58,8 @@ using namespace std::chrono_literals;
 // without performance degradation. Total lookup time should be under 1ms.
 // 3GPP: TS 24.008 4.4 - TMSI-based subscriber identification at scale.
 TEST(Stress, _10000Sessions_CreateAndLookup_AllFound) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
     SubscriberRegistry reg;
     constexpr int N = 10000;
 
@@ -92,6 +95,8 @@ TEST(Stress, _10000Sessions_CreateAndLookup_AllFound) {
 // to not block the main thread when managing many concurrent sessions.
 // 3GPP: TS 24.008 timer management (T3101-T3113) at scale.
 TEST(Stress, _10000Sessions_TimerTick_Fast) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
     SubscriberRegistry reg;
     constexpr int N = 10000;
 
@@ -170,6 +175,8 @@ TEST(Stress, Sharded_10000Sessions_ThreadSafe) {
 // high-throughput response building.
 // 3GPP: TS 04.08 response message construction at scale.
 TEST(Stress, ResponseBuilder_10000Builds_ZeroAlloc_Span) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
     Arena arena(65536 * 4); // 256KB arena to hold all responses
 
     constexpr int N = 10000;
@@ -255,6 +262,8 @@ TEST(Stress, ProcedureStepResult_SizeInvariants) {
 // the library scales to production BTS subscriber counts without degradation.
 // 3GPP: TS 24.008 - mass subscriber management for high-capacity base stations.
 TEST(Stress, _100KSessions_ProcedureRunner_Feed_Fast) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
     ShardedSubscriberRegistry<32> reg;
     constexpr int N = 100000;
 
@@ -297,6 +306,8 @@ TEST(Stress, _100KSessions_ProcedureRunner_Feed_Fast) {
 // during the hot path (feed + buildResponseFromToken with span overload).
 // 3GPP: TS 04.08 - high-throughput response message construction without heap pressure.
 TEST(Stress, ResponseToken_Arena_100K_ZeroAlloc) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
     constexpr int N = 100000;
 
     // Large arena to hold all responses without reallocation
@@ -481,6 +492,8 @@ TEST(Stress, ResponseBuilder_Span_ZeroHeapAllocations) {
 // bottleneck; the active-index must skip inactive sessions.
 // 3GPP coverage: TS 24.008 timer management at scale.
 TEST(Stress, tickAllTimers_OnlyActive_Scales) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
     ShardedSubscriberRegistry<32> reg;
     constexpr uint32_t N = 200000;
     constexpr uint32_t ACTIVE = 200;
@@ -497,5 +510,58 @@ TEST(Stress, tickAllTimers_OnlyActive_Scales) {
     EXPECT_EQ(n, ACTIVE) << "Only the " << ACTIVE << " active timers should expire";
 #ifndef GSML3PARSER_ASAN
     EXPECT_LT(ms, 50.0) << "tickAllTimers over 200K sessions (200 active) took " << ms << "ms";
+#endif
+}
+
+// Test: 1,000,000 sessions: create + TMSI lookup + timer tick must stay within
+// a real-time budget. Proves the library scales to one million concurrent
+// sessions (audit requirement); existing stress tests only covered 100K-200K.
+// Importance: a real BTS cluster front-end can hold a million registrations;
+// the O(1) hash paths and O(active) timer tick must remain real-time at that
+// scale. Per-session footprint must stay small enough that 1M sessions fit in
+// < 2.5 GB of RAM.
+// 3GPP: TS 24.008 - million-subscriber scale management.
+TEST(Stress, _1MSession_Create_Lookup_Tick_Scale) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
+    ShardedSubscriberRegistry<32> reg;
+    constexpr uint32_t N = 1'000'000;
+    // Memory sanity: 1M * sizeof(SubscriberSession) must be reasonable (< 2.5 GB).
+    EXPECT_LT(sizeof(SubscriberSession), 2500)
+        << "per-session footprint too large for 1M scale";
+
+    auto t0 = std::chrono::steady_clock::now();
+    for (uint32_t i = 1; i <= N; ++i) {
+        auto* s = reg.createByTMSI(i);
+        ASSERT_NE(s, nullptr) << "Failed to create session " << i;
+    }
+    auto tCreate = std::chrono::steady_clock::now();
+
+    // Lookup every session by TMSI (O(1) hash path).
+    for (uint32_t i = 1; i <= N; ++i) {
+        ASSERT_NE(reg.findByTMSI(i), nullptr) << "Failed to find session " << i;
+    }
+    auto tLookup = std::chrono::steady_clock::now();
+
+    // Start a timer in 10K sessions, tick all (O(active) path).
+    for (uint32_t i = 1; i <= 10000; ++i) {
+        reg.findByTMSI(i)->timers.start(L3TimerId::T3101, std::chrono::milliseconds(100));
+    }
+    std::vector<L3TimerId> expired(N);
+    auto tTick0 = std::chrono::steady_clock::now();
+    size_t n = reg.tickAllTimers(std::chrono::milliseconds(150), {expired.data(), expired.size()});
+    auto tTick = std::chrono::steady_clock::now();
+
+    EXPECT_EQ(n, 10000u) << "Only the 10K active timers should expire";
+    auto ms = [](auto a, auto b) {
+        return std::chrono::duration_cast<std::chrono::microseconds>(b - a).count() / 1000.0;
+    };
+    std::printf("1M create: %.1f ms, lookup: %.1f ms, tick(10K active): %.1f ms\n",
+                ms(t0, tCreate), ms(tCreate, tLookup), ms(tTick0, tTick));
+#ifndef GSML3PARSER_ASAN
+    // Real-time budgets (generous; ASAN slows 2-3x so skipped under sanitizer).
+    EXPECT_LT(ms(t0, tCreate), 5000.0)   << "1M create too slow";
+    EXPECT_LT(ms(tCreate, tLookup), 2000.0) << "1M lookup too slow";
+    EXPECT_LT(ms(tTick0, tTick), 50.0)   << "tick over 1M (10K active) too slow";
 #endif
 }

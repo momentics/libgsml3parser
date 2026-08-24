@@ -21,7 +21,7 @@
 
 // Tests for LocationUpdateProcedure: validates the full location updating state
 // machine per TS 24.008 4.4.1, covering identity check, authentication with
-// RAND/SRES verification, external VLR decision via feedExternal(), timer
+// RAND/SRES verification, external VLR decision via feedExternalTyped(), timer
 // expiry, cancel, and end-to-end flows.
 // 3GPP coverage: TS 24.008 4.4.1 (Location Updating), 4.4.2 (Authentication),
 // TS 04.08 9.2.9 (CM Service Request), 9.2.10 (Identity Request/Response),

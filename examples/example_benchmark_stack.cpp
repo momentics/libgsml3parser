@@ -26,6 +26,7 @@
 // Benchmark: 10K context allocations < 50ms on modern x86_64
 
 #include <gsml3parser/gsml3parser.hpp>
+#include <gsml3parser/benchmark_hw.h>
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -435,6 +436,8 @@ void benchmarkFullStack() {
 int main() {
     std::cout << "GSM L3 Stack Component Performance Benchmarks\n";
     std::cout << "================================================\n";
+    // Attribute results to the machine: performance depends on CPU/RAM/OS.
+    std::cout << "Hardware: " << benchmark::hardwareId() << "\n";
 
     benchmarkMSContext();
     benchmarkTimerManager();

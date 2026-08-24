@@ -188,6 +188,7 @@ set(PUBLIC_HEADERS
     include/gsml3parser/stack/procedures/imsi_detach.h
     include/gsml3parser/stack/procedure_orchestrator.h
     include/gsml3parser/flat_handler.h
+    include/gsml3parser/benchmark_hw.h
     include/gsml3parser/bitstream/inline_framer.h
     include/gsml3parser/bitstream/zero_copy_processor.h
     include/gsml3parser/abis/rsl_types.h

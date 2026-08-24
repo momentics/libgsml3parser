@@ -5,7 +5,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![C++20](https://img.shields.io/badge/C%2B%2B-20-blue.svg)](https://en.cppreference.com/w/cpp/20)
 [![Build](https://github.com/momentics/libgsml3parser/actions/workflows/build-release.yml/badge.svg)](https://github.com/momentics/libgsml3parser/actions/workflows/build-release.yml)
-[![Version](https://img.shields.io/badge/Version-0.15.0-blue.svg)](https://github.com/momentics/libgsml3parser/releases)
+[![Version](https://img.shields.io/badge/Version-0.16.0-blue.svg)](https://github.com/momentics/libgsml3parser/releases)
 
 ## Why This Library?
 
@@ -99,15 +99,20 @@ Numbers that matter for a real-time radio stack:
 
 | Metric | Result |
 |--------|--------|
-| **L3 parse throughput** | 9.9 – 38.8 M msg/s (per message type, single core) |
-| **Mixed-domain stream** | 8.7 M msg/s (all 12 PD domains) |
-| **Full BTS stack** (1K MS, timers, FSM, dispatch) | **78 M msg/s** (single core) |
-| **TimerManager tick** | 45.1 M ticks/sec |
+| **L3 parse throughput** | 9.6 – 39.3 M msg/s (per message type, single core) |
+| **Mixed-domain stream** | 8.6 M msg/s (all 12 PD domains) |
+| **Full BTS stack** (1K MS, timers, FSM, dispatch) | **80 M msg/s** (single core) |
+| **TimerManager tick** | 48.1 M ticks/sec |
 | **Transaction lookup** | 0.004 µs per match |
-| **State machine dispatch** | 0.008 µs per message |
-| **ChannelPool alloc+release** | 0.070 µs per cycle |
+| **State machine dispatch** | 0.007 µs per message |
+| **ChannelPool alloc+release** | 0.069 µs per cycle |
+| **1M sessions** (create / lookup / tick 10K active) | 1.4 s / 0.17 s / 1.4 ms |
 
 Numbers measured with `example_benchmark` / `example_benchmark_stack` (Release, single core, MSVC 2026).
+Every benchmark test and example prints a dynamically detected **hardware ID**
+(CPU brand, base clock, sockets/cores/logical, L1/L2/L3 cache, RAM, memory
+slots + clock, OS) so results are attributed to the machine that produced
+them — see [`benchmark_results.txt`](benchmark_results.txt) for the full run.
 
 | Optimization | Impact |
 |--------------|--------|

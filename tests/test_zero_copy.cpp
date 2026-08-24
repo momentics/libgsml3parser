@@ -34,6 +34,7 @@
 #include "gsml3parser/gcc/l3gccmessages.h"
 #include "gsml3parser/sm/l3smmessages.h"
 #include "gsml3parser/sms/l3smsmessages.h"
+#include "gsml3parser/benchmark_hw.h"
 #include <vector>
 #include <chrono>
 #include <thread>
@@ -230,6 +231,8 @@ TEST(ZeroCopyStreamProcessor, ForEachCallbacks) {
 
 // Performance: zero-copy parser is faster than reference for large buffers.
 TEST(ZeroCopyStreamProcessor, OutperformsReferenceOnLargeBuffer) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
     // Build a large buffer with many repeated L2-framed messages.
     std::vector<uint8_t> data;
     const uint8_t singleFrame[] = {0x03, 0x60, 0x0D, 0x00}; // Channel Release

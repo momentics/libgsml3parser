@@ -26,6 +26,7 @@
 #include <gsml3parser/bitstream/zero_copy_processor.h>
 #include <gsml3parser/parser.h>
 #include <gsml3parser/visitor.h>
+#include <gsml3parser/benchmark_hw.h>
 #include <chrono>
 #include <cinttypes>
 #include <cstdio>
@@ -114,6 +115,8 @@ int main() {
     // (3-6 bytes) parsing dominates and both are similar.  With large frames
     // the ByteSource->buffer memcpy in L3Framer becomes significant.
     printf("--- Performance Comparison (callback path, fair) ---\n");
+    // Attribute results to the machine: performance depends on CPU/RAM/OS.
+    printf("  Hardware: %s\n", benchmark::hardwareId().c_str());
     {
         uint64_t iterations = 50000;
         auto data = buildL2Data(msgs, iterations);

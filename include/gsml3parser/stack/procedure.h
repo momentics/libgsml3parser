@@ -25,7 +25,7 @@
 /// GSM Layer 3 protocol procedure (Location Update, Authentication, Call Setup,
 /// etc.) with its own internal state machine, timers, and message sequence logic.
 /// BTS applications feed incoming L3 messages via feed(), receive external data
-/// via feedExternal(), and manage timeouts via tick().
+/// via feedExternalTyped(), and manage timeouts via tick().
 ///
 /// ResponseSink callback allows procedures to trigger response message generation
 /// without heap allocation on the hot path. The caller provides a callback (wrapped

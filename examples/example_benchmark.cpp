@@ -34,6 +34,7 @@
 #include "gsml3parser/bitstream/stream_processor.h"
 #include "gsml3parser/bitstream/zero_copy_processor.h"
 #include "gsml3parser/visitor.h"
+#include "gsml3parser/benchmark_hw.h"
 
 using namespace gsml3parser;
 
@@ -160,7 +161,9 @@ static std::vector<uint8_t> buildL2Data(const std::vector<std::pair<const uint8_
 }
 
 int main() {
-    printf("=== libgsml3parser Benchmark (12 PD Domains) ===\n\n");
+    printf("=== libgsml3parser Benchmark (12 PD Domains) ===\n");
+    // Attribute results to the machine: performance depends on CPU/RAM/OS.
+    printf("Hardware: %s\n\n", benchmark::hardwareId().c_str());
 
     // Representative messages for each PD domain.
     // RR: Channel Release (3 bytes) - PD=0x6, MTI=0x0D

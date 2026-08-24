@@ -26,6 +26,7 @@
 
 #include <gsml3parser/gsml3parser.hpp>
 #include <gsml3parser/stack/sharded_channel_pool.h>
+#include <gsml3parser/benchmark_hw.h>
 #include <atomic>
 #include <chrono>
 #include <iostream>
@@ -194,7 +195,9 @@ int main(int argc, char* argv[]) {
     std::cout << "Multi-threaded parse benchmark (12 PD domains)\n";
     std::cout << "  Threads:    " << numThreads << "\n";
     std::cout << "  Iterations: " << iterations << " / thread\n";
-    std::cout << "  Total msgs: " << (static_cast<int64_t>(numThreads) * iterations) << "\n\n";
+    std::cout << "  Total msgs: " << (static_cast<int64_t>(numThreads) * iterations) << "\n";
+    // Attribute results to the machine: performance depends on CPU/RAM/OS.
+    std::cout << "  Hardware:   " << benchmark::hardwareId() << "\n\n";
 
     ThreadStats stats;
     auto start = std::chrono::steady_clock::now();
