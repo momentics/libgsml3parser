@@ -775,8 +775,12 @@ TEST(LAPDmEntityTest, SendData_SingleFrame) {
     EXPECT_EQ(iFrameCount, 1u);
 }
 
-// k=1 constraint: second sendData fails when first frame not acknowledged.
-TEST(LAPDmEntityTest, SendData_ExceedsN201_FailsWithOutstanding) {
+// k=1 constraint with the TX segment queue: a second sendData() while the
+// first frame is outstanding succeeds (the message is queued) and its
+// segments are transmitted in order after acknowledgments arrive.
+// (Previously the second send returned an error and queued data was lost;
+// see audit D1.)
+TEST(LAPDmEntityTest, SendData_WhileOutstanding_SecondMessageQueued) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
     auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
@@ -788,9 +792,10 @@ TEST(LAPDmEntityTest, SendData_ExceedsN201_FailsWithOutstanding) {
     auto result1 = mock.entity.sendData(std::span(data));
     ASSERT_TRUE(result1); // First send succeeds
 
-    // Second send should fail because first frame not acknowledged
+    // Second send while the first frame is outstanding (previously failed).
     auto result2 = mock.entity.sendData(std::span(data));
-    ASSERT_FALSE(result2);
+    // Second send succeeds: its data is queued behind the outstanding frame.
+    ASSERT_TRUE(result2);
 }
 
 // After RR acknowledges, second sendData succeeds.
@@ -823,6 +828,133 @@ TEST(LAPDmEntityTest, SendData_BeforeLink_Fails) {
     uint8_t data[] = {0x60, 0x0D};
     auto result = mock.entity.sendData(std::span(data));
     ASSERT_FALSE(result); // sendData requires LinkEstablished
+}
+
+// Test: a 50-byte message on SDCCH (N201=20) is segmented into 3 I-frames
+// (20+20+10) and the segments are transmitted as acknowledgments arrive.
+// Validates the TX segment queue: sendData() queues the full message and
+// transmits one segment at a time under the k=1 constraint.
+// GSM 04.06 5.5.2 - I-frame segmentation.
+TEST(LAPDmEntityTest, SendData_50Bytes_SDCCH_SegmentsTransmittedOnAck) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI0, true);
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    mock.entity.receiveFrame(sabme);
+
+    std::vector<uint8_t> data(50, 0xAB);
+    auto result = mock.entity.sendData(std::span<const uint8_t>(data.data(), data.size()));
+    ASSERT_TRUE(result);
+
+    // First segment is in flight (k=1): exactly one I-frame sent so far.
+    size_t iFrames = 0;
+    for (auto& frameBytes : mock.l1Sent) {
+        auto decoded = LAPDmFrame::decode(frameBytes);
+        if (decoded && (*decoded).format == LAPDmControlFormat::I_Format) ++iFrames;
+    }
+    EXPECT_EQ(iFrames, 1u);
+
+    // Acknowledge segment 1 (NS=0) with RR(NR=1) -> segment 2 is sent.
+    mock.entity.receiveFrame(encodeFrame(makeRRFrame(SAPI::SAPI0, 1, false)));
+    // Acknowledge segment 2 (NS=1) with RR(NR=2) -> segment 3 (M=1) is sent.
+    mock.entity.receiveFrame(encodeFrame(makeRRFrame(SAPI::SAPI0, 2, false)));
+
+    // Verify the full M-bit pattern: 0, 0, 1 (last segment completes the message).
+    std::vector<bool> mBits;
+    for (auto& frameBytes : mock.l1Sent) {
+        auto decoded = LAPDmFrame::decode(frameBytes);
+        if (decoded && (*decoded).format == LAPDmControlFormat::I_Format)
+            mBits.push_back((*decoded).m);
+    }
+    ASSERT_EQ(mBits.size(), 3u);
+    EXPECT_FALSE(mBits[0]);
+    EXPECT_FALSE(mBits[1]);
+    EXPECT_TRUE(mBits[2]);
+}
+
+// Test: two sendData() calls while a frame is outstanding are both queued and
+// transmitted in order as acknowledgments arrive.
+// Importance: queued order must be preserved (FIFO) for protocol correctness.
+TEST(LAPDmEntityTest, SendData_WhileOutstanding_QueuesAndDrainsInOrder) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI0, true);
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    mock.entity.receiveFrame(sabme);
+
+    std::vector<uint8_t> big(50, 0xAB);   // 3 segments: 20(M=0) + 20(M=0) + 10(M=1)
+    std::vector<uint8_t> small(10, 0xCD); // 1 segment:  10(M=1)
+    ASSERT_TRUE(mock.entity.sendData(std::span<const uint8_t>(big.data(), big.size())));
+    ASSERT_TRUE(mock.entity.sendData(std::span<const uint8_t>(small.data(), small.size())));
+
+    // Only the first segment is in flight (k=1).
+    size_t iFrames = 0;
+    for (auto& frameBytes : mock.l1Sent) {
+        auto decoded = LAPDmFrame::decode(frameBytes);
+        if (decoded && (*decoded).format == LAPDmControlFormat::I_Format) ++iFrames;
+    }
+    EXPECT_EQ(iFrames, 1u);
+
+    // Acknowledge all four segments in order.
+    for (uint8_t nr = 1; nr <= 4; ++nr) {
+        mock.entity.receiveFrame(encodeFrame(makeRRFrame(SAPI::SAPI0, nr, false)));
+    }
+
+    // Total 4 I-frames; M bits: 0, 0, 1, 1.
+    std::vector<bool> mBits;
+    for (auto& frameBytes : mock.l1Sent) {
+        auto decoded = LAPDmFrame::decode(frameBytes);
+        if (decoded && (*decoded).format == LAPDmControlFormat::I_Format)
+            mBits.push_back((*decoded).m);
+    }
+    ASSERT_EQ(mBits.size(), 4u);
+    EXPECT_FALSE(mBits[0]);
+    EXPECT_FALSE(mBits[1]);
+    EXPECT_TRUE(mBits[2]);
+    EXPECT_TRUE(mBits[3]);
+
+    // Queue is drained: an extra acknowledgment sends nothing new.
+    size_t before = mock.l1Sent.size();
+    mock.entity.receiveFrame(encodeFrame(makeRRFrame(SAPI::SAPI0, 4, false)));
+    EXPECT_EQ(mock.l1Sent.size(), before);
+}
+
+// Test: abnormal release clears the TX queue; after re-establishment a fresh
+// message is transmitted without stale queued segments.
+// Importance: stale segments from a released link must never leak into a new link.
+TEST(LAPDmEntityTest, SendData_AbnormalRelease_ClearsTxQueue) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI0, true);
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    mock.entity.receiveFrame(sabme);
+
+    std::vector<uint8_t> big(50, 0xAB);
+    ASSERT_TRUE(mock.entity.sendData(std::span<const uint8_t>(big.data(), big.size())));
+
+    // Force abnormal release: tick T200 past N200 (SDCCH N200=23).
+    for (int i = 0; i < 24; ++i) {
+        mock.entity.tickT200(std::chrono::milliseconds(900));
+    }
+    EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
+
+    // Re-establish the link (peer sends SABME).
+    mock.entity.receiveFrame(encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{})));
+    ASSERT_TRUE(mock.entity.isEstablished());
+
+    size_t sentBefore = mock.l1Sent.size();
+    std::vector<uint8_t> small(10, 0xCD);
+    ASSERT_TRUE(mock.entity.sendData(std::span<const uint8_t>(small.data(), small.size())));
+
+    // Exactly one new I-frame (M=1) — no stale segments from the released queue.
+    size_t newIFrames = 0;
+    bool lastM = false;
+    for (size_t i = sentBefore; i < mock.l1Sent.size(); ++i) {
+        auto decoded = LAPDmFrame::decode(mock.l1Sent[i]);
+        if (decoded && (*decoded).format == LAPDmControlFormat::I_Format) {
+            ++newIFrames;
+            lastM = (*decoded).m;
+        }
+    }
+    EXPECT_EQ(newIFrames, 1u);
+    EXPECT_TRUE(lastM);
 }
 
 // ── T200 Timer and Retransmission Tests (GSM 04.06 3.5) ───────────────

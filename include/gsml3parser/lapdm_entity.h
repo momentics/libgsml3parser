@@ -129,10 +129,15 @@ public:
     [[nodiscard]] Expected<void> sendUI(SAPI sapi, std::span<const uint8_t> l3Data);
 
     /// Send L3 data via I-frames (acknowledged, segmented if needed) — GSM 04.06 5.5.2.
-    /// Requires LinkEstablished or ContentionResolution state. Respects k=1 constraint:
-    /// only one unacknowledged I-frame in flight at a time.
+    /// Requires LinkEstablished or ContentionResolution state.
+    /// The full message is queued internally; segments are transmitted one at a
+    /// time, respecting the k=1 constraint (one unacknowledged I-frame in flight).
+    /// Remaining segments are sent automatically as acknowledgments (RR / I-frame NR)
+    /// arrive. Multiple sendData() calls may be issued while a frame is outstanding;
+    /// their data is queued and transmitted in order.
     /// @param l3Data L3 message bytes to send (may exceed N201, will be segmented).
-    /// @return Success, or error if link not established or frame outstanding.
+    /// @return Success if the message was accepted (sent and/or queued), or an error
+    ///         if the link is not established or the data is empty.
     [[nodiscard]] Expected<void> sendData(std::span<const uint8_t> l3Data);
 
     /// Initiate link establishment by sending SABME — GSM 04.06 5.4.1.
@@ -207,6 +212,20 @@ private:
     // I-frame reassembly buffer — lazy-allocated, reserve(N201*2) on first use
     std::vector<uint8_t> mReassemblyBuffer;
 
+    // TX segment queue — lazy-allocated, like mReassemblyBuffer. Holds the bytes
+    // of queued messages not yet transmitted. With the k=1 constraint at most one
+    // segment is in flight; the rest wait here until the outstanding frame is
+    // acknowledged (processAck drains the queue via trySendNextSegment()).
+    std::vector<uint8_t> mTxQueue;
+    // Exclusive end offset in mTxQueue for each queued message (FIFO order).
+    // Message i occupies [mTxMsgEnds[i-1], mTxMsgEnds[i]) — the M bit is set on
+    // the last segment of each message, so boundaries must be tracked per message.
+    std::vector<size_t> mTxMsgEnds;
+    // Index of the message currently being segmented (into mTxMsgEnds).
+    size_t mTxMsgIdx{0};
+    // Offset in mTxQueue of the next byte to send of the current message.
+    size_t mTxQueuePos{0};
+
     // Contention resolution checksum
     uint32_t mContentionChecksum{0};
 
@@ -278,8 +297,9 @@ private:
     /// Advances mVS after building the frame.
     void buildIFrame(std::span<const uint8_t> payload, bool isLast);
 
-    /// Check k=1 constraint: return error if outstanding frame not acknowledged.
-    [[nodiscard]] Expected<void> checkOutstanding();
+    /// Send the next queued segment if no frame is outstanding (k=1).
+    /// No-op when the queue is empty or a frame is still awaiting acknowledgment.
+    void trySendNextSegment();
 
     /// Deliver a complete L3 message to upper layer via callback.
     void deliverL3(Primitive prim, std::span<const uint8_t> data) const;

@@ -111,21 +111,16 @@ Expected<void> LAPDmEntity::sendData(std::span<const uint8_t> l3Data) {
             ParseError(ParseError::Code::TruncatedInput, "Empty data"));
     }
 
-    size_t maxPayload = mProfile.n201;
-    size_t offset = 0;
-
-    while (offset < l3Data.size()) {
-        // k=1 constraint: ensure no outstanding frame before sending next segment.
-        if (auto err = checkOutstanding(); !err) return err;
-
-        size_t remaining = l3Data.size() - offset;
-        size_t chunkSize = std::min(remaining, maxPayload);
-        bool mBit = (remaining <= maxPayload); // M=1: Message complete (last segment)
-
-        auto chunk = l3Data.subspan(offset, chunkSize);
-        buildIFrame(chunk, mBit);
-        offset += chunkSize;
-    }
+    // Append the full message to the TX queue (lazy allocation; capacity is
+    // reused across calls). Segments are transmitted one at a time under the
+    // k=1 constraint: trySendNextSegment() sends the first segment when the
+    // line is free; otherwise the data waits until the outstanding frame is
+    // acknowledged (processAck drains the queue).
+    size_t oldSize = mTxQueue.size();
+    mTxQueue.resize(oldSize + l3Data.size());
+    std::copy(l3Data.begin(), l3Data.end(), mTxQueue.begin() + oldSize);
+    mTxMsgEnds.push_back(mTxQueue.size());
+    trySendNextSegment();
 
     return Expected<void>::hold();
 }
@@ -238,6 +233,10 @@ void LAPDmEntity::clearCounters() noexcept {
     mT200Active = false;
     mT200RemainingMs = 0;
     mReassemblyBuffer.clear();
+    mTxQueue.clear();
+    mTxMsgEnds.clear();
+    mTxQueuePos = 0;
+    mTxMsgIdx = 0;
     mPendingFrame.clear();
 }
 
@@ -259,6 +258,8 @@ void LAPDmEntity::processAck(uint8_t nr) {
     if (mVA == mVS) {
         mRC = 0;
         mT200Active = false;
+        // Line is free again — continue transmitting queued segments (k=1).
+        trySendNextSegment();
     }
 }
 
@@ -276,13 +277,30 @@ uint32_t LAPDmEntity::computeChecksum(std::span<const uint8_t> data) {
     return sum;
 }
 
-Expected<void> LAPDmEntity::checkOutstanding() {
-    if (mVS != mVA) {
-        return Expected<void>::error(
-            ParseError(ParseError::Code::InvalidValue,
-                       "Outstanding frame not acknowledged yet"));
+void LAPDmEntity::trySendNextSegment() {
+    // k=1: only one unacknowledged I-frame may be in flight.
+    if (mVS != mVA) return;
+    if (mTxMsgIdx >= mTxMsgEnds.size()) return;
+
+    size_t msgEnd = mTxMsgEnds[mTxMsgIdx];
+    size_t remaining = msgEnd - mTxQueuePos;
+    size_t chunkSize = std::min(remaining, mProfile.n201);
+    bool mBit = (remaining <= mProfile.n201); // M=1: Message complete (last segment)
+
+    buildIFrame(std::span<const uint8_t>(mTxQueue.data() + mTxQueuePos, chunkSize), mBit);
+    mTxQueuePos += chunkSize;
+
+    // Current message fully sent: advance to the next queued message, if any.
+    if (mTxQueuePos >= msgEnd) {
+        mTxMsgIdx += 1;
+        // Queue drained: release the buffer contents (capacity is kept for reuse).
+        if (mTxMsgIdx >= mTxMsgEnds.size()) {
+            mTxQueue.clear();
+            mTxMsgEnds.clear();
+            mTxQueuePos = 0;
+            mTxMsgIdx = 0;
+        }
     }
-    return Expected<void>::hold();
 }
 
 // ── Response frame senders ────────────────────────────────────────────

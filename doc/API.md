@@ -1198,7 +1198,7 @@ using L1TransmitFn = void (*)(std::span<const uint8_t> frameBytes, void* ctx);
 | `open(sapi, commandBit)` | Transition to LinkReleased | GSM 04.06 3.5.2 |
 | `receiveFrame(frameBytes)` | Process incoming frame through FSM | GSM 04.06 5.x |
 | `sendUI(sapi, l3Data)` | Send unacknowledged UI frame | GSM 04.06 5.2.1 |
-| `sendData(l3Data)` | Send acknowledged I-frames (segmented) | GSM 04.06 5.5.2 |
+| `sendData(l3Data)` | Queue and send acknowledged I-frames (segmented; k=1, segments flow as ACKs arrive) | GSM 04.06 5.5.2 |
 | `sendSABME()` | Initiate link establishment | GSM 04.06 5.4.1 |
 | `sendDISC()` | Initiate normal link release | GSM 04.06 5.4.4 |
 | `hardRelease()` | Immediate transition to LinkReleased | — |
@@ -1237,7 +1237,7 @@ Unused ──open()──> LinkReleased
 | `sizeof(LAPDmEntity)` | < 512 bytes (enforced by `static_assert`) |
 | Heap allocations | Zero on `receiveFrame()` hot path |
 | Callbacks | Raw function pointer + void* ctx — zero heap per instance |
-| Dynamic buffers | `mPendingFrame`, `mReassemblyBuffer` lazy-allocated |
+| Dynamic buffers | `mPendingFrame`, `mReassemblyBuffer`, `mTxQueue` (TX segment queue) lazy-allocated |
 | Thread safety | NOT thread-safe; one instance per SAPI per logical channel |
 
 **Usage:**
