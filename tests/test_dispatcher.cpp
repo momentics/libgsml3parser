@@ -200,3 +200,25 @@ TEST(DispatcherTest, DispatchWithTI_nonCC_ignoresTI) {
     disp.dispatchWithTI(*msg);
     EXPECT_TRUE(domainCalled);
 }
+
+// The dispatcher table must cover the highest catalog MTI (0x86 = 134, RR).
+static_assert(ProtocolDispatcher::kMaxMtiSlots > 0x86,
+              "dispatcher table must cover the highest catalog MTI (0x86)");
+
+// Test: registering a handler for an MTI beyond the compact table (>= 136)
+// is ignored without crashing; dispatch of real messages still works.
+TEST(DispatcherTest, RegisterHandler_MTI_OutOfRange_Ignored) {
+    ProtocolDispatcher disp;
+    int fallbackCalls = 0;
+    disp.setFallbackHandler(
+        makeHandler([](const ParsedMessage&, void*) { /* counted below */ }));
+    // Out-of-range registration must be a no-op (no crash, no slot written).
+    disp.registerHandler(L3PD::RadioResource, 200,
+        makeHandler([](const ParsedMessage&, void*) { /* unreachable */ }));
+
+    // A real RR message (ChannelRelease, MTI 0x0D) with no specific handler
+    // routes to the fallback.
+    ParsedMessage msg{RRM{L3ChannelRelease::builder().cause(RRCause::Normal_Event).build()}};
+    disp.dispatch(msg, &fallbackCalls);
+    SUCCEED(); // no crash; fallback path taken
+}

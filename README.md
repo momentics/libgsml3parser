@@ -116,7 +116,7 @@ them — see [`benchmark_results.txt`](benchmark_results.txt) for the full run.
 
 | Optimization | Impact |
 |--------------|--------|
-| Handler dispatch `std::array[16][256]` | O(1) index, ~64 KB L2-cache resident |
+| Handler dispatch `std::array[16][136]` | O(1) index, ~35 KB L2-cache resident |
 | `FlatHandler` callbacks (16 bytes) | 2.5x smaller than `std::function`, no type erasure |
 | RingBuffer `& mask` wrap | 1 CPU cycle vs 20-80 for modulo |
 | Zero-copy parsing | span -> parse directly, no memcpy |

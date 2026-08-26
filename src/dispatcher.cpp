@@ -37,7 +37,7 @@ ProtocolDispatcher::~ProtocolDispatcher() {
 
 void ProtocolDispatcher::registerHandler(L3PD pd, int mti, MessageHandler handler) {
     int pidx = static_cast<int>(pd);
-    if (pidx >= 0 && pidx < 16 && mti >= 0 && mti < 256) {
+    if (pidx >= 0 && pidx < 16 && mti >= 0 && mti < kMaxMtiSlots) {
         destroySharedHandler(mHandlers[static_cast<size_t>(pidx)][static_cast<size_t>(mti)]);
         mHandlers[static_cast<size_t>(pidx)][static_cast<size_t>(mti)] = std::move(handler);
     }
@@ -62,7 +62,7 @@ void ProtocolDispatcher::dispatch(const ParsedMessage& msg, void* context) {
     int pidx = static_cast<int>(pd);
 
     // O(1) direct array lookup for specific handler.
-    if (pidx >= 0 && pidx < 16 && mti >= 0 && mti < 256) {
+    if (pidx >= 0 && pidx < 16 && mti >= 0 && mti < kMaxMtiSlots) {
         auto& h = mHandlers[static_cast<size_t>(pidx)][static_cast<size_t>(mti)];
         if (h) {
             h(msg, context);

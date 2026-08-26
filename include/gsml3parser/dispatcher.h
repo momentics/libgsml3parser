@@ -46,6 +46,12 @@ public:
     ProtocolDispatcher(const ProtocolDispatcher&) = delete;
     ProtocolDispatcher& operator=(const ProtocolDispatcher&) = delete;
 
+    /// Number of MTI slots per PD in the handler table. The highest wire MTI
+    /// in the message catalog is 0x86 (RR, SystemInformationType2quater) = 134,
+    /// so 136 slots cover every real message type. MTI values >= kMaxMtiSlots
+    /// route to the domain/fallback handlers.
+    static constexpr int kMaxMtiSlots = 136;
+
     /// Register a handler for a specific message type.
     /// The handler is called when a message of the given PD + MTI is dispatched.
     /// @param pd Protocol Discriminator domain.
@@ -88,9 +94,10 @@ public:
     void dispatchWithTI(const ParsedMessage& msg, void* context = nullptr);
 
 private:
-    // Per-PD, per-MTI handler table. L3PD has 16 values (0x00..0x0f), MTI fits in 0..255.
-    // O(1) direct array index — no hash, no heap allocation for nodes.
-    std::array<std::array<MessageHandler, 256>, 16> mHandlers{};
+    // Per-PD, per-MTI handler table. L3PD has 16 values (0x00..0x0f); MTI is
+    // covered by kMaxMtiSlots (see above). O(1) direct array index — no hash,
+    // no heap allocation for nodes. ~35 KB total (L2-cache resident).
+    std::array<std::array<MessageHandler, kMaxMtiSlots>, 16> mHandlers{};
 
     // Domain-level fallback handlers, indexed by L3PD (16 entries).
     // O(1) direct array index.
