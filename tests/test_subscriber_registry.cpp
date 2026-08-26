@@ -27,6 +27,7 @@
 #include <gtest/gtest.h>
 #include "gsml3parser/stack/subscriber_registry.h"
 #include "gsml3parser/cc/l3ccmessages.h"
+#include "gsml3parser/mm/l3mmmessages.h"
 
 #include <array>
 #include <chrono>
@@ -239,6 +240,65 @@ TEST(SR_tickAllTimers, ExpiresPendingTransactions) {
     EXPECT_EQ(expired[0].id, L3TimerId::T3101);
     // get() returns nullptr for non-pending transactions.
     EXPECT_EQ(s->transactions.get(txId.value()), nullptr);
+}
+
+// Test: tickAllProcedures ticks only sessions with active procedures (O(active)).
+// Importance: at 1M sessions a full scan per event-loop tick is a real-time
+// bottleneck; the active-procedure index must skip idle sessions (audit D2).
+// 3GPP: TS 24.008 procedure management at scale.
+TEST(SR_tickAllProcedures, OnlyActiveSessionsTicked) {
+    SubscriberRegistry reg;
+    constexpr int N = 1000;
+    for (int i = 0; i < N; ++i) {
+        auto* s = reg.createByTMSI(static_cast<uint32_t>(i + 1));
+        ASSERT_NE(s, nullptr);
+        if (i < 10) {
+            // Feed CM Service Requests to start a LocationUpdate procedure and
+            // advance it to WAITING_EXTERNAL with T3103 running: the procedure
+            // FSM advances one state per feed (INIT -> IDENTITY_CHECK ->
+            // AUTH_CHECK -> LU_REQUEST -> WAITING_EXTERNAL + startTimer(T3103)).
+            for (int step = 0; step < 4; ++step) {
+                auto cmReq = L3CMServiceRequest::builder()
+                    .serviceType(L3CMServiceType{L3CMServiceType::LocationUpdateRequest})
+                    .build();
+                ParsedMessage msg{MMM{std::move(cmReq)}};
+                s->procedures.feed(msg, s, {});
+            }
+            ASSERT_EQ(s->procedures.activeCount(), 1u);
+        }
+    }
+
+    // LocationUpdate runs T3103 = 5s; a 6s tick expires the 10 active procedures.
+    size_t failed = reg.tickAllProcedures(std::chrono::milliseconds(6000));
+    EXPECT_EQ(failed, 10u);
+
+    // All active procedures cleaned up; the next tick has nothing to do.
+    EXPECT_EQ(reg.tickAllProcedures(std::chrono::milliseconds(100)), 0u);
+}
+
+// Test: ShardedSubscriberRegistry tickAllProcedures works across shards.
+TEST(SSR_tickAllProcedures, Parallel_Correct) {
+    ShardedSubscriberRegistry<4> reg;
+    auto* s1 = reg.createByTMSI(0x00000001);
+    auto* s2 = reg.createByTMSI(0x00000002);
+    ASSERT_NE(s1, nullptr);
+    ASSERT_NE(s2, nullptr);
+    // Advance each LocationUpdate to WAITING_EXTERNAL with T3103 running
+    // (one FSM state per feed; see SR_tickAllProcedures.OnlyActiveSessionsTicked).
+    for (int step = 0; step < 4; ++step) {
+        ParsedMessage msg{MMM{L3CMServiceRequest::builder()
+            .serviceType(L3CMServiceType{L3CMServiceType::LocationUpdateRequest}).build()}};
+        s1->procedures.feed(msg, s1, {});
+    }
+    for (int step = 0; step < 4; ++step) {
+        ParsedMessage msg{MMM{L3CMServiceRequest::builder()
+            .serviceType(L3CMServiceType{L3CMServiceType::LocationUpdateRequest}).build()}};
+        s2->procedures.feed(msg, s2, {});
+    }
+
+    size_t failed = reg.tickAllProcedures(std::chrono::milliseconds(6000));
+    EXPECT_EQ(failed, 2u);
+    EXPECT_EQ(reg.tickAllProcedures(std::chrono::milliseconds(100)), 0u);
 }
 
 // Test: Identity switch from TMSI to IMSI updates indexes correctly.

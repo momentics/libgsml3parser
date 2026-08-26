@@ -30,6 +30,9 @@
 /// Thread safety: NOT thread-safe. One instance per SubscriberSession.
 /// Memory: Fixed-size array of up to MAX_PROCEDURES slots (~8); no heap allocation
 /// for the runner itself (procedures are heap-allocated via unique_ptr).
+/// Optional zero-alloc active-change observer (setOnActiveChange) lets
+/// SubscriberRegistry track which sessions have active procedures so
+/// tickAllProcedures() is O(active).
 ///
 /// Example:
 /// @code
@@ -127,6 +130,24 @@ public:
     /// Cancel all active procedures and free their slots.
     void cancelAll() noexcept;
 
+    /// Set the owning object (e.g. SubscriberSession) reported to the
+    /// active-change observer.
+    /// @param owner Pointer to the owning object, or nullptr.
+    /// @note No heap allocation. The pointer must outlive this ProcedureRunner.
+    void setOwner(void* owner) noexcept { mOwner = owner; }
+
+    /// Register a callback invoked when the active-procedure count crosses 0
+    /// (active=true) or drops to 0 (active=false).
+    /// @param fn Callback with signature void(void* owner, void* ctx, bool active), or nullptr.
+    /// @param ctx Opaque context passed back to fn (e.g. the owning SubscriberRegistry).
+    /// @note No heap allocation. fn is invoked from feed()/feedExternalTyped()/
+    ///       tickAll()/cancelAll() on the calling thread and must not block;
+    ///       it must not re-enter this ProcedureRunner.
+    void setOnActiveChange(void (*fn)(void*, void*, bool), void* ctx) noexcept {
+        mOnActiveChange = fn;
+        mActiveCtx = ctx;
+    }
+
 private:
     static constexpr size_t MAX_PROCEDURES = 8;
 
@@ -136,6 +157,17 @@ private:
     };
 
     std::array<ProcedureSlot, MAX_PROCEDURES> mSlots{};
+
+    // Active-change observer (fn + ctx, no heap). Fired on 0 -> >0 (active)
+    // and >0 -> 0 (inactive) active-procedure count transitions.
+    void* mOwner{nullptr};
+    void* mActiveCtx{nullptr};
+    void (*mOnActiveChange)(void*, void*, bool){nullptr};
+
+    // Invoke the observer (no-op if none registered).
+    void notifyActive(bool active) const noexcept {
+        if (mOnActiveChange) mOnActiveChange(mOwner, mActiveCtx, active);
+    }
 
     /// Find an active slot whose procedure matches the PD of the incoming message.
     /// Used as the routing fallback after the precise Procedure::matches() scan:

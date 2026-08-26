@@ -565,3 +565,39 @@ TEST(Stress, _1MSession_Create_Lookup_Tick_Scale) {
     EXPECT_LT(ms(tTick0, tTick), 50.0)   << "tick over 1M (10K active) too slow";
 #endif
 }
+
+// Test: 1,000,000 sessions, 10K with active procedures — tickAllProcedures
+// must stay within the real-time budget (O(active) path, audit D2).
+// Importance: the documented event loop ticks procedures every 10-100 ms;
+// an O(all) scan over 1M sessions would blow the budget.
+TEST(Stress, _1MSession_ProcedureTick_Scale) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
+    ShardedSubscriberRegistry<32> reg;
+    constexpr uint32_t N = 1'000'000;
+    for (uint32_t i = 1; i <= N; ++i) {
+        auto* s = reg.createByTMSI(i);
+        ASSERT_NE(s, nullptr);
+    }
+    // Start a LocationUpdate procedure in 10K sessions and advance it to
+    // WAITING_EXTERNAL with T3103 running (one FSM state per feed).
+    for (uint32_t i = 1; i <= 10000; ++i) {
+        auto* s = reg.findByTMSI(i);
+        for (int step = 0; step < 4; ++step) {
+            auto cmReq = L3CMServiceRequest::builder()
+                .serviceType(L3CMServiceType{L3CMServiceType::LocationUpdateRequest})
+                .build();
+            ParsedMessage msg{MMM{std::move(cmReq)}};
+            s->procedures.feed(msg, s, {});
+        }
+    }
+    auto t0 = std::chrono::steady_clock::now();
+    size_t failed = reg.tickAllProcedures(std::chrono::milliseconds(100));
+    auto t1 = std::chrono::steady_clock::now();
+    double ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
+    EXPECT_EQ(failed, 0u);
+    std::printf("1M procedure tick (10K active): %.1f ms\n", ms);
+#ifndef GSML3PARSER_ASAN
+    EXPECT_LT(ms, 50.0) << "tickAllProcedures over 1M (10K active) too slow";
+#endif
+}

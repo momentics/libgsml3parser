@@ -117,6 +117,11 @@ static_assert(sizeof(TimerExpiry) == 16, "TimerExpiry must stay pointer-sized");
 /// subscriber_registry.cpp; friend of SubscriberRegistry.
 void registryTimerActiveFn(void* owner, void* ctx, bool active);
 
+/// Trampoline: forwards ProcedureRunner active-change notifications to the
+/// owning SubscriberRegistry (see SubscriberRegistry::handleProcedureActive).
+/// Defined in subscriber_registry.cpp; friend of SubscriberRegistry.
+void registryProcedureActiveFn(void* owner, void* ctx, bool active);
+
 /// BTS subscriber registry. Manages multiple SubscriberSession instances and provides
 /// TMSI, IMSI and LAPDm link lookup indexes. Analogous to MMUserMap in OpenBTS.
 ///
@@ -204,7 +209,15 @@ public:
     /// (onTimerExpired), matching the documented timer event path.
     /// Note: the order of entries in expiredOut is unspecified.
     size_t tickAllTimers(std::chrono::milliseconds delta,
-                         std::span<TimerExpiry> expiredOut);
+                          std::span<TimerExpiry> expiredOut);
+
+    /// Tick procedures of all sessions that have at least one active procedure.
+    /// @param delta Time advance in milliseconds.
+    /// @return Total number of procedures that transitioned to Failed due to
+    ///         timeout across all sessions.
+    /// Performance: O(active) — only sessions with active procedures are ticked,
+    /// not all sessions (active-procedure index). Idle sessions are skipped.
+    size_t tickAllProcedures(std::chrono::milliseconds delta);
 
 private:
     struct SessionEntry {
@@ -233,6 +246,14 @@ private:
     mutable std::vector<SubscriberSession*> mActiveSnapshot; // scratch for tickAllTimers
     void handleTimerActive(SubscriberSession* session, bool active);
     friend void registryTimerActiveFn(void* owner, void* ctx, bool active);
+
+    // Sessions with >=1 active procedure. Ticked by tickAllProcedures() —
+    // O(active), not O(all).
+    std::unordered_set<SubscriberSession*> mActiveProcedureSessions;
+    std::mutex mProcedureMutex; // protects mActiveProcedureSessions
+    mutable std::vector<SubscriberSession*> mProcedureSnapshot; // scratch for tickAllProcedures
+    void handleProcedureActive(SubscriberSession* session, bool active);
+    friend void registryProcedureActiveFn(void* owner, void* ctx, bool active);
 };
 
 /// Thread-safe, high-concurrency subscriber registry.
@@ -391,7 +412,13 @@ public:
     /// @param expiredOut Pre-allocated span for TimerExpiry entries.
     /// @return Total expiry events across all shards.
     size_t tickAllTimers(std::chrono::milliseconds delta,
-                         std::span<TimerExpiry> expiredOut);
+                          std::span<TimerExpiry> expiredOut);
+
+    /// Tick all procedures across all shards. Thread-safe. Each shard ticked
+    /// independently (O(active) per shard).
+    /// @param delta Time advance in milliseconds.
+    /// @return Total number of procedures that failed due to timeout.
+    size_t tickAllProcedures(std::chrono::milliseconds delta);
 
     /// Iterate all sessions across all shards. Thread-safe (shared locks).
     template<typename F>

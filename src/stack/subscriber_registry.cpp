@@ -39,6 +39,19 @@ void SubscriberRegistry::handleTimerActive(SubscriberSession* session, bool acti
     else mActiveTimerSessions.erase(session);
 }
 
+/// Trampoline: forwards ProcedureRunner active-change to the owning SubscriberRegistry.
+void registryProcedureActiveFn(void* owner, void* ctx, bool active) {
+    auto* reg = static_cast<SubscriberRegistry*>(ctx);
+    auto* session = static_cast<SubscriberSession*>(owner);
+    reg->handleProcedureActive(session, active);
+}
+
+void SubscriberRegistry::handleProcedureActive(SubscriberSession* session, bool active) {
+    std::lock_guard lock(mProcedureMutex);
+    if (active) mActiveProcedureSessions.insert(session);
+    else mActiveProcedureSessions.erase(session);
+}
+
 SubscriberSession* SubscriberRegistry::createByTMSI(uint32_t tmsi) {
     auto [it, inserted] = mByTMSI.emplace(tmsi, SessionEntry{});
     if (!inserted) return nullptr;
@@ -47,6 +60,8 @@ SubscriberSession* SubscriberRegistry::createByTMSI(uint32_t tmsi) {
     it->second.session.assignedTmsi = tmsi;
     it->second.session.timers.setOwner(&it->second.session);
     it->second.session.timers.setOnActiveChange(&registryTimerActiveFn, this);
+    it->second.session.procedures.setOwner(&it->second.session);
+    it->second.session.procedures.setOnActiveChange(&registryProcedureActiveFn, this);
     return &it->second.session;
 }
 
@@ -69,6 +84,8 @@ SubscriberSession* SubscriberRegistry::createByIMSI(std::string_view imsi) {
     tmsiIt->second.session.assignedTmsi = tmsi;
     tmsiIt->second.session.timers.setOwner(&tmsiIt->second.session);
     tmsiIt->second.session.timers.setOnActiveChange(&registryTimerActiveFn, this);
+    tmsiIt->second.session.procedures.setOwner(&tmsiIt->second.session);
+    tmsiIt->second.session.procedures.setOnActiveChange(&registryProcedureActiveFn, this);
     mByIMSI.emplace(std::move(key), tmsi);
     return &tmsiIt->second.session;
 }
@@ -163,6 +180,9 @@ bool SubscriberRegistry::remove(SubscriberSession* session) noexcept {
     // Remove from the active-timer index before destroying the session, so
     // tickAllTimers() never ticks a destroyed session (use-after-free).
     handleTimerActive(session, false);
+    // Remove from the active-procedure index before destroying the session, so
+    // tickAllProcedures() never ticks a destroyed session (use-after-free).
+    handleProcedureActive(session, false);
     // Erase the entry so memory is reclaimed (previously the entry
     // stayed in the map with active=false, leaking on every removal).
     // The session pointer is invalidated by this call.
@@ -177,6 +197,10 @@ void SubscriberRegistry::clear() noexcept {
     mByLink.clear();
     std::lock_guard lock(mActiveMutex);
     mActiveTimerSessions.clear();
+    {
+        std::lock_guard procLock(mProcedureMutex);
+        mActiveProcedureSessions.clear();
+    }
 }
 
 size_t SubscriberRegistry::count() const noexcept {
@@ -209,6 +233,21 @@ size_t SubscriberRegistry::tickAllTimers(std::chrono::milliseconds delta,
         }
     }
     return written;
+}
+
+size_t SubscriberRegistry::tickAllProcedures(std::chrono::milliseconds delta) {
+    // Snapshot active sessions under the lock, then tick WITHOUT holding it:
+    // a procedure failing during tick fires the observer, which re-locks
+    // mProcedureMutex (non-recursive) — holding it here would deadlock.
+    {
+        std::lock_guard lock(mProcedureMutex);
+        mProcedureSnapshot.assign(mActiveProcedureSessions.begin(), mActiveProcedureSessions.end());
+    }
+    size_t failed = 0;
+    for (auto* session : mProcedureSnapshot) {
+        failed += session->procedures.tickAll(delta);
+    }
+    return failed;
 }
 
 // ── ShardedSubscriberRegistry: template method definitions ───────────
@@ -276,13 +315,23 @@ bool ShardedSubscriberRegistry<N>::remove(SubscriberSession* session) noexcept {
 
 template<int N>
 size_t ShardedSubscriberRegistry<N>::tickAllTimers(std::chrono::milliseconds delta,
-                                                      std::span<TimerExpiry> expiredOut) {
+                                                       std::span<TimerExpiry> expiredOut) {
     size_t total = 0;
     for (auto& shard : mShards) {
         std::unique_lock lock(shard.mutex);
         size_t remaining = expiredOut.size() - total;
         if (remaining == 0) break;
         total += shard.registry.tickAllTimers(delta, expiredOut.subspan(total, remaining));
+    }
+    return total;
+}
+
+template<int N>
+size_t ShardedSubscriberRegistry<N>::tickAllProcedures(std::chrono::milliseconds delta) {
+    size_t total = 0;
+    for (auto& shard : mShards) {
+        std::unique_lock lock(shard.mutex);
+        total += shard.registry.tickAllProcedures(delta);
     }
     return total;
 }

@@ -246,11 +246,13 @@ Event Loop Tick (every 10-100ms)
   │
   │  Returned events are TimerExpiry{session, id} pairs (order unspecified).
   │
-  ├─ For each session:
-  │     └─ session->procedures.tickAll(delta)
-  │             │
-  │             └─ Each procedure advances internal timers
-  │                   Timer expiry -> Failed state -> slot auto-freed
+  ├─ SubscriberRegistry.tickAllProcedures(delta)
+  │       │
+  │       └─ For each session WITH >=1 active procedure (active-procedure index, O(active)):
+  │             └─ ProcedureRunner::tickAll(delta)
+  │                   │
+  │                   └─ Each procedure advances internal timers
+  │                         Timer expiry -> Failed state -> slot auto-freed
   │
   └─ LAPDmEntity.tickT200() per active link
 ```
@@ -459,6 +461,7 @@ The following operations perform zero heap allocations:
 | `ProcedureRunner::feed()` | O(8) = O(1) | Fixed array of procedure slots |
 | `SubscriberRegistry::findByTMSI()` | O(1) | Hash map lookup |
 | `ShardedSubscriberRegistry::findByTMSI()` | O(1) | Hash + per-shard lock |
+| `SubscriberRegistry::tickAllProcedures()` | O(active) | Active-procedure index (sessions with >=1 active procedure) |
 | `ShardedChannelPool::allocate()` | O(N) worst, typically O(1) | Round-robin shard start + fallback (channels hash-distributed) |
 
 ## 7. Abis/RSL Integration
@@ -512,6 +515,10 @@ std::array<TimerExpiry, 4096> expired;
 size_t n = registry.tickAllTimers(std::chrono::milliseconds(100), {expired.data(), expired.size()});
 // Each event: {session, timerId} — route the expiry to the owner.
 
+// Tick active procedures — O(active): only sessions with >=1 active
+// procedure are visited (active-procedure index).
+size_t failed = registry.tickAllProcedures(std::chrono::milliseconds(100));
+
 // Remove session (detach) — O(1) via session->assignedTmsi reverse index,
 // so high session churn at scale does not degrade to O(N) scans.
 registry.remove(session);
@@ -535,10 +542,12 @@ public:
             processRadioFrames();
             processRslMessages();
 
-            // 2. Tick all session timers and procedures
-            registry.forEach([&delta](SubscriberSession* sess) {
-                sess->procedures.tickAll(delta);
-            });
+            // 2. Tick all session timers and procedures — O(active) for both:
+            //    only sessions with running timers / active procedures are visited.
+            std::array<TimerExpiry, 4096> expired;
+            size_t nExpired = registry.tickAllTimers(delta, {expired.data(), expired.size()});
+            // (handle expired[i].session / expired[i].id protocol timeouts)
+            registry.tickAllProcedures(delta);
 
             // 3. Periodic broadcasts (System Information)
             if (siCounter++ % SI_INTERVAL == 0) {
@@ -582,6 +591,7 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
 
 ### Known Limitations
 
+- **Procedure tick:** `tickAllProcedures()` is O(active) via an active-procedure index (same pattern as the active-timer index). The old documented pattern (forEach over all sessions) must not be used at scale.
 - **Registry storage:** `SubscriberRegistry`/`ShardedSubscriberRegistry` use `std::unordered_map` (pointer chasing) for their TMSI/IMSI/link indexes. At 1M+ sessions this costs roughly ~2 GB of RAM and is cache-unfriendly. If further optimization is required, replace the indexes with a flat/open-addressing hash table (out of scope of the current design; the session objects themselves are already contiguous-friendly and the hot paths — lookup, O(1) remove, O(active) timer tick — are index-driven).
 - **L3Framer header-based mode:** for variable-length messages (SI, SMS, Setup with IEs, ...) the framer uses a boundary heuristic that scans for the next plausible L3 header. Fixed-length messages (including BCC/GCC/LS header-only forms) are framed exactly. For deterministic framing of variable-length messages use the L2-length mode (`FrameConfig::useL2Length = true`), which is what production LAPDm/A-bis paths provide.
 

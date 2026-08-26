@@ -65,8 +65,10 @@ std::optional<size_t> ProcedureRunner::insertSlot(std::unique_ptr<Procedure> pro
     if (!proc) return std::nullopt;
     for (size_t i = 0; i < MAX_PROCEDURES; ++i) {
         if (!mSlots[i].active) {
+            bool wasActive = activeCount() > 0;
             mSlots[i].proc = std::move(proc);
             mSlots[i].active = true;
+            if (!wasActive) notifyActive(true);
             return i;
         }
     }
@@ -79,8 +81,10 @@ void ProcedureRunner::cleanupSlotIfTerminal(size_t idx) noexcept {
         if (st == procedure::ProcedureState::Completed ||
             st == procedure::ProcedureState::Failed ||
             st == procedure::ProcedureState::TimedOut) {
+            bool wasActive = activeCount() > 0;
             mSlots[idx].proc.reset();
             mSlots[idx].active = false;
+            if (wasActive && activeCount() == 0) notifyActive(false);
         }
     }
 }
@@ -170,6 +174,7 @@ size_t ProcedureRunner::activeCount() const noexcept {
 }
 
 void ProcedureRunner::cancelAll() noexcept {
+    bool wasActive = activeCount() > 0;
     for (size_t i = 0; i < MAX_PROCEDURES; ++i) {
         if (mSlots[i].active) {
             mSlots[i].proc->cancel();
@@ -177,6 +182,7 @@ void ProcedureRunner::cancelAll() noexcept {
             mSlots[i].active = false;
         }
     }
+    if (wasActive) notifyActive(false);
 }
 
 // ── Auto-create procedure from message ────────────────────────────────
