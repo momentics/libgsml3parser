@@ -1321,7 +1321,7 @@ public:
 | `registerTIHandler(ti, h)` | Register handler by Transaction Identifier (CC/SS) | O(1) array index |
 | `dispatchWithTI(msg, ctx)` | Dispatch with TI awareness for CC/SS messages | O(1) TI lookup |
 
-**Internal storage:** `std::array<std::array<MessageHandler, 256>, 16>` — fixed 64 KB handler table, no heap allocations.
+**Internal storage:** `std::array<std::array<MessageHandler, 136>, 16>` — fixed ~35 KB handler table, no heap allocations.
 
 **Dispatch priority:** Specific handler (PD+MTI) -> Domain handler (PD) -> Fallback handler.
 
@@ -4656,7 +4656,7 @@ The following optimizations have been applied to achieve high-throughput, low-la
 
 ### Fixed-Array Handler Tables (ProtocolDispatcher)
 
-`std::unordered_map<HandlerKey, MessageHandler>` replaced with `std::array<std::array<MessageHandler, 256>, 16>`. Eliminates hash computation, node allocation, and pointer chasing on the dispatch hot path. The handler table is ~64 KB and fits in L2 cache.
+`std::unordered_map<HandlerKey, MessageHandler>` replaced with `std::array<std::array<MessageHandler, 136>, 16>`. Eliminates hash computation, node allocation, and pointer chasing on the dispatch hot path. The handler table is ~35 KB and fits in L2 cache.
 
 ### FlatHandler (Zero-Overhead Callbacks)
 

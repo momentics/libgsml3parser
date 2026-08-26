@@ -91,7 +91,7 @@ What sets this library apart: ready-to-use per-subscriber state management primi
 | **ChannelPool** | Logical channel allocation/release, VEA support | global |
 | **SubscriberRegistry** | Per-MS session management, TMSI/IMSI/link indexes | < 4 KB/session |
 
-Total per-MS footprint: **~1.7 KB** (10K concurrent sessions ≈ 17 MB). See [BTS Architecture Guide](doc/bts_architecture.md) for scaling to millions.
+Total per-MS footprint: **~2 KB** (`sizeof(SubscriberSession)` = 2056 B; 10K concurrent sessions ≈ 20 MB). See [BTS Architecture Guide](doc/bts_architecture.md) for scaling to millions.
 
 ## Performance
 
@@ -101,7 +101,7 @@ Numbers that matter for a real-time radio stack:
 |--------|--------|
 | **L3 parse throughput** | 9.6 – 39.3 M msg/s (per message type, single core) |
 | **Mixed-domain stream** | 8.6 M msg/s (all 12 PD domains) |
-| **Full BTS stack** (1K MS, timers, FSM, dispatch) | **80 M msg/s** (single core) |
+| **Full BTS stack dispatch** (1K MS, pre-parsed messages, timers, FSM) | **~74–80 M msg/s** (single core; end-to-end parse+stream: 8.7 M msg/s) |
 | **TimerManager tick** | 48.1 M ticks/sec |
 | **Transaction lookup** | 0.004 µs per match |
 | **State machine dispatch** | 0.007 µs per message |
@@ -120,7 +120,7 @@ them — see [`benchmark_results.txt`](benchmark_results.txt) for the full run.
 | `FlatHandler` callbacks (16 bytes) | 2.5x smaller than `std::function`, no type erasure |
 | RingBuffer `& mask` wrap | 1 CPU cycle vs 20-80 for modulo |
 | Zero-copy parsing | span -> parse directly, no memcpy |
-| Per-MS stack modules | ~1.7 KB per session (10K sessions = ~17 MB) |
+| Per-MS stack modules | ~2 KB per session (10K sessions = ~20 MB) |
 
 ```bash
 ./build/Release/examples/example_benchmark.exe       # all 12 PD domains (parse + stream)

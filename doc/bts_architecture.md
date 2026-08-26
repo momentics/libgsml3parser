@@ -417,10 +417,10 @@ Measured sizes (MSVC 2026, Release, x64):
 | `RRStateMachine` | 16 bytes | Virtual table pointer + state int |
 | `MMStateMachine` | 16 bytes | Virtual table pointer + state int |
 | `CCStateMachine` | 16 bytes | Virtual table pointer + state int |
-| `ProcedureRunner` | 128 bytes | 8 × ProcedureSlot (unique_ptr + bool) |
+| `ProcedureRunner` | 152 bytes | 8 × ProcedureSlot (unique_ptr + bool) + active-change observer |
 | `ResponseContext` | 124 bytes | Response parameters (fixed arrays, ≤ 160 budget) |
 | `ProcedureOrchestrator` | ~100 bytes | Active chain state + phase timer |
-| **Total per MS** | **2,032 bytes** (`sizeof(SubscriberSession)`) | Enforced `< 4096` via `static_assert`; plus `ParsedMessage` (416 bytes) on stack during processing |
+| **Total per MS** | **2,056 bytes** (`sizeof(SubscriberSession)`) | Enforced `< 4096` via `static_assert`; plus `ParsedMessage` (416 bytes) on stack during processing |
 
 At 10,000 concurrent MS sessions: ~20 MB for sessions (fits comfortably in DRAM; hot per-session data stays cache-resident under normal load).
 
@@ -452,7 +452,7 @@ The following operations perform zero heap allocations:
 
 | Operation | Complexity | Mechanism |
 |-----------|-----------|-----------|
-| `ProtocolDispatcher::dispatch()` | O(1) | `std::array[16][256]` handler table |
+| `ProtocolDispatcher::dispatch()` | O(1) | `std::array[16][136]` handler table |
 | `TransactionManager::match()` CC/SS | O(1) | `mTiIndex[ti]` direct array access |
 | `TransactionManager::match()` other | O(K), K ≤ 16 | Bounded linear scan of `mTransactions` |
 | `ChannelPool::allocate()` | O(1) | Per-type free-list `pop_back()` |
@@ -566,13 +566,13 @@ public:
 
 ### Memory Budget Planning
 
-Per-MS stack footprint is ~1.7 KB (measured: 1708 bytes per session, `sizeof(SubscriberSession) < 4096`); `sizeof(ParsedMessage) = 416` bytes.
+Per-MS stack footprint is ~2 KB (`sizeof(SubscriberSession)` = 2056 bytes, static_assert < 4096); `sizeof(ParsedMessage) = 416` bytes.
 
 | Scale | MS Sessions | Stack Module Memory | ParsedMessage (stack, transient) |
 |-------|------------|-------------------|-------------------------------|
-| Small cell | 100 | ~170 KB | ~42 KB peak |
-| Macro cell | 10,000 | ~17 MB | ~4.2 MB peak |
-| Large deployment | 1,000,000 | ~1.7 GB | ~416 MB peak (transient) |
+| Small cell | 100 | ~200 KB | ~42 KB peak |
+| Macro cell | 10,000 | ~20 MB | ~4.2 MB peak |
+| Large deployment | 1,000,000 | ~2 GB | ~416 MB peak (transient) |
 
 For large deployments, ParsedMessage is only on-stack during message processing (microseconds), so peak concurrent usage is much lower than the theoretical maximum.
 
@@ -600,7 +600,7 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
 - [ ] Build with C++20, Release mode (`-O2` or `/O2`)
 - [ ] Verify `sizeof(MSContext) <= 256` via `static_assert` (measured: 92 bytes)
 - [ ] Verify `sizeof(ProcedureStepResult) <= 32` via `static_assert`
-- [ ] Verify `sizeof(SubscriberSession) < 4096` via `static_assert` (measured: 2032 bytes)
+- [ ] Verify `sizeof(SubscriberSession) < 4096` via `static_assert` (measured: 2056 bytes)
 - [ ] Verify `sizeof(ResponseContext) <= 160` via `static_assert` (measured: 124 bytes)
 - [ ] Configure `ChannelPool` with available channels at startup
 - [ ] Initialize `SubscriberRegistry` (or `ShardedSubscriberRegistry<N>` for multi-threaded)

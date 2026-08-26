@@ -427,8 +427,8 @@ void benchmarkFullStack() {
     double opsPerSec = totalOps / (static_cast<double>((t3 - t2).count()) / 1'000'000'000.0);
     std::cout << "  Throughput: " << std::fixed << std::setprecision(0)
               << opsPerSec << " msg/sec\n";
-    std::cout << "  Memory per MS: " << sizeof(MSContext) + sizeof(TimerManager)
-              + sizeof(TransactionManager) << " bytes (stack only)\n";
+    std::cout << "  Memory per MS (sizeof(SubscriberSession)): "
+              << sizeof(SubscriberSession) << " bytes\n";
 }
 
 } // anonymous namespace
