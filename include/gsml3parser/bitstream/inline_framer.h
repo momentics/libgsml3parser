@@ -42,6 +42,11 @@ namespace gsml3parser {
  * - L2 length mode: each frame preceded by a length octet.
  * - Header-based mode: frame length derived from PD+MTI fixed-length table.
  *
+ * NOTE: header-based mode is a heuristic for variable-length messages (it
+ * scans for the next plausible L3 header). For deterministic framing of
+ * variable-length messages use useL2Length = true, which is what production
+ * LAPDm / A-bis paths provide.
+ *
  * Thread safety: not thread-safe. One instance per buffer, single-threaded use.
  */
 class InlineFramer {
@@ -185,7 +190,18 @@ inline std::optional<std::span<const uint8_t>> InlineFramer::nextFrame() noexcep
                 }
             }
 
-            if (frameLen == 0 || frameLen > mMaxFrameLen) return std::nullopt;
+            if (frameLen == 0) {
+                // No boundary found. This is a contiguous in-memory buffer (no more data
+                // can arrive), so the remainder of the buffer is the last frame: emit it
+                // if it fits the size limit. The parser still validates the content; a
+                // truncated frame surfaces as a parse error rather than being silently
+                // dropped (audit D7).
+                size_t rest = mData.size() - mPos;
+                if (rest < 2 || rest > mMaxFrameLen) return std::nullopt;
+                frameLen = rest;
+            } else if (frameLen > mMaxFrameLen) {
+                return std::nullopt;
+            }
         }
     }
 

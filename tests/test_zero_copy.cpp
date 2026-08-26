@@ -147,6 +147,31 @@ TEST(InlineFramer, ExtractHeaderBasedFrames) {
     ASSERT_FALSE(frame4.has_value());
 }
 
+// Test: a trailing variable-length frame at the end of a contiguous buffer is
+// emitted (not silently dropped) when no next-header boundary exists.
+// Importance: ZeroCopyStreamProcessor must return every frame of a complete
+// buffer; previously the last variable-length frame was lost (audit D7).
+TEST(InlineFramer, TrailingVariableLengthFrame_Emitted) {
+    // RR ChannelRelease (3 bytes, fixed) + CC Setup (4 bytes, variable;
+    // body 0x20 0x21 has no plausible PD nibble, so no false boundary).
+    const uint8_t buf[] = {
+        0x60, 0x0D, 0x00,        // RR Channel Release
+        0x30, 0x08, 0x20, 0x21   // CC Setup (MTI=0x02), body without PD-like nibbles
+    };
+    InlineFramer framer(std::span<const uint8_t>(buf, sizeof(buf)));
+
+    auto f1 = framer.nextFrame();
+    ASSERT_TRUE(f1.has_value());
+    EXPECT_EQ(f1->size(), 3u);
+
+    auto f2 = framer.nextFrame();
+    ASSERT_TRUE(f2.has_value());
+    EXPECT_EQ(f2->size(), 4u);
+    EXPECT_EQ(f2->data()[0], 0x30);
+
+    EXPECT_FALSE(framer.nextFrame().has_value());
+}
+
 // ── ZeroCopyStreamProcessor tests ─────────────────────────────────────
 
 // ZeroCopyStreamProcessor parses all frames from a contiguous buffer.
