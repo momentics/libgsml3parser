@@ -448,10 +448,15 @@ public:
     }
 
 private:
-    /// Simple mix for uint32_t — sufficient for shard distribution.
+    /// 32-bit finalizer (MurmurHash3 fmix32) — full avalanche for shard
+    /// distribution with sequential or patterned TMSI values.
     static constexpr uint32_t hashTMSI(uint32_t tmsi) noexcept {
-        uint32_t h = tmsi ^ (tmsi >> 16);
-        h ^= h >> 8;
+        uint32_t h = tmsi;
+        h ^= h >> 16;
+        h *= 0x7feb352du;
+        h ^= h >> 15;
+        h *= 0x846ca68bu;
+        h ^= h >> 16;
         return h;
     }
 

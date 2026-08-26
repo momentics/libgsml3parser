@@ -687,3 +687,20 @@ TEST(Sharded_Remove_O1_SingleShardLock, Remove_SingleShard) {
     // nullptr is rejected as well.
     EXPECT_FALSE(reg.remove(nullptr));
 }
+
+// Test: hashTMSI distributes sequential TMSI values evenly across shards.
+// Importance: sequential TMSI assignment (createByIMSI high-water mark)
+// must not concentrate sessions on a few shards (audit D11).
+TEST(SSR_hashTMSI, SequentialTmsi_EvenShardDistribution) {
+    constexpr int N = 16;
+    int counts[N] = {0};
+    constexpr uint32_t kNum = 10000;
+    for (uint32_t i = 0; i < kNum; ++i) {
+        counts[ShardedSubscriberRegistry<N>::debugShardForTmsi(i + 1)]++;
+    }
+    for (int i = 0; i < N; ++i) {
+        // Uniform expectation: 625 per shard; accept 400..850 (loose chi-square).
+        EXPECT_GT(counts[i], 400) << "shard " << i << " underloaded: " << counts[i];
+        EXPECT_LT(counts[i], 850) << "shard " << i << " overloaded: " << counts[i];
+    }
+}
