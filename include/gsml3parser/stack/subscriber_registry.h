@@ -98,6 +98,20 @@ public:
 
 static_assert(sizeof(SubscriberSession) < 4096, "SubscriberSession too large");
 
+/// A protocol-timer expiry event bound to the session that owns the timer.
+///
+/// Returned by SubscriberRegistry::tickAllTimers() so the caller can route
+/// the expiry to the correct session. A bare L3TimerId is ambiguous when
+/// many sessions run timers concurrently.
+///
+/// Memory: exactly 16 bytes (pointer + enum), trivially copyable.
+struct TimerExpiry {
+    SubscriberSession* session{nullptr};
+    L3TimerId id{L3TimerId::Unknown};
+};
+
+static_assert(sizeof(TimerExpiry) == 16, "TimerExpiry must stay pointer-sized");
+
 /// Trampoline: forwards TimerManager active-change notifications to the owning
 /// SubscriberRegistry (see SubscriberRegistry::handleTimerActive). Defined in
 /// subscriber_registry.cpp; friend of SubscriberRegistry.
@@ -179,13 +193,18 @@ public:
         }
     }
 
-    /// Tick timers of all sessions. Fills pre-allocated buffer with expired timer IDs.
+    /// Tick timers of all sessions. Fills the pre-allocated buffer with expiry
+    /// events (session + timer ID).
     /// @param delta Time advance in milliseconds.
-    /// @param expiredOut Pre-allocated span for expired L3TimerId entries.
-    /// @return Number of expired timer entries written.
-    /// Performance: O(active) — only sessions with running timers are ticked, not all sessions.
+    /// @param expiredOut Pre-allocated span for TimerExpiry entries.
+    /// @return Number of expiry events written.
+    /// Performance: O(active) — only sessions with running timers are ticked,
+    /// not all sessions (active-timer index).
+    /// For each expired timer the session's TransactionManager is notified
+    /// (onTimerExpired), matching the documented timer event path.
+    /// Note: the order of entries in expiredOut is unspecified.
     size_t tickAllTimers(std::chrono::milliseconds delta,
-                         std::span<L3TimerId> expiredOut);
+                         std::span<TimerExpiry> expiredOut);
 
 private:
     struct SessionEntry {
@@ -365,12 +384,14 @@ public:
         return shardIndex(hashTMSI(tmsi));
     }
 
-    /// Tick all timers across all shards. Thread-safe. Each shard ticked independently.
+    /// Tick all timers across all shards. Thread-safe. Each shard ticked
+    /// independently. Fills the pre-allocated buffer with expiry events
+    /// (session + timer ID); the order of entries is unspecified.
     /// @param delta Time advance in milliseconds.
-    /// @param expiredOut Pre-allocated span for expired timer IDs.
-    /// @return Total expired timers across all shards.
+    /// @param expiredOut Pre-allocated span for TimerExpiry entries.
+    /// @return Total expiry events across all shards.
     size_t tickAllTimers(std::chrono::milliseconds delta,
-                         std::span<L3TimerId> expiredOut);
+                         std::span<TimerExpiry> expiredOut);
 
     /// Iterate all sessions across all shards. Thread-safe (shared locks).
     template<typename F>

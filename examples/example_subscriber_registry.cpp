@@ -73,18 +73,19 @@ int main() {
 
     // Tick 1 second — timer should NOT expire.
     {
-        std::array<L3TimerId, 32> expired{};
+        std::array<TimerExpiry, 32> expired{};
         size_t n = registry.tickAllTimers(1000ms, expired);
         std::cout << "After 1s tick: " << n << " timers expired\n";
     }
 
     // Tick another 1.5 seconds — timer SHOULD expire.
     {
-        std::array<L3TimerId, 32> expired{};
+        std::array<TimerExpiry, 32> expired{};
         size_t n = registry.tickAllTimers(1500ms, expired);
         std::cout << "After 1.5s tick: " << n << " timers expired\n";
         for (size_t i = 0; i < n; ++i) {
-            std::cout << "  Expired: " << static_cast<int>(expired[i]) << "\n";
+            // TimerExpiry carries the owning session; print the timer ID.
+            std::cout << "  Expired: " << static_cast<int>(expired[i].id) << "\n";
         }
     }
 

@@ -107,7 +107,7 @@ TEST(Stress, _10000Sessions_TimerTick_Fast) {
         sess->timers.start(L3TimerId::T3101);
     }
 
-    std::array<L3TimerId, N * 2> expired;
+    std::array<TimerExpiry, N * 2> expired;
 
     auto t0 = std::chrono::steady_clock::now();
 
@@ -502,7 +502,7 @@ TEST(Stress, tickAllTimers_OnlyActive_Scales) {
         ASSERT_NE(s, nullptr);
         if (i <= ACTIVE) s->timers.start(L3TimerId::T3101, std::chrono::milliseconds(100));
     }
-    std::vector<L3TimerId> expired(N);
+    std::vector<TimerExpiry> expired(N);
     auto t0 = std::chrono::steady_clock::now();
     size_t n = reg.tickAllTimers(std::chrono::milliseconds(150), {expired.data(), expired.size()});
     auto t1 = std::chrono::steady_clock::now();
@@ -547,7 +547,7 @@ TEST(Stress, _1MSession_Create_Lookup_Tick_Scale) {
     for (uint32_t i = 1; i <= 10000; ++i) {
         reg.findByTMSI(i)->timers.start(L3TimerId::T3101, std::chrono::milliseconds(100));
     }
-    std::vector<L3TimerId> expired(N);
+    std::vector<TimerExpiry> expired(N);
     auto tTick0 = std::chrono::steady_clock::now();
     size_t n = reg.tickAllTimers(std::chrono::milliseconds(150), {expired.data(), expired.size()});
     auto tTick = std::chrono::steady_clock::now();

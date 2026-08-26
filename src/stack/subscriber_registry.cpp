@@ -188,7 +188,7 @@ size_t SubscriberRegistry::count() const noexcept {
 }
 
 size_t SubscriberRegistry::tickAllTimers(std::chrono::milliseconds delta,
-                                          std::span<L3TimerId> expiredOut) {
+                                          std::span<TimerExpiry> expiredOut) {
     // Snapshot active sessions under the lock, then tick WITHOUT holding it:
     // a timer expiring during tick fires the observer, which re-locks mActiveMutex
     // (non-recursive) — holding it here would deadlock.
@@ -200,8 +200,12 @@ size_t SubscriberRegistry::tickAllTimers(std::chrono::milliseconds delta,
     for (auto* session : mActiveSnapshot) {
         std::array<L3TimerId, 32> localBuf{};
         size_t n = session->timers.tick(delta, std::span<L3TimerId>{localBuf});
-        for (size_t j = 0; j < n && written < expiredOut.size(); ++j, ++written) {
-            expiredOut[written] = localBuf[j];
+        for (size_t j = 0; j < n; ++j) {
+            // Notify the session's transaction correlation of the expiry.
+            session->transactions.onTimerExpired(localBuf[j]);
+            if (written < expiredOut.size()) {
+                expiredOut[written++] = TimerExpiry{session, localBuf[j]};
+            }
         }
     }
     return written;
@@ -272,7 +276,7 @@ bool ShardedSubscriberRegistry<N>::remove(SubscriberSession* session) noexcept {
 
 template<int N>
 size_t ShardedSubscriberRegistry<N>::tickAllTimers(std::chrono::milliseconds delta,
-                                                     std::span<L3TimerId> expiredOut) {
+                                                      std::span<TimerExpiry> expiredOut) {
     size_t total = 0;
     for (auto& shard : mShards) {
         std::unique_lock lock(shard.mutex);

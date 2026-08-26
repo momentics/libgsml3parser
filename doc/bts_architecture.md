@@ -242,7 +242,9 @@ Event Loop Tick (every 10-100ms)
   │       │
   │       └─ For each session WITH >=1 running timer (active-timer index, O(active)):
   │             ├─ TimerManager::tick() -> expired timer IDs
-  │             └─ TransactionManager::onTimerExpired()
+  │             └─ TransactionManager::onTimerExpired() (called by the registry)
+  │
+  │  Returned events are TimerExpiry{session, id} pairs (order unspecified).
   │
   ├─ For each session:
   │     └─ session->procedures.tickAll(delta)
@@ -506,8 +508,9 @@ auto* found = registry.findByTMSI(0x12345678);
 // Tick all timers across all shards — O(active): only sessions with >=1
 // running timer are ticked (active-timer index), so a large number of idle
 // sessions does not slow the tick.
-std::array<L3TimerId, 4096> expired;
-size_t n = registry.tickAllTimers(std::chrono::milliseconds(100), expired);
+std::array<TimerExpiry, 4096> expired;
+size_t n = registry.tickAllTimers(std::chrono::milliseconds(100), {expired.data(), expired.size()});
+// Each event: {session, timerId} — route the expiry to the owner.
 
 // Remove session (detach) — O(1) via session->assignedTmsi reverse index,
 // so high session churn at scale does not degrade to O(N) scans.

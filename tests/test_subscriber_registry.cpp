@@ -26,6 +26,7 @@
 
 #include <gtest/gtest.h>
 #include "gsml3parser/stack/subscriber_registry.h"
+#include "gsml3parser/cc/l3ccmessages.h"
 
 #include <array>
 #include <chrono>
@@ -191,11 +192,53 @@ TEST(SR_tickAllTimers, ExpiresCorrectTimers) {
     s1->timers.start(L3TimerId::T3101, 100ms);
     s2->timers.start(L3TimerId::T3106, 100ms);
 
-    std::array<L3TimerId, 32> expired{};
+    std::array<TimerExpiry, 32> expired{};
     size_t n = reg.tickAllTimers(150ms, expired);
     EXPECT_EQ(n, 2u);
     EXPECT_TRUE(s1->timers.isRunning(L3TimerId::T3101) == false);
     EXPECT_TRUE(s2->timers.isRunning(L3TimerId::T3106) == false);
+}
+
+// Test: tickAllTimers returns expiry events bound to the correct sessions.
+// Importance: with many sessions running timers concurrently, a bare timer ID
+// is ambiguous; the event must carry the owning session pointer (audit D3).
+TEST(SR_tickAllTimers, ExpiryBoundToCorrectSession) {
+    SubscriberRegistry reg;
+    auto* s1 = reg.createByTMSI(0x01010101);
+    auto* s2 = reg.createByTMSI(0x02020202);
+
+    s1->timers.start(L3TimerId::T3101, 100ms);
+    s2->timers.start(L3TimerId::T3106, 100ms);
+
+    std::array<TimerExpiry, 32> expired{};
+    size_t n = reg.tickAllTimers(150ms, expired);
+    ASSERT_EQ(n, 2u);
+
+    // Order is unspecified — collect into a set and verify membership.
+    std::set<std::pair<SubscriberSession*, L3TimerId>> got;
+    for (size_t i = 0; i < n; ++i) got.insert({expired[i].session, expired[i].id});
+    EXPECT_EQ(got.count({s1, L3TimerId::T3101}), 1u);
+    EXPECT_EQ(got.count({s2, L3TimerId::T3106}), 1u);
+}
+
+// Test: expired timers also expire the session's pending transactions.
+// Importance: the registry owns the documented timer event path
+// (tick -> TransactionManager::onTimerExpired); previously nothing in the
+// production stack called onTimerExpired, leaving transactions pending forever.
+TEST(SR_tickAllTimers, ExpiresPendingTransactions) {
+    SubscriberRegistry reg;
+    auto* s = reg.createByTMSI(0x03030303);
+    auto txId = s->transactions.create(L3PD::CallControl, L3Setup::MTI, 1, L3TimerId::T3101);
+    ASSERT_TRUE(txId.has_value());
+    s->timers.start(L3TimerId::T3101, 100ms);
+
+    std::array<TimerExpiry, 32> expired{};
+    size_t n = reg.tickAllTimers(150ms, expired);
+    ASSERT_EQ(n, 1u);
+    EXPECT_EQ(expired[0].session, s);
+    EXPECT_EQ(expired[0].id, L3TimerId::T3101);
+    // get() returns nullptr for non-pending transactions.
+    EXPECT_EQ(s->transactions.get(txId.value()), nullptr);
 }
 
 // Test: Identity switch from TMSI to IMSI updates indexes correctly.
@@ -309,7 +352,7 @@ TEST(SSR_tickAllTimers, Parallel_Correct) {
     s2->timers.start(L3TimerId::T3103, 50ms);
     s3->timers.start(L3TimerId::T3106, 50ms);
 
-    std::array<L3TimerId, 64> expired{};
+    std::array<TimerExpiry, 64> expired{};
     size_t n = reg.tickAllTimers(100ms, expired);
     EXPECT_EQ(n, 3u);
 }

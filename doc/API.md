@@ -3623,7 +3623,9 @@ size_t count() const noexcept;
 // tickAllTimers() is O(active): it ticks only sessions with at least one running
 // timer (active-timer index), not all sessions. Sessions register/unregister
 // themselves automatically when their first timer starts / last timer stops.
-size_t tickAllTimers(std::chrono::milliseconds delta, std::span<L3TimerId> expiredOut);
+// Each event carries the owning session pointer; the session's TransactionManager
+// is notified of the expiry.
+size_t tickAllTimers(std::chrono::milliseconds delta, std::span<TimerExpiry> expiredOut);
 
 // Iterate all sessions (guaranteed single visit).
 template<typename F> void forEach(F&& callback);
@@ -3658,7 +3660,7 @@ registry.assignChannel(session, ch, /*lapdmLink=*/3);
 auto* target = registry.findByLink(0, 5, 3);
 
 // Tick all timers.
-std::array<L3TimerId, 256> expired;
+std::array<TimerExpiry, 256> expired;
 size_t n = registry.tickAllTimers(100ms, expired);
 
 // Clean up when procedure completes.
