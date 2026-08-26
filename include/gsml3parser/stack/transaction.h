@@ -182,11 +182,13 @@ class TransactionManager {
     /// @return Pointer to the matching pending transaction, or nullptr if none found.
     Transaction* match(const L3Header& header, const ParsedMessage& msg);
 
-    /// Try to match an incoming message against pending transactions using PD+MTI only.
-    /// Useful when L3 header information is not available at the call site.
-    /// Scans all pending transactions for a PD+MTI match.
+    /// Try to match an incoming message against pending transactions using the
+    /// message's own PD/MTI/TI. Useful when L3 header information is not
+    /// available at the call site (the parsed CC/SS message stores its TI).
+    /// For CC/SS: O(1) TI-index lookup with exact TI match.
+    /// For other PDs: linear scan matching PD + MTI.
     /// @param msg The fully parsed message.
-    /// @return Pointer to the first matching pending transaction, or nullptr.
+    /// @return Pointer to the matching pending transaction, or nullptr if none found.
     Transaction* match(const ParsedMessage& msg);
 
     /// Handle timer expiry: expire all pending transactions using the given timer ID.

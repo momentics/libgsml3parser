@@ -359,17 +359,39 @@ TEST(TransactionManagerTest, MultipleTI_independent) {
     EXPECT_EQ(tm.pendingCount(), 3u);
 }
 
-// match() without header for CC falls back to scanning by PD
-TEST(TransactionManagerTest, Match_CC_withoutHeader_scansByPD) {
+// match() without header for CC uses the message's own TI (O(1) exact
+// match). Previously this fell back to scanning by PD and returned the
+// first pending CC transaction regardless of TI (audit D12).
+TEST(TransactionManagerTest, Match_CC_withoutHeader_UsesMessageTI) {
     TransactionManager tm;
     tm.create(L3PD::CallControl, L3Setup::MTI, 1, L3TimerId::T3101);
 
-    ParsedMessage msg = makeCCConnect();
+    // The message carries TI=1, matching the pending transaction.
+    ParsedMessage msg{CCM{L3Connect::builder().ti(1).build()}};
     Transaction* result = tm.match(msg);
 
-    // Should find the CC transaction by PD scan
     ASSERT_NE(result, nullptr);
     EXPECT_EQ(result->requestPD(), L3PD::CallControl);
+    EXPECT_EQ(result->ti(), 1u);
+}
+
+// Test: headerless match for CC with several pending dialogs (different TIs)
+// correlates the response to the right transaction, not the first pending.
+// Importance: TI mis-correlation would complete the wrong dialog (audit D12).
+TEST(TransactionManagerTest, Match_CC_withoutHeader_MultipleDialogs_ExactTI) {
+    TransactionManager tm;
+    tm.create(L3PD::CallControl, L3Setup::MTI, 1, L3TimerId::T3101);
+    tm.create(L3PD::CallControl, L3Setup::MTI, 3, L3TimerId::T3101);
+
+    // Incoming Release with TI=3 must match the TI=3 transaction.
+    ParsedMessage msg{CCM{L3Release::builder().ti(3).build()}};
+    Transaction* tx = tm.match(msg);
+    ASSERT_NE(tx, nullptr);
+    EXPECT_EQ(tx->ti(), 3u);
+
+    // TI=5 has no pending transaction.
+    ParsedMessage msg5{CCM{L3Release::builder().ti(5).build()}};
+    EXPECT_EQ(tm.match(msg5), nullptr);
 }
 
 // onTimerExpired() only affects transactions with matching timer ID
