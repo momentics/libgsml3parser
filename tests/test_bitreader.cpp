@@ -269,3 +269,26 @@ TEST(BitReaderTest, PeekFieldNullBufferWithBits_ReturnsZeroNoUB) {
     EXPECT_EQ(br.peekField(16), 0u);
     EXPECT_EQ(br.peekField(40), 0u);
 }
+
+// Test: a BitReader over a null buffer with a non-zero bit count must return
+// errors (not undefined behavior) from readField()/readBytes(), and 0 from
+// peekField(). Symmetric with the existing peekField null-buffer guard.
+TEST(BitReaderTest, NullBuffer_ReadField_ReturnsError) {
+    BitReader r(nullptr, 64);
+    auto res = r.readField(8);
+    ASSERT_FALSE(res.has_value());
+    EXPECT_EQ(res.error().code, ParseError::Code::TruncatedInput);
+}
+
+TEST(BitReaderTest, NullBuffer_ReadBytes_ReturnsError) {
+    BitReader r(nullptr, 64);
+    uint8_t out[4];
+    auto res = r.readBytes(out, 4);
+    ASSERT_FALSE(res.has_value());
+    EXPECT_EQ(res.error().code, ParseError::Code::TruncatedInput);
+}
+
+TEST(BitReaderTest, NullBuffer_PeekField_ReturnsZero) {
+    BitReader r(nullptr, 64);
+    EXPECT_EQ(r.peekField(8), 0u);
+}

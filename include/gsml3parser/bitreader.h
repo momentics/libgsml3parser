@@ -62,6 +62,8 @@ public:
 
     [[nodiscard]] Expected<uint32_t> readField(unsigned nbits) & {
         if (nbits == 0) return Expected<uint32_t>::hold(0u);
+        if (!mBuf) return Expected<uint32_t>::error(
+            ParseError{ParseError::Code::TruncatedInput, "null buffer", mPos});
         if (nbits > 32) return Expected<uint32_t>::error(ParseError{ParseError::Code::InvalidValue, "field too large"});
         if (mPos + nbits > mTotalBits) {
             return Expected<uint32_t>::error(
@@ -200,6 +202,8 @@ public:
 
     [[nodiscard]] Expected<void> readBytes(uint8_t* out, size_t count) & {
         if (count == 0) return Expected<void>::hold();
+        if (!mBuf) return Expected<void>::error(
+            ParseError{ParseError::Code::TruncatedInput, "null buffer", mPos});
         if (mPos / 8 + count > (mTotalBits + 7) / 8) {
             return Expected<void>::error(
                 ParseError{ParseError::Code::TruncatedInput, "read past end", mPos});
