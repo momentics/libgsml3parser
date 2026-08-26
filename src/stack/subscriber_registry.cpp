@@ -66,8 +66,8 @@ SubscriberSession* SubscriberRegistry::createByTMSI(uint32_t tmsi) {
 }
 
 SubscriberSession* SubscriberRegistry::createByIMSI(std::string_view imsi) {
-    std::string key(imsi);
-    if (mByIMSI.count(key) != 0) return nullptr;
+    if (mByIMSI.count(imsi) != 0) return nullptr;
+    std::string key(imsi); // owned key for the map (single allocation, cold path)
 
     // Allocate a unique TMSI: advance the high-water mark past any in-use
     // value (user-assigned TMSIs may occupy arbitrary slots) and skip the
@@ -103,7 +103,7 @@ const SubscriberSession* SubscriberRegistry::findByTMSI(uint32_t tmsi) const noe
 }
 
 SubscriberSession* SubscriberRegistry::findByIMSI(std::string_view imsi) noexcept {
-    auto it = mByIMSI.find(std::string(imsi));
+    auto it = mByIMSI.find(imsi);
     if (it != mByIMSI.end()) {
         uint32_t tmsi = it->second;
         return findByTMSI(tmsi);
@@ -112,7 +112,7 @@ SubscriberSession* SubscriberRegistry::findByIMSI(std::string_view imsi) noexcep
 }
 
 const SubscriberSession* SubscriberRegistry::findByIMSI(std::string_view imsi) const noexcept {
-    auto it = mByIMSI.find(std::string(imsi));
+    auto it = mByIMSI.find(imsi);
     if (it != mByIMSI.end()) {
         uint32_t tmsi = it->second;
         return findByTMSI(tmsi);
@@ -175,7 +175,11 @@ bool SubscriberRegistry::remove(SubscriberSession* session) noexcept {
     }
     releaseChannel(session);
     if (session->context.identity().isIMSI()) {
-        mByIMSI.erase(std::string(session->context.identity().digits()));
+        // Heterogeneous find + iterator erase: MSVC's C++20 mode lacks the
+        // transparent key-based erase() overload, but this path stays
+        // allocation-free (no temporary std::string).
+        auto imsiIt = mByIMSI.find(std::string_view(session->context.identity().digits()));
+        if (imsiIt != mByIMSI.end()) mByIMSI.erase(imsiIt);
     }
     // Remove from the active-timer index before destroying the session, so
     // tickAllTimers() never ticks a destroyed session (use-after-free).

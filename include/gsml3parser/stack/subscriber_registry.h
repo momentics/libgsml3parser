@@ -122,6 +122,20 @@ void registryTimerActiveFn(void* owner, void* ctx, bool active);
 /// Defined in subscriber_registry.cpp; friend of SubscriberRegistry.
 void registryProcedureActiveFn(void* owner, void* ctx, bool active);
 
+/// Transparent hasher for the IMSI index (see SubscriberRegistry::mByIMSI).
+/// Accepts std::string_view directly (std::string converts to it) and carries
+/// the is_transparent marker, so heterogeneous find()/count() calls take
+/// std::string_view without constructing a temporary std::string (zero heap
+/// allocation on the lookup path; removal goes through find + iterator erase).
+/// A user-defined transparent hasher is required because MSVC's
+/// std::hash<std::string_view> does not define is_transparent.
+struct ImsiViewHash {
+    using is_transparent = void;
+    size_t operator()(std::string_view sv) const noexcept {
+        return std::hash<std::string_view>{}(sv);
+    }
+};
+
 /// BTS subscriber registry. Manages multiple SubscriberSession instances and provides
 /// TMSI, IMSI and LAPDm link lookup indexes. Analogous to MMUserMap in OpenBTS.
 ///
@@ -229,8 +243,12 @@ private:
     // TMSI -> session (primary index)
     std::unordered_map<uint32_t, SessionEntry> mByTMSI;
 
-    // IMSI -> TMSI (secondary index: redirects to mByTMSI)
-    std::unordered_map<std::string, uint32_t> mByIMSI;
+    // IMSI -> TMSI (secondary index: redirects to mByTMSI).
+    // Transparent heterogeneous lookup: find()/count() take std::string_view
+    // directly (removal goes through find + iterator erase) without
+    // constructing a temporary std::string — zero heap allocation on the
+    // lookup path.
+    std::unordered_map<std::string, uint32_t, ImsiViewHash, std::equal_to<>> mByIMSI;
 
     // LAPDm link key (trx:8 | ts:8 | lapdmLink:8) -> session pointer
     std::unordered_map<uint32_t, SubscriberSession*> mByLink;

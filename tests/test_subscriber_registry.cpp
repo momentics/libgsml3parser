@@ -28,6 +28,7 @@
 #include "gsml3parser/stack/subscriber_registry.h"
 #include "gsml3parser/cc/l3ccmessages.h"
 #include "gsml3parser/mm/l3mmmessages.h"
+#include "gsml3parser/benchmark_hw.h"
 
 #include <array>
 #include <chrono>
@@ -107,6 +108,26 @@ TEST(SR_findByIMSI, Existing_Found) {
 TEST(SR_findByIMSI, NonExisting_Nullptr) {
     SubscriberRegistry reg;
     EXPECT_EQ(reg.findByIMSI("001020000000000"), nullptr);
+}
+
+// Test: IMSI lookup works through std::string_view (transparent heterogeneous
+// lookup) without constructing a temporary std::string.
+// Importance: findByIMSI is on the authentication path; a heap allocation per
+// lookup is unacceptable at high subscriber churn (audit D4).
+TEST(SR_findByIMSI, StringViewLookup_NoTempString) {
+    SubscriberRegistry reg;
+    auto* sess = reg.createByIMSI("244051234567890");
+    ASSERT_NE(sess, nullptr);
+
+    // Lookup via string_view (no std::string construction).
+    std::string_view imsi = "244051234567890";
+    EXPECT_EQ(reg.findByIMSI(imsi), sess);
+    const SubscriberRegistry& creg = reg;
+    EXPECT_EQ(creg.findByIMSI(imsi), sess);
+
+    // remove() erases the IMSI index entry (heterogeneous erase).
+    EXPECT_TRUE(reg.remove(sess));
+    EXPECT_EQ(reg.findByIMSI(imsi), nullptr);
 }
 
 // Test: findByLink returns session when channel is assigned via assignChannel().
@@ -354,6 +375,34 @@ TEST(SR_Stress, 1000Sessions_LookupFast) {
     auto end = std::chrono::steady_clock::now();
     auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
     EXPECT_LT(ms, 1000);
+}
+
+// Test: 100K IMSI lookups stay fast (allocation-free lookup path).
+// Importance: validates the lookup budget at high churn.
+TEST(SR_Stress, 100K_IMSI_Lookups_Fast) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
+    SubscriberRegistry reg;
+    constexpr int N = 10000;
+    std::vector<std::string> imsis;
+    imsis.reserve(N);
+    for (int i = 0; i < N; ++i) {
+        std::string imsi = "24405" + std::to_string(100000000u + static_cast<unsigned>(i));
+        imsis.push_back(imsi);
+        ASSERT_NE(reg.createByIMSI(imsi), nullptr);
+    }
+    auto t0 = std::chrono::steady_clock::now();
+    for (int r = 0; r < 10; ++r) {
+        for (const auto& imsi : imsis) {
+            ASSERT_NE(reg.findByIMSI(std::string_view(imsi)), nullptr);
+        }
+    }
+    auto t1 = std::chrono::steady_clock::now();
+    double ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
+    std::printf("100K IMSI lookups: %.1f ms\n", ms);
+#ifndef GSML3PARSER_ASAN
+    EXPECT_LT(ms, 200.0) << "100K IMSI lookups too slow";
+#endif
 }
 
 // Test: ShardedSubscriberRegistry distributes sessions across shards.
