@@ -61,6 +61,14 @@ namespace gsml3parser {
 class SubscriberSession;
 
 /// Orchestrates chains of protocol procedures for compound L3 transactions.
+///
+/// Chain lifecycle: when a chain reaches a terminal state (finalResult.state is
+/// Completed/Failed/TimedOut), the orchestrator automatically returns to the
+/// idle state (ChainPhase::None), so the next feed() starts a fresh chain.
+/// No cancelAll() call is needed between chains; cancelAll() remains available
+/// for explicit aborts. The session's ResponseContext is reset when a new
+/// chain starts (never between the terminal result and the caller's response
+/// build), so stale parameters (RAND, TI, channel) cannot leak across chains.
 class ProcedureOrchestrator {
 public:
     ProcedureOrchestrator() = default;
@@ -140,8 +148,18 @@ private:
     void transitionToPhase(ChainPhase phase);
     void stopPhaseTimer() noexcept;
     std::unique_ptr<Procedure> createProcedureForPhase(ChainPhase phase);
-    void onProcedureCompleted(const ProcedureStepResult& result);
+    /// Handle a completed active procedure.
+    /// @return True if the chain continues into the next phase (a transition was
+    ///         made); false if the chain is terminal and must be ended.
+    bool onProcedureCompleted(const ProcedureStepResult& result);
     void onProcedureFailed(const ProcedureStepResult& result);
+    /// End the current chain after it reached a terminal state, so the next
+    /// feed() detects a fresh chain instead of routing to a stale phase handler.
+    /// Unlike cancelAll(), this keeps mLastToken (the caller may still build the
+    /// terminal response via buildPendingResponse()) and does NOT reset
+    /// session->response (the context is cleared when the next chain starts,
+    /// per the reset rule in procedure.h / doc/API.md).
+    void endChain() noexcept;
 
     // Inline phase handlers (no Procedure object needed)
     [[nodiscard]] ProcedureStepResult handleCMServiceRequest(const ParsedMessage& msg, SubscriberSession* session);

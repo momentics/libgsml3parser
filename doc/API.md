@@ -1007,7 +1007,7 @@ struct ResponseContext {
 
 - **Ownership:** one instance per `SubscriberSession`, stored inline as `session->response` (`sizeof(ResponseContext) <= 160` bytes, fixed arrays, zero heap).
 - **Population rule:** each procedure writes the parameters it learns (RAND from `AuthChallenge`, new TMSI / reject cause from `VLRDecision`, channel from a channel request, TI + called number from a `Setup`, etc.) before returning a `SendResponseWithToken` result.
-- **Reset rule:** the context is reset when a new procedure chain starts (`ProcedureRunner::feed()` auto-creation) and on `ProcedureOrchestrator::cancelAll()`. It is deliberately NOT reset in `onProcedureCompleted`/`onProcedureFailed`, because the caller may still build the response from the returned token after the procedure has terminated.
+- **Reset rule:** the context is reset when a new procedure chain starts (`ProcedureRunner::feed()` auto-creation, `ProcedureOrchestrator::feed()` new-chain detection) and on `ProcedureOrchestrator::cancelAll()`. It is deliberately NOT reset when a chain terminates (`onProcedureCompleted`/`onProcedureFailed`/`endChain()`), because the caller may still build the response from the returned token after the procedure has terminated.
 - **Missing-parameter rule:** `buildResponseFromToken()` returns -1 if the token requires a parameter that is not present (e.g. `hasRand == false` for `AuthenticationRequest`), never a fabricated value.
 
 **Thread safety:** NOT thread-safe. One instance per session, single-threaded.
@@ -4290,6 +4290,8 @@ public:
 | `chainPhase()` | Get the current chain phase (ProcedureType) |
 
 **Identity phase semantics:** while the chain awaits an `IdentityResponse`, `feed()` returns `SendResponseWithToken(IdentityRequest)`. Once the `IdentityResponse` arrives, the chain transitions to Authentication and returns `Continue` (no response) — an `IdentityRequest` is never sent after the identity has already been received.
+
+**Chain lifecycle (auto-reset on terminal state):** when a chain reaches a terminal state (`finalResult.state` is `Completed`/`Failed`/`TimedOut`), the orchestrator automatically returns to the idle state, so the next `feed()` starts a fresh chain — no `cancelAll()` call is needed between chains. `cancelAll()` remains available for explicit aborts. The session's `ResponseContext` is reset when a new chain starts (never between the terminal result and the caller's response build), so stale parameters (RAND, TI, channel) cannot leak across chains.
 
 ### Supported Chains
 

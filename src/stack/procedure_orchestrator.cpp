@@ -39,6 +39,16 @@
 
 namespace gsml3parser {
 
+namespace {
+/// True for terminal procedure states (Completed/Failed/TimedOut). A default-
+/// constructed ProcedureResult carries Initiated and is NOT terminal.
+constexpr bool isTerminalState(procedure::ProcedureState s) noexcept {
+    return s == procedure::ProcedureState::Completed ||
+           s == procedure::ProcedureState::Failed ||
+           s == procedure::ProcedureState::TimedOut;
+}
+} // namespace
+
 // ── Phase detection ──────────────────────────────────────────────────────
 
 ProcedureOrchestrator::ChainPhase ProcedureOrchestrator::detectChainPhase(
@@ -167,31 +177,40 @@ std::unique_ptr<Procedure> ProcedureOrchestrator::createProcedureForPhase(ChainP
     }
 }
 
-void ProcedureOrchestrator::onProcedureCompleted(const ProcedureStepResult& result) {
+bool ProcedureOrchestrator::onProcedureCompleted(const ProcedureStepResult& result) {
     (void)result;
     switch (mCurrentPhase) {
         case ChainPhase::Authentication:
             if (mSession) mSession->mmSM.setState(MMStateMachine::State::AUTHENTICATED);
             transitionToPhase(ChainPhase::CipheringMode);
-            break;
+            return true;
         case ChainPhase::CipheringMode:
             if (mSession) {
                 mSession->rrSM.setState(RRStateMachine::State::ACTIVE);
                 mSession->context.setCiphered(true);
             }
             transitionToPhase(ChainPhase::LocationUpdate);
-            break;
+            return true;
         case ChainPhase::LocationUpdate:
             if (mSession) mSession->mmSM.setState(MMStateMachine::State::REGISTERED);
             // The VLR answered: stop T3103 so it cannot cancel the finished chain.
             stopPhaseTimer();
-            break;
+            return false;
         case ChainPhase::CallSetupMO:
         case ChainPhase::CallSetupMT:
-            break;
+            return false;
         default:
-            break;
+            return false;
     }
+}
+
+void ProcedureOrchestrator::endChain() noexcept {
+    mCurrentProcedure.reset();
+    mCurrentPhase = ChainPhase::None;
+    stopPhaseTimer();
+    mChainType = procedure::ProcedureType::Unknown;
+    // mLastToken is intentionally kept: the caller may still build the terminal
+    // response via buildPendingResponse() after receiving the result.
 }
 
 void ProcedureOrchestrator::onProcedureFailed(const ProcedureStepResult& result) {
@@ -212,19 +231,27 @@ ProcedureStepResult ProcedureOrchestrator::feed(const ParsedMessage& msg,
             return {ProcedureStepResult::Action::Continue};
         }
 
-        // Start a new chain
+        // Start a new chain: clear stale response parameters left over from any
+        // previously completed chain so the new procedure begins from a clean
+        // context (same rule as ProcedureRunner::feed auto-creation).
+        if (session) session->response.reset();
+
         mChainType = procedure::ProcedureType::Unknown;
 
         if (detected == ChainPhase::IMSIDetach) {
             transitionToPhase(ChainPhase::IMSIDetach);
             mChainType = procedure::ProcedureType::IMSIDetach;
-            return handleIMSIDetachPhase(msg, session);
+            ProcedureStepResult result = handleIMSIDetachPhase(msg, session);
+            if (isTerminalState(result.finalResult.state)) endChain();
+            return result;
         }
 
         if (detected == ChainPhase::CallRelease) {
             transitionToPhase(ChainPhase::CallRelease);
             mChainType = procedure::ProcedureType::CallRelease;
-            return handleCallReleasePhase(msg, session);
+            ProcedureStepResult result = handleCallReleasePhase(msg, session);
+            if (isTerminalState(result.finalResult.state)) endChain();
+            return result;
         }
 
         // CMServiceRequest chains: determine type from service request
@@ -271,10 +298,17 @@ ProcedureStepResult ProcedureOrchestrator::feed(const ParsedMessage& msg,
             return handleIdentityVerification(msg, session);
         case ChainPhase::LocationUpdate:
             return handleLocationUpdatePhase(msg, session);
-        case ChainPhase::IMSIDetach:
-            return handleIMSIDetachPhase(msg, session);
-        case ChainPhase::CallRelease:
-            return handleCallReleasePhase(msg, session);
+        case ChainPhase::IMSIDetach: {
+            ProcedureStepResult result = handleIMSIDetachPhase(msg, session);
+            // Terminal inline phase: end the chain so the next feed() starts fresh.
+            if (isTerminalState(result.finalResult.state)) endChain();
+            return result;
+        }
+        case ChainPhase::CallRelease: {
+            ProcedureStepResult result = handleCallReleasePhase(msg, session);
+            if (isTerminalState(result.finalResult.state)) endChain();
+            return result;
+        }
         default:
             // Phases with Procedure objects
             if (mCurrentProcedure) {
@@ -286,7 +320,7 @@ ProcedureStepResult ProcedureOrchestrator::feed(const ParsedMessage& msg,
                 // rule in procedure.h): a procedure may finish WITH a pending response
                 // token in the same step, so action alone is not a terminal indicator.
                 if (result.finalResult.state == procedure::ProcedureState::Completed) {
-                    onProcedureCompleted(result);
+                    if (!onProcedureCompleted(result)) endChain();
                 } else if (result.finalResult.state == procedure::ProcedureState::Failed ||
                            result.finalResult.state == procedure::ProcedureState::TimedOut) {
                     onProcedureFailed(result);
@@ -313,7 +347,7 @@ ProcedureStepResult ProcedureOrchestrator::feedExternalTyped(const ExternalData&
         // rule in procedure.h): a procedure may finish WITH a pending response
         // token in the same step, so action alone is not a terminal indicator.
         if (result.finalResult.state == procedure::ProcedureState::Completed) {
-            onProcedureCompleted(result);
+            if (!onProcedureCompleted(result)) endChain();
         } else if (result.finalResult.state == procedure::ProcedureState::Failed ||
                    result.finalResult.state == procedure::ProcedureState::TimedOut) {
             onProcedureFailed(result);
@@ -323,8 +357,13 @@ ProcedureStepResult ProcedureOrchestrator::feedExternalTyped(const ExternalData&
 
     // Inline phase handlers
     switch (mCurrentPhase) {
-        case ChainPhase::LocationUpdate:
-            return handleExternalDataLocationUpdate(data, std::move(sink));
+        case ChainPhase::LocationUpdate: {
+            ProcedureStepResult result = handleExternalDataLocationUpdate(data, std::move(sink));
+            // Terminal inline phase (VLR accept/reject): end the chain so the
+            // next feed() starts fresh instead of re-entering the phase handler.
+            if (isTerminalState(result.finalResult.state)) endChain();
+            return result;
+        }
         case ChainPhase::IMSIDetach:
             return handleExternalDataIMSIDetach(data, std::move(sink));
         case ChainPhase::CallRelease:
@@ -474,7 +513,17 @@ ProcedureStepResult ProcedureOrchestrator::handleIMSIDetachPhase(
 
 ProcedureStepResult ProcedureOrchestrator::handleCallReleasePhase(
     const ParsedMessage& msg, SubscriberSession* session) {
-    (void)msg;
+    // Record the TI and cause from the Disconnect header/body so the Release
+    // response is built with the real transaction identifier (never a stale
+    // or default value).
+    if (session) {
+        if (const auto* disc = tryGet<L3Disconnect>(msg)) {
+            session->response.ti = static_cast<uint8_t>(disc->ti());
+            session->response.ccCause = disc->cause();
+        } else {
+            session->response.ti = messageTI(msg);
+        }
+    }
 
     ProcedureStepResult result;
     // Terminal with response: keep SendResponseWithToken so the caller still

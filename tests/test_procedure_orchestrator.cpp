@@ -353,3 +353,96 @@ TEST(ProcedureOrchestrator, LocationUpdate_TimerStopsOnVlrDecision) {
 
     EXPECT_EQ(orchestrator.tickAll(std::chrono::milliseconds(10000)), 0u);
 }
+
+// Regression: after a chain reaches a terminal state (VLR accept), the
+// orchestrator must return to the idle state so that the NEXT incoming
+// message starts a fresh chain. Before the fix the orchestrator stayed in
+// the LocationUpdate phase and a new CMServiceRequest was mis-routed to the
+// stale phase handler (returning WaitingExternal instead of CMServiceAccept).
+TEST(ProcedureOrchestrator, NewChain_AfterVlrAccept_IsDetected) {
+    SubscriberSession session;
+    ProcedureOrchestrator orchestrator;
+
+    // Drive the chain to the inline LocationUpdate phase and terminate it.
+    driveToLocationUpdatePhase(orchestrator, session);
+    VLRDecision vlr{true, std::nullopt, MMRejectCause::Zero};
+    auto rVlr = orchestrator.feedExternalTyped(vlr);
+    ASSERT_EQ(rVlr.finalResult.state, procedure::ProcedureState::Completed);
+
+    // A brand-new CMServiceRequest must start a fresh chain (CMServiceAccept),
+    // not be swallowed by the finished LocationUpdate phase.
+    auto rNew = orchestrator.feed(makeCMServiceRequestLU(), &session);
+    EXPECT_EQ(rNew.action, ProcedureStepResult::Action::SendResponseWithToken);
+    EXPECT_EQ(rNew.responseToken, ResponseToken::CMServiceAccept);
+    EXPECT_EQ(orchestrator.lastResponseToken(), ResponseToken::CMServiceAccept);
+}
+
+// Regression: after a terminal inline phase (IMSI detach), the next message
+// must start a fresh chain. Before the fix the stale IMSIDetach handler
+// re-fired the same terminal result for ANY subsequent message.
+TEST(ProcedureOrchestrator, NewChain_AfterIMSIDetach_IsDetected) {
+    SubscriberSession session;
+    session.context.setTMSI(0x12345678u);
+    ProcedureOrchestrator orchestrator;
+
+    // Terminal inline chain: IMSI detach -> CMServiceAccept + Completed.
+    auto r1 = orchestrator.feed(makeIMSIDetachIndication(), &session);
+    ASSERT_EQ(r1.finalResult.state, procedure::ProcedureState::Completed);
+
+    // New chain: CMServiceRequest for a location update.
+    auto r2 = orchestrator.feed(makeCMServiceRequestLU(), &session);
+    EXPECT_EQ(r2.action, ProcedureStepResult::Action::SendResponseWithToken);
+    EXPECT_EQ(r2.responseToken, ResponseToken::CMServiceAccept);
+    // The terminal result must describe the NEW chain (LocationUpdate), not a
+    // re-fired IMSIDetach.
+    EXPECT_NE(r2.finalResult.type, procedure::ProcedureType::IMSIDetach);
+}
+
+// Regression: the inline CallRelease phase must record the Disconnect's
+// transaction identifier and cause on the session so the Release response is
+// built with the real TI (never a stale or default value).
+TEST(ProcedureOrchestrator, CallRelease_UsesDisconnectTI) {
+    SubscriberSession session;
+    session.context.setTMSI(0x12345678u);
+    ProcedureOrchestrator orchestrator;
+
+    // Pre-seed a stale TI that must NOT leak into the Release response.
+    session.response.ti = 0;
+    session.response.ccCause = CCCause::Normal_Call_Clearing;
+
+    // Disconnect on TI=5 with a non-default cause.
+    auto disc = ParsedMessage{CCM{
+        L3Disconnect::builder().ti(5).cause(CCCause::Switching_Equipment_Congestion).build()}};
+    auto r1 = orchestrator.feed(disc, &session);
+    ASSERT_EQ(r1.action, ProcedureStepResult::Action::SendResponseWithToken);
+    ASSERT_EQ(r1.responseToken, ResponseToken::Release);
+
+    // Build the Release response and verify the header carries TI=5.
+    uint8_t buf[64];
+    int n = ResponseBuilder::buildResponseFromToken(
+        ResponseToken::Release, {buf, sizeof(buf)}, &session);
+    ASSERT_GT(n, 0);
+    // CC header byte 0: PD(4 bits) | TI(3 bits) | TIF(1 bit) = 0x30 | (5 << 1).
+    EXPECT_EQ(buf[0], static_cast<uint8_t>(0x30 | (5u << 1)));
+}
+
+// Regression: starting a new orchestrator chain must clear stale response
+// parameters left over from a previously completed chain (same rule as
+// ProcedureRunner::feed auto-creation).
+TEST(ProcedureOrchestrator, ResponseContext_Reset_OnOrchestratorNewChain) {
+    SubscriberSession session;
+    session.context.setTMSI(0x12345678u);
+
+    // Stale parameters from a previous chain.
+    std::memset(session.response.rand.data(), 0xAB, 16);
+    session.response.hasRand = true;
+    session.response.ti = 7;
+
+    // Start a new chain: the stale context must be cleared before the new
+    // procedure runs.
+    ProcedureOrchestrator orchestrator;
+    [[maybe_unused]] auto result = orchestrator.feed(makeCMServiceRequestLU(), &session);
+
+    EXPECT_FALSE(session.response.hasRand);
+    EXPECT_EQ(session.response.ti, 0);
+}
