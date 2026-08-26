@@ -101,7 +101,7 @@ size_t parseIEs(const uint8_t* data, size_t len, RSLParsedMessage::IE ies[], siz
                 if (pos + vlen > len) break; // truncated value
                 if (count < maxIes) {
                     ies[count].type = type;
-                    ies[count].len = static_cast<uint8_t>(vlen > 255 ? 255 : vlen);
+                    ies[count].len = vlen;
                     ies[count].val = data + pos;
                     ++count;
                 }

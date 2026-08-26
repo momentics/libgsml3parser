@@ -317,3 +317,57 @@ TEST(RSLP_messageName, KnownTypes) {
     EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::CommonChannel, 0x16), "CHAN_RQD");
     EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::RLL, 0xff), "UNKNOWN");
 }
+
+// Test: TL16V IEs longer than 255 bytes keep their full length in the IE
+// descriptor and in the extracted L3 payload.
+// Importance: L3Info/FullBCCHInfo carry complete L3 messages; a uint8_t
+// length field truncated payloads above 255 bytes (audit D6).
+// 3GPP: TS 48.058 9.2.25 (FULL_BCCH_INFO), 9.2.30 (L3_INFO).
+TEST(RSLP_parse_CCHAN_L3Info, Over255Bytes_FullLengthKept) {
+    // CCHAN BCCH_INFO: disc(0x40) + type(0x01) + chanNr + reserved
+    // + L3Info IE: type(0x30) + len(2, big-endian = 300) + value(300 bytes).
+    std::vector<uint8_t> raw;
+    raw.push_back(0x40);
+    raw.push_back(0x01);
+    raw.push_back(0x00);
+    raw.push_back(0x00);
+    raw.push_back(0x30);
+    raw.push_back(0x01); // 0x012C = 300
+    raw.push_back(0x2C);
+    for (int i = 0; i < 300; ++i) raw.push_back(static_cast<uint8_t>(i & 0xFF));
+
+    auto result = RSLParser::parse(raw);
+    ASSERT_TRUE(result.has_value());
+    auto* ie = RSLParser::findIE(*result, RSL_IE::L3Info);
+    ASSERT_NE(ie, nullptr);
+    EXPECT_EQ(ie->len, 300u);
+    auto l3 = RSLParser::extractL3(*result);
+    ASSERT_TRUE(l3.has_value());
+    EXPECT_EQ(l3->size(), 300u);
+    EXPECT_EQ((*l3)[299], static_cast<uint8_t>(299 & 0xFF));
+}
+
+// Test: FullBCCHInfo (TL16V) payloads longer than 255 bytes are extracted
+// in full via the l3Payload fallback path.
+TEST(RSLP_parse_DCHAN_FullBCCHInfo, Over255Bytes_FullPayloadExtracted) {
+    // DCHAN message (no L3Info IE) carrying FullBCCHInfo:
+    // disc(0x60) + type + chanNr + reserved + type(0x32) + len(2) + value(300).
+    std::vector<uint8_t> raw;
+    raw.push_back(0x60);
+    raw.push_back(0x20);
+    raw.push_back(0x00);
+    raw.push_back(0x00);
+    raw.push_back(0x32);
+    raw.push_back(0x01); // 0x012C = 300
+    raw.push_back(0x2C);
+    for (int i = 0; i < 300; ++i) raw.push_back(static_cast<uint8_t>(i & 0xFF));
+
+    auto result = RSLParser::parse(raw);
+    ASSERT_TRUE(result.has_value());
+    auto* ie = RSLParser::findIE(*result, RSL_IE::FullBCCHInfo);
+    ASSERT_NE(ie, nullptr);
+    EXPECT_EQ(ie->len, 300u);
+    auto l3 = RSLParser::extractL3(*result);
+    ASSERT_TRUE(l3.has_value());
+    EXPECT_EQ(l3->size(), 300u);
+}

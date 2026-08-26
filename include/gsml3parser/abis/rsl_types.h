@@ -130,7 +130,7 @@ enum class RSL_IE : uint8_t {
     FullImmAssInfo   = 0x2f,  ///< Full Immediate Assignment Info (TLV, variable)
     L3Info           = 0x30,  ///< L3 Information (TL16V, variable, 16-bit length)
     SysInfoType      = 0x31,  ///< System Information Type (TV, 1 byte)
-    FullBCCHInfo     = 0x32,  ///< Full BCCH Info (TLV, variable)
+    FullBCCHInfo     = 0x32,  ///< Full BCCH Info (TL16V, 16-bit length, variable)
     MeasResNr        = 0x33,  ///< Measurement Result Number (TV, 1 byte)
     UplinkMeas       = 0x34,  ///< Uplink Measurements (TLV, 3..7 bytes)
     L1Info           = 0x35,  ///< L1 Information (TLV, variable)

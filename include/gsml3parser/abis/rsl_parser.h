@@ -71,7 +71,8 @@ struct RSLParsedMessage {
     /// TLV Information Element descriptor. Each IE points into the original buffer.
     struct IE {
         uint8_t type{0};
-        uint8_t len{0};
+        uint16_t len{0}; ///< IE length in bytes (16-bit: TL16V IEs such as L3Info /
+                         ///< FullBCCHInfo can exceed 255 bytes).
         const uint8_t* val{nullptr};
     };
 
