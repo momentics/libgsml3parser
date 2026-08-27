@@ -98,26 +98,29 @@ if(ENABLE_ASAN AND MSVC)
     target_compile_definitions(gsml3parser_tests PRIVATE GSML3PARSER_ASAN)
     # /Zi is required: MSVC emits C5072 (ASan without debug info) in Release,
     # which gtest's /WX escalates to an error; /Zi also improves ASan reports.
+    # The ASan runtime is linked automatically: link.exe detects the ASAN
+    # metadata in the instrumented objects (LNK4300) and links the runtime.
+    # /fsanitize=address is a compiler option only — passing it to link.exe
+    # is invalid (LNK4044), so no link options are added here.
     target_compile_options(gsml3parser_tests PRIVATE /fsanitize=address /Zi)
-    target_link_options(gsml3parser_tests PRIVATE /fsanitize=address)
     # gtest must be compiled with ASAN to avoid LNK2038 mismatches
     target_compile_options(gtest PRIVATE /fsanitize=address /Zi)
     target_compile_options(gtest_main PRIVATE /fsanitize=address /Zi)
-    target_link_options(gtest PRIVATE /fsanitize=address)
-    target_link_options(gtest_main PRIVATE /fsanitize=address)
 
     # Copy ASAN runtime DLL to test output directory
     get_filename_component(_msvc_bin_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
     set(_asan_dbg_dll "${_msvc_bin_dir}/clang_rt.asan_dbg_dynamic-x86_64.dll")
     set(_asan_rel_dll "${_msvc_bin_dir}/clang_rt.asan_dynamic-x86_64.dll")
 
+    # Note: POST_BUILD commands run for every configuration; both runtime DLLs
+    # are copied (copy_if_different is idempotent) so the test exe always finds
+    # the one matching its build configuration.
     if(EXISTS "${_asan_dbg_dll}")
         add_custom_command(TARGET gsml3parser_tests POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${_asan_dbg_dll}"
                 $<TARGET_FILE_DIR:gsml3parser_tests>
             COMMENT "Copying ASAN runtime DLL (Debug)"
-            CONFIGURATION Debug
         )
     endif()
     if(EXISTS "${_asan_rel_dll}")
@@ -126,7 +129,6 @@ if(ENABLE_ASAN AND MSVC)
                 "${_asan_rel_dll}"
                 $<TARGET_FILE_DIR:gsml3parser_tests>
             COMMENT "Copying ASAN runtime DLL (Release)"
-            CONFIGURATION Release
         )
     endif()
 endif()

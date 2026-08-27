@@ -240,8 +240,11 @@ endif()
 if(ENABLE_ASAN AND MSVC)
     # /Zi: MSVC warns C5072 (ASan without debug info) in Release; /Zi also
     # produces more detailed ASan error reports.
+    # The ASan runtime is linked automatically: link.exe detects the ASAN
+    # metadata in the instrumented objects (LNK4300) and links the runtime.
+    # /fsanitize=address is a compiler option only — passing it to link.exe
+    # is invalid (LNK4044), so no link options are added here.
     target_compile_options(gsml3parser PRIVATE /fsanitize=address /Zi)
-    target_link_options(gsml3parser PRIVATE /fsanitize=address)
     set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT ProgramDatabase)
 endif()
 

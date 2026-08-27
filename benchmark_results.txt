@@ -12,58 +12,62 @@ and examples via gsml3parser/benchmark_hw.h):
 
 Struct sizes (all static_assert invariants pass):
   FlatHandler: 16 bytes (== 2 * sizeof(void*))
-  ProtocolDispatcher: 65936 bytes (~64 KB array)
+  ProtocolDispatcher: 35216 bytes (~35 KB compact table [16][136])
   ChannelPool: 2816 bytes (fixed arrays, no unordered_map)
   ShardedChannelPool<16>: 45192 bytes
   ParsedMessage: 416 bytes (variant of 12 PD domains, stack-resident)
   MSContext: 92 bytes
-  SubscriberSession: 2032 bytes (context + 3 FSMs + timers + transactions + procedure runner + response)
+  SubscriberSession: 2056 bytes (context + 3 FSMs + timers + transactions + procedure runner + response)
   ProcedureStepResult: 32 bytes (<= 32)
   SMResult: 12 bytes (<= 16)
   Transaction: 24 bytes
   TimerManager: 1080 bytes
   TransactionManager: 536 bytes
-  ProcedureRunner: 128 bytes
+  ProcedureRunner: 152 bytes
+  TimerExpiry: 16 bytes (== pointer + enum; session-bound timer event)
   AuthChallenge: 20 bytes (<= 32)
   CipheringParameters: 2 bytes (<= 16)
   ResponseContext: 124 bytes (<= 160)
 
 === parseL3() Benchmark (500K iterations per PD domain) ===
-  RR ChannelRelease                        20.4M msg/s
-  MM CMServiceAccept                       39.3M msg/s
-  CC Disconnect                            9.6M msg/s
+  RR ChannelRelease                        20.8M msg/s
+  MM CMServiceAccept                       41.3M msg/s
+  CC Disconnect                            9.7M msg/s
   SS SupServFacility                       19.0M msg/s
-  GMM GMMStatus                            20.8M msg/s
-  SM SMStatus                              9.8M msg/s
-  SMS CPAck                                27.9M msg/s
-  BCC Setup                                21.9M msg/s
+  GMM GMMStatus                            21.5M msg/s
+  SM SMStatus                              9.1M msg/s
+  SMS CPAck                                28.6M msg/s
+  BCC Setup                                21.3M msg/s
   GCC Setup                                10.2M msg/s
-  LS LocationServiceRequest                27.8M msg/s
-  EXT ExtendedMessage                      27.5M msg/s
-  TST TestProcedureMessage                 28.7M msg/s
+  LS LocationServiceRequest                28.3M msg/s
+  EXT ExtendedMessage                      27.9M msg/s
+  TST TestProcedureMessage                 28.6M msg/s
 
 === L3StreamProcessor Benchmark (mixed) ===
-  Mixed (all 12 PD domains)                8.6M msg/s
+  Mixed (all 12 PD domains)                8.7M msg/s
 
 === ZeroCopyStreamProcessor Benchmark (callback path, fair) ===
-  Zero-copy (all 12 PD domains)            12.9M msg/s
-  Ratio vs L3StreamProcessor (mixed):      1.50x
+  Zero-copy (all 12 PD domains)            12.8M msg/s
+  Ratio vs L3StreamProcessor (mixed):      1.47x
   Note: zero-copy benefit scales with frame size; parseL3 dominates for 3-6 byte messages
 
 === Stack Component Benchmarks ===
-  MSContext alloc (10K):                   0.47 ms
-  TimerManager tick throughput:            48.1M ticks/sec
+  MSContext alloc (10K):                   0.46 ms
+  TimerManager tick throughput:            51.0M ticks/sec
   TransactionManager match:                0.004 us/lookup
-  ChannelPool alloc+release:               0.069 us/cycle
-  State Machine dispatch:                  0.007 us/message
+  ChannelPool alloc+release:               0.070 us/cycle
+  State Machine dispatch:                  0.006 us/message
   ProtocolDispatcher route:                0.007 us/message
-  Full Stack SM dispatch (1K MS, 10K msgs): 80.2M msg/sec
+  Full Stack SM dispatch (1K MS, 10K msgs): 68-88 M msg/sec (7 runs, single core)
   NOTE: pre-constructed ParsedMessage dispatched through RRStateMachine;
   does NOT include byte-level parsing (see parseL3 above for that)
+  Note: Full Stack throughput varies with CPU power state (67.6-87.6 M observed);
+  end-to-end parse+stream is 8.7 M msg/s (mixed, above)
 
-=== 1M-session scale (Stress._1MSession_Create_Lookup_Tick_Scale) ===
-  1M create: 1403.6 ms, lookup: 173.6 ms, tick(10K active): 1.4 ms
+=== 1M-session scale (Stress._1MSession_* + SSR_tickAllProcedures) ===
+  1M create: 1221.8 ms, lookup: 144.0 ms, tick(10K active): 1.6 ms
+  1M procedure tick (10K active): 1.4 ms
   Real-time budgets: create < 5000ms, lookup < 2000ms, tick < 50ms (all met)
 
 === Regression ===
-  Tests passed: 1982 / 158 suites
+  Tests passed: 2005 / 163 suites
