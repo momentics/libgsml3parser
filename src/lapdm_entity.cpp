@@ -77,6 +77,11 @@ void LAPDmEntity::receiveFrame(std::span<const uint8_t> frameBytes) {
     ++mFramesReceived;
     const auto& frame = *result;
 
+    // Drop frames addressed to a different SAPI: one entity serves one SAPI
+    // per logical channel (audit C5: previously a UI frame for SAPI3 was
+    // delivered by a SAPI0 entity).
+    if (frame.address.sapi != mSapi) return;
+
     // FSM dispatch via switch — O(1), no virtual calls.
     switch (frame.format) {
         case lapdm::LAPDmControlFormat::I_Format:
@@ -93,7 +98,7 @@ void LAPDmEntity::receiveFrame(std::span<const uint8_t> frameBytes) {
 
 Expected<void> LAPDmEntity::sendUI(SAPI sapi, std::span<const uint8_t> l3Data) {
     auto frame = lapdm::makeUIFrame(sapi, mCommandBit, l3Data);
-    auto encoded = lapdm::encodeFrame(frame);
+    auto encoded = encodeToTxBuf(frame);
     sendFrame(encoded);
     return Expected<void>::hold();
 }
@@ -132,7 +137,7 @@ Expected<void> LAPDmEntity::sendSABME() {
     }
 
     auto frame = lapdm::makeSABMEFrame(mSapi, mCommandBit, std::span<const uint8_t>{});
-    auto encoded = lapdm::encodeFrame(frame);
+    auto encoded = encodeToTxBuf(frame);
     saveForRetransmission(encoded);
     transitionTo(LAPDmState::AwaitingEstablish);
     return Expected<void>::hold();
@@ -146,7 +151,7 @@ Expected<void> LAPDmEntity::sendDISC() {
     }
 
     auto frame = lapdm::makeDISCFrame(mSapi, mCommandBit);
-    auto encoded = lapdm::encodeFrame(frame);
+    auto encoded = encodeToTxBuf(frame);
     saveForRetransmission(encoded);
     transitionTo(LAPDmState::AwaitingRelease);
     return Expected<void>::hold();
@@ -211,6 +216,16 @@ void LAPDmEntity::resetStats() noexcept {
 }
 
 // ── Internal helpers ──────────────────────────────────────────────────
+
+std::span<const uint8_t> LAPDmEntity::encodeToTxBuf(const lapdm::LAPDmFrame& frame) {
+    // Worst case: address(1) + control(1) + length(1) + payload
+    // (I-frames, SABME/UA with echo payload). UI frames are shorter
+    // (no length byte).
+    size_t needed = 3 + frame.info.size();
+    if (mTxBuf.size() < needed) mTxBuf.resize(needed);
+    size_t n = lapdm::encodeFrameToBuffer(frame, mTxBuf.data(), mTxBuf.size());
+    return std::span<const uint8_t>(mTxBuf.data(), n);
+}
 
 void LAPDmEntity::sendFrame(std::span<const uint8_t> frameBytes) {
     if (mL1Callback) {
@@ -307,31 +322,31 @@ void LAPDmEntity::trySendNextSegment() {
 
 void LAPDmEntity::sendUA(bool pf) {
     auto frame = lapdm::makeUAFrame(mSapi, pf, std::span<const uint8_t>{});
-    auto encoded = lapdm::encodeFrame(frame);
+    auto encoded = encodeToTxBuf(frame);
     sendFrame(encoded);
 }
 
 void LAPDmEntity::sendUAWithEcho(std::span<const uint8_t> info) {
     auto frame = lapdm::makeUAFrame(mSapi, true, info);
-    auto encoded = lapdm::encodeFrame(frame);
+    auto encoded = encodeToTxBuf(frame);
     sendFrame(encoded);
 }
 
 void LAPDmEntity::sendDM(bool pf) {
     auto frame = lapdm::makeDMFrame(mSapi, pf);
-    auto encoded = lapdm::encodeFrame(frame);
+    auto encoded = encodeToTxBuf(frame);
     sendFrame(encoded);
 }
 
 void LAPDmEntity::sendRR(bool pf) {
     auto frame = lapdm::makeRRFrame(mSapi, mVR, pf);
-    auto encoded = lapdm::encodeFrame(frame);
+    auto encoded = encodeToTxBuf(frame);
     sendFrame(encoded);
 }
 
 void LAPDmEntity::sendREJ(bool pf) {
     auto frame = lapdm::makeREJFrame(mSapi, mVR, pf);
-    auto encoded = lapdm::encodeFrame(frame);
+    auto encoded = encodeToTxBuf(frame);
     sendFrame(encoded);
 }
 
@@ -344,7 +359,7 @@ void LAPDmEntity::buildIFrame(std::span<const uint8_t> payload, bool isLast) {
     mVS = static_cast<uint8_t>((mVS + 1) & 0x07u);
 
     auto frame = lapdm::makeIFrame(mSapi, mCommandBit, nr, ns, false, isLast, payload);
-    auto encoded = lapdm::encodeFrame(frame);
+    auto encoded = encodeToTxBuf(frame);
     saveForRetransmission(encoded);
 }
 
@@ -549,6 +564,15 @@ void LAPDmEntity::receiveIFrame(const lapdm::LAPDmFrame& frame) {
     // Accept frame — advance VR.
     mVR = static_cast<uint8_t>((mVR + 1) & 0x07u);
 
+    // Protocol-error guards for untrusted radio input (audit C4): an
+    // I-frame payload larger than N201, or a reassembly that would exceed
+    // the maximum L3 message size, is unrecoverable — abnormal release.
+    if (frame.info.size() > mProfile.n201 ||
+        mReassemblyBuffer.size() + frame.info.size() > kMaxReassemblyBytes) {
+        abnormalRelease();
+        return;
+    }
+
     // Append payload to reassembly buffer.
     if (!frame.info.empty()) {
         mReassemblyBuffer.insert(mReassemblyBuffer.end(),
@@ -585,7 +609,25 @@ void LAPDmEntity::receiveSFrame(const lapdm::LAPDmFrame& frame) {
         }
         case lapdm::LAPDmSFrameType::REJ: {
             processAck(frame.nr);
-            // Stop sending data until upper layer signals readiness.
+            // REJ (GSM 04.06 5.3.3): the peer requests retransmission
+            // starting from NR. With the k=1 constraint the only outstanding
+            // frame is mPendingFrame; retransmit it when it is still
+            // unacknowledged (audit C7: previously REJ was ignored until
+            // T200 expired, up to N200*T200 later). Retransmissions
+            // triggered by REJ count toward the N200 budget exactly like
+            // T200-expiry retransmissions (tickT200), so a peer cannot force
+            // unbounded retransmits by sending REJ repeatedly.
+            if (mVA != mVS && !mPendingFrame.empty()) {
+                if (mRC < mProfile.n200) {
+                    sendFrame(mPendingFrame);
+                    ++mRC;
+                    ++mRetransmissions;
+                    mT200Active = true;
+                    mT200RemainingMs = mProfile.t200Ms;
+                } else {
+                    abnormalRelease();
+                }
+            }
             break;
         }
     }

@@ -1234,3 +1234,125 @@ TEST(LAPDmEntityTest, MemoryUsage_FreshInstance_NoHeap) {
     EXPECT_EQ(mock.entity.framesReceived(), 0u);
     EXPECT_EQ(mock.entity.retransmissions(), 0u);
 }
+
+// Test: repeated sends reuse the TX encode buffer (audit C3): frames of
+// different sizes are all encoded correctly after warmup.
+TEST(LAPDmEntityTest, SendUI_Repeated_SizesCorrect) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI0, true);
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    mock.entity.receiveFrame(sabme);
+    ASSERT_TRUE(mock.entity.isEstablished());
+
+    size_t sentBefore = mock.l1Sent.size();
+    for (int len = 1; len <= 20; ++len) {
+        std::vector<uint8_t> payload(static_cast<size_t>(len), 0x5A);
+        ASSERT_TRUE(mock.entity.sendUI(SAPI::SAPI0, std::span<const uint8_t>(payload.data(), payload.size())));
+    }
+    size_t uiFrames = 0;
+    for (size_t i = sentBefore; i < mock.l1Sent.size(); ++i) {
+        auto decoded = LAPDmFrame::decode(mock.l1Sent[i]);
+        ASSERT_TRUE(decoded);
+        if ((*decoded).format == LAPDmControlFormat::U_Format &&
+            (*decoded).uType == LAPDmUFrameType::UI) {
+            ++uiFrames;
+            // k-th UI frame (0-based) carries the k+1-byte payload (1..20).
+            EXPECT_EQ((*decoded).info.size(), i - sentBefore + 1);
+        }
+    }
+    EXPECT_EQ(uiFrames, 20u);
+}
+
+// Test: an I-frame whose payload exceeds N201 (SDCCH: 20) triggers an
+// abnormal release (audit C4: untrusted radio input must not corrupt the
+// entity state).
+TEST(LAPDmEntityTest, IFrame_PayloadExceedsN201_AbnormalRelease) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI0, true);
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    mock.entity.receiveFrame(sabme);
+    ASSERT_TRUE(mock.entity.isEstablished());
+
+    // Craft an I-frame with a 21-byte payload (N201 = 20 on SDCCH).
+    std::vector<uint8_t> payload(21, 0x77);
+    auto iFrame = makeIFrame(SAPI::SAPI0, false, 0, 0, false, true,
+                             std::span<const uint8_t>(payload.data(), payload.size()));
+    mock.entity.receiveFrame(encodeFrame(iFrame));
+
+    EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
+    // MDL_ERROR_INDICATION delivered to L3.
+    bool errorInd = false;
+    for (auto& [prim, data] : mock.l3Received) {
+        if (prim == Primitive::MDL_ERROR_INDICATION) errorInd = true;
+    }
+    EXPECT_TRUE(errorInd);
+}
+
+// Test: reassembly beyond kMaxReassemblyBytes (4096) triggers an abnormal
+// release (audit C4: bounded memory on untrusted input).
+TEST(LAPDmEntityTest, Reassembly_Overflow_AbnormalRelease) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI0, true);
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    mock.entity.receiveFrame(sabme);
+    ASSERT_TRUE(mock.entity.isEstablished());
+
+    // Stream M=0 segments of 20 bytes until the reassembly buffer would
+    // exceed 4096 bytes (205 segments = 4100 > 4096).
+    std::vector<uint8_t> payload(20, 0x11);
+    for (int i = 0; i < 205 && mock.entity.isEstablished(); ++i) {
+        auto iFrame = makeIFrame(SAPI::SAPI0, false,
+                                 static_cast<uint8_t>((i + 1) & 0x07u),
+                                 static_cast<uint8_t>(i & 0x07u),
+                                 false, false,
+                                 std::span<const uint8_t>(payload.data(), payload.size()));
+        mock.entity.receiveFrame(encodeFrame(iFrame));
+    }
+    EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
+}
+
+// Test: a frame addressed to another SAPI is dropped (audit C5).
+TEST(LAPDmEntityTest, ReceiveFrame_WrongSapi_Dropped) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI0, true);
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    mock.entity.receiveFrame(sabme);
+    ASSERT_TRUE(mock.entity.isEstablished());
+
+    size_t l3Before = mock.l3Received.size();
+    // UI frame with SAPI3 (address byte 0x31: SAPI=3, C/R=0, EA=1) on a SAPI0 entity.
+    uint8_t l3[] = {0x60, 0x0D, 0x00};
+    auto ui = makeUIFrame(SAPI::SAPI3, false, std::span<const uint8_t>(l3, 3));
+    mock.entity.receiveFrame(encodeFrame(ui));
+
+    EXPECT_EQ(mock.l3Received.size(), l3Before) << "wrong-SAPI frame must be dropped";
+}
+
+// Test: REJ from the peer triggers immediate retransmission of the
+// outstanding frame (GSM 04.06 5.3.3, audit C7).
+TEST(LAPDmEntityTest, REJ_RetransmitsOutstandingFrame) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI0, true);
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    mock.entity.receiveFrame(sabme);
+    ASSERT_TRUE(mock.entity.isEstablished());
+
+    std::vector<uint8_t> data(10, 0xAB);
+    ASSERT_TRUE(mock.entity.sendData(std::span<const uint8_t>(data.data(), data.size())));
+    size_t iFramesBefore = 0;
+    for (auto& frameBytes : mock.l1Sent) {
+        auto decoded = LAPDmFrame::decode(frameBytes);
+        if (decoded && (*decoded).format == LAPDmControlFormat::I_Format) ++iFramesBefore;
+    }
+    ASSERT_EQ(iFramesBefore, 1u); // one segment in flight (k=1)
+
+    // Peer sends REJ(NR=0): it did not receive NS=0.
+    mock.entity.receiveFrame(encodeFrame(makeREJFrame(SAPI::SAPI0, 0, false)));
+
+    size_t iFramesAfter = 0;
+    for (auto& frameBytes : mock.l1Sent) {
+        auto decoded = LAPDmFrame::decode(frameBytes);
+        if (decoded && (*decoded).format == LAPDmControlFormat::I_Format) ++iFramesAfter;
+    }
+    EXPECT_EQ(iFramesAfter, 2u) << "REJ must trigger immediate retransmission";
+}

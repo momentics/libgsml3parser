@@ -100,6 +100,9 @@ public:
     using L3ReceiveFn = void (*)(SAPI sapi, Primitive prim, std::span<const uint8_t> l3Data, void* ctx);
 
     /// Called when the entity wants to send a frame to L1/PHY.
+    /// The frame span is backed by the entity's reusable TX buffer and is
+    /// valid only during the callback: transmit or copy synchronously
+    /// (audit C3).
     using L1TransmitFn = void (*)(std::span<const uint8_t> frameBytes, void* ctx);
 
     /// Construct LAPDmEntity with channel profile and zero-allocation callbacks.
@@ -212,6 +215,14 @@ private:
     // I-frame reassembly buffer — lazy-allocated, reserve(N201*2) on first use
     std::vector<uint8_t> mReassemblyBuffer;
 
+    // TX encode buffer — lazy-allocated on first send and reused afterwards,
+    // so the steady-state send path performs no heap allocation (audit C3:
+    // the previous code built a fresh std::vector via encodeFrame() per
+    // frame). The L1 callback receives a span into this buffer and must
+    // transmit or copy synchronously; it must not retain the span beyond
+    // the callback.
+    std::vector<uint8_t> mTxBuf;
+
     // TX segment queue — lazy-allocated, like mReassemblyBuffer. Holds the bytes
     // of queued messages not yet transmitted. With the k=1 constraint at most one
     // segment is in flight; the rest wait here until the outstanding frame is
@@ -229,6 +240,12 @@ private:
     // Contention resolution checksum
     uint32_t mContentionChecksum{0};
 
+    // Maximum L3 message size for I-frame reassembly (audit C4: the previous
+    // code appended I-frame payloads without any limit — a peer sending M=0
+    // segments forever grew the buffer unboundedly, a DoS vector on
+    // untrusted radio input). Matches FrameConfig::maxMessageLength.
+    static constexpr size_t kMaxReassemblyBytes = 4096;
+
     // Statistics
     unsigned mFramesSent{0};
     unsigned mFramesReceived{0};
@@ -238,6 +255,10 @@ private:
 
     /// Send raw frame bytes via L1 callback and increment counter.
     void sendFrame(std::span<const uint8_t> frameBytes);
+
+    /// Encode a frame into mTxBuf (zero allocation after first use) and
+    /// return a span over the encoded bytes.
+    std::span<const uint8_t> encodeToTxBuf(const lapdm::LAPDmFrame& frame);
 
     /// Save a frame for potential retransmission and start T200 timer.
     void saveForRetransmission(std::span<const uint8_t> frameBytes);
