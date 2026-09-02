@@ -31,8 +31,11 @@ namespace {
 constexpr size_t RSL_HEADER_SIZE = 4;
 
 // Write the common 4-byte RSL header.
-void writeHeader(uint8_t* buf, uint8_t disc, uint8_t msgType, uint8_t chanNr, uint8_t extra) {
-    buf[0] = disc;
+void writeHeader(uint8_t* buf, uint8_t disc, uint8_t msgType, uint8_t chanNr, uint8_t extra,
+                 bool btsToBsc) {
+    // TS 48.058 7.1.1: bit 0 of the discriminator octet is the
+    // direction bit (1 = BTS->BSC) (audit C6).
+    buf[0] = static_cast<uint8_t>(disc) | (btsToBsc ? 0x01u : 0x00u);
     buf[1] = msgType;
     buf[2] = chanNr;
     buf[3] = extra;
@@ -70,11 +73,11 @@ size_t writeTV(uint8_t* buf, size_t offset, uint8_t type, uint8_t value) {
 // Helper: build an RLL data message (DATA_REQ/DATA_IND/UNIT_DATA_REQ/UNIT_DATA_IND).
 // The L3 payload is placed directly after the 4-byte header.
 int buildRLLData(std::span<uint8_t> out, uint8_t msgType, uint8_t chanNr, uint8_t linkId,
-                 std::span<const uint8_t> l3Payload) {
+                 std::span<const uint8_t> l3Payload, bool btsToBsc) {
     size_t needed = RSL_HEADER_SIZE + l3Payload.size();
     if (out.size() < needed) return -1;
 
-    writeHeader(out.data(), static_cast<uint8_t>(RSLDiscriminator::RLL), msgType, chanNr, linkId);
+    writeHeader(out.data(), static_cast<uint8_t>(RSLDiscriminator::RLL), msgType, chanNr, linkId, btsToBsc);
     if (!l3Payload.empty()) {
         std::memcpy(out.data() + RSL_HEADER_SIZE, l3Payload.data(), l3Payload.size());
     }
@@ -82,16 +85,20 @@ int buildRLLData(std::span<uint8_t> out, uint8_t msgType, uint8_t chanNr, uint8_
 }
 
 // Helper: build a DCHAN message with chanNr.
+// All DCHAN builders produce BTS->BSC messages (audit C6).
 int buildDChanMsg(std::span<uint8_t> out, uint8_t msgType, uint8_t chanNr) {
     if (out.size() < RSL_HEADER_SIZE) return -1;
-    writeHeader(out.data(), static_cast<uint8_t>(RSLDiscriminator::DedicatedChannel), msgType, chanNr, 0);
+    writeHeader(out.data(), static_cast<uint8_t>(RSLDiscriminator::DedicatedChannel), msgType, chanNr, 0,
+                /*btsToBsc=*/true);
     return static_cast<int>(RSL_HEADER_SIZE);
 }
 
 // Helper: build a CCHAN message with chanNr.
+// All CCHAN builders produce BTS->BSC messages (audit C6).
 int buildCChanMsg(std::span<uint8_t> out, uint8_t msgType, uint8_t chanNr) {
     if (out.size() < RSL_HEADER_SIZE) return -1;
-    writeHeader(out.data(), static_cast<uint8_t>(RSLDiscriminator::CommonChannel), msgType, chanNr, 0);
+    writeHeader(out.data(), static_cast<uint8_t>(RSLDiscriminator::CommonChannel), msgType, chanNr, 0,
+                /*btsToBsc=*/true);
     return static_cast<int>(RSL_HEADER_SIZE);
 }
 
@@ -127,14 +134,16 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildDataReq(
 {
     return buildVector({RSL_HEADER_SIZE + l3Payload.size()},
         [&](std::span<uint8_t> out) {
-            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataReq), chanNr, linkId, l3Payload);
+            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataReq), chanNr, linkId, l3Payload,
+                                /*btsToBsc=*/false);
         });
 }
 
 int RSLBuilder::buildDataReq(std::span<uint8_t> out, uint8_t chanNr, uint8_t linkId,
     std::span<const uint8_t> l3Payload)
 {
-    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataReq), chanNr, linkId, l3Payload);
+    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataReq), chanNr, linkId, l3Payload,
+                        /*btsToBsc=*/false);
 }
 
 Expected<std::vector<uint8_t>> RSLBuilder::buildDataInd(
@@ -142,14 +151,16 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildDataInd(
 {
     return buildVector({RSL_HEADER_SIZE + l3Payload.size()},
         [&](std::span<uint8_t> out) {
-            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataInd), chanNr, linkId, l3Payload);
+            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataInd), chanNr, linkId, l3Payload,
+                                /*btsToBsc=*/true);
         });
 }
 
 int RSLBuilder::buildDataInd(std::span<uint8_t> out, uint8_t chanNr, uint8_t linkId,
     std::span<const uint8_t> l3Payload)
 {
-    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataInd), chanNr, linkId, l3Payload);
+    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataInd), chanNr, linkId, l3Payload,
+                        /*btsToBsc=*/true);
 }
 
 Expected<std::vector<uint8_t>> RSLBuilder::buildUnitDataReq(
@@ -157,14 +168,16 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildUnitDataReq(
 {
     return buildVector({RSL_HEADER_SIZE + l3Payload.size()},
         [&](std::span<uint8_t> out) {
-            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataReq), chanNr, linkId, l3Payload);
+            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataReq), chanNr, linkId, l3Payload,
+                                /*btsToBsc=*/false);
         });
 }
 
 int RSLBuilder::buildUnitDataReq(std::span<uint8_t> out, uint8_t chanNr, uint8_t linkId,
     std::span<const uint8_t> l3Payload)
 {
-    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataReq), chanNr, linkId, l3Payload);
+    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataReq), chanNr, linkId, l3Payload,
+                        /*btsToBsc=*/false);
 }
 
 Expected<std::vector<uint8_t>> RSLBuilder::buildUnitDataInd(
@@ -172,14 +185,16 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildUnitDataInd(
 {
     return buildVector({RSL_HEADER_SIZE + l3Payload.size()},
         [&](std::span<uint8_t> out) {
-            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataInd), chanNr, linkId, l3Payload);
+            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataInd), chanNr, linkId, l3Payload,
+                                /*btsToBsc=*/true);
         });
 }
 
 int RSLBuilder::buildUnitDataInd(std::span<uint8_t> out, uint8_t chanNr, uint8_t linkId,
     std::span<const uint8_t> l3Payload)
 {
-    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataInd), chanNr, linkId, l3Payload);
+    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataInd), chanNr, linkId, l3Payload,
+                        /*btsToBsc=*/true);
 }
 
 // ── DCHAN messages ────────────────────────────────────────────────────

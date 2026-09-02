@@ -140,16 +140,22 @@ Expected<RSLParsedMessage> RSLParser::parse(std::span<const uint8_t> data)
             ParseError{ParseError::Code::TruncatedInput, "RSL message too short for header"});
     }
 
-    // Parse discriminator and message type.
-    msg.discriminator = static_cast<RSLDiscriminator>(data[0]);
+    // Parse discriminator (7 high bits) and direction (bit 0).
+    // TS 48.058 7.1.1: bit 0 of the discriminator octet indicates the
+    // message direction (0 = BSC->BTS, 1 = BTS->BSC); receivers match on
+    // the 7 discriminator bits only, as osmo-bts does (msg_discr & 0xfe).
+    // The previous code rejected all BTS->BSC messages (audit C6).
+    uint8_t discByte = data[0] & 0xFE;
+    msg.btsToBsc = (data[0] & 0x01u) != 0;
+    msg.discriminator = static_cast<RSLDiscriminator>(discByte);
     msg.msgType = data[1];
 
     // Validate discriminator is known.
-    if (data[0] != static_cast<uint8_t>(RSLDiscriminator::RLL) &&
-        data[0] != static_cast<uint8_t>(RSLDiscriminator::CommonChannel) &&
-        data[0] != static_cast<uint8_t>(RSLDiscriminator::DedicatedChannel) &&
-        data[0] != static_cast<uint8_t>(RSLDiscriminator::TRX) &&
-        data[0] != static_cast<uint8_t>(RSLDiscriminator::IPAccess)) {
+    if (discByte != static_cast<uint8_t>(RSLDiscriminator::RLL) &&
+        discByte != static_cast<uint8_t>(RSLDiscriminator::CommonChannel) &&
+        discByte != static_cast<uint8_t>(RSLDiscriminator::DedicatedChannel) &&
+        discByte != static_cast<uint8_t>(RSLDiscriminator::TRX) &&
+        discByte != static_cast<uint8_t>(RSLDiscriminator::IPAccess)) {
         return Expected<RSLParsedMessage>::error(
             ParseError{ParseError::Code::InvalidValue, "Unknown RSL discriminator"});
     }

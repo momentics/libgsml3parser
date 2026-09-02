@@ -51,6 +51,9 @@ namespace gsml3parser {
 /// RLL for radio link layer data transport, DCHAN for dedicated channel control,
 /// CCHAN for common channel control, TRX for transceiver-level management,
 /// or IPAccess for ip.access vendor-specific extensions.
+/// Note: on the wire the first octet is discriminator (7 bits) + direction
+/// (bit 0: 0 = BSC->BTS, 1 = BTS->BSC, TS 48.058 7.1.1). The enum values
+/// are the 7-bit discriminator with the direction bit clear.
 enum class RSLDiscriminator : uint8_t {
     RLL              = 0x00,  ///< Radio Link Layer messages
     CommonChannel    = 0x40,  ///< CCHAN - common channel control

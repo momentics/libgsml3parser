@@ -371,3 +371,36 @@ TEST(RSLP_parse_DCHAN_FullBCCHInfo, Over255Bytes_FullPayloadExtracted) {
     ASSERT_TRUE(l3.has_value());
     EXPECT_EQ(l3->size(), 300u);
 }
+
+// Test: BTS->BSC discriminators (direction bit set, TS 48.058 7.1.1) are
+// accepted and the direction is reported (audit C6: the previous parser
+// rejected all of them).
+TEST(RSLP_parse_DirectionBit, BtsToBscAccepted) {
+    // DCHAN CHAN_ACTIV_ACK with direction bit: 0x61 = 0x60 | 0x01.
+    std::vector<uint8_t> buf = {0x61, static_cast<uint8_t>(RSLDChanMessageType::ChanActivAck), 0x78, 0x00};
+    auto result = RSLParser::parse(buf);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ((*result).discriminator, RSLDiscriminator::DedicatedChannel);
+    EXPECT_TRUE((*result).btsToBsc);
+
+    // CCHAN CCCH_LOAD_IND with direction bit: 0x41.
+    std::vector<uint8_t> cbuf = {0x41, static_cast<uint8_t>(RSLCChanMessageType::CCCHLoadInd), 0x00, 0x00};
+    auto cresult = RSLParser::parse(cbuf);
+    ASSERT_TRUE(cresult.has_value());
+    EXPECT_EQ((*cresult).discriminator, RSLDiscriminator::CommonChannel);
+    EXPECT_TRUE((*cresult).btsToBsc);
+
+    // RLL DATA_IND with direction bit: 0x01.
+    std::vector<uint8_t> rbuf = {0x01, static_cast<uint8_t>(RSLL3MessageType::DataInd), 0x7e, 0x03, 0x09, 0x68, 0x02};
+    auto rresult = RSLParser::parse(rbuf);
+    ASSERT_TRUE(rresult.has_value());
+    EXPECT_EQ((*rresult).discriminator, RSLDiscriminator::RLL);
+    EXPECT_TRUE((*rresult).btsToBsc);
+    EXPECT_TRUE(RSLParser::hasL3Payload(*rresult));
+
+    // BSC->BTS (direction bit clear) still works and reports false.
+    std::vector<uint8_t> bbuf = {0x60, static_cast<uint8_t>(RSLDChanMessageType::ChanActiv), 0x78, 0x00};
+    auto bresult = RSLParser::parse(bbuf);
+    ASSERT_TRUE(bresult.has_value());
+    EXPECT_FALSE((*bresult).btsToBsc);
+}

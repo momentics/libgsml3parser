@@ -23,6 +23,7 @@
 // span overload correctness, and proper encoding of TLV information elements.
 // 3GPP coverage: TS 48.058 (A-bis RSL), GSM 04.08 (L3 encapsulation in RSL).
 
+#include <array>
 #include <gtest/gtest.h>
 #include <vector>
 #include "gsml3parser/abis/rsl_builder.h"
@@ -235,4 +236,27 @@ TEST(RSLB_buildDeleteInd, RoundTrip) {
     auto* ie = RSLParser::findIE(*parsed, RSL_IE::FullImmAssInfo);
     ASSERT_NE(ie, nullptr);
     EXPECT_EQ(ie->len, 3u);
+}
+
+// Test: builders set the TS 48.058 direction bit correctly (audit C6):
+// BTS->BSC messages carry bit 0 set; BSC->BTS (testing/loopback) clear.
+TEST(RSLB_build_DirectionBit, SetPerMessageDirection) {
+    std::array<uint8_t, 3> l3{0x09, 0x68, 0x02};
+    auto l3Span = std::span<const uint8_t>(l3.data(), l3.size());
+
+    auto ind = RSLBuilder::buildDataInd(0x7e, 3, l3Span);
+    ASSERT_TRUE(ind.has_value());
+    EXPECT_EQ((*ind)[0], 0x01u); // RLL | BTS->BSC
+
+    auto req = RSLBuilder::buildDataReq(0x7c, 1, l3Span);
+    ASSERT_TRUE(req.has_value());
+    EXPECT_EQ((*req)[0], 0x00u); // RLL | BSC->BTS
+
+    auto ack = RSLBuilder::buildChanActivAck(0x78, 100);
+    ASSERT_TRUE(ack.has_value());
+    EXPECT_EQ((*ack)[0], 0x61u); // DCHAN | BTS->BSC
+
+    auto load = RSLBuilder::buildCCCHLoadInd(0x00, 50, 100, 30, 80);
+    ASSERT_TRUE(load.has_value());
+    EXPECT_EQ((*load)[0], 0x41u); // CCHAN | BTS->BSC
 }

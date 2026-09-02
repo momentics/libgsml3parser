@@ -64,6 +64,12 @@ struct RSLParsedMessage {
     uint8_t chanNr{0};
     uint8_t linkId{0};  ///< LAPDm link identifier (RLL messages only)
 
+    /// Message direction bit (TS 48.058 7.1.1): false = BSC->BTS,
+    /// true = BTS->BSC. The discriminator is matched on the 7 high bits;
+    /// bit 0 of the first octet carries the direction and is not part of
+    /// the discriminator value (audit C6).
+    bool btsToBsc{false};
+
     /// Extracted L3 payload bytes (GSM 04.08 message).
     /// Only populated for messages that carry L3 data (DATA_REQ, DATA_IND, BCCH_INFO, ENCR_CMD, etc.).
     std::span<const uint8_t> l3Payload{};
@@ -101,8 +107,10 @@ public:
     /// Parse an RSL message from raw bytes.
     /// @param data Raw RSL message bytes (discriminator + msg_type + header + TLV IEs).
     /// Minimum size depends on discriminator: RLL/DCHAN/CCHAN require at least 4 header bytes.
-    /// @return Parsed message with discriminator, message type, channel number,
-    ///         link ID, extracted L3 payload, and parsed information elements.
+    /// @return Parsed message with discriminator (7-bit, direction bit
+    ///         stripped) and btsToBsc (direction), message type, channel
+    ///         number, link ID, extracted L3 payload, and parsed information
+    ///         elements.
     ///         Returns ParseError if the message is truncated or malformed.
     /// 3GPP TS 48.058 - RSL message structure.
     [[nodiscard]] static Expected<RSLParsedMessage> parse(std::span<const uint8_t> data);
