@@ -389,3 +389,25 @@ TEST(L3TimerTest, IdPreserved_afterConstruction) {
     L3Timer timer(L3TimerId::T3395);
     EXPECT_EQ(timer.id(), L3TimerId::T3395);
 }
+
+// Test: a timer started by the expiry callback is NOT ticked in the same
+// pass (audit N4).
+TEST(TimerManagerTest, Tick_CallbackStartedTimer_NotTickedSamePass) {
+    TimerManager tm;
+    tm.start(L3TimerId::T3101, std::chrono::milliseconds(100));
+    std::vector<L3TimerId> fired;
+    tm.tick(std::chrono::milliseconds(150), [&](L3TimerId id) {
+        fired.push_back(id);
+        // Start a new timer with a short expiry DURING the callback.
+        tm.start(L3TimerId::T3102, std::chrono::milliseconds(1));
+    });
+    // Only T3101 fired; T3102 (started in the callback) did not.
+    ASSERT_EQ(fired.size(), 1u);
+    EXPECT_EQ(fired[0], L3TimerId::T3101);
+    EXPECT_TRUE(tm.isRunning(L3TimerId::T3102));
+    // Next pass: T3102 expires.
+    std::vector<L3TimerId> fired2;
+    tm.tick(std::chrono::milliseconds(5), [&](L3TimerId id) { fired2.push_back(id); });
+    ASSERT_EQ(fired2.size(), 1u);
+    EXPECT_EQ(fired2[0], L3TimerId::T3102);
+}

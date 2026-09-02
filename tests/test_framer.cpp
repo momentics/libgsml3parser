@@ -283,3 +283,24 @@ TEST(L3Framer, PagingResponseFixedLength) {
     ASSERT_TRUE(r2.has_value());
     ASSERT_EQ(r2.value().data.size(), 3u);
 }
+
+// Test: extracted frames carry a non-zero, non-decreasing batched
+// timestamp (audit N2).
+// Suite name follows the existing convention of test_framer.cpp ("L3Framer").
+TEST(L3Framer, Timestamp_BatchedAndSet) {
+    std::vector<uint8_t> stream;
+    for (int i = 0; i < 10; ++i) stream.insert(stream.end(), {0x60, 0x0D, 0x00});
+    SpanByteSource src(std::span<const uint8_t>(stream.data(), stream.size()));
+    L3Framer framer(src);
+    double last = 0.0;
+    int frames = 0;
+    while (true) {
+        auto res = framer.nextFrame();
+        if (!res) break;
+        EXPECT_GT(res.value().timestamp, 0.0);
+        EXPECT_GE(res.value().timestamp, last);
+        last = res.value().timestamp;
+        ++frames;
+    }
+    EXPECT_EQ(frames, 10);
+}

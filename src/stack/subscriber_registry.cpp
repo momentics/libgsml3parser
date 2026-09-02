@@ -55,6 +55,7 @@ void SubscriberRegistry::handleProcedureActive(SubscriberSession* session, bool 
 SubscriberSession* SubscriberRegistry::createByTMSI(uint32_t tmsi) {
     auto [it, inserted] = mByTMSI.emplace(tmsi, SessionEntry{});
     if (!inserted) return nullptr;
+    ++mCount;
 
     it->second.session.context.setTMSI(tmsi);
     it->second.session.assignedTmsi = tmsi;
@@ -71,14 +72,21 @@ SubscriberSession* SubscriberRegistry::createByIMSI(std::string_view imsi) {
 
     // Allocate a unique TMSI: advance the high-water mark past any in-use
     // value (user-assigned TMSIs may occupy arbitrary slots) and skip the
-    // reserved all-zero TMSI.
+    // reserved all-zero TMSI. The scan is bounded (audit N3: the previous
+    // loop could spin forever once the TMSI space is exhausted): with K
+    // occupied slots, K+1 consecutive candidate values must contain a free
+    // one (pigeonhole principle), so exceeding that bound means the 32-bit
+    // TMSI space is full.
     uint32_t tmsi = mNextAutoTmsi++;
+    size_t attempts = 0;
     while (tmsi == 0 || mByTMSI.count(tmsi) != 0) {
         tmsi = mNextAutoTmsi++;
+        if (++attempts > mByTMSI.size() + 1) return nullptr;
     }
 
     auto [tmsiIt, inserted] = mByTMSI.emplace(tmsi, SessionEntry{});
     if (!inserted) return nullptr;
+    ++mCount;
 
     tmsiIt->second.session.context.setIMSI(imsi);
     tmsiIt->second.session.assignedTmsi = tmsi;
@@ -191,6 +199,7 @@ bool SubscriberRegistry::remove(SubscriberSession* session) noexcept {
     // stayed in the map with active=false, leaking on every removal).
     // The session pointer is invalidated by this call.
     mByTMSI.erase(it);
+    --mCount;
     return true;
 }
 
@@ -199,6 +208,7 @@ void SubscriberRegistry::clear() noexcept {
     mByTMSI.clear();
     mByIMSI.clear();
     mByLink.clear();
+    mCount = 0;
     std::lock_guard lock(mActiveMutex);
     mActiveTimerSessions.clear();
     {
@@ -208,11 +218,7 @@ void SubscriberRegistry::clear() noexcept {
 }
 
 size_t SubscriberRegistry::count() const noexcept {
-    size_t c = 0;
-    for (const auto& [tmsi, entry] : mByTMSI) {
-        if (entry.active) ++c;
-    }
-    return c;
+    return mCount;
 }
 
 size_t SubscriberRegistry::tickAllTimers(std::chrono::milliseconds delta,

@@ -205,8 +205,15 @@ public:
     template<typename Callback>
     void tick(std::chrono::milliseconds delta, Callback&& onExpired) {
         bool wasActive = runningCount() > 0;
+        // Snapshot the running set so a timer started (or stopped) by the
+        // callback is not ticked within the same pass (audit N4: the
+        // previous in-place loop could double-tick a callback-started timer).
+        std::array<bool, MAX_TIMERS> running{};
         for (size_t i = 0; i < MAX_TIMERS; ++i) {
-            if (mInitialized[i] && mTimers[i].isRunning()) {
+            running[i] = mInitialized[i] && mTimers[i].isRunning();
+        }
+        for (size_t i = 0; i < MAX_TIMERS; ++i) {
+            if (running[i]) {
                 L3TimerId tid = mTimers[i].id();
                 if (mTimers[i].tick(delta)) {
                     std::forward<Callback>(onExpired)(tid);

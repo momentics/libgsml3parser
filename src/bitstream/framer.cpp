@@ -121,6 +121,10 @@ bool L3Framer::fillBuffer() {
     size_t n = mSource.read(mBuf.data() + mEnd, mBuf.size() - mEnd);
     if (n > 0) {
         mEnd += n;
+        // Batched timestamp (audit N2): frames extracted from this fill
+        // share the fill time instead of each reading steady_clock.
+        mBufferTimestamp = std::chrono::duration<double>(
+            std::chrono::steady_clock::now().time_since_epoch()).count();
     }
     return n > 0;
 }
@@ -157,8 +161,7 @@ Expected<ExtractedFrame> L3Framer::tryExtract() {
         ExtractedFrame frame;
         frame.data = std::span<const uint8_t>(mBuf.data() + mPos + 1, l2len);
         frame.l2Length = l2len;
-        frame.timestamp = std::chrono::duration<double>(
-            std::chrono::steady_clock::now().time_since_epoch()).count();
+        frame.timestamp = mBufferTimestamp;
         mPos += frameLen;
         return Expected<ExtractedFrame>::hold(frame);
     }
@@ -257,8 +260,7 @@ Expected<ExtractedFrame> L3Framer::tryExtract() {
     ExtractedFrame frame;
     frame.data = std::span<const uint8_t>(mBuf.data() + mPos, frameLen);
     frame.l2Length = 0;
-    frame.timestamp = std::chrono::duration<double>(
-        std::chrono::steady_clock::now().time_since_epoch()).count();
+    frame.timestamp = mBufferTimestamp;
     mPos += frameLen;
     return Expected<ExtractedFrame>::hold(frame);
 }

@@ -52,7 +52,9 @@ struct ExtractedFrame {
     /** L2 length octet value (only meaningful when FrameConfig.useL2Length is true). */
     size_t l2Length{};
 
-    /** Timestamp of frame extraction (seconds since epoch). */
+    /// Timestamp (seconds since epoch) of the buffer fill during which the
+    /// frame was extracted — batched per fill, not per frame (audit N2:
+    /// a steady_clock read per frame is avoidable overhead at 10M msg/s).
     double timestamp{};
 };
 
@@ -72,6 +74,7 @@ class L3Framer {
     size_t mPos{};
     size_t mEnd{};
     FrameConfig mConfig;
+    double mBufferTimestamp{}; // set in fillBuffer(); stamped on extracted frames
 
 public:
     explicit L3Framer(ByteSource& source, FrameConfig cfg = {});

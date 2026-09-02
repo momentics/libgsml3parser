@@ -201,6 +201,7 @@ public:
 
     /// Number of active sessions.
     /// @return Count of currently tracked sessions.
+    /// Performance: O(1) (maintained counter, audit Q5).
     [[nodiscard]] size_t count() const noexcept;
 
     /// Iterate over all unique active sessions (for timer tick, periodic tasks).
@@ -257,6 +258,10 @@ private:
     // any in-use TMSI so auto-assignment never collides with user-assigned
     // values. TMSI 0 is reserved (all-zero TMSI per TS 24.008) and skipped.
     uint32_t mNextAutoTmsi{1};
+
+    // Active session count — O(1) count() (audit Q5: the previous count()
+    // scanned the whole map, O(N) at 1M+ sessions).
+    size_t mCount{0};
 
     // Sessions with >=1 running timer. Ticked by tickAllTimers() — O(active), not O(all).
     std::unordered_set<SubscriberSession*> mActiveTimerSessions;
