@@ -292,3 +292,66 @@ TEST(BitReaderTest, NullBuffer_PeekField_ReturnsZero) {
     BitReader r(nullptr, 64);
     EXPECT_EQ(r.peekField(8), 0u);
 }
+
+// Test: misaligned 32-bit reads (bitOffset 1..7, field spanning 5 bytes)
+// match the bit-by-bit reference for every offset (audit Q1: the fast
+// 5-byte window path must be value-identical to the old fallback).
+TEST(BitReaderTest, ReadField_Misaligned32Bit_AllOffsets) {
+    // 6-byte pattern: 0x12 0x34 0x56 0x78 0x9A 0xBC.
+    uint8_t buf[6] = {0x12, 0x34, 0x56, 0x78, 0x9A, 0xBC};
+    for (unsigned offset = 1; offset <= 7; ++offset) {
+        BitReader br(buf, 48);
+        auto skip = br.readField(offset);
+        ASSERT_TRUE(skip);
+        auto field = br.readField(32);
+        ASSERT_TRUE(field) << "offset " << offset;
+
+        // Reference: bit-by-bit extraction of the same 32 bits.
+        uint32_t ref = 0;
+        for (unsigned i = 0; i < 32; ++i) {
+            size_t bit = static_cast<size_t>(offset) + i;
+            ref = (ref << 1) | ((buf[bit / 8] >> (7u - static_cast<unsigned>(bit % 8))) & 1u);
+        }
+        EXPECT_EQ(field.value(), ref) << "offset " << offset;
+    }
+}
+
+// Test: the 32-bit field ending exactly at the last bit of the buffer
+// (mPos + nbits == mTotalBits) with a non-zero bit offset — the right
+// shift amount stays non-negative (audit Q1 edge case). The reader views
+// 41 bits over 6 bytes so the field at bit 9 ends exactly at bit 41
+// (a 40-bit buffer cannot host a misaligned 32-bit field ending on its
+// last bit: bits 9..40 would need 41 bits).
+TEST(BitReaderTest, ReadField_Misaligned32Bit_EndsAtLastBit) {
+    uint8_t buf[6] = {0x01, 0x23, 0x45, 0x67, 0x89, 0xAB};
+    BitReader br(buf, 41); // 41-bit view over 6 bytes
+    auto skip = br.readField(8); // now at bit 8 (byte-aligned)
+    ASSERT_TRUE(skip);
+    // Re-misalign: read 1 bit, then a 32-bit field ending at bit 41.
+    auto one = br.readField(1);
+    ASSERT_TRUE(one);
+    auto field = br.readField(32);
+    ASSERT_TRUE(field);
+    uint32_t ref = 0;
+    for (unsigned i = 0; i < 32; ++i) {
+        size_t bit = static_cast<size_t>(9) + i;
+        ref = (ref << 1) | ((buf[bit / 8] >> (7u - static_cast<unsigned>(bit % 8))) & 1u);
+    }
+    EXPECT_EQ(field.value(), ref);
+    EXPECT_EQ(br.remainingBits(), 0u);
+}
+
+// Test: misaligned peeks match the read values (audit Q1, peekField path).
+TEST(BitReaderTest, PeekField_Misaligned32Bit_MatchesRead) {
+    uint8_t buf[6] = {0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x23};
+    for (unsigned offset = 1; offset <= 7; ++offset) {
+        BitReader br(buf, 48);
+        (void)br.readField(offset);
+        uint32_t peeked = br.peekField(32);
+        BitReader br2(buf, 48);
+        (void)br2.readField(offset);
+        auto read = br2.readField(32);
+        ASSERT_TRUE(read);
+        EXPECT_EQ(peeked, read.value()) << "offset " << offset;
+    }
+}

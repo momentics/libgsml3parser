@@ -105,13 +105,17 @@ public:
                 uint32_t loaded = loadN(mBuf, mByteIndex, totalBytes, toLoad, actual);
                 val = (loaded >> (actual * 8 - mBitOffset - nbits)) & mask;
             } else {
-                // Fallback: bit-by-bit.
-                size_t pos = mPos;
-                val = 0;
-                for (unsigned i = 0; i < nbits; ++i) {
-                    size_t bi = pos + i;
-                    val = (val << 1) | ((mBuf[bi / 8] >> (7u - static_cast<unsigned>(bi % 8))) & 1u);
-                }
+                // Misaligned field wider than the first 32-bit window
+                // (mBitOffset + nbits in 33..39, i.e. the field spans
+                // exactly 5 bytes): combine two overlapping loads in a
+                // 64-bit window (audit Q1: replaced the per-bit loop).
+                // In-bounds proof: mPos + nbits <= mTotalBits guarantees
+                // all 5 spanned bytes exist.
+                unsigned actual;
+                uint32_t lo = loadN(mBuf, mByteIndex, totalBytes, 4, actual);
+                uint32_t hi = loadN(mBuf, mByteIndex + 4, totalBytes, 1, actual);
+                uint64_t window = (static_cast<uint64_t>(lo) << 8) | hi;
+                val = static_cast<uint32_t>((window >> (40 - mBitOffset - nbits)) & mask);
             }
         }
 
@@ -171,11 +175,13 @@ public:
             return val << (nbits - actualNbits);
         }
 
-        // Fallback: bit-by-bit.
-        uint32_t val = 0;
-        for (size_t bi = mPos; bi < limit; ++bi) {
-            val = (val << 1) | ((mBuf[bi / 8] >> (7u - static_cast<unsigned>(bi % 8))) & 1u);
-        }
+        // Fallback: misaligned peek wider than the first 32-bit window —
+        // two overlapping loads in a 64-bit window (see readField, audit Q1).
+        unsigned actual;
+        uint32_t lo = loadN(mBuf, mByteIndex, totalBytes, 4, actual);
+        uint32_t hi = loadN(mBuf, mByteIndex + 4, totalBytes, 1, actual);
+        uint64_t window = (static_cast<uint64_t>(lo) << 8) | hi;
+        uint32_t val = static_cast<uint32_t>((window >> (40 - mBitOffset - actualNbits)) & mask);
         return val << (nbits - actualNbits);
     }
 
