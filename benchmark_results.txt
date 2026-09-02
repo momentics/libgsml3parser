@@ -27,7 +27,7 @@ Struct sizes (all static_assert invariants pass):
   TimerExpiry: 16 bytes (== pointer + enum; session-bound timer event)
   AuthChallenge: 20 bytes (<= 32)
   CipheringParameters: 2 bytes (<= 16)
-  ResponseContext: 124 bytes (<= 160)
+  ResponseContext: 126 bytes (<= 160)
 
 === parseL3() Benchmark (500K iterations per PD domain) ===
   RR ChannelRelease                        20.8M msg/s

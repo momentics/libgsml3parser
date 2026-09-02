@@ -103,7 +103,9 @@ TEST(DispatcherTest, GlobalFallback) {
 // dispatchRaw returns false on parse error
 TEST(DispatcherTest, DispatchRawInvalidData) {
     ProtocolDispatcher disp;
-    uint8_t data[] = {0x00}; // Too short to be valid L3
+    // A single octet is a valid Channel Request (audit C1), so use an RR
+    // ChannelRelease header with no body bytes to trigger a parse error.
+    uint8_t data[] = {0x60, 0x0D}; // Too short to be valid L3
     EXPECT_FALSE(disp.dispatchRaw(std::span<const uint8_t>(data)));
 }
 

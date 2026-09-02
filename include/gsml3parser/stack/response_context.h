@@ -69,6 +69,10 @@ struct ResponseContext {
     uint8_t cipherAlgo{0};            ///< Ciphering algorithm selector (0=A5/0, 1=A5/1).
     bool hasCipherAlgo{false};
 
+    // ── RACH (TS 44.018 9.1.8) ────────────────────────────────────────
+    uint8_t requestRef{0};          ///< 8-bit RA from the Channel Request.
+    bool hasRequestRef{false};      ///< True once a Channel Request was fed.
+
     // ── Paging (TS 04.08 9.1.25) ─────────────────────────────────────
     L3MobileIdentity identity{};      ///< Identity to page (TMSI or IMSI).
     bool hasIdentity{false};

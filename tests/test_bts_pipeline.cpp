@@ -436,8 +436,10 @@ TEST(BTSPipeline, MalformedLAPDmFrame) {
 TEST(BTSPipeline, InvalidL3DataInPipeline) {
     ProtocolDispatcher disp;
 
-    // Use a single byte that is too short to be a valid L3 message.
-    uint8_t invalidData[] = {0x00};
+    // Use an RR ChannelRelease header with no body bytes: a single octet is
+    // a valid Channel Request (audit C1), so this 2-byte frame is the
+    // minimal "too short to be a valid L3 message" input.
+    uint8_t invalidData[] = {0x60, 0x0D};
 
     // dispatchRaw should return false since the data is too short to parse.
     EXPECT_FALSE(disp.dispatchRaw(std::span<const uint8_t>(invalidData)));

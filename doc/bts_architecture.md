@@ -418,7 +418,7 @@ Measured sizes (MSVC 2026, Release, x64):
 | `MMStateMachine` | 16 bytes | Virtual table pointer + state int |
 | `CCStateMachine` | 16 bytes | Virtual table pointer + state int |
 | `ProcedureRunner` | 152 bytes | 8 × ProcedureSlot (unique_ptr + bool) + active-change observer |
-| `ResponseContext` | 124 bytes | Response parameters (fixed arrays, ≤ 160 budget) |
+| `ResponseContext` | 126 bytes | Response parameters (fixed arrays, ≤ 160 budget) |
 | `ProcedureOrchestrator` | ~100 bytes | Active chain state + phase timer |
 | **Total per MS** | **2,056 bytes** (`sizeof(SubscriberSession)`) | Enforced `< 4096` via `static_assert`; plus `ParsedMessage` (416 bytes) on stack during processing |
 
@@ -601,7 +601,7 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
 - [ ] Verify `sizeof(MSContext) <= 256` via `static_assert` (measured: 92 bytes)
 - [ ] Verify `sizeof(ProcedureStepResult) <= 32` via `static_assert`
 - [ ] Verify `sizeof(SubscriberSession) < 4096` via `static_assert` (measured: 2056 bytes)
-- [ ] Verify `sizeof(ResponseContext) <= 160` via `static_assert` (measured: 124 bytes)
+- [ ] Verify `sizeof(ResponseContext) <= 160` via `static_assert` (measured: 126 bytes)
 - [ ] Configure `ChannelPool` with available channels at startup
 - [ ] Initialize `SubscriberRegistry` (or `ShardedSubscriberRegistry<N>` for multi-threaded)
 - [ ] Choose usage mode: L3 Parser Mode (parse/build only) or BTS Stack Mode (full procedures)

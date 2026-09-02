@@ -578,6 +578,21 @@ TEST(RoundTripTest, ChannelRequest) {
     checkHeader(*parsed, L3PD::RadioResource, L3ChannelRequest::MTI);
 }
 
+// RA round-trip for the all-zero and all-ones values (audit C1: the full
+// 8-bit RA must survive write -> parse).
+TEST(RoundTripTest, ChannelRequest_ZeroAndMaxRA) {
+    for (uint8_t ra : {0x00u, 0xFFu}) {
+        ParsedMessage msg{RRM{L3ChannelRequest{ra}}};
+        auto bytes = writeL3Bytes(msg);
+        ASSERT_TRUE(bytes) << "writeL3Bytes failed for RA 0x" << std::hex << ra;
+        auto parsed = parseL3(std::span<const uint8_t>((*bytes).data(), (*bytes).size()));
+        ASSERT_TRUE(parsed) << "parseL3 failed for RA 0x" << std::hex << ra;
+        const auto* cr = tryGet<L3ChannelRequest>(*parsed);
+        ASSERT_NE(cr, nullptr);
+        EXPECT_EQ(cr->requestReference(), ra);
+    }
+}
+
 // Handover Access (GSM 04.08 9.1.14a)
 // HandoverAccess uses MTI=0x102 (internal RrShortDisc code).
 // Reference: GSM_RR_Types.ttcn RrShortDisc. Sent on HO access timeslot.

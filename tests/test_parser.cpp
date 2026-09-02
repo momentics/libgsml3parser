@@ -235,10 +235,16 @@ TEST(ParserTest, EmptyInput) {
 }
 
 TEST(ParserTest, SingleByte) {
+    // A single octet is a Channel Request: the whole octet is the 8-bit
+    // request reference (RA), so any value parses (audit C1: the previous
+    // heuristic rejected octets whose high nibble looked like a PD).
     uint8_t data[] = {0x60};
     auto res = parseL3(std::span<const uint8_t>(data));
-    EXPECT_FALSE(res);
-    EXPECT_EQ(res.error().code, ParseError::Code::TruncatedInput);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messageMTI(*res), L3ChannelRequest::MTI);
+    const auto* cr = tryGet<L3ChannelRequest>(*res);
+    ASSERT_NE(cr, nullptr);
+    EXPECT_EQ(cr->requestReference(), 0x60u);
 }
 
 TEST(ParserTest, EmptyHex) {
@@ -248,7 +254,10 @@ TEST(ParserTest, EmptyHex) {
 }
 
 TEST(ParserTest, TruncatedHex) {
-    auto res = parseL3Hex("60");
+    // "600d" is an RR ChannelRelease header with no body bytes: the 8-bit
+    // cause is missing, so the parse must fail with TruncatedInput.
+    // (A single octet like "60" is a valid Channel Request — audit C1.)
+    auto res = parseL3Hex("600d");
     EXPECT_FALSE(res);
     EXPECT_EQ(res.error().code, ParseError::Code::TruncatedInput);
 }
@@ -431,12 +440,32 @@ TEST(ParserTest, ParseWithConfig) {
 // Short messages - ChannelRequest (1 byte), HandoverAccess (4 bytes)
 // =====================================================================
 
+// RA 0x42: high nibble 0x4 is not a PD, so it parsed even before audit C1.
 TEST(ParserTest, ShortMessage_ChannelRequest) {
     // 1-byte RACH message: PD is not standard, handled as short message
     uint8_t data[] = {0x42};
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::RadioResource);
+}
+
+// Test: ALL 256 one-octet RACH values parse as ChannelRequest with the
+// full 8-bit RA preserved.
+// Importance: the RACH Channel Request is a single octet (TS 44.018 9.1.8);
+// the previous heuristic rejected 192 of 256 RA values and truncated the
+// rest to 4 bits (audit C1). The network must echo the full RA in the
+// Immediate Assignment.
+TEST(ParserTest, ShortMessage_ChannelRequest_AllRAValues) {
+    for (int v = 0; v < 256; ++v) {
+        uint8_t data[1] = {static_cast<uint8_t>(v)};
+        auto res = parseL3(std::span<const uint8_t>(data, 1));
+        ASSERT_TRUE(res) << "RA 0x" << std::hex << v << " must parse";
+        EXPECT_EQ(messageMTI(*res), L3ChannelRequest::MTI);
+        const auto* cr = tryGet<L3ChannelRequest>(*res);
+        ASSERT_NE(cr, nullptr);
+        EXPECT_EQ(cr->requestReference(), static_cast<uint8_t>(v))
+            << "full 8-bit RA must round-trip (RA 0x" << std::hex << v << ")";
+    }
 }
 
 TEST(ParserTest, ShortMessage_HandoverAccess) {

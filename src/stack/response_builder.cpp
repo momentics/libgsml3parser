@@ -669,6 +669,12 @@ int ResponseBuilder::buildResponseFromToken(ResponseToken token, std::span<uint8
         // ── RR responses ────────────────────────────────────────────────
         case ResponseToken::ImmediateAssignment:
             if (!r.hasChannel) return -1;
+            // Echo the full 8-bit RA from the RACH burst (TS 44.018 9.1.8):
+            // the MS identifies itself by this value during channel seizure.
+            if (r.hasRequestRef) {
+                return buildImmediateAssignment(out, r.channel, 0,
+                    L3RequestReference{r.requestRef, 0, 0, 0});
+            }
             return buildImmediateAssignment(out, r.channel, 0);
         case ResponseToken::AssignmentCommand:
             if (!r.hasChannel) return -1;

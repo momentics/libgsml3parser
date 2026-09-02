@@ -60,7 +60,7 @@ void demoChannelRequest() {
 
     auto chanReq = L3ChannelRequest(chanReqRaw);
     std::cout << "  Channel Request received:\n";
-    std::cout << "    requestReference=" << chanReq.requestReference() << "\n";
+    std::cout << "    requestReference=" << static_cast<unsigned>(chanReq.requestReference()) << "\n";
     std::cout << "\n";
 }
 

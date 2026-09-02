@@ -23,6 +23,7 @@
 
 #include "gsml3parser/stack/subscriber_registry.h"
 #include "gsml3parser/rr/l3rrmessages.h"
+#include "gsml3parser/visitor.h"
 
 namespace gsml3parser {
 
@@ -82,7 +83,6 @@ void ChannelAssignmentProcedure::doComplete() {
 
 ProcedureStepResult ChannelAssignmentProcedure::feed(const ParsedMessage& msg,
     SubscriberSession* session, ResponseSink sink) {
-    (void)session;
     ProcedureStepResult result;
 
     auto pd = messagePD(msg);
@@ -92,6 +92,14 @@ ProcedureStepResult ChannelAssignmentProcedure::feed(const ParsedMessage& msg,
         case State::INIT:
             if (pd == L3PD::RadioResource &&
                 (mti == L3ChannelRequest::MTI || mti == L3PagingResponse::MTI)) {
+                // Remember the full 8-bit RA from the RACH burst so the
+                // Immediate Assignment can echo it (TS 44.018 9.1.8, audit C1).
+                if (session && mti == L3ChannelRequest::MTI) {
+                    if (const auto* chReq = tryGet<L3ChannelRequest>(msg)) {
+                        session->response.requestRef = chReq->requestReference();
+                        session->response.hasRequestRef = true;
+                    }
+                }
                 transitionTo(State::ALLOCATE_CHANNEL);
             }
             break;

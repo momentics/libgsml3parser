@@ -27,6 +27,9 @@
 #include <gsml3parser/message_types.h>
 #include <gsml3parser/rr/l3rrmessages.h>
 #include <gsml3parser/visitor.h>
+#include <gsml3parser/parser.h>
+#include <gsml3parser/stack/subscriber_registry.h>
+#include <gsml3parser/stack/response_builder.h>
 
 #include <chrono>
 #include <cstdint>
@@ -146,4 +149,38 @@ TEST(ChannelAssignmentProcedureTest, CAP_PagingResponse_Allocates) {
     // Seizure completes.
     auto res2 = proc.feed(makeDummyMsg(), nullptr, ResponseSink{});
     EXPECT_EQ(res2.action, ProcedureStepResult::Action::Completed);
+}
+
+// Test: the 8-bit RA from the Channel Request is stored on the session
+// and echoed in the Immediate Assignment built from the response token
+// (TS 44.018 9.1.8, audit C1).
+TEST(ChannelAssignmentProcedureTest, CAP_EchoesFullRAInImmediateAssignment) {
+    SubscriberSession session;
+    ChannelAssignmentProcedure proc(ChannelType::SDCCHType);
+    auto chReq = L3ChannelRequest{0xA5};
+    ParsedMessage msg{RRM{chReq}};
+
+    // First feed: INIT -> ALLOCATE_CHANNEL. The RA is remembered during
+    // this transition; the action is Continue (no token yet).
+    auto res = proc.feed(msg, &session, ResponseSink{});
+    EXPECT_EQ(res.action, ProcedureStepResult::Action::Continue);
+    EXPECT_EQ(session.response.hasRequestRef, true);
+    EXPECT_EQ(session.response.requestRef, 0xA5u);
+
+    // Second feed: ALLOCATE_CHANNEL sets the channel on the session and
+    // returns the ImmediateAssignment token.
+    res = proc.feed(makeDummyMsg(), &session, ResponseSink{});
+    EXPECT_EQ(res.action, ProcedureStepResult::Action::SendResponseWithToken);
+    EXPECT_EQ(res.responseToken, ResponseToken::ImmediateAssignment);
+
+    uint8_t buf[512];
+    int n = ResponseBuilder::buildResponseFromToken(
+        ResponseToken::ImmediateAssignment, {buf, sizeof(buf)}, &session);
+    ASSERT_GT(n, 0);
+    auto parsed = parseL3(std::span<const uint8_t>(buf, static_cast<size_t>(n)));
+    ASSERT_TRUE(parsed);
+    const auto* ia = tryGet<L3ImmediateAssignment>(*parsed);
+    ASSERT_NE(ia, nullptr);
+    // The Request Reference IE must carry the full RA.
+    EXPECT_EQ(ia->requestReference().ra(), 0xA5u);
 }

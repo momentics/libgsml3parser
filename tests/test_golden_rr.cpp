@@ -610,6 +610,18 @@ TEST(GoldenRR, ChannelRequest_Parse) {
     EXPECT_EQ(messageMTI(*msg), L3ChannelRequest::MTI);
 }
 
+// [GOLDEN] RA = 0x00 (all-zero pattern) is a legitimate random-access value.
+// The previous heuristic rejected it as "Incomplete L3 message" (audit C1).
+TEST(GoldenRR, ChannelRequest_Parse_ZeroRA) {
+    uint8_t data[] = {0x00};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3ChannelRequest::MTI);
+    const auto* cr = tryGet<L3ChannelRequest>(*msg);
+    ASSERT_NE(cr, nullptr);
+    EXPECT_EQ(cr->requestReference(), 0x00u);
+}
+
 // =====================================================================
 // RR PARSE FROM HEX: Handover Access (GSM 04.08 9.1.14a / 3GPP TS 44.018 9.1.14a)
 // Reference: GSM_RR_Types.ttcn RrShortDisc (short message on HO access timeslot, no L3 header)

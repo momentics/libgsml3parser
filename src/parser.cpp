@@ -807,29 +807,27 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
             ParseError{ParseError::Code::TruncatedInput, "Empty input"});
     }
 
-    // ── Short-message heuristic (intentional simplification) ─────────────
-    /// Handle short messages (no standard 2-octet L3 header).
-    ///
+    // ── Short messages (no standard 2-octet L3 header) ─────────────────
     /// GSM 04.08 defines RR short messages that carry no standard L3 header,
     /// so they are disambiguated by total frame length:
-    ///   - 1 byte  -> ChannelRequest (GSM 04.08 9.1.3)
+    ///   - 1 byte  -> ChannelRequest (TS 44.018 9.1.8)
     ///   - 4 bytes -> HandoverAccess (GSM 04.08 9.1.38)
     ///   - 7 bytes -> SynchronizationChannelInformation (GSM 04.08 9.1.39)
     ///
-    /// This length-based interpretation is an intentional simplification:
-    /// a standard-header message of exactly 1/4/7 bytes is indistinguishable
-    /// from a short message by length alone. The branches below therefore try
-    /// the standard RR/BCC/GCC parse first (or in a dedicated branch) and only
-    /// fall back to the short-message interpretation when the standard parse
-    /// fails, which keeps the heuristic safe for all known message types.
+    /// Disambiguation for 4/7-byte frames (audit N1): the standard-header
+    /// parse wins only when it consumes the frame EXACTLY
+    /// (remainingBits() == 0). A standard parse that leaves trailing bytes
+    /// means the frame is a short message whose first octet merely looks
+    /// like a plausible header. Short-message handlers are tried for any
+    /// first-octet value, because a short message's first octet is not an
+    /// L3 header at all.
     if (data.size() == 1) {
-        uint8_t pdNibble = (data[0] >> 4) & 0x0F;
-        if (pdNibble == 0x06 || pdNibble == 0x05 || pdNibble == 0x03 || pdNibble == 0x0b ||
-            pdNibble == 0x08 || pdNibble == 0x09 || pdNibble == 0x0a || pdNibble == 0x0c ||
-            pdNibble == 0x0e || pdNibble == 0x0f || pdNibble == 0x00 || pdNibble == 0x01) {
-            return Expected<ParsedMessage>::error(
-                ParseError{ParseError::Code::TruncatedInput, "Incomplete L3 message"});
-        }
+        // A one-octet frame can only be a Channel Request: every
+        // standard-header L3 message is at least two octets long, and the
+        // RACH carries exactly this one-octet message. The full octet is
+        // the 8-bit request reference (RA); any of the 256 values is
+        // valid, so no nibble filtering is applied (audit C1: the previous
+        // heuristic rejected 192 of 256 legitimate RA values).
         BitReader reader(data.data(), 8);
         auto res = L3ChannelRequest::parse(reader);
         return std::move(res).map([](L3ChannelRequest v){ return ParsedMessage(RRM(std::move(v))); });

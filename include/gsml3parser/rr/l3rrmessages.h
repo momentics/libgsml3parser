@@ -1838,30 +1838,34 @@ public:
 // Short message: no standard L3 header, 1 byte.
 
 class L3ChannelRequest {
-    unsigned mRequestReference{0};
+    // Full 8-bit request reference (RA) from the RACH burst — TS 44.018 9.1.8.
+    // The establishment cause and the random reference are encoded together
+    // in this single octet; the network echoes the full RA in the Immediate
+    // Assignment (Request Reference IE) to identify the MS (audit C1).
+    uint8_t mRequestReference{0};
 
     friend struct Builder;
 public:
     static constexpr int MTI = 0x101;
 
     L3ChannelRequest() = default;
-    explicit L3ChannelRequest(unsigned wRef) : mRequestReference(wRef) {}
+    explicit L3ChannelRequest(unsigned wRef) : mRequestReference(static_cast<uint8_t>(wRef & 0xFFu)) {}
 
-    unsigned requestReference() const { return mRequestReference; }
+    uint8_t requestReference() const { return mRequestReference; }
 
     size_t bodyLength() const { return 1; }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 1; }
+    size_t l2BodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3ChannelRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
 
     struct Builder {
-        unsigned mRequestReference{0};
+        uint8_t mRequestReference{0};
 
-        /// Set request reference.
-        Builder& requestReference(unsigned v) { mRequestReference = v; return *this; }
+        /// Set the 8-bit request reference (RA) from the RACH burst.
+        Builder& requestReference(unsigned v) { mRequestReference = static_cast<uint8_t>(v & 0xFFu); return *this; }
         /// Build the final message.
         [[nodiscard]] L3ChannelRequest build() const {
             L3ChannelRequest msg;
@@ -1870,7 +1874,7 @@ public:
         }
     };
 
-    static Builder builder() { return Builder{}; }
+    static Builder builder() { return Builder{}; };
 };
 
 // ── Handover Access (GSM 04.08 9.1.14a) ───────────────────────────────

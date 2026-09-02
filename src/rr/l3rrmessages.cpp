@@ -2306,15 +2306,17 @@ void L3SynchronizationChannelInformation::text(std::ostream& os) const {
 
 Expected<L3ChannelRequest> L3ChannelRequest::parse(BitReader& br) {
     L3ChannelRequest msg;
-    auto r = br.readField(4); if (!r) return Expected<L3ChannelRequest>::error(r.error());
-    msg.mRequestReference = r.value();
-    r = br.readField(4); if (!r) return Expected<L3ChannelRequest>::error(r.error());
+    // The entire octet is the 8-bit request reference (RA): establishment
+    // cause + random reference (TS 44.018 Table 9.1.8.1). The network must
+    // echo the full RA in the Immediate Assignment, so all 8 bits are kept
+    // (previously only the high nibble was stored — audit C1).
+    auto r = br.readField(8); if (!r) return Expected<L3ChannelRequest>::error(r.error());
+    msg.mRequestReference = static_cast<uint8_t>(r.value());
     return Expected<L3ChannelRequest>::hold(std::move(msg));
 }
 
 void L3ChannelRequest::write(BitWriter& bw) const {
-    bw.writeField(mRequestReference, 4);
-    bw.writeField(0, 4);
+    bw.writeField(mRequestReference, 8);
 }
 
 void L3ChannelRequest::text(std::ostream& os) const {
