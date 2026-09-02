@@ -171,7 +171,7 @@ TEST(FlatMapTest, Scale_4MEntries) {
     double findMs = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() / 1000.0;
     std::printf("FlatMap 4M find: %.1f ms\n", findMs);
     EXPECT_EQ(ok, N);
-#ifndef GSML3PARSER_ASAN
+#if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
     EXPECT_LT(insMs, 10000.0) << "4M insert too slow";
     EXPECT_LT(findMs, 10000.0) << "4M find too slow";
 #endif

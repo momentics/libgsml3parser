@@ -65,9 +65,13 @@ Struct sizes (all static_assert invariants pass):
   end-to-end parse+stream is 8.7 M msg/s (mixed, above)
 
 === 1M-session scale (Stress._1MSession_* + SSR_tickAllProcedures) ===
-  1M create: 1221.8 ms, lookup: 144.0 ms, tick(10K active): 1.6 ms
-  1M procedure tick (10K active): 1.4 ms
+  1M create: 1496.7 ms, lookup: 131.6 ms, tick(10K active): 1.5 ms
+  1M procedure tick (10K active): 1.0 ms
   Real-time budgets: create < 5000ms, lookup < 2000ms, tick < 50ms (all met)
 
+=== 2M-session scale (Stress._2MSession_FlatIndex_Scale) ===
+  2M create: 2365.0 ms, lookup: 356.6 ms, tick(10K active): 2.2 ms
+  Real-time budgets: create < 15000ms, lookup < 5000ms, tick < 100ms (all met)
+
 === Regression ===
-  Tests passed: 2005 / 163 suites
+  Tests passed: 2035 / 165 suites

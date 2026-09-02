@@ -348,7 +348,7 @@ TEST(ChannelPoolTest, Release_O1Fast) {
     double ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
     EXPECT_EQ(ok, N);
     EXPECT_EQ(pool.freeCount(ChannelType::SDCCHType), static_cast<size_t>(N));
-#ifndef GSML3PARSER_ASAN
+#if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
     EXPECT_LT(ms, 100.0) << "100K release() took " << ms << "ms (expected O(1), < 100ms)";
 #endif
 }

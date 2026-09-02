@@ -689,7 +689,7 @@ TEST(MMStateMachineTest, FullRegistrationSequence) {
     EXPECT_EQ(r5.action, SMAction::SendResponse);
 }
 
-// ── Response-aware FSM integration tests (Step 1.5, 1.7, 1.9) ─────────────
+// ── Response-aware FSM integration tests ───────────────────────────────────
 
 // RR: WAITING_MM + CMServiceRequest returns SendResponse action
 TEST(RRStateMachineTest, WaitingMM_CMServiceRequest_Action_SendResponse) {

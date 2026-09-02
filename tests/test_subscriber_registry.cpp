@@ -400,7 +400,7 @@ TEST(SR_Stress, 100K_IMSI_Lookups_Fast) {
     auto t1 = std::chrono::steady_clock::now();
     double ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
     std::printf("100K IMSI lookups: %.1f ms\n", ms);
-#ifndef GSML3PARSER_ASAN
+#if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
     EXPECT_LT(ms, 200.0) << "100K IMSI lookups too slow";
 #endif
 }
@@ -638,7 +638,7 @@ TEST(SR_remove, OneMillion_O1Fast) {
     double ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
 
     EXPECT_EQ(reg.count(), static_cast<size_t>(N) - ptrs.size());
-#ifndef GSML3PARSER_ASAN
+#if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
     // Budget is machine-dependent: the point is to prove O(1) behavior.
     // The old O(N) implementation took tens of seconds here (100K removals x
     // ~500K entries scanned); O(1) removal is ~1 us/op, so 500ms is a 100x

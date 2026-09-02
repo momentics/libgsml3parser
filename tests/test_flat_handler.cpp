@@ -89,7 +89,7 @@ ParsedMessage makeDisconnectMessage() {
 
 } // namespace
 
-// Positive test (step 8.1): the FlatHandler constructor with a plain
+// Positive test: the FlatHandler constructor with a plain
 // function pointer and a user context works correctly.
 TEST(FlatHandlerTest, Constructor_FreeFunctionWithContext) {
     FreeFunctionContext ctx;

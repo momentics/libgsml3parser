@@ -2258,7 +2258,7 @@ public:
 };
 
 // ── VGCS Uplink Grant (GSM 04.08 9.1.28) ──────────────────────────────
-// Note: MTI=0x09 conflicts with no existing RR message, but plan notes potential issues.
+// Note: MTI=0x09 does not conflict with any other RR message type.
 
 class L3VGCSUplinkGrant {
 public:

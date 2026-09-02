@@ -94,6 +94,11 @@ if(MSVC)
     target_compile_options(gsml3parser_tests PRIVATE /bigobj)
 endif()
 
+# GSML3PARSER_DEBUG: wall-clock performance budgets only hold for optimized
+# builds; skip them in Debug (unoptimized) builds as well (Release/Debug
+# codegen differs by an order of magnitude).
+target_compile_definitions(gsml3parser_tests PRIVATE $<$<CONFIG:Debug>:GSML3PARSER_DEBUG>)
+
 if(ENABLE_ASAN AND MSVC)
     # GSML3PARSER_ASAN: lets tests skip wall-clock performance budgets, which
     # are not meaningful under a sanitizer (2-3x slowdown).
@@ -108,6 +113,9 @@ if(ENABLE_ASAN AND MSVC)
     # gtest must be compiled with ASAN to avoid LNK2038 mismatches
     target_compile_options(gtest PRIVATE /fsanitize=address /Zi)
     target_compile_options(gtest_main PRIVATE /fsanitize=address /Zi)
+    # /DEBUG keeps the debug info in the linked test exe (silences LNK4302
+    # and yields detailed ASan reports).
+    target_link_options(gsml3parser_tests PRIVATE /DEBUG)
 
     # Copy ASAN runtime DLL to test output directory
     get_filename_component(_msvc_bin_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)

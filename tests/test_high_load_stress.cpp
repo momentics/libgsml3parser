@@ -83,8 +83,9 @@ TEST(Stress, _10000Sessions_CreateAndLookup_AllFound) {
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
 
     // Total create + lookup should complete quickly (< 1 second is generous)
-    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x)
-#ifndef GSML3PARSER_ASAN
+    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x;
+    // and in Debug: unoptimized codegen is an order of magnitude slower)
+#if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
     EXPECT_LT(elapsed.count(), 1000)
         << "10K create + lookup took " << elapsed.count() << "ms";
 #endif
@@ -118,8 +119,9 @@ TEST(Stress, _10000Sessions_TimerTick_Fast) {
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
 
     EXPECT_EQ(count, 0u) << "No timers should expire with 1ms delta";
-    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x)
-#ifndef GSML3PARSER_ASAN
+    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x;
+    // and in Debug: unoptimized codegen is an order of magnitude slower)
+#if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
     EXPECT_LT(elapsed.count(), 50)
         << "tickAllTimers for 10K sessions took " << elapsed.count()
         << "ms (expected < 50ms)";
@@ -198,8 +200,9 @@ TEST(Stress, ResponseBuilder_10000Builds_ZeroAlloc_Span) {
     auto t1 = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
 
-    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x)
-#ifndef GSML3PARSER_ASAN
+    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x;
+    // and in Debug: unoptimized codegen is an order of magnitude slower)
+#if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
     EXPECT_LT(elapsed.count(), 500)
         << "10K ResponseBuilder span builds took " << elapsed.count()
         << "ms (expected < 500ms)";
@@ -287,8 +290,9 @@ TEST(Stress, _100KSessions_ProcedureRunner_Feed_Fast) {
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
 
     // 100K create + feed must complete in under 500ms on modern hardware
-    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x)
-#ifndef GSML3PARSER_ASAN
+    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x;
+    // and in Debug: unoptimized codegen is an order of magnitude slower)
+#if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
     EXPECT_LT(elapsed.count(), 500)
         << "100K sessions create + ProcedureRunner::feed took "
         << elapsed.count() << "ms (expected < 500ms)";
@@ -378,8 +382,9 @@ TEST(Stress, ResponseToken_Arena_100K_ZeroAlloc) {
     auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(t1 - t0);
 
     // 100K feed + build iterations must complete in under 2 seconds
-    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x)
-#ifndef GSML3PARSER_ASAN
+    // (performance budget is skipped under ASAN: sanitizer overhead is 2-3x;
+    // and in Debug: unoptimized codegen is an order of magnitude slower)
+#if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
     EXPECT_LT(elapsed.count(), 2000)
         << "100K ResponseToken + Arena builds took " << elapsed.count()
         << "ms (expected < 2000ms)";
@@ -508,7 +513,7 @@ TEST(Stress, tickAllTimers_OnlyActive_Scales) {
     auto t1 = std::chrono::steady_clock::now();
     double ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
     EXPECT_EQ(n, ACTIVE) << "Only the " << ACTIVE << " active timers should expire";
-#ifndef GSML3PARSER_ASAN
+#if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
     EXPECT_LT(ms, 50.0) << "tickAllTimers over 200K sessions (200 active) took " << ms << "ms";
 #endif
 }
@@ -558,8 +563,9 @@ TEST(Stress, _1MSession_Create_Lookup_Tick_Scale) {
     };
     std::printf("1M create: %.1f ms, lookup: %.1f ms, tick(10K active): %.1f ms\n",
                 ms(t0, tCreate), ms(tCreate, tLookup), ms(tTick0, tTick));
-#ifndef GSML3PARSER_ASAN
-    // Real-time budgets (generous; ASAN slows 2-3x so skipped under sanitizer).
+#if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
+    // Real-time budgets (generous; ASAN slows 2-3x so skipped under sanitizer;
+    // also skipped in Debug — unoptimized builds are an order of magnitude slower).
     EXPECT_LT(ms(t0, tCreate), 5000.0)   << "1M create too slow";
     EXPECT_LT(ms(tCreate, tLookup), 2000.0) << "1M lookup too slow";
     EXPECT_LT(ms(tTick0, tTick), 50.0)   << "tick over 1M (10K active) too slow";
@@ -606,7 +612,7 @@ TEST(Stress, _2MSession_FlatIndex_Scale) {
     double tickMs = std::chrono::duration_cast<std::chrono::microseconds>(t5 - t4).count() / 1000.0;
     std::printf("2M tick (10K active): %.1f ms\n", tickMs);
     EXPECT_EQ(n, 10000u);
-#ifndef GSML3PARSER_ASAN
+#if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
     EXPECT_LT(createMs, 15000.0) << "2M create too slow";
     EXPECT_LT(lookupMs, 5000.0) << "2M lookup too slow";
     EXPECT_LT(tickMs, 100.0) << "2M tick too slow";
@@ -644,7 +650,7 @@ TEST(Stress, _1MSession_ProcedureTick_Scale) {
     double ms = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
     EXPECT_EQ(failed, 0u);
     std::printf("1M procedure tick (10K active): %.1f ms\n", ms);
-#ifndef GSML3PARSER_ASAN
+#if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
     EXPECT_LT(ms, 50.0) << "tickAllProcedures over 1M (10K active) too slow";
 #endif
 }
