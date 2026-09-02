@@ -447,6 +447,7 @@ The following operations perform zero heap allocations:
 | `ProcedureRunner::feed()` | Runner | Fixed array scan, delegates to Procedure |
 | `ResponseBuilder::buildXxx(span)` | ResponseBuilder | Writes to caller buffer, zero heap |
 | `RSLParser::parse()` | RSLParser | Fixed IE array, span pointers into original data |
+| `LAPDmEntity` send path (sendUI/sendData/…) | LAPDm | TX buffer reused after first send (audit C3); L1 callback must transmit synchronously |
 
 ### Dispatch Complexity
 
@@ -501,6 +502,10 @@ The event loop model scales to millions of sessions with `ShardedSubscriberRegis
 ```cpp
 // Sharded registry for multi-threaded access
 ShardedSubscriberRegistry<16> registry;
+
+// Size the flat indexes for the expected subscriber population
+// (one-time, cold path) — avoids incremental rehashing at scale.
+registry.reserve(1'000'000);
 
 // Create session (hash-based shard selection, per-shard lock)
 auto* session = registry.createByTMSI(0x12345678);
@@ -592,7 +597,12 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
 ### Known Limitations
 
 - **Procedure tick:** `tickAllProcedures()` is O(active) via an active-procedure index (same pattern as the active-timer index). The old documented pattern (forEach over all sessions) must not be used at scale.
-- **Registry storage:** `SubscriberRegistry`/`ShardedSubscriberRegistry` use `std::unordered_map` (pointer chasing) for their TMSI/IMSI/link indexes. At 1M+ sessions this costs roughly ~2 GB of RAM and is cache-unfriendly. If further optimization is required, replace the indexes with a flat/open-addressing hash table (out of scope of the current design; the session objects themselves are already contiguous-friendly and the hot paths — lookup, O(1) remove, O(active) timer tick — are index-driven).
+- **Registry storage:** `SubscriberRegistry`/`ShardedSubscriberRegistry`
+  use a flat open-addressing hash table (`stack/flat_map.h`) for the
+  TMSI and LAPDm-link indexes: inline key/value entries, no per-node
+  heap allocation, no pointer chasing. Call `reserve()` at startup when
+  the subscriber scale is known. The IMSI index stays a
+  `std::unordered_map` (owned std::string keys, cold path).
 - **L3Framer header-based mode:** for variable-length messages (SI, SMS, Setup with IEs, ...) the framer uses a boundary heuristic that scans for the next plausible L3 header. Fixed-length messages (including BCC/GCC/LS header-only forms) are framed exactly. For deterministic framing of variable-length messages use the L2-length mode (`FrameConfig::useL2Length = true`), which is what production LAPDm/A-bis paths provide.
 
 ## 9. Deployment Checklist

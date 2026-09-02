@@ -363,6 +363,8 @@ Layered design, bottom to top:
 - **parseL3()** — Stateless function, thread-safe with shared read-only config.
 - **BitReader/BitWriter** — Plain value types, no shared state.
 - **Arena** — NOT thread-safe. Each thread uses its own instance.
+- **LAPDmEntity** — single-threaded per entity; the TX encode buffer is
+  reused after the first send (zero heap allocation in steady state).
 
 ## Documentation
 
