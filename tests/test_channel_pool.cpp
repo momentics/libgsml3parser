@@ -29,55 +29,48 @@ using namespace gsml3parser;
 
 // ── RA Decoding Tests (GSM 04.08 Table 9.9) ────────────────────────────
 
-// MO call (establishment cause 00) with VEA returns TCH
-TEST(DecodeChannelNeededTest, MO_Call_returnsTCH_withVEA) {
-    // RA=0x00: establishment cause bits 6-5 = 00 (MO call)
-    EXPECT_EQ(decodeChannelNeeded(0x00, false, true), ChannelType::TCHFType);
-}
-
-// MO call without VEA returns SDCCH
-TEST(DecodeChannelNeededTest, MO_Call_returnsSDCCH_withoutVEA) {
-    // RA=0x00: establishment cause 00 (MO call), no VEA -> SDCCH
-    EXPECT_EQ(decodeChannelNeeded(0x00, false, false), ChannelType::SDCCHType);
-}
-
-// Location Updating (establishment cause 11) always returns SDCCH
-TEST(DecodeChannelNeededTest, LocationUpdate_returnsSDCCH) {
-    // RA=0x60: establishment cause bits 6-5 = 11 (Location Updating)
-    EXPECT_EQ(decodeChannelNeeded(0x60, false, false), ChannelType::SDCCHType);
-    EXPECT_EQ(decodeChannelNeeded(0x60, false, true), ChannelType::SDCCHType);
-}
-
-// Emergency call (establishment cause 01) always returns TCH
-TEST(DecodeChannelNeededTest, EmergencyCall_returnsTCH) {
-    // RA=0x20: establishment cause bits 6-5 = 01 (Emergency)
+// RA decoding per TS 44.018 Table 9.1.8.1 (audit C2: the previous 2-bit
+// mapping was replaced by full 8-bit pattern decoding).
+TEST(ChannelPoolTest, DecodeChannelNeeded_SpecPatterns) {
+    // 0000xxxx — location updating -> SDCCH (never TCH, even with VEA).
+    EXPECT_EQ(decodeChannelNeeded(0x00, false, true), ChannelType::SDCCHType);
+    EXPECT_EQ(decodeChannelNeeded(0x0F, false, false), ChannelType::SDCCHType);
+    // 0001xxxx — other SDCCH procedures -> SDCCH.
+    EXPECT_EQ(decodeChannelNeeded(0x10, false, false), ChannelType::SDCCHType);
+    // 0010xxxx — answer to paging, TCH/F.
     EXPECT_EQ(decodeChannelNeeded(0x20, false, false), ChannelType::TCHFType);
-    EXPECT_EQ(decodeChannelNeeded(0x20, false, true), ChannelType::TCHFType);
+    // 0011xxxx — answer to paging, TCH/H or TCH/F.
+    EXPECT_EQ(decodeChannelNeeded(0x30, false, false), ChannelType::TCHHType);
+    // 0100xxxx / 0101xxxx — MO speech/data TCH/H (NECI).
+    EXPECT_EQ(decodeChannelNeeded(0x40, false, false), ChannelType::TCHHType);
+    EXPECT_EQ(decodeChannelNeeded(0x50, false, false), ChannelType::TCHHType);
+    // 01100xxx — MBMS/reserved/LMU -> SDCCH.
+    EXPECT_EQ(decodeChannelNeeded(0x60, false, false), ChannelType::SDCCHType);
+    EXPECT_EQ(decodeChannelNeeded(0x67, false, false), ChannelType::SDCCHType); // LMU
+    // 011010xx / 011011xx — call re-establishment TCH/H (NECI).
+    EXPECT_EQ(decodeChannelNeeded(0x68, false, false), ChannelType::TCHHType);
+    EXPECT_EQ(decodeChannelNeeded(0x6F, false, false), ChannelType::TCHHType);
+    // 0111xxxx — GPRS packet access / reserved -> undefined (no PCU).
+    EXPECT_EQ(decodeChannelNeeded(0x70, false, false), ChannelType::UndefinedCHType);
+    EXPECT_EQ(decodeChannelNeeded(0x7F, false, false), ChannelType::UndefinedCHType);
+    // 100xxxxx — answer to paging (any channel) -> TCH/F.
+    EXPECT_EQ(decodeChannelNeeded(0x80, false, false), ChannelType::TCHFType);
+    // 101xxxxx — emergency call -> TCH/F.
+    EXPECT_EQ(decodeChannelNeeded(0xA0, false, false), ChannelType::TCHFType);
+    // 110xxxxx — call re-establishment TCH/F -> TCH/F.
+    EXPECT_EQ(decodeChannelNeeded(0xB0, false, false), ChannelType::TCHFType);
+    // 111xxxxx — originating call: VEA -> TCH/F, otherwise SDCCH.
+    EXPECT_EQ(decodeChannelNeeded(0xC0, false, true), ChannelType::TCHFType);
+    EXPECT_EQ(decodeChannelNeeded(0xC0, false, false), ChannelType::SDCCHType);
+    EXPECT_EQ(decodeChannelNeeded(0xCF, false, true), ChannelType::TCHFType);
 }
 
-// Answer to Paging (establishment cause 10) returns TCH
-TEST(DecodeChannelNeededTest, AnswerToPaging_returnsTCH) {
-    // RA=0x40: establishment cause bits 6-5 = 10 (Answer to Paging)
-    EXPECT_EQ(decodeChannelNeeded(0x40, false, false), ChannelType::TCHFType);
-}
-
-// ── Location Updating Request Detection ────────────────────────────────
-
-// RA with establishment cause 11 is a location updating request
-TEST(IsLocationUpdatingRequestTest, RA_LocationUpdate_returnsTrue) {
-    // RA=0x60: establishment cause 11 = Location Updating
-    EXPECT_TRUE(isLocationUpdatingRequest(0x60));
-    EXPECT_TRUE(isLocationUpdatingRequest(0x6F));
-}
-
-// RA with other establishment causes is not a location updating request
-TEST(IsLocationUpdatingRequestTest, RA_NonLocationUpdate_returnsFalse) {
-    // RA=0x00: establishment cause 00 = MO Call
-    EXPECT_FALSE(isLocationUpdatingRequest(0x00));
-    // RA=0x20: establishment cause 01 = Emergency
-    EXPECT_FALSE(isLocationUpdatingRequest(0x20));
-    // RA=0x40: establishment cause 10 = Answer to Paging
-    EXPECT_FALSE(isLocationUpdatingRequest(0x40));
+TEST(ChannelPoolTest, IsLocationUpdatingRequest_SpecPatterns) {
+    EXPECT_TRUE(isLocationUpdatingRequest(0x00));
+    EXPECT_TRUE(isLocationUpdatingRequest(0x0F));
+    EXPECT_FALSE(isLocationUpdatingRequest(0x10)); // other SDCCH procedures
+    EXPECT_FALSE(isLocationUpdatingRequest(0x60)); // was true before audit C2 (re-establishment)
+    EXPECT_FALSE(isLocationUpdatingRequest(0xC0)); // MO call
 }
 
 // ── ChannelPool Basic Operations ───────────────────────────────────────
@@ -220,8 +213,8 @@ TEST(ChannelPoolVEATest, AllocateVEA_MOC_tryTCHFirst) {
     pool.addChannel({ChannelType::TCHFType, 1, 0, 200});
     pool.addChannel({ChannelType::SDCCHType, 0, 0, 100});
 
-    // RA=0x00: MO call. VEA should allocate TCH first.
-    auto ch = pool.allocateVEA(0x00);
+    // RA=0xC0: originating call (111xxxxx). VEA allocates TCH first (audit C2).
+    auto ch = pool.allocateVEA(0xC0);
     ASSERT_TRUE(ch.has_value());
     EXPECT_EQ(ch->type, ChannelType::TCHFType);
 }
@@ -231,8 +224,8 @@ TEST(ChannelPoolVEATest, AllocateVEA_fallbackToSDCCH) {
     ChannelPool pool;
     pool.addChannel({ChannelType::SDCCHType, 0, 0, 100});
 
-    // RA=0x00: MO call. No TCH available, should fall back to SDCCH.
-    auto ch = pool.allocateVEA(0x00);
+    // RA=0xC0: originating call. No TCH available — VEA falls back to SDCCH.
+    auto ch = pool.allocateVEA(0xC0);
     ASSERT_TRUE(ch.has_value());
     EXPECT_EQ(ch->type, ChannelType::SDCCHType);
 }
@@ -242,8 +235,9 @@ TEST(ChannelPoolVEATest, AllocateVEA_LocationUpdate_usesSDCCH) {
     ChannelPool pool;
     pool.addChannel({ChannelType::SDCCHType, 0, 0, 100});
 
-    // RA=0x60: Location Updating. Should allocate SDCCH directly.
-    auto ch = pool.allocateVEA(0x60);
+    // RA=0x00: location updating (0000xxxx) — must never get a TCH via the
+    // VEA path (audit C2).
+    auto ch = pool.allocateVEA(0x00);
     ASSERT_TRUE(ch.has_value());
     EXPECT_EQ(ch->type, ChannelType::SDCCHType);
 }

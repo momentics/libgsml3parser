@@ -29,41 +29,31 @@ namespace gsml3parser {
 // ── RA Decoding (GSM 04.08 Table 9.9) ──────────────────────────────────
 
 ChannelType decodeChannelNeeded(uint8_t ra, bool neci, bool vea) {
-    (void)neci; // NECI extension reserved for future use; legacy decoding applied
+    (void)neci; // NECI-specific variants are covered by the explicit patterns below.
 
-    // Establishment cause: bits 6-5 of RA byte (GSM 04.08 5.1.3)
-    //   00 - Mobile Originating (normal call)
-    //   01 - Emergency Call
-    //   10 - Answer to Paging
-    //   11 - Location Updating
-    uint8_t establishmentCause = (ra >> 5) & 0x03;
-
-    switch (establishmentCause) {
-        case 0x00: {
-            // MO call: with VEA assign TCH directly, otherwise SDCCH
-            if (vea) {
-                return ChannelType::TCHFType;
-            }
-            return ChannelType::SDCCHType;
-        }
-        case 0x01:
-            // Emergency call always needs TCH
-            return ChannelType::TCHFType;
-        case 0x02:
-            // Answer to Paging needs TCH
-            return ChannelType::TCHFType;
-        case 0x03:
-            // Location Updating needs SDCCH
-            return ChannelType::SDCCHType;
-        default:
-            return ChannelType::UndefinedCHType;
-    }
+    // 8-bit RA pattern decoding — TS 44.018 Table 9.1.8.1 / 9.1.8.2
+    // (audit C2: the previous 2-bit (ra >> 5) & 0x03 mapping misclassified
+    // most patterns, e.g. originating call 111xxxxx became "location
+    // updating" -> SDCCH instead of TCH).
+    if (ra < 0x20) return ChannelType::SDCCHType;   // 0000xxxx LU / 0001xxxx other SDCCH procedures
+    if (ra < 0x30) return ChannelType::TCHFType;    // 0010xxxx answer to paging, TCH/F
+    if (ra < 0x40) return ChannelType::TCHHType;    // 0011xxxx answer to paging, TCH/H or TCH/F
+    if (ra < 0x60) return ChannelType::TCHHType;    // 0100xxxx/0101xxxx MO speech/data TCH/H (NECI)
+    if (ra < 0x68) return ChannelType::SDCCHType;   // 01100xxx MBMS/reserved + 01100111 LMU
+    if (ra < 0x70) return ChannelType::TCHHType;    // 011010xx/011011xx re-establishment TCH/H (NECI)
+    if (ra < 0x80) return ChannelType::UndefinedCHType; // 0111xxxx GPRS packet access / reserved (no PCU)
+    if (ra < 0xA0) return ChannelType::TCHFType;    // 100xxxxx answer to paging (any channel)
+    if (ra < 0xC0) return ChannelType::TCHFType;    // 101xxxxx emergency / 110xxxxx re-establishment TCH/F
+    return vea ? ChannelType::TCHFType : ChannelType::SDCCHType; // 111xxxxx MO call
 }
 
 bool isLocationUpdatingRequest(uint8_t ra, bool neci) {
-    (void)neci; // NECI extension reserved for future use
-    // Establishment cause 11 (bits 6-5) = Location Updating
-    return ((ra >> 5) & 0x03) == 0x03;
+    (void)neci; // NECI variants are covered by the explicit pattern below.
+    // 0000xxxx: location updating (NECI=1). The 0001xxxx form ("other
+    // SDCCH procedures", NECI=1) is ambiguous with paging SDCCH-only
+    // accesses, so only 0000xxxx is reported as LU (audit C2: the previous
+    // (ra >> 5) & 0x03 == 0x03 test matched 0110xxxx = re-establishment).
+    return ra < 0x10;
 }
 
 // ── ChannelPool Implementation ─────────────────────────────────────────
@@ -149,21 +139,20 @@ size_t ChannelPool::totalCount() const {
 }
 
 std::optional<ChannelDescriptor> ChannelPool::allocateVEA(uint8_t ra) {
-    // For MO calls (establishment cause 00), try TCH first, then SDCCH
-    uint8_t establishmentCause = (ra >> 5) & 0x03;
-
-    if (establishmentCause == 0x00) {
-        // MO call: try TCHF first
-        auto tch = allocate(ChannelType::TCHFType);
-        if (tch) return tch;
-        // Try TCHH as fallback within TCH family
-        auto tchh = allocate(ChannelType::TCHHType);
-        if (tchh) return tchh;
-        // Fall back to SDCCH
+    // VEA (Very Early Assignment) applies to originating calls
+    // (RA 111xxxxx): assign a TCH directly, falling back to SDCCH when no
+    // TCH is free (TS 44.018 5.2.4, audit C2: the previous
+    // (ra >> 5) & 0x03 == 0 test applied VEA to location updating 000xxxxx,
+    // which must never be assigned a TCH).
+    if (ra >= 0xC0) {
+        if (auto tch = allocate(ChannelType::TCHFType)) return tch;
+        // Try TCHH as fallback within the TCH family.
+        if (auto tchh = allocate(ChannelType::TCHHType)) return tchh;
+        // Fall back to SDCCH.
         return allocate(ChannelType::SDCCHType);
     }
 
-    // For other causes, use standard decode + allocate
+    // Other causes: standard decode + allocate.
     ChannelType needed = decodeChannelNeeded(ra, false, false);
     if (needed == ChannelType::UndefinedCHType) {
         return std::nullopt;

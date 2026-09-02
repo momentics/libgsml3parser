@@ -865,8 +865,9 @@ TEST(BTSProceduresTest, VEA_Allocation_Integration) {
     pool.addChannel({ChannelType::SDCCHType, 0, 0, 100});
     pool.addChannel({ChannelType::TCHFType, 1, 0, 200});
 
-    // RA for MO call (establishment cause = 00)
-    uint8_t ra = 0x00;
+    // RA=0xC0: originating call (111xxxxx) — the only pattern VEA applies
+    // to (TS 44.018 5.2.4, audit C2).
+    uint8_t ra = 0xC0;
 
     // VEA: try TCH first
     auto ch = pool.allocateVEA(ra);
@@ -889,24 +890,25 @@ TEST(BTSProceduresTest, VEA_Allocation_Integration) {
 
 // decodeChannelNeeded and isLocationUpdatingRequest integration
 TEST(BTSProceduresTest, RA_Decoding_Integration) {
-    // MO call without VEA -> SDCCH (establishment cause 00, bits 6-5 = 00, RA=0x00)
+    // 0000xxxx location updating without VEA -> SDCCH (RA=0x00)
     EXPECT_EQ(decodeChannelNeeded(0x00, false, false), ChannelType::SDCCHType);
 
-    // MO call with VEA -> TCH (establishment cause 00, bits 6-5 = 00, RA=0x00)
-    EXPECT_EQ(decodeChannelNeeded(0x00, false, true), ChannelType::TCHFType);
+    // 0000xxxx location updating with VEA -> SDCCH (VEA does not apply to
+    // location updating, audit C2; RA=0x00)
+    EXPECT_EQ(decodeChannelNeeded(0x00, false, true), ChannelType::SDCCHType);
 
-    // Emergency call -> TCH always (establishment cause 01, bits 6-5 = 01, RA=0x20)
+    // 0010xxxx paging TCH/F -> TCH/F (RA=0x20)
     EXPECT_EQ(decodeChannelNeeded(0x20, false, false), ChannelType::TCHFType);
 
-    // Answer to Paging -> TCH (establishment cause 10, bits 6-5 = 10, RA=0x40)
-    EXPECT_EQ(decodeChannelNeeded(0x40, false, false), ChannelType::TCHFType);
+    // 0100xxxx MO TCH/H -> TCH/H (RA=0x40)
+    EXPECT_EQ(decodeChannelNeeded(0x40, false, false), ChannelType::TCHHType);
 
-    // Location Updating -> SDCCH (establishment cause 11, bits 6-5 = 11, RA=0x60)
+    // 01100xxx reserved/MBMS -> SDCCH (RA=0x60)
     EXPECT_EQ(decodeChannelNeeded(0x60, false, false), ChannelType::SDCCHType);
 
-    // isLocationUpdatingRequest checks: establishment cause 11 (RA=0x60)
-    EXPECT_TRUE(isLocationUpdatingRequest(0x60));
-    EXPECT_FALSE(isLocationUpdatingRequest(0x00));
+    // isLocationUpdatingRequest checks: only 0000xxxx is LU (audit C2)
+    EXPECT_FALSE(isLocationUpdatingRequest(0x60));
+    EXPECT_TRUE(isLocationUpdatingRequest(0x00));
     EXPECT_FALSE(isLocationUpdatingRequest(0x20));
 }
 

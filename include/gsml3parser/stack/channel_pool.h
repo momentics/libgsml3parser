@@ -91,33 +91,33 @@ struct hash<gsml3parser::ChannelDescriptor> {
 
 namespace gsml3parser {
 
-/// Decodes Request Reference (RA) from a RACH burst into the needed
-/// channel type, following GSM 04.08 Table 9.9.
+/// Decodes the 8-bit Request Reference (RA) from a RACH burst into the
+/// needed channel type, following TS 44.018 Table 9.1.8.1 / 9.1.8.2.
 ///
-/// The RA byte encodes the establishment cause and access category.
-/// Establishment cause bits (6-5) determine the channel type:
-///   00 - Mobile Originating call -> TCH (with VEA) or SDCCH (without VEA)
-///   01 - Emergency call -> TCH always
-///   10 - Answer to Paging -> TCH
-///   11 - Location Updating -> SDCCH
+/// The RA is an 8-bit pattern (establishment cause + random reference),
+/// NOT a 2-bit field: e.g. 111xxxxx = originating call, 101xxxxx =
+/// emergency call, 0000xxxx = location updating (audit C2).
 ///
 /// @param ra The 8-bit RA value from the Channel Request message.
-/// @param neci Non-Extended Channel Indicator (0 = legacy, 1 = NECI extended).
-///             When NECI is set, additional channel type information may be encoded.
-/// @param vea Very Early Assignment enabled. When true, MO calls can be assigned
-///            directly to TCH without an intermediate SDCCH assignment.
-/// @return Required channel type, or UndefinedCHType if RA value is unrecognized.
-/// Performance: O(1) bit operations, no heap allocation.
+/// @param neci Non-Extended Channel Indicator (accepted for API stability;
+///             NECI variants are covered by the explicit patterns).
+/// @param vea Very Early Assignment enabled. When true, originating calls
+///            (111xxxxx) are assigned a TCH directly.
+/// @return Required channel type, or UndefinedCHType for GPRS packet
+///         access patterns (0111xxxx) and reserved values.
+/// Performance: O(1) range checks, no heap allocation.
 [[nodiscard]] ChannelType decodeChannelNeeded(uint8_t ra, bool neci = false, bool vea = false);
 
 /// Returns true if the RA indicates a Location Updating Request.
 ///
-/// Checks establishment cause bits (6-5) for value 11 (Location Updating).
+/// Pattern 0000xxxx (TS 44.018 Table 9.1.8.1). The 0001xxxx form is
+/// ambiguous with "other SDCCH procedures" and is not reported as LU
+/// (audit C2).
 ///
 /// @param ra The 8-bit RA value from the Channel Request message.
-/// @param neci Non-Extended Channel Indicator (reserved for future extended decoding).
-/// @return True if the establishment cause indicates a location updating request.
-/// Performance: O(1) bit operations, no heap allocation.
+/// @param neci Accepted for API stability (unused).
+/// @return True for location updating RA patterns.
+/// Performance: O(1) range check, no heap allocation.
 [[nodiscard]] bool isLocationUpdatingRequest(uint8_t ra, bool neci = false);
 
 /// Manages a pool of logical channels and handles allocation/release.
