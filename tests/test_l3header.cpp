@@ -200,8 +200,20 @@ TEST(L3HeaderTest, SMSHeader) {
     // PD=0x09(SMS), MTI=0x01(CPData), raw byte extraction
     std::array<uint8_t, 2> data{0x90, 0x01};
     auto res = parseL3Header(data);
-    EXPECT_TRUE(res.has_value());
+    ASSERT_TRUE(res);
     L3Header hdr = res.value();
     EXPECT_EQ(hdr.pd, L3PD::SMS);
     EXPECT_EQ(hdr.mti, 0x01);
+}
+
+// Test: reserved PD values (0x02, 0x04, 0x07, 0x0d) are rejected with
+// InvalidPD instead of producing an L3Header with a non-enumerator PD
+// (audit Q4).
+TEST(L3HeaderTest, ReservedPD_Invalid) {
+    for (uint8_t pd : {0x02u, 0x04u, 0x07u, 0x0Du}) {
+        uint8_t data[] = {static_cast<uint8_t>(pd << 4), 0x00};
+        auto res = parseL3Header(std::span<const uint8_t>(data, 2));
+        ASSERT_FALSE(res) << "PD 0x" << std::hex << pd << " must be rejected";
+        EXPECT_EQ(res.error().code, ParseError::Code::InvalidPD);
+    }
 }

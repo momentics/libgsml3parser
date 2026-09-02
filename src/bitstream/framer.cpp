@@ -247,6 +247,7 @@ Expected<ExtractedFrame> L3Framer::tryExtract() {
         auto hdrResult = parseL3Header(std::span<const uint8_t>(mBuf.data() + mPos, frameLen));
         if (!hdrResult || !hdrResult.value().isValid()) {
             // Invalid PD - skip this byte and try again.
+            // Invalid/reserved PD - skip this byte and resync (audit Q4).
             mPos++;
             return Expected<ExtractedFrame>::error(
                 {ParseError::Code::InvalidPD, "invalid L3 header in frame"});

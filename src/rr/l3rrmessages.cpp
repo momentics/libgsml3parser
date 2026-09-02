@@ -2943,12 +2943,18 @@ Expected<L3SystemInformationType14> L3SystemInformationType14::parse(BitReader& 
     L3SystemInformationType14 msg;
     { auto res = L3CellIdentity::parse(br); if (!res) return Expected<L3SystemInformationType14>::error(res.error()); msg.mCI = std::move(res.value()); }
     { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType14>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
+    // Spare octet (GSM 24.008 9.1.43d): body is 5 octets, so it must be
+    // consumed for the parse to be the exact inverse of write() (audit N1:
+    // a 7-byte frame whose standard parse leaves a tail is treated as a
+    // short message).
+    { auto res = br.readField(8); if (!res) return Expected<L3SystemInformationType14>::error(res.error()); }
     return Expected<L3SystemInformationType14>::hold(std::move(msg));
 }
 
 void L3SystemInformationType14::write(BitWriter& bw) const {
     mCI.write(bw);
     mCellSelectionParameters.write(bw);
+    bw.writeField(0, 8); // spare octet (GSM 24.008 9.1.43d)
 }
 
 void L3SystemInformationType14::text(std::ostream& os) const {

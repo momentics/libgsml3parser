@@ -476,6 +476,64 @@ TEST(ParserTest, ShortMessage_HandoverAccess) {
     EXPECT_EQ(messagePD(*res), L3PD::RadioResource);
 }
 
+// Test: a 4-byte HandoverAccess whose first octet looks like an RR header
+// (nibble 0x6) and whose second byte is a valid RR MTI with a shorter body
+// must NOT be misparsed as the RR message (audit N1). The standard parse
+// wins only on exact frame consumption.
+TEST(ParserTest, ShortMessage_HandoverAccess_RRPrefixNotMisparsed) {
+    // {0x60, 0x12, 0x00, 0x03}: RR nibble, TIF=0 (low bit of byte 0 must
+    // be 0 — with TIF=1 the header maps the MTI into the 0x100+ short
+    // space and the standard parse fails on unknown MTI instead of
+    // leaving a tail), MTI 0x12 (RR Status, 1-byte body) would consume
+    // only 3 of the 4 bytes -> not exact -> the frame is a HandoverAccess.
+    uint8_t data[] = {0x60, 0x12, 0x00, 0x03};
+    auto res = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messageMTI(*res), L3HandoverAccess::MTI)
+        << "expected HandoverAccess, got MTI 0x" << std::hex << messageMTI(*res);
+}
+
+// Test: a genuine 4-byte CC message (Facility, 2-byte body) parses as CC —
+// the short-message handler must not swallow it (audit N1).
+TEST(ParserTest, ShortMessage_ExactCCMessageWins) {
+    auto fac = L3Facility::builder().ti(0).facilityBody({0x27, 0x00}).build();
+    ParsedMessage pm{CCM{std::move(fac)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    const auto& vec = bytes.value();
+    ASSERT_EQ(vec.size(), 4u);
+    auto res = parseL3(std::span<const uint8_t>(vec.data(), vec.size()));
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::CallControl);
+    EXPECT_EQ(messageMTI(*res), L3Facility::MTI);
+}
+
+// Test: a genuine 7-byte CC message (Facility, 5-byte body) parses as CC,
+// not as SynchronizationChannelInformation (audit N1).
+TEST(ParserTest, ShortMessage_ExactCCMessageWins_7Bytes) {
+    auto fac = L3Facility::builder().ti(1).facilityBody({0x27, 0x01, 0x02, 0x03, 0x04}).build();
+    ParsedMessage pm{CCM{std::move(fac)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    const auto& vec = bytes.value();
+    ASSERT_EQ(vec.size(), 7u);
+    auto res = parseL3(std::span<const uint8_t>(vec.data(), vec.size()));
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::CallControl);
+}
+
+// Test: 4-byte frames with reserved PD nibbles (0x02/0x04/0x07/0x0d) are
+// HandoverAccess, not "invalid PD" (audit N1 + Q4: parseL3Header now
+// rejects reserved PDs, so the short-message path must still be reached).
+TEST(ParserTest, ShortMessage_HandoverAccess_ReservedPDNibble) {
+    for (uint8_t first : {0x21u, 0x41u, 0x71u, 0xD1u}) {
+        uint8_t data[] = {first, 0x00, 0x00, 0x03};
+        auto res = parseL3(std::span<const uint8_t>(data));
+        ASSERT_TRUE(res) << "first byte 0x" << std::hex << first;
+        EXPECT_EQ(messageMTI(*res), L3HandoverAccess::MTI);
+    }
+}
+
 // =====================================================================
 // parseL3Hex with uppercase and lowercase hex digits
 // =====================================================================

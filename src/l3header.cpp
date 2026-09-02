@@ -31,13 +31,22 @@ Expected<L3Header> parseL3Header(std::span<const uint8_t> data) {
 
     L3Header hdr;
 
-    // Byte 0: bits 7-4 = PD (high nibble)
+    // Byte 0: bits 7-4 = PD (high nibble).
+    // Only the 12 PD values defined in GSM 04.08 10.2 are valid; 0x02,
+    // 0x04, 0x07 and 0x0d are reserved. The previous static_cast produced
+    // an L3PD holding a non-enumerator value that passed isValid()
+    // (audit Q4).
     uint8_t byte0 = data[0];
-    hdr.pd = static_cast<L3PD>((byte0 >> 4) & 0x0F);
-
-    if (hdr.pd == L3PD::Undefined) {
-        return Expected<L3Header>::error(
-            ParseError{ParseError::Code::InvalidPD, "Invalid Protocol Discriminator"});
+    uint8_t pdNibble = (byte0 >> 4) & 0x0F;
+    switch (pdNibble) {
+        case 0x00: case 0x01: case 0x03: case 0x05: case 0x06:
+        case 0x08: case 0x09: case 0x0a: case 0x0b: case 0x0c:
+        case 0x0e: case 0x0f:
+            hdr.pd = static_cast<L3PD>(pdNibble);
+            break;
+        default:
+            return Expected<L3Header>::error(
+                {ParseError::Code::InvalidPD, "Invalid Protocol Discriminator"});
     }
 
     // Byte 0 low nibble: bits 2-4 = TI (3 bits), bit 0 = TIF (1 bit)

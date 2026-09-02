@@ -798,6 +798,59 @@ Expected<TESTPROC> parseL3TestProc(BitReader& reader, uint8_t mti) {
     return L3TestProcedureMessage::parse(reader, mti).map([](L3TestProcedureMessage v){ return TESTPROC(std::move(v)); });
 }
 
+/// Parse the body of a standard-header message: the 12-domain switch.
+/// Shared by the main parseL3 path and by the 4/7-byte short-message
+/// disambiguation (which additionally requires exact frame consumption,
+/// audit N1).
+[[nodiscard]] Expected<ParsedMessage> parseStandardBody(const L3Header& hdr, BitReader& reader) {
+    switch (hdr.pd) {
+        case L3PD::RadioResource: {
+            auto rrRes = parseL3RR(reader, hdr.mti);
+            if (rrRes) return rrRes.map([](RRM v){ return ParsedMessage(std::move(v)); });
+            // Truncated body (e.g. incomplete SI message) is a hard error:
+            // never fabricate a default-constructed message (C11).
+            return Expected<ParsedMessage>::error(rrRes.error());
+        }
+        case L3PD::MobilityManagement:
+            return parseL3MM(reader, hdr.mti)
+                .map([](MMM v){ return ParsedMessage(std::move(v)); });
+        case L3PD::CallControl:
+            return parseL3CC(reader, hdr.mti, hdr.ti)
+                .map([](CCM v){ return ParsedMessage(std::move(v)); });
+        case L3PD::NonCallSS:
+            return parseL3SS(reader, hdr.mti, hdr.ti)
+                .map([](SSM v){ return ParsedMessage(std::move(v)); });
+        case L3PD::GPRSMobilityManagement:
+            return parseL3GMM(reader, hdr.mti)
+                .map([](GMM v){ return ParsedMessage(std::move(v)); });
+        case L3PD::GPRSSessionManagement:
+            return parseL3SM(reader, hdr.mti)
+                .map([](SM v){ return ParsedMessage(std::move(v)); });
+        case L3PD::SMS:
+            return parseL3SMS(reader, hdr.mti)
+                .map([](SMS v){ return ParsedMessage(std::move(v)); });
+        case L3PD::BroadcastCallControl:
+            return parseL3BCC(reader, hdr.mti, hdr.ti)
+                .map([](BCCM v){ return ParsedMessage(std::move(v)); });
+        case L3PD::GroupCallControl:
+            return parseL3GCC(reader, hdr.mti, hdr.ti)
+                .map([](GCCM v){ return ParsedMessage(std::move(v)); });
+        case L3PD::Location:
+            return parseL3LS(reader, hdr.mti)
+                .map([](LSM v){ return ParsedMessage(std::move(v)); });
+        case L3PD::Extended:
+            return parseL3Extended(reader, static_cast<uint8_t>(hdr.mti))
+                .map([](EXTENDED v){ return ParsedMessage(std::move(v)); });
+        case L3PD::TestProcedure:
+            return parseL3TestProc(reader, static_cast<uint8_t>(hdr.mti))
+                .map([](TESTPROC v){ return ParsedMessage(std::move(v)); });
+    }
+    // Unreachable: parseL3Header only accepts the 12 defined PD values
+    // (reserved PDs are rejected — audit Q4).
+    return Expected<ParsedMessage>::error(
+        {ParseError::Code::InvalidPD, "Unsupported Protocol Discriminator"});
+}
+
 } // namespace detail
 
 Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfig& cfg) {
@@ -840,19 +893,12 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
     if (data.size() == 4 || data.size() == 7) {
         uint8_t pdNibble = (data[0] >> 4) & 0x0F;
 
-        // RR PD: try standard RR parsing first, then fall back to short message.
-        if (pdNibble == static_cast<uint8_t>(L3PD::RadioResource)) {
-            auto hdrResult = parseL3Header(data);
-            if (hdrResult) {
-                size_t bodyBits = (data.size() - 2) * 8;
-                BitReader reader(data.data() + 2, bodyBits);
-                auto rrRes = detail::parseL3RR(reader, hdrResult.value().mti);
-                if (rrRes) return rrRes.map([](RRM v){ return ParsedMessage(std::move(v)); });
-            }
-        }
-
-        // BCC/GCC PD: short messages may have first byte that looks like BCC/GCC header.
-        // Try short message handler first, then fall through to standard BCC/GCC parsing.
+        // BCC/GCC PD: short messages win. BCC Setup (MTI 0x00) and
+        // BCC Proceeding (MTI 0x01) have opaque bodies that consume the
+        // whole frame, so a standard parse would always "succeed exactly"
+        // and swallow genuine HandoverAccess/SynchronizationChannelInformation
+        // frames (golden vectors {0x17, 0x00, ...} and {0x12, 0x34, ...}
+        // pin this behavior).
         if (pdNibble == static_cast<uint8_t>(L3PD::BroadcastCallControl) ||
             pdNibble == static_cast<uint8_t>(L3PD::GroupCallControl)) {
             if (data.size() == 4) {
@@ -865,109 +911,54 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
                 auto res = L3SynchronizationChannelInformation::parse(reader);
                 if (res) return res.map([](L3SynchronizationChannelInformation v){ return ParsedMessage(RRM(std::move(v))); });
             }
-        }
+        } else {
+            // Other PDs: the standard parse wins only on EXACT
+            // consumption. A standard parse that leaves trailing bytes
+            // means the frame is a short message whose first octet merely
+            // looks like a plausible header (audit N1: e.g. HandoverAccess
+            // {0x60, 0x12, ..} used to be misparsed as RR Status with the
+            // trailing byte silently dropped).
+            auto hdrResult = parseL3Header(data);
+            if (hdrResult) {
+                size_t bodyBits = (data.size() - 2) * 8;
+                BitReader reader(data.data() + 2, bodyBits);
+                auto stdRes = detail::parseStandardBody(hdrResult.value(), reader);
+                if (stdRes && reader.remainingBits() == 0) {
+                    return stdRes;
+                }
+            }
 
-        // RR standard parse failed; fall back to short message handler.
-        if (pdNibble == static_cast<uint8_t>(L3PD::RadioResource)) {
+            // Short messages: HandoverAccess (4 bytes) / Synchronization
+            // Channel Information (7 bytes). Their first octet is not an
+            // L3 header, so they are tried for ANY first-octet value,
+            // including reserved PD nibbles (rejected by parseL3Header).
+            // Both parsers consume the whole frame, so success is
+            // unambiguous.
             if (data.size() == 4) {
                 BitReader reader(data.data(), 32);
                 auto res = L3HandoverAccess::parse(reader);
-                return std::move(res).map([](L3HandoverAccess v){ return ParsedMessage(RRM(std::move(v))); });
+                if (res) return res.map([](L3HandoverAccess v){ return ParsedMessage(RRM(std::move(v))); });
             }
             if (data.size() == 7) {
                 BitReader reader(data.data(), 56);
                 auto res = L3SynchronizationChannelInformation::parse(reader);
-                return std::move(res).map([](L3SynchronizationChannelInformation v){ return ParsedMessage(RRM(std::move(v))); });
+                if (res) return res.map([](L3SynchronizationChannelInformation v){ return ParsedMessage(RRM(std::move(v))); });
             }
         }
+        // Defensive fall-through: a 4/7-byte frame whose short parse
+        // unexpectedly failed (impossible today: both short parsers always
+        // succeed on full-length input) reaches the standard parse below,
+        // which returns a proper error.
     }
 
     // Standard L3 header parsing.
     auto hdrResult = parseL3Header(data);
     if (!hdrResult) {
-        // For 7-byte data with unparseable header, try SynchronizationChannelInformation.
-        if (data.size() == 7) {
-            BitReader reader(data.data(), 56);
-            auto res = L3SynchronizationChannelInformation::parse(reader);
-            return std::move(res).map([](L3SynchronizationChannelInformation v){ return ParsedMessage(RRM(std::move(v))); });
-        }
         return Expected<ParsedMessage>::error(hdrResult.error());
     }
-    auto hdr = std::move(hdrResult).value();
-
     size_t bodyBits = (data.size() - 2) * 8;
     BitReader reader(data.data() + 2, bodyBits);
-
-    switch (hdr.pd) {
-        case L3PD::RadioResource: {
-            auto rrRes = detail::parseL3RR(reader, hdr.mti);
-            if (rrRes) return rrRes.map([](RRM v){ return ParsedMessage(std::move(v)); });
-            // Truncated body (e.g. incomplete SI message) is a hard error:
-            // never fabricate a default-constructed message (C11).
-            return Expected<ParsedMessage>::error(rrRes.error());
-        }
-
-        case L3PD::MobilityManagement:
-            return detail::parseL3MM(reader, hdr.mti)
-                .map([](MMM v){ return ParsedMessage(std::move(v)); });
-
-        case L3PD::CallControl:
-            return detail::parseL3CC(reader, hdr.mti, hdr.ti)
-                .map([](CCM v){ return ParsedMessage(std::move(v)); });
-
-        case L3PD::NonCallSS:
-            return detail::parseL3SS(reader, hdr.mti, hdr.ti)
-                .map([](SSM v){ return ParsedMessage(std::move(v)); });
-
-        case L3PD::GPRSMobilityManagement:
-            return detail::parseL3GMM(reader, hdr.mti)
-                .map([](GMM v){ return ParsedMessage(std::move(v)); });
-
-        case L3PD::GPRSSessionManagement:
-            return detail::parseL3SM(reader, hdr.mti)
-                .map([](SM v){ return ParsedMessage(std::move(v)); });
-
-        case L3PD::SMS:
-            return detail::parseL3SMS(reader, hdr.mti)
-                .map([](SMS v){ return ParsedMessage(std::move(v)); });
-
-        case L3PD::BroadcastCallControl:
-            return detail::parseL3BCC(reader, hdr.mti, hdr.ti)
-                .map([](BCCM v){ return ParsedMessage(std::move(v)); });
-
-        case L3PD::GroupCallControl:
-            return detail::parseL3GCC(reader, hdr.mti, hdr.ti)
-                .map([](GCCM v){ return ParsedMessage(std::move(v)); });
-
-        case L3PD::Location:
-            return detail::parseL3LS(reader, hdr.mti)
-                .map([](LSM v){ return ParsedMessage(std::move(v)); });
-
-        case L3PD::Extended:
-            return detail::parseL3Extended(reader, static_cast<uint8_t>(hdr.mti))
-                .map([](EXTENDED v){ return ParsedMessage(std::move(v)); });
-
-        case L3PD::TestProcedure:
-            return detail::parseL3TestProc(reader, static_cast<uint8_t>(hdr.mti))
-                .map([](TESTPROC v){ return ParsedMessage(std::move(v)); });
-
-        default: {
-            // For 7-byte data with unsupported PD, try SynchronizationChannelInformation.
-            if (data.size() == 7) {
-                BitReader rawReader(data.data(), 56);
-                auto res = L3SynchronizationChannelInformation::parse(rawReader);
-                if (res) return res.map([](L3SynchronizationChannelInformation v){ return ParsedMessage(RRM(std::move(v))); });
-            }
-            // For 4-byte data with unsupported PD, try HandoverAccess.
-            if (data.size() == 4) {
-                BitReader rawReader(data.data(), 32);
-                auto res = L3HandoverAccess::parse(rawReader);
-                if (res) return res.map([](L3HandoverAccess v){ return ParsedMessage(RRM(std::move(v))); });
-            }
-            return Expected<ParsedMessage>::error(
-                ParseError{ParseError::Code::InvalidPD, "Unsupported Protocol Discriminator"});
-        }
-    }
+    return detail::parseStandardBody(hdrResult.value(), reader);
 }
 
 Expected<ParsedMessage> parseL3Hex(std::string_view hex, const ParserConfig& cfg) {
