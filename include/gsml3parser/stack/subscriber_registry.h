@@ -61,6 +61,7 @@
 #include "gsml3parser/stack/procedure_runner.h"
 #include "gsml3parser/stack/channel_pool.h"
 #include "gsml3parser/stack/response_context.h"
+#include "gsml3parser/stack/flat_map.h"
 
 namespace gsml3parser {
 
@@ -144,7 +145,10 @@ struct ImsiViewHash {
 ///
 /// 3GPP TS 24.008 - Subscriber data management.
 /// Thread safety: NOT thread-safe. One instance per BTS, single event-loop access.
-/// Memory: std::unordered_map indexes. For >100K sessions prefer ShardedSubscriberRegistry.
+/// Memory: flat open-addressing TMSI/link indexes (stack/flat_map.h) +
+/// unordered_map IMSI index (cold path). Call reserve() at startup for
+/// known scale; for >100K concurrent sessions prefer
+/// ShardedSubscriberRegistry.
 class SubscriberRegistry {
 public:
     SubscriberRegistry() = default;
@@ -199,6 +203,11 @@ public:
     /// Remove all sessions (emergency shutdown).
     void clear() noexcept;
 
+    /// Pre-size the flat TMSI/link indexes for the expected subscriber
+    /// population (one-time, cold path; avoids incremental rehashing at
+    /// scale — audit SCALE).
+    void reserve(size_t expectedSessions);
+
     /// Number of active sessions.
     /// @return Count of currently tracked sessions.
     /// Performance: O(1) (maintained counter, audit Q5).
@@ -208,9 +217,9 @@ public:
     /// Guarantees each session is visited exactly once.
     template<typename F>
     void forEach(F&& callback) {
-        for (auto& [key, entry] : mByTMSI) {
+        mByTMSI.forEach([&callback](uint32_t, const SessionEntry& entry) {
             if (entry.active) callback(entry.session);
-        }
+        });
     }
 
     /// Tick timers of all sessions. Fills the pre-allocated buffer with expiry
@@ -241,18 +250,22 @@ private:
         bool active{true};
     };
 
-    // TMSI -> session (primary index)
-    std::unordered_map<uint32_t, SessionEntry> mByTMSI;
+    // TMSI -> session (primary index). Flat open-addressing table: inline
+    // entries, no per-node heap allocation, no pointer chasing
+    // (audit SCALE).
+    FlatMap<uint32_t, SessionEntry> mByTMSI;
 
     // IMSI -> TMSI (secondary index: redirects to mByTMSI).
     // Transparent heterogeneous lookup: find()/count() take std::string_view
     // directly (removal goes through find + iterator erase) without
     // constructing a temporary std::string — zero heap allocation on the
-    // lookup path.
+    // lookup path. Kept as unordered_map: owned std::string keys, cold
+    // path (audit SCALE).
     std::unordered_map<std::string, uint32_t, ImsiViewHash, std::equal_to<>> mByIMSI;
 
-    // LAPDm link key (trx:8 | ts:8 | lapdmLink:8) -> session pointer
-    std::unordered_map<uint32_t, SubscriberSession*> mByLink;
+    // LAPDm link key (trx:8 | ts:8 | lapdmLink:8) -> session pointer.
+    // Flat open-addressing table (audit SCALE).
+    FlatMap<uint32_t, SubscriberSession*> mByLink;
 
     // High-water mark for auto-assigned TMSIs (createByIMSI). Advances past
     // any in-use TMSI so auto-assignment never collides with user-assigned
@@ -442,6 +455,25 @@ public:
     /// @param delta Time advance in milliseconds.
     /// @return Total number of procedures that failed due to timeout.
     size_t tickAllProcedures(std::chrono::milliseconds delta);
+
+    /// Pre-size the flat indexes of every shard (cold path; audit SCALE).
+    void reserve(size_t expectedSessions) {
+        for (auto& shard : mShards) {
+            std::lock_guard lock(shard.mutex);
+            shard.registry.reserve(expectedSessions / N + 1);
+        }
+    }
+
+    /// Total number of active sessions across all shards (diagnostics).
+    /// Thread-safe (per-shard shared locks).
+    [[nodiscard]] size_t count() const {
+        size_t total = 0;
+        for (const auto& shard : mShards) {
+            std::shared_lock lock(shard.mutex); // Shard::mutex is mutable
+            total += shard.registry.count();
+        }
+        return total;
+    }
 
     /// Iterate all sessions across all shards. Thread-safe (shared locks).
     template<typename F>

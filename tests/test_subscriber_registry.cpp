@@ -197,8 +197,8 @@ TEST(SR_forEach, VisitsEachSessionOnce) {
     reg.createByTMSI(0x0B0B0B0B);
     reg.createByTMSI(0x0C0C0C0C);
 
-    std::set<SubscriberSession*> visited;
-    reg.forEach([&](SubscriberSession& sess) {
+    std::set<const SubscriberSession*> visited;
+    reg.forEach([&](const SubscriberSession& sess) {
         visited.insert(&sess);
     });
     EXPECT_EQ(visited.size(), 3u);

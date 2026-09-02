@@ -3598,6 +3598,12 @@ Size: `sizeof(SubscriberSession) < 4096 bytes`, all components inline.
 
 ### SubscriberRegistry API
 
+Storage: the TMSI and LAPDm-link indexes use a flat open-addressing
+hash table (`stack/flat_map.h`, inline entries, no per-node heap
+allocation); the IMSI index is a transparent-lookup `unordered_map`
+(owned `std::string` keys, cold path). Call `reserve()` at startup
+when the subscriber scale is known.
+
 ```cpp
 // Create sessions by identity.
 SubscriberSession* createByTMSI(uint32_t tmsi);
@@ -3618,6 +3624,9 @@ void releaseChannel(SubscriberSession* session);
 bool remove(SubscriberSession* session) noexcept;
 void clear() noexcept;
 size_t count() const noexcept;
+
+// Pre-size the flat TMSI/link indexes (one-time, cold path).
+void reserve(size_t expectedSessions);
 
 // Timer management.
 // tickAllTimers() is O(active): it ticks only sessions with at least one running

@@ -53,17 +53,17 @@ void SubscriberRegistry::handleProcedureActive(SubscriberSession* session, bool 
 }
 
 SubscriberSession* SubscriberRegistry::createByTMSI(uint32_t tmsi) {
-    auto [it, inserted] = mByTMSI.emplace(tmsi, SessionEntry{});
+    auto [idx, inserted] = mByTMSI.emplace(tmsi, SessionEntry{});
     if (!inserted) return nullptr;
+    SessionEntry& entry = mByTMSI.at(idx);
+    entry.session.context.setTMSI(tmsi);
+    entry.session.assignedTmsi = tmsi;
+    entry.session.timers.setOwner(&entry.session);
+    entry.session.timers.setOnActiveChange(&registryTimerActiveFn, this);
+    entry.session.procedures.setOwner(&entry.session);
+    entry.session.procedures.setOnActiveChange(&registryProcedureActiveFn, this);
     ++mCount;
-
-    it->second.session.context.setTMSI(tmsi);
-    it->second.session.assignedTmsi = tmsi;
-    it->second.session.timers.setOwner(&it->second.session);
-    it->second.session.timers.setOnActiveChange(&registryTimerActiveFn, this);
-    it->second.session.procedures.setOwner(&it->second.session);
-    it->second.session.procedures.setOnActiveChange(&registryProcedureActiveFn, this);
-    return &it->second.session;
+    return &entry.session;
 }
 
 SubscriberSession* SubscriberRegistry::createByIMSI(std::string_view imsi) {
@@ -79,35 +79,38 @@ SubscriberSession* SubscriberRegistry::createByIMSI(std::string_view imsi) {
     // TMSI space is full.
     uint32_t tmsi = mNextAutoTmsi++;
     size_t attempts = 0;
-    while (tmsi == 0 || mByTMSI.count(tmsi) != 0) {
+    while (tmsi == 0 ||
+           mByTMSI.find(tmsi) != FlatMap<uint32_t, SessionEntry>::npos) {
         tmsi = mNextAutoTmsi++;
         if (++attempts > mByTMSI.size() + 1) return nullptr;
     }
 
-    auto [tmsiIt, inserted] = mByTMSI.emplace(tmsi, SessionEntry{});
+    auto [tmsiIdx, inserted] = mByTMSI.emplace(tmsi, SessionEntry{});
     if (!inserted) return nullptr;
-    ++mCount;
-
-    tmsiIt->second.session.context.setIMSI(imsi);
-    tmsiIt->second.session.assignedTmsi = tmsi;
-    tmsiIt->second.session.timers.setOwner(&tmsiIt->second.session);
-    tmsiIt->second.session.timers.setOnActiveChange(&registryTimerActiveFn, this);
-    tmsiIt->second.session.procedures.setOwner(&tmsiIt->second.session);
-    tmsiIt->second.session.procedures.setOnActiveChange(&registryProcedureActiveFn, this);
+    SessionEntry& entry = mByTMSI.at(tmsiIdx);
+    entry.session.context.setIMSI(imsi);
+    entry.session.assignedTmsi = tmsi;
+    entry.session.timers.setOwner(&entry.session);
+    entry.session.timers.setOnActiveChange(&registryTimerActiveFn, this);
+    entry.session.procedures.setOwner(&entry.session);
+    entry.session.procedures.setOnActiveChange(&registryProcedureActiveFn, this);
     mByIMSI.emplace(std::move(key), tmsi);
-    return &tmsiIt->second.session;
+    ++mCount;
+    return &entry.session;
 }
 
 SubscriberSession* SubscriberRegistry::findByTMSI(uint32_t tmsi) noexcept {
-    auto it = mByTMSI.find(tmsi);
-    if (it != mByTMSI.end() && it->second.active) return &it->second.session;
-    return nullptr;
+    size_t idx = mByTMSI.find(tmsi);
+    if (idx == FlatMap<uint32_t, SessionEntry>::npos) return nullptr;
+    SessionEntry& entry = mByTMSI.at(idx);
+    return entry.active ? &entry.session : nullptr;
 }
 
 const SubscriberSession* SubscriberRegistry::findByTMSI(uint32_t tmsi) const noexcept {
-    auto it = mByTMSI.find(tmsi);
-    if (it != mByTMSI.end() && it->second.active) return &it->second.session;
-    return nullptr;
+    size_t idx = mByTMSI.find(tmsi);
+    if (idx == FlatMap<uint32_t, SessionEntry>::npos) return nullptr;
+    const SessionEntry& entry = mByTMSI.at(idx);
+    return entry.active ? &entry.session : nullptr;
 }
 
 SubscriberSession* SubscriberRegistry::findByIMSI(std::string_view imsi) noexcept {
@@ -139,8 +142,8 @@ constexpr uint32_t encodeLinkKey(uint8_t trx, uint8_t ts, uint8_t lapdmLink) noe
 
 SubscriberSession* SubscriberRegistry::findByLink(uint8_t trx, uint8_t ts, uint8_t lapdmLink) noexcept {
     uint32_t key = encodeLinkKey(trx, ts, lapdmLink);
-    auto it = mByLink.find(key);
-    if (it != mByLink.end()) return it->second;
+    size_t idx = mByLink.find(key);
+    if (idx != FlatMap<uint32_t, SubscriberSession*>::npos) return mByLink.at(idx);
     return nullptr;
 }
 
@@ -151,7 +154,7 @@ void SubscriberRegistry::assignChannel(SubscriberSession* session, ChannelDescri
         uint32_t oldKey = encodeLinkKey(session->context.trxNumber(),
                                         session->context.timeslot(),
                                         session->lapdmLink);
-        mByLink.erase(oldKey);
+        mByLink.erase(mByLink.find(oldKey)); // npos-safe: erase(npos) is a no-op
     }
 
     session->channel = desc;
@@ -159,7 +162,12 @@ void SubscriberRegistry::assignChannel(SubscriberSession* session, ChannelDescri
     session->context.assignChannel(desc.type, desc.trxNumber, desc.timeslot, desc.arfcn);
 
     uint32_t key = encodeLinkKey(desc.trxNumber, desc.timeslot, lapdmLink);
-    mByLink[key] = session;
+    size_t linkIdx = mByLink.find(key);
+    if (linkIdx == FlatMap<uint32_t, SubscriberSession*>::npos) {
+        mByLink.emplace(key, session);
+    } else {
+        mByLink.at(linkIdx) = session;
+    }
 }
 
 void SubscriberRegistry::releaseChannel(SubscriberSession* session) noexcept {
@@ -167,7 +175,7 @@ void SubscriberRegistry::releaseChannel(SubscriberSession* session) noexcept {
         uint32_t key = encodeLinkKey(session->context.trxNumber(),
                                      session->context.timeslot(),
                                      session->lapdmLink);
-        mByLink.erase(key);
+        mByLink.erase(mByLink.find(key)); // npos-safe: erase(npos) is a no-op
     }
     session->channel.reset();
     session->context.releaseChannel();
@@ -177,8 +185,9 @@ bool SubscriberRegistry::remove(SubscriberSession* session) noexcept {
     // O(1): derive the TMSI key from the session and look it up directly.
     if (!session) return false;
     uint32_t tmsi = session->assignedTmsi;
-    auto it = mByTMSI.find(tmsi);
-    if (it == mByTMSI.end() || &it->second.session != session || !it->second.active) {
+    size_t idx = mByTMSI.find(tmsi);
+    if (idx == FlatMap<uint32_t, SessionEntry>::npos ||
+        &mByTMSI.at(idx).session != session || !mByTMSI.at(idx).active) {
         return false;
     }
     releaseChannel(session);
@@ -198,7 +207,7 @@ bool SubscriberRegistry::remove(SubscriberSession* session) noexcept {
     // Erase the entry so memory is reclaimed (previously the entry
     // stayed in the map with active=false, leaking on every removal).
     // The session pointer is invalidated by this call.
-    mByTMSI.erase(it);
+    mByTMSI.erase(idx);
     --mCount;
     return true;
 }
@@ -219,6 +228,11 @@ void SubscriberRegistry::clear() noexcept {
 
 size_t SubscriberRegistry::count() const noexcept {
     return mCount;
+}
+
+void SubscriberRegistry::reserve(size_t expectedSessions) {
+    mByTMSI.reserve(expectedSessions);
+    mByLink.reserve(expectedSessions);
 }
 
 size_t SubscriberRegistry::tickAllTimers(std::chrono::milliseconds delta,

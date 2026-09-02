@@ -566,6 +566,53 @@ TEST(Stress, _1MSession_Create_Lookup_Tick_Scale) {
 #endif
 }
 
+// Test: 2,000,000 sessions on the flat index — create/lookup/tick within
+// budget (audit SCALE: the flat open-addressing table must scale past 1M
+// without the unordered_map per-node overhead).
+TEST(Stress, _2MSession_FlatIndex_Scale) {
+    // Attribute the timing result to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
+    ShardedSubscriberRegistry<32> reg;
+    reg.reserve(2'000'000);
+    constexpr uint32_t N = 2'000'000;
+    auto t0 = std::chrono::steady_clock::now();
+    for (uint32_t i = 1; i <= N; ++i) {
+        auto* s = reg.createByTMSI(i);
+        ASSERT_NE(s, nullptr);
+    }
+    auto t1 = std::chrono::steady_clock::now();
+    double createMs = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
+    std::printf("2M create: %.1f ms\n", createMs);
+
+    auto t2 = std::chrono::steady_clock::now();
+    uint32_t found = 0;
+    for (uint32_t i = 1; i <= N; ++i) {
+        if (reg.findByTMSI(i)) ++found;
+    }
+    auto t3 = std::chrono::steady_clock::now();
+    double lookupMs = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() / 1000.0;
+    std::printf("2M lookup: %.1f ms\n", lookupMs);
+    EXPECT_EQ(found, N);
+    EXPECT_EQ(reg.count(), N);
+
+    // Tick: 10K active timers.
+    for (uint32_t i = 1; i <= 10000; ++i) {
+        reg.findByTMSI(i)->timers.start(L3TimerId::T3101, std::chrono::milliseconds(100));
+    }
+    std::vector<TimerExpiry> expired(20000);
+    auto t4 = std::chrono::steady_clock::now();
+    size_t n = reg.tickAllTimers(std::chrono::milliseconds(150), expired);
+    auto t5 = std::chrono::steady_clock::now();
+    double tickMs = std::chrono::duration_cast<std::chrono::microseconds>(t5 - t4).count() / 1000.0;
+    std::printf("2M tick (10K active): %.1f ms\n", tickMs);
+    EXPECT_EQ(n, 10000u);
+#ifndef GSML3PARSER_ASAN
+    EXPECT_LT(createMs, 15000.0) << "2M create too slow";
+    EXPECT_LT(lookupMs, 5000.0) << "2M lookup too slow";
+    EXPECT_LT(tickMs, 100.0) << "2M tick too slow";
+#endif
+}
+
 // Test: 1,000,000 sessions, 10K with active procedures — tickAllProcedures
 // must stay within the real-time budget (O(active) path, audit D2).
 // Importance: the documented event loop ticks procedures every 10-100 ms;

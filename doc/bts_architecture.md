@@ -460,7 +460,8 @@ The following operations perform zero heap allocations:
 | `FSM::handle_message_impl()` | O(1) | `switch(PD) + switch(MTI)` jump table |
 | `TimerManager::tick()` | O(32) = O(1) | Fixed array of 32 timers |
 | `ProcedureRunner::feed()` | O(8) = O(1) | Fixed array of procedure slots |
-| `SubscriberRegistry::findByTMSI()` | O(1) | Hash map lookup |
+| `SubscriberRegistry::findByTMSI()` | O(1) | FlatMap (open addressing, inline entries) lookup |
+| `SubscriberRegistry::findByLink()` | O(1) | FlatMap (open addressing, inline entries) lookup |
 | `ShardedSubscriberRegistry::findByTMSI()` | O(1) | Hash + per-shard lock |
 | `SubscriberRegistry::tickAllProcedures()` | O(active) | Active-procedure index (sessions with >=1 active procedure) |
 | `ShardedChannelPool::allocate()` | O(N) worst, typically O(1) | Round-robin shard start + fallback (channels hash-distributed) |
@@ -571,7 +572,7 @@ public:
 
 ### Memory Budget Planning
 
-Per-MS stack footprint is ~2 KB (`sizeof(SubscriberSession)` = 2056 bytes, static_assert < 4096); `sizeof(ParsedMessage) = 416` bytes.
+Per-MS stack footprint is ~2 KB (`sizeof(SubscriberSession)` = 2056 bytes, static_assert < 4096); `sizeof(ParsedMessage) = 416` bytes. The TMSI and LAPDm-link flat indexes add ~32 bytes per session (entry + slot, `stack/flat_map.h`) — negligible against the 2 KB session footprint.
 
 | Scale | MS Sessions | Stack Module Memory | ParsedMessage (stack, transient) |
 |-------|------------|-------------------|-------------------------------|
