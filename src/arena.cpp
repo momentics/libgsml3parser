@@ -37,7 +37,10 @@ constexpr bool isPowerOfTwo(size_t v) noexcept {
 
 Arena::Arena(size_t initialCapacity) {
     Block b;
-    b.data.resize(initialCapacity, 0);
+    // Plain new[] (default-initialized): std::make_unique<uint8_t[]>
+    // would value-initialize the array and zero-fill it (audit Q3).
+    b.data.reset(new uint8_t[initialCapacity]);
+    b.size = initialCapacity;
     mBlocks.push_back(std::move(b));
 }
 
@@ -49,8 +52,8 @@ void* Arena::allocate(size_t bytes, size_t alignment) {
     if (!mBlocks.empty()) {
         Block& b = mBlocks.back();
         size_t alignedOffset = (b.offset + alignment - 1) & ~(alignment - 1);
-        if (alignedOffset + bytes <= b.data.size()) {
-            void* ptr = b.data.data() + alignedOffset;
+        if (alignedOffset + bytes <= b.size) {
+            void* ptr = b.data.get() + alignedOffset;
             b.offset = alignedOffset + bytes;
             mUsed += bytes;
             return ptr;
@@ -69,12 +72,13 @@ void* Arena::allocate(size_t bytes, size_t alignment) {
     // Over-allocate by `alignment` and round the base pointer up, so the
     // first usable address is aligned even if the heap returned a pointer
     // aligned to less than `alignment`.
-    b.data.resize(blockCapacity + alignment, 0);
-    uintptr_t base = reinterpret_cast<uintptr_t>(b.data.data());
+    b.data.reset(new uint8_t[blockCapacity + alignment]); // no zero-fill
+    b.size = blockCapacity + alignment;
+    uintptr_t base = reinterpret_cast<uintptr_t>(b.data.get());
     uintptr_t alignedBase = (base + alignment - 1) & ~(static_cast<uintptr_t>(alignment) - 1);
     size_t slack = static_cast<size_t>(alignedBase - base);
 
-    void* ptr = b.data.data() + slack;
+    void* ptr = b.data.get() + slack;
     b.offset = slack + bytes;
     mBlocks.push_back(std::move(b));
     mUsed += bytes;
@@ -89,13 +93,13 @@ void Arena::reset() {
 size_t Arena::remaining() const {
     if (mBlocks.empty()) return 0;
     const Block& b = mBlocks.back();
-    return b.data.size() - b.offset;
+    return b.size - b.offset;
 }
 
 size_t Arena::capacity() const {
     size_t total = 0;
     for (const auto& b : mBlocks) {
-        total += b.data.size();
+        total += b.size;
     }
     return total;
 }

@@ -22,6 +22,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstring>
 #include <cstdint>
 
 namespace gsml3parser {
@@ -33,9 +34,12 @@ public:
         : m_buf(buf), m_bits(nbits), m_pos(0) {}
 
     /// Write \p nbits bits of \p value (MSB-first). Only the top \p nbits
-    /// are taken from \p value.
+    /// are taken from \p value. \p nbits is clamped to 32 (the value width):
+    /// a shift count >= 32 would be undefined behavior (audit Q2; mirrors
+    /// BitReader::peekField's documented clamp).
     void writeField(uint32_t value, unsigned nbits)
     {
+        if (nbits > 32) nbits = 32;
         for (int i = static_cast<int>(nbits) - 1; i >= 0; --i) {
             if (m_pos >= m_bits) break;
             size_t byteIdx = m_pos / 8;
@@ -54,9 +58,18 @@ public:
         writeField(v, 8);
     }
 
-    /// Write \p count bytes verbatim.
+    /// Write \p count bytes verbatim. Uses a bulk memcpy when byte-aligned
+    /// and the bytes fit in the buffer; otherwise falls back to per-octet
+    /// bit writes (audit Q2: the previous per-bit loop cost 8 operations
+    /// per byte on the aligned path).
     void writeBytes(const uint8_t* data, size_t count)
     {
+        if (count == 0) return;
+        if (m_pos % 8 == 0 && m_pos + count * 8 <= m_bits) {
+            std::memcpy(m_buf + m_pos / 8, data, count);
+            m_pos += count * 8;
+            return;
+        }
         for (size_t i = 0; i < count; ++i) {
             writeOctet(data[i]);
         }

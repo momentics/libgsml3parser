@@ -24,6 +24,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <vector>
+#include <memory>
 
 namespace gsml3parser {
 
@@ -36,7 +37,8 @@ namespace gsml3parser {
 /// whose reallocation would silently invalidate all outstanding pointers.
 ///
 /// Thread safety: NOT thread-safe. One Arena per thread/owner.
-/// Memory: blocks are heap-allocated once and reused until reset().
+/// Memory: blocks are heap-allocated once and reused until reset(). Blocks
+/// are default-initialized (not zeroed).
 class Arena {
 public:
     /// Create an arena whose first block has `initialCapacity` bytes.
@@ -73,7 +75,13 @@ public:
 
 private:
     struct Block {
-        std::vector<uint8_t> data;
+        // Default-initialized storage (NOT zero-filled — audit Q3: the
+        // previous std::vector<uint8_t> value-initialized every new block,
+        // a wasted 64 KB+ memset per block on the allocation path).
+        // NOTE: std::make_unique<uint8_t[]>(n) value-initializes the array
+        // (zero-fills it), so the allocation below uses plain new[].
+        std::unique_ptr<uint8_t[]> data;
+        size_t size{0};
         size_t offset{0};
     };
 
