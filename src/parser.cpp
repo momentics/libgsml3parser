@@ -844,6 +844,10 @@ Expected<TESTPROC> parseL3TestProc(BitReader& reader, uint8_t mti) {
         case L3PD::TestProcedure:
             return parseL3TestProc(reader, static_cast<uint8_t>(hdr.mti))
                 .map([](TESTPROC v){ return ParsedMessage(std::move(v)); });
+        case L3PD::Undefined:
+            // Spelled out explicitly so the switch covers the whole L3PD
+            // domain (-Wswitch); parseL3Header rejects it upstream anyway.
+            break;
     }
     // Unreachable: parseL3Header only accepts the 12 defined PD values
     // (reserved PDs are rejected — audit Q4).

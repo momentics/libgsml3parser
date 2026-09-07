@@ -133,9 +133,8 @@ inline Expected<bool> parseOptionalTLVFixed(BitReader& br, uint8_t iei, T& out, 
     if (ieiRes.value() != iei) return Expected<bool>::hold(false);
     auto lenRes = readLength(br);
     if (!lenRes) return Expected<bool>::error(lenRes.error());
-    // Consume the value bytes according to length
-    size_t valBits = lenRes.value() * 8;
-    // For fixed-size elements, just parse directly
+    // The length octet is consumed above to keep the stream position
+    // correct; for fixed-size elements the value is then parsed directly.
     auto p = T::parse(br);
     if (!p) return Expected<bool>::error(p.error());
     out = std::move(p.value());
