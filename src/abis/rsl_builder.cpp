@@ -71,17 +71,19 @@ size_t writeTV(uint8_t* buf, size_t offset, uint8_t type, uint8_t value) {
 }
 
 // Helper: build an RLL data message (DATA_REQ/DATA_IND/UNIT_DATA_REQ/UNIT_DATA_IND).
-// The L3 payload is placed directly after the 4-byte header.
+// TS 48.058 8.3.1: the L3 PDU is carried inside an L3Info IE (type 0x30,
+// TL16V), not as raw octets after the header (audit P1-4: the previous
+// raw layout was incompatible with real BSCs such as osmo-bts, which
+// send/expect the L3Info IE).
 int buildRLLData(std::span<uint8_t> out, uint8_t msgType, uint8_t chanNr, uint8_t linkId,
                  std::span<const uint8_t> l3Payload, bool btsToBsc) {
-    size_t needed = RSL_HEADER_SIZE + l3Payload.size();
+    size_t needed = RSL_HEADER_SIZE + 3 + l3Payload.size(); // header + TL16V IE
     if (out.size() < needed) return -1;
 
     writeHeader(out.data(), static_cast<uint8_t>(RSLDiscriminator::RLL), msgType, chanNr, linkId, btsToBsc);
-    if (!l3Payload.empty()) {
-        std::memcpy(out.data() + RSL_HEADER_SIZE, l3Payload.data(), l3Payload.size());
-    }
-    return static_cast<int>(needed);
+    return static_cast<int>(
+        writeTL16V(out.data(), RSL_HEADER_SIZE, 0x30, l3Payload.data(),
+                   static_cast<uint16_t>(l3Payload.size())));
 }
 
 // Helper: build a DCHAN message with chanNr.

@@ -181,43 +181,31 @@ Expected<RSLParsedMessage> RSLParser::parse(std::span<const uint8_t> data)
     msg.ieCount = parseIEs(payloadStart, payloadLen, msg.informationElements.data(), RSLParsedMessage::MAX_IE);
 
     // Extract L3 payload for messages that carry it.
-    // DATA_REQ, DATA_IND, UNIT_DATA_REQ, UNIT_DATA_IND: L3 is the entire payload after header.
+    // RLL DATA_REQ/DATA_IND/UNIT_DATA_* and CCHAN/DCHAN BCCH_INFO,
+    // ENCR_CMD, PAGING_CMD: L3 is inside the L3Info IE (type 0x30,
+    // TL16V) (TS 48.058 8.3.1; audit P1-4: RLL data previously read the
+    // raw payload after the header, which is not what real BSCs send).
+    // Note: when an RLL data message carries several L3Info IEs, the
+    // first one is used (one L3 PDU per RSL message in this library's
+    // pipeline).
     if (msg.discriminator == RSLDiscriminator::RLL) {
         uint8_t mtype = msg.msgType;
         if (mtype == static_cast<uint8_t>(RSLL3MessageType::DataReq) ||
             mtype == static_cast<uint8_t>(RSLL3MessageType::DataInd) ||
             mtype == static_cast<uint8_t>(RSLL3MessageType::UnitDataReq) ||
             mtype == static_cast<uint8_t>(RSLL3MessageType::UnitDataInd)) {
-            if (payloadLen > 0) {
-                msg.l3Payload = std::span<const uint8_t>(payloadStart, payloadLen);
+            if (auto* l3IE = findIE(msg, RSL_IE::L3Info)) {
+                msg.l3Payload = std::span<const uint8_t>(l3IE->val, l3IE->len);
             }
         }
     }
-
-    // For BCCH_INFO, ENCR_CMD, PAGING_CMD: L3 is in the L3Info IE.
     if (msg.discriminator == RSLDiscriminator::CommonChannel ||
         msg.discriminator == RSLDiscriminator::DedicatedChannel) {
-        auto* l3IE = findIE(msg, RSL_IE::L3Info);
-        if (l3IE && l3IE->val) {
-            // For TL16V IEs, recalculate actual length from the raw data.
-            for (size_t i = 0; i < msg.ieCount; ++i) {
-                if (msg.informationElements[i].val == l3IE->val) {
-                    // The val pointer already points to the value data.
-                    // For TL16V, the length is 2 bytes before val.
-                    const uint8_t* lenPos = l3IE->val - 2;
-                    if (lenPos >= payloadStart) {
-                        uint16_t actualLen = static_cast<uint16_t>(lenPos[0]) << 8 | lenPos[1];
-                        if (actualLen > 0 && l3IE->val + actualLen <= data.data() + data.size()) {
-                            msg.l3Payload = std::span<const uint8_t>(l3IE->val, actualLen);
-                        } else {
-                            msg.l3Payload = std::span<const uint8_t>(l3IE->val, l3IE->len);
-                        }
-                    } else {
-                        msg.l3Payload = std::span<const uint8_t>(l3IE->val, l3IE->len);
-                    }
-                    break;
-                }
-            }
+        if (auto* l3IE = findIE(msg, RSL_IE::L3Info)) {
+            // parseIEs already decoded the TL16V length into l3IE->len,
+            // so no re-derivation is needed (the previous loop
+            // recomputed the same value from val - 2).
+            msg.l3Payload = std::span<const uint8_t>(l3IE->val, l3IE->len);
         }
     }
 

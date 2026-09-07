@@ -45,11 +45,15 @@ int main()
     std::cout << "[1] BSC->BTS: RLL DATA_REQ with L3 CM Service Request\n";
     {
         // Simulate raw RSL frame from BSC: DATA_REQ carrying L3 CM Service Request.
+        // TS 48.058 8.3.1: real BSCs (e.g. osmo-bts) wrap the L3 PDU in an
+        // L3Info IE (type 0x30, TL16V) — audit P1-4.
         std::vector<uint8_t> rawRSL = {
             0x00,                       // discriminator: RLL
             0x21,                       // msgType: DATA_REQ
             0x7c,                       // chanNr: dedicated channel (SDCCH/8, TS4)
             0x01,                       // linkId: LAPDm link 1
+            // L3Info IE (type 0x30, TL16V): length 3
+            0x30, 0x00, 0x03,
             // L3 payload: CM Service Request (PD=0x09, MTI=0x68, serviceType=2)
             0x09, 0x68, 0x02
         };

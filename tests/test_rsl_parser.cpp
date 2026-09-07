@@ -31,23 +31,33 @@
 using namespace gsml3parser;
 
 // Helper: build a minimal RLL DATA_REQ with L3 payload.
+// L3 is wrapped in an L3Info IE (TL16V) — audit P1-4.
 static std::vector<uint8_t> makeRLLDataReq(uint8_t chanNr, uint8_t linkId, std::initializer_list<uint8_t> l3) {
     std::vector<uint8_t> buf;
     buf.push_back(static_cast<uint8_t>(RSLDiscriminator::RLL));
     buf.push_back(static_cast<uint8_t>(RSLL3MessageType::DataReq));
     buf.push_back(chanNr);
     buf.push_back(linkId);
+    // L3Info IE (type 0x30, TL16V) per TS 48.058 8.3.1 (audit P1-4).
+    buf.push_back(0x30);
+    buf.push_back(0x00);
+    buf.push_back(static_cast<uint8_t>(l3.size()));
     buf.insert(buf.end(), l3.begin(), l3.end());
     return buf;
 }
 
 // Helper: build a minimal RLL DATA_IND with L3 payload.
+// L3 is wrapped in an L3Info IE (TL16V) — audit P1-4.
 static std::vector<uint8_t> makeRLLDataInd(uint8_t chanNr, uint8_t linkId, std::initializer_list<uint8_t> l3) {
     std::vector<uint8_t> buf;
     buf.push_back(static_cast<uint8_t>(RSLDiscriminator::RLL));
     buf.push_back(static_cast<uint8_t>(RSLL3MessageType::DataInd));
     buf.push_back(chanNr);
     buf.push_back(linkId);
+    // L3Info IE (type 0x30, TL16V) per TS 48.058 8.3.1 (audit P1-4).
+    buf.push_back(0x30);
+    buf.push_back(0x00);
+    buf.push_back(static_cast<uint8_t>(l3.size()));
     buf.insert(buf.end(), l3.begin(), l3.end());
     return buf;
 }
@@ -391,7 +401,9 @@ TEST(RSLP_parse_DirectionBit, BtsToBscAccepted) {
     EXPECT_TRUE((*cresult).btsToBsc);
 
     // RLL DATA_IND with direction bit: 0x01.
-    std::vector<uint8_t> rbuf = {0x01, static_cast<uint8_t>(RSLL3MessageType::DataInd), 0x7e, 0x03, 0x09, 0x68, 0x02};
+    // L3 is wrapped in an L3Info IE (type 0x30, TL16V) — audit P1-4.
+    std::vector<uint8_t> rbuf = {0x01, static_cast<uint8_t>(RSLL3MessageType::DataInd), 0x7e, 0x03,
+                                 0x30, 0x00, 0x03, 0x09, 0x68, 0x02};
     auto rresult = RSLParser::parse(rbuf);
     ASSERT_TRUE(rresult.has_value());
     EXPECT_EQ((*rresult).discriminator, RSLDiscriminator::RLL);

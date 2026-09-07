@@ -165,8 +165,12 @@ TEST(RSLB_buildDataInd_SpanOverload, CorrectBytes) {
     std::vector<uint8_t> buf(256, 0);
     int n = RSLBuilder::buildDataInd(buf, 0x7c, 2, l3);
     EXPECT_GT(n, 0);
-    // Header(4) + L3(3) = 7 bytes.
-    EXPECT_EQ(n, 7);
+    // Header(4) + L3Info IE(3: type 0x30, TL16V length) + L3(3) = 10 bytes (audit P1-4).
+    EXPECT_EQ(n, 10);
+    // L3Info IE header (type 0x30, TL16V length 3) — audit P1-4.
+    EXPECT_EQ(buf[4], 0x30);
+    EXPECT_EQ(buf[5], 0x00);
+    EXPECT_EQ(buf[6], 0x03);
 
     auto parsed = RSLParser::parse(std::span<const uint8_t>(buf.data(), n));
     ASSERT_TRUE(parsed.has_value());
