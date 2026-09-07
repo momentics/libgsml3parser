@@ -68,6 +68,7 @@
 #include <cctype>
 #include <dirent.h>
 #include <set>
+#include <sys/utsname.h>
 #include <utility>
 #endif
 
