@@ -94,7 +94,7 @@ CMake options:
 | `BUILD_SHARED_LIBS` | OFF | Build shared library instead of static |
 | `BUILD_TESTS` | OFF | Build unit tests (Google Test 1.14+) |
 | `BUILD_EXAMPLES` | OFF | Build example programs |
-| `ENABLE_FUZZING` | OFF | Build fuzzing target |
+| `ENABLE_FUZZING` | OFF | Build libFuzzer targets in `fuzz/` (requires Clang/LLVM; no-op with a status message on MSVC) |
 
 ### CMake Integration
 

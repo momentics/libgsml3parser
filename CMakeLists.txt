@@ -216,6 +216,12 @@ add_library(gsml3parser
 
 add_library(gsml3parser::parser ALIAS gsml3parser)
 
+# ── Fuzzing ───────────────────────────────────────────────────────────
+
+if(ENABLE_FUZZING)
+    add_subdirectory(fuzz)
+endif()
+
 target_include_directories(gsml3parser
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>

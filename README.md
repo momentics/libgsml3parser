@@ -157,7 +157,7 @@ cmake --build . --config Release --parallel
 | `BUILD_SHARED_LIBS` | OFF | Shared library instead of static |
 | `BUILD_TESTS` | OFF | Unit tests (Google Test 1.14.0) |
 | `BUILD_EXAMPLES` | OFF | Example programs |
-| `ENABLE_FUZZING` | OFF | Fuzzing target |
+| `ENABLE_FUZZING` | OFF | libFuzzer targets in `fuzz/` (requires Clang/LLVM; no-op with a status message on MSVC) |
 
 ### Using in Your Project
 
@@ -354,7 +354,7 @@ Layered design, bottom to top:
 - **TypedExternalData** — Strongly-typed structures (`AuthChallenge`, `VLRDecision`) replace raw byte arrays for external data
 - **Arena allocator** — Bump allocator for high-throughput batch parsing
 - **Zero external dependencies** — C++20 standard library only
-- **Fuzzing-ready** — Clean parse/generate API suitable for libFuzzer
+- **Fuzzing targets** — libFuzzer targets for `parseL3`, `RSLParser::parse`, `LAPDmFrame::decode` and `L3Framer` (`fuzz/`, `ENABLE_FUZZING=ON`)
 - **Spec-compliant** — GSM 04.08 / 3GPP TS 24.008, GSM 04.06, GSM 04.07, 3GPP TS 24.080, TS 44.018, TS 44.031
 
 ## Thread Safety
@@ -385,7 +385,6 @@ Layered design, bottom to top:
 
 ## Roadmap
 
-- [ ] Fuzzing target (libFuzzer integration)
 - [ ] C API wrapper for FFI
 - [ ] Python bindings (pybind11)
 
