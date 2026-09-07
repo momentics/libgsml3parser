@@ -22,6 +22,11 @@
 #include <gtest/gtest.h>
 #include "gsml3parser/bitstream/framer.h"
 #include "gsml3parser/bitstream/byte_source.h"
+#include "gsml3parser/parser.h"
+#include "gsml3parser/visitor.h"
+#include "gsml3parser/message_types.h"
+#include "gsml3parser/rr/l3rrmessages.h"
+#include "gsml3parser/common/l3common.h"
 #include <vector>
 
 using namespace gsml3parser;
@@ -86,13 +91,17 @@ TEST(L3Framer, MultipleFixedLengthFrames) {
 
 TEST(L3Framer, TruncatedFrame) {
     // Only the header of a Channel Release (need 3 bytes, only have 2).
+    // Channel Release is variable-length (optional GPRS resumption
+    // octet), so at end of stream the framer emits the 2-byte tail and
+    // the parser rejects it downstream (audit P1-1: fixed-length
+    // framing applies only to constant-body messages).
     uint8_t data[] = {0x60, 0x0D};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     L3Framer framer(src);
 
     auto result = framer.nextFrame();
-    ASSERT_FALSE(result.has_value());
-    ASSERT_EQ(static_cast<int>(result.error().code), static_cast<int>(ParseError::Code::TruncatedInput));
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ(result.value().data.size(), 2u);
 }
 
 TEST(L3Framer, EmptySource) {
@@ -222,11 +231,16 @@ TEST(L3Framer, BCCSetupStreamThreeFrames) {
 }
 
 TEST(L3Framer, GCCSetupStreamThreeFrames) {
-    // Three GCC Setup frames: 00 01 02 (PD=0x00, MTI=0x00, 1-byte opaque body).
+    // Three GCC Setup frames: 00 01 20 (PD=0x00, MTI=0x00, 1-byte opaque body).
+    // GCC Setup has a variable body, so it is framed by the boundary
+    // heuristic (C17), not the fixed-length table (audit P1-1). The body
+    // octet 0x20 is chosen so its high nibble (0x02, a reserved PD) is not
+    // a plausible L3 header start — the previous body octet 0x02 (high
+    // nibble 0x00 = GCC) created a false boundary inside the frame.
     uint8_t data[] = {
-        0x00, 0x01, 0x02,  // GCC Setup #1
-        0x00, 0x01, 0x02,  // GCC Setup #2
-        0x00, 0x01, 0x02   // GCC Setup #3
+        0x00, 0x01, 0x20,  // GCC Setup #1
+        0x00, 0x01, 0x20,  // GCC Setup #2
+        0x00, 0x01, 0x20   // GCC Setup #3
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     L3Framer framer(src);
@@ -237,7 +251,7 @@ TEST(L3Framer, GCCSetupStreamThreeFrames) {
         ASSERT_EQ(r.value().data.size(), 3u);
         ASSERT_EQ(r.value().data[0], 0x00);
         ASSERT_EQ(r.value().data[1], 0x01);
-        ASSERT_EQ(r.value().data[2], 0x02);
+        ASSERT_EQ(r.value().data[2], 0x20);
     }
 
     auto r4 = framer.nextFrame();
@@ -268,16 +282,70 @@ TEST(L3Framer, LSRequestStreamThreeFrames) {
 
 // ── Paging Response (fixed-length RR) ──────────────────────────────────
 
-TEST(L3Framer, PagingResponseFixedLength) {
-    // Paging Response: 60 0E + 5 body bytes = 7 bytes total
-    uint8_t data[] = {0x60, 0x0E, 0x01, 0x02, 0x03, 0x04, 0x05,
-                      0x60, 0x0D, 0x00}; // followed by Channel Release
-    SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
+// [GOLDEN] A real Paging Response (variable body: CKSN + classmark +
+// mobile identity) framed in L2-length mode — the deterministic framing
+// path for variable-length messages (audit P1-1: the previous test
+// pinned a 5-byte "fixed" body that matched neither the message
+// definition (body 7–15 bytes) nor any spec MTI).
+TEST(L3Framer, PagingResponse_L2LengthMode) {
+    auto pr = L3PagingResponse::builder()
+        .cksn(1)
+        .classmark(L3MobileStationClassmark2{})
+        .mobileId(L3MobileIdentity{0x12345678u})
+        .build();
+    ParsedMessage pm{RRM{std::move(pr)}};
+    auto wire = writeL3Bytes(pm);
+    ASSERT_TRUE(wire);
+
+    std::vector<uint8_t> data;
+    data.push_back(static_cast<uint8_t>(wire.value().size()));
+    data.insert(data.end(), wire.value().begin(), wire.value().end());
+    data.push_back(3);
+    data.push_back(0x60); data.push_back(0x0D); data.push_back(0x00);
+
+    SpanByteSource src(std::span<const uint8_t>(data.data(), data.size()));
+    FrameConfig cfg;
+    cfg.useL2Length = true;
+    L3Framer framer(src, cfg);
+
+    auto r1 = framer.nextFrame();
+    ASSERT_TRUE(r1.has_value());
+    ASSERT_EQ(r1.value().data.size(), wire.value().size());
+    auto parsed1 = parseL3(r1.value().data);
+    ASSERT_TRUE(parsed1) << "the framed paging response must parse";
+    EXPECT_EQ(messageMTI(*parsed1), L3PagingResponse::MTI);
+
+    auto r2 = framer.nextFrame();
+    ASSERT_TRUE(r2.has_value());
+    ASSERT_EQ(r2.value().data.size(), 3u);
+}
+
+// Header-based mode: a real Paging Response followed by a Channel
+// Release. The paging body (TMSI 0x21222324, zero classmark, CKSN=1)
+// contains no plausible PD nibble, so the heuristic boundary lands on
+// the real next header (audit P1-1).
+TEST(L3Framer, PagingResponse_HeaderBasedHeuristic) {
+    auto pr = L3PagingResponse::builder()
+        .cksn(1)
+        .classmark(L3MobileStationClassmark2{})
+        .mobileId(L3MobileIdentity{0x21222324u})
+        .build();
+    ParsedMessage pm{RRM{std::move(pr)}};
+    auto wire = writeL3Bytes(pm);
+    ASSERT_TRUE(wire);
+
+    std::vector<uint8_t> data = *wire;
+    data.push_back(0x60); data.push_back(0x0D); data.push_back(0x00);
+
+    SpanByteSource src(std::span<const uint8_t>(data.data(), data.size()));
     L3Framer framer(src);
 
     auto r1 = framer.nextFrame();
     ASSERT_TRUE(r1.has_value());
-    ASSERT_EQ(r1.value().data.size(), 7u);
+    ASSERT_EQ(r1.value().data.size(), wire.value().size());
+    auto parsed1 = parseL3(r1.value().data);
+    ASSERT_TRUE(parsed1);
+    EXPECT_EQ(messageMTI(*parsed1), L3PagingResponse::MTI);
 
     auto r2 = framer.nextFrame();
     ASSERT_TRUE(r2.has_value());

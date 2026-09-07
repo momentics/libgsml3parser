@@ -382,22 +382,43 @@ public:
 // ── Classmark Enquiry (GSM 04.08 9.1.14) ──────────────────────────────
 
 class L3ClassmarkEnquiry {
+    // Classmark type: which classmark the MS shall send
+    // (00 = classmark 1, 01 = classmark 2, 10 = classmark 3,
+    // 11 = classmark 2 and 3) — TS 44.018 9.1.14 (audit SPEC-1: the
+    // previous header-only implementation dropped the mandatory
+    // 1-octet body; the TTCN-3 type carries it as classmarkEnquiryMask).
+    uint8_t mClassmarkType{0};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x13;
 
-    size_t bodyLength() const { return 0; }
+    L3ClassmarkEnquiry() = default;
+    explicit L3ClassmarkEnquiry(unsigned type) : mClassmarkType(static_cast<uint8_t>(type & 0x03u)) {}
+
+    [[nodiscard]] unsigned classmarkType() const { return mClassmarkType; }
+
+    size_t bodyLength() const { return 1; }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 0; }
-    [[nodiscard]] static Expected<L3ClassmarkEnquiry> parse(BitReader&);
-    void write(BitWriter&) const;
+    size_t l2BodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3ClassmarkEnquiry> parse(BitReader& br);
+    void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
 
     struct Builder {
+        uint8_t mClassmarkType{0};
+
+        /// Set the classmark type (0..3).
+        Builder& classmarkType(unsigned v) { mClassmarkType = static_cast<uint8_t>(v & 0x03u); return *this; }
         /// Build the final message.
-        [[nodiscard]] L3ClassmarkEnquiry build() const;
+        [[nodiscard]] L3ClassmarkEnquiry build() const {
+            L3ClassmarkEnquiry msg;
+            msg.mClassmarkType = mClassmarkType;
+            return msg;
+        }
     };
-    friend struct Builder;
+
     static Builder builder() { return Builder{}; }
 };
 
@@ -530,23 +551,56 @@ public:
 // ── Ciphering Mode Complete (GSM 04.08 9.1.10) ────────────────────────
 
 class L3CipheringModeComplete {
+    // Ciphering mode response: 00 = ciphering off, 01 = ciphering on
+    // (TS 44.018 9.1.26; audit SPEC-2: the previous header-only
+    // implementation dropped the mandatory response octet and the
+    // optional IMEISV — the TTCN-3 type carries
+    // mobileEquipmentIdentity := omit).
+    uint8_t mCipheringModeResponse{0};
+    // IMEISV is carried wire-exact as 8 opaque octets (BCD IMEI + SV);
+    // it is NOT an L3MobileIdentity (whose 2-bit type field does not
+    // exist in this position on the wire).
+    std::array<uint8_t, 8> mImeisv{};
+    bool mHasImeisv{false};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x32;
 
-    struct Builder {
-        /// Build the final message.
-        [[nodiscard]] L3CipheringModeComplete build() const;
-    };
-    friend struct Builder;
-    static Builder builder();
+    L3CipheringModeComplete() = default;
 
-    size_t bodyLength() const { return 0; }
+    [[nodiscard]] unsigned cipheringModeResponse() const { return mCipheringModeResponse; }
+    [[nodiscard]] bool hasImeisv() const { return mHasImeisv; }
+    [[nodiscard]] const std::array<uint8_t, 8>& imeisv() const { return mImeisv; }
+
+    size_t bodyLength() const { return 1 + (mHasImeisv ? 8 : 0); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 0; }
-    [[nodiscard]] static Expected<L3CipheringModeComplete> parse(BitReader&);
-    void write(BitWriter&) const;
+    size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3CipheringModeComplete> parse(BitReader& br);
+    void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        uint8_t mCipheringModeResponse{0};
+        std::array<uint8_t, 8> mImeisv{};
+        bool mHasImeisv{false};
+
+        /// Set the ciphering mode response (0 = off, 1 = on).
+        Builder& response(unsigned v) { mCipheringModeResponse = static_cast<uint8_t>(v & 0x03u); return *this; }
+        /// Attach the optional IMEISV (8 opaque octets: BCD IMEI + SV).
+        Builder& imeisv(std::array<uint8_t, 8> v) { mImeisv = v; mHasImeisv = true; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CipheringModeComplete build() const {
+            L3CipheringModeComplete msg;
+            msg.mCipheringModeResponse = mCipheringModeResponse;
+            msg.mImeisv = mImeisv;
+            msg.mHasImeisv = mHasImeisv;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── Handover Complete (GSM 04.08 9.1.16) ──────────────────────────────

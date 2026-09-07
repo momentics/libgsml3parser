@@ -470,7 +470,8 @@ TEST(ParserTest, ShortMessage_ChannelRequest_AllRAValues) {
 
 TEST(ParserTest, ShortMessage_HandoverAccess) {
     // 4-byte Handover Access: FN bits encoded directly
-    uint8_t data[] = {0x69, 0x00, 0x00, 0x03};
+    // Last byte 0x00: the 5 reserved bits are zero (audit P2-4).
+    uint8_t data[] = {0x69, 0x00, 0x00, 0x00};
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::RadioResource);
@@ -481,16 +482,40 @@ TEST(ParserTest, ShortMessage_HandoverAccess) {
 // must NOT be misparsed as the RR message (audit N1). The standard parse
 // wins only on exact frame consumption.
 TEST(ParserTest, ShortMessage_HandoverAccess_RRPrefixNotMisparsed) {
-    // {0x60, 0x12, 0x00, 0x03}: RR nibble, TIF=0 (low bit of byte 0 must
+    // {0x60, 0x12, 0x00, 0x00}: RR nibble, TIF=0 (low bit of byte 0 must
     // be 0 — with TIF=1 the header maps the MTI into the 0x100+ short
     // space and the standard parse fails on unknown MTI instead of
     // leaving a tail), MTI 0x12 (RR Status, 1-byte body) would consume
     // only 3 of the 4 bytes -> not exact -> the frame is a HandoverAccess.
-    uint8_t data[] = {0x60, 0x12, 0x00, 0x03};
+    // Last byte 0x00: the 5 reserved bits are zero (audit P2-4).
+    uint8_t data[] = {0x60, 0x12, 0x00, 0x00};
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
     EXPECT_EQ(messageMTI(*res), L3HandoverAccess::MTI)
         << "expected HandoverAccess, got MTI 0x" << std::hex << messageMTI(*res);
+}
+
+// Test: a 4-byte frame with non-zero HandoverAccess reserved bits is
+// not misclassified as HandoverAccess (audit P2-4: the previous short
+// parse accepted ANY 32-bit input). The standard parse wins instead:
+// RR Status consumes 3 of the 4 bytes and the trailing octet is ignored
+// in lenient mode (strict framing, audit P2-2, rejects it in Phase 6).
+TEST(ParserTest, ShortMessage_HandoverAccess_ReservedBitsRejected) {
+    uint8_t data[] = {0x60, 0x12, 0x00, 0x03}; // HandoverAccess reserved = 0x03 (non-zero)
+    auto res = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messageMTI(*res), L3RRStatus::MTI)
+        << "must be parsed as RR Status, not misclassified as HandoverAccess";
+}
+
+// Test: L3HandoverAccess::parse directly rejects non-zero reserved bits
+// (audit P2-4).
+TEST(ParserTest, HandoverAccess_Parse_ReservedBitsRejected) {
+    uint8_t data[] = {0x17, 0x00, 0x00, 0x1F}; // all 5 reserved bits set
+    BitReader br(data, 32);
+    auto res = L3HandoverAccess::parse(br);
+    ASSERT_FALSE(res);
+    EXPECT_EQ(res.error().code, ParseError::Code::InvalidValue);
 }
 
 // Test: a genuine 4-byte CC message (Facility, 2-byte body) parses as CC —
@@ -527,7 +552,8 @@ TEST(ParserTest, ShortMessage_ExactCCMessageWins_7Bytes) {
 // rejects reserved PDs, so the short-message path must still be reached).
 TEST(ParserTest, ShortMessage_HandoverAccess_ReservedPDNibble) {
     for (uint8_t first : {0x21u, 0x41u, 0x71u, 0xD1u}) {
-        uint8_t data[] = {first, 0x00, 0x00, 0x03};
+        // Last byte 0x00: the 5 reserved bits are zero (audit P2-4).
+        uint8_t data[] = {first, 0x00, 0x00, 0x00};
         auto res = parseL3(std::span<const uint8_t>(data));
         ASSERT_TRUE(res) << "first byte 0x" << std::hex << first;
         EXPECT_EQ(messageMTI(*res), L3HandoverAccess::MTI);

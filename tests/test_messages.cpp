@@ -107,7 +107,8 @@ TEST(MessagesTest, RR_ChannelRelease) {
 TEST(MessagesTest, RR_ClassmarkEnquiry) {
     L3ClassmarkEnquiry msg;
     EXPECT_EQ(msg.mti(), L3ClassmarkEnquiry::MTI);
-    EXPECT_EQ(msg.l2BodyLength(), 0u);
+    // 1-octet body: classmark type (2 bits) + reserved (6 bits) — audit SPEC-1.
+    EXPECT_EQ(msg.l2BodyLength(), 1u);
 }
 
 TEST(MessagesTest, RR_CipheringModeCommand) {
@@ -119,7 +120,9 @@ TEST(MessagesTest, RR_CipheringModeCommand) {
 TEST(MessagesTest, RR_CipheringModeComplete) {
     L3CipheringModeComplete msg;
     EXPECT_EQ(msg.mti(), L3CipheringModeComplete::MTI);
-    EXPECT_EQ(msg.l2BodyLength(), 0u);
+    // 1-octet body: ciphering mode response (2 bits) + reserved (6 bits);
+    // +8 octets when the optional IMEISV is present — audit SPEC-2.
+    EXPECT_EQ(msg.l2BodyLength(), 1u);
 }
 
 TEST(MessagesTest, RR_PagingRequestType1) {

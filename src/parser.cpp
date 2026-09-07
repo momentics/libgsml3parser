@@ -949,6 +949,10 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
         // unexpectedly failed (impossible today: both short parsers always
         // succeed on full-length input) reaches the standard parse below,
         // which returns a proper error.
+        // Note (audit P2-4): L3HandoverAccess::parse can now fail on
+        // non-zero reserved bits — such a 4-byte frame falls through to
+        // the standard parse below and produces a proper error instead of
+        // a fake HandoverAccess.
     }
 
     // Standard L3 header parsing.

@@ -18,6 +18,7 @@ add_executable(gsml3parser_tests
     test_l3header.cpp
     test_byte_source.cpp
     test_framer.cpp
+    test_frame_lengths.cpp
     test_stream_processor.cpp
     test_golden_rr.cpp
     test_golden_mm.cpp

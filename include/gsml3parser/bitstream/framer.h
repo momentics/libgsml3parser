@@ -98,8 +98,10 @@ private:
     /** Read more data from source into mBuf. Returns true if data was read. */
     bool fillBuffer();
 
-    /** Try to extract a frame from mBuf[mPos..mEnd). */
-    Expected<ExtractedFrame> tryExtract();
+    // atEof=true: the source is exhausted — a variable-length tail is
+    // emitted as the final frame (validated downstream by the parser);
+    // atEof=false: a missing boundary means "need more data".
+    Expected<ExtractedFrame> tryExtract(bool atEof);
 };
 
 } // namespace gsml3parser

@@ -604,7 +604,7 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
   heap allocation, no pointer chasing. Call `reserve()` at startup when
   the subscriber scale is known. The IMSI index stays a
   `std::unordered_map` (owned std::string keys, cold path).
-- **L3Framer header-based mode:** for variable-length messages (SI, SMS, Setup with IEs, ...) the framer uses a boundary heuristic that scans for the next plausible L3 header. Fixed-length messages (including BCC/GCC/LS header-only forms) are framed exactly. For deterministic framing of variable-length messages use the L2-length mode (`FrameConfig::useL2Length = true`), which is what production LAPDm/A-bis paths provide.
+- **L3Framer header-based mode:** fixed-body messages are framed exactly from a single compile-time table (`bitstream/frame_lengths.h`, cross-checked by `tests/test_frame_lengths.cpp` against the message definitions — audit P1-1). Variable-body messages (SI, SMS, Setup with IEs, Paging Response, ...) use a boundary heuristic that scans for the next plausible L3 header; at end of stream the tail is emitted and validated by the parser. For deterministic framing of variable-length messages use the L2-length mode (`FrameConfig::useL2Length = true`), which is what production LAPDm/A-bis paths provide.
 
 ## 9. Deployment Checklist
 

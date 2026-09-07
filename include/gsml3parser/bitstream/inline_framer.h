@@ -29,6 +29,8 @@
 #include <optional>
 #include <span>
 
+#include "gsml3parser/bitstream/frame_lengths.h"
+
 namespace gsml3parser {
 
 /**
@@ -119,57 +121,29 @@ inline std::optional<std::span<const uint8_t>> InlineFramer::nextFrame() noexcep
         int rawMti = b1;
         int mti = rawMti;
 
-        // Adjust MTI for MM/CC/SS (6-bit messageType).
-        if (pd == 0x05 || pd == 0x03 || pd == 0x0B) {
+        // Adjust MTI for MM/CC/SS/BCC/GCC (6-bit messageType + 2-bit NSD).
+        // BCC (0x01) and GCC (0x00) use the same CC-style header
+        // (TS 44.018 10.2) — audit P1-1: the previous condition missed
+        // them, so their fixed-length table entries never matched.
+        if (pd == 0x05 || pd == 0x03 || pd == 0x0B || pd == 0x01 || pd == 0x00) {
             mti = (rawMti & 0xFC) >> 2;
         }
 
-        // Fixed-length lookup table — mirrors framer.cpp fixedBodyLength().
-        constexpr size_t VARIABLE = static_cast<size_t>(-1);
-        size_t bodyLen = VARIABLE;
+        // Same boundary-candidate logic as L3Framer (C17):
+        // 0x00/0x01/0x0c high nibbles occur frequently inside
+        // variable-length bodies (e.g. GMM/SMS cause octets), so
+        // they are only accepted while framing BCC/GCC/LS
+        // messages (audit planZ review: the two framers must
+        // behave identically).
+        const bool callControlLike = (pd == 0x00 || pd == 0x01 || pd == 0x0c);
 
-        switch (pd) {
-            case 0x06: // Radio Resource
-                switch (mti) {
-                    case 0x0D: bodyLen = 1; break; // Channel Release
-                    case 0x0E: bodyLen = 5; break; // Paging Response
-                    case 0x0F: bodyLen = 8; break; // Classmark Change
-                    case 0x10: bodyLen = 3; break; // Classmark Enquiry
-                    case 0x1A: bodyLen = 0; break; // RR Status
-                    case 0x1C: bodyLen = 4; break; // Assignment Complete
-                    case 0x1D: bodyLen = 2; break; // Assignment Failure
-                    case 0x21: bodyLen = 3; break; // Immediate Assignment Reject
-                    case 0x25: bodyLen = 0; break; // Additional Assignment
-                    case 0x29: bodyLen = 4; break; // Handover Complete
-                    case 0x2A: bodyLen = 2; break; // Handover Failure
-                    case 0x2E: bodyLen = 1; break; // Physical Information
-                    case 0x33: bodyLen = 2; break; // Ciphering Mode Complete
-                    default:   break;
-                }
-                break;
-            case 0x05: // Mobility Management
-                switch (mti) {
-                    case 0x1F: bodyLen = 4; break; // IMSI Detach Indication
-                    case 0x21: bodyLen = 0; break; // CM Service Accept
-                    case 0x22: bodyLen = 3; break; // CM Service Reject
-                    case 0x23: bodyLen = 1; break; // CM Service Abort
-                    case 0x27: bodyLen = 1; break; // MM Status
-                    default:   break;
-                }
-                break;
-            case 0x03: // Call Control
-                switch (mti) {
-                    case 0x23: bodyLen = 1; break; // Release Complete
-                    case 0x25: bodyLen = 1; break; // CC Status (min body)
-                    default:   break;
-                }
-                break;
-            default:
-                break;
-        }
+        // Fixed-length lookup — single source of truth in
+        // bitstream/frame_lengths.h (audit P1-1: the previous
+        // duplicated switch used wrong MTI values and lengths).
+        size_t fixedLen = detail::fixedFrameLength(pd, mti);
 
-        if (bodyLen != VARIABLE) {
-            frameLen = 2 + bodyLen;
+        if (fixedLen != 0) {
+            frameLen = fixedLen;
             if (mPos + frameLen > mData.size()) return std::nullopt;
         } else {
             // Variable-length message: scan for next plausible L3 header.
@@ -183,8 +157,9 @@ inline std::optional<std::span<const uint8_t>> InlineFramer::nextFrame() noexcep
                     candidatePd == 0x06 || candidatePd == 0x0B ||
                     candidatePd == 0x08 || candidatePd == 0x09 ||
                     candidatePd == 0x0A || candidatePd == 0x0E ||
-                    candidatePd == 0x0F || candidatePd == 0x00 ||
-                    candidatePd == 0x01) {
+                    candidatePd == 0x0F ||
+                    (callControlLike &&
+                     (candidatePd == 0x00 || candidatePd == 0x01 || candidatePd == 0x0C))) {
                     frameLen = i - mPos;
                     break;
                 }

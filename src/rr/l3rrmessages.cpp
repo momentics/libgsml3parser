@@ -638,14 +638,27 @@ L3AssignmentFailure::Builder L3AssignmentFailure::builder() {
 
 // ── L3ClassmarkEnquiry ──────────────────────────────────────────────────
 
-Expected<L3ClassmarkEnquiry> L3ClassmarkEnquiry::parse(BitReader&) {
-    return Expected<L3ClassmarkEnquiry>::hold(L3ClassmarkEnquiry{});
+Expected<L3ClassmarkEnquiry> L3ClassmarkEnquiry::parse(BitReader& br) {
+    L3ClassmarkEnquiry msg;
+    // 1 octet: classmark type (2 bits) + reserved (6 bits, '0' values)
+    // (TS 44.018 9.1.14, audit SPEC-1).
+    auto r = br.readField(2); if (!r) return Expected<L3ClassmarkEnquiry>::error(r.error());
+    msg.mClassmarkType = static_cast<uint8_t>(r.value());
+    r = br.readField(6); if (!r) return Expected<L3ClassmarkEnquiry>::error(r.error());
+    if (r.value() != 0) {
+        return Expected<L3ClassmarkEnquiry>::error(
+            {ParseError::Code::InvalidValue, "ClassmarkEnquiry: reserved bits must be zero"});
+    }
+    return Expected<L3ClassmarkEnquiry>::hold(std::move(msg));
 }
 
-void L3ClassmarkEnquiry::write(BitWriter&) const {}
+void L3ClassmarkEnquiry::write(BitWriter& bw) const {
+    bw.writeField(mClassmarkType, 2);
+    bw.writeField(0, 6);
+}
 
 void L3ClassmarkEnquiry::text(std::ostream& os) const {
-    os << "ClassmarkEnquiry";
+    os << "ClassmarkEnquiry: classmarkType=" << static_cast<unsigned>(mClassmarkType);
 }
 
 // ── L3ClassmarkChange ──────────────────────────────────────────────────
@@ -769,22 +782,44 @@ L3CipheringModeCommand::Builder L3CipheringModeCommand::builder() {
 
 // ── L3CipheringModeComplete ────────────────────────────────────────────
 
-Expected<L3CipheringModeComplete> L3CipheringModeComplete::parse(BitReader&) {
-    return Expected<L3CipheringModeComplete>::hold(L3CipheringModeComplete{});
+Expected<L3CipheringModeComplete> L3CipheringModeComplete::parse(BitReader& br) {
+    L3CipheringModeComplete msg;
+    // 1 octet: ciphering mode response (2 bits) + reserved (6 bits,
+    // '0' values) (TS 44.018 9.1.26, audit SPEC-2).
+    auto r = br.readField(2); if (!r) return Expected<L3CipheringModeComplete>::error(r.error());
+    msg.mCipheringModeResponse = static_cast<uint8_t>(r.value());
+    r = br.readField(6); if (!r) return Expected<L3CipheringModeComplete>::error(r.error());
+    if (r.value() != 0) {
+        return Expected<L3CipheringModeComplete>::error(
+            {ParseError::Code::InvalidValue, "CipheringModeComplete: reserved bits must be zero"});
+    }
+    // Optional IMEISV: 8 opaque octets when present (wire-exact; not an
+    // L3MobileIdentity — see the class comment).
+    if (br.remainingBits() >= 64) {
+        for (size_t i = 0; i < 8; ++i) {
+            r = br.readField(8); if (!r) return Expected<L3CipheringModeComplete>::error(r.error());
+            msg.mImeisv[i] = static_cast<uint8_t>(r.value());
+        }
+        msg.mHasImeisv = true;
+    }
+    return Expected<L3CipheringModeComplete>::hold(std::move(msg));
 }
 
-void L3CipheringModeComplete::write(BitWriter&) const {}
+void L3CipheringModeComplete::write(BitWriter& bw) const {
+    bw.writeField(mCipheringModeResponse, 2);
+    bw.writeField(0, 6);
+    if (mHasImeisv) {
+        for (uint8_t b : mImeisv) bw.writeField(b, 8);
+    }
+}
 
 void L3CipheringModeComplete::text(std::ostream& os) const {
-    os << "CipheringModeComplete";
-}
-
-L3CipheringModeComplete L3CipheringModeComplete::Builder::build() const {
-    return L3CipheringModeComplete{};
-}
-
-L3CipheringModeComplete::Builder L3CipheringModeComplete::builder() {
-    return Builder{};
+    os << "CipheringModeComplete: response=" << static_cast<unsigned>(mCipheringModeResponse);
+    if (mHasImeisv) {
+        os << " imeisv=";
+        for (uint8_t b : mImeisv) os << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned>(b);
+        os << std::dec << std::setfill(' ');
+    }
 }
 
 // ── L3HandoverComplete ─────────────────────────────────────────────────
@@ -2329,7 +2364,15 @@ Expected<L3HandoverAccess> L3HandoverAccess::parse(BitReader& br) {
     L3HandoverAccess msg;
     auto r = br.readField(27); if (!r) return Expected<L3HandoverAccess>::error(r.error());
     msg.mHandoverNumber = r.value();
+    // 5 reserved bits, '0' values (GSM 04.08 9.1.38; audit P2-4: the
+    // previous parser accepted ANY 32-bit input, so a garbage 4-byte
+    // frame whose standard parse left a tail was misclassified as a
+    // HandoverAccess and could trigger a spurious handover procedure).
     r = br.readField(5); if (!r) return Expected<L3HandoverAccess>::error(r.error());
+    if (r.value() != 0) {
+        return Expected<L3HandoverAccess>::error(
+            {ParseError::Code::InvalidValue, "HandoverAccess: reserved bits must be zero"});
+    }
     return Expected<L3HandoverAccess>::hold(std::move(msg));
 }
 
@@ -3424,10 +3467,6 @@ void L3SystemInformationType2quater::text(std::ostream& os) const {
 }
 
 // ── Builder::build() implementations for empty classes ──────────────────
-
-L3ClassmarkEnquiry L3ClassmarkEnquiry::Builder::build() const {
-    return L3ClassmarkEnquiry{};
-}
 
 L3VGCSUplinkGrant L3VGCSUplinkGrant::Builder::build() const {
     return L3VGCSUplinkGrant{};

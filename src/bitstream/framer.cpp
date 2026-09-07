@@ -21,6 +21,7 @@
 
 #include "gsml3parser/bitstream/framer.h"
 #include "gsml3parser/l3header.h"
+#include "gsml3parser/bitstream/frame_lengths.h"
 #include <cstring>
 #include <chrono>
 #include <climits>
@@ -29,68 +30,8 @@ namespace gsml3parser {
 
 namespace {
 
-/**
- * Return the expected body length (in bytes, excluding the 2-byte L3 header)
- * for known fixed-length messages.  Returns SIZE_MAX if the message is
- * variable-length and cannot be determined from PD+MTI alone.
- */
-size_t fixedBodyLength(int pd, int mti) {
-    constexpr size_t VARIABLE = SIZE_MAX;
-    switch (pd) {
-        case 0x06: // Radio Resource
-            switch (mti) {
-                case 0x0D: return 1;  // Channel Release
-                case 0x0E: return 5;  // Paging Response
-                case 0x0F: return 8;  // Classmark Change
-                case 0x10: return 3;  // Classmark Enquiry
-                case 0x1A: return 0;  // RR Status
-                case 0x1C: return 4;  // Assignment Complete
-                case 0x1D: return 2;  // Assignment Failure
-                case 0x21: return 3;  // Immediate Assignment Reject
-                case 0x25: return 0;  // Additional Assignment
-                case 0x29: return 4;  // Handover Complete
-                case 0x2A: return 2;  // Handover Failure
-                case 0x2E: return 1;  // Physical Information
-                case 0x33: return 2;  // Ciphering Mode Complete
-                default:   return VARIABLE;
-            }
-        case 0x05: // Mobility Management
-            switch (mti) {
-                case 0x1F: return 4;  // IMSI Detach Indication
-                case 0x21: return 0;  // CM Service Accept
-                case 0x22: return 3;  // CM Service Reject
-                case 0x23: return 1;  // CM Service Abort
-                case 0x27: return 1;  // MM Status
-                default:   return VARIABLE;
-            }
-        case 0x03: // Call Control
-            switch (mti) {
-                case 0x23: return 1;  // Release Complete
-                case 0x25: return 1;  // CC Status (min body)
-                default:   return VARIABLE;
-            }
-        case 0x01: // Broadcast Call Control (6-bit MTI, shifted; see bcc/l3bccmessages.h)
-            switch (mti) {
-                case 0x00: return 0;  // BCC Setup (header-only in known vectors)
-                case 0x04: return 0;  // BCC Call Confirmed (no body)
-                case 0x09: return 0;  // BCC Connect Acknowledge (no body)
-                default:   return VARIABLE;
-            }
-        case 0x00: // Group Call Control (6-bit MTI, shifted; see gcc/l3gccmessages.h)
-            switch (mti) {
-                case 0x00: return 1;  // GCC Setup (1-byte opaque body in known vectors)
-                case 0x03: return 0;  // GCC Call Confirmed (no body)
-                default:   return VARIABLE;
-            }
-        case 0x0c: // Location Services (8-bit MTI, no shift; see ls/l3lsmessages.h)
-            switch (mti) {
-                case 0x01: return 0;  // Location Service Request (header-only in known vectors)
-                default:   return VARIABLE;
-            }
-        default:
-            return VARIABLE;
-    }
-}
+// The fixed-length table lives in bitstream/frame_lengths.h (single
+// source of truth, cross-checked by test_frame_lengths.cpp — audit P1-1).
 
 } // anonymous namespace
 
@@ -129,7 +70,7 @@ bool L3Framer::fillBuffer() {
     return n > 0;
 }
 
-Expected<ExtractedFrame> L3Framer::tryExtract() {
+Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
     // Need at least the minimum header.
     if (mEnd - mPos < mConfig.minHeaderLength) {
         return Expected<ExtractedFrame>::error(
@@ -154,6 +95,9 @@ Expected<ExtractedFrame> L3Framer::tryExtract() {
         frameLen = l2len + 1; // length octet + message
 
         if (mEnd - mPos < frameLen) {
+            // Incomplete L2 frame. At end of source the length octet is
+            // authoritative: a partial frame is NOT a frame (no tail
+            // emit) — report the error (audit P1-1).
             return Expected<ExtractedFrame>::error(
                 {ParseError::Code::TruncatedInput, "incomplete frame (L2 length)"});
         }
@@ -184,58 +128,78 @@ Expected<ExtractedFrame> L3Framer::tryExtract() {
             mti = (rawMti & 0xFC) >> 2;
         }
 
-        size_t bodyLen = fixedBodyLength(pd, mti);
-
-        if (bodyLen != SIZE_MAX) {
-            // Fixed-length message: frame = 2 (header) + bodyLen.
-            frameLen = 2 + bodyLen;
-        } else {
-            // Variable-length message: try to parse to determine length.
-            // We attempt a greedy approach: parse the header and as much body
-            // as we can, looking for a natural boundary.
-            // For now, use a heuristic: scan for the next plausible L3 header.
-            //
-            // Boundary candidates depend on the PD of the message being framed
-            // (C17): while framing BCC (0x01), GCC (0x00) or LS (0x0c)
-            // messages, any of the 12 valid PDs may start the next message, so
-            // the full list is used. For all other PDs the original list is
-            // kept: 0x00/0x01/0x0c high nibbles occur frequently inside
-            // variable-length bodies (e.g. GMM/SMS cause octets) and listing
-            // them unconditionally would create false frame boundaries.
-            const bool callControlLike = (pd == 0x00 || pd == 0x01 || pd == 0x0c);
-            frameLen = 0;
-            for (size_t i = mPos + 2; i + 1 < mEnd && i < mPos + 2 + mConfig.maxMessageLength; ++i) {
-                uint8_t candidatePd = (mBuf[i] >> 4) & 0x0F;
-                // Check if this looks like a valid L3 header start.
-                // Base valid PDs: 0x03, 0x05, 0x06, 0x0b, 0x08, 0x09, 0x0a, 0x0e, 0x0f.
-                // Extended with 0x00 (GCC), 0x01 (BCC), 0x0c (LS) when framing
-                // BCC/GCC/LS messages.
-                const bool plausible =
-                    candidatePd == 0x03 || candidatePd == 0x05 ||
-                    candidatePd == 0x06 || candidatePd == 0x0b ||
-                    candidatePd == 0x08 || candidatePd == 0x09 ||
-                    candidatePd == 0x0a || candidatePd == 0x0e ||
-                    candidatePd == 0x0f ||
-                    (callControlLike &&
-                     (candidatePd == 0x00 || candidatePd == 0x01 || candidatePd == 0x0c));
-                if (plausible) {
-                    // This might be the start of the next message.
-                    frameLen = i - mPos;
-                    break;
-                }
-            }
-
-            if (frameLen == 0) {
-                // No boundary found - need more data.
-                return Expected<ExtractedFrame>::error(
-                    {ParseError::Code::TruncatedInput, "variable-length frame, need more data"});
-            }
-
-            // Safety: ensure frame is not too large.
+        if (atEof) {
+            // Source exhausted: the remainder IS the final frame of the
+            // stream (audit P1-1: the previous code reported TruncatedInput
+            // and the caller could not distinguish "need more data" from
+            // "end of stream", so the final variable-length frame of a
+            // stream was never emitted). The parser still validates the
+            // content downstream; a truncated frame surfaces as a parse
+            // error. (planZ review: the tail decision must live here,
+            // driven by nextFrame(), not by a fillBuffer() call inside
+            // this function — the latter lost the tail for streams
+            // longer than the internal buffer.)
+            frameLen = mEnd - mPos;
             if (frameLen > mConfig.maxMessageLength) {
-                mPos++; // skip one byte and retry
                 return Expected<ExtractedFrame>::error(
-                    {ParseError::Code::InvalidValue, "frame exceeds maxMessageLength"});
+                    {ParseError::Code::TruncatedInput, "trailing data exceeds maxMessageLength"});
+            }
+        } else {
+            size_t fixedLen = detail::fixedFrameLength(pd, mti);
+
+            if (fixedLen != 0) {
+                // Fixed-length message: frame = 2 (header) + body.
+                frameLen = fixedLen;
+            } else {
+                // Variable-length message: try to determine length.
+                // We attempt a greedy approach: parse the header and as much body
+                // as we can, looking for a natural boundary.
+                // For now, use a heuristic: scan for the next plausible L3 header.
+                //
+                // Boundary candidates depend on the PD of the message being framed
+                // (C17): while framing BCC (0x01), GCC (0x00) or LS (0x0c)
+                // messages, any of the 12 valid PDs may start the next message, so
+                // the full list is used. For all other PDs the original list is
+                // kept: 0x00/0x01/0x0c high nibbles occur frequently inside
+                // variable-length bodies (e.g. GMM/SMS cause octets) and listing
+                // them unconditionally would create false frame boundaries.
+                const bool callControlLike = (pd == 0x00 || pd == 0x01 || pd == 0x0c);
+                frameLen = 0;
+                for (size_t i = mPos + 2; i + 1 < mEnd && i < mPos + 2 + mConfig.maxMessageLength; ++i) {
+                    uint8_t candidatePd = (mBuf[i] >> 4) & 0x0F;
+                    // Check if this looks like a valid L3 header start.
+                    // Base valid PDs: 0x03, 0x05, 0x06, 0x0b, 0x08, 0x09, 0x0a, 0x0e, 0x0f.
+                    // Extended with 0x00 (GCC), 0x01 (BCC), 0x0c (LS) when framing
+                    // BCC/GCC/LS messages.
+                    const bool plausible =
+                        candidatePd == 0x03 || candidatePd == 0x05 ||
+                        candidatePd == 0x06 || candidatePd == 0x0b ||
+                        candidatePd == 0x08 || candidatePd == 0x09 ||
+                        candidatePd == 0x0a || candidatePd == 0x0e ||
+                        candidatePd == 0x0f ||
+                        (callControlLike &&
+                         (candidatePd == 0x00 || candidatePd == 0x01 || candidatePd == 0x0c));
+                    if (plausible) {
+                        // This might be the start of the next message.
+                        frameLen = i - mPos;
+                        break;
+                    }
+                }
+
+                if (frameLen == 0) {
+                    // No boundary found in the buffered data: need more
+                    // data (nextFrame() will fill the buffer and retry;
+                    // at end of source it calls tryExtract(true)).
+                    return Expected<ExtractedFrame>::error(
+                        {ParseError::Code::TruncatedInput, "variable-length frame, need more data"});
+                }
+
+                // Safety: ensure frame is not too large.
+                if (frameLen > mConfig.maxMessageLength) {
+                    mPos++; // skip one byte and retry
+                    return Expected<ExtractedFrame>::error(
+                        {ParseError::Code::InvalidValue, "frame exceeds maxMessageLength"});
+                }
             }
         }
     }
@@ -269,7 +233,7 @@ Expected<ExtractedFrame> L3Framer::nextFrame() {
     // Loop to handle corrupt frames: skip bad bytes and retry.
     while (true) {
         // Try to extract from currently buffered data.
-        auto result = tryExtract();
+        auto result = tryExtract(false);
         if (result) return result;
 
         const auto& err = result.error();
@@ -288,17 +252,17 @@ Expected<ExtractedFrame> L3Framer::nextFrame() {
         bool gotData = fillBuffer();
 
         if (!gotData) {
-            // Source returned 0 bytes (EOF or non-blocking with no data).
+            // Source exhausted (EOF per the ByteSource contract). Give
+            // the buffered tail one final chance: in header-based mode
+            // the remainder IS the last frame of the stream (audit
+            // P1-1); in L2 mode a partial frame is an error.
+            auto tail = tryExtract(true);
+            if (tail) return tail;
             return Expected<ExtractedFrame>::error(
                 {ParseError::Code::TruncatedInput, "source returned no data"});
         }
 
-        // After filling, check if we still have enough for a header.
-        if (mEnd - mPos < mConfig.minHeaderLength) {
-            return Expected<ExtractedFrame>::error(
-                {ParseError::Code::TruncatedInput, "insufficient data after refill"});
-        }
-        // Loop back to tryExtract with new data.
+        // Got more data: loop back and retry with the extended buffer.
     }
 }
 
