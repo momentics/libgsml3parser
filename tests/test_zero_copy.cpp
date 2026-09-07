@@ -470,3 +470,38 @@ TEST(ZeroCopyStreamProcessor, TruncatedFrame) {
     auto msg = proc.nextMessage();
     ASSERT_FALSE(msg.has_value());
 }
+
+// Test: a corrupt L2 length octet is skipped and the framer
+// resynchronizes on the next valid frame (audit P1-2: previously the
+// whole remainder of the buffer was abandoned after one bad octet).
+TEST(InlineFramer, L2Length_CorruptOctet_Resyncs) {
+    std::vector<uint8_t> data = {
+        3, 0x60, 0x0D, 0x00,  // frame 1 (RR Channel Release, 3 bytes)
+        0,                    // corrupt length octet
+        3, 0x60, 0x0D, 0x01,  // frame 2
+        3, 0x60, 0x0D, 0x02   // frame 3
+    };
+    InlineFramer framer(std::span<const uint8_t>(data), /*useL2Length=*/true);
+    int frames = 0;
+    while (auto f = framer.nextFrame()) {
+        ASSERT_EQ(f->size(), 3u);
+        ++frames;
+    }
+    EXPECT_EQ(frames, 3) << "all valid frames must survive one corrupt octet";
+    EXPECT_EQ(framer.resyncSkips(), 1u);
+}
+
+// Test: resyncSkips is observable through ZeroCopyStreamProcessor
+// (audit P1-2).
+TEST(ZeroCopyStreamProcessor, L2Length_CorruptOctet_ResyncCounted) {
+    std::vector<uint8_t> data = {
+        3, 0x60, 0x0D, 0x00,
+        0,
+        3, 0x60, 0x0D, 0x01
+    };
+    ZeroCopyStreamProcessor proc(std::span<const uint8_t>(data), /*useL2Length=*/true);
+    int parsed = 0;
+    while (auto msg = proc.nextMessage()) { (void)msg; ++parsed; }
+    EXPECT_EQ(parsed, 2);
+    EXPECT_EQ(proc.resyncSkips(), 1u);
+}

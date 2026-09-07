@@ -136,6 +136,10 @@ public:
 
     /** Reset framer to beginning of buffer. */
     void reset() noexcept { mFramer.reset(); }
+
+    /** Number of corrupt L2 length octets the internal framer skipped
+     * while resynchronizing (audit P1-2). */
+    [[nodiscard]] size_t resyncSkips() const noexcept { return mFramer.resyncSkips(); }
 };
 
 // ── Inline implementation (header-only) ────────────────────────────────

@@ -56,6 +56,7 @@ class InlineFramer {
     size_t mPos{};
     bool mUseL2Length{false};
     size_t mMaxFrameLen{4096};
+    size_t mResyncSkips{0};  // corrupt length octets skipped (audit P1-2)
 
 public:
     constexpr InlineFramer() noexcept = default;
@@ -86,6 +87,9 @@ public:
 
     /** Set maximum allowed frame length (default 4096). */
     void setMaxFrameLength(size_t len) noexcept { mMaxFrameLen = len; }
+
+    /** Number of corrupt L2 length octets skipped during resync (audit P1-2). */
+    [[nodiscard]] constexpr size_t resyncSkips() const noexcept { return mResyncSkips; }
 };
 
 // ── Inline implementations (header-only) ──────────────────────────────
@@ -95,6 +99,7 @@ inline InlineFramer::InlineFramer(std::span<const uint8_t> data, bool useL2Lengt
 
 inline void InlineFramer::reset() noexcept {
     mPos = 0;
+    mResyncSkips = 0;
 }
 
 inline std::optional<std::span<const uint8_t>> InlineFramer::nextFrame() noexcept {
@@ -105,11 +110,23 @@ inline std::optional<std::span<const uint8_t>> InlineFramer::nextFrame() noexcep
 
     if (mUseL2Length) {
         // L2 length mode: first byte is the L3 message length.
-        if (mPos + 1 > mData.size()) return std::nullopt;
-        frameLen = static_cast<size_t>(mData[mPos]);
-        if (frameLen == 0 || frameLen > mMaxFrameLen) return std::nullopt;
+        for (;;) {
+            if (mPos + 1 > mData.size()) return std::nullopt;
+            frameLen = static_cast<size_t>(mData[mPos]);
+            if (frameLen == 0 || frameLen > mMaxFrameLen) {
+                // Corrupt length octet: skip it and resynchronize on the
+                // next byte (audit P1-2: the previous code returned
+                // nullopt here WITHOUT advancing mPos, so the caller saw
+                // "buffer exhausted" and silently abandoned every
+                // remaining frame).
+                ++mPos;
+                ++mResyncSkips;
+                continue;
+            }
+            break;
+        }
+        if (mPos + 1 + frameLen > mData.size()) return std::nullopt;
         mPos += 1; // skip length octet
-        if (mPos + frameLen > mData.size()) return std::nullopt;
     } else {
         // Header-based mode: use fixed-length table from PD+MTI.
         // Need at least 2 bytes for L3 header.
