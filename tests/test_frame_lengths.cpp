@@ -69,7 +69,7 @@ TEST(FrameLengths, VariableLengthTypesAbsent) {
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3ImmediateAssignmentReject::MTI), 0u);
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3PhysicalInformation::MTI), 0u);
     EXPECT_EQ(detail::fixedFrameLength(0x05, L3CMServiceRequest::MTI), 0u);
-    // Variable bodies (planZ review): IMSI Detach Indication carries LV
+    // Variable bodies: IMSI Detach Indication carries LV
     // classmark + LV mobile identity; Location Service Request carries an
     // opaque variable body — neither may be framed from a fixed table.
     EXPECT_EQ(detail::fixedFrameLength(0x05, L3IMSIDetachIndication::MTI), 0u);

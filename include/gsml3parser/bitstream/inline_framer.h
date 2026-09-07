@@ -150,7 +150,7 @@ inline std::optional<std::span<const uint8_t>> InlineFramer::nextFrame() noexcep
         // 0x00/0x01/0x0c high nibbles occur frequently inside
         // variable-length bodies (e.g. GMM/SMS cause octets), so
         // they are only accepted while framing BCC/GCC/LS
-        // messages (audit planZ review: the two framers must
+        // messages (the two framers must
         // behave identically).
         const bool callControlLike = (pd == 0x00 || pd == 0x01 || pd == 0x0c);
 

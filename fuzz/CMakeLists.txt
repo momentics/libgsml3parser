@@ -4,7 +4,7 @@
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # Register the smoke tests even when BUILD_TESTS is OFF: the CI
     # fuzz job configures with -DBUILD_TESTS=OFF and runs ctest on the
-    # *_smoke tests (planZ Phase 9).
+    # *_smoke tests.
     enable_testing()
     set(GSML3_FUZZ_TARGETS
         fuzz_parse_l3

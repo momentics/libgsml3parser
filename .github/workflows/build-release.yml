@@ -3,12 +3,15 @@ name: Build Release Package
 on:
   release:
     types: [published]
+  push:
 
 permissions:
   contents: write
 
 jobs:
   build:
+    # Release packaging only: the CI jobs below run on push.
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
 
     steps:
@@ -116,3 +119,78 @@ jobs:
             gsml3parser-${{ github.ref_name }}-linux-x86_64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── CI: Windows/MSVC (primary development platform) ─────────────────
+
+  windows-msvc:
+    name: Windows (MSVC) build + tests + examples
+    if: github.event_name == 'push'
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake -S . -B build -DBUILD_TESTS=ON -DBUILD_EXAMPLES=ON -G "Visual Studio 17 2022"
+      - name: Build
+        run: cmake --build build --config Release --parallel
+      - name: Unit tests
+        run: ctest --test-dir build -C Release --output-on-failure
+      - name: Examples
+        shell: pwsh
+        run: |
+          Get-ChildItem build\examples\Release\*.exe | ForEach-Object {
+            $args = @()
+            if ($_.Name -eq "example_parse_file.exe") { $args = @("060D00") }
+            & $_.FullName @args
+            if ($LASTEXITCODE -ne 0) { throw "Example failed: $($_.Name)" }
+          }
+
+  # ── CI: Linux/Clang ThreadSanitizer (sharded-registry concurrency) ──
+
+  linux-tsan:
+    name: Linux (Clang) ThreadSanitizer
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang lld
+      - name: Configure
+        run: >
+          cmake -S . -B build_tsan -DBUILD_TESTS=ON -DBUILD_EXAMPLES=OFF
+          -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_CXX_FLAGS="-fsanitize=thread -fno-omit-frame-pointer"
+          -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=thread"
+      - name: Build
+        run: cmake --build build_tsan --parallel
+      - name: Concurrency tests (TSan)
+        run: >
+          ./build_tsan/tests/gsml3parser_tests
+          --gtest_filter=*Thread*:*Shard*:*Concurrent*:*TornRead*
+        env:
+          TSAN_OPTIONS: suppressions=
+
+  # ── CI: Linux/Clang fuzzing smoke (libFuzzer) ───────────────────────
+  # Separate job: the fuzzer sanitizer is incompatible with
+  # ThreadSanitizer.
+
+  linux-fuzz:
+    name: Linux (Clang) fuzzing smoke
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang lld
+      - name: Configure
+        run: >
+          cmake -S . -B build_fuzz -DBUILD_TESTS=OFF -DBUILD_EXAMPLES=OFF
+          -DENABLE_FUZZING=ON
+          -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
+          -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build_fuzz --parallel
+      - name: Fuzz smoke (2000 runs per target)
+        run: >
+          ctest --test-dir build_fuzz -C Release --output-on-failure
+          -R "_smoke$"

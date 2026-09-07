@@ -277,7 +277,7 @@ bool FlatMap<Key, Value>::erase(size_t idx) noexcept {
     --mSize;
     // Tombstone cleanup: more than half the slots are tombstones.
     // (mSize + mTomb is invariant under erase, so a cleanup keyed on
-    // total used slots would be unreachable — audit planZ review.)
+    // total used slots would be unreachable.)
     if (mTomb * 2 > mSlots.size()) {
         rehash(mSlots.size());
     }

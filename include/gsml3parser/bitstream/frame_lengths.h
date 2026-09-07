@@ -67,7 +67,7 @@ inline constexpr size_t kFixedFrameEntries[] = {
     0x01, 0x09, 2,  // BCC Connect Acknowledge (no body)
     // Group Call Control (pd 0x00, shifted 6-bit MTI)
     0x00, 0x03, 2,  // GCC Call Confirmed (no body)
-    // NOT listed (variable bodies — planZ review): MM 0x01 IMSI Detach
+    // NOT listed (variable bodies): MM 0x01 IMSI Detach
     // Indication (LV classmark + LV mobile identity), LS 0x01 Location
     // Service Request (opaque body), RR 0x27 Paging Response (7–15),
     // RR 0x32 Ciphering Mode Complete (1 or 9 after SPEC-2).

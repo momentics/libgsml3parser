@@ -139,7 +139,7 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
             // "end of stream", so the final variable-length frame of a
             // stream was never emitted). The parser still validates the
             // content downstream; a truncated frame surfaces as a parse
-            // error. (planZ review: the tail decision must live here,
+            // error. (the tail decision must live here,
             // driven by nextFrame(), not by a fillBuffer() call inside
             // this function — the latter lost the tail for streams
             // longer than the internal buffer.)
