@@ -224,3 +224,45 @@ TEST(DispatcherTest, RegisterHandler_MTI_OutOfRange_Ignored) {
     disp.dispatch(msg, &fallbackCalls);
     SUCCEED(); // no crash; fallback path taken
 }
+
+// Test: the context passed to dispatch() is delivered to the callback
+// (audit P1-3: it was previously silently dropped in every handler kind).
+TEST(DispatcherTest, DispatchContext_DeliveredToRawHandler) {
+    static void* lastCtx = nullptr;
+    ProtocolDispatcher d;
+    d.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
+        FlatHandler{[](const ParsedMessage*, void* c) { lastCtx = c; },
+                    reinterpret_cast<void*>(0x1)});
+    ParsedMessage pm{RRM{L3ChannelRelease::builder().cause(RRCause::Normal_Event).build()}};
+
+    d.dispatch(pm, reinterpret_cast<void*>(0x2));
+    EXPECT_EQ(lastCtx, reinterpret_cast<void*>(0x2)) << "dispatch context must win";
+    d.dispatch(pm, nullptr);
+    EXPECT_EQ(lastCtx, reinterpret_cast<void*>(0x1)) << "registered ctx when dispatch ctx is null";
+}
+
+TEST(DispatcherTest, DispatchContext_DeliveredToSharedHandler) {
+    static void* lastCtx = reinterpret_cast<void*>(0xDEAD);
+    ProtocolDispatcher d;
+    d.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
+        makeSharedHandler([](const ParsedMessage&, void* c) { lastCtx = c; }));
+    ParsedMessage pm{RRM{L3ChannelRelease::builder().cause(RRCause::Normal_Event).build()}};
+
+    d.dispatch(pm, reinterpret_cast<void*>(0x7));
+    EXPECT_EQ(lastCtx, reinterpret_cast<void*>(0x7));
+    d.dispatch(pm, nullptr);
+    EXPECT_EQ(lastCtx, nullptr);
+}
+
+TEST(DispatcherTest, DispatchContext_DeliveredToMakeHandler) {
+    static void* lastCtx = reinterpret_cast<void*>(0xBEEF);
+    ProtocolDispatcher d;
+    d.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
+        makeHandler([](const ParsedMessage&, void* c) { lastCtx = c; }));
+    ParsedMessage pm{RRM{L3ChannelRelease::builder().cause(RRCause::Normal_Event).build()}};
+
+    d.dispatch(pm, reinterpret_cast<void*>(0x9));
+    EXPECT_EQ(lastCtx, reinterpret_cast<void*>(0x9));
+    d.dispatch(pm, nullptr);
+    EXPECT_EQ(lastCtx, nullptr);
+}

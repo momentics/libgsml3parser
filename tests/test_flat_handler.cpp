@@ -101,8 +101,12 @@ TEST(FlatHandlerTest, Constructor_FreeFunctionWithContext) {
     EXPECT_EQ(ctx.calls, 1);
 
     // Copies of a non-shared handler are trivial value copies.
+    // Field-wise comparison: FlatHandler no longer defines operator==
+    // (audit P3-2: comparing holder pointers made two co-owning copies
+    // of a shared handler "unequal").
     FlatHandler copy = h;
-    EXPECT_EQ(copy, h);
+    EXPECT_EQ(copy.fn, h.fn);
+    EXPECT_EQ(copy.ctx, h.ctx);
     copy(msg, &ctx);
     EXPECT_EQ(ctx.calls, 2);
 }

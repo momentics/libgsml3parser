@@ -23,22 +23,11 @@
 
 namespace gsml3parser {
 
-ProtocolDispatcher::~ProtocolDispatcher() {
-    // Destroy all shared handlers to avoid memory leaks.
-    for (auto& pd_arr : mHandlers)
-        for (auto& h : pd_arr)
-            destroySharedHandler(h);
-    for (auto& h : mDomainHandlers)
-        destroySharedHandler(h);
-    for (auto& h : mTIHandlers)
-        destroySharedHandler(h);
-    destroySharedHandler(mFallback);
-}
-
 void ProtocolDispatcher::registerHandler(L3PD pd, int mti, MessageHandler handler) {
     int pidx = static_cast<int>(pd);
     if (pidx >= 0 && pidx < 16 && mti >= 0 && mti < kMaxMtiSlots) {
-        destroySharedHandler(mHandlers[static_cast<size_t>(pidx)][static_cast<size_t>(mti)]);
+        // Move-assignment releases the previously registered handler (RAII,
+        // audit P3-3).
         mHandlers[static_cast<size_t>(pidx)][static_cast<size_t>(mti)] = std::move(handler);
     }
 }
@@ -46,13 +35,11 @@ void ProtocolDispatcher::registerHandler(L3PD pd, int mti, MessageHandler handle
 void ProtocolDispatcher::registerDomainHandler(L3PD pd, MessageHandler handler) {
     int pidx = static_cast<int>(pd);
     if (pidx >= 0 && pidx < 16) {
-        destroySharedHandler(mDomainHandlers[static_cast<size_t>(pidx)]);
         mDomainHandlers[static_cast<size_t>(pidx)] = std::move(handler);
     }
 }
 
 void ProtocolDispatcher::setFallbackHandler(MessageHandler handler) {
-    destroySharedHandler(mFallback);
     mFallback = std::move(handler);
 }
 
@@ -93,7 +80,6 @@ bool ProtocolDispatcher::dispatchRaw(std::span<const uint8_t> data, void* contex
 
 void ProtocolDispatcher::registerTIHandler(uint8_t ti, MessageHandler handler) {
     if (ti < 8) {
-        destroySharedHandler(mTIHandlers[ti]);
         mTIHandlers[ti] = std::move(handler);
     }
 }

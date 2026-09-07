@@ -77,8 +77,12 @@ struct SharedHandlerHolder {
     std::shared_ptr<SharedHandlerBase> handler;
 };
 
-/// Named trampoline for shared handlers. Its address doubles as the marker
-/// distinguishing shared-handler ctx pointers from plain user contexts.
+/// Marker function for shared handlers. Its address distinguishes
+/// shared-handler ctx pointers (per-owner holders) from plain user
+/// contexts. It is never invoked: operator() dispatches shared handlers
+/// directly through the holder so the per-dispatch context reaches the
+/// callable (audit P1-3). The body is kept behaviorally correct
+/// (nullptr context) in case it is ever called.
 inline void sharedTrampoline(const ParsedMessage* msg, void* ctx) {
     auto* holder = static_cast<SharedHandlerHolder*>(ctx);
     holder->handler->invoke(*msg, nullptr);
@@ -119,6 +123,10 @@ inline void releaseSharedHandler(void* ctx) noexcept {
  * Usage:
  *   FlatHandler h{[](const ParsedMessage* msg, void* ctx) { ... }, &myContext};
  *   h(msg, nullptr); // direct call, no virtual dispatch
+ *
+ * Context delivery: the callback's void* argument is the context passed
+ * to operator()/dispatch() when non-null; otherwise the context bound at
+ * registration (raw handlers) or nullptr (make* handlers) (audit P1-3).
  */
 struct FlatHandler {
     using Callback = void (*)(const ParsedMessage*, void*);
@@ -195,12 +203,6 @@ struct FlatHandler {
      */
     void operator()(const ParsedMessage& msg, void* userCtx = nullptr) const;
 
-    bool operator==(const FlatHandler& other) const noexcept {
-        return fn == other.fn && ctx == other.ctx;
-    }
-    bool operator!=(const FlatHandler& other) const noexcept {
-        return !(*this == other);
-    }
     explicit operator bool() const noexcept { return fn != nullptr; }
 
 private:
@@ -244,8 +246,8 @@ FlatHandler makeHandler(F) noexcept {
     // Stateless instance per callable type; the trampoline lambda below is
     // non-capturing, so it converts to a plain function pointer.
     static const F instance{};
-    return FlatHandler{[](const ParsedMessage* msg, void*) {
-        instance(*msg, nullptr);
+    return FlatHandler{[](const ParsedMessage* msg, void* c) {
+        instance(*msg, c);
     }, nullptr};
 }
 
@@ -283,11 +285,16 @@ inline void destroySharedHandler(FlatHandler& h) {
 // ── operator() implementation ──────────────────────────────────────────
 
 inline void FlatHandler::operator()(const ParsedMessage& msg, void* userCtx) const {
-    // For shared handlers, ctx points to the refcounted holder which owns
-    // the callable; the trampoline extracts and invokes it.
-    // Captured lambdas access their state through captures; userCtx is ignored.
-    (void)userCtx;
-    fn(&msg, ctx);
+    // Context delivery (audit P1-3: the dispatch context was previously
+    // silently dropped — operator() passed the registered ctx in every
+    // case). The callback receives userCtx when provided; otherwise the
+    // context bound at registration (raw handlers) or nullptr (make*
+    // handlers register no context).
+    if (isShared()) {
+        static_cast<detail::SharedHandlerHolder*>(ctx)->handler->invoke(msg, userCtx);
+        return;
+    }
+    fn(&msg, userCtx ? userCtx : ctx);
 }
 
 } // namespace gsml3parser

@@ -41,7 +41,10 @@ using MessageHandler = FlatHandler;
 class ProtocolDispatcher {
 public:
     ProtocolDispatcher() = default;
-    ~ProtocolDispatcher();
+    // FlatHandler members are RAII: destroying the handler arrays releases
+    // any shared handler storage (audit P3-3: the previous manual loop was
+    // redundant and fragile — every new member would need a new line here).
+    ~ProtocolDispatcher() = default;
 
     ProtocolDispatcher(const ProtocolDispatcher&) = delete;
     ProtocolDispatcher& operator=(const ProtocolDispatcher&) = delete;
