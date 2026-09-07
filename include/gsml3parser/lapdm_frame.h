@@ -94,10 +94,10 @@ struct LAPDmAddressField {
 };
 
 /// I-frame control field (GSM 04.06 4.4.1).
-/// Bit layout: [NR(7:5)][P/F(4)][NS(2:0)][Fixed(3)=0]
+/// Bit layout: [NR(7:5)][P/F(4)][NS(3:1)][Fixed(0)=0]
 struct LAPDmIControlField {
     uint8_t nr; ///< Receive sequence number (mod 8, bits 7-5)
-    uint8_t ns; ///< Send sequence number (mod 8, bits 2-0)
+    uint8_t ns; ///< Send sequence number (mod 8, bits 3-1)
     bool pf;    ///< Poll/Final bit (bit 4)
 
     constexpr LAPDmIControlField() noexcept : nr(0), ns(0), pf(false) {}

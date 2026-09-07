@@ -1369,14 +1369,7 @@ void L3CellSelection::text(std::ostream& os) const {
 }
 
 // ── L3RestOctets ───────────────────────────────────────────────────────
-
-Expected<L3RestOctets> L3RestOctets::parse(BitReader&) {
-    return Expected<L3RestOctets>::hold(L3RestOctets{});
-}
-
-Expected<L3RestOctets> L3RestOctets::parse(BitReader&, size_t) {
-    return Expected<L3RestOctets>::hold(L3RestOctets{});
-}
+// (virtual parse factory removed — dead code, audit P3-1)
 
 // ── L3SI3RestOctets ────────────────────────────────────────────────────
 
@@ -1389,33 +1382,6 @@ size_t L3SI3RestOctets::lengthV() const {
     if (mHaveGPRS) bits += 1 + 3 + 1;
     else bits += 1;
     return (bits + 7) / 8;
-}
-
-Expected<L3RestOctets> L3SI3RestOctets::parse(BitReader& br) {
-    L3SI3RestOctets result;
-    auto r = br.readField(1); if (!r) return Expected<L3RestOctets>::error(r.error());
-    if (r.value() == 0) return Expected<L3RestOctets>::hold(std::move(result));
-    result.mHaveSI3RestOctets = true;
-    r = br.readField(1); if (!r) return Expected<L3RestOctets>::error(r.error());
-    if (r.value()) {
-        result.mHaveSelectionParameters = true;
-        r = br.readField(1); if (!r) return Expected<L3RestOctets>::error(r.error()); result.mCBQ = r.value();
-        r = br.readField(6); if (!r) return Expected<L3RestOctets>::error(r.error()); result.mCELL_RESELECT_OFFSET = r.value();
-        r = br.readField(3); if (!r) return Expected<L3RestOctets>::error(r.error()); result.mTEMPORARY_OFFSET = r.value();
-        r = br.readField(5); if (!r) return Expected<L3RestOctets>::error(r.error()); result.mPENALTY_TIME = r.value();
-    }
-    r = br.readField(4); if (!r) return Expected<L3RestOctets>::error(r.error()); // spare
-    r = br.readField(1); if (!r) return Expected<L3RestOctets>::error(r.error());
-    if (r.value()) {
-        result.mHaveGPRS = true;
-        r = br.readField(3); if (!r) return Expected<L3RestOctets>::error(r.error()); result.mRA_COLOUR = r.value();
-        r = br.readField(1); if (!r) return Expected<L3RestOctets>::error(r.error()); // spare
-    }
-    return Expected<L3RestOctets>::hold(std::move(result));
-}
-
-Expected<L3RestOctets> L3SI3RestOctets::parse(BitReader& br, size_t) {
-    return parse(br);
 }
 
 void L3SI3RestOctets::write(BitWriter& bw) const {
@@ -1457,22 +1423,6 @@ size_t L3SIType4RestOctets::lengthV() const {
     if (!mHaveGPRS) return 1;
     int bits = 1 + 1 + 1 + 3 + 1 + 2;
     return (bits + 7) / 8;
-}
-
-Expected<L3RestOctets> L3SIType4RestOctets::parse(BitReader& br) {
-    L3SIType4RestOctets result;
-    auto r = br.readField(2); if (!r) return Expected<L3RestOctets>::error(r.error()); // spare
-    r = br.readField(1); if (!r) return Expected<L3RestOctets>::error(r.error());
-    if (r.value()) {
-        result.mHaveGPRS = true;
-        r = br.readField(3); if (!r) return Expected<L3RestOctets>::error(r.error()); result.mRA_COLOUR = r.value();
-        r = br.readField(1); if (!r) return Expected<L3RestOctets>::error(r.error()); // spare
-    }
-    return Expected<L3RestOctets>::hold(std::move(result));
-}
-
-Expected<L3RestOctets> L3SIType4RestOctets::parse(BitReader& br, size_t) {
-    return parse(br);
 }
 
 void L3SIType4RestOctets::write(BitWriter& bw) const {
@@ -1549,24 +1499,6 @@ size_t L3SI13RestOctets::lengthV() const {
     bits += mCellOptions.lengthBits();
     bits += mPowerControlParameters.lengthBits();
     return (bits + 7) / 8;
-}
-
-Expected<L3RestOctets> L3SI13RestOctets::parse(BitReader& br) {
-    L3SI13RestOctets result;
-    auto r = br.readField(1); if (!r) return Expected<L3RestOctets>::error(r.error()); // ext
-    r = br.readField(3); if (!r) return Expected<L3RestOctets>::error(r.error()); // spare
-    r = br.readField(4); if (!r) return Expected<L3RestOctets>::error(r.error()); // spare
-    r = br.readField(1); if (!r) return Expected<L3RestOctets>::error(r.error()); // spare
-    r = br.readField(1); if (!r) return Expected<L3RestOctets>::error(r.error()); // spare
-    r = br.readField(8); if (!r) return Expected<L3RestOctets>::error(r.error()); result.mRAC = r.value();
-    r = br.readField(1); if (!r) return Expected<L3RestOctets>::error(r.error()); result.mSPGC_CCCH_SUP = r.value();
-    r = br.readField(3); if (!r) return Expected<L3RestOctets>::error(r.error()); result.mPRIORITY_ACCESS_THR = r.value();
-    r = br.readField(2); if (!r) return Expected<L3RestOctets>::error(r.error()); result.mNETWORK_CONTROL_ORDER = r.value();
-    return Expected<L3RestOctets>::hold(std::move(result));
-}
-
-Expected<L3RestOctets> L3SI13RestOctets::parse(BitReader& br, size_t) {
-    return parse(br);
 }
 
 void L3SI13RestOctets::write(BitWriter& bw) const {

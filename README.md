@@ -320,13 +320,13 @@ Layered design, bottom to top:
 
 | Domain | PD | Messages | IEs |
 |--------|----|----------|-----|
-| Group Call Control (GCC) | `0x00` | 7 | — |
-| Broadcast Call Control (BCC) | `0x01` | 6 | — |
-| Call Control (CC) | `0x03` | 20 | 26 |
-| Mobility Management (MM) | `0x05` | 18 | — |
-| Radio Resource (RR) | `0x06` | 95 | 15+ |
-| GPRS Mobility Mgmt (GMM) | `0x08` | 19 | 12 |
-| SMS | `0x09` | 23 | 2 |
+| Group Call Control (GCC) | `0x00` | 8 | — |
+| Broadcast Call Control (BCC) | `0x01` | 8 | — |
+| Call Control (CC) | `0x03` | 24 | 26 |
+| Mobility Management (MM) | `0x05` | 20 | — |
+| Radio Resource (RR) | `0x06` | 98 | 15+ |
+| GPRS Mobility Mgmt (GMM) | `0x08` | 23 | 12 |
+| SMS | `0x09` | 19 | 2 |
 | GPRS Session Mgmt (SM) | `0x0a` | 29 | 8 |
 | Supplementary Services (SS) | `0x0b` | 3 | 2 |
 | Location Services (LS) | `0x0c` | 2 | — |

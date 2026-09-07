@@ -418,7 +418,7 @@ Measured sizes (MSVC 2026, Release, x64):
 | `MMStateMachine` | 16 bytes | Virtual table pointer + state int |
 | `CCStateMachine` | 16 bytes | Virtual table pointer + state int |
 | `ProcedureRunner` | 152 bytes | 8 × ProcedureSlot (unique_ptr + bool) + active-change observer |
-| `ResponseContext` | 126 bytes | Response parameters (fixed arrays, ≤ 160 budget) |
+| `ResponseContext` | 128 bytes | Response parameters (fixed arrays, ≤ 160 budget) |
 | `ProcedureOrchestrator` | ~100 bytes | Active chain state + phase timer |
 | **Total per MS** | **2,056 bytes** (`sizeof(SubscriberSession)`) | Enforced `< 4096` via `static_assert`; plus `ParsedMessage` (416 bytes) on stack during processing |
 
@@ -600,34 +600,18 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
 - **Procedure tick:** `tickAllProcedures()` is O(active) via an active-procedure index (same pattern as the active-timer index). The old documented pattern (forEach over all sessions) must not be used at scale.
 - **Registry storage:** `SubscriberRegistry`/`ShardedSubscriberRegistry`
   use a flat open-addressing hash table (`stack/flat_map.h`) for the
-  TMSI and LAPDm-link indexes: inline key/value entries, no per-node
-  heap allocation, no pointer chasing. Call `reserve()` at startup when
-  the subscriber scale is known. The IMSI index stays a
-  `std::unordered_map` (owned std::string keys, cold path).
+  TMSI and LAPDm-link indexes: per-entry heap blocks with STABLE
+  addresses for the entry's whole lifetime (insertions, erasures of
+  other entries and rehashes never move an entry — audit P0-1: the
+  previous swap-with-last erase invalidated every external
+  SubscriberSession*), a flat open-addressing slot table (no pointer
+  chasing on lookup), one allocation per session creation (cold path).
+  Call `reserve()` at startup when the subscriber scale is known. The
+  IMSI index stays a `std::unordered_map` (owned std::string keys,
+  cold path).
 - **L3Framer header-based mode:** fixed-body messages are framed exactly from a single compile-time table (`bitstream/frame_lengths.h`, cross-checked by `tests/test_frame_lengths.cpp` against the message definitions — audit P1-1). Variable-body messages (SI, SMS, Setup with IEs, Paging Response, ...) use a boundary heuristic that scans for the next plausible L3 header; at end of stream the tail is emitted and validated by the parser. For deterministic framing of variable-length messages use the L2-length mode (`FrameConfig::useL2Length = true`), which is what production LAPDm/A-bis paths provide.
 
-## 9. Deployment Checklist
-
-- [ ] Build with C++20, Release mode (`-O2` or `/O2`)
-- [ ] Verify `sizeof(MSContext) <= 256` via `static_assert` (measured: 92 bytes)
-- [ ] Verify `sizeof(ProcedureStepResult) <= 32` via `static_assert`
-- [ ] Verify `sizeof(SubscriberSession) < 4096` via `static_assert` (measured: 2056 bytes)
-- [ ] Verify `sizeof(ResponseContext) <= 160` via `static_assert` (measured: 126 bytes)
-- [ ] Configure `ChannelPool` with available channels at startup
-- [ ] Initialize `SubscriberRegistry` (or `ShardedSubscriberRegistry<N>` for multi-threaded)
-- [ ] Choose usage mode: L3 Parser Mode (parse/build only) or BTS Stack Mode (full procedures)
-- [ ] For BTS Stack Mode: create `ProcedureOrchestrator` per subscriber session
-- [ ] Implement `feedExternalTyped()` handlers: query AuC for `AuthChallenge`, VLR for `VLRDecision`
-- [ ] Handle `ResponseToken` from `ProcedureStepResult`: call `ResponseBuilder::buildResponseFromToken()` into Arena buffer
-- [ ] Integrate `orchestrator.tickAll()` or `runner.tickAll()` into event loop (10-100ms interval)
-- [ ] If using A-bis: set up `RSLParser` -> `parseL3()` -> `orchestrator.feed()` pipeline
-- [ ] If using A-bis: set up Arena buffer -> `RSLBuilder::buildDataInd()` -> PHY outbound pipeline
-- [ ] Provide external synchronization for shared `ChannelPool` (or use `ShardedChannelPool`)
-- [ ] Set up PHY backend with `sendToRadio(span)` and `onRadioFrameReceived(span)` callbacks
-- [ ] Configure System Information broadcast schedule
-- [ ] Add logging for procedure state transitions, ResponseToken values, and timer expirations
-
-## 10. References
+## 9. References
 
 | Document | Topic |
 |----------|-------|

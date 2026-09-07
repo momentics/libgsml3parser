@@ -998,14 +998,15 @@ public:
 
 // ── Rest Octets Base ───────────────────────────────────────────────────
 
+/// Plain data holder: SI messages parse their rest octets inline
+/// (the previous virtual parse factory was dead code and returned
+/// the base class by value — slicing; audit P3-1).
 class L3RestOctets {
 public:
     L3RestOctets() = default;
     virtual ~L3RestOctets() = default;
     virtual size_t lengthV() const { return 0; }
     virtual void write(BitWriter&) const {}
-    [[nodiscard]] virtual Expected<L3RestOctets> parse(BitReader& br);
-    [[nodiscard]] virtual Expected<L3RestOctets> parse(BitReader& br, size_t lengthBytes);
 };
 
 // ── SI3 Rest Octets (GSM 04.08 10.5.2.34) ─────────────────────────────
@@ -1030,8 +1031,6 @@ public:
     size_t lengthV() const override;
 
     void write(BitWriter& bw) const override;
-    [[nodiscard]] Expected<L3RestOctets> parse(BitReader& br) override;
-    [[nodiscard]] Expected<L3RestOctets> parse(BitReader& br, size_t lengthBytes) override;
     void text(std::ostream& os) const;
 };
 
@@ -1048,8 +1047,6 @@ public:
 
     size_t lengthV() const override;
     void write(BitWriter& bw) const override;
-    [[nodiscard]] Expected<L3RestOctets> parse(BitReader& br) override;
-    [[nodiscard]] Expected<L3RestOctets> parse(BitReader& br, size_t lengthBytes) override;
     void text(std::ostream& os) const;
 };
 
@@ -1110,8 +1107,6 @@ public:
 
     size_t lengthV() const override;
     void write(BitWriter& bw) const override;
-    [[nodiscard]] Expected<L3RestOctets> parse(BitReader& br) override;
-    [[nodiscard]] Expected<L3RestOctets> parse(BitReader& br, size_t lengthBytes) override;
     void text(std::ostream& os) const;
 };
 

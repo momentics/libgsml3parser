@@ -75,13 +75,13 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
 
     switch (mCurrentState) {
         case State::INIT: {
+            // Both branches previously set the same action (audit P3-4:
+            // dead if/else) — the transition is the only difference.
             auto pd = messagePD(msg);
             if (pd == L3PD::MobilityManagement || pd == L3PD::RadioResource) {
                 transitionTo(State::IDENTITY_CHECK);
-                result.action = ProcedureStepResult::Action::Continue;
-            } else {
-                result.action = ProcedureStepResult::Action::Continue;
             }
+            result.action = ProcedureStepResult::Action::Continue;
             break;
         }
 

@@ -99,6 +99,8 @@ The main event loop processes incoming L3 messages by feeding them into the subs
 
 Note: `SubscriberSession` does not embed the orchestrator — the BTS application owns one `ProcedureOrchestrator` (48 bytes) per session. The examples below use `orchestratorFor(session)` as the app-side lookup (e.g. a map keyed by TMSI, or a parallel structure alongside the registry).
 
+Runner vs orchestrator: `SubscriberSession::procedures` (ProcedureRunner, 8 slots) is ticked by `tickAllProcedures()` through the O(active) index and is meant for the session's built-in procedures. `ProcedureOrchestrator` is an app-owned single chain for application-level procedure sequencing. They are complementary, not alternatives: a session may use both, but a given procedure must live in exactly one of them (audit v4 P3-9).
+
 ```cpp
 // Arena for zero-heap-allocation response building
 Arena arena(65536);

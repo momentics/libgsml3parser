@@ -241,7 +241,7 @@ TEST(RSLP_parse_EmptyMessage, ReturnsError) {
 
 // Test: Truncated TLV value returns partial parse (does not crash).
 // Importance: Graceful degradation on malformed messages from buggy BSC implementations.
-TEST(RSLP_parse_TruncatedTLV, ReturnsError) {
+TEST(RSLP_parse_TruncatedTLV, PartialParse_NoCrash) {
     // Header + IE type + length claiming 100 bytes but only 5 available.
     std::vector<uint8_t> buf = {
         0x60, 0x01, 0x78, 0x00, // DCHAN CHAN_ACTIV header
