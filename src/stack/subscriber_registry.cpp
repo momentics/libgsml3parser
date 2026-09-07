@@ -206,7 +206,12 @@ bool SubscriberRegistry::remove(SubscriberSession* session) noexcept {
     handleProcedureActive(session, false);
     // Erase the entry so memory is reclaimed (previously the entry
     // stayed in the map with active=false, leaking on every removal).
-    // The session pointer is invalidated by this call.
+    // The pointer to THIS session is invalidated by this call. Pointers
+    // to all other sessions remain valid: FlatMap erase is in-place and
+    // never moves other entries (audit P0-1 — the previous
+    // swap-with-last erase silently invalidated every external
+    // SubscriberSession* of the moved entry: active-timer/procedure
+    // sets, the link index, owner self-pointers and app-held pointers).
     mByTMSI.erase(idx);
     --mCount;
     return true;
@@ -253,6 +258,14 @@ size_t SubscriberRegistry::tickAllTimers(std::chrono::milliseconds delta,
             session->transactions.onTimerExpired(localBuf[j]);
             if (written < expiredOut.size()) {
                 expiredOut[written++] = TimerExpiry{session, localBuf[j]};
+            } else {
+                // Output span full: re-arm with a minimal duration so
+                // the expiry is reported on the next tick instead of
+                // being silently lost (audit P2-9). localBuf always
+                // fits one session's expiries (32 = MAX_TIMERS), so
+                // only the registry-level cap can drop an event here.
+                session->timers.start(localBuf[j],
+                                      std::chrono::milliseconds(1));
             }
         }
     }

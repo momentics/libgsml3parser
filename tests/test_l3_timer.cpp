@@ -206,6 +206,7 @@ TEST(TimerManagerTest, TickWithSpan_fillsBuffer) {
 }
 
 // tick() with an undersized span buffer returns the number of IDs actually written
+// (audit P2-9: unreported expiries are re-armed, not dropped)
 TEST(TimerManagerTest, TickSpan_BufferFull_ReturnsWritten) {
     TimerManager tm;
     tm.start(L3TimerId::T3101, 100ms);
@@ -219,9 +220,18 @@ TEST(TimerManagerTest, TickSpan_BufferFull_ReturnsWritten) {
     EXPECT_EQ(count, 1u);
     EXPECT_EQ(expired[0], L3TimerId::T3101);
 
-    // Both timers still expired: their running state is cleared regardless
-    // of whether their ID fit into the output buffer.
+    // T3101 was reported and stopped.
     EXPECT_FALSE(tm.isRunning(L3TimerId::T3101));
+    // T3102 did not fit: it is re-armed (1 ms) and must still be
+    // running, so the next tick reports it (audit P2-9: no silent loss).
+    EXPECT_TRUE(tm.isRunning(L3TimerId::T3102));
+    EXPECT_EQ(tm.runningCount(), 1u);
+
+    // The re-armed timer is reported on the following tick.
+    std::array<L3TimerId, 1> second;
+    size_t secondCount = tm.tick(5ms, std::span<L3TimerId>(second));
+    EXPECT_EQ(secondCount, 1u);
+    EXPECT_EQ(second[0], L3TimerId::T3102);
     EXPECT_FALSE(tm.isRunning(L3TimerId::T3102));
     EXPECT_EQ(tm.runningCount(), 0u);
 }

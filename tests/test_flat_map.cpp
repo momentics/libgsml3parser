@@ -49,7 +49,7 @@ TEST(FlatMapTest, InsertFindErase) {
 
 // Test: erasing a non-last entry swaps the last one into its place;
 // probes through the tombstone still find later entries.
-TEST(FlatMapTest, EraseNonLast_SwapAndProbe) {
+TEST(FlatMapTest, EraseNonLast_ProbeChainIntact) {
     FlatMap<uint32_t, int> m;
     m.emplace(1, 10);
     m.emplace(2, 20);
@@ -175,4 +175,100 @@ TEST(FlatMapTest, Scale_4MEntries) {
     EXPECT_LT(insMs, 10000.0) << "4M insert too slow";
     EXPECT_LT(findMs, 10000.0) << "4M find too slow";
 #endif
+}
+
+// Test: erasing one entry does NOT move any other entry (audit P0-1:
+// the previous swap-with-last erase relocated the last entry into the
+// erased slot, invalidating every raw pointer derived from entry
+// addresses — owner self-pointers, registry indexes, app-held pointers).
+TEST(FlatMapTest, Erase_OtherEntries_KeepStableAddresses) {
+    FlatMap<uint32_t, int> m;
+    std::vector<size_t> idx(5);
+    for (int i = 0; i < 5; ++i) {
+        idx[i] = m.emplace(static_cast<uint32_t>(i * 10), i * 100).first;
+    }
+    int* addrs[5];
+    for (int i = 0; i < 5; ++i) addrs[i] = &m.at(idx[i]);
+
+    // Erase the middle entry: no other entry may move.
+    ASSERT_TRUE(m.erase(idx[2]));
+    for (int i = 0; i < 5; ++i) {
+        if (i == 2) continue;
+        EXPECT_EQ(addrs[i], &m.at(idx[i])) << "entry " << i << " moved on erase";
+        EXPECT_EQ(m.at(idx[i]), i * 100) << "entry " << i << " value lost";
+    }
+    EXPECT_EQ(m.find(20u), (FlatMap<uint32_t, int>::npos));
+}
+
+// Test: a dead entry index is recycled IN PLACE — the new occupant sits
+// at the same address, all other entries stay put (audit P0-1).
+TEST(FlatMapTest, Erase_RecyclesDeadSlot_InPlace) {
+    FlatMap<uint32_t, int> m;
+    auto [ia, insA] = m.emplace(1u, 100);
+    ASSERT_TRUE(insA);
+    auto [ib, insB] = m.emplace(2u, 200);
+    ASSERT_TRUE(insB);
+    int* aAddr = &m.at(ia);
+    int* bAddr = &m.at(ib);
+
+    ASSERT_TRUE(m.erase(ia));
+    auto [ic, ins] = m.emplace(3u, 300);
+    ASSERT_TRUE(ins);
+    // The recycled index is the same slot (freelist reuse is in-place).
+    EXPECT_EQ(ic, ia);
+    EXPECT_EQ(&m.at(ic), aAddr) << "recycled entry must keep the old address";
+    EXPECT_EQ(&m.at(ib), bAddr) << "unrelated entry must not move";
+    EXPECT_EQ(m.at(ic), 300);
+}
+
+// Test: entry addresses survive rehash (growth and tombstone cleanup) —
+// rehash rebuilds only the slot table (audit P0-1).
+TEST(FlatMapTest, Erase_ThenRehash_AddressesStable) {
+    FlatMap<uint32_t, int> m;
+    m.reserve(8);
+    auto [i0, _] = m.emplace(100u, 1);
+    int* addr = &m.at(i0);
+    // Force growth rehashes (1025 insertions grow the slot table to 2048).
+    for (uint32_t k = 0; k < 1025; ++k) m.emplace(k + 200u, static_cast<int>(k));
+    EXPECT_EQ(addr, &m.at(i0));
+    EXPECT_EQ(m.at(i0), 1);
+    // Erase all 1025 non-survivor entries: mTomb (1025) exceeds 50% of
+    // the 2048-slot table, so the erase path performs the tombstone
+    // cleanup rehash (same capacity). The survivor's address and value
+    // must stay stable through it.
+    for (uint32_t k = 0; k < 1025; ++k) {
+        size_t idx = m.find(k + 200u);
+        ASSERT_NE(idx, (FlatMap<uint32_t, int>::npos));
+        ASSERT_TRUE(m.erase(idx));
+    }
+    EXPECT_EQ(addr, &m.at(i0));
+    EXPECT_EQ(m.at(i0), 1);
+    EXPECT_EQ(m.size(), 1u);
+    EXPECT_EQ(m.find(100u), i0);
+}
+
+// Test: move-only values (unique_ptr inside) work with the per-entry
+// block storage (SessionEntry shape: ProcedureRunner has unique_ptr slots).
+TEST(FlatMapTest, MoveOnlyValue_StableAcrossChurn) {
+    struct V {
+        std::unique_ptr<int> p;
+        V() : p(std::make_unique<int>(42)) {}
+        V(V&& o) noexcept : p(std::move(o.p)) {}
+        V& operator=(V&& o) noexcept { p = std::move(o.p); return *this; }
+        V(const V&) = delete;
+        V& operator=(const V&) = delete;
+    };
+    FlatMap<uint32_t, V> m;
+    auto [ia, insA] = m.emplace(1u, V{});
+    ASSERT_TRUE(insA);
+    auto [ib, insB] = m.emplace(2u, V{});
+    ASSERT_TRUE(insB);
+    V* bAddr = &m.at(ib);
+    ASSERT_TRUE(m.erase(ia));
+    EXPECT_EQ(bAddr, &m.at(ib));
+    EXPECT_EQ(*m.at(ib).p, 42);
+    auto [ic, ins] = m.emplace(3u, V{});
+    ASSERT_TRUE(ins);
+    EXPECT_EQ(bAddr, &m.at(ib));
+    EXPECT_EQ(*m.at(ic).p, 42);
 }

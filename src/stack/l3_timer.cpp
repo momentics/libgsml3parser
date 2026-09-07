@@ -195,10 +195,18 @@ size_t TimerManager::tick(std::chrono::milliseconds delta, std::span<L3TimerId> 
                 if (count < out.size()) {
                     out[count] = mTimers[i].id();
                     ++count; // increment only on a successful write
+                } else {
+                    // Output buffer full: re-arm the timer with a
+                    // minimal duration so its expiry is reported on a
+                    // LATER tick instead of being silently dropped
+                    // (audit P2-9: the previous contract cleared the
+                    // running state without ever reporting the ID, so a
+                    // real-time event loop would miss protocol
+                    // timeouts such as T3101/T3106).
+                    mTimers[i].reconfigure(mTimers[i].id(),
+                                           std::chrono::milliseconds(1));
+                    mTimers[i].start();
                 }
-                // If `out` is full, the timer still expired (state updated above),
-                // but its ID is not reported; the contract is to return the
-                // number of IDs actually written.
             }
         }
     }

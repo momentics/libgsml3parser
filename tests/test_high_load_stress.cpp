@@ -654,3 +654,70 @@ TEST(Stress, _1MSession_ProcedureTick_Scale) {
     EXPECT_LT(ms, 50.0) << "tickAllProcedures over 1M (10K active) too slow";
 #endif
 }
+
+// Test: high session churn with concurrently ACTIVE timers (audit P0-1:
+// the previous FlatMap::erase moved the last entry into the erased
+// slot, so every remove() while other sessions had running timers
+// produced ghost ticks and lost expiries). 1M sessions, 10K active
+// timers, 100K remove/create cycles; invariants:
+//   1. every reported expiry is bound to a session that is still in the
+//      registry (no ghost / no use-after-free);
+//   2. every session with a running timer is ticked (no lost expiries);
+//   3. the registry count stays consistent;
+//   4. (audit P2-9) the number of reported expiries equals ACTIVE: the
+//      4096-slot output buffer is smaller than the 10K simultaneous
+//      expiries, so unreported expiries must be re-armed and reported on
+//      a later tick — never silently dropped.
+TEST(Stress, _1MSession_ChurnWithActiveTimers_NoGhostTicks) {
+    // Attribute the run to the machine it ran on (unified hardware ID).
+    benchmark::printHardwareId();
+    constexpr uint32_t N = 1'000'000;
+    constexpr uint32_t ACTIVE = 10'000;
+    constexpr uint32_t CYCLES = 100'000;
+
+    ShardedSubscriberRegistry<32> reg;
+    reg.reserve(N);
+    for (uint32_t i = 1; i <= N; ++i) {
+        ASSERT_TRUE(reg.createByTMSI(i));
+    }
+    // 10K sessions with a running T3101 (one tick expires it).
+    for (uint32_t i = 1; i <= ACTIVE; ++i) {
+        reg.findByTMSI(i)->timers.start(L3TimerId::T3101, std::chrono::milliseconds(50));
+    }
+
+    std::array<TimerExpiry, 4096> expired{};
+    uint32_t ghostTicks = 0, lostExpiries = 0;
+    uint32_t reportedTotal = 0;  // audit P2-9: every logical expiry must be reported exactly once
+    uint32_t nextTmsi = N + 1;
+    for (uint32_t c = 0; c < CYCLES; ++c) {
+        // Churn: remove an idle session (TMSI > ACTIVE) and create a new one.
+        uint32_t victim = ACTIVE + 1 + (c % (N - ACTIVE));
+        auto* v = reg.findByTMSI(victim);
+        if (v) {
+            reg.remove(v);
+            ASSERT_TRUE(reg.createByTMSI(nextTmsi++));
+        }
+        // Tick: every running timer must expire exactly on its real session.
+        size_t n = reg.tickAllTimers(std::chrono::milliseconds(60), expired);
+        reportedTotal += static_cast<uint32_t>(n);
+        for (size_t j = 0; j < n; ++j) {
+            auto* live = reg.findByTMSI(
+                expired[j].session ? expired[j].session->assignedTmsi : 0);
+            if (!live || live != expired[j].session) ++ghostTicks;
+        }
+    }
+    // All 10K active timers must have expired on their real sessions.
+    for (uint32_t i = 1; i <= ACTIVE; ++i) {
+        auto* s = reg.findByTMSI(i);
+        ASSERT_NE(s, nullptr);
+        if (s->timers.isRunning(L3TimerId::T3101)) ++lostExpiries;
+    }
+    EXPECT_EQ(ghostTicks, 0u) << "ghost ticks: expiry bound to a non-live session";
+    EXPECT_EQ(lostExpiries, 0u) << "lost expiries: real session timer never ticked";
+    EXPECT_EQ(reportedTotal, ACTIVE)
+        << "each of the " << ACTIVE
+        << " active timers must be reported exactly once (re-armed, not dropped, when the buffer is full — audit P2-9)";
+    // Count: N original - removed victims + created replacements.
+    // (CYCLES < N - ACTIVE, so every victim is unique: removed == CYCLES.)
+    EXPECT_EQ(reg.count(), N);
+}

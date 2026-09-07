@@ -226,12 +226,15 @@ public:
     /// Advance all timers by `delta`. Fills the pre-allocated output buffer with expired IDs.
     /// @param delta Time elapsed since the last tick.
     /// @param out Pre-allocated span to receive expired timer IDs.
-    ///            The caller must provide capacity for at least the number of running
-    ///            timers (maximum 32 = MAX_TIMERS) to receive every expired ID.
-    /// @return The number of expired timer IDs actually written to `out`.
-    ///         If the buffer is smaller than the number of expired timers, only the
-    ///         first `out.size()` IDs are written and that count is returned; the
-    ///         unreported timers still expire (their running state is cleared).
+    ///            The caller should provide capacity for at least the number of
+    ///            running timers (maximum 32 = MAX_TIMERS) to receive every
+    ///            expired ID in one pass.
+    /// @return The number of expired timer IDs written to `out`.
+    ///         IDs that do not fit are NOT lost: the corresponding timers
+    ///         are re-armed with a 1 ms duration and reported on a later
+    ///         tick (audit P2-9: the previous contract silently cleared
+    ///         their running state, so real-time loops could miss
+    ///         protocol timeouts).
     /// This overload avoids heap allocation by using a caller-provided buffer.
     size_t tick(std::chrono::milliseconds delta, std::span<L3TimerId> out);
 

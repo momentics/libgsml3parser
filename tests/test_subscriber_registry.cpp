@@ -704,3 +704,97 @@ TEST(SSR_hashTMSI, SequentialTmsi_EvenShardDistribution) {
         EXPECT_LT(counts[i], 850) << "shard " << i << " overloaded: " << counts[i];
     }
 }
+
+// Test: removing session A must not relocate session B, so B's running
+// timer keeps ticking on the REAL session address and the reported
+// expiry is bound to the real session (audit P0-1, repro_uf: the
+// previous swap-with-last erase made tickAllTimers tick a ghost and
+// left B's timer running forever).
+TEST(SR_remove, MovesNoSession_TimerExpiryBoundToRealSession) {
+    SubscriberRegistry reg;
+    auto* a = reg.createByTMSI(1);
+    auto* b = reg.createByTMSI(2);
+    ASSERT_NE(a, nullptr);
+    ASSERT_NE(b, nullptr);
+
+    b->timers.start(L3TimerId::T3101, std::chrono::milliseconds(100));
+    ASSERT_TRUE(reg.remove(a));
+
+    auto* bNow = reg.findByTMSI(2);
+    ASSERT_NE(bNow, nullptr);
+    EXPECT_EQ(bNow, b) << "session B must not be relocated by remove(A)";
+
+    std::array<TimerExpiry, 32> expired{};
+    size_t n = reg.tickAllTimers(std::chrono::milliseconds(150), expired);
+    ASSERT_EQ(n, 1u);
+    EXPECT_EQ(expired[0].session, bNow) << "expiry must be bound to the real session";
+    EXPECT_EQ(expired[0].id, L3TimerId::T3101);
+    EXPECT_FALSE(bNow->timers.isRunning(L3TimerId::T3101))
+        << "the real session's timer must have been ticked";
+}
+
+// Test: a timer started AFTER the session was relocated by a foreign
+// erase is tracked via the (stable) owner self-pointer (audit P0-1,
+// repro_owner: previously the observer fired with a stale owner and
+// tickAllTimers reported 0 expiries — the procedure hung forever).
+TEST(SR_remove, MovesNoSession_NewTimerTrackedAfterMove) {
+    SubscriberRegistry reg;
+    auto* a = reg.createByTMSI(1);
+    auto* b = reg.createByTMSI(2);
+    ASSERT_TRUE(reg.remove(a));
+
+    auto* bNow = reg.findByTMSI(2);
+    ASSERT_NE(bNow, nullptr);
+    bNow->timers.start(L3TimerId::T3106, std::chrono::milliseconds(100));
+
+    std::array<TimerExpiry, 32> expired{};
+    size_t n = reg.tickAllTimers(std::chrono::milliseconds(150), expired);
+    ASSERT_EQ(n, 1u) << "the moved session's new timer must be ticked";
+    EXPECT_EQ(expired[0].session, bNow);
+    EXPECT_FALSE(bNow->timers.isRunning(L3TimerId::T3106));
+}
+
+// Test: the LAPDm-link index of a session that survives a foreign erase
+// still resolves to the real session (audit P0-1: mByLink holds raw
+// SubscriberSession* pointers).
+TEST(SR_remove, MovesNoSession_LinkIndexPointsToRealSession) {
+    SubscriberRegistry reg;
+    auto* a = reg.createByTMSI(1);
+    auto* b = reg.createByTMSI(2);
+    ChannelDescriptor desc{};
+    desc.type = ChannelType::SDCCHType;
+    desc.trxNumber = 0;
+    desc.timeslot = 1;
+    desc.arfcn = 100;
+    reg.assignChannel(b, desc, /*lapdmLink=*/1);
+    ASSERT_TRUE(reg.remove(a));
+
+    auto* bNow = reg.findByTMSI(2);
+    ASSERT_NE(bNow, nullptr);
+    auto* byLink = reg.findByLink(0, 1, /*lapdmLink=*/1);
+    ASSERT_NE(byLink, nullptr);
+    EXPECT_EQ(byLink, bNow) << "link index must resolve to the real session";
+}
+
+// Test: with an undersized output buffer, expiries are re-armed and
+// reported on a later tick instead of being silently dropped
+// (audit P2-9).
+TEST(SR_tickAllTimers, BufferFull_ReArmsInsteadOfDropping) {
+    SubscriberRegistry reg;
+    auto* s1 = reg.createByTMSI(1);
+    auto* s2 = reg.createByTMSI(2);
+    s1->timers.start(L3TimerId::T3101, std::chrono::milliseconds(100));
+    s2->timers.start(L3TimerId::T3101, std::chrono::milliseconds(100));
+
+    std::array<TimerExpiry, 1> expired{};  // fits only ONE expiry
+    size_t n1 = reg.tickAllTimers(std::chrono::milliseconds(150), expired);
+    ASSERT_EQ(n1, 1u);
+    // The unreported session's timer must be re-armed, not lost.
+    auto* other = (expired[0].session == s1) ? s2 : s1;
+    EXPECT_TRUE(other->timers.isRunning(L3TimerId::T3101));
+
+    size_t n2 = reg.tickAllTimers(std::chrono::milliseconds(10), expired);
+    ASSERT_EQ(n2, 1u);
+    EXPECT_EQ(expired[0].session, other);
+    EXPECT_FALSE(other->timers.isRunning(L3TimerId::T3101));
+}

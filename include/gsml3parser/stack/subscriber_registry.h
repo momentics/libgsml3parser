@@ -198,6 +198,9 @@ public:
     /// @param session Session pointer to remove.
     /// @return true if session was found and removed.
     /// Performance: O(1) via session->assignedTmsi (no linear scan).
+    /// @note Only the pointer to the removed session is invalidated.
+    /// Pointers to other sessions stay valid for their whole lifetime in
+    /// the registry (FlatMap address stability, audit P0-1).
     bool remove(SubscriberSession* session) noexcept;
 
     /// Remove all sessions (emergency shutdown).
@@ -232,6 +235,10 @@ public:
     /// For each expired timer the session's TransactionManager is notified
     /// (onTimerExpired), matching the documented timer event path.
     /// Note: the order of entries in expiredOut is unspecified.
+    /// @note Expired timers that do not fit into `expiredOut` are
+    /// re-armed with a 1 ms duration and reported on a later tick —
+    /// no expiry event is ever silently dropped (audit P2-9). Size
+    /// `expiredOut` for the expected number of concurrent expiries.
     size_t tickAllTimers(std::chrono::milliseconds delta,
                           std::span<TimerExpiry> expiredOut);
 
