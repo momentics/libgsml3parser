@@ -146,7 +146,20 @@ TEST(L3StreamProcessor, EmptySource) {
 
     const auto& stats = proc.stats();
     ASSERT_EQ(stats.totalFrames, 0u);
-    ASSERT_EQ(stats.truncatedInputs, 1u);
+    ASSERT_EQ(stats.idlePolls, 0u);         // poll at EOF is not an idle poll (audit P2-6)
+    ASSERT_EQ(stats.sourceExhausted, 1u);   // the source reached EOF (audit P2-5)
+}
+
+// Test: an idle poll on a live (non-exhausted) RingBuffer counts
+// toward idlePolls, not sourceExhausted (audit P2-5/P2-6: the
+// previous stat conflated "empty right now" with "truncated").
+TEST(L3StreamProcessor, RingBuffer_IdlePoll_CountedAsIdle) {
+    RingBuffer ring(1024);
+    L3StreamProcessor proc(ring);
+    EXPECT_FALSE(proc.processOne([](const ParsedMessage&) {}));
+    const auto& stats = proc.stats();
+    EXPECT_EQ(stats.idlePolls, 1u);
+    EXPECT_EQ(stats.sourceExhausted, 0u);
 }
 
 // ── processN ───────────────────────────────────────────────────────────
@@ -213,6 +226,15 @@ TEST(L3StreamBuilder, BuildWithL2Length) {
     TestHandler handler;
     proc->processUntilEOF(handler);
     ASSERT_EQ(handler.messages.size(), 1u);
+}
+
+// Test: a missing file is a build error, not a silent empty stream
+// (audit P2-1).
+TEST(L3StreamBuilder, Build_FileNotFound_ReturnsNullptr) {
+    L3StreamBuilder b;
+    b.sourceFile("no_such_file_for_libgsml3parser_test.bin");
+    EXPECT_TRUE(b.hasFileError());
+    EXPECT_EQ(b.build(), nullptr);
 }
 
 // ── Mixed message types ────────────────────────────────────────────────

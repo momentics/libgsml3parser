@@ -47,6 +47,14 @@ public:
      *         May block if the underlying source has no data yet.
      */
     [[nodiscard]] virtual size_t read(uint8_t* buf, size_t maxSize) = 0;
+
+    /**
+     * True when the source is exhausted and will never produce more
+     * bytes (audit P2-5: read() == 0 means "no data right now" for
+     * live sources such as RingBuffer, so the framer must ask the
+     * source explicitly whether it is at end-of-stream).
+     */
+    [[nodiscard]] virtual bool atEof() const { return false; }
 };
 
 /**
@@ -62,6 +70,8 @@ public:
 
     [[nodiscard]] size_t read(uint8_t* buf, size_t maxSize) override;
 
+    [[nodiscard]] bool atEof() const override { return mPos >= mData.size(); }
+
     /** Remaining unread bytes in the span. */
     [[nodiscard]] size_t remaining() const noexcept { return mData.size() - mPos; }
 };
@@ -72,6 +82,7 @@ public:
  */
 class FileByteSource : public ByteSource {
     std::FILE* mFile;
+    bool mEof{false};  // latched once fread() reports end of file (audit P2-5)
 
 public:
     explicit FileByteSource(std::FILE* f);
@@ -82,6 +93,8 @@ public:
     FileByteSource& operator=(const FileByteSource&) = delete;
 
     [[nodiscard]] size_t read(uint8_t* buf, size_t maxSize) override;
+
+    [[nodiscard]] bool atEof() const override { return mEof; }
 };
 
 /**

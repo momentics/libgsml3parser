@@ -755,7 +755,7 @@ Running statistics for stream processing.
 ```cpp
 struct StreamStats {
     uint64_t totalBytes{}, totalFrames{}, parsedOk{}, parseErrors{};
-    uint64_t truncatedInputs{}, unsupportedPD{};
+    uint64_t idlePolls{}, sourceExhausted{}, unsupportedPD{};
     uint64_t rrMessages{}, mmMessages{}, ccMessages{}, ssMessages{};
     uint64_t gmmMessages{}, smMessages{}, smsMessages{};
     uint64_t bccMessages{}, gccMessages{}, lsMessages{};
@@ -778,6 +778,7 @@ public:
     L3StreamBuilder& maxMessageLength(size_t v);
     L3StreamBuilder& ringBufferSize(size_t v);
     [[nodiscard]] std::unique_ptr<L3StreamProcessor> build();
+    [[nodiscard]] bool hasFileError() const noexcept;
 };
 ```
 

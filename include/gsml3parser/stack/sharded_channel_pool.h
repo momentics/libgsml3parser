@@ -93,17 +93,26 @@ public:
     /// Thread-safe. Uses shared locks. O(N).
     [[nodiscard]] size_t totalCount() const;
 
-private:
+    // Public for distribution tests (audit P2-3).
     /// Hash a channel descriptor to a shard index. O(1), bitmask.
-    static constexpr size_t hashDescriptor(const ChannelDescriptor& desc) noexcept {
-        size_t h = static_cast<size_t>(desc.trxNumber) << 16;
-        h |= static_cast<size_t>(desc.timeslot) << 8;
-        h |= desc.arfcn & 0xFF;
-        h ^= h >> 12;
-        h ^= h >> 25;
+    static constexpr uint32_t hashDescriptor(const ChannelDescriptor& d) noexcept {
+        // Pack all identifying fields without overlap and apply a real
+        // finalizer (audit P2-3: the previous hash truncated ARFCN to
+        // 8 bits, ignored the channel type, and its second avalanche
+        // step (h ^= h >> 25) was dead code because h < 2^24 always).
+        // Bit layout: type 5 bits (20 ChannelType values), trx 8,
+        // timeslot 8, ARFCN 11 (valid values are 10-bit, 0-1023).
+        uint32_t h = (static_cast<uint32_t>(d.type) & 0x1Fu)
+                    | (static_cast<uint32_t>(d.trxNumber) << 5)
+                    | (static_cast<uint32_t>(d.timeslot) << 13)
+                    | ((static_cast<uint32_t>(d.arfcn) & 0x3FFu) << 21);
+        h ^= h >> 16; h *= 0x7feb352du;
+        h ^= h >> 15; h *= 0x846ca68bu;
+        h ^= h >> 16;
         return h;
     }
 
+private:
     static constexpr int shardIndex(size_t hash) noexcept {
         return static_cast<int>(hash & static_cast<size_t>(N - 1));
     }

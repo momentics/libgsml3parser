@@ -40,9 +40,17 @@ void L3StreamProcessor::processUntilEOF(FrameHandler& handler) {
         auto frameResult = mFramer.nextFrame();
         if (!frameResult) {
             const auto& err = frameResult.error();
-            if (err.code == ParseError::Code::TruncatedInput) {
-                mStats.truncatedInputs++;
-                break; // No more data available.
+            if (err.code == ParseError::Code::TruncatedInput ||
+                err.code == ParseError::Code::SourceExhausted) {
+                // End of stream (SourceExhausted) or a live source with
+                // no data right now (TruncatedInput — RingBuffer):
+                // stop processing.
+                if (err.code == ParseError::Code::SourceExhausted) {
+                    mStats.sourceExhausted++;
+                } else {
+                    mStats.idlePolls++;
+                }
+                break; // No more data available (audit P2-5).
             }
             // Other errors (corrupt frames) - continue processing.
             mStats.parseErrors++;
@@ -90,10 +98,19 @@ void L3StreamProcessor::processN(size_t count, FrameHandler& handler) {
         auto frameResult = mFramer.nextFrame();
         if (!frameResult) {
             const auto& err = frameResult.error();
-            if (err.code == ParseError::Code::TruncatedInput) {
-                mStats.truncatedInputs++;
+            if (err.code == ParseError::Code::TruncatedInput ||
+                err.code == ParseError::Code::SourceExhausted) {
+                // End of stream (SourceExhausted) or a live source with
+                // no data right now (TruncatedInput — RingBuffer):
+                // stop processing.
+                if (err.code == ParseError::Code::SourceExhausted) {
+                    mStats.sourceExhausted++;
+                } else {
+                    mStats.idlePolls++;
+                }
                 break;
             }
+            // Other errors (corrupt frames) - continue processing.
             mStats.parseErrors++;
             handler.onError(err, {});
             continue;
@@ -156,6 +173,10 @@ L3StreamBuilder& L3StreamBuilder::sourceFile(const char* path) {
     if (f) {
         mOwnedSource = std::make_unique<FileByteSource>(f);
         mSource = mOwnedSource.get();
+        mFileError.clear();
+    } else {
+        // Audit P2-1: record the failure; build() returns nullptr.
+        mFileError = "cannot open file";
     }
     return *this;
 }
@@ -181,6 +202,7 @@ L3StreamBuilder& L3StreamBuilder::ringBufferSize(size_t v) {
 }
 
 std::unique_ptr<L3StreamProcessor> L3StreamBuilder::build() {
+    if (!mFileError.empty()) return nullptr;
     if (!mSource) {
         // Default: create an empty RingBuffer.
         mOwnedSource = std::make_unique<RingBuffer>(mRingBufferSize);

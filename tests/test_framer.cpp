@@ -84,7 +84,8 @@ TEST(L3Framer, MultipleFixedLengthFrames) {
 
     auto r3 = framer.nextFrame();
     ASSERT_FALSE(r3.has_value());
-    ASSERT_EQ(static_cast<int>(r3.error().code), static_cast<int>(ParseError::Code::TruncatedInput));
+    // SourceExhausted: the span source is at EOF (audit P2-5).
+    ASSERT_EQ(static_cast<int>(r3.error().code), static_cast<int>(ParseError::Code::SourceExhausted));
 }
 
 // ── Truncated frame at end of buffer ───────────────────────────────────
@@ -111,7 +112,8 @@ TEST(L3Framer, EmptySource) {
 
     auto result = framer.nextFrame();
     ASSERT_FALSE(result.has_value());
-    ASSERT_EQ(static_cast<int>(result.error().code), static_cast<int>(ParseError::Code::TruncatedInput));
+    // SourceExhausted: the span source is at EOF (audit P2-5).
+    ASSERT_EQ(static_cast<int>(result.error().code), static_cast<int>(ParseError::Code::SourceExhausted));
 }
 
 // ── L2 length mode ─────────────────────────────────────────────────────
@@ -160,7 +162,8 @@ TEST(L3Framer, L2LengthTruncated) {
 
     auto result = framer.nextFrame();
     ASSERT_FALSE(result.has_value());
-    ASSERT_EQ(static_cast<int>(result.error().code), static_cast<int>(ParseError::Code::TruncatedInput));
+    // SourceExhausted: the span source is at EOF (audit P2-5).
+    ASSERT_EQ(static_cast<int>(result.error().code), static_cast<int>(ParseError::Code::SourceExhausted));
 }
 
 // ── buffered() tracking ────────────────────────────────────────────────

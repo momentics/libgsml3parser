@@ -74,7 +74,9 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
     // Need at least the minimum header.
     if (mEnd - mPos < mConfig.minHeaderLength) {
         return Expected<ExtractedFrame>::error(
-            {ParseError::Code::TruncatedInput, "insufficient data for L3 header"});
+            {atEof ? ParseError::Code::SourceExhausted
+                   : ParseError::Code::TruncatedInput,
+              "insufficient data for L3 header"});
     }
 
     size_t frameLen = 0;
@@ -99,7 +101,9 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
             // authoritative: a partial frame is NOT a frame (no tail
             // emit) — report the error (audit P1-1).
             return Expected<ExtractedFrame>::error(
-                {ParseError::Code::TruncatedInput, "incomplete frame (L2 length)"});
+                {atEof ? ParseError::Code::SourceExhausted
+                       : ParseError::Code::TruncatedInput,
+                  "incomplete frame (L2 length)"});
         }
 
         ExtractedFrame frame;
@@ -142,7 +146,7 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
             frameLen = mEnd - mPos;
             if (frameLen > mConfig.maxMessageLength) {
                 return Expected<ExtractedFrame>::error(
-                    {ParseError::Code::TruncatedInput, "trailing data exceeds maxMessageLength"});
+                    {ParseError::Code::SourceExhausted, "trailing data exceeds maxMessageLength"});
             }
         } else {
             size_t fixedLen = detail::fixedFrameLength(pd, mti);
@@ -252,14 +256,21 @@ Expected<ExtractedFrame> L3Framer::nextFrame() {
         bool gotData = fillBuffer();
 
         if (!gotData) {
-            // Source exhausted (EOF per the ByteSource contract). Give
-            // the buffered tail one final chance: in header-based mode
-            // the remainder IS the last frame of the stream (audit
-            // P1-1); in L2 mode a partial frame is an error.
-            auto tail = tryExtract(true);
-            if (tail) return tail;
+            // Source returned 0 bytes. Per the ByteSource contract a
+            // finite source is at EOF here; a live source (RingBuffer)
+            // is merely empty right now (audit P2-5: the previous code
+            // conflated the two, so callers could not distinguish
+            // end-of-stream from "try again later").
+            if (mSource.atEof()) {
+                // End of stream: give the buffered tail one final
+                // chance (header-based mode emits it; L2 mode errors).
+                auto tail = tryExtract(true);
+                if (tail) return tail;
+                return Expected<ExtractedFrame>::error(
+                    {ParseError::Code::SourceExhausted, "source exhausted"});
+            }
             return Expected<ExtractedFrame>::error(
-                {ParseError::Code::TruncatedInput, "source returned no data"});
+                {ParseError::Code::TruncatedInput, "no data available yet"});
         }
 
         // Got more data: loop back and retry with the extended buffer.

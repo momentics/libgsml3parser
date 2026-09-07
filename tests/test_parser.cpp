@@ -764,3 +764,26 @@ TEST(ParserTest, BinaryRoundTrip_LS) {
     ASSERT_TRUE(readRes);
     EXPECT_EQ(messagePD(*readRes), L3PD::Location);
 }
+
+// Test: strict framing rejects trailing bytes after a complete message
+// (audit P2-2: the lenient default ignored them silently).
+TEST(ParserTest, StrictFraming_TrailingDataRejected) {
+    // RR Status (3 bytes: 0x60 0x12 0x00) + 2 trailing bytes.
+    uint8_t data[] = {0x60, 0x12, 0x00, 0x01, 0x02};
+    auto lenient = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(lenient) << "lenient mode keeps ignoring the tail";
+
+    auto strict = parseL3(std::span<const uint8_t>(data),
+                          ParserConfig{}.withStrictFraming(true));
+    ASSERT_FALSE(strict);
+    EXPECT_EQ(strict.error().code, ParseError::Code::LengthMismatch);
+}
+
+// Test: strict framing accepts an exactly-consumed message (audit P2-2).
+TEST(ParserTest, StrictFraming_ExactMessageAccepted) {
+    uint8_t data[] = {0x60, 0x0D, 0x00}; // Channel Release, exact
+    auto strict = parseL3(std::span<const uint8_t>(data),
+                          ParserConfig{}.withStrictFraming(true));
+    ASSERT_TRUE(strict);
+    EXPECT_EQ(messageMTI(*strict), L3ChannelRelease::MTI);
+}

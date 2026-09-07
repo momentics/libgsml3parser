@@ -55,15 +55,19 @@ struct ThreadStats {
     std::atomic<uint64_t> tstCount{0};
 };
 
-// Example messages for all 9 PD domains.
+// Example messages for all 12 PD domains.
+// SMS CP Ack is 2 bytes (CP-ACK has no body, 24.011 8.1.3; audit P3-5:
+// the previous 4-byte vector parsed as a HandoverAccess, so the SMS
+// counter stayed 0 and RR was double-counted).
 std::vector<std::string> sExampleHexes = {
     "600D00",                    // RR: Channel Release
     "5084",                      // MM: CM Service Accept
-    "3E9408021621",              // CC: Disconnect (TI=7)
+    "3E9408021621",              // CC: Disconnect (TI=7) — complete 6-byte wire form:
+                                 // 2-byte header + 4-byte body, exact consumption.
     "B0E8",                      // SS: Facility
     "802005",                     // GMM: GMM Status (cause=5)
     "A055320105",                 // SM: SM Status (cause=5)
-    "90040102",                   // SMS: CP Ack (ref=2)
+    "9004",                       // SMS: CP Ack
     "1001",                       // BCC: Setup
     "000102",                     // GCC: Setup
     "C001",                       // LS: LocationServiceRequest

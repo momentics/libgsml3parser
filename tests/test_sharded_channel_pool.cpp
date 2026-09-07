@@ -21,6 +21,7 @@
 
 #include <gtest/gtest.h>
 #include "gsml3parser/stack/sharded_channel_pool.h"
+#include <array>
 #include <thread>
 #include <vector>
 #include <atomic>
@@ -205,4 +206,26 @@ TEST(ShardedChannelPool, Allocate_RoundRobin_SpreadsShards) {
         if (pool.allocate(ChannelType::SDCCHType)) ++ok;
     }
     EXPECT_EQ(ok, 8) << "All 8 channels must be allocatable regardless of shard";
+}
+
+// Test: the channel descriptor hash spreads sequential ARFCNs across
+// shards (audit P2-3: the previous hash was dominated by arfcn & 0xFF
+// and had a dead avalanche step).
+TEST(ChannelPoolTest, HashDescriptor_Distribution) {
+    std::array<int, 16> perShard{};
+    for (uint16_t arfcn = 1; arfcn <= 1000; ++arfcn) {
+        ChannelDescriptor d{};
+        d.type = ChannelType::TCHFType;
+        d.trxNumber = static_cast<uint8_t>(arfcn / 8);
+        d.timeslot = static_cast<uint8_t>(arfcn % 8);
+        d.arfcn = arfcn;
+        perShard[ShardedChannelPool<16>::hashDescriptor(d) & 0xF]++;
+    }
+    int nonEmpty = 0, maxShard = 0;
+    for (int c : perShard) {
+        if (c > 0) ++nonEmpty;
+        if (c > maxShard) maxShard = c;
+    }
+    EXPECT_GE(nonEmpty, 12) << "hash must use most of the 16 shards";
+    EXPECT_LE(maxShard, 250) << "no shard may hold more than ~2x the average";
 }

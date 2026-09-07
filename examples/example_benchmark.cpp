@@ -75,71 +75,6 @@ static void runParseBenchmark(const char* label, std::span<const uint8_t> single
             label, iterations, secs, perSec, ok, errs);
 }
 
-static void runStreamBenchmark(const char* label, std::span<const uint8_t> singleMsg, uint64_t iterations) {
-    size_t totalSize = singleMsg.size() * iterations;
-    std::vector<uint8_t> data(totalSize);
-    uint8_t* ptr = data.data();
-    for (uint64_t i = 0; i < iterations; ++i) {
-        std::memcpy(ptr, singleMsg.data(), singleMsg.size());
-        ptr += singleMsg.size();
-    }
-
-    SpanByteSource src(data);
-
-    auto start = std::chrono::high_resolution_clock::now();
-
-    struct CounterHandler : public FrameHandler {
-        uint64_t count{0};
-        void onFrame(const ParsedMessage&, const ExtractedFrame&) override { count++; }
-        void onError(const ParseError&, std::span<const uint8_t>) override {}
-    };
-    CounterHandler handler;
-    L3StreamProcessor proc(src);
-    proc.processUntilEOF(handler);
-
-    auto end = std::chrono::high_resolution_clock::now();
-
-    double secs = std::chrono::duration<double>(end - start).count();
-    uint64_t perSec = secs > 0 ? static_cast<uint64_t>(handler.count / secs) : 0;
-
-    printf("  %-40s %" PRIu64 " msgs  %8.4f s  %" PRIu64 " msg/s\n",
-            label, handler.count, secs, perSec);
-}
-
-// Build an L2-length-prefixed stream for zero-copy benchmarks.
-static std::vector<uint8_t> buildL2Stream(const uint8_t* msgs[], size_t nMsgs, uint64_t iterations) {
-    // Compute total cycle size (length byte + each message).
-    size_t cycleSize = 0;
-    for (size_t i = 0; i < nMsgs; ++i) {
-        auto result = parseL3(std::span<const uint8_t>(msgs[i], 10)); // rough probe
-        cycleSize += 1; // length byte
-        // Find actual message size by scanning for known lengths.
-    }
-    // Simpler: just build from raw data with known sizes.
-    (void)nMsgs;
-    return {};
-}
-
-static void runZeroCopyBenchmark(const char* label, std::span<const uint8_t> data) {
-    auto start = std::chrono::high_resolution_clock::now();
-
-    ZeroCopyStreamProcessor proc(data, true);
-    uint64_t count = 0;
-    while (auto msg = proc.nextMessage()) {
-        (void)msg;
-        ++count;
-    }
-
-    auto end = std::chrono::high_resolution_clock::now();
-
-    double secs = std::chrono::duration<double>(end - start).count();
-    uint64_t perSec = secs > 0 ? static_cast<uint64_t>(count / secs) : 0;
-
-    printf("  %-40s %" PRIu64 " msgs  %8.4f s  %" PRIu64 " msg/s  (ok=%" PRIu64 " err=%" PRIu64 ")\n",
-            label, count + proc.stats().parseErrors, secs, perSec,
-            proc.stats().parsedOk, proc.stats().parseErrors);
-}
-
 // Build L2-framed data: each message preceded by its length byte.
 static std::vector<uint8_t> buildL2Data(const std::vector<std::pair<const uint8_t*, size_t>>& msgs, uint64_t iterations) {
     size_t cycleSize = 0;
@@ -160,6 +95,62 @@ static std::vector<uint8_t> buildL2Data(const std::vector<std::pair<const uint8_
     return data;
 }
 
+static uint64_t runStreamBenchmark(const char* label, std::span<const uint8_t> singleMsg, uint64_t iterations) {
+    // L2-length framing: deterministic boundaries for any message type
+    // (audit P3-5: the previous header-based framing silently dropped
+    // frames for variable-length messages and the benchmark never
+    // checked the count).
+    std::vector<std::pair<const uint8_t*, size_t>> one{ {singleMsg.data(), singleMsg.size()} };
+    auto data = buildL2Data(one, iterations);
+
+    SpanByteSource src(data);
+
+    auto start = std::chrono::high_resolution_clock::now();
+
+    struct CounterHandler : public FrameHandler {
+        uint64_t count{0};
+        void onFrame(const ParsedMessage&, const ExtractedFrame&) override { count++; }
+        void onError(const ParseError&, std::span<const uint8_t>) override {}
+    };
+    CounterHandler handler;
+    FrameConfig fcfg;
+    fcfg.useL2Length = true;
+    L3StreamProcessor proc(src, {}, fcfg);
+    proc.processUntilEOF(handler);
+
+    auto end = std::chrono::high_resolution_clock::now();
+
+    double secs = std::chrono::duration<double>(end - start).count();
+    uint64_t perSec = secs > 0 ? static_cast<uint64_t>(handler.count / secs) : 0;
+
+    printf("  %-40s %" PRIu64 " msgs  %8.4f s  %" PRIu64 " msg/s\n",
+            label, handler.count, secs, perSec);
+    return handler.count;
+}
+
+static uint64_t runZeroCopyBenchmark(const char* label, std::span<const uint8_t> data) {
+    auto start = std::chrono::high_resolution_clock::now();
+
+    ZeroCopyStreamProcessor proc(data, true);
+    uint64_t count = 0;
+    while (auto msg = proc.nextMessage()) {
+        (void)msg;
+        ++count;
+    }
+
+    auto end = std::chrono::high_resolution_clock::now();
+
+    double secs = std::chrono::duration<double>(end - start).count();
+    uint64_t perSec = secs > 0 ? static_cast<uint64_t>(count / secs) : 0;
+
+    printf("  %-40s %" PRIu64 " msgs  %8.4f s  %" PRIu64 " msg/s  (ok=%" PRIu64 " err=%" PRIu64 ")\n",
+            label, count + proc.stats().parseErrors, secs, perSec,
+            proc.stats().parsedOk, proc.stats().parseErrors);
+    // Count includes parse errors so the caller can verify that every
+    // framed message was observed (audit P3-5).
+    return count + proc.stats().parseErrors;
+}
+
 int main() {
     printf("=== libgsml3parser Benchmark (12 PD Domains) ===\n");
     // Attribute results to the machine: performance depends on CPU/RAM/OS.
@@ -172,8 +163,12 @@ int main() {
     // MM: CM Service Accept (2 bytes) - PD=0x5, MTI=0x21
     uint8_t mmMsg[] = {0x50, 0x84};
 
-    // CC: Disconnect (6 bytes) - PD=0x3, TI=7, TIF=0, MTI=0x25
-    uint8_t ccMsg[] = {0x3E, 0x94, 0x08, 0x02, 0x16, 0x21};
+    // CC: Disconnect — built wire-exact via the message builder (audit
+    // P3-5: the stream benchmark now uses L2-length framing, so every
+    // vector must be a valid complete message; the builder guarantees
+    // that).
+    auto ccBuilt = writeL3Bytes(ParsedMessage{CCM{L3Disconnect::builder().ti(3).build()}});
+    std::vector<uint8_t> ccMsg = *ccBuilt;
 
     // SS: SupServ Facility (2 bytes) - PD=0xB, MTI=0x3A
     uint8_t ssMsg[] = {0xB0, 0xE8};
@@ -184,8 +179,10 @@ int main() {
     // SM: SM Status (4 bytes) - PD=0xA, MTI=0x55
     uint8_t smMsg[] = {0xA0, 0x55, 0x32, 0x01};
 
-    // SMS: CP Ack (4 bytes) - PD=0x9, MTI=0x04
-    uint8_t smsMsg[] = {0x90, 0x04, 0x01, 0x02};
+    // SMS: CP Ack (2 bytes) — CP-ACK has no body (24.011 8.1.3; audit
+    // P3-5: the previous 4-byte vector was not a valid CP-ACK and
+    // parsed as a HandoverAccess via the 4-byte short-message path).
+    uint8_t smsMsg[] = {0x90, 0x04};
 
     // BCC: Setup (2 bytes) - PD=0x1, MTI=0x01
     uint8_t bccMsg[] = {0x10, 0x01};
@@ -219,43 +216,44 @@ int main() {
     runParseBenchmark("TST TestProcedureMessage", tstMsg, iterations);
 
     printf("\n--- L3StreamProcessor Benchmark (%" PRIu64 " iterations each) ---\n", iterations);
-    runStreamBenchmark("RR ChannelRelease", rrMsg, iterations);
-    runStreamBenchmark("MM CMServiceAccept", mmMsg, iterations);
-    runStreamBenchmark("CC Disconnect", ccMsg, iterations);
-    runStreamBenchmark("SS SupServFacility", ssMsg, iterations);
-    runStreamBenchmark("GMM GMMStatus", gmmMsg, iterations);
-    runStreamBenchmark("SM SMStatus", smMsg, iterations);
-    runStreamBenchmark("SMS CPAck", smsMsg, iterations);
-    runStreamBenchmark("BCC Setup", bccMsg, iterations);
-    runStreamBenchmark("GCC Setup", gccMsg, iterations);
-    runStreamBenchmark("LS LocationServiceRequest", lsMsg, iterations);
-    runStreamBenchmark("EXT ExtendedMessage", extMsg, iterations);
-    runStreamBenchmark("TST TestProcedureMessage", tstMsg, iterations);
+    uint64_t streamCount;
+    streamCount = runStreamBenchmark("RR ChannelRelease", rrMsg, iterations);
+    if (streamCount != iterations) { printf("FAIL: RR stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
+    streamCount = runStreamBenchmark("MM CMServiceAccept", mmMsg, iterations);
+    if (streamCount != iterations) { printf("FAIL: MM stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
+    streamCount = runStreamBenchmark("CC Disconnect", ccMsg, iterations);
+    if (streamCount != iterations) { printf("FAIL: CC stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
+    streamCount = runStreamBenchmark("SS SupServFacility", ssMsg, iterations);
+    if (streamCount != iterations) { printf("FAIL: SS stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
+    streamCount = runStreamBenchmark("GMM GMMStatus", gmmMsg, iterations);
+    if (streamCount != iterations) { printf("FAIL: GMM stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
+    streamCount = runStreamBenchmark("SM SMStatus", smMsg, iterations);
+    if (streamCount != iterations) { printf("FAIL: SM stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
+    streamCount = runStreamBenchmark("SMS CPAck", smsMsg, iterations);
+    if (streamCount != iterations) { printf("FAIL: SMS stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
+    streamCount = runStreamBenchmark("BCC Setup", bccMsg, iterations);
+    if (streamCount != iterations) { printf("FAIL: BCC stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
+    streamCount = runStreamBenchmark("GCC Setup", gccMsg, iterations);
+    if (streamCount != iterations) { printf("FAIL: GCC stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
+    streamCount = runStreamBenchmark("LS LocationServiceRequest", lsMsg, iterations);
+    if (streamCount != iterations) { printf("FAIL: LS stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
+    streamCount = runStreamBenchmark("EXT ExtendedMessage", extMsg, iterations);
+    if (streamCount != iterations) { printf("FAIL: EXT stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
+    streamCount = runStreamBenchmark("TST TestProcedureMessage", tstMsg, iterations);
+    if (streamCount != iterations) { printf("FAIL: TST stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
 
     printf("\n--- Mixed stream Benchmark (All 12 PD Domains) ---\n");
-    // Build a mixed stream with all 9 message types interleaved.
+    // Build a mixed stream with all 12 message types interleaved
+    // (L2-length framing, audit P3-5).
+    std::vector<std::pair<const uint8_t*, size_t>> allMsgs{
+        {rrMsg, sizeof(rrMsg)},   {mmMsg, sizeof(mmMsg)},   {ccMsg.data(), ccMsg.size()},
+        {ssMsg, sizeof(ssMsg)},   {gmmMsg, sizeof(gmmMsg)}, {smMsg, sizeof(smMsg)},
+        {smsMsg, sizeof(smsMsg)}, {bccMsg, sizeof(bccMsg)}, {gccMsg, sizeof(gccMsg)},
+        {lsMsg, sizeof(lsMsg)},   {extMsg, sizeof(extMsg)}, {tstMsg, sizeof(tstMsg)},
+    };
     {
-        size_t singleCycle = sizeof(rrMsg) + sizeof(mmMsg) + sizeof(ccMsg) +
-                              sizeof(ssMsg) + sizeof(gmmMsg) + sizeof(smMsg) +
-                              sizeof(smsMsg) + sizeof(bccMsg) + sizeof(gccMsg) +
-                              sizeof(lsMsg) + sizeof(extMsg) + sizeof(tstMsg);
-        uint64_t mixedIters = iterations / 9;
-        std::vector<uint8_t> data(singleCycle * mixedIters);
-        uint8_t* p = data.data();
-        for (uint64_t i = 0; i < mixedIters; ++i) {
-            std::memcpy(p, rrMsg, sizeof(rrMsg));  p += sizeof(rrMsg);
-            std::memcpy(p, mmMsg, sizeof(mmMsg));  p += sizeof(mmMsg);
-            std::memcpy(p, ccMsg, sizeof(ccMsg));  p += sizeof(ccMsg);
-            std::memcpy(p, ssMsg, sizeof(ssMsg));  p += sizeof(ssMsg);
-            std::memcpy(p, gmmMsg, sizeof(gmmMsg)); p += sizeof(gmmMsg);
-            std::memcpy(p, smMsg, sizeof(smMsg));  p += sizeof(smMsg);
-            std::memcpy(p, smsMsg, sizeof(smsMsg)); p += sizeof(smsMsg);
-            std::memcpy(p, bccMsg, sizeof(bccMsg)); p += sizeof(bccMsg);
-            std::memcpy(p, gccMsg, sizeof(gccMsg)); p += sizeof(gccMsg);
-            std::memcpy(p, lsMsg, sizeof(lsMsg));    p += sizeof(lsMsg);
-            std::memcpy(p, extMsg, sizeof(extMsg));   p += sizeof(extMsg);
-            std::memcpy(p, tstMsg, sizeof(tstMsg));   p += sizeof(tstMsg);
-        }
+        uint64_t mixedIters = iterations / 12;
+        auto data = buildL2Data(allMsgs, mixedIters);
 
         SpanByteSource src(data);
 
@@ -267,7 +265,9 @@ int main() {
             void onError(const ParseError&, std::span<const uint8_t>) override {}
         };
         CounterHandler handler;
-        L3StreamProcessor proc(src);
+        FrameConfig fcfg;
+        fcfg.useL2Length = true;
+        L3StreamProcessor proc(src, {}, fcfg);
         proc.processUntilEOF(handler);
 
         auto end = std::chrono::high_resolution_clock::now();
@@ -277,21 +277,22 @@ int main() {
 
         printf("  %-40s %" PRIu64 " msgs  %8.4f s  %" PRIu64 " msg/s\n",
                 "Mixed (all 12 PD domains)", handler.count, secs, perSec);
+
+        if (handler.count != mixedIters * 12) {
+            printf("FAIL: mixed stream lost frames (%" PRIu64 "/%" PRIu64 ")\n",
+                   handler.count, mixedIters * 12);
+            return 1;
+        }
     }
 
     // Zero-copy benchmark: compare against L3StreamProcessor for mixed stream.
     printf("\n--- ZeroCopyStreamProcessor Benchmark (All 12 PD Domains) ---\n");
     {
-        std::vector<std::pair<const uint8_t*, size_t>> allMsgs{
-            {rrMsg, sizeof(rrMsg)},   {mmMsg, sizeof(mmMsg)},   {ccMsg, sizeof(ccMsg)},
-            {ssMsg, sizeof(ssMsg)},   {gmmMsg, sizeof(gmmMsg)}, {smMsg, sizeof(smMsg)},
-            {smsMsg, sizeof(smsMsg)}, {bccMsg, sizeof(bccMsg)}, {gccMsg, sizeof(gccMsg)},
-            {lsMsg, sizeof(lsMsg)},   {extMsg, sizeof(extMsg)}, {tstMsg, sizeof(tstMsg)},
-        };
         uint64_t mixedIters = iterations / 12;
         auto l2Data = buildL2Data(allMsgs, mixedIters);
 
-        runZeroCopyBenchmark("Zero-copy (all 12 PD domains)", std::span<const uint8_t>(l2Data));
+        uint64_t zcCount = runZeroCopyBenchmark("Zero-copy (all 12 PD domains)", std::span<const uint8_t>(l2Data));
+        if (zcCount != mixedIters * 12) { printf("FAIL: zero-copy stream lost frames\n"); return 1; }
     }
 
     printf("\n=== Benchmark complete ===\n");

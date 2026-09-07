@@ -43,6 +43,7 @@ struct ParseError {
         InvalidIE,
         InvalidValue,
         UnsupportedFeature,
+        SourceExhausted,  // the ByteSource is at EOF (atEof() == true) and no frame could be extracted
     };
 
     // Inline buffer for small-string optimization - no heap allocation.

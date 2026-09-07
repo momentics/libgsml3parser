@@ -25,6 +25,7 @@
 #include <concepts>
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "gsml3parser/expected.h"
@@ -46,7 +47,8 @@ struct StreamStats {
     uint64_t totalFrames{};
     uint64_t parsedOk{};
     uint64_t parseErrors{};
-    uint64_t truncatedInputs{};
+    uint64_t idlePolls{};         // processOne polls that found no data yet (audit P2-6)
+    uint64_t sourceExhausted{};   // observations of end-of-stream (audit P2-5)
     uint64_t unsupportedPD{};
     uint64_t rrMessages{};
     uint64_t mmMessages{};
@@ -102,13 +104,20 @@ class L3StreamProcessor {
 
     /**
      * Non-blocking: process one frame if available.
+     * An idle poll on a non-exhausted source counts toward
+     * stats().idlePolls; end-of-stream counts toward
+     * stats().sourceExhausted (audit P2-5/P2-6).
      * @return true if a frame was processed (success or error).
      */
     template<typename F>
         requires std::is_invocable_v<F, const ParsedMessage&>
     bool processOne(F&& handler);
 
-    /** Blocking: process all frames until the source is exhausted. */
+    /**
+     * Blocking: process all frames until the source is exhausted.
+     * For live sources (RingBuffer) this stops at the first empty
+     * read; use processOne() to keep polling such sources.
+     */
     void processUntilEOF(FrameHandler& handler);
 
     /** Process exactly @p count frames (or until EOF). */
@@ -128,6 +137,7 @@ class L3StreamBuilder {
     ParserConfig mConfig;
     FrameConfig mFrameConfig;
     size_t mRingBufferSize{262144};
+    std::string mFileError;  // set when sourceFile() cannot open the path (audit P2-1)
 
 public:
     L3StreamBuilder& source(ByteSource& src);
@@ -138,6 +148,11 @@ public:
     L3StreamBuilder& maxMessageLength(size_t v);
     L3StreamBuilder& ringBufferSize(size_t v);
     [[nodiscard]] std::unique_ptr<L3StreamProcessor> build();
+
+    /// True when sourceFile() failed to open the path (audit P2-1: the
+    /// previous code silently produced a processor over an empty
+    /// RingBuffer, so a missing file looked like an empty stream).
+    [[nodiscard]] bool hasFileError() const noexcept { return !mFileError.empty(); }
 };
 
 // ── Template method definitions (must be in header) ────────────────────
@@ -148,8 +163,14 @@ bool L3StreamProcessor::processOne(F&& handler) {
     auto frameResult = mFramer.nextFrame();
     if (!frameResult) {
         const auto& err = frameResult.error();
-        if (err.code == ParseError::Code::TruncatedInput) {
-            mStats.truncatedInputs++;
+        if (err.code == ParseError::Code::SourceExhausted) {
+            mStats.sourceExhausted++;
+        } else {
+            // TruncatedInput: the source is not exhausted but has no
+            // data right now (live ring buffer) — an idle poll, not a
+            // truncation (audit P2-6: previously this inflated the
+            // truncation counter in real-time loops).
+            mStats.idlePolls++;
         }
         return false;
     }

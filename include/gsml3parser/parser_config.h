@@ -37,6 +37,11 @@ namespace gsml3parser {
 struct ParserConfig {
     LogLevel logLevel{LogLevel::WARNING};
 
+    /// When true, parseL3 rejects a frame whose message does not consume
+    /// the entire input (audit P2-2: the lenient default silently ignored
+    /// trailing bytes, which hid framing errors in the benchmarks).
+    bool requireFullConsumption{false};
+
     [[nodiscard]] LogLevel getLogLevel() const noexcept
     {
         return logLevel;
@@ -46,6 +51,13 @@ struct ParserConfig {
     {
         ParserConfig cfg = *this;
         cfg.logLevel = lvl;
+        return cfg;
+    }
+
+    [[nodiscard]] ParserConfig withStrictFraming(bool v) const noexcept
+    {
+        ParserConfig cfg = *this;
+        cfg.requireFullConsumption = v;
         return cfg;
     }
 };

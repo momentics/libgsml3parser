@@ -962,7 +962,14 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
     }
     size_t bodyBits = (data.size() - 2) * 8;
     BitReader reader(data.data() + 2, bodyBits);
-    return detail::parseStandardBody(hdrResult.value(), reader);
+    auto res = detail::parseStandardBody(hdrResult.value(), reader);
+    if (res && cfg.requireFullConsumption && reader.remainingBits() != 0) {
+        // Strict framing: trailing bytes after a complete message mean the
+        // frame boundary was wrong (audit P2-2).
+        return Expected<ParsedMessage>::error(
+            {ParseError::Code::LengthMismatch, "trailing data after L3 message"});
+    }
+    return res;
 }
 
 Expected<ParsedMessage> parseL3Hex(std::string_view hex, const ParserConfig& cfg) {
