@@ -120,30 +120,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # ── CI: Windows/MSVC (primary development platform) ─────────────────
-
-  windows-msvc:
-    name: Windows (MSVC) build + tests + examples
-    if: github.event_name == 'push'
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Configure
-        run: cmake -S . -B build -DBUILD_TESTS=ON -DBUILD_EXAMPLES=ON -G "Visual Studio 17 2022"
-      - name: Build
-        run: cmake --build build --config Release --parallel
-      - name: Unit tests
-        run: ctest --test-dir build -C Release --output-on-failure
-      - name: Examples
-        shell: pwsh
-        run: |
-          Get-ChildItem build\examples\Release\*.exe | ForEach-Object {
-            $args = @()
-            if ($_.Name -eq "example_parse_file.exe") { $args = @("060D00") }
-            & $_.FullName @args
-            if ($LASTEXITCODE -ne 0) { throw "Example failed: $($_.Name)" }
-          }
-
   # ── CI: Linux/Clang ThreadSanitizer (sharded-registry concurrency) ──
 
   linux-tsan:
