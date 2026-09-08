@@ -1,17 +1,15 @@
 name: Build Release Package
 
 on:
-  release:
-    types: [published]
-  push:
+  workflow_dispatch:
 
 permissions:
   contents: write
 
 jobs:
   build:
-    # Release packaging only: the CI jobs below run on push.
-    if: github.event_name == 'release'
+    # Release packaging: runs after all CI checks pass.
+    needs: [linux-tsan, linux-fuzz]
     runs-on: ubuntu-latest
 
     steps:
@@ -124,7 +122,6 @@ jobs:
 
   linux-tsan:
     name: Linux (Clang) ThreadSanitizer
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -152,7 +149,6 @@ jobs:
 
   linux-fuzz:
     name: Linux (Clang) fuzzing smoke
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
