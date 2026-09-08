@@ -51,12 +51,12 @@ enum class CallSetupMTState : uint8_t {
 };
 
 /// Mobile-Terminated Call Setup procedure per TS 24.008 6.1.
-class CallSetupMTPercedure : public Procedure,
-                              public ProcedureStateMixin<CallSetupMTPercedure, CallSetupMTState> {
+class CallSetupMTProcedure : public Procedure,
+                              public ProcedureStateMixin<CallSetupMTProcedure, CallSetupMTState> {
 public:
     using State = CallSetupMTState;
 
-    explicit CallSetupMTPercedure(std::string calledNumber);
+    explicit CallSetupMTProcedure(std::string calledNumber);
 
     [[nodiscard]] procedure::ProcedureType type() const override;
     [[nodiscard]] procedure::ProcedureState state() const override;

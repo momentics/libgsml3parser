@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-/// Unit tests for CallSetupMTPercedure (TS 24.008 6.1).
+/// Unit tests for CallSetupMTProcedure (TS 24.008 6.1).
 /// Validates MT call setup: paging, PagingResponse, Setup delivery, ConnectAcknowledge.
 
 #include <gtest/gtest.h>
@@ -66,8 +66,8 @@ static ParsedMessage makeDummyMsg() {
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 // [TS 24.008 6.1] feedExternal triggers paging SendResponse from INIT state.
-TEST(CallSetupMTPercedureTest, MTC_Init_FeedExternal_StartsPaging) {
-    CallSetupMTPercedure proc("1234567890");
+TEST(CallSetupMTProcedureTest, MTC_Init_FeedExternal_StartsPaging) {
+    CallSetupMTProcedure proc("1234567890");
 
     EXPECT_EQ(proc.calledNumber(), "1234567890");
     EXPECT_EQ(proc.type(), procedure::ProcedureType::CallSetup_MT);
@@ -87,8 +87,8 @@ TEST(CallSetupMTPercedureTest, MTC_Init_FeedExternal_StartsPaging) {
 }
 
 // [TS 24.008 6.1] PagingResponse in WAIT_PAGE_RESPONSE advances to ASSIGN_SDCCH.
-TEST(CallSetupMTPercedureTest, MTC_PageResponse_AssignSDCCH) {
-    CallSetupMTPercedure proc("9876543210");
+TEST(CallSetupMTProcedureTest, MTC_PageResponse_AssignSDCCH) {
+    CallSetupMTProcedure proc("9876543210");
 
     [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{}, nullptr);
     feedStep(proc, makeDummyMsg());
@@ -104,8 +104,8 @@ TEST(CallSetupMTPercedureTest, MTC_PageResponse_AssignSDCCH) {
 }
 
 // [TS 24.008 6.1] CallConfirmed in WAIT_CONFIRMED advances to ASSIGN_TCH.
-TEST(CallSetupMTPercedureTest, MTC_CallConfirmed_AssignTCH) {
-    CallSetupMTPercedure proc("5555555555");
+TEST(CallSetupMTProcedureTest, MTC_CallConfirmed_AssignTCH) {
+    CallSetupMTProcedure proc("5555555555");
 
     [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{}, nullptr);
     feedStep(proc, makeDummyMsg());
@@ -119,8 +119,8 @@ TEST(CallSetupMTPercedureTest, MTC_CallConfirmed_AssignTCH) {
 }
 
 // [TS 24.008 6.1] ConnectAcknowledge in ACTIVE state completes the MT call setup.
-TEST(CallSetupMTPercedureTest, MTC_ConnectAck_Completes) {
-    CallSetupMTPercedure proc("1111111111");
+TEST(CallSetupMTProcedureTest, MTC_ConnectAck_Completes) {
+    CallSetupMTProcedure proc("1111111111");
 
     [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{}, nullptr);
     feedStep(proc, makeDummyMsg());
@@ -142,8 +142,8 @@ TEST(CallSetupMTPercedureTest, MTC_ConnectAck_Completes) {
 }
 
 // [TS 24.008 6.1] T3109 expiry during WAIT_PAGE_RESPONSE retries paging up to MAX_PAGE_ATTEMPTS.
-TEST(CallSetupMTPercedureTest, MTC_Tick_PagingRetry_Retries) {
-    CallSetupMTPercedure proc("2222222222");
+TEST(CallSetupMTProcedureTest, MTC_Tick_PagingRetry_Retries) {
+    CallSetupMTProcedure proc("2222222222");
 
     [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{}, nullptr);
     feedStep(proc, makeDummyMsg());
@@ -164,8 +164,8 @@ TEST(CallSetupMTPercedureTest, MTC_Tick_PagingRetry_Retries) {
 }
 
 // [TS 24.008 6.1] cancel() aborts the MT call setup and sets Failed state.
-TEST(CallSetupMTPercedureTest, MTC_Cancel_Aborts) {
-    CallSetupMTPercedure proc("3333333333");
+TEST(CallSetupMTProcedureTest, MTC_Cancel_Aborts) {
+    CallSetupMTProcedure proc("3333333333");
 
     [[maybe_unused]] auto _r = proc.feedExternalTyped(PagingTrigger{}, nullptr);
     proc.cancel();

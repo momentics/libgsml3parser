@@ -240,7 +240,7 @@ std::unique_ptr<Procedure> ProcedureFactory::createCallSetupMO() {
 }
 
 std::unique_ptr<Procedure> ProcedureFactory::createCallSetupMT(const std::string& calledNumber) {
-    return std::make_unique<CallSetupMTPercedure>(calledNumber);
+    return std::make_unique<CallSetupMTProcedure>(calledNumber);
 }
 
 std::unique_ptr<Procedure> ProcedureFactory::createChannelAssignment(ChannelType target) {

@@ -278,7 +278,7 @@ orchestrator.feedExternalTyped(chal);
 | `LocationUpdateProcedure` | TS 24.008 4.4.1 | Full location updating with auth + VLR decision |
 | `AuthenticationProcedure` | TS 24.008 4.4.2 | RAND/SRES exchange with external AuC integration |
 | `CallSetupMOPercedure` | TS 24.008 6.1 | Mobile Originated Call (RACH -> Active) |
-| `CallSetupMTPercedure` | TS 24.008 6.1 | Mobile Terminated Call (Paging -> Active) |
+| `CallSetupMTProcedure` | TS 24.008 6.1 | Mobile Terminated Call (Paging -> Active) |
 | `ChannelAssignmentProcedure` | TS 04.08 9.1.2 | RACH -> Immediate Assignment -> Channel seizure |
 | `CipheringModeProcedure` | TS 24.008 4.4.3 | A5 ciphering activation |
 | `PagingProcedure` | TS 04.08 9.1.25 | Paging request (Type1/2/3) with T3109 retransmission |

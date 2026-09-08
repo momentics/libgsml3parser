@@ -4042,7 +4042,7 @@ Static factory for creating specific procedure instances:
 | `createAuthentication()` | `AuthenticationProcedure` | TS 24.008 4.4.2 |
 | `createCipheringMode(algo)` | `CipheringModeProcedure` | TS 24.008 4.4.3 |
 | `createCallSetupMO()` | `CallSetupMOPercedure` | TS 24.008 6.1 |
-| `createCallSetupMT(number)` | `CallSetupMTPercedure` | TS 24.008 6.1 |
+| `createCallSetupMT(number)` | `CallSetupMTProcedure` | TS 24.008 6.1 |
 | `createChannelAssignment(type)` | `ChannelAssignmentProcedure` | TS 04.08 9.1.2 |
 | `createPaging(identity)` | `PagingProcedure` | TS 04.08 9.1.25 |
 | `createHandover(target)` | `HandoverProcedure` | TS 04.08 9.1.40 |

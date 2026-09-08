@@ -28,18 +28,18 @@
 
 namespace gsml3parser {
 
-CallSetupMTPercedure::CallSetupMTPercedure(std::string calledNumber)
+CallSetupMTProcedure::CallSetupMTProcedure(std::string calledNumber)
     : mCalledNumber(std::move(calledNumber)) {}
 
-procedure::ProcedureType CallSetupMTPercedure::type() const {
+procedure::ProcedureType CallSetupMTProcedure::type() const {
     return procedure::ProcedureType::CallSetup_MT;
 }
 
-procedure::ProcedureState CallSetupMTPercedure::state() const {
+procedure::ProcedureState CallSetupMTProcedure::state() const {
     return mProcState;
 }
 
-bool CallSetupMTPercedure::matches(const ParsedMessage& msg) const {
+bool CallSetupMTProcedure::matches(const ParsedMessage& msg) const {
     // Messages this procedure processes (TS 24.008 6.1, MT direction):
     // PagingResponse (MS answers the page), CallConfirmed (SDCCH assigned),
     // AssignmentComplete (TCH assigned), ConnectAcknowledge (call active).
@@ -50,25 +50,25 @@ bool CallSetupMTPercedure::matches(const ParsedMessage& msg) const {
     return false;
 }
 
-void CallSetupMTPercedure::doTransitionTo(State s) {
+void CallSetupMTProcedure::doTransitionTo(State s) {
     mCurrentState = s;
     if (s == State::COMPLETED) mProcState = procedure::ProcedureState::Completed;
     else if (s == State::FAILED) mProcState = procedure::ProcedureState::Failed;
     else mProcState = procedure::ProcedureState::InProgress;
 }
 
-void CallSetupMTPercedure::doFail(std::string_view reason) {
+void CallSetupMTProcedure::doFail(std::string_view reason) {
     (void)reason;
     mCurrentState = State::FAILED;
     mProcState = procedure::ProcedureState::Failed;
 }
 
-void CallSetupMTPercedure::doComplete() {
+void CallSetupMTProcedure::doComplete() {
     mCurrentState = State::COMPLETED;
     mProcState = procedure::ProcedureState::Completed;
 }
 
-ProcedureStepResult CallSetupMTPercedure::feed(const ParsedMessage& msg,
+ProcedureStepResult CallSetupMTProcedure::feed(const ParsedMessage& msg,
     SubscriberSession* session, ResponseSink sink) {
     (void)session;
     ProcedureStepResult result;
@@ -190,7 +190,7 @@ ProcedureStepResult CallSetupMTPercedure::feed(const ParsedMessage& msg,
     return result;
 }
 
-ProcedureStepResult CallSetupMTPercedure::feedExternalTyped(
+ProcedureStepResult CallSetupMTProcedure::feedExternalTyped(
     const ExternalData& data, SubscriberSession* session, ResponseSink sink) {
     (void)data;
     // The sink is never invoked here: feedExternalTyped has no incoming L3 message,
@@ -216,7 +216,7 @@ ProcedureStepResult CallSetupMTPercedure::feedExternalTyped(
     return result;
 }
 
-ProcedureStepResult CallSetupMTPercedure::tick(std::chrono::milliseconds delta) {
+ProcedureStepResult CallSetupMTProcedure::tick(std::chrono::milliseconds delta) {
     if (!mTimerRunning) {
         return {ProcedureStepResult::Action::Continue};
     }
@@ -239,8 +239,8 @@ ProcedureStepResult CallSetupMTPercedure::tick(std::chrono::milliseconds delta) 
     return {ProcedureStepResult::Action::Continue};
 }
 
-void CallSetupMTPercedure::cancel() noexcept {
-    static_cast<ProcedureStateMixin<CallSetupMTPercedure, State>&>(*this).doCancel();
+void CallSetupMTProcedure::cancel() noexcept {
+    static_cast<ProcedureStateMixin<CallSetupMTProcedure, State>&>(*this).doCancel();
 }
 
 } // namespace gsml3parser
