@@ -103,14 +103,14 @@ SubscriberSession* SubscriberRegistry::findByTMSI(uint32_t tmsi) noexcept {
     size_t idx = mByTMSI.find(tmsi);
     if (idx == FlatMap<uint32_t, SessionEntry>::npos) return nullptr;
     SessionEntry& entry = mByTMSI.at(idx);
-    return entry.active ? &entry.session : nullptr;
+    return &entry.session;
 }
 
 const SubscriberSession* SubscriberRegistry::findByTMSI(uint32_t tmsi) const noexcept {
     size_t idx = mByTMSI.find(tmsi);
     if (idx == FlatMap<uint32_t, SessionEntry>::npos) return nullptr;
     const SessionEntry& entry = mByTMSI.at(idx);
-    return entry.active ? &entry.session : nullptr;
+    return &entry.session;
 }
 
 SubscriberSession* SubscriberRegistry::findByIMSI(std::string_view imsi) noexcept {
@@ -187,7 +187,7 @@ bool SubscriberRegistry::remove(SubscriberSession* session) noexcept {
     uint32_t tmsi = session->assignedTmsi;
     size_t idx = mByTMSI.find(tmsi);
     if (idx == FlatMap<uint32_t, SessionEntry>::npos ||
-        &mByTMSI.at(idx).session != session || !mByTMSI.at(idx).active) {
+        &mByTMSI.at(idx).session != session) {
         return false;
     }
     releaseChannel(session);

@@ -221,7 +221,7 @@ public:
     template<typename F>
     void forEach(F&& callback) {
         mByTMSI.forEach([&callback](uint32_t, const SessionEntry& entry) {
-            if (entry.active) callback(entry.session);
+            callback(entry.session);
         });
     }
 
@@ -254,7 +254,6 @@ private:
     struct SessionEntry {
         SessionEntry() = default;
         SubscriberSession session;
-        bool active{true};
     };
 
     // TMSI -> session (primary index). Flat open-addressing table: inline
