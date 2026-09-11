@@ -552,6 +552,25 @@ Expected<size_t> writeL3Body(const ConcreteMsg& msg, uint8_t* out, size_t maxlen
     }
 }
 
+/// Exact wire length of a message: 2-byte header + body for standard
+/// messages, body only for short messages (MTI >= 0x100). Used to size
+/// the output container exactly (the previous 4 KB stack
+/// buffer is gone).
+template<typename ConcreteMsg>
+constexpr size_t wireLength(const ConcreteMsg& msg) noexcept {
+    if constexpr (ConcreteMsg::MTI >= 0x100) return msg.bodyLength();
+    else return 2 + msg.bodyLength();
+}
+
+template<typename Msg>
+size_t messageWireLength(const Msg& msg) noexcept {
+    return std::visit([](const auto& domainVariant) -> size_t {
+        return std::visit([](const auto& m) -> size_t {
+            return wireLength<std::decay_t<decltype(m)>>(m);
+        }, domainVariant);
+    }, msg);
+}
+
 } // namespace detail
 
 Expected<size_t> writeL3(const ParsedMessage& msg, uint8_t* out, size_t maxlen) {
@@ -566,13 +585,14 @@ Expected<size_t> writeL3(const ParsedMessage& msg, uint8_t* out, size_t maxlen) 
 }
 
 Expected<std::string> writeL3Hex(const ParsedMessage& msg) {
-    constexpr size_t MaxMsgBytes = 4096;
-    alignas(1) uint8_t buf[MaxMsgBytes];
-
-    auto szResult = writeL3(msg, buf, MaxMsgBytes);
+    // Exact-size output: the wire length is known up front
+    // via bodyLength(), so no oversized stack buffer is needed.
+    size_t n = detail::messageWireLength(msg);
+    std::vector<uint8_t> buf(n);
+    auto szResult = writeL3(msg, buf.data(), buf.size());
     if (!szResult) return Expected<std::string>::error(szResult.error());
+    n = szResult.value();
 
-    size_t n = szResult.value();
     static constexpr char hexDigits[] = "0123456789abcdef";
     std::string result;
     result.resize(n * 2);
@@ -584,13 +604,13 @@ Expected<std::string> writeL3Hex(const ParsedMessage& msg) {
 }
 
 Expected<std::vector<uint8_t>> writeL3Bytes(const ParsedMessage& msg) {
-    constexpr size_t MaxMsgBytes = 4096;
-    alignas(1) uint8_t buf[MaxMsgBytes];
-    auto szResult = writeL3(msg, buf, MaxMsgBytes);
+    // Exact-size output: sized by bodyLength() up front,
+    // written once — no 4 KB stack buffer, no second copy.
+    std::vector<uint8_t> buf(detail::messageWireLength(msg));
+    auto szResult = writeL3(msg, buf.data(), buf.size());
     if (!szResult) return Expected<std::vector<uint8_t>>::error(szResult.error());
-    size_t n = szResult.value();
-    std::vector<uint8_t> result(buf, buf + n);
-    return Expected<std::vector<uint8_t>>::hold(std::move(result));
+    buf.resize(szResult.value());
+    return Expected<std::vector<uint8_t>>::hold(std::move(buf));
 }
 
 } // namespace gsml3parser
