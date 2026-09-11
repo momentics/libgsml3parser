@@ -1235,7 +1235,7 @@ TEST(LAPDmEntityTest, MemoryUsage_FreshInstance_NoHeap) {
     EXPECT_EQ(mock.entity.retransmissions(), 0u);
 }
 
-// Test: repeated sends reuse the TX encode buffer (audit C3): frames of
+// Test: repeated sends reuse the TX encode buffer: frames of
 // different sizes are all encoded correctly after warmup.
 TEST(LAPDmEntityTest, SendUI_Repeated_SizesCorrect) {
     MockLAPDmEntity mock;
@@ -1264,7 +1264,7 @@ TEST(LAPDmEntityTest, SendUI_Repeated_SizesCorrect) {
 }
 
 // Test: an I-frame whose payload exceeds N201 (SDCCH: 20) triggers an
-// abnormal release (audit C4: untrusted radio input must not corrupt the
+// abnormal release (untrusted radio input must not corrupt the
 // entity state).
 TEST(LAPDmEntityTest, IFrame_PayloadExceedsN201_AbnormalRelease) {
     MockLAPDmEntity mock;
@@ -1289,7 +1289,7 @@ TEST(LAPDmEntityTest, IFrame_PayloadExceedsN201_AbnormalRelease) {
 }
 
 // Test: reassembly beyond kMaxReassemblyBytes (4096) triggers an abnormal
-// release (audit C4: bounded memory on untrusted input).
+// release (bounded memory on untrusted input).
 TEST(LAPDmEntityTest, Reassembly_Overflow_AbnormalRelease) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
@@ -1311,7 +1311,7 @@ TEST(LAPDmEntityTest, Reassembly_Overflow_AbnormalRelease) {
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
 }
 
-// Test: a frame addressed to another SAPI is dropped (audit C5).
+// Test: a frame addressed to another SAPI is dropped.
 TEST(LAPDmEntityTest, ReceiveFrame_WrongSapi_Dropped) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
@@ -1329,7 +1329,7 @@ TEST(LAPDmEntityTest, ReceiveFrame_WrongSapi_Dropped) {
 }
 
 // Test: REJ from the peer triggers immediate retransmission of the
-// outstanding frame (GSM 04.06 5.3.3, audit C7).
+// outstanding frame (GSM 04.06 5.3.3).
 TEST(LAPDmEntityTest, REJ_RetransmitsOutstandingFrame) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);

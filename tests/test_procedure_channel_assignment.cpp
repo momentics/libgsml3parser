@@ -153,7 +153,7 @@ TEST(ChannelAssignmentProcedureTest, CAP_PagingResponse_Allocates) {
 
 // Test: the 8-bit RA from the Channel Request is stored on the session
 // and echoed in the Immediate Assignment built from the response token
-// (TS 44.018 9.1.8, audit C1).
+// (TS 44.018 9.1.8).
 TEST(ChannelAssignmentProcedureTest, CAP_EchoesFullRAInImmediateAssignment) {
     SubscriberSession session;
     ChannelAssignmentProcedure proc(ChannelType::SDCCHType);

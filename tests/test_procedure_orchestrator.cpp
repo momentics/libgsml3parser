@@ -316,7 +316,7 @@ TEST(ProcedureOrchestrator, IdentityVerification_UnexpectedMessage_ResendsReques
 }
 
 // Test: the IdentityVerification phase carries a T3102 (3 s) phase timer
-// with retransmissions (audit D3: the phase previously had no timer and
+// with retransmissions (the phase previously had no timer and
 // hung forever when the MS never answered the Identity Request). The
 // initial Identity Request is queued on the retransmission channel when
 // the phase starts; each T3102 expiry re-queues it; after
@@ -343,7 +343,7 @@ TEST(ProcedureOrchestrator, IdentityVerification_T3102_RetransmitsThenTimesOut) 
 }
 
 // Test: receiving the Identity Response stops T3102 — no retransmission
-// token is queued afterwards (audit D3).
+// token is queued afterwards.
 TEST(ProcedureOrchestrator, IdentityVerification_ResponseStopsT3102) {
     SubscriberSession session;
     ProcedureOrchestrator orchestrator;
@@ -366,7 +366,7 @@ TEST(ProcedureOrchestrator, IdentityVerification_ResponseStopsT3102) {
 
 // Test: CM Service Requests with a service type other than
 // LocationUpdate / MobileOriginatedCall are NOT handled by the
-// orchestrator (audit D12 policy): no chain starts, no response token,
+// orchestrator: no chain starts, no response token,
 // the application handles the message itself.
 TEST(ProcedureOrchestrator, CMServiceRequest_UnsupportedServiceType_Ignored) {
     SubscriberSession session;

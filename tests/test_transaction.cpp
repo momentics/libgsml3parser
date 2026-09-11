@@ -113,7 +113,7 @@ TEST(TransactionTest, Matches_byTI_forCC) {
 
 // Test: a CC transaction must NOT be matched by an SS message carrying
 // the same TI — the dialog PD is part of the correlation key
-// (audit D11: the previous TI-only check cross-matched CC/SS dialogs).
+// (the previous TI-only check cross-matched CC/SS dialogs).
 TEST(TransactionTest, Matches_TI_AlsoRequiresSamePD) {
     Transaction tx(L3PD::CallControl, L3Setup::MTI, 2, L3TimerId::T3101);
     // Same TI, different dialog PD: no match.
@@ -383,7 +383,7 @@ TEST(TransactionManagerTest, MultipleTI_independent) {
 
 // match() without header for CC uses the message's own TI (O(1) exact
 // match). Previously this fell back to scanning by PD and returned the
-// first pending CC transaction regardless of TI (audit D12).
+// first pending CC transaction regardless of TI.
 TEST(TransactionManagerTest, Match_CC_withoutHeader_UsesMessageTI) {
     TransactionManager tm;
     tm.create(L3PD::CallControl, L3Setup::MTI, 1, L3TimerId::T3101);
@@ -399,7 +399,7 @@ TEST(TransactionManagerTest, Match_CC_withoutHeader_UsesMessageTI) {
 
 // Test: headerless match for CC with several pending dialogs (different TIs)
 // correlates the response to the right transaction, not the first pending.
-// Importance: TI mis-correlation would complete the wrong dialog (audit D12).
+// Importance: TI mis-correlation would complete the wrong dialog.
 TEST(TransactionManagerTest, Match_CC_withoutHeader_MultipleDialogs_ExactTI) {
     TransactionManager tm;
     tm.create(L3PD::CallControl, L3Setup::MTI, 1, L3TimerId::T3101);

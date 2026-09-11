@@ -150,7 +150,7 @@ TEST(InlineFramer, ExtractHeaderBasedFrames) {
 // Test: a trailing variable-length frame at the end of a contiguous buffer is
 // emitted (not silently dropped) when no next-header boundary exists.
 // Importance: ZeroCopyStreamProcessor must return every frame of a complete
-// buffer; previously the last variable-length frame was lost (audit D7).
+// buffer; previously the last variable-length frame was lost.
 TEST(InlineFramer, TrailingVariableLengthFrame_Emitted) {
     // RR ChannelRelease (3 bytes, fixed) + CC Setup (4 bytes, variable;
     // body 0x20 0x21 has no plausible PD nibble, so no false boundary).
@@ -472,7 +472,7 @@ TEST(ZeroCopyStreamProcessor, TruncatedFrame) {
 }
 
 // Test: a corrupt L2 length octet is skipped and the framer
-// resynchronizes on the next valid frame (audit P1-2: previously the
+// resynchronizes on the next valid frame (previously the
 // whole remainder of the buffer was abandoned after one bad octet).
 TEST(InlineFramer, L2Length_CorruptOctet_Resyncs) {
     std::vector<uint8_t> data = {
@@ -492,7 +492,7 @@ TEST(InlineFramer, L2Length_CorruptOctet_Resyncs) {
 }
 
 // Test: resyncSkips is observable through ZeroCopyStreamProcessor
-// (audit P1-2).
+// .
 TEST(ZeroCopyStreamProcessor, L2Length_CorruptOctet_ResyncCounted) {
     std::vector<uint8_t> data = {
         3, 0x60, 0x0D, 0x00,

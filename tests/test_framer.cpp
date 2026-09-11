@@ -38,7 +38,7 @@ TEST(L3Framer, SingleFixedLengthFrame) {
     uint8_t data[] = {0x60, 0x0D, 0x00};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
-    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    cfg.useL2Length = false;  // header-based mode
     L3Framer framer(src, cfg);
 
     auto result = framer.nextFrame();
@@ -55,7 +55,7 @@ TEST(L3Framer, SingleCMServiceAccept) {
     uint8_t data[] = {0x50, 0x84};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
-    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    cfg.useL2Length = false;  // header-based mode
     L3Framer framer(src, cfg);
 
     auto result = framer.nextFrame();
@@ -73,7 +73,7 @@ TEST(L3Framer, MultipleFixedLengthFrames) {
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
-    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    cfg.useL2Length = false;  // header-based mode
     L3Framer framer(src, cfg);
 
     auto r1 = framer.nextFrame();
@@ -90,7 +90,7 @@ TEST(L3Framer, MultipleFixedLengthFrames) {
 
     auto r3 = framer.nextFrame();
     ASSERT_FALSE(r3.has_value());
-    // SourceExhausted: the span source is at EOF (audit P2-5).
+    // SourceExhausted: the span source is at EOF.
     ASSERT_EQ(static_cast<int>(r3.error().code), static_cast<int>(ParseError::Code::SourceExhausted));
 }
 
@@ -100,12 +100,12 @@ TEST(L3Framer, TruncatedFrame) {
     // Only the header of a Channel Release (need 3 bytes, only have 2).
     // Channel Release is variable-length (optional GPRS resumption
     // octet), so at end of stream the framer emits the 2-byte tail and
-    // the parser rejects it downstream (audit P1-1: fixed-length
+    // the parser rejects it downstream (fixed-length
     // framing applies only to constant-body messages).
     uint8_t data[] = {0x60, 0x0D};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
-    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    cfg.useL2Length = false;  // header-based mode
     L3Framer framer(src, cfg);
 
     auto result = framer.nextFrame();
@@ -117,12 +117,12 @@ TEST(L3Framer, EmptySource) {
     uint8_t dummy;
     SpanByteSource src(std::span<const uint8_t>(&dummy, 0));
     FrameConfig cfg;
-    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    cfg.useL2Length = false;  // header-based mode
     L3Framer framer(src, cfg);
 
     auto result = framer.nextFrame();
     ASSERT_FALSE(result.has_value());
-    // SourceExhausted: the span source is at EOF (audit P2-5).
+    // SourceExhausted: the span source is at EOF.
     ASSERT_EQ(static_cast<int>(result.error().code), static_cast<int>(ParseError::Code::SourceExhausted));
 }
 
@@ -172,7 +172,7 @@ TEST(L3Framer, L2LengthTruncated) {
 
     auto result = framer.nextFrame();
     ASSERT_FALSE(result.has_value());
-    // SourceExhausted: the span source is at EOF (audit P2-5).
+    // SourceExhausted: the span source is at EOF.
     ASSERT_EQ(static_cast<int>(result.error().code), static_cast<int>(ParseError::Code::SourceExhausted));
 }
 
@@ -182,7 +182,7 @@ TEST(L3Framer, BufferedCount) {
     uint8_t data[] = {0x60, 0x0D, 0x00, 0x60, 0x0D, 0x01};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
-    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    cfg.useL2Length = false;  // header-based mode
     L3Framer framer(src, cfg);
 
     auto r1 = framer.nextFrame();
@@ -209,7 +209,7 @@ TEST(L3Framer, VariableLengthWithNextHeader) {
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
-    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    cfg.useL2Length = false;  // header-based mode
     L3Framer framer(src, cfg);
 
     auto r1 = framer.nextFrame();
@@ -234,7 +234,7 @@ TEST(L3Framer, BCCSetupStreamThreeFrames) {
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
-    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    cfg.useL2Length = false;  // header-based mode
     L3Framer framer(src, cfg);
 
     for (int i = 0; i < 3; ++i) {
@@ -252,7 +252,7 @@ TEST(L3Framer, BCCSetupStreamThreeFrames) {
 TEST(L3Framer, GCCSetupStreamThreeFrames) {
     // Three GCC Setup frames: 00 01 20 (PD=0x00, MTI=0x00, 1-byte opaque body).
     // GCC Setup has a variable body, so it is framed by the boundary
-    // heuristic (C17), not the fixed-length table (audit P1-1). The body
+    // heuristic (C17), not the fixed-length table. The body
     // octet 0x20 is chosen so its high nibble (0x02, a reserved PD) is not
     // a plausible L3 header start — the previous body octet 0x02 (high
     // nibble 0x00 = GCC) created a false boundary inside the frame.
@@ -263,7 +263,7 @@ TEST(L3Framer, GCCSetupStreamThreeFrames) {
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
-    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    cfg.useL2Length = false;  // header-based mode
     L3Framer framer(src, cfg);
 
     for (int i = 0; i < 3; ++i) {
@@ -288,7 +288,7 @@ TEST(L3Framer, LSRequestStreamThreeFrames) {
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
-    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    cfg.useL2Length = false;  // header-based mode
     L3Framer framer(src, cfg);
 
     for (int i = 0; i < 3; ++i) {
@@ -307,7 +307,7 @@ TEST(L3Framer, LSRequestStreamThreeFrames) {
 
 // [GOLDEN] A real Paging Response (variable body: CKSN + classmark +
 // mobile identity) framed in L2-length mode — the deterministic framing
-// path for variable-length messages (audit P1-1: the previous test
+// path for variable-length messages (the previous test
 // pinned a 5-byte "fixed" body that matched neither the message
 // definition (body 7–15 bytes) nor any spec MTI).
 TEST(L3Framer, PagingResponse_L2LengthMode) {
@@ -346,7 +346,7 @@ TEST(L3Framer, PagingResponse_L2LengthMode) {
 // Header-based mode: a real Paging Response followed by a Channel
 // Release. The paging body (TMSI 0x21222324, zero classmark, CKSN=1)
 // contains no plausible PD nibble, so the heuristic boundary lands on
-// the real next header (audit P1-1).
+// the real next header.
 TEST(L3Framer, PagingResponse_HeaderBasedHeuristic) {
     auto pr = L3PagingResponse::builder()
         .cksn(1)
@@ -362,7 +362,7 @@ TEST(L3Framer, PagingResponse_HeaderBasedHeuristic) {
 
     SpanByteSource src(std::span<const uint8_t>(data.data(), data.size()));
     FrameConfig cfg;
-    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    cfg.useL2Length = false;  // header-based mode
     L3Framer framer(src, cfg);
 
     auto r1 = framer.nextFrame();
@@ -378,14 +378,14 @@ TEST(L3Framer, PagingResponse_HeaderBasedHeuristic) {
 }
 
 // Test: extracted frames carry a non-zero, non-decreasing batched
-// timestamp (audit N2).
+// timestamp.
 // Suite name follows the existing convention of test_framer.cpp ("L3Framer").
 TEST(L3Framer, Timestamp_BatchedAndSet) {
     std::vector<uint8_t> stream;
     for (int i = 0; i < 10; ++i) stream.insert(stream.end(), {0x60, 0x0D, 0x00});
     SpanByteSource src(std::span<const uint8_t>(stream.data(), stream.size()));
     FrameConfig cfg;
-    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    cfg.useL2Length = false;  // header-based mode
     L3Framer framer(src, cfg);
     double last = 0.0;
     int frames = 0;

@@ -236,7 +236,7 @@ target_compile_definitions(gsml3parser PRIVATE
 
 if(MSVC)
     target_compile_definitions(gsml3parser PRIVATE _CRT_SECURE_NO_WARNINGS)
-    target_compile_options(gsml3parser PRIVATE /W4 /WX /bigobj)
+    target_compile_options(gsml3parser PRIVATE /W4 /WX)
     target_compile_options(gsml3parser PRIVATE $<$<CONFIG:Release>:/O2>)
 else()
     target_compile_options(gsml3parser PRIVATE -Wall -Wextra -Wpedantic -Werror)

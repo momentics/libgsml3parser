@@ -51,6 +51,7 @@
 #include <gsml3parser/ss/l3ssmessages.h>
 #include <gsml3parser/sm/l3smmessages.h>
 #include <gsml3parser/sms/l3smsl3messages.h>
+#include <gsml3parser/sms/l3smsmessages.h>
 #include <gsml3parser/ls/l3lsmessages.h>
 #include <gsml3parser/extended/l3extendedmessages.h>
 #include <gsml3parser/testproc/l3testproceduremessages.h>
@@ -236,7 +237,7 @@ TEST(ParserTest, EmptyInput) {
 
 TEST(ParserTest, SingleByte) {
     // A single octet is a Channel Request: the whole octet is the 8-bit
-    // request reference (RA), so any value parses (audit C1: the previous
+    // request reference (RA), so any value parses (the previous
     // heuristic rejected octets whose high nibble looked like a PD).
     uint8_t data[] = {0x60};
     auto res = parseL3(std::span<const uint8_t>(data));
@@ -256,7 +257,7 @@ TEST(ParserTest, EmptyHex) {
 TEST(ParserTest, TruncatedHex) {
     // "600d" is an RR ChannelRelease header with no body bytes: the 8-bit
     // cause is missing, so the parse must fail with TruncatedInput.
-    // (A single octet like "60" is a valid Channel Request — audit C1.)
+    // (A single octet like "60" is a valid Channel Request.)
     auto res = parseL3Hex("600d");
     EXPECT_FALSE(res);
     EXPECT_EQ(res.error().code, ParseError::Code::TruncatedInput);
@@ -440,7 +441,7 @@ TEST(ParserTest, ParseWithConfig) {
 // Short messages - ChannelRequest (1 byte), HandoverAccess (4 bytes)
 // =====================================================================
 
-// RA 0x42: high nibble 0x4 is not a PD, so it parsed even before audit C1.
+// RA 0x42: high nibble 0x4 is not a PD, so it parsed even before.
 TEST(ParserTest, ShortMessage_ChannelRequest) {
     // 1-byte RACH message: PD is not standard, handled as short message
     uint8_t data[] = {0x42};
@@ -453,7 +454,7 @@ TEST(ParserTest, ShortMessage_ChannelRequest) {
 // full 8-bit RA preserved.
 // Importance: the RACH Channel Request is a single octet (TS 44.018 9.1.8);
 // the previous heuristic rejected 192 of 256 RA values and truncated the
-// rest to 4 bits (audit C1). The network must echo the full RA in the
+// rest to 4 bits. The network must echo the full RA in the
 // Immediate Assignment.
 TEST(ParserTest, ShortMessage_ChannelRequest_AllRAValues) {
     for (int v = 0; v < 256; ++v) {
@@ -470,7 +471,7 @@ TEST(ParserTest, ShortMessage_ChannelRequest_AllRAValues) {
 
 TEST(ParserTest, ShortMessage_HandoverAccess) {
     // 4-byte Handover Access: FN bits encoded directly
-    // Last byte 0x00: the 5 reserved bits are zero (audit P2-4).
+    // Last byte 0x00: the 5 reserved bits are zero .
     uint8_t data[] = {0x69, 0x00, 0x00, 0x00};
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
@@ -479,7 +480,7 @@ TEST(ParserTest, ShortMessage_HandoverAccess) {
 
 // Test: a 4-byte HandoverAccess whose first octet looks like an RR header
 // (nibble 0x6) and whose second byte is a valid RR MTI with a shorter body
-// must NOT be misparsed as the RR message (audit N1). The standard parse
+// must NOT be misparsed as the RR message. The standard parse
 // wins only on exact frame consumption.
 TEST(ParserTest, ShortMessage_HandoverAccess_RRPrefixNotMisparsed) {
     // {0x60, 0x12, 0x00, 0x00}: RR nibble, TIF=0 (low bit of byte 0 must
@@ -487,7 +488,7 @@ TEST(ParserTest, ShortMessage_HandoverAccess_RRPrefixNotMisparsed) {
     // space and the standard parse fails on unknown MTI instead of
     // leaving a tail), MTI 0x12 (RR Status, 1-byte body) would consume
     // only 3 of the 4 bytes -> not exact -> the frame is a HandoverAccess.
-    // Last byte 0x00: the 5 reserved bits are zero (audit P2-4).
+    // Last byte 0x00: the 5 reserved bits are zero .
     uint8_t data[] = {0x60, 0x12, 0x00, 0x00};
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
@@ -496,10 +497,10 @@ TEST(ParserTest, ShortMessage_HandoverAccess_RRPrefixNotMisparsed) {
 }
 
 // Test: a 4-byte frame with non-zero HandoverAccess reserved bits is
-// not misclassified as HandoverAccess (audit P2-4: the previous short
+// not misclassified as HandoverAccess (the previous short
 // parse accepted ANY 32-bit input). The standard parse wins instead:
 // RR Status consumes 3 of the 4 bytes and the trailing octet is ignored
-// in lenient mode (strict framing, audit P2-2, rejects it in Phase 6).
+// in lenient mode (strict framing, rejects it).
 TEST(ParserTest, ShortMessage_HandoverAccess_ReservedBitsRejected) {
     uint8_t data[] = {0x60, 0x12, 0x00, 0x03}; // HandoverAccess reserved = 0x03 (non-zero)
     auto res = parseL3(std::span<const uint8_t>(data));
@@ -509,7 +510,7 @@ TEST(ParserTest, ShortMessage_HandoverAccess_ReservedBitsRejected) {
 }
 
 // Test: L3HandoverAccess::parse directly rejects non-zero reserved bits
-// (audit P2-4).
+// .
 TEST(ParserTest, HandoverAccess_Parse_ReservedBitsRejected) {
     uint8_t data[] = {0x17, 0x00, 0x00, 0x1F}; // all 5 reserved bits set
     BitReader br(data, 32);
@@ -519,7 +520,7 @@ TEST(ParserTest, HandoverAccess_Parse_ReservedBitsRejected) {
 }
 
 // Test: a genuine 4-byte CC message (Facility, 2-byte body) parses as CC —
-// the short-message handler must not swallow it (audit N1).
+// the short-message handler must not swallow it.
 TEST(ParserTest, ShortMessage_ExactCCMessageWins) {
     auto fac = L3Facility::builder().ti(0).facilityBody({0x27, 0x00}).build();
     ParsedMessage pm{CCM{std::move(fac)}};
@@ -534,7 +535,7 @@ TEST(ParserTest, ShortMessage_ExactCCMessageWins) {
 }
 
 // Test: a genuine 7-byte CC message (Facility, 5-byte body) parses as CC,
-// not as SynchronizationChannelInformation (audit N1).
+// not as SynchronizationChannelInformation.
 TEST(ParserTest, ShortMessage_ExactCCMessageWins_7Bytes) {
     auto fac = L3Facility::builder().ti(1).facilityBody({0x27, 0x01, 0x02, 0x03, 0x04}).build();
     ParsedMessage pm{CCM{std::move(fac)}};
@@ -548,11 +549,11 @@ TEST(ParserTest, ShortMessage_ExactCCMessageWins_7Bytes) {
 }
 
 // Test: 4-byte frames with reserved PD nibbles (0x02/0x04/0x07/0x0d) are
-// HandoverAccess, not "invalid PD" (audit N1 + Q4: parseL3Header now
+// HandoverAccess, not "invalid PD" (parseL3Header now
 // rejects reserved PDs, so the short-message path must still be reached).
 TEST(ParserTest, ShortMessage_HandoverAccess_ReservedPDNibble) {
     for (uint8_t first : {0x21u, 0x41u, 0x71u, 0xD1u}) {
-        // Last byte 0x00: the 5 reserved bits are zero (audit P2-4).
+        // Last byte 0x00: the 5 reserved bits are zero .
         uint8_t data[] = {first, 0x00, 0x00, 0x00};
         auto res = parseL3(std::span<const uint8_t>(data));
         ASSERT_TRUE(res) << "first byte 0x" << std::hex << first;
@@ -621,6 +622,29 @@ TEST(ParserTest, UnknownMTI_LS) {
     auto res = parseL3(std::span<const uint8_t>(data));
     EXPECT_FALSE(res);
     EXPECT_EQ(res.error().code, ParseError::Code::InvalidMTI);
+}
+
+// Test: SMS MTI 0x12/0x13 overlap — the CP-layer parsers keep precedence
+// over the L3-layer duplicates (the dispatch table must
+// preserve the previous switch's first-case-wins behavior).
+TEST(ParserTest, SMS_MTIOverlap_CPTakesPrecedence) {
+    // CP-STATUS (MTI 0x12): body = 1-octet TP-Status.
+    auto cpStatus = L3CPStatus::builder().tpOi(1).build();
+    ParsedMessage pm1{SMS{std::move(cpStatus)}};
+    auto bytes1 = writeL3Bytes(pm1);
+    ASSERT_TRUE(bytes1);
+    auto r1 = parseL3(std::span<const uint8_t>((*bytes1).data(), (*bytes1).size()));
+    ASSERT_TRUE(r1);
+    EXPECT_NE(tryGet<L3CPStatus>(*r1), nullptr) << "CP-STATUS must win MTI 0x12";
+
+    // CP-SMT (MTI 0x13): body = Length(1) + RPDU.
+    auto cpSmt = L3CPSMT::builder().rpdu({0x01, 0x02}).build();
+    ParsedMessage pm2{SMS{std::move(cpSmt)}};
+    auto bytes2 = writeL3Bytes(pm2);
+    ASSERT_TRUE(bytes2);
+    auto r2 = parseL3(std::span<const uint8_t>((*bytes2).data(), (*bytes2).size()));
+    ASSERT_TRUE(r2);
+    EXPECT_NE(tryGet<L3CPSMT>(*r2), nullptr) << "CP-SMT must win MTI 0x13";
 }
 
 // =====================================================================
@@ -766,7 +790,7 @@ TEST(ParserTest, BinaryRoundTrip_LS) {
 }
 
 // Test: strict framing rejects trailing bytes after a complete message
-// (audit P2-2: the lenient default ignored them silently).
+// (the lenient default ignored them silently).
 TEST(ParserTest, StrictFraming_TrailingDataRejected) {
     // RR Status (3 bytes: 0x60 0x12 0x00) + 2 trailing bytes.
     uint8_t data[] = {0x60, 0x12, 0x00, 0x01, 0x02};
@@ -779,7 +803,7 @@ TEST(ParserTest, StrictFraming_TrailingDataRejected) {
     EXPECT_EQ(strict.error().code, ParseError::Code::LengthMismatch);
 }
 
-// Test: strict framing accepts an exactly-consumed message (audit P2-2).
+// Test: strict framing accepts an exactly-consumed message.
 TEST(ParserTest, StrictFraming_ExactMessageAccepted) {
     uint8_t data[] = {0x60, 0x0D, 0x00}; // Channel Release, exact
     auto strict = parseL3(std::span<const uint8_t>(data),

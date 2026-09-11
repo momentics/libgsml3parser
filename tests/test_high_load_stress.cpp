@@ -520,7 +520,7 @@ TEST(Stress, tickAllTimers_OnlyActive_Scales) {
 
 // Test: 1,000,000 sessions: create + TMSI lookup + timer tick must stay within
 // a real-time budget. Proves the library scales to one million concurrent
-// sessions (audit requirement); existing stress tests only covered 100K-200K.
+// sessions; existing stress tests only covered 100K-200K.
 // Importance: a real BTS cluster front-end can hold a million registrations;
 // the O(1) hash paths and O(active) timer tick must remain real-time at that
 // scale. Per-session footprint must stay small enough that 1M sessions fit in
@@ -573,7 +573,7 @@ TEST(Stress, _1MSession_Create_Lookup_Tick_Scale) {
 }
 
 // Test: 2,000,000 sessions on the flat index — create/lookup/tick within
-// budget (audit SCALE: the flat open-addressing table must scale past 1M
+// budget (the flat open-addressing table must scale past 1M
 // without the unordered_map per-node overhead).
 TEST(Stress, _2MSession_FlatIndex_Scale) {
     // Attribute the timing result to the machine it ran on (unified hardware ID).
@@ -620,7 +620,7 @@ TEST(Stress, _2MSession_FlatIndex_Scale) {
 }
 
 // Test: 1,000,000 sessions, 10K with active procedures — tickAllProcedures
-// must stay within the real-time budget (O(active) path, audit D2).
+// must stay within the real-time budget (O(active) path).
 // Importance: the documented event loop ticks procedures every 10-100 ms;
 // an O(all) scan over 1M sessions would blow the budget.
 TEST(Stress, _1MSession_ProcedureTick_Scale) {
@@ -655,7 +655,7 @@ TEST(Stress, _1MSession_ProcedureTick_Scale) {
 #endif
 }
 
-// Test: high session churn with concurrently ACTIVE timers (audit P0-1:
+// Test: high session churn with concurrently ACTIVE timers (
 // the previous FlatMap::erase moved the last entry into the erased
 // slot, so every remove() while other sessions had running timers
 // produced ghost ticks and lost expiries). 1M sessions, 10K active
@@ -687,7 +687,7 @@ TEST(Stress, _1MSession_ChurnWithActiveTimers_NoGhostTicks) {
 
     std::array<TimerExpiry, 4096> expired{};
     uint32_t ghostTicks = 0, lostExpiries = 0;
-    uint32_t reportedTotal = 0;  // audit P2-9: every logical expiry must be reported exactly once
+    uint32_t reportedTotal = 0;  // every logical expiry must be reported exactly once
     uint32_t nextTmsi = N + 1;
     for (uint32_t c = 0; c < CYCLES; ++c) {
         // Churn: remove an idle session (TMSI > ACTIVE) and create a new one.
@@ -716,7 +716,7 @@ TEST(Stress, _1MSession_ChurnWithActiveTimers_NoGhostTicks) {
     EXPECT_EQ(lostExpiries, 0u) << "lost expiries: real session timer never ticked";
     EXPECT_EQ(reportedTotal, ACTIVE)
         << "each of the " << ACTIVE
-        << " active timers must be reported exactly once (re-armed, not dropped, when the buffer is full — audit P2-9)";
+        << " active timers must be reported exactly once (re-armed, not dropped, when the buffer is full)";
     // Count: N original - removed victims + created replacements.
     // (CYCLES < N - ACTIVE, so every victim is unique: removed == CYCLES.)
     EXPECT_EQ(reg.count(), N);

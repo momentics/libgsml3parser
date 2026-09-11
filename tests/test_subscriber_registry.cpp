@@ -113,7 +113,7 @@ TEST(SR_findByIMSI, NonExisting_Nullptr) {
 // Test: IMSI lookup works through std::string_view (transparent heterogeneous
 // lookup) without constructing a temporary std::string.
 // Importance: findByIMSI is on the authentication path; a heap allocation per
-// lookup is unacceptable at high subscriber churn (audit D4).
+// lookup is unacceptable at high subscriber churn.
 TEST(SR_findByIMSI, StringViewLookup_NoTempString) {
     SubscriberRegistry reg;
     auto* sess = reg.createByIMSI("244051234567890");
@@ -223,7 +223,7 @@ TEST(SR_tickAllTimers, ExpiresCorrectTimers) {
 
 // Test: tickAllTimers returns expiry events bound to the correct sessions.
 // Importance: with many sessions running timers concurrently, a bare timer ID
-// is ambiguous; the event must carry the owning session pointer (audit D3).
+// is ambiguous; the event must carry the owning session pointer.
 TEST(SR_tickAllTimers, ExpiryBoundToCorrectSession) {
     SubscriberRegistry reg;
     auto* s1 = reg.createByTMSI(0x01010101);
@@ -265,7 +265,7 @@ TEST(SR_tickAllTimers, ExpiresPendingTransactions) {
 
 // Test: tickAllProcedures ticks only sessions with active procedures (O(active)).
 // Importance: at 1M sessions a full scan per event-loop tick is a real-time
-// bottleneck; the active-procedure index must skip idle sessions (audit D2).
+// bottleneck; the active-procedure index must skip idle sessions.
 // 3GPP: TS 24.008 procedure management at scale.
 TEST(SR_tickAllProcedures, OnlyActiveSessionsTicked) {
     SubscriberRegistry reg;
@@ -690,7 +690,7 @@ TEST(Sharded_Remove_O1_SingleShardLock, Remove_SingleShard) {
 
 // Test: hashTMSI distributes sequential TMSI values evenly across shards.
 // Importance: sequential TMSI assignment (createByIMSI high-water mark)
-// must not concentrate sessions on a few shards (audit D11).
+// must not concentrate sessions on a few shards.
 TEST(SSR_hashTMSI, SequentialTmsi_EvenShardDistribution) {
     constexpr int N = 16;
     int counts[N] = {0};
@@ -707,7 +707,7 @@ TEST(SSR_hashTMSI, SequentialTmsi_EvenShardDistribution) {
 
 // Test: removing session A must not relocate session B, so B's running
 // timer keeps ticking on the REAL session address and the reported
-// expiry is bound to the real session (audit P0-1, repro_uf: the
+// expiry is bound to the real session (repro_uf: the
 // previous swap-with-last erase made tickAllTimers tick a ghost and
 // left B's timer running forever).
 TEST(SR_remove, MovesNoSession_TimerExpiryBoundToRealSession) {
@@ -734,7 +734,7 @@ TEST(SR_remove, MovesNoSession_TimerExpiryBoundToRealSession) {
 }
 
 // Test: a timer started AFTER the session was relocated by a foreign
-// erase is tracked via the (stable) owner self-pointer (audit P0-1,
+// erase is tracked via the (stable) owner self-pointer (
 // repro_owner: previously the observer fired with a stale owner and
 // tickAllTimers reported 0 expiries — the procedure hung forever).
 TEST(SR_remove, MovesNoSession_NewTimerTrackedAfterMove) {
@@ -755,7 +755,7 @@ TEST(SR_remove, MovesNoSession_NewTimerTrackedAfterMove) {
 }
 
 // Test: the LAPDm-link index of a session that survives a foreign erase
-// still resolves to the real session (audit P0-1: mByLink holds raw
+// still resolves to the real session (mByLink holds raw
 // SubscriberSession* pointers).
 TEST(SR_remove, MovesNoSession_LinkIndexPointsToRealSession) {
     SubscriberRegistry reg;
@@ -778,7 +778,7 @@ TEST(SR_remove, MovesNoSession_LinkIndexPointsToRealSession) {
 
 // Test: with an undersized output buffer, expiries are re-armed and
 // reported on a later tick instead of being silently dropped
-// (audit P2-9).
+// .
 TEST(SR_tickAllTimers, BufferFull_ReArmsInsteadOfDropping) {
     SubscriberRegistry reg;
     auto* s1 = reg.createByTMSI(1);

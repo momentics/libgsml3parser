@@ -578,7 +578,7 @@ TEST(RoundTripTest, ChannelRequest) {
     checkHeader(*parsed, L3PD::RadioResource, L3ChannelRequest::MTI);
 }
 
-// RA round-trip for the all-zero and all-ones values (audit C1: the full
+// RA round-trip for the all-zero and all-ones values (the full
 // 8-bit RA must survive write -> parse).
 TEST(RoundTripTest, ChannelRequest_ZeroAndMaxRA) {
     for (uint8_t ra : {0x00u, 0xFFu}) {

@@ -31,14 +31,14 @@
 using namespace gsml3parser;
 
 // Helper: build a minimal RLL DATA_REQ with L3 payload.
-// L3 is wrapped in an L3Info IE (TL16V) — audit P1-4.
+// L3 is wrapped in an L3Info IE (TL16V).
 static std::vector<uint8_t> makeRLLDataReq(uint8_t chanNr, uint8_t linkId, std::initializer_list<uint8_t> l3) {
     std::vector<uint8_t> buf;
     buf.push_back(static_cast<uint8_t>(RSLDiscriminator::RLL));
     buf.push_back(static_cast<uint8_t>(RSLL3MessageType::DataReq));
     buf.push_back(chanNr);
     buf.push_back(linkId);
-    // L3Info IE (type 0x30, TL16V) per TS 48.058 8.3.1 (audit P1-4).
+    // L3Info IE (type 0x30, TL16V) per TS 48.058 8.3.1.
     buf.push_back(0x30);
     buf.push_back(0x00);
     buf.push_back(static_cast<uint8_t>(l3.size()));
@@ -47,14 +47,14 @@ static std::vector<uint8_t> makeRLLDataReq(uint8_t chanNr, uint8_t linkId, std::
 }
 
 // Helper: build a minimal RLL DATA_IND with L3 payload.
-// L3 is wrapped in an L3Info IE (TL16V) — audit P1-4.
+// L3 is wrapped in an L3Info IE (TL16V).
 static std::vector<uint8_t> makeRLLDataInd(uint8_t chanNr, uint8_t linkId, std::initializer_list<uint8_t> l3) {
     std::vector<uint8_t> buf;
     buf.push_back(static_cast<uint8_t>(RSLDiscriminator::RLL));
     buf.push_back(static_cast<uint8_t>(RSLL3MessageType::DataInd));
     buf.push_back(chanNr);
     buf.push_back(linkId);
-    // L3Info IE (type 0x30, TL16V) per TS 48.058 8.3.1 (audit P1-4).
+    // L3Info IE (type 0x30, TL16V) per TS 48.058 8.3.1.
     buf.push_back(0x30);
     buf.push_back(0x00);
     buf.push_back(static_cast<uint8_t>(l3.size()));
@@ -331,7 +331,7 @@ TEST(RSLP_messageName, KnownTypes) {
 // Test: TL16V IEs longer than 255 bytes keep their full length in the IE
 // descriptor and in the extracted L3 payload.
 // Importance: L3Info/FullBCCHInfo carry complete L3 messages; a uint8_t
-// length field truncated payloads above 255 bytes (audit D6).
+// length field truncated payloads above 255 bytes.
 // 3GPP: TS 48.058 9.2.25 (FULL_BCCH_INFO), 9.2.30 (L3_INFO).
 TEST(RSLP_parse_CCHAN_L3Info, Over255Bytes_FullLengthKept) {
     // CCHAN BCCH_INFO: disc(0x40) + type(0x01) + chanNr + reserved
@@ -383,7 +383,7 @@ TEST(RSLP_parse_DCHAN_FullBCCHInfo, Over255Bytes_FullPayloadExtracted) {
 }
 
 // Test: BTS->BSC discriminators (direction bit set, TS 48.058 7.1.1) are
-// accepted and the direction is reported (audit C6: the previous parser
+// accepted and the direction is reported (the previous parser
 // rejected all of them).
 TEST(RSLP_parse_DirectionBit, BtsToBscAccepted) {
     // DCHAN CHAN_ACTIV_ACK with direction bit: 0x61 = 0x60 | 0x01.
@@ -401,7 +401,7 @@ TEST(RSLP_parse_DirectionBit, BtsToBscAccepted) {
     EXPECT_TRUE((*cresult).btsToBsc);
 
     // RLL DATA_IND with direction bit: 0x01.
-    // L3 is wrapped in an L3Info IE (type 0x30, TL16V) — audit P1-4.
+    // L3 is wrapped in an L3Info IE (type 0x30, TL16V).
     std::vector<uint8_t> rbuf = {0x01, static_cast<uint8_t>(RSLL3MessageType::DataInd), 0x7e, 0x03,
                                  0x30, 0x00, 0x03, 0x09, 0x68, 0x02};
     auto rresult = RSLParser::parse(rbuf);

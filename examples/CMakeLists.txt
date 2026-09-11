@@ -77,7 +77,6 @@ set(_all_examples
 if(MSVC)
     foreach(_tgt ${_all_examples})
         target_compile_definitions(${_tgt} PRIVATE _CRT_SECURE_NO_WARNINGS)
-        target_compile_options(${_tgt} PRIVATE /bigobj)
     endforeach()
 endif()
 

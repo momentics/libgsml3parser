@@ -74,7 +74,7 @@ TEST(L3StreamProcessor, ParseAllFrames) {
         0x60, 0x0D, 0x02   // Channel Release #3
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
 
     std::vector<int> mtis;
     while (proc.processOne([&mtis](const ParsedMessage& msg) {
@@ -103,7 +103,7 @@ TEST(L3StreamProcessor, StatsTracking) {
         0x50, 0x84,          // MM: CM Service Accept
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
 
     TestHandler h;
     proc.processUntilEOF(h);
@@ -124,7 +124,7 @@ TEST(L3StreamProcessor, CorruptFrameContinues) {
         0x60, 0x0D, 0x01    // Valid Channel Release
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
 
     TestHandler handler;
     proc.processUntilEOF(handler);
@@ -146,12 +146,12 @@ TEST(L3StreamProcessor, EmptySource) {
 
     const auto& stats = proc.stats();
     ASSERT_EQ(stats.totalFrames, 0u);
-    ASSERT_EQ(stats.idlePolls, 0u);         // poll at EOF is not an idle poll (audit P2-6)
-    ASSERT_EQ(stats.sourceExhausted, 1u);   // the source reached EOF (audit P2-5)
+    ASSERT_EQ(stats.idlePolls, 0u);         // poll at EOF is not an idle poll
+    ASSERT_EQ(stats.sourceExhausted, 1u);   // the source reached EOF
 }
 
 // Test: an idle poll on a live (non-exhausted) RingBuffer counts
-// toward idlePolls, not sourceExhausted (audit P2-5/P2-6: the
+// toward idlePolls, not sourceExhausted (the
 // previous stat conflated "empty right now" with "truncated").
 TEST(L3StreamProcessor, RingBuffer_IdlePoll_CountedAsIdle) {
     RingBuffer ring(1024);
@@ -172,7 +172,7 @@ TEST(L3StreamProcessor, ProcessN) {
         0x60, 0x0D, 0x03   // #4
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
 
     TestHandler handler;
     proc.processN(2, handler);
@@ -187,7 +187,7 @@ TEST(L3StreamProcessor, ProcessN) {
 TEST(L3StreamProcessor, ResetStats) {
     uint8_t data[] = {0x60, 0x0D, 0x00};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
 
     TestHandler h;
     proc.processUntilEOF(h);
@@ -205,7 +205,7 @@ TEST(L3StreamBuilder, BuildFromSpan) {
     uint8_t data[] = {0x60, 0x0D, 0x00};
     auto proc = L3StreamBuilder()
         .source(std::span<const uint8_t>(data, std::size(data)))
-        .useL2Length(false)  // header-based mode (opt-in since audit D6)
+        .useL2Length(false)  // header-based mode 
         .build();
 
     ASSERT_TRUE(proc != nullptr);
@@ -230,7 +230,7 @@ TEST(L3StreamBuilder, BuildWithL2Length) {
 }
 
 // Test: a missing file is a build error, not a silent empty stream
-// (audit P2-1).
+// .
 TEST(L3StreamBuilder, Build_FileNotFound_ReturnsNullptr) {
     L3StreamBuilder b;
     b.sourceFile("no_such_file_for_libgsml3parser_test.bin");
@@ -247,7 +247,7 @@ TEST(L3StreamProcessor, MixedMessageTypes) {
         0x60, 0x0E, 0x01, 0x02, 0x03, 0x04, 0x05,  // RR: Paging Response (7 bytes)
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
 
     TestHandler handler;
     proc.processUntilEOF(handler);
@@ -298,7 +298,7 @@ TEST(L3StreamProcessor, DomainMessageIdentification) {
         0x60, 0x0D, 0x02,                             // RR: Channel Release #3
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
 
     std::vector<std::string_view> names;
     while (proc.processOne([&names](const ParsedMessage& msg) {
@@ -325,7 +325,7 @@ TEST(L3StreamProcessor, LargeMultiDomainStream) {
     }
 
     SpanByteSource src(std::span<const uint8_t>(data.data(), data.size()));
-    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
 
     TestHandler handler;
     proc.processUntilEOF(handler);

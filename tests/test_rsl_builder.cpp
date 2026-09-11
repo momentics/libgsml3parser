@@ -165,9 +165,9 @@ TEST(RSLB_buildDataInd_SpanOverload, CorrectBytes) {
     std::vector<uint8_t> buf(256, 0);
     int n = RSLBuilder::buildDataInd(buf, 0x7c, 2, l3);
     EXPECT_GT(n, 0);
-    // Header(4) + L3Info IE(3: type 0x30, TL16V length) + L3(3) = 10 bytes (audit P1-4).
+    // Header(4) + L3Info IE(3: type 0x30, TL16V length) + L3(3) = 10 bytes.
     EXPECT_EQ(n, 10);
-    // L3Info IE header (type 0x30, TL16V length 3) — audit P1-4.
+    // L3Info IE header (type 0x30, TL16V length 3).
     EXPECT_EQ(buf[4], 0x30);
     EXPECT_EQ(buf[5], 0x00);
     EXPECT_EQ(buf[6], 0x03);
@@ -242,7 +242,7 @@ TEST(RSLB_buildDeleteInd, RoundTrip) {
     EXPECT_EQ(ie->len, 3u);
 }
 
-// Test: builders set the TS 48.058 direction bit correctly (audit C6):
+// Test: builders set the TS 48.058 direction bit correctly:
 // BTS->BSC messages carry bit 0 set; BSC->BTS (testing/loopback) clear.
 TEST(RSLB_build_DirectionBit, SetPerMessageDirection) {
     std::array<uint8_t, 3> l3{0x09, 0x68, 0x02};
