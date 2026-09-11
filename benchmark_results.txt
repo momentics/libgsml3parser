@@ -78,18 +78,18 @@ Struct sizes (all static_assert invariants pass):
   end-to-end parse+stream is 10.0 M msg/s (mixed, above)
 
 === 1M-session scale (Stress._1MSession_* + SSR_tickAllProcedures) ===
-  1M create: 1550.7 ms, lookup: 168.9 ms, tick(10K active): 1.8 ms
-  1M procedure tick (10K active): 1.7 ms
+  1M create: 1238.8 ms, lookup: 138.2 ms, tick(10K active): 2.3 ms
+  1M procedure tick (10K active): 1.1 ms
   Real-time budgets: create < 5000ms, lookup < 2000ms, tick < 50ms (all met)
 
 === 2M-session scale (Stress._2MSession_FlatIndex_Scale) ===
-  2M create: 2608.6 ms, lookup: 378.2 ms, tick(10K active): 1.9 ms
+  2M create: 1110.6 ms, lookup: 297.9 ms, tick(10K active): 1.5 ms
   Real-time budgets: create < 15000ms, lookup < 5000ms, tick < 100ms (all met)
 
 === 1M-session real-time event loop (example_rt_scale) ===
-  create 1M: 1279.5 ms, tick avg 0.087 ms (min 0.077 / max 0.180), overruns 0/1000
-  throughput: 5.74 M msg/s
-  peak working set: 2.09 GB (per-entry FlatMap blocks, audit P0-1: 2.07 GB pre-P0-1)
+  create 1M: 549.0 ms, tick avg 0.085 ms (min 0.075 / max 0.237), overruns 0/1000
+  throughput: 5.85 M msg/s
+  peak working set: 2.00 GB (slab-backed FlatMap, 64 entries/slab — audit D1)
   RT SCALE OK
 
 === Regression ===

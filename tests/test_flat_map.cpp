@@ -19,9 +19,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include <algorithm>
 #include <chrono>
 #include <cstdio>
 #include <memory>
+#include <vector>
 
 #include <gtest/gtest.h>
 #include "gsml3parser/stack/flat_map.h"
@@ -271,4 +273,75 @@ TEST(FlatMapTest, MoveOnlyValue_StableAcrossChurn) {
     ASSERT_TRUE(ins);
     EXPECT_EQ(bAddr, &m.at(ib));
     EXPECT_EQ(*m.at(ic).p, 42);
+}
+
+// Test: entries survive slab-boundary growth with stable addresses
+// (audit D1: the slab storage must keep the P0-1 address-stability
+// invariant across slabs, not just within one).
+TEST(FlatMapTest, SlabGrowth_OtherEntries_KeepStableAddresses) {
+    FlatMap<uint32_t, int> m;
+    constexpr size_t K = FlatMap<uint32_t, int>::kSlabEntries;
+    // Fill the first two slabs and part of the third.
+    for (uint32_t i = 0; i < K * 2 + 10; ++i) m.emplace(i, static_cast<int>(i));
+    int* first = &m.at(m.find(0));
+    int* mid = &m.at(m.find(K + 5));
+    // Grow into further slabs.
+    for (uint32_t i = K * 2 + 10; i < K * 5; ++i) m.emplace(i, static_cast<int>(i));
+    EXPECT_EQ(first, &m.at(m.find(0))) << "entry 0 moved across slab growth";
+    EXPECT_EQ(mid, &m.at(m.find(K + 5))) << "entry K+5 moved across slab growth";
+    EXPECT_EQ(m.size(), K * 5);
+}
+
+// Test: reserve() pre-allocates slabs, so a full insert loop performs no
+// slab growth (audit D1: startup sizing for known scale).
+TEST(FlatMapTest, Reserve_SlabPreallocation_NoGrowthDuringInsert) {
+    FlatMap<uint32_t, int> m;
+    constexpr uint32_t N = 1000;
+    m.reserve(N);
+    int* first = nullptr;
+    for (uint32_t i = 0; i < N; ++i) {
+        auto [idx, ins] = m.emplace(i, static_cast<int>(i));
+        ASSERT_TRUE(ins);
+        if (i == 0) first = &m.at(idx);
+    }
+    EXPECT_EQ(m.size(), static_cast<size_t>(N));
+    EXPECT_EQ(first, &m.at(m.find(0))) << "entry 0 must not move during reserved inserts";
+}
+
+// Test: heavy churn recycles dead entries in place (same slab addresses),
+// so steady 1-remove/1-create performs no allocations (audit D1). The
+// free list is LIFO, so key i re-occupies some previously used address
+// (not necessarily its own): the invariant is that the SET of live
+// addresses after re-insertion equals the set before the erase burst —
+// nothing allocated, nothing moved.
+TEST(FlatMapTest, Churn_RecyclesSlabEntries_InPlace) {
+    FlatMap<uint32_t, int> m;
+    constexpr uint32_t N = 512;
+    for (uint32_t i = 0; i < N; ++i) m.emplace(i, static_cast<int>(i));
+    // Record every live address, then erase everything.
+    std::vector<int*> addrs(N);
+    for (uint32_t i = 0; i < N; ++i) addrs[i] = &m.at(m.find(i));
+    for (uint32_t i = 0; i < N; ++i) {
+        size_t idx = m.find(i);
+        ASSERT_NE(idx, (FlatMap<uint32_t, int>::npos));
+        ASSERT_TRUE(m.erase(idx));
+    }
+    EXPECT_EQ(m.size(), 0u);
+    // Re-insert the same keys: every address must come from the original
+    // set (recycled in place, no new slab allocated).
+    std::vector<int*> after(N);
+    for (uint32_t i = 0; i < N; ++i) {
+        m.emplace(i, static_cast<int>(i * 2));
+        size_t idx = m.find(i);
+        ASSERT_NE(idx, (FlatMap<uint32_t, int>::npos));
+        after[i] = &m.at(idx);
+        EXPECT_NE(std::find(addrs.begin(), addrs.end(), after[i]), addrs.end())
+            << "recycled entry " << i << " left the original slab set";
+        EXPECT_EQ(m.at(idx), static_cast<int>(i * 2));
+    }
+    // Set equality: every original address is occupied exactly once
+    // (no duplicates, nothing leaked out of the set).
+    std::sort(addrs.begin(), addrs.end());
+    std::sort(after.begin(), after.end());
+    EXPECT_EQ(addrs, after) << "churn must recycle in place without allocation";
 }

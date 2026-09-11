@@ -256,8 +256,9 @@ private:
         SubscriberSession session;
     };
 
-    // TMSI -> session (primary index). Flat open-addressing table: inline
-    // entries, no per-node heap allocation, no pointer chasing
+    // TMSI -> session (primary index). Flat open-addressing table: slab
+    // storage (one allocation per 64 entries — audit D1, replacing the
+    // previous one-heap-block-per-entry storage), no pointer chasing
     // (audit SCALE).
     FlatMap<uint32_t, SessionEntry> mByTMSI;
 
