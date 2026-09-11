@@ -93,6 +93,19 @@ const char* MMRejectCause2Str(MMRejectCause cause) {
     }
 }
 
+const char* CMServiceAbortCause2Str(CMServiceAbortCause cause) {
+    switch (cause) {
+        case CMServiceAbortCause::Unspecified:           return "Unspecified";
+        case CMServiceAbortCause::Congestion:            return "Congestion";
+        case CMServiceAbortCause::ServiceNotProvided:    return "ServiceNotProvided";
+        case CMServiceAbortCause::SemanticErrorInValue:  return "SemanticErrorInValue";
+        case CMServiceAbortCause::Unspecified2:          return "Unspecified2";
+        case CMServiceAbortCause::ServiceNotSupported:   return "ServiceNotSupported";
+        case CMServiceAbortCause::SemanticInconsistency: return "SemanticInconsistency";
+    }
+    return "Unknown";
+}
+
 const char* CCCause2Str(CCCause cause) {
     switch (cause) {
         case CCCause::Unassigned_Number:                  return "Unassigned_Number";

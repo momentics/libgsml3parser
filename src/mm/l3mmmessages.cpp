@@ -204,16 +204,30 @@ void L3CMServiceReject::text(std::ostream& os) const {
     os << "CMServiceReject: " << MMRejectCause2Str(mCause);
 }
 
-// ── L3CMServiceAbort (MTI=0x23, empty body) ────────────────────────────
+// ── L3CMServiceAbort (MTI=0x23, 1-byte body: CM service abort cause) ──
 
-Expected<L3CMServiceAbort> L3CMServiceAbort::parse(BitReader&) {
-    return Expected<L3CMServiceAbort>::hold(L3CMServiceAbort{});
+Expected<L3CMServiceAbort> L3CMServiceAbort::parse(BitReader& br) {
+    L3CMServiceAbort msg;
+    // CM service abort cause (TS 24.008 9.2.3.2): one octet, values
+    // 0x01–0x07 defined, 0x08–0xFF reserved (audit D5: the previous
+    // empty-body implementation dropped the cause octet).
+    auto r = br.readField(8);
+    if (!r) return Expected<L3CMServiceAbort>::error(r.error());
+    uint8_t v = static_cast<uint8_t>(r.value());
+    if (v < 0x01 || v > 0x07) {
+        return Expected<L3CMServiceAbort>::error(
+            ParseError{ParseError::Code::InvalidValue, "Invalid CM service abort cause", br.position()});
+    }
+    msg.mCause = static_cast<CMServiceAbortCause>(v);
+    return Expected<L3CMServiceAbort>::hold(std::move(msg));
 }
 
-void L3CMServiceAbort::write(BitWriter&) const {}
+void L3CMServiceAbort::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint8_t>(mCause), 8);
+}
 
 void L3CMServiceAbort::text(std::ostream& os) const {
-    os << "CMServiceAbort";
+    os << "CMServiceAbort: " << CMServiceAbortCause2Str(mCause);
 }
 
 // ── L3CMServiceRequest (MTI=0x24) ──────────────────────────────────────
@@ -828,7 +842,7 @@ L3CMServiceAccept::Builder L3CMServiceAccept::builder() {
 
 // L3CMServiceAbort Builder
 L3CMServiceAbort L3CMServiceAbort::Builder::build() const {
-    return L3CMServiceAbort{};
+    return L3CMServiceAbort{mCause};
 }
 
 L3CMServiceAbort::Builder L3CMServiceAbort::builder() {

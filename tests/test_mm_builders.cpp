@@ -49,15 +49,30 @@ TEST(MMBuilders, CMServiceAccept) {
     EXPECT_EQ(messageMTI(*reparsed), L3CMServiceAccept::MTI);
 }
 
-// GSM 04.08 9.2.7: CM Service Abort (empty body)
+// GSM 04.08 9.2.7: CM Service Abort (1-byte cause body, TS 24.008 9.2.3.2 — audit D5)
 TEST(MMBuilders, CMServiceAbort) {
     auto msg = L3CMServiceAbort::builder().build();
+    EXPECT_EQ(msg.cause(), CMServiceAbortCause::Unspecified);
     ParsedMessage pm{MMM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
     EXPECT_EQ((*bytes)[0], 0x50); // PD=5(MM)
 
     auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3CMServiceAbort::MTI);
+}
+
+// Test: the builder sets the CM service abort cause (audit D5).
+TEST(MMBuilders, CMServiceAbort_Cause) {
+    auto msg = L3CMServiceAbort::builder().cause(CMServiceAbortCause::Congestion).build();
+    EXPECT_EQ(msg.cause(), CMServiceAbortCause::Congestion);
+    EXPECT_EQ(msg.bodyLength(), 1u);
+    ParsedMessage pm(MMM(std::move(msg)));
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), 3u);  // 2-byte header + 1-byte cause
+    auto reparsed = parseL3(std::span<const uint8_t>(bytes.value().data(), bytes.value().size()));
     ASSERT_TRUE(reparsed);
     EXPECT_EQ(messageMTI(*reparsed), L3CMServiceAbort::MTI);
 }

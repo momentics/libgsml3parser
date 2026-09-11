@@ -357,25 +357,35 @@ public:
 // ── CM Service Abort (GSM 04.08 9.2.7) ────────────────────────────────
 
 class L3CMServiceAbort {
+    CMServiceAbortCause mCause{CMServiceAbortCause::Unspecified};
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x23;
 
-    struct Builder {
-        /// Build the final message.
-        [[nodiscard]] L3CMServiceAbort build() const;
-    };
+    L3CMServiceAbort() = default;
+    explicit L3CMServiceAbort(CMServiceAbortCause wCause) : mCause(wCause) {}
 
-    static Builder builder();
-private:
-    friend struct Builder;
-public:
-    size_t bodyLength() const { return 0; }
+    CMServiceAbortCause cause() const { return mCause; }
+
+    size_t bodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3CMServiceAbort> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        CMServiceAbortCause mCause{CMServiceAbortCause::Unspecified};
+
+        /// Set the CM service abort cause (TS 24.008 9.2.3.2).
+        Builder& cause(CMServiceAbortCause c) { mCause = c; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CMServiceAbort build() const;
+    };
+
+    static Builder builder();
 };
 
 // ── CM Service Request (GSM 04.08 9.2.9) ──────────────────────────────

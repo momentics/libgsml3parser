@@ -339,7 +339,7 @@ TEST(MessagesTest, MM_CMServiceAccept) {
 TEST(MessagesTest, MM_CMServiceAbort) {
     L3CMServiceAbort msg;
     EXPECT_EQ(msg.mti(), L3CMServiceAbort::MTI);
-    EXPECT_EQ(msg.l2BodyLength(), 0u);
+    EXPECT_EQ(msg.l2BodyLength(), 1u);
 }
 
 TEST(MessagesTest, MM_AuthenticationRequest) {

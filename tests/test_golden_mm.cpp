@@ -402,6 +402,41 @@ TEST(GoldenMM, CMServiceAbort_RoundTrip) {
     EXPECT_EQ(messageMTI(*parsed), L3CMServiceAbort::MTI);
 }
 
+// [GOLDEN] CM Service Abort carries the 1-octet CM service abort cause
+// (TS 24.008 9.2.3.2): header 50 8C (PD=0x05, MTI=0x23<<2) + cause 0x02
+// (congestion). Audit D5: the previous empty-body implementation dropped
+// the cause octet.
+TEST(GoldenMM, CMServiceAbort_Parse_Cause) {
+    uint8_t data[] = {0x50, 0x8C, 0x02};
+    auto parsed = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(messageMTI(*parsed), L3CMServiceAbort::MTI);
+    const auto* abort = tryGet<L3CMServiceAbort>(*parsed);
+    ASSERT_NE(abort, nullptr);
+    EXPECT_EQ(abort->cause(), CMServiceAbortCause::Congestion);
+}
+
+// [GOLDEN] Reserved cause values (0x08 and above) are rejected.
+TEST(GoldenMM, CMServiceAbort_Parse_ReservedCause_Invalid) {
+    for (uint8_t cause : {0x08u, 0xFFu}) {
+        uint8_t data[] = {0x50, 0x8C, cause};
+        auto parsed = parseL3(std::span<const uint8_t>(data));
+        ASSERT_FALSE(parsed) << "cause 0x" << std::hex << cause << " must be rejected";
+        EXPECT_EQ(parsed.error().code, ParseError::Code::InvalidValue);
+    }
+}
+
+// [GOLDEN] Non-default cause round-trips.
+TEST(GoldenMM, CMServiceAbort_RoundTrip_Cause) {
+    ParsedMessage msg(MMM(L3CMServiceAbort{CMServiceAbortCause::ServiceNotSupported}));
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(messageMTI(*parsed), L3CMServiceAbort::MTI);
+    const auto* abort = tryGet<L3CMServiceAbort>(*parsed);
+    ASSERT_NE(abort, nullptr);
+    EXPECT_EQ(abort->cause(), CMServiceAbortCause::ServiceNotSupported);
+}
+
 TEST(GoldenMM, CMServiceReject_RoundTrip) {
     ParsedMessage msg{MMM{L3CMServiceReject{MMRejectCause::Congestion}}};
     auto parsed = roundtrip(msg);

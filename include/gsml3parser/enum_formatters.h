@@ -74,6 +74,7 @@ GSML3PARSER_FORMATTER(gsml3parser::GSMAlphabet)
 
 GSML3PARSER_FORMATTER(gsml3parser::RRCause)
 GSML3PARSER_FORMATTER(gsml3parser::MMRejectCause)
+GSML3PARSER_FORMATTER(gsml3parser::CMServiceAbortCause)
 GSML3PARSER_FORMATTER(gsml3parser::CCCause)
 GSML3PARSER_FORMATTER(gsml3parser::CCCauseLocation)
 GSML3PARSER_FORMATTER(gsml3parser::BSSCause)

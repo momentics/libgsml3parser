@@ -96,6 +96,19 @@ enum class MMRejectCause : uint8_t {
 
 const char* MMRejectCause2Str(MMRejectCause cause);
 
+// CM service abort cause (3GPP TS 24.008 9.2.3.2)
+enum class CMServiceAbortCause : uint8_t {
+    Unspecified             = 0x01,
+    Congestion              = 0x02,
+    ServiceNotProvided      = 0x03,
+    SemanticErrorInValue    = 0x04,
+    Unspecified2            = 0x05,  // the spec lists two "unspecified" values
+    ServiceNotSupported     = 0x06,
+    SemanticInconsistency   = 0x07
+};
+
+const char* CMServiceAbortCause2Str(CMServiceAbortCause cause);
+
 // CC Cause (GSM 04.08 10.5.4.11)
 enum class CCCause : uint8_t {
     Unknown_L3_Cause                 = 0,

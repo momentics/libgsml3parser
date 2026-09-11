@@ -55,9 +55,7 @@ inline constexpr size_t kFixedFrameEntries[] = {
     // Mobility Management (pd 0x05, shifted 6-bit MTI)
     0x05, 0x21, 2,  // CM Service Accept (no body)
     0x05, 0x22, 3,  // CM Service Reject (1-byte body)
-    0x05, 0x23, 2,  // CM Service Abort (header-only in this library;
-                    // spec carries a cause — implementation gap, keep
-                    // the wire format the parser/builder actually use)
+    0x05, 0x23, 3,  // CM Service Abort (1-byte cause body, TS 24.008 9.2.3 — audit D5)
     0x05, 0x31, 3,  // MM Status (1-byte body)
     // Call Control (pd 0x03, shifted 6-bit MTI)
     0x03, 0x3D, 7,  // CC Status (5-byte body: ti|cause|callState per the
