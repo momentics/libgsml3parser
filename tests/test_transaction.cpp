@@ -22,6 +22,7 @@
 #include <gtest/gtest.h>
 #include <gsml3parser/stack/transaction.h>
 #include <gsml3parser/cc/l3ccmessages.h>
+#include <gsml3parser/ss/l3ssmessages.h>
 #include <gsml3parser/rr/l3rrmessages.h>
 #include <gsml3parser/mm/l3mmmessages.h>
 #include <gsml3parser/visitor.h>
@@ -50,6 +51,13 @@ static ParsedMessage makeRRPagingResponse() {
 // Helper: build an MM CMServiceRequest message as ParsedMessage
 static ParsedMessage makeMMCMServiceRequest() {
     return ParsedMessage{MMM{L3CMServiceRequest::builder().build()}};
+}
+
+// Helper: build an SS Facility message with a given TI
+static ParsedMessage makeSSFacility(unsigned ti) {
+    L3SupServFacilityMessage msg;
+    msg.ti(ti);
+    return ParsedMessage{SSM{std::move(msg)}};
 }
 
 // Helper: build a minimal L3Header
@@ -101,6 +109,20 @@ TEST(TransactionTest, Matches_byTI_forCC) {
 
     // Different TI - should not match
     EXPECT_FALSE(tx.matches(connectMsg, 5));
+}
+
+// Test: a CC transaction must NOT be matched by an SS message carrying
+// the same TI — the dialog PD is part of the correlation key
+// (audit D11: the previous TI-only check cross-matched CC/SS dialogs).
+TEST(TransactionTest, Matches_TI_AlsoRequiresSamePD) {
+    Transaction tx(L3PD::CallControl, L3Setup::MTI, 2, L3TimerId::T3101);
+    // Same TI, different dialog PD: no match.
+    EXPECT_FALSE(tx.matches(makeSSFacility(2), 2));
+    // The SS transaction with the same TI matches the SS message.
+    Transaction txSs(L3PD::NonCallSS, L3SupServFacilityMessage::MTI, 2, L3TimerId::T3101);
+    EXPECT_TRUE(txSs.matches(makeSSFacility(2), 2));
+    // And a CC message still matches the CC transaction.
+    EXPECT_TRUE(tx.matches(makeCCConnect(), 2));
 }
 
 // Non-CC transaction matches by PD + MTI
