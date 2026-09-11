@@ -96,7 +96,7 @@ namespace gsml3parser {
 ///
 /// The RA is an 8-bit pattern (establishment cause + random reference),
 /// NOT a 2-bit field: e.g. 111xxxxx = originating call, 101xxxxx =
-/// emergency call, 0000xxxx = location updating (audit C2).
+/// emergency call, 0000xxxx = location updating.
 ///
 /// @param ra The 8-bit RA value from the Channel Request message.
 /// @param neci Non-Extended Channel Indicator (accepted for API stability;
@@ -112,7 +112,7 @@ namespace gsml3parser {
 ///
 /// Pattern 0000xxxx (TS 44.018 Table 9.1.8.1). The 0001xxxx form is
 /// ambiguous with "other SDCCH procedures" and is not reported as LU
-/// (audit C2).
+/// .
 ///
 /// @param ra The 8-bit RA value from the Channel Request message.
 /// @param neci Accepted for API stability (unused).

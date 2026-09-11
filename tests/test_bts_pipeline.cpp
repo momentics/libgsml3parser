@@ -437,7 +437,7 @@ TEST(BTSPipeline, InvalidL3DataInPipeline) {
     ProtocolDispatcher disp;
 
     // Use an RR ChannelRelease header with no body bytes: a single octet is
-    // a valid Channel Request (audit C1), so this 2-byte frame is the
+    // a valid Channel Request, so this 2-byte frame is the
     // minimal "too short to be a valid L3 message" input.
     uint8_t invalidData[] = {0x60, 0x0D};
 

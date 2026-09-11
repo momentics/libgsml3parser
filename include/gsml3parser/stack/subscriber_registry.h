@@ -200,7 +200,7 @@ public:
     /// Performance: O(1) via session->assignedTmsi (no linear scan).
     /// @note Only the pointer to the removed session is invalidated.
     /// Pointers to other sessions stay valid for their whole lifetime in
-    /// the registry (FlatMap address stability, audit P0-1).
+    /// the registry (FlatMap address stability).
     bool remove(SubscriberSession* session) noexcept;
 
     /// Remove all sessions (emergency shutdown).
@@ -208,12 +208,12 @@ public:
 
     /// Pre-size the flat TMSI/link indexes for the expected subscriber
     /// population (one-time, cold path; avoids incremental rehashing at
-    /// scale — audit SCALE).
+    /// scale.
     void reserve(size_t expectedSessions);
 
     /// Number of active sessions.
     /// @return Count of currently tracked sessions.
-    /// Performance: O(1) (maintained counter, audit Q5).
+    /// Performance: O(1) (maintained counter).
     [[nodiscard]] size_t count() const noexcept;
 
     /// Iterate over all unique active sessions (for timer tick, periodic tasks).
@@ -237,7 +237,7 @@ public:
     /// Note: the order of entries in expiredOut is unspecified.
     /// @note Expired timers that do not fit into `expiredOut` are
     /// re-armed with a 1 ms duration and reported on a later tick —
-    /// no expiry event is ever silently dropped (audit P2-9). Size
+    /// no expiry event is ever silently dropped. Size
     /// `expiredOut` for the expected number of concurrent expiries.
     size_t tickAllTimers(std::chrono::milliseconds delta,
                           std::span<TimerExpiry> expiredOut);
@@ -257,9 +257,9 @@ private:
     };
 
     // TMSI -> session (primary index). Flat open-addressing table: slab
-    // storage (one allocation per 64 entries — audit D1, replacing the
+    // storage (one allocation per 64 entries, replacing the
     // previous one-heap-block-per-entry storage), no pointer chasing
-    // (audit SCALE).
+    // .
     FlatMap<uint32_t, SessionEntry> mByTMSI;
 
     // IMSI -> TMSI (secondary index: redirects to mByTMSI).
@@ -267,11 +267,11 @@ private:
     // directly (removal goes through find + iterator erase) without
     // constructing a temporary std::string — zero heap allocation on the
     // lookup path. Kept as unordered_map: owned std::string keys, cold
-    // path (audit SCALE).
+    // path.
     std::unordered_map<std::string, uint32_t, ImsiViewHash, std::equal_to<>> mByIMSI;
 
     // LAPDm link key (trx:8 | ts:8 | lapdmLink:8) -> session pointer.
-    // Flat open-addressing table (audit SCALE).
+    // Flat open-addressing table.
     FlatMap<uint32_t, SubscriberSession*> mByLink;
 
     // High-water mark for auto-assigned TMSIs (createByIMSI). Advances past
@@ -279,7 +279,7 @@ private:
     // values. TMSI 0 is reserved (all-zero TMSI per TS 24.008) and skipped.
     uint32_t mNextAutoTmsi{1};
 
-    // Active session count — O(1) count() (audit Q5: the previous count()
+    // Active session count — O(1) count() (the previous count()
     // scanned the whole map, O(N) at 1M+ sessions).
     size_t mCount{0};
 
@@ -463,7 +463,7 @@ public:
     /// @return Total number of procedures that failed due to timeout.
     size_t tickAllProcedures(std::chrono::milliseconds delta);
 
-    /// Pre-size the flat indexes of every shard (cold path; audit SCALE).
+    /// Pre-size the flat indexes of every shard (cold path).
     void reserve(size_t expectedSessions) {
         for (auto& shard : mShards) {
             std::lock_guard lock(shard.mutex);

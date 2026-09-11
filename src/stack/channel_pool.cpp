@@ -32,7 +32,7 @@ ChannelType decodeChannelNeeded(uint8_t ra, bool neci, bool vea) {
     (void)neci; // NECI-specific variants are covered by the explicit patterns below.
 
     // 8-bit RA pattern decoding — TS 44.018 Table 9.1.8.1 / 9.1.8.2
-    // (audit C2: the previous 2-bit (ra >> 5) & 0x03 mapping misclassified
+    // (the previous 2-bit (ra >> 5) & 0x03 mapping misclassified
     // most patterns, e.g. originating call 111xxxxx became "location
     // updating" -> SDCCH instead of TCH).
     if (ra < 0x20) return ChannelType::SDCCHType;   // 0000xxxx LU / 0001xxxx other SDCCH procedures
@@ -51,7 +51,7 @@ bool isLocationUpdatingRequest(uint8_t ra, bool neci) {
     (void)neci; // NECI variants are covered by the explicit pattern below.
     // 0000xxxx: location updating (NECI=1). The 0001xxxx form ("other
     // SDCCH procedures", NECI=1) is ambiguous with paging SDCCH-only
-    // accesses, so only 0000xxxx is reported as LU (audit C2: the previous
+    // accesses, so only 0000xxxx is reported as LU (the previous
     // (ra >> 5) & 0x03 == 0x03 test matched 0110xxxx = re-establishment).
     return ra < 0x10;
 }
@@ -141,7 +141,7 @@ size_t ChannelPool::totalCount() const {
 std::optional<ChannelDescriptor> ChannelPool::allocateVEA(uint8_t ra) {
     // VEA (Very Early Assignment) applies to originating calls
     // (RA 111xxxxx): assign a TCH directly, falling back to SDCCH when no
-    // TCH is free (TS 44.018 5.2.4, audit C2: the previous
+    // TCH is free (TS 44.018 5.2.4, the previous
     // (ra >> 5) & 0x03 == 0 test applied VEA to location updating 000xxxxx,
     // which must never be assigned a TCH).
     if (ra >= 0xC0) {

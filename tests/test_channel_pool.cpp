@@ -29,7 +29,7 @@ using namespace gsml3parser;
 
 // ── RA Decoding Tests (GSM 04.08 Table 9.9) ────────────────────────────
 
-// RA decoding per TS 44.018 Table 9.1.8.1 (audit C2: the previous 2-bit
+// RA decoding per TS 44.018 Table 9.1.8.1 (the previous 2-bit
 // mapping was replaced by full 8-bit pattern decoding).
 TEST(ChannelPoolTest, DecodeChannelNeeded_SpecPatterns) {
     // 0000xxxx — location updating -> SDCCH (never TCH, even with VEA).
@@ -69,7 +69,7 @@ TEST(ChannelPoolTest, IsLocationUpdatingRequest_SpecPatterns) {
     EXPECT_TRUE(isLocationUpdatingRequest(0x00));
     EXPECT_TRUE(isLocationUpdatingRequest(0x0F));
     EXPECT_FALSE(isLocationUpdatingRequest(0x10)); // other SDCCH procedures
-    EXPECT_FALSE(isLocationUpdatingRequest(0x60)); // was true before audit C2 (re-establishment)
+    EXPECT_FALSE(isLocationUpdatingRequest(0x60)); // was true before (re-establishment)
     EXPECT_FALSE(isLocationUpdatingRequest(0xC0)); // MO call
 }
 
@@ -213,7 +213,7 @@ TEST(ChannelPoolVEATest, AllocateVEA_MOC_tryTCHFirst) {
     pool.addChannel({ChannelType::TCHFType, 1, 0, 200});
     pool.addChannel({ChannelType::SDCCHType, 0, 0, 100});
 
-    // RA=0xC0: originating call (111xxxxx). VEA allocates TCH first (audit C2).
+    // RA=0xC0: originating call (111xxxxx). VEA allocates TCH first.
     auto ch = pool.allocateVEA(0xC0);
     ASSERT_TRUE(ch.has_value());
     EXPECT_EQ(ch->type, ChannelType::TCHFType);
@@ -236,7 +236,7 @@ TEST(ChannelPoolVEATest, AllocateVEA_LocationUpdate_usesSDCCH) {
     pool.addChannel({ChannelType::SDCCHType, 0, 0, 100});
 
     // RA=0x00: location updating (0000xxxx) — must never get a TCH via the
-    // VEA path (audit C2).
+    // VEA path.
     auto ch = pool.allocateVEA(0x00);
     ASSERT_TRUE(ch.has_value());
     EXPECT_EQ(ch->type, ChannelType::SDCCHType);

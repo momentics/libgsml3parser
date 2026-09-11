@@ -53,7 +53,7 @@ size_t FileByteSource::read(uint8_t* buf, size_t maxSize) {
     size_t n = std::fread(buf, 1, maxSize, mFile);
     if (n == 0) {
         // A zero-length read is not necessarily EOF; feof() distinguishes
-        // "end of file" from "nothing available right now" (audit P2-5).
+        // "end of file" from "nothing available right now".
         mEof = std::feof(mFile) != 0;
     }
     return n;

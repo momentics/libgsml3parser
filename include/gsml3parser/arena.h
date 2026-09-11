@@ -75,7 +75,7 @@ public:
 
 private:
     struct Block {
-        // Default-initialized storage (NOT zero-filled — audit Q3: the
+        // Default-initialized storage (NOT zero-filled - the
         // previous std::vector<uint8_t> value-initialized every new block,
         // a wasted 64 KB+ memset per block on the allocation path).
         // NOTE: std::make_unique<uint8_t[]>(n) value-initializes the array

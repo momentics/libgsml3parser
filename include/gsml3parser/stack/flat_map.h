@@ -33,15 +33,15 @@
 namespace gsml3parser {
 
 /// Open-addressing flat hash map with linear probing (registry scale,
-/// audit: tens of millions of concurrent streams).
+/// tens of millions of concurrent streams).
 ///
-/// Storage (audit D1): entries live in contiguous slabs of kSlabEntries
+/// Storage: entries live in contiguous slabs of kSlabEntries
 /// (64) entries — one slab allocation per 64 entries instead of the
 /// previous one heap block per entry (10M sessions = 10M ~2KB mallocs,
 /// ~21 GB RSS, allocator churn and poor traversal locality). Slabs are
 /// never moved or reallocated, so every entry address is stable for the
 /// entry's whole lifetime: insertions, erasures of OTHER entries,
-/// rehashes and growth never move an entry (audit P0-1 — a hard
+/// rehashes and growth never move an entry (a hard
 /// requirement, because SessionEntry values carry self-referencing
 /// owner pointers and the registry indexes plus application code hold
 /// raw SubscriberSession* pointers into the map).
@@ -78,11 +78,11 @@ public:
     static constexpr uint32_t kTomb = 0xFFFFFFFFu;  // slot: tombstone
     static constexpr size_t npos = static_cast<size_t>(-1);
 
-    // Slab layout (audit D1): entries live in contiguous slabs of
+    // Slab layout: entries live in contiguous slabs of
     // kSlabEntries entries each, replacing the previous one-heap-block-
     // per-entry storage (10M sessions = 10M ~2KB allocations). Slabs are
     // never moved or reallocated, so an entry's address stays stable for
-    // its whole lifetime (audit P0-1: insertions, erasures of OTHER
+    // its whole lifetime (insertions, erasures of OTHER
     // entries, rehashes and growth never move it) — a hard requirement:
     // SessionEntry values carry self-referencing owner pointers
     // (TimerManager/ProcedureRunner), and the registry indexes
@@ -106,7 +106,7 @@ public:
     /// Reserve space for at least `expectedEntries` entries under the 70%
     /// load threshold (cold path: startup sizing for known scale).
     /// Pre-allocates the slot table AND the slabs, so steady-state
-    /// emplace never allocates (audit D1).
+    /// emplace never allocates.
     void reserve(size_t expectedEntries);
 
     /// Insert or locate (std::unordered_map::emplace semantics).
@@ -121,14 +121,14 @@ public:
     /// Access by entry index (from emplace/find). The entry must be live
     /// (not erased). The index and the entry address stay valid until
     /// THIS entry is erased — erasing other entries does not invalidate
-    /// them (audit P0-1).
+    /// them.
     [[nodiscard]] Value& at(size_t idx) noexcept { return *mEntryAt(idx).value; }
     [[nodiscard]] const Value& at(size_t idx) const noexcept { return *mEntryAt(idx).value; }
     [[nodiscard]] const Key& keyAt(size_t idx) const noexcept { return mEntryAt(idx).key; }
 
     /// Erase by entry index. In-place: no other entry is moved, so all
     /// other entry addresses (and raw pointers derived from them) remain
-    /// valid (audit P0-1). @return true if an entry was removed.
+    /// valid. @return true if an entry was removed.
     bool erase(size_t idx) noexcept;
 
     /// Remove all entries and release every slab (slot table is kept and
@@ -154,7 +154,7 @@ private:
 
     // Entry index -> slab storage. Slabs are fixed-size blocks that are
     // never moved: the address of slab[j] is stable for the slab's
-    // lifetime (audit D1 / P0-1).
+    // lifetime.
     [[nodiscard]] Entry& mEntryAt(size_t idx) noexcept {
         return mSlabs[idx >> kLog2SlabEntries][idx & (kSlabEntries - 1)];
     }
@@ -210,7 +210,7 @@ void FlatMap<Key, Value>::reserve(size_t expectedEntries) {
     size_t cap = nextPow2(need);
     if (cap > mSlots.size()) rehash(cap);
     // Pre-allocate slabs so steady-state emplace never allocates
-    // (audit D1: startup sizing for known scale).
+    // (startup sizing for known scale).
     while (mSlabs.size() * kSlabEntries < expectedEntries) allocateSlab();
 }
 
@@ -301,7 +301,7 @@ bool FlatMap<Key, Value>::erase(size_t idx) noexcept {
     // In-place erase: the entry keeps its slab address; only its Value
     // is destroyed and the slot becomes a tombstone. No other entry
     // moves, so every other entry address (and every raw pointer
-    // derived from one) remains valid (audit P0-1).
+    // derived from one) remains valid.
     Entry& e = mEntryAt(idx);
     mSlots[e.slot] = kTomb;
     ++mTomb;

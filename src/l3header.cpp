@@ -35,7 +35,7 @@ Expected<L3Header> parseL3Header(std::span<const uint8_t> data) {
     // Only the 12 PD values defined in GSM 04.08 10.2 are valid; 0x02,
     // 0x04, 0x07 and 0x0d are reserved. The previous static_cast produced
     // an L3PD holding a non-enumerator value that passed isValid()
-    // (audit Q4).
+    // .
     uint8_t byte0 = data[0];
     uint8_t pdNibble = (byte0 >> 4) & 0x0F;
     switch (pdNibble) {

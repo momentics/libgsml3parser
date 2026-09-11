@@ -56,6 +56,12 @@ ProcedureOrchestrator::ChainPhase ProcedureOrchestrator::detectChainPhase(
     auto pd = messagePD(msg);
     auto mti = messageMTI(msg);
 
+    // Chain policy: the orchestrator starts chains only for
+    // LocationUpdate / MobileOriginatedCall CM Service Requests, IMSI
+    // Detach and CC Disconnect. Every other CM service type (SMS,
+    // emergency, supplementary services, ...) returns None: the
+    // orchestrator stays idle and the application handles the message
+    // itself — it owns the parsed ParsedMessage it fed here.
     if (pd == L3PD::MobilityManagement) {
         if (mti == L3CMServiceRequest::MTI) {
             const auto* cmReq = tryGet<L3CMServiceRequest>(msg);
@@ -137,23 +143,36 @@ void ProcedureOrchestrator::transitionToPhase(ChainPhase phase) {
         mCurrentProcedure.reset();
     }
 
-    // Phase timer for inline phases (no Procedure object to carry its own
-    // timer). Entering LocationUpdate starts T3103 (5s, TS 24.008 10.5.12):
-    // the VLR must deliver its decision within this window. Any other phase
-    // stops the timer.
+    // Phase timers for inline phases (no Procedure object to carry its
+    // own timer): LocationUpdate — T3103 (5s, TS 24.008
+    // 10.5.12), terminal on expiry; IdentityVerification — T3102 (3s,
+    // TS 24.008 10.5.6) with retransmissions of the Identity Request.
     if (phase == ChainPhase::LocationUpdate) {
-        mPhaseTimer = L3TimerId::T3103;
+        mPhaseTimerPolicy = {L3TimerId::T3103, std::chrono::milliseconds(5000), 0, ResponseToken::None};
         mPhaseTimerRemaining = std::chrono::milliseconds(5000);
         mPhaseTimerRunning = true;
+        mPhaseRetransmissions = 0;
+    } else if (phase == ChainPhase::IdentityVerification) {
+        mPhaseTimerPolicy = {L3TimerId::T3102, std::chrono::milliseconds(3000),
+                             kMaxIdentityRetransmissions, ResponseToken::IdentityRequest};
+        // remaining = 0: the initial Identity Request is due immediately;
+        // the first tickAll() re-queues it and starts the 3 s window.
+        mPhaseTimerRemaining = std::chrono::milliseconds(0);
+        mPhaseTimerRunning = true;
+        mPhaseRetransmissions = 0;
+        mRetransmitToken = ResponseToken::IdentityRequest;
     } else {
         stopPhaseTimer();
     }
 }
 
 void ProcedureOrchestrator::stopPhaseTimer() noexcept {
-    mPhaseTimer = L3TimerId::Unknown;
+    mPhaseTimerPolicy = PhaseTimerPolicy{};
     mPhaseTimerRemaining = std::chrono::milliseconds(0);
     mPhaseTimerRunning = false;
+    mPhaseRetransmissions = 0;
+    // A queued retransmission is stale once the phase ends.
+    mRetransmitToken = ResponseToken::None;
 }
 
 std::unique_ptr<Procedure> ProcedureOrchestrator::createProcedureForPhase(ChainPhase phase) {
@@ -384,12 +403,23 @@ size_t ProcedureOrchestrator::tickAll(std::chrono::milliseconds delta) {
         mPhaseTimerRemaining -= delta;
         if (mPhaseTimerRemaining <= std::chrono::milliseconds(0)) {
             mPhaseTimerRunning = false;
-            ProcedureStepResult timeout;
-            timeout.action = ProcedureStepResult::Action::Failed;
-            timeout.finalResult = {mChainType, procedure::ProcedureState::TimedOut,
-                                   "phase_timer_expired"};
-            onProcedureFailed(timeout);
-            ++failed;
+            if (mPhaseTimerPolicy.maxRetransmissions > 0 &&
+                mPhaseRetransmissions < mPhaseTimerPolicy.maxRetransmissions) {
+                // Retransmit: queue the token for the application's event
+                // loop (takeRetransmissionToken()) and restart the window
+                // . Not counted as a failure.
+                ++mPhaseRetransmissions;
+                mRetransmitToken = mPhaseTimerPolicy.retransmitToken;
+                mPhaseTimerRemaining = mPhaseTimerPolicy.duration;
+                mPhaseTimerRunning = true;
+            } else {
+                ProcedureStepResult timeout;
+                timeout.action = ProcedureStepResult::Action::Failed;
+                timeout.finalResult = {mChainType, procedure::ProcedureState::TimedOut,
+                                       "phase_timer_expired"};
+                onProcedureFailed(timeout);
+                ++failed;
+            }
         }
     }
     if (mCurrentProcedure) {
@@ -430,6 +460,12 @@ ResponseToken ProcedureOrchestrator::lastResponseToken() const noexcept {
     return mLastToken;
 }
 
+ResponseToken ProcedureOrchestrator::takeRetransmissionToken() {
+    ResponseToken t = mRetransmitToken;
+    mRetransmitToken = ResponseToken::None;
+    return t;
+}
+
 int ProcedureOrchestrator::buildPendingResponse(std::span<uint8_t> out,
                                                  const SubscriberSession* session) const {
     if (mLastToken == ResponseToken::None) return -1;
@@ -447,6 +483,11 @@ ProcedureStepResult ProcedureOrchestrator::handleCMServiceRequest(
     (void)msg;
     (void)session;
 
+    // Policy: the CM Service Request is accepted
+    // unconditionally with a CM Service Accept. The orchestrator does
+    // not check registration state or service entitlements; the
+    // application should gate the chain on session state (e.g. skip an
+    // already-registered MS) before feeding the message.
     ProcedureStepResult result;
     result.action = ProcedureStepResult::Action::SendResponseWithToken;
     result.responseToken = ResponseToken::CMServiceAccept;
@@ -472,7 +513,14 @@ ProcedureStepResult ProcedureOrchestrator::handleIdentityVerification(
         return r;
     }
 
-    // The phase is still waiting for the IdentityResponse: (re)send the request.
+    // The phase is still waiting for the IdentityResponse: (re)send the
+    // request. A retransmission just happened on the feed path, so
+    // restart the T3102 window — the tick path must not fire a duplicate
+    // retransmission within the next 3 s.
+    if (mPhaseTimerPolicy.id == L3TimerId::T3102) {
+        mPhaseTimerRemaining = mPhaseTimerPolicy.duration;
+        mPhaseTimerRunning = true;
+    }
     ProcedureStepResult result;
     result.action = ProcedureStepResult::Action::SendResponseWithToken;
     result.responseToken = ResponseToken::IdentityRequest;

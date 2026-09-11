@@ -209,7 +209,7 @@ void L3CMServiceReject::text(std::ostream& os) const {
 Expected<L3CMServiceAbort> L3CMServiceAbort::parse(BitReader& br) {
     L3CMServiceAbort msg;
     // CM service abort cause (TS 24.008 9.2.3.2): one octet, values
-    // 0x01–0x07 defined, 0x08–0xFF reserved (audit D5: the previous
+    // 0x01–0x07 defined, 0x08–0xFF reserved (the previous
     // empty-body implementation dropped the cause octet).
     auto r = br.readField(8);
     if (!r) return Expected<L3CMServiceAbort>::error(r.error());

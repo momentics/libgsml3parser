@@ -20,7 +20,7 @@
 // SOFTWARE.
 
 // Fuzz target: L3Framer frame extraction + parseL3 over arbitrary byte
-// streams (audit P2-8).
+// streams.
 #include <cstddef>
 #include <cstdint>
 #include <span>

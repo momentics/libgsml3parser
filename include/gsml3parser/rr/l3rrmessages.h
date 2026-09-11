@@ -384,7 +384,7 @@ public:
 class L3ClassmarkEnquiry {
     // Classmark type: which classmark the MS shall send
     // (00 = classmark 1, 01 = classmark 2, 10 = classmark 3,
-    // 11 = classmark 2 and 3) — TS 44.018 9.1.14 (audit SPEC-1: the
+    // 11 = classmark 2 and 3) — TS 44.018 9.1.14 (the
     // previous header-only implementation dropped the mandatory
     // 1-octet body; the TTCN-3 type carries it as classmarkEnquiryMask).
     uint8_t mClassmarkType{0};
@@ -552,7 +552,7 @@ public:
 
 class L3CipheringModeComplete {
     // Ciphering mode response: 00 = ciphering off, 01 = ciphering on
-    // (TS 44.018 9.1.26; audit SPEC-2: the previous header-only
+    // (TS 44.018 9.1.26; the previous header-only
     // implementation dropped the mandatory response octet and the
     // optional IMEISV — the TTCN-3 type carries
     // mobileEquipmentIdentity := omit).
@@ -1895,7 +1895,7 @@ class L3ChannelRequest {
     // Full 8-bit request reference (RA) from the RACH burst — TS 44.018 9.1.8.
     // The establishment cause and the random reference are encoded together
     // in this single octet; the network echoes the full RA in the Immediate
-    // Assignment (Request Reference IE) to identify the MS (audit C1).
+    // Assignment (Request Reference IE) to identify the MS.
     uint8_t mRequestReference{0};
 
     friend struct Builder;

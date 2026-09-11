@@ -102,7 +102,7 @@ public:
     /// Called when the entity wants to send a frame to L1/PHY.
     /// The frame span is backed by the entity's reusable TX buffer and is
     /// valid only during the callback: transmit or copy synchronously
-    /// (audit C3).
+    /// .
     using L1TransmitFn = void (*)(std::span<const uint8_t> frameBytes, void* ctx);
 
     /// Construct LAPDmEntity with channel profile and zero-allocation callbacks.
@@ -216,7 +216,7 @@ private:
     std::vector<uint8_t> mReassemblyBuffer;
 
     // TX encode buffer — lazy-allocated on first send and reused afterwards,
-    // so the steady-state send path performs no heap allocation (audit C3:
+    // so the steady-state send path performs no heap allocation (
     // the previous code built a fresh std::vector via encodeFrame() per
     // frame). The L1 callback receives a span into this buffer and must
     // transmit or copy synchronously; it must not retain the span beyond
@@ -240,7 +240,7 @@ private:
     // Contention resolution checksum
     uint32_t mContentionChecksum{0};
 
-    // Maximum L3 message size for I-frame reassembly (audit C4: the previous
+    // Maximum L3 message size for I-frame reassembly (the previous
     // code appended I-frame payloads without any limit — a peer sending M=0
     // segments forever grew the buffer unboundedly, a DoS vector on
     // untrusted radio input). Matches FrameConfig::maxMessageLength.

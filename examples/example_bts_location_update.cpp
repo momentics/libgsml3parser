@@ -59,7 +59,7 @@ void printStep(const std::string& title) {
 void step1_channelRequestForLUR() {
     printStep("Step 1: Channel Request (Location Updating)");
 
-    // RA=0x00: location updating (0000xxxx, TS 44.018 Table 9.1.8.1, audit C2).
+    // RA=0x00: location updating (0000xxxx, TS 44.018 Table 9.1.8.1).
     uint8_t ra = 0x00;
     std::cout << "  Received RA: 0x" << std::hex << static_cast<int>(ra) << "\n";
 

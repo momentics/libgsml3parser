@@ -641,7 +641,7 @@ L3AssignmentFailure::Builder L3AssignmentFailure::builder() {
 Expected<L3ClassmarkEnquiry> L3ClassmarkEnquiry::parse(BitReader& br) {
     L3ClassmarkEnquiry msg;
     // 1 octet: classmark type (2 bits) + reserved (6 bits, '0' values)
-    // (TS 44.018 9.1.14, audit SPEC-1).
+    // (TS 44.018 9.1.14).
     auto r = br.readField(2); if (!r) return Expected<L3ClassmarkEnquiry>::error(r.error());
     msg.mClassmarkType = static_cast<uint8_t>(r.value());
     r = br.readField(6); if (!r) return Expected<L3ClassmarkEnquiry>::error(r.error());
@@ -785,7 +785,7 @@ L3CipheringModeCommand::Builder L3CipheringModeCommand::builder() {
 Expected<L3CipheringModeComplete> L3CipheringModeComplete::parse(BitReader& br) {
     L3CipheringModeComplete msg;
     // 1 octet: ciphering mode response (2 bits) + reserved (6 bits,
-    // '0' values) (TS 44.018 9.1.26, audit SPEC-2).
+    // '0' values) (TS 44.018 9.1.26).
     auto r = br.readField(2); if (!r) return Expected<L3CipheringModeComplete>::error(r.error());
     msg.mCipheringModeResponse = static_cast<uint8_t>(r.value());
     r = br.readField(6); if (!r) return Expected<L3CipheringModeComplete>::error(r.error());
@@ -2344,7 +2344,7 @@ Expected<L3ChannelRequest> L3ChannelRequest::parse(BitReader& br) {
     // The entire octet is the 8-bit request reference (RA): establishment
     // cause + random reference (TS 44.018 Table 9.1.8.1). The network must
     // echo the full RA in the Immediate Assignment, so all 8 bits are kept
-    // (previously only the high nibble was stored — audit C1).
+    // (previously only the high nibble was stored).
     auto r = br.readField(8); if (!r) return Expected<L3ChannelRequest>::error(r.error());
     msg.mRequestReference = static_cast<uint8_t>(r.value());
     return Expected<L3ChannelRequest>::hold(std::move(msg));
@@ -2364,7 +2364,7 @@ Expected<L3HandoverAccess> L3HandoverAccess::parse(BitReader& br) {
     L3HandoverAccess msg;
     auto r = br.readField(27); if (!r) return Expected<L3HandoverAccess>::error(r.error());
     msg.mHandoverNumber = r.value();
-    // 5 reserved bits, '0' values (GSM 04.08 9.1.38; audit P2-4: the
+    // 5 reserved bits, '0' values (GSM 04.08 9.1.38; the
     // previous parser accepted ANY 32-bit input, so a garbage 4-byte
     // frame whose standard parse left a tail was misclassified as a
     // HandoverAccess and could trigger a spurious handover procedure).
@@ -2987,7 +2987,7 @@ Expected<L3SystemInformationType14> L3SystemInformationType14::parse(BitReader& 
     { auto res = L3CellIdentity::parse(br); if (!res) return Expected<L3SystemInformationType14>::error(res.error()); msg.mCI = std::move(res.value()); }
     { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType14>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
     // Spare octet (GSM 24.008 9.1.43d): body is 5 octets, so it must be
-    // consumed for the parse to be the exact inverse of write() (audit N1:
+    // consumed for the parse to be the exact inverse of write() (
     // a 7-byte frame whose standard parse leaves a tail is treated as a
     // short message).
     { auto res = br.readField(8); if (!res) return Expected<L3SystemInformationType14>::error(res.error()); }

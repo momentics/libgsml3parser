@@ -35,7 +35,7 @@ public:
 
     /// Write \p nbits bits of \p value (MSB-first). Only the top \p nbits
     /// are taken from \p value. \p nbits is clamped to 32 (the value width):
-    /// a shift count >= 32 would be undefined behavior (audit Q2; mirrors
+    /// a shift count >= 32 would be undefined behavior (mirrors
     /// BitReader::peekField's documented clamp).
     void writeField(uint32_t value, unsigned nbits)
     {
@@ -60,7 +60,7 @@ public:
 
     /// Write \p count bytes verbatim. Uses a bulk memcpy when byte-aligned
     /// and the bytes fit in the buffer; otherwise falls back to per-octet
-    /// bit writes (audit Q2: the previous per-bit loop cost 8 operations
+    /// bit writes (the previous per-bit loop cost 8 operations
     /// per byte on the aligned path).
     void writeBytes(const uint8_t* data, size_t count)
     {

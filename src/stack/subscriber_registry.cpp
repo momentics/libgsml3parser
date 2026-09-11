@@ -72,7 +72,7 @@ SubscriberSession* SubscriberRegistry::createByIMSI(std::string_view imsi) {
 
     // Allocate a unique TMSI: advance the high-water mark past any in-use
     // value (user-assigned TMSIs may occupy arbitrary slots) and skip the
-    // reserved all-zero TMSI. The scan is bounded (audit N3: the previous
+    // reserved all-zero TMSI. The scan is bounded (the previous
     // loop could spin forever once the TMSI space is exhausted): with K
     // occupied slots, K+1 consecutive candidate values must contain a free
     // one (pigeonhole principle), so exceeding that bound means the 32-bit
@@ -208,7 +208,7 @@ bool SubscriberRegistry::remove(SubscriberSession* session) noexcept {
     // stayed in the map with active=false, leaking on every removal).
     // The pointer to THIS session is invalidated by this call. Pointers
     // to all other sessions remain valid: FlatMap erase is in-place and
-    // never moves other entries (audit P0-1 — the previous
+    // never moves other entries (the previous
     // swap-with-last erase silently invalidated every external
     // SubscriberSession* of the moved entry: active-timer/procedure
     // sets, the link index, owner self-pointers and app-held pointers).
@@ -261,7 +261,7 @@ size_t SubscriberRegistry::tickAllTimers(std::chrono::milliseconds delta,
             } else {
                 // Output span full: re-arm with a minimal duration so
                 // the expiry is reported on the next tick instead of
-                // being silently lost (audit P2-9). localBuf always
+                // being silently lost. localBuf always
                 // fits one session's expiries (32 = MAX_TIMERS), so
                 // only the registry-level cap can drop an event here.
                 session->timers.start(localBuf[j],

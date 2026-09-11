@@ -144,7 +144,7 @@ Expected<RSLParsedMessage> RSLParser::parse(std::span<const uint8_t> data)
     // TS 48.058 7.1.1: bit 0 of the discriminator octet indicates the
     // message direction (0 = BSC->BTS, 1 = BTS->BSC); receivers match on
     // the 7 discriminator bits only, as osmo-bts does (msg_discr & 0xfe).
-    // The previous code rejected all BTS->BSC messages (audit C6).
+    // The previous code rejected all BTS->BSC messages.
     uint8_t discByte = data[0] & 0xFE;
     msg.btsToBsc = (data[0] & 0x01u) != 0;
     msg.discriminator = static_cast<RSLDiscriminator>(discByte);
@@ -183,7 +183,7 @@ Expected<RSLParsedMessage> RSLParser::parse(std::span<const uint8_t> data)
     // Extract L3 payload for messages that carry it.
     // RLL DATA_REQ/DATA_IND/UNIT_DATA_* and CCHAN/DCHAN BCCH_INFO,
     // ENCR_CMD, PAGING_CMD: L3 is inside the L3Info IE (type 0x30,
-    // TL16V) (TS 48.058 8.3.1; audit P1-4: RLL data previously read the
+    // TL16V) (TS 48.058 8.3.1; RLL data previously read the
     // raw payload after the header, which is not what real BSCs send).
     // Note: when an RLL data message carries several L3Info IEs, the
     // first one is used (one L3 PDU per RSL message in this library's

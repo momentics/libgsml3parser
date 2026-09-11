@@ -67,7 +67,7 @@ struct RSLParsedMessage {
     /// Message direction bit (TS 48.058 7.1.1): false = BSC->BTS,
     /// true = BTS->BSC. The discriminator is matched on the 7 high bits;
     /// bit 0 of the first octet carries the direction and is not part of
-    /// the discriminator value (audit C6).
+    /// the discriminator value.
     bool btsToBsc{false};
 
     /// Extracted L3 payload bytes (GSM 04.08 message).

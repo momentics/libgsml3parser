@@ -800,8 +800,8 @@ Expected<TESTPROC> parseL3TestProc(BitReader& reader, uint8_t mti) {
 
 /// Parse the body of a standard-header message: the 12-domain switch.
 /// Shared by the main parseL3 path and by the 4/7-byte short-message
-/// disambiguation (which additionally requires exact frame consumption,
-/// audit N1).
+/// disambiguation (which additionally requires exact frame consumption
+/// .
 [[nodiscard]] Expected<ParsedMessage> parseStandardBody(const L3Header& hdr, BitReader& reader) {
     switch (hdr.pd) {
         case L3PD::RadioResource: {
@@ -850,7 +850,7 @@ Expected<TESTPROC> parseL3TestProc(BitReader& reader, uint8_t mti) {
             break;
     }
     // Unreachable: parseL3Header only accepts the 12 defined PD values
-    // (reserved PDs are rejected — audit Q4).
+    // (reserved PDs are rejected).
     return Expected<ParsedMessage>::error(
         {ParseError::Code::InvalidPD, "Unsupported Protocol Discriminator"});
 }
@@ -871,7 +871,7 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
     ///   - 4 bytes -> HandoverAccess (GSM 04.08 9.1.38)
     ///   - 7 bytes -> SynchronizationChannelInformation (GSM 04.08 9.1.39)
     ///
-    /// Disambiguation for 4/7-byte frames (audit N1): the standard-header
+    /// Disambiguation for 4/7-byte frames: the standard-header
     /// parse wins only when it consumes the frame EXACTLY
     /// (remainingBits() == 0). A standard parse that leaves trailing bytes
     /// means the frame is a short message whose first octet merely looks
@@ -883,7 +883,7 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
         // standard-header L3 message is at least two octets long, and the
         // RACH carries exactly this one-octet message. The full octet is
         // the 8-bit request reference (RA); any of the 256 values is
-        // valid, so no nibble filtering is applied (audit C1: the previous
+        // valid, so no nibble filtering is applied (the previous
         // heuristic rejected 192 of 256 legitimate RA values).
         BitReader reader(data.data(), 8);
         auto res = L3ChannelRequest::parse(reader);
@@ -919,7 +919,7 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
             // Other PDs: the standard parse wins only on EXACT
             // consumption. A standard parse that leaves trailing bytes
             // means the frame is a short message whose first octet merely
-            // looks like a plausible header (audit N1: e.g. HandoverAccess
+            // looks like a plausible header (e.g. HandoverAccess
             // {0x60, 0x12, ..} used to be misparsed as RR Status with the
             // trailing byte silently dropped).
             auto hdrResult = parseL3Header(data);
@@ -953,7 +953,7 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
         // unexpectedly failed (impossible today: both short parsers always
         // succeed on full-length input) reaches the standard parse below,
         // which returns a proper error.
-        // Note (audit P2-4): L3HandoverAccess::parse can now fail on
+        // Note: L3HandoverAccess::parse can now fail on
         // non-zero reserved bits — such a 4-byte frame falls through to
         // the standard parse below and produces a proper error instead of
         // a fake HandoverAccess.
@@ -969,7 +969,7 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
     auto res = detail::parseStandardBody(hdrResult.value(), reader);
     if (res && cfg.requireFullConsumption && reader.remainingBits() != 0) {
         // Strict framing: trailing bytes after a complete message mean the
-        // frame boundary was wrong (audit P2-2).
+        // frame boundary was wrong.
         return Expected<ParsedMessage>::error(
             {ParseError::Code::LengthMismatch, "trailing data after L3 message"});
     }

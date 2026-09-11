@@ -93,11 +93,11 @@ public:
     /// Thread-safe. Uses shared locks. O(N).
     [[nodiscard]] size_t totalCount() const;
 
-    // Public for distribution tests (audit P2-3).
+    // Public for distribution tests.
     /// Hash a channel descriptor to a shard index. O(1), bitmask.
     static constexpr uint32_t hashDescriptor(const ChannelDescriptor& d) noexcept {
         // Pack all identifying fields without overlap and apply a real
-        // finalizer (audit P2-3: the previous hash truncated ARFCN to
+        // finalizer (the previous hash truncated ARFCN to
         // 8 bits, ignored the channel type, and its second avalanche
         // step (h ^= h >> 25) was dead code because h < 2^24 always).
         // Bit layout: type 5 bits (20 ChannelType values), trx 8,

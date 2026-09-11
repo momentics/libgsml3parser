@@ -60,7 +60,7 @@ void step1_receiveChannelRequest() {
     printSeparator("Step 1: Receive Channel Request on RACH");
 
     // RA=0xC0: originating call (111xxxxx) — VEA applies to this pattern
-    // (TS 44.018 Table 9.1.8.1, audit C2).
+    // (TS 44.018 Table 9.1.8.1).
     uint8_t ra = 0xC0;
     std::cout << "  Raw RA byte: 0x" << std::hex << static_cast<int>(ra) << "\n";
 

@@ -75,7 +75,7 @@ ProcedureStepResult LocationUpdateProcedure::feed(const ParsedMessage& msg,
 
     switch (mCurrentState) {
         case State::INIT: {
-            // Both branches previously set the same action (audit P3-4:
+            // Both branches previously set the same action (
             // dead if/else) — the transition is the only difference.
             auto pd = messagePD(msg);
             if (pd == L3PD::MobilityManagement || pd == L3PD::RadioResource) {

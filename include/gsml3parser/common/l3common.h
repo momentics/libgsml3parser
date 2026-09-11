@@ -1000,7 +1000,7 @@ public:
 
 /// Plain data holder: SI messages parse their rest octets inline
 /// (the previous virtual parse factory was dead code and returned
-/// the base class by value — slicing; audit P3-1).
+/// the base class by value — slicing).
 class L3RestOctets {
 public:
     L3RestOctets() = default;

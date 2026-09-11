@@ -78,7 +78,7 @@ void LAPDmEntity::receiveFrame(std::span<const uint8_t> frameBytes) {
     const auto& frame = *result;
 
     // Drop frames addressed to a different SAPI: one entity serves one SAPI
-    // per logical channel (audit C5: previously a UI frame for SAPI3 was
+    // per logical channel (previously a UI frame for SAPI3 was
     // delivered by a SAPI0 entity).
     if (frame.address.sapi != mSapi) return;
 
@@ -564,7 +564,7 @@ void LAPDmEntity::receiveIFrame(const lapdm::LAPDmFrame& frame) {
     // Accept frame — advance VR.
     mVR = static_cast<uint8_t>((mVR + 1) & 0x07u);
 
-    // Protocol-error guards for untrusted radio input (audit C4): an
+    // Protocol-error guards for untrusted radio input: an
     // I-frame payload larger than N201, or a reassembly that would exceed
     // the maximum L3 message size, is unrecoverable — abnormal release.
     if (frame.info.size() > mProfile.n201 ||
@@ -612,7 +612,7 @@ void LAPDmEntity::receiveSFrame(const lapdm::LAPDmFrame& frame) {
             // REJ (GSM 04.06 5.3.3): the peer requests retransmission
             // starting from NR. With the k=1 constraint the only outstanding
             // frame is mPendingFrame; retransmit it when it is still
-            // unacknowledged (audit C7: previously REJ was ignored until
+            // unacknowledged (previously REJ was ignored until
             // T200 expired, up to N200*T200 later). Retransmissions
             // triggered by REJ count toward the N200 budget exactly like
             // T200-expiry retransmissions (tickT200), so a peer cannot force

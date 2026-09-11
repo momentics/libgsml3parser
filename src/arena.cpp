@@ -38,7 +38,7 @@ constexpr bool isPowerOfTwo(size_t v) noexcept {
 Arena::Arena(size_t initialCapacity) {
     Block b;
     // Plain new[] (default-initialized): std::make_unique<uint8_t[]>
-    // would value-initialize the array and zero-fill it (audit Q3).
+    // would value-initialize the array and zero-fill it.
     b.data.reset(new uint8_t[initialCapacity]);
     b.size = initialCapacity;
     mBlocks.push_back(std::move(b));

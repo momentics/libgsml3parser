@@ -86,7 +86,7 @@ void demoSpanSource() {
         {"SS",   "B0E8"},               // Facility
         {"GMM",  "802005"},              // GMM Status (cause=5)
         {"SM",   "A055320105"},          // SM Status (cause=5)
-        {"SMS",  "9004"},                // CP Ack (2 bytes, no body; audit P3-5)
+        {"SMS",  "9004"},                // CP Ack (2 bytes, no body)
         {"BCC",  "1001"},                // BCC Setup
         {"GCC",  "000102"},              // GCC Setup
         {"LS",   "C001"},                // LocationServiceRequest
@@ -137,7 +137,7 @@ void demoRingBuffer() {
         {"RR",   "600D00"},             // Channel Release
         {"MM",   "5084"},               // CM Service Accept
         {"GMM",  "802005"},              // GMM Status
-        {"SMS",  "9004"},                // CP Ack (2 bytes, no body; audit P3-5)
+        {"SMS",  "9004"},                // CP Ack (2 bytes, no body)
     };
 
     auto producerThread = std::thread([&ring, &hexMessages]() {
@@ -201,7 +201,7 @@ void demoInlineFramer() {
         {"RR",   "600D00"},             // Channel Release
         {"MM",   "5084"},               // CM Service Accept
         {"CC",   "3E9408021621"},       // Disconnect (TI=7)
-        {"SMS",  "9004"},                // CP Ack (2 bytes, no body; audit P3-5)
+        {"SMS",  "9004"},                // CP Ack (2 bytes, no body)
     };
 
     std::vector<uint8_t> buffer;

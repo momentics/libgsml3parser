@@ -199,7 +199,7 @@ size_t TimerManager::tick(std::chrono::milliseconds delta, std::span<L3TimerId> 
                     // Output buffer full: re-arm the timer with a
                     // minimal duration so its expiry is reported on a
                     // LATER tick instead of being silently dropped
-                    // (audit P2-9: the previous contract cleared the
+                    // (the previous contract cleared the
                     // running state without ever reporting the ID, so a
                     // real-time event loop would miss protocol
                     // timeouts such as T3101/T3106).

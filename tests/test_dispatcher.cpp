@@ -103,7 +103,7 @@ TEST(DispatcherTest, GlobalFallback) {
 // dispatchRaw returns false on parse error
 TEST(DispatcherTest, DispatchRawInvalidData) {
     ProtocolDispatcher disp;
-    // A single octet is a valid Channel Request (audit C1), so use an RR
+    // A single octet is a valid Channel Request, so use an RR
     // ChannelRelease header with no body bytes to trigger a parse error.
     uint8_t data[] = {0x60, 0x0D}; // Too short to be valid L3
     EXPECT_FALSE(disp.dispatchRaw(std::span<const uint8_t>(data)));
@@ -226,7 +226,7 @@ TEST(DispatcherTest, RegisterHandler_MTI_OutOfRange_Ignored) {
 }
 
 // Test: the context passed to dispatch() is delivered to the callback
-// (audit P1-3: it was previously silently dropped in every handler kind).
+// (it was previously silently dropped in every handler kind).
 TEST(DispatcherTest, DispatchContext_DeliveredToRawHandler) {
     static void* lastCtx = nullptr;
     ProtocolDispatcher d;

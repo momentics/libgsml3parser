@@ -24,7 +24,7 @@
 // Creates 1,000,000 subscriber sessions, then runs 1000 event-loop ticks
 // of 10 ms each (tickAllTimers + tickAllProcedures + 500 parsed L3
 // messages per tick = 50K msg/s aggregate) and verifies the real-time
-// budget: no tick may exceed its 10 ms period (audit SCALE).
+// budget: no tick may exceed its 10 ms period.
 
 #include <algorithm>  // std::min / std::max for tick statistics
 #include <array>      // std::array<TimerExpiry, 1024>

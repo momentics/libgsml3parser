@@ -34,7 +34,7 @@ constexpr size_t RSL_HEADER_SIZE = 4;
 void writeHeader(uint8_t* buf, uint8_t disc, uint8_t msgType, uint8_t chanNr, uint8_t extra,
                  bool btsToBsc) {
     // TS 48.058 7.1.1: bit 0 of the discriminator octet is the
-    // direction bit (1 = BTS->BSC) (audit C6).
+    // direction bit (1 = BTS->BSC).
     buf[0] = static_cast<uint8_t>(disc) | (btsToBsc ? 0x01u : 0x00u);
     buf[1] = msgType;
     buf[2] = chanNr;
@@ -72,7 +72,7 @@ size_t writeTV(uint8_t* buf, size_t offset, uint8_t type, uint8_t value) {
 
 // Helper: build an RLL data message (DATA_REQ/DATA_IND/UNIT_DATA_REQ/UNIT_DATA_IND).
 // TS 48.058 8.3.1: the L3 PDU is carried inside an L3Info IE (type 0x30,
-// TL16V), not as raw octets after the header (audit P1-4: the previous
+// TL16V), not as raw octets after the header (the previous
 // raw layout was incompatible with real BSCs such as osmo-bts, which
 // send/expect the L3Info IE).
 int buildRLLData(std::span<uint8_t> out, uint8_t msgType, uint8_t chanNr, uint8_t linkId,
@@ -87,7 +87,7 @@ int buildRLLData(std::span<uint8_t> out, uint8_t msgType, uint8_t chanNr, uint8_
 }
 
 // Helper: build a DCHAN message with chanNr.
-// All DCHAN builders produce BTS->BSC messages (audit C6).
+// All DCHAN builders produce BTS->BSC messages.
 int buildDChanMsg(std::span<uint8_t> out, uint8_t msgType, uint8_t chanNr) {
     if (out.size() < RSL_HEADER_SIZE) return -1;
     writeHeader(out.data(), static_cast<uint8_t>(RSLDiscriminator::DedicatedChannel), msgType, chanNr, 0,
@@ -96,7 +96,7 @@ int buildDChanMsg(std::span<uint8_t> out, uint8_t msgType, uint8_t chanNr) {
 }
 
 // Helper: build a CCHAN message with chanNr.
-// All CCHAN builders produce BTS->BSC messages (audit C6).
+// All CCHAN builders produce BTS->BSC messages.
 int buildCChanMsg(std::span<uint8_t> out, uint8_t msgType, uint8_t chanNr) {
     if (out.size() < RSL_HEADER_SIZE) return -1;
     writeHeader(out.data(), static_cast<uint8_t>(RSLDiscriminator::CommonChannel), msgType, chanNr, 0,

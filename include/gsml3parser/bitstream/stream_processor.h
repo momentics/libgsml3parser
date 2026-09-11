@@ -47,8 +47,8 @@ struct StreamStats {
     uint64_t totalFrames{};
     uint64_t parsedOk{};
     uint64_t parseErrors{};
-    uint64_t idlePolls{};         // processOne polls that found no data yet (audit P2-6)
-    uint64_t sourceExhausted{};   // observations of end-of-stream (audit P2-5)
+    uint64_t idlePolls{};         // processOne polls that found no data yet
+    uint64_t sourceExhausted{};   // observations of end-of-stream
     uint64_t unsupportedPD{};
     uint64_t rrMessages{};
     uint64_t mmMessages{};
@@ -106,7 +106,7 @@ class L3StreamProcessor {
      * Non-blocking: process one frame if available.
      * An idle poll on a non-exhausted source counts toward
      * stats().idlePolls; end-of-stream counts toward
-     * stats().sourceExhausted (audit P2-5/P2-6).
+     * stats().sourceExhausted.
      * @return true if a frame was processed (success or error).
      */
     template<typename F>
@@ -137,7 +137,7 @@ class L3StreamBuilder {
     ParserConfig mConfig;
     FrameConfig mFrameConfig;
     size_t mRingBufferSize{262144};
-    std::string mFileError;  // set when sourceFile() cannot open the path (audit P2-1)
+    std::string mFileError;  // set when sourceFile() cannot open the path
 
 public:
     L3StreamBuilder& source(ByteSource& src);
@@ -149,7 +149,7 @@ public:
     L3StreamBuilder& ringBufferSize(size_t v);
     [[nodiscard]] std::unique_ptr<L3StreamProcessor> build();
 
-    /// True when sourceFile() failed to open the path (audit P2-1: the
+    /// True when sourceFile() failed to open the path (the
     /// previous code silently produced a processor over an empty
     /// RingBuffer, so a missing file looked like an empty stream).
     [[nodiscard]] bool hasFileError() const noexcept { return !mFileError.empty(); }
@@ -168,7 +168,7 @@ bool L3StreamProcessor::processOne(F&& handler) {
         } else {
             // TruncatedInput: the source is not exhausted but has no
             // data right now (live ring buffer) — an idle poll, not a
-            // truncation (audit P2-6: previously this inflated the
+            // truncation (previously this inflated the
             // truncation counter in real-time loops).
             mStats.idlePolls++;
         }

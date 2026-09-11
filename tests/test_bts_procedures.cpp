@@ -866,7 +866,7 @@ TEST(BTSProceduresTest, VEA_Allocation_Integration) {
     pool.addChannel({ChannelType::TCHFType, 1, 0, 200});
 
     // RA=0xC0: originating call (111xxxxx) — the only pattern VEA applies
-    // to (TS 44.018 5.2.4, audit C2).
+    // to (TS 44.018 5.2.4).
     uint8_t ra = 0xC0;
 
     // VEA: try TCH first
@@ -894,7 +894,7 @@ TEST(BTSProceduresTest, RA_Decoding_Integration) {
     EXPECT_EQ(decodeChannelNeeded(0x00, false, false), ChannelType::SDCCHType);
 
     // 0000xxxx location updating with VEA -> SDCCH (VEA does not apply to
-    // location updating, audit C2; RA=0x00)
+    // location updating; RA=0x00)
     EXPECT_EQ(decodeChannelNeeded(0x00, false, true), ChannelType::SDCCHType);
 
     // 0010xxxx paging TCH/F -> TCH/F (RA=0x20)
@@ -906,7 +906,7 @@ TEST(BTSProceduresTest, RA_Decoding_Integration) {
     // 01100xxx reserved/MBMS -> SDCCH (RA=0x60)
     EXPECT_EQ(decodeChannelNeeded(0x60, false, false), ChannelType::SDCCHType);
 
-    // isLocationUpdatingRequest checks: only 0000xxxx is LU (audit C2)
+    // isLocationUpdatingRequest checks: only 0000xxxx is LU
     EXPECT_FALSE(isLocationUpdatingRequest(0x60));
     EXPECT_TRUE(isLocationUpdatingRequest(0x00));
     EXPECT_FALSE(isLocationUpdatingRequest(0x20));

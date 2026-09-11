@@ -38,7 +38,7 @@ struct ParserConfig {
     LogLevel logLevel{LogLevel::WARNING};
 
     /// When true, parseL3 rejects a frame whose message does not consume
-    /// the entire input (audit P2-2: the lenient default silently ignored
+    /// the entire input (the lenient default silently ignored
     /// trailing bytes, which hid framing errors in the benchmarks).
     bool requireFullConsumption{false};
 

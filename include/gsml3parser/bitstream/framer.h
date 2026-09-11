@@ -53,13 +53,13 @@ struct ExtractedFrame {
     size_t l2Length{};
 
     /// Timestamp (seconds since epoch) of the buffer fill during which the
-    /// frame was extracted — batched per fill, not per frame (audit N2:
+    /// frame was extracted — batched per fill, not per frame (
     /// a steady_clock read per frame is avoidable overhead at 10M msg/s).
     double timestamp{};
 
     /// Copy the frame bytes (the span is a non-owning view into the
     /// framer's internal buffer and is invalidated by the next
-    /// nextFrame() call — audit P2-5).
+    /// nextFrame() call).
     [[nodiscard]] std::vector<uint8_t> copy() const {
         return std::vector<uint8_t>(data.begin(), data.end());
     }

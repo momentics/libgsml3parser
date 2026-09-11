@@ -315,6 +315,75 @@ TEST(ProcedureOrchestrator, IdentityVerification_UnexpectedMessage_ResendsReques
     EXPECT_EQ(orchestrator.lastResponseToken(), ResponseToken::IdentityRequest);
 }
 
+// Test: the IdentityVerification phase carries a T3102 (3 s) phase timer
+// with retransmissions (audit D3: the phase previously had no timer and
+// hung forever when the MS never answered the Identity Request). The
+// initial Identity Request is queued on the retransmission channel when
+// the phase starts; each T3102 expiry re-queues it; after
+// kMaxIdentityRetransmissions (3) the chain times out.
+TEST(ProcedureOrchestrator, IdentityVerification_T3102_RetransmitsThenTimesOut) {
+    SubscriberSession session;
+    // No TMSI/IMSI known: the chain must go through identity verification.
+    ProcedureOrchestrator orchestrator;
+
+    auto r1 = orchestrator.feed(makeCMServiceRequestLU(), &session);
+    EXPECT_EQ(r1.responseToken, ResponseToken::CMServiceAccept);
+    // Initial Identity Request queued immediately (due on first tick).
+    EXPECT_EQ(orchestrator.takeRetransmissionToken(), ResponseToken::IdentityRequest);
+
+    // Three T3102 expiries: retransmissions (not failures).
+    for (int i = 0; i < 3; ++i) {
+        EXPECT_EQ(orchestrator.tickAll(std::chrono::milliseconds(3000)), 0u) << "retransmission " << i;
+        EXPECT_EQ(orchestrator.takeRetransmissionToken(), ResponseToken::IdentityRequest);
+    }
+    // Fourth expiry: retransmission budget exhausted — the chain times out.
+    EXPECT_EQ(orchestrator.tickAll(std::chrono::milliseconds(3000)), 1u);
+    EXPECT_EQ(orchestrator.chainPhase(), procedure::ProcedureType::Unknown);
+    EXPECT_EQ(orchestrator.takeRetransmissionToken(), ResponseToken::None);
+}
+
+// Test: receiving the Identity Response stops T3102 — no retransmission
+// token is queued afterwards (audit D3).
+TEST(ProcedureOrchestrator, IdentityVerification_ResponseStopsT3102) {
+    SubscriberSession session;
+    ProcedureOrchestrator orchestrator;
+
+    [[maybe_unused]] auto r1 = orchestrator.feed(makeCMServiceRequestLU(), &session);
+    EXPECT_EQ(orchestrator.takeRetransmissionToken(), ResponseToken::IdentityRequest);
+
+    // MS answers: the phase advances to Authentication and the timer stops.
+    auto r2 = orchestrator.feed(makeIdentityResponse(), &session);
+    EXPECT_EQ(r2.action, ProcedureStepResult::Action::Continue);
+    EXPECT_EQ(orchestrator.takeRetransmissionToken(), ResponseToken::None)
+        << "the queued Identity Request is stale once the phase advanced";
+
+    // Ticking far past T3102 produces neither retransmissions nor failures
+    // (the Authentication procedure has no running timer before the AuC
+    // data is fed).
+    EXPECT_EQ(orchestrator.tickAll(std::chrono::milliseconds(10000)), 0u);
+    EXPECT_EQ(orchestrator.takeRetransmissionToken(), ResponseToken::None);
+}
+
+// Test: CM Service Requests with a service type other than
+// LocationUpdate / MobileOriginatedCall are NOT handled by the
+// orchestrator (audit D12 policy): no chain starts, no response token,
+// the application handles the message itself.
+TEST(ProcedureOrchestrator, CMServiceRequest_UnsupportedServiceType_Ignored) {
+    SubscriberSession session;
+    session.context.setTMSI(0x12345678);
+    ProcedureOrchestrator orchestrator;
+
+    auto cmReq = L3CMServiceRequest::builder()
+        .serviceType(L3CMServiceType{L3CMServiceType::TypeCode::ShortMessage})
+        .build();
+    ParsedMessage msg{MMM{std::move(cmReq)}};
+    auto result = orchestrator.feed(msg, &session);
+    EXPECT_EQ(result.action, ProcedureStepResult::Action::Continue);
+    EXPECT_EQ(result.responseToken, ResponseToken::None);
+    EXPECT_EQ(orchestrator.chainPhase(), procedure::ProcedureType::Unknown);
+    EXPECT_EQ(orchestrator.takeRetransmissionToken(), ResponseToken::None);
+}
+
 TEST(ProcedureOrchestrator, LocationUpdate_TimerExpiry) {
     SubscriberSession session;
     ProcedureOrchestrator orchestrator;

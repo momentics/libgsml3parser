@@ -108,7 +108,7 @@ public:
                 // Misaligned field wider than the first 32-bit window
                 // (mBitOffset + nbits in 33..39, i.e. the field spans
                 // exactly 5 bytes): combine two overlapping loads in a
-                // 64-bit window (audit Q1: replaced the per-bit loop).
+                // 64-bit window (replaced the per-bit loop).
                 // In-bounds proof: mPos + nbits <= mTotalBits guarantees
                 // all 5 spanned bytes exist.
                 unsigned actual;
@@ -176,7 +176,7 @@ public:
         }
 
         // Fallback: misaligned peek wider than the first 32-bit window —
-        // two overlapping loads in a 64-bit window (see readField, audit Q1).
+        // two overlapping loads in a 64-bit window (see readField).
         unsigned actual;
         uint32_t lo = loadN(mBuf, mByteIndex, totalBytes, 4, actual);
         uint32_t hi = loadN(mBuf, mByteIndex + 4, totalBytes, 1, actual);

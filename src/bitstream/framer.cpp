@@ -31,7 +31,7 @@ namespace gsml3parser {
 namespace {
 
 // The fixed-length table lives in bitstream/frame_lengths.h (single
-// source of truth, cross-checked by test_frame_lengths.cpp — audit P1-1).
+// source of truth, cross-checked by test_frame_lengths.cpp.
 
 } // anonymous namespace
 
@@ -62,7 +62,7 @@ bool L3Framer::fillBuffer() {
     size_t n = mSource.read(mBuf.data() + mEnd, mBuf.size() - mEnd);
     if (n > 0) {
         mEnd += n;
-        // Batched timestamp (audit N2): frames extracted from this fill
+        // Batched timestamp: frames extracted from this fill
         // share the fill time instead of each reading steady_clock.
         mBufferTimestamp = std::chrono::duration<double>(
             std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -99,7 +99,7 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
         if (mEnd - mPos < frameLen) {
             // Incomplete L2 frame. At end of source the length octet is
             // authoritative: a partial frame is NOT a frame (no tail
-            // emit) — report the error (audit P1-1).
+            // emit) — report the error.
             return Expected<ExtractedFrame>::error(
                 {atEof ? ParseError::Code::SourceExhausted
                        : ParseError::Code::TruncatedInput,
@@ -134,7 +134,7 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
 
         if (atEof) {
             // Source exhausted: the remainder IS the final frame of the
-            // stream (audit P1-1: the previous code reported TruncatedInput
+            // stream (the previous code reported TruncatedInput
             // and the caller could not distinguish "need more data" from
             // "end of stream", so the final variable-length frame of a
             // stream was never emitted). The parser still validates the
@@ -218,7 +218,7 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
         auto hdrResult = parseL3Header(std::span<const uint8_t>(mBuf.data() + mPos, frameLen));
         if (!hdrResult || !hdrResult.value().isValid()) {
             // Invalid PD - skip this byte and try again.
-            // Invalid/reserved PD - skip this byte and resync (audit Q4).
+            // Invalid/reserved PD - skip this byte and resync.
             mPos++;
             return Expected<ExtractedFrame>::error(
                 {ParseError::Code::InvalidPD, "invalid L3 header in frame"});
@@ -258,7 +258,7 @@ Expected<ExtractedFrame> L3Framer::nextFrame() {
         if (!gotData) {
             // Source returned 0 bytes. Per the ByteSource contract a
             // finite source is at EOF here; a live source (RingBuffer)
-            // is merely empty right now (audit P2-5: the previous code
+            // is merely empty right now (the previous code
             // conflated the two, so callers could not distinguish
             // end-of-stream from "try again later").
             if (mSource.atEof()) {

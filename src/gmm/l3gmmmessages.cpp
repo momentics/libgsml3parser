@@ -1105,7 +1105,7 @@ Expected<L3GMMIdentityRequest> L3GMMIdentityRequest::parse(BitReader& br) {
 
     // Second (spare) octet: written by write() (bodyLength() == 2) and
     // present in the TTCN-3 template; it must be consumed so the parse is
-    // the exact inverse of the write (audit N1: a 4-byte frame whose
+    // the exact inverse of the write (a 4-byte frame whose
     // standard parse leaves a tail is treated as a short message).
     auto o2 = br.readField(8);
     if (!o2) return Expected<L3GMMIdentityRequest>::error(o2.error());

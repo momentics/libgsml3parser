@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Fuzz target: LAPDmFrame::decode over arbitrary byte streams (audit P2-8).
+// Fuzz target: LAPDmFrame::decode over arbitrary byte streams.
 #include <cstddef>
 #include <cstdint>
 #include <span>

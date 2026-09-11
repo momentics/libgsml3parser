@@ -89,7 +89,7 @@ Struct sizes (all static_assert invariants pass):
 === 1M-session real-time event loop (example_rt_scale) ===
   create 1M: 549.0 ms, tick avg 0.085 ms (min 0.075 / max 0.237), overruns 0/1000
   throughput: 5.85 M msg/s
-  peak working set: 2.00 GB (slab-backed FlatMap, 64 entries/slab — audit D1)
+  peak working set: 2.00 GB (slab-backed FlatMap, 64 entries/slab)
   RT SCALE OK
 
 === Regression ===

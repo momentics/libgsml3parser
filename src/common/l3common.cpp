@@ -1369,7 +1369,7 @@ void L3CellSelection::text(std::ostream& os) const {
 }
 
 // ── L3RestOctets ───────────────────────────────────────────────────────
-// (virtual parse factory removed — dead code, audit P3-1)
+// (virtual parse factory removed — dead code)
 
 // ── L3SI3RestOctets ────────────────────────────────────────────────────
 

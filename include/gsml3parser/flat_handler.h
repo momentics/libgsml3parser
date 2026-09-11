@@ -81,7 +81,7 @@ struct SharedHandlerHolder {
 /// shared-handler ctx pointers (per-owner holders) from plain user
 /// contexts. It is never invoked: operator() dispatches shared handlers
 /// directly through the holder so the per-dispatch context reaches the
-/// callable (audit P1-3). The body is kept behaviorally correct
+/// callable. The body is kept behaviorally correct
 /// (nullptr context) in case it is ever called.
 inline void sharedTrampoline(const ParsedMessage* msg, void* ctx) {
     auto* holder = static_cast<SharedHandlerHolder*>(ctx);
@@ -126,7 +126,7 @@ inline void releaseSharedHandler(void* ctx) noexcept {
  *
  * Context delivery: the callback's void* argument is the context passed
  * to operator()/dispatch() when non-null; otherwise the context bound at
- * registration (raw handlers) or nullptr (make* handlers) (audit P1-3).
+ * registration (raw handlers) or nullptr (make* handlers).
  */
 struct FlatHandler {
     using Callback = void (*)(const ParsedMessage*, void*);
@@ -285,7 +285,7 @@ inline void destroySharedHandler(FlatHandler& h) {
 // ── operator() implementation ──────────────────────────────────────────
 
 inline void FlatHandler::operator()(const ParsedMessage& msg, void* userCtx) const {
-    // Context delivery (audit P1-3: the dispatch context was previously
+    // Context delivery (the dispatch context was previously
     // silently dropped — operator() passed the registered ctx in every
     // case). The callback receives userCtx when provided; otherwise the
     // context bound at registration (raw handlers) or nullptr (make*

@@ -206,7 +206,7 @@ public:
     void tick(std::chrono::milliseconds delta, Callback&& onExpired) {
         bool wasActive = runningCount() > 0;
         // Snapshot the running set so a timer started (or stopped) by the
-        // callback is not ticked within the same pass (audit N4: the
+        // callback is not ticked within the same pass (the
         // previous in-place loop could double-tick a callback-started timer).
         std::array<bool, MAX_TIMERS> running{};
         for (size_t i = 0; i < MAX_TIMERS; ++i) {
@@ -232,7 +232,7 @@ public:
     /// @return The number of expired timer IDs written to `out`.
     ///         IDs that do not fit are NOT lost: the corresponding timers
     ///         are re-armed with a 1 ms duration and reported on a later
-    ///         tick (audit P2-9: the previous contract silently cleared
+    ///         tick (the previous contract silently cleared
     ///         their running state, so real-time loops could miss
     ///         protocol timeouts).
     /// This overload avoids heap allocation by using a caller-provided buffer.

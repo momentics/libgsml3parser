@@ -294,7 +294,7 @@ TEST(BitReaderTest, NullBuffer_PeekField_ReturnsZero) {
 }
 
 // Test: misaligned 32-bit reads (bitOffset 1..7, field spanning 5 bytes)
-// match the bit-by-bit reference for every offset (audit Q1: the fast
+// match the bit-by-bit reference for every offset (the fast
 // 5-byte window path must be value-identical to the old fallback).
 TEST(BitReaderTest, ReadField_Misaligned32Bit_AllOffsets) {
     // 6-byte pattern: 0x12 0x34 0x56 0x78 0x9A 0xBC.
@@ -318,7 +318,7 @@ TEST(BitReaderTest, ReadField_Misaligned32Bit_AllOffsets) {
 
 // Test: the 32-bit field ending exactly at the last bit of the buffer
 // (mPos + nbits == mTotalBits) with a non-zero bit offset — the right
-// shift amount stays non-negative (audit Q1 edge case). The reader views
+// shift amount stays non-negative (edge case). The reader views
 // 41 bits over 6 bytes so the field at bit 9 ends exactly at bit 41
 // (a 40-bit buffer cannot host a misaligned 32-bit field ending on its
 // last bit: bits 9..40 would need 41 bits).
@@ -341,7 +341,7 @@ TEST(BitReaderTest, ReadField_Misaligned32Bit_EndsAtLastBit) {
     EXPECT_EQ(br.remainingBits(), 0u);
 }
 
-// Test: misaligned peeks match the read values (audit Q1, peekField path).
+// Test: misaligned peeks match the read values (peekField path).
 TEST(BitReaderTest, PeekField_Misaligned32Bit_MatchesRead) {
     uint8_t buf[6] = {0xDE, 0xAD, 0xBE, 0xEF, 0x01, 0x23};
     for (unsigned offset = 1; offset <= 7; ++offset) {

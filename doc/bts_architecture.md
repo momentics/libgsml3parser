@@ -254,6 +254,10 @@ Event Loop Tick (every 10-100ms)
   │                   └─ Each procedure advances internal timers
   │                         Timer expiry -> Failed state -> slot auto-freed
   │
+  ├─ ProcedureOrchestrator.tickAll() may queue a retransmission token
+  │  (takeRetransmissionToken()) when a phase timer fires its
+  │  retransmission policy (T3102 identity retransmission);
+  │  the event loop drains it and sends the response
   └─ LAPDmEntity.tickT200() per active link
 ```
 
@@ -419,7 +423,7 @@ Measured sizes (MSVC 2026, Release, x64):
 | `CCStateMachine` | 16 bytes | Virtual table pointer + state int |
 | `ProcedureRunner` | 152 bytes | 8 × ProcedureSlot (unique_ptr + bool) + active-change observer |
 | `ResponseContext` | 128 bytes | Response parameters (fixed arrays, ≤ 160 budget) |
-| `ProcedureOrchestrator` | ~100 bytes | Active chain state + phase timer |
+| `ProcedureOrchestrator` | 72 bytes | Active chain state + phase timer + retransmission channel |
 | **Total per MS** | **2,056 bytes** (`sizeof(SubscriberSession)`) | Enforced `< 4096` via `static_assert`; plus `ParsedMessage` (416 bytes) on stack during processing |
 
 At 10,000 concurrent MS sessions: ~20 MB for sessions (fits comfortably in DRAM; hot per-session data stays cache-resident under normal load).
@@ -447,7 +451,7 @@ The following operations perform zero heap allocations:
 | `ProcedureRunner::feed()` | Runner | Fixed array scan, delegates to Procedure |
 | `ResponseBuilder::buildXxx(span)` | ResponseBuilder | Writes to caller buffer, zero heap |
 | `RSLParser::parse()` | RSLParser | Fixed IE array, span pointers into original data |
-| `LAPDmEntity` send path (sendUI/sendData/…) | LAPDm | TX buffer reused after first send (audit C3); L1 callback must transmit synchronously |
+| `LAPDmEntity` send path (sendUI/sendData/…) | LAPDm | TX buffer reused after first send; L1 callback must transmit synchronously |
 
 ### Dispatch Complexity
 
@@ -572,7 +576,7 @@ public:
 
 ### Memory Budget Planning
 
-Per-MS stack footprint is ~2 KB (`sizeof(SubscriberSession)` = 2056 bytes, static_assert < 4096); `sizeof(ParsedMessage) = 416` bytes. The TMSI and LAPDm-link flat indexes add ~28 bytes per session (key + slot + value flag inside the shared 64-entry slab, `stack/flat_map.h`) plus one slab allocation per 64 sessions (audit D1) — negligible against the 2 KB session footprint.
+Per-MS stack footprint is ~2 KB (`sizeof(SubscriberSession)` = 2056 bytes, static_assert < 4096); `sizeof(ParsedMessage) = 416` bytes. The TMSI and LAPDm-link flat indexes add ~28 bytes per session (key + slot + value flag inside the shared 64-entry slab, `stack/flat_map.h`) plus one slab allocation per 64 sessions — negligible against the 2 KB session footprint.
 
 | Scale | MS Sessions | Stack Module Memory | ParsedMessage (stack, transient) |
 |-------|------------|-------------------|-------------------------------|
@@ -601,16 +605,14 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
 - **Registry storage:** `SubscriberRegistry`/`ShardedSubscriberRegistry`
   use a flat open-addressing hash table (`stack/flat_map.h`) for the
   TMSI and LAPDm-link indexes: entries live in contiguous slabs of 64
-  (one slab allocation per 64 sessions — audit D1, replacing the
+  (one slab allocation per 64 sessions, replacing the
   previous one-heap-block-per-entry storage), slab addresses are never
-  moved, so every entry address is stable for the entry's whole lifetime
-  (audit P0-1: the previous swap-with-last erase invalidated every
-  external SubscriberSession*), a flat open-addressing slot table (no
+  moved, so every entry address is stable for the entry's whole lifetime, a flat open-addressing slot table (no
   pointer chasing on lookup), and in-place erase with free-list recycling
   (steady churn allocates nothing). Call `reserve()` at startup when the
   subscriber scale is known. The IMSI index stays a `std::unordered_map`
   (owned std::string keys, cold path).
-- **L3Framer header-based mode:** fixed-body messages are framed exactly from a single compile-time table (`bitstream/frame_lengths.h`, cross-checked by `tests/test_frame_lengths.cpp` against the message definitions — audit P1-1). Variable-body messages (SI, SMS, Setup with IEs, Paging Response, ...) use a boundary heuristic that scans for the next plausible L3 header; at end of stream the tail is emitted and validated by the parser. For deterministic framing of variable-length messages use the L2-length mode (`FrameConfig::useL2Length = true`), which is what production LAPDm/A-bis paths provide.
+- **L3Framer header-based mode:** fixed-body messages are framed exactly from a single compile-time table (`bitstream/frame_lengths.h`, cross-checked by `tests/test_frame_lengths.cpp` against the message definitions). Variable-body messages (SI, SMS, Setup with IEs, Paging Response, ...) use a boundary heuristic that scans for the next plausible L3 header; at end of stream the tail is emitted and validated by the parser. For deterministic framing of variable-length messages use the L2-length mode (`FrameConfig::useL2Length = true`), which is what production LAPDm/A-bis paths provide.
 
 ## 9. References
 

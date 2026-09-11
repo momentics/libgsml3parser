@@ -73,7 +73,7 @@ bool Transaction::matches(const ParsedMessage& msg, uint8_t ti) const {
 
     L3PD pd = messagePD(msg);
     if (pd == L3PD::CallControl || pd == L3PD::NonCallSS) {
-        // The dialog PD must match as well as the TI (audit D11: the
+        // The dialog PD must match as well as the TI (the
         // previous TI-only check let an SS message carrying the same TI
         // cross-match a pending CC transaction and vice versa).
         return mPd == pd && mTi == ti;

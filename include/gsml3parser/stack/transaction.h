@@ -110,7 +110,7 @@ class Transaction {
 
     /// Check if this transaction matches a given incoming message for CC/SS protocols.
     /// For CallControl or NonCallSS: matches on the dialog PD AND the TI
-    /// (audit D11: TI alone cross-matched CC/SS dialogs sharing a TI).
+    /// (TI alone cross-matched CC/SS dialogs sharing a TI).
     /// @param msg The incoming parsed message (used to determine PD).
     /// @param ti  The Transaction Identifier from the incoming message's L3 header.
     /// @return True if the transaction is pending and the PD/TI match.

@@ -56,7 +56,7 @@ class InlineFramer {
     size_t mPos{};
     bool mUseL2Length{false};
     size_t mMaxFrameLen{4096};
-    size_t mResyncSkips{0};  // corrupt length octets skipped (audit P1-2)
+    size_t mResyncSkips{0};  // corrupt length octets skipped
 
 public:
     constexpr InlineFramer() noexcept = default;
@@ -88,7 +88,7 @@ public:
     /** Set maximum allowed frame length (default 4096). */
     void setMaxFrameLength(size_t len) noexcept { mMaxFrameLen = len; }
 
-    /** Number of corrupt L2 length octets skipped during resync (audit P1-2). */
+    /** Number of corrupt L2 length octets skipped during resync. */
     [[nodiscard]] constexpr size_t resyncSkips() const noexcept { return mResyncSkips; }
 };
 
@@ -115,7 +115,7 @@ inline std::optional<std::span<const uint8_t>> InlineFramer::nextFrame() noexcep
             frameLen = static_cast<size_t>(mData[mPos]);
             if (frameLen == 0 || frameLen > mMaxFrameLen) {
                 // Corrupt length octet: skip it and resynchronize on the
-                // next byte (audit P1-2: the previous code returned
+                // next byte (the previous code returned
                 // nullopt here WITHOUT advancing mPos, so the caller saw
                 // "buffer exhausted" and silently abandoned every
                 // remaining frame).
@@ -140,7 +140,7 @@ inline std::optional<std::span<const uint8_t>> InlineFramer::nextFrame() noexcep
 
         // Adjust MTI for MM/CC/SS/BCC/GCC (6-bit messageType + 2-bit NSD).
         // BCC (0x01) and GCC (0x00) use the same CC-style header
-        // (TS 44.018 10.2) — audit P1-1: the previous condition missed
+        // (TS 44.018 10.2) — the previous condition missed
         // them, so their fixed-length table entries never matched.
         if (pd == 0x05 || pd == 0x03 || pd == 0x0B || pd == 0x01 || pd == 0x00) {
             mti = (rawMti & 0xFC) >> 2;
@@ -155,7 +155,7 @@ inline std::optional<std::span<const uint8_t>> InlineFramer::nextFrame() noexcep
         const bool callControlLike = (pd == 0x00 || pd == 0x01 || pd == 0x0c);
 
         // Fixed-length lookup — single source of truth in
-        // bitstream/frame_lengths.h (audit P1-1: the previous
+        // bitstream/frame_lengths.h (the previous
         // duplicated switch used wrong MTI values and lengths).
         size_t fixedLen = detail::fixedFrameLength(pd, mti);
 
@@ -187,7 +187,7 @@ inline std::optional<std::span<const uint8_t>> InlineFramer::nextFrame() noexcep
                 // can arrive), so the remainder of the buffer is the last frame: emit it
                 // if it fits the size limit. The parser still validates the content; a
                 // truncated frame surfaces as a parse error rather than being silently
-                // dropped (audit D7).
+                // dropped.
                 size_t rest = mData.size() - mPos;
                 if (rest < 2 || rest > mMaxFrameLen) return std::nullopt;
                 frameLen = rest;

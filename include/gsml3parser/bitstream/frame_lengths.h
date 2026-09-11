@@ -34,7 +34,7 @@ namespace gsml3parser::detail {
 // RR/LS, shifted 6-bit for MM/CC/SS/BCC/GCC); totalWireLength = 2-byte
 // L3 header + constant body.
 //
-// Audit P1-1: the previous hand-written tables in framer.cpp and
+// the previous hand-written tables in framer.cpp and
 // inline_framer.h used WRONG MTI values (e.g. 0x0E for Paging Response,
 // which is 0x27 per TS 44.018 / GSM_RR_Types.ttcn) and wrong lengths
 // (e.g. RR Status 0 instead of 1, Assignment Complete 4 instead of 1),
@@ -47,7 +47,7 @@ namespace gsml3parser::detail {
 inline constexpr size_t kFixedFrameEntries[] = {
     // Radio Resource (pd 0x06, raw 8-bit MTI)
     0x06, 0x12, 3,  // RR Status (1-byte body)
-    0x06, 0x13, 3,  // Classmark Enquiry (1-byte body, audit SPEC-1)
+    0x06, 0x13, 3,  // Classmark Enquiry (1-byte body)
     0x06, 0x28, 3,  // Handover Failure (1-byte body)
     0x06, 0x29, 3,  // Assignment Complete (1-byte body)
     0x06, 0x2C, 3,  // Handover Complete (1-byte body)
@@ -55,7 +55,7 @@ inline constexpr size_t kFixedFrameEntries[] = {
     // Mobility Management (pd 0x05, shifted 6-bit MTI)
     0x05, 0x21, 2,  // CM Service Accept (no body)
     0x05, 0x22, 3,  // CM Service Reject (1-byte body)
-    0x05, 0x23, 3,  // CM Service Abort (1-byte cause body, TS 24.008 9.2.3 — audit D5)
+    0x05, 0x23, 3,  // CM Service Abort (1-byte cause body, TS 24.008 9.2.3)
     0x05, 0x31, 3,  // MM Status (1-byte body)
     // Call Control (pd 0x03, shifted 6-bit MTI)
     0x03, 0x3D, 7,  // CC Status (5-byte body: ti|cause|callState per the

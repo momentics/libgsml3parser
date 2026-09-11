@@ -99,7 +99,7 @@ The main event loop processes incoming L3 messages by feeding them into the subs
 
 Note: `SubscriberSession` does not embed the orchestrator — the BTS application owns one `ProcedureOrchestrator` (48 bytes) per session. The examples below use `orchestratorFor(session)` as the app-side lookup (e.g. a map keyed by TMSI, or a parallel structure alongside the registry).
 
-Runner vs orchestrator: `SubscriberSession::procedures` (ProcedureRunner, 8 slots) is ticked by `tickAllProcedures()` through the O(active) index and is meant for the session's built-in procedures. `ProcedureOrchestrator` is an app-owned single chain for application-level procedure sequencing. They are complementary, not alternatives: a session may use both, but a given procedure must live in exactly one of them (audit v4 P3-9).
+Runner vs orchestrator: `SubscriberSession::procedures` (ProcedureRunner, 8 slots) is ticked by `tickAllProcedures()` through the O(active) index and is meant for the session's built-in procedures. `ProcedureOrchestrator` is an app-owned single chain for application-level procedure sequencing. They are complementary, not alternatives: a session may use both, but a given procedure must live in exactly one of them.
 
 ```cpp
 // Arena for zero-heap-allocation response building
@@ -244,9 +244,17 @@ void eventLoop() {
         //    (LAPDm entities are per-link and app-owned; the orchestrator is
         //     app-owned per session — see Step 2.)
         registry.forEach([delta](SubscriberSession* sess) {
-            size_t failed = orchestratorFor(sess).tickAll(delta);
+            auto& orch = orchestratorFor(sess);
+            size_t failed = orch.tickAll(delta);
             if (failed > 0) {
                 logWarning("{} procedures timed out for session", failed);
+            }
+            // Drain retransmissions queued by phase timers:
+            // e.g. the Identity Request retransmitted while T3102 runs.
+            if (orch.takeRetransmissionToken() != ResponseToken::None) {
+                uint8_t buf[512];
+                int n = orch.buildPendingResponse({buf, sizeof(buf)}, sess);
+                if (n > 0) sendToMS(sess, buf, n);
             }
         });
         for (auto& link : activeLapdmLinks) {
@@ -272,6 +280,12 @@ void eventLoop() {
 ### Location Update (Full Chain)
 
 The orchestrator automatically chains: CMServiceRequest -> [Identity] -> Authentication -> CipheringMode -> LocationUpdate.
+
+The Identity phase (when the session has no TMSI) runs the T3102 timer
+(3 s): the initial Identity Request is queued on the orchestrator's
+retransmission channel (`takeRetransmissionToken()`) when the phase
+starts and is re-queued on every T3102 expiry; after 3 retransmissions
+the chain times out.
 
 ```cpp
 // App-owned orchestrator for this session (see Step 2).

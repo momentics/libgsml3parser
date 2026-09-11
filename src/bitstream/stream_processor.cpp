@@ -50,7 +50,7 @@ void L3StreamProcessor::processUntilEOF(FrameHandler& handler) {
                 } else {
                     mStats.idlePolls++;
                 }
-                break; // No more data available (audit P2-5).
+                break; // No more data available.
             }
             // Other errors (corrupt frames) - continue processing.
             mStats.parseErrors++;
@@ -175,7 +175,7 @@ L3StreamBuilder& L3StreamBuilder::sourceFile(const char* path) {
         mSource = mOwnedSource.get();
         mFileError.clear();
     } else {
-        // Audit P2-1: record the failure; build() returns nullptr.
+        // record the failure; build() returns nullptr.
         mFileError = "cannot open file";
     }
     return *this;

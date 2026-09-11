@@ -1,4 +1,4 @@
-# Fuzzing targets (audit P2-8: the ENABLE_FUZZING option was declared
+# Fuzzing targets (the ENABLE_FUZZING option was declared
 # but never used). libFuzzer requires Clang/LLVM; on MSVC the option is
 # a no-op with a status message.
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")

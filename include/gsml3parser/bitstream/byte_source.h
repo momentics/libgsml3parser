@@ -50,7 +50,7 @@ public:
 
     /**
      * True when the source is exhausted and will never produce more
-     * bytes (audit P2-5: read() == 0 means "no data right now" for
+     * bytes (read() == 0 means "no data right now" for
      * live sources such as RingBuffer, so the framer must ask the
      * source explicitly whether it is at end-of-stream).
      */
@@ -82,7 +82,7 @@ public:
  */
 class FileByteSource : public ByteSource {
     std::FILE* mFile;
-    bool mEof{false};  // latched once fread() reports end of file (audit P2-5)
+    bool mEof{false};  // latched once fread() reports end of file
 
 public:
     explicit FileByteSource(std::FILE* f);

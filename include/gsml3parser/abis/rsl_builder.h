@@ -32,7 +32,7 @@
 /// Memory: span overloads perform zero heap allocation; vector overloads allocate once.
 /// Direction bit (TS 48.058 7.1.1): all BTS->BSC builders set bit 0 of the
 /// discriminator octet; buildDataReq/buildUnitDataReq are BSC->BTS
-/// (direction bit clear) and exist for testing/loopback (audit C6).
+/// (direction bit clear) and exist for testing/loopback.
 ///
 /// Example:
 /// @code

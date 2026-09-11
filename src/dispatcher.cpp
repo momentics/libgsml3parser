@@ -26,8 +26,8 @@ namespace gsml3parser {
 void ProtocolDispatcher::registerHandler(L3PD pd, int mti, MessageHandler handler) {
     int pidx = static_cast<int>(pd);
     if (pidx >= 0 && pidx < 16 && mti >= 0 && mti < kMaxMtiSlots) {
-        // Move-assignment releases the previously registered handler (RAII,
-        // audit P3-3).
+        // Move-assignment releases the previously registered handler (RAII
+        // ).
         mHandlers[static_cast<size_t>(pidx)][static_cast<size_t>(mti)] = std::move(handler);
     }
 }
