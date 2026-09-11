@@ -121,7 +121,7 @@ TEST(FlatMapTest, Tombstones_CorrectAfterChurn) {
 }
 
 // Test: values with unique_ptr survive rehash (moved, not memcpy'd) —
-// the property that makes SessionEntry usable (audit SCALE).
+// the property that makes SessionEntry usable.
 TEST(FlatMapTest, MoveOnlyValue_SurvivesRehash) {
     FlatMap<uint32_t, std::unique_ptr<int>> m;
     for (int i = 0; i < 10000; ++i) {
@@ -179,7 +179,7 @@ TEST(FlatMapTest, Scale_4MEntries) {
 #endif
 }
 
-// Test: erasing one entry does NOT move any other entry (audit P0-1:
+// Test: erasing one entry does NOT move any other entry (
 // the previous swap-with-last erase relocated the last entry into the
 // erased slot, invalidating every raw pointer derived from entry
 // addresses — owner self-pointers, registry indexes, app-held pointers).
@@ -203,7 +203,7 @@ TEST(FlatMapTest, Erase_OtherEntries_KeepStableAddresses) {
 }
 
 // Test: a dead entry index is recycled IN PLACE — the new occupant sits
-// at the same address, all other entries stay put (audit P0-1).
+// at the same address, all other entries stay put.
 TEST(FlatMapTest, Erase_RecyclesDeadSlot_InPlace) {
     FlatMap<uint32_t, int> m;
     auto [ia, insA] = m.emplace(1u, 100);
@@ -224,7 +224,7 @@ TEST(FlatMapTest, Erase_RecyclesDeadSlot_InPlace) {
 }
 
 // Test: entry addresses survive rehash (growth and tombstone cleanup) —
-// rehash rebuilds only the slot table (audit P0-1).
+// rehash rebuilds only the slot table.
 TEST(FlatMapTest, Erase_ThenRehash_AddressesStable) {
     FlatMap<uint32_t, int> m;
     m.reserve(8);
@@ -276,7 +276,7 @@ TEST(FlatMapTest, MoveOnlyValue_StableAcrossChurn) {
 }
 
 // Test: entries survive slab-boundary growth with stable addresses
-// (audit D1: the slab storage must keep the P0-1 address-stability
+// (the slab storage must keep the P0-1 address-stability
 // invariant across slabs, not just within one).
 TEST(FlatMapTest, SlabGrowth_OtherEntries_KeepStableAddresses) {
     FlatMap<uint32_t, int> m;
@@ -293,7 +293,7 @@ TEST(FlatMapTest, SlabGrowth_OtherEntries_KeepStableAddresses) {
 }
 
 // Test: reserve() pre-allocates slabs, so a full insert loop performs no
-// slab growth (audit D1: startup sizing for known scale).
+// slab growth (startup sizing for known scale).
 TEST(FlatMapTest, Reserve_SlabPreallocation_NoGrowthDuringInsert) {
     FlatMap<uint32_t, int> m;
     constexpr uint32_t N = 1000;
@@ -309,7 +309,7 @@ TEST(FlatMapTest, Reserve_SlabPreallocation_NoGrowthDuringInsert) {
 }
 
 // Test: heavy churn recycles dead entries in place (same slab addresses),
-// so steady 1-remove/1-create performs no allocations (audit D1). The
+// so steady 1-remove/1-create performs no allocations. The
 // free list is LIFO, so key i re-occupies some previously used address
 // (not necessarily its own): the invariant is that the SET of live
 // addresses after re-insertion equals the set before the erase burst —

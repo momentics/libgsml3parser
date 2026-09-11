@@ -206,7 +206,7 @@ TEST(TimerManagerTest, TickWithSpan_fillsBuffer) {
 }
 
 // tick() with an undersized span buffer returns the number of IDs actually written
-// (audit P2-9: unreported expiries are re-armed, not dropped)
+// (unreported expiries are re-armed, not dropped)
 TEST(TimerManagerTest, TickSpan_BufferFull_ReturnsWritten) {
     TimerManager tm;
     tm.start(L3TimerId::T3101, 100ms);
@@ -223,7 +223,7 @@ TEST(TimerManagerTest, TickSpan_BufferFull_ReturnsWritten) {
     // T3101 was reported and stopped.
     EXPECT_FALSE(tm.isRunning(L3TimerId::T3101));
     // T3102 did not fit: it is re-armed (1 ms) and must still be
-    // running, so the next tick reports it (audit P2-9: no silent loss).
+    // running, so the next tick reports it (no silent loss).
     EXPECT_TRUE(tm.isRunning(L3TimerId::T3102));
     EXPECT_EQ(tm.runningCount(), 1u);
 
@@ -401,7 +401,7 @@ TEST(L3TimerTest, IdPreserved_afterConstruction) {
 }
 
 // Test: a timer started by the expiry callback is NOT ticked in the same
-// pass (audit N4).
+// pass.
 TEST(TimerManagerTest, Tick_CallbackStartedTimer_NotTickedSamePass) {
     TimerManager tm;
     tm.start(L3TimerId::T3101, std::chrono::milliseconds(100));

@@ -49,7 +49,7 @@ TEST(MMBuilders, CMServiceAccept) {
     EXPECT_EQ(messageMTI(*reparsed), L3CMServiceAccept::MTI);
 }
 
-// GSM 04.08 9.2.7: CM Service Abort (1-byte cause body, TS 24.008 9.2.3.2 — audit D5)
+// GSM 04.08 9.2.7: CM Service Abort (1-byte cause body, TS 24.008 9.2.3.2)
 TEST(MMBuilders, CMServiceAbort) {
     auto msg = L3CMServiceAbort::builder().build();
     EXPECT_EQ(msg.cause(), CMServiceAbortCause::Unspecified);
@@ -63,7 +63,7 @@ TEST(MMBuilders, CMServiceAbort) {
     EXPECT_EQ(messageMTI(*reparsed), L3CMServiceAbort::MTI);
 }
 
-// Test: the builder sets the CM service abort cause (audit D5).
+// Test: the builder sets the CM service abort cause.
 TEST(MMBuilders, CMServiceAbort_Cause) {
     auto msg = L3CMServiceAbort::builder().cause(CMServiceAbortCause::Congestion).build();
     EXPECT_EQ(msg.cause(), CMServiceAbortCause::Congestion);

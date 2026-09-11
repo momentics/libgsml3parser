@@ -681,7 +681,7 @@ Extracts L3 frames from a raw byte stream.
 
 ```cpp
 struct FrameConfig {
-    bool useL2Length{false};       // Use L2 length octet for framing
+    bool useL2Length{true};        // Use L2 length octet for framing (default)
     size_t maxMessageLength{4096}; // Safety limit
     size_t minHeaderLength{2};     // Minimum bytes for L3 header
 };
@@ -703,8 +703,8 @@ public:
 
 **Framing modes:**
 
-- **L2 length mode** (`useL2Length = true`): each frame is preceded by a length octet. Deterministic; recommended for production streams.
-- **Header-based mode** (default): the frame length is derived from PD + MTI. All 12 protocol domains are supported, including BCC (PD=0x01), GCC (PD=0x00) and LS (PD=0x0c): BCC/GCC use the CC-style 6-bit MTI (byte 1 = MTI<<2 | NSD), LS uses a raw 8-bit MTI. Messages with a known fixed body length (e.g. BCC Setup/CallConfirmed/ConnectAcknowledge, GCC Setup/CallConfirmed, LS LocationServiceRequest, RR ChannelRelease, MM CMServiceAccept) are framed exactly. Variable-length messages (SI, SMS, Setup with IEs, ...) rely on a boundary heuristic that scans for the next plausible L3 header; for BCC/GCC/LS messages the scan accepts any of the 12 valid PDs, for other PDs it uses a conservative list to avoid false boundaries inside message bodies. Use L2 length mode when deterministic framing of variable-length messages is required.
+- **L2 length mode** (`useL2Length = true`): each frame is preceded by a length octet. Deterministic; required for production streams.
+- **Header-based mode** (`useL2Length = false`, opt-in): the frame length is derived from PD + MTI. All 12 protocol domains are supported, including BCC (PD=0x01), GCC (PD=0x00) and LS (PD=0x0c): BCC/GCC use the CC-style 6-bit MTI (byte 1 = MTI<<2 | NSD), LS uses a raw 8-bit MTI. Messages with a known fixed body length (e.g. BCC Setup/CallConfirmed/ConnectAcknowledge, GCC Setup/CallConfirmed, LS LocationServiceRequest, RR ChannelRelease, MM CMServiceAccept) are framed exactly. Variable-length messages (SI, SMS, Setup with IEs, ...) rely on a boundary heuristic that scans for the next plausible L3 header (O(L) per frame, resume-cached); for BCC/GCC/LS messages the scan accepts any of the 12 valid PDs, for other PDs it uses a conservative list to avoid false boundaries inside message bodies. The heuristic is UNRELIABLE on real variable-length streams — use L2 length mode for deterministic framing.
 
 ### L3StreamProcessor
 
@@ -3456,7 +3456,7 @@ Zero-copy L3 frame extractor for contiguous memory buffers. Unlike `L3Framer` wh
 ```cpp
 class InlineFramer {
 public:
-    explicit InlineFramer(std::span<const uint8_t> data, bool useL2Length = false);
+    explicit InlineFramer(std::span<const uint8_t> data, bool useL2Length = true);
 
     [[nodiscard]] std::optional<std::span<const uint8_t>> nextFrame() noexcept;
     [[nodiscard]] constexpr size_t remaining() const noexcept;
@@ -3475,8 +3475,8 @@ public:
 
 | Mode | Description |
 |------|-------------|
-| **L2 length** (`useL2Length=true`) | Each frame preceded by a single length octet. Most common for test data and buffered streams. |
-| **Header-based** (`useL2Length=false`) | Frame length derived from PD+MTI fixed-length table, or next-header scanning for variable-length messages. |
+| **L2 length** (`useL2Length=true`, default) | Each frame preceded by a single length octet. Deterministic; required for production streams. |
+| **Header-based** (`useL2Length=false`, opt-in) | Frame length derived from PD+MTI fixed-length table, or next-header scanning for variable-length messages (heuristic — see above). |
 
 ### Usage Example
 
@@ -3514,7 +3514,7 @@ Zero-copy L3 stream processor for contiguous buffers. Parses L3 messages directl
 ```cpp
 class ZeroCopyStreamProcessor {
 public:
-    explicit ZeroCopyStreamProcessor(std::span<const uint8_t> data, bool useL2Length = false);
+    explicit ZeroCopyStreamProcessor(std::span<const uint8_t> data, bool useL2Length = true);
 
     [[nodiscard]] std::optional<ParsedMessage> nextMessage();
 

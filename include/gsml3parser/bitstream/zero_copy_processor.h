@@ -62,10 +62,10 @@ public:
      * Construct a zero-copy processor over a contiguous data span.
      *
      * @param data        The raw byte buffer containing L3 frames.
-     * @param useL2Length If true, each frame is preceded by a single length octet.
+     * @param useL2Length If true (default), each frame is preceded by a single length octet.
      */
     explicit ZeroCopyStreamProcessor(std::span<const uint8_t> data,
-                                      bool useL2Length = false);
+                                      bool useL2Length = true);
 
     /**
      * Parse the next L3 message from the buffer.

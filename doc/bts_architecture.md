@@ -612,7 +612,19 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
   (steady churn allocates nothing). Call `reserve()` at startup when the
   subscriber scale is known. The IMSI index stays a `std::unordered_map`
   (owned std::string keys, cold path).
-- **L3Framer header-based mode:** fixed-body messages are framed exactly from a single compile-time table (`bitstream/frame_lengths.h`, cross-checked by `tests/test_frame_lengths.cpp` against the message definitions). Variable-body messages (SI, SMS, Setup with IEs, Paging Response, ...) use a boundary heuristic that scans for the next plausible L3 header; at end of stream the tail is emitted and validated by the parser. For deterministic framing of variable-length messages use the L2-length mode (`FrameConfig::useL2Length = true`), which is what production LAPDm/A-bis paths provide.
+- **L3Framer framing modes:** the DEFAULT is the L2-length
+  mode (`FrameConfig::useL2Length = true`) — deterministic framing, which
+  is what production LAPDm/A-bis paths provide. The header-based mode
+  (`useL2Length = false`, opt-in) frames fixed-body messages exactly from
+  a single compile-time table (`bitstream/frame_lengths.h`, cross-checked
+  by `tests/test_frame_lengths.cpp` against the message definitions);
+  variable-body messages (SI, SMS, Setup with IEs, Paging
+  Response, ...) use a boundary heuristic that scans for the next
+  plausible L3 header (O(L) per frame via a resume cache),
+  which is UNRELIABLE on real variable-length streams (message bodies
+  frequently contain bytes with valid-PD high nibbles) — use it only for
+  synthetic/test streams. At end of stream the tail is emitted and
+  validated by the parser.
 
 ## 9. References
 

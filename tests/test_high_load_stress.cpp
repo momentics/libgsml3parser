@@ -664,7 +664,7 @@ TEST(Stress, _1MSession_ProcedureTick_Scale) {
 //      registry (no ghost / no use-after-free);
 //   2. every session with a running timer is ticked (no lost expiries);
 //   3. the registry count stays consistent;
-//   4. (audit P2-9) the number of reported expiries equals ACTIVE: the
+//   4. the number of reported expiries equals ACTIVE: the
 //      4096-slot output buffer is smaller than the 10K simultaneous
 //      expiries, so unreported expiries must be re-armed and reported on
 //      a later tick — never silently dropped.

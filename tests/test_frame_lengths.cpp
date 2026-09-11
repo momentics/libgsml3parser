@@ -20,7 +20,7 @@
 // SOFTWARE.
 
 // Cross-checks the framer fixed-length table against the message
-// definitions (audit P1-1): every table entry must equal
+// definitions (every table entry must equal
 // 2 + Type{}.bodyLength(), and every variable-body message must be
 // ABSENT from the table.
 
@@ -61,7 +61,7 @@ TEST(FrameLengths, TableMatchesMessageDefinitions) {
 
 TEST(FrameLengths, VariableLengthTypesAbsent) {
     // Every variable-body message must be absent (0) — framing them from
-    // the table would truncate or over-consume (audit P1-1).
+    // the table would truncate or over-consume.
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3PagingResponse::MTI), 0u);
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3ChannelRelease::MTI), 0u);
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3ClassmarkChange::MTI), 0u);

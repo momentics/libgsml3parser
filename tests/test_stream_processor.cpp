@@ -74,7 +74,7 @@ TEST(L3StreamProcessor, ParseAllFrames) {
         0x60, 0x0D, 0x02   // Channel Release #3
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3StreamProcessor proc(src);
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
 
     std::vector<int> mtis;
     while (proc.processOne([&mtis](const ParsedMessage& msg) {
@@ -103,7 +103,7 @@ TEST(L3StreamProcessor, StatsTracking) {
         0x50, 0x84,          // MM: CM Service Accept
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3StreamProcessor proc(src);
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
 
     TestHandler h;
     proc.processUntilEOF(h);
@@ -124,7 +124,7 @@ TEST(L3StreamProcessor, CorruptFrameContinues) {
         0x60, 0x0D, 0x01    // Valid Channel Release
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3StreamProcessor proc(src);
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
 
     TestHandler handler;
     proc.processUntilEOF(handler);
@@ -172,7 +172,7 @@ TEST(L3StreamProcessor, ProcessN) {
         0x60, 0x0D, 0x03   // #4
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3StreamProcessor proc(src);
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
 
     TestHandler handler;
     proc.processN(2, handler);
@@ -187,7 +187,7 @@ TEST(L3StreamProcessor, ProcessN) {
 TEST(L3StreamProcessor, ResetStats) {
     uint8_t data[] = {0x60, 0x0D, 0x00};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3StreamProcessor proc(src);
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
 
     TestHandler h;
     proc.processUntilEOF(h);
@@ -205,6 +205,7 @@ TEST(L3StreamBuilder, BuildFromSpan) {
     uint8_t data[] = {0x60, 0x0D, 0x00};
     auto proc = L3StreamBuilder()
         .source(std::span<const uint8_t>(data, std::size(data)))
+        .useL2Length(false)  // header-based mode (opt-in since audit D6)
         .build();
 
     ASSERT_TRUE(proc != nullptr);
@@ -246,7 +247,7 @@ TEST(L3StreamProcessor, MixedMessageTypes) {
         0x60, 0x0E, 0x01, 0x02, 0x03, 0x04, 0x05,  // RR: Paging Response (7 bytes)
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3StreamProcessor proc(src);
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
 
     TestHandler handler;
     proc.processUntilEOF(handler);
@@ -297,7 +298,7 @@ TEST(L3StreamProcessor, DomainMessageIdentification) {
         0x60, 0x0D, 0x02,                             // RR: Channel Release #3
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3StreamProcessor proc(src);
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
 
     std::vector<std::string_view> names;
     while (proc.processOne([&names](const ParsedMessage& msg) {
@@ -324,7 +325,7 @@ TEST(L3StreamProcessor, LargeMultiDomainStream) {
     }
 
     SpanByteSource src(std::span<const uint8_t>(data.data(), data.size()));
-    L3StreamProcessor proc(src);
+    L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode (opt-in since audit D6)
 
     TestHandler handler;
     proc.processUntilEOF(handler);

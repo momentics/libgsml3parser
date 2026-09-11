@@ -34,8 +34,14 @@ namespace gsml3parser {
 
 /** Configuration for frame boundary detection. */
 struct FrameConfig {
-    /** Use L2 length octet before each L3 message for framing. */
-    bool useL2Length{false};
+    /** Use L2 length octet before each L3 message for framing.
+     *  Default: true — deterministic framing, which is what
+     *  production LAPDm / A-bis paths provide. Set to false for the
+     *  header-based heuristic (fixed-length table + next-plausible-
+     *  header scan for variable-length messages; unreliable on real
+     *  variable-length streams — see the Known Limitations in
+     *  doc/bts_architecture.md). */
+    bool useL2Length{true};
 
     /** Safety limit: reject frames larger than this many bytes. */
     size_t maxMessageLength{4096};
@@ -82,6 +88,7 @@ class L3Framer {
     size_t mEnd{};
     FrameConfig mConfig;
     double mBufferTimestamp{}; // set in fillBuffer(); stamped on extracted frames
+    size_t mBoundaryScanPos{}; // header mode: resume the boundary scan here
 
 public:
     explicit L3Framer(ByteSource& source, FrameConfig cfg = {});

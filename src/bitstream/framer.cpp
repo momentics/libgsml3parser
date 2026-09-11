@@ -22,6 +22,7 @@
 #include "gsml3parser/bitstream/framer.h"
 #include "gsml3parser/l3header.h"
 #include "gsml3parser/bitstream/frame_lengths.h"
+#include <algorithm>
 #include <cstring>
 #include <chrono>
 #include <climits>
@@ -51,12 +52,21 @@ bool L3Framer::fillBuffer() {
             std::memmove(mBuf.data(), mBuf.data() + mPos, mEnd - mPos);
         }
         mEnd -= mPos;
+        // The boundary-scan resume cache is an absolute buffer
+        // position: re-base it on the new origin, or a stale value beyond
+        // the scan window would permanently kill the scan for the current
+        // frame. (It is always > mPos when set: the scan starts at mPos+2.)
+        if (mBoundaryScanPos > 0) mBoundaryScanPos -= mPos;
         mPos = 0;
     }
 
-    // Ensure enough capacity.
+    // Ensure enough capacity. Exponential growth (x2) up to 1 MB, then
+    // linear +4 KB (the previous +4096-per-fill growth
+    // reallocated on every fill for long streams).
     if (mBuf.size() <= mEnd) {
-        mBuf.resize(mEnd + 4096);
+        size_t target = mEnd + 4096;
+        if (mBuf.size() < (1u << 20)) target = std::max(target, mBuf.size() * 2);
+        mBuf.resize(target);
     }
 
     size_t n = mSource.read(mBuf.data() + mEnd, mBuf.size() - mEnd);
@@ -111,6 +121,7 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
         frame.l2Length = l2len;
         frame.timestamp = mBufferTimestamp;
         mPos += frameLen;
+        mBoundaryScanPos = 0;  // uniform reset; the L2 path does not scan
         return Expected<ExtractedFrame>::hold(frame);
     }
 
@@ -169,7 +180,14 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
                 // them unconditionally would create false frame boundaries.
                 const bool callControlLike = (pd == 0x00 || pd == 0x01 || pd == 0x0c);
                 frameLen = 0;
-                for (size_t i = mPos + 2; i + 1 < mEnd && i < mPos + 2 + mConfig.maxMessageLength; ++i) {
+                // Resume the boundary scan where the previous attempt
+                // left off (the previous code rescanned from
+                // the frame start on every fill, O(L^2/4096) per
+                // variable-length frame). mBoundaryScanPos is reset when
+                // a frame is extracted or skipped.
+                size_t scanFrom = mBoundaryScanPos;
+                if (scanFrom < mPos + 2) scanFrom = mPos + 2;
+                for (size_t i = scanFrom; i + 1 < mEnd && i < mPos + 2 + mConfig.maxMessageLength; ++i) {
                     uint8_t candidatePd = (mBuf[i] >> 4) & 0x0F;
                     // Check if this looks like a valid L3 header start.
                     // Base valid PDs: 0x03, 0x05, 0x06, 0x0b, 0x08, 0x09, 0x0a, 0x0e, 0x0f.
@@ -191,9 +209,15 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
                 }
 
                 if (frameLen == 0) {
-                    // No boundary found in the buffered data: need more
-                    // data (nextFrame() will fill the buffer and retry;
-                    // at end of source it calls tryExtract(true)).
+                    // No boundary found in the buffered data: remember
+                    // where the scan stopped so the next attempt resumes
+                    // here, then request more data
+                    // (nextFrame() will fill the buffer and retry; at end
+                    // of source it calls tryExtract(true)).
+                    size_t scanStop = mEnd;
+                    size_t scanLimit = mPos + 2 + mConfig.maxMessageLength;
+                    if (scanStop > scanLimit) scanStop = scanLimit;
+                    mBoundaryScanPos = scanStop;
                     return Expected<ExtractedFrame>::error(
                         {ParseError::Code::TruncatedInput, "variable-length frame, need more data"});
                 }
@@ -230,6 +254,7 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
     frame.l2Length = 0;
     frame.timestamp = mBufferTimestamp;
     mPos += frameLen;
+    mBoundaryScanPos = 0;  // new frame starts: restart the boundary scan
     return Expected<ExtractedFrame>::hold(frame);
 }
 
@@ -280,6 +305,7 @@ Expected<ExtractedFrame> L3Framer::nextFrame() {
 void L3Framer::skip(size_t nbytes) {
     if (mPos + nbytes > mEnd) nbytes = mEnd - mPos;
     mPos += nbytes;
+    mBoundaryScanPos = 0;  // resync: the next frame starts at the new position
 }
 
 } // namespace gsml3parser

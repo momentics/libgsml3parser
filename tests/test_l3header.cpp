@@ -208,7 +208,7 @@ TEST(L3HeaderTest, SMSHeader) {
 
 // Test: reserved PD values (0x02, 0x04, 0x07, 0x0d) are rejected with
 // InvalidPD instead of producing an L3Header with a non-enumerator PD
-// (audit Q4).
+// .
 TEST(L3HeaderTest, ReservedPD_Invalid) {
     for (uint8_t pd : {0x02u, 0x04u, 0x07u, 0x0Du}) {
         uint8_t data[] = {static_cast<uint8_t>(pd << 4), 0x00};

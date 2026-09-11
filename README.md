@@ -313,7 +313,7 @@ Layered design, bottom to top:
 1. **Bit-level I/O** — `BitReader`/`BitWriter`, bounds-checked, MSB-first, no heap
 2. **Message types** — plain C++ structs with `parse()` and `write()`, no inheritance
 3. **Variant dispatch** — `ParsedMessage` holds 12 domains on the stack (`sizeof(ParsedMessage) = 416 bytes`, static_assert < 8 KB)
-4. **Streaming** — `ByteSource` -> `L3Framer` -> `L3StreamProcessor` pipeline
+4. **Streaming** — `ByteSource` -> `L3Framer` (L2-length framing by default) -> `L3StreamProcessor` pipeline
 5. **Stack modules** — MSContext, TimerManager, FSMs for BTS state management
 
 ## Supported Messages Summary

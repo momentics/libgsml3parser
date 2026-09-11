@@ -404,7 +404,7 @@ TEST(GoldenMM, CMServiceAbort_RoundTrip) {
 
 // [GOLDEN] CM Service Abort carries the 1-octet CM service abort cause
 // (TS 24.008 9.2.3.2): header 50 8C (PD=0x05, MTI=0x23<<2) + cause 0x02
-// (congestion). Audit D5: the previous empty-body implementation dropped
+// (congestion). the previous empty-body implementation dropped
 // the cause octet.
 TEST(GoldenMM, CMServiceAbort_Parse_Cause) {
     uint8_t data[] = {0x50, 0x8C, 0x02};

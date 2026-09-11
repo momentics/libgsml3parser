@@ -30,9 +30,14 @@
 #include "gsml3parser/parser.h"
 
 extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
-    std::span<const uint8_t> span(data, size);
+    // Alternate the framing mode per input (L2 length is the
+    // default; the header-based heuristic must stay covered too).
+    const bool useL2 = (size == 0) || (data[0] & 1) == 0;
+    std::span<const uint8_t> span(data + (useL2 ? 0 : 1), useL2 ? size : size - 1);
     gsml3parser::SpanByteSource src(span);
-    gsml3parser::L3Framer framer(src);
+    gsml3parser::FrameConfig cfg;
+    cfg.useL2Length = useL2;
+    gsml3parser::L3Framer framer(src, cfg);
     int budget = 1000; // bound the loop: fuzzer input is finite
     while (budget-- > 0) {
         auto frame = framer.nextFrame();

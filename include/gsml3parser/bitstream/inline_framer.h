@@ -44,10 +44,14 @@ namespace gsml3parser {
  * - L2 length mode: each frame preceded by a length octet.
  * - Header-based mode: frame length derived from PD+MTI fixed-length table.
  *
- * NOTE: header-based mode is a heuristic for variable-length messages (it
- * scans for the next plausible L3 header). For deterministic framing of
- * variable-length messages use useL2Length = true, which is what production
- * LAPDm / A-bis paths provide.
+ * Framing modes: L2 length mode is the DEFAULT (useL2Length =
+ * true) — deterministic, and what production LAPDm / A-bis paths provide.
+ * Header-based mode (useL2Length = false) is a heuristic for
+ * variable-length messages (it scans for the next plausible L3 header)
+ * and is NOT reliable on real variable-length streams: message bodies
+ * (SMS, GMM, SI, CC with IEs) frequently contain bytes whose high nibble
+ * is a valid PD, creating false frame boundaries. Use it only for
+ * synthetic/test streams of fixed-length or boundary-safe messages.
  *
  * Thread safety: not thread-safe. One instance per buffer, single-threaded use.
  */
@@ -67,7 +71,7 @@ public:
      * @param data        The raw byte buffer containing L3 frames.
      * @param useL2Length If true, each frame is preceded by a single length octet.
      */
-    explicit InlineFramer(std::span<const uint8_t> data, bool useL2Length = false);
+    explicit InlineFramer(std::span<const uint8_t> data, bool useL2Length = true);
 
     /**
      * Extract the next frame from the buffer.

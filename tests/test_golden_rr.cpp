@@ -611,7 +611,7 @@ TEST(GoldenRR, ChannelRequest_Parse) {
 }
 
 // [GOLDEN] RA = 0x00 (all-zero pattern) is a legitimate random-access value.
-// The previous heuristic rejected it as "Incomplete L3 message" (audit C1).
+// The previous heuristic rejected it as "Incomplete L3 message".
 TEST(GoldenRR, ChannelRequest_Parse_ZeroRA) {
     uint8_t data[] = {0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));

@@ -158,7 +158,7 @@ TEST(InlineFramer, TrailingVariableLengthFrame_Emitted) {
         0x60, 0x0D, 0x00,        // RR Channel Release
         0x30, 0x08, 0x20, 0x21   // CC Setup (MTI=0x02), body without PD-like nibbles
     };
-    InlineFramer framer(std::span<const uint8_t>(buf, sizeof(buf)));
+    InlineFramer framer(std::span<const uint8_t>(buf, sizeof(buf)), false);
 
     auto f1 = framer.nextFrame();
     ASSERT_TRUE(f1.has_value());

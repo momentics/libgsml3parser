@@ -37,7 +37,9 @@ TEST(L3Framer, SingleFixedLengthFrame) {
     // Channel Release: 60 0D 00 (PD=6 in high nibble, MTI=0x0D, 1 body byte)
     uint8_t data[] = {0x60, 0x0D, 0x00};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3Framer framer(src);
+    FrameConfig cfg;
+    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    L3Framer framer(src, cfg);
 
     auto result = framer.nextFrame();
     ASSERT_TRUE(result.has_value());
@@ -52,7 +54,9 @@ TEST(L3Framer, SingleCMServiceAccept) {
     // CM Service Accept: 50 84 (PD=5 in high nibble, MTI encoded in byte 1)
     uint8_t data[] = {0x50, 0x84};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3Framer framer(src);
+    FrameConfig cfg;
+    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    L3Framer framer(src, cfg);
 
     auto result = framer.nextFrame();
     ASSERT_TRUE(result.has_value());
@@ -68,7 +72,9 @@ TEST(L3Framer, MultipleFixedLengthFrames) {
         0x60, 0x0D, 0x01   // Channel Release #2
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3Framer framer(src);
+    FrameConfig cfg;
+    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    L3Framer framer(src, cfg);
 
     auto r1 = framer.nextFrame();
     ASSERT_TRUE(r1.has_value());
@@ -98,7 +104,9 @@ TEST(L3Framer, TruncatedFrame) {
     // framing applies only to constant-body messages).
     uint8_t data[] = {0x60, 0x0D};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3Framer framer(src);
+    FrameConfig cfg;
+    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    L3Framer framer(src, cfg);
 
     auto result = framer.nextFrame();
     ASSERT_TRUE(result.has_value());
@@ -108,7 +116,9 @@ TEST(L3Framer, TruncatedFrame) {
 TEST(L3Framer, EmptySource) {
     uint8_t dummy;
     SpanByteSource src(std::span<const uint8_t>(&dummy, 0));
-    L3Framer framer(src);
+    FrameConfig cfg;
+    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    L3Framer framer(src, cfg);
 
     auto result = framer.nextFrame();
     ASSERT_FALSE(result.has_value());
@@ -171,7 +181,9 @@ TEST(L3Framer, L2LengthTruncated) {
 TEST(L3Framer, BufferedCount) {
     uint8_t data[] = {0x60, 0x0D, 0x00, 0x60, 0x0D, 0x01};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3Framer framer(src);
+    FrameConfig cfg;
+    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    L3Framer framer(src, cfg);
 
     auto r1 = framer.nextFrame();
     ASSERT_TRUE(r1.has_value());
@@ -196,7 +208,9 @@ TEST(L3Framer, VariableLengthWithNextHeader) {
         0x60, 0x0D, 0x00          // Channel Release (3 bytes, fixed)
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3Framer framer(src);
+    FrameConfig cfg;
+    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    L3Framer framer(src, cfg);
 
     auto r1 = framer.nextFrame();
     ASSERT_TRUE(r1.has_value());
@@ -219,7 +233,9 @@ TEST(L3Framer, BCCSetupStreamThreeFrames) {
         0x10, 0x01   // BCC Setup #3
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3Framer framer(src);
+    FrameConfig cfg;
+    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    L3Framer framer(src, cfg);
 
     for (int i = 0; i < 3; ++i) {
         auto r = framer.nextFrame();
@@ -246,7 +262,9 @@ TEST(L3Framer, GCCSetupStreamThreeFrames) {
         0x00, 0x01, 0x20   // GCC Setup #3
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3Framer framer(src);
+    FrameConfig cfg;
+    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    L3Framer framer(src, cfg);
 
     for (int i = 0; i < 3; ++i) {
         auto r = framer.nextFrame();
@@ -269,7 +287,9 @@ TEST(L3Framer, LSRequestStreamThreeFrames) {
         0xC0, 0x01   // LS Request #3
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
-    L3Framer framer(src);
+    FrameConfig cfg;
+    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    L3Framer framer(src, cfg);
 
     for (int i = 0; i < 3; ++i) {
         auto r = framer.nextFrame();
@@ -341,7 +361,9 @@ TEST(L3Framer, PagingResponse_HeaderBasedHeuristic) {
     data.push_back(0x60); data.push_back(0x0D); data.push_back(0x00);
 
     SpanByteSource src(std::span<const uint8_t>(data.data(), data.size()));
-    L3Framer framer(src);
+    FrameConfig cfg;
+    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    L3Framer framer(src, cfg);
 
     auto r1 = framer.nextFrame();
     ASSERT_TRUE(r1.has_value());
@@ -362,7 +384,9 @@ TEST(L3Framer, Timestamp_BatchedAndSet) {
     std::vector<uint8_t> stream;
     for (int i = 0; i < 10; ++i) stream.insert(stream.end(), {0x60, 0x0D, 0x00});
     SpanByteSource src(std::span<const uint8_t>(stream.data(), stream.size()));
-    L3Framer framer(src);
+    FrameConfig cfg;
+    cfg.useL2Length = false;  // header-based mode (opt-in since audit D6)
+    L3Framer framer(src, cfg);
     double last = 0.0;
     int frames = 0;
     while (true) {

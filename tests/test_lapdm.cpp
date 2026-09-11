@@ -778,8 +778,8 @@ TEST(LAPDmEntityTest, SendData_SingleFrame) {
 // k=1 constraint with the TX segment queue: a second sendData() while the
 // first frame is outstanding succeeds (the message is queued) and its
 // segments are transmitted in order after acknowledgments arrive.
-// (Previously the second send returned an error and queued data was lost;
-// see audit D1.)
+// (Previously the second send returned an error and queued data was lost
+// )
 TEST(LAPDmEntityTest, SendData_WhileOutstanding_SecondMessageQueued) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);

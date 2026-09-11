@@ -693,7 +693,7 @@ TEST(GSMSpecTest, ParseHexWithVariousFormats) {
     EXPECT_FALSE(msg3);
 
     // Single byte: a Channel Request — the octet is the 8-bit request
-    // reference (RA), so it parses (audit C1: previously "too short").
+    // reference (RA), so it parses (previously "too short").
     auto msg4 = parseL3Hex("60");
     ASSERT_TRUE(msg4);
     EXPECT_EQ(messageMTI(*msg4), L3ChannelRequest::MTI);
