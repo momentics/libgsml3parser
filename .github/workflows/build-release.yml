@@ -2,6 +2,11 @@ name: Build Release Package
 
 on:
   workflow_dispatch:
+  # Run the full check + build + publish pipeline when a GitHub Release is
+  # published (UI or `gh release create`); the build job attaches the
+  # package to the release (softprops/action-gh-release finds it by tag).
+  release:
+    types: [published]
 
 permissions:
   contents: write
