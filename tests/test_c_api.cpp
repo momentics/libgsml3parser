@@ -38,6 +38,8 @@
 #include <gsml3parser/message_types.h>
 #include <gsml3parser/parser.h>
 #include <gsml3parser/visitor.h>
+#include <gsml3parser/abis/rsl_parser.h>
+#include <gsml3parser/abis/rsl_builder.h>
 
 using namespace gsml3parser;
 
@@ -240,4 +242,182 @@ TEST(CApi, Concurrent_IndependentHandles) {
     }
     for (auto& th : threads) th.join();
     EXPECT_EQ(failures.load(), 0);
+}
+
+// ── RSL (A-bis) ────────────────────────────────────────────────────────
+
+namespace {
+
+// Build an RLL DATA_REQ frame: disc 0x00 | msgType 0x21 | chanNr |
+// linkId | L3Info IE (0x30, TL16V).
+std::vector<uint8_t> makeRllDataReq(uint8_t chanNr, uint8_t linkId,
+                                    const std::vector<uint8_t>& l3) {
+    std::vector<uint8_t> b;
+    b.push_back(0x00);  // discriminator RLL, BSC->BTS
+    b.push_back(0x21);  // DATA_REQ
+    b.push_back(chanNr);
+    b.push_back(linkId);
+    b.push_back(0x30);  // L3Info IE (TL16V)
+    b.push_back(static_cast<uint8_t>(l3.size() >> 8));
+    b.push_back(static_cast<uint8_t>(l3.size() & 0xFF));
+    b.insert(b.end(), l3.begin(), l3.end());
+    return b;
+}
+
+} // namespace
+
+// Test: RSL parse through the C API agrees with the C++ RSLParser on
+// every field; the L3 view points into the handle's copy (the caller's
+// buffer is freed right after parse).
+TEST(CApiRsl, Parse_AgreesWithCpp) {
+    std::vector<uint8_t> frame = makeRllDataReq(0x7C, 1, {0x60, 0x0D, 0x00});
+    auto cpp = RSLParser::parse(frame);
+    ASSERT_TRUE(cpp);
+    const RSLParsedMessage& c = *cpp;
+
+    gsml3_rsl* r = gsml3_rsl_parse(frame.data(), frame.size());
+    ASSERT_NE(r, nullptr) << gsml3_last_error();
+
+    EXPECT_STREQ(gsml3_rsl_name(r),
+                 RSLParser::messageName(c.discriminator, c.msgType).data());
+    EXPECT_EQ(gsml3_rsl_discriminator(r), static_cast<int>(c.discriminator));
+    EXPECT_EQ(gsml3_rsl_msg_type(r), c.msgType);
+    EXPECT_EQ(gsml3_rsl_chan_nr(r), c.chanNr);
+    EXPECT_EQ(gsml3_rsl_link_id(r), c.linkId);
+    EXPECT_EQ(gsml3_rsl_bts_to_bsc(r), c.btsToBsc ? 1 : 0);
+    EXPECT_EQ(gsml3_rsl_has_l3(r), 1);
+
+    size_t l3len = 0;
+    const uint8_t* l3 = gsml3_rsl_l3(r, &l3len);
+    ASSERT_NE(l3, nullptr);
+    EXPECT_EQ(l3len, 3u);
+    EXPECT_EQ(0, std::memcmp(l3, frame.data() + 7, 3));
+
+    // IE access: the L3Info IE (0x30) is the first one.
+    EXPECT_EQ(gsml3_rsl_ie_count(r), c.ieCount);
+    uint8_t ietype = 0; size_t ielen = 0; const uint8_t* ieval = nullptr;
+    ASSERT_EQ(gsml3_rsl_ie_get(r, 0, &ietype, &ielen, &ieval), GSML3_OK);
+    EXPECT_EQ(ietype, 0x30);
+    EXPECT_EQ(ielen, 3u);
+    EXPECT_NE(gsml3_rsl_ie_get(r, 99, &ietype, &ielen, &ieval), GSML3_OK);
+
+    // The handle owns a copy: the input buffer is dead, the views live.
+    frame.clear();
+    frame.shrink_to_fit();
+    EXPECT_EQ(l3len, 3u);
+    gsml3_rsl_free(r);
+}
+
+// Test: every RSL builder produces exactly the bytes the C++ vector
+// overload produces, and the frame parses back with the expected fields.
+TEST(CApiRsl, Builders_AgreeWithCpp) {
+    const std::vector<uint8_t> l3 = {0x60, 0x0D, 0x00};
+    uint8_t out[512];
+
+    struct Case {
+        size_t (*c)(uint8_t*, size_t, uint8_t, uint8_t, const uint8_t*, size_t);
+        std::vector<uint8_t> cpp;
+    };
+    Case cases[] = {
+        {gsml3_rsl_build_data_req,      RSLBuilder::buildDataReq(0x7C, 1, l3).value()},
+        {gsml3_rsl_build_data_ind,      RSLBuilder::buildDataInd(0x7C, 1, l3).value()},
+        {gsml3_rsl_build_unit_data_req, RSLBuilder::buildUnitDataReq(0x7C, 1, l3).value()},
+        {gsml3_rsl_build_unit_data_ind, RSLBuilder::buildUnitDataInd(0x7C, 1, l3).value()},
+    };
+    for (const auto& c : cases) {
+        size_t n = c.c(out, sizeof(out), 0x7C, 1, l3.data(), l3.size());
+        ASSERT_EQ(n, c.cpp.size());
+        EXPECT_EQ(0, std::memcmp(out, c.cpp.data(), n));
+        // Parse back: the L3 payload must round-trip.
+        gsml3_rsl* r = gsml3_rsl_parse(out, n);
+        ASSERT_NE(r, nullptr);
+        size_t l3len = 0;
+        const uint8_t* l3v = gsml3_rsl_l3(r, &l3len);
+        ASSERT_NE(l3v, nullptr);
+        EXPECT_EQ(l3len, l3.size());
+        EXPECT_EQ(0, std::memcmp(l3v, l3.data(), l3.size()));
+        gsml3_rsl_free(r);
+    }
+
+    // Fixed-shape builders.
+    {
+        auto cpp = RSLBuilder::buildChanActivAck(0x78, 0x1234).value();
+        size_t n = gsml3_rsl_build_chan_activ_ack(out, sizeof(out), 0x78, 0x1234);
+        ASSERT_EQ(n, cpp.size());
+        EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
+    }
+    {
+        auto cpp = RSLBuilder::buildChanActivNack(0x78, RSLErrorCause::EquipmentFailure).value();
+        size_t n = gsml3_rsl_build_chan_activ_nack(out, sizeof(out), 0x78, 0x03);
+        ASSERT_EQ(n, cpp.size());
+        EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
+    }
+    {
+        auto cpp = RSLBuilder::buildRFChanRelAck(0x78).value();
+        size_t n = gsml3_rsl_build_rf_chan_rel_ack(out, sizeof(out), 0x78);
+        ASSERT_EQ(n, cpp.size());
+        EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
+    }
+    {
+        auto cpp = RSLBuilder::buildConnFail(0x78, RSLErrorCause::ResourceUnavailable).value();
+        size_t n = gsml3_rsl_build_conn_fail(out, sizeof(out), 0x78, 0x06);
+        ASSERT_EQ(n, cpp.size());
+        EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
+    }
+    {
+        const std::vector<uint8_t> l1 = {0x01, 0x02, 0x03};
+        auto cpp = RSLBuilder::buildMeasRes(0x78, 5, -47, 3, l1).value();
+        size_t n = gsml3_rsl_build_meas_res(out, sizeof(out), 0x78, 5, -47, 3, l1.data(), l1.size());
+        ASSERT_EQ(n, cpp.size());
+        EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
+    }
+    {
+        auto cpp = RSLBuilder::buildHandoDet(0x78, 7).value();
+        size_t n = gsml3_rsl_build_hando_det(out, sizeof(out), 0x78, 7);
+        ASSERT_EQ(n, cpp.size());
+        EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
+    }
+    {
+        auto cpp = RSLBuilder::buildCCCHLoadInd(0x00, 85, 120, 10, 90).value();
+        size_t n = gsml3_rsl_build_ccch_load_ind(out, sizeof(out), 0x00, 85, 120, 10, 90);
+        ASSERT_EQ(n, cpp.size());
+        EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
+    }
+    {
+        auto cpp = RSLBuilder::buildChanRqd(0x40, L3RequestReference(0x55, 0, 0, 0), 4).value();
+        size_t n = gsml3_rsl_build_chan_rqd(out, sizeof(out), 0x40, 0x55, 0, 0, 0, 4);
+        ASSERT_EQ(n, cpp.size());
+        EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
+    }
+    {
+        const std::vector<uint8_t> info = {0xAA, 0xBB};
+        auto cpp = RSLBuilder::buildDeleteInd(0x40, info).value();
+        size_t n = gsml3_rsl_build_delete_ind(out, sizeof(out), 0x40, info.data(), info.size());
+        ASSERT_EQ(n, cpp.size());
+        EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
+    }
+}
+
+// Test: buffer-too-small returns 0 (documented C contract).
+TEST(CApiRsl, Builder_BufferTooSmall) {
+    uint8_t out[4];
+    const std::vector<uint8_t> l3 = {0x60, 0x0D, 0x00};
+    EXPECT_EQ(gsml3_rsl_build_data_req(out, sizeof(out), 0x7C, 1, l3.data(), l3.size()), 0u);
+    EXPECT_GT(std::strlen(gsml3_last_error()), 0u);
+}
+
+// Test: NULL safety of the RSL accessors.
+TEST(CApiRsl, NullSafety) {
+    EXPECT_STREQ(gsml3_rsl_name(nullptr), "");
+    EXPECT_EQ(gsml3_rsl_discriminator(nullptr), -1);
+    EXPECT_EQ(gsml3_rsl_msg_type(nullptr), -1);
+    EXPECT_EQ(gsml3_rsl_chan_nr(nullptr), -1);
+    EXPECT_EQ(gsml3_rsl_link_id(nullptr), -1);
+    EXPECT_EQ(gsml3_rsl_bts_to_bsc(nullptr), -1);
+    EXPECT_EQ(gsml3_rsl_has_l3(nullptr), 0);
+    size_t len = 99;
+    EXPECT_EQ(gsml3_rsl_l3(nullptr, &len), nullptr);
+    EXPECT_EQ(len, 0u);
+    EXPECT_EQ(gsml3_rsl_ie_count(nullptr), 0u);
+    gsml3_rsl_free(nullptr);
 }

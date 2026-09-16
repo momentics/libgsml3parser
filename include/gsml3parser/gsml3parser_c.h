@@ -202,6 +202,74 @@ GSML3_C_API size_t gsml3_message_write(const gsml3_message* msg,
  * free with gsml3_free(). NULL on error. */
 GSML3_C_API char* gsml3_message_hex(const gsml3_message* msg);
 
+/* ── RSL (A-bis, TS 48.058) ──────────────────────────────────────────── */
+typedef struct gsml3_rsl gsml3_rsl;
+
+/* Parse an RSL frame. The handle owns a copy of the input: the IE and
+ * L3 views reference that copy (the caller's buffer may be freed
+ * immediately). Returns NULL on error. */
+GSML3_C_API gsml3_rsl* gsml3_rsl_parse(const uint8_t* data, size_t len);
+/* Free the RSL handle. NULL-safe. */
+GSML3_C_API void gsml3_rsl_free(gsml3_rsl* rsl);
+
+/* Message name ("DATA_REQ", "CHAN_ACTIV", ...). Static storage. */
+GSML3_C_API const char* gsml3_rsl_name(const gsml3_rsl* rsl);
+/* 7-bit discriminator (direction bit stripped), -1 if NULL. */
+GSML3_C_API int gsml3_rsl_discriminator(const gsml3_rsl* rsl);
+/* Message type byte within the discriminator, -1 if NULL. */
+GSML3_C_API int gsml3_rsl_msg_type(const gsml3_rsl* rsl);
+/* Channel number, -1 if NULL. */
+GSML3_C_API int gsml3_rsl_chan_nr(const gsml3_rsl* rsl);
+/* LAPDm link identifier (RLL), -1 if NULL. */
+GSML3_C_API int gsml3_rsl_link_id(const gsml3_rsl* rsl);
+/* Direction: 1 = BTS->BSC, 0 = BSC->BTS; -1 if NULL. */
+GSML3_C_API int gsml3_rsl_bts_to_bsc(const gsml3_rsl* rsl);
+/* 1 if the frame carries an L3 payload, 0 otherwise. */
+GSML3_C_API int gsml3_rsl_has_l3(const gsml3_rsl* rsl);
+/* L3 payload view into the handle's copy (valid while the handle is
+ * alive); NULL when there is no L3. *len is set to the payload size. */
+GSML3_C_API const uint8_t* gsml3_rsl_l3(const gsml3_rsl* rsl, size_t* len);
+/* Number of parsed information elements. */
+GSML3_C_API size_t gsml3_rsl_ie_count(const gsml3_rsl* rsl);
+/* IE at `index`: *type = IE type code, *len = value length, *val points
+ * into the handle's copy. GSML3_OK or GSML3_ERR_INVALID_ARG. */
+GSML3_C_API int gsml3_rsl_ie_get(const gsml3_rsl* rsl, size_t index,
+                                 uint8_t* type, size_t* len,
+                                 const uint8_t** val);
+
+/* RSL builders (zero-alloc; write into the caller's buffer). Return
+ * bytes written, 0 on error or buffer too small. cause: RSLErrorCause
+ * value (see include/gsml3parser/abis/rsl_types.h). */
+GSML3_C_API size_t gsml3_rsl_build_data_req(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint8_t link_id, const uint8_t* l3, size_t l3_len);
+GSML3_C_API size_t gsml3_rsl_build_data_ind(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint8_t link_id, const uint8_t* l3, size_t l3_len);
+GSML3_C_API size_t gsml3_rsl_build_unit_data_req(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint8_t link_id, const uint8_t* l3, size_t l3_len);
+GSML3_C_API size_t gsml3_rsl_build_unit_data_ind(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint8_t link_id, const uint8_t* l3, size_t l3_len);
+GSML3_C_API size_t gsml3_rsl_build_chan_activ_ack(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint16_t frame_number);
+GSML3_C_API size_t gsml3_rsl_build_chan_activ_nack(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, int cause);
+GSML3_C_API size_t gsml3_rsl_build_rf_chan_rel_ack(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr);
+GSML3_C_API size_t gsml3_rsl_build_conn_fail(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, int cause);
+GSML3_C_API size_t gsml3_rsl_build_meas_res(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint8_t meas_nr, int8_t rxlev, int8_t rxqual,
+    const uint8_t* l1, size_t l1_len);
+GSML3_C_API size_t gsml3_rsl_build_hando_det(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint8_t access_delay);
+GSML3_C_API size_t gsml3_rsl_build_ccch_load_ind(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint16_t paging_load, uint16_t rach_total,
+    uint16_t rach_busy, uint16_t rach_access);
+GSML3_C_API size_t gsml3_rsl_build_chan_rqd(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint8_t ra, uint8_t t1p, uint8_t t2, uint8_t t3,
+    uint8_t access_delay);
+GSML3_C_API size_t gsml3_rsl_build_delete_ind(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, const uint8_t* info, size_t info_len);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

@@ -45,6 +45,8 @@
 #include "gsml3parser/parser.h"
 #include "gsml3parser/parser_config.h"
 #include "gsml3parser/visitor.h"
+#include "gsml3parser/abis/rsl_parser.h"
+#include "gsml3parser/abis/rsl_builder.h"
 
 namespace {
 
@@ -231,5 +233,326 @@ GSML3_C_API char* gsml3_message_hex(const gsml3_message* msg) {
     } catch (...) {
         setLastError("unexpected exception in gsml3_message_hex");
         return nullptr;
+    }
+}
+
+// ── RSL (A-bis, TS 48.058) ─────────────────────────────────────────────
+
+// The handle owns a copy of the input: RSLParsedMessage holds spans into
+// that copy (IE values, L3 payload), so the caller's buffer may be freed
+// right after gsml3_rsl_parse returns.
+struct gsml3_rsl {
+    std::vector<uint8_t> buffer;
+    RSLParsedMessage parsed;
+};
+
+GSML3_C_API gsml3_rsl* gsml3_rsl_parse(const uint8_t* data, size_t len) {
+    try {
+        tLastError.clear();
+        if (!data || len == 0) { setLastError("NULL or empty input"); return nullptr; }
+        auto r = RSLParser::parse({data, len});
+        if (!r) { reportParseError(r.error()); return nullptr; }
+        auto* h = new (std::nothrow) gsml3_rsl{};
+        if (!h) { setLastError("out of memory"); return nullptr; }
+        h->buffer.assign(data, data + len);
+        h->parsed = std::move(r.value());
+        // Point the spans at the owned copy (parse() filled them with
+        // views into the caller's buffer).
+        if (h->parsed.l3Payload.data())
+            h->parsed.l3Payload = {h->buffer.data() + (h->parsed.l3Payload.data() - data),
+                                   h->parsed.l3Payload.size()};
+        for (auto& ie : h->parsed.informationElements) {
+            if (ie.val) ie.val = h->buffer.data() + (ie.val - data);
+        }
+        if (h->parsed.rawData.data())
+            h->parsed.rawData = {h->buffer.data() + (h->parsed.rawData.data() - data),
+                                 h->parsed.rawData.size()};
+        return h;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_rsl_parse");
+        return nullptr;
+    }
+}
+
+GSML3_C_API void gsml3_rsl_free(gsml3_rsl* rsl) {
+    delete rsl;
+}
+
+GSML3_C_API const char* gsml3_rsl_name(const gsml3_rsl* rsl) {
+    if (!rsl) return "";
+    return RSLParser::messageName(rsl->parsed.discriminator, rsl->parsed.msgType).data();
+}
+
+GSML3_C_API int gsml3_rsl_discriminator(const gsml3_rsl* rsl) {
+    if (!rsl) return -1;
+    return static_cast<int>(rsl->parsed.discriminator);
+}
+
+GSML3_C_API int gsml3_rsl_msg_type(const gsml3_rsl* rsl) {
+    if (!rsl) return -1;
+    return rsl->parsed.msgType;
+}
+
+GSML3_C_API int gsml3_rsl_chan_nr(const gsml3_rsl* rsl) {
+    if (!rsl) return -1;
+    return rsl->parsed.chanNr;
+}
+
+GSML3_C_API int gsml3_rsl_link_id(const gsml3_rsl* rsl) {
+    if (!rsl) return -1;
+    return rsl->parsed.linkId;
+}
+
+GSML3_C_API int gsml3_rsl_bts_to_bsc(const gsml3_rsl* rsl) {
+    if (!rsl) return -1;
+    return rsl->parsed.btsToBsc ? 1 : 0;
+}
+
+GSML3_C_API int gsml3_rsl_has_l3(const gsml3_rsl* rsl) {
+    if (!rsl) return 0;
+    return RSLParser::hasL3Payload(rsl->parsed) ? 1 : 0;
+}
+
+GSML3_C_API const uint8_t* gsml3_rsl_l3(const gsml3_rsl* rsl, size_t* len) {
+    if (!rsl) { if (len) *len = 0; return nullptr; }
+    auto l3 = RSLParser::extractL3(rsl->parsed);
+    if (len) *len = l3 ? l3->size() : 0;
+    return l3 ? l3->data() : nullptr;
+}
+
+GSML3_C_API size_t gsml3_rsl_ie_count(const gsml3_rsl* rsl) {
+    if (!rsl) return 0;
+    return rsl->parsed.ieCount;
+}
+
+GSML3_C_API int gsml3_rsl_ie_get(const gsml3_rsl* rsl, size_t index,
+                                 uint8_t* type, size_t* len,
+                                 const uint8_t** val) {
+    if (!rsl || index >= rsl->parsed.ieCount || !type || !len || !val) {
+        setLastError("invalid RSL IE index or NULL out parameter");
+        return GSML3_ERR_INVALID_ARG;
+    }
+    const auto& ie = rsl->parsed.informationElements[index];
+    *type = ie.type;
+    *len = ie.len;
+    *val = ie.val;
+    return GSML3_OK;
+}
+
+namespace {
+
+// The C++ span overloads return int (bytes written, -1 when the buffer
+// is too small); the C API returns size_t (0 = error/too small).
+size_t rslSpanResult(int n) {
+    return n > 0 ? static_cast<size_t>(n) : 0;
+}
+
+} // namespace
+
+GSML3_C_API size_t gsml3_rsl_build_data_req(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint8_t link_id, const uint8_t* l3, size_t l3_len) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0 || (l3_len && !l3)) {
+            setLastError("NULL output buffer or L3 payload");
+            return 0;
+        }
+        int n = RSLBuilder::buildDataReq({out, maxlen}, chan_nr, link_id, {l3, l3_len});
+        if (n < 0) setLastError("buffer too small");
+        return rslSpanResult(n);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_rsl_build_data_req");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_rsl_build_data_ind(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint8_t link_id, const uint8_t* l3, size_t l3_len) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0 || (l3_len && !l3)) {
+            setLastError("NULL output buffer or L3 payload");
+            return 0;
+        }
+        int n = RSLBuilder::buildDataInd({out, maxlen}, chan_nr, link_id, {l3, l3_len});
+        if (n < 0) setLastError("buffer too small");
+        return rslSpanResult(n);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_rsl_build_data_ind");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_rsl_build_unit_data_req(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint8_t link_id, const uint8_t* l3, size_t l3_len) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0 || (l3_len && !l3)) {
+            setLastError("NULL output buffer or L3 payload");
+            return 0;
+        }
+        int n = RSLBuilder::buildUnitDataReq({out, maxlen}, chan_nr, link_id, {l3, l3_len});
+        if (n < 0) setLastError("buffer too small");
+        return rslSpanResult(n);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_rsl_build_unit_data_req");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_rsl_build_unit_data_ind(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint8_t link_id, const uint8_t* l3, size_t l3_len) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0 || (l3_len && !l3)) {
+            setLastError("NULL output buffer or L3 payload");
+            return 0;
+        }
+        int n = RSLBuilder::buildUnitDataInd({out, maxlen}, chan_nr, link_id, {l3, l3_len});
+        if (n < 0) setLastError("buffer too small");
+        return rslSpanResult(n);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_rsl_build_unit_data_ind");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_rsl_build_chan_activ_ack(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint16_t frame_number) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = RSLBuilder::buildChanActivAck({out, maxlen}, chan_nr, frame_number);
+        if (n < 0) setLastError("buffer too small");
+        return rslSpanResult(n);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_rsl_build_chan_activ_ack");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_rsl_build_chan_activ_nack(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, int cause) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = RSLBuilder::buildChanActivNack({out, maxlen}, chan_nr,
+                                               static_cast<RSLErrorCause>(cause));
+        if (n < 0) setLastError("buffer too small");
+        return rslSpanResult(n);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_rsl_build_chan_activ_nack");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_rsl_build_rf_chan_rel_ack(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = RSLBuilder::buildRFChanRelAck({out, maxlen}, chan_nr);
+        if (n < 0) setLastError("buffer too small");
+        return rslSpanResult(n);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_rsl_build_rf_chan_rel_ack");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_rsl_build_conn_fail(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, int cause) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = RSLBuilder::buildConnFail({out, maxlen}, chan_nr,
+                                          static_cast<RSLErrorCause>(cause));
+        if (n < 0) setLastError("buffer too small");
+        return rslSpanResult(n);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_rsl_build_conn_fail");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_rsl_build_meas_res(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint8_t meas_nr, int8_t rxlev, int8_t rxqual,
+    const uint8_t* l1, size_t l1_len) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0 || (l1_len && !l1)) {
+            setLastError("NULL output buffer or L1 info");
+            return 0;
+        }
+        int n = RSLBuilder::buildMeasRes({out, maxlen}, chan_nr, meas_nr,
+                                         rxlev, rxqual, {l1, l1_len});
+        if (n < 0) setLastError("buffer too small");
+        return rslSpanResult(n);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_rsl_build_meas_res");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_rsl_build_hando_det(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint8_t access_delay) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = RSLBuilder::buildHandoDet({out, maxlen}, chan_nr, access_delay);
+        if (n < 0) setLastError("buffer too small");
+        return rslSpanResult(n);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_rsl_build_hando_det");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_rsl_build_ccch_load_ind(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint16_t paging_load, uint16_t rach_total,
+    uint16_t rach_busy, uint16_t rach_access) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = RSLBuilder::buildCCCHLoadInd({out, maxlen}, chan_nr, paging_load,
+                                             rach_total, rach_busy, rach_access);
+        if (n < 0) setLastError("buffer too small");
+        return rslSpanResult(n);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_rsl_build_ccch_load_ind");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_rsl_build_chan_rqd(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, uint8_t ra, uint8_t t1p, uint8_t t2, uint8_t t3,
+    uint8_t access_delay) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        L3RequestReference ref(ra, t1p, t2, t3);
+        int n = RSLBuilder::buildChanRqd({out, maxlen}, chan_nr, ref, access_delay);
+        if (n < 0) setLastError("buffer too small");
+        return rslSpanResult(n);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_rsl_build_chan_rqd");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_rsl_build_delete_ind(uint8_t* out, size_t maxlen,
+    uint8_t chan_nr, const uint8_t* info, size_t info_len) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0 || (info_len && !info)) {
+            setLastError("NULL output buffer or info");
+            return 0;
+        }
+        int n = RSLBuilder::buildDeleteInd({out, maxlen}, chan_nr, {info, info_len});
+        if (n < 0) setLastError("buffer too small");
+        return rslSpanResult(n);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_rsl_build_delete_ind");
+        return 0;
     }
 }
