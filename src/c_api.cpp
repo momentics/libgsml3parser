@@ -49,6 +49,9 @@
 #include "gsml3parser/abis/rsl_builder.h"
 #include "gsml3parser/lapdm_frame.h"
 #include "gsml3parser/lapdm_entity.h"
+#include "gsml3parser/stack/subscriber_registry.h"
+#include "gsml3parser/stack/ms_context.h"
+#include "gsml3parser/stack/transaction.h"
 
 namespace {
 
@@ -767,4 +770,298 @@ GSML3_C_API unsigned gsml3_lapdm_entity_frames_received(const gsml3_lapdm_entity
 
 GSML3_C_API unsigned gsml3_lapdm_entity_retransmissions(const gsml3_lapdm_entity* e) {
     return e ? e->entity.retransmissions() : 0;
+}
+
+// ── BTS stack: registry / session ─────────────────────────────────────
+
+// gsml3_session is a pointer-sized alias of SubscriberSession*: the
+// slab-backed FlatMap keeps every entry address stable for the entry's
+// whole lifetime, so the alias costs zero allocations on create/find.
+struct gsml3_session { int _opaque; };  // never instantiated
+
+// The registry handle owns exactly one of the five registry types
+// (plain + the four explicitly instantiated sharded sizes). Defined at
+// global scope like every other opaque handle in this file (it completes
+// the tag declared in gsml3parser_c.h).
+struct gsml3_registry {
+    std::variant<
+        std::unique_ptr<SubscriberRegistry>,
+        std::unique_ptr<ShardedSubscriberRegistry<4>>,
+        std::unique_ptr<ShardedSubscriberRegistry<8>>,
+        std::unique_ptr<ShardedSubscriberRegistry<16>>,
+        std::unique_ptr<ShardedSubscriberRegistry<32>>> reg;
+};
+
+namespace {
+
+inline SubscriberSession* sess(gsml3_session* s) noexcept {
+    return reinterpret_cast<SubscriberSession*>(s);
+}
+
+inline gsml3_session* sessPtr(SubscriberSession* s) noexcept {
+    return reinterpret_cast<gsml3_session*>(s);
+}
+
+template <typename F>
+auto withRegistry(gsml3_registry* r, F&& f) {
+    return std::visit([&f](auto& up) { return f(*up); }, r->reg);
+}
+
+inline bool isSharded(const gsml3_registry* r) noexcept {
+    return !std::holds_alternative<std::unique_ptr<SubscriberRegistry>>(r->reg);
+}
+
+} // namespace
+
+GSML3_C_API gsml3_registry* gsml3_registry_new(int shard_count) {
+    try {
+        tLastError.clear();
+        auto* r = new (std::nothrow) gsml3_registry{};
+        if (!r) { setLastError("out of memory"); return nullptr; }
+        switch (shard_count) {
+            case 0:  r->reg = std::make_unique<SubscriberRegistry>(); break;
+            case 4:  r->reg = std::make_unique<ShardedSubscriberRegistry<4>>(); break;
+            case 8:  r->reg = std::make_unique<ShardedSubscriberRegistry<8>>(); break;
+            case 16: r->reg = std::make_unique<ShardedSubscriberRegistry<16>>(); break;
+            case 32: r->reg = std::make_unique<ShardedSubscriberRegistry<32>>(); break;
+            default:
+                setLastError("shard_count must be 0, 4, 8, 16 or 32");
+                delete r;
+                return nullptr;
+        }
+        return r;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_registry_new");
+        return nullptr;
+    }
+}
+
+GSML3_C_API void gsml3_registry_free(gsml3_registry* r) {
+    delete r;
+}
+
+GSML3_C_API void gsml3_registry_reserve(gsml3_registry* r, size_t expected) {
+    if (r) withRegistry(r, [expected](auto& reg) { reg.reserve(expected); });
+}
+
+GSML3_C_API size_t gsml3_registry_count(const gsml3_registry* r) {
+    if (!r) return 0;
+    return withRegistry(const_cast<gsml3_registry*>(r),
+                        [](const auto& reg) { return reg.count(); });
+}
+
+GSML3_C_API gsml3_session* gsml3_registry_create_by_tmsi(gsml3_registry* r,
+                                                          uint32_t tmsi) {
+    try {
+        tLastError.clear();
+        if (!r) { setLastError("NULL registry"); return nullptr; }
+        auto* s = withRegistry(r, [tmsi](auto& reg) { return reg.createByTMSI(tmsi); });
+        if (!s) setLastError("TMSI already exists");
+        return sessPtr(s);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_registry_create_by_tmsi");
+        return nullptr;
+    }
+}
+
+GSML3_C_API gsml3_session* gsml3_registry_create_by_imsi(gsml3_registry* r,
+                                                          const char* imsi) {
+    try {
+        tLastError.clear();
+        if (!r || !imsi) { setLastError("NULL registry or imsi"); return nullptr; }
+        if (isSharded(r)) {
+            setLastError("create_by_imsi is not supported by sharded registries");
+            return nullptr;
+        }
+        // std::visit compiles the lambda for every alternative, so the
+        // plain-registry-only member is selected with if constexpr (the
+        // sharded branch is rejected by the guard above and returns null).
+        auto* s = withRegistry(r, [imsi](auto& reg) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(reg)>, SubscriberRegistry>)
+                return reg.createByIMSI(imsi);
+            else
+                return static_cast<SubscriberSession*>(nullptr);
+        });
+        if (!s) setLastError("IMSI already exists");
+        return sessPtr(s);
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_registry_create_by_imsi");
+        return nullptr;
+    }
+}
+
+GSML3_C_API gsml3_session* gsml3_registry_find_by_tmsi(gsml3_registry* r,
+                                                        uint32_t tmsi) {
+    if (!r) return nullptr;
+    return sessPtr(withRegistry(r, [tmsi](auto& reg) { return reg.findByTMSI(tmsi); }));
+}
+
+GSML3_C_API gsml3_session* gsml3_registry_find_by_imsi(gsml3_registry* r,
+                                                        const char* imsi) {
+    if (!r || !imsi) return nullptr;
+    return sessPtr(withRegistry(r, [imsi](auto& reg) { return reg.findByIMSI(imsi); }));
+}
+
+GSML3_C_API gsml3_session* gsml3_registry_find_by_link(gsml3_registry* r,
+    uint8_t trx, uint8_t ts, uint8_t lapdm_link) {
+    if (!r) return nullptr;
+    return sessPtr(withRegistry(r, [trx, ts, lapdm_link](auto& reg) {
+        return reg.findByLink(trx, ts, lapdm_link);
+    }));
+}
+
+GSML3_C_API int gsml3_registry_remove(gsml3_registry* r, gsml3_session* s) {
+    if (!r || !s) return 0;
+    return withRegistry(r, [s](auto& reg) { return reg.remove(sess(s)); }) ? 1 : 0;
+}
+
+GSML3_C_API void gsml3_registry_clear(gsml3_registry* r) {
+    if (!r) return;
+    if (isSharded(r)) {
+        setLastError("clear is not supported by sharded registries");
+        return;
+    }
+    // clear() exists only on the plain registry; std::visit compiles the
+    // lambda for every alternative, hence if constexpr.
+    withRegistry(r, [](auto& reg) {
+        if constexpr (std::is_same_v<std::decay_t<decltype(reg)>, SubscriberRegistry>)
+            reg.clear();
+    });
+}
+
+GSML3_C_API void gsml3_registry_assign_channel(gsml3_registry* r,
+    gsml3_session* s, int ch_type, uint8_t trx, uint8_t ts, uint16_t arfcn,
+    uint8_t lapdm_link) {
+    try {
+        if (!r || !s) return;
+        auto* session = sess(s);
+        ChannelDescriptor desc{static_cast<ChannelType>(ch_type), trx, ts, arfcn};
+        withRegistry(r, [&](auto& reg) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(reg)>, SubscriberRegistry>) {
+                reg.assignChannel(session, desc, lapdm_link);
+            } else {
+                // Sharded: lock the session's shard exclusively.
+                auto locked = reg.lockForTMSI(session->assignedTmsi);
+                locked.registry.assignChannel(session, desc, lapdm_link);
+            }
+        });
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_registry_assign_channel");
+    }
+}
+
+GSML3_C_API void gsml3_registry_release_channel(gsml3_registry* r,
+                                                gsml3_session* s) {
+    try {
+        if (!r || !s) return;
+        auto* session = sess(s);
+        withRegistry(r, [&](auto& reg) {
+            if constexpr (std::is_same_v<std::decay_t<decltype(reg)>, SubscriberRegistry>) {
+                reg.releaseChannel(session);
+            } else {
+                auto locked = reg.lockForTMSI(session->assignedTmsi);
+                locked.registry.releaseChannel(session);
+            }
+        });
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_registry_release_channel");
+    }
+}
+
+// gsml3_timer_expiry is layout-compatible with TimerExpiry
+// (pointer + int == pointer + L3TimerId, both 16 bytes), so the caller's
+// buffer is used directly (zero allocation, O(active)).
+static_assert(sizeof(gsml3_timer_expiry) == sizeof(TimerExpiry),
+              "gsml3_timer_expiry must stay layout-compatible with TimerExpiry");
+static_assert(alignof(gsml3_timer_expiry) >= alignof(TimerExpiry),
+              "gsml3_timer_expiry must stay layout-compatible with TimerExpiry");
+
+GSML3_C_API size_t gsml3_registry_tick_timers(gsml3_registry* r,
+    uint32_t delta_ms, gsml3_timer_expiry* expired_out, size_t cap) {
+    try {
+        if (!r) return 0;
+        auto span = std::span<TimerExpiry>(
+            reinterpret_cast<TimerExpiry*>(expired_out), cap);
+        size_t n = withRegistry(r, [&](auto& reg) {
+            return reg.tickAllTimers(std::chrono::milliseconds(delta_ms), span);
+        });
+        // The session pointers are already correct (same pointer value);
+        // the conversion loop documents the aliasing contract.
+        for (size_t i = 0; i < n; ++i)
+            expired_out[i].session = sessPtr(span[i].session);
+        return n;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_registry_tick_timers");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_registry_tick_procedures(gsml3_registry* r,
+                                                  uint32_t delta_ms) {
+    try {
+        if (!r) return 0;
+        return withRegistry(r, [&](auto& reg) {
+            return reg.tickAllProcedures(std::chrono::milliseconds(delta_ms));
+        });
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_registry_tick_procedures");
+        return 0;
+    }
+}
+
+// ── Session access ─────────────────────────────────────────────────────
+
+GSML3_C_API uint32_t gsml3_session_tmsi(gsml3_session* s) {
+    if (!s) return 0;
+    const auto& id = sess(s)->context.identity();
+    return id.isTMSI() ? id.tmsi() : 0;
+}
+
+GSML3_C_API void gsml3_session_set_tmsi(gsml3_session* s, uint32_t tmsi) {
+    if (s) sess(s)->context.setTMSI(tmsi);
+}
+
+GSML3_C_API void gsml3_session_set_imsi(gsml3_session* s, const char* digits) {
+    if (s && digits) sess(s)->context.setIMSI(digits);
+}
+
+GSML3_C_API int gsml3_session_is_registered(gsml3_session* s) {
+    return s && sess(s)->context.isRegistered() ? 1 : 0;
+}
+
+GSML3_C_API void gsml3_session_set_registered(gsml3_session* s, int v) {
+    if (s) sess(s)->context.setRegistered(v != 0);
+}
+
+GSML3_C_API int gsml3_session_is_authenticated(gsml3_session* s) {
+    return s && sess(s)->context.isAuthenticated() ? 1 : 0;
+}
+
+GSML3_C_API void gsml3_session_set_authenticated(gsml3_session* s, int v) {
+    if (s) sess(s)->context.setAuthenticated(v != 0);
+}
+
+GSML3_C_API int gsml3_session_is_ciphered(gsml3_session* s) {
+    return s && sess(s)->context.isCiphered() ? 1 : 0;
+}
+
+GSML3_C_API void gsml3_session_set_ciphered(gsml3_session* s, int v) {
+    if (s) sess(s)->context.setCiphered(v != 0);
+}
+
+GSML3_C_API int gsml3_session_timer_start(gsml3_session* s, int timer_id) {
+    if (!s) return 0;
+    return sess(s)->timers.start(static_cast<L3TimerId>(timer_id)) ? 1 : 0;
+}
+
+GSML3_C_API void gsml3_session_timer_stop(gsml3_session* s, int timer_id) {
+    if (s) sess(s)->timers.stop(static_cast<L3TimerId>(timer_id));
+}
+
+GSML3_C_API int gsml3_session_timer_running(gsml3_session* s, int timer_id) {
+    return s && sess(s)->timers.isRunning(static_cast<L3TimerId>(timer_id)) ? 1 : 0;
+}
+
+GSML3_C_API size_t gsml3_session_transaction_pending(gsml3_session* s) {
+    return s ? sess(s)->transactions.pendingCount() : 0;
 }

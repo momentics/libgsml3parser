@@ -397,6 +397,122 @@ GSML3_C_API unsigned gsml3_lapdm_entity_frames_sent(const gsml3_lapdm_entity* e)
 GSML3_C_API unsigned gsml3_lapdm_entity_frames_received(const gsml3_lapdm_entity* e);
 GSML3_C_API unsigned gsml3_lapdm_entity_retransmissions(const gsml3_lapdm_entity* e);
 
+/* ── BTS stack: registry / session ───────────────────────────────────── */
+
+/* Registry. shard_count: 0 = plain single-threaded registry (event-loop
+ * model); 4/8/16/32 = sharded thread-safe registry (per-shard locks).
+ * Any other value returns NULL + GSML3_ERR_INVALID_ARG. */
+typedef struct gsml3_registry gsml3_registry;
+
+/* Session: a BORROWED pointer-sized handle (zero allocations on
+ * create/find). Owned by the registry: do NOT free it; it is valid until
+ * the session is removed or the registry is freed. Direct gsml3_session_*
+ * calls operate on the session WITHOUT a registry lock: the caller owns
+ * per-session synchronization (one thread per session; never use a
+ * session concurrently with gsml3_registry_remove of it). Note:
+ * gsml3_session_set_tmsi changes the session identity only; it does not
+ * update the registry TMSI index (remove + create to re-index). */
+typedef struct gsml3_session gsml3_session;
+
+/* Create the registry. NULL on invalid shard_count or allocation
+ * failure. */
+GSML3_C_API gsml3_registry* gsml3_registry_new(int shard_count);
+/* Free the registry and all its sessions. NULL-safe. */
+GSML3_C_API void gsml3_registry_free(gsml3_registry* r);
+/* Pre-size the indexes for the expected population (cold path). */
+GSML3_C_API void gsml3_registry_reserve(gsml3_registry* r, size_t expected);
+/* Number of active sessions. */
+GSML3_C_API size_t gsml3_registry_count(const gsml3_registry* r);
+
+/* Create a session; NULL on duplicate key (or allocation failure).
+ * create_by_imsi is not supported by sharded registries (NULL +
+ * gsml3_last_error explains). */
+GSML3_C_API gsml3_session* gsml3_registry_create_by_tmsi(gsml3_registry* r,
+                                                          uint32_t tmsi);
+/* imsi: BCD digit string (e.g. "244051234567890"). */
+GSML3_C_API gsml3_session* gsml3_registry_create_by_imsi(gsml3_registry* r,
+                                                          const char* imsi);
+/* Lookups; NULL when not found. */
+GSML3_C_API gsml3_session* gsml3_registry_find_by_tmsi(gsml3_registry* r,
+                                                        uint32_t tmsi);
+GSML3_C_API gsml3_session* gsml3_registry_find_by_imsi(gsml3_registry* r,
+                                                        const char* imsi);
+GSML3_C_API gsml3_session* gsml3_registry_find_by_link(gsml3_registry* r,
+    uint8_t trx, uint8_t ts, uint8_t lapdm_link);
+/* Remove a session. 1 = removed, 0 = not found / unowned. */
+GSML3_C_API int gsml3_registry_remove(gsml3_registry* r, gsml3_session* s);
+/* Remove all sessions. Not supported by sharded registries (no-op +
+ * gsml3_last_error explains). */
+GSML3_C_API void gsml3_registry_clear(gsml3_registry* r);
+/* Assign a channel and update the link index. ch_type:
+ * gsml3parser::ChannelType value (see include/gsml3parser/types.h). */
+GSML3_C_API void gsml3_registry_assign_channel(gsml3_registry* r,
+    gsml3_session* s, int ch_type, uint8_t trx, uint8_t ts, uint16_t arfcn,
+    uint8_t lapdm_link);
+GSML3_C_API void gsml3_registry_release_channel(gsml3_registry* r,
+                                                gsml3_session* s);
+
+/* L3 timer IDs (mirror L3TimerId 1:1). */
+enum gsml3_timer {
+    GSML3_TIMER_T3101 = 0,
+    GSML3_TIMER_T3102 = 1,
+    GSML3_TIMER_T3103 = 2,
+    GSML3_TIMER_T3106 = 3,
+    GSML3_TIMER_T3108 = 4,
+    GSML3_TIMER_T3109 = 5,
+    GSML3_TIMER_T3111 = 6,
+    GSML3_TIMER_T3112 = 7,
+    GSML3_TIMER_T3113 = 8,
+    GSML3_TIMER_T3310 = 9,
+    GSML3_TIMER_T3311 = 10,
+    GSML3_TIMER_T3312 = 11,
+    GSML3_TIMER_T3314 = 12,
+    GSML3_TIMER_T3315 = 13,
+    GSML3_TIMER_T3320 = 14,
+    GSML3_TIMER_T3321 = 15,
+    GSML3_TIMER_T3322 = 16,
+    GSML3_TIMER_T3334 = 17,
+    GSML3_TIMER_T3395 = 18,
+    GSML3_TIMER_UNKNOWN = 0xFF
+};
+
+/* Timer expiry event (session + timer ID). */
+typedef struct gsml3_timer_expiry {
+    gsml3_session* session;
+    int timer_id;  /* GSML3_TIMER_* */
+} gsml3_timer_expiry;
+
+/* Tick all session timers (O(active)). expired_out: caller buffer of
+ * `cap` events; returns the number written. Events that do not fit are
+ * re-armed (1 ms) and reported on a later tick — never dropped. */
+GSML3_C_API size_t gsml3_registry_tick_timers(gsml3_registry* r,
+    uint32_t delta_ms, gsml3_timer_expiry* expired_out, size_t cap);
+/* Tick all active procedures (O(active)); returns the number of
+ * procedures that timed out. */
+GSML3_C_API size_t gsml3_registry_tick_procedures(gsml3_registry* r,
+                                                  uint32_t delta_ms);
+
+/* Session access (MSContext subset + timers + transactions). NULL-safe:
+ * setters are no-ops, getters return 0. */
+/* TMSI of the session identity (0 when the identity is not a TMSI). */
+GSML3_C_API uint32_t gsml3_session_tmsi(gsml3_session* s);
+GSML3_C_API void gsml3_session_set_tmsi(gsml3_session* s, uint32_t tmsi);
+/* digits: BCD digit string. */
+GSML3_C_API void gsml3_session_set_imsi(gsml3_session* s, const char* digits);
+GSML3_C_API int gsml3_session_is_registered(gsml3_session* s);
+GSML3_C_API void gsml3_session_set_registered(gsml3_session* s, int v);
+GSML3_C_API int gsml3_session_is_authenticated(gsml3_session* s);
+GSML3_C_API void gsml3_session_set_authenticated(gsml3_session* s, int v);
+GSML3_C_API int gsml3_session_is_ciphered(gsml3_session* s);
+GSML3_C_API void gsml3_session_set_ciphered(gsml3_session* s, int v);
+/* timer_id: GSML3_TIMER_*. start returns 1 on a fresh start, 0 on a
+ * restart or invalid ID. */
+GSML3_C_API int gsml3_session_timer_start(gsml3_session* s, int timer_id);
+GSML3_C_API void gsml3_session_timer_stop(gsml3_session* s, int timer_id);
+GSML3_C_API int gsml3_session_timer_running(gsml3_session* s, int timer_id);
+/* Number of pending transactions. */
+GSML3_C_API size_t gsml3_session_transaction_pending(gsml3_session* s);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

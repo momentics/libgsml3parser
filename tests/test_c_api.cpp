@@ -41,6 +41,7 @@
 #include <gsml3parser/abis/rsl_parser.h>
 #include <gsml3parser/abis/rsl_builder.h>
 #include <gsml3parser/lapdm_frame.h>
+#include <gsml3parser/stack/subscriber_registry.h>
 
 using namespace gsml3parser;
 
@@ -612,4 +613,156 @@ TEST(CApiLapdm, Concurrent_IndependentEntities) {
     }
     for (auto& th : threads) th.join();
     EXPECT_EQ(failures.load(), 0);
+}
+
+// ── BTS stack: registry / session ──────────────────────────────────────
+
+// Test: plain registry — create/find/remove by TMSI and IMSI, link index,
+// channel assignment, counts.
+TEST(CApiRegistry, Plain_CreateFindRemove) {
+    gsml3_registry* r = gsml3_registry_new(0);
+    ASSERT_NE(r, nullptr);
+    EXPECT_EQ(gsml3_registry_count(r), 0u);
+
+    gsml3_session* s1 = gsml3_registry_create_by_tmsi(r, 0x11111111);
+    ASSERT_NE(s1, nullptr);
+    EXPECT_EQ(gsml3_registry_create_by_tmsi(r, 0x11111111), nullptr);  // dup
+    EXPECT_EQ(gsml3_registry_count(r), 1u);
+
+    gsml3_session* s2 = gsml3_registry_create_by_imsi(r, "244051234567890");
+    ASSERT_NE(s2, nullptr);
+    EXPECT_EQ(gsml3_registry_count(r), 2u);
+    EXPECT_NE(gsml3_registry_find_by_imsi(r, "244051234567890"), nullptr);
+
+    EXPECT_EQ(gsml3_registry_find_by_tmsi(r, 0x11111111), s1);
+    EXPECT_EQ(gsml3_registry_find_by_tmsi(r, 0xDEADBEEF), nullptr);
+
+    // Link index + channel assignment.
+    gsml3_registry_assign_channel(r, s1, 7 /* SDCCHType */, 0, 3, 5120, 1);
+    EXPECT_EQ(gsml3_registry_find_by_link(r, 0, 3, 1), s1);
+    gsml3_registry_release_channel(r, s1);
+    EXPECT_EQ(gsml3_registry_find_by_link(r, 0, 3, 1), nullptr);
+
+    // Session access: identity + flags.
+    EXPECT_EQ(gsml3_session_tmsi(s1), 0x11111111u);
+    gsml3_session_set_tmsi(s1, 0x22222222);
+    EXPECT_EQ(gsml3_session_tmsi(s1), 0x22222222u);
+    gsml3_session_set_imsi(s1, "244051234567890");
+    EXPECT_EQ(gsml3_session_tmsi(s1), 0u);  // identity is now an IMSI
+    EXPECT_EQ(gsml3_session_is_registered(s1), 0);
+    gsml3_session_set_registered(s1, 1);
+    EXPECT_EQ(gsml3_session_is_registered(s1), 1);
+    gsml3_session_set_authenticated(s1, 1);
+    EXPECT_EQ(gsml3_session_is_authenticated(s1), 1);
+    gsml3_session_set_ciphered(s1, 1);
+    EXPECT_EQ(gsml3_session_is_ciphered(s1), 1);
+
+    EXPECT_EQ(gsml3_registry_remove(r, s1), 1);
+    EXPECT_EQ(gsml3_registry_remove(r, s1), 0);  // already removed
+    EXPECT_EQ(gsml3_registry_count(r), 1u);
+
+    gsml3_registry_clear(r);
+    EXPECT_EQ(gsml3_registry_count(r), 0u);
+    gsml3_registry_free(r);
+}
+
+// Test: sharded registries of every supported size — create/lookup/tick
+// with 10K sessions each.
+TEST(CApiRegistry, Sharded_AllSizes_10K) {
+    const int shards[] = {4, 8, 16, 32};
+    for (int sh : shards) {
+        gsml3_registry* r = gsml3_registry_new(sh);
+        ASSERT_NE(r, nullptr) << "shards=" << sh;
+        gsml3_registry_reserve(r, 10000);
+
+        const uint32_t N = 10000;
+        for (uint32_t i = 0; i < N; ++i)
+            ASSERT_NE(gsml3_registry_create_by_tmsi(r, i + 1), nullptr);
+        EXPECT_EQ(gsml3_registry_count(r), N);
+
+        uint32_t found = 0;
+        for (uint32_t i = 0; i < N; ++i)
+            if (gsml3_registry_find_by_tmsi(r, i + 1)) ++found;
+        EXPECT_EQ(found, N);
+
+        // Start a timer in 100 sessions and tick (O(active)).
+        for (uint32_t i = 0; i < 100; ++i) {
+            gsml3_session* s = gsml3_registry_find_by_tmsi(r, i + 1);
+            EXPECT_EQ(gsml3_session_timer_start(s, GSML3_TIMER_T3101), 1);
+        }
+        std::vector<gsml3_timer_expiry> exp(4096);
+        size_t n = gsml3_registry_tick_timers(r, 3000, exp.data(), exp.size());
+        EXPECT_EQ(n, 100u);
+        for (size_t i = 0; i < n; ++i)
+            EXPECT_EQ(gsml3_session_timer_running(exp[i].session, GSML3_TIMER_T3101), 0);
+
+        // create_by_imsi / clear are plain-registry features.
+        EXPECT_EQ(gsml3_registry_create_by_imsi(r, "244051234567890"), nullptr);
+        gsml3_registry_clear(r);  // no-op for sharded, documented
+        EXPECT_EQ(gsml3_registry_count(r), N);
+
+        gsml3_registry_free(r);
+    }
+}
+
+// Test: invalid shard counts are rejected.
+TEST(CApiRegistry, InvalidShardCount) {
+    for (int bad : {1, 2, 3, 5, 64, 128, -1}) {
+        EXPECT_EQ(gsml3_registry_new(bad), nullptr) << "shards=" << bad;
+        EXPECT_GT(std::strlen(gsml3_last_error()), 0u);
+    }
+}
+
+// Test: NULL safety of the registry/session accessors.
+TEST(CApiRegistry, NullSafety) {
+    gsml3_registry_free(nullptr);
+    EXPECT_EQ(gsml3_registry_count(nullptr), 0u);
+    EXPECT_EQ(gsml3_registry_find_by_tmsi(nullptr, 1), nullptr);
+    EXPECT_EQ(gsml3_registry_remove(nullptr, nullptr), 0);
+    gsml3_registry_reserve(nullptr, 10);
+    gsml3_registry_clear(nullptr);
+    gsml3_registry_assign_channel(nullptr, nullptr, 0, 0, 0, 0, 0);
+    gsml3_registry_release_channel(nullptr, nullptr);
+    EXPECT_EQ(gsml3_registry_tick_timers(nullptr, 1, nullptr, 0), 0u);
+    EXPECT_EQ(gsml3_registry_tick_procedures(nullptr, 1), 0u);
+
+    EXPECT_EQ(gsml3_session_tmsi(nullptr), 0u);
+    gsml3_session_set_tmsi(nullptr, 1);
+    gsml3_session_set_imsi(nullptr, "123");
+    EXPECT_EQ(gsml3_session_is_registered(nullptr), 0);
+    gsml3_session_set_registered(nullptr, 1);
+    EXPECT_EQ(gsml3_session_is_authenticated(nullptr), 0);
+    gsml3_session_set_authenticated(nullptr, 1);
+    EXPECT_EQ(gsml3_session_is_ciphered(nullptr), 0);
+    gsml3_session_set_ciphered(nullptr, 1);
+    EXPECT_EQ(gsml3_session_timer_start(nullptr, GSML3_TIMER_T3101), 0);
+    gsml3_session_timer_stop(nullptr, GSML3_TIMER_T3101);
+    EXPECT_EQ(gsml3_session_timer_running(nullptr, GSML3_TIMER_T3101), 0);
+    EXPECT_EQ(gsml3_session_transaction_pending(nullptr), 0u);
+}
+
+// Test: 8 threads against one sharded registry (create/find/remove) —
+// the name contains "Concurrent" so the TSan CI filter picks it up.
+TEST(CApiRegistry, Concurrent_ShardedRegistry) {
+    gsml3_registry* r = gsml3_registry_new(32);
+    ASSERT_NE(r, nullptr);
+    const uint32_t base = 0x40000000;
+    std::vector<std::thread> threads;
+    std::atomic<int> failures{0};
+    for (int t = 0; t < 8; ++t) {
+        threads.emplace_back([&, t]() {
+            for (uint32_t i = 0; i < 2000; ++i) {
+                uint32_t tmsi = base + static_cast<uint32_t>(t) * 2000 + i;
+                gsml3_session* s = gsml3_registry_create_by_tmsi(r, tmsi);
+                if (!s) { ++failures; continue; }
+                if (gsml3_registry_find_by_tmsi(r, tmsi) != s) ++failures;
+                if (gsml3_session_timer_start(s, GSML3_TIMER_T3101) != 1) ++failures;
+                if (gsml3_registry_remove(r, s) != 1) ++failures;
+            }
+        });
+    }
+    for (auto& th : threads) th.join();
+    EXPECT_EQ(failures.load(), 0);
+    EXPECT_EQ(gsml3_registry_count(r), 0u);
+    gsml3_registry_free(r);
 }
