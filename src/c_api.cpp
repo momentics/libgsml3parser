@@ -47,6 +47,8 @@
 #include "gsml3parser/visitor.h"
 #include "gsml3parser/abis/rsl_parser.h"
 #include "gsml3parser/abis/rsl_builder.h"
+#include "gsml3parser/lapdm_frame.h"
+#include "gsml3parser/lapdm_entity.h"
 
 namespace {
 
@@ -555,4 +557,214 @@ GSML3_C_API size_t gsml3_rsl_build_delete_ind(uint8_t* out, size_t maxlen,
         setLastError("unexpected exception in gsml3_rsl_build_delete_ind");
         return 0;
     }
+}
+
+// ── LAPDm (GSM 04.06) ─────────────────────────────────────────────────
+
+GSML3_C_API int gsml3_lapdm_frame_decode(const uint8_t* data, size_t len,
+                                         gsml3_lapdm_frame_info* out) {
+    try {
+        tLastError.clear();
+        if (!data || len == 0 || !out) {
+            setLastError("NULL input or out parameter");
+            return GSML3_ERR_INVALID_ARG;
+        }
+        auto r = lapdm::LAPDmFrame::decode({data, len});
+        if (!r) { reportParseError(r.error()); return mapParseError(r.error()); }
+        const auto& f = r.value();
+        out->format = static_cast<int>(f.format);
+        out->u_type = (f.format == lapdm::LAPDmControlFormat::U_Format)
+            ? static_cast<int>(f.uType) : -1;
+        out->s_type = (f.format == lapdm::LAPDmControlFormat::S_Format)
+            ? static_cast<int>(f.sType) : -1;
+        out->nr = f.nr;
+        out->ns = f.ns;
+        out->pf = f.pf ? 1 : 0;
+        out->m_bit = f.m ? 1 : 0;
+        out->sapi = static_cast<int>(f.address.sapi);
+        out->command = f.address.command ? 1 : 0;
+        out->info = f.info.data();
+        out->info_len = f.info.size();
+        return GSML3_OK;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_lapdm_frame_decode");
+        return GSML3_ERR_INVALID_VALUE;
+    }
+}
+
+namespace {
+
+// C trampolines for LAPDmEntity's fn+ctx callbacks. Declared before the
+// handle definition (the constructor takes their addresses) and defined
+// after it; the two blocks are the same unnamed namespace.
+void lapdmL3Trampoline(SAPI sapi, Primitive prim,
+                       std::span<const uint8_t> l3, void* ctx);
+void lapdmL1Trampoline(std::span<const uint8_t> frame, void* ctx);
+
+} // namespace
+
+// The handle owns the entity plus the C callback state. LAPDmEntity has no
+// default constructor, so its callbacks are wired in the member
+// initializer-list: `this` already is the final handle address there, and
+// the trampolines use it as the callback ctx to reach the C callbacks and
+// the user pointer.
+struct gsml3_lapdm_entity {
+    LAPDmEntity entity;
+    gsml3_lapdm_l3_cb l3Cb{nullptr};
+    gsml3_lapdm_l1_cb l1Cb{nullptr};
+    void* user{nullptr};
+
+    explicit gsml3_lapdm_entity(LAPDmChannelProfile profile)
+        : entity(profile, &lapdmL3Trampoline, &lapdmL1Trampoline,
+                 static_cast<void*>(this)) {}
+};
+
+namespace {
+
+void lapdmL3Trampoline(SAPI sapi, Primitive prim,
+                       std::span<const uint8_t> l3, void* ctx) {
+    auto* self = static_cast<gsml3_lapdm_entity*>(ctx);
+    if (self->l3Cb)
+        self->l3Cb(static_cast<int>(sapi), static_cast<int>(prim),
+                   l3.data(), l3.size(), self->user);
+}
+
+void lapdmL1Trampoline(std::span<const uint8_t> frame, void* ctx) {
+    auto* self = static_cast<gsml3_lapdm_entity*>(ctx);
+    if (self->l1Cb)
+        self->l1Cb(frame.data(), frame.size(), self->user);
+}
+
+} // namespace
+
+GSML3_C_API gsml3_lapdm_entity* gsml3_lapdm_entity_new(int profile,
+    gsml3_lapdm_l3_cb l3_cb, gsml3_lapdm_l1_cb l1_cb, void* user) {
+    try {
+        tLastError.clear();
+        LAPDmChannelProfile p;
+        switch (profile) {
+            case 0:  p = LAPDmChannelProfile::SDCCH(); break;
+            case 1:  p = LAPDmChannelProfile::SACCH(); break;
+            case 2:  p = LAPDmChannelProfile::FACCH(); break;
+            default:
+                setLastError("invalid LAPDm profile (0=SDCCH, 1=SACCH, 2=FACCH)");
+                return nullptr;
+        }
+        auto* e = new (std::nothrow) gsml3_lapdm_entity(p);
+        if (!e) { setLastError("out of memory"); return nullptr; }
+        e->l3Cb = l3_cb;
+        e->l1Cb = l1_cb;
+        e->user = user;
+        return e;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_lapdm_entity_new");
+        return nullptr;
+    }
+}
+
+GSML3_C_API void gsml3_lapdm_entity_free(gsml3_lapdm_entity* e) {
+    delete e;
+}
+
+GSML3_C_API void gsml3_lapdm_entity_open(gsml3_lapdm_entity* e, int sapi,
+                                         int command_bit) {
+    if (e && sapi >= 0 && sapi <= 15)
+        e->entity.open(static_cast<SAPI>(sapi), command_bit != 0);
+}
+
+GSML3_C_API void gsml3_lapdm_entity_receive(gsml3_lapdm_entity* e,
+                                            const uint8_t* frame, size_t len) {
+    if (e && frame && len) e->entity.receiveFrame({frame, len});
+}
+
+GSML3_C_API int gsml3_lapdm_entity_send_ui(gsml3_lapdm_entity* e, int sapi,
+                                           const uint8_t* l3, size_t l3_len) {
+    try {
+        tLastError.clear();
+        if (!e || (l3_len && !l3)) {
+            setLastError("NULL entity or L3 payload");
+            return GSML3_ERR_INVALID_ARG;
+        }
+        auto r = e->entity.sendUI(static_cast<SAPI>(sapi), {l3, l3_len});
+        if (!r) { reportParseError(r.error()); return mapParseError(r.error()); }
+        return GSML3_OK;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_lapdm_entity_send_ui");
+        return GSML3_ERR_INVALID_VALUE;
+    }
+}
+
+GSML3_C_API int gsml3_lapdm_entity_send_data(gsml3_lapdm_entity* e,
+                                             const uint8_t* l3, size_t l3_len) {
+    try {
+        tLastError.clear();
+        if (!e || (l3_len && !l3)) {
+            setLastError("NULL entity or L3 payload");
+            return GSML3_ERR_INVALID_ARG;
+        }
+        auto r = e->entity.sendData({l3, l3_len});
+        if (!r) { reportParseError(r.error()); return mapParseError(r.error()); }
+        return GSML3_OK;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_lapdm_entity_send_data");
+        return GSML3_ERR_INVALID_VALUE;
+    }
+}
+
+GSML3_C_API int gsml3_lapdm_entity_send_sabme(gsml3_lapdm_entity* e) {
+    try {
+        tLastError.clear();
+        if (!e) { setLastError("NULL entity"); return GSML3_ERR_INVALID_ARG; }
+        auto r = e->entity.sendSABME();
+        if (!r) { reportParseError(r.error()); return mapParseError(r.error()); }
+        return GSML3_OK;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_lapdm_entity_send_sabme");
+        return GSML3_ERR_INVALID_VALUE;
+    }
+}
+
+GSML3_C_API int gsml3_lapdm_entity_send_disc(gsml3_lapdm_entity* e) {
+    try {
+        tLastError.clear();
+        if (!e) { setLastError("NULL entity"); return GSML3_ERR_INVALID_ARG; }
+        auto r = e->entity.sendDISC();
+        if (!r) { reportParseError(r.error()); return mapParseError(r.error()); }
+        return GSML3_OK;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_lapdm_entity_send_disc");
+        return GSML3_ERR_INVALID_VALUE;
+    }
+}
+
+GSML3_C_API void gsml3_lapdm_entity_hard_release(gsml3_lapdm_entity* e) {
+    if (e) e->entity.hardRelease();
+}
+
+GSML3_C_API int gsml3_lapdm_entity_tick_t200(gsml3_lapdm_entity* e,
+                                             uint32_t elapsed_ms) {
+    if (!e) return 0;
+    return e->entity.tickT200(std::chrono::milliseconds(elapsed_ms)) ? 1 : 0;
+}
+
+GSML3_C_API int gsml3_lapdm_entity_state(const gsml3_lapdm_entity* e) {
+    if (!e) return GSML3_LAPDM_STATE_UNUSED;
+    return static_cast<int>(e->entity.state());
+}
+
+GSML3_C_API int gsml3_lapdm_entity_is_established(const gsml3_lapdm_entity* e) {
+    if (!e) return 0;
+    return e->entity.isEstablished() ? 1 : 0;
+}
+
+GSML3_C_API unsigned gsml3_lapdm_entity_frames_sent(const gsml3_lapdm_entity* e) {
+    return e ? e->entity.framesSent() : 0;
+}
+
+GSML3_C_API unsigned gsml3_lapdm_entity_frames_received(const gsml3_lapdm_entity* e) {
+    return e ? e->entity.framesReceived() : 0;
+}
+
+GSML3_C_API unsigned gsml3_lapdm_entity_retransmissions(const gsml3_lapdm_entity* e) {
+    return e ? e->entity.retransmissions() : 0;
 }

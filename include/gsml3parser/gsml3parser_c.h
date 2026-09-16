@@ -270,6 +270,133 @@ GSML3_C_API size_t gsml3_rsl_build_chan_rqd(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_rsl_build_delete_ind(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, const uint8_t* info, size_t info_len);
 
+/* ── LAPDm (GSM 04.06) ───────────────────────────────────────────────── */
+
+/* Frame formats (mirror gsml3parser::lapdm::LAPDmControlFormat 1:1). */
+enum gsml3_lapdm_format {
+    GSML3_LAPDM_FMT_I = 0,
+    GSML3_LAPDM_FMT_S = 1,
+    GSML3_LAPDM_FMT_U = 2
+};
+/* U-frame types (mirror gsml3parser::lapdm::LAPDmUFrameType 1:1). */
+enum gsml3_lapdm_u_type {
+    GSML3_LAPDM_U_UI = 0x03,
+    GSML3_LAPDM_U_SABME = 0x2F,
+    GSML3_LAPDM_U_UA = 0x63,
+    GSML3_LAPDM_U_DM = 0x0F,
+    GSML3_LAPDM_U_DISC = 0x08
+};
+/* S-frame types (mirror gsml3parser::lapdm::LAPDmSFrameType 1:1). */
+enum gsml3_lapdm_s_type {
+    GSML3_LAPDM_S_RR = 0x01,
+    GSML3_LAPDM_S_REJ = 0x0D
+};
+/* LAPDm FSM states (mirror gsml3parser::LAPDmState 1:1). */
+enum gsml3_lapdm_state {
+    GSML3_LAPDM_STATE_UNUSED = 0,
+    GSML3_LAPDM_STATE_LINK_RELEASED = 1,
+    GSML3_LAPDM_STATE_AWAITING_ESTABLISH = 2,
+    GSML3_LAPDM_STATE_AWAITING_RELEASE = 3,
+    GSML3_LAPDM_STATE_LINK_ESTABLISHED = 4,
+    GSML3_LAPDM_STATE_CONTENTION_RESOLUTION = 5
+};
+/* SAPI values (mirror gsml3parser::SAPI 1:1). */
+enum gsml3_sapi {
+    GSML3_SAPI0 = 0,
+    GSML3_SAPI3 = 3,
+    GSML3_SAPI0_SACCH = 4,
+    GSML3_SAPI3_SACCH = 7
+};
+/* Interlayer primitives (mirror gsml3parser::Primitive 1:1). */
+enum gsml3_primitive {
+    GSML3_PRIM_L2_DATA = 1,
+    GSML3_PRIM_L3_DATA = 2,
+    GSML3_PRIM_L3_DATA_CONFIRM = 3,
+    GSML3_PRIM_L3_UNIT_DATA = 4,
+    GSML3_PRIM_L3_ESTABLISH_REQUEST = 5,
+    GSML3_PRIM_L3_ESTABLISH_INDICATION = 6,
+    GSML3_PRIM_L3_ESTABLISH_CONFIRM = 7,
+    GSML3_PRIM_L3_RELEASE_REQUEST = 8,
+    GSML3_PRIM_L3_RELEASE_CONFIRM = 9,
+    GSML3_PRIM_L3_HARDRELEASE_REQUEST = 10,
+    GSML3_PRIM_MDL_ERROR_INDICATION = 11,
+    GSML3_PRIM_L3_RELEASE_INDICATION = 12,
+    GSML3_PRIM_PH_CONNECT = 13,
+    GSML3_PRIM_HANDOVER_ACCESS = 14
+};
+
+/* Decoded LAPDm frame. ZERO-COPY: info points into the input buffer and
+ * is valid while that buffer is alive. */
+typedef struct gsml3_lapdm_frame_info {
+    int format;       /* GSML3_LAPDM_FMT_* */
+    int u_type;       /* GSML3_LAPDM_U_* when format == U, else -1 */
+    int s_type;       /* GSML3_LAPDM_S_* when format == S, else -1 */
+    uint8_t nr;       /* receive sequence number (I/S frames) */
+    uint8_t ns;       /* send sequence number (I frames) */
+    int pf;           /* Poll/Final bit */
+    int m_bit;        /* message-complete bit (I frames) */
+    int sapi;         /* GSML3_SAPI* value */
+    int command;      /* C/R bit: 1 = command, 0 = response */
+    const uint8_t* info;  /* info field (NULL when absent) */
+    size_t info_len;
+} gsml3_lapdm_frame_info;
+
+/* Decode a raw LAPDm frame (address + control [+ length + info]).
+ * GSML3_OK or an error code. */
+GSML3_C_API int gsml3_lapdm_frame_decode(const uint8_t* data, size_t len,
+                                         gsml3_lapdm_frame_info* out);
+
+/* Entity callbacks: fn + user, invoked synchronously. The l3/frame
+ * spans are valid only DURING the callback: transmit or copy
+ * synchronously, never retain them. */
+typedef void (*gsml3_lapdm_l3_cb)(int sapi, int primitive,
+                                  const uint8_t* l3, size_t l3_len, void* user);
+typedef void (*gsml3_lapdm_l1_cb)(const uint8_t* frame, size_t frame_len,
+                                  void* user);
+
+typedef struct gsml3_lapdm_entity gsml3_lapdm_entity;
+
+/* profile: 0 = SDCCH (N201=20, N200=23, T200=900ms), 1 = SACCH
+ * (N201=18, N200=5, T200=3600ms), 2 = FACCH (N201=20, N200=34,
+ * T200=900ms). Callbacks may be NULL. Invalid profile returns NULL. */
+GSML3_C_API gsml3_lapdm_entity* gsml3_lapdm_entity_new(int profile,
+    gsml3_lapdm_l3_cb l3_cb, gsml3_lapdm_l1_cb l1_cb, void* user);
+/* Free the entity. NULL-safe. */
+GSML3_C_API void gsml3_lapdm_entity_free(gsml3_lapdm_entity* e);
+/* Open the entity (transition to LinkReleased). command_bit: 1 = BTS
+ * side (C/R=1), 0 = MS side (C/R=0). */
+GSML3_C_API void gsml3_lapdm_entity_open(gsml3_lapdm_entity* e, int sapi,
+                                         int command_bit);
+/* Feed a raw LAPDm frame from L1 into the FSM. */
+GSML3_C_API void gsml3_lapdm_entity_receive(gsml3_lapdm_entity* e,
+                                            const uint8_t* frame, size_t len);
+/* Send L3 data via a UI frame (works in any state). GSML3_OK or error. */
+GSML3_C_API int gsml3_lapdm_entity_send_ui(gsml3_lapdm_entity* e, int sapi,
+                                           const uint8_t* l3, size_t l3_len);
+/* Send L3 data via I-frames (segmented if needed; requires an
+ * established link). GSML3_OK or error. */
+GSML3_C_API int gsml3_lapdm_entity_send_data(gsml3_lapdm_entity* e,
+                                             const uint8_t* l3, size_t l3_len);
+/* Send SABME (link establishment; requires LinkReleased). */
+GSML3_C_API int gsml3_lapdm_entity_send_sabme(gsml3_lapdm_entity* e);
+/* Send DISC (link release; requires an established link). */
+GSML3_C_API int gsml3_lapdm_entity_send_disc(gsml3_lapdm_entity* e);
+/* Immediate transition to LinkReleased without sending frames. */
+GSML3_C_API void gsml3_lapdm_entity_hard_release(gsml3_lapdm_entity* e);
+/* Advance T200 by elapsed_ms; returns 1 if a retransmission or abnormal
+ * release occurred, 0 otherwise. */
+GSML3_C_API int gsml3_lapdm_entity_tick_t200(gsml3_lapdm_entity* e,
+                                             uint32_t elapsed_ms);
+/* Current FSM state (GSML3_LAPDM_STATE_*). */
+GSML3_C_API int gsml3_lapdm_entity_state(const gsml3_lapdm_entity* e);
+/* 1 if the link is established (LinkEstablished or
+ * ContentionResolution), 0 otherwise. */
+GSML3_C_API int gsml3_lapdm_entity_is_established(const gsml3_lapdm_entity* e);
+/* Statistics counters. */
+GSML3_C_API unsigned gsml3_lapdm_entity_frames_sent(const gsml3_lapdm_entity* e);
+GSML3_C_API unsigned gsml3_lapdm_entity_frames_received(const gsml3_lapdm_entity* e);
+GSML3_C_API unsigned gsml3_lapdm_entity_retransmissions(const gsml3_lapdm_entity* e);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

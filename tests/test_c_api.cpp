@@ -40,6 +40,7 @@
 #include <gsml3parser/visitor.h>
 #include <gsml3parser/abis/rsl_parser.h>
 #include <gsml3parser/abis/rsl_builder.h>
+#include <gsml3parser/lapdm_frame.h>
 
 using namespace gsml3parser;
 
@@ -420,4 +421,195 @@ TEST(CApiRsl, NullSafety) {
     EXPECT_EQ(len, 0u);
     EXPECT_EQ(gsml3_rsl_ie_count(nullptr), 0u);
     gsml3_rsl_free(nullptr);
+}
+
+// ── LAPDm (GSM 04.06) ─────────────────────────────────────────────────
+
+namespace {
+
+struct LapdmL3Event {
+    int sapi;
+    int primitive;  // GSML3_PRIM_*
+    std::vector<uint8_t> data;
+};
+
+struct LapdmCapture {
+    std::vector<std::vector<uint8_t>> txFrames;  // L1 callback
+    std::vector<LapdmL3Event> l3;                // L3 callback (sapi, primitive, bytes)
+};
+
+void cL3Cb(int sapi, int primitive, const uint8_t* l3, size_t l3_len, void* user) {
+    auto* cap = static_cast<LapdmCapture*>(user);
+    LapdmL3Event ev;
+    ev.sapi = sapi;
+    ev.primitive = primitive;
+    if (l3 && l3_len) ev.data.assign(l3, l3 + l3_len);
+    cap->l3.push_back(ev);
+}
+
+void cL1Cb(const uint8_t* frame, size_t frame_len, void* user) {
+    auto* cap = static_cast<LapdmCapture*>(user);
+    cap->txFrames.emplace_back(frame, frame + frame_len);
+}
+
+} // namespace
+
+// Test: frame decode through the C API agrees with the C++ decoder on
+// UI, I and S frames (zero-copy: info points into the input).
+TEST(CApiLapdm, FrameDecode_AgreesWithCpp) {
+    const std::vector<uint8_t> info = {0x60, 0x0D, 0x00};
+    auto ui = lapdm::makeUIFrame(SAPI::SAPI0, true, info);
+    std::vector<uint8_t> uiBytes = lapdm::encodeFrame(ui);
+
+    gsml3_lapdm_frame_info f{};
+    ASSERT_EQ(gsml3_lapdm_frame_decode(uiBytes.data(), uiBytes.size(), &f), GSML3_OK);
+    EXPECT_EQ(f.format, GSML3_LAPDM_FMT_U);
+    EXPECT_EQ(f.u_type, GSML3_LAPDM_U_UI);
+    EXPECT_EQ(f.s_type, -1);
+    EXPECT_EQ(f.sapi, GSML3_SAPI0);
+    EXPECT_EQ(f.command, 1);
+    ASSERT_NE(f.info, nullptr);
+    EXPECT_EQ(f.info_len, info.size());
+    EXPECT_EQ(0, std::memcmp(f.info, info.data(), info.size()));
+    // Zero-copy: info points inside the input buffer (address + control
+    // field precede the info field).
+    EXPECT_GE(f.info, uiBytes.data());
+    EXPECT_LE(f.info + f.info_len, uiBytes.data() + uiBytes.size());
+
+    auto ifr = lapdm::makeIFrame(SAPI::SAPI3, true, 2, 5, true, false, info);
+    std::vector<uint8_t> ifBytes = lapdm::encodeFrame(ifr);
+    ASSERT_EQ(gsml3_lapdm_frame_decode(ifBytes.data(), ifBytes.size(), &f), GSML3_OK);
+    EXPECT_EQ(f.format, GSML3_LAPDM_FMT_I);
+    EXPECT_EQ(f.nr, 2);
+    EXPECT_EQ(f.ns, 5);
+    EXPECT_EQ(f.pf, 1);
+    EXPECT_EQ(f.m_bit, 0);
+    EXPECT_EQ(f.sapi, GSML3_SAPI3);
+
+    auto rr = lapdm::makeRRFrame(SAPI::SAPI0, 3, true);
+    std::vector<uint8_t> rrBytes = lapdm::encodeFrame(rr);
+    ASSERT_EQ(gsml3_lapdm_frame_decode(rrBytes.data(), rrBytes.size(), &f), GSML3_OK);
+    EXPECT_EQ(f.format, GSML3_LAPDM_FMT_S);
+    EXPECT_EQ(f.s_type, GSML3_LAPDM_S_RR);
+    EXPECT_EQ(f.nr, 3);
+
+    // Truncated input: clean error, no crash.
+    EXPECT_NE(gsml3_lapdm_frame_decode(uiBytes.data(), 1, &f), GSML3_OK);
+}
+
+// Test: full link lifecycle through the C API: open -> SABME -> UA ->
+// established -> UI receive -> L3 callback -> DISC -> released. Mirrors
+// the scenarios in tests/test_lapdm.cpp.
+TEST(CApiLapdm, Entity_LinkLifecycle) {
+    LapdmCapture cap;
+    gsml3_lapdm_entity* e = gsml3_lapdm_entity_new(0, cL3Cb, cL1Cb, &cap);
+    ASSERT_NE(e, nullptr);
+    EXPECT_EQ(gsml3_lapdm_entity_state(e), GSML3_LAPDM_STATE_UNUSED);
+
+    gsml3_lapdm_entity_open(e, GSML3_SAPI0, 1);  // BTS side
+    EXPECT_EQ(gsml3_lapdm_entity_state(e), GSML3_LAPDM_STATE_LINK_RELEASED);
+
+    // SABME goes out via the L1 callback.
+    ASSERT_EQ(gsml3_lapdm_entity_send_sabme(e), GSML3_OK);
+    ASSERT_EQ(cap.txFrames.size(), 1u);
+    gsml3_lapdm_frame_info f{};
+    ASSERT_EQ(gsml3_lapdm_frame_decode(cap.txFrames[0].data(), cap.txFrames[0].size(), &f), GSML3_OK);
+    EXPECT_EQ(f.u_type, GSML3_LAPDM_U_SABME);
+    EXPECT_EQ(gsml3_lapdm_entity_state(e), GSML3_LAPDM_STATE_AWAITING_ESTABLISH);
+
+    // The peer answers with UA.
+    std::vector<uint8_t> ua = lapdm::encodeFrame(lapdm::makeUAFrame(SAPI::SAPI0, true, {}));
+    gsml3_lapdm_entity_receive(e, ua.data(), ua.size());
+    EXPECT_EQ(gsml3_lapdm_entity_state(e), GSML3_LAPDM_STATE_LINK_ESTABLISHED);
+    EXPECT_EQ(gsml3_lapdm_entity_is_established(e), 1);
+
+    // The peer sends a UI frame with L3: the L3 callback must fire.
+    const std::vector<uint8_t> l3 = {0x60, 0x0D, 0x00};
+    std::vector<uint8_t> ui = lapdm::encodeFrame(lapdm::makeUIFrame(SAPI::SAPI0, false, l3));
+    gsml3_lapdm_entity_receive(e, ui.data(), ui.size());
+    // Active-side establishment delivered an ESTABLISH_CONFIRM (empty
+    // payload) on the UA; the UI frame then delivers its L3 as
+    // UNIT_DATA — the same sequence semantics as test_lapdm.cpp.
+    ASSERT_EQ(cap.l3.size(), 2u);
+    EXPECT_EQ(cap.l3[0].primitive, GSML3_PRIM_L3_ESTABLISH_CONFIRM);
+    EXPECT_TRUE(cap.l3[0].data.empty());
+    EXPECT_EQ(cap.l3[1].sapi, GSML3_SAPI0);
+    EXPECT_EQ(cap.l3[1].primitive, GSML3_PRIM_L3_UNIT_DATA);
+    EXPECT_EQ(cap.l3[1].data, l3);
+
+    // DISC -> AwaitingRelease -> UA -> LinkReleased.
+    ASSERT_EQ(gsml3_lapdm_entity_send_disc(e), GSML3_OK);
+    EXPECT_EQ(gsml3_lapdm_entity_state(e), GSML3_LAPDM_STATE_AWAITING_RELEASE);
+    gsml3_lapdm_entity_receive(e, ua.data(), ua.size());
+    EXPECT_EQ(gsml3_lapdm_entity_state(e), GSML3_LAPDM_STATE_LINK_RELEASED);
+    EXPECT_EQ(gsml3_lapdm_entity_is_established(e), 0);
+
+    EXPECT_GT(gsml3_lapdm_entity_frames_sent(e), 0u);
+    // Received frames so far: UA (establish) + UI + UA (release) = 3.
+    EXPECT_EQ(gsml3_lapdm_entity_frames_received(e), 3u);
+
+    gsml3_lapdm_entity_free(e);
+}
+
+// Test: T200 expiry retransmits the outstanding SABME (mirrors
+// tests/test_lapdm.cpp LAPDmEntityTest.T200_Retransmission).
+TEST(CApiLapdm, Entity_T200_Retransmission) {
+    LapdmCapture cap;
+    gsml3_lapdm_entity* e = gsml3_lapdm_entity_new(0, cL3Cb, cL1Cb, &cap);
+    ASSERT_NE(e, nullptr);
+    gsml3_lapdm_entity_open(e, GSML3_SAPI0, 1);
+    ASSERT_EQ(gsml3_lapdm_entity_send_sabme(e), GSML3_OK);
+    cap.txFrames.clear();
+
+    EXPECT_EQ(gsml3_lapdm_entity_tick_t200(e, 900), 1);  // T200 (SDCCH) = 900 ms
+    ASSERT_EQ(cap.txFrames.size(), 1u);  // retransmitted SABME
+    EXPECT_EQ(gsml3_lapdm_entity_retransmissions(e), 1u);
+
+    gsml3_lapdm_entity_free(e);
+}
+
+// Test: send_data before link establishment fails with a clean error.
+TEST(CApiLapdm, Entity_SendData_BeforeLink_Fails) {
+    LapdmCapture cap;
+    gsml3_lapdm_entity* e = gsml3_lapdm_entity_new(0, cL3Cb, cL1Cb, &cap);
+    ASSERT_NE(e, nullptr);
+    gsml3_lapdm_entity_open(e, GSML3_SAPI0, 1);
+    const uint8_t l3[] = {0x60, 0x0D, 0x00};
+    EXPECT_NE(gsml3_lapdm_entity_send_data(e, l3, sizeof(l3)), GSML3_OK);
+    EXPECT_GT(std::strlen(gsml3_last_error()), 0u);
+    gsml3_lapdm_entity_free(e);
+}
+
+// Test: invalid profile and NULL safety.
+TEST(CApiLapdm, Entity_InvalidProfileAndNullSafety) {
+    EXPECT_EQ(gsml3_lapdm_entity_new(7, nullptr, nullptr, nullptr), nullptr);
+    gsml3_lapdm_entity_free(nullptr);
+    EXPECT_EQ(gsml3_lapdm_entity_state(nullptr), GSML3_LAPDM_STATE_UNUSED);
+    EXPECT_EQ(gsml3_lapdm_entity_is_established(nullptr), 0);
+    EXPECT_EQ(gsml3_lapdm_entity_frames_sent(nullptr), 0u);
+    gsml3_lapdm_entity_open(nullptr, 0, 1);
+    gsml3_lapdm_entity_receive(nullptr, nullptr, 0);
+    EXPECT_NE(gsml3_lapdm_entity_send_sabme(nullptr), GSML3_OK);
+}
+
+// Test: 8 threads each run an independent entity (the name contains
+// "Concurrent" so the TSan CI filter picks it up).
+TEST(CApiLapdm, Concurrent_IndependentEntities) {
+    std::vector<std::thread> threads;
+    std::atomic<int> failures{0};
+    for (int t = 0; t < 8; ++t) {
+        threads.emplace_back([&failures]() {
+            for (int i = 0; i < 200; ++i) {
+                LapdmCapture cap;
+                gsml3_lapdm_entity* e = gsml3_lapdm_entity_new(0, cL3Cb, cL1Cb, &cap);
+                if (!e) { ++failures; continue; }
+                gsml3_lapdm_entity_open(e, GSML3_SAPI0, 1);
+                if (gsml3_lapdm_entity_send_sabme(e) != GSML3_OK) ++failures;
+                gsml3_lapdm_entity_tick_t200(e, 900);
+                gsml3_lapdm_entity_free(e);
+            }
+        });
+    }
+    for (auto& th : threads) th.join();
+    EXPECT_EQ(failures.load(), 0);
 }
