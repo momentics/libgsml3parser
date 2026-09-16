@@ -79,6 +79,7 @@ add_executable(gsml3parser_tests
     test_procedure_call_release.cpp
     test_procedure_imsi_detach.cpp
     test_procedure_orchestrator.cpp
+    test_c_api.cpp
 )
 
 find_package(Threads REQUIRED)
@@ -144,3 +145,26 @@ if(ENABLE_ASAN AND MSVC)
 endif()
 
 add_test(NAME gsml3parser_tests COMMAND gsml3parser_tests)
+
+# C89 acceptance check of the C ABI: compiles the header as strict C,
+# links against the library and runs a parse/query/free smoke.
+enable_language(C)
+add_executable(c_api_c89_check c_api_c89_check.c)
+target_link_libraries(c_api_c89_check PRIVATE gsml3parser)
+if(MSVC)
+    target_compile_options(c_api_c89_check PRIVATE /TC /W4 /WX)
+else()
+    target_compile_options(c_api_c89_check PRIVATE -std=c89 -pedantic -Wall -Wextra -Werror)
+endif()
+add_test(NAME c_api_c89_check COMMAND c_api_c89_check)
+
+if(MSVC AND BUILD_SHARED_LIBS)
+    # The C consumer links against gsml3parser.dll; copy it next to the
+    # executable so ctest can run it without a modified PATH.
+    add_custom_command(TARGET c_api_c89_check POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:gsml3parser>
+            $<TARGET_FILE_DIR:c_api_c89_check>
+        COMMENT "Copying gsml3parser.dll next to c_api_c89_check"
+    )
+endif()

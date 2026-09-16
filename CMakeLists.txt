@@ -119,6 +119,10 @@ set(TESTPROC_SOURCES
     src/testproc/l3testproceduremessages.cpp
 )
 
+set(CAPI_SOURCES
+    src/c_api.cpp
+)
+
 # ── Public headers ────────────────────────────────────────────────────
 
 set(PUBLIC_HEADERS
@@ -194,6 +198,7 @@ set(PUBLIC_HEADERS
     include/gsml3parser/abis/rsl_types.h
     include/gsml3parser/abis/rsl_parser.h
     include/gsml3parser/abis/rsl_builder.h
+    include/gsml3parser/gsml3parser_c.h
 )
 
 # ── Library target ────────────────────────────────────────────────────
@@ -212,6 +217,7 @@ add_library(gsml3parser
     ${LS_SOURCES}
     ${EXTENDED_SOURCES}
     ${TESTPROC_SOURCES}
+    ${CAPI_SOURCES}
 )
 
 add_library(gsml3parser::parser ALIAS gsml3parser)
@@ -232,6 +238,14 @@ target_compile_features(gsml3parser PUBLIC cxx_std_20)
 
 target_compile_definitions(gsml3parser PRIVATE
     GSML3PARSER_EXPORTS
+)
+
+# C ABI (gsml3parser_c.h): GSML3PARSER_SHARED must be PUBLIC so shared
+# consumers get dllimport/visibility handling; GSML3PARSER_VERSION is
+# consumed by src/c_api.cpp only.
+target_compile_definitions(gsml3parser
+    PUBLIC  $<$<BOOL:${BUILD_SHARED_LIBS}>:GSML3PARSER_SHARED>
+    PRIVATE GSML3PARSER_VERSION="${PROJECT_VERSION}"
 )
 
 if(MSVC)
