@@ -27,9 +27,11 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <array>
 #include <cctype>
 #include <cstdio>
 #include <cstring>
+#include <functional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -42,6 +44,12 @@
 #include <gsml3parser/abis/rsl_builder.h>
 #include <gsml3parser/lapdm_frame.h>
 #include <gsml3parser/stack/subscriber_registry.h>
+#include <gsml3parser/common/l3common.h>
+#include <gsml3parser/mm/l3mmmessages.h>
+#include <gsml3parser/cc/l3ccmessages.h>
+#include <gsml3parser/rr/l3rrmessages.h>
+#include <gsml3parser/stack/procedure_orchestrator.h>
+#include <gsml3parser/stack/response_builder.h>
 
 using namespace gsml3parser;
 
@@ -765,4 +773,361 @@ TEST(CApiRegistry, Concurrent_ShardedRegistry) {
     EXPECT_EQ(failures.load(), 0);
     EXPECT_EQ(gsml3_registry_count(r), 0u);
     gsml3_registry_free(r);
+}
+
+// ── BTS stack: orchestrator / responses ────────────────────────────────
+
+namespace {
+
+// Build a CM Service Request (LocationUpdate) message handle. Returns
+// nullptr when the wire bytes cannot be produced or reparsed; callers
+// assert non-null (gtest ASSERT macros cannot be used in a function that
+// returns a value: they expand to an early `return`).
+gsml3_message* makeCmServiceRequestLU(uint32_t tmsi) {
+    auto msg = L3CMServiceRequest::builder()
+        .serviceType(L3CMServiceType{L3CMServiceType::TypeCode::LocationUpdateRequest})
+        .mobileIdentity(L3MobileIdentity{tmsi})
+        .build();
+    ParsedMessage pm{MMM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    if (!bytes) return nullptr;
+    return gsml3_parse_l3(bytes.value().data(), bytes.value().size(), nullptr);
+}
+
+// Build a CC Setup message handle (MO call).
+gsml3_message* makeCcSetup(uint8_t ti, const char* digits) {
+    auto msg = L3Setup::builder().ti(ti).calledParty(L3CalledPartyBCDNumber{digits}).build();
+    ParsedMessage pm{CCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    if (!bytes) return nullptr;
+    return gsml3_parse_l3(bytes.value().data(), bytes.value().size(), nullptr);
+}
+
+// Build a CC Disconnect message handle (starts the Call Release chain).
+gsml3_message* makeCcDisconnect(uint8_t ti) {
+    auto msg = L3Disconnect::builder().ti(ti).build();
+    ParsedMessage pm{CCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    if (!bytes) return nullptr;
+    return gsml3_parse_l3(bytes.value().data(), bytes.value().size(), nullptr);
+}
+
+} // namespace
+
+// Test: full Call Release chain through the C API — mirrors
+// CallRelease_UsesDisconnectTI from tests/test_procedure_orchestrator.cpp.
+// CC Disconnect starts the chain (detectChainPhase), is terminal with a
+// response: the action stays SEND_RESPONSE while the terminal state and
+// the thread-local reason are reported in finalResult. Note: a
+// wire-serialized LocationUpdate CMServiceRequest cannot drive the LU
+// chain instead, because the service-type field on the wire is 4 bits
+// (TypeCode::LocationUpdateRequest = 105 does not survive a parse); the
+// orchestrator correctly stays idle for it.
+TEST(CApiOrchestrator, CallReleaseChain) {
+    gsml3_registry* r = gsml3_registry_new(0);
+    gsml3_orchestrator* o = gsml3_orchestrator_new();
+    ASSERT_NE(r, nullptr);
+    ASSERT_NE(o, nullptr);
+    gsml3_session* s = gsml3_registry_create_by_tmsi(r, 0x12345678);
+    ASSERT_NE(s, nullptr);
+
+    uint8_t buf[512];
+
+    // CC Disconnect (TI=5) -> terminal Release response.
+    gsml3_message* disc = makeCcDisconnect(5);
+    ASSERT_NE(disc, nullptr);
+    gsml3_step_result r1 = gsml3_orchestrator_feed(o, disc, s);
+    EXPECT_EQ(r1.action, GSML3_ACTION_SEND_RESPONSE);
+    EXPECT_EQ(r1.response_token, GSML3_TOKEN_RELEASE);
+    EXPECT_EQ(r1.final_state, GSML3_STATE_COMPLETED);
+    EXPECT_EQ(r1.final_type, GSML3_PROC_CALL_RELEASE);
+    ASSERT_NE(r1.reason, nullptr);
+    EXPECT_STREQ(r1.reason, "release_sent");
+
+    size_t n = gsml3_orchestrator_build_response(o, s, buf, sizeof(buf));
+    ASSERT_GT(n, 0u);
+    gsml3_message* resp = gsml3_parse_l3(buf, n, nullptr);
+    ASSERT_NE(resp, nullptr);
+    EXPECT_STREQ(gsml3_message_name(resp), "Release");
+    // The Release is built from the Disconnect's real TI (session
+    // ResponseContext, never a fabricated value).
+    EXPECT_EQ(gsml3_message_ti(resp), 5);
+    gsml3_message_free(resp);
+
+    // The chain is terminal: phase is idle.
+    EXPECT_EQ(gsml3_orchestrator_chain_phase(o), GSML3_PROC_UNKNOWN);
+    EXPECT_EQ(gsml3_orchestrator_take_retransmit(o), GSML3_TOKEN_NONE);
+
+    gsml3_message_free(disc);
+    gsml3_orchestrator_free(o);
+    gsml3_registry_free(r);
+}
+
+// Test: the wire service type of a CMServiceRequest is truncated to its
+// 4-bit field on re-parse; the orchestrator must stay idle (no chain, no
+// response) for such requests — the LocationUpdate chain is driven by
+// directly constructed C++ messages in the C++ test suite.
+TEST(CApiOrchestrator, LURequest_NotChainStart_OverWire) {
+    gsml3_orchestrator* o = gsml3_orchestrator_new();
+    ASSERT_NE(o, nullptr);
+    gsml3_registry* r = gsml3_registry_new(0);
+    ASSERT_NE(r, nullptr);
+    gsml3_session* s = gsml3_registry_create_by_tmsi(r, 0x12345678);
+    ASSERT_NE(s, nullptr);
+
+    // A re-parsed LocationUpdate CMServiceRequest: the service type is
+    // read back from the 4-bit wire field, so it no longer matches the
+    // chain-start policy (LU = 105 / MO call = 1).
+    gsml3_message* cmReq = makeCmServiceRequestLU(0x12345678);
+    ASSERT_NE(cmReq, nullptr);
+    gsml3_step_result res = gsml3_orchestrator_feed(o, cmReq, s);
+    EXPECT_EQ(res.action, GSML3_ACTION_CONTINUE);
+    EXPECT_EQ(res.response_token, GSML3_TOKEN_NONE);
+    EXPECT_EQ(gsml3_orchestrator_chain_phase(o), GSML3_PROC_UNKNOWN);
+    EXPECT_EQ(gsml3_orchestrator_take_retransmit(o), GSML3_TOKEN_NONE);
+
+    gsml3_message_free(cmReq);
+    gsml3_orchestrator_free(o);
+    gsml3_registry_free(r);
+}
+
+// Test: MO Call Setup chain through the C API — mirrors
+// examples/example_reference_bts.cpp simulateMOCallSetupChain().
+TEST(CApiOrchestrator, MOCallSetupChain) {
+    gsml3_registry* r = gsml3_registry_new(0);
+    gsml3_orchestrator* o = gsml3_orchestrator_new();
+    ASSERT_NE(r, nullptr);
+    ASSERT_NE(o, nullptr);
+    gsml3_session* s = gsml3_registry_create_by_tmsi(r, 0x87654321);
+    ASSERT_NE(s, nullptr);
+
+    // Step 1: CMServiceRequest (MO call) -> CMServiceAccept.
+    auto cmReq = L3CMServiceRequest::builder()
+        .serviceType(L3CMServiceType{L3CMServiceType::TypeCode::MobileOriginatedCall})
+        .mobileIdentity(L3MobileIdentity{0x87654321})
+        .build();
+    ParsedMessage pm{MMM{std::move(cmReq)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    gsml3_message* cmReqMsg = gsml3_parse_l3(bytes.value().data(), bytes.value().size(), nullptr);
+    ASSERT_NE(cmReqMsg, nullptr);
+    gsml3_step_result r1 = gsml3_orchestrator_feed(o, cmReqMsg, s);
+    EXPECT_EQ(r1.response_token, GSML3_TOKEN_CM_SERVICE_ACCEPT);
+    gsml3_message_free(cmReqMsg);
+
+    // Step 2: CC Setup -> a response token (CallProceeding or later).
+    gsml3_message* setup = makeCcSetup(3, "123456789");
+    ASSERT_NE(setup, nullptr);
+    gsml3_step_result r2 = gsml3_orchestrator_feed(o, setup, s);
+    EXPECT_NE(r2.response_token, GSML3_TOKEN_NONE);
+    uint8_t buf[512];
+    size_t n = gsml3_orchestrator_build_response(o, s, buf, sizeof(buf));
+    ASSERT_GT(n, 0u);
+    gsml3_message* resp = gsml3_parse_l3(buf, n, nullptr);
+    ASSERT_NE(resp, nullptr);
+    gsml3_message_free(resp);
+    gsml3_message_free(setup);
+
+    gsml3_orchestrator_free(o);
+    gsml3_registry_free(r);
+}
+
+// Test: MO Call Setup procedure timer — after the MS Setup message the
+// active CallSetupMO procedure runs T3101 (3 s). Ticks inside the window
+// are not failures and queue nothing on the retransmission channel; an
+// expiry fails the procedure and resets the chain to idle. (The C++ test
+// suite covers the identity phase's T3102 retransmissions directly, where
+// a wire message is not needed to enter the phase.)
+TEST(CApiOrchestrator, CallSetupMO_T3101_Timeout) {
+    gsml3_registry* r = gsml3_registry_new(0);
+    gsml3_orchestrator* o = gsml3_orchestrator_new();
+    ASSERT_NE(r, nullptr);
+    ASSERT_NE(o, nullptr);
+    gsml3_session* s = gsml3_registry_create_by_tmsi(r, 0x87654321);
+    ASSERT_NE(s, nullptr);
+
+    // Step 1: CMServiceRequest (MO call) -> CMServiceAccept.
+    auto cmReq = L3CMServiceRequest::builder()
+        .serviceType(L3CMServiceType{L3CMServiceType::TypeCode::MobileOriginatedCall})
+        .mobileIdentity(L3MobileIdentity{0x87654321})
+        .build();
+    ParsedMessage pm{MMM{std::move(cmReq)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    gsml3_message* cmReqMsg = gsml3_parse_l3(bytes.value().data(), bytes.value().size(), nullptr);
+    ASSERT_NE(cmReqMsg, nullptr);
+    gsml3_step_result r1 = gsml3_orchestrator_feed(o, cmReqMsg, s);
+    EXPECT_EQ(r1.response_token, GSML3_TOKEN_CM_SERVICE_ACCEPT);
+    gsml3_message_free(cmReqMsg);
+
+    // Step 2: CC Setup -> CallProceeding; the procedure starts T3101 (3 s).
+    gsml3_message* setup = makeCcSetup(3, "123456789");
+    ASSERT_NE(setup, nullptr);
+    gsml3_step_result r2 = gsml3_orchestrator_feed(o, setup, s);
+    EXPECT_EQ(r2.response_token, GSML3_TOKEN_CALL_PROCEEDING);
+    gsml3_message_free(setup);
+
+    // Inside the window: no failures, nothing retransmitted.
+    EXPECT_EQ(gsml3_orchestrator_tick(o, 1000), 0u);
+    EXPECT_EQ(gsml3_orchestrator_take_retransmit(o), GSML3_TOKEN_NONE);
+
+    // Expiry: the chain times out (one failure) and resets to idle.
+    EXPECT_EQ(gsml3_orchestrator_tick(o, 2500), 1u);
+    EXPECT_EQ(gsml3_orchestrator_chain_phase(o), GSML3_PROC_UNKNOWN);
+    EXPECT_EQ(gsml3_orchestrator_take_retransmit(o), GSML3_TOKEN_NONE);
+
+    gsml3_orchestrator_free(o);
+    gsml3_registry_free(r);
+}
+
+// Test: CM Service Requests with a service type other than
+// LocationUpdate / MobileOriginatedCall are not handled by the
+// orchestrator: no chain, no response token.
+TEST(CApiOrchestrator, UnsupportedServiceType_Ignored) {
+    gsml3_registry* r = gsml3_registry_new(0);
+    gsml3_orchestrator* o = gsml3_orchestrator_new();
+    ASSERT_NE(r, nullptr);
+    ASSERT_NE(o, nullptr);
+    gsml3_session* s = gsml3_registry_create_by_tmsi(r, 0x12345678);
+    ASSERT_NE(s, nullptr);
+
+    auto cmReq = L3CMServiceRequest::builder()
+        .serviceType(L3CMServiceType{L3CMServiceType::TypeCode::ShortMessage})
+        .mobileIdentity(L3MobileIdentity{0x12345678})
+        .build();
+    ParsedMessage pm{MMM{std::move(cmReq)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    gsml3_message* cmReqMsg = gsml3_parse_l3(bytes.value().data(), bytes.value().size(), nullptr);
+    ASSERT_NE(cmReqMsg, nullptr);
+    gsml3_step_result res = gsml3_orchestrator_feed(o, cmReqMsg, s);
+    EXPECT_EQ(res.action, GSML3_ACTION_CONTINUE);
+    EXPECT_EQ(res.response_token, GSML3_TOKEN_NONE);
+    EXPECT_EQ(gsml3_orchestrator_chain_phase(o), GSML3_PROC_UNKNOWN);
+    EXPECT_EQ(gsml3_orchestrator_take_retransmit(o), GSML3_TOKEN_NONE);
+
+    gsml3_message_free(cmReqMsg);
+    gsml3_orchestrator_free(o);
+    gsml3_registry_free(r);
+}
+
+// Test: every standalone response builder produces bytes that parse back
+// with the expected message name (cross-check with the C++ API). Each
+// builder is invoked and parsed immediately: all builders write into one
+// caller buffer, so a message must be consumed before the next build.
+TEST(CApiResponse, Builders_ParseBack) {
+    uint8_t buf[512];
+    std::array<uint8_t, 16> kRand16{0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
+
+    const char* names[] = {
+        "CMServiceAccept",
+        "CMServiceReject",
+        "IdentityRequest",
+        "AuthenticationRequest",
+        "LocationUpdatingAccept",
+        "LocationUpdatingReject",
+        "TMSIReallocationCommand",
+        "ChannelRelease",
+        "CipheringModeCommand",
+        "PhysicalInformation",
+        "ImmediateAssignment",
+        "AssignmentCommand",
+        "CallProceeding",
+        "Alerting",
+        "Connect",
+        "ConnectAcknowledge",
+        "Disconnect",
+        "Release",
+        "ReleaseComplete",
+        "Setup",
+    };
+    std::vector<std::function<size_t(uint8_t*, size_t)>> builds = {
+        [](uint8_t* b, size_t m) { return gsml3_response_build_cm_service_accept(b, m); },
+        [](uint8_t* b, size_t m) { return gsml3_response_build_cm_service_reject(b, m, 0x03); },
+        [](uint8_t* b, size_t m) { return gsml3_response_build_identity_request(b, m, GSML3_ID_IMSI); },
+        [rand16 = kRand16.data()](uint8_t* b, size_t m) {
+            return gsml3_response_build_authentication_request(b, m, rand16); },
+        [](uint8_t* b, size_t m) {
+            return gsml3_response_build_location_updating_accept(b, m, "244", "05", 0x1234, 1, 0xDEADBEEF); },
+        [](uint8_t* b, size_t m) {
+            return gsml3_response_build_location_updating_reject(b, m, 0x03); },
+        [](uint8_t* b, size_t m) {
+            return gsml3_response_build_tmsi_reallocation_command(b, m, "244", "05", 0x1234, 0x11111111); },
+        [](uint8_t* b, size_t m) { return gsml3_response_build_channel_release(b, m, 0); },
+        [](uint8_t* b, size_t m) { return gsml3_response_build_ciphering_mode_command(b, m, 1); },
+        [](uint8_t* b, size_t m) { return gsml3_response_build_physical_information(b, m, 7); },
+        [](uint8_t* b, size_t m) {
+            return gsml3_response_build_immediate_assignment(b, m, 1 /* SDCCH */, 0, 0, 5120, 0); },
+        [](uint8_t* b, size_t m) {
+            return gsml3_response_build_assignment_command(b, m, 2 /* TCHF */, 0, 0, 5120); },
+        [](uint8_t* b, size_t m) { return gsml3_response_build_call_proceeding(b, m, 3); },
+        [](uint8_t* b, size_t m) { return gsml3_response_build_alerting(b, m, 3); },
+        [](uint8_t* b, size_t m) { return gsml3_response_build_connect(b, m, 3); },
+        [](uint8_t* b, size_t m) { return gsml3_response_build_connect_acknowledge(b, m, 3); },
+        [](uint8_t* b, size_t m) { return gsml3_response_build_disconnect(b, m, 3, 16); },
+        [](uint8_t* b, size_t m) { return gsml3_response_build_release(b, m, 3, 16); },
+        [](uint8_t* b, size_t m) { return gsml3_response_build_release_complete(b, m, 3); },
+        [](uint8_t* b, size_t m) { return gsml3_response_build_setup(b, m, "123456789", 3); },
+    };
+    for (size_t i = 0; i < builds.size(); ++i) {
+        size_t n = builds[i](buf, sizeof(buf));
+        ASSERT_GT(n, 0u) << names[i] << ": " << gsml3_last_error();
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr) << names[i];
+        EXPECT_STREQ(gsml3_message_name(m), names[i]) << names[i];
+        gsml3_message_free(m);
+    }
+}
+
+// Test: build_response_from_token reads the session's ResponseContext;
+// a missing parameter returns 0 (no fabricated values).
+TEST(CApiResponse, BuildFromToken) {
+    gsml3_registry* r = gsml3_registry_new(0);
+    gsml3_orchestrator* o = gsml3_orchestrator_new();
+    ASSERT_NE(r, nullptr);
+    ASSERT_NE(o, nullptr);
+    gsml3_session* s = gsml3_registry_create_by_tmsi(r, 0x12345678);
+    ASSERT_NE(s, nullptr);
+
+    uint8_t buf[512];
+
+    // Missing required parameter: AuthenticationRequest needs the session's
+    // RAND, which has not been fed yet — 0 (never fabricated values).
+    EXPECT_EQ(gsml3_response_build_from_token(GSML3_TOKEN_AUTHENTICATION_REQUEST,
+                                              s, buf, sizeof(buf)), 0u)
+        << "no RAND in the session context yet";
+
+    // After a CMServiceRequest(LU) the CMServiceAccept token builds.
+    gsml3_message* cmReq = makeCmServiceRequestLU(0x12345678);
+    ASSERT_NE(cmReq, nullptr);
+    [[maybe_unused]] auto r1 = gsml3_orchestrator_feed(o, cmReq, s);
+    size_t n = gsml3_response_build_from_token(GSML3_TOKEN_CM_SERVICE_ACCEPT,
+                                               s, buf, sizeof(buf));
+    ASSERT_GT(n, 0u);
+    gsml3_message* resp = gsml3_parse_l3(buf, n, nullptr);
+    ASSERT_NE(resp, nullptr);
+    EXPECT_STREQ(gsml3_message_name(resp), "CMServiceAccept");
+    gsml3_message_free(resp);
+
+    gsml3_message_free(cmReq);
+    gsml3_orchestrator_free(o);
+    gsml3_registry_free(r);
+}
+
+// Test: NULL safety of the orchestrator/response API.
+TEST(CApiOrchestrator, NullSafety) {
+    gsml3_orchestrator_free(nullptr);
+    gsml3_step_result d = gsml3_orchestrator_feed(nullptr, nullptr, nullptr);
+    EXPECT_EQ(d.action, GSML3_ACTION_CONTINUE);
+    EXPECT_EQ(d.response_token, GSML3_TOKEN_NONE);
+    EXPECT_EQ(d.final_type, GSML3_PROC_UNKNOWN);
+    EXPECT_EQ(d.reason, nullptr);
+    EXPECT_EQ(gsml3_orchestrator_tick(nullptr, 1), 0u);
+    uint8_t buf[8];
+    EXPECT_EQ(gsml3_orchestrator_build_response(nullptr, nullptr, buf, sizeof(buf)), 0u);
+    EXPECT_EQ(gsml3_orchestrator_take_retransmit(nullptr), GSML3_TOKEN_NONE);
+    gsml3_orchestrator_cancel_all(nullptr);
+    EXPECT_EQ(gsml3_orchestrator_chain_phase(nullptr), GSML3_PROC_UNKNOWN);
+    EXPECT_EQ(gsml3_response_build_cm_service_accept(nullptr, 0), 0u);
+    EXPECT_EQ(gsml3_response_build_from_token(GSML3_TOKEN_NONE, nullptr, buf, sizeof(buf)), 0u);
 }

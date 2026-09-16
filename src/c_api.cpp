@@ -52,6 +52,9 @@
 #include "gsml3parser/stack/subscriber_registry.h"
 #include "gsml3parser/stack/ms_context.h"
 #include "gsml3parser/stack/transaction.h"
+#include "gsml3parser/stack/procedure_orchestrator.h"
+#include "gsml3parser/stack/response_builder.h"
+#include "gsml3parser/stack/typed_external_data.h"
 
 namespace {
 
@@ -1064,4 +1067,507 @@ GSML3_C_API int gsml3_session_timer_running(gsml3_session* s, int timer_id) {
 
 GSML3_C_API size_t gsml3_session_transaction_pending(gsml3_session* s) {
     return s ? sess(s)->transactions.pendingCount() : 0;
+}
+
+// ── BTS stack: orchestrator / responses ───────────────────────────────
+
+// Thread-local copy of the last ProcedureStepResult::finalResult.reason
+// (the C++ string_view lifetime is not guaranteed beyond the call).
+thread_local std::string tLastReason;
+
+struct gsml3_orchestrator {
+    ProcedureOrchestrator orch;
+};
+
+namespace {
+
+gsml3_step_result defaultStepResult() {
+    gsml3_step_result c;
+    c.action = GSML3_ACTION_CONTINUE;
+    c.response_token = GSML3_TOKEN_NONE;
+    c.final_state = GSML3_STATE_INITIATED;
+    c.final_type = GSML3_PROC_UNKNOWN;
+    c.reason = nullptr;
+    return c;
+}
+
+gsml3_step_result toCResult(const ProcedureStepResult& r) {
+    gsml3_step_result c;
+    c.action = static_cast<int>(r.action);
+    c.response_token = static_cast<int>(r.responseToken);
+    c.final_state = static_cast<int>(r.finalResult.state);
+    c.final_type = static_cast<int>(r.finalResult.type);
+    c.reason = nullptr;
+    if (!r.finalResult.reason.empty()) {
+        tLastReason = std::string(r.finalResult.reason);
+        c.reason = tLastReason.c_str();
+    }
+    return c;
+}
+
+} // namespace
+
+GSML3_C_API gsml3_orchestrator* gsml3_orchestrator_new(void) {
+    tLastError.clear();
+    auto* o = new (std::nothrow) gsml3_orchestrator{};
+    if (!o) setLastError("out of memory");
+    return o;
+}
+
+GSML3_C_API void gsml3_orchestrator_free(gsml3_orchestrator* o) {
+    delete o;
+}
+
+GSML3_C_API gsml3_step_result gsml3_orchestrator_feed(
+    gsml3_orchestrator* o, const gsml3_message* msg, gsml3_session* s) {
+    try {
+        if (!o || !msg) return defaultStepResult();
+        return toCResult(o->orch.feed(msg->msg, sess(s)));
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_orchestrator_feed");
+        return defaultStepResult();
+    }
+}
+
+GSML3_C_API gsml3_step_result gsml3_orchestrator_feed_auth_challenge(
+    gsml3_orchestrator* o, const uint8_t rand[16], const uint8_t sres[4]) {
+    try {
+        if (!o || !rand || !sres) {
+            setLastError("NULL orchestrator or challenge data");
+            return defaultStepResult();
+        }
+        AuthChallenge c{};
+        std::memcpy(c.rand.data(), rand, 16);
+        std::memcpy(c.expectedSres.data(), sres, 4);
+        return toCResult(o->orch.feedExternalTyped(c));
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_orchestrator_feed_auth_challenge");
+        return defaultStepResult();
+    }
+}
+
+GSML3_C_API gsml3_step_result gsml3_orchestrator_feed_vlr_decision(
+    gsml3_orchestrator* o, int accept, int has_new_tmsi, uint32_t new_tmsi,
+    int reject_cause) {
+    try {
+        if (!o) return defaultStepResult();
+        VLRDecision v;
+        v.accept = (accept != 0);
+        v.newTmsi = has_new_tmsi ? std::optional<uint32_t>(new_tmsi) : std::nullopt;
+        v.rejectCause = static_cast<MMRejectCause>(reject_cause);
+        return toCResult(o->orch.feedExternalTyped(v));
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_orchestrator_feed_vlr_decision");
+        return defaultStepResult();
+    }
+}
+
+GSML3_C_API gsml3_step_result gsml3_orchestrator_feed_ciphering(
+    gsml3_orchestrator* o, uint8_t algo, int enable) {
+    try {
+        if (!o) return defaultStepResult();
+        CipheringParameters p{algo, enable != 0};
+        return toCResult(o->orch.feedExternalTyped(p));
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_orchestrator_feed_ciphering");
+        return defaultStepResult();
+    }
+}
+
+GSML3_C_API gsml3_step_result gsml3_orchestrator_feed_paging_trigger(
+    gsml3_orchestrator* o, int id_type, uint32_t tmsi, const char* imsi,
+    int target_channel) {
+    try {
+        if (!o) return defaultStepResult();
+        PagingTrigger p;
+        if (id_type == GSML3_ID_TMSI) {
+            p.identity = L3MobileIdentity{tmsi};
+        } else if (id_type == GSML3_ID_IMSI && imsi) {
+            p.identity = L3MobileIdentity{std::string_view(imsi)};
+        } else {
+            setLastError("invalid id_type or NULL imsi");
+            return defaultStepResult();
+        }
+        p.targetChannel = static_cast<ChannelType>(target_channel);
+        return toCResult(o->orch.feedExternalTyped(p));
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_orchestrator_feed_paging_trigger");
+        return defaultStepResult();
+    }
+}
+
+GSML3_C_API size_t gsml3_orchestrator_tick(gsml3_orchestrator* o,
+                                           uint32_t delta_ms) {
+    try {
+        if (!o) return 0;
+        return o->orch.tickAll(std::chrono::milliseconds(delta_ms));
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_orchestrator_tick");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_orchestrator_build_response(gsml3_orchestrator* o,
+    gsml3_session* s, uint8_t* out, size_t maxlen) {
+    try {
+        tLastError.clear();
+        if (!o || !out || maxlen == 0) {
+            setLastError("NULL orchestrator or output buffer");
+            return 0;
+        }
+        int n = o->orch.buildPendingResponse({out, maxlen}, sess(s));
+        if (n < 0) setLastError("missing response parameter or buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_orchestrator_build_response");
+        return 0;
+    }
+}
+
+GSML3_C_API int gsml3_orchestrator_take_retransmit(gsml3_orchestrator* o) {
+    if (!o) return GSML3_TOKEN_NONE;
+    return static_cast<int>(o->orch.takeRetransmissionToken());
+}
+
+GSML3_C_API void gsml3_orchestrator_cancel_all(gsml3_orchestrator* o) {
+    if (o) o->orch.cancelAll();
+}
+
+GSML3_C_API int gsml3_orchestrator_chain_phase(const gsml3_orchestrator* o) {
+    if (!o) return GSML3_PROC_UNKNOWN;
+    return static_cast<int>(o->orch.chainPhase());
+}
+
+// ── Standalone response builders ───────────────────────────────────────
+
+GSML3_C_API size_t gsml3_response_build_from_token(int token,
+    gsml3_session* s, uint8_t* out, size_t maxlen) {
+    try {
+        tLastError.clear();
+        if (!s || !out || maxlen == 0) {
+            setLastError("NULL session or output buffer");
+            return 0;
+        }
+        int n = ResponseBuilder::buildResponseFromToken(
+            static_cast<ResponseToken>(token), {out, maxlen}, sess(s));
+        if (n < 0) setLastError("missing response parameter or buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_from_token");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_cm_service_accept(uint8_t* out,
+    size_t maxlen) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = ResponseBuilder::buildCMServiceAccept({out, maxlen});
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_cm_service_accept");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_cm_service_reject(uint8_t* out,
+    size_t maxlen, int mm_cause) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = ResponseBuilder::buildCMServiceReject(
+            {out, maxlen}, static_cast<MMRejectCause>(mm_cause));
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_cm_service_reject");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_identity_request(uint8_t* out,
+    size_t maxlen, int id_type) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = ResponseBuilder::buildIdentityRequest(
+            {out, maxlen}, static_cast<MobileIDType>(id_type));
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_identity_request");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_authentication_request(uint8_t* out,
+    size_t maxlen, const uint8_t rand[16]) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0 || !rand) {
+            setLastError("NULL output buffer or rand");
+            return 0;
+        }
+        int n = ResponseBuilder::buildAuthenticationRequest(
+            {out, maxlen}, {rand, 16});
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_authentication_request");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_location_updating_accept(
+    uint8_t* out, size_t maxlen, const char* mcc, const char* mnc,
+    uint16_t lac, int has_new_tmsi, uint32_t new_tmsi) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0 || !mcc || !mnc) {
+            setLastError("NULL output buffer or LAI digits");
+            return 0;
+        }
+        L3LocationAreaIdentity lai{mcc, mnc, lac};
+        int n = ResponseBuilder::buildLocationUpdatingAccept(
+            {out, maxlen}, lai,
+            has_new_tmsi ? std::optional<uint32_t>(new_tmsi) : std::nullopt);
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_location_updating_accept");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_location_updating_reject(
+    uint8_t* out, size_t maxlen, int mm_cause) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = ResponseBuilder::buildLocationUpdatingReject(
+            {out, maxlen}, static_cast<MMRejectCause>(mm_cause));
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_location_updating_reject");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_tmsi_reallocation_command(
+    uint8_t* out, size_t maxlen, const char* mcc, const char* mnc,
+    uint16_t lac, uint32_t tmsi) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0 || !mcc || !mnc) {
+            setLastError("NULL output buffer or LAI digits");
+            return 0;
+        }
+        L3LocationAreaIdentity lai{mcc, mnc, lac};
+        int n = ResponseBuilder::buildTMSIReallocationCommand(
+            {out, maxlen}, lai, tmsi);
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_tmsi_reallocation_command");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_channel_release(uint8_t* out,
+    size_t maxlen, int rr_cause) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = ResponseBuilder::buildChannelRelease(
+            {out, maxlen}, static_cast<RRCause>(rr_cause));
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_channel_release");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_ciphering_mode_command(uint8_t* out,
+    size_t maxlen, uint8_t algo) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = ResponseBuilder::buildCipheringModeCommand({out, maxlen}, algo);
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_ciphering_mode_command");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_physical_information(uint8_t* out,
+    size_t maxlen, uint8_t ta) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = ResponseBuilder::buildPhysicalInformation({out, maxlen}, ta);
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_physical_information");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_immediate_assignment(uint8_t* out,
+    size_t maxlen, int type_and_offset, uint8_t tn, uint8_t tsc,
+    uint16_t arfcn, uint8_t ta) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        L3ChannelDescription channel{static_cast<TypeAndOffset>(type_and_offset),
+                                     tn, tsc, arfcn};
+        int n = ResponseBuilder::buildImmediateAssignment(
+            {out, maxlen}, channel, ta);
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_immediate_assignment");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_assignment_command(uint8_t* out,
+    size_t maxlen, int type_and_offset, uint8_t tn, uint8_t tsc,
+    uint16_t arfcn) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        L3ChannelDescription channel{static_cast<TypeAndOffset>(type_and_offset),
+                                     tn, tsc, arfcn};
+        int n = ResponseBuilder::buildAssignmentCommand({out, maxlen}, channel);
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_assignment_command");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_call_proceeding(uint8_t* out,
+    size_t maxlen, uint8_t ti) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = ResponseBuilder::buildCallProceeding({out, maxlen}, ti);
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_call_proceeding");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_alerting(uint8_t* out, size_t maxlen,
+    uint8_t ti) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = ResponseBuilder::buildAlerting({out, maxlen}, ti);
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_alerting");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_connect(uint8_t* out, size_t maxlen,
+    uint8_t ti) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = ResponseBuilder::buildConnect({out, maxlen}, ti);
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_connect");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_connect_acknowledge(uint8_t* out,
+    size_t maxlen, uint8_t ti) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = ResponseBuilder::buildConnectAcknowledge({out, maxlen}, ti);
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_connect_acknowledge");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_disconnect(uint8_t* out,
+    size_t maxlen, uint8_t ti, int cc_cause) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = ResponseBuilder::buildDisconnect(
+            {out, maxlen}, ti, static_cast<CCCause>(cc_cause));
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_disconnect");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_release(uint8_t* out, size_t maxlen,
+    uint8_t ti, int cc_cause) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = ResponseBuilder::buildRelease(
+            {out, maxlen}, ti, static_cast<CCCause>(cc_cause));
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_release");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_release_complete(uint8_t* out,
+    size_t maxlen, uint8_t ti) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        int n = ResponseBuilder::buildReleaseComplete({out, maxlen}, ti);
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_release_complete");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_response_build_setup(uint8_t* out, size_t maxlen,
+    const char* called_digits, uint8_t ti) {
+    try {
+        tLastError.clear();
+        if (!out || maxlen == 0 || !called_digits || !*called_digits) {
+            setLastError("NULL output buffer or called number");
+            return 0;
+        }
+        int n = ResponseBuilder::buildSetupZeroAlloc(
+            {out, maxlen}, called_digits, std::strlen(called_digits), ti);
+        if (n < 0) setLastError("buffer too small");
+        return n > 0 ? static_cast<size_t>(n) : 0;
+    } catch (...) {
+        setLastError("unexpected exception in gsml3_response_build_setup");
+        return 0;
+    }
 }

@@ -513,6 +513,180 @@ GSML3_C_API int gsml3_session_timer_running(gsml3_session* s, int timer_id);
 /* Number of pending transactions. */
 GSML3_C_API size_t gsml3_session_transaction_pending(gsml3_session* s);
 
+/* ── BTS stack: orchestrator / responses ─────────────────────────────── */
+
+/* Step actions (mirror ProcedureStepResult::Action 1:1). */
+enum gsml3_action {
+    GSML3_ACTION_CONTINUE = 0,
+    GSML3_ACTION_SEND_RESPONSE = 1,
+    GSML3_ACTION_WAITING_EXTERNAL = 2,
+    GSML3_ACTION_COMPLETED = 3,
+    GSML3_ACTION_FAILED = 4
+};
+/* Procedure lifecycle states (mirror procedure::ProcedureState 1:1). */
+enum gsml3_state {
+    GSML3_STATE_INITIATED = 0,
+    GSML3_STATE_IN_PROGRESS = 1,
+    GSML3_STATE_WAITING_EXTERNAL = 2,
+    GSML3_STATE_COMPLETED = 3,
+    GSML3_STATE_FAILED = 4,
+    GSML3_STATE_TIMED_OUT = 5
+};
+/* Procedure types (mirror procedure::ProcedureType 1:1). */
+enum gsml3_proc_type {
+    GSML3_PROC_LOCATION_UPDATE = 0x01,
+    GSML3_PROC_AUTHENTICATION = 0x02,
+    GSML3_PROC_CIPHERING_MODE = 0x03,
+    GSML3_PROC_CALL_SETUP_MO = 0x04,
+    GSML3_PROC_CALL_SETUP_MT = 0x05,
+    GSML3_PROC_CHANNEL_ASSIGNMENT = 0x06,
+    GSML3_PROC_HANDOVER = 0x07,
+    GSML3_PROC_PAGING = 0x08,
+    GSML3_PROC_CM_SERVICE_REQUEST = 0x09,
+    GSML3_PROC_IMSI_DETACH = 0x0A,
+    GSML3_PROC_CALL_RELEASE = 0x0B,
+    GSML3_PROC_PERIODIC_LOCATION_UPDATE = 0x0C,
+    GSML3_PROC_UNKNOWN = 0xFF
+};
+/* Response tokens (mirror ResponseToken 1:1). */
+enum gsml3_token {
+    GSML3_TOKEN_NONE = 0,
+    GSML3_TOKEN_IMMEDIATE_ASSIGNMENT = 1,
+    GSML3_TOKEN_ASSIGNMENT_COMMAND = 2,
+    GSML3_TOKEN_CHANNEL_RELEASE = 3,
+    GSML3_TOKEN_CIPHERING_MODE_COMMAND = 4,
+    GSML3_TOKEN_PHYSICAL_INFORMATION = 5,
+    GSML3_TOKEN_HANDOVER_COMMAND = 6,
+    GSML3_TOKEN_PAGING_REQUEST_TYPE1 = 7,
+    GSML3_TOKEN_PAGING_REQUEST_TYPE2 = 8,
+    GSML3_TOKEN_PAGING_REQUEST_TYPE3 = 9,
+    GSML3_TOKEN_CM_SERVICE_ACCEPT = 10,
+    GSML3_TOKEN_CM_SERVICE_REJECT = 11,
+    GSML3_TOKEN_IDENTITY_REQUEST = 12,
+    GSML3_TOKEN_AUTHENTICATION_REQUEST = 13,
+    GSML3_TOKEN_LOCATION_UPDATING_ACCEPT = 14,
+    GSML3_TOKEN_LOCATION_UPDATING_REJECT = 15,
+    GSML3_TOKEN_TMSI_REALLOCATION_COMMAND = 16,
+    GSML3_TOKEN_CALL_PROCEEDING = 17,
+    GSML3_TOKEN_ALERTING = 18,
+    GSML3_TOKEN_CONNECT = 19,
+    GSML3_TOKEN_CONNECT_ACKNOWLEDGE = 20,
+    GSML3_TOKEN_DISCONNECT = 21,
+    GSML3_TOKEN_RELEASE = 22,
+    GSML3_TOKEN_RELEASE_COMPLETE = 23,
+    GSML3_TOKEN_SETUP = 24
+};
+
+/* Result of one orchestrator step. reason: a thread-local copy of the
+ * C++ string_view (whose lifetime is not guaranteed beyond the call);
+ * valid until the next gsml3_* call on this thread, NULL when empty. */
+typedef struct gsml3_step_result {
+    int action;          /* GSML3_ACTION_* */
+    int response_token;  /* GSML3_TOKEN_* (GSML3_TOKEN_NONE when none) */
+    int final_state;     /* GSML3_STATE_* */
+    int final_type;      /* GSML3_PROC_* */
+    const char* reason;
+} gsml3_step_result;
+
+/* One orchestrator per session chain. Owns the active procedure. */
+typedef struct gsml3_orchestrator gsml3_orchestrator;
+
+GSML3_C_API gsml3_orchestrator* gsml3_orchestrator_new(void);
+/* Free the orchestrator. NULL-safe. */
+GSML3_C_API void gsml3_orchestrator_free(gsml3_orchestrator* o);
+
+/* Feed a parsed L3 message into the chain. */
+GSML3_C_API gsml3_step_result gsml3_orchestrator_feed(
+    gsml3_orchestrator* o, const gsml3_message* msg, gsml3_session* s);
+/* Typed external data (1:1 with the C++ ExternalData alternatives).
+ * rand: 16 octets (wire order); sres: 4 octets (big-endian, octet 0 =
+ * MSB). */
+GSML3_C_API gsml3_step_result gsml3_orchestrator_feed_auth_challenge(
+    gsml3_orchestrator* o, const uint8_t rand[16], const uint8_t sres[4]);
+/* reject_cause: MMRejectCause value (see include/gsml3parser/enums.h). */
+GSML3_C_API gsml3_step_result gsml3_orchestrator_feed_vlr_decision(
+    gsml3_orchestrator* o, int accept, int has_new_tmsi, uint32_t new_tmsi,
+    int reject_cause);
+GSML3_C_API gsml3_step_result gsml3_orchestrator_feed_ciphering(
+    gsml3_orchestrator* o, uint8_t algo, int enable);
+/* id_type: GSML3_ID_TMSI or GSML3_ID_IMSI (imsi digits when IMSI);
+ * target_channel: gsml3parser::ChannelType value. */
+GSML3_C_API gsml3_step_result gsml3_orchestrator_feed_paging_trigger(
+    gsml3_orchestrator* o, int id_type, uint32_t tmsi, const char* imsi,
+    int target_channel);
+
+/* Tick the chain timers; returns the number of failures. */
+GSML3_C_API size_t gsml3_orchestrator_tick(gsml3_orchestrator* o,
+                                           uint32_t delta_ms);
+/* Build the pending response (last token) into the caller's buffer;
+ * 0 on error (missing parameter or buffer too small). */
+GSML3_C_API size_t gsml3_orchestrator_build_response(gsml3_orchestrator* o,
+    gsml3_session* s, uint8_t* out, size_t maxlen);
+/* Drain the retransmission channel (consume-on-read); GSML3_TOKEN_*.
+ * After a non-None token, build and send the response via
+ * gsml3_orchestrator_build_response. */
+GSML3_C_API int gsml3_orchestrator_take_retransmit(gsml3_orchestrator* o);
+/* Cancel the active chain. */
+GSML3_C_API void gsml3_orchestrator_cancel_all(gsml3_orchestrator* o);
+/* Current chain phase (GSML3_PROC_*; GSML3_PROC_UNKNOWN when idle). */
+GSML3_C_API int gsml3_orchestrator_chain_phase(const gsml3_orchestrator* o);
+
+/* Standalone response builders (stateless; zero-alloc). Return bytes
+ * written, 0 on error or buffer too small. Cause parameters are int
+ * values mirroring the corresponding C++ enums (RRCause /
+ * MMRejectCause / CCCause — see include/gsml3parser/enums.h). */
+/* Build the response for `token` from the session's ResponseContext;
+ * 0 when a required parameter is missing. */
+GSML3_C_API size_t gsml3_response_build_from_token(int token,
+    gsml3_session* s, uint8_t* out, size_t maxlen);
+GSML3_C_API size_t gsml3_response_build_cm_service_accept(uint8_t* out,
+    size_t maxlen);
+GSML3_C_API size_t gsml3_response_build_cm_service_reject(uint8_t* out,
+    size_t maxlen, int mm_cause);
+GSML3_C_API size_t gsml3_response_build_identity_request(uint8_t* out,
+    size_t maxlen, int id_type);
+GSML3_C_API size_t gsml3_response_build_authentication_request(uint8_t* out,
+    size_t maxlen, const uint8_t rand[16]);
+/* mcc/mnc: digit strings (e.g. "244", "05"). */
+GSML3_C_API size_t gsml3_response_build_location_updating_accept(
+    uint8_t* out, size_t maxlen, const char* mcc, const char* mnc,
+    uint16_t lac, int has_new_tmsi, uint32_t new_tmsi);
+GSML3_C_API size_t gsml3_response_build_location_updating_reject(
+    uint8_t* out, size_t maxlen, int mm_cause);
+GSML3_C_API size_t gsml3_response_build_tmsi_reallocation_command(
+    uint8_t* out, size_t maxlen, const char* mcc, const char* mnc,
+    uint16_t lac, uint32_t tmsi);
+GSML3_C_API size_t gsml3_response_build_channel_release(uint8_t* out,
+    size_t maxlen, int rr_cause);
+GSML3_C_API size_t gsml3_response_build_ciphering_mode_command(uint8_t* out,
+    size_t maxlen, uint8_t algo);
+GSML3_C_API size_t gsml3_response_build_physical_information(uint8_t* out,
+    size_t maxlen, uint8_t ta);
+/* type_and_offset: gsml3parser::TypeAndOffset value (types.h). */
+GSML3_C_API size_t gsml3_response_build_immediate_assignment(uint8_t* out,
+    size_t maxlen, int type_and_offset, uint8_t tn, uint8_t tsc,
+    uint16_t arfcn, uint8_t ta);
+GSML3_C_API size_t gsml3_response_build_assignment_command(uint8_t* out,
+    size_t maxlen, int type_and_offset, uint8_t tn, uint8_t tsc,
+    uint16_t arfcn);
+GSML3_C_API size_t gsml3_response_build_call_proceeding(uint8_t* out,
+    size_t maxlen, uint8_t ti);
+GSML3_C_API size_t gsml3_response_build_alerting(uint8_t* out, size_t maxlen,
+    uint8_t ti);
+GSML3_C_API size_t gsml3_response_build_connect(uint8_t* out, size_t maxlen,
+    uint8_t ti);
+GSML3_C_API size_t gsml3_response_build_connect_acknowledge(uint8_t* out,
+    size_t maxlen, uint8_t ti);
+GSML3_C_API size_t gsml3_response_build_disconnect(uint8_t* out,
+    size_t maxlen, uint8_t ti, int cc_cause);
+GSML3_C_API size_t gsml3_response_build_release(uint8_t* out, size_t maxlen,
+    uint8_t ti, int cc_cause);
+GSML3_C_API size_t gsml3_response_build_release_complete(uint8_t* out,
+    size_t maxlen, uint8_t ti);
+/* called_digits: BCD digit string (e.g. "123456789"). */
+GSML3_C_API size_t gsml3_response_build_setup(uint8_t* out, size_t maxlen,
+    const char* called_digits, uint8_t ti);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
