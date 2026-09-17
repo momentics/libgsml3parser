@@ -355,6 +355,7 @@ Layered design, bottom to top:
 - **Arena allocator** — Bump allocator for high-throughput batch parsing
 - **Zero external dependencies** — C++20 standard library only
 - **Fuzzing targets** — libFuzzer targets for `parseL3`, `RSLParser::parse`, `LAPDmFrame::decode` and `L3Framer` (`fuzz/`, `ENABLE_FUZZING=ON`)
+- **C ABI** — C89-compatible header (`gsml3parser_c.h`) for FFI (C, Python ctypes/cffi, Rust, Go): L3/RSL parsing, LAPDm, the full BTS stack (registry/sessions/orchestrator) with zero-allocation hot path
 - **Spec-compliant** — GSM 04.08 / 3GPP TS 24.008, GSM 04.06, GSM 04.07, 3GPP TS 24.080, TS 44.018, TS 44.031
 
 ## Thread Safety
@@ -370,7 +371,7 @@ Layered design, bottom to top:
 
 | Document | Topic |
 |----------|-------|
-| [doc/API.md](doc/API.md) | Full API reference (62 sections) |
+| [doc/API.md](doc/API.md) | Full API reference (63 sections) |
 | [doc/bts_architecture.md](doc/bts_architecture.md) | BTS architecture, threading model, scaling to millions of MS |
 | [doc/bts_integration.md](doc/bts_integration.md) | **Primary guide for BTS developers**: ProcedureOrchestrator, ResponseToken pattern, typed external data |
 | [doc/messages.md](doc/messages.md) | Complete catalog of 200+ message types |
@@ -385,7 +386,6 @@ Layered design, bottom to top:
 
 ## Roadmap
 
-- [ ] C API wrapper for FFI
 - [ ] Python bindings (pybind11)
 
 ## License
