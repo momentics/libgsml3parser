@@ -66,6 +66,7 @@
 60. [Call Release Procedure](#60-call-release-procedure)
 61. [IMSI Detach Procedure](#61-imsi-detach-procedure)
 62. [Performance Optimizations Summary](#62-performance-optimizations-summary)
+63. [C API (gsml3parser_c.h)](#63-c-api-gsml3parser_ch)
 
 ---
 
@@ -4695,6 +4696,95 @@ Ring buffer index wrap-around uses `idx & mMask` (1 CPU cycle) instead of `idx %
 ### Template-Based processOne
 
 `L3StreamProcessor::processOne(F&& handler)` is a template method with C++20 concepts constraint. The compiler can inline and optimize the handler call, eliminating `std::function` type-erasure overhead for this hot path.
+
+---
+
+## 63. C API (gsml3parser_c.h)
+
+A stable C ABI over the C++20 library for FFI consumers (C, Python
+ctypes/cffi, Rust, Go). One C89-clean header
+(`include/gsml3parser/gsml3parser_c.h`) + one implementation
+(`src/c_api.cpp`); no C++ types cross the boundary.
+
+### Scope
+
+| Layer | C API |
+|-------|-------|
+| Core L3 | `gsml3_parse_l3` / `gsml3_parse_l3_hex` / `gsml3_parse_l3_into` (all 240 message types), `gsml3_message_name/pd/mti/ti`, `gsml3_message_write/hex/free`, `gsml3_config` |
+| A-bis RSL | `gsml3_rsl_parse` + accessors (IE/L3 views into the handle's copy) + 13 `gsml3_rsl_build_*` |
+| LAPDm | `gsml3_lapdm_frame_decode` (zero-copy) + `gsml3_lapdm_entity` (full FSM, fn+user callbacks) |
+| BTS stack | `gsml3_registry` (plain + sharded {4,8,16,32}), borrowed `gsml3_session`, O(active) ticks, session access |
+| Orchestrator | `gsml3_orchestrator_feed/feedExternal*/tick/build_response/take_retransmit/cancel_all/chain_phase` + 21 `gsml3_response_build_*` |
+| Typed access | Curated ~44 messages: typed getters + builders (see the header) |
+
+### ABI rules
+
+- **Handles.** Owned handles (`gsml3_config`, `gsml3_message`,
+  `gsml3_rsl`, `gsml3_registry`, `gsml3_orchestrator`,
+  `gsml3_lapdm_entity`) are created by `gsml3_*_new()`/`gsml3_parse_*()`
+  and released by the matching `gsml3_*_free()` (NULL-safe).
+  `gsml3_session` is a **borrowed** pointer-sized handle owned by the
+  registry (zero allocations on create/find; valid until the session is
+  removed or the registry is freed).
+- **Errors.** Handle-returning functions return NULL; action functions
+  return `enum gsml3_error` codes; serializers return bytes written
+  (0 = error / buffer too small). Details: `gsml3_last_error()`
+  (thread-local, `""` when none; valid until the next `gsml3_*` call on
+  the same thread).
+- **Strings.** `const char*` results (names, last error) are static /
+  thread-local — do not free. `char*` results (hex) — free with
+  `gsml3_free()`.
+- **Buffers.** All serializers write into the caller's buffer
+  (`uint8_t* out, size_t maxlen`) — zero heap allocation on the hot
+  path.
+- **Threading.** Stateless functions are thread-safe. Owned handles are
+  single-thread. A registry with `shard_count > 0` is thread-safe
+  (per-shard locks).
+- **C89.** The header compiles as strict C89
+  (`gcc -std=c89 -pedantic-errors`, MSVC `/TC`) and as C++20.
+
+### Usage example
+
+```c
+#include <gsml3parser/gsml3parser_c.h>
+
+int main(void) {
+    /* Parse one L3 message from hex. */
+    gsml3_message* msg = gsml3_parse_l3_hex("60 0D 00", NULL);
+    if (!msg) return 1;
+    printf("%s (PD=%d, MTI=0x%02X)\n",
+           gsml3_message_name(msg), gsml3_message_pd(msg),
+           gsml3_message_mti(msg));
+    gsml3_message_free(msg);
+
+    /* High-throughput streaming: one reused handle per thread.
+     * gsml3_parse_l3_into reparses in place (zero extra allocation
+     * for typical messages); on error the handle keeps its previous
+     * content. */
+    gsml3_message* hot = gsml3_parse_l3_hex("60 0D 00", NULL);
+    if (hot) {
+        /* for each frame (buf, len):
+           if (gsml3_parse_l3_into(hot, buf, len, NULL) == GSML3_OK) {
+               ... use gsml3_message_name(hot) ...
+           } */
+        gsml3_message_free(hot);
+    }
+
+    /* A-bis RSL frame. */
+    /* gsml3_rsl* rsl = gsml3_rsl_parse(frame, frame_len);
+       const uint8_t* l3 = gsml3_rsl_l3(rsl, &l3_len); ... */
+
+    return 0;
+}
+```
+
+### Build
+
+The C header is installed with the package
+(`install(DIRECTORY include/gsml3parser ...)`); link against the
+`gsml3parser` target (static or shared). For shared builds the
+`GSML3PARSER_SHARED` definition is propagated automatically
+(dllexport/dllimport / default visibility).
 
 ---
 

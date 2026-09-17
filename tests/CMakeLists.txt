@@ -94,6 +94,10 @@ target_link_libraries(gsml3parser_tests
 
 if(MSVC)
     target_compile_definitions(gsml3parser_tests PRIVATE _CRT_SECURE_NO_WARNINGS)
+    # The test translation units instantiate large parts of the message
+    # template machinery; in Debug this exceeds the default COFF section
+    # limit (C1128). Same fix as for the library target (Debug only).
+    target_compile_options(gsml3parser_tests PRIVATE $<$<CONFIG:Debug>:/bigobj>)
 endif()
 
 # GSML3PARSER_DEBUG: wall-clock performance budgets only hold for optimized
@@ -160,12 +164,29 @@ endif()
 add_test(NAME c_api_c89_check COMMAND c_api_c89_check)
 
 if(MSVC AND BUILD_SHARED_LIBS)
-    # The C consumer links against gsml3parser.dll; copy it next to the
-    # executable so ctest can run it without a modified PATH.
+    # The consumers link against gsml3parser.dll; copy it next to the
+    # executables so ctest can run them without a modified PATH.
     add_custom_command(TARGET c_api_c89_check POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
             $<TARGET_FILE:gsml3parser>
             $<TARGET_FILE_DIR:c_api_c89_check>
         COMMENT "Copying gsml3parser.dll next to c_api_c89_check"
+    )
+    add_custom_command(TARGET gsml3parser_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:gsml3parser>
+            $<TARGET_FILE_DIR:gsml3parser_tests>
+        COMMENT "Copying gsml3parser.dll next to gsml3parser_tests"
+    )
+    # In a shared build googletest is also a DLL pair; copy the runtimes
+    # next to the test executable so ctest finds them without PATH changes.
+    add_custom_command(TARGET gsml3parser_tests POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:gtest>
+            $<TARGET_FILE_DIR:gsml3parser_tests>
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:gtest_main>
+            $<TARGET_FILE_DIR:gsml3parser_tests>
+        COMMENT "Copying gtest runtime DLLs next to gsml3parser_tests"
     )
 endif()

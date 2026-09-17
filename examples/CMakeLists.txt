@@ -77,6 +77,10 @@ set(_all_examples
 if(MSVC)
     foreach(_tgt ${_all_examples})
         target_compile_definitions(${_tgt} PRIVATE _CRT_SECURE_NO_WARNINGS)
+        # The examples instantiate large parts of the message template
+        # machinery; in Debug this exceeds the default COFF section limit
+        # (C1128). Same fix as for the library and test targets.
+        target_compile_options(${_tgt} PRIVATE $<$<CONFIG:Debug>:/bigobj>)
     endforeach()
 endif()
 

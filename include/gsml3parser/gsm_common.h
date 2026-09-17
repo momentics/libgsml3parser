@@ -25,6 +25,7 @@
 #include <ostream>
 #include <string>
 
+#include "export.h"
 #include "types.h"
 
 namespace gsml3parser {
@@ -73,10 +74,10 @@ int FNCompare(int32_t v1, int32_t v2);
 // ── GSM alphabet tables ─────────────────────────────────────────────────
 
 /** GSM 7-bit alphabet -> ISO-8859-1 mapping */
-extern const unsigned char gGSMAlphabet[];
+GSML3PARSER_DLL extern const unsigned char gGSMAlphabet[];
 
 /** BCD -> ASCII mapping */
-extern const char gBCDAlphabet[];
+GSML3PARSER_DLL extern const char gBCDAlphabet[];
 
 unsigned char encodeGSMChar(unsigned char ascii);
 inline unsigned char decodeGSMChar(unsigned char sms) {
@@ -95,10 +96,10 @@ std::string data2hex(const char* data, unsigned nbytes);
 // ── RACH tables ─────────────────────────────────────────────────────────
 
 /** "T" parameter - GSM 04.08 10.5.2.29, indexed by TxInteger */
-extern const unsigned RACHSpreadSlots[16];
+GSML3PARSER_DLL extern const unsigned RACHSpreadSlots[16];
 
 /** "S" parameter - GSM 04.08 3.3.1.1.2, indexed by TxInteger */
-extern const unsigned RACHWaitSParam[16];
-extern const unsigned RACHWaitSParamCombined[16];
+GSML3PARSER_DLL extern const unsigned RACHWaitSParam[16];
+GSML3PARSER_DLL extern const unsigned RACHWaitSParamCombined[16];
 
 } // namespace gsml3parser

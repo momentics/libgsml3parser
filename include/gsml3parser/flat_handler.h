@@ -38,6 +38,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "export.h"
 #include "gsml3parser/message_types.h"
 
 namespace gsml3parser {
@@ -83,10 +84,13 @@ struct SharedHandlerHolder {
 /// directly through the holder so the per-dispatch context reaches the
 /// callable. The body is kept behaviorally correct
 /// (nullptr context) in case it is ever called.
-inline void sharedTrampoline(const ParsedMessage* msg, void* ctx) {
-    auto* holder = static_cast<SharedHandlerHolder*>(ctx);
-    holder->handler->invoke(*msg, nullptr);
-}
+///
+/// Non-inline on purpose and defined in src/flat_handler.cpp: isShared()
+/// identifies shared handlers by comparing fn pointers against this
+/// function's address, so shared builds must see one copy (exported by
+/// the library) — an inline copy per module would make a handler created
+/// by the other module look like a raw handler.
+GSML3PARSER_DLL void sharedTrampoline(const ParsedMessage* msg, void* ctx);
 
 /// Acquire one ownership reference on a shared handler by copying the
 /// shared_ptr into a fresh per-owner holder.

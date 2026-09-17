@@ -38,6 +38,7 @@ set(CORE_SOURCES
     src/lapdm_frame.cpp
     src/lapdm_entity.cpp
     src/dispatcher.cpp
+    src/flat_handler.cpp
     src/stack/ms_context.cpp
     src/stack/l3_timer.cpp
     src/stack/state_machine.cpp
@@ -199,6 +200,7 @@ set(PUBLIC_HEADERS
     include/gsml3parser/abis/rsl_parser.h
     include/gsml3parser/abis/rsl_builder.h
     include/gsml3parser/gsml3parser_c.h
+    include/gsml3parser/export.h
 )
 
 # ── Library target ────────────────────────────────────────────────────
@@ -248,10 +250,23 @@ target_compile_definitions(gsml3parser
     PRIVATE GSML3PARSER_VERSION="${PROJECT_VERSION}"
 )
 
+if(MSVC AND BUILD_SHARED_LIBS)
+    # The C ABI (gsml3_* functions) is the only *stable* external interface
+    # of the DLL, but MSVC exports nothing from a DLL by default and the
+    # in-repo test suite also links against internal C++ symbols. Export all
+    # symbols so first-party consumers (tests) can link; external FFI users
+    # keep using the stable C ABI. ELF shared builds need no equivalent
+    # (default visibility already exports everything).
+    set_target_properties(gsml3parser PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
+
 if(MSVC)
     target_compile_definitions(gsml3parser PRIVATE _CRT_SECURE_NO_WARNINGS)
     target_compile_options(gsml3parser PRIVATE /W4 /WX)
     target_compile_options(gsml3parser PRIVATE $<$<CONFIG:Release>:/O2>)
+    # Debug codegen of the heavily template-instantiated sources exceeds the
+    # default COFF section limit (C1128); /bigobj lifts it (Debug only).
+    target_compile_options(gsml3parser PRIVATE $<$<CONFIG:Debug>:/bigobj>)
 else()
     target_compile_options(gsml3parser PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(gsml3parser PRIVATE $<$<CONFIG:Release>:-O2>)
