@@ -80,6 +80,7 @@ add_executable(gsml3parser_tests
     test_procedure_imsi_detach.cpp
     test_procedure_orchestrator.cpp
     test_c_api.cpp
+    test_c_api_stress.cpp
 )
 
 find_package(Threads REQUIRED)

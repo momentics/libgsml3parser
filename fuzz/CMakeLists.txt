@@ -13,7 +13,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         fuzz_framer
         fuzz_lapdm_entity
         fuzz_orchestrator
-        fuzz_registry)
+        fuzz_registry
+        fuzz_c_api_parse)
     foreach(t IN LISTS GSML3_FUZZ_TARGETS)
         add_executable(${t} ${t}.cpp)
         target_link_libraries(${t} PRIVATE gsml3parser)
