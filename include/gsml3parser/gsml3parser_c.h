@@ -687,6 +687,246 @@ GSML3_C_API size_t gsml3_response_build_release_complete(uint8_t* out,
 GSML3_C_API size_t gsml3_response_build_setup(uint8_t* out, size_t maxlen,
     const char* called_digits, uint8_t ti);
 
+/* ── Typed access: curated message fields / builders ─────────────────── */
+/*
+ * The general layer (gsml3_parse_l3* / gsml3_message_*) covers all 240
+ * message types; this section adds typed field access and builders for
+ * the ~44 key messages used by BTS procedure chains, the examples and
+ * the quickstart. Getters return sentinel values (-1 / 0 / NULL) when
+ * the message is not the expected type.
+ */
+
+/* Channel description (GSM 04.08 10.5.2.5). type_and_offset:
+ * gsml3parser::TypeAndOffset value (types.h). */
+typedef struct gsml3_channel {
+    int type_and_offset;
+    uint8_t tn;
+    uint8_t tsc;
+    uint16_t arfcn;
+} gsml3_channel;
+
+/* Mobile identity (GSM 04.08 10.5.1.4). imsi points into the message
+ * handle (valid while the handle is alive); NULL for TMSI identities. */
+typedef struct gsml3_mobile_identity {
+    int type;        /* GSML3_ID_* */
+    uint32_t tmsi;   /* valid when type == GSML3_ID_TMSI */
+    const char* imsi;
+} gsml3_mobile_identity;
+
+/* Location Area Identity (GSM 04.08 10.5.1.3), numeric form. */
+typedef struct gsml3_lai {
+    int mcc;   /* e.g. 244 */
+    int mnc;   /* e.g. 5 */
+    uint16_t lac;
+} gsml3_lai;
+
+/* ── RR getters ──────────────────────────────────────────────────────── */
+GSML3_C_API int gsml3_msg_channel_release_cause(const gsml3_message* msg);
+/* 1/0 when the GPRS resumption bit is present, -1 otherwise/absent. */
+GSML3_C_API int gsml3_msg_channel_release_gprs_resumption(const gsml3_message* msg);
+/* 8-bit request reference (RA) from the RACH burst. */
+GSML3_C_API int gsml3_msg_channel_request_ra(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_immediate_assignment_channel(const gsml3_message* msg,
+                                                        gsml3_channel* ch);
+GSML3_C_API int gsml3_msg_immediate_assignment_ta(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_immediate_assignment_reject_wait_time(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_assignment_command_channel(const gsml3_message* msg,
+                                                      gsml3_channel* ch);
+GSML3_C_API int gsml3_msg_assignment_complete_cause(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_assignment_failure_cause(const gsml3_message* msg);
+/* Number of paged mobiles (1..2). */
+GSML3_C_API int gsml3_msg_paging_request_type1_count(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_paging_request_type1_identity(const gsml3_message* msg,
+                                                         int index,
+                                                         gsml3_mobile_identity* id);
+/* Paged TMSIs (2 / 4 respectively); 0 on out-of-range. */
+GSML3_C_API uint32_t gsml3_msg_paging_request_type2_tmsi(const gsml3_message* msg,
+                                                          int index);
+GSML3_C_API uint32_t gsml3_msg_paging_request_type3_tmsi(const gsml3_message* msg,
+                                                          int index);
+GSML3_C_API int gsml3_msg_paging_response_cks(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_paging_response_identity(const gsml3_message* msg,
+                                                    gsml3_mobile_identity* id);
+GSML3_C_API int gsml3_msg_ciphering_mode_command_ciphering(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_ciphering_mode_command_algorithm(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_ciphering_mode_complete_response(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_ciphering_mode_complete_has_imeisv(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_handover_complete_cause(const gsml3_message* msg);
+/* Target cell of the handover command. */
+GSML3_C_API int gsml3_msg_handover_command_cell(const gsml3_message* msg,
+                                                uint16_t* arfcn, uint8_t* ncc,
+                                                uint8_t* bcc);
+GSML3_C_API int gsml3_msg_physical_information_ta(const gsml3_message* msg);
+
+/* ── MM getters ──────────────────────────────────────────────────────── */
+/* L3CMServiceType::TypeCode value. */
+GSML3_C_API int gsml3_msg_cm_service_request_service_type(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_cm_service_request_identity(const gsml3_message* msg,
+                                                       gsml3_mobile_identity* id);
+GSML3_C_API int gsml3_msg_cm_service_reject_cause(const gsml3_message* msg);
+/* CMServiceAbortCause value (enums.h). */
+GSML3_C_API int gsml3_msg_cm_service_abort_cause(const gsml3_message* msg);
+/* MobileIDType value. */
+GSML3_C_API int gsml3_msg_identity_request_type(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_identity_response_identity(const gsml3_message* msg,
+                                                      gsml3_mobile_identity* id);
+/* 0=Normal, 1=Periodic, 2=IMSI Attach. */
+GSML3_C_API int gsml3_msg_location_updating_request_update_type(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_location_updating_request_identity(const gsml3_message* msg,
+                                                              gsml3_mobile_identity* id);
+GSML3_C_API int gsml3_msg_location_updating_request_lai(const gsml3_message* msg,
+                                                         gsml3_lai* lai);
+GSML3_C_API int gsml3_msg_location_updating_accept_lai(const gsml3_message* msg,
+                                                        gsml3_lai* lai);
+GSML3_C_API int gsml3_msg_location_updating_accept_identity(const gsml3_message* msg,
+                                                             gsml3_mobile_identity* id);
+GSML3_C_API int gsml3_msg_location_updating_reject_cause(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_authentication_request_cks(const gsml3_message* msg);
+/* Copies the 16-octet RAND (wire order) into rand[16]; 0 on wrong type. */
+GSML3_C_API int gsml3_msg_authentication_request_rand(const gsml3_message* msg,
+                                                       uint8_t rand[16]);
+/* 32-bit SRES; 0 when the message is not AuthenticationResponse. */
+GSML3_C_API uint32_t gsml3_msg_authentication_response_sres(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_tmsi_reallocation_command_lai(const gsml3_message* msg,
+                                                         gsml3_lai* lai);
+GSML3_C_API uint32_t gsml3_msg_tmsi_reallocation_command_tmsi(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_imsi_detach_indication_identity(const gsml3_message* msg,
+                                                           gsml3_mobile_identity* id);
+
+/* ── CC getters ──────────────────────────────────────────────────────── */
+GSML3_C_API int gsml3_msg_setup_ti(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_setup_have_called_party(const gsml3_message* msg);
+/* BCD digit string into the handle (NULL when absent). */
+GSML3_C_API const char* gsml3_msg_setup_called_number(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_call_proceeding_ti(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_alerting_ti(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_connect_ti(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_connect_acknowledge_ti(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_disconnect_ti(const gsml3_message* msg);
+/* CCCause value (enums.h). */
+GSML3_C_API int gsml3_msg_disconnect_cause(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_release_ti(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_release_have_cause(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_release_cause(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_release_complete_ti(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_release_complete_have_cause(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_release_complete_cause(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_facility_ti(const gsml3_message* msg);
+GSML3_C_API size_t gsml3_msg_facility_body(const gsml3_message* msg,
+                                            uint8_t* out, size_t maxlen);
+
+/* ── SMS getters ─────────────────────────────────────────────────────── */
+GSML3_C_API size_t gsml3_msg_cp_data_rpdu(const gsml3_message* msg,
+                                           uint8_t* out, size_t maxlen);
+GSML3_C_API int gsml3_msg_cp_status_tp_oi(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_cp_status_mti_value(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_cp_status_has_message_ref(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_cp_status_message_ref(const gsml3_message* msg);
+GSML3_C_API size_t gsml3_msg_cp_smt_rpdu(const gsml3_message* msg,
+                                          uint8_t* out, size_t maxlen);
+GSML3_C_API int gsml3_msg_sms_deliver_tp_mti(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_sms_deliver_tp_mr(const gsml3_message* msg);
+GSML3_C_API int gsml3_msg_sms_deliver_has_tp_ud(const gsml3_message* msg);
+GSML3_C_API size_t gsml3_msg_sms_deliver_tp_ud(const gsml3_message* msg,
+                                                uint8_t* out, size_t maxlen);
+
+/* ── SS getters ──────────────────────────────────────────────────────── */
+GSML3_C_API int gsml3_msg_sup_serv_facility_ti(const gsml3_message* msg);
+GSML3_C_API size_t gsml3_msg_sup_serv_facility_data(const gsml3_message* msg,
+                                                     uint8_t* out, size_t maxlen);
+
+/* ── Typed builders ──────────────────────────────────────────────────── */
+/* cause parameters: RRCause / MMRejectCause / CMServiceAbortCause /
+ * CCCause values (include/gsml3parser/enums.h); id_type: GSML3_ID_*;
+ * service_type: L3CMServiceType::TypeCode value. */
+GSML3_C_API size_t gsml3_build_channel_release(uint8_t* out, size_t maxlen,
+                                                int rr_cause);
+GSML3_C_API size_t gsml3_build_channel_request(uint8_t* out, size_t maxlen,
+                                                uint8_t ra);
+GSML3_C_API size_t gsml3_build_immediate_assignment(uint8_t* out, size_t maxlen,
+    int type_and_offset, uint8_t tn, uint8_t tsc, uint16_t arfcn, uint8_t ta,
+    uint8_t ra);
+GSML3_C_API size_t gsml3_build_immediate_assignment_reject(uint8_t* out,
+    size_t maxlen, uint8_t wait_seconds);
+GSML3_C_API size_t gsml3_build_assignment_command(uint8_t* out, size_t maxlen,
+    int type_and_offset, uint8_t tn, uint8_t tsc, uint16_t arfcn);
+GSML3_C_API size_t gsml3_build_assignment_complete(uint8_t* out, size_t maxlen,
+                                                    int rr_cause);
+GSML3_C_API size_t gsml3_build_assignment_failure(uint8_t* out, size_t maxlen,
+                                                   int rr_cause);
+GSML3_C_API size_t gsml3_build_paging_request_type1(uint8_t* out, size_t maxlen,
+                                                     uint32_t tmsi);
+GSML3_C_API size_t gsml3_build_paging_request_type2(uint8_t* out, size_t maxlen,
+                                                     uint32_t tmsi0, uint32_t tmsi1);
+GSML3_C_API size_t gsml3_build_paging_request_type3(uint8_t* out, size_t maxlen,
+    uint32_t tmsi0, uint32_t tmsi1, uint32_t tmsi2, uint32_t tmsi3);
+GSML3_C_API size_t gsml3_build_paging_response(uint8_t* out, size_t maxlen,
+    int id_type, uint32_t tmsi, const char* imsi);
+GSML3_C_API size_t gsml3_build_ciphering_mode_command(uint8_t* out, size_t maxlen,
+                                                       uint8_t algo);
+GSML3_C_API size_t gsml3_build_ciphering_mode_complete(uint8_t* out,
+                                                        size_t maxlen, int response);
+GSML3_C_API size_t gsml3_build_handover_complete(uint8_t* out, size_t maxlen,
+                                                  int rr_cause);
+GSML3_C_API size_t gsml3_build_physical_information(uint8_t* out, size_t maxlen,
+                                                     uint8_t ta);
+GSML3_C_API size_t gsml3_build_cm_service_request(uint8_t* out, size_t maxlen,
+    int service_type, int id_type, uint32_t tmsi, const char* imsi);
+GSML3_C_API size_t gsml3_build_cm_service_accept(uint8_t* out, size_t maxlen);
+GSML3_C_API size_t gsml3_build_cm_service_reject(uint8_t* out, size_t maxlen,
+                                                  int mm_cause);
+GSML3_C_API size_t gsml3_build_cm_service_abort(uint8_t* out, size_t maxlen,
+                                                 int abort_cause);
+GSML3_C_API size_t gsml3_build_identity_request(uint8_t* out, size_t maxlen,
+                                                 int id_type);
+GSML3_C_API size_t gsml3_build_identity_response(uint8_t* out, size_t maxlen,
+    int id_type, uint32_t tmsi, const char* imsi);
+GSML3_C_API size_t gsml3_build_location_updating_request(uint8_t* out,
+    size_t maxlen, int update_type, int id_type, uint32_t tmsi, const char* imsi,
+    int mcc, int mnc, uint16_t lac);
+GSML3_C_API size_t gsml3_build_location_updating_accept(uint8_t* out,
+    size_t maxlen, int mcc, int mnc, uint16_t lac, int has_new_tmsi,
+    uint32_t new_tmsi);
+GSML3_C_API size_t gsml3_build_location_updating_reject(uint8_t* out,
+                                                         size_t maxlen, int mm_cause);
+GSML3_C_API size_t gsml3_build_authentication_request(uint8_t* out, size_t maxlen,
+                                                       uint8_t cksn,
+                                                       const uint8_t rand[16]);
+GSML3_C_API size_t gsml3_build_authentication_response(uint8_t* out, size_t maxlen,
+                                                        uint32_t sres);
+GSML3_C_API size_t gsml3_build_tmsi_reallocation_command(uint8_t* out,
+    size_t maxlen, int mcc, int mnc, uint16_t lac, uint32_t tmsi);
+GSML3_C_API size_t gsml3_build_tmsi_reallocation_complete(uint8_t* out,
+                                                           size_t maxlen);
+GSML3_C_API size_t gsml3_build_imsi_detach_indication(uint8_t* out, size_t maxlen,
+    int id_type, uint32_t tmsi, const char* imsi);
+GSML3_C_API size_t gsml3_build_setup(uint8_t* out, size_t maxlen, uint8_t ti,
+                                      const char* called_digits);
+GSML3_C_API size_t gsml3_build_call_proceeding(uint8_t* out, size_t maxlen,
+                                                uint8_t ti);
+GSML3_C_API size_t gsml3_build_alerting(uint8_t* out, size_t maxlen, uint8_t ti);
+GSML3_C_API size_t gsml3_build_connect(uint8_t* out, size_t maxlen, uint8_t ti);
+GSML3_C_API size_t gsml3_build_connect_acknowledge(uint8_t* out, size_t maxlen,
+                                                    uint8_t ti);
+GSML3_C_API size_t gsml3_build_disconnect(uint8_t* out, size_t maxlen,
+                                           uint8_t ti, int cc_cause);
+GSML3_C_API size_t gsml3_build_release(uint8_t* out, size_t maxlen,
+                                        uint8_t ti, int cc_cause);
+GSML3_C_API size_t gsml3_build_release_complete(uint8_t* out, size_t maxlen,
+                                                 uint8_t ti);
+GSML3_C_API size_t gsml3_build_facility(uint8_t* out, size_t maxlen, uint8_t ti,
+                                         const uint8_t* data, size_t len);
+GSML3_C_API size_t gsml3_build_cp_data(uint8_t* out, size_t maxlen,
+                                        const uint8_t* rpdu, size_t rpdu_len);
+GSML3_C_API size_t gsml3_build_cp_status(uint8_t* out, size_t maxlen,
+    uint8_t tp_oi, uint8_t mti_value, int has_ref, uint8_t ref);
+GSML3_C_API size_t gsml3_build_cp_smt(uint8_t* out, size_t maxlen,
+                                       const uint8_t* rpdu, size_t rpdu_len);
+GSML3_C_API size_t gsml3_build_sms_deliver(uint8_t* out, size_t maxlen,
+    uint8_t tp_mti, uint8_t tp_mr, const uint8_t* ud, size_t ud_len);
+GSML3_C_API size_t gsml3_build_sup_serv_facility(uint8_t* out, size_t maxlen,
+    uint8_t ti, const uint8_t* data, size_t len);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

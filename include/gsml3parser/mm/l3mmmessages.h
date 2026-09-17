@@ -102,6 +102,10 @@ private:
 public:
     L3LocationUpdatingAccept() = default;
     static constexpr int MTI = 0x02;
+
+    const L3LocationAreaIdentity& lai() const { return mLAI; }
+    bool hasMobileIdentity() const { return mHaveMobileIdentity; }
+    const L3MobileIdentity& mobileIdentity() const { return mMobileIdentity; }
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3LocationUpdatingAccept> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -121,6 +125,8 @@ private:
 public:
     static constexpr int MTI = 0x04;
     explicit L3LocationUpdatingReject(MMRejectCause cause) : mCause(cause) {}
+
+    MMRejectCause cause() const { return mCause; }
 
     struct Builder {
         MMRejectCause m_cause{MMRejectCause::Zero};
@@ -238,6 +244,9 @@ public:
     /// RAND as a zero-copy span (128-bit, wire order).
     [[nodiscard]] std::span<const uint8_t> rand() const { return mRAND; }
 
+    /// CKSN value (4 bits, TS 24.008 10.5.1.24).
+    [[nodiscard]] unsigned cksn() const { return mCKSN; }
+
     struct Builder {
         unsigned m_cksn{0};
         std::array<uint8_t, 16> m_rand{};
@@ -334,6 +343,8 @@ private:
 public:
     static constexpr int MTI = 0x22;
     explicit L3CMServiceReject(MMRejectCause cause) : mCause(cause) {}
+
+    MMRejectCause cause() const { return mCause; }
 
     struct Builder {
         MMRejectCause m_cause{MMRejectCause::Zero};
@@ -502,6 +513,8 @@ private:
 public:
     static constexpr int MTI = 0x18;
     explicit L3IdentityRequest(MobileIDType type) : mType(type) {}
+
+    MobileIDType type() const { return mType; }
 
     struct Builder {
         MobileIDType m_type{MobileIDType::NoID};

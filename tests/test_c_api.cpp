@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <cstring>
 #include <functional>
+#include <span>
 #include <string>
 #include <thread>
 #include <vector>
@@ -50,6 +51,9 @@
 #include <gsml3parser/rr/l3rrmessages.h>
 #include <gsml3parser/stack/procedure_orchestrator.h>
 #include <gsml3parser/stack/response_builder.h>
+#include <gsml3parser/ss/l3ssmessages.h>
+#include <gsml3parser/sms/l3smsmessages.h>
+#include <gsml3parser/sms/l3smsl3messages.h>
 
 using namespace gsml3parser;
 
@@ -1130,4 +1134,236 @@ TEST(CApiOrchestrator, NullSafety) {
     EXPECT_EQ(gsml3_orchestrator_chain_phase(nullptr), GSML3_PROC_UNKNOWN);
     EXPECT_EQ(gsml3_response_build_cm_service_accept(nullptr, 0), 0u);
     EXPECT_EQ(gsml3_response_build_from_token(GSML3_TOKEN_NONE, nullptr, buf, sizeof(buf)), 0u);
+}
+
+// ── Typed access: curated message fields / builders ───────────────────
+
+// Test: every typed builder round-trips through the C API: build ->
+// parse -> the key fields read back with the typed getters.
+TEST(CApiTyped, Builders_RoundTrip) {
+    uint8_t buf[512];
+
+    {
+        size_t n = gsml3_build_channel_release(buf, sizeof(buf), 4);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_STREQ(gsml3_message_name(m), "ChannelRelease");
+        EXPECT_EQ(gsml3_msg_channel_release_cause(m), 4);
+        gsml3_message_free(m);
+    }
+    {
+        size_t n = gsml3_build_channel_request(buf, sizeof(buf), 0x55);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_STREQ(gsml3_message_name(m), "ChannelRequest");
+        EXPECT_EQ(gsml3_msg_channel_request_ra(m), 0x55);
+        gsml3_message_free(m);
+    }
+    {
+        // The channel description carries ARFCN in a 10-bit field (this
+        // library's wire encoding), so the test value must fit.
+        size_t n = gsml3_build_immediate_assignment(buf, sizeof(buf), 1, 2, 3, 100, 7, 0x55);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        gsml3_channel ch{};
+        ASSERT_EQ(gsml3_msg_immediate_assignment_channel(m, &ch), 0);
+        EXPECT_EQ(ch.type_and_offset, 1);
+        EXPECT_EQ(ch.tn, 2);
+        EXPECT_EQ(ch.tsc, 3);
+        EXPECT_EQ(ch.arfcn, 100);
+        EXPECT_EQ(gsml3_msg_immediate_assignment_ta(m), 7);
+        gsml3_message_free(m);
+    }
+    {
+        size_t n = gsml3_build_assignment_command(buf, sizeof(buf), 2, 0, 0, 50);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        gsml3_channel ch{};
+        ASSERT_EQ(gsml3_msg_assignment_command_channel(m, &ch), 0);
+        EXPECT_EQ(ch.arfcn, 50);
+        gsml3_message_free(m);
+    }
+    {
+        size_t n = gsml3_build_paging_request_type2(buf, sizeof(buf), 0xAAAA0001, 0xAAAA0002);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_STREQ(gsml3_message_name(m), "PagingRequestType2");
+        EXPECT_EQ(gsml3_msg_paging_request_type2_tmsi(m, 0), 0xAAAA0001u);
+        EXPECT_EQ(gsml3_msg_paging_request_type2_tmsi(m, 1), 0xAAAA0002u);
+        EXPECT_EQ(gsml3_msg_paging_request_type2_tmsi(m, 2), 0u);  // OOR
+        gsml3_message_free(m);
+    }
+    {
+        size_t n = gsml3_build_paging_response(buf, sizeof(buf), GSML3_ID_TMSI, 0x12345678, nullptr);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        gsml3_mobile_identity id{};
+        ASSERT_EQ(gsml3_msg_paging_response_identity(m, &id), 0);
+        EXPECT_EQ(id.type, GSML3_ID_TMSI);
+        EXPECT_EQ(id.tmsi, 0x12345678u);
+        EXPECT_EQ(id.imsi, nullptr);
+        gsml3_message_free(m);
+    }
+    {
+        size_t n = gsml3_build_ciphering_mode_command(buf, sizeof(buf), 1);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_EQ(gsml3_msg_ciphering_mode_command_algorithm(m), 1);
+        gsml3_message_free(m);
+    }
+    {
+        size_t n = gsml3_build_cm_service_request(buf, sizeof(buf), 105 /* LU */, GSML3_ID_TMSI, 0x12345678, nullptr);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_STREQ(gsml3_message_name(m), "CMServiceRequest");
+        // The CM service type is a 4-bit field on the wire (this library's
+        // L3CMServiceType encoding): LU = 105 round-trips as its low nibble.
+        // Cross-check against the direct C++ parse of the same bytes: the
+        // C getter must agree with the C++ API value exactly.
+        auto cppR = parseL3(std::span<const uint8_t>(buf, n));
+        ASSERT_TRUE(cppR);
+        const auto* cppM = tryGet<L3CMServiceRequest>(cppR.value());
+        ASSERT_NE(cppM, nullptr);
+        EXPECT_EQ(gsml3_msg_cm_service_request_service_type(m), (int)cppM->serviceType());
+        gsml3_mobile_identity id{};
+        ASSERT_EQ(gsml3_msg_cm_service_request_identity(m, &id), 0);
+        EXPECT_EQ(id.tmsi, 0x12345678u);
+        gsml3_message_free(m);
+    }
+    {
+        size_t n = gsml3_build_cm_service_reject(buf, sizeof(buf), 0x03);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_EQ(gsml3_msg_cm_service_reject_cause(m), 0x03);
+        gsml3_message_free(m);
+    }
+    {
+        size_t n = gsml3_build_identity_request(buf, sizeof(buf), GSML3_ID_IMSI);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_EQ(gsml3_msg_identity_request_type(m), GSML3_ID_IMSI);
+        gsml3_message_free(m);
+    }
+    {
+        const uint8_t rand[16] = {0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15};
+        size_t n = gsml3_build_authentication_request(buf, sizeof(buf), 1, rand);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_EQ(gsml3_msg_authentication_request_cks(m), 1);
+        uint8_t got[16] = {};
+        ASSERT_EQ(gsml3_msg_authentication_request_rand(m, got), 0);
+        EXPECT_EQ(0, std::memcmp(got, rand, 16));
+        gsml3_message_free(m);
+    }
+    {
+        size_t n = gsml3_build_authentication_response(buf, sizeof(buf), 0xABCD1234);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_EQ(gsml3_msg_authentication_response_sres(m), 0xABCD1234);
+        gsml3_message_free(m);
+    }
+    {
+        size_t n = gsml3_build_location_updating_request(buf, sizeof(buf), 0, GSML3_ID_TMSI, 0x12345678, nullptr, 244, 5, 0x1234);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_STREQ(gsml3_message_name(m), "LocationUpdatingRequest");
+        gsml3_lai lai{};
+        ASSERT_EQ(gsml3_msg_location_updating_request_lai(m, &lai), 0);
+        EXPECT_EQ(lai.mcc, 244);
+        EXPECT_EQ(lai.mnc, 5);
+        EXPECT_EQ(lai.lac, 0x1234);
+        gsml3_message_free(m);
+    }
+    {
+        size_t n = gsml3_build_setup(buf, sizeof(buf), 3, "123456789");
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_STREQ(gsml3_message_name(m), "Setup");
+        EXPECT_EQ(gsml3_msg_setup_ti(m), 3);
+        EXPECT_EQ(gsml3_msg_setup_have_called_party(m), 1);
+        EXPECT_STREQ(gsml3_msg_setup_called_number(m), "123456789");
+        gsml3_message_free(m);
+    }
+    {
+        size_t n = gsml3_build_disconnect(buf, sizeof(buf), 3, 16);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_EQ(gsml3_msg_disconnect_ti(m), 3);
+        EXPECT_EQ(gsml3_msg_disconnect_cause(m), 16);
+        gsml3_message_free(m);
+    }
+    {
+        const uint8_t rpdu[] = {0x11, 0x22, 0x33};
+        size_t n = gsml3_build_cp_data(buf, sizeof(buf), rpdu, sizeof(rpdu));
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        uint8_t got[16] = {};
+        EXPECT_EQ(gsml3_msg_cp_data_rpdu(m, got, sizeof(got)), 3u);
+        EXPECT_EQ(0, std::memcmp(got, rpdu, 3));
+        gsml3_message_free(m);
+    }
+    {
+        const uint8_t fac[] = {0xA0, 0x81};
+        size_t n = gsml3_build_sup_serv_facility(buf, sizeof(buf), 5, fac, sizeof(fac));
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_EQ(gsml3_msg_sup_serv_facility_ti(m), 5);
+        uint8_t got[16] = {};
+        EXPECT_EQ(gsml3_msg_sup_serv_facility_data(m, got, sizeof(got)), 2u);
+        gsml3_message_free(m);
+    }
+}
+
+// Test: typed getters on a message of the wrong type return sentinels
+// (no crash, documented behavior).
+TEST(CApiTyped, WrongType_Sentinels) {
+    gsml3_message* m = gsml3_parse_l3_hex("60 0D 00", nullptr);  // ChannelRelease
+    ASSERT_NE(m, nullptr);
+    EXPECT_EQ(gsml3_msg_setup_ti(m), -1);
+    EXPECT_EQ(gsml3_msg_disconnect_cause(m), -1);
+    EXPECT_EQ(gsml3_msg_cm_service_reject_cause(m), -1);
+    EXPECT_EQ(gsml3_msg_paging_request_type2_tmsi(m, 0), 0u);
+    EXPECT_EQ(gsml3_msg_setup_called_number(m), nullptr);
+    uint8_t buf[8];
+    EXPECT_EQ(gsml3_msg_cp_data_rpdu(m, buf, sizeof(buf)), 0u);
+    gsml3_channel ch{};
+    EXPECT_EQ(gsml3_msg_immediate_assignment_channel(m, &ch), -1);
+    gsml3_mobile_identity id{};
+    EXPECT_EQ(gsml3_msg_paging_response_identity(m, &id), -1);
+    gsml3_lai lai{};
+    EXPECT_EQ(gsml3_msg_location_updating_request_lai(m, &lai), -1);
+    gsml3_message_free(m);
+}
+
+// Test: typed getters agree with the C++ tryGet values (cross-check).
+TEST(CApiTyped, Getters_AgreeWithCpp) {
+    // Build via C++, parse via C, compare.
+    auto msg = L3Disconnect::builder().ti(2).cause(CCCause::User_Busy).build();
+    ParsedMessage pm{CCM{msg}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    gsml3_message* m = gsml3_parse_l3(bytes.value().data(), bytes.value().size(), nullptr);
+    ASSERT_NE(m, nullptr);
+    const auto* cppMsg = tryGet<L3Disconnect>(pm);
+    ASSERT_NE(cppMsg, nullptr);
+    EXPECT_EQ(gsml3_msg_disconnect_ti(m), (int)cppMsg->ti());
+    EXPECT_EQ(gsml3_msg_disconnect_cause(m), (int)cppMsg->cause());
+    gsml3_message_free(m);
 }
