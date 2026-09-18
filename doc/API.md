@@ -1,6 +1,6 @@
 # libgsml3parser - Full API Reference
 
-> Version 0.15.0 | C++20 | Thread-safe | Zero heap allocation on hot path | No external dependencies
+> Version 0.18.0 | C++20 | Zero heap allocation on hot path | No external dependencies
 
 ## Table of Contents
 
@@ -16,7 +16,7 @@
 10. [Arena Allocator](#10-arena-allocator)
 11. [Procedure Types](#11-procedure-types)
 12. [Response Builder](#12-response-builder)
-13. [LAPDm Framing](#13-lapdm-framing)
+13. [LAPDm Protocol](#13-lapdm-protocol)
 14. [Protocol Dispatcher](#14-protocol-dispatcher)
 15. [Builder Pattern](#15-builder-pattern)
 16. [Enum Formatters](#16-enum-formatters)
@@ -76,9 +76,9 @@
 
 | Requirement | Minimum Version |
 |-------------|-----------------|
-| C++ Compiler | GCC 11+, Clang 10+, MSVC 2022 17.3+ |
+| C++ Compiler | MSVC 2022 (17.x), GCC 13+, or Clang with a C++20 `std::format`-capable standard library |
 | CMake | 3.20+ |
-| Standard Library | C++20 (libstdc++ or libc++) |
+| Standard Library | C++20 (`std::variant`, `std::span`, concepts, `std::format`) |
 
 ### Build
 
@@ -96,6 +96,7 @@ CMake options:
 | `BUILD_TESTS` | OFF | Build unit tests (Google Test 1.14+) |
 | `BUILD_EXAMPLES` | OFF | Build example programs |
 | `ENABLE_FUZZING` | OFF | Build libFuzzer targets in `fuzz/` (requires Clang/LLVM; no-op with a status message on MSVC) |
+| `ENABLE_ASAN` | OFF | AddressSanitizer for Debug builds (MSVC 17.8+) |
 
 ### CMake Integration
 
@@ -121,7 +122,7 @@ Include everything with a single header:
 
 ### Stack Modules for BTS Development
 
-Version 0.11.0 introduces the **stack module** namespace (`gsml3parser::stack/`), providing high-level primitives for building a software Base Transceiver Station (BTS) on top of the L3 parser:
+The stack-module headers under `gsml3parser/stack/` provide high-level primitives for building a software Base Transceiver Station (BTS) on top of the L3 parser:
 
 | Module | Header | Purpose |
 |--------|--------|---------|
@@ -165,21 +166,25 @@ Structured error type with zero heap allocation for short messages (SSO up to 47
 struct ParseError {
     enum class Code : uint8_t {
         Ok, TruncatedInput, InvalidPD, InvalidMTI,
-        LengthMismatch, InvalidIE, InvalidValue, UnsupportedFeature
+        LengthMismatch, InvalidIE, InvalidValue, UnsupportedFeature,
+        SourceExhausted
     };
+    static constexpr std::size_t InlineCapacity = 47;
     Code code{Code::Ok};
-    std::string_view message{};
     size_t bitPosition{};
-    [[nodiscard]] constexpr bool failed() const;
+    std::string_view message{};   // SSO-backed inline storage for messages up to 47 chars
+    [[nodiscard]] constexpr bool failed() const noexcept;
 };
 ```
 
 | Member | Description |
 |--------|-------------|
-| `code` | Error classification enum |
-| `message` | Human-readable error description (SSO-backed) |
+| `code` | Error classification enum (`Ok` through `SourceExhausted`) |
 | `bitPosition` | Bit offset in input where the error occurred |
+| `message` | Human-readable error description, stored inline (zero heap allocation for messages up to 47 characters) |
 | `failed()` | Returns `true` if `code != Ok` |
+
+`SourceExhausted` is returned by stream framing when the byte source reached EOF without a complete frame.
 
 ### Expected<T>
 
@@ -236,7 +241,7 @@ public:
 **Usage example:**
 
 ```cpp
-auto msg = parseL3Hex("060D");
+auto msg = parseL3Hex("600D00");
 
 if (msg) {
     std::cout << messageName(*msg) << "\n";
@@ -400,14 +405,15 @@ Parse a 2-byte L3 header from raw data.
 Expected<L3Header> parseL3Header(std::span<const uint8_t> data);
 ```
 
-Returns `TruncatedInput` error if fewer than 2 bytes provided. Returns `InvalidPD` for unrecognized PD values.
+Returns `TruncatedInput` error if fewer than 2 bytes provided. Returns `InvalidPD` for unrecognized PD values (reserved nibbles 0x02, 0x04, 0x07, 0x0d).
 
 **Decoding rules:**
 - Byte 0 high nibble (bits 4-7): PD value
-- For CC/SS: Byte 0 bits 1-3 = TI, bit 0 = TIF
-- Byte 1: raw MTI (8 bits)
-- For MM/CC/SS: actual mti = `(raw & 0xFC) >> 2` (6-bit messageType, NSD discarded)
-- For RR short messages with TIF=1: mti = `0x100 + raw_byte1`
+- Byte 0 low nibble: bits 3-1 = TI, bit 0 = TIF (all PDs; TI is meaningful for the dialog domains CC/SS/BCC/GCC)
+- Byte 1: raw MTI octet
+- MM / CC / SS / BCC / GCC: `mti = (raw & 0xFC) >> 2` (6-bit messageType, 2 NSD bits discarded)
+- GMM / SMS / SM / LS: `mti = raw` (full 8-bit messageType)
+- RR: `mti = raw`; with TIF=1 (short messages on RACH/SACCH) `mti = 0x100 + raw`
 
 ---
 
@@ -420,9 +426,9 @@ Returns `TruncatedInput` error if fewer than 2 bytes provided. Returns `InvalidP
 Each protocol domain has a `std::variant` type that holds all message types for that domain:
 
 ```cpp
-using RRM      = std::variant< /* 95 RR types */ >;
+using RRM      = std::variant< /* 98 RR types */ >;
 using MMM      = std::variant< /* 20 MM types */ >;
-using CCM      = std::variant< /* 23 CC types */ >;
+using CCM      = std::variant< /* 24 CC types */ >;
 using SSM      = std::variant< /* 3 SS types */ >;
 using GMM      = std::variant< /* 23 GMM types */ >;
 using SM       = std::variant< /* 29 SM types */ >;
@@ -442,12 +448,12 @@ The top-level variant that wraps all domains:
 using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM, EXTENDED, TESTPROC>;
 ```
 
-Stored on the stack - no heap allocation. `sizeof(ParsedMessage) = 416` bytes (guaranteed < 8 KB via `static_assert`). The variant spans 12 protocol domains.
+Stored on the stack - no heap allocation. `sizeof(ParsedMessage) = 488` bytes on 64-bit (bounded `< 8192` via `static_assert`). The variant spans 12 protocol domains.
 
 **Usage:**
 
 ```cpp
-auto msg = parseL3Hex("060D");
+auto msg = parseL3Hex("600D00");
 if (msg) {
     const ParsedMessage& parsed = *msg;
 
@@ -529,7 +535,7 @@ Expected<std::vector<uint8_t>> writeL3Bytes(const ParsedMessage& msg);
 **Usage:**
 
 ```cpp
-auto msg = parseL3Hex("060D00");
+auto msg = parseL3Hex("600D00");
 if (msg) {
     auto bytes = writeL3Bytes(*msg);
     if (bytes) {
@@ -541,7 +547,7 @@ if (msg) {
 ### Round-trip Pattern
 
 ```cpp
-auto original = parseL3Hex("06270460001");
+auto original = parseL3Hex("600D00");   // RR Channel Release, cause 0
 if (original) {
     auto hex = writeL3Hex(*original);
     if (hex) {
@@ -571,7 +577,7 @@ Returns pointer to the concrete type if the variant holds it, or `nullptr` other
 **Usage:**
 
 ```cpp
-auto msg = parseL3Hex("060D");
+auto msg = parseL3Hex("600D00");
 if (msg) {
     if (auto* cr = tryGet<L3ChannelRelease>(*msg)) {
         std::cout << "Cause: " << static_cast<int>(cr->cause()) << "\n";
@@ -597,10 +603,18 @@ L3PD messagePD(const ParsedMessage& msg);
 
 ### messageMTI()
 
-Returns the Message Type Indicator value.
+Returns the Message Type Indicator value (for RR short messages this is ≥ 0x100, matching `L3Header::mti`).
 
 ```cpp
 int messageMTI(const ParsedMessage& msg);
+```
+
+### messageTI()
+
+Returns the Transaction Identifier for CC/SS dialog messages. Returns 0 for non-dialog message types where TI does not apply.
+
+```cpp
+uint8_t messageTI(const ParsedMessage& msg);
 ```
 
 ---
@@ -618,10 +632,11 @@ class ByteSource {
 public:
     virtual ~ByteSource() = default;
     [[nodiscard]] virtual size_t read(uint8_t* buf, size_t maxSize) = 0;
+    [[nodiscard]] virtual bool atEof() const { return false; }
 };
 ```
 
-Returns bytes actually read. Zero indicates EOF. May block.
+`read()` returns bytes actually read (0 = no data right now). `atEof()` is true only when the source is exhausted and will never produce more bytes. Sources may block.
 
 ### SpanByteSource
 
@@ -704,8 +719,8 @@ public:
 
 **Framing modes:**
 
-- **L2 length mode** (`useL2Length = true`): each frame is preceded by a length octet. Deterministic; required for production streams.
-- **Header-based mode** (`useL2Length = false`, opt-in): the frame length is derived from PD + MTI. All 12 protocol domains are supported, including BCC (PD=0x01), GCC (PD=0x00) and LS (PD=0x0c): BCC/GCC use the CC-style 6-bit MTI (byte 1 = MTI<<2 | NSD), LS uses a raw 8-bit MTI. Messages with a known fixed body length (e.g. BCC Setup/CallConfirmed/ConnectAcknowledge, GCC Setup/CallConfirmed, LS LocationServiceRequest, RR ChannelRelease, MM CMServiceAccept) are framed exactly. Variable-length messages (SI, SMS, Setup with IEs, ...) rely on a boundary heuristic that scans for the next plausible L3 header (O(L) per frame, resume-cached); for BCC/GCC/LS messages the scan accepts any of the 12 valid PDs, for other PDs it uses a conservative list to avoid false boundaries inside message bodies. The heuristic is UNRELIABLE on real variable-length streams — use L2 length mode for deterministic framing.
+- **L2 length mode** (`useL2Length = true`, default): each frame is preceded by a single length octet. Deterministic; what production LAPDm / A-bis paths provide.
+- **Header-based mode** (`useL2Length = false`, opt-in): the frame length is derived from PD + MTI for all 12 protocol domains (BCC/GCC use the CC-style 6-bit MTI `byte1 = mti<<2 | nsd`; GMM/SMS/SM/LS use a raw 8-bit MTI). Fixed-body messages are framed exactly from a single compile-time table (`bitstream/frame_lengths.h`, cross-checked by `tests/test_frame_lengths.cpp`): RR RRStatus, ClassmarkEnquiry, HandoverFailure, AssignmentComplete, HandoverComplete, AssignmentFailure; MM CMServiceAccept, CMServiceReject, CMServiceAbort, MMStatus; CC CCStatus; BCC CallConfirmed, ConnectAcknowledge; GCC CallConfirmed. Every other message (SI, SMS, Setup with IEs, ...) is framed by a boundary heuristic: scan forward for the next plausible L3 header within `maxMessageLength` bytes (O(L), resume-cached across fills). While framing a BCC/GCC/LS message all 12 valid PDs are accepted as candidates; for other PDs a conservative list is used (0x03, 0x05, 0x06, 0x08, 0x09, 0x0a, 0x0b, 0x0e, 0x0f) to avoid false boundaries inside variable bodies. The heuristic is UNRELIABLE on real variable-length streams — message bodies frequently contain bytes whose high nibble is a valid PD — use L2 length mode for deterministic framing. At source EOF the tail is emitted as the final frame and validated by the parser.
 
 ### L3StreamProcessor
 
@@ -717,6 +732,8 @@ High-throughput streaming parser with statistics tracking.
 class L3StreamProcessor {
 public:
     L3StreamProcessor(ByteSource& source, ParserConfig cfg = {}, FrameConfig fcfg = {});
+    // Owning variant: takes ownership of the source (kept alive until the processor is destroyed).
+    L3StreamProcessor(std::unique_ptr<ByteSource> source, ParserConfig cfg = {}, FrameConfig fcfg = {});
     template<typename F>
         requires std::is_invocable_v<F, const ParsedMessage&>
     bool processOne(F&& handler);
@@ -1078,7 +1095,7 @@ All field encode/decode methods are `constexpr` for compile-time evaluation:
 | Struct | Purpose | Spec |
 |--------|---------|------|
 | `LAPDmAddressField` | `[SAPI(7:4)][C/R(3)][Reserved(2:1)=00][EA(0)]` | GSM 04.06 4.2.1 |
-| `LAPDmIControlField` | `[NR(7:5)][P/F(4)][NS(2:0)][Fixed(3)=0]` | GSM 04.06 4.4.1 |
+| `LAPDmIControlField` | `[NR(7:5)][P/F(4)][NS(3:1)][Fixed(0)=0]` | GSM 04.06 4.4.1 |
 | `LAPDmSControlField` | `[NR(7:5)][P/F(4)][Function(1:0)][Fixed(3)=1]` | GSM 04.06 4.4.2.1 |
 | `LAPDmLengthField` | `[M(7)][Reserved(6)=0][Length(5:0)]` | GSM 04.06 5.5.2 |
 
@@ -1281,7 +1298,7 @@ Callback-based message routing for BTS-style protocol handling. Dispatches incom
 
 ### MessageHandler
 
-The `MessageHandler` alias now uses `FlatHandler` — a zero-overhead callback type that eliminates `std::function` virtual dispatch overhead. Each `FlatHandler` is exactly two machine words (16 bytes on 64-bit).
+The `MessageHandler` alias is `FlatHandler` — a two-word (fn pointer + ctx, 16 bytes on 64-bit) callback type that avoids `std::function`'s virtual dispatch and potential heap allocation.
 
 ```cpp
 using MessageHandler = FlatHandler;
@@ -1386,18 +1403,18 @@ Builder patterns are implemented for all message types across all 12 protocol do
 
 | Domain | Messages with Builder |
 |--------|----------------------|
-| **RR** | All 95 types (Paging, System Information SI1–SI23, Handover, Assignment, Ciphering, etc.) |
-| **MM** | All 20 types (Location Updating, Authentication, Identity, CM Service, TMSI Reallocation) |
-| **CC** | All 25 types (Setup, Connect, Disconnect, Release, DTMF, Hold, Progress, etc.) |
-| **GMM** | All 19 types (Attach, Detach, RA Update, Service Request, P-TMSI Reallocation, etc.) |
-| **SM** | All 29 types (Activate/Deactivate/Modify PDP Context, MBMS, AA PDP, etc.) |
-| **SMS** | CP messages + L3 SMS messages |
-| **BCC** | All 6 types |
+| **RR** | All 98 types (Paging, System Information SI1–SI23 + Type 2quater, Handover, Assignment, Ciphering, etc.) |
+| **MM** | All 20 types (Location Updating, Authentication, Identity, CM Service, CM Request, Paging MM, TMSI Reallocation) |
+| **CC** | All 24 types (Setup, Modify, Unit Data, Connect, Disconnect, Release, DTMF, Hold, Facility, Progress, etc.) |
+| **GMM** | All 23 types (Attach, Detach, RA Update, Service Request, P-TMSI Reallocation, Auth+Ciphering, GMM Identity, etc.) |
+| **SM** | All 29 types (Activate/Deactivate/Modify PDP Context, Secondary/AA/MBMS contexts, Notification) |
+| **SMS** | 19 L3 messages in the variant (5 CP + 14 SMS L3) plus the RP payload classes (RPData/RPAck/RPError/RPSMMA) and TP PDUs (Deliver/Submit/StatusReport/Command) |
+| **BCC** | All 8 types |
 | **GCC** | All 8 types |
 | **LS** | Both types |
 | **SS** | Facility, Register, Release Complete |
-| **Extended** | `L3ExtendedMessage` |
-| **TestProcedure** | `L3TestProcedureMessage` |
+| **Extended** | `L3ExtendedMessage` (builder takes `mti()` + `body()`) |
+| **TestProcedure** | `L3TestProcedureMessage` (builder takes `mti()` + `body()`) |
 
 ### Example - Building an Immediate Assignment
 
@@ -1418,8 +1435,7 @@ auto bytes = writeL3Bytes(pm);
 
 ```cpp
 auto msg = L3PagingRequestType2::builder()
-    .pageMode(L3PageMode::TMSI)
-    .tmsi(0x12345678)
+    .addTMSI(0x12345678, ChannelType::SDCCHType)   // up to 2 TMSIs
     .build();
 
 ParsedMessage pm{RRM{std::move(msg)}};
@@ -1443,44 +1459,46 @@ ParsedMessage pm{CCM{std::move(msg)}};
 
 **File:** `gsml3parser/enum_formatters.h`
 
-`std::formatter` specializations for all gsml3parser enums, enabling use with `std::format` and `std::println`. Each specialization delegates to the existing `operator<<(ostream&, T)`.
+`std::formatter` specializations for gsml3parser protocol enums, enabling use with `std::format`. Each specialization delegates to the corresponding `operator<<(ostream&, T)`.
 
 ### Supported Enums
 
-| Enum | Domain |
-|------|--------|
-| `LogLevel` | Parser config |
-| `L3PD` | Protocol Discriminator |
-| `Primitive` | Interlayer Primitives |
-| `SAPI` | Service Access Point |
-| `MobileIDType` | Identity types |
-| `TypeOfNumber` | Numbering |
-| `NumberingPlan` | Numbering |
-| `ChannelType` | RR channels |
-| `GSMAlphabet` | Text encoding |
-| `RRCause` | RR cause codes |
-| `MMRejectCause` | MM reject causes |
-| `CCCause` | CC cause codes (Q.931) |
-| `CCCauseLocation` | CC cause location |
-| `BSSCause` | BSSMAP cause codes |
-| `CCMessageType` | CC message type IDs |
-| `GMMPTMSIType` | GMM P-TMSI type |
-| `L3ProgressIndicator::Location` | CC Progress nested enum |
-| `L3ProgressIndicator::Progress` | CC Progress nested enum |
+The 19 `std::formatter` specializations below all format through `std::ostream <<`, which the library declares/defines for every listed enum (cause-code enums stream their `*2Str()` names):
+
+| Enum | Domain | `std::format` | Name helper |
+|------|--------|---------------|-------------|
+| `LogLevel` | Parser config | Yes | — |
+| `L3PD` | Protocol Discriminator | Yes | — |
+| `Primitive` | Interlayer Primitives | Yes | — |
+| `SAPI` | Service Access Point | Yes | — |
+| `MobileIDType` | Identity types | Yes | — |
+| `TypeOfNumber` | Numbering | Yes | — |
+| `NumberingPlan` | Numbering | Yes | — |
+| `ChannelType` | RR channels | Yes | — |
+| `GSMAlphabet` | Text encoding | Yes | — |
+| `RRCause` | RR cause codes | Yes | `RRCause2Str()` |
+| `MMRejectCause` | MM reject causes | Yes | `MMRejectCause2Str()` |
+| `CMServiceAbortCause` | CM service abort causes | Yes | `CMServiceAbortCause2Str()` |
+| `CCCause` | CC cause codes (Q.931) | Yes | `CCCause2Str()` |
+| `CCCauseLocation` | CC cause location | Yes | — |
+| `BSSCause` | BSSMAP cause codes | Yes | `BSSCause2Str()` |
+| `CCMessageType` | CC message type IDs | Yes | — |
+| `GMMPTMSIType` | GMM P-TMSI type | Yes | — |
+| `L3ProgressIndicator::Location` | CC Progress nested enum | Yes | — |
+| `L3ProgressIndicator::Progress` | CC Progress nested enum | Yes | — |
 
 ### Usage
 
 ```cpp
 #include <gsml3parser/enum_formatters.h>
 
-auto msg = gsml3parser::parseL3Hex("060D00");
+auto msg = gsml3parser::parseL3Hex("600D00");
 if (msg) {
-    std::println("PD: {}", gsml3parser::messagePD(*msg));
-    // Output: PD: RadioResource (0x06)
+    std::string line = std::format("PD: {}", gsml3parser::messagePD(*msg));
+    // line == "PD: RadioResource"
 
     if (auto* cr = gsml3parser::tryGet<gsml3parser::L3ChannelRelease>(*msg)) {
-        std::println("Cause: {}", cr->cause());
-        // Output: cause value formatted via operator<<
+        std::string s = std::format("Cause: {}", cr->cause());  // "Cause: Normal_Event"
     }
 }
 ```
@@ -1630,11 +1648,14 @@ Template for range-checked scalar values:
 
 ```cpp
 template<typename T, T Min, T Max>
-class Bounded {
-public:
-    constexpr Bounded(T value);
-    [[nodiscard]] constexpr T get() const;
-    [[nodiscard]] constexpr operator T() const;
+struct Bounded {
+    T value{Min};
+    constexpr explicit Bounded(T v);
+    [[nodiscard]] constexpr T get() const noexcept;
+    [[nodiscard]] constexpr operator T() const noexcept;
+    Bounded& operator=(T v) & noexcept;
+    static constexpr T min();
+    static constexpr T max();
 };
 ```
 
@@ -1642,17 +1663,19 @@ public:
 
 | Type | Range | Description |
 |------|-------|-------------|
-| `Arfcn` | 0–1023 | Absolute Radio Frequency Channel Number |
-| `Bsic` | 0–63 | Base Station Identity Code |
-| `TimingAdvanceValue` | 0–63 | Timing Advance |
-| `Ncc` | 0–7 | Network Color Code |
-| `Bcc` | 0–7 | Base Station Color Code |
-| `Tsc` | 0–7 | Training Sequence Code |
-| `Hsn` | 0–7 | Hopping Sequence Number |
-| `Maio` | 0–63 | MAIO (Multiframe Offset) |
-| `TimeslotNumber` | 0–15 | TDMA timeslot |
-| `CellIdentity` | 0–65535 | Cell Identity |
-| `Lac` | 0–65535 | Location Area Code |
+| `Arfcn` | 0–1023 | Absolute Radio Frequency Channel Number (10 bits) |
+| `Bsic` | 0–63 | Base Station Identity Code (6 bits) |
+| `TimingAdvanceValue` | 0–63 | Timing Advance (6 bits) |
+| `Ncc` | 0–7 | Network Color Code (3 bits) |
+| `Bcc` | 0–7 | Base Station Color Code (3 bits) |
+| `Tsc` | 0–7 | Training Sequence Code (3 bits) |
+| `Hsn` | 0–7 | Hopping Sequence Number (3 bits) |
+| `Maio` | 0–63 | MAIO (Multiframe Offset, 6 bits) |
+| `TimeslotNumber` | 0–15 | TDMA timeslot (4 bits) |
+| `CellIdentity` | 0–65535 | Cell Identity (16 bits) |
+| `Lac` | 0–65535 | Location Area Code (16 bits) |
+| `Cksn` | 0–7 | Ciphering key sequence number (3 bits) |
+| `CiValue` | 0–15 | Bounded 4-bit field value |
 
 ---
 
@@ -1660,7 +1683,7 @@ public:
 
 **File:** `gsml3parser/common/l3common.h`
 
-All IEs are plain value types with `parse(BitReader&, size_t)`, `write(BitWriter&)`, and `text(std::ostream&)` methods. No virtual base class.
+All IEs are plain value types with a static `Expected<T> parse(BitReader&)`, `write(BitWriter&) const`, and `text(std::ostream&) const` method (plus typed accessors and, where applicable, a constexpr `lengthV()`). No virtual base class, no RTTI.
 
 ### L3MobileIdentity
 
@@ -1680,8 +1703,8 @@ MCC + MNC (BCD encoded) + LAC.
 
 | Method | Description |
 |--------|-------------|
-| `L3LocationAreaIdentity(mcc, mnc, lac)` | Construct from components |
-| `MCC()`, `MNC()`, `LAC()` | Accessor methods |
+| `L3LocationAreaIdentity(mcc, mnc, lac)` | Construct from components (BCD MCC/MNC strings + 16-bit LAC) |
+| `mcc()`, `mnc()`, `lac()` | Accessor methods (PLMN as integers, LAC 0–65535) |
 
 ### L3CellIdentity
 
@@ -1739,13 +1762,16 @@ Cell parameters and handover reference for handover procedures.
 
 ## 21. Radio Resource Messages
 
-**File:** `gsml3parser/rr/l3rrmessages.h` - 95 message types in the `RRM` variant.
+**File:** `gsml3parser/rr/l3rrmessages.h` - 98 message types in the `RRM` variant (PD=0x06).
 
 Each message is a plain struct with:
-- `parse(BitReader&)` -> `Expected<Self>` (static method)
-- `write(BitWriter&) const` -> void
-- `mti() const` -> returns MTI value
+- `static Expected<Self> parse(BitReader&)`
+- `write(BitWriter&) const`
+- `mti() const` -> dispatch MTI (RR short/SACCH messages report values ≥ 0x100, matching `L3Header::mti`)
 - `text(std::ostream&) const` -> human-readable output
+- `static Builder builder()` + `build()` -> fluent construction (see §15)
+
+Messages with dispatch MTI ≥ 0x106 (`L3SystemInformationType10/10bis/10ter`, `L3NotificationFACCH`, `L3UplinkFree`, `L3EnhancedMeasurementRepUL`, `L3MeasurementInfoDL`, `L3VBSVGCSRecon(2)`, `L3VGCSAddInfo`, `L3VGCSMSInfo`, `L3VGCSSNeighCellInfo`, `L3NotifyAppData`) have no parse dispatch slot: they are constructible/serializable only. The three length-based short messages (`L3ChannelRequest` 1 B, `L3HandoverAccess` 4 B, `L3SynchronizationChannelInformation` 7 B) are recognized by frame length on RACH/SCH.
 
 ### Short Messages (no standard L3 header)
 
@@ -1770,20 +1796,21 @@ Each message is a plain struct with:
 |---------|-----|-------------|
 | `L3SystemInformationType1` | 0x19 | Cell access parameters, CBCH flag |
 | `L3SystemInformationType2` | 0x1a | BCCH freq list, NCC permitted, RACH control |
-| `L3SystemInformationType2bis` | 0x1f | Extended BCCH freq list (GPRS) |
-| `L3SystemInformationType2ter` | 0x14 | BCCH freq list with GPRS cell options |
+| `L3SystemInformationType2bis` | 0x02 | Extended BCCH freq list (GPRS) |
+| `L3SystemInformationType2ter` | 0x03 | BCCH freq list with GPRS cell options |
 | `L3SystemInformationType3` | 0x1b | Cell desc, BA list type 1, rest octets |
 | `L3SystemInformationType4` | 0x1c | LAI, CI, cell selection, RACH control, rest octets |
 | `L3SystemInformationType5` | 0x1d | BA list type 2 |
-| `L3SystemInformationType5bis` | 0x20 | Extended BA list (GPRS) |
-| `L3SystemInformationType5ter` | 0x23 | BA list with GPRS cell options |
+| `L3SystemInformationType5bis` | 0x05 | Extended BA list (GPRS) |
+| `L3SystemInformationType5ter` | 0x06 | BA list with GPRS cell options |
 | `L3SystemInformationType6` | 0x1e | CI, LAI, SACCH cell options, NCC permitted |
-| `L3SystemInformationType7` | 0x15 | BA list type 3 |
-| `L3SystemInformationType8` | 0x16 | NCC permitted (SACCH) |
-| `L3SystemInformationType9` | 0x17 | CI, cell selection, BCCH cell options |
+| `L3SystemInformationType7` | 0x1f | BA list type 3 |
+| `L3SystemInformationType8` | 0x18 | NCC permitted (SACCH) |
+| `L3SystemInformationType9` | 0x04 | CI, cell selection, BCCH cell options |
 | `L3SystemInformationType13` | 0x00 | Cell desc, BA list type 1, rest octets |
-| `L3SystemInformationType16` | 0x01 | CI, cell selection, BCCH cell options (SACCH) |
-| `L3SystemInformationType17` | 0x04 | NCC permitted (SACCH extended) |
+| `L3SystemInformationType2quater` | 0x07 | Extended BCCH freq list, RACH ctrl params, CBCH description (raw body) |
+| `L3SystemInformationType16` | 0x3d | CI, cell selection (SACCH) |
+| `L3SystemInformationType17` | 0x3e | NCC permitted (SACCH extended) |
 
 ### Dedicated Channel Messages
 
@@ -1791,10 +1818,10 @@ Each message is a plain struct with:
 |---------|-----|-----------|-------------|
 | `L3ChannelRelease` | 0x0D | DL | Cause [+ GPRS resumption] |
 | `L3ImmediateAssignment` | 0x3F | DL | PageMode, channel desc, TA, mobile alloc |
-| `L3ImmediateAssignmentExtended` | - | DL | Extended immediate assignment |
+| `L3ImmediateAssignmentExtended` | 0x39 | DL | Extended immediate assignment |
 | `L3ImmediateAssignmentReject` | 0x3A | DL | Wait indication entries |
-| `L3AdditionalAssignment` | 0x01 | DL | Additional channel assignment |
-| `L3PhysicalInformation` | 0x26 | DL | Timing advance command |
+| `L3AdditionalAssignment` | 0x3B | DL | Additional channel assignment |
+| `L3PhysicalInformation` | 0x2D | DL | Timing advance command |
 | `L3AssignmentCommand` | 0x2E | DL | Channel desc, mode, power command |
 | `L3AssignmentComplete` | 0x29 | UL | Cause |
 | `L3AssignmentFailure` | 0x2F | UL | Cause |
@@ -1808,7 +1835,7 @@ Each message is a plain struct with:
 | `L3CipheringModeCommand` | 0x35 | DL | Ciphering setting + key seq |
 | `L3CipheringModeComplete` | 0x32 | UL | Empty body |
 | `L3ChannelModeModify` | 0x10 | DL | Channel desc + mode [+ multi-rate] |
-| `L3ChannelModeModifyAcknowledge` | 0x11 | UL | Channel desc + mode |
+| `L3ChannelModeModifyAcknowledge` | 0x17 | UL | Channel desc + mode |
 | `L3GPRSSuspensionRequest` | 0x34 | UL | TLLI, RA ID, suspension cause |
 | `L3ApplicationInformation` | 0x38 | DL/UL | RRLP encapsulation data |
 
@@ -1901,29 +1928,31 @@ Each message is a plain struct with:
 | `L3SystemInformationType22` | 0x47 | Empty body |
 | `L3SystemInformationType23` | 0x4f | Empty body |
 
-### Short Messages (FACCH, BCCH)
+### SACCH Short Messages (TIF=1)
 
-| Message | Size | Description |
-|---------|------|-------------|
-| `L3SystemInformationType10` | 10 bytes | CI + LAI + CellOptions + CellSelectionParameters |
-| `L3SystemInformationType10bis` | 10 bytes | CI + LAI + CellOptions + CellSelectionParameters |
-| `L3SystemInformationType10ter` | 10 bytes | CI + LAI + CellOptions + CellSelectionParameters |
-| `L3NotificationFACCH` | - | FACCH notification |
-| `L3UplinkFree` | - | FACCH uplink free |
-| `L3EnhancedMeasurementRepUL` | variable | FACCH measurement report UL |
-| `L3MeasurementInfoDL` | variable | FACCH measurement info DL |
-| `L3VBSVGCSRecon` | - | VBS/VGCS reconfiguration |
-| `L3VBSVGCSRecon2` | - | VBS/VGCS reconfiguration 2 |
-| `L3VGCSAddInfo` | - | VGCS additional info |
-| `L3VGCSMSInfo` | - | VGCS SMS info |
-| `L3VGCSSNeighCellInfo` | - | VGCS neighbor cell info |
-| `L3NotifyAppData` | - | Notify application data |
+These carry the TIF=1 SACCH/BCCH encoding. The SI10-family types (0x106–0x108) and this FACCH/VBS-VGCS group (0x109–0x112) are constructible/serializable only — there is no parse dispatch slot for them (see section intro).
+
+| Message | MTI | Description |
+|---------|-----|-------------|
+| `L3SystemInformationType10` | 0x106 | CI + LAI + CellOptions + CellSelectionParameters |
+| `L3SystemInformationType10bis` | 0x107 | CI + LAI + CellOptions + CellSelectionParameters |
+| `L3SystemInformationType10ter` | 0x108 | CI + LAI + CellOptions + CellSelectionParameters |
+| `L3NotificationFACCH` | 0x109 | FACCH notification |
+| `L3UplinkFree` | 0x10A | FACCH uplink free |
+| `L3EnhancedMeasurementRepUL` | 0x10B | FACCH measurement report UL |
+| `L3MeasurementInfoDL` | 0x10C | FACCH measurement info DL |
+| `L3VBSVGCSRecon` | 0x10D | VBS/VGCS reconfiguration |
+| `L3VBSVGCSRecon2` | 0x10E | VBS/VGCS reconfiguration 2 |
+| `L3VGCSAddInfo` | 0x10F | VGCS additional info |
+| `L3VGCSMSInfo` | 0x110 | VGCS SMS info |
+| `L3VGCSSNeighCellInfo` | 0x111 | VGCS neighbor cell info |
+| `L3NotifyAppData` | 0x112 | Notify application data |
 
 ---
 
 ## 22. Mobility Management Messages
 
-**File:** `gsml3parser/mm/l3mmmessages.h` - 18 message types in the `MMM` variant.
+**File:** `gsml3parser/mm/l3mmmessages.h` - 20 message types in the `MMM` variant (PD=0x05).
 
 ### MM Information Elements
 
@@ -1943,6 +1972,11 @@ Each message is a plain struct with:
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
 | `L3IMSIDetachIndication` | 0x01 | UL | MobileIdentity (IMSI detach) |
+| `L3LocationUpdatingAccept` | 0x02 | DL | LAI [+ new MobileIdentity] |
+| `L3PagingMM` | 0x06 | DL | MM paging — mobile identity to page (TS 24.008 9.2.12) |
+| `L3LocationUpdatingReject` | 0x04 | DL | Reject cause |
+| `L3LocationUpdatingRequest` | 0x08 | UL | MobileIdentity + LAI + update type |
+| `L3CMRequest` | 0x20 | DL | CM request — CKSN, CM service type, classmark2, mobile identity (TS 24.008 9.2.8) |
 | `L3CMServiceAccept` | 0x21 | DL | Empty body |
 | `L3CMServiceReject` | 0x22 | DL | Reject cause |
 | `L3CMServiceAbort` | 0x23 | DL | CM service type [+ cause] |
@@ -1951,9 +1985,6 @@ Each message is a plain struct with:
 | `L3IdentityResponse` | 0x19 | UL | MobileIdentity |
 | `L3IdentityRequest` | 0x18 | DL | Identity type (IMSI/IMEI) |
 | `L3MMInformation` | 0x32 | DL | Network name, time zone, ciphering mode |
-| `L3LocationUpdatingAccept` | 0x02 | DL | LAI [+ MobileIdentity] |
-| `L3LocationUpdatingReject` | 0x04 | DL | Reject cause |
-| `L3LocationUpdatingRequest` | 0x08 | UL | MobileIdentity + LAI + update type |
 | `L3TMSIReallocationCommand` | 0x1A | DL | New TMSI + old TMSI |
 | `L3TMSIReallocationComplete` | 0x1B | UL | Empty body |
 | `L3MMStatus` | 0x31 | UL/DL | Cause + spare |
@@ -1965,7 +1996,7 @@ Each message is a plain struct with:
 
 ## 23. Call Control Messages
 
-**File:** `gsml3parser/cc/l3ccmessages.h` - 20 message types in the `CCM` variant.
+**File:** `gsml3parser/cc/l3ccmessages.h` - 24 message types in the `CCM` variant (PD=0x03, dialog protocol — header carries TI).
 
 ### CC Information Elements
 
@@ -2018,8 +2049,12 @@ Each message is a plain struct with:
 | `L3Alerting` | 0x01 | DL | [+ Facility, ProgressIndicator, UserUser, SSVersion] |
 | `L3Connect` | 0x07 | UL | [+ ProgressIndicator, ConnectedNumber, ConnectedSubAddress, UserUser, StreamIdentifier] |
 | `L3ConnectAcknowledge` | 0x0f | DL | Empty body |
+| `L3Modify` | 0x19 | UL | Modify call: [+ BearerCapability, CalledParty, CallingParty] (TS 24.008 9.3.15) |
 | `L3CallConfirmed` | 0x08 | DL | [+ BearerCapability, SupportedCodecs, Cause, UserUser] |
 | `L3Disconnect` | 0x25 | UL | Cause (CCCause + CCCauseLocation) |
+| `L3UnitData` | 0x27 | UL | Unit data: [+ BearerCapability] + user data (9.3.16) |
+| `L3UnitDataAck` | 0x28 | DL | Unit data acknowledgement, no body (9.3.16a) |
+| `L3ErrorIndication` | 0x2b | UL | CC cause (CCCause) (9.3.16b) |
 | `L3Release` | 0x2d | DL/UL | [+ Cause, Facility, SSVersion] |
 | `L3ReleaseComplete` | 0x2a | DL/UL | [+ Cause, Facility, SSVersion] |
 | `L3StartDTMF` | 0x35 | UL | KeypadFacility digit |
@@ -2027,6 +2062,7 @@ Each message is a plain struct with:
 | `L3StopDTMFAcknowledge` | 0x32 | DL | Empty body |
 | `L3StartDTMFAcknowledge` | 0x36 | DL | KeypadFacility digit |
 | `L3StartDTMFReject` | 0x37 | DL | Cause |
+| `L3Facility` | 0x3a | DL/UL | CC Facility — SS facility data container (TS 24.008 9.3.21) |
 | `L3Hold` | 0x18 | UL | Empty body |
 | `L3HoldReject` | 0x1a | DL | Cause |
 | `L3CCStatus` | 0x3d | DL/UL | Cause + CallState |
@@ -2038,25 +2074,30 @@ MTI values are the 6-bit messageType field (GSM 04.08 Table 10.3). In the L3 hea
 
 | MTI | Message | Spec Section |
 |-----|---------|-------------|
-| 0x01 | Alerting | GSM 04.08 9.3.1 |
-| 0x02 | Call Proceeding | GSM 04.08 9.3.3 |
-| 0x03 | Progress | GSM 04.08 9.3.17 |
-| 0x05 | Setup | GSM 04.08 9.3.19 |
-| 0x07 | Connect | GSM 04.08 9.3.5 |
-| 0x08 | Call Confirmed | GSM 04.08 9.3.2 |
-| 0x0e | Emergency Setup | GSM 04.08 9.3.8 |
-| 0x0f | Connect Acknowledge | GSM 04.08 9.3.6 |
-| 0x18 | Hold | GSM 04.08 9.3.23 |
-| 0x1a | Hold Reject | GSM 04.08 9.3.24 |
-| 0x25 | Disconnect | GSM 04.08 9.3.7 |
-| 0x2a | Release Complete | GSM 04.08 9.3.19 |
-| 0x2d | Release | GSM 04.08 9.3.19 |
-| 0x31 | Stop DTMF | GSM 04.08 9.3.25 |
-| 0x32 | Stop DTMF Acknowledge | GSM 04.08 9.3.25 |
-| 0x35 | Start DTMF | GSM 04.08 9.3.25 |
-| 0x36 | Start DTMF Acknowledge | GSM 04.08 9.3.25 |
-| 0x37 | Start DTMF Reject | GSM 04.08 9.3.25 |
-| 0x3d | CC Status | GSM 04.08 9.3.19 |
+| 0x01 | Alerting | TS 24.008 9.3.1 |
+| 0x02 | Call Proceeding | TS 24.008 9.3.3 |
+| 0x03 | Progress | TS 24.008 9.3.17 |
+| 0x05 | Setup | TS 24.008 9.3.2 |
+| 0x07 | Connect | TS 24.008 9.3.5 |
+| 0x08 | Call Confirmed | TS 24.008 9.3.2 |
+| 0x0e | Emergency Setup | TS 24.008 9.3.8 |
+| 0x0f | Connect Acknowledge | TS 24.008 9.3.6 |
+| 0x18 | Hold | TS 24.008 9.3.23 |
+| 0x19 | Modify | TS 24.008 9.3.15 |
+| 0x1a | Hold Reject | TS 24.008 9.3.24 |
+| 0x25 | Disconnect | TS 24.008 9.3.7 |
+| 0x27 | Unit Data | TS 24.008 9.3.16 |
+| 0x28 | Unit Data Acknowledge | TS 24.008 9.3.16a |
+| 0x2b | Error Indication | TS 24.008 9.3.16b |
+| 0x2a | Release Complete | TS 24.008 9.3.19 |
+| 0x2d | Release | TS 24.008 9.3.19 |
+| 0x31 | Stop DTMF | TS 24.008 9.3.25 |
+| 0x32 | Stop DTMF Acknowledge | TS 24.008 9.3.25 |
+| 0x35 | Start DTMF | TS 24.008 9.3.25 |
+| 0x36 | Start DTMF Acknowledge | TS 24.008 9.3.25 |
+| 0x37 | Start DTMF Reject | TS 24.008 9.3.25 |
+| 0x3a | Facility | TS 24.008 9.3.21 |
+| 0x3d | CC Status | TS 24.008 9.3.19 |
 
 ---
 
@@ -2064,11 +2105,13 @@ MTI values are the 6-bit messageType field (GSM 04.08 Table 10.3). In the L3 hea
 
 **File:** `gsml3parser/ss/l3ssmessages.h` - 3 message types in the `SSM` variant.
 
+All three are GSM 04.80 opaque containers: the body carries a CC-style Facility element (TCAP components), parsed further by `L3FacilityOpCode` / `L3USSDData` below. The header carries TI like other dialog messages.
+
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3SupServFacilityMessage` | varies | DL/UL | SS facility data (TLV) |
-| `L3SupServRegisterMessage` | varies | DL/UL | Registration request/response |
-| `L3SupServReleaseCompleteMessage` | varies | DL | SS release complete |
+| `L3SupServFacilityMessage` | 0x3a | DL/UL | SS facility data (opaque Facility body) |
+| `L3SupServRegisterMessage` | 0x3b | DL/UL | Registration request/response |
+| `L3SupServReleaseCompleteMessage` | 0x2a | DL/UL | SS release complete |
 
 ### SS Operation Codes
 
@@ -2228,7 +2271,7 @@ if (ussd) {
 
 ## 25. GPRS Mobility Management Messages
 
-**File:** `gsml3parser/gmm/l3gmmmessages.h` - 19 message types in the `GMM` variant.
+**File:** `gsml3parser/gmm/l3gmmmessages.h` - 23 message types in the `GMM` variant.
 **Spec:** 3GPP TS 24.008 sections 9.4, Table 10.4.
 **PD:** `0x08` (GPRSMobilityManagement).
 
@@ -2459,7 +2502,7 @@ The SMS layer uses a three-level encapsulation: L3 header -> CP message -> RP me
 
 ## 28. Broadcast Call Control Messages
 
-**File:** `gsml3parser/bcc/l3bccmessages.h` - 6 message types in the `BCCM` variant.
+**File:** `gsml3parser/bcc/l3bccmessages.h` - 8 message types in the `BCCM` variant.
 **Spec:** 3GPP TS 44.018 sections 9.6, Table 10.4.3.
 **PD:** `0x01` (BroadcastCallControl).
 
@@ -2469,9 +2512,11 @@ L3 header encoding matches CC: Byte 0 high nibble = PD, bits 1-3 = TI, bit 0 = T
 |---------|-----|-----------|-------------|
 | `L3BCCSetup` | 0x00 | MO | Broadcast call setup with TI + opaque body |
 | `L3BCCProceeding` | 0x01 | MT | Network proceeding indication |
+| `L3BCCCallConfirmed` | 0x04 | MT | Call confirmed |
 | `L3BCCConnect` | 0x05 | MT | Broadcast call connected |
 | `L3BCCDisconnect` | 0x06 | MO | Broadcast call disconnect |
 | `L3BCCRelease` | 0x07 | MT | Broadcast call release |
+| `L3BCCConnectAcknowledge` | 0x09 | Bidir | Connect acknowledged |
 | `L3BCCReleaseComplete` | 0x0a | Bidir | Release complete |
 
 Each message stores the body as an opaque octet sequence for basic infrastructure parsing. The `ti()` accessor returns the Transaction Identifier.
@@ -2480,7 +2525,7 @@ Each message stores the body as an opaque octet sequence for basic infrastructur
 
 ## 29. Group Call Control Messages
 
-**File:** `gsml3parser/gcc/l3gccmessages.h` - 7 message types in the `GCCM` variant.
+**File:** `gsml3parser/gcc/l3gccmessages.h` - 8 message types in the `GCCM` variant.
 **Spec:** 3GPP TS 44.018 sections 9.7, Table 10.4.4.
 **PD:** `0x00` (GroupCallControl).
 
@@ -2491,6 +2536,7 @@ L3 header encoding matches CC: Byte 0 high nibble = PD, bits 1-3 = TI, bit 0 = T
 | `L3GCCSetup` | 0x00 | MO | Group call setup with TI + opaque body |
 | `L3GCCProceeding` | 0x01 | MT | Network proceeding indication |
 | `L3GCCAcknowledge` | 0x02 | MT | Group call acknowledgement |
+| `L3GCCCallConfirmed` | 0x03 | MT | Call confirmed |
 | `L3GCCConnect` | 0x05 | MT | Group call connected |
 | `L3GCCDisconnect` | 0x06 | MO | Group call disconnect |
 | `L3GCCRelease` | 0x07 | MT | Group call release |
@@ -2745,6 +2791,7 @@ Single timer instance with start/stop/expired semantics.
 | `remaining()` | Returns remaining time (zero if not running) |
 | `id()` | Returns the timer's L3TimerId |
 | `expiry()` | Returns the configured expiry duration |
+| `reconfigure(id, expiry)` | Stop and re-arm with a new timer ID / expiry (no heap allocation) |
 
 ### TimerManager Class
 
@@ -2769,7 +2816,7 @@ Manages up to 32 named timers for one MS context using fixed-size arrays.
 
 | Metric | Value |
 |--------|-------|
-| Memory footprint | `sizeof(TimerManager)` ≈ 1.2 KB (32 timers × ~36 bytes + 32 bytes init flags + 3 observer words) |
+| Memory footprint | `sizeof(TimerManager)` = 1,080 bytes on 64-bit (32 × 32-byte `L3Timer` slots + per-slot init flags + owner/observer words) |
 | Heap allocations | **Zero** - all storage is `std::array`; observer is a plain fn pointer + context |
 | `tick()` complexity | O(32) = constant, iterates fixed array |
 | `start()` / `stop()` | O(1) - direct index into array (plus O(32) running-count check for active-change detection) |
@@ -2827,7 +2874,7 @@ The transaction framework provides request-response correlation for L3 messaging
 |------------------------|-------------------|------------|
 | `CallControl` (PD=0x03) | TI-based lookup via `mTiIndex[8]` | O(1) |
 | `NonCallSS` (PD=0x0b) | TI-based lookup via `mTiIndex[8]` | O(1) |
-| All other PDs | PD + MTI comparison | O(K), K < 16 |
+| All other PDs | PD + MTI comparison | O(K), K at most 16 |
 
 ### API Reference
 
@@ -2933,7 +2980,7 @@ tm.cleanup();
 | `sizeof(Transaction)` | <= 48 bytes |
 | Max concurrent transactions | 16 per MS |
 | CC/SS match() complexity | O(1) via TI index |
-| Non-CC/SS match() complexity | O(K), K < 16 |
+| Non-CC/SS match() complexity | O(K), K at most 16 (MAX_TRANSACTIONS) |
 | Heap allocations | None (std::array storage) |
 | Thread safety | NOT thread-safe; one instance per MS |
 
@@ -3004,16 +3051,19 @@ protected:
 | `HANDOVER` | Handover procedure in progress |
 | `CHANNEL_RELEASE` | Channel release in progress |
 
-**Default RR transitions:**
+**Default RR transitions:** (a `SendResponse` action marks states where a response should be built externally; e.g. IDLE+ChannelRequest responds with ImmediateAssignment/ChannelRelease per application policy, ACTIVE+ChannelRelease re-sends the release)
 ```
-IDLE + ChannelRequest           -> CHANNEL_REQUESTED
-CHANNEL_ASSIGNED + PagingResp   -> WAITING_MM
-LINK_ESTABLISHED + (any MM msg) -> WAITING_MM
-WAITING_MM + CMServiceAccept    -> ACTIVE
-ACTIVE + ChannelRelease         -> CHANNEL_RELEASE
-ACTIVE + HandoverCommand        -> HANDOVER
-CIPHER_MODE + CipherModeComplete-> ACTIVE
-T3109 expiry (CHANNEL_ASSIGNED) -> CHANNEL_RELEASE
+IDLE + ChannelRequest            -> CHANNEL_REQUESTED  (SendResponse)
+CHANNEL_ASSIGNED + PagingResponse-> WAITING_MM
+LINK_ESTABLISHED + (any MM msg)  -> WAITING_MM
+WAITING_MM + CMServiceAccept     -> ACTIVE
+WAITING_MM + CMServiceRequest    -> ACTIVE             (SendResponse)
+ACTIVE + CC Setup                -> ACTIVE             (SendResponse, stay)
+ACTIVE + ChannelRelease          -> CHANNEL_RELEASE    (SendResponse)
+ACTIVE + HandoverCommand         -> HANDOVER
+CIPHER_MODE + CipherModeComplete -> ACTIVE
+CHANNEL_RELEASE                  -> ReleaseChannel action (no state change)
+T3109 expiry (CHANNEL_ASSIGNED or WAITING_MM) -> CHANNEL_RELEASE
 ```
 
 ### MMStateMachine States
@@ -3029,17 +3079,20 @@ T3109 expiry (CHANNEL_ASSIGNED) -> CHANNEL_RELEASE
 | `LOCATION_UPDATE` | Location Updating in progress |
 | `REGISTERED`      | Fully registered, ready for calls |
 
-**Default MM transitions:**
+**Default MM transitions:** (`SendResponse` = build a response externally, e.g. Identity Request on entering IDENTITY_VERIFIED)
 ```
-DEREGISTERED + CMServiceRequest       -> SERVICE_REQUEST
-SERVICE_REQUEST + IdentityResponse    -> IDENTITY_VERIFIED
-IDENTITY_VERIFIED + AuthResponse      -> AUTHENTICATED
-AUTHENTICATION + AuthResponse         -> AUTHENTICATED
+DEREGISTERED + CMServiceRequest       -> WAITING_IDENTITY  (SendResponse)
+SERVICE_REQUEST + IdentityResponse    -> IDENTITY_VERIFIED (SendResponse)
+WAITING_IDENTITY + IdentityResponse   -> IDENTITY_VERIFIED (SendResponse)
+IDENTITY_VERIFIED + AuthResponse      -> AUTHENTICATED     (SendResponse)
+AUTHENTICATION + AuthResponse         -> AUTHENTICATED     (SendResponse)
 AUTHENTICATED + LocationUpdatingReq   -> LOCATION_UPDATE
-LOCATION_UPDATE + CMServiceAccept     -> REGISTERED
-T3101/T3102 expiry (SERVICE_REQUEST)  -> DEREGISTERED
+LOCATION_UPDATE + CMServiceAccept     -> REGISTERED        (SendResponse)
+T3101/T3102 expiry (SERVICE_REQUEST or WAITING_IDENTITY)  -> DEREGISTERED
 T3106 expiry (AUTHENTICATION)         -> DEREGISTERED
 ```
+
+Non-MM PDs always return `SMAction::None`.
 
 ### CCStateMachine States
 
@@ -3054,17 +3107,21 @@ T3106 expiry (AUTHENTICATION)         -> DEREGISTERED
 | `DISCONNECT_RECEIVED` | Disconnect received |
 | `RELEASE`             | Release in progress |
 
-**Default CC transitions:**
+**Default CC transitions:** (`SendResponse` = build a response externally; auto-transitions fire on any routed message in that state)
 ```
-IDLE + Setup              -> SETUP_RECEIVED
-SETUP_RECEIVED            -> PROCEEDING (auto-transition)
-PROCEEDING + Alerting     -> ALERTING
-ALERTING + Connect        -> CONNECT
-CONNECT + CallConfirmed   -> ACTIVE
-ACTIVE + Disconnect       -> DISCONNECT_RECEIVED
-DISCONNECT_RECEIVED       -> RELEASE (auto-transition)
+IDLE + Setup                 -> SETUP_RECEIVED
+SETUP_RECEIVED               -> PROCEEDING           (auto, SendResponse: Call Proceeding)
+PROCEEDING + Alerting        -> ALERTING             (SendResponse: Alerting ack per application policy)
+ALERTING + Connect           -> CONNECT              (SendResponse: Connect)
+CONNECT + CallConfirmed      -> ACTIVE
+ACTIVE + Disconnect          -> DISCONNECT_RECEIVED  (SendResponse)
+ACTIVE + ConnectAcknowledge  -> ACTIVE               (stay, no-op)
+DISCONNECT_RECEIVED          -> RELEASE              (auto, SendResponse: Release)
+RELEASE + Release            -> IDLE                 (SendResponse)
 T3101 expiry (SETUP_RECEIVED/PROCEEDING/ALERTING) -> IDLE
 ```
+
+Non-CC PDs always return `SMAction::None`.
 
 ### Usage Example
 
@@ -3100,10 +3157,10 @@ protected:
 
 | Metric | Value |
 |--------|-------|
-| `sizeof(SMResult)` | <= 16 bytes |
-| Message dispatch | O(1) via switch(PD) + switch(MTI), compile-time resolved |
+| `sizeof(SMResult)` | <= 16 bytes (static-asserted) |
+| Message dispatch | O(1): PD gate + per-state message-type tests; RR `ACTIVE` uses a `switch(mti)` jump table for its four handled MTIs |
 | Heap allocations | None on hot path |
-| Virtual dispatch | Only at base class level; derived impl uses switch statements |
+| Virtual dispatch | Only at the base-class level (`processMessage` -> `handle_message_impl`) |
 | Thread safety | NOT thread-safe; one instance per MS |
 
 ---
@@ -3240,7 +3297,8 @@ pool.release(*ch);
 
 | Metric | Value |
 |--------|-------|
-| `sizeof(ChannelDescriptor)` | 8 bytes (with padding) |
+| `sizeof(ChannelDescriptor)` | 6 bytes |
+| `sizeof(ChannelPool)` | ~3.5 KB (two `std::array[..., kMaxChannelTypes=32]` buckets; per-type `vector` free-lists + `unordered_set` allocated sets) |
 | allocate() complexity | O(1) - vector pop_back on free-list |
 | release() complexity | O(1) - unordered_set find/erase on allocated set + free-list push |
 | Heap allocations | Amortized O(1) on hot path (allocate/release). addChannel() grows internal vectors; the allocated set may rehash as channels are allocated. |
@@ -3252,7 +3310,7 @@ pool.release(*ch);
 
 **File:** `gsml3parser/flat_handler.h`
 
-`FlatHandler` replaces `std::function<void(const ParsedMessage&, void*)>` with a zero-overhead callback type. Each instance is exactly two machine words (16 bytes on 64-bit), compared to 40+ bytes for `std::function`. Invocations use direct function pointer calls — no virtual dispatch, no type erasure overhead.
+`FlatHandler` is the zero-overhead callback type used throughout the dispatcher and procedure layers. Each instance is exactly two machine words (16 bytes on 64-bit, `static_assert`-ed), compared to 40+ bytes for `std::function`. Invocations use direct function pointer calls — no virtual dispatch, no type erasure overhead.
 
 ### FlatHandler Struct
 
@@ -3266,19 +3324,23 @@ struct FlatHandler {
     constexpr FlatHandler() noexcept = default;
     constexpr FlatHandler(Callback f, void* c) noexcept;
 
+    // Copy/move and assignment are RAII: a shared handler's refcount is
+    // bumped on copy and released on overwrite/destruction (bad_alloc-safe).
     void operator()(const ParsedMessage& msg, void* userCtx = nullptr) const;
-    bool operator==(const FlatHandler& other) const noexcept;
+    void release() noexcept;          // drop one shared reference; resets to empty
     explicit operator bool() const noexcept;
 };
 
-static_assert(sizeof(FlatHandler) == 2 * sizeof(void*));
+static_assert(sizeof(FlatHandler) == 2 * sizeof(void*), "FlatHandler must be exactly two pointers");
 ```
 
 | Method | Description | Complexity |
 |--------|-------------|------------|
-| `operator()(msg, ctx)` | Invoke handler. Direct function pointer call. | O(1) single indirect call |
-| `operator==` | Compare two handlers (fn + ctx equality) | O(1) |
+| `operator()(msg, userCtx)` | Invoke handler. Raw handlers call `fn(&msg, userCtx ?: ctx)`; shared handlers dispatch through their holder with the caller's context. | O(1) single indirect call |
+| `release()` | Drop one shared reference (no-op for raw handlers), reset to empty | O(1) |
 | `operator bool` | True if fn is not nullptr | O(1) |
+
+Registration semantics in `ProtocolDispatcher`: re-registering a slot replaces the previous handler; its shared storage, if any, is released automatically through the RAII copy/move operations. There is no removal API — overwrite the slot with an empty handler or the new one.
 
 ### Factory Functions
 
@@ -3373,10 +3435,14 @@ Explicit template instantiations are provided for N = 4, 8, 16, and 32.
 
 ```cpp
 void addChannel(ChannelDescriptor desc);
-std::optional<ChannelDescriptor> allocate(ChannelType type);
+[[nodiscard]] std::optional<ChannelDescriptor> allocate(ChannelType type);
 bool release(const ChannelDescriptor& desc);
-size_t freeCount(ChannelType type) const;
-size_t totalCount() const;
+[[nodiscard]] size_t freeCount(ChannelType type) const;
+[[nodiscard]] size_t totalCount() const;
+
+// Public for distribution tests: the same bit-packed finalizer used to
+// select the owning shard, keyed by (type, trx, timeslot, arfcn).
+static constexpr uint32_t hashDescriptor(const ChannelDescriptor& desc) noexcept;
 ```
 
 | Method | Description | Complexity | Lock Type |
@@ -3389,7 +3455,7 @@ size_t totalCount() const;
 
 ### Hash Function
 
-The shard index is computed from `(trxNumber, timeslot, arfcn)` using a simple XOR-shift hash followed by a bitmask (`hash & (N-1)`). This ensures:
+The shard index is computed from `(type, trxNumber, timeslot, arfcn)` via the bit-packed `hashDescriptor()` finalizer and a bitmask (`hash & (N-1)`). This ensures:
 - O(1) computation (no modulo division)
 - Deterministic: same channel always maps to same shard
 - Even distribution for typical BTS channel layouts
@@ -3457,20 +3523,24 @@ Zero-copy L3 frame extractor for contiguous memory buffers. Unlike `L3Framer` wh
 ```cpp
 class InlineFramer {
 public:
+    constexpr InlineFramer() noexcept = default;
     explicit InlineFramer(std::span<const uint8_t> data, bool useL2Length = true);
 
     [[nodiscard]] std::optional<std::span<const uint8_t>> nextFrame() noexcept;
     [[nodiscard]] constexpr size_t remaining() const noexcept;
     void reset() noexcept;
     void setMaxFrameLength(size_t len) noexcept;
+    [[nodiscard]] constexpr size_t resyncSkips() const noexcept;  // corrupt L2 length octets skipped during resync
 };
 ```
 
 | Method | Description | Complexity |
 |--------|-------------|------------|
-| `nextFrame()` | Extract next frame as a span into original data | O(1) for L2 length, O(L) for header-based scanning |
+| `nextFrame()` | Extract next frame as a non-owning span into the original data; `nullopt` when exhausted. Corrupt L2 length octets (0 or > maxFrameLength) are skipped and counted by `resyncSkips()`. | O(1) for L2 length, O(L) for header-based scanning |
 | `remaining()` | Unconsumed bytes | O(1) |
-| `reset()` | Reset to beginning of buffer | O(1) |
+| `reset()` | Reset to beginning of buffer (also clears the resync counter) | O(1) |
+| `setMaxFrameLength(len)` | Upper bound on frame size (default 4096) | — |
+| `resyncSkips()` | Number of corrupt length octets skipped so far | O(1) |
 
 ### Framing Modes
 
@@ -3644,18 +3714,36 @@ template<typename F> void forEach(F&& callback);
 
 ### ShardedSubscriberRegistry
 
-Thread-safe variant that partitions sessions across N shards:
+Thread-safe variant that partitions sessions across N shards (power of two, >= 2; explicit instantiations provided for N = 4, 8, 16, 32). Each shard is a `SubscriberRegistry` guarded by its own `std::shared_mutex`; shard selection is a MurmurHash3-fmix32 TMSI hash masked with `N-1`.
 
 ```cpp
-ShardedSubscriberRegistry<16> registry;  // 16 shards
+ShardedSubscriberRegistry<16> registry;  // default template argument is N = 16
 
 // Thread-safe operations.
-auto* s1 = registry.createByTMSI(0x12345678);
-auto* s2 = registry.findByTMSI(0x12345678);  // shared_lock
-registry.remove(s1);  // unique_lock
+auto* s1 = registry.createByTMSI(0x12345678);        // exclusive shard lock, nullptr on duplicate TMSI
+auto* s2 = registry.findByTMSI(0x12345678);          // shared shard lock
+registry.remove(s1);                                 // O(1) via session->assignedTmsi
+
+// Read-guarded access: findLocked() holds the shard's shared lock for the
+// guard's lifetime (safe against concurrent readers; do not modify while held).
+auto locked = registry.findLocked(0x12345678);       // {SubscriberSession* session, SharedGuard guard}
+if (locked.session) use(*locked.session);            // shard stays read-locked here
+
+// Exclusive access for multi-step modification:
+auto shard = registry.lockForTMSI(0x12345678);       // {SubscriberRegistry& registry, UniqueGuard guard}
 ```
 
-Explicit instantiations provided for N=4, 8, 16, 32.
+| Method | Notes |
+|--------|-------|
+| `createByTMSI(tmsi)` | nullptr if the TMSI already exists |
+| `findByTMSI` / `findByIMSI` / `findByLink(trx, ts, lapdmLink)` | raw session pointer; IMSI and link lookups scan all shards (cold path) |
+| `findLocked(tmsi)` / `lockForTMSI(tmsi)` | RAII `LockedSession` / `LockedShard` guards |
+| `reserve(expectedSessions)` | pre-sizes each shard's flat indexes (`expected/N + 1`) |
+| `forEach(callback)` | visits every session exactly once, shard by shard |
+| `tickAllTimers(delta, expiredOut)` / `tickAllProcedures(delta)` | per-shard O(active) ticks; returns total events/failures |
+| `remove(session)` | O(1) via `session->assignedTmsi`; returns false for unknown/removed sessions (the plain `SubscriberRegistry::clear()` emergency shutdown has no sharded equivalent) |
+
+**Warning:** the shard mutexes are non-recursive — never call a locking API while holding a guard from `findLocked`/`lockForTMSI` on the same shard.
 
 ### Example
 
@@ -3702,34 +3790,53 @@ Defines all RSL enumerations and structures for A-bis message parsing and constr
 
 | Enum | Value | Direction | Description |
 |------|-------|-----------|-------------|
-| `RSLL3MessageType::DataReq` | `0x21` | BSC->BTS | Numbered L3 data |
-| `RSLL3MessageType::DataInd` | `0x22` | BTS->BSC | Numbered L3 data |
-| `RSLL3MessageType::UnitDataReq` | `0x41` | BSC->BTS | Unnumbered L3 data |
-| `RSLL3MessageType::UnitDataInd` | `0x42` | BTS->BSC | Unnumbered L3 data |
+| `RSLL3MessageType::DataReq` | `0x21` | BSC->BTS | Numbered L3 data (L3Info TL16V IE) |
+| `RSLL3MessageType::DataInd` | `0x22` | BTS->BSC | Numbered L3 data (L3Info TL16V IE) |
+| `RSLL3MessageType::UnitDataReq` | `0x41` | BSC->BTS | Unnumbered (connectionless) L3 data |
+| `RSLL3MessageType::UnitDataInd` | `0x42` | BTS->BSC | Unnumbered (connectionless) L3 data |
+| `RSLL3MessageType::EstablishmentInd` | `0x61` | BTS->BSC | Link establishment indication |
+| `RSLL3MessageType::ReleaseReq` | `0x81` | BSC->BTS | RF link release request |
+| `RSLL3MessageType::ReleaseInd` | `0xa1` | BTS->BSC | RF link release indication |
 
 ### DCHAN Message Types
 
 | Enum | Value | Direction | Description |
 |------|-------|-----------|-------------|
-| `RSLDChanMessageType::ChanActiv` | `0x01` | BSC->BTS | Channel activation |
+| `RSLDChanMessageType::ChanActiv` | `0x01` | BSC->BTS | Channel activation (CHN_ACT) |
+| `RSLDChanMessageType::RFChanRel` | `0x02` | BSC->BTS | RF channel release |
+| `RSLDChanMessageType::SACCHInfoModify` | `0x03` | BSC->BTS | SACCH information modification |
+| `RSLDChanMessageType::DeactivateSACCH` | `0x04` | BSC->BTS | Deactivate SACCH |
+| `RSLDChanMessageType::EncrCmd` | `0x06` | BSC->BTS | Encryption command (RSLEncryptionInfo IE) |
+| `RSLDChanMessageType::ModeModifyReq` | `0x07` | BSC->BTS | Mode modification request |
+| `RSLDChanMessageType::MS_PowerControl` | `0x09` | BSC->BTS | MS power control (MSPower IE) |
+| `RSLDChanMessageType::BS_PowerControl` | `0x0a` | BSC->BTS | BS power control (BSPower IE) |
 | `RSLDChanMessageType::ChanActivAck` | `0x11` | BTS->BSC | Activation ACK |
-| `RSLDChanMessageType::ChanActivNack` | `0x12` | BTS->BSC | Activation NACK |
-| `RSLDChanMessageType::RFChanRelAck` | `0x15` | BTS->BSC | Release ACK |
+| `RSLDChanMessageType::ChanActivNack` | `0x12` | BTS->BSC | Activation NACK (RSLErrorCause) |
+| `RSLDChanMessageType::RFChanRelAck` | `0x15` | BTS->BSC | RF channel release ACK |
+| `RSLDChanMessageType::ConnFail` | `0x21` | BTS->BSC | Connection failure (RSLErrorCause) |
 | `RSLDChanMessageType::MeasRes` | `0x24` | BTS->BSC | Measurement result |
+| `RSLDChanMessageType::HandoDet` | `0x26` | BTS->BSC | Handover detection (AccessDelay IE) |
 
 ### CCHAN Message Types
 
 | Enum | Value | Direction | Description |
 |------|-------|-----------|-------------|
-| `RSLCChanMessageType::BCCHInfo` | `0x01` | BSC->BTS | System information |
-| `RSLCChanMessageType::PagingCmd` | `0x03` | BSC->BTS | Paging command |
+| `RSLCChanMessageType::BCCHInfo` | `0x01` | BSC->BTS | System information (FullBCCHInfo TL16V IE) |
+| `RSLCChanMessageType::ImmediateAssignCmd` | `0x02` | BSC->BTS | Immediate assignment command |
+| `RSLCChanMessageType::PagingCmd` | `0x03` | BSC->BTS | Paging command (L3Info TL16V IE) |
+| `RSLCChanMessageType::SMSBCCmd` | `0x04` | BSC->BTS | SMS BCCH command (L3Info TL16V IE) |
 | `RSLCChanMessageType::CCCHLoadInd` | `0x13` | BTS->BSC | CCCH load report |
-| `RSLCChanMessageType::ChanRqd` | `0x16` | BTS->BSC | Channel required |
+| `RSLCChanMessageType::DeleteInd` | `0x14` | BTS->BSC | Delete indication (FullImmAssInfo IE) |
+| `RSLCChanMessageType::ChanRqd` | `0x16` | BTS->BSC | Channel required (ReqReference + AccessDelay IEs) |
 
 ### Information Elements
 
-The `RSL_IE` enum defines 24 IE types (ChanNr, LinkIdent, ActType, ChanMode, EncrInfo, L3Info, etc.).
-L3Info uses TL16V encoding (16-bit length) for large payloads.
+The `RSL_IE` enum defines 26 IE types (`ChanNr = 0x11` ... `ReleaseMode = 0x38`). Most IEs use TLV encoding; fixed single-byte-value IEs use TV. Two IEs use **TL16V** (16-bit big-endian length) so payloads can exceed 255 bytes:
+
+- `RSL_IE::L3Info` (`0x30`) — the L3 payload carrier for RLL DATA_*/UNIT_DATA_* and CCHAN paging/SMS/BCCH commands;
+- `RSL_IE::FullBCCHInfo` (`0x32`) — full BCCH system-information payload.
+
+`RSLErrorCause` (14 values, 0x01–0x0e) carries NACK/failure reasons; helpers `rslDiscriminatorName()`, `rslIEName()`, and `rslErrorCauseName()` return `std::string_view` names for logging.
 
 ### Structures
 
@@ -3755,11 +3862,13 @@ Zero-heap-allocation parser for A-bis RSL messages. Extracts L3 payloads from RL
 
 ### `RSLParsedMessage`
 
-Fixed-size result struct (~544 bytes on 64-bit). Contains:
-- `discriminator`, `msgType`, `chanNr`, `linkId` - header fields
-- `l3Payload` - extracted L3 bytes (span into original buffer)
-- `informationElements[MAX_IE=32]` - parsed TLV IEs (pointers into original buffer)
+Fixed-size result struct (560 bytes on 64-bit, zero heap allocation — all spans point into the caller's input buffer, which must outlive the struct). Contains:
+- `discriminator`, `msgType`, `chanNr`, `linkId` (RLL only), `btsToBsc` - header fields
+- `l3Payload` - extracted L3 bytes (span into original buffer; empty when the message carries none)
+- `informationElements[MAX_IE=32]` + `ieCount`, and `ies()` span accessors - parsed TLV/TV IEs with `type`, 16-bit `len` (so TL16V L3 payloads over 255 bytes work), and non-owning `val` pointers into the original buffer
 - `rawData` - full message span for debugging
+
+L3 payload sources: RLL `DataReq/DataInd/UnitDataReq/UnitDataInd` via the first `L3Info` (0x30) TL16V IE; CCHAN/DCHAN messages likewise via `L3Info`; fallback to `FullBCCHInfo` (0x32).
 
 ### `RSLParser::parse(data)`
 
@@ -3794,10 +3903,12 @@ Constructs serialized RSL messages for BTS->BSC communication. Every method has 
 
 ### RLL Messages
 
+Direction: all builders set the discriminator direction bit to BTS->BSC except `buildDataReq`/`buildUnitDataReq`, which produce BSC->BTS frames (useful for testing/loopback of the parser).
+
 - `buildDataReq(chanNr, linkId, l3Payload)` - Encapsulate L3 in DATA_REQ
 - `buildDataInd(chanNr, linkId, l3Payload)` - Encapsulate L3 in DATA_IND
-- `buildUnitDataReq(chanNr, linkId, l3Payload)` - Connectionless DATA_REQ
-- `buildUnitDataInd(chanNr, linkId, l3Payload)` - Connectionless DATA_IND
+- `buildUnitDataReq(chanNr, linkId, l3Payload)` - Unnumbered (connectionless) L3 data, BSC->BTS
+- `buildUnitDataInd(chanNr, linkId, l3Payload)` - Unnumbered (connectionless) L3 data
 
 ### DCHAN Messages
 
@@ -3852,7 +3963,7 @@ The BTS application provides this callback when calling `Procedure::feed()`. Ins
 
 The sink is an observability hook, not the response-building mechanism itself: it is invoked only from `feed()` with the real incoming message. `feedExternalTyped()` never invokes the sink — on that path the response to send is signaled by the `ResponseToken` in the returned `ProcedureStepResult`.
 
-**Performance:** `ResponseSink` is exactly two machine words (16 bytes) with direct function-pointer invocation — no virtual dispatch, no type erasure, no per-call heap allocation (replaces `std::function`, which was 40+ bytes and could heap-allocate). Capturing lambdas are wrapped with `makeResponseSink()` (one heap allocation at creation, shared by all copies via an atomic refcount); stateless callbacks use the zero-allocation two-argument constructor `ResponseSink{fn, ctx}`.
+**Performance:** `ResponseSink` is exactly two machine words (16 bytes) with direct function-pointer invocation — no virtual dispatch, no type erasure, no per-call heap allocation. Capturing lambdas are wrapped with `makeResponseSink()` (one heap allocation at creation, shared by all copies via an atomic refcount); stateless callbacks use the zero-allocation two-argument constructor `ResponseSink{fn, ctx}`.
 
 ### ResponseToken
 
@@ -4019,8 +4130,17 @@ public:
 
     /// Cancel all active procedures and free their slots.
     void cancelAll() noexcept;
+
+    // Zero-alloc active-change observer (same pattern as TimerManager): fired on
+    // the 0 -> >0 / >0 -> 0 crossings of activeCount from feed()/feedExternalTyped()
+    // /tickAll()/cancelAll(), letting an owner (e.g. SubscriberRegistry) maintain
+    // its O(active) tick index without per-message bookkeeping.
+    void setOwner(void* owner) noexcept;
+    void setOnActiveChange(void (*fn)(void* owner, void* ctx, bool active), void* ctx) noexcept;
 };
 ```
+
+`SubscriberSession::procedures` is wired to the owning `SubscriberRegistry` through these observers, which is what makes `tickAllProcedures()` O(active) instead of O(all sessions).
 
 | Method | Description | Slot Cleanup |
 |--------|-------------|--------------|
@@ -4268,7 +4388,7 @@ private:
 
 Manages compound procedure chains such as Location Update (CMServiceRequest -> Identity -> Authentication -> CipheringMode -> LocationUpdate) and Call Setup MO (CMServiceRequest -> CallSetupMO). The orchestrator owns a single active `Procedure` at any time, transitions between phases based on procedure outcomes, and updates the `SubscriberSession` FSM states to stay in sync.
 
-**Does NOT store `ParsedMessage` (416-byte variant) internally.** Instead stores the last `ResponseToken` and provides `buildPendingResponse()` for zero-allocation response building. This is critical for high-load BTS: avoids heap allocation per response.
+**Does NOT store `ParsedMessage` (488-byte variant on 64-bit) internally.** Instead stores the last `ResponseToken` and provides `buildPendingResponse()` for zero-allocation response building. `sizeof(ProcedureOrchestrator)` is 72 bytes (app-owned, one instance per subscriber).
 
 ### API
 
@@ -4285,36 +4405,43 @@ public:
     [[nodiscard]] Procedure* activeProcedure() noexcept;
     [[nodiscard]] const Procedure* activeProcedure() const noexcept;
     [[nodiscard]] ResponseToken lastResponseToken() const noexcept;
+    [[nodiscard]] ResponseToken takeRetransmissionToken();  // consume-on-read drain
     [[nodiscard]] int buildPendingResponse(std::span<uint8_t> out,
-                                             const SubscriberSession* session) const;
+                                              const SubscriberSession* session) const;
     [[nodiscard]] procedure::ProcedureType chainPhase() const noexcept;
 };
 ```
 
 | Method | Description |
 |--------|-------------|
-| `feed(msg, session)` | Feed incoming L3 message; orchestrator auto-chains sub-procedures. The orchestrator keeps the session and forwards it to the active procedure (including `feedExternalTyped`), so procedures can populate `session->response` |
-| `feedExternalTyped(data, sink)` | Feed typed external data to the active chain (AuthChallenge, VLRDecision, etc.); the stored session is passed to the procedure for `ResponseContext` population |
-| `tickAll(delta)` | Tick the active procedure's timers plus the inline-phase timer (T3103, 5 s, started when the LocationUpdate phase begins); returns count of failed procedures. A phase-timer expiry fails the chain with `finalResult.state == TimedOut` |
-| `cancelAll()` | Cancel all active procedures in the chain, stop the phase timer, and reset the session's `ResponseContext` |
-| `activeProcedure()` | Get the current active procedure, or nullptr if in an inline phase |
+| `feed(msg, session)` | Feed incoming L3 message; orchestrator auto-chains sub-procedures. The orchestrator keeps the session and forwards it to the active procedure (including `feedExternalTyped`), so procedures can populate `session->response`. Non-trigger messages return `{Action::Continue}` while no chain is active. Sub-procedure results are returned as-is: a `Completed`/`Failed` `finalResult` may therefore report a sub-procedure finishing while the chain has already advanced to its next phase |
+| `feedExternalTyped(data, sink)` | Feed typed external data to the active chain (AuthChallenge, VLRDecision, CipheringParameters, PagingTrigger, HandoverTarget); the stored session is passed to the procedure for `ResponseContext` population |
+| `tickAll(delta)` | Tick the inline-phase timer and the active procedure's timer. LocationUpdate phase: T3103 (5 s), expiry is terminal (`TimedOut`, chain cancelled). IdentityVerification phase: T3102 (3 s) — expiry re-queues the `IdentityRequest` retransmission token (see `takeRetransmissionToken()`) up to 3 times; the 4th expiry fails the chain. Returns the count of failures |
+| `takeRetransmissionToken()` | Drain (consume-on-read) the token queued by a phase-timer retransmission, or `ResponseToken::None`. The event loop builds it with `ResponseBuilder::buildResponseFromToken(token, buf, session)` |
+| `cancelAll()` | Cancel the active procedure, stop the phase timer, clear any queued retransmission token, and reset the session's `ResponseContext` |
+| `activeProcedure()` | Get the current active procedure, or nullptr when in an inline phase |
 | `lastResponseToken()` | Get the last response token generated by the chain |
-| `buildPendingResponse(out, session)` | Build the pending response into a pre-allocated buffer (zero heap allocation) |
-| `chainPhase()` | Get the current chain phase (ProcedureType) |
+| `buildPendingResponse(out, session)` | Build the response for `mLastToken` (the token from the most recent `SendResponseWithToken` result) into a pre-allocated buffer (zero heap allocation); returns -1 when no token is pending or a parameter is missing. Note: retransmission tokens are NOT `mLastToken` — build those via `buildResponseFromToken` directly with the returned token |
+| `chainPhase()` | Get the chain type (ProcedureType, `Unknown` when idle) |
 
-**Identity phase semantics:** while the chain awaits an `IdentityResponse`, `feed()` returns `SendResponseWithToken(IdentityRequest)`. Once the `IdentityResponse` arrives, the chain transitions to Authentication and returns `Continue` (no response) — an `IdentityRequest` is never sent after the identity has already been received.
+**Chain triggers:** the orchestrator starts a chain only for these messages — MM `CMServiceRequest` with service type Location Updating or MO Call; MM `IMSIDetachIndication`; CC `Disconnect`. Every other CM service type (SMS, emergency, ...) is ignored (`feed()` returns `Continue` and the application owns that message).
+
+**Identity phase semantics:** entered when the session has no TMSI. The initial `IdentityRequest` is queued immediately on the retransmission channel; while the chain awaits an `IdentityResponse`, any `feed()` returns `SendResponseWithToken(IdentityRequest)` and restarts the 3 s T3102 window (retransmitted up to 3 times by `tickAll()`, after which the chain times out). Once the `IdentityResponse` arrives, the chain transitions to Authentication and that `feed()` returns `Continue` — no further Identity Requests are sent.
 
 **Chain lifecycle (auto-reset on terminal state):** when a chain reaches a terminal state (`finalResult.state` is `Completed`/`Failed`/`TimedOut`), the orchestrator automatically returns to the idle state, so the next `feed()` starts a fresh chain — no `cancelAll()` call is needed between chains. `cancelAll()` remains available for explicit aborts. The session's `ResponseContext` is reset when a new chain starts (never between the terminal result and the caller's response build), so stale parameters (RAND, TI, channel) cannot leak across chains.
 
 ### Supported Chains
 
-| Chain Type | Phases |
-|------------|--------|
-| Location Update | CMServiceRequest -> [IdentityVerification] -> Authentication -> CipheringMode -> LocationUpdate |
-| Call Setup MO | CMServiceRequest -> CallSetupMO |
-| Call Setup MT | Paging -> ChannelAssignment -> CallSetupMT |
-| IMSI Detach | CMServiceRequest -> IMSIDetach |
-| Call Release | Disconnect -> Release -> ReleaseComplete |
+Auto-chains currently triggered by the detector:
+
+| Chain (trigger) | Phases | Terminal event |
+|-----------------|--------|----------------|
+| Location Update (CMServiceRequest, LU service type) | CMServiceAccept -> Authentication *or* IdentityVerification (TMSI absent) -> CipheringMode (CipheringParameters) -> LocationUpdate (VLRDecision; T3103 5 s) | VLR accept/reject (`LocationUpdatingAccept` / `LocationUpdatingReject`), or T3103/identity timeouts |
+| Call Setup MO (CMServiceRequest, MO call service type) | CMServiceAccept -> `CallSetupMOPercedure` (§54) | procedure Completed (`"call_active"`), Failed, or T3101 timeout |
+| IMSI Detach (IMSI Detach Indication) | inline single phase: sends CM Service Accept | completed (`"imsi_detach_accept"`); MM FSM -> DEREGISTERED |
+| Call Release (CC Disconnect) | inline single phase: records TI + cause, sends CC Release | completed (`"release_sent"`); CC FSM -> RELEASE |
+
+`ChainPhase` additionally defines `CallSetupMT`, `ChannelAssignment`, `Paging`, and `Handover` values, and `createProcedureForPhase()` can construct those procedures — the current detector does not auto-start these chains. Drive them individually via `ProcedureFactory` / `ProcedureRunner` (session-owned) instead.
 
 ### Usage Example
 
@@ -4361,16 +4488,15 @@ Full location updating flow with identity check, optional authentication, VLR/BS
 
 | State | Trigger | Next State | Response |
 |-------|---------|------------|----------|
-| `INIT` | CMServiceRequest/PagingResponse | `IDENTITY_CHECK` | — |
+| `INIT` | Any MM or RR message | `IDENTITY_CHECK` | — |
 | `IDENTITY_CHECK` | TMSI known | `AUTH_CHECK` | — |
 | `IDENTITY_CHECK` | TMSI unknown | `REQUEST_IDENTITY` | `buildIdentityRequest(IMSI)` |
 | `REQUEST_IDENTITY` | IdentityResponse | `AUTH_CHECK` | — |
-| `AUTH_CHECK` | Auth needed | `SEND_AUTH` | — |
-| `AUTH_CHECK` | Auth skipped | `LU_REQUEST` | — |
-| `SEND_AUTH` | — | `WAIT_AUTH` (T3106 started) | `buildAuthenticationRequest(rand)` |
-| `WAIT_AUTH` | AuthenticationResponse | `VERIFY_AUTH` | — |
-| `VERIFY_AUTH` | SRES matches | `LU_REQUEST` | — |
-| `VERIFY_AUTH` | SRES mismatch | `REJECT` | — |
+| `AUTH_CHECK` | AuthChallenge already fed (`mHasRand`) | `SEND_AUTH` (T3106 started) | `buildAuthenticationRequest(rand)` |
+| `AUTH_CHECK` | No RAND fed (auth skipped) | `LU_REQUEST` | — |
+| `SEND_AUTH` | Any message | `WAIT_AUTH` | — |
+| `WAIT_AUTH` | AuthenticationResponse, SRES matches | `LU_REQUEST` | — |
+| `WAIT_AUTH` | AuthenticationResponse, SRES missing/invalid or mismatch (MAC_Failure) | `SEND_REJECT` (Failed terminal) | `buildLocationUpdatingReject(MAC_Failure)` |
 | `LU_REQUEST` | — | `WAITING_EXTERNAL` | — (forward to VLR) |
 | `WAITING_EXTERNAL` | feedExternalTyped: accept | `SEND_ACCEPT` | `buildLocationUpdatingAccept(lai, newTmsi)` |
 | `WAITING_EXTERNAL` | feedExternalTyped: reject | `SEND_REJECT` | `buildLocationUpdatingReject(cause)` |
@@ -4385,13 +4511,14 @@ Full location updating flow with identity check, optional authentication, VLR/BS
 | `mLAI` | `L3LocationAreaIdentity` | LAI from MSContext |
 | `mNewTmsi` | `optional<uint32_t>` | New TMSI assignment from VLR |
 
+SRES verification is big-endian: `expectedSres[0]` is the MSB, matching the TS 24.008 10.5.1.22 SRES IE encoding.
+
 ### Timers
 
 | Timer | Default | Used During |
 |-------|---------|-------------|
-| `T3106` | 3000ms | Authentication phase |
-| `T3103` | 5000ms | Location update request |
-| `T3108` | 3000ms | TMSI reallocation complete |
+| `T3106` | 3000ms | Authentication phase (WAIT_AUTH) |
+| `T3103` | 5000ms | VLR decision wait (LU_REQUEST/WAITING_EXTERNAL) |
 
 ---
 
@@ -4436,17 +4563,19 @@ Mobile-Originated Call establishment: CMServiceAccept through Setup, Proceeding,
 
 ### State Machine
 
-| State | Trigger | Next State | Response |
-|-------|---------|------------|----------|
-| `INIT` | CMServiceRequest(Call) | `SERVICE_ACCEPT` | — |
-| `SERVICE_ACCEPT` | — | `WAIT_SETUP` | `buildCMServiceAccept()` |
-| `WAIT_SETUP` | Setup (T3101 started) | `PROCEEDING` | — |
-| `PROCEEDING` | — | `ASSIGN_TCH` | `buildCallProceeding(ti)` |
-| `ASSIGN_TCH` | — | `WAIT_ASSIGN_COMPLETE` | `buildAssignmentCommand(channel)` |
-| `WAIT_ASSIGN_COMPLETE` | AssignmentComplete | `ALERTING` | — |
-| `ALERTING` | — | `CONNECT` | `buildAlerting(ti)` |
-| `CONNECT` | — | `ACTIVE` | `buildConnect(ti)` |
-| `ACTIVE` | ConnectAcknowledge | `COMPLETED` | — |
+Each row emits the listed response token while processing the listed state (the transition to "Next State" happens on the *next* feed step unless a trigger message is named):
+
+| State | Trigger | Next State | Response emitted in this step |
+|-------|---------|------------|-------------------------------|
+| `INIT` | CMServiceRequest (MO call) | `SERVICE_ACCEPT` | `buildCMServiceAccept()` |
+| `SERVICE_ACCEPT` | any feed | `WAIT_SETUP` | — |
+| `WAIT_SETUP` | CC Setup (T3101 started, TI recorded to `session->response`) | `PROCEEDING` | `buildCallProceeding(ti)` |
+| `PROCEEDING` | any feed (T3101 started) | `ASSIGN_TCH` | `buildAssignmentCommand(channel)` |
+| `ASSIGN_TCH` | any feed | `WAIT_ASSIGN_COMPLETE` | — |
+| `WAIT_ASSIGN_COMPLETE` | RR AssignmentComplete | `ALERTING` | `buildAlerting(ti)` |
+| `ALERTING` | any feed | `CONNECT` | `buildConnect(ti)` |
+| `CONNECT` | any feed | `ACTIVE` | `buildConnectAcknowledge(ti)` |
+| `ACTIVE` | CC ConnectAcknowledge | `COMPLETED` (`"call_active"`) | — |
 
 ### Internal State
 
@@ -4467,19 +4596,29 @@ Mobile-Originated Call establishment: CMServiceAccept through Setup, Proceeding,
 **File:** `gsml3parser/stack/procedures/call_setup_mt.h`
 **Spec:** 3GPP TS 24.008 6.1
 
-Mobile-Terminated Call establishment: Paging (up to 3 attempts with T3109), SDCCH assignment, Setup delivery, CallConfirmed, TCH assignment, to Active speech path.
+Mobile-Terminated Call establishment: page the MS (up to 3 attempts, T3109 5 s each), assign an SDCCH, deliver CC Setup, wait for CallConfirmed, assign TCH, then walk the same MO-style dialog (Alerting/Connect/ConnectAcknowledge) to the Active speech path.
+
+Started by any `feedExternalTyped(...)` call while in `INIT` — it does not inspect the payload. The paged identity is taken from `session->context.identity()` and recorded into `session->response` (`hasIdentity`), so the page is always built from the subscriber's real identity; the dialed number (`mCalledNumber`, from the constructor) is exposed on the session when Setup is emitted (max 19 BCD digits + terminator).
 
 ### State Machine
 
-| State | Trigger | Next State | Response |
-|-------|---------|------------|----------|
-| `INIT` | feedExternalTyped (PagingTrigger) | `PAGE` | — |
-| `PAGE` | — | `WAIT_PAGE_RESPONSE` (T3109 started) | `buildPagingRequestType1/2/3()` |
-| `WAIT_PAGE_RESPONSE` | PagingResponse | `ASSIGN_SDCCH` | — |
-| `ASSIGN_SDCCH` | — | `SEND_SETUP` | `buildImmediateAssignment(channel)` |
-| `SEND_SETUP` | — | `WAIT_CONFIRMED` (T3101 started) | `buildSetup(calledNumber)` |
-| `WAIT_CONFIRMED` | CallConfirmed | `ASSIGN_TCH` | — |
-| Remaining states | Same as MO | `COMPLETED` | Same responses as MO |
+| State | Trigger | Next State | Response emitted in this step |
+|-------|---------|------------|-------------------------------|
+| `INIT` | any `feedExternalTyped()` (T3109 5 s started) | `PAGE` | `PagingRequestType1` token |
+| `PAGE` | any routed feed (T3109 running) | `WAIT_PAGE_RESPONSE` | `PagingRequestType1` token |
+| `WAIT_PAGE_RESPONSE` | RR PagingResponse | `ASSIGN_SDCCH` | `buildImmediateAssignment(channel)` |
+| `WAIT_PAGE_RESPONSE` | T3109 expiry, attempts < 3 | retry (T3109 restarted) | — (no further page types; the page is re-sent as Type1 on the next routed message) |
+| `WAIT_PAGE_RESPONSE` | T3109 expiry, attempts == 3 | `FAILED` (`"timer_expired"`) | — |
+| `ASSIGN_SDCCH` | any routed feed | `SEND_SETUP` | `buildSetup(calledNumber, ti)` |
+| `SEND_SETUP` | any routed feed (T3101 3 s started) | `WAIT_CONFIRMED` | `buildSetup(calledNumber, ti)` |
+| `WAIT_CONFIRMED` | CC CallConfirmed (timer stopped) | `ASSIGN_TCH` | — |
+| `ASSIGN_TCH` | any routed feed (T3101 3 s started) | `WAIT_ASSIGN_COMPLETE` | `buildAssignmentCommand(channel)` |
+| `WAIT_ASSIGN_COMPLETE` | RR AssignmentComplete | `ALERTING` | `buildAlerting(ti)` |
+| `ALERTING` | any routed feed | `CONNECT` | `buildConnect(ti)` |
+| `CONNECT` | any routed feed | `ACTIVE` | `buildConnectAcknowledge(ti)` |
+| `ACTIVE` | CC ConnectAcknowledge | `COMPLETED` (`"call_active"`) | — |
+
+`matches()` routes exactly: RR PagingResponse/AssignmentComplete, CC CallConfirmed/ConnectAcknowledge.
 
 ### Internal State
 
@@ -4487,14 +4626,14 @@ Mobile-Terminated Call establishment: Paging (up to 3 attempts with T3109), SDCC
 |--------|------|---------|
 | `mCalledNumber` | `std::string` | Dialed number for Setup message |
 | `mTI` | `uint8_t` | Transaction Identifier |
-| `mPageAttempt` | `uint8_t` | Current paging attempt (max 3) |
+| `mPageAttempt` | `uint8_t` | Current paging attempt (max 3, `MAX_PAGE_ATTEMPTS`) |
 
 ### Timers
 
 | Timer | Default | Used During |
 |-------|---------|-------------|
-| `T3109` | 30000ms | Paging response wait |
-| `T3101` | 3000ms | Call setup phases |
+| `T3109` | 5000ms per attempt | Paging response wait (up to 3 attempts, then failure) |
+| `T3101` | 3000ms | Setup confirmation and TCH assignment waits |
 
 ---
 
@@ -4550,6 +4689,12 @@ Short procedure to activate ciphering: receives algorithm and key via `feedExter
 |--------|------|---------|
 | `mCipherAlgo` | `uint8_t` | Algorithm ID (0=A5/0, 1=A5/1, etc.) |
 
+### Timer
+
+| Timer | Default | Used During |
+|-------|---------|-------------|
+| `T3101` | 3000ms | Waiting for CipheringModeComplete after the command is sent (mix-in timer; expiry fails the procedure with `"timer_expired"`) |
+
 ---
 
 ## 58. Paging Procedure
@@ -4557,7 +4702,7 @@ Short procedure to activate ciphering: receives algorithm and key via `feedExter
 **File:** `gsml3parser/stack/procedures/paging.h`
 **Spec:** 3GPP TS 04.08 9.1.25
 
-Network-initiated paging of MS with up to 3 attempts (Type1, Type2, Type3) using T3109 timer between each attempt. Created via `ProcedureFactory::createPaging()`, not through auto-start.
+Network-initiated paging of MS with up to 3 attempts (Type1, then Type2, then Type3), each page followed by a T3109 wait (5 s). The procedure never auto-triggers — it is started with `feedExternalTyped(PagingTrigger)`; the first page is always `PagingRequestType1`, and the paged identity from the trigger is recorded into `session->response` (`hasIdentity`). The only message `matches()` routes to this procedure is RR `L3PagingResponse`, which completes it (`"page_response_received"`) when awaited — so a retransmission page (State::SEND_PAGE2/3) is emitted on the next routed feed after a T3109 expiry.
 
 ### State Machine
 
@@ -4569,15 +4714,21 @@ Network-initiated paging of MS with up to 3 attempts (Type1, Type2, Type3) using
 | `SEND_PAGE2` | — | `WAIT_PAGE2` (T3109 restarted) | PagingRequestType2 |
 | `WAIT_PAGE2` | T3109 expired | `SEND_PAGE3` | — |
 | `SEND_PAGE3` | — | `WAIT_PAGE3` (T3109 restarted) | PagingRequestType3 |
-| `WAIT_PAGE3` | PagingResponse | `COMPLETED` | — |
-| `WAIT_PAGE3` | T3109 expired | `FAILED` | — |
+| `WAIT_PAGE3` | PagingResponse | `COMPLETED` (`"page_response_received"`) | — |
+| `WAIT_PAGE3` | T3109 expired | `FAILED` (`"no_page_response"`) | — |
 
 ### Internal State
 
 | Member | Type | Purpose |
 |--------|------|---------|
-| `mIdentity` | `L3MobileIdentity` | Identity to page |
-| `mPageAttempt` | `uint8_t` | Current attempt (max 3) |
+| `mIdentity` | `L3MobileIdentity` | Identity to page (from the `PagingTrigger`, also stored in the procedure constructor) |
+| `mPageAttempt` | `uint8_t` | Current attempt (max 3, `MAX_PAGE_ATTEMPTS`) |
+
+### Timer
+
+| Timer | Default | Used During |
+|-------|---------|-------------|
+| `T3109` | 5000ms per attempt | Paging response wait (3 attempts, then failure) |
 
 ---
 
@@ -4611,29 +4762,29 @@ Handover: receives target channel via `feedExternalTyped(HandoverTarget, session
 **File:** `gsml3parser/stack/procedures/call_release.h` / `call_release.cpp`
 **Spec:** 3GPP TS 24.008 6.1
 
-Call release procedure for terminating an active call. Manages the Disconnect -> Release -> ReleaseComplete message exchange.
+Call release procedure for terminating an active call: BTS sends the CC clear command (`Disconnect` with its TI + cause), waits for the MS's `Release`, then completes by sending `ReleaseComplete`. Created via `ProcedureFactory::createCallRelease(ti, cause)`; `matches()` accepts CC Disconnect or CC Release (so a runner routes these precisely instead of shadowing a same-PD CallSetup_MO). On every feed, the procedure's TI and cause are exposed on `session->response` so both tokens build with real values.
 
 ### State Machine
 
-| State | Trigger | Next State | Response |
-|-------|---------|------------|----------|
-| `INIT` | Disconnect message from MS | `SEND_RELEASE` | — |
-| `SEND_RELEASE` | — | `WAIT_RELEASE_COMPLETE` (T3101 started) | `buildRelease(ti, cause)` via `ResponseToken::Release` |
-| `WAIT_RELEASE_COMPLETE` | ReleaseComplete from MS | `COMPLETED` | — |
-| `WAIT_RELEASE_COMPLETE` | T3101 expired | `FAILED` | — |
+| State | Trigger | Next State | Response emitted in this step |
+|-------|---------|------------|-------------------------------|
+| `INIT` | any CC message | `SEND_DISCONNECT` | — |
+| `SEND_DISCONNECT` | (fall-through from INIT, T3101 12 s started) | `WAIT_RELEASE` | `buildDisconnect(ti, cause)` via `ResponseToken::Disconnect` |
+| `WAIT_RELEASE` | CC Release from MS (terminal, `"release_complete_sent"`) | `COMPLETED` | `buildReleaseComplete(ti)` via `ResponseToken::ReleaseComplete` |
+| any non-terminal state | T3101 expired (mix-in timer) | `FAILED` (`"timer_expired"`) | — |
 
 ### Internal State
 
 | Member | Type | Purpose |
 |--------|------|---------|
-| `mTI` | `uint8_t` | Transaction Identifier from Disconnect message |
-| `mCause` | `CCCause` | CC cause code for Release message |
+| `mTI` | `uint8_t` | Transaction Identifier used in the release dialog |
+| `mCause` | `CCCause` | CC cause code sent with the Disconnect |
 
 ### Timer
 
 | Timer | Default | Used During |
 |-------|---------|-------------|
-| `T3101` | 3000ms | Release Complete wait |
+| `T3101` | 12000ms | Release wait |
 
 ---
 
@@ -4642,22 +4793,22 @@ Call release procedure for terminating an active call. Manages the Disconnect ->
 **File:** `gsml3parser/stack/procedures/imsi_detach.h` / `imsi_detach.cpp`
 **Spec:** 3GPP TS 24.008 4.4.6
 
-IMSI detach procedure: MS signals intent to detach from the network. BTS sends CMServiceAccept and waits for confirmation or timeout.
+Standalone IMSI detach procedure (for use via `ProcedureRunner`; the orchestrator instead runs an inline one-step detach on MM IMSIDetachIndication, see §51): on the MS's IMSI Detach Indication the BTS sends CM Service Accept and waits for any follow-up MM message; a T3112 expiry fails the procedure.
 
 ### State Machine
 
-| State | Trigger | Next State | Response |
-|-------|---------|------------|----------|
-| `INIT` | IMSIDetachIndication from MS | `SEND_CM_SERVICE_ACCEPT` | — |
-| `SEND_CM_SERVICE_ACCEPT` | — | `WAIT_DETACH_COMPLETE` (T3112 started) | `buildCMServiceAccept()` via `ResponseToken::CMServiceAccept` |
-| `WAIT_DETACH_COMPLETE` | Confirmation or any L3 message | `COMPLETED` | — |
-| `WAIT_DETACH_COMPLETE` | T3112 expired | `COMPLETED` | — |
+| State | Trigger | Next State | Response emitted in this step |
+|-------|---------|------------|-------------------------------|
+| `INIT` | any MM message | `SEND_CM_SERVICE_ACCEPT` | — |
+| `SEND_CM_SERVICE_ACCEPT` | (fall-through, T3112 5 s started) | `WAIT_DETACH_COMPLETE` | `buildCMServiceAccept()` via `ResponseToken::CMServiceAccept` |
+| `WAIT_DETACH_COMPLETE` | any MM message (terminal, `"detach_complete"`) | `COMPLETED` | — |
+| `WAIT_DETACH_COMPLETE` | T3112 expired (mix-in timer) | `FAILED` (`"timer_expired"`) | — |
 
 ### Timer
 
 | Timer | Default | Used During |
 |-------|---------|-------------|
-| `T3112` | 3000ms | Detach confirmation wait |
+| `T3112` | 5000ms | Detach confirmation wait |
 
 ---
 
@@ -4667,15 +4818,15 @@ The following optimizations have been applied to achieve high-throughput, low-la
 
 ### Fixed-Array Handler Tables (ProtocolDispatcher)
 
-`std::unordered_map<HandlerKey, MessageHandler>` replaced with `std::array<std::array<MessageHandler, 136>, 16>`. Eliminates hash computation, node allocation, and pointer chasing on the dispatch hot path. The handler table is ~35 KB and fits in L2 cache.
+Dispatch is a direct index into `std::array<std::array<MessageHandler, 136>, 16>` — no hash computation, node allocation, or pointer chasing on the hot path. The handler table is ~35 KB (35,216 B with domain/TI/fallback slots) and stays L2-cache resident.
 
 ### FlatHandler (Zero-Overhead Callbacks)
 
-`std::function<void(const ParsedMessage&, void*)>` replaced with `FlatHandler` — a two-word struct with direct function pointer calls. Factory functions `makeHandler()` and `makeSharedHandler()` provide ergonomic lambda wrapping.
+`FlatHandler` is a two-word struct (fn + ctx) with direct function-pointer calls. Factory functions `makeHandler()` (stateless lambdas) and `makeSharedHandler()` (capturing lambdas, shared_ptr-backed) provide ergonomic wrapping.
 
 ### ResponseSink (Zero-Overhead Procedure Callbacks)
 
-`std::function` replaced with `ResponseSink` — a two-word struct (16 bytes) with direct function pointer calls, used by `Procedure::feed()`/`feedExternalTyped()` and the runner/orchestrator. `makeResponseSink()` wraps capturing lambdas with one heap allocation at creation (refcounted, shared by copies); invocation is allocation-free.
+`ResponseSink` is a two-word struct (16 bytes) with direct function-pointer calls, used by `Procedure::feed()` and the runner/orchestrator. `makeResponseSink()` wraps capturing lambdas with one heap allocation at creation (refcounted, shared by copies); invocation is allocation-free.
 
 ### Fixed-Array Channel Pool
 
@@ -4710,12 +4861,12 @@ ctypes/cffi, Rust, Go). One C89-clean header
 
 | Layer | C API |
 |-------|-------|
-| Core L3 | `gsml3_parse_l3` / `gsml3_parse_l3_hex` / `gsml3_parse_l3_into` (all 240 message types), `gsml3_message_name/pd/mti/ti`, `gsml3_message_write/hex/free`, `gsml3_config` |
+| Core L3 | `gsml3_parse_l3` / `gsml3_parse_l3_hex` / `gsml3_parse_l3_into` (all 236 message types), `gsml3_message_name/pd/mti/ti`, `gsml3_message_write/hex/free`, `gsml3_config` |
 | A-bis RSL | `gsml3_rsl_parse` + accessors (IE/L3 views into the handle's copy) + 13 `gsml3_rsl_build_*` |
 | LAPDm | `gsml3_lapdm_frame_decode` (zero-copy) + `gsml3_lapdm_entity` (full FSM, fn+user callbacks) |
 | BTS stack | `gsml3_registry` (plain + sharded {4,8,16,32}), borrowed `gsml3_session`, O(active) ticks, session access |
 | Orchestrator | `gsml3_orchestrator_feed/feedExternal*/tick/build_response/take_retransmit/cancel_all/chain_phase` + 21 `gsml3_response_build_*` |
-| Typed access | Curated ~44 messages: typed getters + builders (see the header) |
+| Typed access | Curated message set: 69 `gsml3_msg_*` typed getters + 43 `gsml3_build_*` typed L3 builders (RR/MM/CC/SMS/SS), plus 21 stateless `gsml3_response_build*` factories |
 
 ### ABI rules
 
@@ -4795,11 +4946,11 @@ The library implements encodings defined by:
 | Standard | Scope | Coverage |
 |----------|-------|----------|
 | **GSM 04.06 / 3GPP TS 45.006** | LAPDm protocol for Um interface | `LAPDmFrame` zero-copy decode, `LAPDmEntity` full state machine (SABME/UA/DISC), I-frame segmentation/reassembly, T200 retransmission, contention resolution |
-| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | Full RR, MM, CC, GMM, SM (29 types), SMS L3 (14 types) message parsing and generation |
+| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | RR (98), MM (20), CC (24), GMM (23), SM (29), SMS (19 = 5 CP + 14 L3) message parsing and generation; SS (3), Extended and Test-Procedure PD catch-alls |
 | **GSM 04.07 / 3GPP TS 24.007** | Information element encoding rules | V, TV, TLV, LV formats; H/L rest octet padding (0x2B); bit ordering |
 | **GSM 04.80 / 3GPP TS 24.080** | Supplementary services on mobile | Facility, Register, Release Complete messages; SSOpCode/SSErrorCode enums; L3FacilityOpCode TCAP parser; L3USSDData IE |
 | **GSM 02.90 / 3GPP TS 23.038** | USSD alphabet and encoding | GSM 7-bit default/extended alphabet, UCS2, DCS handling in L3USSDData |
-| **3GPP TS 44.018** | Group call and broadcast call control | GCC (PD=0x00): 7 messages; BCC (PD=0x01): 6 messages |
+| **3GPP TS 44.018** | Group call and broadcast call control | GCC (PD=0x00): 8 messages; BCC (PD=0x01): 8 messages (TI-carrying dialog, opaque bodies) |
 | **3GPP TS 24.011 / GSM 04.11** | SMS over mobile radio interface | CP layer (5 messages), RP layer (4 messages), TP PDUs (Deliver, Submit, StatusReport, Command) |
 | **3GPP TS 23.040 / GSM 03.40** | SMS TPDU formatting and encoding | TP address, TP-DCS, TP-PID, TP-SCTS, GSM 7-bit alphabet |
 | **3GPP TS 44.031 / TS 24.027/24.028** | Location services on mobile radio | LSM: L3LocationServiceRequest, L3LocationServiceProviderMessage |

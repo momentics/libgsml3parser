@@ -40,10 +40,10 @@ For traffic analyzers, protocol sniffers, test tools, fuzzing frameworks, and an
 ```cpp
 #include <gsml3parser/gsml3parser.hpp>
 
-auto msg = gsml3parser::parseL3Hex("060D00");
+auto msg = gsml3parser::parseL3Hex("600D00");  // RR Channel Release, cause 0
 if (msg) {
-    std::cout << gsml3parser::messageName(*msg) << "\n";
-    auto bytes = gsml3parser::writeL3Bytes(*msg);
+    std::cout << gsml3parser::messageName(*msg) << "\n";   // "ChannelRelease"
+    auto bytes = gsml3parser::writeL3Bytes(*msg);          // -> Expected<vector<uint8_t>>
 }
 ```
 
@@ -55,10 +55,10 @@ For software BTS developers who need a complete Layer 3 signaling stack. This mo
 
 | Component | Header | Purpose |
 |-----------|--------|---------|
-| `ProcedureOrchestrator` | `stack/procedure_orchestrator.h` | Auto-chains compound procedures (LU, Call Setup) |
-| `ProcedureRunner` | `stack/procedure_runner.h` | Concurrent procedure management per subscriber |
-| `SubscriberSession` + `SubscriberRegistry` | `stack/subscriber_registry.h` | Per-MS state management (< 4 KB/session) |
-| `ResponseBuilder` + `ResponseToken` | `stack/response_builder.h` | Zero-allocation response generation |
+| `ProcedureOrchestrator` | `stack/procedure_orchestrator.h` | Auto-chains compound procedures (LU, Call Setup MO, detach, release) |
+| `ProcedureRunner` + `ProcedureFactory` | `stack/procedure_runner.h` | Concurrent procedure management per subscriber (8 fixed slots) |
+| `SubscriberSession` + `SubscriberRegistry` (+ `ShardedSubscriberRegistry<N>`) | `stack/subscriber_registry.h` | Per-MS state management (< 4 KB/session; 2,056 B measured) |
+| `ResponseBuilder`, `ResponseToken` (in `procedure.h`) | `stack/response_builder.h` | Zero-allocation response generation from tokens + session context |
 | `TypedExternalData` (`AuthChallenge`, `VLRDecision`, etc.) | `stack/typed_external_data.h` | Type-safe external data integration |
 | `ProcedureStateMixin<Derived, State>` | `stack/procedure_state_mixin.h` | CRTP mixin eliminating procedure code duplication |
 | `ChannelPool` / `ShardedChannelPool` | `stack/channel_pool.h` | Logical channel allocation/release |
@@ -81,10 +81,10 @@ For software BTS developers who need a complete Layer 3 signaling stack. This mo
 │  └───────────────────┬─────────────────────────────────────────┘  │
 │                      │ feed() / tickAll()                         │
 │  ┌───────────────────▼─────────────────────────────────────────┐  │
- │  │                  SubscriberSession                          │  │
- │  │  MSContext + RR/MM/CC FSM + TimerManager + TransactionMgr   │  │
- │  │  ResponseContext (response parameters) + ProcedureRunner    │  │
- │  └─────────────────────────────────────────────────────────────┘  │
+│  │                  SubscriberSession                          │  │
+│  │  MSContext + RR/MM/CC FSM + TimerManager + TransactionMgr   │  │
+│  │  ResponseContext (response parameters) + ProcedureRunner    │  │
+│  └─────────────────────────────────────────────────────────────┘  │
 │                      │                                            │
 │  ResponseToken ──► ResponseBuilder::buildResponseFromToken()      │
 │                      │ span<uint8_t> (Arena buffer, zero alloc)   │
@@ -116,7 +116,7 @@ BTS Stack Mode (all modules)
     ├── parseL3() / writeL3Bytes()
     ├── BitReader / BitWriter
     ├── ProtocolDispatcher + FlatHandler
-    ├── Builder API (200+ message types across 12 PD domains)
+    ├── Builder API (236 message types across all 12 PD domains)
     └── ByteSource / L3Framer / StreamProcessor
 ```
 
@@ -130,9 +130,9 @@ BTS Stack Mode (all modules)
 │  │ Integration │  │ Decision API │  │ or RSL transport (osmo-bts)│   │
 │  └──────┬──────┘  └──────┬───────┘  └──────────────┬─────────────┘   │
 │         │                │                         │                 │
- │         └────────────────┼─────────────────────────┘                 │
- │                          │ feedExternalTyped()                       │
- ├──────────────────────────┼───────────────────────────────────────────┤
+│         └────────────────┼─────────────────────────┘                 │
+│                          │ feedExternalTyped()                       │
+├──────────────────────────┼───────────────────────────────────────────┤
 │              Procedure Framework                                     │
 │  ┌───────────────────────▼──────────────────────────────────┐        │
 │  │                   ProcedureRunner                        │        │
@@ -146,18 +146,18 @@ BTS Stack Mode (all modules)
 ├──────────────────────────────┼───────────────────────────────────────┤
 │                      SubscriberRegistry                              │
 │  ┌───────────────────────────▼──────────────────────────────────┐    │
- │  │  SubscriberSession [per-MS]                                  │    │
- │  │  ├─ MSContext (identity, channel, flags)                     │    │
- │  │  ├─ RR/MM/CC State Machines (response-aware)                 │    │
- │  │  ├─ TimerManager + TransactionManager                        │    │
- │  │  ├─ ResponseContext (response parameters, populated by       │    │
- │  │  │  the active procedure; consumed by ResponseBuilder)       │    │
- │  │  └─ ProcedureRunner (active procedures)                      │    │
+│  │  SubscriberSession [per-MS]                                  │    │
+│  │  ├─ MSContext (identity, channel, flags)                     │    │
+│  │  ├─ RR/MM/CC State Machines (response-aware)                 │    │
+│  │  ├─ TimerManager + TransactionManager                        │    │
+│  │  ├─ ResponseContext (response parameters, populated by       │    │
+│  │  │  the active procedure; consumed by ResponseBuilder)       │    │
+│  │  └─ ProcedureRunner (active procedures)                      │    │
 │  └──────────────────────────────────────────────────────────────┘    │
 ├──────────────────────────────────────────────────────────────────────┤
 │             Response Builder                                         │
-│  Auto-generates L3 response messages from FSM transitions            │
-│  Zero-heap-allocation via Arena pre-allocated buffers                │
+│  Builds L3 responses from ProcedureStepResult tokens + session       │
+│  context into caller buffers (span/Arena) — zero heap allocation     │
 ├──────────────────────────────────────────────────────────────────────┤
 │                    Core Parser / Serializer API                      │
 │  parseL3() / writeL3Bytes() / Builder API / LAPDm / Dispatcher       │
@@ -218,15 +218,15 @@ LAPDm Frame (raw bytes from PHY)
 ### Outbound Message Path (BTS -> MS)
 
 ```
-Application Decision or Procedure ResponseSink callback
+Application Decision or Procedure Result / ResponseSink callback
   │
-  ├─ ResponseBuilder::buildXxx(span, ...) ─► Arena buffer bytes
+  ├─ ResponseBuilder::buildXxx(span, ...) or buildResponseFromToken(token, span, session)
+  │     └────────► complete L3 bytes written into a caller buffer (zero heap)
   │
-  ├─ wrap in ParsedMessage variant
-  │
-  ├─ writeL3Bytes(msg) ───► raw L3 bytes (if not already serialized)
-  │
-  ├─ LAPDmEntity.sendUI() or sendData() ───► LAPDm frame to PHY
+  ├─ Dedicated channel:  LAPDmEntity.sendUI() / sendData()  ─► LAPDm frame to PHY
+  ├─ BCCH/PAGCH broadcast: lapdm::makeUIFrame(SAPI0, false, span) + encodeFrame()
+  │     (LAPDmEntity's TX span is reused per send — transmit or copy synchronously
+  │      inside the L1 callback)
   │
   └─ Radio TX: send frame bytes
 ```
@@ -322,14 +322,14 @@ The library provides well-defined integration points for external systems that a
 
 | External System | Integration Point | API |
 |----------------|-------------------|-----|
-| **PHY / Radio (TX)** | `sendToRadio(std::span<const uint8_t>)` | After ResponseBuilder writes to Arena buffer, pass bytes to PHY transmit callback. For BCCH/PAGCH: `lapdm::wrapL3()` -> byte vector for broadcast. For AGCH/SDCCH: same pattern for dedicated channel. |
-| **PHY / Radio (RX)** | `onRadioFrameReceived(std::span<const uint8_t>)` | PHY receive callback invokes LAPDmEntity -> parseL3() -> orchestrator.feed(). RACH: PHY delivers raw 1-byte Channel Request, parsed with `parseL3()`. |
+| **PHY / Radio (TX)** | `sendToRadio(std::span<const uint8_t>)` | ResponseBuilder writes complete L3 bytes into a caller buffer; wrap and transmit: dedicated channels via `LAPDmEntity.sendUI()/sendData()` (the entity's TX span is reused per send — copy/transmit synchronously inside the L1 callback), BCCH/PAGCH broadcasts via `lapdm::makeUIFrame()` + `encodeFrame()`. |
+| **PHY / Radio (RX)** | `onRadioFrameReceived(std::span<const uint8_t>)` | PHY receive callback feeds the LAPDm frame bytes to `LAPDmEntity.receiveFrame()`; the entity's `L3ReceiveFn` delivers reassembled L3 messages, which are passed through `parseL3()` and then `ProcedureOrchestrator::feed()`. RACH: the raw 1-byte Channel Request is parsed directly with `parseL3()`. |
 | **AuC** | `orchestrator.feedExternalTyped(AuthChallenge{rand, expectedSres})` | Query AuC for RAND(16B) + SRES(4B), feed as typed struct to procedure. The library does not implement authentication algorithms (COMP128, MIL-STD-1889A). |
 | **VLR / HLR** | `orchestrator.feedExternalTyped(VLRDecision{accept, newTmsi, rejectCause})` | VLR accept/reject decision with optional TMSI assignment. For IMSI detach: `feedExternalTyped(VLRDecision{accept: true})`. |
 | **Ciphering (A5)** | After `CipheringModeComplete` received from MS | BTS enables A5/XOR at L2 level on affected logical channels. Library does not implement ciphering algorithms (A5/1, A5/2, A5/3). |
 | **BSC (A-bis RSL, Inbound)** | `RSLParser::parse()` -> `extractL3()` -> `orchestrator.feed()` | BSC sends RLL DATA_REQ; extract L3 payload and feed to orchestrator. DCHAN CHAN_ACTIV: parse channel mode and activate via ChannelPool. CCHAN PAGING_CMD: extract identity and trigger PagingProcedure. |
 | **BSC (A-bis RSL, Outbound)** | `ResponseBuilder` bytes -> `RSLBuilder::buildDataInd()` -> PHY | Wrap L3 response in RSL DATA_IND for BSC. DCHAN CHAN_ACTIV_ACK, DCHAN MEAS_RES, CCHAN CCCH_LOAD_IND built via RSLBuilder. |
-| **SDR: GNU Radio** | Custom block | Call `unwrapL3()` -> `parseL3()` on RX path; `writeL3Bytes()` -> `wrapL3()` on TX path. |
+| **SDR: GNU Radio** | Custom block | RX: frame bytes into `LAPDmEntity::receiveFrame()` (or bare `parseL3()` for headerless bursts); TX: `writeL3Bytes()`/ResponseBuilder output through the same LAPDm framing as above. |
 | **SDR: srsRAN** | Replace L3 module | Swap `srsgsbts` L3 encode/decode with libgsml3parser equivalents. |
 | **SDR: Limesuite / ADALM-Pluto** | PHY backend | Use as hardware transport; libgsml3parser handles all L2/L3 processing. |
 
@@ -387,11 +387,11 @@ Each `SubscriberSession` is accessed from a single thread (the event loop). The 
 | `ShardedSubscriberRegistry<N>` | **Yes** | Per-shard shared_mutex |
 | `ChannelPool` | **No** | External synchronization required |
 | `ShardedChannelPool<N>` | **Yes** | Per-shard shared_mutex |
-| `parseL3()` / `writeL3Bytes()` | **Yes** | Stateless functions |
+| `parseL3()` / `writeL3Bytes()` | **Yes** | Stateless functions (share an immutable `ParserConfig`) |
 | `Builder API` | **Yes** | Each builder independent |
 | `ResponseBuilder` | **Yes** | Stateless static methods |
-| `RSLParser` / `RSLBuilder` | **Yes** | Stateless static methods |
-| `ProtocolDispatcher` | **No** | One instance per MS, one thread |
+| `RSLParser` / `RSLBuilder` | **Yes** | Stateless static methods; `RSLParsedMessage` views are bound to the caller's input buffer lifetime |
+| `ProtocolDispatcher` | **No** | Application-wide router; registration and dispatch on a single thread |
 
 ### Synchronization Strategy
 
@@ -411,20 +411,19 @@ auto ch = btsChannels.allocate(ChannelType::SDCCHType);
 
 ### Memory Footprint Per MS
 
-Measured sizes (MSVC 2026, Release, x64):
+Measured sizes (MSVC, x64; identical across Debug/Release):
 
 | Component | Size | Notes |
 |-----------|------|-------|
-| `MSContext` | 92 bytes | All inline storage. |
-| `TimerManager` | 1,080 bytes | 32 × L3Timer + init flags + active index |
-| `TransactionManager` | 536 bytes | 16 × Transaction (24B) + TI index + metadata |
+| `MSContext` | 92 bytes | All inline storage (bounded ≤ 256 via `static_assert`) |
+| `TimerManager` | 1,080 bytes | Fixed 32-slot `L3Timer` array + per-slot init flags + owner/observer words |
+| `TransactionManager` | 536 bytes | 16 × Transaction (24 B) + TI index [8] + metadata |
 | `RRStateMachine` | 16 bytes | Virtual table pointer + state int |
 | `MMStateMachine` | 16 bytes | Virtual table pointer + state int |
 | `CCStateMachine` | 16 bytes | Virtual table pointer + state int |
-| `ProcedureRunner` | 152 bytes | 8 × ProcedureSlot (unique_ptr + bool) + active-change observer |
-| `ResponseContext` | 128 bytes | Response parameters (fixed arrays, ≤ 160 budget) |
-| `ProcedureOrchestrator` | 72 bytes | Active chain state + phase timer + retransmission channel |
-| **Total per MS** | **2,056 bytes** (`sizeof(SubscriberSession)`) | Enforced `< 4096` via `static_assert`; plus `ParsedMessage` (416 bytes) on stack during processing |
+| `ProcedureRunner` | 152 bytes | 8 × ProcedureSlot (unique_ptr + flag) + owner/observer words |
+| `ResponseContext` | 128 bytes | Response parameters, fixed arrays (budget ≤ 160 via `static_assert`) |
+| **Total per MS** | **2,056 bytes** (`sizeof(SubscriberSession)`) | Enforced `< 4096` via `static_assert`; plus a transient `ParsedMessage` (488 bytes on x64) on the stack while a message is being processed. The app-owned `ProcedureOrchestrator` adds 72 bytes per subscriber |
 
 At 10,000 concurrent MS sessions: ~20 MB for sessions (fits comfortably in DRAM; hot per-session data stays cache-resident under normal load).
 
@@ -433,7 +432,7 @@ At 10,000 concurrent MS sessions: ~20 MB for sessions (fits comfortably in DRAM;
 - **MSContext fields ordered by access frequency**: identity and channel type are accessed on every message; LAI and classmark only during setup
 - **TimerManager tick()** iterates a contiguous `std::array<L3Timer, 32>` - single cache line per ~4 timers
 - **TransactionManager match()** for CC/SS: direct array index into `mTiIndex[8]` - no pointer chasing
-- **FSM dispatch**: `switch(PD) + switch(MTI)` compiled to jump table - O(1), no branch misprediction on hot path
+- **FSM dispatch**: per-state PD + message-type tests (RR `ACTIVE` state compiles a `switch(mti)` jump table over its four handled MTIs) — O(1) per message, no data structures on the path
 - **ProcedureRunner slots**: Fixed `std::array<ProcedureSlot, 8>` - sequential scan for routing
 
 ### Allocation-Free Hot Paths
@@ -461,7 +460,7 @@ The following operations perform zero heap allocations:
 | `TransactionManager::match()` CC/SS | O(1) | `mTiIndex[ti]` direct array access |
 | `TransactionManager::match()` other | O(K), K ≤ 16 | Bounded linear scan of `mTransactions` |
 | `ChannelPool::allocate()` | O(1) | Per-type free-list `pop_back()` |
-| `FSM::handle_message_impl()` | O(1) | `switch(PD) + switch(MTI)` jump table |
+| `FSM::handle_message_impl()` | O(1) | PD gate + per-state message-type tests; `switch(mti)` in RR `ACTIVE` |
 | `TimerManager::tick()` | O(32) = O(1) | Fixed array of 32 timers |
 | `ProcedureRunner::feed()` | O(8) = O(1) | Fixed array of procedure slots |
 | `SubscriberRegistry::findByTMSI()` | O(1) | FlatMap (open addressing, inline entries) lookup |
@@ -576,13 +575,13 @@ public:
 
 ### Memory Budget Planning
 
-Per-MS stack footprint is ~2 KB (`sizeof(SubscriberSession)` = 2056 bytes, static_assert < 4096); `sizeof(ParsedMessage) = 416` bytes. The TMSI and LAPDm-link flat indexes add ~28 bytes per session (key + slot + value flag inside the shared 64-entry slab, `stack/flat_map.h`) plus one slab allocation per 64 sessions — negligible against the 2 KB session footprint.
+Per-MS stack footprint is ~2 KB (`sizeof(SubscriberSession)` = 2056 bytes, static_assert < 4096); `sizeof(ParsedMessage)` = 488 bytes on x64. The TMSI and LAPDm-link flat indexes add a small per-entry cost inside shared 64-entry slabs (`stack/flat_map.h`; one slab allocation per 64 sessions, entry addresses stable for the entry's lifetime) — negligible against the 2 KB session footprint.
 
 | Scale | MS Sessions | Stack Module Memory | ParsedMessage (stack, transient) |
 |-------|------------|-------------------|-------------------------------|
-| Small cell | 100 | ~200 KB | ~42 KB peak |
-| Macro cell | 10,000 | ~20 MB | ~4.2 MB peak |
-| Large deployment | 1,000,000 | ~2 GB | ~416 MB peak (transient) |
+| Small cell | 100 | ~205 KB | ~49 KB peak |
+| Macro cell | 10,000 | ~20 MB | ~4.9 MB peak |
+| Large deployment | 1,000,000 | ~2 GB | ~488 MB peak (transient) |
 
 For large deployments, ParsedMessage is only on-stack during message processing (microseconds), so peak concurrent usage is much lower than the theoretical maximum.
 
@@ -601,17 +600,8 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
 
 ### Known Limitations
 
-- **Procedure tick:** `tickAllProcedures()` is O(active) via an active-procedure index (same pattern as the active-timer index). The old documented pattern (forEach over all sessions) must not be used at scale.
-- **Registry storage:** `SubscriberRegistry`/`ShardedSubscriberRegistry`
-  use a flat open-addressing hash table (`stack/flat_map.h`) for the
-  TMSI and LAPDm-link indexes: entries live in contiguous slabs of 64
-  (one slab allocation per 64 sessions, replacing the
-  previous one-heap-block-per-entry storage), slab addresses are never
-  moved, so every entry address is stable for the entry's whole lifetime, a flat open-addressing slot table (no
-  pointer chasing on lookup), and in-place erase with free-list recycling
-  (steady churn allocates nothing). Call `reserve()` at startup when the
-  subscriber scale is known. The IMSI index stays a `std::unordered_map`
-  (owned std::string keys, cold path).
+- **Procedure tick:** `tickAllProcedures()` is O(active) via an active-procedure index (same pattern as the active-timer index) — sessions without a running timer or active procedure are never visited.
+- **Registry storage:** `SubscriberRegistry`/`ShardedSubscriberRegistry` use a flat open-addressing hash table (`stack/flat_map.h`) for the TMSI and LAPDm-link indexes: entries live in contiguous slabs of 64 (one slab allocation per 64 sessions), entry addresses are stable for an entry's whole lifetime, lookup is pointer-chasing-free slot-table probing, and erase is in-place with free-list recycling (steady churn allocates nothing). Call `reserve()` at startup when the subscriber scale is known. The IMSI index is a transparent-lookup `std::unordered_map` (owned `std::string` keys, cold path).
 - **L3Framer framing modes:** the DEFAULT is the L2-length
   mode (`FrameConfig::useL2Length = true`) — deterministic framing, which
   is what production LAPDm/A-bis paths provide. The header-based mode
@@ -630,8 +620,8 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
 
 | Document | Topic |
 |----------|-------|
-| [doc/API.md](API.md) | Full API reference (62 sections) |
-| [doc/bts_integration.md](bts_integration.md) | Step-by-step integration guide with ProcedureRunner |
+| [doc/API.md](API.md) | Full API reference (63 numbered sections) |
+| [doc/bts_integration.md](bts_integration.md) | Step-by-step integration guide for ProcedureOrchestrator-based BTS |
 | [README.md](../README.md) | Library overview and quick start |
 | 3GPP TS 24.008 | Mobile radio interface L3 specification |
 | 3GPP TS 44.018 | Group call and broadcast call control |

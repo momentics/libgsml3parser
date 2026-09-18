@@ -61,6 +61,9 @@ enum class RRCause : uint8_t {
 
 const char* RRCause2Str(RRCause cause);
 
+/// Streams the cause name via RRCause2Str (enables std::ostream / std::format output).
+std::ostream& operator<<(std::ostream& os, RRCause cause);
+
 // MM Reject Cause (GSM 04.08 10.5.3.6)
 enum class MMRejectCause : uint8_t {
     Zero                            = 0,
@@ -96,6 +99,9 @@ enum class MMRejectCause : uint8_t {
 
 const char* MMRejectCause2Str(MMRejectCause cause);
 
+/// Streams the cause name via MMRejectCause2Str.
+std::ostream& operator<<(std::ostream& os, MMRejectCause cause);
+
 // CM service abort cause (3GPP TS 24.008 9.2.3.2)
 enum class CMServiceAbortCause : uint8_t {
     Unspecified             = 0x01,
@@ -108,6 +114,9 @@ enum class CMServiceAbortCause : uint8_t {
 };
 
 const char* CMServiceAbortCause2Str(CMServiceAbortCause cause);
+
+/// Streams the cause name via CMServiceAbortCause2Str.
+std::ostream& operator<<(std::ostream& os, CMServiceAbortCause cause);
 
 // CC Cause (GSM 04.08 10.5.4.11)
 enum class CCCause : uint8_t {
@@ -165,6 +174,9 @@ enum class CCCause : uint8_t {
 
 const char* CCCause2Str(CCCause cause);
 
+/// Streams the cause name via CCCause2Str.
+std::ostream& operator<<(std::ostream& os, CCCause cause);
+
 // CC cause location
 enum class CCCauseLocation : uint8_t {
     User                      = 0,
@@ -209,5 +221,8 @@ enum class BSSCause : uint8_t {
 };
 
 const char* BSSCause2Str(BSSCause cause);
+
+/// Streams the cause name via BSSCause2Str.
+std::ostream& operator<<(std::ostream& os, BSSCause cause);
 
 } // namespace gsml3parser

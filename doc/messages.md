@@ -2,36 +2,46 @@
 
 Complete catalog of all L3 message types, Information Elements, and enums implemented in libgsml3parser.
 
-**Total: 200+ message types across 12 protocol domains.**
+**Total: 236 message types across 12 protocol domains.**
 
 For a summary table see [README.md](../README.md#supported-messages-summary).
 
+Dispatch notes:
+- MM/CC/SS/BCC/GCC headers use a 6-bit messageType: `mti = (byte1 & 0xFC) >> 2`.
+- GMM/SMS/SM/LS use the raw 8-bit second octet.
+- RR uses the raw second octet; with TIF=1 (short/SACCH messages) `mti = 0x100 + raw` — MTIs ≥ 0x100 are listed with their dispatch value.
+- SMS: the CP-layer classes win the parse slots for MTI 0x12 (`L3CPStatus`) and 0x13 (`L3CPSMT`); `L3SMSProvidedReplyExpected` (0x12) and `L3SMSSubmitRep` (0x13) remain constructible/writable but are not produced by `parseL3`.
+- RR messages with dispatch MTI 0x106–0x112 (SI10/10bis/10ter, NotificationFACCH, UplinkFree, EnhancedMeasurementRepUL, MeasurementInfoDL, VBSVGCSRecon(2), VGCSAddInfo, VGCSMSInfo, VGCSSNeighCellInfo, NotifyAppData) are build/serialize only — the parser has no slot for them.
+
 ---
 
-## Group Call Control (PD=0x00) — 7 message types
+## Group Call Control (PD=0x00) — 8 message types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3GCCSetup` | 0x00 | MO | Group call setup request |
+| `L3GCCSetup` | 0x00 | MO | Group call setup request (TI + opaque body) |
 | `L3GCCProceeding` | 0x01 | MT | Network proceeding indication |
 | `L3GCCAcknowledge` | 0x02 | MT | Group call acknowledgement |
+| `L3GCCCallConfirmed` | 0x03 | MT | Call confirmed |
 | `L3GCCConnect` | 0x05 | MT | Group call connected |
 | `L3GCCDisconnect` | 0x06 | MO | Group call disconnect request |
 | `L3GCCRelease` | 0x07 | MT | Group call release |
 | `L3GCCReleaseComplete` | 0x0a | Bidir | Group call release complete |
 
-## Broadcast Call Control (PD=0x01) — 6 message types
+## Broadcast Call Control (PD=0x01) — 8 message types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3BCCSetup` | 0x00 | MO | Broadcast call setup request |
+| `L3BCCSetup` | 0x00 | MO | Broadcast call setup request (TI + opaque body) |
 | `L3BCCProceeding` | 0x01 | MT | Network proceeding indication |
 | `L3BCCConnect` | 0x05 | MT | Broadcast call connected |
 | `L3BCCDisconnect` | 0x06 | MO | Broadcast call disconnect request |
 | `L3BCCRelease` | 0x07 | MT | Broadcast call release |
+| `L3BCCCallConfirmed` | 0x04 | MT | Call confirmed |
 | `L3BCCReleaseComplete` | 0x0a | Bidir | Broadcast call release complete |
+| `L3BCCConnectAcknowledge` | 0x09 | Bidir | Connect acknowledged |
 
-## Call Control (PD=0x03) — 20 message types, 26 IE types
+## Call Control (PD=0x03) — 24 message types, 26 IE types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -44,8 +54,12 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 | `L3EmergencySetup` | 0x0e | UL | Emergency call setup |
 | `L3ConnectAcknowledge` | 0x0f | DL | Connect acknowledged |
 | `L3Hold` | 0x18 | UL | Hold request |
+| `L3Modify` | 0x19 | UL | Call modify ([BearerCapability, Called/CallingParty]) |
 | `L3HoldReject` | 0x1a | DL | Hold rejected |
 | `L3Disconnect` | 0x25 | UL | Disconnect request |
+| `L3UnitData` | 0x27 | UL | Unit data ([BearerCapability] + user data, TS 24.008 9.3.16) |
+| `L3UnitDataAck` | 0x28 | DL | Unit data acknowledgement (9.3.16a) |
+| `L3ErrorIndication` | 0x2b | UL | Error indication with CC cause (9.3.16b) |
 | `L3ReleaseComplete` | 0x2a | Bidir | Release complete |
 | `L3Release` | 0x2d | Bidir | Release request |
 | `L3StopDTMF` | 0x31 | UL | Stop DTMF tones |
@@ -53,6 +67,7 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 | `L3StartDTMF` | 0x35 | UL | Start DTMF tones |
 | `L3StartDTMFAcknowledge` | 0x36 | DL | Start DTMF acknowledged |
 | `L3StartDTMFReject` | 0x37 | DL | Start DTMF rejected |
+| `L3Facility` | 0x3a | DL/UL | CC Facility — SS data container (TS 24.008 9.3.21) |
 | `L3CCStatus` | 0x3d | Bidir | CC status report |
 
 ### CC Information Elements (26 types)
@@ -87,14 +102,19 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 | `L3SupServFacilityIE` | TLV | Supplementary service facility data |
 | `L3SupServVersionIndicator` | V | SS version indicator |
 
-## Mobility Management (PD=0x05) — 18 message types
+## Mobility Management (PD=0x05) — 20 message types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
 | `L3IMSIDetachIndication` | 0x01 | UL | IMSI detach indication |
 | `L3LocationUpdatingAccept` | 0x02 | DL | Location updating accepted |
+| `L3PagingMM` | 0x06 | DL | MM paging (mobile identity, TS 24.008 9.2.12) |
 | `L3LocationUpdatingReject` | 0x04 | DL | Location updating rejected |
 | `L3LocationUpdatingRequest` | 0x08 | UL | Location update request |
+| `L3AuthenticationReject` | 0x11 | DL | Authentication rejected |
+| `L3AuthenticationRequest` | 0x12 | DL | Authentication challenge (RAND) |
+| `L3AuthenticationResponse` | 0x14 | UL | Authentication response (SRES) |
+| `L3CMRequest` | 0x20 | DL | CM request (CKSN, service type, classmark, mobile identity, TS 24.008 9.2.8) |
 | `L3CMServiceAccept` | 0x21 | DL | CM service accepted |
 | `L3CMServiceReject` | 0x22 | DL | CM service rejected |
 | `L3CMServiceAbort` | 0x23 | DL | CM service aborted |
@@ -102,15 +122,12 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 | `L3CMReestablishmentRequest` | 0x28 | UL | CM re-establishment request |
 | `L3MMStatus` | 0x31 | Bidir | MM status report |
 | `L3MMInformation` | 0x32 | DL | Network information broadcast |
-| `L3AuthenticationRequest` | 0x12 | DL | Authentication challenge (RAND) |
-| `L3AuthenticationResponse` | 0x14 | UL | Authentication response (SRES) |
-| `L3AuthenticationReject` | 0x11 | DL | Authentication rejected |
 | `L3IdentityRequest` | 0x18 | DL | Identity request (IMSI/IMEI) |
 | `L3IdentityResponse` | 0x19 | UL | Identity response |
 | `L3TMSIReallocationCommand` | 0x1A | DL | New TMSI assignment |
 | `L3TMSIReallocationComplete` | 0x1B | UL | TMSI reallocation complete |
 
-## Radio Resource (PD=0x06) — 95 message types
+## Radio Resource (PD=0x06) — 98 message types
 
 ### Paging
 
@@ -121,39 +138,45 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 | `L3PagingRequestType3` | 0x24 | DL | PageMode + IMSI/IMEI digits |
 | `L3PagingResponse` | 0x27 | UL | MobileIdentity [+ Classmark2/3] |
 
-### System Information (BCCH)
+### System Information (BCCH/SACCH)
 
 | Message | MTI | Description |
 |---------|-----|-------------|
 | `L3SystemInformationType1` | 0x19 | Cell access parameters, CBCH flag |
 | `L3SystemInformationType2` | 0x1a | BCCH freq list, NCC permitted, RACH control |
-| `L3SystemInformationType2bis` | 0x1f | Extended BCCH freq list (GPRS) |
-| `L3SystemInformationType2ter` | 0x14 | BCCH freq list with GPRS cell options |
+| `L3SystemInformationType2bis` | 0x02 | Extended BCCH freq list (GPRS) |
+| `L3SystemInformationType2ter` | 0x03 | BCCH freq list with GPRS cell options |
 | `L3SystemInformationType3` | 0x1b | Cell desc, BA list type 1, rest octets |
 | `L3SystemInformationType4` | 0x1c | LAI, CI, cell selection, RACH control |
 | `L3SystemInformationType5` | 0x1d | BA list type 2 |
-| `L3SystemInformationType5bis` | 0x20 | Extended BA list (GPRS) |
-| `L3SystemInformationType5ter` | 0x23 | BA list with GPRS cell options |
+| `L3SystemInformationType5bis` | 0x05 | Extended BA list (GPRS) |
+| `L3SystemInformationType5ter` | 0x06 | BA list with GPRS cell options |
 | `L3SystemInformationType6` | 0x1e | CI, LAI, SACCH cell options, NCC permitted |
-| `L3SystemInformationType7` | 0x15 | BA list type 3 |
-| `L3SystemInformationType8` | 0x16 | NCC permitted (SACCH) |
-| `L3SystemInformationType9` | 0x17 | CI, cell selection, BCCH cell options |
-| `L3SystemInformationType10` | — | Short: CI + LAI + CellOptions + CellSelParams |
-| `L3SystemInformationType10bis` | — | Short: CI + LAI + CellOptions + CellSelParams |
-| `L3SystemInformationType10ter` | — | Short: CI + LAI + CellOptions + CellSelParams |
+| `L3SystemInformationType7` | 0x1f | BA list type 3 |
+| `L3SystemInformationType8` | 0x18 | NCC permitted (SACCH) |
+| `L3SystemInformationType9` | 0x04 | CI, cell selection, BCCH cell options |
 | `L3SystemInformationType13` | 0x00 | Cell desc, BA list type 1, rest octets |
-| `L3SystemInformationType13alt` | 0x44 | SACCH alternative format |
+| `L3SystemInformationType2quater` | 0x07 | Extended BCCH freq list, RACH ctrl params, CBCH description (raw body) |
 | `L3SystemInformationType14` | 0x01 | CellIdentity + CellSelectionParameters |
 | `L3SystemInformationType15` | 0x43 | Empty body |
-| `L3SystemInformationType16` | 0x01 | CI, cell selection (SACCH) |
-| `L3SystemInformationType17` | 0x04 | NCC permitted (SACCH extended) |
+| `L3SystemInformationType16` | 0x3d | CI, cell selection (SACCH) |
+| `L3SystemInformationType17` | 0x3e | NCC permitted (SACCH extended) |
 | `L3SystemInformationType18` | 0x40 | RACHControl + CellChannelDescriptions |
 | `L3SystemInformationType19` | 0x41 | RACHControl + CellChannelDescriptions |
 | `L3SystemInformationType20` | 0x42 | RACHControl + CellChannelDescriptions |
+| `L3SystemInformationType13alt` | 0x44 | SACCH alternative format |
 | `L3SystemInformationType2n` | 0x45 | Empty body |
 | `L3SystemInformationType21` | 0x46 | Empty body |
 | `L3SystemInformationType22` | 0x47 | Empty body |
 | `L3SystemInformationType23` | 0x4f | Empty body |
+
+### SACCH Short-Form System Information (TIF=1)
+
+| Message | MTI | Description |
+|---------|-----|-------------|
+| `L3SystemInformationType10` | 0x106 | CI + LAI + CellOptions + CellSelParams |
+| `L3SystemInformationType10bis` | 0x107 | CI + LAI + CellOptions + CellSelParams |
+| `L3SystemInformationType10ter` | 0x108 | CI + LAI + CellOptions + CellSelParams |
 
 ### Dedicated Channel (DCCH/FACCH)
 
@@ -161,10 +184,10 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 |---------|-----|-----------|-------------|
 | `L3ChannelRelease` | 0x0D | DL | Cause [+ GPRS resumption] |
 | `L3ImmediateAssignment` | 0x3F | DL | PageMode, channel desc, TA, mobile alloc |
-| `L3ImmediateAssignmentExtended` | — | DL | Extended immediate assignment |
+| `L3ImmediateAssignmentExtended` | 0x39 | DL | Extended immediate assignment |
 | `L3ImmediateAssignmentReject` | 0x3A | DL | Wait indication entries |
-| `L3AdditionalAssignment` | 0x01 | DL | Additional channel assignment |
-| `L3PhysicalInformation` | 0x26 | DL | Timing advance command |
+| `L3AdditionalAssignment` | 0x3B | DL | Additional channel assignment |
+| `L3PhysicalInformation` | 0x2D | DL | Timing advance command |
 | `L3AssignmentCommand` | 0x2E | DL | Channel desc, mode, power command |
 | `L3AssignmentComplete` | 0x29 | UL | Cause |
 | `L3AssignmentFailure` | 0x2F | UL | Cause |
@@ -180,7 +203,7 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 | `L3CipheringModeCommand` | 0x35 | DL | Ciphering setting + key seq |
 | `L3CipheringModeComplete` | 0x32 | UL | Empty body |
 | `L3ChannelModeModify` | 0x10 | DL | Channel desc + mode [+ multi-rate] |
-| `L3ChannelModeModifyAcknowledge` | 0x11 | UL | Channel desc + mode |
+| `L3ChannelModeModifyAcknowledge` | 0x17 | UL | Channel desc + mode |
 | `L3GPRSSuspensionRequest` | 0x34 | UL | TLLI, RA ID, suspension cause |
 | `L3ApplicationInformation` | 0x38 | DL/UL | RRLP encapsulation data |
 | `L3ConfigurationChangeCommand` | 0x30 | DL | ChanDesc + PowerCmd |
@@ -192,11 +215,11 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 
 ### Short Messages (no standard L3 header)
 
-| Message | Size | Description |
-|---------|------|-------------|
-| `L3ChannelRequest` | 1 byte | RACH access with cause + TSC |
-| `L3HandoverAccess` | 4 bytes | Handover confirmation with HO reference |
-| `L3SynchronizationChannelInformation` | 7 bytes | SCH info with FN, TOA, BSIC |
+| Message | MTI | Size | Description |
+|---------|-----|------|-------------|
+| `L3ChannelRequest` | 0x101 | 1 byte | RACH access with cause + TSC |
+| `L3HandoverAccess` | 0x102 | 4 bytes | Handover confirmation with HO reference |
+| `L3SynchronizationChannelInformation` | 0x100 | 7 bytes | SCH info with FN, TOA, BSIC |
 
 ### VGCS/VBS and Notification
 
@@ -234,22 +257,24 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 | `L3IntersysToCDMA2000HOCommand` | 0x64 | DL | Variable-length HO data |
 | `L3GERANIUClassmarkChange` | 0x65 | UL | Variable-length classmark |
 
-### FACCH and VBS/VGCS
+### SACCH FACCH/VBS-VGCS (TIF=1)
 
-| Message | Description |
-|---------|-------------|
-| `L3NotificationFACCH` | FACCH notification |
-| `L3UplinkFree` | FACCH uplink free |
-| `L3EnhancedMeasurementRepUL` | FACCH measurement report UL |
-| `L3MeasurementInfoDL` | FACCH measurement info DL |
-| `L3VBSVGCSRecon` | VBS/VGCS reconfiguration |
-| `L3VBSVGCSRecon2` | VBS/VGCS reconfiguration 2 |
-| `L3VGCSAddInfo` | VGCS additional info |
-| `L3VGCSMSInfo` | VGCS SMS info |
-| `L3VGCSSNeighCellInfo` | VGCS neighbor cell info |
-| `L3NotifyAppData` | Notify application data |
+Build/serialize only (no parse slot, MTI 0x109–0x112):
 
-## GPRS Mobility Management (PD=0x08) — 19 message types
+| Message | MTI | Description |
+|---------|-----|-------------|
+| `L3NotificationFACCH` | 0x109 | FACCH notification |
+| `L3UplinkFree` | 0x10A | FACCH uplink free |
+| `L3EnhancedMeasurementRepUL` | 0x10B | FACCH measurement report UL |
+| `L3MeasurementInfoDL` | 0x10C | FACCH measurement info DL |
+| `L3VBSVGCSRecon` | 0x10D | VBS/VGCS reconfiguration |
+| `L3VBSVGCSRecon2` | 0x10E | VBS/VGCS reconfiguration 2 |
+| `L3VGCSAddInfo` | 0x10F | VGCS additional info |
+| `L3VGCSMSInfo` | 0x110 | VGCS SMS info |
+| `L3VGCSSNeighCellInfo` | 0x111 | VGCS neighbor cell info |
+| `L3NotifyAppData` | 0x112 | Notify application data |
+
+## GPRS Mobility Management (PD=0x08) — 23 message types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -294,7 +319,11 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 | `L3PTMSISignature` | P-TMSI signature (3 octets) |
 | `L3GMMStatusCause` | GMM status cause octet |
 
-## SMS (PD=0x09) — 5 CP messages, 14 SMS L3 messages, 4 TP types, 4 RP types
+Enums: `GMMCause`, `GMMAttachType`, `GMMUpdateType`, `GMMDetachTypeMO`, `GMMDetachTypeMT`, `GMMPTMSIType`.
+
+## SMS (PD=0x09) — 19 L3 messages in the `SMS` variant, plus 4 TP types and 4 RP types
+
+The variant holds 5 CP-layer + 14 L3-layer messages. The RP/TP classes below parse payloads inside CP-DATA/CP-SMT frames (not standalone PD=0x09 dispatch).
 
 ### Control Part (CP) Messages
 
@@ -303,8 +332,17 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 | `L3CPData` | 0x01 | Bidir | SMS data container (wraps RPDU/TPDU) |
 | `L3CPAck` | 0x04 | Bidir | CP acknowledgement |
 | `L3CPErr` | 0x10 | Bidir | CP error with cause |
-| `L3CPStatus` | 0x12 | MT | CP status report (SC to MS) |
-| `L3CPSMT` | 0x13 | MT | Short message to telephony |
+| `L3CPStatus` | 0x12 | MT | CP status report (SC to MS) — wins parse slot 0x12 |
+| `L3CPSMT` | 0x13 | MT | Short message to telephony — wins parse slot 0x13 |
+
+### Relay Part (RP) Messages
+
+| Message | RP-MTI (MO/MT) | Description |
+|---------|----------------|-------------|
+| `L3RPData` | 0 / 1 | Relay data (wraps TPDU) |
+| `L3RPAck` | 2 / 3 | Relay acknowledgement |
+| `L3RPError` | 4 / 5 | Relay error with cause |
+| `L3RPSMMA` | 6 / 7 | Short message memory available |
 
 ### Transport Part (TP) Types
 
@@ -315,29 +353,22 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 | `L3TPStatusReport` | 0x02 | Delivery status report |
 | `L3TPCommand` | 0x03 | SMS command (e.g. delete) |
 
-### Relay Part (RP) Messages
-
-| Message | RP-MTI | Description |
-|---------|--------|-------------|
-| `L3RPData` | MO=0, MT=1 | Relay data (wraps TPDU) |
-| `L3RPAck` | MO=2, MT=3 | Relay acknowledgement |
-| `L3RPError` | MO=4, MT=5 | Relay error with cause |
-| `L3RPSMMA` | MO=6, MT=7 | Short message memory available |
-
 ### TP Information Elements
 
 | IE | Description |
 |----|-------------|
 | `L3TPAddress` | TP-DA/TP-OA: TON/NPI + BCD digits |
 | `TPSCTimeStamp` | Service centre time stamp (7 octets) |
+| `TPDCS` | Data coding scheme (Default, 8-bit, UCS2) |
+| `TPPID` | Protocol identifier (GSM, X121, Telex, etc.) |
 
 ### SMS L3 Messages (14 types, TS 24.008 9.6)
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
 | `L3SMSStatusReport` | 0x11 | Bidir | TP-MR, RP-Disp, [TP-DA], [TP-OA], [SCTS], [MT-StartTime], TP-ST |
-| `L3SMSProvidedReplyExpected` | 0x12 | DL | [TP-PID], TP-DCS, [TP-Ud] |
-| `L3SMSSubmitRep` | 0x13 | DL | [TP-PID], TP-DCS, [TP-Ud] |
+| `L3SMSProvidedReplyExpected` | 0x12 | DL | [TP-PID], TP-DCS, [TP-Ud] — shadowed by L3CPStatus in parse dispatch |
+| `L3SMSSubmitRep` | 0x13 | DL | [TP-PID], TP-DCS, [TP-Ud] — shadowed by L3CPSMT in parse dispatch |
 | `L3SMSDeliver` | 0x14 | DL | TP-MTI, TP-MR, [TP-OA], TP-PID, TP-DCS, SCTS, [TP-Ud] |
 | `L3SMSDeliverRep` | 0x15 | UL | TP-MTI, TP-MR, [TP-DA], TP-PID, TP-DCS, [TP-Ud] |
 | `L3SMSStatusReportAck` | 0x16 | UL | TP-MR |
@@ -349,8 +380,6 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 | `L3SMSSFProvidedRepAck` | 0x1C | DL | Empty body |
 | `L3SMSNotification` | 0x1D | Bidir | [TP-PID], TP-DCS, [TP-Ud] |
 | `L3SMSShortCodeInfo` | 0x1E | Bidir | ShortCodeType, [ShortCode] |
-| `TPDCS` | — | Data coding scheme (Default, 8-bit, UCS2) |
-| `TPPID` | — | Protocol identifier (GSM, X121, Telex, etc.) |
 
 ## GPRS Session Management (PD=0x0a) — 29 message types
 
@@ -431,15 +460,17 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 | `L3PDPHandle` | PDP context identifier (0–15) |
 | `L3TMGI` | Temporary Mobile Group Identity: PLMN(3) + ServiceID(2) + SessionID(1) |
 
+Enums: `PDPType`, `QoSType`, `QoSElementType`, `SMCause`.
+
 ## Supplementary Services (PD=0x0b) — 3 message types, 2 enums, 2 IEs
 
 ### Messages
 
-| Message | Description |
-|---------|-------------|
-| `L3SupServFacilityMessage` | SS facility data (TLV) |
-| `L3SupServRegisterMessage` | Registration request/response |
-| `L3SupServReleaseCompleteMessage` | SS release complete |
+| Message | MTI | Description |
+|---------|-----|-------------|
+| `L3SupServFacilityMessage` | 0x3a | SS facility data (GSM 04.80 opaque container) |
+| `L3SupServRegisterMessage` | 0x3b | Registration request/response |
+| `L3SupServReleaseCompleteMessage` | 0x2a | SS release complete |
 
 ### Enums
 
@@ -466,10 +497,10 @@ For a summary table see [README.md](../README.md#supported-messages-summary).
 
 | Message | Description |
 |---------|-------------|
-| `L3ExtendedMessage` | Raw-body placeholder for extended protocol discriminators; MTI determined at parse time |
+| `L3ExtendedMessage` | Raw-body catch-all for the extended protocol discriminator; MTI captured at parse time, body opaque |
 
 ## Test Procedure PD (PD=0x0f) — 1 placeholder type
 
 | Message | Description |
 |---------|-------------|
-| `L3TestProcedureMessage` | Raw-body placeholder for test procedure messages; MTI determined at parse time |
+| `L3TestProcedureMessage` | Raw-body catch-all for test procedure messages; MTI captured at parse time, body opaque |

@@ -77,7 +77,7 @@ entity.sendUI(SAPI::SAPI0, l3Data);  // unacknowledged UI frame
 entity.sendData(l3Data);           // acknowledged I-frames (segmented)
 ```
 
-Channel profiles carry per-channel N201/N200/T200 values (SDCCH, SACCH, FACCH). Reassembly is bounded at 4 KB to keep untrusted radio input from growing the buffer unboundedly. The TX encode buffer is allocated on the first send and reused afterwards, so the steady-state send path performs no heap allocation (`sizeof(LAPDmEntity) = 216 bytes`, static-asserted < 512).
+Channel profiles carry per-channel N201/N200/T200 values (SDCCH, SACCH, FACCH). Reassembly is bounded at 4 KB to keep untrusted radio input from growing the buffer unboundedly. The TX encode buffer is allocated on the first send and reused afterwards, so the steady-state send path performs no heap allocation (`sizeof(LAPDmEntity) = 256 bytes` on x64, static-asserted < 512).
 
 ### 4. BTS Stack Modules — Protocol State Machines
 
@@ -89,7 +89,7 @@ What sets this library apart: ready-to-use per-subscriber state management primi
 | **TimerManager** | GSM L3 protocol timers T3101–T3395 (TS 24.008 10.5), ≤32 concurrent per MS | 1080 bytes |
 | **TransactionManager** | Request/response correlation, O(1) TI index for CC/SS | 536 bytes |
 | **RR/MM/CC StateMachine** | Protocol FSM skeletons with switch(PD)+switch(MTI) dispatch | 16 bytes each |
-| **ChannelPool / ShardedChannelPool** | Logical channel allocation/release, VEA support (fixed arrays; sharded variant is thread-safe) | 2816 / 45 KB per instance |
+| **ChannelPool / ShardedChannelPool** | Logical channel allocation/release, VEA support (fixed arrays; sharded variant is thread-safe) | 3584 B / ~57.5 KB per instance (shard count 16) |
 | **SubscriberRegistry** | Per-MS sessions with TMSI/IMSI/link indexes (open-addressing FlatMap), O(active) timer tick | 2056 bytes per session |
 | **ShardedSubscriberRegistry** | Thread-safe registry: N power-of-two shards, per-shard `shared_mutex` | default 16 shards |
 
@@ -349,7 +349,7 @@ Layered design, bottom to top:
 
 1. **Bit-level I/O** — `BitReader`/`BitWriter`, bounds-checked, MSB-first, no heap
 2. **Message types** — plain C++ structs with `parse()` and `write()`, no inheritance; dispatch via constexpr function-pointer tables per domain (O(1) MTI index)
-3. **Variant dispatch** — `ParsedMessage` holds the 12 domains on the stack (`sizeof(ParsedMessage)` = 416 bytes, static-asserted < 8 KB)
+3. **Variant dispatch** — `ParsedMessage` holds the 12 domains on the stack (`sizeof(ParsedMessage)` = 488 bytes on x64, static-asserted < 8 KB)
 4. **Streaming** — `ByteSource` → `L3Framer` (deterministic L2-length octet framing by default) → `L3StreamProcessor` / `InlineFramer` + `ZeroCopyStreamProcessor` (views into the input, zero allocation)
 5. **Stack modules** — MSContext, TimerManager, TransactionManager, FSMs, ChannelPool, SubscriberRegistry
 6. **Procedure framework** — `ProcedureRunner` + `ProcedureOrchestrator`, `ResponseToken` → `ResponseBuilder` (pre-allocated buffer, zero heap)

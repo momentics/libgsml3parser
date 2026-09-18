@@ -136,6 +136,7 @@ const char* CCCause2Str(CCCause cause) {
         case CCCause::Requested_Facility_Not_Subscribed:  return "Facility_Not_Subscribed";
         case CCCause::Bearer_Capability_Not_Authorized:   return "Bearer_Not_Authorized";
         case CCCause::Bearer_Capability_Not_Available:    return "Bearer_Not_Available";
+        case CCCause::Incoming_Calls_Barred_Within_CUG:   return "CUG_Barring";
         case CCCause::Service_Or_Option_Not_Available:    return "Service_Unavailable";
         case CCCause::Bearer_Service_Not_Implemented:     return "Bearer_Not_Implemented";
         case CCCause::ACM_GE_Max:                         return "ACM_GE_Max";
@@ -176,13 +177,40 @@ const char* BSSCause2Str(BSSCause cause) {
         case BSSCause::Reduce_Load_In_Serving_Cell:    return "Reduce_Load_Serving_Cell";
         case BSSCause::Equipment_Failure:              return "Equipment_Failure";
         case BSSCause::No_Radio_Resource_Available:    return "No_Radio_Resource";
+        case BSSCause::Traffic_Load_In_Target_Cell_Higher_Than_In_Source_Cell:
+                                                       return "Target_Traffic_Higher";
+        case BSSCause::Relocation_Triggered:           return "Relocation_Triggered";
         case BSSCause::CCCH_Overload:                  return "CCCH_Overload";
         case BSSCause::Processor_Overload:             return "Processor_Overload";
         case BSSCause::Traffic_Load:                   return "Traffic_Load";
         case BSSCause::Emergency_Preemption:           return "Emergency_Preemption";
+        case BSSCause::DTM_Handover_SGSN_Failure:      return "DTM_HO_SGSN_Failure";
+        case BSSCause::DTM_Handover_PS_Allocation_Failure: return "DTM_HO_PS_Alloc_Failure";
+        case BSSCause::Transcoding_Mismatch:           return "Transcoding_Mismatch";
+        case BSSCause::Requested_Speech_Version_Unavailable: return "Speech_Version_Unavailable";
         case BSSCause::Ciphering_Algorithm_Not_Supported: return "Ciphering_Algo_Not_Supported";
         default:                                       return "Unknown_BSS_Cause";
     }
+}
+
+std::ostream& operator<<(std::ostream& os, RRCause cause) {
+    return os << RRCause2Str(cause);
+}
+
+std::ostream& operator<<(std::ostream& os, MMRejectCause cause) {
+    return os << MMRejectCause2Str(cause);
+}
+
+std::ostream& operator<<(std::ostream& os, CMServiceAbortCause cause) {
+    return os << CMServiceAbortCause2Str(cause);
+}
+
+std::ostream& operator<<(std::ostream& os, CCCause cause) {
+    return os << CCCause2Str(cause);
+}
+
+std::ostream& operator<<(std::ostream& os, BSSCause cause) {
+    return os << BSSCause2Str(cause);
 }
 
 } // namespace gsml3parser

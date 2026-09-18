@@ -43,7 +43,7 @@ libgsml3parser sits between the BTS application logic and the physical/radio lay
    - `Completed` — chain finished successfully (no response pending)
    - `Failed` — chain aborted (timeout, error; no response pending)
 
-   **Response/terminal rule:** if a procedure must send a response, `action == SendResponseWithToken` is always the case — even when the procedure terminates in the same step. The terminal state is reported exclusively through `finalResult` (state == Completed/Failed/TimedOut). So after building a response, always check `finalResult.state`: if it is terminal, release the procedure/chain.
+    **Response/terminal rule:** if a procedure must send a response, `action == SendResponseWithToken` is always the case — even when the procedure terminates in the same step. The terminal state is reported exclusively through `finalResult` (state == Completed/Failed/TimedOut). So after building a response, check `finalResult.state`: for a standalone procedure a terminal state means release the slot. In an orchestrator *chain* a terminal `finalResult` can also report a mid-chain sub-procedure finishing (e.g. Authentication -> CipheringMode): the orchestrator has already advanced to the next phase, so keep feeding it — the chain ends with the final phase's result only.
 
 ### Outbound Flow (BTS -> MS)
 
@@ -67,7 +67,7 @@ ChannelPool btsChannels;
 // Subscriber registry (sessions are created on demand)
 ShardedSubscriberRegistry<16> registry;
 
-// App-owned per-session orchestrators: one ProcedureOrchestrator (48 bytes)
+// App-owned per-session orchestrators: one ProcedureOrchestrator (72 bytes)
 // per subscriber. SubscriberSession does not embed the orchestrator.
 std::unordered_map<uint32_t, ProcedureOrchestrator> orchestrators; // keyed by TMSI
 
@@ -97,7 +97,7 @@ void initBts() {
 
 The main event loop processes incoming L3 messages by feeding them into the subscriber's `ProcedureOrchestrator`. The orchestrator manages compound procedure chains (e.g., CMServiceRequest -> Authentication -> CipheringMode -> LocationUpdate) automatically.
 
-Note: `SubscriberSession` does not embed the orchestrator — the BTS application owns one `ProcedureOrchestrator` (48 bytes) per session. The examples below use `orchestratorFor(session)` as the app-side lookup (e.g. a map keyed by TMSI, or a parallel structure alongside the registry).
+Note: `SubscriberSession` does not embed the orchestrator — the BTS application owns one `ProcedureOrchestrator` (72 bytes) per session. The examples below use `orchestratorFor(session)` as the app-side lookup (e.g. a map keyed by TMSI, or a parallel structure alongside the registry).
 
 Runner vs orchestrator: `SubscriberSession::procedures` (ProcedureRunner, 8 slots) is ticked by `tickAllProcedures()` through the O(active) index and is meant for the session's built-in procedures. `ProcedureOrchestrator` is an app-owned single chain for application-level procedure sequencing. They are complementary, not alternatives: a session may use both, but a given procedure must live in exactly one of them.
 
@@ -250,10 +250,13 @@ void eventLoop() {
                 logWarning("{} procedures timed out for session", failed);
             }
             // Drain retransmissions queued by phase timers:
-            // e.g. the Identity Request retransmitted while T3102 runs.
-            if (orch.takeRetransmissionToken() != ResponseToken::None) {
+            // e.g. the Identity Request re-queued while T3102 runs. Build from
+            // the returned token directly (buildPendingResponse() covers the
+            // last *feed* token, not the retransmission queue).
+            ResponseToken rt = orch.takeRetransmissionToken();
+            if (rt != ResponseToken::None) {
                 uint8_t buf[512];
-                int n = orch.buildPendingResponse({buf, sizeof(buf)}, sess);
+                int n = ResponseBuilder::buildResponseFromToken(rt, {buf, sizeof(buf)}, sess);
                 if (n > 0) sendToMS(sess, buf, n);
             }
         });
@@ -279,118 +282,128 @@ void eventLoop() {
 
 ### Location Update (Full Chain)
 
-The orchestrator automatically chains: CMServiceRequest -> [Identity] -> Authentication -> CipheringMode -> LocationUpdate.
+The orchestrator automatically chains: CMServiceRequest -> Authentication *or* IdentityVerification -> CipheringMode -> LocationUpdate.
 
-The Identity phase (when the session has no TMSI) runs the T3102 timer
-(3 s): the initial Identity Request is queued on the orchestrator's
-retransmission channel (`takeRetransmissionToken()`) when the phase
-starts and is re-queued on every T3102 expiry; after 3 retransmissions
-the chain times out.
+- **TMSI present** on the session: after CM Service Accept the chain goes straight to the Authentication phase, which needs AuC data (`AuthChallenge`) — feeding it immediately returns the Authentication Request token.
+- **No TMSI**: the chain enters IdentityVerification (T3102, 3 s). The initial Identity Request is queued on the orchestrator's retransmission channel (`takeRetransmissionToken()`), and every T3102 expiry re-queues it (max 3 retransmissions, then the chain times out); `feed()` returns `IdentityRequest` while still awaiting the response.
+- SRES is verified big-endian by the Authentication phase; on match the chain advances to CipheringMode, which needs `CipheringParameters`. The LocationUpdate phase is inline (no Procedure object) and waits for the VLR decision with a terminal T3103 timer (5 s).
 
 ```cpp
 // App-owned orchestrator for this session (see Step 2).
 auto& orchestrator = orchestratorFor(session);
 
-// 1. MS sends CMServiceRequest (Location Updating)
+// 1. MS sends CMServiceRequest (Location Updating service type)
 auto cmReq = parseL3(incomingData).value();
 auto result = orchestrator.feed(cmReq, session);
-// Orchestrator starts chain: CMServiceRequest phase
-// Returns SendResponseWithToken + ResponseToken::CMServiceAccept
+// New chain: returns SendResponseWithToken + ResponseToken::CMServiceAccept;
+// the orchestrator has already advanced to Authentication (TMSI known)
+// or IdentityVerification (TMSI absent) internally.
 
 // Build and send CM Service Accept
 uint8_t buf[512];
 int n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
 sendToMS(session, buf, n);
 
-// 2. Orchestrator transitions to Authentication phase automatically
-//    Returns WaitingExternal — need AuC data
+// 1b. If IdentityVerification: drain the queued Identity Request now and on
+//     every T3102 expiry (see the event loop in Step 4).
+
+// 2. Query the AuC, then feed the triplet — Authentication phase
 AuthChallenge chal{};
 std::memcpy(chal.rand.data(), aucRandBytes, 16);
 std::memcpy(chal.expectedSres.data(), aucSresBytes, 4);
 result = orchestrator.feedExternalTyped(chal);
 // Returns SendResponseWithToken + ResponseToken::AuthenticationRequest
 // (the procedure recorded RAND into session->response)
+n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
+sendToMS(session, buf, n);
 
 // 3. MS responds with AuthenticationResponse
 auto authResp = parseL3(authResponseData).value();
 result = orchestrator.feed(authResp, session);
-// Orchestrator verifies SRES internally, transitions to CipheringMode
+// SRES verified internally (big-endian); the Authentication sub-procedure
+// reports Completed here while the chain advances to CipheringMode —
+// keep the chain alive and continue below.
 
-// 4. Ciphering phase
+// 4. Ciphering phase: feed the algorithm decision
 CipheringParameters cipher{1, true}; // A5/1 enabled
 result = orchestrator.feedExternalTyped(cipher);
 // Returns SendResponseWithToken + ResponseToken::CipheringModeCommand
+n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
+sendToMS(session, buf, n);
 
 // 5. MS sends CipheringModeComplete
 auto cipherComplete = parseL3(cipherCompleteData).value();
 result = orchestrator.feed(cipherComplete, session);
-// Transitions to LocationUpdate phase, returns WaitingExternal — need VLR decision
+// Chain is now in the inline LocationUpdate phase; feed() on that phase
+// returns WaitingExternal — awaiting the VLR decision (T3103, 5 s).
 
 // 6. VLR accepts
 VLRDecision vlr{true, 0x87654321u, MMRejectCause::Zero};
 result = orchestrator.feedExternalTyped(vlr);
-// Returns SendResponseWithToken + ResponseToken::LocationUpdatingAccept
-// (newTmsi recorded into session->response; action stays SendResponseWithToken
-//  even though the chain terminates in this step — see finalResult.state)
-
-// 7. Build and send Location Updating Accept
+// Returns SendResponseWithToken + ResponseToken::LocationUpdatingAccept with a
+// terminal finalResult (Completed): the action stays SendResponseWithToken even
+// though the chain terminates in this step.
 n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
 sendToMS(session, buf, n);
-// Chain completed successfully
+// Chain completed successfully (finalResult.state == Completed)
 ```
 
 ### Call Setup MO (Full Chain)
 
-The orchestrator chains: CMServiceRequest(MO_Call) -> CallSetupMO.
+The orchestrator chains: CMServiceRequest(MO_Call) -> `CallSetupMOPercedure`. After the initial CM Service Accept, the procedure advances one state per routed feed and emits this token sequence:
+
+| Feed step (state processed) | Response token emitted |
+|------------------------------|------------------------|
+| CC Setup (procedure starts in `INIT`) | CallProceeding — TI from the Setup header is recorded to `session->response` |
+| any feed (`PROCEEDING`, T3101 3 s) | AssignmentCommand — allocate/announce the TCH via `ResponseContext.channel` |
+| any feed (`ASSIGN_TCH`) | — (advances silently) |
+| RR AssignmentComplete (`WAIT_ASSIGN_COMPLETE`) | Alerting |
+| any feed (`ALERTING`) | Connect |
+| any feed (`CONNECT`) | ConnectAcknowledge |
+| CC ConnectAcknowledge (`ACTIVE`) | — terminal: `finalResult.state == Completed` (`"call_active"`) |
 
 ```cpp
 auto& orchestrator = orchestratorFor(session);
 
-// 1. MS sends CMServiceRequest (MO Call)
+// 1. MS sends CMServiceRequest (MO call service type)
 auto cmReq = parseL3(incomingData).value();
 auto result = orchestrator.feed(cmReq, session);
-// Returns SendResponseWithToken + ResponseToken::CMServiceAccept
+// SendResponseWithToken + CMServiceAccept; chain now in the CallSetupMO procedure
 
-// 2. MS sends Setup
+uint8_t buf[512];
+int n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
+sendToMS(session, buf, n);
+
+// 2. MS sends CC Setup
 auto setup = parseL3(setupData).value();
 result = orchestrator.feed(setup, session);
-// Returns SendResponseWithToken + ResponseToken::CallProceeding
-// (TI from the Setup header is recorded into session->response.ti)
+// SendResponseWithToken + CallProceeding (real TI recorded on the session)
+n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
+sendToMS(session, buf, n);
 
-// 3. MS sends AssignmentComplete (after TCH assignment)
-auto assignComplete = parseL3(assignCompleteData).value();
-result = orchestrator.feed(assignComplete, session);
-// Returns SendResponseWithToken + ResponseToken::Alerting
-
-// 4. MS sends Connect
-auto connect = parseL3(connectData).value();
-result = orchestrator.feed(connect, session);
-// Returns SendResponseWithToken + ResponseToken::Connect
-
-// 5. MS sends ConnectAcknowledge
-auto connAck = parseL3(connAckData).value();
-result = orchestrator.feed(connAck, session);
-// finalResult.state == Completed — call is active, speech path established
+// 3. Subsequent routed feeds drive AssignmentCommand -> Alerting -> Connect
+//    -> ConnectAcknowledge in that order (table above). Build and send each
+//    token exactly like step 2. When the MS's ConnectAcknowledge arrives the
+//    procedure completes with finalResult.state == Completed ("call_active").
 ```
 
 ### Paging Procedure
 
-For network-initiated paging:
+Network-initiated paging is driven through a `PagingProcedure` (created with the paged identity; run standalone via `ProcedureFactory::createPaging()` in the session's `ProcedureRunner`, or inside an orchestrator chain). Feeding the trigger always starts with `PagingRequestType1`; the paged identity from the trigger is recorded into `session->response` so the page builds from real parameters. After each T3109 expiry (5 s) the next attempt uses the next type (Type2, then Type3); a third expiry fails the procedure with `"no_page_response"`, and RR `L3PagingResponse` completes it with `"page_response_received"`.
 
 ```cpp
-auto& orchestrator = orchestratorFor(session);
+ProcedureRunner& runner = session->procedures;  // or your own runner
 
 PagingTrigger trigger;
 trigger.identity = L3MobileIdentity(0x12345678u); // TMSI
 trigger.targetChannel = ChannelType::SDCCHType;
 
-auto result = orchestrator.feedExternalTyped(trigger);
-// Returns SendResponseWithToken + ResponseToken::PagingRequestType2
-// (identity recorded into session->response — the page is built from it)
+auto result = runner.feedExternalTyped(procedure::ProcedureType::Paging, session, trigger);
+// SendResponseWithToken + PagingRequestType1 (identity on session->response)
 
 uint8_t buf[512];
 int n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
-broadcastPaging(buf, n); // Send on PAGCH
+broadcastPaging(buf, n); // transmit on PAGCH; T3109 (5 s) retries escalate to Type2/Type3
 ```
 
 ## External System Integration (feedExternalTyped)
@@ -489,8 +502,12 @@ void onRslMessage(std::span<const uint8_t> rslBytes) {
             result.responseToken, {l3Buf, sizeof(l3Buf)}, session);
         if (l3Len > 0) {
             uint8_t rslBuf[1024];
+            // RSL chan_nr is NOT the ARFCN: encode CBITS (per TS 48.058 for the
+            // allocated logical channel) + timeslot with RSLChannelNumber::encode().
+            auto& ch = session->channel.value();
+            uint8_t rslChanNr = RSLChannelNumber::encode(0, ch.timeslot);
             int rslLen = RSLBuilder::buildDataInd({rslBuf, sizeof(rslBuf)},
-                session->channel.value().arfcn, session->lapdmLink,
+                rslChanNr, session->lapdmLink,
                 {l3Buf, static_cast<size_t>(l3Len)});
             if (rslLen > 0) sendToBsc(rslBuf, rslLen);
         }
@@ -572,7 +589,7 @@ entity.hardRelease();
 
 ## Timer Management
 
-Timers are managed at two levels: LAPDm T200 timer (per link) and L3 protocol timers (managed by ProcedureOrchestrator).
+Timers live at three levels: the LAPDm **T200** timer (per link, `LAPDmEntity::tickT200`), the GSM L3 protocol timers in each session's `TimerManager` (32 fixed slots, O(active) registry tick via `SubscriberRegistry::tickAllTimers`), and the procedure/orchestrator phase timers (`ProcedureRunner::tickAll`, `ProcedureOrchestrator::tickAll`).
 
 ### Event Loop Integration
 
@@ -581,24 +598,42 @@ void eventLoopTick(SubscriberSession* session, std::chrono::milliseconds delta) 
     // Advance LAPDm T200 timer (per-link entity, app-owned)
     bool retransmitted = lapdmEntityFor(session).tickT200(delta);
 
-    // Advance procedure timers (managed by the app-owned orchestrator)
-    size_t failed = orchestratorFor(session).tickAll(delta);
+    // Advance session protocol timers (O(active) via the registry active-timer index;
+    // expiry events carry the owning session and notify TransactionManager)
+    std::array<TimerExpiry, 4096> expired;
+    size_t n = registry.tickAllTimers(delta, {expired.data(), expired.size()});
+
+    // Advance procedure timers (session runner + app-owned orchestrator)
+    size_t failed = registry.tickAllProcedures(delta);
+    failed += orchestratorFor(session).tickAll(delta);
 }
 ```
 
-### Timer Reference Table
+### Timer Reference Table (`L3TimerId`, built-in defaults from `l3TimerDefault()`)
 
 | Timer | Default | Used For |
 |-------|---------|----------|
-| T3101 | 3s | CM service request retransmission |
-| T3102 | 3s | Identity response retransmission |
-| T3103 | 5s | Location updating request retransmission |
-| T3106 | 3s | Authentication response retransmission |
-| T3108 | 3s | TMSI reallocation complete retransmission |
-| T3109 | 30s | Paging response (etom × 5s) |
-| T3111 | 3s | CM reestablishment request |
-| T3112 | 3s | IMSI detach indication |
-| T3113 | 3s | MM status retransmission |
+| T3101 | 3000ms | CM service request / call-setup retransmission |
+| T3102 | 3000ms | Identity response retransmission (orchestrator identity phase) |
+| T3103 | 5000ms | Location updating request retransmission (LU VLR wait) |
+| T3106 | 3000ms | Authentication response retransmission |
+| T3108 | 3000ms | TMSI reallocation complete retransmission |
+| T3109 | 30000ms (5s per page attempt in procedures) | Paging response (etom × 5s) |
+| T3111 | 3000ms | CM reestablishment request retransmission |
+| T3112 | 3000ms | IMSI detach indication retransmission (5s override in the detach procedure) |
+| T3113 | 3000ms | MM status retransmission |
+| T3310 | 5000ms | GPRS attach request retransmission |
+| T3311 | 30000ms (etor × 5s) | Routing area update retransmission |
+| T3312 | 3000ms | P-TMSI reallocation complete retransmission |
+| T3314 | 3000ms | GPRS service request retransmission |
+| T3315 | 3000ms | Authentication and ciphering response retransmission |
+| T3320 | 3000ms | Activate PDP context request retransmission |
+| T3321 | 3000ms | Deactivate PDP context request retransmission |
+| T3322 | 3000ms | Modify PDP context request retransmission |
+| T3334 | 3000ms | GMM status retransmission |
+| T3395 | 3000ms | Packet reservation request retransmission |
+
+Per-timer expiry handling is driven by the registry's `TimerExpiry` events (`tickAllTimers`), and transactions are notified through `TransactionManager::onTimerExpired`.
 
 ## System Information Broadcast
 
@@ -651,7 +686,7 @@ if (result.action == ProcedureStepResult::Action::Failed) {
 
 ## Performance Considerations
 
-- **Zero heap allocation on parse path**: `ParsedMessage` is a stack-allocated variant (416 bytes, static_assert < 8 KB)
+- **Zero heap allocation on parse path**: `ParsedMessage` is a stack-allocated variant (488 bytes on x64, bounded < 8192 via `static_assert`)
 - **MSContext 92 bytes**: Fits in L1 cache; millions of contexts fit in L3 cache
 - **ProcedureStepResult ≤ 32 bytes**: Compact result with `ResponseToken` (uint8_t), no heap allocation
 - **ResponseContext ≤ 160 bytes**: Fixed arrays, zero heap; single source of response parameters on the session
