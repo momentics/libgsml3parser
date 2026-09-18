@@ -18,7 +18,7 @@ The following capabilities are part of libgsml3parser and maintained by this pro
 | **Response Building** | `ResponseBuilder` static factories (vector + zero-alloc span overloads), `ResponseToken` → `buildResponseFromToken(token, buf, session)`, per-session `ResponseContext` | TS 24.008 / GSM 04.08 message formats |
 | **Typed External Data** | `ExternalData` variant (`AuthChallenge`, `VLRDecision`, `PagingTrigger`, `CipheringParameters`, `HandoverTarget`) via `feedExternalTyped()` | Type-safe AuC/VLR/BSC integration API |
 | **Channel Pool** | `ChannelPool`, `ShardedChannelPool<N>` (logical channel allocation/release, RA decoding, VEA) | GSM 04.08 9.1 / 05.08 |
-| **A-bis RSL Parsing / Building** | `RSLParser` (zero-copy IE/L3 extraction; RLL/DCHAN/CCHAN discriminators), `RSLBuilder` (13 BTS→BSC frame builders with span overloads) | TS 48.058 |
+| **A-bis RSL Parsing / Building** | `RSLParser` (zero-copy IE/L3 extraction; RLL, CCHAN, DCHAN, TRX and IPAccess discriminators), `RSLBuilder` (13 frame builders with span overloads: 11 BTS→BSC plus DATA_REQ/UNIT_DATA_REQ for BSC→BTS loopback) | TS 48.058 |
 | **Bit-Level I/O & Streaming** | `BitReader`/`BitWriter`; `ByteSource` (Span/File/RingBuffer), `L3Framer`, `L3StreamProcessor`, zero-copy `InlineFramer`/`ZeroCopyStreamProcessor` | Bit-exact GSM encoding |
 | **Protocol Dispatcher** | `ProtocolDispatcher` + `FlatHandler` (16×136 O(1) handler table, domain/fallback/TI handlers) | Callback routing |
 | **C ABI** | Stable C89 header `gsml3parser_c.h` over the full stack (parse/serialize, typed accessors/builders, RSL, LAPDm, registry/orchestrator) for FFI | — |
@@ -65,7 +65,7 @@ TX: `ResponseBuilder` writes complete L3 bytes into a caller buffer; the app fra
 
 **Reason:** OML is BSC-specific and varies by deployment; a single library cannot cover it all.
 
-**Integration point:** The BTS application handles OML independently. The RSL support covers the RLL, DCHAN and CCHAN discriminators (parse + 13 frame builders) — OML PDUs are out of scope for `RSLParser`/`RSLBuilder`.
+**Integration point:** The BTS application handles OML independently. The RSL support covers the RLL, CCHAN, DCHAN, TRX and IPAccess discriminators (parse + 13 frame builders) — OML PDUs are out of scope for `RSLParser`/`RSLBuilder`.
 
 ### SIP / Media Gateway Integration
 
@@ -134,7 +134,7 @@ std::string line = std::format("chain {} action={} token={} final={}",
 | Signal procedures (FSM) | Yes | `ProcedureOrchestrator` / `ProcedureRunner` |
 | Subscriber state | Yes | `SubscriberSession` (+ sharded) registry |
 | Response building | Yes | `ResponseBuilder` + caller buffers (Arena optional) |
-| A-bis RSL | Yes | `RSLParser` / `RSLBuilder` (RLL, DCHAN, CCHAN) |
+| A-bis RSL | Yes | `RSLParser` / `RSLBuilder` (RLL, CCHAN, DCHAN, TRX, IPAccess) |
 | PHY / SDR | No | App callbacks at the LAPDm frame boundary (`L1TransmitFn`/`L3ReceiveFn`) |
 | Speech codecs | No | After `"call_active"`, app owns TCH media path |
 | Ciphering (A5) | No | After `CipheringModeComplete`, app enables A5 with the same selector |

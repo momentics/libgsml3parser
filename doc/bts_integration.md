@@ -58,6 +58,7 @@ libgsml3parser sits between the BTS application logic and the physical/radio lay
 
 ```cpp
 #include <gsml3parser/gsml3parser.hpp>
+#include <gsml3parser/stack/procedure_orchestrator.h> // not part of the umbrella header
 
 using namespace gsml3parser;
 
@@ -243,8 +244,10 @@ void eventLoop() {
         // 2. Tick all session orchestrators and LAPDm timers.
         //    (LAPDm entities are per-link and app-owned; the orchestrator is
         //     app-owned per session — see Step 2.)
-        registry.forEach([delta](SubscriberSession* sess) {
-            auto& orch = orchestratorFor(sess);
+        std::vector<uint32_t> removedSessions;
+        for (auto& [tmsi, orch] : orchestrators) {
+            SubscriberSession* sess = registry.findByTMSI(tmsi);
+            if (!sess) { removedSessions.push_back(tmsi); continue; }
             size_t failed = orch.tickAll(delta);
             if (failed > 0) {
                 logWarning("{} procedures timed out for session", failed);
@@ -259,7 +262,8 @@ void eventLoop() {
                 int n = ResponseBuilder::buildResponseFromToken(rt, {buf, sizeof(buf)}, sess);
                 if (n > 0) sendToMS(sess, buf, n);
             }
-        });
+        }
+        for (uint32_t tmsi : removedSessions) orchestrators.erase(tmsi);
         for (auto& link : activeLapdmLinks) {
             link.entity.tickT200(delta);
         }
@@ -389,21 +393,24 @@ sendToMS(session, buf, n);
 
 ### Paging Procedure
 
-Network-initiated paging is driven through a `PagingProcedure` (created with the paged identity; run standalone via `ProcedureFactory::createPaging()` in the session's `ProcedureRunner`, or inside an orchestrator chain). Feeding the trigger always starts with `PagingRequestType1`; the paged identity from the trigger is recorded into `session->response` so the page builds from real parameters. After each T3109 expiry (5 s) the next attempt uses the next type (Type2, then Type3); a third expiry fails the procedure with `"no_page_response"`, and RR `L3PagingResponse` completes it with `"page_response_received"`.
+Network-initiated paging is driven through an app-owned `PagingProcedure` created with the paged identity (construct it directly or via `ProcedureFactory::createPaging(identity)`). It runs standalone — `feed()`/`feedExternalTyped()`/`tick()` are called on it directly. It cannot be inserted into a `ProcedureRunner` (the runner auto-creates procedures only from incoming messages), and no `ProcedureOrchestrator` chain enters the Paging phase.
+
+Feeding the trigger starts with `PagingRequestType1` and records the paged identity into `session->response` so the page builds from real parameters. In the event loop, `proc.tick(delta)` runs T3109 (5 s per attempt): each expiry moves the procedure to the next send state, where the next `proc.feed(rrMsg)` re-emits the token for Type2, then Type3; an expiry in the third wait state fails the procedure with `"no_page_response"`, and a RR `L3PagingResponse` during any wait state completes it with `"page_response_received"`.
 
 ```cpp
-ProcedureRunner& runner = session->procedures;  // or your own runner
+// App-owned standalone procedure (one per active page, or keep one per paged MS).
+PagingProcedure proc(L3MobileIdentity(0x12345678u)); // TMSI identity
 
 PagingTrigger trigger;
 trigger.identity = L3MobileIdentity(0x12345678u); // TMSI
 trigger.targetChannel = ChannelType::SDCCHType;
 
-auto result = runner.feedExternalTyped(procedure::ProcedureType::Paging, session, trigger);
+auto result = proc.feedExternalTyped(trigger, session);
 // SendResponseWithToken + PagingRequestType1 (identity on session->response)
 
 uint8_t buf[512];
 int n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
-broadcastPaging(buf, n); // transmit on PAGCH; T3109 (5 s) retries escalate to Type2/Type3
+broadcastPaging(buf, n); // transmit on PAGCH
 ```
 
 ## External System Integration (feedExternalTyped)
@@ -488,8 +495,8 @@ void onRslMessage(std::span<const uint8_t> rslBytes) {
     auto msg = parseL3(*l3Payload);
     if (!msg) return;
 
-    uint8_t chanNr = parsed->chanNr;
-    uint8_t linkId = parsed->linkId;
+    uint8_t chanNr = parsed.value().chanNr;
+    uint8_t linkId = parsed.value().linkId;
     auto* session = registry.findByLink(/*trx from chanNr*/, /*ts from chanNr*/, linkId);
     if (!session) return;
 
@@ -676,7 +683,7 @@ if (!msg) {
 For orchestrator results:
 
 ```cpp
-auto result = orchestratorFor(session).feed(msg, session);
+auto result = orchestratorFor(session).feed(*msg, session); // msg is Expected<ParsedMessage>
 if (result.action == ProcedureStepResult::Action::Failed) {
     logWarning("Procedure {} failed: {}",
         procedureTypeName(result.finalResult.type),
@@ -686,7 +693,7 @@ if (result.action == ProcedureStepResult::Action::Failed) {
 
 ## Performance Considerations
 
-- **Zero heap allocation on parse path**: `ParsedMessage` is a stack-allocated variant (488 bytes on x64, bounded < 8192 via `static_assert`)
+- **Zero heap allocation on parse path**: `ParsedMessage` is a stack-allocated variant (416 bytes on x64, bounded < 8192 via `static_assert`)
 - **MSContext 92 bytes**: Fits in L1 cache; millions of contexts fit in L3 cache
 - **ProcedureStepResult ≤ 32 bytes**: Compact result with `ResponseToken` (uint8_t), no heap allocation
 - **ResponseContext ≤ 160 bytes**: Fixed arrays, zero heap; single source of response parameters on the session

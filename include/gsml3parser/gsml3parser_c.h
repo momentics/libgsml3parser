@@ -689,7 +689,7 @@ GSML3_C_API size_t gsml3_response_build_setup(uint8_t* out, size_t maxlen,
 
 /* ── Typed access: curated message fields / builders ─────────────────── */
 /*
- * The general layer (gsml3_parse_l3* / gsml3_message_*) covers all 240
+ * The general layer (gsml3_parse_l3* / gsml3_message_*) covers all 236
  * message types; this section adds typed field access and builders for
  * the ~44 key messages used by BTS procedure chains, the examples and
  * the quickstart. Getters return sentinel values (-1 / 0 / NULL) when

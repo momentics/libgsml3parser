@@ -61,7 +61,8 @@ For software BTS developers who need a complete Layer 3 signaling stack. This mo
 | `ResponseBuilder`, `ResponseToken` (in `procedure.h`) | `stack/response_builder.h` | Zero-allocation response generation from tokens + session context |
 | `TypedExternalData` (`AuthChallenge`, `VLRDecision`, etc.) | `stack/typed_external_data.h` | Type-safe external data integration |
 | `ProcedureStateMixin<Derived, State>` | `stack/procedure_state_mixin.h` | CRTP mixin eliminating procedure code duplication |
-| `ChannelPool` / `ShardedChannelPool` | `stack/channel_pool.h` | Logical channel allocation/release |
+| `ChannelPool` | `stack/channel_pool.h` | Logical channel allocation/release, RA decoding, VEA |
+| `ShardedChannelPool<N>` (N = 16 default) | `stack/sharded_channel_pool.h` | Thread-safe channel pool: per-shard `shared_mutex`, round-robin allocate |
 | `TimerManager` / `TransactionManager` | `stack/l3_timer.h` / `stack/transaction.h` | Protocol timers and request-response correlation |
 | `LAPDmEntity` | `lapdm_entity.h` | Full LAPDm state machine (GSM 04.06) |
 
@@ -423,7 +424,7 @@ Measured sizes (MSVC, x64; identical across Debug/Release):
 | `CCStateMachine` | 16 bytes | Virtual table pointer + state int |
 | `ProcedureRunner` | 152 bytes | 8 × ProcedureSlot (unique_ptr + flag) + owner/observer words |
 | `ResponseContext` | 128 bytes | Response parameters, fixed arrays (budget ≤ 160 via `static_assert`) |
-| **Total per MS** | **2,056 bytes** (`sizeof(SubscriberSession)`) | Enforced `< 4096` via `static_assert`; plus a transient `ParsedMessage` (488 bytes on x64) on the stack while a message is being processed. The app-owned `ProcedureOrchestrator` adds 72 bytes per subscriber |
+| **Total per MS** | **2,056 bytes** (`sizeof(SubscriberSession)`) | Enforced `< 4096` via `static_assert`; plus a transient `ParsedMessage` (416 bytes on x64) on the stack while a message is being processed. The app-owned `ProcedureOrchestrator` adds 72 bytes per subscriber |
 
 At 10,000 concurrent MS sessions: ~20 MB for sessions (fits comfortably in DRAM; hot per-session data stays cache-resident under normal load).
 
@@ -575,13 +576,13 @@ public:
 
 ### Memory Budget Planning
 
-Per-MS stack footprint is ~2 KB (`sizeof(SubscriberSession)` = 2056 bytes, static_assert < 4096); `sizeof(ParsedMessage)` = 488 bytes on x64. The TMSI and LAPDm-link flat indexes add a small per-entry cost inside shared 64-entry slabs (`stack/flat_map.h`; one slab allocation per 64 sessions, entry addresses stable for the entry's lifetime) — negligible against the 2 KB session footprint.
+Per-MS stack footprint is ~2 KB (`sizeof(SubscriberSession)` = 2056 bytes, static_assert < 4096); `sizeof(ParsedMessage)` = 416 bytes on x64. The TMSI and LAPDm-link flat indexes add a small per-entry cost inside shared 64-entry slabs (`stack/flat_map.h`; one slab allocation per 64 sessions, entry addresses stable for the entry's lifetime) — negligible against the 2 KB session footprint.
 
 | Scale | MS Sessions | Stack Module Memory | ParsedMessage (stack, transient) |
 |-------|------------|-------------------|-------------------------------|
-| Small cell | 100 | ~205 KB | ~49 KB peak |
-| Macro cell | 10,000 | ~20 MB | ~4.9 MB peak |
-| Large deployment | 1,000,000 | ~2 GB | ~488 MB peak (transient) |
+| Small cell | 100 | ~205 KB | ~42 KB peak |
+| Macro cell | 10,000 | ~20 MB | ~4.2 MB peak |
+| Large deployment | 1,000,000 | ~2 GB | ~416 MB peak (transient) |
 
 For large deployments, ParsedMessage is only on-stack during message processing (microseconds), so peak concurrent usage is much lower than the theoretical maximum.
 

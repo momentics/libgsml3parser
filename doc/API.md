@@ -352,16 +352,21 @@ Immutable, thread-safe parser configuration. No mutex, no atomic operations. Pur
 ```cpp
 struct ParserConfig {
     LogLevel logLevel{LogLevel::WARNING};
+    bool requireFullConsumption{false};
 
-    [[nodiscard]] constexpr LogLevel getLogLevel() const;
-    [[nodiscard]] ParserConfig withLogLevel(LogLevel lvl) const;
+    [[nodiscard]] LogLevel getLogLevel() const noexcept;
+    [[nodiscard]] ParserConfig withLogLevel(LogLevel lvl) const noexcept;
+    [[nodiscard]] ParserConfig withStrictFraming(bool v) const noexcept;
 };
 ```
 
-| Method | Description |
+| Member / method | Description |
 |--------|-------------|
+| `logLevel` | Log level (default `WARNING`) |
+| `requireFullConsumption` | When true, `parseL3()` returns `LengthMismatch` if the message does not consume the entire input; default is lenient (trailing bytes ignored) |
 | `getLogLevel()` | Current log level |
 | `withLogLevel(lvl)` | Return new config with changed log level |
+| `withStrictFraming(v)` | Return new config with strict framing on/off |
 
 The struct is reserved for future parser options (log level and similar). It intentionally carries no per-PD handler table: all 12 protocol domains are parsed by the built-in domain parsers in `parseL3()`.
 
@@ -448,7 +453,7 @@ The top-level variant that wraps all domains:
 using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM, EXTENDED, TESTPROC>;
 ```
 
-Stored on the stack - no heap allocation. `sizeof(ParsedMessage) = 488` bytes on 64-bit (bounded `< 8192` via `static_assert`). The variant spans 12 protocol domains.
+Stored on the stack - no heap allocation. `sizeof(ParsedMessage) = 416` bytes on 64-bit (bounded `< 8192` via `static_assert`). The variant spans 12 protocol domains.
 
 **Usage:**
 
@@ -1256,7 +1261,7 @@ Unused ──open()──> LinkReleased
 | `sizeof(LAPDmEntity)` | < 512 bytes (enforced by `static_assert`) |
 | Heap allocations | Zero on `receiveFrame()` hot path |
 | Callbacks | Raw function pointer + void* ctx — zero heap per instance |
-| Dynamic buffers | `mPendingFrame`, `mReassemblyBuffer`, `mTxQueue` (TX segment queue) lazy-allocated |
+| Dynamic buffers | `mPendingFrame`, `mTxBuf` (TX encode buffer, reused after first send), `mReassemblyBuffer` (bounded at 4 KB), `mTxQueue` (TX segment queue) — all lazy-allocated |
 | Thread safety | NOT thread-safe; one instance per SAPI per logical channel |
 
 **Usage:**
@@ -2363,7 +2368,7 @@ if (ussd) {
 | `PDPType` | 6 values | IPv4, IPv6, IPsecAH, PPP, Private, Unknown |
 | `QoSType` | 3 values | Requested, Default, Teardown |
 | `QoSElementType` | 18 values | QoSClass, MaxBitRate UL/DL, Delay, DeliveryOrder, SopClass, ResidualErrorRate, PeakThroughput, MeanThroughput, TrafficClass, GuaranteedBitRate, SRB rate, GPRS/External Priority |
-| `SMCause` | 17 codes | SM cause values (ReqAccepted, Unsupported_PDP_Address_Type, PDP_Auth_Failed, IE_Invalid, etc.) |
+| `SMCause` | 18 values | SM cause values (ReqAccepted, Unsupported_PDP_Address_Type, Service_Opcode_NotSupported, Multicast_Context_Ack/Reject/Deactivate, Invalid_Flow_Desc, Multicast_PDP_No_Bearer, PDP_Auth_Failed_Primary/Secondary_PDN, plus the common protocol-error codes 95–111) |
 
 ### SM Messages - Primary PDP Context
 
@@ -2488,8 +2493,8 @@ The SMS layer uses a three-level encapsulation: L3 header -> CP message -> RP me
 
 | Enum | Values | Description |
 |------|--------|-------------|
-| `TPDCS` | 3 values | Default_Alphabet (7-bit), Default_8bit, UCS2 |
-| `TPPID` | 6 values | Default, GSM, X121, Telex, LandLine, SS7_DestinationAccess |
+| `TPDCS` | 6 values | Default_Alphabet (7-bit), Default_8bit, UCS2, Range_Indicator, RLA_64, RLA_128 |
+| `TPPID` | 23 values | GSM 03.40 protocol identifiers: Default, GSM, X121, Telex, LandLine, SS7_DestinationAccess, TeX_Page, Packet_Switched_64k, TeX_Information, Packet_Switched_1200, SS7_Telephone_User, SS7_Telelex_User, SS7_Direct_Connection, SS7_MAP, SNA, X400_FTAM, Telematic_Application, SCF_Access, H323_Video, Internet_ST_FIP, CAP, SS7_SCCP, X25_Packet_Switched |
 
 ### TP Information Elements
 
@@ -4388,7 +4393,7 @@ private:
 
 Manages compound procedure chains such as Location Update (CMServiceRequest -> Identity -> Authentication -> CipheringMode -> LocationUpdate) and Call Setup MO (CMServiceRequest -> CallSetupMO). The orchestrator owns a single active `Procedure` at any time, transitions between phases based on procedure outcomes, and updates the `SubscriberSession` FSM states to stay in sync.
 
-**Does NOT store `ParsedMessage` (488-byte variant on 64-bit) internally.** Instead stores the last `ResponseToken` and provides `buildPendingResponse()` for zero-allocation response building. `sizeof(ProcedureOrchestrator)` is 72 bytes (app-owned, one instance per subscriber).
+**Does NOT store `ParsedMessage` (416-byte variant on 64-bit) internally.** Instead stores the last `ResponseToken` and provides `buildPendingResponse()` for zero-allocation response building. `sizeof(ProcedureOrchestrator)` is 72 bytes (app-owned, one instance per subscriber).
 
 ### API
 
