@@ -158,8 +158,12 @@ jobs:
           cmake -S . -B build_c_shared \
                 -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=ON \
                 -DBUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release
-          cmake --build build_c_shared --parallel
-          ctest --test-dir build_c_shared --output-on-failure
+           # Cap at -j1: Release -O2 codegen of the large test TUs plus a
+           # concurrent linker exceeds the hosted runner's memory limit when
+           # run fully parallel (gmake SIGTERM, exit 143). Same cap as the
+           # release job's test build below.
+           cmake --build build_c_shared --parallel 1
+           ctest --test-dir build_c_shared --output-on-failure
 
   # ── CI: Linux/Clang ThreadSanitizer (sharded-registry concurrency) ──
 
