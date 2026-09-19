@@ -1060,10 +1060,12 @@ TEST(CApiResponse, Builders_ParseBack) {
         [](uint8_t* b, size_t m) { return gsml3_response_build_channel_release(b, m, 0); },
         [](uint8_t* b, size_t m) { return gsml3_response_build_ciphering_mode_command(b, m, 1); },
         [](uint8_t* b, size_t m) { return gsml3_response_build_physical_information(b, m, 7); },
+        // The ARFCN of the RR channel description is a 10-bit on-wire field;
+        // out-of-width values are rejected by the boundary (see CApi.InputValidation).
         [](uint8_t* b, size_t m) {
-            return gsml3_response_build_immediate_assignment(b, m, 1 /* SDCCH */, 0, 0, 5120, 0); },
+            return gsml3_response_build_immediate_assignment(b, m, 1 /* SDCCH */, 0, 0, 100, 0); },
         [](uint8_t* b, size_t m) {
-            return gsml3_response_build_assignment_command(b, m, 2 /* TCHF */, 0, 0, 5120); },
+            return gsml3_response_build_assignment_command(b, m, 2 /* TCHF */, 0, 0, 250); },
         [](uint8_t* b, size_t m) { return gsml3_response_build_call_proceeding(b, m, 3); },
         [](uint8_t* b, size_t m) { return gsml3_response_build_alerting(b, m, 3); },
         [](uint8_t* b, size_t m) { return gsml3_response_build_connect(b, m, 3); },
@@ -1482,13 +1484,107 @@ TEST(CApi, InputValidation) {
     expectInvalid(gsml3_build_immediate_assignment(buf, sizeof(buf), 99, 0, 0, 5120, 0, 0));
     expectInvalid(gsml3_response_build_assignment_command(buf, sizeof(buf), -1, 0, 0, 5120));
     expectInvalid(gsml3_build_cm_service_request(buf, sizeof(buf), 500, GSML3_ID_TMSI,
-                                                 0x11, nullptr));
+                                                  0x11, nullptr));
     expectInvalid(gsml3_build_identity_request(buf, sizeof(buf), GSML3_ID_NO_ID));
     expectInvalid(gsml3_response_build_identity_request(buf, sizeof(buf), 9));
+
+    // Fixed-width channel-description fields: values beyond the on-wire
+    // field width (3/3/10 bits) would be silently truncated by the encoders;
+    // the C boundary rejects them instead. Boundary values still build.
+    expectInvalid(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 8, 0, 50, 0, 0));
+    expectInvalid(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 0, 8, 50, 0, 0));
+    expectInvalid(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 0, 0, 1024, 0, 0));
+    EXPECT_GT(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 7, 7, 1023, 63, 0), 0u);
+    expectInvalid(gsml3_response_build_assignment_command(buf, sizeof(buf), 2, 9, 0, 50));
+    expectInvalid(gsml3_response_build_immediate_assignment(buf, sizeof(buf), 2, 0, 0, 2048, 1));
+    EXPECT_GT(gsml3_build_physical_information(buf, sizeof(buf), 63), 0u);
+    expectInvalid(gsml3_build_physical_information(buf, sizeof(buf), 64));
+    expectInvalid(gsml3_response_build_physical_information(buf, sizeof(buf), 64));
+
+    // Request-reference timing fields (5/5/6 bits on the wire).
+    expectInvalid(gsml3_rsl_build_chan_rqd(buf, sizeof(buf), 0x7C, 5, 32, 0, 0, 1));
+    expectInvalid(gsml3_rsl_build_chan_rqd(buf, sizeof(buf), 0x7C, 5, 0, 32, 0, 1));
+    expectInvalid(gsml3_rsl_build_chan_rqd(buf, sizeof(buf), 0x7C, 5, 0, 0, 64, 1));
+    EXPECT_GT(gsml3_rsl_build_chan_rqd(buf, sizeof(buf), 0x7C, 5, 31, 31, 63, 1), 0u);
+
+    // The reserved all-zero TMSI is rejected by every builder that would
+    // carry one (the registry applies the same rule to session keys).
+    EXPECT_GT(gsml3_build_paging_request_type1(buf, sizeof(buf), 1), 0u);
+    expectInvalid(gsml3_build_paging_request_type1(buf, sizeof(buf), 0));
+    expectInvalid(gsml3_build_paging_request_type2(buf, sizeof(buf), 1, 0));
+    expectInvalid(gsml3_build_paging_request_type3(buf, sizeof(buf), 0, 1, 2, 3));
+    expectInvalid(gsml3_build_paging_response(buf, sizeof(buf), GSML3_ID_TMSI, 0, nullptr));
+    EXPECT_GT(gsml3_build_tmsi_reallocation_command(buf, sizeof(buf), 244, 5, 0x1234, 0x7), 0u);
+    expectInvalid(gsml3_build_tmsi_reallocation_command(buf, sizeof(buf), 244, 5, 0x1234, 0));
+    expectInvalid(gsml3_response_build_tmsi_reallocation_command(buf, sizeof(buf), "244",
+                                                                 "05", 0x12, 0));
+    expectInvalid(gsml3_build_location_updating_accept(buf, sizeof(buf), 244, 5, 0x1234, 1, 0));
+    EXPECT_GT(gsml3_response_build_location_updating_accept(buf, sizeof(buf), "244", "05", 0x12,
+                                                            1, 0xABCD), 0u);
+    expectInvalid(gsml3_response_build_location_updating_accept(buf, sizeof(buf), "244", "05",
+                                                                0x12, 1, 0));
 
     // The error is cleared by the next successful call.
     EXPECT_GT(gsml3_response_build_cm_service_accept(buf, sizeof(buf)), 0u);
     EXPECT_EQ(gsml3_last_error_code(), GSML3_OK);
+}
+
+// Test: body-copy getters use the dedicated buffer-too-small error class, so
+// a C caller can retry with a larger buffer without parsing message text.
+TEST(CApi, BodyGetterBufferTooSmallClass) {
+    const uint8_t data[4] = {0xA0, 0x81, 0x05, 0x20};
+    uint8_t frame[32];
+    size_t n = gsml3_build_sup_serv_facility(frame, sizeof(frame), 3, data, sizeof(data));
+    ASSERT_GT(n, 0u);
+    gsml3_message* m = gsml3_parse_l3(frame, n, nullptr);
+    ASSERT_NE(m, nullptr);
+
+    uint8_t tiny[2] = {};
+    EXPECT_EQ(gsml3_msg_sup_serv_facility_data(m, tiny, sizeof(tiny)), 0u);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_BUFFER_TOO_SMALL);
+
+    uint8_t ok[16] = {};
+    EXPECT_EQ(gsml3_msg_sup_serv_facility_data(m, ok, sizeof(ok)), sizeof(data));
+    EXPECT_EQ(0, std::memcmp(ok, data, sizeof(data)));
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_OK);
+    gsml3_message_free(m);
+}
+
+// Test: a successful operation clears any pending failure, while the
+// release functions and the state observers preserve it for inspection.
+TEST(CApi, StaleErrorClearedBySuccess) {
+    uint8_t buf[256];
+
+    EXPECT_EQ(gsml3_build_channel_release(buf, sizeof(buf), 999), 0u);
+    ASSERT_EQ(gsml3_last_error_code(), GSML3_ERR_INVALID_ARG);
+
+    gsml3_lapdm_entity* e = gsml3_lapdm_entity_new(0, nullptr, nullptr, nullptr);
+    ASSERT_NE(e, nullptr);
+    gsml3_lapdm_entity_open(e, GSML3_SAPI0, 1);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_OK);
+
+    gsml3_config* c = gsml3_config_new();
+    ASSERT_NE(c, nullptr);
+    gsml3_config_set_log_level(c, GSML3_LOG_DEBUG);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_OK);
+    gsml3_config_free(c);
+
+    // Release functions never touch the error state: the failure set above
+    // stays readable across them.
+    EXPECT_EQ(gsml3_build_channel_release(buf, sizeof(buf), 999), 0u);
+    ASSERT_EQ(gsml3_last_error_code(), GSML3_ERR_INVALID_ARG);
+    gsml3_message_free(nullptr);
+    gsml3_lapdm_entity_free(e);
+    gsml3_free(nullptr);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_INVALID_ARG);
+
+    // Getters on a fresh handle clear the state again.
+    gsml3_message* m = gsml3_parse_l3_hex("60 0D 00", nullptr);
+    ASSERT_NE(m, nullptr);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_OK);
+    (void)gsml3_message_pd(m);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_OK);
+    gsml3_message_free(m);
 }
 
 // Test: timer IDs and the reserved TMSI are validated at the boundary.
@@ -1518,13 +1614,34 @@ TEST(CApiRegistry, TimerAndTmsiValidation) {
     EXPECT_EQ(gsml3_last_error_code(), GSML3_OK);
     gsml3_session_timer_stop(s, GSML3_TIMER_T3101);
 
-    // IMSI input is validated for create and set; a duplicate IMSI key is
-    // reported (the registry never returns the existing session).
+    // IMSI input is validated for create and set; a duplicate key reports
+    // its own error class (the registry never returns the existing session).
     EXPECT_EQ(gsml3_registry_create_by_imsi(r, "244a5"), nullptr);
     EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_INVALID_ARG);
     EXPECT_EQ(gsml3_registry_create_by_imsi(r, "244051234567890"), nullptr);
-    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_INVALID_VALUE);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_DUPLICATE);
+    EXPECT_EQ(gsml3_registry_create_by_tmsi(r, gsml3_session_assigned_tmsi(s)), nullptr);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_DUPLICATE);
     gsml3_session_set_imsi(s, "not-digits");
+    gsml3_registry_free(r);
+}
+
+// Test: a sharded registry reports its unsupported operations with the
+// dedicated error class while the supported ones keep working.
+TEST(CApiRegistry, ShardedUnsupportedOps) {
+    gsml3_registry* r = gsml3_registry_new(4);
+    ASSERT_NE(r, nullptr);
+
+    EXPECT_EQ(gsml3_registry_create_by_imsi(r, "244051234567890"), nullptr);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_UNSUPPORTED);
+
+    gsml3_registry_clear(r);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_UNSUPPORTED);
+
+    gsml3_session* s = gsml3_registry_create_by_tmsi(r, 0x42);
+    ASSERT_NE(s, nullptr);
+    EXPECT_EQ(gsml3_registry_remove(r, s), 1);
+
     gsml3_registry_free(r);
 }
 
@@ -1602,6 +1719,116 @@ TEST(CApiOrchestrator, FeedFailureReported) {
     EXPECT_EQ(badPaging.error, GSML3_ERR_INVALID_ARG);
 
     gsml3_message_free(m);
+    gsml3_orchestrator_free(o);
+    gsml3_registry_free(r);
+}
+
+// Test: channel assignment and release range-check the channel type and
+// refuse to touch a session that belongs to another registry (or none), so
+// one registry's link index can never reference a session it does not own.
+TEST(CApiRegistry, ChannelOps_ValidationAndOwnership) {
+    gsml3_registry* ra = gsml3_registry_new(0);
+    gsml3_registry* rb = gsml3_registry_new(4);  // sharded on purpose
+    ASSERT_NE(ra, nullptr);
+    ASSERT_NE(rb, nullptr);
+    gsml3_session* sA = gsml3_registry_create_by_tmsi(ra, 0x12345678);
+    ASSERT_NE(sA, nullptr);
+
+    // Out-of-domain channel type: rejected before anything is stored.
+    gsml3_registry_assign_channel(ra, sA, 99, 3, 2, 5120, 0);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_INVALID_ARG);
+    EXPECT_EQ(gsml3_registry_find_by_link(ra, 3, 2, 0), nullptr);
+
+    // A valid assignment through the owning registry.
+    gsml3_registry_assign_channel(ra, sA, 1 /*SACCH*/, 3, 2, 5120, 0);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_OK);
+    EXPECT_EQ(gsml3_registry_find_by_link(ra, 3, 2, 0), sA);
+
+    // The same session through a foreign registry is refused: the session's
+    // channel state and both registries' link indexes are left untouched.
+    gsml3_registry_release_channel(rb, sA);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_INVALID_ARG);
+    EXPECT_EQ(gsml3_registry_find_by_link(ra, 3, 2, 0), sA);
+    gsml3_registry_assign_channel(rb, sA, 1, 7, 6, 5130, 1);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_INVALID_ARG);
+    EXPECT_EQ(gsml3_registry_find_by_link(ra, 7, 6, 1), nullptr);
+
+    // Release through the owning registry still works.
+    gsml3_registry_release_channel(ra, sA);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_OK);
+    EXPECT_EQ(gsml3_registry_find_by_link(ra, 3, 2, 0), nullptr);
+
+    gsml3_registry_free(ra);
+    gsml3_registry_free(rb);
+}
+
+// Test: the response builders disambiguate a too-small buffer (dedicated
+// error class, retry with a larger one) from missing parameters; the exact
+// wire size is queryable before allocating.
+TEST(CApiResponse, BuildErrorClassesAndRequiredSize) {
+    gsml3_registry* r = gsml3_registry_new(0);
+    gsml3_orchestrator* o = gsml3_orchestrator_new();
+    ASSERT_NE(r, nullptr);
+    ASSERT_NE(o, nullptr);
+    gsml3_session* s = gsml3_registry_create_by_tmsi(r, 0x12345678);
+    ASSERT_NE(s, nullptr);
+
+    // A pending response with no missing parameters: a CC Disconnect is the
+    // terminal step of the Call Release chain and leaves the RELEASE token
+    // to be built from the session's ResponseContext.
+    gsml3_message* disc = makeCcDisconnect(5);
+    ASSERT_NE(disc, nullptr);
+    const gsml3_step_result step = gsml3_orchestrator_feed(o, disc, s);
+    EXPECT_EQ(step.action, GSML3_ACTION_SEND_RESPONSE);
+    EXPECT_EQ(step.response_token, GSML3_TOKEN_RELEASE);
+
+    uint8_t buf[64];
+    const size_t want = gsml3_orchestrator_required_size(o, s);
+    ASSERT_GT(want, 0u);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_OK);
+    ASSERT_LT(want, sizeof(buf));
+
+    // One byte short of the required size: dedicated error class.
+    std::vector<uint8_t> tiny(want - 1);
+    EXPECT_EQ(gsml3_orchestrator_build_response(o, s, tiny.data(), tiny.size()), 0u);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_BUFFER_TOO_SMALL);
+
+    // Exactly the required size: guaranteed to be accepted.
+    std::vector<uint8_t> exact(want);
+    EXPECT_EQ(gsml3_orchestrator_build_response(o, s, exact.data(), exact.size()), want);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_OK);
+
+    // from_token: the two failure classes are distinguishable. A fresh
+    // session has no RAND in its ResponseContext, so AuthenticationRequest
+    // cannot be built — INVALID_VALUE, not BUFFER_TOO_SMALL.
+    EXPECT_EQ(gsml3_response_required_size(GSML3_TOKEN_AUTHENTICATION_REQUEST, s), 0u);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_INVALID_VALUE);
+
+    const size_t accept = gsml3_response_required_size(GSML3_TOKEN_CM_SERVICE_ACCEPT, s);
+    ASSERT_GT(accept, 0u);
+    std::vector<uint8_t> exactAccept(accept);
+    EXPECT_EQ(gsml3_response_build_from_token(GSML3_TOKEN_CM_SERVICE_ACCEPT, s,
+                                              exactAccept.data(), exactAccept.size()), accept);
+
+    std::vector<uint8_t> tinyAccept(accept - 1);
+    EXPECT_EQ(gsml3_response_build_from_token(GSML3_TOKEN_CM_SERVICE_ACCEPT, s,
+                                              tinyAccept.data(), tinyAccept.size()), 0u);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_BUFFER_TOO_SMALL);
+
+    // Argument and state errors.
+    gsml3_orchestrator* o2 = gsml3_orchestrator_new();
+    ASSERT_NE(o2, nullptr);
+    EXPECT_EQ(gsml3_orchestrator_required_size(o2, s), 0u);  // no pending token
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_INVALID_VALUE);
+    EXPECT_EQ(gsml3_orchestrator_required_size(o, nullptr), 0u);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_INVALID_ARG);
+    EXPECT_EQ(gsml3_response_required_size(GSML3_TOKEN_CM_SERVICE_ACCEPT, nullptr), 0u);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_INVALID_ARG);
+    EXPECT_EQ(gsml3_response_required_size(99 /*out-of-domain*/, s), 0u);
+    EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_INVALID_ARG);
+
+    gsml3_message_free(disc);
+    gsml3_orchestrator_free(o2);
     gsml3_orchestrator_free(o);
     gsml3_registry_free(r);
 }

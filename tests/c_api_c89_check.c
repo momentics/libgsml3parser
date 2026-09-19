@@ -218,6 +218,49 @@ static void check_validation(void)
               "TMSI 0 error class");
         gsml3_registry_free(r);
     }
+
+    /* Fixed-width channel fields: a value beyond its on-wire width would be
+     * truncated into the frame and is rejected before one is produced. */
+    n = gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 8, 0, 50, 0, 0);
+    check(n == 0 && gsml3_last_error_code() == GSML3_ERR_INVALID_ARG,
+          "timeslot 8 rejected");
+    n = gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 0, 0, 5120, 0, 0);
+    check(n == 0 && gsml3_last_error_code() == GSML3_ERR_INVALID_ARG,
+          "ARFCN beyond the wire width rejected");
+    n = gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 7, 7, 1023, 63, 0);
+    check(n > 0 && gsml3_last_error_code() == GSML3_OK,
+          "channel field boundary accepted");
+    n = gsml3_build_physical_information(buf, sizeof(buf), 64);
+    check(n == 0 && gsml3_last_error_code() == GSML3_ERR_INVALID_ARG,
+          "timing advance 64 rejected");
+
+    /* The reserved all-zero TMSI never reaches a built frame either. */
+    n = gsml3_build_paging_request_type1(buf, sizeof(buf), 0);
+    check(n == 0 && gsml3_last_error_code() == GSML3_ERR_INVALID_ARG,
+          "paging with TMSI 0 rejected");
+    n = gsml3_response_build_location_updating_accept(buf, sizeof(buf),
+        "244", "05", 0x12, 1, 0);
+    check(n == 0 && gsml3_last_error_code() == GSML3_ERR_INVALID_ARG,
+          "LUR accept with new TMSI 0 rejected");
+
+    /* Buffer too small on a body getter shares the dedicated error class. */
+    {
+        uint8_t frame[32];
+        unsigned char ud[4] = {0xA0, 0x81, 0x05, 0x20};
+        uint8_t tiny[2];
+        gsml3_message* m;
+
+        n = gsml3_build_sup_serv_facility(frame, sizeof(frame), 3, ud, sizeof(ud));
+        check(n > 0, "sup serv facility build");
+        m = gsml3_parse_l3(frame, n, NULL);
+        check(m != NULL, "sup serv facility parse");
+        if (m) {
+            check(gsml3_msg_sup_serv_facility_data(m, tiny, sizeof(tiny)) == 0 &&
+                  gsml3_last_error_code() == GSML3_ERR_BUFFER_TOO_SMALL,
+                  "body getter buffer-too-small class");
+            gsml3_message_free(m);
+        }
+    }
 }
 
 /* ── A-bis RSL (TS 48.058) ──────────────────────────────────────────── */
@@ -271,6 +314,15 @@ static void check_rsl(void)
 
         gsml3_rsl_free(r);
     }
+
+    /* The request-reference timing fields (5/5/6 bits on the wire) are
+     * range-checked at the boundary. */
+    n = gsml3_rsl_build_chan_rqd(out, sizeof(out), 0x7C, 5, 32, 0, 0, 1);
+    check(n == 0 && gsml3_last_error_code() == GSML3_ERR_INVALID_ARG,
+          "chan rqd T1 timing rejected");
+    n = gsml3_rsl_build_chan_rqd(out, sizeof(out), 0x7C, 5, 0, 0, 64, 1);
+    check(n == 0 && gsml3_last_error_code() == GSML3_ERR_INVALID_ARG,
+          "chan rqd T3 timing rejected");
 
     check(gsml3_rsl_parse(NULL, 4) == NULL, "rsl parse(NULL) fails");
     gsml3_rsl_free(NULL);
@@ -357,6 +409,27 @@ static void check_lapdm(void)
 
     gsml3_lapdm_entity_free(e);
 
+    /* Error state: a successful operation clears a pending failure, while a
+     * release function preserves it for later inspection. */
+    {
+        gsml3_lapdm_entity* e3;
+
+        e3 = gsml3_lapdm_entity_new(0, NULL, NULL, NULL);
+        check(e3 != NULL, "third entity");
+        if (e3) {
+            check(gsml3_lapdm_entity_send_sabme(e3) != GSML3_OK,
+                  "sabme before open fails");
+            gsml3_lapdm_entity_open(e3, GSML3_SAPI0, 1);
+            check(gsml3_last_error_code() == GSML3_OK,
+                  "success clears the stale error");
+            check(gsml3_lapdm_entity_send_disc(e3) != GSML3_OK,
+                  "disc without a link fails");
+            gsml3_lapdm_entity_free(e3);
+            check(gsml3_last_error_code() != GSML3_OK,
+                  "release keeps the pending error readable");
+        }
+    }
+
     /* NULL safety. */
     gsml3_lapdm_entity_free(NULL);
     check(gsml3_lapdm_entity_state(NULL) == GSML3_LAPDM_STATE_UNUSED,
@@ -385,6 +458,12 @@ static void check_registry(void)
     check(gsml3_session_tmsi(s) == 0x1234u, "session tmsi getter");
     check(gsml3_registry_find_by_tmsi(r, 0x1234) == s, "find by TMSI");
     check(gsml3_session_assigned_tmsi(s) == 0x1234u, "assigned tmsi == key");
+
+    /* A duplicate TMSI reports the dedicated error class (distinct from
+     * the reserved-TMSI INVALID_ARG). */
+    check(gsml3_registry_create_by_tmsi(r, 0x1234) == NULL &&
+          gsml3_last_error_code() == GSML3_ERR_DUPLICATE,
+          "duplicate TMSI error class");
 
     /* An IMSI-keyed session: identity stays IMSI, the registry assigns a
      * TMSI that the C API exposes via assigned_tmsi. */
@@ -423,17 +502,60 @@ static void check_registry(void)
     check(gsml3_last_error_code() == GSML3_ERR_INVALID_ARG,
           "timer id error class");
 
-    /* Channel assignment through the registry link index. */
+    /* Channel type is range-checked at the boundary. */
     {
         gsml3_session* byLink;
+        gsml3_session* byLinkBad;
 
+        gsml3_registry_assign_channel(
+            r, s, 99 /*out-of-domain*/, 3, 2, 5120, 0);
+        check(gsml3_last_error_code() == GSML3_ERR_INVALID_ARG,
+              "channel type out of domain rejected");
+        byLinkBad = gsml3_registry_find_by_link(r, 3, 2, 0);
+        check(byLinkBad == NULL, "rejected assign leaves no link entry");
+
+        /* Channel assignment through the registry link index. */
         gsml3_registry_assign_channel(
             r, s, 1 /*SACCH*/, 3 /*trx*/, 2 /*ts*/, 5120 /*arfcn*/,
             0 /*lapdm_link*/);
+        check(gsml3_last_error_code() == GSML3_OK, "valid assign clears the error");
         byLink = gsml3_registry_find_by_link(r, 3 /*trx*/, 2 /*ts*/,
                                              0 /*lapdm link*/);
         check(byLink == s, "find session by channel link");
-        gsml3_registry_release_channel(r, s);
+    }
+
+    /* A session foreign to a registry is never touched by its channel ops. */
+    {
+        gsml3_registry* foreign = gsml3_registry_new(4);
+
+        check(foreign != NULL, "second (sharded) registry new");
+        if (foreign) {
+            gsml3_session* byLink;
+
+            gsml3_registry_release_channel(foreign, s);
+            check(gsml3_last_error_code() == GSML3_ERR_INVALID_ARG,
+                  "release on a foreign session rejected");
+            gsml3_registry_assign_channel(foreign, s, 1, 7, 6, 5130, 1);
+            check(gsml3_last_error_code() == GSML3_ERR_INVALID_ARG,
+                  "assign on a foreign session rejected");
+            byLink = gsml3_registry_find_by_link(r, 7, 6, 1);
+            check(byLink == NULL, "foreign assign left the index untouched");
+        }
+    }
+
+    /* Sharded registries report unsupported ops with the dedicated class. */
+    {
+        gsml3_registry* rs;
+
+        rs = gsml3_registry_new(4);
+        check(rs != NULL, "sharded registry new");
+        check(gsml3_registry_create_by_imsi(rs, "244051234567890") == NULL &&
+              gsml3_last_error_code() == GSML3_ERR_UNSUPPORTED,
+              "create_by_imsi unsupported on sharded");
+        gsml3_registry_clear(rs);
+        check(gsml3_last_error_code() == GSML3_ERR_UNSUPPORTED,
+              "clear unsupported on sharded");
+        gsml3_registry_free(rs);
     }
 
     check(gsml3_registry_remove(r, s) == 1, "remove session");
@@ -500,6 +622,8 @@ static void check_orchestrator(void)
         check(n == 0, "no pending response");
         check(gsml3_orchestrator_take_retransmit(o) == GSML3_TOKEN_NONE,
               "retransmit channel empty");
+        check(gsml3_orchestrator_required_size(o, NULL) == 0,
+              "required size with a NULL session is 0");
     }
 
     gsml3_message_free(m);
