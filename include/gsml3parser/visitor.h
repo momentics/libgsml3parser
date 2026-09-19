@@ -295,6 +295,12 @@ template<typename T>
 
 // ── Message metadata from variant (no RTTI). ───────────────────────────
 
+/// Render a parsed message as human-readable text: the message name on the
+/// first line, followed by the information-element dump produced by the
+/// concrete message class's text() method. No C++ type leaks — safe for
+/// logging and FFI export.
+[[nodiscard]] std::string messageText(const ParsedMessage& msg);
+
 [[nodiscard]] std::string_view messageName(const ParsedMessage& msg);
 [[nodiscard]] L3PD messagePD(const ParsedMessage& msg);
 [[nodiscard]] int messageMTI(const ParsedMessage& msg);

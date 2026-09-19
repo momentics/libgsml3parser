@@ -44,6 +44,7 @@ struct ParseError {
         InvalidValue,
         UnsupportedFeature,
         SourceExhausted,  // the ByteSource is at EOF (atEof() == true) and no frame could be extracted
+        BufferTooSmall,   // an output buffer could not hold the serialized result; enlarge it and retry
     };
 
     // Inline buffer for small-string optimization - no heap allocation.

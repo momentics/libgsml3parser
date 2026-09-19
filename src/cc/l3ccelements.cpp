@@ -154,8 +154,15 @@ static char bcdDecode(int d) {
 }
 
 L3BCDDigits::L3BCDDigits(const char* wDigits) {
-    std::strncpy(mDigits, wDigits, maxDigits);
-    mDigits[maxDigits] = '\0';
+    // Only characters the encoder knows how to turn into nibbles are stored
+    // ('+', '*', '#' and ASCII digits); anything else is dropped instead of
+    // corrupting the BCD octets on write.
+    size_t n = 0;
+    for (const char* p = wDigits; *p && n < maxDigits; ++p) {
+        if ((*p >= '0' && *p <= '9') || *p == '+' || *p == '*' || *p == '#')
+            mDigits[n++] = *p;
+    }
+    mDigits[n] = '\0';
 }
 
 L3BCDDigits::L3BCDDigits(const L3BCDDigits& other) {

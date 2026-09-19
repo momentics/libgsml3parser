@@ -37,9 +37,21 @@
  *  - Errors: functions returning a handle return NULL on error; action
  *    functions return an enum gsml3_error code (GSML3_OK on success);
  *    serializers return the number of bytes written, 0 on error or
- *    buffer-too-small. Details: gsml3_last_error() (thread-local, "" when
- *    none; valid until the next gsml3_* call on the same thread — copy it
- *    if you need it longer).
+ *    buffer-too-small. Details: gsml3_last_error() (thread-local message,
+ *    "" when none) and gsml3_last_error_code() (the gsml3_error code of the
+ *    last failure, GSML3_OK when none). Both are valid until a later call
+ *    clears or replaces them; read them right after a failed call and copy
+ *    the string if you need it longer.
+ *  - Validation: integer parameters that mirror C++ enum values (causes,
+ *    SAPIs, channel types, tokens, timer IDs, ...) and digit strings (IMSI,
+ *    called-party numbers, LAI components) are range-checked against their
+ *    protocol domain. Invalid input fails with GSML3_ERR_INVALID_ARG (or
+ *    NULL / 0 where that is the error form): no frame is ever built or sent
+ *    with out-of-range fields and digit strings are never truncated silently.
+ *  - ABI versioning: GSML3_ABI_VERSION / gsml3_abi_version() identify this
+ *    header's C ABI. Public enums only grow values, public structs only grow
+ *    trailing fields, functions are only added; check the value at startup
+ *    when linking against a prebuilt binary of an older or newer build.
  *  - Strings: const char* results (names, gsml3_last_error) point to
  *    static or thread-local storage — do not free. char* results (hex)
  *    are allocated by the library — free with gsml3_free().
@@ -72,6 +84,10 @@
 extern "C" {
 #endif
 
+/* C ABI revision. Bumped only when the layout or calling contract of a
+ * public enum or struct changes in an incompatible way. */
+#define GSML3_ABI_VERSION 1
+
 /* Export macro: dllexport/dllimport on Windows shared builds, default
  * visibility on ELF shared builds, empty otherwise. */
 #if defined(_WIN32) && defined(GSML3PARSER_SHARED)
@@ -101,15 +117,27 @@ enum gsml3_error {
     GSML3_ERR_INVALID_VALUE = 7,
     GSML3_ERR_UNSUPPORTED = 8,
     GSML3_ERR_SOURCE_EXHAUSTED = 9,
-    GSML3_ERR_NO_MEMORY = 10
+    GSML3_ERR_NO_MEMORY = 10,
+    /* The caller's output buffer was too small; enlarge it and retry. */
+    GSML3_ERR_BUFFER_TOO_SMALL = 11,
+    /* Internal failure (an unexpected condition inside the library). */
+    GSML3_ERR_INTERNAL = 12
 };
 
 /* Library version (e.g. "0.18.0"). Static storage; do not free. */
 GSML3_C_API const char* gsml3_version(void);
 
-/* Thread-local last error message ("" when none). Never NULL. Valid
- * until the next gsml3_* call on this thread; copy if needed longer. */
+/* C ABI revision of this header (== GSML3_ABI_VERSION). */
+GSML3_C_API unsigned gsml3_abi_version(void);
+
+/* Thread-local last error message ("" when none). Never NULL. Valid until
+ * a later call clears or replaces it; copy if needed longer. */
 GSML3_C_API const char* gsml3_last_error(void);
+
+/* Thread-local last error code (GSML3_OK when there is no pending error).
+ * Paired with gsml3_last_error(); lets callers branch on the failure class
+ * programmatically instead of comparing message text. */
+GSML3_C_API int gsml3_last_error_code(void);
 
 /* Release any char* string returned by this API. NULL-safe. */
 GSML3_C_API void gsml3_free(void* ptr);
@@ -194,13 +222,22 @@ GSML3_C_API int gsml3_message_mti(const gsml3_message* msg);
 /* Transaction identifier for CC/SS messages (0..7), 0 otherwise. */
 GSML3_C_API int gsml3_message_ti(const gsml3_message* msg);
 
+/* Exact wire size of the serialized message in bytes (zero allocation).
+ * A buffer of this size is guaranteed to be accepted by
+ * gsml3_message_write(). Returns 0 when msg is NULL. */
+GSML3_C_API size_t gsml3_message_size(const gsml3_message* msg);
 /* Serialize into the caller's buffer. Returns bytes written; 0 on error
- * or buffer too small. */
+ * or buffer too small (see gsml3_last_error_code():
+ * GSML3_ERR_BUFFER_TOO_SMALL means "enlarge and retry"). */
 GSML3_C_API size_t gsml3_message_write(const gsml3_message* msg,
                                        uint8_t* out, size_t maxlen);
 /* Hex serialization (lowercase, no spaces). Allocated by the library;
  * free with gsml3_free(). NULL on error. */
 GSML3_C_API char* gsml3_message_hex(const gsml3_message* msg);
+/* Human-readable dump: message name on the first line followed by the
+ * information-element text of every field (all 236 message types).
+ * Allocated by the library; free with gsml3_free(). NULL when msg is NULL. */
+GSML3_C_API char* gsml3_message_dump(const gsml3_message* msg);
 
 /* ── RSL (A-bis, TS 48.058) ──────────────────────────────────────────── */
 typedef struct gsml3_rsl gsml3_rsl;
@@ -239,7 +276,8 @@ GSML3_C_API int gsml3_rsl_ie_get(const gsml3_rsl* rsl, size_t index,
 
 /* RSL builders (zero-alloc; write into the caller's buffer). Return
  * bytes written, 0 on error or buffer too small. cause: RSLErrorCause
- * value (see include/gsml3parser/abis/rsl_types.h). */
+ * value (see include/gsml3parser/abis/rsl_types.h), range-checked:
+ * out-of-domain values fail with GSML3_ERR_INVALID_ARG. */
 GSML3_C_API size_t gsml3_rsl_build_data_req(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t link_id, const uint8_t* l3, size_t l3_len);
 GSML3_C_API size_t gsml3_rsl_build_data_ind(uint8_t* out, size_t maxlen,
@@ -346,9 +384,12 @@ typedef struct gsml3_lapdm_frame_info {
 GSML3_C_API int gsml3_lapdm_frame_decode(const uint8_t* data, size_t len,
                                          gsml3_lapdm_frame_info* out);
 
-/* Entity callbacks: fn + user, invoked synchronously. The l3/frame
+/* Entity callbacks: fn + user, invoked synchronously from
+ * gsml3_lapdm_entity_receive() / gsml3_lapdm_entity_send_*. The l3/frame
  * spans are valid only DURING the callback: transmit or copy
- * synchronously, never retain them. */
+ * synchronously, never retain them. Do not free the owning entity (or any
+ * gsml3_* handle it may reference) from within its own callbacks; re-enter
+ * gsml3_* calls that only observe unrelated state. */
 typedef void (*gsml3_lapdm_l3_cb)(int sapi, int primitive,
                                   const uint8_t* l3, size_t l3_len, void* user);
 typedef void (*gsml3_lapdm_l1_cb)(const uint8_t* frame, size_t frame_len,
@@ -363,14 +404,17 @@ GSML3_C_API gsml3_lapdm_entity* gsml3_lapdm_entity_new(int profile,
     gsml3_lapdm_l3_cb l3_cb, gsml3_lapdm_l1_cb l1_cb, void* user);
 /* Free the entity. NULL-safe. */
 GSML3_C_API void gsml3_lapdm_entity_free(gsml3_lapdm_entity* e);
-/* Open the entity (transition to LinkReleased). command_bit: 1 = BTS
- * side (C/R=1), 0 = MS side (C/R=0). */
+/* Open the entity (transition to LinkReleased). sapi: 0..15 (gsml3_sapi
+ * names the common ones; values outside 0..15 are rejected — an invalid
+ * value sets the thread-local error and leaves the entity in its previous
+ * state). command_bit: 1 = BTS side (C/R=1), 0 = MS side (C/R=0). */
 GSML3_C_API void gsml3_lapdm_entity_open(gsml3_lapdm_entity* e, int sapi,
                                          int command_bit);
 /* Feed a raw LAPDm frame from L1 into the FSM. */
 GSML3_C_API void gsml3_lapdm_entity_receive(gsml3_lapdm_entity* e,
                                             const uint8_t* frame, size_t len);
-/* Send L3 data via a UI frame (works in any state). GSML3_OK or error. */
+/* Send L3 data via a UI frame (works in any state). sapi must be 0..15.
+ * GSML3_OK or error (GSML3_ERR_INVALID_ARG on out-of-range input). */
 GSML3_C_API int gsml3_lapdm_entity_send_ui(gsml3_lapdm_entity* e, int sapi,
                                            const uint8_t* l3, size_t l3_len);
 /* Send L3 data via I-frames (segmented if needed; requires an
@@ -384,7 +428,8 @@ GSML3_C_API int gsml3_lapdm_entity_send_disc(gsml3_lapdm_entity* e);
 /* Immediate transition to LinkReleased without sending frames. */
 GSML3_C_API void gsml3_lapdm_entity_hard_release(gsml3_lapdm_entity* e);
 /* Advance T200 by elapsed_ms; returns 1 if a retransmission or abnormal
- * release occurred, 0 otherwise. */
+ * release occurred, 0 otherwise, -1 on an internal error (see
+ * gsml3_last_error()). */
 GSML3_C_API int gsml3_lapdm_entity_tick_t200(gsml3_lapdm_entity* e,
                                              uint32_t elapsed_ms);
 /* Current FSM state (GSML3_LAPDM_STATE_*). */
@@ -424,12 +469,17 @@ GSML3_C_API void gsml3_registry_reserve(gsml3_registry* r, size_t expected);
 /* Number of active sessions. */
 GSML3_C_API size_t gsml3_registry_count(const gsml3_registry* r);
 
-/* Create a session; NULL on duplicate key (or allocation failure).
+/* Create a session; NULL on duplicate key, reserved TMSI (0) or
+ * allocation failure (gsml3_last_error() explains which). The all-zero
+ * TMSI is rejected in both registry flavors (TS 24.008 reserves it).
  * create_by_imsi is not supported by sharded registries (NULL +
- * gsml3_last_error explains). */
+ * gsml3_last_error explains); the IMSI must be a non-empty ASCII digit
+ * string of at most 15 digits. */
 GSML3_C_API gsml3_session* gsml3_registry_create_by_tmsi(gsml3_registry* r,
                                                           uint32_t tmsi);
-/* imsi: BCD digit string (e.g. "244051234567890"). */
+/* imsi: BCD digit string of at most 15 ASCII digits (e.g.
+ * "244051234567890"). The session is keyed by an auto-assigned TMSI,
+ * readable via gsml3_session_assigned_tmsi(). */
 GSML3_C_API gsml3_session* gsml3_registry_create_by_imsi(gsml3_registry* r,
                                                           const char* imsi);
 /* Lookups; NULL when not found. */
@@ -437,8 +487,11 @@ GSML3_C_API gsml3_session* gsml3_registry_find_by_tmsi(gsml3_registry* r,
                                                         uint32_t tmsi);
 GSML3_C_API gsml3_session* gsml3_registry_find_by_imsi(gsml3_registry* r,
                                                         const char* imsi);
+/* Look up a session by the channel it was assigned to: the link index is
+ * keyed on (trx number, timeslot, LAPDm link id) — the ARFCN of the
+ * assigned channel is stored with the session but not part of the key. */
 GSML3_C_API gsml3_session* gsml3_registry_find_by_link(gsml3_registry* r,
-    uint8_t trx, uint8_t ts, uint8_t lapdm_link);
+    uint8_t trx_number, uint8_t timeslot, uint8_t lapdm_link);
 /* Remove a session. 1 = removed, 0 = not found / unowned. */
 GSML3_C_API int gsml3_registry_remove(gsml3_registry* r, gsml3_session* s);
 /* Remove all sessions. Not supported by sharded registries (no-op +
@@ -483,8 +536,10 @@ typedef struct gsml3_timer_expiry {
 } gsml3_timer_expiry;
 
 /* Tick all session timers (O(active)). expired_out: caller buffer of
- * `cap` events; returns the number written. Events that do not fit are
- * re-armed (1 ms) and reported on a later tick — never dropped. */
+ * `cap` events; returns the number written. The buffer need not be
+ * pre-zeroed: every written event is fully initialized. Events that do
+ * not fit are re-armed (1 ms) and reported on a later tick — never
+ * dropped. */
 GSML3_C_API size_t gsml3_registry_tick_timers(gsml3_registry* r,
     uint32_t delta_ms, gsml3_timer_expiry* expired_out, size_t cap);
 /* Tick all active procedures (O(active)); returns the number of
@@ -494,8 +549,14 @@ GSML3_C_API size_t gsml3_registry_tick_procedures(gsml3_registry* r,
 
 /* Session access (MSContext subset + timers + transactions). NULL-safe:
  * setters are no-ops, getters return 0. */
-/* TMSI of the session identity (0 when the identity is not a TMSI). */
+/* TMSI of the session identity (0 when the identity is not a TMSI — in
+ * particular for sessions created by IMSI). */
 GSML3_C_API uint32_t gsml3_session_tmsi(gsml3_session* s);
+/* TMSI under which the session is keyed in its owning registry; for
+ * sessions created with gsml3_registry_create_by_imsi this is the
+ * auto-assigned TMSI (use it with gsml3_registry_find_by_tmsi). 0 when
+ * the session does not belong to a registry. */
+GSML3_C_API uint32_t gsml3_session_assigned_tmsi(gsml3_session* s);
 GSML3_C_API void gsml3_session_set_tmsi(gsml3_session* s, uint32_t tmsi);
 /* digits: BCD digit string. */
 GSML3_C_API void gsml3_session_set_imsi(gsml3_session* s, const char* digits);
@@ -506,7 +567,7 @@ GSML3_C_API void gsml3_session_set_authenticated(gsml3_session* s, int v);
 GSML3_C_API int gsml3_session_is_ciphered(gsml3_session* s);
 GSML3_C_API void gsml3_session_set_ciphered(gsml3_session* s, int v);
 /* timer_id: GSML3_TIMER_*. start returns 1 on a fresh start, 0 on a
- * restart or invalid ID. */
+ * restart or an out-of-range ID (which also sets the thread-local error). */
 GSML3_C_API int gsml3_session_timer_start(gsml3_session* s, int timer_id);
 GSML3_C_API void gsml3_session_timer_stop(gsml3_session* s, int timer_id);
 GSML3_C_API int gsml3_session_timer_running(gsml3_session* s, int timer_id);
@@ -577,15 +638,19 @@ enum gsml3_token {
     GSML3_TOKEN_SETUP = 24
 };
 
-/* Result of one orchestrator step. reason: a thread-local copy of the
- * C++ string_view (whose lifetime is not guaranteed beyond the call);
- * valid until the next gsml3_* call on this thread, NULL when empty. */
+/* Result of one orchestrator step. error: GSML3_OK when the step was
+ * executed; GSML3_ERR_INVALID_ARG / GSML3_ERR_INTERNAL otherwise — when
+ * error != GSML3_OK the remaining fields carry no step information.
+ * reason: a thread-local copy of the C++ string_view (whose lifetime is
+ * not guaranteed beyond the call); valid until the next gsml3_* call on
+ * this thread, NULL when empty. */
 typedef struct gsml3_step_result {
     int action;          /* GSML3_ACTION_* */
     int response_token;  /* GSML3_TOKEN_* (GSML3_TOKEN_NONE when none) */
     int final_state;     /* GSML3_STATE_* */
     int final_type;      /* GSML3_PROC_* */
     const char* reason;
+    int error;           /* gsml3_error code; GSML3_OK on a real step */
 } gsml3_step_result;
 
 /* One orchestrator per session chain. Owns the active procedure. */
@@ -634,7 +699,8 @@ GSML3_C_API int gsml3_orchestrator_chain_phase(const gsml3_orchestrator* o);
 /* Standalone response builders (stateless; zero-alloc). Return bytes
  * written, 0 on error or buffer too small. Cause parameters are int
  * values mirroring the corresponding C++ enums (RRCause /
- * MMRejectCause / CCCause — see include/gsml3parser/enums.h). */
+ * MMRejectCause / CCCause — see include/gsml3parser/enums.h),
+ * range-checked: out-of-domain values fail with GSML3_ERR_INVALID_ARG. */
 /* Build the response for `token` from the session's ResponseContext;
  * 0 when a required parameter is missing. */
 GSML3_C_API size_t gsml3_response_build_from_token(int token,
@@ -647,7 +713,9 @@ GSML3_C_API size_t gsml3_response_build_identity_request(uint8_t* out,
     size_t maxlen, int id_type);
 GSML3_C_API size_t gsml3_response_build_authentication_request(uint8_t* out,
     size_t maxlen, const uint8_t rand[16]);
-/* mcc/mnc: digit strings (e.g. "244", "05"). */
+/* mcc: exactly 3 BCD digits ("244", not "24"); mnc: 2 or 3 digits ("05").
+ * Both are validated; out-of-domain values fail with
+ * GSML3_ERR_INVALID_ARG. */
 GSML3_C_API size_t gsml3_response_build_location_updating_accept(
     uint8_t* out, size_t maxlen, const char* mcc, const char* mnc,
     uint16_t lac, int has_new_tmsi, uint32_t new_tmsi);

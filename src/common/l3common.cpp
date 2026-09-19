@@ -116,10 +116,13 @@ L3MobileIdentity::L3MobileIdentity(uint32_t wTMSI)
 L3MobileIdentity::L3MobileIdentity(std::string_view wDigits)
     : mType(MobileIDType::IMSI), mTMSI(0) {
     mDigits.fill('\0');
-    size_t maxLen = mDigits.size() - 1;
-    size_t len = wDigits.size();
-    if (len > maxLen) len = maxLen;
-    for (size_t i = 0; i < len; ++i) mDigits[i] = static_cast<char>(wDigits[i]);
+    // Only BCD digits are encodable on the wire (write() turns each stored
+    // character into a nibble); any other character would corrupt the frame.
+    size_t n = 0;
+    for (char c : wDigits) {
+        if (n >= mDigits.size() - 1) break;
+        if (c >= '0' && c <= '9') mDigits[n++] = c;
+    }
 }
 
 const char* L3MobileIdentity::digits() const {

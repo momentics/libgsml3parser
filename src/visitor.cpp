@@ -621,6 +621,24 @@ struct TIVisitor {
 
 } // anonymous namespace
 
+std::string messageText(const ParsedMessage& msg) {
+    // Two-level visit: the outer dispatch selects the domain variant, the
+    // inner generic invoker reaches every concrete message class. The
+    // invoker's template form is what keeps this list-free: std::visit
+    // instantiates it for every alternative and fails compilation if a
+    // message class ever drops its text(std::ostream&) member.
+    std::ostringstream os;
+    os << messageName(msg);
+    auto writeText = [&os](const auto& concrete) {
+        os << '\n';
+        concrete.text(os);
+    };
+    std::visit([&writeText](const auto& domain) {
+        std::visit(writeText, domain);
+    }, msg);
+    return os.str();
+}
+
 std::string_view messageName(const ParsedMessage& msg) {
     return std::visit([](const auto& domain) -> std::string_view {
         return std::visit(NameVisitor{}, domain);

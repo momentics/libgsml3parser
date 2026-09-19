@@ -53,6 +53,9 @@ void SubscriberRegistry::handleProcedureActive(SubscriberSession* session, bool 
 }
 
 SubscriberSession* SubscriberRegistry::createByTMSI(uint32_t tmsi) {
+    // The all-zero TMSI is reserved (TS 24.008 9.1.32); sharded registries
+    // additionally derive the owning shard from it, so reject it uniformly.
+    if (tmsi == 0) return nullptr;
     auto [idx, inserted] = mByTMSI.emplace(tmsi, SessionEntry{});
     if (!inserted) return nullptr;
     SessionEntry& entry = mByTMSI.at(idx);

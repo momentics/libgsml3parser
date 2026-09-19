@@ -69,13 +69,44 @@ namespace {
 
 using namespace gsml3parser;
 
-// Thread-local last error message ("" when none). Lives until the next
-// gsml3_* call on this thread; callers that need it longer must copy it.
+// Thread-local last error: message + machine-readable code. Both are valid
+// until a later call clears or replaces them; callers that need the string
+// longer must copy it.
 thread_local std::string tLastError;
+thread_local int tLastErrorCode{GSML3_OK};
 
-void setLastError(const char* msg) { tLastError = msg ? msg : ""; }
+void setError(int code, const char* msg) {
+    tLastErrorCode = code;
+    tLastError = msg ? msg : "";
+}
 
-void reportParseError(const ParseError& e) { tLastError = std::string(e.message); }
+inline void clearLastError() {
+    tLastErrorCode = GSML3_OK;
+    tLastError.clear();
+}
+
+// Default-class error (argument/value problems); the specific helpers below
+// override the class for OOM, buffer-too-small and internal failures.
+inline void setLastError(const char* msg) { setError(GSML3_ERR_INVALID_VALUE, msg); }
+
+inline void setOomError() { setError(GSML3_ERR_NO_MEMORY, "out of memory"); }
+
+inline void setBufferTooSmallError() {
+    setError(GSML3_ERR_BUFFER_TOO_SMALL, "output buffer too small");
+}
+
+// Used by catch (...) guards: an exception escaped from a noexcept-expected
+// C++ path; the library remains functional but the caller should treat the
+// affected handle as suspect.
+inline void setLastErrorUnexpected(const char* msg) {
+    setError(GSML3_ERR_INTERNAL, msg);
+}
+
+int mapParseError(const ParseError& e);
+
+void reportParseError(const ParseError& e) {
+    setError(mapParseError(e), std::string(e.message).c_str());
+}
 
 int mapParseError(const ParseError& e) {
     switch (e.code) {
@@ -87,9 +118,99 @@ int mapParseError(const ParseError& e) {
         case ParseError::Code::InvalidValue:       return GSML3_ERR_INVALID_VALUE;
         case ParseError::Code::UnsupportedFeature: return GSML3_ERR_UNSUPPORTED;
         case ParseError::Code::SourceExhausted:    return GSML3_ERR_SOURCE_EXHAUSTED;
+        case ParseError::Code::BufferTooSmall:     return GSML3_ERR_BUFFER_TOO_SMALL;
         default:                                   return GSML3_ERR_INVALID_VALUE;
     }
 }
+
+// ── Input validation (boundary of the C API) ────────────────────────────
+
+// Range check for a parameter that mirrors a C++ enum value. The bounds are
+// derived from the enum's own enumerators so a future core change is caught
+// by this function's call sites, not by runtime surprises on the wire.
+inline bool checkEnumValue(int v, int lo, int hi, const char* what) {
+    if (v < lo || v > hi) {
+        char msg[96];
+        std::snprintf(msg, sizeof(msg), "invalid %s value %d (expected %d..%d)",
+                      what, v, lo, hi);
+        setError(GSML3_ERR_INVALID_ARG, msg);
+        return false;
+    }
+    return true;
+}
+
+// Validation of BCD digit strings accepted from the caller: ASCII digits
+// only (plus one optional leading '+'), length in [minLen, maxLen]. The
+// C++ storage truncates silently; failing fast here keeps the wire format
+// honest.
+inline bool checkDigitString(const char* s, size_t minLen, size_t maxLen,
+                             bool plusAllowed, const char* what) {
+    if (!s) {
+        setError(GSML3_ERR_INVALID_ARG, (std::string("NULL ") + what).c_str());
+        return false;
+    }
+    const char* p = s;
+    if (*p == '+') {
+        if (!plusAllowed) {
+            setError(GSML3_ERR_INVALID_ARG,
+                     (std::string(what) + " must not start with '+'").c_str());
+            return false;
+        }
+        ++p;
+    }
+    size_t n = 0;
+    while (*p != '\0') {
+        if (*p < '0' || *p > '9') {
+            setError(GSML3_ERR_INVALID_ARG,
+                     (std::string(what) + " must contain ASCII digits only").c_str());
+            return false;
+        }
+        ++p;
+        ++n;
+    }
+    if (n < minLen || n > maxLen) {
+        char msg[96];
+        std::snprintf(msg, sizeof(msg), "invalid %s length %zu (expected %d..%d digits)",
+                      what, n, static_cast<int>(minLen), static_cast<int>(maxLen));
+        setError(GSML3_ERR_INVALID_ARG, msg);
+        return false;
+    }
+    return true;
+}
+
+// ── Valid value domains (derived from the mirrored C++ enums) ──────────
+// Keep in sync with include/gsml3parser/{enums,types,rsl_types}.h. The low
+// and high ends reference the enums themselves where that is meaningful so
+// the ranges cannot drift from the core definitions.
+
+namespace ranges {
+inline constexpr int rrCauseLo    = 0;  // RRCause::Normal_Event
+inline constexpr int rrCauseHi    = static_cast<int>(RRCause::Protocol_Error_Unspecified);
+inline constexpr int mmCauseLo    = 0;  // MMRejectCause::Zero
+inline constexpr int mmCauseHi    = static_cast<int>(MMRejectCause::Protocol_Error_Unspecified);
+inline constexpr int cmAbortLo    = static_cast<int>(CMServiceAbortCause::Unspecified);
+inline constexpr int cmAbortHi    = static_cast<int>(CMServiceAbortCause::SemanticInconsistency);
+inline constexpr int ccCauseLo    = 0;  // CCCause::Unknown_L3_Cause
+inline constexpr int ccCauseHi    = static_cast<int>(CCCause::Interworking_Unspecified);
+inline constexpr int idTypeLo     = static_cast<int>(MobileIDType::NoID);
+inline constexpr int idTypeHi     = static_cast<int>(MobileIDType::TMSI);
+inline constexpr int typeOffsetLo = 0;  // TypeAndOffset::TDMA_SACCH
+inline constexpr int typeOffsetHi = static_cast<int>(TDMA_MISC);
+inline constexpr int chanTypeLo   = static_cast<int>(ChannelType::SCHType);
+inline constexpr int chanTypeHi   = static_cast<int>(ChannelType::UndefinedCHType);
+inline constexpr int tokenLo      = 0;  // ResponseToken::None
+inline constexpr int tokenHi      = static_cast<int>(ResponseToken::Setup);
+inline constexpr int rslCauseLo   = static_cast<int>(RSLErrorCause::NormalUnspecified);
+inline constexpr int rslCauseHi   = static_cast<int>(RSLErrorCause::EncryptionUnimplemented);
+inline constexpr int sapiLo       = 0;
+inline constexpr int sapiHi       = 15;
+inline constexpr int serviceTypeLo = 0;  // L3CMServiceType::TypeCode::UndefinedType
+inline constexpr int serviceTypeHi = static_cast<int>(L3CMServiceType::TypeCode::LocationUpdateRequest);
+inline constexpr int updateTypeLo = 0;   // Location updating type: Normal / Periodic / IMSI Attach
+inline constexpr int updateTypeHi = 2;
+inline constexpr int timerLo      = static_cast<int>(L3TimerId::T3101);
+inline constexpr int timerHi      = static_cast<int>(L3TimerId::T3395);
+} // namespace ranges
 
 } // namespace
 
@@ -100,16 +221,26 @@ struct gsml3_message { ParsedMessage msg; };
 
 // ── Version / error model / free ───────────────────────────────────────
 
-GSML3_C_API const char* gsml3_version(void) {
 #ifdef GSML3PARSER_VERSION
-    return GSML3PARSER_VERSION;
+#define GSML3PARSER_VERSION_STRING GSML3PARSER_VERSION
 #else
-    return "0.18.0";
+#  error GSML3PARSER_VERSION must be defined when building libgsml3parser (CMakeLists.txt sets it)
 #endif
+
+GSML3_C_API const char* gsml3_version(void) {
+    return GSML3PARSER_VERSION_STRING;
+}
+
+GSML3_C_API unsigned gsml3_abi_version(void) {
+    return GSML3_ABI_VERSION;
 }
 
 GSML3_C_API const char* gsml3_last_error(void) {
     return tLastError.c_str();
+}
+
+GSML3_C_API int gsml3_last_error_code(void) {
+    return tLastErrorCode;
 }
 
 GSML3_C_API void gsml3_free(void* ptr) {
@@ -119,9 +250,9 @@ GSML3_C_API void gsml3_free(void* ptr) {
 // ── Parser config ──────────────────────────────────────────────────────
 
 GSML3_C_API gsml3_config* gsml3_config_new(void) {
-    tLastError.clear();
+    clearLastError();
     auto* c = new (std::nothrow) gsml3_config{};
-    if (!c) setLastError("out of memory");
+    if (!c) setOomError();
     return c;
 }
 
@@ -143,15 +274,15 @@ GSML3_C_API void gsml3_config_free(gsml3_config* c) {
 GSML3_C_API gsml3_message* gsml3_parse_l3(const uint8_t* data, size_t len,
                                           const gsml3_config* cfg) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!data || len == 0) { setLastError("NULL or empty input"); return nullptr; }
         auto r = parseL3({data, len}, cfg ? cfg->cfg : ParserConfig{});
         if (!r) { reportParseError(r.error()); return nullptr; }
         auto* m = new (std::nothrow) gsml3_message{std::move(r.value())};
-        if (!m) setLastError("out of memory");
+        if (!m) setOomError();
         return m;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_parse_l3");
+        setLastErrorUnexpected("unexpected exception in gsml3_parse_l3");
         return nullptr;
     }
 }
@@ -159,15 +290,15 @@ GSML3_C_API gsml3_message* gsml3_parse_l3(const uint8_t* data, size_t len,
 GSML3_C_API gsml3_message* gsml3_parse_l3_hex(const char* hex,
                                               const gsml3_config* cfg) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!hex) { setLastError("NULL hex string"); return nullptr; }
         auto r = parseL3Hex(hex, cfg ? cfg->cfg : ParserConfig{});
         if (!r) { reportParseError(r.error()); return nullptr; }
         auto* m = new (std::nothrow) gsml3_message{std::move(r.value())};
-        if (!m) setLastError("out of memory");
+        if (!m) setOomError();
         return m;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_parse_l3_hex");
+        setLastErrorUnexpected("unexpected exception in gsml3_parse_l3_hex");
         return nullptr;
     }
 }
@@ -175,9 +306,9 @@ GSML3_C_API gsml3_message* gsml3_parse_l3_hex(const char* hex,
 GSML3_C_API int gsml3_parse_l3_into(gsml3_message* msg, const uint8_t* data,
                                     size_t len, const gsml3_config* cfg) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!msg || !data || len == 0) {
-            setLastError("NULL handle or empty input");
+            setError(GSML3_ERR_INVALID_ARG, "NULL handle or empty input");
             return GSML3_ERR_INVALID_ARG;
         }
         auto r = parseL3({data, len}, cfg ? cfg->cfg : ParserConfig{});
@@ -189,8 +320,8 @@ GSML3_C_API int gsml3_parse_l3_into(gsml3_message* msg, const uint8_t* data,
         msg->msg = std::move(r.value());
         return GSML3_OK;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_parse_l3_into");
-        return GSML3_ERR_INVALID_VALUE;
+        setLastErrorUnexpected("unexpected exception in gsml3_parse_l3_into");
+        return GSML3_ERR_INTERNAL;
     }
 }
 
@@ -218,10 +349,20 @@ GSML3_C_API int gsml3_message_ti(const gsml3_message* msg) {
     return messageTI(msg->msg);
 }
 
+GSML3_C_API size_t gsml3_message_size(const gsml3_message* msg) {
+    if (!msg) return 0;
+    try {
+        return messageWireLength(msg->msg);
+    } catch (...) {
+        setLastErrorUnexpected("unexpected exception in gsml3_message_size");
+        return 0;
+    }
+}
+
 GSML3_C_API size_t gsml3_message_write(const gsml3_message* msg,
                                        uint8_t* out, size_t maxlen) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!msg || !out || maxlen == 0) {
             setLastError("NULL handle or output buffer");
             return 0;
@@ -230,25 +371,41 @@ GSML3_C_API size_t gsml3_message_write(const gsml3_message* msg,
         if (!r) { reportParseError(r.error()); return 0; }
         return r.value();
     } catch (...) {
-        setLastError("unexpected exception in gsml3_message_write");
+        setLastErrorUnexpected("unexpected exception in gsml3_message_write");
         return 0;
     }
 }
 
 GSML3_C_API char* gsml3_message_hex(const gsml3_message* msg) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!msg) { setLastError("NULL handle"); return nullptr; }
         auto r = writeL3Hex(msg->msg);
         if (!r) { reportParseError(r.error()); return nullptr; }
         const std::string& s = r.value();
         char* p = new (std::nothrow) char[s.size() + 1];
-        if (!p) { setLastError("out of memory"); return nullptr; }
+        if (!p) { setOomError(); return nullptr; }
         std::memcpy(p, s.data(), s.size());
         p[s.size()] = '\0';
         return p;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_message_hex");
+        setLastErrorUnexpected("unexpected exception in gsml3_message_hex");
+        return nullptr;
+    }
+}
+
+GSML3_C_API char* gsml3_message_dump(const gsml3_message* msg) {
+    try {
+        clearLastError();
+        if (!msg) { setLastError("NULL handle"); return nullptr; }
+        const std::string s = messageText(msg->msg);
+        char* p = new (std::nothrow) char[s.size() + 1];
+        if (!p) { setOomError(); return nullptr; }
+        std::memcpy(p, s.data(), s.size());
+        p[s.size()] = '\0';
+        return p;
+    } catch (...) {
+        setLastErrorUnexpected("unexpected exception in gsml3_message_dump");
         return nullptr;
     }
 }
@@ -264,13 +421,13 @@ struct gsml3_rsl {
 };
 
 GSML3_C_API gsml3_rsl* gsml3_rsl_parse(const uint8_t* data, size_t len) {
+    if (!data || len == 0) { setLastError("NULL or empty input"); return nullptr; }
+    clearLastError();
+    std::unique_ptr<gsml3_rsl> h(new (std::nothrow) gsml3_rsl{});
+    if (!h) { setOomError(); return nullptr; }
     try {
-        tLastError.clear();
-        if (!data || len == 0) { setLastError("NULL or empty input"); return nullptr; }
         auto r = RSLParser::parse({data, len});
         if (!r) { reportParseError(r.error()); return nullptr; }
-        auto* h = new (std::nothrow) gsml3_rsl{};
-        if (!h) { setLastError("out of memory"); return nullptr; }
         h->buffer.assign(data, data + len);
         h->parsed = std::move(r.value());
         // Point the spans at the owned copy (parse() filled them with
@@ -283,10 +440,10 @@ GSML3_C_API gsml3_rsl* gsml3_rsl_parse(const uint8_t* data, size_t len) {
         }
         if (h->parsed.rawData.data())
             h->parsed.rawData = {h->buffer.data() + (h->parsed.rawData.data() - data),
-                                 h->parsed.rawData.size()};
-        return h;
+                                  h->parsed.rawData.size()};
+        return h.release();
     } catch (...) {
-        setLastError("unexpected exception in gsml3_rsl_parse");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_parse");
         return nullptr;
     }
 }
@@ -345,8 +502,9 @@ GSML3_C_API size_t gsml3_rsl_ie_count(const gsml3_rsl* rsl) {
 GSML3_C_API int gsml3_rsl_ie_get(const gsml3_rsl* rsl, size_t index,
                                  uint8_t* type, size_t* len,
                                  const uint8_t** val) {
+    clearLastError();
     if (!rsl || index >= rsl->parsed.ieCount || !type || !len || !val) {
-        setLastError("invalid RSL IE index or NULL out parameter");
+        setError(GSML3_ERR_INVALID_ARG, "invalid RSL IE index or NULL out parameter");
         return GSML3_ERR_INVALID_ARG;
     }
     const auto& ie = rsl->parsed.informationElements[index];
@@ -369,16 +527,16 @@ size_t rslSpanResult(int n) {
 GSML3_C_API size_t gsml3_rsl_build_data_req(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t link_id, const uint8_t* l3, size_t l3_len) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0 || (l3_len && !l3)) {
             setLastError("NULL output buffer or L3 payload");
             return 0;
         }
         int n = RSLBuilder::buildDataReq({out, maxlen}, chan_nr, link_id, {l3, l3_len});
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_rsl_build_data_req");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_data_req");
         return 0;
     }
 }
@@ -386,16 +544,16 @@ GSML3_C_API size_t gsml3_rsl_build_data_req(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_rsl_build_data_ind(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t link_id, const uint8_t* l3, size_t l3_len) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0 || (l3_len && !l3)) {
             setLastError("NULL output buffer or L3 payload");
             return 0;
         }
         int n = RSLBuilder::buildDataInd({out, maxlen}, chan_nr, link_id, {l3, l3_len});
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_rsl_build_data_ind");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_data_ind");
         return 0;
     }
 }
@@ -403,16 +561,16 @@ GSML3_C_API size_t gsml3_rsl_build_data_ind(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_rsl_build_unit_data_req(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t link_id, const uint8_t* l3, size_t l3_len) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0 || (l3_len && !l3)) {
             setLastError("NULL output buffer or L3 payload");
             return 0;
         }
         int n = RSLBuilder::buildUnitDataReq({out, maxlen}, chan_nr, link_id, {l3, l3_len});
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_rsl_build_unit_data_req");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_unit_data_req");
         return 0;
     }
 }
@@ -420,16 +578,16 @@ GSML3_C_API size_t gsml3_rsl_build_unit_data_req(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_rsl_build_unit_data_ind(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t link_id, const uint8_t* l3, size_t l3_len) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0 || (l3_len && !l3)) {
             setLastError("NULL output buffer or L3 payload");
             return 0;
         }
         int n = RSLBuilder::buildUnitDataInd({out, maxlen}, chan_nr, link_id, {l3, l3_len});
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_rsl_build_unit_data_ind");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_unit_data_ind");
         return 0;
     }
 }
@@ -437,13 +595,13 @@ GSML3_C_API size_t gsml3_rsl_build_unit_data_ind(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_rsl_build_chan_activ_ack(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint16_t frame_number) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
         int n = RSLBuilder::buildChanActivAck({out, maxlen}, chan_nr, frame_number);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_rsl_build_chan_activ_ack");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_chan_activ_ack");
         return 0;
     }
 }
@@ -451,14 +609,16 @@ GSML3_C_API size_t gsml3_rsl_build_chan_activ_ack(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_rsl_build_chan_activ_nack(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, int cause) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        if (!checkEnumValue(cause, ranges::rslCauseLo, ranges::rslCauseHi, "cause"))
+            return 0;
         int n = RSLBuilder::buildChanActivNack({out, maxlen}, chan_nr,
-                                               static_cast<RSLErrorCause>(cause));
-        if (n < 0) setLastError("buffer too small");
+                                                static_cast<RSLErrorCause>(cause));
+        if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_rsl_build_chan_activ_nack");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_chan_activ_nack");
         return 0;
     }
 }
@@ -466,13 +626,13 @@ GSML3_C_API size_t gsml3_rsl_build_chan_activ_nack(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_rsl_build_rf_chan_rel_ack(uint8_t* out, size_t maxlen,
     uint8_t chan_nr) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
         int n = RSLBuilder::buildRFChanRelAck({out, maxlen}, chan_nr);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_rsl_build_rf_chan_rel_ack");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_rf_chan_rel_ack");
         return 0;
     }
 }
@@ -480,14 +640,16 @@ GSML3_C_API size_t gsml3_rsl_build_rf_chan_rel_ack(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_rsl_build_conn_fail(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, int cause) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        if (!checkEnumValue(cause, ranges::rslCauseLo, ranges::rslCauseHi, "cause"))
+            return 0;
         int n = RSLBuilder::buildConnFail({out, maxlen}, chan_nr,
                                           static_cast<RSLErrorCause>(cause));
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_rsl_build_conn_fail");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_conn_fail");
         return 0;
     }
 }
@@ -496,17 +658,17 @@ GSML3_C_API size_t gsml3_rsl_build_meas_res(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t meas_nr, int8_t rxlev, int8_t rxqual,
     const uint8_t* l1, size_t l1_len) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0 || (l1_len && !l1)) {
             setLastError("NULL output buffer or L1 info");
             return 0;
         }
         int n = RSLBuilder::buildMeasRes({out, maxlen}, chan_nr, meas_nr,
                                          rxlev, rxqual, {l1, l1_len});
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_rsl_build_meas_res");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_meas_res");
         return 0;
     }
 }
@@ -514,13 +676,13 @@ GSML3_C_API size_t gsml3_rsl_build_meas_res(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_rsl_build_hando_det(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t access_delay) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
         int n = RSLBuilder::buildHandoDet({out, maxlen}, chan_nr, access_delay);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_rsl_build_hando_det");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_hando_det");
         return 0;
     }
 }
@@ -529,14 +691,14 @@ GSML3_C_API size_t gsml3_rsl_build_ccch_load_ind(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint16_t paging_load, uint16_t rach_total,
     uint16_t rach_busy, uint16_t rach_access) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
         int n = RSLBuilder::buildCCCHLoadInd({out, maxlen}, chan_nr, paging_load,
                                              rach_total, rach_busy, rach_access);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_rsl_build_ccch_load_ind");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_ccch_load_ind");
         return 0;
     }
 }
@@ -545,14 +707,14 @@ GSML3_C_API size_t gsml3_rsl_build_chan_rqd(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t ra, uint8_t t1p, uint8_t t2, uint8_t t3,
     uint8_t access_delay) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
         L3RequestReference ref(ra, t1p, t2, t3);
         int n = RSLBuilder::buildChanRqd({out, maxlen}, chan_nr, ref, access_delay);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_rsl_build_chan_rqd");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_chan_rqd");
         return 0;
     }
 }
@@ -560,16 +722,16 @@ GSML3_C_API size_t gsml3_rsl_build_chan_rqd(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_rsl_build_delete_ind(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, const uint8_t* info, size_t info_len) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0 || (info_len && !info)) {
             setLastError("NULL output buffer or info");
             return 0;
         }
         int n = RSLBuilder::buildDeleteInd({out, maxlen}, chan_nr, {info, info_len});
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_rsl_build_delete_ind");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_delete_ind");
         return 0;
     }
 }
@@ -579,9 +741,9 @@ GSML3_C_API size_t gsml3_rsl_build_delete_ind(uint8_t* out, size_t maxlen,
 GSML3_C_API int gsml3_lapdm_frame_decode(const uint8_t* data, size_t len,
                                          gsml3_lapdm_frame_info* out) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!data || len == 0 || !out) {
-            setLastError("NULL input or out parameter");
+            setError(GSML3_ERR_INVALID_ARG, "NULL input or out parameter");
             return GSML3_ERR_INVALID_ARG;
         }
         auto r = lapdm::LAPDmFrame::decode({data, len});
@@ -602,8 +764,8 @@ GSML3_C_API int gsml3_lapdm_frame_decode(const uint8_t* data, size_t len,
         out->info_len = f.info.size();
         return GSML3_OK;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_lapdm_frame_decode");
-        return GSML3_ERR_INVALID_VALUE;
+        setLastErrorUnexpected("unexpected exception in gsml3_lapdm_frame_decode");
+        return GSML3_ERR_INTERNAL;
     }
 }
 
@@ -655,7 +817,7 @@ void lapdmL1Trampoline(std::span<const uint8_t> frame, void* ctx) {
 GSML3_C_API gsml3_lapdm_entity* gsml3_lapdm_entity_new(int profile,
     gsml3_lapdm_l3_cb l3_cb, gsml3_lapdm_l1_cb l1_cb, void* user) {
     try {
-        tLastError.clear();
+        clearLastError();
         LAPDmChannelProfile p;
         switch (profile) {
             case 0:  p = LAPDmChannelProfile::SDCCH(); break;
@@ -666,13 +828,13 @@ GSML3_C_API gsml3_lapdm_entity* gsml3_lapdm_entity_new(int profile,
                 return nullptr;
         }
         auto* e = new (std::nothrow) gsml3_lapdm_entity(p);
-        if (!e) { setLastError("out of memory"); return nullptr; }
+        if (!e) { setOomError(); return nullptr; }
         e->l3Cb = l3_cb;
         e->l1Cb = l1_cb;
         e->user = user;
         return e;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_lapdm_entity_new");
+        setLastErrorUnexpected("unexpected exception in gsml3_lapdm_entity_new");
         return nullptr;
     }
 }
@@ -683,72 +845,88 @@ GSML3_C_API void gsml3_lapdm_entity_free(gsml3_lapdm_entity* e) {
 
 GSML3_C_API void gsml3_lapdm_entity_open(gsml3_lapdm_entity* e, int sapi,
                                          int command_bit) {
-    if (e && sapi >= 0 && sapi <= 15)
-        e->entity.open(static_cast<SAPI>(sapi), command_bit != 0);
+    if (!e) return;
+    if (sapi < 0 || sapi > 15) { setError(GSML3_ERR_INVALID_ARG, "invalid SAPI value (expected 0..15)"); return; }
+    e->entity.open(static_cast<SAPI>(sapi), command_bit != 0);
 }
 
 GSML3_C_API void gsml3_lapdm_entity_receive(gsml3_lapdm_entity* e,
                                             const uint8_t* frame, size_t len) {
-    if (e && frame && len) e->entity.receiveFrame({frame, len});
+    if (!e || !frame || !len) return;
+    try {
+        clearLastError();
+        e->entity.receiveFrame({frame, len});
+    } catch (...) {
+        setLastErrorUnexpected("unexpected exception in gsml3_lapdm_entity_receive; "
+                               "the entity state may be inconsistent - free it and "
+                               "create a fresh one");
+    }
 }
 
 GSML3_C_API int gsml3_lapdm_entity_send_ui(gsml3_lapdm_entity* e, int sapi,
                                            const uint8_t* l3, size_t l3_len) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!e || (l3_len && !l3)) {
-            setLastError("NULL entity or L3 payload");
+            setError(GSML3_ERR_INVALID_ARG, "NULL entity or L3 payload");
+            return GSML3_ERR_INVALID_ARG;
+        }
+        // SAPI is 4 bits in the LAPDm address octet: an out-of-range value
+        // would wrap and silently corrupt the SAPI and C/R fields, so it is
+        // rejected before it can reach the encoder.
+        if (sapi < ranges::sapiLo || sapi > ranges::sapiHi) {
+            setError(GSML3_ERR_INVALID_ARG, "invalid SAPI value (expected 0..15)");
             return GSML3_ERR_INVALID_ARG;
         }
         auto r = e->entity.sendUI(static_cast<SAPI>(sapi), {l3, l3_len});
         if (!r) { reportParseError(r.error()); return mapParseError(r.error()); }
         return GSML3_OK;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_lapdm_entity_send_ui");
-        return GSML3_ERR_INVALID_VALUE;
+        setLastErrorUnexpected("unexpected exception in gsml3_lapdm_entity_send_ui");
+        return GSML3_ERR_INTERNAL;
     }
 }
 
 GSML3_C_API int gsml3_lapdm_entity_send_data(gsml3_lapdm_entity* e,
                                              const uint8_t* l3, size_t l3_len) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!e || (l3_len && !l3)) {
-            setLastError("NULL entity or L3 payload");
+            setError(GSML3_ERR_INVALID_ARG, "NULL entity or L3 payload");
             return GSML3_ERR_INVALID_ARG;
         }
         auto r = e->entity.sendData({l3, l3_len});
         if (!r) { reportParseError(r.error()); return mapParseError(r.error()); }
         return GSML3_OK;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_lapdm_entity_send_data");
-        return GSML3_ERR_INVALID_VALUE;
+        setLastErrorUnexpected("unexpected exception in gsml3_lapdm_entity_send_data");
+        return GSML3_ERR_INTERNAL;
     }
 }
 
 GSML3_C_API int gsml3_lapdm_entity_send_sabme(gsml3_lapdm_entity* e) {
     try {
-        tLastError.clear();
-        if (!e) { setLastError("NULL entity"); return GSML3_ERR_INVALID_ARG; }
+        clearLastError();
+        if (!e) { setError(GSML3_ERR_INVALID_ARG, "NULL entity"); return GSML3_ERR_INVALID_ARG; }
         auto r = e->entity.sendSABME();
         if (!r) { reportParseError(r.error()); return mapParseError(r.error()); }
         return GSML3_OK;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_lapdm_entity_send_sabme");
-        return GSML3_ERR_INVALID_VALUE;
+        setLastErrorUnexpected("unexpected exception in gsml3_lapdm_entity_send_sabme");
+        return GSML3_ERR_INTERNAL;
     }
 }
 
 GSML3_C_API int gsml3_lapdm_entity_send_disc(gsml3_lapdm_entity* e) {
     try {
-        tLastError.clear();
-        if (!e) { setLastError("NULL entity"); return GSML3_ERR_INVALID_ARG; }
+        clearLastError();
+        if (!e) { setError(GSML3_ERR_INVALID_ARG, "NULL entity"); return GSML3_ERR_INVALID_ARG; }
         auto r = e->entity.sendDISC();
         if (!r) { reportParseError(r.error()); return mapParseError(r.error()); }
         return GSML3_OK;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_lapdm_entity_send_disc");
-        return GSML3_ERR_INVALID_VALUE;
+        setLastErrorUnexpected("unexpected exception in gsml3_lapdm_entity_send_disc");
+        return GSML3_ERR_INTERNAL;
     }
 }
 
@@ -759,7 +937,13 @@ GSML3_C_API void gsml3_lapdm_entity_hard_release(gsml3_lapdm_entity* e) {
 GSML3_C_API int gsml3_lapdm_entity_tick_t200(gsml3_lapdm_entity* e,
                                              uint32_t elapsed_ms) {
     if (!e) return 0;
-    return e->entity.tickT200(std::chrono::milliseconds(elapsed_ms)) ? 1 : 0;
+    try {
+        clearLastError();
+        return e->entity.tickT200(std::chrono::milliseconds(elapsed_ms)) ? 1 : 0;
+    } catch (...) {
+        setLastErrorUnexpected("unexpected exception in gsml3_lapdm_entity_tick_t200");
+        return -1;
+    }
 }
 
 GSML3_C_API int gsml3_lapdm_entity_state(const gsml3_lapdm_entity* e) {
@@ -826,10 +1010,10 @@ inline bool isSharded(const gsml3_registry* r) noexcept {
 } // namespace
 
 GSML3_C_API gsml3_registry* gsml3_registry_new(int shard_count) {
+    clearLastError();
+    auto r = std::unique_ptr<gsml3_registry>(new (std::nothrow) gsml3_registry{});
+    if (!r) { setOomError(); return nullptr; }
     try {
-        tLastError.clear();
-        auto* r = new (std::nothrow) gsml3_registry{};
-        if (!r) { setLastError("out of memory"); return nullptr; }
         switch (shard_count) {
             case 0:  r->reg = std::make_unique<SubscriberRegistry>(); break;
             case 4:  r->reg = std::make_unique<ShardedSubscriberRegistry<4>>(); break;
@@ -837,13 +1021,12 @@ GSML3_C_API gsml3_registry* gsml3_registry_new(int shard_count) {
             case 16: r->reg = std::make_unique<ShardedSubscriberRegistry<16>>(); break;
             case 32: r->reg = std::make_unique<ShardedSubscriberRegistry<32>>(); break;
             default:
-                setLastError("shard_count must be 0, 4, 8, 16 or 32");
-                delete r;
+                setError(GSML3_ERR_INVALID_ARG, "shard_count must be 0, 4, 8, 16 or 32");
                 return nullptr;
         }
-        return r;
+        return r.release();
     } catch (...) {
-        setLastError("unexpected exception in gsml3_registry_new");
+        setLastErrorUnexpected("unexpected exception in gsml3_registry_new");
         return nullptr;
     }
 }
@@ -853,7 +1036,13 @@ GSML3_C_API void gsml3_registry_free(gsml3_registry* r) {
 }
 
 GSML3_C_API void gsml3_registry_reserve(gsml3_registry* r, size_t expected) {
-    if (r) withRegistry(r, [expected](auto& reg) { reg.reserve(expected); });
+    if (!r) return;
+    try {
+        clearLastError();
+        withRegistry(r, [expected](auto& reg) { reg.reserve(expected); });
+    } catch (...) {
+        setLastErrorUnexpected("unexpected exception in gsml3_registry_reserve");
+    }
 }
 
 GSML3_C_API size_t gsml3_registry_count(const gsml3_registry* r) {
@@ -865,13 +1054,17 @@ GSML3_C_API size_t gsml3_registry_count(const gsml3_registry* r) {
 GSML3_C_API gsml3_session* gsml3_registry_create_by_tmsi(gsml3_registry* r,
                                                           uint32_t tmsi) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!r) { setLastError("NULL registry"); return nullptr; }
+        if (tmsi == 0) {
+            setError(GSML3_ERR_INVALID_ARG, "TMSI 0 is reserved and cannot be used");
+            return nullptr;
+        }
         auto* s = withRegistry(r, [tmsi](auto& reg) { return reg.createByTMSI(tmsi); });
         if (!s) setLastError("TMSI already exists");
         return sessPtr(s);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_registry_create_by_tmsi");
+        setLastErrorUnexpected("unexpected exception in gsml3_registry_create_by_tmsi");
         return nullptr;
     }
 }
@@ -879,8 +1072,9 @@ GSML3_C_API gsml3_session* gsml3_registry_create_by_tmsi(gsml3_registry* r,
 GSML3_C_API gsml3_session* gsml3_registry_create_by_imsi(gsml3_registry* r,
                                                           const char* imsi) {
     try {
-        tLastError.clear();
-        if (!r || !imsi) { setLastError("NULL registry or imsi"); return nullptr; }
+        clearLastError();
+        if (!r) { setLastError("NULL registry"); return nullptr; }
+        if (!checkDigitString(imsi, 1, 15, false, "IMSI")) return nullptr;
         if (isSharded(r)) {
             setLastError("create_by_imsi is not supported by sharded registries");
             return nullptr;
@@ -897,7 +1091,7 @@ GSML3_C_API gsml3_session* gsml3_registry_create_by_imsi(gsml3_registry* r,
         if (!s) setLastError("IMSI already exists");
         return sessPtr(s);
     } catch (...) {
-        setLastError("unexpected exception in gsml3_registry_create_by_imsi");
+        setLastErrorUnexpected("unexpected exception in gsml3_registry_create_by_imsi");
         return nullptr;
     }
 }
@@ -958,7 +1152,7 @@ GSML3_C_API void gsml3_registry_assign_channel(gsml3_registry* r,
             }
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_registry_assign_channel");
+        setLastErrorUnexpected("unexpected exception in gsml3_registry_assign_channel");
     }
 }
 
@@ -976,34 +1170,45 @@ GSML3_C_API void gsml3_registry_release_channel(gsml3_registry* r,
             }
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_registry_release_channel");
+        setLastErrorUnexpected("unexpected exception in gsml3_registry_release_channel");
     }
 }
 
-// gsml3_timer_expiry is layout-compatible with TimerExpiry
-// (pointer + int == pointer + L3TimerId, both 16 bytes), so the caller's
-// buffer is used directly (zero allocation, O(active)).
+// The caller's gsml3_timer_expiry array is reused as the tick buffer: the
+// C struct (pointer + int) and TimerExpiry (pointer + one-byte L3TimerId)
+// are the same size, and the C++ side writes into it in place. The
+// conversion below then re-stores each event field by field, which is what
+// makes every byte of the caller-visible struct defined (the 3 padding
+// bytes TimerExpiry carries after its enum are never read back as part of
+// the C int).
 static_assert(sizeof(gsml3_timer_expiry) == sizeof(TimerExpiry),
               "gsml3_timer_expiry must stay layout-compatible with TimerExpiry");
 static_assert(alignof(gsml3_timer_expiry) >= alignof(TimerExpiry),
               "gsml3_timer_expiry must stay layout-compatible with TimerExpiry");
+static_assert(sizeof(((const gsml3_timer_expiry*)nullptr)->session) ==
+                  sizeof(((const TimerExpiry*)nullptr)->session),
+              "session must be the first member of both structs");
 
 GSML3_C_API size_t gsml3_registry_tick_timers(gsml3_registry* r,
     uint32_t delta_ms, gsml3_timer_expiry* expired_out, size_t cap) {
     try {
-        if (!r) return 0;
+        clearLastError();
+        if (!r || (cap != 0 && !expired_out)) {
+            setError(GSML3_ERR_INVALID_ARG, "NULL registry or timer-expiry buffer");
+            return 0;
+        }
         auto span = std::span<TimerExpiry>(
             reinterpret_cast<TimerExpiry*>(expired_out), cap);
         size_t n = withRegistry(r, [&](auto& reg) {
             return reg.tickAllTimers(std::chrono::milliseconds(delta_ms), span);
         });
-        // The session pointers are already correct (same pointer value);
-        // the conversion loop documents the aliasing contract.
-        for (size_t i = 0; i < n; ++i)
-            expired_out[i].session = sessPtr(span[i].session);
+        for (size_t i = 0; i < n; ++i) {
+            expired_out[i].session  = sessPtr(span[i].session);
+            expired_out[i].timer_id = static_cast<int>(span[i].id);
+        }
         return n;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_registry_tick_timers");
+        setLastErrorUnexpected("unexpected exception in gsml3_registry_tick_timers");
         return 0;
     }
 }
@@ -1016,7 +1221,7 @@ GSML3_C_API size_t gsml3_registry_tick_procedures(gsml3_registry* r,
             return reg.tickAllProcedures(std::chrono::milliseconds(delta_ms));
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_registry_tick_procedures");
+        setLastErrorUnexpected("unexpected exception in gsml3_registry_tick_procedures");
         return 0;
     }
 }
@@ -1029,12 +1234,18 @@ GSML3_C_API uint32_t gsml3_session_tmsi(gsml3_session* s) {
     return id.isTMSI() ? id.tmsi() : 0;
 }
 
+GSML3_C_API uint32_t gsml3_session_assigned_tmsi(gsml3_session* s) {
+    return s ? sess(s)->assignedTmsi : 0;
+}
+
 GSML3_C_API void gsml3_session_set_tmsi(gsml3_session* s, uint32_t tmsi) {
     if (s) sess(s)->context.setTMSI(tmsi);
 }
 
 GSML3_C_API void gsml3_session_set_imsi(gsml3_session* s, const char* digits) {
-    if (s && digits) sess(s)->context.setIMSI(digits);
+    if (!s || !digits) return;
+    clearLastError();
+    if (checkDigitString(digits, 1, 15, false, "IMSI")) sess(s)->context.setIMSI(digits);
 }
 
 GSML3_C_API int gsml3_session_is_registered(gsml3_session* s) {
@@ -1063,15 +1274,25 @@ GSML3_C_API void gsml3_session_set_ciphered(gsml3_session* s, int v) {
 
 GSML3_C_API int gsml3_session_timer_start(gsml3_session* s, int timer_id) {
     if (!s) return 0;
+    clearLastError();
+    if (!checkEnumValue(timer_id, ranges::timerLo, ranges::timerHi, "timer_id"))
+        return 0;
     return sess(s)->timers.start(static_cast<L3TimerId>(timer_id)) ? 1 : 0;
 }
 
 GSML3_C_API void gsml3_session_timer_stop(gsml3_session* s, int timer_id) {
-    if (s) sess(s)->timers.stop(static_cast<L3TimerId>(timer_id));
+    if (!s) return;
+    clearLastError();
+    if (checkEnumValue(timer_id, ranges::timerLo, ranges::timerHi, "timer_id"))
+        sess(s)->timers.stop(static_cast<L3TimerId>(timer_id));
 }
 
 GSML3_C_API int gsml3_session_timer_running(gsml3_session* s, int timer_id) {
-    return s && sess(s)->timers.isRunning(static_cast<L3TimerId>(timer_id)) ? 1 : 0;
+    if (!s) return 0;
+    clearLastError();
+    if (!checkEnumValue(timer_id, ranges::timerLo, ranges::timerHi, "timer_id"))
+        return 0;
+    return sess(s)->timers.isRunning(static_cast<L3TimerId>(timer_id)) ? 1 : 0;
 }
 
 GSML3_C_API size_t gsml3_session_transaction_pending(gsml3_session* s) {
@@ -1090,13 +1311,17 @@ struct gsml3_orchestrator {
 
 namespace {
 
-gsml3_step_result defaultStepResult() {
+// Result returned when the step could not be executed (invalid arguments,
+// internal error): error carries the gsml3_error code, the other fields are
+// neutral and must not be interpreted as step information.
+gsml3_step_result failedStepResult(int error) {
     gsml3_step_result c;
     c.action = GSML3_ACTION_CONTINUE;
     c.response_token = GSML3_TOKEN_NONE;
     c.final_state = GSML3_STATE_INITIATED;
     c.final_type = GSML3_PROC_UNKNOWN;
     c.reason = nullptr;
+    c.error = error;
     return c;
 }
 
@@ -1107,6 +1332,7 @@ gsml3_step_result toCResult(const ProcedureStepResult& r) {
     c.final_state = static_cast<int>(r.finalResult.state);
     c.final_type = static_cast<int>(r.finalResult.type);
     c.reason = nullptr;
+    c.error = GSML3_OK;
     if (!r.finalResult.reason.empty()) {
         tLastReason = std::string(r.finalResult.reason);
         c.reason = tLastReason.c_str();
@@ -1117,9 +1343,9 @@ gsml3_step_result toCResult(const ProcedureStepResult& r) {
 } // namespace
 
 GSML3_C_API gsml3_orchestrator* gsml3_orchestrator_new(void) {
-    tLastError.clear();
+    clearLastError();
     auto* o = new (std::nothrow) gsml3_orchestrator{};
-    if (!o) setLastError("out of memory");
+    if (!o) setOomError();
     return o;
 }
 
@@ -1130,28 +1356,35 @@ GSML3_C_API void gsml3_orchestrator_free(gsml3_orchestrator* o) {
 GSML3_C_API gsml3_step_result gsml3_orchestrator_feed(
     gsml3_orchestrator* o, const gsml3_message* msg, gsml3_session* s) {
     try {
-        if (!o || !msg) return defaultStepResult();
+        clearLastError();
+        if (!o || !msg) {
+            setError(GSML3_ERR_INVALID_ARG, "NULL orchestrator or message handle");
+            return failedStepResult(GSML3_ERR_INVALID_ARG);
+        }
+        // The session is optional (procedures that need one degrade
+        // gracefully), so it is passed through unchecked.
         return toCResult(o->orch.feed(msg->msg, sess(s)));
     } catch (...) {
-        setLastError("unexpected exception in gsml3_orchestrator_feed");
-        return defaultStepResult();
+        setLastErrorUnexpected("unexpected exception in gsml3_orchestrator_feed");
+        return failedStepResult(GSML3_ERR_INTERNAL);
     }
 }
 
 GSML3_C_API gsml3_step_result gsml3_orchestrator_feed_auth_challenge(
     gsml3_orchestrator* o, const uint8_t rand[16], const uint8_t sres[4]) {
     try {
+        clearLastError();
         if (!o || !rand || !sres) {
-            setLastError("NULL orchestrator or challenge data");
-            return defaultStepResult();
+            setError(GSML3_ERR_INVALID_ARG, "NULL orchestrator or challenge data");
+            return failedStepResult(GSML3_ERR_INVALID_ARG);
         }
         AuthChallenge c{};
         std::memcpy(c.rand.data(), rand, 16);
         std::memcpy(c.expectedSres.data(), sres, 4);
         return toCResult(o->orch.feedExternalTyped(c));
     } catch (...) {
-        setLastError("unexpected exception in gsml3_orchestrator_feed_auth_challenge");
-        return defaultStepResult();
+        setLastErrorUnexpected("unexpected exception in gsml3_orchestrator_feed_auth_challenge");
+        return failedStepResult(GSML3_ERR_INTERNAL);
     }
 }
 
@@ -1159,27 +1392,42 @@ GSML3_C_API gsml3_step_result gsml3_orchestrator_feed_vlr_decision(
     gsml3_orchestrator* o, int accept, int has_new_tmsi, uint32_t new_tmsi,
     int reject_cause) {
     try {
-        if (!o) return defaultStepResult();
+        clearLastError();
+        if (!o) {
+            setError(GSML3_ERR_INVALID_ARG, "NULL orchestrator");
+            return failedStepResult(GSML3_ERR_INVALID_ARG);
+        }
+        // The reject cause is only meaningful when accept == 0, but an
+        // out-of-domain value must never be written into a frame later.
+        if (accept == 0 &&
+            !checkEnumValue(reject_cause, ranges::mmCauseLo, ranges::mmCauseHi,
+                            "reject_cause")) {
+            return failedStepResult(GSML3_ERR_INVALID_ARG);
+        }
         VLRDecision v;
         v.accept = (accept != 0);
         v.newTmsi = has_new_tmsi ? std::optional<uint32_t>(new_tmsi) : std::nullopt;
         v.rejectCause = static_cast<MMRejectCause>(reject_cause);
         return toCResult(o->orch.feedExternalTyped(v));
     } catch (...) {
-        setLastError("unexpected exception in gsml3_orchestrator_feed_vlr_decision");
-        return defaultStepResult();
+        setLastErrorUnexpected("unexpected exception in gsml3_orchestrator_feed_vlr_decision");
+        return failedStepResult(GSML3_ERR_INTERNAL);
     }
 }
 
 GSML3_C_API gsml3_step_result gsml3_orchestrator_feed_ciphering(
     gsml3_orchestrator* o, uint8_t algo, int enable) {
     try {
-        if (!o) return defaultStepResult();
+        clearLastError();
+        if (!o) {
+            setError(GSML3_ERR_INVALID_ARG, "NULL orchestrator");
+            return failedStepResult(GSML3_ERR_INVALID_ARG);
+        }
         CipheringParameters p{algo, enable != 0};
         return toCResult(o->orch.feedExternalTyped(p));
     } catch (...) {
-        setLastError("unexpected exception in gsml3_orchestrator_feed_ciphering");
-        return defaultStepResult();
+        setLastErrorUnexpected("unexpected exception in gsml3_orchestrator_feed_ciphering");
+        return failedStepResult(GSML3_ERR_INTERNAL);
     }
 }
 
@@ -1187,21 +1435,29 @@ GSML3_C_API gsml3_step_result gsml3_orchestrator_feed_paging_trigger(
     gsml3_orchestrator* o, int id_type, uint32_t tmsi, const char* imsi,
     int target_channel) {
     try {
-        if (!o) return defaultStepResult();
+        clearLastError();
+        if (!o) {
+            setError(GSML3_ERR_INVALID_ARG, "NULL orchestrator");
+            return failedStepResult(GSML3_ERR_INVALID_ARG);
+        }
+        if (!checkEnumValue(id_type, ranges::idTypeLo, ranges::idTypeHi, "id_type") ||
+            !checkEnumValue(target_channel, ranges::chanTypeLo, ranges::chanTypeHi,
+                            "target_channel")) {
+            return failedStepResult(GSML3_ERR_INVALID_ARG);
+        }
         PagingTrigger p;
         if (id_type == GSML3_ID_TMSI) {
             p.identity = L3MobileIdentity{tmsi};
-        } else if (id_type == GSML3_ID_IMSI && imsi) {
-            p.identity = L3MobileIdentity{std::string_view(imsi)};
+        } else if (!checkDigitString(imsi, 1, 15, false, "IMSI")) {
+            return failedStepResult(GSML3_ERR_INVALID_ARG);
         } else {
-            setLastError("invalid id_type or NULL imsi");
-            return defaultStepResult();
+            p.identity = L3MobileIdentity{std::string_view(imsi)};
         }
         p.targetChannel = static_cast<ChannelType>(target_channel);
         return toCResult(o->orch.feedExternalTyped(p));
     } catch (...) {
-        setLastError("unexpected exception in gsml3_orchestrator_feed_paging_trigger");
-        return defaultStepResult();
+        setLastErrorUnexpected("unexpected exception in gsml3_orchestrator_feed_paging_trigger");
+        return failedStepResult(GSML3_ERR_INTERNAL);
     }
 }
 
@@ -1211,7 +1467,7 @@ GSML3_C_API size_t gsml3_orchestrator_tick(gsml3_orchestrator* o,
         if (!o) return 0;
         return o->orch.tickAll(std::chrono::milliseconds(delta_ms));
     } catch (...) {
-        setLastError("unexpected exception in gsml3_orchestrator_tick");
+        setLastErrorUnexpected("unexpected exception in gsml3_orchestrator_tick");
         return 0;
     }
 }
@@ -1219,7 +1475,7 @@ GSML3_C_API size_t gsml3_orchestrator_tick(gsml3_orchestrator* o,
 GSML3_C_API size_t gsml3_orchestrator_build_response(gsml3_orchestrator* o,
     gsml3_session* s, uint8_t* out, size_t maxlen) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!o || !out || maxlen == 0) {
             setLastError("NULL orchestrator or output buffer");
             return 0;
@@ -1228,7 +1484,7 @@ GSML3_C_API size_t gsml3_orchestrator_build_response(gsml3_orchestrator* o,
         if (n < 0) setLastError("missing response parameter or buffer too small");
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_orchestrator_build_response");
+        setLastErrorUnexpected("unexpected exception in gsml3_orchestrator_build_response");
         return 0;
     }
 }
@@ -1252,17 +1508,24 @@ GSML3_C_API int gsml3_orchestrator_chain_phase(const gsml3_orchestrator* o) {
 GSML3_C_API size_t gsml3_response_build_from_token(int token,
     gsml3_session* s, uint8_t* out, size_t maxlen) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!s || !out || maxlen == 0) {
             setLastError("NULL session or output buffer");
             return 0;
         }
+        // A token outside the enum range would be cast into a garbage
+        // ResponseToken and reach the builder's switch default silently.
+        if (!checkEnumValue(token, ranges::tokenLo, ranges::tokenHi, "token"))
+            return 0;
         int n = ResponseBuilder::buildResponseFromToken(
             static_cast<ResponseToken>(token), {out, maxlen}, sess(s));
+        // -1 here means either a missing response parameter on the session's
+        // context or an undersized buffer; both are reported as INVALID_VALUE
+        // because the token alone does not disambiguate them.
         if (n < 0) setLastError("missing response parameter or buffer too small");
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_from_token");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_from_token");
         return 0;
     }
 }
@@ -1270,13 +1533,13 @@ GSML3_C_API size_t gsml3_response_build_from_token(int token,
 GSML3_C_API size_t gsml3_response_build_cm_service_accept(uint8_t* out,
     size_t maxlen) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
         int n = ResponseBuilder::buildCMServiceAccept({out, maxlen});
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_cm_service_accept");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_cm_service_accept");
         return 0;
     }
 }
@@ -1284,14 +1547,16 @@ GSML3_C_API size_t gsml3_response_build_cm_service_accept(uint8_t* out,
 GSML3_C_API size_t gsml3_response_build_cm_service_reject(uint8_t* out,
     size_t maxlen, int mm_cause) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        if (!checkEnumValue(mm_cause, ranges::mmCauseLo, ranges::mmCauseHi, "mm_cause"))
+            return 0;
         int n = ResponseBuilder::buildCMServiceReject(
             {out, maxlen}, static_cast<MMRejectCause>(mm_cause));
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_cm_service_reject");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_cm_service_reject");
         return 0;
     }
 }
@@ -1299,14 +1564,17 @@ GSML3_C_API size_t gsml3_response_build_cm_service_reject(uint8_t* out,
 GSML3_C_API size_t gsml3_response_build_identity_request(uint8_t* out,
     size_t maxlen, int id_type) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        // MobileIDType::NoID is not a valid identity-request type on the wire.
+        if (!checkEnumValue(id_type, ranges::idTypeLo + 1, ranges::idTypeHi, "id_type"))
+            return 0;
         int n = ResponseBuilder::buildIdentityRequest(
             {out, maxlen}, static_cast<MobileIDType>(id_type));
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_identity_request");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_identity_request");
         return 0;
     }
 }
@@ -1314,17 +1582,17 @@ GSML3_C_API size_t gsml3_response_build_identity_request(uint8_t* out,
 GSML3_C_API size_t gsml3_response_build_authentication_request(uint8_t* out,
     size_t maxlen, const uint8_t rand[16]) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0 || !rand) {
             setLastError("NULL output buffer or rand");
             return 0;
         }
         int n = ResponseBuilder::buildAuthenticationRequest(
             {out, maxlen}, {rand, 16});
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_authentication_request");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_authentication_request");
         return 0;
     }
 }
@@ -1333,19 +1601,20 @@ GSML3_C_API size_t gsml3_response_build_location_updating_accept(
     uint8_t* out, size_t maxlen, const char* mcc, const char* mnc,
     uint16_t lac, int has_new_tmsi, uint32_t new_tmsi) {
     try {
-        tLastError.clear();
-        if (!out || maxlen == 0 || !mcc || !mnc) {
-            setLastError("NULL output buffer or LAI digits");
-            return 0;
-        }
+        clearLastError();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        // This LAI encoding carries exactly three MCC digits and two or
+        // three MNC digits as raw BCD nibbles; anything else is rejected.
+        if (!checkDigitString(mcc, 3, 3, false, "MCC")) return 0;
+        if (!checkDigitString(mnc, 2, 3, false, "MNC")) return 0;
         L3LocationAreaIdentity lai{mcc, mnc, lac};
         int n = ResponseBuilder::buildLocationUpdatingAccept(
             {out, maxlen}, lai,
             has_new_tmsi ? std::optional<uint32_t>(new_tmsi) : std::nullopt);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_location_updating_accept");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_location_updating_accept");
         return 0;
     }
 }
@@ -1353,14 +1622,16 @@ GSML3_C_API size_t gsml3_response_build_location_updating_accept(
 GSML3_C_API size_t gsml3_response_build_location_updating_reject(
     uint8_t* out, size_t maxlen, int mm_cause) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        if (!checkEnumValue(mm_cause, ranges::mmCauseLo, ranges::mmCauseHi, "mm_cause"))
+            return 0;
         int n = ResponseBuilder::buildLocationUpdatingReject(
             {out, maxlen}, static_cast<MMRejectCause>(mm_cause));
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_location_updating_reject");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_location_updating_reject");
         return 0;
     }
 }
@@ -1369,18 +1640,17 @@ GSML3_C_API size_t gsml3_response_build_tmsi_reallocation_command(
     uint8_t* out, size_t maxlen, const char* mcc, const char* mnc,
     uint16_t lac, uint32_t tmsi) {
     try {
-        tLastError.clear();
-        if (!out || maxlen == 0 || !mcc || !mnc) {
-            setLastError("NULL output buffer or LAI digits");
-            return 0;
-        }
+        clearLastError();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        if (!checkDigitString(mcc, 3, 3, false, "MCC")) return 0;
+        if (!checkDigitString(mnc, 2, 3, false, "MNC")) return 0;
         L3LocationAreaIdentity lai{mcc, mnc, lac};
         int n = ResponseBuilder::buildTMSIReallocationCommand(
             {out, maxlen}, lai, tmsi);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_tmsi_reallocation_command");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_tmsi_reallocation_command");
         return 0;
     }
 }
@@ -1388,14 +1658,16 @@ GSML3_C_API size_t gsml3_response_build_tmsi_reallocation_command(
 GSML3_C_API size_t gsml3_response_build_channel_release(uint8_t* out,
     size_t maxlen, int rr_cause) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        if (!checkEnumValue(rr_cause, ranges::rrCauseLo, ranges::rrCauseHi, "rr_cause"))
+            return 0;
         int n = ResponseBuilder::buildChannelRelease(
             {out, maxlen}, static_cast<RRCause>(rr_cause));
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_channel_release");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_channel_release");
         return 0;
     }
 }
@@ -1403,13 +1675,13 @@ GSML3_C_API size_t gsml3_response_build_channel_release(uint8_t* out,
 GSML3_C_API size_t gsml3_response_build_ciphering_mode_command(uint8_t* out,
     size_t maxlen, uint8_t algo) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
         int n = ResponseBuilder::buildCipheringModeCommand({out, maxlen}, algo);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_ciphering_mode_command");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_ciphering_mode_command");
         return 0;
     }
 }
@@ -1417,13 +1689,13 @@ GSML3_C_API size_t gsml3_response_build_ciphering_mode_command(uint8_t* out,
 GSML3_C_API size_t gsml3_response_build_physical_information(uint8_t* out,
     size_t maxlen, uint8_t ta) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
         int n = ResponseBuilder::buildPhysicalInformation({out, maxlen}, ta);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_physical_information");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_physical_information");
         return 0;
     }
 }
@@ -1432,16 +1704,19 @@ GSML3_C_API size_t gsml3_response_build_immediate_assignment(uint8_t* out,
     size_t maxlen, int type_and_offset, uint8_t tn, uint8_t tsc,
     uint16_t arfcn, uint8_t ta) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        if (!checkEnumValue(type_and_offset, ranges::typeOffsetLo,
+                            ranges::typeOffsetHi, "type_and_offset"))
+            return 0;
         L3ChannelDescription channel{static_cast<TypeAndOffset>(type_and_offset),
                                      tn, tsc, arfcn};
         int n = ResponseBuilder::buildImmediateAssignment(
             {out, maxlen}, channel, ta);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_immediate_assignment");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_immediate_assignment");
         return 0;
     }
 }
@@ -1450,15 +1725,18 @@ GSML3_C_API size_t gsml3_response_build_assignment_command(uint8_t* out,
     size_t maxlen, int type_and_offset, uint8_t tn, uint8_t tsc,
     uint16_t arfcn) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        if (!checkEnumValue(type_and_offset, ranges::typeOffsetLo,
+                            ranges::typeOffsetHi, "type_and_offset"))
+            return 0;
         L3ChannelDescription channel{static_cast<TypeAndOffset>(type_and_offset),
                                      tn, tsc, arfcn};
         int n = ResponseBuilder::buildAssignmentCommand({out, maxlen}, channel);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_assignment_command");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_assignment_command");
         return 0;
     }
 }
@@ -1466,13 +1744,13 @@ GSML3_C_API size_t gsml3_response_build_assignment_command(uint8_t* out,
 GSML3_C_API size_t gsml3_response_build_call_proceeding(uint8_t* out,
     size_t maxlen, uint8_t ti) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
         int n = ResponseBuilder::buildCallProceeding({out, maxlen}, ti);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_call_proceeding");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_call_proceeding");
         return 0;
     }
 }
@@ -1480,13 +1758,13 @@ GSML3_C_API size_t gsml3_response_build_call_proceeding(uint8_t* out,
 GSML3_C_API size_t gsml3_response_build_alerting(uint8_t* out, size_t maxlen,
     uint8_t ti) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
         int n = ResponseBuilder::buildAlerting({out, maxlen}, ti);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_alerting");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_alerting");
         return 0;
     }
 }
@@ -1494,13 +1772,13 @@ GSML3_C_API size_t gsml3_response_build_alerting(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_response_build_connect(uint8_t* out, size_t maxlen,
     uint8_t ti) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
         int n = ResponseBuilder::buildConnect({out, maxlen}, ti);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_connect");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_connect");
         return 0;
     }
 }
@@ -1508,13 +1786,13 @@ GSML3_C_API size_t gsml3_response_build_connect(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_response_build_connect_acknowledge(uint8_t* out,
     size_t maxlen, uint8_t ti) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
         int n = ResponseBuilder::buildConnectAcknowledge({out, maxlen}, ti);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_connect_acknowledge");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_connect_acknowledge");
         return 0;
     }
 }
@@ -1522,14 +1800,16 @@ GSML3_C_API size_t gsml3_response_build_connect_acknowledge(uint8_t* out,
 GSML3_C_API size_t gsml3_response_build_disconnect(uint8_t* out,
     size_t maxlen, uint8_t ti, int cc_cause) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        if (!checkEnumValue(cc_cause, ranges::ccCauseLo, ranges::ccCauseHi, "cc_cause"))
+            return 0;
         int n = ResponseBuilder::buildDisconnect(
             {out, maxlen}, ti, static_cast<CCCause>(cc_cause));
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_disconnect");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_disconnect");
         return 0;
     }
 }
@@ -1537,14 +1817,16 @@ GSML3_C_API size_t gsml3_response_build_disconnect(uint8_t* out,
 GSML3_C_API size_t gsml3_response_build_release(uint8_t* out, size_t maxlen,
     uint8_t ti, int cc_cause) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        if (!checkEnumValue(cc_cause, ranges::ccCauseLo, ranges::ccCauseHi, "cc_cause"))
+            return 0;
         int n = ResponseBuilder::buildRelease(
             {out, maxlen}, ti, static_cast<CCCause>(cc_cause));
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_release");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_release");
         return 0;
     }
 }
@@ -1552,13 +1834,13 @@ GSML3_C_API size_t gsml3_response_build_release(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_response_build_release_complete(uint8_t* out,
     size_t maxlen, uint8_t ti) {
     try {
-        tLastError.clear();
+        clearLastError();
         if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
         int n = ResponseBuilder::buildReleaseComplete({out, maxlen}, ti);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_release_complete");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_release_complete");
         return 0;
     }
 }
@@ -1566,17 +1848,18 @@ GSML3_C_API size_t gsml3_response_build_release_complete(uint8_t* out,
 GSML3_C_API size_t gsml3_response_build_setup(uint8_t* out, size_t maxlen,
     const char* called_digits, uint8_t ti) {
     try {
-        tLastError.clear();
-        if (!out || maxlen == 0 || !called_digits || !*called_digits) {
-            setLastError("NULL output buffer or called number");
+        clearLastError();
+        if (!out || maxlen == 0) { setLastError("NULL output buffer"); return 0; }
+        // A leading '+' marks an international (E.164) number.
+        if (!checkDigitString(called_digits, 1, L3BCDDigits::maxDigits, true,
+                              "called_digits"))
             return 0;
-        }
         int n = ResponseBuilder::buildSetupZeroAlloc(
             {out, maxlen}, called_digits, std::strlen(called_digits), ti);
-        if (n < 0) setLastError("buffer too small");
+        if (n < 0) setBufferTooSmallError();
         return n > 0 ? static_cast<size_t>(n) : 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_response_build_setup");
+        setLastErrorUnexpected("unexpected exception in gsml3_response_build_setup");
         return 0;
     }
 }
@@ -1594,9 +1877,10 @@ int typedGetInt(const gsml3_message* msg, F&& f) {
 }
 
 // Builder: write one message into the caller's buffer; 0 on error.
+// (Clears the thread-local error so a success never reports a stale one.)
 template <typename Variant, typename F>
 size_t typedBuild(uint8_t* out, size_t maxlen, F&& f) {
-    tLastError.clear();
+    clearLastError();
     if (!out || maxlen == 0) { setLastError("NULL or empty output buffer"); return 0; }
     ParsedMessage pm(f());
     auto r = writeL3(pm, out, maxlen);
@@ -1605,14 +1889,34 @@ size_t typedBuild(uint8_t* out, size_t maxlen, F&& f) {
 }
 
 L3MobileIdentity cIdentity(int id_type, uint32_t tmsi, const char* imsi,
-                            bool* ok) {
+                             bool* ok) {
     *ok = false;
     if (id_type == GSML3_ID_TMSI) { *ok = true; return L3MobileIdentity{tmsi}; }
-    if (id_type == GSML3_ID_IMSI && imsi) {
-        *ok = true;
-        return L3MobileIdentity{std::string_view(imsi)};
+    if (id_type == GSML3_ID_IMSI) {
+        // The IMSI digit string is validated before it reaches the BCD
+        // encoder, so the builder never emits an out-of-domain sequence.
+        if (checkDigitString(imsi, 1, 15, false, "IMSI")) {
+            *ok = true;
+            return L3MobileIdentity{std::string_view(imsi)};
+        }
+        return L3MobileIdentity{};
     }
+    setError(GSML3_ERR_INVALID_ARG,
+             "id_type must be TMSI (GSML3_ID_TMSI) or IMSI (GSML3_ID_IMSI)");
     return L3MobileIdentity{};
+}
+
+// Validated LAI: MCC is 2..999 (rendered as three digits) and MNC 1..999.
+bool checkLaiDigits(int mcc, int mnc, uint16_t /*lac*/) {
+    if (mcc < 1 || mcc > 999) {
+        setError(GSML3_ERR_INVALID_ARG, "invalid MCC value (expected 1..999)");
+        return false;
+    }
+    if (mnc < 1 || mnc > 999) {
+        setError(GSML3_ERR_INVALID_ARG, "invalid MNC value (expected 1..999)");
+        return false;
+    }
+    return true;
 }
 
 L3LocationAreaIdentity cLai(int mcc, int mnc, uint16_t lac) {
@@ -1648,7 +1952,7 @@ GSML3_C_API int gsml3_msg_channel_release_cause(const gsml3_message* msg) {
     try {
         return typedGetInt<L3ChannelRelease>(msg, [](auto& m){ return (int)m.cause(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_channel_release_cause");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_channel_release_cause");
         return -1;
     }
 }
@@ -1658,7 +1962,7 @@ GSML3_C_API int gsml3_msg_channel_release_gprs_resumption(const gsml3_message* m
         return typedGetInt<L3ChannelRelease>(msg,
             [](auto& m){ return m.hasGprsResumption() ? (m.gprsResumption() ? 1 : 0) : -1; });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_channel_release_gprs_resumption");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_channel_release_gprs_resumption");
         return -1;
     }
 }
@@ -1667,7 +1971,7 @@ GSML3_C_API int gsml3_msg_channel_request_ra(const gsml3_message* msg) {
     try {
         return typedGetInt<L3ChannelRequest>(msg, [](auto& m){ return (int)m.requestReference(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_channel_request_ra");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_channel_request_ra");
         return -1;
     }
 }
@@ -1682,7 +1986,7 @@ GSML3_C_API int gsml3_msg_immediate_assignment_channel(const gsml3_message* msg,
         }
         return -1;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_immediate_assignment_channel");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_immediate_assignment_channel");
         return -1;
     }
 }
@@ -1692,7 +1996,7 @@ GSML3_C_API int gsml3_msg_immediate_assignment_ta(const gsml3_message* msg) {
         return typedGetInt<L3ImmediateAssignment>(msg,
             [](auto& m){ return (int)m.timingAdvance().timingAdvance(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_immediate_assignment_ta");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_immediate_assignment_ta");
         return -1;
     }
 }
@@ -1701,7 +2005,7 @@ GSML3_C_API int gsml3_msg_immediate_assignment_reject_wait_time(const gsml3_mess
     try {
         return typedGetInt<L3ImmediateAssignmentReject>(msg, [](auto& m){ return (int)m.waitTime(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_immediate_assignment_reject_wait_time");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_immediate_assignment_reject_wait_time");
         return -1;
     }
 }
@@ -1716,7 +2020,7 @@ GSML3_C_API int gsml3_msg_assignment_command_channel(const gsml3_message* msg,
         }
         return -1;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_assignment_command_channel");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_assignment_command_channel");
         return -1;
     }
 }
@@ -1725,7 +2029,7 @@ GSML3_C_API int gsml3_msg_assignment_complete_cause(const gsml3_message* msg) {
     try {
         return typedGetInt<L3AssignmentComplete>(msg, [](auto& m){ return (int)m.cause(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_assignment_complete_cause");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_assignment_complete_cause");
         return -1;
     }
 }
@@ -1734,7 +2038,7 @@ GSML3_C_API int gsml3_msg_assignment_failure_cause(const gsml3_message* msg) {
     try {
         return typedGetInt<L3AssignmentFailure>(msg, [](auto& m){ return (int)m.cause(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_assignment_failure_cause");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_assignment_failure_cause");
         return -1;
     }
 }
@@ -1743,7 +2047,7 @@ GSML3_C_API int gsml3_msg_paging_request_type1_count(const gsml3_message* msg) {
     try {
         return typedGetInt<L3PagingRequestType1>(msg, [](auto& m){ return (int)m.mobileIds().size(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_paging_request_type1_count");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_paging_request_type1_count");
         return -1;
     }
 }
@@ -1760,7 +2064,7 @@ GSML3_C_API int gsml3_msg_paging_request_type1_identity(const gsml3_message* msg
         fillCIdentity(ids[index], id);
         return 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_paging_request_type1_identity");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_paging_request_type1_identity");
         return -1;
     }
 }
@@ -1775,7 +2079,7 @@ GSML3_C_API uint32_t gsml3_msg_paging_request_type2_tmsi(const gsml3_message* ms
         if (index < 0 || static_cast<size_t>(index) >= t.size()) return 0;
         return t[static_cast<size_t>(index)];
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_paging_request_type2_tmsi");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_paging_request_type2_tmsi");
         return 0;
     }
 }
@@ -1790,7 +2094,7 @@ GSML3_C_API uint32_t gsml3_msg_paging_request_type3_tmsi(const gsml3_message* ms
         if (index < 0 || static_cast<size_t>(index) >= t.size()) return 0;
         return t[static_cast<size_t>(index)];
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_paging_request_type3_tmsi");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_paging_request_type3_tmsi");
         return 0;
     }
 }
@@ -1799,7 +2103,7 @@ GSML3_C_API int gsml3_msg_paging_response_cks(const gsml3_message* msg) {
     try {
         return typedGetInt<L3PagingResponse>(msg, [](auto& m){ return (int)m.cksn(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_paging_response_cks");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_paging_response_cks");
         return -1;
     }
 }
@@ -1813,7 +2117,7 @@ GSML3_C_API int gsml3_msg_paging_response_identity(const gsml3_message* msg,
         fillCIdentity(m->mobileId(), id);
         return 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_paging_response_identity");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_paging_response_identity");
         return -1;
     }
 }
@@ -1822,7 +2126,7 @@ GSML3_C_API int gsml3_msg_ciphering_mode_command_ciphering(const gsml3_message* 
     try {
         return typedGetInt<L3CipheringModeCommand>(msg, [](auto& m){ return m.isCiphering() ? 1 : 0; });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_ciphering_mode_command_ciphering");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_ciphering_mode_command_ciphering");
         return -1;
     }
 }
@@ -1831,7 +2135,7 @@ GSML3_C_API int gsml3_msg_ciphering_mode_command_algorithm(const gsml3_message* 
     try {
         return typedGetInt<L3CipheringModeCommand>(msg, [](auto& m){ return m.algorithm(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_ciphering_mode_command_algorithm");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_ciphering_mode_command_algorithm");
         return -1;
     }
 }
@@ -1840,7 +2144,7 @@ GSML3_C_API int gsml3_msg_ciphering_mode_complete_response(const gsml3_message* 
     try {
         return typedGetInt<L3CipheringModeComplete>(msg, [](auto& m){ return (int)m.cipheringModeResponse(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_ciphering_mode_complete_response");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_ciphering_mode_complete_response");
         return -1;
     }
 }
@@ -1849,7 +2153,7 @@ GSML3_C_API int gsml3_msg_ciphering_mode_complete_has_imeisv(const gsml3_message
     try {
         return typedGetInt<L3CipheringModeComplete>(msg, [](auto& m){ return m.hasImeisv() ? 1 : 0; });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_ciphering_mode_complete_has_imeisv");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_ciphering_mode_complete_has_imeisv");
         return -1;
     }
 }
@@ -1858,7 +2162,7 @@ GSML3_C_API int gsml3_msg_handover_complete_cause(const gsml3_message* msg) {
     try {
         return typedGetInt<L3HandoverComplete>(msg, [](auto& m){ return (int)m.cause(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_handover_complete_cause");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_handover_complete_cause");
         return -1;
     }
 }
@@ -1877,7 +2181,7 @@ GSML3_C_API int gsml3_msg_handover_command_cell(const gsml3_message* msg,
         }
         return -1;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_handover_command_cell");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_handover_command_cell");
         return -1;
     }
 }
@@ -1886,7 +2190,7 @@ GSML3_C_API int gsml3_msg_physical_information_ta(const gsml3_message* msg) {
     try {
         return typedGetInt<L3PhysicalInformation>(msg, [](auto& m){ return (int)m.timingAdvance().timingAdvance(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_physical_information_ta");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_physical_information_ta");
         return -1;
     }
 }
@@ -1897,7 +2201,7 @@ GSML3_C_API int gsml3_msg_cm_service_request_service_type(const gsml3_message* m
     try {
         return typedGetInt<L3CMServiceRequest>(msg, [](auto& m){ return (int)m.serviceType(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_cm_service_request_service_type");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_cm_service_request_service_type");
         return -1;
     }
 }
@@ -1911,7 +2215,7 @@ GSML3_C_API int gsml3_msg_cm_service_request_identity(const gsml3_message* msg,
         fillCIdentity(m->mobileId(), id);
         return 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_cm_service_request_identity");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_cm_service_request_identity");
         return -1;
     }
 }
@@ -1920,7 +2224,7 @@ GSML3_C_API int gsml3_msg_cm_service_reject_cause(const gsml3_message* msg) {
     try {
         return typedGetInt<L3CMServiceReject>(msg, [](auto& m){ return (int)m.cause(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_cm_service_reject_cause");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_cm_service_reject_cause");
         return -1;
     }
 }
@@ -1929,7 +2233,7 @@ GSML3_C_API int gsml3_msg_cm_service_abort_cause(const gsml3_message* msg) {
     try {
         return typedGetInt<L3CMServiceAbort>(msg, [](auto& m){ return (int)m.cause(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_cm_service_abort_cause");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_cm_service_abort_cause");
         return -1;
     }
 }
@@ -1938,7 +2242,7 @@ GSML3_C_API int gsml3_msg_identity_request_type(const gsml3_message* msg) {
     try {
         return typedGetInt<L3IdentityRequest>(msg, [](auto& m){ return (int)m.type(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_identity_request_type");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_identity_request_type");
         return -1;
     }
 }
@@ -1952,7 +2256,7 @@ GSML3_C_API int gsml3_msg_identity_response_identity(const gsml3_message* msg,
         fillCIdentity(m->mobileId(), id);
         return 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_identity_response_identity");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_identity_response_identity");
         return -1;
     }
 }
@@ -1961,7 +2265,7 @@ GSML3_C_API int gsml3_msg_location_updating_request_update_type(const gsml3_mess
     try {
         return typedGetInt<L3LocationUpdatingRequest>(msg, [](auto& m){ return (int)m.getLocationUpdatingType(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_location_updating_request_update_type");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_location_updating_request_update_type");
         return -1;
     }
 }
@@ -1975,7 +2279,7 @@ GSML3_C_API int gsml3_msg_location_updating_request_identity(const gsml3_message
         fillCIdentity(m->mobileId(), id);
         return 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_location_updating_request_identity");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_location_updating_request_identity");
         return -1;
     }
 }
@@ -1993,7 +2297,7 @@ GSML3_C_API int gsml3_msg_location_updating_request_lai(const gsml3_message* msg
         }
         return -1;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_location_updating_request_lai");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_location_updating_request_lai");
         return -1;
     }
 }
@@ -2011,7 +2315,7 @@ GSML3_C_API int gsml3_msg_location_updating_accept_lai(const gsml3_message* msg,
         }
         return -1;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_location_updating_accept_lai");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_location_updating_accept_lai");
         return -1;
     }
 }
@@ -2026,7 +2330,7 @@ GSML3_C_API int gsml3_msg_location_updating_accept_identity(const gsml3_message*
         fillCIdentity(m->mobileIdentity(), id);
         return 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_location_updating_accept_identity");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_location_updating_accept_identity");
         return -1;
     }
 }
@@ -2035,7 +2339,7 @@ GSML3_C_API int gsml3_msg_location_updating_reject_cause(const gsml3_message* ms
     try {
         return typedGetInt<L3LocationUpdatingReject>(msg, [](auto& m){ return (int)m.cause(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_location_updating_reject_cause");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_location_updating_reject_cause");
         return -1;
     }
 }
@@ -2044,7 +2348,7 @@ GSML3_C_API int gsml3_msg_authentication_request_cks(const gsml3_message* msg) {
     try {
         return typedGetInt<L3AuthenticationRequest>(msg, [](auto& m){ return (int)m.cksn(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_authentication_request_cks");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_authentication_request_cks");
         return -1;
     }
 }
@@ -2059,7 +2363,7 @@ GSML3_C_API int gsml3_msg_authentication_request_rand(const gsml3_message* msg,
         std::memcpy(rand, r.data(), 16);
         return 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_authentication_request_rand");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_authentication_request_rand");
         return -1;
     }
 }
@@ -2070,7 +2374,7 @@ GSML3_C_API uint32_t gsml3_msg_authentication_response_sres(const gsml3_message*
         if (auto* m = tryGet<L3AuthenticationResponse>(msg->msg)) return m->sres();
         return 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_authentication_response_sres");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_authentication_response_sres");
         return 0;
     }
 }
@@ -2088,7 +2392,7 @@ GSML3_C_API int gsml3_msg_tmsi_reallocation_command_lai(const gsml3_message* msg
         }
         return -1;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_tmsi_reallocation_command_lai");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_tmsi_reallocation_command_lai");
         return -1;
     }
 }
@@ -2100,7 +2404,7 @@ GSML3_C_API uint32_t gsml3_msg_tmsi_reallocation_command_tmsi(const gsml3_messag
             return m->tmsi().isTMSI() ? m->tmsi().tmsi() : 0;
         return 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_tmsi_reallocation_command_tmsi");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_tmsi_reallocation_command_tmsi");
         return 0;
     }
 }
@@ -2114,7 +2418,7 @@ GSML3_C_API int gsml3_msg_imsi_detach_indication_identity(const gsml3_message* m
         fillCIdentity(m->mobileId(), id);
         return 0;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_imsi_detach_indication_identity");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_imsi_detach_indication_identity");
         return -1;
     }
 }
@@ -2125,7 +2429,7 @@ GSML3_C_API int gsml3_msg_setup_ti(const gsml3_message* msg) {
     try {
         return typedGetInt<L3Setup>(msg, [](auto& m){ return (int)m.ti(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_setup_ti");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_setup_ti");
         return -1;
     }
 }
@@ -2134,7 +2438,7 @@ GSML3_C_API int gsml3_msg_setup_have_called_party(const gsml3_message* msg) {
     try {
         return typedGetInt<L3Setup>(msg, [](auto& m){ return m.haveCalledParty() ? 1 : 0; });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_setup_have_called_party");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_setup_have_called_party");
         return -1;
     }
 }
@@ -2146,7 +2450,7 @@ GSML3_C_API const char* gsml3_msg_setup_called_number(const gsml3_message* msg) 
             return m->haveCalledParty() ? m->digits() : nullptr;
         return nullptr;
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_setup_called_number");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_setup_called_number");
         return nullptr;
     }
 }
@@ -2155,7 +2459,7 @@ GSML3_C_API int gsml3_msg_call_proceeding_ti(const gsml3_message* msg) {
     try {
         return typedGetInt<L3CallProceeding>(msg, [](auto& m){ return (int)m.ti(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_call_proceeding_ti");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_call_proceeding_ti");
         return -1;
     }
 }
@@ -2164,7 +2468,7 @@ GSML3_C_API int gsml3_msg_alerting_ti(const gsml3_message* msg) {
     try {
         return typedGetInt<L3Alerting>(msg, [](auto& m){ return (int)m.ti(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_alerting_ti");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_alerting_ti");
         return -1;
     }
 }
@@ -2173,7 +2477,7 @@ GSML3_C_API int gsml3_msg_connect_ti(const gsml3_message* msg) {
     try {
         return typedGetInt<L3Connect>(msg, [](auto& m){ return (int)m.ti(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_connect_ti");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_connect_ti");
         return -1;
     }
 }
@@ -2182,7 +2486,7 @@ GSML3_C_API int gsml3_msg_connect_acknowledge_ti(const gsml3_message* msg) {
     try {
         return typedGetInt<L3ConnectAcknowledge>(msg, [](auto& m){ return (int)m.ti(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_connect_acknowledge_ti");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_connect_acknowledge_ti");
         return -1;
     }
 }
@@ -2191,7 +2495,7 @@ GSML3_C_API int gsml3_msg_disconnect_ti(const gsml3_message* msg) {
     try {
         return typedGetInt<L3Disconnect>(msg, [](auto& m){ return (int)m.ti(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_disconnect_ti");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_disconnect_ti");
         return -1;
     }
 }
@@ -2200,7 +2504,7 @@ GSML3_C_API int gsml3_msg_disconnect_cause(const gsml3_message* msg) {
     try {
         return typedGetInt<L3Disconnect>(msg, [](auto& m){ return (int)m.cause(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_disconnect_cause");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_disconnect_cause");
         return -1;
     }
 }
@@ -2209,7 +2513,7 @@ GSML3_C_API int gsml3_msg_release_ti(const gsml3_message* msg) {
     try {
         return typedGetInt<L3Release>(msg, [](auto& m){ return (int)m.ti(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_release_ti");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_release_ti");
         return -1;
     }
 }
@@ -2218,7 +2522,7 @@ GSML3_C_API int gsml3_msg_release_have_cause(const gsml3_message* msg) {
     try {
         return typedGetInt<L3Release>(msg, [](auto& m){ return m.haveCause() ? 1 : 0; });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_release_have_cause");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_release_have_cause");
         return -1;
     }
 }
@@ -2227,7 +2531,7 @@ GSML3_C_API int gsml3_msg_release_cause(const gsml3_message* msg) {
     try {
         return typedGetInt<L3Release>(msg, [](auto& m){ return (int)m.cause(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_release_cause");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_release_cause");
         return -1;
     }
 }
@@ -2236,7 +2540,7 @@ GSML3_C_API int gsml3_msg_release_complete_ti(const gsml3_message* msg) {
     try {
         return typedGetInt<L3ReleaseComplete>(msg, [](auto& m){ return (int)m.ti(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_release_complete_ti");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_release_complete_ti");
         return -1;
     }
 }
@@ -2245,7 +2549,7 @@ GSML3_C_API int gsml3_msg_release_complete_have_cause(const gsml3_message* msg) 
     try {
         return typedGetInt<L3ReleaseComplete>(msg, [](auto& m){ return m.haveCause() ? 1 : 0; });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_release_complete_have_cause");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_release_complete_have_cause");
         return -1;
     }
 }
@@ -2254,7 +2558,7 @@ GSML3_C_API int gsml3_msg_release_complete_cause(const gsml3_message* msg) {
     try {
         return typedGetInt<L3ReleaseComplete>(msg, [](auto& m){ return (int)m.cause(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_release_complete_cause");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_release_complete_cause");
         return -1;
     }
 }
@@ -2263,7 +2567,7 @@ GSML3_C_API int gsml3_msg_facility_ti(const gsml3_message* msg) {
     try {
         return typedGetInt<L3Facility>(msg, [](auto& m){ return (int)m.ti(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_facility_ti");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_facility_ti");
         return -1;
     }
 }
@@ -2279,7 +2583,7 @@ GSML3_C_API size_t gsml3_msg_facility_body(const gsml3_message* msg,
         if (!b.empty()) std::memcpy(out, b.data(), b.size());
         return b.size();
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_facility_body");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_facility_body");
         return 0;
     }
 }
@@ -2297,7 +2601,7 @@ GSML3_C_API size_t gsml3_msg_cp_data_rpdu(const gsml3_message* msg,
         if (!b.empty()) std::memcpy(out, b.data(), b.size());
         return b.size();
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_cp_data_rpdu");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_cp_data_rpdu");
         return 0;
     }
 }
@@ -2306,7 +2610,7 @@ GSML3_C_API int gsml3_msg_cp_status_tp_oi(const gsml3_message* msg) {
     try {
         return typedGetInt<L3CPStatus>(msg, [](auto& m){ return (int)m.tpOi(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_cp_status_tp_oi");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_cp_status_tp_oi");
         return -1;
     }
 }
@@ -2315,7 +2619,7 @@ GSML3_C_API int gsml3_msg_cp_status_mti_value(const gsml3_message* msg) {
     try {
         return typedGetInt<L3CPStatus>(msg, [](auto& m){ return (int)m.mtiValue(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_cp_status_mti_value");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_cp_status_mti_value");
         return -1;
     }
 }
@@ -2324,7 +2628,7 @@ GSML3_C_API int gsml3_msg_cp_status_has_message_ref(const gsml3_message* msg) {
     try {
         return typedGetInt<L3CPStatus>(msg, [](auto& m){ return m.hasMessageRef() ? 1 : 0; });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_cp_status_has_message_ref");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_cp_status_has_message_ref");
         return -1;
     }
 }
@@ -2333,7 +2637,7 @@ GSML3_C_API int gsml3_msg_cp_status_message_ref(const gsml3_message* msg) {
     try {
         return typedGetInt<L3CPStatus>(msg, [](auto& m){ return (int)m.messageRef(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_cp_status_message_ref");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_cp_status_message_ref");
         return -1;
     }
 }
@@ -2349,7 +2653,7 @@ GSML3_C_API size_t gsml3_msg_cp_smt_rpdu(const gsml3_message* msg,
         if (!b.empty()) std::memcpy(out, b.data(), b.size());
         return b.size();
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_cp_smt_rpdu");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_cp_smt_rpdu");
         return 0;
     }
 }
@@ -2358,7 +2662,7 @@ GSML3_C_API int gsml3_msg_sms_deliver_tp_mti(const gsml3_message* msg) {
     try {
         return typedGetInt<L3SMSDeliver>(msg, [](auto& m){ return (int)m.tpMti(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_sms_deliver_tp_mti");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_sms_deliver_tp_mti");
         return -1;
     }
 }
@@ -2367,7 +2671,7 @@ GSML3_C_API int gsml3_msg_sms_deliver_tp_mr(const gsml3_message* msg) {
     try {
         return typedGetInt<L3SMSDeliver>(msg, [](auto& m){ return (int)m.tpMr(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_sms_deliver_tp_mr");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_sms_deliver_tp_mr");
         return -1;
     }
 }
@@ -2376,7 +2680,7 @@ GSML3_C_API int gsml3_msg_sms_deliver_has_tp_ud(const gsml3_message* msg) {
     try {
         return typedGetInt<L3SMSDeliver>(msg, [](auto& m){ return m.hasTpUd() ? 1 : 0; });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_sms_deliver_has_tp_ud");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_sms_deliver_has_tp_ud");
         return -1;
     }
 }
@@ -2392,7 +2696,7 @@ GSML3_C_API size_t gsml3_msg_sms_deliver_tp_ud(const gsml3_message* msg,
         if (!b.empty()) std::memcpy(out, b.data(), b.size());
         return b.size();
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_sms_deliver_tp_ud");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_sms_deliver_tp_ud");
         return 0;
     }
 }
@@ -2403,7 +2707,7 @@ GSML3_C_API int gsml3_msg_sup_serv_facility_ti(const gsml3_message* msg) {
     try {
         return typedGetInt<L3SupServFacilityMessage>(msg, [](auto& m){ return (int)m.ti(); });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_sup_serv_facility_ti");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_sup_serv_facility_ti");
         return -1;
     }
 }
@@ -2419,7 +2723,7 @@ GSML3_C_API size_t gsml3_msg_sup_serv_facility_data(const gsml3_message* msg,
         if (!d.empty()) std::memcpy(out, d.data(), d.size());
         return d.size();
     } catch (...) {
-        setLastError("unexpected exception in gsml3_msg_sup_serv_facility_data");
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_sup_serv_facility_data");
         return 0;
     }
 }
@@ -2427,15 +2731,17 @@ GSML3_C_API size_t gsml3_msg_sup_serv_facility_data(const gsml3_message* msg,
 // ── Typed builders ─────────────────────────────────────────────────────
 
 GSML3_C_API size_t gsml3_build_channel_release(uint8_t* out, size_t maxlen,
-                                                int rr_cause) {
+                                                 int rr_cause) {
     try {
+        if (!checkEnumValue(rr_cause, ranges::rrCauseLo, ranges::rrCauseHi, "rr_cause"))
+            return 0;
         return typedBuild<RRM>(out, maxlen, [&]{
             return RRM{L3ChannelRelease::builder()
                            .cause(static_cast<RRCause>(rr_cause))
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_channel_release");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_channel_release");
         return 0;
     }
 }
@@ -2447,7 +2753,7 @@ GSML3_C_API size_t gsml3_build_channel_request(uint8_t* out, size_t maxlen,
             return RRM{L3ChannelRequest::builder().requestReference(ra).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_channel_request");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_channel_request");
         return 0;
     }
 }
@@ -2456,6 +2762,9 @@ GSML3_C_API size_t gsml3_build_immediate_assignment(uint8_t* out, size_t maxlen,
     int type_and_offset, uint8_t tn, uint8_t tsc, uint16_t arfcn, uint8_t ta,
     uint8_t ra) {
     try {
+        if (!checkEnumValue(type_and_offset, ranges::typeOffsetLo,
+                            ranges::typeOffsetHi, "type_and_offset"))
+            return 0;
         return typedBuild<RRM>(out, maxlen, [&]{
             return RRM{L3ImmediateAssignment::builder()
                            .channelDescription(L3ChannelDescription{
@@ -2465,7 +2774,7 @@ GSML3_C_API size_t gsml3_build_immediate_assignment(uint8_t* out, size_t maxlen,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_immediate_assignment");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_immediate_assignment");
         return 0;
     }
 }
@@ -2478,7 +2787,7 @@ GSML3_C_API size_t gsml3_build_immediate_assignment_reject(uint8_t* out,
                            .waitTime(wait_seconds).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_immediate_assignment_reject");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_immediate_assignment_reject");
         return 0;
     }
 }
@@ -2486,6 +2795,9 @@ GSML3_C_API size_t gsml3_build_immediate_assignment_reject(uint8_t* out,
 GSML3_C_API size_t gsml3_build_assignment_command(uint8_t* out, size_t maxlen,
     int type_and_offset, uint8_t tn, uint8_t tsc, uint16_t arfcn) {
     try {
+        if (!checkEnumValue(type_and_offset, ranges::typeOffsetLo,
+                            ranges::typeOffsetHi, "type_and_offset"))
+            return 0;
         return typedBuild<RRM>(out, maxlen, [&]{
             return RRM{L3AssignmentCommand::builder()
                            .channel(L3ChannelDescription{
@@ -2493,7 +2805,7 @@ GSML3_C_API size_t gsml3_build_assignment_command(uint8_t* out, size_t maxlen,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_assignment_command");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_assignment_command");
         return 0;
     }
 }
@@ -2501,13 +2813,15 @@ GSML3_C_API size_t gsml3_build_assignment_command(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_build_assignment_complete(uint8_t* out, size_t maxlen,
                                                     int rr_cause) {
     try {
+        if (!checkEnumValue(rr_cause, ranges::rrCauseLo, ranges::rrCauseHi, "rr_cause"))
+            return 0;
         return typedBuild<RRM>(out, maxlen, [&]{
             return RRM{L3AssignmentComplete::builder()
                            .cause(static_cast<RRCause>(rr_cause))
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_assignment_complete");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_assignment_complete");
         return 0;
     }
 }
@@ -2515,13 +2829,15 @@ GSML3_C_API size_t gsml3_build_assignment_complete(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_build_assignment_failure(uint8_t* out, size_t maxlen,
                                                    int rr_cause) {
     try {
+        if (!checkEnumValue(rr_cause, ranges::rrCauseLo, ranges::rrCauseHi, "rr_cause"))
+            return 0;
         return typedBuild<RRM>(out, maxlen, [&]{
             return RRM{L3AssignmentFailure::builder()
                            .cause(static_cast<RRCause>(rr_cause))
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_assignment_failure");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_assignment_failure");
         return 0;
     }
 }
@@ -2535,7 +2851,7 @@ GSML3_C_API size_t gsml3_build_paging_request_type1(uint8_t* out, size_t maxlen,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_paging_request_type1");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_paging_request_type1");
         return 0;
     }
 }
@@ -2550,7 +2866,7 @@ GSML3_C_API size_t gsml3_build_paging_request_type2(uint8_t* out, size_t maxlen,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_paging_request_type2");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_paging_request_type2");
         return 0;
     }
 }
@@ -2567,7 +2883,7 @@ GSML3_C_API size_t gsml3_build_paging_request_type3(uint8_t* out, size_t maxlen,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_paging_request_type3");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_paging_request_type3");
         return 0;
     }
 }
@@ -2577,15 +2893,12 @@ GSML3_C_API size_t gsml3_build_paging_response(uint8_t* out, size_t maxlen,
     try {
         bool ok = false;
         L3MobileIdentity mi = cIdentity(id_type, tmsi, imsi, &ok);
-        if (!ok) {
-            setLastError("invalid identity: id_type must be TMSI or IMSI");
-            return 0;
-        }
+        if (!ok) return 0; // cIdentity() reports the exact reason above
         return typedBuild<RRM>(out, maxlen, [&]{
             return RRM{L3PagingResponse::builder().mobileId(mi).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_paging_response");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_paging_response");
         return 0;
     }
 }
@@ -2602,7 +2915,7 @@ GSML3_C_API size_t gsml3_build_ciphering_mode_command(uint8_t* out, size_t maxle
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_ciphering_mode_command");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_ciphering_mode_command");
         return 0;
     }
 }
@@ -2610,12 +2923,14 @@ GSML3_C_API size_t gsml3_build_ciphering_mode_command(uint8_t* out, size_t maxle
 GSML3_C_API size_t gsml3_build_ciphering_mode_complete(uint8_t* out,
                                                         size_t maxlen, int response) {
     try {
+        // 2-bit ciphering-mode response: 0 or 1 only.
+        if (!checkEnumValue(response, 0, 1, "response")) return 0;
         return typedBuild<RRM>(out, maxlen, [&]{
             return RRM{L3CipheringModeComplete::builder()
                            .response(static_cast<unsigned>(response)).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_ciphering_mode_complete");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_ciphering_mode_complete");
         return 0;
     }
 }
@@ -2623,13 +2938,15 @@ GSML3_C_API size_t gsml3_build_ciphering_mode_complete(uint8_t* out,
 GSML3_C_API size_t gsml3_build_handover_complete(uint8_t* out, size_t maxlen,
                                                   int rr_cause) {
     try {
+        if (!checkEnumValue(rr_cause, ranges::rrCauseLo, ranges::rrCauseHi, "rr_cause"))
+            return 0;
         return typedBuild<RRM>(out, maxlen, [&]{
             return RRM{L3HandoverComplete::builder()
                            .cause(static_cast<RRCause>(rr_cause))
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_handover_complete");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_handover_complete");
         return 0;
     }
 }
@@ -2642,7 +2959,7 @@ GSML3_C_API size_t gsml3_build_physical_information(uint8_t* out, size_t maxlen,
                            .timingAdvance(L3TimingAdvance(ta)).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_physical_information");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_physical_information");
         return 0;
     }
 }
@@ -2652,12 +2969,12 @@ GSML3_C_API size_t gsml3_build_physical_information(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_build_cm_service_request(uint8_t* out, size_t maxlen,
     int service_type, int id_type, uint32_t tmsi, const char* imsi) {
     try {
+        if (!checkEnumValue(service_type, ranges::serviceTypeLo, ranges::serviceTypeHi,
+                            "service_type"))
+            return 0;
         bool ok = false;
         L3MobileIdentity mi = cIdentity(id_type, tmsi, imsi, &ok);
-        if (!ok) {
-            setLastError("invalid identity: id_type must be TMSI or IMSI");
-            return 0;
-        }
+        if (!ok) return 0; // cIdentity() already reported the reason
         return typedBuild<MMM>(out, maxlen, [&]{
             return MMM{L3CMServiceRequest::builder()
                            .serviceType(L3CMServiceType{static_cast<L3CMServiceType::TypeCode>(service_type)})
@@ -2665,7 +2982,7 @@ GSML3_C_API size_t gsml3_build_cm_service_request(uint8_t* out, size_t maxlen,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_cm_service_request");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_cm_service_request");
         return 0;
     }
 }
@@ -2676,7 +2993,7 @@ GSML3_C_API size_t gsml3_build_cm_service_accept(uint8_t* out, size_t maxlen) {
             return MMM{L3CMServiceAccept::builder().build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_cm_service_accept");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_cm_service_accept");
         return 0;
     }
 }
@@ -2684,13 +3001,15 @@ GSML3_C_API size_t gsml3_build_cm_service_accept(uint8_t* out, size_t maxlen) {
 GSML3_C_API size_t gsml3_build_cm_service_reject(uint8_t* out, size_t maxlen,
                                                   int mm_cause) {
     try {
+        if (!checkEnumValue(mm_cause, ranges::mmCauseLo, ranges::mmCauseHi, "mm_cause"))
+            return 0;
         return typedBuild<MMM>(out, maxlen, [&]{
             return MMM{L3CMServiceReject::builder()
                            .cause(static_cast<MMRejectCause>(mm_cause))
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_cm_service_reject");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_cm_service_reject");
         return 0;
     }
 }
@@ -2698,27 +3017,33 @@ GSML3_C_API size_t gsml3_build_cm_service_reject(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_build_cm_service_abort(uint8_t* out, size_t maxlen,
                                                  int abort_cause) {
     try {
+        if (!checkEnumValue(abort_cause, ranges::cmAbortLo, ranges::cmAbortHi,
+                            "abort_cause"))
+            return 0;
         return typedBuild<MMM>(out, maxlen, [&]{
             return MMM{L3CMServiceAbort::builder()
                            .cause(static_cast<CMServiceAbortCause>(abort_cause))
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_cm_service_abort");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_cm_service_abort");
         return 0;
     }
 }
 
 GSML3_C_API size_t gsml3_build_identity_request(uint8_t* out, size_t maxlen,
-                                                 int id_type) {
+                                                  int id_type) {
     try {
+        // NoID is not a requestable identity on the wire.
+        if (!checkEnumValue(id_type, ranges::idTypeLo + 1, ranges::idTypeHi, "id_type"))
+            return 0;
         return typedBuild<MMM>(out, maxlen, [&]{
             return MMM{L3IdentityRequest::builder()
                            .type(static_cast<MobileIDType>(id_type))
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_identity_request");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_identity_request");
         return 0;
     }
 }
@@ -2728,15 +3053,12 @@ GSML3_C_API size_t gsml3_build_identity_response(uint8_t* out, size_t maxlen,
     try {
         bool ok = false;
         L3MobileIdentity mi = cIdentity(id_type, tmsi, imsi, &ok);
-        if (!ok) {
-            setLastError("invalid identity: id_type must be TMSI or IMSI");
-            return 0;
-        }
+        if (!ok) return 0; // cIdentity() reports the exact reason above
         return typedBuild<MMM>(out, maxlen, [&]{
             return MMM{L3IdentityResponse::builder().mobileId(mi).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_identity_response");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_identity_response");
         return 0;
     }
 }
@@ -2745,12 +3067,13 @@ GSML3_C_API size_t gsml3_build_location_updating_request(uint8_t* out,
     size_t maxlen, int update_type, int id_type, uint32_t tmsi, const char* imsi,
     int mcc, int mnc, uint16_t lac) {
     try {
+        if (!checkEnumValue(update_type, ranges::updateTypeLo, ranges::updateTypeHi,
+                            "update_type"))
+            return 0;
+        if (!checkLaiDigits(mcc, mnc, lac)) return 0;
         bool ok = false;
         L3MobileIdentity mi = cIdentity(id_type, tmsi, imsi, &ok);
-        if (!ok) {
-            setLastError("invalid identity: id_type must be TMSI or IMSI");
-            return 0;
-        }
+        if (!ok) return 0; // cIdentity() already reported the reason
         return typedBuild<MMM>(out, maxlen, [&]{
             return MMM{L3LocationUpdatingRequest::builder()
                            .updateType(static_cast<unsigned>(update_type))
@@ -2759,22 +3082,23 @@ GSML3_C_API size_t gsml3_build_location_updating_request(uint8_t* out,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_location_updating_request");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_location_updating_request");
         return 0;
     }
 }
 
 GSML3_C_API size_t gsml3_build_location_updating_accept(uint8_t* out,
-    size_t maxlen, int mcc, int mnc, uint16_t lac, int has_new_tmsi,
+    size_t maxlen, int mcc, int mnc,     uint16_t lac, int has_new_tmsi,
     uint32_t new_tmsi) {
     try {
+        if (!checkLaiDigits(mcc, mnc, lac)) return 0;
         return typedBuild<MMM>(out, maxlen, [&]{
             auto b = L3LocationUpdatingAccept::builder().lai(cLai(mcc, mnc, lac));
             if (has_new_tmsi != 0) b.mobileIdentity(L3MobileIdentity{new_tmsi});
             return MMM{b.build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_location_updating_accept");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_location_updating_accept");
         return 0;
     }
 }
@@ -2782,13 +3106,15 @@ GSML3_C_API size_t gsml3_build_location_updating_accept(uint8_t* out,
 GSML3_C_API size_t gsml3_build_location_updating_reject(uint8_t* out,
                                                          size_t maxlen, int mm_cause) {
     try {
+        if (!checkEnumValue(mm_cause, ranges::mmCauseLo, ranges::mmCauseHi, "mm_cause"))
+            return 0;
         return typedBuild<MMM>(out, maxlen, [&]{
             return MMM{L3LocationUpdatingReject::builder()
                            .cause(static_cast<MMRejectCause>(mm_cause))
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_location_updating_reject");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_location_updating_reject");
         return 0;
     }
 }
@@ -2797,11 +3123,7 @@ GSML3_C_API size_t gsml3_build_authentication_request(uint8_t* out, size_t maxle
                                                        uint8_t cksn,
                                                        const uint8_t rand[16]) {
     try {
-        if (!rand) {
-            tLastError.clear();
-            setLastError("NULL rand");
-            return 0;
-        }
+        if (!rand) { setLastError("NULL rand"); return 0; }
         return typedBuild<MMM>(out, maxlen, [&]{
             return MMM{L3AuthenticationRequest::builder()
                            .cksn(cksn)
@@ -2809,7 +3131,7 @@ GSML3_C_API size_t gsml3_build_authentication_request(uint8_t* out, size_t maxle
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_authentication_request");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_authentication_request");
         return 0;
     }
 }
@@ -2821,7 +3143,7 @@ GSML3_C_API size_t gsml3_build_authentication_response(uint8_t* out, size_t maxl
             return MMM{L3AuthenticationResponse::builder().sres(sres).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_authentication_response");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_authentication_response");
         return 0;
     }
 }
@@ -2829,6 +3151,7 @@ GSML3_C_API size_t gsml3_build_authentication_response(uint8_t* out, size_t maxl
 GSML3_C_API size_t gsml3_build_tmsi_reallocation_command(uint8_t* out,
     size_t maxlen, int mcc, int mnc, uint16_t lac, uint32_t tmsi) {
     try {
+        if (!checkLaiDigits(mcc, mnc, lac)) return 0;
         return typedBuild<MMM>(out, maxlen, [&]{
             return MMM{L3TMSIReallocationCommand::builder()
                            .lai(cLai(mcc, mnc, lac))
@@ -2836,7 +3159,7 @@ GSML3_C_API size_t gsml3_build_tmsi_reallocation_command(uint8_t* out,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_tmsi_reallocation_command");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_tmsi_reallocation_command");
         return 0;
     }
 }
@@ -2848,7 +3171,7 @@ GSML3_C_API size_t gsml3_build_tmsi_reallocation_complete(uint8_t* out,
             return MMM{L3TMSIReallocationComplete::builder().build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_tmsi_reallocation_complete");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_tmsi_reallocation_complete");
         return 0;
     }
 }
@@ -2858,15 +3181,12 @@ GSML3_C_API size_t gsml3_build_imsi_detach_indication(uint8_t* out, size_t maxle
     try {
         bool ok = false;
         L3MobileIdentity mi = cIdentity(id_type, tmsi, imsi, &ok);
-        if (!ok) {
-            setLastError("invalid identity: id_type must be TMSI or IMSI");
-            return 0;
-        }
+        if (!ok) return 0; // cIdentity() reports the exact reason above
         return typedBuild<MMM>(out, maxlen, [&]{
             return MMM{L3IMSIDetachIndication::builder().mobileIdentity(mi).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_imsi_detach_indication");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_imsi_detach_indication");
         return 0;
     }
 }
@@ -2876,11 +3196,10 @@ GSML3_C_API size_t gsml3_build_imsi_detach_indication(uint8_t* out, size_t maxle
 GSML3_C_API size_t gsml3_build_setup(uint8_t* out, size_t maxlen, uint8_t ti,
                                       const char* called_digits) {
     try {
-        if (!called_digits || !*called_digits) {
-            tLastError.clear();
-            setLastError("NULL or empty called number");
+        // A leading '+' marks an international (E.164) number.
+        if (!checkDigitString(called_digits, 1, L3BCDDigits::maxDigits, true,
+                              "called_digits"))
             return 0;
-        }
         return typedBuild<CCM>(out, maxlen, [&]{
             return CCM{L3Setup::builder()
                            .ti(ti)
@@ -2888,7 +3207,7 @@ GSML3_C_API size_t gsml3_build_setup(uint8_t* out, size_t maxlen, uint8_t ti,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_setup");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_setup");
         return 0;
     }
 }
@@ -2900,7 +3219,7 @@ GSML3_C_API size_t gsml3_build_call_proceeding(uint8_t* out, size_t maxlen,
             return CCM{L3CallProceeding::builder().ti(ti).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_call_proceeding");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_call_proceeding");
         return 0;
     }
 }
@@ -2911,7 +3230,7 @@ GSML3_C_API size_t gsml3_build_alerting(uint8_t* out, size_t maxlen, uint8_t ti)
             return CCM{L3Alerting::builder().ti(ti).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_alerting");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_alerting");
         return 0;
     }
 }
@@ -2922,7 +3241,7 @@ GSML3_C_API size_t gsml3_build_connect(uint8_t* out, size_t maxlen, uint8_t ti) 
             return CCM{L3Connect::builder().ti(ti).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_connect");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_connect");
         return 0;
     }
 }
@@ -2934,7 +3253,7 @@ GSML3_C_API size_t gsml3_build_connect_acknowledge(uint8_t* out, size_t maxlen,
             return CCM{L3ConnectAcknowledge::builder().ti(ti).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_connect_acknowledge");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_connect_acknowledge");
         return 0;
     }
 }
@@ -2942,6 +3261,8 @@ GSML3_C_API size_t gsml3_build_connect_acknowledge(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_build_disconnect(uint8_t* out, size_t maxlen,
                                            uint8_t ti, int cc_cause) {
     try {
+        if (!checkEnumValue(cc_cause, ranges::ccCauseLo, ranges::ccCauseHi, "cc_cause"))
+            return 0;
         return typedBuild<CCM>(out, maxlen, [&]{
             return CCM{L3Disconnect::builder()
                            .ti(ti)
@@ -2949,7 +3270,7 @@ GSML3_C_API size_t gsml3_build_disconnect(uint8_t* out, size_t maxlen,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_disconnect");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_disconnect");
         return 0;
     }
 }
@@ -2957,6 +3278,8 @@ GSML3_C_API size_t gsml3_build_disconnect(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_build_release(uint8_t* out, size_t maxlen,
                                         uint8_t ti, int cc_cause) {
     try {
+        if (!checkEnumValue(cc_cause, ranges::ccCauseLo, ranges::ccCauseHi, "cc_cause"))
+            return 0;
         return typedBuild<CCM>(out, maxlen, [&]{
             return CCM{L3Release::builder()
                            .ti(ti)
@@ -2964,7 +3287,7 @@ GSML3_C_API size_t gsml3_build_release(uint8_t* out, size_t maxlen,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_release");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_release");
         return 0;
     }
 }
@@ -2976,7 +3299,7 @@ GSML3_C_API size_t gsml3_build_release_complete(uint8_t* out, size_t maxlen,
             return CCM{L3ReleaseComplete::builder().ti(ti).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_release_complete");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_release_complete");
         return 0;
     }
 }
@@ -2985,7 +3308,7 @@ GSML3_C_API size_t gsml3_build_facility(uint8_t* out, size_t maxlen, uint8_t ti,
                                          const uint8_t* data, size_t len) {
     try {
         if (len != 0 && !data) {
-            tLastError.clear();
+            clearLastError();
             setLastError("NULL payload with non-zero length");
             return 0;
         }
@@ -2998,7 +3321,7 @@ GSML3_C_API size_t gsml3_build_facility(uint8_t* out, size_t maxlen, uint8_t ti,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_facility");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_facility");
         return 0;
     }
 }
@@ -3009,7 +3332,7 @@ GSML3_C_API size_t gsml3_build_cp_data(uint8_t* out, size_t maxlen,
                                         const uint8_t* rpdu, size_t rpdu_len) {
     try {
         if (rpdu_len != 0 && !rpdu) {
-            tLastError.clear();
+            clearLastError();
             setLastError("NULL payload with non-zero length");
             return 0;
         }
@@ -3019,7 +3342,7 @@ GSML3_C_API size_t gsml3_build_cp_data(uint8_t* out, size_t maxlen,
             return SMS{L3CPData::builder().rpdu(std::move(payload)).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_cp_data");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_cp_data");
         return 0;
     }
 }
@@ -3036,7 +3359,7 @@ GSML3_C_API size_t gsml3_build_cp_status(uint8_t* out, size_t maxlen,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_cp_status");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_cp_status");
         return 0;
     }
 }
@@ -3045,7 +3368,7 @@ GSML3_C_API size_t gsml3_build_cp_smt(uint8_t* out, size_t maxlen,
                                        const uint8_t* rpdu, size_t rpdu_len) {
     try {
         if (rpdu_len != 0 && !rpdu) {
-            tLastError.clear();
+            clearLastError();
             setLastError("NULL payload with non-zero length");
             return 0;
         }
@@ -3055,7 +3378,7 @@ GSML3_C_API size_t gsml3_build_cp_smt(uint8_t* out, size_t maxlen,
             return SMS{L3CPSMT::builder().rpdu(std::move(payload)).build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_cp_smt");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_cp_smt");
         return 0;
     }
 }
@@ -3064,7 +3387,7 @@ GSML3_C_API size_t gsml3_build_sms_deliver(uint8_t* out, size_t maxlen,
     uint8_t tp_mti, uint8_t tp_mr, const uint8_t* ud, size_t ud_len) {
     try {
         if (ud_len != 0 && !ud) {
-            tLastError.clear();
+            clearLastError();
             setLastError("NULL payload with non-zero length");
             return 0;
         }
@@ -3079,7 +3402,7 @@ GSML3_C_API size_t gsml3_build_sms_deliver(uint8_t* out, size_t maxlen,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_sms_deliver");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_sms_deliver");
         return 0;
     }
 }
@@ -3090,7 +3413,7 @@ GSML3_C_API size_t gsml3_build_sup_serv_facility(uint8_t* out, size_t maxlen,
     uint8_t ti, const uint8_t* data, size_t len) {
     try {
         if (len != 0 && !data) {
-            tLastError.clear();
+            clearLastError();
             setLastError("NULL payload with non-zero length");
             return 0;
         }
@@ -3105,7 +3428,7 @@ GSML3_C_API size_t gsml3_build_sup_serv_facility(uint8_t* out, size_t maxlen,
                            .build()};
         });
     } catch (...) {
-        setLastError("unexpected exception in gsml3_build_sup_serv_facility");
+        setLastErrorUnexpected("unexpected exception in gsml3_build_sup_serv_facility");
         return 0;
     }
 }

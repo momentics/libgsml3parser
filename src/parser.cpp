@@ -525,7 +525,7 @@ Expected<size_t> writeL3Body(const ConcreteMsg& msg, uint8_t* out, size_t maxlen
     if constexpr (ConcreteMsg::MTI >= 0x100) {
         size_t bodyLen = msg.bodyLength();
         if (bodyLen > maxlen) return Expected<size_t>::error(
-            ParseError{ParseError::Code::InvalidValue, "Buffer too small"});
+            ParseError{ParseError::Code::BufferTooSmall, "output buffer too small"});
         BitWriter writer(out, bodyLen * 8);
         msg.write(writer);
         return Expected<size_t>::hold(bodyLen);
@@ -541,7 +541,7 @@ Expected<size_t> writeL3Body(const ConcreteMsg& msg, uint8_t* out, size_t maxlen
         size_t bodyLen = msg.bodyLength();
         size_t totalLen = 2 + bodyLen;
         if (totalLen > maxlen) return Expected<size_t>::error(
-            ParseError{ParseError::Code::InvalidValue, "Buffer too small"});
+            ParseError{ParseError::Code::BufferTooSmall, "output buffer too small"});
 
         encodeL3Header(out, pd, mtiVal, ti, tif);
 
@@ -582,6 +582,10 @@ Expected<size_t> writeL3(const ParsedMessage& msg, uint8_t* out, size_t maxlen) 
             return detail::writeL3Body<pd, MsgType>(concreteMsg, out, maxlen);
         }, domainVariant);
     }, msg);
+}
+
+size_t messageWireLength(const ParsedMessage& msg) noexcept {
+    return detail::messageWireLength(msg);
 }
 
 Expected<std::string> writeL3Hex(const ParsedMessage& msg) {

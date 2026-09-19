@@ -73,4 +73,10 @@ namespace gsml3parser {
 /// Returns a std::vector<uint8_t> ready for transmission over LAPDm/PHY.
 [[nodiscard]] Expected<std::vector<uint8_t>> writeL3Bytes(const ParsedMessage& msg);
 
+/// Exact wire length of a message in bytes (2-byte header plus body for
+/// standard messages, body only for RR short messages). No allocation; the
+/// result is a lower bound on any buffer accepted by writeL3(), and
+/// writeL3() with that size always succeeds.
+[[nodiscard]] size_t messageWireLength(const ParsedMessage& msg) noexcept;
+
 } // namespace gsml3parser

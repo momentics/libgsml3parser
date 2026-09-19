@@ -14,7 +14,7 @@ permissions:
 jobs:
   build:
     # Release packaging: runs after all CI checks pass.
-    needs: [linux-tsan, linux-fuzz]
+    needs: [c-abi, linux-tsan, linux-fuzz]
     runs-on: ubuntu-latest
 
     steps:
@@ -122,6 +122,44 @@ jobs:
             gsml3parser-${{ github.ref_name }}-linux-x86_64.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── CI: C ABI acceptance ────────────────────────────────────────────
+  # The C API is a standalone public interface: the header must stay
+  # compilable as strict C across the standards consumers actually use,
+  # and the full test suite (including the pure-C c_api_c89_check) must
+  # link against the SHARED library to prove export/visibility.
+
+  c-abi:
+    name: C ABI (strict C + shared library)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang
+        run: sudo apt-get update && sudo apt-get install -y clang
+
+      - name: Compile the public C header under strict C89..C17
+        run: |
+          cat > c_abi_probe.c <<'EOF'
+          #include <gsml3parser/gsml3parser_c.h>
+
+          int main(void) { return (int)gsml3_abi_version(); }
+          EOF
+          for cc in gcc clang; do
+            for std in c89 c90 c99 c11 c17; do
+              echo "== $cc -std=$std =="
+              $cc -std=$std -pedantic-errors -Wall -Wextra -Werror \
+                  -Iinclude -c c_abi_probe.c -o probe_$std.o
+            done
+          done
+
+      - name: Build and run the full test suite against the shared library
+        run: |
+          cmake -S . -B build_c_shared \
+                -DBUILD_SHARED_LIBS=ON -DBUILD_TESTS=ON \
+                -DBUILD_EXAMPLES=OFF -DCMAKE_BUILD_TYPE=Release
+          cmake --build build_c_shared --parallel
+          ctest --test-dir build_c_shared --output-on-failure
 
   # ── CI: Linux/Clang ThreadSanitizer (sharded-registry concurrency) ──
 

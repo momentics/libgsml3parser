@@ -4866,12 +4866,13 @@ ctypes/cffi, Rust, Go). One C89-clean header
 
 | Layer | C API |
 |-------|-------|
-| Core L3 | `gsml3_parse_l3` / `gsml3_parse_l3_hex` / `gsml3_parse_l3_into` (all 236 message types), `gsml3_message_name/pd/mti/ti`, `gsml3_message_write/hex/free`, `gsml3_config` |
+| Core L3 | `gsml3_parse_l3` / `gsml3_parse_l3_hex` / `gsml3_parse_l3_into` (all 236 message types), `gsml3_message_name/pd/mti/ti/size/dump`, `gsml3_message_write/hex`, `gsml3_config` |
 | A-bis RSL | `gsml3_rsl_parse` + accessors (IE/L3 views into the handle's copy) + 13 `gsml3_rsl_build_*` |
 | LAPDm | `gsml3_lapdm_frame_decode` (zero-copy) + `gsml3_lapdm_entity` (full FSM, fn+user callbacks) |
-| BTS stack | `gsml3_registry` (plain + sharded {4,8,16,32}), borrowed `gsml3_session`, O(active) ticks, session access |
+| BTS stack | `gsml3_registry` (plain + sharded {4,8,16,32}), borrowed `gsml3_session` (`assigned_tmsi`, timers, transactions), O(active) ticks, channel assignment/release with link index |
 | Orchestrator | `gsml3_orchestrator_feed/feedExternal*/tick/build_response/take_retransmit/cancel_all/chain_phase` + 21 `gsml3_response_build_*` |
 | Typed access | Curated message set: 69 `gsml3_msg_*` typed getters + 43 `gsml3_build_*` typed L3 builders (RR/MM/CC/SMS/SS), plus 21 stateless `gsml3_response_build*` factories |
+| Error model | `gsml3_last_error()` / `gsml3_last_error_code()`, `gsml3_abi_version()`, `enum gsml3_error` incl. `GSML3_ERR_BUFFER_TOO_SMALL` / `GSML3_ERR_INTERNAL` |
 
 ### ABI rules
 
@@ -4881,23 +4882,47 @@ ctypes/cffi, Rust, Go). One C89-clean header
   and released by the matching `gsml3_*_free()` (NULL-safe).
   `gsml3_session` is a **borrowed** pointer-sized handle owned by the
   registry (zero allocations on create/find; valid until the session is
-  removed or the registry is freed).
+  removed or the registry is freed). Sessions created from an IMSI are
+  keyed by an auto-assigned TMSI — read it with
+  `gsml3_session_assigned_tmsi()` (the identity getter stays IMSI).
 - **Errors.** Handle-returning functions return NULL; action functions
   return `enum gsml3_error` codes; serializers return bytes written
-  (0 = error / buffer too small). Details: `gsml3_last_error()`
-  (thread-local, `""` when none; valid until the next `gsml3_*` call on
-  the same thread).
+  (0 = error / buffer too small); orchestrator step results carry the
+  code in `gsml3_step_result.error`. Details: `gsml3_last_error()`
+  (thread-local message, `""` when none) and
+  `gsml3_last_error_code()` (machine-readable class). Both are valid
+  until a later call clears or replaces them — read them right after a
+  failed call. A serializer that fails with
+  `GSML3_ERR_BUFFER_TOO_SMALL` simply needs a larger buffer: the exact
+  size is queryable for parsed messages via `gsml3_message_size()` (no
+  guessing and no string comparison required).
+- **Validation.** Integer parameters that mirror C++ enums (causes, SAPI,
+  channel types, timer IDs, response tokens, ...) and digit strings
+  (IMSI, called-party numbers, LAI components) are range-checked at the
+  boundary: invalid values fail with `GSML3_ERR_INVALID_ARG` (or NULL / 0)
+  and never reach the wire; the reserved TMSI 0 is rejected. No digit
+  string is ever truncated silently.
 - **Strings.** `const char*` results (names, last error) are static /
-  thread-local — do not free. `char*` results (hex) — free with
-  `gsml3_free()`.
+  thread-local — do not free. `char*` results (`gsml3_message_hex`,
+  `gsml3_message_dump`) — free with `gsml3_free()`.
 - **Buffers.** All serializers write into the caller's buffer
   (`uint8_t* out, size_t maxlen`) — zero heap allocation on the hot
-  path.
+  path. The timer-expiry array of `gsml3_registry_tick_timers()` need not
+  be pre-zeroed: every written event is fully initialized.
 - **Threading.** Stateless functions are thread-safe. Owned handles are
-  single-thread. A registry with `shard_count > 0` is thread-safe
-  (per-shard locks).
-- **C89.** The header compiles as strict C89
-  (`gcc -std=c89 -pedantic-errors`, MSVC `/TC`) and as C++20.
+  single-thread. A registry with `shard_count > 0` is thread-safe for
+  its own methods (per-shard locks); direct `gsml3_session_*` calls run
+  without the registry lock, so the caller keeps one thread per session
+  and never removes a session it uses concurrently. LAPDm entity
+  callbacks fire synchronously inside receive/send: transmit or copy
+  within them, and do not free the owning entity from its own callbacks.
+- **ABI versioning.** `GSML3_ABI_VERSION` (header) / `gsml3_abi_version()`
+  identify this C ABI revision; compare it at startup when linking
+  against a prebuilt binary of another build.
+- **C89.** The header compiles as strict C89..C17
+  (`gcc`/`clang -std=cNN -pedantic-errors -Werror`, MSVC `/TC /W4 /WX`)
+  and as C++20; CI enforces this matrix. `tests/c_api_c89_check.c` is the
+  reference for consuming the API from plain C.
 
 ### Usage example
 
@@ -4940,7 +4965,10 @@ The C header is installed with the package
 (`install(DIRECTORY include/gsml3parser ...)`); link against the
 `gsml3parser` target (static or shared). For shared builds the
 `GSML3PARSER_SHARED` definition is propagated automatically
-(dllexport/dllimport / default visibility).
+(dllexport/dllimport / default visibility). On MSVC the DLL also
+exports its internal C++ symbols so that first-party in-repo tests can
+link against them; only the `gsml3_*` C ABI is the stable external
+interface of the shared library.
 
 ---
 
