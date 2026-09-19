@@ -65,9 +65,6 @@ public:
     [[nodiscard]] ProcedureStepResult tick(std::chrono::milliseconds delta) override;
     void cancel() noexcept override;
 
-private:
-    uint8_t mAttempt{0};
-
 public:
     void doTransitionTo(State s);
     void doFail(std::string_view reason);

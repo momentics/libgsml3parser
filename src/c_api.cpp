@@ -85,10 +85,9 @@ inline void clearLastError() {
     tLastError.clear();
 }
 
-// Default-class error (argument/value problems); the specific helpers below
-// override the class for OOM, buffer-too-small and internal failures.
-inline void setLastError(const char* msg) { setError(GSML3_ERR_INVALID_VALUE, msg); }
-
+// Argument/validation errors set GSML3_ERR_INVALID_ARG directly at the call
+// site; the helpers below override the class for OOM, buffer-too-small and
+// internal failures.
 inline void setOomError() { setError(GSML3_ERR_NO_MEMORY, "out of memory"); }
 
 inline void setBufferTooSmallError() {
