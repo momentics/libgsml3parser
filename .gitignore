@@ -1,5 +1,7 @@
 # Build directories
 build/
+build_*/
+
 
 # IDE
 .vs/

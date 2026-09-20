@@ -1,9 +1,20 @@
 cmake_minimum_required(VERSION 3.20)
 
+# Single source of truth for the product version: the VERSION file at the
+# repository root (one semver line, no "v", no BOM). Everything that stamps a
+# version derives from this file: PROJECT_VERSION feeds the GSML3PARSER_VERSION
+# compile definition consumed by gsml3_version() (src/c_api.cpp), and the
+# binding manifests under bindings/ are kept in sync with it by
+# scripts/verify_bindings.ps1 (manifest version check).
+file(READ "${CMAKE_CURRENT_LIST_DIR}/VERSION" GSML3PARSER_VERSION_RAW)
+string(STRIP "${GSML3PARSER_VERSION_RAW}" GSML3PARSER_VERSION_FILE)
+if(NOT GSML3PARSER_VERSION_FILE MATCHES "^[0-9]+\\.[0-9]+\\.[0-9]+$")
+    message(FATAL_ERROR "Malformed VERSION file (expected a single semver X.Y.Z line, got: '${GSML3PARSER_VERSION_FILE}')")
+endif()
 set(CMAKE_MSVC_DEBUG_INFORMATION_FORMAT Embedded)
 
 project(gsml3parser
-    VERSION 0.19.0
+    VERSION ${GSML3PARSER_VERSION_FILE}
     DESCRIPTION "GSM L3 Signalling Message Parser - standalone C++20 library"
     LANGUAGES CXX
     HOMEPAGE_URL "https://github.com/momentics/libgsml3parser"
