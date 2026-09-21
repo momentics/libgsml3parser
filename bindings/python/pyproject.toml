@@ -1,0 +1,36 @@
+# Copyright 2026 momentics <momentics@gmail.com>; MIT license; see /COPYING at the repository root.
+
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "gsml3parser"
+# Product version is NOT hardcoded here: it comes from the repository-root
+# VERSION file (single source of truth).
+dynamic = ["version"]
+description = "ctypes bindings over the libgsml3parser C ABI (GSM L3, A-bis RSL, LAPDm, BTS stack)"
+readme = "../README.md"
+# >=3.10: public signatures use PEP 604 unions (`int | None`), evaluated at runtime.
+requires-python = ">=3.10"
+# Runtime: standard library only (ctypes). No third-party dependencies.
+
+[project.optional-dependencies]
+test = ["pytest>=7"]
+
+[tool.setuptools.dynamic]
+# Relative to this pyproject.toml: bindings/python/../../VERSION == repo root.
+version = { file = ["../../VERSION"] }
+
+[tool.setuptools]
+packages = ["gsml3parser"]
+
+[tool.pytest.ini_options]
+# The Phase-1 test functions keep their descriptive step-1.7 names (e.g.
+# stack_mo_call_simulation) alongside the test_*-prefixed ones; collect this
+# explicit family set under this directory tree (module helpers stay private).
+python_functions = [
+    "test_*", "parse_*", "roundtrip_*", "error_paths", "null_safety_*",
+    "config_setters", "stack_*", "registry_*", "session_*",
+    "t200_retransmission", "frames_received_counting", "lapdm_decode_wrapper_validation",
+]
