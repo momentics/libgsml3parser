@@ -41,18 +41,6 @@ See the module docs of gsml3parser.stack for the ownership, threading and
 callback-safety rules that apply to everything below.
 """
 
-from pathlib import Path
-
-# Product version — the repository-root VERSION file is the single source of
-# truth; this runtime value mirrors it (the build-time
-# metadata does too, via pyproject.toml dynamic version).
-_REPO_VERSION_FILE = Path(__file__).resolve().parents[3] / "VERSION"
-try:
-    __version__ = _REPO_VERSION_FILE.read_text(encoding="utf-8").strip()
-except OSError:      # installed outside the repository tree
-    __version__ = "0.19.0"   # mirrors the current VERSION file (the repository has no
-                              # published releases — nothing else to sync with)
-
 # Error model (codes mirror enum gsml3_error 1:1; raise hierarchy on top).
 from ._errors import (
     OK, INVALID_ARG, TRUNCATED, INVALID_PD, INVALID_MTI, LENGTH_MISMATCH,
@@ -138,15 +126,22 @@ from ._library import lib, PROTOTYPES, EXPECTED_ABI, CALL_COUNTS
 
 
 def version() -> str:
-    """Library version string from the C core (gsml3_version()) — must equal
-    the repository-root VERSION file content (pinned by the Phase-1 tests)."""
-    v = lib.gsml3_version()  # static storage; returned as a bytes copy
-    return v.decode("utf-8", "replace") if isinstance(v, (bytes, bytearray)) else ""
+    """Library version string reported by the C core (gsml3_version()).
+
+    The single source of truth is the repository-root VERSION file; CMake bakes
+    it into the shared library at build time, so the runtime value is read back
+    from the loaded binary. This package performs no file I/O for its version.
+    """
+    v = lib.gsml3_version()  # const char* to static storage; never free
+    return v.decode("utf-8", "replace")
 
 
 def abi_version() -> int:
     """C ABI revision reported by the loaded library (== GSML3_ABI_VERSION)."""
     return int(lib.gsml3_abi_version())
+
+
+__version__ = version()  # as reported by the loaded C core at import time
 
 
 __all__ = [

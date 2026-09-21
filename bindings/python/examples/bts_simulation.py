@@ -43,8 +43,9 @@ def main() -> int:
     Python), orchestrator chain and auto-response build/send — identical
     behavioral vectors to examples/example_reference_bts.cpp. Exit 0 only if
     every step's expectations hold (the unified gate relies on this contract)."""
-    print(f"version {g.version()}  (C ABI revision {g.abi_version()}, "
-          f"package {g.__version__})")
+    # Both values come straight from the loaded C core (gsml3_version() /
+    # gsml3_abi_version()); the package performs no file I/O for its version.
+    print(f"version {g.version()}  (C ABI revision {g.abi_version()})")
 
     # BTS-side stack: registry + borrowed session + orchestrator + LAPDm entity
     # with the C->Python callbacks; auto_response=True drives parse -> feed ->

@@ -97,7 +97,7 @@ import threading
 from ctypes import POINTER
 from pathlib import Path
 
-from ._errors import InternalError
+from ._errors import INTERNAL, InternalError
 
 #: Must equal GSML3_ABI_VERSION in gsml3parser_c.h; bump both together.
 EXPECTED_ABI = 1
@@ -124,7 +124,7 @@ def _candidate_paths():
     if explicit:
         p = Path(explicit)
         if not p.is_file():
-            raise InternalError(
+            raise InternalError(INTERNAL,
                 f"GSML3PARSER_LIBRARY is set to {str(p)!r} but the file does not exist")
         return [p], []
 
@@ -168,7 +168,7 @@ def _load():
                     lib = ctypes.CDLL(str(path))
                     break
                 except OSError as exc:
-                    raise InternalError(f"found but failed to load {path}: {exc}") from None
+                    raise InternalError(INTERNAL, f"found but failed to load {path}: {exc}") from None
         if lib is None:
             for entry in raws:
                 tried.append(f"<system> {entry!r}")
@@ -178,7 +178,7 @@ def _load():
                 except OSError:
                     continue
         if lib is None:
-            raise InternalError(
+            raise InternalError(INTERNAL,
                 "could not find the libgsml3parser shared library. Searched:\n  "
                 + "\n  ".join(tried)
                 + "\nBuild it first (see scripts/verify_bindings.ps1): "
@@ -674,7 +674,7 @@ def _register_all():
     # ABI guard, after registration (needs the typed restype to be in place).
     reported = int(_FUNCS["gsml3_abi_version"]())
     if reported != EXPECTED_ABI:
-        raise InternalError(
+        raise InternalError(INTERNAL,
             f"ABI mismatch: header expects GSML3_ABI_VERSION {EXPECTED_ABI}, "
             f"library reports {reported} (a prebuilt binary may lag the header — rebuild)")
 
