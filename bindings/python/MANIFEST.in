@@ -1,0 +1,6 @@
+include README.md
+include build_backend.py
+graft gsml3parser
+prune gsml3parser/__pycache__
+global-exclude __pycache__/*.pyc
+global-exclude .pytest_cache

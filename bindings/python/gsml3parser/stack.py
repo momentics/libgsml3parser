@@ -300,6 +300,17 @@ def _alloc_string(p, op: str) -> str:
     return text
 
 
+def _require_no_pending_error(op: str) -> None:
+    """Poll the thread-local C error state right after a mutating call whose
+    C signature carries no error return value (void or count-only). Such
+    operations can still fail internally and report it exclusively through
+    gsml3_last_error_code(); the poll must be synchronous — the next
+    successful C call clears the pending error."""
+    code = int(lib.gsml3_last_error_code())
+    if code != OK:
+        raise_last_error(lib, code, op)
+
+
 def _lai_from(c_lai) -> Lai:
     return Lai(int(c_lai.mcc), int(c_lai.mnc), int(c_lai.lac))
 
@@ -1246,6 +1257,7 @@ class Registry:
         self._check()
         _as_int(expected, "expected", lo=0)
         lib.gsml3_registry_reserve(self._h, c_size_t(expected))
+        _require_no_pending_error("registry_reserve")
 
     def create_by_tmsi(self, tmsi: int) -> Session:
         """Create the session keyed by TMSI. The reserved ALL-ZERO TMSI is
@@ -1462,6 +1474,7 @@ class Session:
         self._check()
         _as_int(timer_id, "timer_id", lo=0)
         lib.gsml3_session_timer_stop(self._h, timer_id)
+        _require_no_pending_error("session_timer_stop")
 
     def timer_running(self, timer_id: int) -> bool:
         self._check()
@@ -1599,22 +1612,31 @@ class Orchestrator:
     def tick(self, delta_ms: int) -> int:
         """Advance the chain's own procedure timers (the T31xx timeouts of the
         ACTIVE procedure, e.g. T3101 = 3 s on the MO call-setup chain);
-        returns the number of procedure FAILURES (0 inside the window)."""
+        returns the number of procedure FAILURES (0 inside the window). A
+        C-internal failure raises GsmL3Error even though the raw call only
+        returns a count."""
         _as_int(delta_ms, "delta_ms", lo=0, hi=0xFFFFFFFF)
         self._check()
-        return int(lib.gsml3_orchestrator_tick(self._h, delta_ms))
+        failures = int(lib.gsml3_orchestrator_tick(self._h, delta_ms))
+        _require_no_pending_error("orchestrator_tick")
+        return failures
 
     def take_retransmit(self) -> int:
         """Drain the retransmission channel (consume-on-read). Returns a
         GSML3_TOKEN_* value (TOKEN_NONE when nothing is queued); after a
-        non-none token, build and send that response."""
+        non-NONE token, build and send that response via build_response(). A
+        C-internal failure raises GsmL3Error even though the raw call would
+        return TOKEN_NONE in that case too."""
         self._check()
-        return int(lib.gsml3_orchestrator_take_retransmit(self._h))
+        token = int(lib.gsml3_orchestrator_take_retransmit(self._h))
+        _require_no_pending_error("orchestrator_take_retransmit")
+        return token
 
     def cancel_all(self) -> None:
         """Cancel the active chain (back to idle)."""
         self._check()
         lib.gsml3_orchestrator_cancel_all(self._h)
+        _require_no_pending_error("orchestrator_cancel_all")
 
     @property
     def chain_phase(self) -> int:
@@ -2098,8 +2120,12 @@ class LapdmEntity:
                 raise TypeError(f"{what} must be None, a callable, or a prebuilt {ct.__name__}")
         return out[0], out[1]
 
+    @property
+    def closed(self) -> bool:
+        return self._closed or self._h is None
+
     def _check(self) -> None:
-        if self._closed or self._h is None:
+        if self.closed:
             raise ClosedGsmL3ObjectError("lapdm entity is closed")
 
     # -- link control ----------------------------------------------------------
@@ -2120,12 +2146,16 @@ class LapdmEntity:
 
     def receive(self, frame) -> None:
         """Feed one raw LAPDm frame from L1 into the FSM. Callbacks fire here,
-        synchronously. None -> TypeError and len < 2 -> ValueError BEFORE FFI."""
+        synchronously. None -> TypeError and len < 2 -> ValueError BEFORE FFI;
+        a C-internal failure inside the FSM raises GsmL3Error (the C side flags
+        such an entity as potentially inconsistent, so it must be surfaced, not
+        swallowed)."""
         self._check()
         b = _byteslike(frame, "frame")
         if len(b) < 2:
             raise ValueError("LAPDm frame too short (<2 bytes: address + control)")
         lib.gsml3_lapdm_entity_receive(self._h, b, c_size_t(len(b)))
+        _require_no_pending_error("lapdm_entity_receive")
 
     # -- transmissions (C return codes are mapped to typed errors) ----------------
 
@@ -2168,6 +2198,7 @@ class LapdmEntity:
         """Immediate transition to LINK_RELEASED without sending frames."""
         self._check()
         lib.gsml3_lapdm_entity_hard_release(self._h)
+        _require_no_pending_error("lapdm_entity_hard_release")
 
     # -- timers / state / statistics ------------------------------------------------
 
@@ -2292,29 +2323,52 @@ class GsmL3Stack:
     ClosedGsmL3ObjectError WITHOUT FFI after close (proven via _library's
     CALL_COUNTS seam in the tests — raw C handles have no "closed" state).
 
-    send_frame(frame) — unified semantics, identical across all three
-    bindings:
-      1) reset the tx collector for this input;
-      2) FFI entity.receive(frame) — C callbacks ONLY enqueue (no FFI inside);
+    Components are reachable as read-only accessors — registry, session
+    (borrowed from the registry), orchestrator and lapdm_entity — for advanced
+    use: creating further sessions on stack.registry, or driving link control
+    (send_sabme / receive / send_disc / hard_release) through
+    stack.lapdm_entity. The lifecycle of every component belongs to the stack
+    (close() releases them); closing a component out from under an open stack
+    makes every subsequent method raise ClosedGsmL3ObjectError instead of
+    running on a dead C handle.
+
+    send_frame(frame) — unified semantics:
+      1) mark the current end of the tx queue; frames produced by EARLIER,
+         not-yet-drained operations (for example T200 retransmissions from
+         tick_t200) stay queued and are never discarded by this call;
+      2) entity.receive(frame) — C callbacks ONLY enqueue (no FFI inside); a
+         C-internal failure raises GsmL3Error here and no chain step runs for
+         this frame;
       3) IF auto_response (default True): drain the L3 queue POST-FFI and, per
-         event with a payload: parse L3 -> orchestrator.feed(session); if the
-         step carries token != TOKEN_NONE: required_size() -> exact-buffer
-         build_response() -> entity.send_ui(stack sapi) — new tx frames are
-         captured by the L1 bridge;
-      4) IF NOT auto_response: L3 events stay UNPROCESSED (retrieve with
-         drain_l3_events(), orchestrate manually via feed_l3/build_response/
-         send_ui);
-      5) return the tx frames collected for THIS input (the C-FSM L2 reactions
-         plus any auto responses; caller owns the bytes).
-    Parse/feed failures in step 3 do NOT abort the frame: they are recorded and
-    surfaced via last_event_error (mirror of Go LastEventError / Rust GsmL3Error
-    propagation). last_step is the StepResult of the most recently processed
-    event.
+         event with a payload: parse L3 -> orchestrator.feed(session); when the
+         step carries a token != TOKEN_NONE, build the pending response into an
+         exact-size buffer -> entity.send_ui(stack sapi) — captured by the L1
+         bridge. A GsmL3Error at any step for ONE event (parse, feed, response
+         build or transmission) is recorded in last_event_error and processing
+         continues with the remaining events;
+      4) IF NOT auto_response: L3 events stay UNPROCESSED (retrieve them with
+          drain_l3_events(), orchestrate manually via feed_l3/build_response/
+          send_ui);
+      5) return ONLY the tx frames produced for THIS input (the C-FSM's L2
+         reactions plus any auto responses; caller owns the bytes). Undrained
+         older frames remain in the queue and are retrieved with
+         drain_tx_frames(). last_step is the StepResult of the most recently
+         processed event.
 
     Threading: one stack belongs to one thread at a time (C ABI contract — one
     thread per handle); the RLock guards the receive/drain/orchestrate path, it
     is not a sharing mechanism.
     """
+
+    # Fixed attribute set: no ad-hoc attributes, and the internals below stay
+    # exactly what close()/teardown reasons about.
+    __slots__ = (
+        "_lock", "_closed", "_l3_events", "_tx_events",
+        "_last_event_error", "_last_step",
+        "_registry", "_session", "_orch", "_ctx",
+        "_c_cb_keepalive", "_entity", "_sapi", "_auto_response",
+        "__weakref__",
+    )
 
     def __init__(self, *, tmsi: int | None = None, imsi: str | None = None,
                  shard_count: int = 0, sapi: int = 0, profile: int = 0,
@@ -2376,8 +2430,45 @@ class GsmL3Stack:
                 raise
 
     def _ensure_open(self) -> None:
+        """Refuse to run once the stack OR any of its components is closed: raw
+        C handles have no 'closed' state, so a dead component means every FFI
+        below this check would touch freed memory."""
         if self._closed:
             raise ClosedGsmL3ObjectError("GsmL3Stack is closed")
+        if self._registry.closed or self._orch.closed or self._entity.closed:
+            raise ClosedGsmL3ObjectError(
+                "a GsmL3Stack component was closed out from under it; create a fresh stack")
+
+    # -- components (read-only views; the stack owns their lifecycle) ----------
+
+    @property
+    def registry(self) -> Registry:
+        """The registry this stack was built on: further sessions, registry
+        ticks and channel assignment work through it. Released by close()."""
+        self._ensure_open()
+        return self._registry
+
+    @property
+    def session(self) -> Session:
+        """The BORROWED session this stack is bound to (owned by the registry;
+        never released here)."""
+        self._ensure_open()
+        return self._session
+
+    @property
+    def orchestrator(self) -> Orchestrator:
+        """The procedure chain. Free orchestration works through this object
+        as well as through the stack shortcuts (feed_l3 / build_response /
+        take_retransmit). Released by close()."""
+        self._ensure_open()
+        return self._orch
+
+    @property
+    def lapdm_entity(self) -> LapdmEntity:
+        """The LAPDm link FSM: link control (send_sabme, receive, send_disc,
+        hard_release), the T200 timer and the per-link statistics live here."""
+        self._ensure_open()
+        return self._entity
 
     # -- identity / session state (all through the borrowed session) -----------
 
@@ -2441,9 +2532,10 @@ class GsmL3Stack:
 
     @property
     def last_event_error(self) -> GsmL3Error | None:
-        """Last parse/feed failure recorded while processing an L3 event
-        (send_frame in auto_response mode); None when clean. The frame itself
-        still completed — the event was skipped, not the frame."""
+        """The most recent failure of a single L3 event during send_frame's
+        auto mode (parse, orchestration feed, response build or transmission);
+        None while clean. Only the failed event is skipped — the remaining
+        events and the frame itself still complete."""
         return self._last_event_error
 
     # -- queues -----------------------------------------------------------------
@@ -2458,7 +2550,9 @@ class GsmL3Stack:
             return out
 
     def drain_tx_frames(self) -> list[bytes]:
-        """Take-and-empty pending L1 transmit frames. No FFI."""
+        """Take-and-empty all pending L1 transmit frames, including those
+        produced outside send_frame/send_ui (for example T200 retransmissions
+        captured while tick_t200 ran). No FFI."""
         self._ensure_open()
         with self._lock:
             out = self._tx_events[:]
@@ -2473,13 +2567,11 @@ class GsmL3Stack:
         frame shorter than address+control (<2 bytes) raises ValueError — both
         BEFORE the FFI boundary."""
         self._ensure_open()
-        b = _byteslike(frame, "frame")
-        if len(b) < 2:
-            raise ValueError("LAPDm frame too short (<2 bytes: address + control)")
         with self._lock:
-            self._tx_events.clear()  # (1) collector for THIS input only
-            # (2) C FSM; callbacks only enqueue — no FFI inside them.
-            lib.gsml3_lapdm_entity_receive(self._entity._h, b, c_size_t(len(b)))
+            tx_start = len(self._tx_events)  # (1) mark; undrained older frames are preserved
+            # (2) C FSM; callbacks only enqueue — no FFI inside them. The
+            # wrapper validates the input and surfaces C-internal failures.
+            self._entity.receive(frame)
             if self._auto_response:
                 pending = self._l3_events[:]   # (3) post-FFI drain — never re-enter
                 self._l3_events.clear()
@@ -2489,16 +2581,16 @@ class GsmL3Stack:
                     try:
                         with Message.from_bytes(ev.data) as msg:
                             step = self._orch.feed(msg, self._session)
-                    except GsmL3Error as exc:  # parse or feed failure: recorded, frame continues
+                        self._last_step = step
+                        if step.token != TOKEN_NONE:
+                            resp = self._orch.build_response(self._session)  # exact-size build
+                            self._entity.send_ui(self._sapi, resp)           # L1 bridge captures the tx frames
+                    except GsmL3Error as exc:  # one failing event never aborts the batch
                         self._last_event_error = exc
                         continue
-                    self._last_step = step
-                    if step.token != TOKEN_NONE:
-                        resp = self._orch.build_response(self._session)  # required_size -> exact buffer
-                        self._entity.send_ui(self._sapi, resp)           # L1 bridge captures the tx frames
-            out = self._tx_events[:]     # (5) everything this input produced
-            self._tx_events.clear()
-            return out
+            produced = self._tx_events[tx_start:]  # (5) only what THIS input produced
+            del self._tx_events[tx_start:]         # older undrained frames stay queued
+            return produced
 
     def feed_l3(self, l3) -> StepResult:
         """Direct orchestration WITHOUT L2 (test/simulation hook; the manual mode
@@ -2523,15 +2615,17 @@ class GsmL3Stack:
 
     def send_ui(self, l3, sapi: int | None = None) -> list[bytes]:
         """Transmit one response manually (auto_response=False mode). Returns the
-        tx frame(s) captured for this transmission."""
+        tx frame(s) captured for this transmission; frames queued by earlier,
+        not-yet-drained operations (e.g. tick_t200 retransmissions) are NOT
+        consumed here — they remain retrievable with drain_tx_frames()."""
         self._ensure_open()
         s = self._sapi if sapi is None else _as_int(sapi, "sapi", lo=0, hi=15)
         b = _byteslike(l3, "l3")
         with self._lock:
-            self._tx_events.clear()
+            tx_start = len(self._tx_events)
             self._entity.send_ui(s, b)
-            out = self._tx_events[:]
-            self._tx_events.clear()
+            out = self._tx_events[tx_start:]
+            del self._tx_events[tx_start:]
             return out
 
     # -- ticks --------------------------------------------------------------------
@@ -2554,12 +2648,13 @@ class GsmL3Stack:
             return self._orch.tick(delta_ms)
 
     def take_retransmit(self) -> int:
-        """Drain the retransmission channel (consume-on-read); GSML3_TOKEN_* 
-(GSM04.08 retransmit slot) — returns GSML3_TOKEN_NONE when nothing is queued. After a
-non-none token, build and send that response via build_response()/send_ui()."""
+        """Drain the retransmission channel (consume-on-read); GSML3_TOKEN_*.
+        Returns TOKEN_NONE when nothing is queued; after a non-NONE token,
+        build and send that response via build_response()/send_ui(). A
+        C-internal failure raises GsmL3Error."""
         self._ensure_open()
         with self._lock:
-            return int(lib.gsml3_orchestrator_take_retransmit(self._orch._h))
+            return self._orch.take_retransmit()
 
     def tick_t200(self, elapsed_ms: int) -> int:
         """Advance the entity's LAPDm T200 (profile-dependent, e.g. 900 ms for SDCCH):

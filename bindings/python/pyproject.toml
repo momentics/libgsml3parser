@@ -2,19 +2,23 @@
 
 [build-system]
 requires = ["setuptools>=64"]
-build-backend = "setuptools.build_meta"
+# Local PEP 517 shim (see build_backend.py): it reads the product version from
+# the repository-root VERSION file, materializes gsml3parser/_version.py, and
+# delegates all packaging to setuptools.build_meta.
+build-backend = "build_backend"
+backend-path = ["."]
 
 [project]
 name = "gsml3parser"
-# The product version has exactly ONE home: the repository-root VERSION file.
-# At sdist/wheel build time setuptools reads it into [project] (build-time
-# propagation, nothing hardcoded here). At RUNTIME the package version is the
-# C core's own report (gsml3_version(), baked by CMake from that same file):
-# gsml3parser.__version__ == gsml3parser.version(). No file I/O in the
+# The product version has exactly one source of truth: the repository-root
+# VERSION file (one semver line). At sdist/wheel build time the PEP 517 shim
+# stamps that value into the package metadata; at runtime the package version
+# is the C core's own report (gsml3_version(), baked by CMake from that same
+# file): gsml3parser.__version__ == gsml3parser.version(). No file I/O in the
 # installed package.
 dynamic = ["version"]
 description = "ctypes bindings over the libgsml3parser C ABI (GSM L3, A-bis RSL, LAPDm, BTS stack)"
-readme = "../README.md"
+readme = "README.md"
 # >=3.10: public signatures use PEP 604 unions (`int | None`), evaluated at runtime.
 requires-python = ">=3.10"
 # Runtime: standard library only (ctypes). No third-party dependencies.
@@ -23,9 +27,10 @@ requires-python = ">=3.10"
 test = ["pytest>=7"]
 
 [tool.setuptools.dynamic]
-# Read by setuptools at build time only; relative to this pyproject.toml,
-# bindings/python/../../VERSION is the repository-root single source of truth.
-version = { file = ["../../VERSION"] }
+# gsml3parser/_version.py is materialized by build_backend.py from the
+# repository-root VERSION file before setuptools reads it, and ships inside
+# every sdist and wheel.
+version = { attr = "gsml3parser._version.__version__" }
 
 [tool.setuptools]
 packages = ["gsml3parser"]

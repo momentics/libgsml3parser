@@ -176,6 +176,82 @@ def null_safety_c_documented():
         assert int(getattr(lib, name)(None)) == 0
 
 
+# -- Error channel after void/count-only C calls -----------------------------
+
+def _install_forced_error(funcs, code: int, message: bytes):
+    """Replace the two thread-local error observers with fakes, as if a C call
+    had just set the pending state. Returns the restore callable."""
+    saved = {k: funcs.get(k) for k in ("gsml3_last_error_code", "gsml3_last_error")}
+
+    def code_fn():
+        return code
+
+    def msg_fn():
+        return message
+
+    funcs["gsml3_last_error_code"] = code_fn
+    funcs["gsml3_last_error"] = msg_fn
+
+    def restore():
+        for name, fn in saved.items():
+            if fn is None:
+                funcs.pop(name, None)
+            else:
+                funcs[name] = fn
+
+    return restore
+
+
+@pytest.mark.parametrize(
+    "op",
+    ["receive", "hard_release", "cancel_all", "tick", "take_retransmit", "reserve", "timer_stop"],
+)
+def test_void_calls_surface_the_pending_error(op):
+    """Every mutating call whose C signature carries no error return value
+    (void or count-only — gsml3parser_c.h reports such failures only through
+    gsml3_last_error* and clears them on the next successful call) is polled
+    synchronously after the FFI call. A forced GSML3_ERR_INTERNAL is raised as
+    a typed GsmL3Error instead of being swallowed."""
+    funcs = _library._FUNCS
+    cleanups = []
+
+    if op == "receive":
+        e = g.LapdmEntity(0)
+        cleanups.append(e.close)
+        e.open(sapi=0, command_bit=1)      # warm up while the error state is still real
+        act = lambda: e.receive(bytes([0x01, 0x63]))
+    elif op == "hard_release":
+        e = g.LapdmEntity(0)
+        cleanups.append(e.close)
+        act = lambda: e.hard_release()
+    elif op in ("cancel_all", "tick", "take_retransmit"):
+        o = g.Orchestrator()
+        cleanups.append(o.close)
+        act = {"cancel_all": o.cancel_all,
+               "tick": lambda: o.tick(1),
+               "take_retransmit": o.take_retransmit}[op]
+    elif op == "reserve":
+        r = g.Registry(0)
+        cleanups.append(r.close)
+        act = lambda: r.reserve(8)
+    elif op == "timer_stop":
+        r = g.Registry(0)
+        cleanups.append(r.close)
+        s = r.create_by_tmsi(0x67000001)
+        act = lambda: s.timer_stop(0)      # GSML3_TIMER_T3101
+
+    restore = _install_forced_error(funcs, g.INTERNAL, b"forced: unexpected exception in the core")
+    try:
+        with pytest.raises(g.InternalError) as excinfo:
+            act()
+        assert "forced: unexpected exception in the core" in excinfo.value.message
+        assert excinfo.value.code == g.INTERNAL == 12
+    finally:
+        restore()
+        for close in cleanups:
+            close()
+
+
 def config_setters():
     """Out-of-range log level is ignored by C (no error, no crash); the strict
     framing setter toggles parsing behavior (exercised end-to-end above)."""

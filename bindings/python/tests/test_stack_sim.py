@@ -300,3 +300,89 @@ def session_borrowed_after_registry_close():
     # (raising instead of touching a freed C handle is the whole point)
     with pytest.raises(g.ClosedGsmL3ObjectError):
         sess.tmsi
+
+
+# -- Queue hygiene of the unified send path ---------------------------------
+
+def test_tx_frames_produced_between_calls_are_never_lost():
+    """A T200 retransmission captured by tick_t200 must survive a later
+    send_frame() and remain retrievable through drain_tx_frames(): calls that
+    return frames for one input never consume frames of an earlier operation."""
+    with g.GsmL3Stack(tmsi=0x66000001, auto_response=False) as stack:
+        stack.lapdm_entity.send_sabme()
+        assert stack.drain_tx_frames() == [bytes([0x09, 0x2F])]   # first SABME taken out
+
+        assert stack.tick_t200(900) == 1      # retransmitted SABME captured, still undrained
+
+        l3 = g.build_cm_service_request(1, g.ID_TMSI, 0x66000001, None)
+        txs = stack.send_frame(g.lapdm_mini.ui(0, False, l3))      # manual mode: emits nothing for this input
+        assert txs == []
+
+        assert stack.drain_tx_frames() == [bytes([0x09, 0x2F])]    # retransmission intact
+
+
+def test_auto_response_batch_survives_a_failed_event():
+    """In auto mode a GsmL3Error raised for ONE queued event — at any step:
+    parse, feed, response build or transmission — is recorded in
+    last_event_error; every remaining event of the same batch still gets its
+    turn and none of them is dropped."""
+    stack = g.GsmL3Stack(tmsi=0x66000002, auto_response=True)
+    try:
+        l3 = g.build_cm_service_request(1, g.ID_TMSI, 0x66000002, None)
+        # Three pre-queued events + the one receive() will append => batch of 4.
+        for _ in range(3):
+            stack._l3_events.append(g.L3Event(sapi=0, primitive=g.PRIM_L3_UNIT_DATA, data=l3))
+
+        orch = stack.orchestrator
+        state = {"feeds": 0, "builds": 0}
+        real_feed = orch.feed
+
+        def counting_feed(msg, session=None):
+            state["feeds"] += 1
+            return real_feed(msg, session)
+
+        def failing_build(session=None):
+            state["builds"] += 1
+            raise g.InvalidArgument(1, "simulated missing ResponseContext parameter")
+
+        orch.feed = counting_feed
+        orch.build_response = failing_build
+        try:
+            txs = stack.send_frame(g.lapdm_mini.ui(0, False, l3))   # must not raise
+        finally:
+            del orch.feed               # back to the class-level methods
+            del orch.build_response
+
+        assert state["feeds"] == 4          # all four events of the batch were attempted
+        assert state["builds"] >= 1         # at least the first event reached response build
+        assert txs == []                    # every response build failed: nothing transmitted
+        assert stack.last_event_error is not None
+        assert "simulated" in stack.last_event_error.message
+        assert stack.drain_l3_events() == []    # the batch was fully consumed, none left behind
+    finally:
+        stack.close()
+
+
+def test_component_accessors_and_dead_component_fail_fast():
+    """Components are reachable through read-only accessors. If a component is
+    closed out from under an open stack, every stack method raises
+    ClosedGsmL3ObjectError immediately instead of silently no-op-ing on dead C
+    handles; the stack teardown stays idempotent afterwards."""
+    stack = g.GsmL3Stack(tmsi=0x66000004)
+    try:
+        assert isinstance(stack.registry, g.Registry)
+        assert stack.session.tmsi == 0x66000004
+        assert isinstance(stack.orchestrator, g.Orchestrator)
+        assert isinstance(stack.lapdm_entity, g.LapdmEntity)
+
+        l3 = g.build_cm_service_request(1, g.ID_TMSI, 0x66000004, None)
+        stack.orchestrator.close()         # a component dies while the stack is open
+        with pytest.raises(g.ClosedGsmL3ObjectError):
+            stack.send_frame(g.lapdm_mini.ui(0, False, l3))
+        with pytest.raises(g.ClosedGsmL3ObjectError):
+            stack.tick_procedures(1)
+        with pytest.raises(g.ClosedGsmL3ObjectError):
+            stack.chain_phase
+    finally:
+        stack.close()                      # teardown must still work exactly once
+        stack.close()                      # ...and remain a no-op afterwards
