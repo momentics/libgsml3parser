@@ -19,7 +19,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-"""API-surface completeness tests (planK Phase 1, step 1.7).
+"""API-surface completeness tests.
 
 The Python binding promises `argtypes`/`restype` for EVERY function of the C
 ABI — this pins that promise: the set of functions declared in the header must
@@ -68,7 +68,7 @@ def test_abi_version_matches_library():
 
 
 def test_version_matches_root_version_file():
-    """Single source of truth (planK decision #13, Phase 0): the library
+    """Single source of truth: the library
     reports the version that CMake read from the repo-root VERSION file."""
     import gsml3parser as g
     vfile = REPO_ROOT / "VERSION"
