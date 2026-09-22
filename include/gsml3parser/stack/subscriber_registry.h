@@ -257,9 +257,8 @@ private:
     };
 
     // TMSI -> session (primary index). Flat open-addressing table: slab
-    // storage (one allocation per 64 entries, replacing the
-    // previous one-heap-block-per-entry storage), no pointer chasing
-    // .
+    // storage (one allocation per 64 entries, replacing the previous
+    // one-heap-block-per-entry storage), no pointer chasing.
     FlatMap<uint32_t, SessionEntry> mByTMSI;
 
     // IMSI -> TMSI (secondary index: redirects to mByTMSI).

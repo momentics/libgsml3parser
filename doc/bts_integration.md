@@ -321,12 +321,19 @@ result = orchestrator.feedExternalTyped(chal);
 n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
 sendToMS(session, buf, n);
 
-// 3. MS responds with AuthenticationResponse
+// 3. MS responds with AuthenticationResponse — fed TWICE. Each routed feed()
+//    advances a procedure by at most one state, and SEND_AUTH_REQ consumes one
+//    feed: it retransmits the AuthenticationRequest and arms T3106.
 auto authResp = parseL3(authResponseData).value();
+
 result = orchestrator.feed(authResp, session);
-// SRES verified internally (big-endian); the Authentication sub-procedure
-// reports Completed here while the chain advances to CipheringMode —
-// keep the chain alive and continue below.
+// SendResponseWithToken + AuthenticationRequest (retransmitted, T3106 armed).
+n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
+sendToMS(session, buf, n);
+
+result = orchestrator.feed(authResp, session);
+// Second feed: SRES verified internally (big-endian); the Authentication
+// sub-procedure reports Completed here while the chain advances to CipheringMode.
 
 // 4. Ciphering phase: feed the algorithm decision
 CipheringParameters cipher{1, true}; // A5/1 enabled
@@ -335,11 +342,18 @@ result = orchestrator.feedExternalTyped(cipher);
 n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
 sendToMS(session, buf, n);
 
-// 5. MS sends CipheringModeComplete
+// 5. MS sends CipheringModeComplete — fed twice for the same one-state-per-feed
+//    reason (SEND_COMMAND retransmits the command and arms T3101 on the first
+//    routed feed).
 auto cipherComplete = parseL3(cipherCompleteData).value();
+
 result = orchestrator.feed(cipherComplete, session);
-// Chain is now in the inline LocationUpdate phase; feed() on that phase
-// returns WaitingExternal — awaiting the VLR decision (T3103, 5 s).
+n = ResponseBuilder::buildResponseFromToken(result.responseToken, {buf, sizeof(buf)}, session);
+sendToMS(session, buf, n);   // CipheringModeCommand (retransmitted)
+
+result = orchestrator.feed(cipherComplete, session);
+// Second feed completes the ciphering sub-procedure; the chain is now in the
+// inline LocationUpdate phase — awaiting the VLR decision (T3103, 5 s).
 
 // 6. VLR accepts
 VLRDecision vlr{true, 0x87654321u, MMRejectCause::Zero};
@@ -359,7 +373,7 @@ The orchestrator chains: CMServiceRequest(MO_Call) -> `CallSetupMOPercedure`. Af
 | Feed step (state processed) | Response token emitted |
 |------------------------------|------------------------|
 | CC Setup (procedure starts in `INIT`) | CallProceeding — TI from the Setup header is recorded to `session->response` |
-| any feed (`PROCEEDING`, T3101 3 s) | AssignmentCommand — allocate/announce the TCH via `ResponseContext.channel` |
+| any feed (`PROCEEDING`, T3101 3 s) | AssignmentCommand — the procedure records only TI/cause; populate `session->response.channel` (with `hasChannel`) yourself before building, or the build returns -1 |
 | any feed (`ASSIGN_TCH`) | — (advances silently) |
 | RR AssignmentComplete (`WAIT_ASSIGN_COMPLETE`) | Alerting |
 | any feed (`ALERTING`) | Connect |

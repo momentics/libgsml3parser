@@ -181,6 +181,14 @@ public:
     ///         (zero-overhead fn+ctx; wrap lambdas with makeResponseSink()).
     /// @return ProcedureStepResult indicating Continue, SendResponse, WaitingExternal,
     ///         Completed, or Failed.
+    ///
+    /// One-step-per-feed convention: each concrete procedure advances by at most
+    /// one internal state per routed feed(). States that (re-)emit their request
+    /// (e.g. Authentication's SEND_AUTH_REQ, CipheringMode's SEND_COMMAND) consume
+    /// one feed before the awaited input is processed, so scripted integrations
+    /// typically feed the same message twice. ProcedureOrchestrator::feed() on a
+    /// chain-starting message is the documented exception: it performs chain
+    /// detection plus phase setup in one call and reports the first step only.
     [[nodiscard]] virtual ProcedureStepResult feed(const ParsedMessage& msg,
                                                       SubscriberSession* session,
                                                       ResponseSink sink) = 0;

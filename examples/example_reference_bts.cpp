@@ -98,7 +98,17 @@ static void simulateLocationUpdateChain() {
         printHex(buf.data(), static_cast<size_t>(n));
     }
 
-    // Step 3: Feed CipheringParameters (chain advances from Auth -> CipheringMode)
+    // Step 2b: MS responds with AuthenticationResponse. The SRES matches the
+    // AuC expected value fed above (big-endian {AB, CD, EF, 01}). SEND_AUTH_REQ
+    // consumes one routed feed (retransmits the request, arms T3106), so feed
+    // the same message twice: the second feed verifies SRES and completes the
+    // Authentication phase -> the chain advances to CipheringMode.
+    auto authResp = ParsedMessage{MMM{
+        L3AuthenticationResponse::builder().sres(0xABCDEF01u).build()}};
+    (void)orchestrator.feed(authResp, session);   // retransmit AuthenticationRequest + T3106
+    (void)orchestrator.feed(authResp, session);   // SRES verified -> "auth_success"
+
+    // Step 3: Feed CipheringParameters (chain is now in the CipheringMode phase)
     CipheringParameters cipherParams{0, true};
     auto r3 = orchestrator.feedExternalTyped(cipherParams);
     std::printf("  [3] CipheringParams -> action=%d token=%d\n",
@@ -110,7 +120,15 @@ static void simulateLocationUpdateChain() {
         printHex(buf.data(), static_cast<size_t>(n));
     }
 
-    // Step 4: Feed VLR accept decision (chain advances to LocationUpdate)
+    // Step 3b: MS sends CipheringModeComplete — fed twice for the same
+    // one-state-per-feed reason (SEND_COMMAND retransmits on the first routed
+    // feed); the second feed completes ciphering -> inline LocationUpdate phase
+    // (T3103 armed, awaiting the VLR decision).
+    auto cipherComplete = ParsedMessage{RRM{L3CipheringModeComplete::builder().build()}};
+    (void)orchestrator.feed(cipherComplete, session);   // retransmit CipheringModeCommand + T3101
+    (void)orchestrator.feed(cipherComplete, session);   // "ciphering_activated"
+
+    // Step 4: Feed VLR accept decision (chain is now in the LocationUpdate phase)
     VLRDecision vlr{true, std::nullopt, MMRejectCause::Zero};
     auto r4 = orchestrator.feedExternalTyped(vlr);
     std::printf("  [4] VLRDecision(accept) -> action=%d token=%d\n",
@@ -122,7 +140,10 @@ static void simulateLocationUpdateChain() {
         printHex(buf.data(), static_cast<size_t>(n));
     }
 
-    std::printf("  Chain phase: %s\n", procedureTypeName(orchestrator.chainPhase()).data());
+    // The chain has terminated: report its final result. (A finished chain's
+    // type is Unknown — procedureTypeName(Unknown) would just print "?".)
+    std::printf("  Chain finished: state=%d reason=\"%s\"\n",
+                static_cast<int>(r4.finalResult.state), r4.finalResult.reason.data());
     std::printf("\n");
 }
 

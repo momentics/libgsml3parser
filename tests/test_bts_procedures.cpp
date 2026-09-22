@@ -504,8 +504,9 @@ TEST(BTSProceduresTest, Stress_1000MSContexts_noAllocations) {
     }
 }
 
-// Benchmark: TransactionManager handles 100 transactions with O(1) TI lookup
-TEST(BTSProceduresTest, Stress_TransactionManager_100Transactions_O1Lookup) {
+// Benchmark: TransactionManager fills all 8 CC TI slots (plus MM transactions)
+// and matches each CC transaction by TI via the O(1) inverted index.
+TEST(BTSProceduresTest, Stress_TransactionManager_TISlots_O1Lookup) {
     // Attribute the timing result to the machine it ran on (unified hardware ID).
     benchmark::printHardwareId();
     TransactionManager txnMgr;
@@ -547,7 +548,7 @@ TEST(BTSProceduresTest, Stress_TransactionManager_100Transactions_O1Lookup) {
     auto tEnd = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(tEnd - tStart);
 
-    // Benchmark: 100 transaction creates + 8 O(1) lookups < 100us
+    // Benchmark: 14 transaction creates + 8 O(1) TI lookups < 1 ms wall clock
     EXPECT_LT(duration.count(), 1000);
 
     // Verify remaining MM transactions still pending
@@ -855,7 +856,7 @@ TEST(BTSProceduresTest, Stress_TimerManager_tickSpanOverload) {
     // After 500ms of ticks, all 5 timers should have expired
     EXPECT_EQ(totalExpired, 5u);
 
-    // Benchmark: 100 span-based ticks < 500us
+    // Benchmark: 100 span-based ticks over 500 ms of protocol time < 5 ms wall clock
     EXPECT_LT(duration.count(), 5000);
 }
 
