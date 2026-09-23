@@ -21,7 +21,7 @@
 
 package gsml3parser
 
-// Stack simulation tests (planK step 2.9 + the unified demo scenario): MO call
+// Stack simulation tests: MO call
 // over SDCCH with C-core callbacks and orchestration, LAPDm link lifecycle
 // (byte-exact vectors mirroring the C Entity_LinkLifecycle test), T200
 // retransmission, wrapper NULL validation, the closed-path NO-FFI invariant

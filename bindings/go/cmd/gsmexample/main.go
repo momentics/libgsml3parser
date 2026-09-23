@@ -20,8 +20,7 @@
 // SOFTWARE.
 
 // Command gsmexample runs the unified "MO call over SDCCH" demo through the Go
-// binding (planK common demo scenario — identical behavioral vectors to the
-// Python/Rust examples and the C reference test): a BTS-side GsmL3Stack with
+// binding: a BTS-side GsmL3Stack with
 // AutoResponse, two MS-side UI frames built by the C typed builders, the
 // orchestrator chain, and the T3101 (3 s) expiry. Stdlib only; the exit code is
 // the CI contract — any failed assertion prints to stderr and exits 1.
@@ -34,7 +33,7 @@ import (
 	gsml3parser "github.com/momentics/libgsml3parser/bindings/go"
 )
 
-const demoTMSI = 0x87654321 // the planK scenario constant (SAPI 0 / profile 0 / BTS side)
+const demoTMSI = 0x87654321 // constant (SAPI 0 / profile 0 / BTS side)
 
 // fail reports a demo assertion failure: stderr + non-zero exit (the gate contract).
 func fail(format string, args ...any) {

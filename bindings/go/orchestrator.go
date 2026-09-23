@@ -310,7 +310,7 @@ func BuildResponseAuthenticationRequest(rand [16]byte) ([]byte, error) {
 // BuildResponseLocationUpdatingAccept builds a location updating accept. In the S7
 // response builders the LAI components are digit STRINGS (mcc exactly 3 BCD
 // digits "244", mnc 2-3 digits "05"), range-checked in C — distinct from the S9
-// typed builders which take ints (planK S7/S9 note).
+// typed builders which take ints.
 func BuildResponseLocationUpdatingAccept(mcc, mnc string, lac uint16, hasNewTMSI bool, newTMSI uint32) ([]byte, error) {
 	return serializeInto("resp.LocationUpdatingAccept", func(out *C.uint8_t, maxLen C.size_t) C.size_t {
 		mccP := C.CString(mcc)
@@ -468,7 +468,7 @@ func ResponseRequiredSize(token int, s *Session) (int, error) {
 }
 
 // ── Curated S9 typed builders (the two the demo chain needs) ───────────────
-// These use the S9 argument conventions (see planK): build_cm_service_request /
+// These use the S9 argument conventions: build_cm_service_request /
 // build_setup. Empty identity strings pass NULL.
 
 // BuildCMServiceRequest builds a CM service request (typed S9). serviceType is an

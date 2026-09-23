@@ -8,6 +8,6 @@ module github.com/momentics/libgsml3parser/bindings/go
 //
 // Version: this Go module deliberately carries NO product version (go modules
 // of an internal binding do not use semver tags); the repository-root VERSION
-// file is the single source of truth (planK decision #13) — there is no value
+// file is the single source of truth — there is no value
 // here that can drift out of sync with it.
 go 1.21

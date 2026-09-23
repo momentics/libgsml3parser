@@ -21,7 +21,7 @@
 
 package gsml3parser
 
-// Core binding tests (planK step 2.8): parse/round-trip over the C-verified PD
+// Core binding tests: parse/round-trip over the C-verified PD
 // batch, NULL-safety on both sides of the wrapper boundary, error paths, and
 // the BUFFER_TOO_SMALL class — stdlib testing only, no external dependencies.
 
@@ -36,7 +36,7 @@ import (
 
 const (
 	// repoRoot is two levels up from bindings/go — the module root is an internal
-	// binding directory (planK: single Go module at bindings/go).
+	// binding directory.
 	repoRoot = "../.."
 
 	demoTMSI = 0x87654321
@@ -62,7 +62,7 @@ func TestVersionAndABI(t *testing.T) {
 	if v := Version(); v == "" {
 		t.Fatal("Version() returned an empty string")
 	}
-	// Single source of truth (planK decision #13, Phase 0): the library reports
+	// Single source of truth: the library reports
 	// exactly what CMake read from the repo-root VERSION file.
 	raw, err := os.ReadFile(filepath.Join(repoRoot, "VERSION"))
 	if err != nil {

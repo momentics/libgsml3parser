@@ -24,8 +24,8 @@ package gsml3parser
 import "fmt"
 
 // Minimal LAPDm (GSM 04.06) MS/peer-side frame builders for simulation and the
-// demo — a byte-for-byte mirror of the Python mini-codec (_lapdm.py), planK
-// decision #7. Purpose: simulation must BUILD Mobile-station-side frames to feed
+// demo — a byte-for-byte mirror of the Python mini-codec (_lapdm.py). 
+// Purpose: simulation must BUILD Mobile-station-side frames to feed
 // a BTS-side entity; the C core decodes peer frames and transmits only its own,
 // so production transmission always goes through the C entity (SendUI/SendData/
 // SendSABME/SendDISC) — do NOT use these builders on that path.

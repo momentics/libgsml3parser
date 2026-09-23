@@ -86,7 +86,7 @@ func (c Code) String() string {
 	}
 }
 
-// Error is the typed failure of one operation (planK decision #9). Code names
+// Error is the typed failure of one operation. Code names
 // the C failure class; Op names the Go call site; Msg is a SYNCHRONOUS copy of
 // the thread-local gsml3_last_error() message taken at the failing call —
 // every later successful FFI call on this thread clears the pending error, so

@@ -30,7 +30,7 @@ import "C"
 
 import "unsafe"
 
-// TEST-ONLY raw access to the C ABI (planK step 2.8 "test-only NULL-export").
+// TEST-ONLY raw access to the C ABI ("test-only NULL-export").
 //
 // Why this is a regular (non-_test) cgo file: the gc toolchain REJECTS
 // `import "C"` inside _test.go files ("use of cgo in test ... not supported" —

@@ -24,7 +24,7 @@
 // the LAPDm entity with Go callbacks, and the BTS stack layer (registry /
 // session / orchestrator / response builders). The v1 surface is C-ABI
 // sections S1–S7 plus gsml3_build_cm_service_request and gsml3_build_setup
-// (planK decision #6) — 128 functions in total; the typed S8 getters are
+//  — 128 functions in total; the typed S8 getters are
 // deliberately curated out and can be added without any ABI change.
 //
 // # Ownership
@@ -121,8 +121,8 @@ func init() {
 // ── S1 core ───────────────────────────────────────────────────────────────
 
 // Version returns the product version string reported by the loaded C core
-// (gsml3_version → PROJECT_VERSION ← repo-root VERSION file, planK decision
-// #13). The C result is static storage: it is copied here and must never be
+// (gsml3_version → PROJECT_VERSION ← repo-root VERSION file.
+// The C result is static storage: it is copied here and must never be
 // freed.
 func Version() string {
 	p := C.gsml3_version()
