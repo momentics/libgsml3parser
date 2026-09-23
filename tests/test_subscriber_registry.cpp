@@ -581,7 +581,6 @@ TEST(SSR_Guards, ConcurrentReadModify_NoTornReads) {
     }
 
     std::atomic<int> tornReads{0};
-    std::atomic<bool> stop{false};
 
     // Writers: modify lapdmLink under the exclusive shard lock.
     auto writer = [&]() {
@@ -596,7 +595,7 @@ TEST(SSR_Guards, ConcurrentReadModify_NoTornReads) {
     // Readers: read under the shared shard lock; a torn read would mean the
     // lock discipline is broken (writer changed the field mid-read).
     auto reader = [&]() {
-        for (int i = 0; i < kIters && !stop; ++i) {
+        for (int i = 0; i < kIters; ++i) {
             uint32_t tmsi = static_cast<uint32_t>((i % kSessions) + 1);
             auto locked = reg.findLocked(tmsi);
             if (!locked.session) { tornReads.fetch_add(1); continue; }
@@ -615,7 +614,7 @@ TEST(SSR_Guards, ConcurrentReadModify_NoTornReads) {
     EXPECT_EQ(tornReads.load(), 0);
 }
 
-// Test: remove() is O(1) — 1M sessions, 100K removals must be fast.
+// Test: remove() is O(1) — 1M sessions, 200K removals must be fast.
 // Importance: session churn (detach) at scale must not degrade to O(N) scans.
 // 3GPP coverage: TS 24.008 4.4 - subscriber lifecycle at scale.
 TEST(SR_remove, OneMillion_O1Fast) {
@@ -640,10 +639,10 @@ TEST(SR_remove, OneMillion_O1Fast) {
     EXPECT_EQ(reg.count(), static_cast<size_t>(N) - ptrs.size());
 #if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
     // Budget is machine-dependent: the point is to prove O(1) behavior.
-    // The old O(N) implementation took tens of seconds here (100K removals x
-    // ~500K entries scanned); O(1) removal is ~1 us/op, so 500ms is a 100x
-    // margin that still separates the two complexities on any hardware.
-    EXPECT_LT(ms, 500.0) << "100K remove() over 1M sessions took " << ms << "ms (expected O(1), < 500ms)";
+    // The old O(N) implementation took tens of seconds here (200K removals x
+    // up to ~1M entries scanned per remove); at ~1 us/op per O(1) removal,
+    // 500 ms still separates the two complexities on any hardware.
+    EXPECT_LT(ms, 500.0) << "200K remove() over 1M sessions took " << ms << "ms (expected O(1), < 500ms)";
 #endif
 }
 

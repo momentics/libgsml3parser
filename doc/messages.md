@@ -41,7 +41,7 @@ Dispatch notes:
 | `L3BCCReleaseComplete` | 0x0a | Bidir | Broadcast call release complete |
 | `L3BCCConnectAcknowledge` | 0x09 | Bidir | Connect acknowledged |
 
-## Call Control (PD=0x03) — 24 message types, 26 IE types
+## Call Control (PD=0x03) — 24 message types, 27 IE types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -70,7 +70,7 @@ Dispatch notes:
 | `L3Facility` | 0x3a | DL/UL | CC Facility — SS data container (TS 24.008 9.3.21) |
 | `L3CCStatus` | 0x3d | Bidir | CC status report |
 
-### CC Information Elements (26 types)
+### CC Information Elements (27 types)
 
 | IE | Format | Description |
 |----|--------|-------------|
