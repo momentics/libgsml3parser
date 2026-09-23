@@ -436,7 +436,8 @@ Information elements are defined alongside their domain (e.g. `common/l3common.h
 
 ## Roadmap
 
-- [ ] Python bindings (pybind11)
+- [ ] Go bindings
+- [ ] Rust bindings
 
 ## License
 
