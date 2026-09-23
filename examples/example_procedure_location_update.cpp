@@ -6,7 +6,6 @@
 // Shows: session creation, message feeding, external data (auth/VLR), and completion.
 
 #include <gsml3parser/gsml3parser.hpp>
-#include <gsml3parser/stack/typed_external_data.h>
 
 #include <iostream>
 

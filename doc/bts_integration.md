@@ -58,7 +58,6 @@ libgsml3parser sits between the BTS application logic and the physical/radio lay
 
 ```cpp
 #include <gsml3parser/gsml3parser.hpp>
-#include <gsml3parser/stack/procedure_orchestrator.h> // not part of the umbrella header
 
 using namespace gsml3parser;
 

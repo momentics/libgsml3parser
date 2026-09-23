@@ -25,7 +25,6 @@
 // per message.
 
 #include <gsml3parser/gsml3parser.hpp>
-#include <gsml3parser/stack/sharded_channel_pool.h>
 #include <gsml3parser/benchmark_hw.h>
 #include <atomic>
 #include <chrono>
