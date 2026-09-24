@@ -44,3 +44,9 @@ CMakeFiles/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# FFI bindings artifacts
+bindings/rust/target/
+**/__pycache__/
+*.pyc
+
