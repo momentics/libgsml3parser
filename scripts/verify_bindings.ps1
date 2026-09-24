@@ -31,6 +31,9 @@
 # truth) -> core shared library (build_bindings, flattened into build_bindings/bin)
 # -> Python (pytest + example) -> Go (vet + test -race + example) -> Rust
 # (clippy + test + example). Fails fast with a non-zero exit code on any failure.
+# Windows cgo: auto-selects a clang + lld-link pair (PATH or Visual Studio's
+# LLD/LLVM component) and routes it through the bindings/go/ccshim pass-through
+# (the Go toolchain appends a GNU-only flag that windows-msvc clang rejects).
 # Generator policy: with no -Generator CMake picks its default for the platform
 # (portable on CI runners); local runs pin "Visual Studio 18 2026" to match the
 # core gate scripts/verify.ps1.
@@ -150,12 +153,71 @@ if ($runLangs -contains "python") {
     if ($LASTEXITCODE -ne 0) { throw "Python example failed (exit $LASTEXITCODE)" }
 }
 
-# ── [3/4] Go binding (cgo; a C compiler must be on PATH: cl / clang / gcc) ─
+# ── [3/4] Go binding (cgo; needs a working C toolchain: gcc / clang+lld / MSVC) ─
 if ($runLangs -contains "go") {
     Step 3 "Go: vet + test -race + example"
-    Need go "Go >= 1.21 (CGO requires a C compiler on PATH: MSVC cl, clang, or gcc)"
+    Need go "Go >= 1.21 (CGO requires a C compiler)"
+
     if (-not $isWin -and [string]::IsNullOrEmpty($env:CC)) {
-        $env:CC = "clang"   # cgo's default is gcc; CI images install clang (matches the core CI toolchain)
+        # cgo's default is gcc; the Linux CI images install clang, so pin it there
+        $env:CC = "clang"
+    }
+    if ($isWin -and [string]::IsNullOrEmpty($env:CC)) {
+        # On Windows the Go toolchain appends the GNU-only flag -mthreads to every
+        # cgo compile; a clang for the x86_64-pc-windows-msvc target rejects it.
+        # Select a clang + lld-link pair (on PATH, or the LLD/LLVM component of a
+        # Visual Studio install) and drive it through the pass-through shim at
+        # bindings/go/ccshim, which drops -mthreads and links via lld-link. An
+        # explicitly set CC is always respected as-is.
+        $shimDir = Join-Path $env:TEMP "gsml3_ccshim"
+        New-Item -ItemType Directory -Force $shimDir | Out-Null
+        & go build -C (Join-Path $RepoRoot "bindings/go/ccshim") -o (Join-Path $shimDir "ccshim.exe") .
+        if ($LASTEXITCODE -ne 0) { throw "failed to build the ccshim compiler wrapper (exit $LASTEXITCODE)" }
+        $shimExe = Join-Path $shimDir "ccshim.exe"
+
+        # Candidate bin directories: a PATH clang whose sibling lld-link exists,
+        # then each Visual Studio install's LLD component (VC\Tools\Llvm).
+        $clangBins = @()
+        $cmdClang = Get-Command clang.exe -ErrorAction SilentlyContinue
+        if ($cmdClang -and (Test-Path (Join-Path (Split-Path $cmdClang.Source) "lld-link.exe"))) {
+            $clangBins += Split-Path $cmdClang.Source
+        }
+        $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+        if (Test-Path $vswhere) {
+            & $vswhere -latest -products * -property installationPath 2>$null | ForEach-Object {
+                foreach ($arch in @("x64", "AMD64")) {
+                    $llvm = Join-Path $_ "VC\Tools\Llvm\$arch\bin"
+                    if ((Test-Path (Join-Path $llvm "clang.exe")) -and (Test-Path (Join-Path $llvm "lld-link.exe"))) { $clangBins += $llvm }
+                }
+            }
+        }
+
+        # Probe each candidate exactly like the Go build will: compile a trivial
+        # C file with the stdlib flag set (incl. -mthreads, stripped by the shim)
+        # and link it through lld-link. First pair that links wins.
+        $probeDir = Join-Path $env:TEMP "gsml3_ccprobe"
+        New-Item -ItemType Directory -Force $probeDir | Out-Null
+        Set-Content (Join-Path $probeDir "probe.c") "int main(void) { return 0; }"
+        $passing = @()
+        foreach ($bin in ($clangBins | Where-Object { $_ } | Sort-Object -Unique)) {
+            $env:CCSHIM_TARGET = (Join-Path $bin "clang.exe")
+            $obj = Join-Path $probeDir ([IO.Path]::GetRandomFileName())
+            & $shimExe -xc -c (Join-Path $probeDir "probe.c") -o $obj -O2 -Wall -Werror `
+                -fno-stack-protector -Wdeclaration-after-statement -mthreads 2>$null
+            if ($LASTEXITCODE -ne 0) { continue }
+            & $shimExe -fuse-ld=lld $obj -o (Join-Path $probeDir "probe.exe") 2>$null
+            Remove-Item $obj, (Join-Path $probeDir "probe.exe") -Force -ErrorAction SilentlyContinue
+            if ($LASTEXITCODE -eq 0) { $passing += $bin }
+        }
+        if ($passing.Count -eq 0) {
+            throw "No usable C toolchain found for Go cgo on this Windows machine (looked for a clang.exe + lld-link.exe pair on PATH and in the LLD/LLVM component of installed Visual Studios). Install that VS component, or set CC to a compiler whose flag set is understood by Go's cgo path."
+        }
+        $chosenBin = $passing[0]
+        $env:CCSHIM_TARGET = (Join-Path $chosenBin "clang.exe")
+        $env:CC = $shimExe
+        $env:CGO_LDFLAGS = "-fuse-ld=lld"   # link through lld-link, not the MSVC linker
+        $env:Path = "$chosenBin;$($env:Path)"
+        Write-Host ("    cgo toolchain: clang + lld from {0} (via bindings/go/ccshim)" -f $chosenBin) -ForegroundColor DarkGray
     }
     $env:CGO_ENABLED = "1"   # the binding is cgo by design; explicit and per-run (not go env -w)
     Push-Location (Join-Path $RepoRoot "bindings/go")
@@ -172,11 +234,12 @@ if ($runLangs -contains "rust") {
     Step 4 "Rust: clippy + test + example"
     Need cargo "Rust stable >= 1.75 with the clippy component (CI installs it explicitly)"
     # Strict lint pass: warnings are rejected in both binding crates.
-    & cargo --manifest-path bindings/rust/Cargo.toml clippy --workspace -- -D warnings
+    # (--manifest-path is a per-command option and follows the subcommand.)
+    & cargo clippy --manifest-path bindings/rust/Cargo.toml --workspace -- -D warnings
     if ($LASTEXITCODE -ne 0) { throw "cargo clippy failed (exit $LASTEXITCODE)" }
-    & cargo --manifest-path bindings/rust/Cargo.toml test --workspace
+    & cargo test --manifest-path bindings/rust/Cargo.toml --workspace
     if ($LASTEXITCODE -ne 0) { throw "cargo test failed (exit $LASTEXITCODE)" }
-    & cargo --manifest-path bindings/rust/Cargo.toml run -p gsml3parser --example bts_simulation
+    & cargo run --manifest-path bindings/rust/Cargo.toml -p gsml3parser --example bts_simulation
     if ($LASTEXITCODE -ne 0) { throw "Rust example failed (exit $LASTEXITCODE)" }
 }
 
