@@ -210,6 +210,16 @@ jobs:
       - name: Build
         run: cmake --build build_fuzz --parallel
       - name: Fuzz smoke (2000 runs per target)
-        run: >
-          ctest --test-dir build_fuzz -C Release --output-on-failure
-          -R "_smoke$"
+        # Guard against a silent green no-op: when zero tests match the
+        # filter ctest exits 0 and only prints "No tests were found!!!",
+        # so assert that at least one _smoke test is registered.
+        run: |
+          set -euo pipefail
+          listing=$(ctest --test-dir build_fuzz -C Release -N -R "_smoke$")
+          printf '%s\n' "$listing"
+          total=$(printf '%s\n' "$listing" | sed -n 's/^Total Tests: \([0-9][0-9]*\)$/\1/p')
+          if [ -z "${total:-}" ] || [ "$total" -eq 0 ]; then
+            echo "No _smoke tests are registered; the ctest run below would be a no-op." >&2
+            exit 1
+          fi
+          ctest --test-dir build_fuzz -C Release --output-on-failure -R "_smoke$"

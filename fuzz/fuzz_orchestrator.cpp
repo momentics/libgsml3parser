@@ -55,7 +55,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
                 len = 1 + (data[pos] % 64);
                 if (len > size - pos) len = size - pos;
                 auto res = parseL3(std::span<const uint8_t>(data + pos, len));
-                if (res) orch.feed(*res, &session);
+                if (res) (void)orch.feed(*res, &session);
                 pos += len;
                 break;
             }
@@ -66,7 +66,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
                 std::memcpy(chal.rand.data(), data + pos, 16);
                 std::memcpy(chal.expectedSres.data(), data + pos + 16, 4);
                 pos += 20;
-                orch.feedExternalTyped(chal);
+                (void)orch.feedExternalTyped(chal);
                 break;
             }
             case 2: {
@@ -75,7 +75,7 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
                 VLRDecision vlr{(data[pos] & 1) != 0, std::nullopt, MMRejectCause::Zero};
                 if (data[pos + 1] & 1) vlr.newTmsi = 0x80000000u;
                 pos += 2;
-                orch.feedExternalTyped(vlr);
+                (void)orch.feedExternalTyped(vlr);
                 break;
             }
             case 3: {
@@ -83,12 +83,12 @@ extern "C" int LLVMFuzzerTestOneInput(const uint8_t* data, size_t size) {
                 const size_t delta = pos < size ? data[pos] % 6000 : 100;
                 ++pos;
                 orch.tickAll(std::chrono::milliseconds(delta));
-                orch.takeRetransmissionToken();
+                (void)orch.takeRetransmissionToken();
                 break;
             }
             default: {
                 // Build the pending response into a local buffer.
-                orch.buildPendingResponse({buf, sizeof(buf)}, &session);
+                (void)orch.buildPendingResponse({buf, sizeof(buf)}, &session);
                 break;
             }
         }

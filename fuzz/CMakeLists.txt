@@ -2,10 +2,11 @@
 # but never used). libFuzzer requires Clang/LLVM; on MSVC the option is
 # a no-op with a status message.
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
-    # Register the smoke tests even when BUILD_TESTS is OFF: the CI
-    # fuzz job configures with -DBUILD_TESTS=OFF and runs ctest on the
-    # *_smoke tests.
-    enable_testing()
+    # Smoke tests registered here are visible to ctest even with
+    # -DBUILD_TESTS=OFF: the top-level CMakeLists.txt enables testing for
+    # (BUILD_TESTS OR ENABLE_FUZZING) so the build-tree root testfile lists
+    # this subdirectory. (A child-scope enable_testing() alone would leave
+    # them invisible to ctest.)
     set(GSML3_FUZZ_TARGETS
         fuzz_parse_l3
         fuzz_rsl_parse

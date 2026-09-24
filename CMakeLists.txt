@@ -235,6 +235,18 @@ add_library(gsml3parser
 
 add_library(gsml3parser::parser ALIAS gsml3parser)
 
+# ── Testing infrastructure ────────────────────────────────────────────
+# Must run in this (top-level) scope: ctest discovers tests via
+# <buildroot>/CTestTestfile.cmake and its subdirs() entries, which CMake
+# only generates when enable_testing() was called at the top level. A
+# child-directory call alone leaves those add_test() targets invisible
+# to ctest ("No tests were found!!!"). Gated on either test source so a
+# fuzz-only build (-DBUILD_TESTS=OFF -DENABLE_FUZZING=ON) still gets them.
+
+if(BUILD_TESTS OR ENABLE_FUZZING)
+    enable_testing()
+endif()
+
 # ── Fuzzing ───────────────────────────────────────────────────────────
 
 if(ENABLE_FUZZING)
@@ -344,7 +356,6 @@ install(FILES
 # ── Tests ─────────────────────────────────────────────────────────────
 
 if(BUILD_TESTS)
-    enable_testing()
     add_subdirectory(tests)
 endif()
 
