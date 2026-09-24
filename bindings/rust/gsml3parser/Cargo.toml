@@ -2,8 +2,9 @@
 
 [package]
 name = "gsml3parser"
-# Keep in sync with the repo-root VERSION file (decision #13); the gate's
-# manifest version check fails on drift. Currently 0.19.0.
+# Must stay in sync with the repo-root VERSION file (single source of truth
+# for the product version; Cargo cannot read a version from a file). The
+# unified gate's manifest version check fails on drift.
 version = "0.19.0"
 edition = "2021"
 rust-version = "1.75"

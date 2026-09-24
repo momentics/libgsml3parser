@@ -28,7 +28,7 @@
 //!
 //! Surface (v1): sections S1–S7 of the header plus the two typed builders
 //! needed by the demo chain — `gsml3_build_cm_service_request` and
-//! `gsml3_build_setup` (128 functions total; planK decision #6). The curated
+//! `gsml3_build_setup` (128 functions total). The curated
 //! S8 typed getters are intentionally not declared here.
 //!
 //! Completeness is enforced at compile time by `tests/surface.rs`, which
@@ -379,7 +379,7 @@ pub type lapdm_l1_cb =
     unsafe extern "C" fn(frame: *const c_uchar, frame_len: usize, user: *mut c_void);
 
 // ── The C ABI (128 functions: S1–S7 + 2 curated S9 builders) ────────────────
-// Implementation note (planK step 3.2): this list is a 1:1 transcription of
+// This list is a 1:1 transcription of
 // the "Inventory of C ABI functions" for the v1 surface — no omissions; the
 // names are verbatim from gsml3parser_c.h (search anchor: `GSML3_C_API name(`).
 // Types follow the mapping int=c_int, uint8_t=u8, uint16_t=u16, uint32_t=u32,

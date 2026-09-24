@@ -19,12 +19,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//! Integration tests for the Rust binding (planK step 3.8). They exercise the
+//! Integration tests for the Rust binding. They exercise the
 //! FFI boundary with the SAME behavioral vectors as the C reference tests, the
 //! Python suite and the Go suite: the unified "MO call over SDCCH" scenario
 //! (`TEST(CApiOrchestrator, MOCallSetupChain)` / `CallSetupMO_T3101_Timeout`),
 //! the link-lifecycle mirror of `Entity_LinkLifecycle`, T200(SDCCH) = 900 ms
-//! retransmission, the mini-codec closed loop (decision #7), the NULL policy
+//! retransmission, the mini-codec closed loop against the C decoder, the NULL policy
 //! (`TEST(CApi, NullSafety)` mirror), the closed-stack no-FFI invariant and the
 //! ABI version check.
 
@@ -39,7 +39,7 @@ use gsml3parser::{
     build_cm_service_request, build_setup, decode_frame, GsmL3Stack, LapdmEntity, Message, Registry,
 };
 
-const DEMO_TMSI: u32 = 0x8765_4321; // the planK scenario constant (SAPI 0 / profile 0 / BTS side)
+const DEMO_TMSI: u32 = 0x8765_4321; // the demo scenario constant (SAPI 0 / profile 0 / BTS side)
 
 /// MS-side UI wrapper helper (the simulation builds peer frames; the C core
 /// decodes them — production transmission goes through the C entity only).
@@ -121,7 +121,7 @@ fn mo_call_simulation() {
 
 /// Link-lifecycle mirror of C `TEST(Entity, Entity_LinkLifecycle)`: SABME → UA
 /// establishes the link with an empty ESTABLISH_CONFIRM, UI delivers
-/// UNIT_DATA, DISC → UA releases. Byte-exact frame vectors per planK.
+/// UNIT_DATA, DISC → UA releases. Byte-exact frame vectors per src/lapdm_frame.cpp.
 #[test]
 fn link_lifecycle() {
     let e = LapdmEntity::new(0).expect("SDCCH-profile entity");
@@ -145,7 +145,7 @@ fn link_lifecycle() {
     assert!(evs[0].data.is_empty(), "ESTABLISH_CONFIRM carries no payload");
 
     // A UI frame on the established link delivers UNIT_DATA with its payload.
-    let l3: &[u8] = &[0x60, 0x0d, 0x00]; // stable Channel Release vector (decision #12)
+    let l3: &[u8] = &[0x60, 0x0d, 0x00]; // stable Channel Release vector (mirrors the C test suite)
     e.receive(&ms_ui(l3)).expect("receive UI");
     let evs = e.drain_l3();
     assert_eq!(evs.len(), 1);
@@ -191,15 +191,15 @@ fn t200_retransmission() {
     assert!(e.is_established().unwrap());
 }
 
-/// Mini-codec closed loop (planK decision #7): every frame the Rust
-/// mini-codec builds must decode back with the C decoder to the exact same
+/// Mini-codec closed loop: every frame the Rust mini-codec builds must decode
+/// back with the C decoder to the exact same
 /// fields — and validation errors stay on the Rust side (INVALID_ARG).
 #[test]
 fn mini_codec_closed_loop_with_c_decoder() {
     let l3: &[u8] = &[0x60, 0x0d, 0x00];
 
     // UI: [address][0x03 pf=0] + RAW info (no length octet).
-    assert_eq!(ms_ui(l3), [0x01, 0x03, 0x60, 0x0d, 0x00]); // self-check vector of the plan (step 1.4)
+    assert_eq!(ms_ui(l3), [0x01, 0x03, 0x60, 0x0d, 0x00]); // canonical UI bytes: address 0x01 + control 0x03 (pf=0)
     let f = ms_ui(l3);
     let d = decode_frame(&f).unwrap();
     assert_eq!((d.format, d.u_type, d.sapi, d.command, d.pf), (s::GSML3_LAPDM_FMT_U, s::GSML3_LAPDM_U_UI, 0, 0, 0));
@@ -247,7 +247,7 @@ fn mini_codec_closed_loop_with_c_decoder() {
     assert!(mini::i_frame(0, true, 0, 0, false, false, &[0u8; 64]).is_err()); // >63 info octets
 }
 
-/// NULL-policy suite (mirror of C `TEST(CApi, NullSafety)` + planK item list):
+/// NULL-policy suite (mirror of C `TEST(CApi, NullSafety)`):
 /// (a) C-documented NULL-safe entry points pass NULL through raw and report
 /// their sentinels; (b) inputs where the C side is documented to fail are
 /// rejected at language level BEFORE FFI; (c) C validation passes through the
@@ -375,7 +375,7 @@ fn stack_closed_no_ffi() {
 fn concurrent_independent_stacks() {
     const THREADS: u32 = 8;
     const ITERS: u32 = 200;
-    const L3_CHANNEL_RELEASE: &[u8] = &[0x60, 0x0d, 0x00]; // stable Channel Release vector (decision #12)
+    const L3_CHANNEL_RELEASE: &[u8] = &[0x60, 0x0d, 0x00]; // stable Channel Release vector (mirrors the C test suite)
 
     std::thread::scope(|scope| {
         for t in 0..THREADS {
@@ -396,7 +396,7 @@ fn concurrent_independent_stacks() {
     }); // all joins here — any panic/UB inside a thread fails the test
 }
 
-/// ABI guard (planK step 3.8): the compile-time surface test covers names and
+/// ABI guard: the compile-time surface test covers names and
 /// types; at RUNTIME the linked library must still report the same C ABI
 /// revision this header declares.
 #[test]
@@ -407,7 +407,7 @@ fn abi_version_matches_header() {
     assert_eq!(gsml3parser::abi_version(), 1);
 }
 
-/// Decision #13 end-to-end: the repo-root VERSION file is the single source of
+/// End-to-end version check: the repo-root VERSION file is the single source of
 /// truth — CMake stamps gsml3_version() from it (verified through the running
 /// core here) and this crate's Cargo.toml literal must match. The unified gate
 /// re-checks both sides on every run; this pins the equality in-tree.

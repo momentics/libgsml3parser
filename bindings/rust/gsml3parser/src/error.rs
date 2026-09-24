@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//! Error model (planK decision #9): one typed error carrying the C code plus a
+//! Error model: one typed error carrying the C code plus a
 //! SYNCHRONOUSLY COPIED message from the thread-local `gsml3_last_error()`.
 //! The copy must happen at the failing call site: every later successful FFI
 //! call clears the pending error, so reading it afterwards loses the report.
@@ -114,7 +114,7 @@ impl fmt::Display for ErrorKind {
     }
 }
 
-/// A typed failure of one operation (planK decision #9): the C error code,
+/// A typed failure of one operation: the C error code,
 /// the Rust call site that produced it, and a synchronous copy of the
 /// thread-local `gsml3_last_error()` message. The message MUST be captured at
 /// the failing call site — every later successful FFI call on this thread
@@ -254,7 +254,7 @@ mod tests {
 
     #[test]
     fn error_kind_is_one_to_one_with_the_c_enum() {
-        // Mirror check: 14 values, stable numeric mapping (planK "Oshibki" block).
+        // Mirror check: all 14 values with the stable numeric mapping from `enum gsml3_error`.
         assert_eq!(ErrorKind::Ok.code(), crate::sys::GSML3_OK);
         assert_eq!(
             ErrorKind::InvalidArg.code(),

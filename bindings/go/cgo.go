@@ -66,8 +66,8 @@ package gsml3parser
 // Linking: the prebuilt shared core lives in build_bindings/bin at the
 // repository root (two levels above this package directory): on Windows that
 // is gsml3parser.dll + the MSVC import library gsml3parser.lib; on Linux it
-// is libgsml3parser.so. Phase 0 / scripts/verify_bindings.ps1 create that flat
-// directory. At RUN TIME the dynamic loader finds the library via PATH
+// is libgsml3parser.so. The unified gate (scripts/verify_bindings.ps1)
+// creates that flat directory. At RUN TIME the dynamic loader finds the library via PATH
 // (Windows) or LD_LIBRARY_PATH (Linux); the unified gate puts build_bindings/bin
 // there. If the directory does not exist yet, the link fails with a clear
 // "cannot find -lgsml3parser" — build the shared core first.

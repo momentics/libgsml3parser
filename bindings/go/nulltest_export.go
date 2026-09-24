@@ -34,8 +34,8 @@ import "unsafe"
 //
 // Why this is a regular (non-_test) cgo file: the gc toolchain REJECTS
 // `import "C"` inside _test.go files ("use of cgo in test ... not supported" —
-// verified on go1.26, windows/linux alike), so the plan's nulltest_export_test.go
-// shape is not compilable; this file is its working equivalent. It stays out of
+// verified on go1.26, windows/linux alike), so the raw C seam cannot live in a
+// _test.go; this regular file is its working equivalent. It stays out of
 // any production binary: every function here is unexported and referenced ONLY
 // by the test files, so the final-link tree-shaker removes them from program
 // builds (they exist only to give the tests a seam that reaches the C core with

@@ -22,7 +22,7 @@
 //! The BTS-side reference stack: `GsmL3Stack` composes exactly the C handles it
 //! created — registry + borrowed session + orchestrator + LAPDm entity — and
 //! hosts the static trampolines that implement the queue-model callback
-//! delivery (planK decisions #3/#4).
+//! delivery.
 //!
 //! ## Unified `send_frame` semantics (Python / Go / Rust — identical)
 //! 1. reset the transmit collector for THIS input;
@@ -69,9 +69,9 @@ pub struct L3Event {
     pub data: Vec<u8>,
 }
 
-// ── Static C trampolines (the queue model, planK decision #3) ────────────────
+// ── Static C trampolines (the queue model) ────────────────────────────────────
 //
-// SAFETY contract of BOTH trampolines (fixed by planK step 3.6): `user` is the
+// SAFETY contract of BOTH trampolines: `user` is the
 // heap address of a `Box<Arc<TrampolineState>>` created in `LapdmEntity::new`
 // and reclaimed — exactly once, with `Box::from_raw` — strictly AFTER
 // `gsml3_lapdm_entity_free`, by `LapdmEntity::close_once` (lapdm.rs). Inside a
@@ -226,8 +226,8 @@ pub struct GsmL3Stack {
 // other thread holds a reference (that would require `Sync`). `Sync` is
 // therefore INTENTIONALLY NOT implemented: sharing `&GsmL3Stack` across
 // threads would permit concurrent calls on one live FSM/entity without any
-// synchronization, which the ABI forbids. Mirrors planK decision #5 and the
-// Go/Python single-thread-per-stack contracts.
+// synchronization, which the ABI forbids — the same single-thread-per-stack
+// contract the Go and Python bindings document.
 unsafe impl Send for GsmL3Stack {}
 
 /// Identity key of the stack's session — internal construction detail.
@@ -448,7 +448,7 @@ impl GsmL3Stack {
                     Ok(step) => {
                         self.last_step.borrow_mut().replace(step.clone());
                         if step.token != s::GSML3_TOKEN_NONE {
-                            // required_size → exact-size build (decision #8), then send_ui.
+                            // required_size → exact-size build (no guess-and-grow), then send_ui.
                             let sent = self.build_response().and_then(|resp| self.ent.send_ui(self.sapi, &resp));
                             if let Err(e) = sent {
                                 // One failing event never aborts the batch (unified
@@ -484,7 +484,7 @@ impl GsmL3Stack {
     }
 
     /// Build the PENDING response (last token): `required_size` → exact-size
-    /// buffer → build (planK decision #8, no guess-and-grow). Returns an error
+    /// buffer → build (no guess-and-grow). Returns an error
     /// with code INVALID_VALUE when nothing is pending — never an empty vec.
     pub fn build_response(&self) -> Result<Vec<u8>, GsmL3Error> {
         self.ensure_open("GsmL3Stack::build_response")?;
@@ -725,7 +725,7 @@ mod tests {
     use super::*;
     use crate::error::ErrorKind;
 
-    /// PlanK step 3.8 (unit): double close via close(&mut self) + a later Drop
+    /// Unit check: double close via close(&mut self) + a later Drop
     /// — the second and third passes are no-ops (no UB, no double free), every
     /// method afterwards reports closed WITHOUT FFI (take-pattern: the handles
     /// were nulled before the flag went up).
@@ -744,7 +744,7 @@ mod tests {
         drop(st); // Drop after close — third pass, no panic / no double free
     }
 
-    /// PlanK step 3.8 (unit): release ORDER is entity → orchestrator →
+    /// Unit check: release ORDER is entity → orchestrator →
     /// registry. After the entity's close_once its trampoline state is already
     /// reclaimed (single Box::from_raw), and the session pointer is only nulled
     /// — it is never passed to any free function.

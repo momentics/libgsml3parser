@@ -22,7 +22,7 @@
 //! Safe Rust bindings over the libgsml3parser C ABI (`gsml3parser_c.h`):
 //! L3 parsing/serialization (all 12 protocol domains), A-bis RSL, the LAPDm
 //! entity with safe callback delivery, and the BTS stack layer (registry /
-//! borrowed session / orchestrator). The v1 surface mirrors planK decision #6:
+//! borrowed session / orchestrator). The v1 surface covers
 //! sections S1–S7 of the C header plus the two typed builders
 //! `gsml3_build_cm_service_request` / `gsml3_build_setup`. Zero runtime
 //! dependencies — `std` only.
@@ -93,7 +93,7 @@ pub use registry::{Registry, Session};
 pub use stack::{GsmL3Stack, L3Event, StepResult};
 
 /// Product version of the C core, from `gsml3_version()` (stamped by CMake from
-/// the repo-root `VERSION` file — the single source of truth, decision #13).
+/// the repo-root `VERSION` file — the single source of truth for releases).
 pub fn version() -> String {
     // SAFETY: gsml3_version returns a pointer to static storage that is never NULL.
     let p = unsafe { sys::gsml3_version() };

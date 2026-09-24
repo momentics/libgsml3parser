@@ -113,8 +113,8 @@ PROC_UNKNOWN = 0xFF
 
 ACTION_CONTINUE, ACTION_SEND_RESPONSE = 0, 1
 
-#: Fixed-size caller buffer for the stateless (S7/S9/RSL) builders —
-#: decision #8: protocol-bounded frames fit comfortably; rc==0 surfaces
+#: Fixed-size caller buffer for the stateless (S7/S9/RSL) builders:
+#: protocol-bounded frames fit comfortably; rc==0 surfaces
 #: BUFFER_TOO_SMALL as an error and is NEVER retried with a grown buffer.
 _BUILDER_BUF = 512
 
@@ -544,7 +544,7 @@ class Message:
 
     def write(self, out: bytearray | None = None) -> bytes:
         """Serialize into the caller's buffer. ``out=None`` allocates EXACTLY
-        size() bytes (decision #8 — no guess-and-grow); a mutable bytearray is
+        size() bytes (no guess-and-grow); a mutable bytearray is
         written in place via a ctypes array view over its storage (C writes
         only for the duration of this one call). A too-small ``out`` raises
         BufferTooSmall (code 11) whose C message names the required size."""
@@ -936,7 +936,7 @@ class Message:
     # both surface as b""; real errors (buffer too small, unexpected) raise.*
 
     def facility_body(self) -> bytes:
-        """Facility IE body (512-octet caller buffer, decision #8); b\"\" when
+        """Facility IE body (fixed-size caller buffer, no guess-and-grow); b\"\" when
         absent or genuinely empty."""
         return _message_body_get(self, "gsml3_msg_facility_body")
 
@@ -960,7 +960,7 @@ class Message:
 
 def _message_body_get(self, op_name: str) -> bytes:
     """Shared implementation of the S8 body getters (see their docs for the
-    absent/empty semantics and the decision #8 buffer rule)."""
+    absent/empty semantics and the exact-size caller-buffer rule)."""
     buf = (ctypes.c_ubyte * _BUILDER_BUF)()
     rc = int(getattr(lib, op_name)(self._h, buf, c_size_t(len(buf))))
     if rc == 0:
@@ -1095,7 +1095,7 @@ class RslFrame:
 
 
 def _builder(op_name: str, args, label: str | None = None) -> bytes:
-    """Shared S4/S7/S9 stateless-builder pattern (decision #8): ONE fixed
+    """Shared S4/S7/S9 stateless-builder pattern: ONE fixed
     512-octet caller buffer (a ctypes c_ubyte array — the PB argtype requires
     an array, and C writes into it only for the duration of this call),
     zero-alloc on the C side. rc == 0 -> GsmL3Error with the synchronous
@@ -1652,7 +1652,7 @@ class Orchestrator:
         return int(lib.gsml3_orchestrator_required_size(self._h, _session_handle(session)))
 
     def build_response(self, session=None) -> bytes:
-        """Build the pending response into an EXACT-SIZE buffer (decision #8):
+        """Build the pending response into an EXACT-SIZE buffer:
         n = required_size() (0 raises — nothing pending / missing parameter),
         then one write into a c_ubyte array of exactly n octets. Returns the
         L3 bytes (caller owns them)."""
@@ -2281,7 +2281,7 @@ class _CallbackContext(ctypes.Structure):
 
 
 def _make_l3_bridge(ctx, events, lock):
-    """L3 bridge closure for one GsmL3Stack (queue model, decision #3).
+    """L3 bridge closure for one GsmL3Stack (queue model).
 
     Runs INSIDE a synchronous C call. Only memory-safe work is permitted here:
     read the span (zero-copy view via string_at) and append one copy under the

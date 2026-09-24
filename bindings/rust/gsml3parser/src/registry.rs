@@ -22,7 +22,7 @@
 //! BTS stack layer: the subscriber [`Registry`] and the BORROWED
 //! [`Session<'r>`] view. The registry owns every session on the C side —
 //! `gsml3_registry_free` releases them all, so this wrapper has NO free/close
-//! call for a session (planK decision #10): it stores only the raw pointer and
+//! call for a session: it stores only the raw pointer and
 //! a lifetime bound to its owner's borrow, which the type system turns into
 //! "you cannot hold a session across a registry close".
 

@@ -77,7 +77,7 @@ func TestVersionAndABI(t *testing.T) {
 	}
 }
 
-// ── Parse round trip: the C-verified PD batch (decision #12 — stable vectors) ─
+// ── Parse round trip: the C-verified PD batch of stable wire vectors ──────────
 // The table is a VERBATIM port of tests/test_c_api.cpp `kBatch` (anchor:
 // "const PDBatch kBatch[]"): each vector was C-side verified and is NOT
 // simplified here.
@@ -122,7 +122,7 @@ func TestParseRoundTrip(t *testing.T) {
 				t.Errorf("vector %d: Name() is empty", i)
 			}
 
-			// Exact-size serialize (decision #8) then byte-level identity on reparse.
+			// Exact-size serialize (no guess-and-grow), then byte-level identity on reparse.
 			wire, err := m.Write()
 			if err != nil {
 				t.Fatalf("vector %d: Write(): %v", i, err)
@@ -306,7 +306,7 @@ func TestErrorPaths(t *testing.T) {
 	}
 
 	// Non-hex content: the C core reports GSML3_ERR_INVALID_VALUE (7) for this —
-	// passed through with its synchronous message (C vector, mirrors Phase 1).
+	// passed through with its synchronous message (the same expectation the C tests make).
 	if _, err := ParseHex("zz", nil); err == nil {
 		t.Fatal(`ParseHex("zz") must fail`)
 	} else if e, ok := err.(*Error); !ok || e.Code != CodeInvalidValue || e.Msg == "" {
@@ -385,7 +385,7 @@ func TestBufferTooSmallClass(t *testing.T) {
 	}
 
 	// RSL builder into an undersized buffer: 0 + BUFFER_TOO_SMALL reported, never
-	// silently retried (decision #8).
+	// silently retried with a bigger one.
 	n, code = rawRslBuildTooSmall()
 	if n != 0 {
 		t.Errorf("rsl_build_data_req into 4-byte buffer wrote %d bytes, want 0", n)

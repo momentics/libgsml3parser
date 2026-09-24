@@ -26,8 +26,8 @@ package gsml3parser
 // (byte-exact vectors mirroring the C Entity_LinkLifecycle test), T200
 // retransmission, wrapper NULL validation, the closed-path NO-FFI invariant
 // (proven through the fixed FFI-call seam in lapdm.go) and independent-stack
-// concurrency under the -race detector. Vectors are stable / builder-generated
-// (decision #12); expected tokens/phases/timers mirror tests/test_c_api.cpp.
+// concurrency under the -race detector. Vectors are stable and builder-generated;
+// expected tokens/phases/timers mirror tests/test_c_api.cpp.
 
 import (
 	"bytes"
@@ -558,7 +558,7 @@ func TestConcurrentEntities(t *testing.T) {
 		wg.Add(1)
 		go func(g int) {
 			defer wg.Done()
-			l3 := []byte{0x60, 0x0D, 0x00} // stable Channel Release vector (decision #12)
+			l3 := []byte{0x60, 0x0D, 0x00} // stable Channel Release vector (mirrors the C test suite)
 			for i := 0; i < iterations; i++ {
 				tmsi := uint32(0xB0000000 + g*1000 + i)
 				stack, err := NewGsmL3Stack(StackOptions{TMSI: tmsi}) // AutoResponse=false default

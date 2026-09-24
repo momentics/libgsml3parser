@@ -46,7 +46,7 @@ import (
 //
 // # Callback rules
 //
-// Queue model (decision #3): the C core invokes the bridges SYNCHRONOUSLY
+// Queue model: the C core invokes the bridges SYNCHRONOUSLY
 // inside gsml3_lapdm_entity_receive / send_*, and the l3/frame spans live only
 // during one callback. A bridge may do ONLY memory-safe work: a zero-copy read
 // via unsafe.Slice over the C span plus exactly one owned copy appended under
@@ -242,7 +242,7 @@ func (s *GsmL3Stack) SendFrame(frame []byte) ([][]byte, error) {
 			s.lastStep = step
 			s.hasLastStep = true
 			if step.Token != TokenNone {
-				resp, rerr := s.orch.BuildResponse(s.sess) // exact-size build (decision #8)
+				resp, rerr := s.orch.BuildResponse(s.sess) // exact-size build (no guess-and-grow)
 				if rerr != nil {
 					return nil, rerr
 				}

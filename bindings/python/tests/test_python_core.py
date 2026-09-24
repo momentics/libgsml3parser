@@ -41,7 +41,7 @@ import gsml3parser as g
 # ── Parse / serialize round trips ──────────────────────────────────────────
 
 def parse_hex_channel_release():
-    """'60 0D 00' = RR Channel Release (stable vector, decision #12)."""
+    """'60 0D 00' = RR Channel Release (stable vector, mirrors the C test suite)."""
     m = g.Message.from_hex("60 0D 00")
     try:
         assert m.name != ""
@@ -266,7 +266,7 @@ def config_setters():
         cfg.close()
 
 
-# ── GC keep-alive of C-registered callbacks (plan requirement) ────────────
+# ── GC keep-alive of C-registered callbacks (safety-critical invariant) ────
 
 def test_callbacks_survive_gc():
     """If the CFUNCTYPE objects were collected, C would invoke dead memory:
@@ -291,7 +291,7 @@ def test_finalizer_is_safe_after_explicit_close():
 
 
 def test_no_raw_calls_after_close():
-    """Interface of _library.CALL_COUNTS is fixed in step 1.3 point 5: the
+    """_library.CALL_COUNTS counts every real FFI call by name; the
     closed path must perform NO FFI call at all."""
     s = g.GsmL3Stack(tmsi=0x22222224)
     base_receive = _library.CALL_COUNTS.get("gsml3_lapdm_entity_receive", 0)
@@ -305,7 +305,7 @@ def test_no_raw_calls_after_close():
     assert _library.CALL_COUNTS.get("gsml3_lapdm_entity_send_ui", 0) == base_send_ui
     # The closed path performs NO FFI at all — a binding-level invariant: raw C
     # handles have no "closed" state, so there is no C-side test to mirror.
-    # Proven here via the _library.CALL_COUNTS test seam (fixed in step 1.3).
+    # Proven here via the _library.CALL_COUNTS test seam.
 
 
 def test_leak_smoke_1k():

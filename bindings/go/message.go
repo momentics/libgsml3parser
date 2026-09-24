@@ -61,8 +61,8 @@ var allowedShardCounts = [5]int{0, 4, 8, 16, 32}
 func shardCountAllowed(v int) bool { return slices.Contains(allowedShardCounts[:], v) }
 
 // builderBufSize is the fixed caller-provided buffer for every standalone
-// (out, maxlen) serializer wrapper — decision #8: exact-size builds, no
-// guess-and-grow. RSL frames, L3 messages and built responses are
+// (out, maxlen) serializer wrapper: exact-size builds, no guess-and-grow.
+// RSL frames, L3 messages and built responses are
 // protocol-bounded and comfortably fit 512 bytes; when a frame does not fit,
 // the C core reports GSML3_ERR_BUFFER_TOO_SMALL (CodeBufferTooSmall) and it is
 // surfaced, never silently retried with a bigger buffer.
@@ -272,7 +272,7 @@ func (m *Message) Size() (int, error) {
 }
 
 // Write serializes the message into a freshly allocated EXACT-size buffer
-// (decision #8: size() then write into make([]byte, n)).
+// (no guess-and-grow: size() then write into make([]byte, n)).
 func (m *Message) Write() ([]byte, error) {
 	if err := m.check("message.Write"); err != nil {
 		return nil, err
@@ -490,7 +490,7 @@ func (f *RslFrame) check(op string) error {
 }
 
 // ── S4 RSL builders (13): fixed caller buffer, causes range-checked in C ───
-// Every builder follows decision #8: one serializeInto pass into the fixed
+// Every builder does ONE serializeInto pass into the fixed
 // 512-byte caller buffer; a zero result surfaces the C code (including
 // BUFFER_TOO_SMALL) and is never retried silently.
 

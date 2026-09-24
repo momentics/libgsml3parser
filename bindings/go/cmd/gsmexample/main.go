@@ -43,7 +43,8 @@ func fail(format string, args ...any) {
 
 func main() {
 	// Both values come straight from the loaded C core (gsml3_version() ->
-	// PROJECT_VERSION <- repo-root VERSION file, decision #13); no file I/O here.
+	// PROJECT_VERSION <- repo-root VERSION file, the single source of truth);
+	// no file I/O here.
 	fmt.Printf("version %s  (C ABI revision %d)\n", gsml3parser.Version(), gsml3parser.ABIVersion())
 
 	// BTS-side stack: registry + borrowed session + orchestrator + LAPDm entity

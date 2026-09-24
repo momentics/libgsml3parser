@@ -2,9 +2,9 @@
 
 [package]
 name = "gsml3parser-sys"
-# Product version: literal that must equal the repo-root VERSION file (single
-# source of truth, planK decision #13 — Cargo cannot read it from a file). The
-# unified gate fails the build on drift. Currently 0.19.0.
+# Product version: this literal must equal the repo-root VERSION file, the
+# single source of truth for the release version (Cargo cannot read a version
+# from a file). The unified gate fails on drift between the two.
 version = "0.19.0"
 edition = "2021"
 rust-version = "1.75"

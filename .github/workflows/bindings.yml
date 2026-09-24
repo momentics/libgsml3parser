@@ -1,0 +1,55 @@
+# Copyright 2026 momentics <momentics@gmail.com>; MIT license; see /COPYING at the repository root.
+
+# CI gate for the FFI bindings (bindings/): builds the shared core and runs the
+# Python / Go / Rust tests + examples on both supported platforms via the single
+# unified script scripts/verify_bindings.ps1. Independent from build-release.yml.
+name: FFI Bindings
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  bindings:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # cgo needs a C compiler. Windows runners carry MSVC in PATH; install
+      # clang on Linux (matches the repo's existing sanitizer CI toolchain).
+      - name: Install C toolchain (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y clang lld
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install pytest (test-only dependency)
+        run: python -m pip install pytest
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy   # the gate runs `cargo clippy -- -D warnings`
+
+      - name: Run the unified bindings gate (repo invariants + core shared lib + 3 languages)
+        # No -Generator: CMake auto-selects what this runner carries. On Linux
+        # cgo gets CC=clang from inside the script (matches build-release.yml,
+        # which installs clang for the sanitizer job).
+        run: pwsh scripts/verify_bindings.ps1 -Config Release

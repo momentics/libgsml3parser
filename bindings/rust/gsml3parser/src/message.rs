@@ -23,7 +23,7 @@
 //! A-bis RSL frames — the S2/S3/S4 surface of the C ABI plus the two curated
 //! S9 typed builders used by the demo chain.
 //!
-//! Ownership (planK "Ownership matrix"): every type here owns exactly one C
+//! Ownership: every type here owns exactly one C
 //! handle created through this wrapper and releases it with its paired
 //! `gsml3_*_free` in `Drop`. The take-pattern (`Option<NonNull>`) makes an
 //! explicit drop plus any later `Drop` a no-op second pass. All byte outputs
@@ -278,8 +278,8 @@ impl Message {
     }
 
     /// Serialize into a freshly allocated `Vec` sized EXACTLY by
-    /// [`Message::size`] — the "required size → build in exact buffer" pattern
-    /// (planK decision #8): no guess-and-grow, no second size probe.
+    /// [`Message::size`] — the "required size → build in exact buffer"
+    /// pattern: no guess-and-grow, no second size probe.
     pub fn to_vec(&self) -> Result<Vec<u8>, GsmL3Error> {
         let n = self.size()?;
         let mut buf = vec![0u8; n];
@@ -499,7 +499,7 @@ impl std::fmt::Debug for RslFrame {
 // All write into the caller's buffer and return bytes written; 0 means error
 // or buffer-too-small — surfaced through last_error() with its code
 // (BUFFER_TOO_SMALL = 11 included), never silently retried with a bigger
-// buffer (planK decision #8).
+// buffer.
 
 fn build_result(op: &'static str, n: usize) -> Result<usize, GsmL3Error> {
     if n == 0 {
@@ -648,8 +648,7 @@ pub fn rsl_build_delete_ind(out: &mut [u8], chan_nr: u8, info: &[u8]) -> Result<
 
 /// Fixed caller-side buffer for standalone builders: protocol-bounded L3/RSL
 /// frames are far below 512 octets, and when one is not, the C side reports
-/// BUFFER_TOO_SMALL (0 + code) — surfaced as an error, never guess-and-grown
-/// (planK decision #8).
+/// BUFFER_TOO_SMALL (0 + code) — surfaced as an error, never guess-and-grown.
 const BUILDER_BUF_LEN: usize = 512;
 
 /// Build a CM SERVICE REQUEST L3 message with the C typed builder.
@@ -701,7 +700,7 @@ mod tests {
     use super::*;
     use crate::error::ErrorKind;
 
-    /// The stable Channel Release test vector (planK decision #12):
+    /// The stable Channel Release test vector, shared with the C API tests:
     /// 0x60 0x0D 0x00 — PD=RR(0x06), MTI=ChannelRelease(0x0D).
     #[test]
     fn parse_write_roundtrip_channel_release() {

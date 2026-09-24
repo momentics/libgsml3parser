@@ -23,7 +23,7 @@
 //! [`FrameInfo`]) and the safe wrapper of the C FSM entity
 //! ([`LapdmEntity`]) with its trampoline context (`TrampolineState`).
 //!
-//! Queue model (planK decision #3, identical to Python `_c_cb_keepalive` and
+//! Queue model (identical in shape to Python `_c_cb_keepalive` and
 //! Go `eventSink`): ONE `TrampolineState` object per entity, heap-allocated as
 //! `Box<Arc<...>>` and handed to C as the `void* user` token via
 //! `Box::into_raw`. The static trampolines (defined in [`crate::stack`]) run
@@ -114,8 +114,8 @@ pub struct LapdmEntity {
     p: Option<NonNull<c_void>>,
     /// The heap `Box<Arc<TrampolineState>>` token C holds as `user`;
     /// taken and reclaimed EXACTLY once, after the entity is gone. The double
-    /// allocation is the planK step-3.5/3.6 fixed token shape (the trampoline
-    /// casts `user` to `*const Box<Arc<TrampolineState>>`), not an accident —
+    /// allocation is the fixed token shape required by the trampoline cast
+    /// (`user` → `*const Box<Arc<TrampolineState>>`), not an accident —
     /// hence the targeted lint allow below.
     #[allow(clippy::redundant_allocation)]
     ctx: Option<NonNull<Box<Arc<TrampolineState>>>>,
@@ -124,7 +124,7 @@ pub struct LapdmEntity {
 // SAFETY: the C ABI is one thread per owned handle — the whole entity (its
 // queue mutexes included) may MOVE to another thread but must never be SHARED:
 // concurrent calls on one FSM violate the contract. `Send` is implemented
-// deliberately, `Sync` intentionally not (planK decision #5).
+// deliberately, `Sync` intentionally not.
 unsafe impl Send for LapdmEntity {}
 
 impl LapdmEntity {
@@ -140,7 +140,7 @@ impl LapdmEntity {
                 "profile must be 0 (SDCCH), 1 (SACCH) or 2 (FACCH)",
             ));
         }
-        // Token layout (planK decision #4 / step 3.5-3.6): C's `void* user` is
+        // Token layout: C's `void* user` is
         // the address of a heap box whose CONTENT is `Box<Arc<TrampolineState>>`
         // — exactly what the trampolines cast it to. One extra pointer
         // indirection by construction (allocation #1: the Arc slot, allocation
@@ -387,8 +387,8 @@ impl std::fmt::Debug for LapdmEntity {
     }
 }
 
-/// Crate-internal test hook (planK step 3.8 release-order tests live in sibling
-/// modules and cannot read the private take-flags directly).
+/// Crate-internal test hook: the release-order tests live in sibling modules
+/// and cannot read the private take-flags directly.
 #[cfg(test)]
 pub(crate) fn lapdm_handles_released(e: &LapdmEntity) -> bool {
     e.p.is_none() && e.ctx.is_none()
@@ -483,7 +483,7 @@ pub fn decode_frame<'a>(frame: &'a [u8]) -> Result<FrameInfo<'a>, GsmL3Error> {
 
 /// Minimal LAPDm (GSM 04.06) MS/peer-side frame builders for simulation and the
 /// demo — a byte-for-byte mirror of the Python `_lapdm` / Go `lapdmmini` mini
-/// codecs (planK decision #7). Purpose: a simulation must BUILD Mobile-station-
+/// codecs. Purpose: a simulation must BUILD Mobile-station-
 /// side frames to feed a BTS-side entity; the C core decodes peer frames and
 /// transmits only its own, so PRODUCTION TRANSMISSION GOES THROUGH THE C ENTITY
 /// (`send_ui` / `send_data` / `send_sabme` / `send_disc`) — never these helpers.
@@ -610,7 +610,7 @@ mod tests {
     use super::*;
     use crate::error::ErrorKind;
 
-    /// Unit half of the planK step-3.8 safety suite: double close / Drop after
+    /// Unit half of the entity safety suite: double close / Drop after
     /// close must be a pure no-op (take-pattern — no double free, no double
     /// Box::from_raw), and every FFI method afterwards reports closed.
     #[test]

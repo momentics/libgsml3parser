@@ -204,7 +204,7 @@ func (o *Orchestrator) RequiredSize(s *Session) (int, error) {
 }
 
 // BuildResponse builds the pending response into an EXACT-size buffer (the
-// required_size -> build pattern, decision #8). A missing pending response or
+// required_size -> build pattern, no guess-and-grow). A missing pending response or
 // a parameter gap in the session's ResponseContext fails with the C code.
 func (o *Orchestrator) BuildResponse(s *Session) ([]byte, error) {
 	if err := o.check("orch.BuildResponse"); err != nil {
@@ -275,7 +275,7 @@ func (o *Orchestrator) check(op string) error {
 
 // ── Standalone response builders (stateless S7, 20) ────────────────────────
 // All build into a fresh exact buffer via serializeInto (fixed caller buffer,
-// decision #8); cause/channel parameters are range-checked in C; digit-string
+// no guess-and-grow); cause/channel parameters are range-checked in C; digit-string
 // arguments (mcc/mnc/called digits/imsi) are C.CString-allocated and freed with
 // C.free in the same call sequence (allocator symmetry — never gsml3_free).
 

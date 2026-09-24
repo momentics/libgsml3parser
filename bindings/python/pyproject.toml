@@ -36,7 +36,7 @@ version = { attr = "gsml3parser._version.__version__" }
 packages = ["gsml3parser"]
 
 [tool.pytest.ini_options]
-# The Phase-1 test functions keep their descriptive step-1.7 names (e.g.
+# Some simulation tests keep descriptive scenario names (e.g.
 # stack_mo_call_simulation) alongside the test_*-prefixed ones; collect this
 # explicit family set under this directory tree (module helpers stay private).
 python_functions = [

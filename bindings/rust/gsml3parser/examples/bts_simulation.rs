@@ -19,8 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//! MO call over SDCCH — the unified demo scenario of the three bindings
-//! (planK "common demo scenario"; identical behavioral vectors to the Python /
+//! MO call over SDCCH — the unified demo scenario shared by all three bindings
+//! (identical behavioral vectors to the Python /
 //! Go examples and to `TEST(CApiOrchestrator, MOCallSetupChain)`): a BTS-side
 //! `GsmL3Stack` with auto-response, two MS-side UI frames built by the C typed
 //! builders (`gsml3_build_cm_service_request` / `gsml3_build_setup`) plus the
@@ -35,7 +35,7 @@ use gsml3parser::lapdm::{decode_frame, mini};
 use gsml3parser::{build_cm_service_request, build_setup, version, GsmL3Stack, Message};
 use gsml3parser_sys as sys; // raw constants (GSML3_TOKEN_* etc.) for readable asserts
 
-const DEMO_TMSI: u32 = 0x8765_4321; // planK scenario constant (SAPI 0 / profile 0 / BTS side)
+const DEMO_TMSI: u32 = 0x8765_4321; // the demo scenario constant (SAPI 0 / profile 0 / BTS side)
 
 /// Report a demo failure: stderr + exit code 1 (the unified-gate contract).
 fn fail(what: String) -> ! {
@@ -56,7 +56,7 @@ macro_rules! check {
 
 fn run() -> Result<(), String> {
     // Both values come straight from the loaded C core (gsml3_version() →
-    // PROJECT_VERSION → repo-root VERSION file, decision #13) — no file I/O here.
+    // PROJECT_VERSION → the repo-root VERSION file) — no file I/O here.
     let abi = gsml3parser::abi_version();
     check!(
         sys::ABI_VERSION == abi && abi == 1,

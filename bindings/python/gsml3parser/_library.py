@@ -28,7 +28,7 @@ This module owns every contact point between Python and the C ABI
   thread-safe). Search order: ``GSML3PARSER_LIBRARY`` (explicit file) ->
   ``GSML3PARSER_LIB_DIR`` (explicit directory, set by the unified gate to
   ``build_bindings/bin``) -> ``<repo>/build_bindings/bin`` (flat artifacts
-  dir, decision #2) -> the regular core CMake build dirs (multi-config MSVC
+  dir) -> the regular core CMake build dirs (multi-config MSVC
   + single-config Unix) -> the platform library search path. After loading,
   the library must report ``GSML3_ABI_VERSION == EXPECTED_ABI`` or the
   import fails fast: a prebuilt binary may lag the header this module was
@@ -48,7 +48,7 @@ This module owns every contact point between Python and the C ABI
   performs NO FFI call at all (raw C handles have no "closed" state, so no
   C-side mirror test can exist; the seam is the proof). The hot C->Python
   callback path does NOT go through this proxy: the bridges read spans and
-  append copies to queues directly (queue model, decision #3).
+   append copies to queues directly (queue model).
 
 Token legend used in ``PROTOTYPES``:
     V     None            restype marker for C `void`

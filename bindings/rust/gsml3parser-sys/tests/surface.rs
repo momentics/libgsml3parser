@@ -19,7 +19,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-//! Compile-time completeness check for the v1 FFI surface (planK decision #6):
+//! Compile-time completeness check for the curated v1 FFI surface:
 //! every one of the 128 functions (S1–S7 + `gsml3_build_cm_service_request` +
 //! `gsml3_build_setup`) must be declared in the extern block of this crate with
 //! the exact C ABI signature. Each assignment below names the function item and

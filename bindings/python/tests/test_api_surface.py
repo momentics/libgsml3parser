@@ -25,8 +25,8 @@ The Python binding promises `argtypes`/`restype` for EVERY function of the C
 ABI — this pins that promise: the set of functions declared in the header must
 equal the set of PROTOTYPES registered by gsml3parser._library, in both
 directions (no missing prototype, no stale one). It also pins the two
-single-source-of-truth facts of Phase 0: GSML3_ABI_VERSION == EXPECTED_ABI,
-and gsml3_version() == repo-root VERSION file content.
+single-source-of-truth facts: GSML3_ABI_VERSION == EXPECTED_ABI, and
+gsml3_version() == repo-root VERSION file content.
 """
 
 import os
@@ -72,5 +72,5 @@ def test_version_matches_root_version_file():
     reports the version that CMake read from the repo-root VERSION file."""
     import gsml3parser as g
     vfile = REPO_ROOT / "VERSION"
-    assert vfile.is_file(), f"missing {vfile} (Phase 0 artifact)"
+    assert vfile.is_file(), f"missing root VERSION file: {vfile}"
     assert g.version() == vfile.read_text(encoding="utf-8").strip() == g.__version__
