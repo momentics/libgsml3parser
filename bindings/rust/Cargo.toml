@@ -1,0 +1,8 @@
+# Copyright 2026 momentics <momentics@gmail.com>; MIT license; see /COPYING at the repository root.
+
+[workspace]
+resolver = "2"
+members = ["gsml3parser-sys", "gsml3parser"]
+
+[profile.release]
+opt-level = 3          # default; listed for explicitness — no LTO surprises across crates
