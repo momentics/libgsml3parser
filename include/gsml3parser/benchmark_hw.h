@@ -37,9 +37,10 @@
 ///    | <OS>"
 ///
 /// Sources (all runtime, no external dependencies):
-///   Windows: CPUID (brand/topology/caches), registry (base speed, OS
-///            version), GetPhysicallyInstalledSystemMemory (RAM), raw SMBIOS
-///            table via GetSystemFirmwareTable (memory slots/frequency).
+///   Windows: CPUID (brand, topology, L1/L2/L3 caches via leaf 0x04),
+///            registry (base speed, OS version),
+///            GetPhysicallyInstalledSystemMemory (RAM), raw SMBIOS table via
+///            GetSystemFirmwareTable (memory slots/frequency).
 ///   Linux:   /proc/cpuinfo, /sys/devices/system/cpu/*/topology, /sys cpufreq
 ///            (base speed), /sys cpu cache index files, /proc/meminfo (RAM),
 ///            /sys edac (memory slots, best effort), /etc/os-release (OS).
@@ -202,43 +203,92 @@ inline void readCpuTopology(HardwareInfo& h) {
 }
 
 // L1/L2/L3 sizes from CPUID leaf 0x04 (Deterministic Cache Parameters).
-// The subleaf count and each descriptor are validated; emulated/masked CPUID
-// in VMs often returns garbage, in which case the fields stay 0 ("n/a").
+// Leaf 4 does NOT advertise its subleaf count (calling it with ECX=0 returns
+// the first descriptor, not a count — treating that word as a count made the
+// old code bail out on every modern CPU); subleaves are iterated until the
+// descriptor comes back all zeros. Field positions follow the layout observed
+// on current Intel/AMD CPUs (validated against known Raptor Lake sizes):
+//   type    = EAX[4:0]   1=Data, 2=Instruction, 3=Unified
+//             (older references list {0=Data, 1=Instruction, 2=Unified}; the
+//             L1 mapping below accepts either legend)
+//   level   = EAX[7:5]   1..4
+//   sets    = ECX + 1             (low half used for range safety)
+//   ways    = (EBX >> 22) & 0x3FF + 1
+//   part    = (EBX >> 12) & 0x3FF + 1     (1 on x86; partial associativity)
+//   line    = EBX[11:0] + 1       (default 64B unless 1..255)
+//   shared  = EAX[23:16] + 1      logical CPUs cohering this instance (L2 check)
+// Every descriptor is range-validated, so a hypervisor that masks or mangles
+// leaf 0x04 simply yields fewer (or zero, "n/a") fields instead of garbage.
+// h.cores/h.logical must already be filled in; detectHardware() calls
+// readCpuTopology() before readCaches().
 inline void readCaches(HardwareInfo& h) {
 #if defined(_M_X64) || defined(_M_IX86)
     int info[4] = {0, 0, 0, 0};
-    __cpuidex(info, 4, 0);
-    const int subleaves = info[0];
-    if (subleaves <= 0 || subleaves > 32) return;  // invalid count
-    for (int sub = 0; sub < subleaves; ++sub) {
-        __cpuidex(info, 4, static_cast<unsigned>(sub));
-        const int type = (info[0] >> 5) & 0x7;     // 0=Data, 1=Instruction, 2=Unified
-        const int level = (info[0] >> 10) & 0x7;   // 1, 2, 3
-        if (level < 1 || level > 3) continue;      // invalid descriptor
-        const int index = (info[0] >> 22) & 0x1F;  // 0=private, N=shared by N cores
-        const int sets = (info[1] & 0xFF) + 1;
-        const int partitions = ((info[1] >> 8) & 0x1FF) + 1;
-        const int ways = ((info[1] >> 16) & 0x7F) + 1;
-        int lineSize = (info[2] >> 24) & 0xFF;     // bytes (0 on very old CPUs)
-        if (lineSize == 0) lineSize = ((info[2] & 0xFF) + 1) * 64;
-        const unsigned long size = static_cast<unsigned long>(sets) *
-                                   static_cast<unsigned long>(partitions) *
-                                   static_cast<unsigned long>(ways) *
-                                   static_cast<unsigned long>(lineSize);
-        if (size == 0 || size > (1ul << 30)) continue;  // sanity: <= 1 GB
-        if (level == 1 && type == 0) {
-            h.l1DataBytes = size;
-        } else if (level == 1 && type == 1) {
-            h.l1InstrBytes = size;
-        } else if (level == 1 && type == 2) {
-            if (h.l1DataBytes == 0) h.l1DataBytes = size;  // unified L1
+    __cpuidex(info, 0, 0);
+    if (info[0] < 4) return;  // leaf 0x04 not implemented at all
+    unsigned long l1ByCode[4] = {0, 0, 0, 0};  // L1 size keyed by reported type code
+    for (unsigned sub = 0; sub < 32; ++sub) {
+        __cpuidex(info, 4, sub);
+        const unsigned eax = static_cast<unsigned>(info[0]);
+        const unsigned ebx = static_cast<unsigned>(info[1]);
+        const unsigned ecx = static_cast<unsigned>(info[2]);
+        if ((eax | ebx | ecx) == 0) break;  // no more deterministic cache subleaves
+        const unsigned type = eax & 0x1Fu;
+        const unsigned level = (eax >> 5) & 0x7u;
+        if (level < 1 || level > 4) continue;  // invalid descriptor: skip it
+        const unsigned long sets = (static_cast<unsigned long>(ecx) & 0xFFFFul) + 1ul;
+        const unsigned long ways = ((ebx >> 22) & 0x3FFul) + 1ul;
+        const unsigned long partitions = ((ebx >> 12) & 0x3FFul) + 1ul;  // 1 on x86
+        const unsigned lineRaw = ebx & 0xFFFu;  // line size minus one
+        const unsigned long line = (lineRaw >= 1u && lineRaw <= 255u)
+                                       ? static_cast<unsigned long>(lineRaw) + 1ul : 64ul;
+        // Multiply in 64-bit: worst-case factor product exceeds 32-bit range.
+        const unsigned long long size = static_cast<unsigned long long>(sets) * ways *
+                                        partitions * line;
+        if (size < 1024ull || size > (1ull << 30)) continue;  // sanity window
+        if (level == 1) {
+            if (type <= 3u && l1ByCode[type] == 0) {
+                l1ByCode[type] = static_cast<unsigned long>(size);
+            }
         } else if (level == 2) {
-            h.l2Bytes = size;
-            h.l2Shared = index != 0;  // shared group: the size is per group/socket
+            if (h.l2Bytes == 0) {
+                h.l2Bytes = static_cast<unsigned long>(size);
+                // L2 is displayed per socket only when more than one core's
+                // threads share the instance. x86 Intel/AMD keep L2 private
+                // per physical core (sharers == threads-per-core).
+                const unsigned sharers = ((eax >> 16) & 0xFFu) + 1u;
+                const unsigned tpc = (h.cores > 0 && h.logical / h.cores >= 1u)
+                                         ? static_cast<unsigned>(h.logical / h.cores)
+                                         : 1u;
+                h.l2Shared = sharers > tpc;
+            }
         } else if (level == 3) {
-            if (h.l3Bytes == 0) h.l3Bytes = size;  // all cores report the same shared size
+            if (h.l3Bytes == 0) {
+                h.l3Bytes = static_cast<unsigned long>(size);  // whole group: one instance
+            }
         }
     }
+    // Map L1 sizes to data/instruction, handling both observed type legends:
+    // current {1=Data, 2=Instruction} and legacy {0=Data, 1=Instruction}. A
+    // single visible code means a unified L1 (or one split entry lost to VM
+    // masking); it is reported as the data cache.
+    if (l1ByCode[1] != 0 && l1ByCode[2] != 0) {
+        h.l1DataBytes = l1ByCode[1];
+        h.l1InstrBytes = l1ByCode[2];
+    } else if (l1ByCode[0] != 0 && l1ByCode[1] != 0) {
+        h.l1DataBytes = l1ByCode[0];
+        h.l1InstrBytes = l1ByCode[1];
+    } else {
+        for (const unsigned long s :
+             {l1ByCode[3], l1ByCode[0], l1ByCode[2], l1ByCode[1]}) {
+            if (s != 0) {
+                h.l1DataBytes = s;
+                break;
+            }
+        }
+    }
+#else
+    (void)h;  // non-x86 Windows: CPUID cache leaves are not available
 #endif
 }
 
@@ -458,6 +508,38 @@ inline unsigned long parseCacheSize(const std::string& s) {
     return v;
 }
 
+// Count the logical CPUs in a sysfs cpu list ("0", "0-3", "4,6-9").
+// Malformed segments are ignored; never throws.
+inline unsigned countCpuList(const std::string& s) {
+    unsigned total = 0;
+    size_t i = 0;
+    while (i < s.size()) {
+        // Advance to the next digit (skips ',' and any garbage).
+        while (i < s.size() && !std::isdigit(static_cast<unsigned char>(s[i]))) ++i;
+        long a = 0;
+        size_t j = i;
+        while (j < s.size() && std::isdigit(static_cast<unsigned char>(s[j]))) {
+            a = a * 10 + static_cast<long>(s[j] - '0');
+            ++j;
+        }
+        if (i == j) continue;  // no more digits: done
+        if (j < s.size() && s[j] == '-') {
+            // "a-upper": the upper bound is parsed fresh, starting at 0.
+            long upper = 0;
+            const size_t k = ++j;
+            while (j < s.size() && std::isdigit(static_cast<unsigned char>(s[j]))) {
+                upper = upper * 10 + static_cast<long>(s[j] - '0');
+                ++j;
+            }
+            if (k != j && upper >= a) total += static_cast<unsigned>(upper - a + 1);
+        } else {
+            total += 1;  // bare cpu number
+        }
+        i = j;
+    }
+    return total;
+}
+
 inline HardwareInfo detectHardware() {
     HardwareInfo h;
     // Brand + logical count from /proc/cpuinfo.
@@ -534,20 +616,37 @@ inline HardwareInfo detectHardware() {
         }
     }
 
-    // Caches from /sys/devices/system/cpu/cpu0/cache/indexN/.
-    for (int idx = 0; idx < 16; ++idx) {
+    // Caches from /sys/devices/system/cpu/cpu0/cache/indexN/. The type file
+    // holds "Data" or "Instruction", and some kernels/architectures report a
+    // unified L1 as "Unified"/"Unknown". shared_cpu_list ("0", "0-3", ...)
+    // lists the logical CPUs sharing each instance.
+    for (int idx = 0; idx < 32; ++idx) {
         const std::string base =
             "/sys/devices/system/cpu/cpu0/cache/index" + std::to_string(idx) + "/";
         const std::string levelStr = readSysLine(base + "level");
-        if (levelStr.empty()) break;
+        if (levelStr.empty()) break;  // no more cache levels on this CPU
         const int level = std::atoi(levelStr.c_str());
+        if (level < 1 || level > 6) break;  // malformed entry: stop, don't guess
         const unsigned long size = parseCacheSize(readSysLine(base + "size"));
+        if (size == 0) continue;
         const std::string type = readSysLine(base + "type");
         if (level == 1) {
-            if (type == "Instruction") h.l1InstrBytes = size;
-            else h.l1DataBytes = size;  // Data or unified L1
+            if (type == "Instruction") {
+                if (h.l1InstrBytes == 0) h.l1InstrBytes = size;
+            } else if (h.l1DataBytes == 0) {
+                // "Data", or a unified L1 reported as "Unified"/"Unknown".
+                h.l1DataBytes = size;
+            }
         } else if (level == 2) {
-            h.l2Bytes = size;  // private per core on x86
+            if (h.l2Bytes == 0) {
+                h.l2Bytes = size;  // per-core private on x86 Intel/AMD
+                // L2 is "shared" (displayed per socket) when its sharer group
+                // is larger than a single core's threads.
+                const unsigned sharers = countCpuList(readSysLine(base + "shared_cpu_list"));
+                const unsigned tpc = (h.cores > 0 && h.logical / h.cores >= 1)
+                                         ? static_cast<unsigned>(h.logical / h.cores) : 1;
+                h.l2Shared = sharers >= 2u * tpc;
+            }
         } else if (level == 3) {
             if (h.l3Bytes == 0) h.l3Bytes = size;  // shared: full size per socket
         }
