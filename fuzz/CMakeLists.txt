@@ -1,6 +1,6 @@
-# Fuzzing targets (the ENABLE_FUZZING option was declared
-# but never used). libFuzzer requires Clang/LLVM; on MSVC the option is
-# a no-op with a status message.
+# Fuzzing targets, gated by -DENABLE_FUZZING=ON. libFuzzer requires
+# Clang/LLVM; on other compilers (e.g. MSVC) the option is a no-op
+# with a status message.
 if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     # Smoke tests registered here are visible to ctest even with
     # -DBUILD_TESTS=OFF: the top-level CMakeLists.txt enables testing for

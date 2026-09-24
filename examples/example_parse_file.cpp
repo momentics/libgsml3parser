@@ -49,7 +49,7 @@ void printMsgDetails(const ParsedMessage& msg) {
     std::cout << "  Name: " << messageName(msg) << "\n";
 }
 
-// Demo: parse multiple hex frames from all 9 PD domains and display their types
+// Demo: parse multiple hex frames from all 12 PD domains and display their types
 void demoBatchParse(const std::vector<std::pair<std::string, std::string>>& hexFrames) {
     for (const auto& [label, hex] : hexFrames) {
         auto result = parseL3Hex(hex);
@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
     if (result) {
         const auto& msg = *result;
 
-        // Typed access via tryGet - covers all 9 PD domains
+        // Typed access via tryGet - covers all 12 PD domains
         if (auto* cr = tryGet<L3ChannelRelease>(msg)) {
             std::cout << "RR: Channel Release detected\n";
         } else if (auto* paging = tryGet<L3PagingRequestType1>(msg)) {
@@ -136,7 +136,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Demo batch parsing with representative messages from all 9 PD domains
+    // Demo batch parsing with representative messages from all 12 PD domains
     std::cout << "\n--- Batch Parse Demo (All 12 PD Domains) ---\n";
     std::vector<std::pair<std::string, std::string>> batch{
         {"RR",       "60 0D 00"},                          // Channel Release

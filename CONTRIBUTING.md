@@ -16,7 +16,7 @@ By participating in this project you agree to abide by the [Code of Conduct](COD
 
 | Requirement | Minimum Version |
 |-------------|-----------------|
-| C++ compiler | GCC 11+, Clang 10+, MSVC 2022 17.3+ |
+| C++ compiler | GCC 13+, MSVC 2022 17.8+, Clang with a `std::format`-capable stdlib |
 | CMake | 3.20 |
 | Standard | C++20 |
 
