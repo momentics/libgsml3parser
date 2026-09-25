@@ -1789,9 +1789,10 @@ def response_required_size(token: int, session=None) -> int:
 def response_build_from_token(token: int, session=None,
                               out: bytearray | None = None) -> bytes:
     """Build the response for ``token`` from the session's ResponseContext.
-    ``out=None`` allocates the exact size via required_size() first (decision
-    #8); a mutable bytearray is written in place (C touches its storage only
-    during this one call)."""
+    With ``out=None`` the exact size is queried first via required_size(), so
+    the serializer always writes into a precisely sized buffer and can never
+    fail with buffer-too-small; a mutable bytearray is written in place (C
+    touches its storage only during this one call)."""
     s = _session_handle(session)
     t = _as_int(token, "token", lo=0)
     if out is None:

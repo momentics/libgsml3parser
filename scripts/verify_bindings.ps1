@@ -31,9 +31,12 @@
 # truth) -> core shared library (build_bindings, flattened into build_bindings/bin)
 # -> Python (pytest + example) -> Go (vet + test -race + example) -> Rust
 # (clippy + test + example). Fails fast with a non-zero exit code on any failure.
-# Windows cgo: auto-selects a clang + lld-link pair (PATH or Visual Studio's
-# LLD/LLVM component) and routes it through the bindings/go/ccshim pass-through
-# (the Go toolchain appends a GNU-only flag that windows-msvc clang rejects).
+# Windows cgo: Go needs a GCC-compatible compiler there; the gate probes
+# candidates against a real smoke test (a `go build` of this binding plus a
+# -race test-binary link) — a native MinGW gcc (PATH / MSYS2) first, then
+# clang + lld routed through the bindings/go/ccshim pass-through (the shim
+# drops the GNU-only -mthreads flag and, at link time, the GNU-ld-only inputs
+# lld-link's MSVC mode cannot consume).
 # Generator policy: with no -Generator CMake picks its default for the platform
 # (portable on CI runners); local runs pin "Visual Studio 18 2026" to match the
 # core gate scripts/verify.ps1.
@@ -163,61 +166,112 @@ if ($runLangs -contains "go") {
         $env:CC = "clang"
     }
     if ($isWin -and [string]::IsNullOrEmpty($env:CC)) {
-        # On Windows the Go toolchain appends the GNU-only flag -mthreads to every
-        # cgo compile; a clang for the x86_64-pc-windows-msvc target rejects it.
-        # Select a clang + lld-link pair (on PATH, or the LLD/LLVM component of a
-        # Visual Studio install) and drive it through the pass-through shim at
-        # bindings/go/ccshim, which drops -mthreads and links via lld-link. An
-        # explicitly set CC is always respected as-is.
-        $shimDir = Join-Path $env:TEMP "gsml3_ccshim"
-        New-Item -ItemType Directory -Force $shimDir | Out-Null
-        & go build -C (Join-Path $RepoRoot "bindings/go/ccshim") -o (Join-Path $shimDir "ccshim.exe") .
-        if ($LASTEXITCODE -ne 0) { throw "failed to build the ccshim compiler wrapper (exit $LASTEXITCODE)" }
-        $shimExe = Join-Path $shimDir "ccshim.exe"
+        # Go builds cgo on windows/amd64 with its GNU toolchain flavor only
+        # (runtime/cgo carries the `#cgo CFLAGS: -Wall -Werror ...` set that is
+        # only valid for GNU-style compilers), so CC must be a GCC-compatible
+        # compiler, and every candidate below is accepted by a REAL cgo smoke
+        # test — `go build` of this binding's own packages — because no raw
+        # probe can anticipate what Go itself injects at the cgo compile/link
+        # steps:
+        #   1) native MinGW gcc (e.g. MSYS2's mingw64) — Go's canonical Windows
+        #      setup: it accepts -mthreads and its GNU ld consumes the linker-
+        #      script inputs and the MinGW import libraries that Go passes;
+        #   2) clang (x86_64-pc-windows-msvc target) + lld through the
+        #      bindings/go/ccshim pass-through wrapper — the shim drops -mthreads
+        #      on every step and, at the link step only, strips the GNU-ld-only
+        #      inputs that lld-link's MSVC mode cannot consume (its package doc
+        #      says exactly which ones and why).
+        # An explicitly set CC is always respected as-is. The CC value must stay
+        # bare ("gcc" / "ccshim"): cgo resolves it with a PATH lookup and would
+        # split a path containing spaces at its first whitespace.
 
-        # Candidate bin directories: a PATH clang whose sibling lld-link exists,
-        # then each Visual Studio install's LLD component (VC\Tools\Llvm).
-        $clangBins = @()
-        $cmdClang = Get-Command clang.exe -ErrorAction SilentlyContinue
-        if ($cmdClang -and (Test-Path (Join-Path (Split-Path $cmdClang.Source) "lld-link.exe"))) {
-            $clangBins += Split-Path $cmdClang.Source
+        $envSnapshot = @{}
+        foreach ($k in @("PATH", "CC", "CGO_LDFLAGS", "CCSHIM_TARGET")) {
+            $item = Get-Item ("Env:" + $k) -ErrorAction SilentlyContinue
+            if ($item) {
+                $envSnapshot[$k] = $item.Value
+            }
         }
-        $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
-        if (Test-Path $vswhere) {
-            & $vswhere -latest -products * -property installationPath 2>$null | ForEach-Object {
-                foreach ($arch in @("x64", "AMD64")) {
-                    $llvm = Join-Path $_ "VC\Tools\Llvm\$arch\bin"
-                    if ((Test-Path (Join-Path $llvm "clang.exe")) -and (Test-Path (Join-Path $llvm "lld-link.exe"))) { $clangBins += $llvm }
+        function Restore-CgoToolchain {
+            foreach ($k in @("PATH", "CC", "CGO_LDFLAGS", "CCSHIM_TARGET")) {
+                if ($envSnapshot.ContainsKey($k)) { Set-Item ("Env:" + $k) $envSnapshot[$k] }
+                else { Remove-Item ("Env:" + $k) -ErrorAction SilentlyContinue }
+            }
+        }
+        function Test-CgoToolchain {
+            # Real smoke test mirroring what the gate runs next: compile and link
+            # this binding's cgo packages, then LINK (and run zero tests of) a
+            # race-instrumented test binary. The -race link is the strictest step
+            # — it needs a ThreadSanitizer runtime (libtsan), which a MinGW gcc
+            # ships but a windows-msvc clang installation does not, so a toolchain
+            # that only compiles is rejected here before the gate proceeds.
+            Push-Location (Join-Path $RepoRoot "bindings/go")
+            & go build ./... 2>$null
+            if ($LASTEXITCODE -ne 0) { Pop-Location; return $false }
+            & go test -count=1 -run ZzzNoSuchTestZzz -race . 2>$null
+            $rc = $LASTEXITCODE
+            Pop-Location
+            return ($rc -eq 0)
+        }
+
+        $chosenNote = ""
+
+        # -- candidate 1: a native MinGW gcc (PATH or the stock MSYS2 install) --
+        $gccDirs = @()
+        $cmdGcc = Get-Command gcc.exe -ErrorAction SilentlyContinue
+        if ($cmdGcc) { $gccDirs += Split-Path $cmdGcc.Source }
+        $gccDirs += "C:\msys64\mingw64\bin"
+        foreach ($dir in ($gccDirs | Where-Object { $_ } | Sort-Object -Unique)) {
+            if (-not (Test-Path (Join-Path $dir "gcc.exe"))) { continue }
+            Restore-CgoToolchain
+            $env:CC = "gcc"
+            $env:Path = "$dir;$($envSnapshot["PATH"])"
+            if (Test-CgoToolchain) { $chosenNote = "MinGW gcc from {0}" -f $dir; break }
+        }
+
+        # -- candidate 2: clang + lld via the ccshim pass-through wrapper -------
+        if (-not $chosenNote) {
+            Restore-CgoToolchain
+            $shimDir = Join-Path $env:TEMP "gsml3_ccshim"
+            New-Item -ItemType Directory -Force $shimDir | Out-Null
+            & go build -C (Join-Path $RepoRoot "bindings/go/ccshim") -o (Join-Path $shimDir "ccshim.exe") . 2>$null
+            if ($LASTEXITCODE -ne 0) { throw "failed to build the ccshim compiler wrapper (exit $LASTEXITCODE)" }
+
+            # Candidate bin directories: a PATH clang whose sibling lld-link exists,
+            # then each Visual Studio install's LLD component (VC\Tools\Llvm).
+            $clangBins = @()
+            $cmdClang = Get-Command clang.exe -ErrorAction SilentlyContinue
+            if ($cmdClang -and (Test-Path (Join-Path (Split-Path $cmdClang.Source) "lld-link.exe"))) {
+                $clangBins += Split-Path $cmdClang.Source
+            }
+            $vswhere = "C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe"
+            if (Test-Path $vswhere) {
+                foreach ($vs in (& $vswhere -all -products * -property installationPath 2>$null)) {
+                    foreach ($arch in @("x64", "AMD64")) {
+                        $llvm = Join-Path $vs "VC\Tools\Llvm\$arch\bin"
+                        if ((Test-Path (Join-Path $llvm "clang.exe")) -and (Test-Path (Join-Path $llvm "lld-link.exe"))) { $clangBins += $llvm }
+                    }
+                }
+            }
+
+            foreach ($bin in ($clangBins | Where-Object { $_ } | Sort-Object -Unique)) {
+                Restore-CgoToolchain
+                $env:CCSHIM_TARGET = (Join-Path $bin "clang.exe")
+                $env:CC = "ccshim"              # bare name; the shim dir joins PATH below
+                $env:CGO_LDFLAGS = "-fuse-ld=lld"   # route the link through lld, not MSVC link
+                $env:Path = "$bin;$shimDir;$($envSnapshot["PATH"])"
+                if (Test-CgoToolchain) {
+                    $chosenNote = "clang + lld from {0} (via bindings/go/ccshim)" -f $bin
+                    break
                 }
             }
         }
 
-        # Probe each candidate exactly like the Go build will: compile a trivial
-        # C file with the stdlib flag set (incl. -mthreads, stripped by the shim)
-        # and link it through lld-link. First pair that links wins.
-        $probeDir = Join-Path $env:TEMP "gsml3_ccprobe"
-        New-Item -ItemType Directory -Force $probeDir | Out-Null
-        Set-Content (Join-Path $probeDir "probe.c") "int main(void) { return 0; }"
-        $passing = @()
-        foreach ($bin in ($clangBins | Where-Object { $_ } | Sort-Object -Unique)) {
-            $env:CCSHIM_TARGET = (Join-Path $bin "clang.exe")
-            $obj = Join-Path $probeDir ([IO.Path]::GetRandomFileName())
-            & $shimExe -xc -c (Join-Path $probeDir "probe.c") -o $obj -O2 -Wall -Werror `
-                -fno-stack-protector -Wdeclaration-after-statement -mthreads 2>$null
-            if ($LASTEXITCODE -ne 0) { continue }
-            & $shimExe -fuse-ld=lld $obj -o (Join-Path $probeDir "probe.exe") 2>$null
-            Remove-Item $obj, (Join-Path $probeDir "probe.exe") -Force -ErrorAction SilentlyContinue
-            if ($LASTEXITCODE -eq 0) { $passing += $bin }
+        if (-not $chosenNote) {
+            Restore-CgoToolchain
+            throw "No usable C toolchain found for Go cgo on this Windows machine (looked for a native MinGW gcc, e.g. an MSYS2 mingw64 install, then for a clang.exe + lld-link.exe pair). Install one of them (e.g. 'pacman -S mingw-w64-x86_64-gcc' under MSYS2), or set CC to a GCC-compatible compiler and re-run."
         }
-        if ($passing.Count -eq 0) {
-            throw "No usable C toolchain found for Go cgo on this Windows machine (looked for a clang.exe + lld-link.exe pair on PATH and in the LLD/LLVM component of installed Visual Studios). Install that VS component, or set CC to a compiler whose flag set is understood by Go's cgo path."
-        }
-        $chosenBin = $passing[0]
-        $env:CCSHIM_TARGET = (Join-Path $chosenBin "clang.exe")
-        $env:CC = $shimExe
-        $env:CGO_LDFLAGS = "-fuse-ld=lld"   # link through lld-link, not the MSVC linker
-        $env:Path = "$chosenBin;$($env:Path)"
-        Write-Host ("    cgo toolchain: clang + lld from {0} (via bindings/go/ccshim)" -f $chosenBin) -ForegroundColor DarkGray
+        Write-Host ("    cgo toolchain: {0}" -f $chosenNote) -ForegroundColor DarkGray
     }
     $env:CGO_ENABLED = "1"   # the binding is cgo by design; explicit and per-run (not go env -w)
     Push-Location (Join-Path $RepoRoot "bindings/go")

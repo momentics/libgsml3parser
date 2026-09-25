@@ -67,6 +67,7 @@
 61. [IMSI Detach Procedure](#61-imsi-detach-procedure)
 62. [Performance Optimizations Summary](#62-performance-optimizations-summary)
 63. [C API (gsml3parser_c.h)](#63-c-api-gsml3parser_ch)
+64. [FFI Bindings (Python / Go / Rust)](#64-ffi-bindings-python--go--rust)
 
 ---
 
@@ -4985,6 +4986,84 @@ The C header is installed with the package
 exports its internal C++ symbols so that first-party in-repo tests can
 link against them; only the `gsml3_*` C ABI is the stable external
 interface of the shared library.
+
+---
+
+## 64. FFI Bindings (Python / Go / Rust)
+
+The C ABI (§63) is consumed through three first-party bindings in `bindings/`,
+all of which are stdlib/zero-dependency and cover the same behavioral surface:
+the Python binding registers `argtypes`/`restype` for every function in
+`gsml3parser_c.h` (enforced by `test_api_surface.py`); the Go and Rust v1
+surface covers the core/config/message, A-bis RSL, LAPDm, registry/session and
+orchestrator/response functions of §63 plus the typed L3 builders
+`gsml3_build_cm_service_request` and `gsml3_build_setup` (the curated
+`gsml3_msg_*` typed getters stay in the Python binding).
+
+### Ownership and threading
+
+- Owned handles (`gsml3_config/message/rsl/lapdm_entity/registry/orchestrator`)
+  are wrapped with RAII: Python `close()` + context manager + guarded `__del__`,
+  Go `Close()` (idempotent), Rust `Drop` (`NonNull` fields, take-pattern). The
+  release order in a stack teardown is always entity → orchestrator → registry.
+- A session is BORROWED (owned by its registry) in every binding: no free call,
+  and wrappers refuse to touch the pointer after the registry closes.
+- Owned handles are single-thread per the C ABI. The Rust `GsmL3Stack` is
+  `Send` (ownership moves) but intentionally not `Sync` (shared access would
+  allow unsynchronized concurrent calls on one entity); Python/Go stacks follow
+  the same contract.
+
+### Callback model
+
+LAPDm entity callbacks fire SYNCHRONOUSLY inside C calls and receive spans that
+are valid only during the callback. All three bindings therefore use the same
+queue model: the callback copies the payload (zero-copy read — ctypes
+`string_at`, Go `unsafe.Slice`, Rust `slice::from_raw_parts`) into a lock-
+guarded queue and makes no FFI call; the stack drains the queues after the C
+call returns, then parses, feeds the orchestrator and emits response frames.
+Context is restored from `void* user` via (Python) a `_CallbackContext`
+structure kept alive in `GsmL3Stack._c_cb_keepalive` (CFUNCTYPE objects are
+GC-protected there), (Go) a `cgo.Handle` read inside the exported bridge, and
+(Rust) an `Arc<TrampolineState>` behind `Box::into_raw`, reclaimed exactly once
+with `Box::from_raw` after the entity is freed.
+
+### Errors and NULL
+
+Failed calls raise a typed error carrying the C code plus a synchronous copy of
+the thread-local message (`GsmL3Error` / Go `*Error` / Rust `GsmL3Error`).
+Wrapper-level validation rejects empty/nil input before the FFI boundary for
+calls where NULL is not part of the contract; the C-documented NULL-safe entry
+points (metadata sentinels, `*_free`, entity stats) pass NULL through and are
+covered by `*_NullSafety` tests in each language.
+
+### Versioning
+
+The product version lives in the `VERSION` file at the repository root: one
+semver line, no `v` prefix, UTF-8 without BOM — the single source of truth for
+every release (the repository has no published releases; the version is bumped
+in place from release to release). CMake reads it into `PROJECT_VERSION`
+(which feeds `gsml3_version()` through the `GSML3PARSER_VERSION` definition),
+the Python package derives both its build-time metadata and runtime
+`__version__` from the same file, and the Cargo manifests carry matching
+literals that the unified gate rejects on drift (`manifest version check`).
+The Go module carries no product version by design. Changing the release
+version means editing `VERSION` — nothing else.
+
+### Build and test
+
+The unified gate builds the shared core into `build_bindings/` (flattened to
+`build_bindings/bin/`) and runs all three bindings:
+
+```sh
+pwsh scripts/verify_bindings.ps1            # core lib + python + go + rust
+pwsh scripts/verify_bindings.ps1 -Only go   # single language, reuse with -SkipLib
+```
+
+Environment overrides: `GSML3PARSER_LIBRARY` (Python, explicit library path),
+`GSML3PARSER_LIB_DIR` (Rust `build.rs`, Python fallback). On Windows the DLL is
+discovered via `PATH`; on Linux via `LD_LIBRARY_PATH`. CI runs the same script
+on `ubuntu-latest` and `windows-latest` (`.github/workflows/bindings.yml`).
+Per-language quickstarts live in [`bindings/README.md`](../bindings/README.md).
 
 ---
 

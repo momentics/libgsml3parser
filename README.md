@@ -128,12 +128,13 @@ Every detail lives in a dedicated guide; this README is the pitch and the index.
 
 | Document | What It Covers |
 |----------|----------------|
-| [doc/API.md](doc/API.md) | Full API reference (63 numbered sections): core types, bit I/O, streaming, parser/serializer, builders and IEs/enums of all 12 domains, LAPDm, dispatcher, arena, every stack module, RSL, all procedures, C ABI + spec conformance notes |
+| [doc/API.md](doc/API.md) | Full API reference (64 numbered sections): core types, bit I/O, streaming, parser/serializer, builders and IEs/enums of all 12 domains, LAPDm, dispatcher, arena, every stack module, RSL, all procedures, C ABI, FFI bindings + spec conformance notes |
 | [doc/bts_integration.md](doc/bts_integration.md) | **Primary guide for BTS developers**: step-by-step event loop with `ProcedureOrchestrator`, full worked procedure chains (Location Update, Call Setup MO, Paging), AuC/VLR/BSC typed-data integration, LAPDm link management, L3 timer reference table, SI broadcast, production error handling |
 | [doc/bts_architecture.md](doc/bts_architecture.md) | Two usage modes (L3 Parser vs BTS Stack), component & data-flow diagrams, PHY/SDR integration points, thread-safety matrix, per-MS memory footprint, allocation-free hot paths, scaling guidelines to millions of sessions |
 | [doc/messages.md](doc/messages.md) | Complete message catalog: all 236 types with MTIs and directions, CC/GMM/SM IEs, SMS CP/RP/TP layers, dispatch edge cases (TIF=1 short messages, build-only types, parse-slot shadowing) |
 | [doc/boundaries.md](doc/boundaries.md) | What the library intentionally excludes — PHY/SDR, speech codecs, A5 ciphering, OML, SIP/media gateways, PS full stack, configuration, logging — and the exact integration point for each |
 | [examples/](examples/) | 20 runnable demos (see below), incl. full BTS flows, benchmarks, and a 1M-session real-time loop |
+| [bindings/README.md](bindings/README.md) | FFI bindings (Python / Go / Rust): quickstarts, ownership & threading model, callback safety rules, unified test gate |
 | [bindings/python/README.md](bindings/python/README.md) | Python `ctypes` binding over the stable C ABI: layout, prebuilt-library loading, quickstart, queue-model BTS stack, error model, ownership & threading contract |
 
 ## Examples
@@ -164,9 +165,13 @@ Every detail lives in a dedicated guide; this README is the pitch and the index.
 
 - Stable C89 C ABI over the full stack: `include/gsml3parser/gsml3parser_c.h` (handles, error model,
   validation, threading contract documented in [doc/API.md §63](doc/API.md#63-c-api-gsml3parser_ch)).
+- **FFI bindings** — first-party Python (ctypes, zero third-party deps), Go (cgo with `//export` +
+  `cgo.Handle` callback bridges), and Rust (sys crate + safe wrapper, `Send`, no code generation) over the
+  stable C ABI, each demonstrating the BTS stack with callbacks; unified build/test gate included
+  (`bindings/`, see [bindings/README.md](bindings/README.md)).
 - **Python** — `ctypes` binding in [bindings/python/](bindings/python/) (stdlib-only, full API surface,
   RAII wrappers + a queue-model BTS stack): see its [README](bindings/python/README.md).
-- **Roadmap** — Go bindings, Rust bindings.
+- [x] FFI bindings for Python (ctypes), Go (cgo), and Rust (safe wrapper) over the C ABI (`bindings/`, unified gate: `scripts/verify_bindings.ps1`).
 
 ## Testing & Fuzzing
 
