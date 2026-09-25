@@ -4,11 +4,16 @@ libgsml3parser benchmark results
 Hardware (dynamically detected at runtime; unified across all benchmark tests
 and examples via gsml3parser/benchmark_hw.h):
   Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz | base 3600 MHz | 1 socket, 8 cores,
-  16 logical | L1 n/a | L2 n/a | L3 n/a | 64 GB RAM, 4 slots @ 3000 MHz |
-  Windows 10.0 (build 19044)
-  Note: cache sizes (L1/L2/L3) are reported as "n/a" on this VM because CPUID
-  leaf 0x04 is emulated/masked; they are reported correctly on physical
-  hardware (CPUID 0x04) and on Linux (/sys/devices/system/cpu/cache).
+  16 logical | L1 32K D + 32K I/core | L2 256K/core | L3 16M/socket | 64 GB RAM,
+  4 slots @ 3000 MHz | Windows 10.0 (build 19044)
+   Note: cache sizes come from CPUID leaf 0x04 when the hypervisor exposes it
+   (as here); otherwise benchmark_hw.h reports "n/a" instead of guessing. On
+   Linux they are read from /sys/devices/system/cpu/cache.
+
+Build (Release): CMake 4.3.2, Visual Studio Professional 2026 (MSVC cl 14.51),
+  x64 static library, /O2 /W4 /WX; single-core timings, multi-run medians
+  unless a range is given. CI builds the same sources on Linux
+  (GitHub Actions: GCC/Clang, TSan/libFuzzer gates).
 
 Struct sizes (all static_assert invariants pass):
   FlatHandler: 16 bytes (== 2 * sizeof(void*))
@@ -30,33 +35,33 @@ Struct sizes (all static_assert invariants pass):
   ResponseContext: 128 bytes (<= 160)
 
 === parseL3() Benchmark (500K iterations per PD domain) ===
-   RR ChannelRelease                        17.1M msg/s
-   MM CMServiceAccept                       26.5M msg/s
-   CC Disconnect                            8.6M msg/s
-   SS SupServFacility                       15.0M msg/s
-   GMM GMMStatus                            16.5M msg/s
-   SM SMStatus                              8.1M msg/s
-   SMS CPAck                                20.4M msg/s
-   BCC Setup                                16.4M msg/s
-   GCC Setup                                7.7M msg/s
-   LS LocationServiceRequest                19.4M msg/s
-   EXT ExtendedMessage                      22.9M msg/s
-   TST TestProcedureMessage                 22.2M msg/s
+    RR ChannelRelease                        16.5M msg/s
+    MM CMServiceAccept                       25.3M msg/s
+    CC Disconnect                            8.1M msg/s
+    SS SupServFacility                       14.8M msg/s
+    GMM GMMStatus                            16.3M msg/s
+    SM SMStatus                              7.8M msg/s
+    SMS CPAck                                20.4M msg/s
+    BCC Setup                                16.0M msg/s
+    GCC Setup                                7.6M msg/s
+    LS LocationServiceRequest                18.6M msg/s
+    EXT ExtendedMessage                      21.9M msg/s
+    TST TestProcedureMessage                 21.1M msg/s
 
 === L3StreamProcessor Benchmark (L2-length framing, 500K iterations each) ===
-   RR ChannelRelease                        13.6M msg/s
-   MM CMServiceAccept                       19.8M msg/s
-   CC Disconnect                            7.5M msg/s
-   SS SupServFacility                       12.6M msg/s
-   GMM GMMStatus                            13.4M msg/s
-   SM SMStatus                              7.1M msg/s
-   SMS CPAck                                16.2M msg/s
-   BCC Setup                                13.5M msg/s
-   GCC Setup                                7.0M msg/s
-   LS LocationServiceRequest                15.4M msg/s
-   EXT ExtendedMessage                      17.2M msg/s
-   TST TestProcedureMessage                 17.1M msg/s
-   Mixed (all 12 PD domains)                11.0M msg/s
+    RR ChannelRelease                        12.8M msg/s
+    MM CMServiceAccept                       17.3M msg/s
+    CC Disconnect                            7.3M msg/s
+    SS SupServFacility                       12.6M msg/s
+    GMM GMMStatus                            13.1M msg/s
+    SM SMStatus                              7.0M msg/s
+    SMS CPAck                                15.8M msg/s
+    BCC Setup                                13.1M msg/s
+    GCC Setup                                7.0M msg/s
+    LS LocationServiceRequest                15.0M msg/s
+    EXT ExtendedMessage                      17.2M msg/s
+    TST TestProcedureMessage                 17.1M msg/s
+    Mixed (all 12 PD domains)                10.7M msg/s
 
 === ZeroCopyStreamProcessor Benchmark (callback path, fair) ===
    Zero-copy (all 12 PD domains)            12.9M msg/s
@@ -65,17 +70,18 @@ Struct sizes (all static_assert invariants pass):
   Note: zero-copy benefit scales with frame size; parseL3 dominates for 3-6 byte messages
 
 === Stack Component Benchmarks ===
-   MSContext alloc (10K):                   0.42 ms
-   TimerManager tick throughput:            42.6M ticks/sec
-  TransactionManager match:                0.004 us/lookup
-  ChannelPool alloc+release:               0.070 us/cycle
-  State Machine dispatch:                  0.006 us/message
-  ProtocolDispatcher route:                0.006 us/message
-   Full Stack SM dispatch (1K MS, 10K msgs): 66-86 M msg/sec (7 runs, single core)
-  NOTE: pre-constructed ParsedMessage dispatched through RRStateMachine;
-  does NOT include byte-level parsing (see parseL3 above for that)
-   Note: Full Stack throughput varies with CPU power state (65.7-86.4 M observed);
-   end-to-end parse+stream is 11.0 M msg/s (mixed, above)
+    MSContext alloc (10K):                   0.44 ms
+    TimerManager tick throughput:            43.0M ticks/sec
+   TransactionManager match:                0.004 us/lookup
+   ChannelPool alloc+release:               0.071 us/cycle
+   State Machine dispatch:                  0.007 us/message
+   ProtocolDispatcher route:                0.006 us/message
+    Full Stack SM dispatch (1K MS, 10K msgs): 53-75 M msg/sec (5 runs, single core)
+   NOTE: pre-constructed ParsedMessage dispatched through RRStateMachine;
+   does NOT include byte-level parsing (see parseL3 above for that)
+    Note: Full Stack throughput varies with CPU power state (52.5-74.8 M
+    observed across cold/warm runs); end-to-end parse+stream is
+    10.7 M msg/s (mixed, above)
 
 === 1M-session scale (Stress._1MSession_* + SSR_tickAllProcedures) ===
    1M create: 1194.7 ms, lookup: 126.5 ms, tick(10K active): 1.4 ms
@@ -93,4 +99,4 @@ Struct sizes (all static_assert invariants pass):
   RT SCALE OK
 
 === Regression ===
-   Tests passed: 2071 / 166 suites
+    Tests passed: 2120 / 174 suites
