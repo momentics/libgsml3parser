@@ -541,14 +541,19 @@ TEST(CCRoundTripTest, Facility_Parse_Golden) {
     EXPECT_EQ(fac->facilityBody().size(), 3u);
 }
 
-// ── CC Modify (TS 24.008 §9.3.15, MTI=0x19) ──────────────────────────
+// ── CC Notify (TS 24.078, MTI=0x3E) ───────────────────────────────────
+// Structure: PD=0x03(CC), MT=0x3E in the six low bits of octet 1, body is
+// the single cause octet.
 
-TEST(CCRoundTripTest, Modify_RoundTrip) {
-    ParsedMessage msg(CCM(L3Modify{}));
+TEST(CCRoundTripTest, Notify_RoundTrip) {
+    ParsedMessage msg(CCM(L3CCNotify::builder().cause(CCCause::Normal_Call_Clearing).build()));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messagePD(*parsed), L3PD::CallControl);
-    EXPECT_EQ(messageMTI(*parsed), L3Modify::MTI);
+    EXPECT_EQ(messageMTI(*parsed), L3CCNotify::MTI);
+    auto* notify = tryGet<L3CCNotify>(*parsed);
+    ASSERT_TRUE(notify);
+    EXPECT_EQ(notify->cause(), CCCause::Normal_Call_Clearing);
 }
 
 // ── CC UnitData (TS 24.008 §9.3.16, MTI=0x27) ────────────────────────

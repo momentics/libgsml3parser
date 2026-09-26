@@ -46,7 +46,6 @@ enum class CCMessageType : uint8_t {
     EmergencySetup     = 0x0e,
     ConnectAcknowledge = 0x0f,
     Hold               = 0x18,
-    Modify             = 0x19,
     HoldReject         = 0x1a,
     Disconnect         = 0x25,
     UnitData           = 0x27,
@@ -60,7 +59,8 @@ enum class CCMessageType : uint8_t {
     StartDTMFAcknowledge = 0x36,
     StartDTMFReject    = 0x37,
     CCStatus           = 0x3d,
-    Facility           = 0x3a
+    Facility           = 0x3a,
+    Notify             = 0x3e
 };
 
 std::ostream& operator<<(std::ostream& os, CCMessageType mti);
@@ -754,7 +754,10 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// ── CC Status (GSM 04.08 9.3.19) ──────────────────────────────────────
+// ── CC Status (TS 24.078 9.3.19) ──────────────────────────────────────
+// Value part (four octets): Cause IE in type-value form (IEI 0x11, no
+// length octet; two value octets per TS 24.078 10.5.4.11), followed by
+// the one-octet call state (TS 24.078 10.5.4.6).
 
 class L3CCStatus {
     unsigned mTI{7};
@@ -790,7 +793,7 @@ public:
 
     [[nodiscard]] static Expected<L3CCStatus> parse(BitReader& br);
     void write(BitWriter& bw) const;
-    size_t bodyLength() const { return 5; }
+    size_t bodyLength() const { return 4; }
     void text(std::ostream& os) const;
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
@@ -1112,54 +1115,35 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// CC Modify - 3GPP TS 24.008 §9.3.15
-// Direction: Both
-// Carries: TI, Bearer Capability, Called/Calling Party Number, etc.
-class L3Modify {
+// CC Notify - 3GPP TS 24.078
+// Direction: MT
+// Carries: TI, cause (single value octet)
+class L3CCNotify {
     unsigned mTI{7};
-    bool mHaveBearerCapability{false};
-    L3BearerCapability mBearerCapability;
-    bool mHaveCalledParty{false};
-    L3CalledPartyBCDNumber mCalledParty;
-    bool mHaveCallingParty{false};
-    L3CallingPartyBCDNumber mCallingParty;
+    CCCause mCause{CCCause::Normal_Call_Clearing};
     friend struct Builder;
 public:
-    static constexpr int MTI = 0x19;
-    L3Modify() = default;
+    static constexpr int MTI = 0x3e;
+    L3CCNotify() = default;
     unsigned ti() const { return mTI; }
     void ti(unsigned v) { mTI = v; }
-    bool haveBearerCapability() const { return mHaveBearerCapability; }
-    const L3BearerCapability& bearerCapability() const { return mBearerCapability; }
-    bool haveCalledParty() const { return mHaveCalledParty; }
-    const L3CalledPartyBCDNumber& calledParty() const { return mCalledParty; }
-    bool haveCallingParty() const { return mHaveCallingParty; }
-    const L3CallingPartyBCDNumber& callingParty() const { return mCallingParty; }
+    CCCause cause() const { return mCause; }
 
     struct Builder {
         unsigned m_ti{7};
-        bool m_haveBearerCapability{false};
-        L3BearerCapability m_bearerCapability;
-        bool m_haveCalledParty{false};
-        L3CalledPartyBCDNumber m_calledParty;
-        bool m_haveCallingParty{false};
-        L3CallingPartyBCDNumber m_callingParty;
+        CCCause m_cause{CCCause::Normal_Call_Clearing};
 
         /// Set transaction identifier.
         Builder& ti(unsigned v) { m_ti = v; return *this; }
-        /// Set bearer capability (sets m_haveBearerCapability flag).
-        Builder& bearerCapability(const L3BearerCapability& v) { m_bearerCapability = v; m_haveBearerCapability = true; return *this; }
-        /// Set called party BCD number (sets m_haveCalledParty flag).
-        Builder& calledParty(const L3CalledPartyBCDNumber& v) { m_calledParty = v; m_haveCalledParty = true; return *this; }
-        /// Set calling party BCD number (sets m_haveCallingParty flag).
-        Builder& callingParty(const L3CallingPartyBCDNumber& v) { m_callingParty = v; m_haveCallingParty = true; return *this; }
+        /// Set CC cause.
+        Builder& cause(CCCause v) { m_cause = v; return *this; }
         /// Build the final message.
-        [[nodiscard]] L3Modify build() const;
+        [[nodiscard]] L3CCNotify build() const;
     };
     static Builder builder();
 
-    size_t bodyLength() const;
-    [[nodiscard]] static Expected<L3Modify> parse(BitReader& br);
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3CCNotify> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
     [[nodiscard]] int mti() const { return MTI; }

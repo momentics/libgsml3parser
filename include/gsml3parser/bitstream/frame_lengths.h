@@ -55,11 +55,13 @@ inline constexpr size_t kFixedFrameEntries[] = {
     // Mobility Management (pd 0x05, shifted 6-bit MTI)
     0x05, 0x21, 2,  // CM Service Accept (no body)
     0x05, 0x22, 3,  // CM Service Reject (1-byte body)
-    0x05, 0x23, 3,  // CM Service Abort (1-byte cause body, TS 24.008 9.2.3)
+    0x05, 0x23, 2,  // CM Service Abort (no value part, TS 24.008 9.2.7)
+    0x05, 0x29, 2,  // MM Abort (no value part, TS 24.008)
     0x05, 0x31, 3,  // MM Status (1-byte body)
     // Call Control (pd 0x03, shifted 6-bit MTI)
-    0x03, 0x3D, 7,  // CC Status (5-byte body: ti|cause|callState per the
-                    // fixed 5-byte implementation, l3ccmessages.h:793)
+    0x03, 0x3D, 6,  // CC Status (4-byte body: cause IE identifier 0x11 +
+                    // two cause octets + call state, TS 24.078 9.3.19)
+    0x03, 0x3E, 3,  // CC Notify (1-byte cause)
     // Broadcast Call Control (pd 0x01, shifted 6-bit MTI)
     0x01, 0x04, 2,  // BCC Call Confirmed (no body)
     0x01, 0x09, 2,  // BCC Connect Acknowledge (no body)

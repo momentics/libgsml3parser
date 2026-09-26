@@ -337,9 +337,17 @@ TEST(MessagesTest, MM_CMServiceAccept) {
 }
 
 TEST(MessagesTest, MM_CMServiceAbort) {
+    // Header-only message: no value part (TS 24.008 9.2.7).
     L3CMServiceAbort msg;
     EXPECT_EQ(msg.mti(), L3CMServiceAbort::MTI);
-    EXPECT_EQ(msg.l2BodyLength(), 1u);
+    EXPECT_EQ(msg.l2BodyLength(), 0u);
+}
+
+TEST(MessagesTest, MM_MMAbort) {
+    // Header-only message: no value part (TS 24.008).
+    L3MMAbort msg;
+    EXPECT_EQ(msg.mti(), L3MMAbort::MTI);
+    EXPECT_EQ(msg.l2BodyLength(), 0u);
 }
 
 TEST(MessagesTest, MM_AuthenticationRequest) {

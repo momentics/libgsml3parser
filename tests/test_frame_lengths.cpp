@@ -52,8 +52,10 @@ TEST(FrameLengths, TableMatchesMessageDefinitions) {
     // a default-cause instance; bodyLength() is a constant 1 regardless.
     EXPECT_EQ(detail::fixedFrameLength(0x05, L3CMServiceReject::MTI), 2 + L3CMServiceReject{MMRejectCause::Zero}.bodyLength()) << "CM Service Reject";
     EXPECT_EQ(detail::fixedFrameLength(0x05, L3CMServiceAbort::MTI), 2 + L3CMServiceAbort{}.bodyLength()) << "CM Service Abort";
+    EXPECT_EQ(detail::fixedFrameLength(0x05, L3MMAbort::MTI), 2 + L3MMAbort{}.bodyLength()) << "MM Abort";
     EXPECT_EQ(detail::fixedFrameLength(0x05, L3MMStatus::MTI), 2 + L3MMStatus{}.bodyLength()) << "MM Status";
     EXPECT_EQ(detail::fixedFrameLength(0x03, L3CCStatus::MTI), 2 + L3CCStatus{}.bodyLength()) << "CC Status";
+    EXPECT_EQ(detail::fixedFrameLength(0x03, L3CCNotify::MTI), 2 + L3CCNotify{}.bodyLength()) << "CC Notify";
     EXPECT_EQ(detail::fixedFrameLength(0x01, L3BCCCallConfirmed::MTI), 2 + L3BCCCallConfirmed{}.bodyLength()) << "BCC Call Confirmed";
     EXPECT_EQ(detail::fixedFrameLength(0x01, L3BCCConnectAcknowledge::MTI), 2 + L3BCCConnectAcknowledge{}.bodyLength()) << "BCC Connect Acknowledge";
     EXPECT_EQ(detail::fixedFrameLength(0x00, L3GCCCallConfirmed::MTI), 2 + L3GCCCallConfirmed{}.bodyLength()) << "GCC Call Confirmed";

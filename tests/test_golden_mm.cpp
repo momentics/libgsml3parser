@@ -402,38 +402,58 @@ TEST(GoldenMM, CMServiceAbort_RoundTrip) {
     EXPECT_EQ(messageMTI(*parsed), L3CMServiceAbort::MTI);
 }
 
-// [GOLDEN] CM Service Abort carries the 1-octet CM service abort cause
-// (TS 24.008 9.2.3.2): header {0x05, 0x23} (PD=MM low nibble, MT=CMServiceAbort)
-// + cause 0x02 (congestion).
-TEST(GoldenMM, CMServiceAbort_Parse_Cause) {
-    uint8_t data[] = {0x05, 0x23, 0x02};
+// [GOLDEN] CM Service Abort is a header-only message (TS 24.008 9.2.7):
+// the frame is exactly the two L3 header octets {PD=MM, MT=0x23}; the
+// message carries no value part.
+TEST(GoldenMM, CMServiceAbort_HeaderOnly) {
+    uint8_t data[] = {0x05, 0x23};
     auto parsed = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3CMServiceAbort::MTI);
     const auto* abort = tryGet<L3CMServiceAbort>(*parsed);
     ASSERT_NE(abort, nullptr);
-    EXPECT_EQ(abort->cause(), CMServiceAbortCause::Congestion);
+
+    // The written frame must be exactly two octets as well.
+    auto bytes = writeL3Bytes(ParsedMessage{MMM{L3CMServiceAbort{}}});
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), 2u);
+    EXPECT_EQ((*bytes)[0], 0x05);
+    EXPECT_EQ((*bytes)[1], 0x23);
 }
 
-// [GOLDEN] Reserved cause values (0x08 and above) are rejected.
-TEST(GoldenMM, CMServiceAbort_Parse_ReservedCause_Invalid) {
-    for (uint8_t cause : {0x08u, 0xFFu}) {
-        uint8_t data[] = {0x05, 0x23, cause};
-        auto parsed = parseL3(std::span<const uint8_t>(data));
-        ASSERT_FALSE(parsed) << "cause 0x" << std::hex << cause << " must be rejected";
-        EXPECT_EQ(parsed.error().code, ParseError::Code::InvalidValue);
-    }
+// [GOLDEN] A trailing octet after the header-only message is a framing
+// error under strict full-consumption parsing.
+TEST(GoldenMM, CMServiceAbort_TrailingByte_Invalid) {
+    uint8_t data[] = {0x05, 0x23, 0x02};
+    ParserConfig cfg = ParserConfig{}.withStrictFraming(true);
+    auto parsed = parseL3(std::span<const uint8_t>(data), cfg);
+    ASSERT_FALSE(parsed) << "trailing byte after a header-only message must be rejected";
+    EXPECT_EQ(parsed.error().code, ParseError::Code::LengthMismatch);
 }
 
-// [GOLDEN] Non-default cause round-trips.
-TEST(GoldenMM, CMServiceAbort_RoundTrip_Cause) {
-    ParsedMessage msg(MMM(L3CMServiceAbort{CMServiceAbortCause::ServiceNotSupported}));
+// [GOLDEN] MM Abort (TS 24.008): header-only message, the frame is
+// exactly {PD=MM, MT=0x29}.
+TEST(GoldenMM, MMAbort_Parse_Golden) {
+    uint8_t data[] = {0x05, 0x29};
+    auto parsed = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(messageMTI(*parsed), L3MMAbort::MTI);
+    const auto* abort = tryGet<L3MMAbort>(*parsed);
+    ASSERT_NE(abort, nullptr);
+}
+
+// [GOLDEN] MM Abort round-trips with the exact two-octet wire shape.
+TEST(GoldenMM, MMAbort_WireShape) {
+    ParsedMessage msg(MMM(L3MMAbort{}));
+    auto bytes = writeL3Bytes(msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), 2u);
+    EXPECT_EQ((*bytes)[0], 0x05);
+    EXPECT_EQ((*bytes)[1], 0x29);
+
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(messageMTI(*parsed), L3CMServiceAbort::MTI);
-    const auto* abort = tryGet<L3CMServiceAbort>(*parsed);
-    ASSERT_NE(abort, nullptr);
-    EXPECT_EQ(abort->cause(), CMServiceAbortCause::ServiceNotSupported);
+    EXPECT_EQ(messageMTI(*parsed), L3MMAbort::MTI);
 }
 
 TEST(GoldenMM, CMServiceReject_RoundTrip) {

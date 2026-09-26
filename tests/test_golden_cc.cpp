@@ -186,30 +186,45 @@ TEST(GoldenCC, CallConfirmed_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: CC Status (GSM 24.008 9.3.19 / GSM 04.08 9.3.19)
-// Reference: L3_Templates.ttcn ts_ML3_Cause (line 60):
-//   ML3_Cause_TLV: elementIdentifier := '08'O, lengthIndicator := 0
-//   oct3: location(4), spare1_1(1), codingStandard(2), ext1(1)
-//   oct4: causeValue(7), ext3(1)='1'B
-// Structure: Cause TLV (IEI=0x08, Length=2, 2 value octets), CallState(8)
-// Spec-verified: Cause IE per GSM 24.008 10.5.4.11, CallState per 10.5.4.6
-// [GSM SPEC VERIFIED] CCStatus body = Cause(TLV) + CallState(per 9.3.19 Table).
-//   Cause octet 3: location(4)|spare(1)|codingStandard(2)|ext1(1)
-//   Cause octet 4: ext3(1)|causeValue(7), where ext3=1 for non-extending cause
+// CC PARSE FROM HEX: CC Status (TS 24.078 9.3.19)
+// Value part is exactly four octets: the Cause information element in
+// type-value form (IEI 0x11, no length octet; two value octets per
+// TS 24.078 10.5.4.11), followed by the one-octet call state
+// (TS 24.078 10.5.4.6).
+//   Cause value octet 1: location(4)|spare(1)|codingStandard(2)|ext1(1)
+//   Cause value octet 2: ext3(1)|causeValue(7), ext3=1 for a non-extending cause
 // =====================================================================
 
 TEST(GoldenCC, CCStatus_Parse) {
     // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
-    // Byte 1: MT=0x3D(CCStatus) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
-    // Byte 2: IEI = 0x08 (Cause, GSM 24.008 10.5.4.11)
-    // Byte 3: Length = 2 (2 octets of Cause value part)
-    // Byte 4: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x16
-    // Byte 5: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21 [GSM 24.008 10.5.4.11]
-    // Byte 6: CallState = 0x00 [GSM 24.008 10.5.4.6]
-    uint8_t data[] = {0xE3, 0x3D, 0x08, 0x02, 0x16, 0x21, 0x00};
+    // Byte 1: MT=0x3D(CCStatus) in the six low bits, NSD=0 (TS 24.078)
+    // Byte 2: IEI = 0x11 (Cause, type-value form without a length octet; TS 24.078 10.5.4.11)
+    // Byte 3: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x16
+    // Byte 4: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21 (TS 24.078 10.5.4.11)
+    // Byte 5: CallState spare(2)=11|value(6)=0 = 0xC0 (TS 24.078 10.5.4.6)
+    uint8_t data[] = {0xE3, 0x3D, 0x11, 0x16, 0x21, 0xC0};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CCStatus::MTI);
+    const auto* status = tryGet<L3CCStatus>(*msg);
+    ASSERT_NE(status, nullptr);
+    EXPECT_EQ(status->cause(), CCCause::Normal_Call_Clearing);
+    EXPECT_EQ(status->callState(), 0u);
+}
+
+// [GOLDEN] CC Status frame size: the two header octets plus the
+// four-octet value part (IEI 0x11, two cause octets, call state).
+TEST(GoldenCC, CCStatus_WireShape) {
+    EXPECT_EQ(L3CCStatus{}.bodyLength(), 4u);
+    auto msg = L3CCStatus::builder().ti(7)
+        .cause(CCCause::Normal_Call_Clearing).callState(0x00).build();
+    ParsedMessage pm{CCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), 6u); // 2-byte header + 4-octet body
+    EXPECT_EQ((*bytes)[0], 0xE3); // TI=7 | TIF=0 | PD=CC
+    EXPECT_EQ((*bytes)[1], 0x3D); // MT=CCStatus, NSD=0
+    EXPECT_EQ((*bytes)[2], 0x11); // Cause IE identifier (type-value form)
 }
 
 // =====================================================================

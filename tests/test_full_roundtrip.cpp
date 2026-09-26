@@ -396,11 +396,8 @@ TEST(FullRoundTrip, MM_Domain) {
     expectRoundTrip(ParsedMessage{MMM{L3AuthenticationReject{}}},
         L3PD::MobilityManagement, L3AuthenticationReject::MTI, "L3AuthenticationReject");
 
-    expectRoundTrip(ParsedMessage{MMM{L3CMRequest{}}},
-        L3PD::MobilityManagement, L3CMRequest::MTI, "L3CMRequest");
-
-    expectRoundTrip(ParsedMessage{MMM{L3PagingMM{}}},
-        L3PD::MobilityManagement, L3PagingMM::MTI, "L3PagingMM");
+    expectRoundTrip(ParsedMessage{MMM{L3MMAbort{}}},
+        L3PD::MobilityManagement, L3MMAbort::MTI, "MMAbort");
 }
 
 // GSM 24.008 9.3: All CC message types round-trip
@@ -465,8 +462,8 @@ TEST(FullRoundTrip, CC_Domain) {
     expectRoundTrip(ParsedMessage{CCM{L3Facility{}}},
         L3PD::CallControl, L3Facility::MTI, "L3Facility");
 
-    expectRoundTrip(ParsedMessage{CCM{L3Modify{}}},
-        L3PD::CallControl, L3Modify::MTI, "L3Modify");
+    expectRoundTrip(ParsedMessage{CCM{L3CCNotify::builder().cause(CCCause::Normal_Call_Clearing).build()}},
+        L3PD::CallControl, L3CCNotify::MTI, "Notify");
 
     expectRoundTrip(ParsedMessage{CCM{L3UnitData{}}},
         L3PD::CallControl, L3UnitData::MTI, "L3UnitData");

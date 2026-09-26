@@ -239,7 +239,7 @@ std::ostream& operator<<(std::ostream& os, CCMessageType mti) {
         case CCMessageType::HoldReject:          os << "HoldReject"; break;
         case CCMessageType::CCStatus:            os << "CCStatus"; break;
         case CCMessageType::Facility:            os << "Facility"; break;
-        case CCMessageType::Modify:              os << "Modify"; break;
+        case CCMessageType::Notify:              os << "Notify"; break;
         case CCMessageType::UnitData:            os << "UnitData"; break;
         case CCMessageType::UnitDataAck:         os << "UnitDataAck"; break;
         case CCMessageType::ErrorIndication:     os << "ErrorIndication"; break;
@@ -1276,12 +1276,16 @@ L3CCStatus L3CCStatus::Builder::build() const {
 Expected<L3CCStatus> L3CCStatus::parse(BitReader& br) {
     L3CCStatus msg;
 
-    // Cause TLV (IEI=0x08)
+    // Cause is a type-value information element in CC (no length octet,
+    // IEI 0x11); the call state follows as a single value octet
+    // (TS 24.078 10.5.4.11 / 10.5.4.6).
     auto ieiRes = detail::readIEI(br);
     if (!ieiRes) return Expected<L3CCStatus>::error(ieiRes.error());
-    auto lenRes = detail::readLength(br);
-    if (!lenRes) return Expected<L3CCStatus>::error(lenRes.error());
-    auto p = L3CauseElement::parse(br);
+    if (ieiRes.value() != 0x11) {
+        return Expected<L3CCStatus>::error(
+            ParseError{ParseError::Code::InvalidIE, "expected Cause IE (0x11)", br.position()});
+    }
+    auto p = L3CauseElement::parse(br); // V = 2 octets, value part only
     if (!p) return Expected<L3CCStatus>::error(p.error());
     msg.mCause = p.value().cause();
 
@@ -1294,10 +1298,9 @@ Expected<L3CCStatus> L3CCStatus::parse(BitReader& br) {
 }
 
 void L3CCStatus::write(BitWriter& bw) const {
-    bw.writeField(0x08, 8);
-    bw.writeField(static_cast<uint32_t>(L3CauseElement::lengthV()), 8);
+    bw.writeField(0x11, 8);
     L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
-    cause.write(bw);
+    cause.write(bw); // two value octets (no IEI+length form)
     L3CallState state(mCallState);
     state.write(bw);
 }
@@ -1470,7 +1473,7 @@ const char* ccMessageName(int mti) {
         case L3CCStatus::MTI:                  return "CCStatus";
         case L3Progress::MTI:                  return "Progress";
         case L3Facility::MTI:                  return "Facility";
-        case L3Modify::MTI:                    return "Modify";
+        case L3CCNotify::MTI:                  return "Notify";
         case L3UnitData::MTI:                  return "UnitData";
         case L3UnitDataAck::MTI:               return "UnitDataAck";
         case L3ErrorIndication::MTI:           return "ErrorIndication";
@@ -1511,83 +1514,22 @@ void L3Facility::text(std::ostream& os) const {
     }
 }
 
-// ── L3Modify (MTI=0x19, TS 24.008 §9.3.15) ─────────────────────────────
+// ── L3CCNotify (MTI=0x3e, TS 24.078) ───────────────────────────────────
 
-size_t L3Modify::bodyLength() const {
-    size_t len = 0;
-    if (mHaveBearerCapability) len += 2 + mBearerCapability.lengthV();
-    if (mHaveCalledParty) len += 2 + mCalledParty.lengthV();
-    if (mHaveCallingParty) len += 2 + mCallingParty.lengthV();
-    return len;
+Expected<L3CCNotify> L3CCNotify::parse(BitReader& br) {
+    L3CCNotify msg;
+    auto r = br.readField(8);
+    if (!r) return Expected<L3CCNotify>::error(r.error());
+    msg.mCause = static_cast<CCCause>(r.value());
+    return Expected<L3CCNotify>::hold(std::move(msg));
 }
 
-Expected<L3Modify> L3Modify::parse(BitReader& br) {
-    L3Modify msg;
-    while (br.hasMore()) {
-        auto ieiRes = detail::readIEI(br);
-        if (!ieiRes) return Expected<L3Modify>::error(ieiRes.error());
-        uint8_t iei = ieiRes.value();
-        switch (iei) {
-        case 0x04: {
-            auto lenRes = detail::readLength(br);
-            if (!lenRes) return Expected<L3Modify>::error(lenRes.error());
-            auto p = L3BearerCapability::parse(br);
-            if (!p) return Expected<L3Modify>::error(p.error());
-            msg.mBearerCapability = std::move(p.value());
-            msg.mHaveBearerCapability = true;
-            continue;
-        }
-        case 0x5e: {
-            auto lenRes = detail::readLength(br);
-            if (!lenRes) return Expected<L3Modify>::error(lenRes.error());
-            auto p = L3CalledPartyBCDNumber::parse(br, lenRes.value());
-            if (!p) return Expected<L3Modify>::error(p.error());
-            msg.mCalledParty = std::move(p.value());
-            msg.mHaveCalledParty = true;
-            continue;
-        }
-        case 0x5c: {
-            auto lenRes = detail::readLength(br);
-            if (!lenRes) return Expected<L3Modify>::error(lenRes.error());
-            auto p = L3CallingPartyBCDNumber::parse(br, lenRes.value());
-            if (!p) return Expected<L3Modify>::error(p.error());
-            msg.mCallingParty = std::move(p.value());
-            msg.mHaveCallingParty = true;
-            continue;
-        }
-        default: {
-            auto skipRes = detail::skipTLV(br);
-            if (!skipRes) return Expected<L3Modify>::error(skipRes.error());
-            continue;
-        }
-        }
-    }
-    return Expected<L3Modify>::hold(std::move(msg));
+void L3CCNotify::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mCause), 8);
 }
 
-void L3Modify::write(BitWriter& bw) const {
-    if (mHaveBearerCapability) {
-        bw.writeField(0x04, 8);
-        bw.writeField(static_cast<uint32_t>(mBearerCapability.lengthV()), 8);
-        mBearerCapability.write(bw);
-    }
-    if (mHaveCalledParty) {
-        bw.writeField(0x5e, 8);
-        bw.writeField(static_cast<uint32_t>(mCalledParty.lengthV()), 8);
-        mCalledParty.write(bw);
-    }
-    if (mHaveCallingParty) {
-        bw.writeField(0x5c, 8);
-        bw.writeField(static_cast<uint32_t>(mCallingParty.lengthV()), 8);
-        mCallingParty.write(bw);
-    }
-}
-
-void L3Modify::text(std::ostream& os) const {
-    os << "Modify: TI=" << mTI;
-    if (mHaveBearerCapability) { os << " BearerCapability=("; mBearerCapability.text(os); os << ")"; }
-    if (mHaveCalledParty) { os << " CalledParty=(" << mCalledParty.digits() << ")"; }
-    if (mHaveCallingParty) { os << " CallingParty=(" << mCallingParty.digits() << ")"; }
+void L3CCNotify::text(std::ostream& os) const {
+    os << "Notify: TI=" << mTI << " cause=" << CCCause2Str(mCause);
 }
 
 // ── L3UnitData (MTI=0x27, TS 24.008 §9.3.16) ───────────────────────────
@@ -1948,26 +1890,15 @@ L3Facility L3Facility::Builder::build() const {
     return msg;
 }
 
-// L3Modify
-L3Modify::Builder L3Modify::builder() {
+// L3CCNotify
+L3CCNotify::Builder L3CCNotify::builder() {
     return Builder{};
 }
 
-L3Modify L3Modify::Builder::build() const {
-    L3Modify msg;
+L3CCNotify L3CCNotify::Builder::build() const {
+    L3CCNotify msg;
     msg.mTI = m_ti;
-    if (m_haveBearerCapability) {
-        msg.mHaveBearerCapability = true;
-        msg.mBearerCapability = m_bearerCapability;
-    }
-    if (m_haveCalledParty) {
-        msg.mHaveCalledParty = true;
-        msg.mCalledParty = m_calledParty;
-    }
-    if (m_haveCallingParty) {
-        msg.mHaveCallingParty = true;
-        msg.mCallingParty = m_callingParty;
-    }
+    msg.mCause = m_cause;
     return msg;
 }
 

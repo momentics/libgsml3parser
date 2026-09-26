@@ -365,21 +365,17 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// ── CM Service Abort (GSM 04.08 9.2.7) ────────────────────────────────
+// ── CM Service Abort (TS 24.008 9.2.7) ────────────────────────────────
+// CM Service Abort (TS 24.008): carries no value part.
 
 class L3CMServiceAbort {
-    CMServiceAbortCause mCause{CMServiceAbortCause::Unspecified};
-
     friend struct Builder;
 public:
     static constexpr int MTI = 0x23;
 
     L3CMServiceAbort() = default;
-    explicit L3CMServiceAbort(CMServiceAbortCause wCause) : mCause(wCause) {}
 
-    CMServiceAbortCause cause() const { return mCause; }
-
-    size_t bodyLength() const { return 1; }
+    size_t bodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3CMServiceAbort> parse(BitReader&);
     void write(BitWriter&) const;
     void text(std::ostream& os) const;
@@ -388,12 +384,34 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 
     struct Builder {
-        CMServiceAbortCause mCause{CMServiceAbortCause::Unspecified};
-
-        /// Set the CM service abort cause (TS 24.008 9.2.3.2).
-        Builder& cause(CMServiceAbortCause c) { mCause = c; return *this; }
         /// Build the final message.
         [[nodiscard]] L3CMServiceAbort build() const;
+    };
+
+    static Builder builder();
+};
+
+// ── MM Abort (TS 24.008) ───────────────────────────────────────────────
+// MM Abort (TS 24.008): carries no value part.
+
+class L3MMAbort {
+    friend struct Builder;
+public:
+    static constexpr int MTI = 0x29;
+
+    L3MMAbort() = default;
+
+    size_t bodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3MMAbort> parse(BitReader&);
+    void write(BitWriter&) const;
+    void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+
+    struct Builder {
+        /// Build the final message.
+        [[nodiscard]] L3MMAbort build() const;
     };
 
     static Builder builder();
@@ -617,85 +635,6 @@ public:
     size_t bodyLength() const { return 0; }
     [[nodiscard]] static Expected<L3TMSIReallocationComplete> parse(BitReader&);
     void write(BitWriter&) const;
-    void text(std::ostream& os) const;
-    [[nodiscard]] int mti() const { return MTI; }
-    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
-    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
-};
-
-// CM-Request - 3GPP TS 24.008 §9.2.8
-// Direction: Both
-// Carries: CKSN, optional CM-Service-Type, Classmark Container(s), Mobile Identity
-class L3CMRequest {
-    unsigned mCKSN{0};
-    bool mHaveServiceType{false};
-    L3CMServiceType mServiceType;
-    L3MobileStationClassmark2 mClassmark;
-    L3MobileIdentity mMobileIdentity;
-
-    friend struct Builder;
-public:
-    static constexpr int MTI = 0x20;
-    L3CMRequest() = default;
-
-    struct Builder {
-        unsigned m_cksn{0};
-        bool m_haveServiceType{false};
-        L3CMServiceType m_serviceType;
-        L3MobileStationClassmark2 m_classmark;
-        L3MobileIdentity m_mobileIdentity;
-
-        /// Set CKSN value.
-        Builder& cksn(unsigned v) { m_cksn = v; return *this; }
-        /// Set service type (sets mHaveServiceType flag).
-        Builder& serviceType(L3CMServiceType v) { m_serviceType = v; m_haveServiceType = true; return *this; }
-        /// Set the classmark.
-        Builder& classmark(L3MobileStationClassmark2 v) { m_classmark = v; return *this; }
-        /// Set the mobile identity.
-        Builder& mobileIdentity(L3MobileIdentity v) { m_mobileIdentity = std::move(v); return *this; }
-        /// Build the final message.
-        [[nodiscard]] L3CMRequest build() const;
-    };
-
-    static Builder builder();
-    unsigned cksn() const { return mCKSN; }
-    bool haveServiceType() const { return mHaveServiceType; }
-    L3CMServiceType::TypeCode serviceType() const { return mServiceType.type(); }
-    const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
-    size_t bodyLength() const;
-    [[nodiscard]] static Expected<L3CMRequest> parse(BitReader& br);
-    void write(BitWriter& bw) const;
-    void text(std::ostream& os) const;
-    [[nodiscard]] int mti() const { return MTI; }
-    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
-    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
-};
-
-// MM-Paging - 3GPP TS 24.008 §9.2.12
-// Direction: DL
-// Carries: Mobile Identity (TMSI or IMSI of paged subscriber)
-class L3PagingMM {
-    L3MobileIdentity mMobileIdentity;
-
-    friend struct Builder;
-public:
-    static constexpr int MTI = 0x06;
-    L3PagingMM() = default;
-
-    struct Builder {
-        L3MobileIdentity m_mobileIdentity;
-
-        /// Set the mobile identity.
-        Builder& mobileIdentity(L3MobileIdentity v) { m_mobileIdentity = std::move(v); return *this; }
-        /// Build the final message.
-        [[nodiscard]] L3PagingMM build() const;
-    };
-
-    static Builder builder();
-    const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
-    size_t bodyLength() const;
-    [[nodiscard]] static Expected<L3PagingMM> parse(BitReader& br);
-    void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }

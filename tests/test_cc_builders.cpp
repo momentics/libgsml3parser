@@ -365,20 +365,22 @@ TEST(CCBuilders, Facility_WithBody) {
     EXPECT_EQ(fac->facilityBody().size(), 3u);
 }
 
-// TS 24.008 9.3.15: Modify with bearer capability and called party
-TEST(CCBuilders, Modify_WithFields) {
-    auto msg = L3Modify::builder()
-        .calledParty(L3CalledPartyBCDNumber("9876543210"))
+// TS 24.078: CC Notify carries the single cause octet
+TEST(CCBuilders, Notify_WithCause) {
+    auto msg = L3CCNotify::builder()
+        .cause(CCCause::Normal_Call_Clearing)
         .build();
     ParsedMessage pm{CCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
+    // Two header octets + one cause octet.
+    ASSERT_EQ(bytes.value().size(), 3u);
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
-    auto* mod = tryGet<L3Modify>(*reparsed);
-    ASSERT_TRUE(mod);
-    EXPECT_TRUE(mod->haveCalledParty());
+    auto* notify = tryGet<L3CCNotify>(*reparsed);
+    ASSERT_TRUE(notify);
+    EXPECT_EQ(notify->cause(), CCCause::Normal_Call_Clearing);
 }
 
 // TS 24.008 9.3.16: Unit Data with user data
@@ -448,7 +450,7 @@ TEST(CCBuilders, AllTypesHaveBuilder) {
     (void)L3HoldReject::builder();
     (void)L3Progress::builder();
     (void)L3Facility::builder();
-    (void)L3Modify::builder();
+    (void)L3CCNotify::builder();
     (void)L3UnitData::builder();
     (void)L3UnitDataAck::builder();
     (void)L3ErrorIndication::builder();

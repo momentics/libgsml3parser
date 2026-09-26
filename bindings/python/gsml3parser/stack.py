@@ -734,7 +734,7 @@ class Message:
         return int(lib.gsml3_msg_cm_service_reject_cause(self._h))
 
     def cm_service_abort_cause(self) -> int:
-        """CMServiceAbortCause; -1 sentinel on wrong type."""
+        """-1: the message carries no value part (TS 24.008 9.2.7)."""
         self._check()
         return int(lib.gsml3_msg_cm_service_abort_cause(self._h))
 
@@ -1903,7 +1903,8 @@ def build_cm_service_reject(mm_cause: int) -> bytes:
 
 
 def build_cm_service_abort(abort_cause: int) -> bytes:
-    """CMServiceAbortCause value (range-checked in C)."""
+    """abort_cause is range-checked in C but not carried on the wire
+    (the message has no value part, TS 24.008 9.2.7)."""
     return _builder("gsml3_build_cm_service_abort", (abort_cause,))
 
 

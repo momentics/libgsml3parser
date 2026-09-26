@@ -49,32 +49,35 @@ TEST(MMBuilders, CMServiceAccept) {
     EXPECT_EQ(messageMTI(*reparsed), L3CMServiceAccept::MTI);
 }
 
-// GSM 04.08 9.2.7: CM Service Abort (1-byte cause body, TS 24.008 9.2.3.2)
+// TS 24.008 9.2.7: CM Service Abort (header-only message)
 TEST(MMBuilders, CMServiceAbort) {
     auto msg = L3CMServiceAbort::builder().build();
-    EXPECT_EQ(msg.cause(), CMServiceAbortCause::Unspecified);
+    EXPECT_EQ(msg.bodyLength(), 0u);
     ParsedMessage pm{MMM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), 2u); // exactly the two header octets
     EXPECT_EQ((*bytes)[0], 0x05); // PD=MM in the low nibble
+    EXPECT_EQ((*bytes)[1], 0x23); // MT=CM Service Abort
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
     EXPECT_EQ(messageMTI(*reparsed), L3CMServiceAbort::MTI);
 }
 
-// Test: the builder sets the CM service abort cause.
-TEST(MMBuilders, CMServiceAbort_Cause) {
-    auto msg = L3CMServiceAbort::builder().cause(CMServiceAbortCause::Congestion).build();
-    EXPECT_EQ(msg.cause(), CMServiceAbortCause::Congestion);
-    EXPECT_EQ(msg.bodyLength(), 1u);
+// Test: the builder produces the header-only MM Abort message (TS 24.008).
+TEST(MMBuilders, MMAbort) {
+    auto msg = L3MMAbort::builder().build();
+    EXPECT_EQ(msg.bodyLength(), 0u);
     ParsedMessage pm(MMM(std::move(msg)));
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    ASSERT_EQ(bytes.value().size(), 3u);  // 2-byte header + 1-byte cause
+    ASSERT_EQ(bytes.value().size(), 2u);  // 2-byte header, no value part
     auto reparsed = parseL3(std::span<const uint8_t>(bytes.value().data(), bytes.value().size()));
     ASSERT_TRUE(reparsed);
-    EXPECT_EQ(messageMTI(*reparsed), L3CMServiceAbort::MTI);
+    EXPECT_EQ(messageMTI(*reparsed), L3MMAbort::MTI);
+    auto* abort = tryGet<L3MMAbort>(*reparsed);
+    ASSERT_TRUE(abort);
 }
 
 // GSM 04.08 9.2.1: Authentication Reject (empty body)
@@ -278,35 +281,19 @@ TEST(MMBuilders, CMServiceRequest) {
     EXPECT_EQ(messageMTI(*reparsed), L3CMServiceRequest::MTI);
 }
 
-// TS 24.008 9.2.8: CM Request
-TEST(MMBuilders, CMRequest) {
-    auto msg = L3CMRequest::builder()
-        .cksn(5)
-        .classmark(L3MobileStationClassmark2{})
-        .mobileIdentity(L3MobileIdentity(0x12345678))
-        .build();
+// TS 24.008: MM Abort wire shape and message name
+TEST(MMBuilders, MMAbort_WireShape) {
+    auto msg = L3MMAbort::builder().build();
     ParsedMessage pm{MMM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), 2u);
+    EXPECT_EQ((*bytes)[0], 0x05); // PD=MM in the low nibble
+    EXPECT_EQ((*bytes)[1], 0x29); // MT=MM Abort
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
-    EXPECT_EQ(messageMTI(*reparsed), L3CMRequest::MTI);
-}
-
-// TS 24.008 9.2.12: MM Paging
-TEST(MMBuilders, PagingMM) {
-    auto msg = L3PagingMM::builder()
-        .mobileIdentity(L3MobileIdentity(0xABCDEF01))
-        .build();
-    ParsedMessage pm{MMM{std::move(msg)}};
-    auto bytes = writeL3Bytes(pm);
-    ASSERT_TRUE(bytes);
-
-    auto reparsed = roundtrip(pm);
-    ASSERT_TRUE(reparsed);
-    auto* pg = tryGet<L3PagingMM>(*reparsed);
-    ASSERT_TRUE(pg);
+    EXPECT_EQ(messageName(*reparsed), "MMAbort");
 }
 
 // GSM 04.08 9.2.4: CM Reestablishment Request

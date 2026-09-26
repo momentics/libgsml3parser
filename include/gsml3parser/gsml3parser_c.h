@@ -882,7 +882,8 @@ GSML3_C_API int gsml3_msg_cm_service_request_service_type(const gsml3_message* m
 GSML3_C_API int gsml3_msg_cm_service_request_identity(const gsml3_message* msg,
                                                        gsml3_mobile_identity* id);
 GSML3_C_API int gsml3_msg_cm_service_reject_cause(const gsml3_message* msg);
-/* CMServiceAbortCause value (enums.h). */
+/* -1: CM Service Abort carries no value part (TS 24.008 9.2.7), so no
+ * cause octet is present on the wire. */
 GSML3_C_API int gsml3_msg_cm_service_abort_cause(const gsml3_message* msg);
 /* MobileIDType value. */
 GSML3_C_API int gsml3_msg_identity_request_type(const gsml3_message* msg);

@@ -1410,8 +1410,8 @@ Builder patterns are implemented for all message types across all 12 protocol do
 | Domain | Messages with Builder |
 |--------|----------------------|
 | **RR** | All 98 types (Paging, System Information SI1–SI23 + Type 2quater, Handover, Assignment, Ciphering, etc.) |
-| **MM** | All 20 types (Location Updating, Authentication, Identity, CM Service, CM Request, Paging MM, TMSI Reallocation) |
-| **CC** | All 24 types (Setup, Modify, Unit Data, Connect, Disconnect, Release, DTMF, Hold, Facility, Progress, etc.) |
+| **MM** | All 19 types (Location Updating, Authentication, Identity, CM Service, MM Abort, TMSI Reallocation) |
+| **CC** | All 24 types (Setup, Notify, Unit Data, Connect, Disconnect, Release, DTMF, Hold, Facility, Progress, etc.) |
 | **GMM** | All 23 types (Attach, Detach, RA Update, Service Request, P-TMSI Reallocation, Auth+Ciphering, GMM Identity, etc.) |
 | **SM** | All 29 types (Activate/Deactivate/Modify PDP Context, Secondary/AA/MBMS contexts, Notification) |
 | **SMS** | 19 L3 messages in the variant (5 CP + 14 SMS L3) plus the RP payload classes (RPData/RPAck/RPError/RPSMMA) and TP PDUs (Deliver/Submit/StatusReport/Command) |
@@ -1958,7 +1958,7 @@ These carry the TIF=1 SACCH/BCCH encoding. The SI10-family types (0x106–0x108)
 
 ## 22. Mobility Management Messages
 
-**File:** `gsml3parser/mm/l3mmmessages.h` - 20 message types in the `MMM` variant (PD=0x05).
+**File:** `gsml3parser/mm/l3mmmessages.h` - 19 message types in the `MMM` variant (PD=0x05).
 
 ### MM Information Elements
 
@@ -1979,15 +1979,14 @@ These carry the TIF=1 SACCH/BCCH encoding. The SI10-family types (0x106–0x108)
 |---------|-----|-----------|-------------|
 | `L3IMSIDetachIndication` | 0x01 | UL | MobileIdentity (IMSI detach) |
 | `L3LocationUpdatingAccept` | 0x02 | DL | LAI [+ new MobileIdentity] |
-| `L3PagingMM` | 0x06 | DL | MM paging — mobile identity to page (TS 24.008 9.2.12) |
 | `L3LocationUpdatingReject` | 0x04 | DL | Reject cause |
 | `L3LocationUpdatingRequest` | 0x08 | UL | MobileIdentity + LAI + update type |
-| `L3CMRequest` | 0x20 | DL | CM request — CKSN, CM service type, classmark2, mobile identity (TS 24.008 9.2.8) |
 | `L3CMServiceAccept` | 0x21 | DL | Empty body |
 | `L3CMServiceReject` | 0x22 | DL | Reject cause |
-| `L3CMServiceAbort` | 0x23 | DL | CM service type [+ cause] |
+| `L3CMServiceAbort` | 0x23 | DL | No value part (TS 24.008 9.2.7) |
 | `L3CMServiceRequest` | 0x24 | UL | MobileIdentity + CM service type |
 | `L3CMReestablishmentRequest` | 0x28 | UL | MobileIdentity (TMSI) |
+| `L3MMAbort` | 0x29 | DL/UL | No value part (TS 24.008) |
 | `L3IdentityResponse` | 0x19 | UL | MobileIdentity |
 | `L3IdentityRequest` | 0x18 | DL | Identity type (IMSI/IMEI) |
 | `L3MMInformation` | 0x32 | DL | Network name, time zone, ciphering mode |
@@ -2055,7 +2054,7 @@ These carry the TIF=1 SACCH/BCCH encoding. The SI10-family types (0x106–0x108)
 | `L3Alerting` | 0x01 | DL | [+ Facility, ProgressIndicator, UserUser, SSVersion] |
 | `L3Connect` | 0x07 | UL | [+ ProgressIndicator, ConnectedNumber, ConnectedSubAddress, UserUser, StreamIdentifier] |
 | `L3ConnectAcknowledge` | 0x0f | DL | Empty body |
-| `L3Modify` | 0x19 | UL | Modify call: [+ BearerCapability, CalledParty, CallingParty] (TS 24.008 9.3.15) |
+| `L3CCNotify` | 0x3e | MT | Notify: single cause octet (TS 24.078) |
 | `L3CallConfirmed` | 0x08 | DL | [+ BearerCapability, SupportedCodecs, Cause, UserUser] |
 | `L3Disconnect` | 0x25 | UL | Cause (CCCause + CCCauseLocation) |
 | `L3UnitData` | 0x27 | UL | Unit data: [+ BearerCapability] + user data (9.3.16) |
@@ -2089,7 +2088,6 @@ MTI values are the 6-bit messageType field (GSM 04.08 Table 10.3). In the L3 hea
 | 0x0e | Emergency Setup | TS 24.008 9.3.8 |
 | 0x0f | Connect Acknowledge | TS 24.008 9.3.6 |
 | 0x18 | Hold | TS 24.008 9.3.23 |
-| 0x19 | Modify | TS 24.008 9.3.15 |
 | 0x1a | Hold Reject | TS 24.008 9.3.24 |
 | 0x25 | Disconnect | TS 24.008 9.3.7 |
 | 0x27 | Unit Data | TS 24.008 9.3.16 |
@@ -2104,6 +2102,7 @@ MTI values are the 6-bit messageType field (GSM 04.08 Table 10.3). In the L3 hea
 | 0x37 | Start DTMF Reject | TS 24.008 9.3.25 |
 | 0x3a | Facility | TS 24.008 9.3.21 |
 | 0x3d | CC Status | TS 24.008 9.3.19 |
+| 0x3e | Notify | TS 24.078 |
 
 ---
 

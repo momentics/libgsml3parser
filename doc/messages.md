@@ -54,7 +54,6 @@ Dispatch notes:
 | `L3EmergencySetup` | 0x0e | UL | Emergency call setup |
 | `L3ConnectAcknowledge` | 0x0f | DL | Connect acknowledged |
 | `L3Hold` | 0x18 | UL | Hold request |
-| `L3Modify` | 0x19 | UL | Call modify ([BearerCapability, Called/CallingParty]) |
 | `L3HoldReject` | 0x1a | DL | Hold rejected |
 | `L3Disconnect` | 0x25 | UL | Disconnect request |
 | `L3UnitData` | 0x27 | UL | Unit data ([BearerCapability] + user data, TS 24.008 9.3.16) |
@@ -68,7 +67,8 @@ Dispatch notes:
 | `L3StartDTMFAcknowledge` | 0x36 | DL | Start DTMF acknowledged |
 | `L3StartDTMFReject` | 0x37 | DL | Start DTMF rejected |
 | `L3Facility` | 0x3a | DL/UL | CC Facility — SS data container (TS 24.008 9.3.21) |
-| `L3CCStatus` | 0x3d | Bidir | CC status report |
+| `L3CCStatus` | 0x3d | Bidir | CC status report (cause IE 0x11 + call state, 4-octet body) |
+| `L3CCNotify` | 0x3e | MT | CC notify (single cause octet, TS 24.078) |
 
 ### CC Information Elements (27 types)
 
@@ -102,24 +102,23 @@ Dispatch notes:
 | `L3SupServFacilityIE` | TLV | Supplementary service facility data |
 | `L3SupServVersionIndicator` | V | SS version indicator |
 
-## Mobility Management (PD=0x05) — 20 message types
+## Mobility Management (PD=0x05) — 19 message types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
 | `L3IMSIDetachIndication` | 0x01 | UL | IMSI detach indication |
 | `L3LocationUpdatingAccept` | 0x02 | DL | Location updating accepted |
-| `L3PagingMM` | 0x06 | DL | MM paging (mobile identity, TS 24.008 9.2.12) |
 | `L3LocationUpdatingReject` | 0x04 | DL | Location updating rejected |
 | `L3LocationUpdatingRequest` | 0x08 | UL | Location update request |
 | `L3AuthenticationReject` | 0x11 | DL | Authentication rejected |
 | `L3AuthenticationRequest` | 0x12 | DL | Authentication challenge (RAND) |
 | `L3AuthenticationResponse` | 0x14 | UL | Authentication response (SRES) |
-| `L3CMRequest` | 0x20 | DL | CM request (CKSN, service type, classmark, mobile identity, TS 24.008 9.2.8) |
 | `L3CMServiceAccept` | 0x21 | DL | CM service accepted |
 | `L3CMServiceReject` | 0x22 | DL | CM service rejected |
 | `L3CMServiceAbort` | 0x23 | DL | CM service aborted |
 | `L3CMServiceRequest` | 0x24 | UL | CM service request |
 | `L3CMReestablishmentRequest` | 0x28 | UL | CM re-establishment request |
+| `L3MMAbort` | 0x29 | Bidir | MM abort (no value part, TS 24.008) |
 | `L3MMStatus` | 0x31 | Bidir | MM status report |
 | `L3MMInformation` | 0x32 | DL | Network information broadcast |
 | `L3IdentityRequest` | 0x18 | DL | Identity request (IMSI/IMEI) |

@@ -159,8 +159,7 @@ using MMM = std::variant<
     L3AuthenticationRequest,
     L3AuthenticationResponse,
     L3AuthenticationReject,
-    L3CMRequest,
-    L3PagingMM
+    L3MMAbort
 >;
 
 using CCM = std::variant<
@@ -184,7 +183,7 @@ using CCM = std::variant<
     L3CCStatus,
     L3Progress,
     L3Facility,
-    L3Modify,
+    L3CCNotify,
     L3UnitData,
     L3UnitDataAck,
     L3ErrorIndication

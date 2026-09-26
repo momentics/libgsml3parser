@@ -146,8 +146,7 @@ struct NameVisitor {
     std::string_view operator()(const L3AuthenticationRequest&) const { return "AuthenticationRequest"; }
     std::string_view operator()(const L3AuthenticationResponse&) const { return "AuthenticationResponse"; }
     std::string_view operator()(const L3AuthenticationReject&) const { return "AuthenticationReject"; }
-    std::string_view operator()(const L3CMRequest&) const { return "CMRequest"; }
-    std::string_view operator()(const L3PagingMM&) const { return "PagingMM"; }
+    std::string_view operator()(const L3MMAbort&) const { return "MMAbort"; }
 
     // CC names
     std::string_view operator()(const L3Setup&) const { return "Setup"; }
@@ -170,7 +169,7 @@ struct NameVisitor {
     std::string_view operator()(const L3CCStatus&) const { return "CCStatus"; }
     std::string_view operator()(const L3Progress&) const { return "Progress"; }
     std::string_view operator()(const L3Facility&) const { return "Facility"; }
-    std::string_view operator()(const L3Modify&) const { return "Modify"; }
+    std::string_view operator()(const L3CCNotify&) const { return "Notify"; }
     std::string_view operator()(const L3UnitData&) const { return "UnitData"; }
     std::string_view operator()(const L3UnitDataAck&) const { return "UnitDataAck"; }
     std::string_view operator()(const L3ErrorIndication&) const { return "ErrorIndication"; }
@@ -435,8 +434,7 @@ struct MTIVisitor {
     int operator()(const L3AuthenticationRequest&) const { return L3AuthenticationRequest::MTI; }
     int operator()(const L3AuthenticationResponse&) const { return L3AuthenticationResponse::MTI; }
     int operator()(const L3AuthenticationReject&) const { return L3AuthenticationReject::MTI; }
-    int operator()(const L3CMRequest&) const { return L3CMRequest::MTI; }
-    int operator()(const L3PagingMM&) const { return L3PagingMM::MTI; }
+    int operator()(const L3MMAbort&) const { return L3MMAbort::MTI; }
 
     int operator()(const L3Setup&) const { return L3Setup::MTI; }
     int operator()(const L3EmergencySetup&) const { return L3EmergencySetup::MTI; }
@@ -458,7 +456,7 @@ struct MTIVisitor {
     int operator()(const L3CCStatus&) const { return L3CCStatus::MTI; }
     int operator()(const L3Progress&) const { return L3Progress::MTI; }
     int operator()(const L3Facility&) const { return L3Facility::MTI; }
-    int operator()(const L3Modify&) const { return L3Modify::MTI; }
+    int operator()(const L3CCNotify&) const { return L3CCNotify::MTI; }
     int operator()(const L3UnitData&) const { return L3UnitData::MTI; }
     int operator()(const L3UnitDataAck&) const { return L3UnitDataAck::MTI; }
     int operator()(const L3ErrorIndication&) const { return L3ErrorIndication::MTI; }
@@ -611,7 +609,7 @@ struct TIVisitor {
     uint8_t operator()(const L3CCStatus& v) const { return static_cast<uint8_t>(v.ti()); }
     uint8_t operator()(const L3Progress& v) const { return static_cast<uint8_t>(v.ti()); }
     uint8_t operator()(const L3Facility& v) const { return static_cast<uint8_t>(v.ti()); }
-    uint8_t operator()(const L3Modify& v) const { return static_cast<uint8_t>(v.ti()); }
+    uint8_t operator()(const L3CCNotify& v) const { return static_cast<uint8_t>(v.ti()); }
     uint8_t operator()(const L3UnitData& v) const { return static_cast<uint8_t>(v.ti()); }
     uint8_t operator()(const L3UnitDataAck& v) const { return static_cast<uint8_t>(v.ti()); }
     uint8_t operator()(const L3ErrorIndication& v) const { return static_cast<uint8_t>(v.ti()); }

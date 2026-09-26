@@ -204,30 +204,32 @@ void L3CMServiceReject::text(std::ostream& os) const {
     os << "CMServiceReject: " << MMRejectCause2Str(mCause);
 }
 
-// ── L3CMServiceAbort (MTI=0x23, 1-byte body: CM service abort cause) ──
+// ── L3CMServiceAbort (MTI=0x23, TS 24.008 9.2.7) ───────────────────────
+// The message carries no value part: the frame is exactly the two L3
+// header octets.
 
-Expected<L3CMServiceAbort> L3CMServiceAbort::parse(BitReader& br) {
-    L3CMServiceAbort msg;
-    // CM service abort cause (TS 24.008 9.2.3.2): one octet, values
-    // 0x01–0x07 defined, 0x08–0xFF reserved (the previous
-    // empty-body implementation dropped the cause octet).
-    auto r = br.readField(8);
-    if (!r) return Expected<L3CMServiceAbort>::error(r.error());
-    uint8_t v = static_cast<uint8_t>(r.value());
-    if (v < 0x01 || v > 0x07) {
-        return Expected<L3CMServiceAbort>::error(
-            ParseError{ParseError::Code::InvalidValue, "Invalid CM service abort cause", br.position()});
-    }
-    msg.mCause = static_cast<CMServiceAbortCause>(v);
-    return Expected<L3CMServiceAbort>::hold(std::move(msg));
+Expected<L3CMServiceAbort> L3CMServiceAbort::parse(BitReader&) {
+    return Expected<L3CMServiceAbort>::hold(L3CMServiceAbort());
 }
 
-void L3CMServiceAbort::write(BitWriter& bw) const {
-    bw.writeField(static_cast<uint8_t>(mCause), 8);
-}
+void L3CMServiceAbort::write(BitWriter&) const {}
 
 void L3CMServiceAbort::text(std::ostream& os) const {
-    os << "CMServiceAbort: " << CMServiceAbortCause2Str(mCause);
+    os << "CMServiceAbort";
+}
+
+// ── L3MMAbort (MTI=0x29, TS 24.008) ───────────────────────────────────
+// The message carries no value part: the frame is exactly the two L3
+// header octets.
+
+Expected<L3MMAbort> L3MMAbort::parse(BitReader&) {
+    return Expected<L3MMAbort>::hold(L3MMAbort());
+}
+
+void L3MMAbort::write(BitWriter&) const {}
+
+void L3MMAbort::text(std::ostream& os) const {
+    os << "MMAbort";
 }
 
 // ── L3CMServiceRequest (MTI=0x24) ──────────────────────────────────────
@@ -280,106 +282,6 @@ void L3CMServiceRequest::text(std::ostream& os) const {
     os << "CMServiceRequest: type=";
     mServiceType.text(os);
     os << " ";
-    mMobileIdentity.text(os);
-}
-
-// ── L3CMRequest (MTI=0x20, TS 24.008 §9.2.8) ──────────────────────────
-
-size_t L3CMRequest::bodyLength() const {
-    size_t len = 1 + lvLen(mClassmark.lengthV()) + lvLen(mMobileIdentity.lengthV());
-    if (mHaveServiceType) len += 1;
-    return len;
-}
-
-Expected<L3CMRequest> L3CMRequest::parse(BitReader& br) {
-    L3CMRequest msg;
-    // CKSN(4)|spare(4)
-    auto ck = br.readField(4);
-    if (!ck) return Expected<L3CMRequest>::error(ck.error());
-    msg.mCKSN = ck.value();
-    auto sp = br.readField(4);
-    if (!sp) return Expected<L3CMRequest>::error(sp.error());
-    // Optional CM-Service-Type (1 octet, present if high bit of next byte != 0x80 classmark length)
-    // Per spec: service type is optional, followed by classmark LV and mobile identity LV
-    // The service type octet has the same encoding as in CM-Service-Request
-    // We detect it by checking if next byte could be a service type (value 0x10-0x19 or 0x64-0x69)
-    // Actually per spec, CM-Request: CKSN(4)|spare(4), then optionally CM-Service-Type, then Classmark2 LV, then MobileIdentity LV
-    // CM-Service-Type is present when there's a service type octet before the classmark length
-    // The classmark2 length is always 3, so we look for 0x03 as the next byte after optional service type
-    // Simpler: per TS 24.008 9.2.8, CM-Service-Type is L/P (optional), followed by mandatory Classmark Container LV and MobileIdentity LV
-    // The presence bit approach: first bit of CKSN octet is spare, no presence bits for service type
-    // Actually re-reading spec: the message format is:
-    //   spare(4)|CKSN(4) | [CM-Service-Type] | Classmark Container (LV) | Mobile Identity (LV)
-    // CM-Service-Type is optional. We try to detect it: if next byte looks like a service type code (0x1X or 0x6X), consume it.
-    // Service type codes are single nibble in low 4 bits of an octet where high 4 bits indicate MT direction.
-    // For simplicity, we check if the byte after CKSN matches known service type patterns.
-    uint8_t nextByte = static_cast<uint8_t>(br.peekField(8));
-    if ((nextByte & 0xF0) == 0x10 || (nextByte & 0xF0) == 0x60) {
-        auto stByte = br.readField(8);
-        if (!stByte) return Expected<L3CMRequest>::error(stByte.error());
-        msg.mServiceType = L3CMServiceType(static_cast<L3CMServiceType::TypeCode>(stByte.value() & 0x0F));
-        msg.mHaveServiceType = true;
-    }
-    // Classmark2 (LV: length octet + 3 bytes value)
-    {
-        auto lenR = br.readField(8);
-        if (!lenR) return Expected<L3CMRequest>::error(lenR.error());
-    }
-    {
-        auto cmRes = L3MobileStationClassmark2::parse(br);
-        if (!cmRes) return Expected<L3CMRequest>::error(cmRes.error());
-        msg.mClassmark = cmRes.value();
-    }
-    // MobileIdentity (LV)
-    {
-        auto miRes = parseLVMI(br);
-        if (!miRes) return Expected<L3CMRequest>::error(miRes.error());
-        msg.mMobileIdentity = miRes.value();
-    }
-    return Expected<L3CMRequest>::hold(msg);
-}
-
-void L3CMRequest::write(BitWriter& bw) const {
-    bw.writeField(mCKSN & 0x0F, 4);
-    bw.writeField(0, 4);
-    if (mHaveServiceType) {
-        mServiceType.write(bw);
-    }
-    bw.writeField(static_cast<uint32_t>(mClassmark.lengthV()), 8);
-    mClassmark.write(bw);
-    writeLVMI(mMobileIdentity, bw);
-}
-
-void L3CMRequest::text(std::ostream& os) const {
-    os << "CMRequest: CKSN=" << mCKSN;
-    if (mHaveServiceType) {
-        os << " type=";
-        mServiceType.text(os);
-    }
-    os << " ";
-    mMobileIdentity.text(os);
-}
-
-// ── L3PagingMM (MTI=0x06, TS 24.008 §9.2.12) ──────────────────────────
-
-size_t L3PagingMM::bodyLength() const {
-    return lvLen(mMobileIdentity.lengthV());
-}
-
-Expected<L3PagingMM> L3PagingMM::parse(BitReader& br) {
-    L3PagingMM msg;
-    auto miRes = parseLVMI(br);
-    if (!miRes) return Expected<L3PagingMM>::error(miRes.error());
-    msg.mMobileIdentity = miRes.value();
-    return Expected<L3PagingMM>::hold(msg);
-}
-
-void L3PagingMM::write(BitWriter& bw) const {
-    writeLVMI(mMobileIdentity, bw);
-}
-
-void L3PagingMM::text(std::ostream& os) const {
-    os << "PagingMM: ";
     mMobileIdentity.text(os);
 }
 
@@ -842,10 +744,19 @@ L3CMServiceAccept::Builder L3CMServiceAccept::builder() {
 
 // L3CMServiceAbort Builder
 L3CMServiceAbort L3CMServiceAbort::Builder::build() const {
-    return L3CMServiceAbort{mCause};
+    return L3CMServiceAbort{};
 }
 
 L3CMServiceAbort::Builder L3CMServiceAbort::builder() {
+    return Builder{};
+}
+
+// L3MMAbort Builder
+L3MMAbort L3MMAbort::Builder::build() const {
+    return L3MMAbort{};
+}
+
+L3MMAbort::Builder L3MMAbort::builder() {
     return Builder{};
 }
 
@@ -986,32 +897,6 @@ L3CMServiceRequest L3CMServiceRequest::Builder::build() const {
 }
 
 L3CMServiceRequest::Builder L3CMServiceRequest::builder() {
-    return Builder{};
-}
-
-// L3CMRequest Builder
-L3CMRequest L3CMRequest::Builder::build() const {
-    L3CMRequest msg;
-    msg.mCKSN = m_cksn;
-    msg.mHaveServiceType = m_haveServiceType;
-    msg.mServiceType = m_serviceType;
-    msg.mClassmark = m_classmark;
-    msg.mMobileIdentity = m_mobileIdentity;
-    return msg;
-}
-
-L3CMRequest::Builder L3CMRequest::builder() {
-    return Builder{};
-}
-
-// L3PagingMM Builder
-L3PagingMM L3PagingMM::Builder::build() const {
-    L3PagingMM msg;
-    msg.mMobileIdentity = m_mobileIdentity;
-    return msg;
-}
-
-L3PagingMM::Builder L3PagingMM::builder() {
     return Builder{};
 }
 

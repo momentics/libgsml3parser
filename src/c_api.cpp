@@ -2522,12 +2522,11 @@ GSML3_C_API int gsml3_msg_cm_service_reject_cause(const gsml3_message* msg) {
 }
 
 GSML3_C_API int gsml3_msg_cm_service_abort_cause(const gsml3_message* msg) {
-    try {
-        return typedGetInt<L3CMServiceAbort>(msg, [](auto& m){ return (int)m.cause(); });
-    } catch (...) {
-        setLastErrorUnexpected("unexpected exception in gsml3_msg_cm_service_abort_cause");
-        return -1;
-    }
+    // CM Service Abort carries no value part (TS 24.008 9.2.7); the cause
+    // octet is not present on the wire, so -1 is always reported.
+    clearLastError();
+    (void)msg;
+    return -1;
 }
 
 GSML3_C_API int gsml3_msg_identity_request_type(const gsml3_message* msg) {
@@ -3336,13 +3335,13 @@ GSML3_C_API size_t gsml3_build_cm_service_reject(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_build_cm_service_abort(uint8_t* out, size_t maxlen,
                                                  int abort_cause) {
     try {
+        // The cause octet is validated but not carried on the wire: CM
+        // Service Abort has no value part (TS 24.008 9.2.7).
         if (!checkEnumValue(abort_cause, ranges::cmAbortLo, ranges::cmAbortHi,
                             "abort_cause"))
             return 0;
-        return typedBuild<MMM>(out, maxlen, [&]{
-            return MMM{L3CMServiceAbort::builder()
-                           .cause(static_cast<CMServiceAbortCause>(abort_cause))
-                           .build()};
+        return typedBuild<MMM>(out, maxlen, []{
+            return MMM{L3CMServiceAbort::builder().build()};
         });
     } catch (...) {
         setLastErrorUnexpected("unexpected exception in gsml3_build_cm_service_abort");
