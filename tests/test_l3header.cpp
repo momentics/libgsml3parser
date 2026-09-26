@@ -23,15 +23,13 @@
 // Reference: GSM 24.008 Table 11.2 (Protocol Discriminator assignments).
 //
 // [GOLDEN VERIFICATION]
-// All L3 header byte values verified against GSM 24.008 Table 11.2 PD assignments:
-//   - RRHeader {0x60, 0x0D}: PD=6(RR) high nibble, skip=0 low nibble -> 0x60; MTI=0x0D(ChannelRelease)
-//     Verified against GSM_RR_Types.ttcn CHANNEL_RELEASE='00001101'B(0x0D)
-//   - MMHeader {0x50, 0x84}: PD=5(MM) high nibble, skip=0 low nibble -> 0x50; raw MTI=0x84 -> messageType=0x21(CMServAcc)
-//     Verified against L3_Templates.ttcn tr_CM_SERV_ACC: messageType='100001'B(0x21)
-//   - CCHeader {0x3E, 0x94}: PD=3(CC) high nibble, TI=7+TIF=0 low nibble -> 0x3E; MTI=0x25(Disconnect)<<2=0x94
-//     Verified against L3_Templates.ttcn ts_ML3_MO_CC_DISC: messageType='100101'B(0x25)
-//   - SSHeader {0xB0, 0xE8}: PD=11(SS) high nibble, TI=0+TIF=0 low nibble -> 0xB0; MTI=0x3A(Facility)<<2=0xE8
-//     Verified against SS_Templates.ttcn ts_SS_FACILITY_INVOKE
+// All L3 header byte values follow the TS 24.008 / TS 44.018 L3 protocol
+// header layout: octet 0 = TI(7:5) | TIF(4) | PD(3:0), octet 1 carries the
+// message type per domain:
+//   - RRHeader {0x06, 0x0D}: PD=6(RR) in the low nibble of octet 0; MTI=0x0D(ChannelRelease)
+//   - MMHeader {0x05, 0x21}: PD=5(MM); messageType=0x21(CMServAcc) in the six low bits of octet 1
+//   - CCHeader {0xE3, 0x25}: PD=3(CC), TI=7 (bits 7:5), TIF=0; MTI=0x25(Disconnect) in the six low bits
+//   - SSHeader {0x0B, 0x3A}: PD=11(SS); MTI=0x3A(Facility) in the six low bits
 
 #include <gtest/gtest.h>
 #include "gsml3parser/l3header.h"
@@ -40,7 +38,7 @@
 using namespace gsml3parser;
 
 TEST(L3HeaderTest, RRHeader) {
-    std::array<uint8_t, 2> data{0x60, 0x0D};
+    std::array<uint8_t, 2> data{0x06, 0x0D};
     auto res = parseL3Header(data);
     EXPECT_TRUE(res.has_value());
     L3Header hdr = res.value();
@@ -52,7 +50,7 @@ TEST(L3HeaderTest, RRHeader) {
 }
 
 TEST(L3HeaderTest, MMHeader) {
-    std::array<uint8_t, 2> data{0x50, 0x84};
+    std::array<uint8_t, 2> data{0x05, 0x21};
     auto res = parseL3Header(data);
     EXPECT_TRUE(res.has_value());
     L3Header hdr = res.value();
@@ -63,7 +61,9 @@ TEST(L3HeaderTest, MMHeader) {
 }
 
 TEST(L3HeaderTest, CCHeader) {
-    std::array<uint8_t, 2> data{0x3E, 0x94};
+    // PD=3(CC) low nibble, TI=7 in bits 7:5 -> octet 0 = 0xE3;
+    // MTI=0x25(Disconnect) in the six low bits of octet 1 (NSD=0).
+    std::array<uint8_t, 2> data{0xE3, 0x25};
     auto res = parseL3Header(data);
     EXPECT_TRUE(res.has_value());
     L3Header hdr = res.value();
@@ -74,7 +74,8 @@ TEST(L3HeaderTest, CCHeader) {
 }
 
 TEST(L3HeaderTest, SSHeader) {
-    std::array<uint8_t, 2> data{0xB0, 0xE8};
+    // PD=11(SS) low nibble; MTI=0x3A(Facility) in the six low bits of octet 1.
+    std::array<uint8_t, 2> data{0x0B, 0x3A};
     auto res = parseL3Header(data);
     EXPECT_TRUE(res.has_value());
     L3Header hdr = res.value();
@@ -92,7 +93,7 @@ TEST(L3HeaderTest, EmptySpan) {
 }
 
 TEST(L3HeaderTest, SingleByte) {
-    std::array<uint8_t, 1> data{0x60};
+    std::array<uint8_t, 1> data{0x06};
     auto res = parseL3Header(data);
     EXPECT_FALSE(res.has_value());
     EXPECT_EQ(res.error().code, ParseError::Code::TruncatedInput);
@@ -101,8 +102,8 @@ TEST(L3HeaderTest, SingleByte) {
 // ── Extended PD (0x0e) header ──────────────────────────────────────────
 
 TEST(L3HeaderTest, ExtendedHeader) {
-    // PD=0x0e(Extended), MTI=0x55, raw byte extraction
-    std::array<uint8_t, 2> data{0xE0, 0x55};
+    // PD=0x0e(Extended) in the low nibble of octet 0, MTI=0x55, raw byte extraction
+    std::array<uint8_t, 2> data{0x0E, 0x55};
     auto res = parseL3Header(data);
     EXPECT_TRUE(res.has_value());
     L3Header hdr = res.value();
@@ -114,7 +115,7 @@ TEST(L3HeaderTest, ExtendedHeader) {
 
 TEST(L3HeaderTest, ExtendedHeader_HighMTI) {
     // PD=0x0e(Extended), MTI=0xFF (high raw byte value)
-    std::array<uint8_t, 2> data{0xE0, 0xFF};
+    std::array<uint8_t, 2> data{0x0E, 0xFF};
     auto res = parseL3Header(data);
     EXPECT_TRUE(res.has_value());
     L3Header hdr = res.value();
@@ -125,8 +126,8 @@ TEST(L3HeaderTest, ExtendedHeader_HighMTI) {
 // ── TestProcedure PD (0x0f) header ─────────────────────────────────────
 
 TEST(L3HeaderTest, TestProcedureHeader) {
-    // PD=0x0f(TestProcedure), MTI=0xAA, raw byte extraction
-    std::array<uint8_t, 2> data{0xF0, 0xAA};
+    // PD=0x0f(TestProcedure) in the low nibble of octet 0, MTI=0xAA, raw byte extraction
+    std::array<uint8_t, 2> data{0x0F, 0xAA};
     auto res = parseL3Header(data);
     EXPECT_TRUE(res.has_value());
     L3Header hdr = res.value();
@@ -138,7 +139,7 @@ TEST(L3HeaderTest, TestProcedureHeader) {
 
 TEST(L3HeaderTest, TestProcedureHeader_ZeroMTI) {
     // PD=0x0f(TestProcedure), MTI=0x00
-    std::array<uint8_t, 2> data{0xF0, 0x00};
+    std::array<uint8_t, 2> data{0x0F, 0x00};
     auto res = parseL3Header(data);
     EXPECT_TRUE(res.has_value());
     L3Header hdr = res.value();
@@ -149,8 +150,8 @@ TEST(L3HeaderTest, TestProcedureHeader_ZeroMTI) {
 // ── Location Services PD (0x0c) header ─────────────────────────────────
 
 TEST(L3HeaderTest, LocationServicesHeader) {
-    // PD=0x0c(Location), MTI=0x01(LocationServiceRequest)
-    std::array<uint8_t, 2> data{0xC0, 0x01};
+    // PD=0x0c(Location) in the low nibble of octet 0, MTI=0x01(LocationServiceRequest)
+    std::array<uint8_t, 2> data{0x0C, 0x01};
     auto res = parseL3Header(data);
     EXPECT_TRUE(res.has_value());
     L3Header hdr = res.value();
@@ -162,7 +163,7 @@ TEST(L3HeaderTest, LocationServicesHeader) {
 
 TEST(L3HeaderTest, LocationServicesHeader_ProviderMessage) {
     // PD=0x0c(Location), MTI=0x02(LocationServiceProviderMessage)
-    std::array<uint8_t, 2> data{0xC0, 0x02};
+    std::array<uint8_t, 2> data{0x0C, 0x02};
     auto res = parseL3Header(data);
     EXPECT_TRUE(res.has_value());
     L3Header hdr = res.value();
@@ -173,8 +174,8 @@ TEST(L3HeaderTest, LocationServicesHeader_ProviderMessage) {
 // ── GMM header (PD=0x08) ───────────────────────────────────────────────
 
 TEST(L3HeaderTest, GMMHeader) {
-    // PD=0x08(GMM), MTI=0x01(AttachRequest), raw byte extraction
-    std::array<uint8_t, 2> data{0x80, 0x01};
+    // PD=0x08(GMM) in the low nibble of octet 0, MTI=0x01(AttachRequest), raw byte extraction
+    std::array<uint8_t, 2> data{0x08, 0x01};
     auto res = parseL3Header(data);
     EXPECT_TRUE(res.has_value());
     L3Header hdr = res.value();
@@ -185,8 +186,8 @@ TEST(L3HeaderTest, GMMHeader) {
 // ── SM header (PD=0x0a) ────────────────────────────────────────────────
 
 TEST(L3HeaderTest, SMHeader) {
-    // PD=0x0a(SM), MTI=0x41(ActivatePDPContextRequest), raw byte extraction
-    std::array<uint8_t, 2> data{0xA0, 0x41};
+    // PD=0x0a(SM) in the low nibble of octet 0, MTI=0x41(ActivatePDPContextRequest), raw byte extraction
+    std::array<uint8_t, 2> data{0x0A, 0x41};
     auto res = parseL3Header(data);
     EXPECT_TRUE(res.has_value());
     L3Header hdr = res.value();
@@ -197,8 +198,8 @@ TEST(L3HeaderTest, SMHeader) {
 // ── SMS header (PD=0x09) ───────────────────────────────────────────────
 
 TEST(L3HeaderTest, SMSHeader) {
-    // PD=0x09(SMS), MTI=0x01(CPData), raw byte extraction
-    std::array<uint8_t, 2> data{0x90, 0x01};
+    // PD=0x09(SMS) in the low nibble of octet 0, MTI=0x01(CPData), raw byte extraction
+    std::array<uint8_t, 2> data{0x09, 0x01};
     auto res = parseL3Header(data);
     ASSERT_TRUE(res);
     L3Header hdr = res.value();
@@ -207,13 +208,51 @@ TEST(L3HeaderTest, SMSHeader) {
 }
 
 // Test: reserved PD values (0x02, 0x04, 0x07, 0x0d) are rejected with
-// InvalidPD instead of producing an L3Header with a non-enumerator PD
-// .
+// InvalidPD instead of producing an L3Header with a non-enumerator PD.
+// The PD occupies the low nibble of octet 0 (TS 24.008 L3 header).
 TEST(L3HeaderTest, ReservedPD_Invalid) {
     for (uint8_t pd : {0x02u, 0x04u, 0x07u, 0x0Du}) {
-        uint8_t data[] = {static_cast<uint8_t>(pd << 4), 0x00};
+        uint8_t data[] = {static_cast<uint8_t>(pd), 0x00};
         auto res = parseL3Header(std::span<const uint8_t>(data, 2));
         ASSERT_FALSE(res) << "PD 0x" << std::hex << pd << " must be rejected";
         EXPECT_EQ(res.error().code, ParseError::Code::InvalidPD);
     }
+}
+
+// Octet layout: PD in the low nibble of octet 0; TI in the three high bits,
+// TIF in bit 4. A CC frame with TI=3 and TIF set must decode those fields
+// while still selecting the CC domain.
+TEST(L3HeaderTest, TiTifPositions) {
+    uint8_t data[] = {static_cast<uint8_t>((3 << 5) | 0x10 | 0x03), 0x05};
+    auto res = parseL3Header(std::span<const uint8_t>(data, 2));
+    ASSERT_TRUE(res);
+    L3Header hdr = res.value();
+    EXPECT_EQ(hdr.pd, L3PD::CallControl);
+    EXPECT_EQ(hdr.ti, 3u);
+    EXPECT_TRUE(hdr.tif);
+    EXPECT_EQ(hdr.mti, 0x05);
+}
+
+// Six-bit-domain MTI extraction: only the low six bits of octet 1 are the
+// message type (the two high bits carry the NSD and must not leak into the
+// decoded MTI).
+TEST(L3HeaderTest, MtMaskSixBit) {
+    uint8_t data[] = {0x05, static_cast<uint8_t>(0xC0 | 0x21)}; // NSD=3, MT=CM Service Accept
+    auto res = parseL3Header(std::span<const uint8_t>(data, 2));
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res.value().mti, 0x21);
+}
+
+// RR short-message header (TIF=1): the message code occupies the low five
+// bits of octet 1 (the high three bits are reserved and must be ignored);
+// the internal MTI is remapped above kRRTifShortBase. Code 5 here decodes
+// to Measurement Info DL (TS 44.018 short-message table).
+TEST(L3HeaderTest, RrTifShortCode) {
+    uint8_t data[] = {0x16, 0x25}; // TIF|PD=RR, code bits '00101', reserved '000'
+    auto res = parseL3Header(std::span<const uint8_t>(data, 2));
+    ASSERT_TRUE(res);
+    L3Header hdr = res.value();
+    EXPECT_EQ(hdr.pd, L3PD::RadioResource);
+    EXPECT_TRUE(hdr.tif);
+    EXPECT_EQ(hdr.mti, kRRTifShortBase + 0x05);
 }

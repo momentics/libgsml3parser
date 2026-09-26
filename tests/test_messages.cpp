@@ -107,8 +107,8 @@ TEST(MessagesTest, RR_ChannelRelease) {
 TEST(MessagesTest, RR_ClassmarkEnquiry) {
     L3ClassmarkEnquiry msg;
     EXPECT_EQ(msg.mti(), L3ClassmarkEnquiry::MTI);
-    // 1-octet body: classmark type (2 bits) + reserved (6 bits).
-    EXPECT_EQ(msg.l2BodyLength(), 1u);
+    // No body: Classmark enquiry carries only the L3 header (TS 44.018).
+    EXPECT_EQ(msg.l2BodyLength(), 0u);
 }
 
 TEST(MessagesTest, RR_CipheringModeCommand) {

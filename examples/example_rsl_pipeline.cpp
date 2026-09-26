@@ -84,8 +84,8 @@ int main()
     // ── 2. BTS sends RLL DATA_IND with L3 response -> BSC ──
     std::cout << "\n[2] BTS->BSC: RLL DATA_IND with L3 CM Service Accept\n";
     {
-        // Simulate L3 CM Service Accept bytes (PD=0x09, MTI=0x60).
-        std::vector<uint8_t> l3Response = {0x09, 0x60};
+        // Simulate L3 CM Service Accept bytes (PD=0x05, MTI=0x21).
+        std::vector<uint8_t> l3Response = {0x05, 0x21};
 
         auto rslFrame = RSLBuilder::buildDataInd(0x7c, 1, l3Response);
         if (!rslFrame) {
@@ -180,7 +180,7 @@ int main()
     std::cout << "\n[5] Zero-allocation RSL building with Arena\n";
     {
         Arena arena(65536);
-        std::vector<uint8_t> l3 = {0x09, 0x60};
+        std::vector<uint8_t> l3 = {0x05, 0x21};
 
         // Allocate buffer from Arena (zero heap alloc on hot path).
         auto* buf = static_cast<uint8_t*>(arena.allocate(512));

@@ -1870,9 +1870,9 @@ TEST(GoldenIE, SI2ter_BodyLength) {
 // =====================================================================
 
 TEST(GoldenIE, Data2Hex) {
-    uint8_t data[] = {0x60, 0x19, 0x0D};
+    uint8_t data[] = {0x06, 0x19, 0x0D};
     std::string hex = data2hex(data, 3);
-    EXPECT_EQ(hex, "60190D");
+    EXPECT_EQ(hex, "06190D");
 }
 
 // =====================================================================

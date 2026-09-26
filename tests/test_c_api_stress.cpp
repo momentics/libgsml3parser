@@ -184,7 +184,7 @@ TEST(CApiStress, Concurrent_IndependentHandles) {
     for (int t = 0; t < 8; ++t) {
         threads.emplace_back([&failures]() {
             for (int i = 0; i < 1000; ++i) {
-                gsml3_message* m = gsml3_parse_l3_hex("60 0D 00", nullptr);
+                gsml3_message* m = gsml3_parse_l3_hex("06 0D 00", nullptr);
                 if (!m || gsml3_message_pd(m) != GSML3_PD_RR ||
                         gsml3_message_mti(m) != 0x0D) {
                     ++failures;

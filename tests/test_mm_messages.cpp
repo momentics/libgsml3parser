@@ -24,20 +24,20 @@
 //
 // [GOLDEN VERIFICATION]
 // All MM hex parse test data verified against osmo-ttcn3-hacks reference:
-//   - LocationUpdatingReject_Parse {0x50, 0x10, 0x02}: PD=5(MM), MTI=0x04(LUReject)<<2=0x10, cause=0x02(IMSI_Unknown_In_HLR)
+//   - LocationUpdatingReject_Parse {0x05, 0x04, 0x02}: PD=5(MM) low nibble, MT=0x04(LUReject) in six low bits, cause=0x02(IMSI_Unknown_In_HLR)
 //     Verified against L3_Templates.ttcn tr_CM_SERV_REJ (line 524): messageType='100010'B(0x22), reject_cause
 //     c_MM_CAUSE_IMSI_UNKNOWN_IN_HLR := '02'O (L3_Templates.ttcn line 57)
-//   - AuthenticationRequest_Parse {0x50, 0x48, 0x00, RAND(16)}: PD=5(MM), MTI=0x12(AuthReq)<<2=0x48, CKSN=0, RAND
+//   - AuthenticationRequest_Parse {0x05, 0x12, 0x00, RAND(16)}: PD=5(MM) low nibble, MT=0x12(AuthReq), CKSN=0, RAND
 //     Verified against L3_Templates.ttcn tr_ML3_MT_MM_AUTH_REQ: messageType='010010'B(0x12)
-//   - AuthenticationResponse_Parse {0x50, 0x50, SRES(4)}: PD=5(MM), MTI=0x14(AuthResp)<<2=0x50, SRES
+//   - AuthenticationResponse_Parse {0x05, 0x14, SRES(4)}: PD=5(MM) low nibble, MT=0x14(AuthResp), SRES
 //     Verified against L3_Templates.ttcn ts_ML3_MT_MM_AUTH_RESP: messageType='010100'B(0x14)
-//   - IdentityRequest_Parse {0x50, 0x60, 0x01}: PD=5(MM), MTI=0x18(IDReq)<<2=0x60, identityType=0x01(IMSI)
+//   - IdentityRequest_Parse {0x05, 0x18, 0x01}: PD=5(MM) low nibble, MT=0x18(IDReq), identityType=0x01(IMSI)
 //     Verified against L3_Templates.ttcn tr_ML3_MT_MM_ID_Req: messageType='011000'B(0x18)
-//   - CMServiceAccept_Parse "5084": PD=5(MM), MTI=0x21(CMServAcc)<<2=0x84
+//   - CMServiceAccept_Parse "0521": PD=5(MM) low nibble, MT=0x21(CMServAcc)
 //     Verified against L3_Templates.ttcn tr_CM_SERV_ACC: messageType='100001'B(0x21)
-//   - AuthenticationReject_Parse "5044": PD=5(MM), MTI=0x11(AuthRej)<<2=0x44
+//   - AuthenticationReject_Parse "0511": PD=5(MM) low nibble, MT=0x11(AuthRej)
 //     Verified against L3_Templates.ttcn ts_ML3_MT_MM_AUTH_REJ: messageType='010001'B(0x11)
-//   - TMSIReallocationComplete_Parse "506C": PD=5(MM), MTI=0x1B(TMSIReallocComp)<<2=0x6C
+//   - TMSIReallocationComplete_Parse "051B": PD=5(MM) low nibble, MT=0x1B(TMSIReallocComp)
 //     Verified against L3_Templates.ttcn: messageType='011011'B(0x1B)
 //   - MMRejectCause values verified against GSM 24.008 Table 10.5.3.6:
 //     0x02=IMSI_Unknown_In_HLR, 0x03=Illegal_MS, 0x16=Congestion, 0x6F=Protocol_Error_Unspecified
@@ -123,13 +123,13 @@ TEST(MMRoundTripTest, LocationUpdatingReject) {
     EXPECT_EQ(messageMTI(*parsed), L3LocationUpdatingReject::MTI);
 }
 
-// GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=000100(LUReject=0x04), NSD=00
+// TS 24.008 10.2: PD=0x05(MM) low nibble, MT=000100(LUReject=0x04) in six low bits, NSD=00
 // Reference: L3_Templates.ttcn tr_ML3_MT_LU_Rej, GSML3MMMessages.h LocationUpdatingReject=0x04
-// Byte 0: PD(4,high) | skip(4,low) = 0101 0000 = 0x50
-// Byte 1: messageType(6)<<2 | NSD(2) = 0x04<<2 | 0 = 0x10
+// Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
+// Byte 1: MT=0x04 in the six low bits, NSD=0
 // Byte 2: reject_cause = 0x02 (IMSI_Unknown_In_HLR, GSM 04.08 10.5.3.6)
 TEST(MMRoundTripTest, LocationUpdatingReject_Parse) {
-    uint8_t data[] = {0x50, 0x10, 0x02};
+    uint8_t data[] = {0x05, 0x04, 0x02};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* lur = tryGet<L3LocationUpdatingReject>(*msg);
@@ -137,7 +137,7 @@ TEST(MMRoundTripTest, LocationUpdatingReject_Parse) {
     // Verify via round-trip: re-serialize and compare bytes
     auto hex1 = writeL3Hex(*msg);
     ASSERT_TRUE(hex1);
-    EXPECT_EQ(hex1.value(), "501002");
+    EXPECT_EQ(hex1.value(), "050402");
 }
 
 // ── Authentication Request (GSM 04.08 9.2.2) ─────────────────────────
@@ -153,15 +153,15 @@ TEST(MMRoundTripTest, AuthenticationRequest) {
     EXPECT_EQ(messageMTI(*parsed), L3AuthenticationRequest::MTI);
 }
 
-// GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=010010(AuthenticationRequest=0x12), NSD=00
+// TS 24.008 10.2: PD=0x05(MM) low nibble, MT=010010(AuthenticationRequest=0x12) in six low bits, NSD=00
 // Reference: L3_Templates.ttcn tr_ML3_MT_MM_AUTH_REQ, GSML3MMMessages.h AuthenticationRequest=0x12
-// Byte 0: PD(4,high) | skip(4,low) = 0101 0000 = 0x50
-// Byte 1: messageType(6)<<2 | NSD(2) = 0x12<<2 | 0 = 0x48
+// Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
+// Byte 1: MT=0x12 in the six low bits, NSD=0
 // Byte 2: CKSN(4)=0, spare(4)=0 = 0x00
 // Bytes 3-18: RAND (16 bytes, GSM 04.08 10.5.3.1)
 TEST(MMRoundTripTest, AuthenticationRequest_Parse) {
     uint8_t data[] = {
-        0x50, 0x48, 0x00,
+        0x05, 0x12, 0x00,
         0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
         0x09, 0x0A, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10
     };
@@ -176,11 +176,11 @@ TEST(MMRoundTripTest, AuthenticationRequest_Parse) {
 // Structure: PD=0x05, MTI=0x14, SRES(32 bits)
 
 TEST(MMRoundTripTest, AuthenticationResponse) {
-    // Reference format: PD=0x05(MM), skip=0, messageType=010100(AuthResponse=0x14), NSD=00
+    // Reference format: PD=0x05(MM) low nibble, MT=010100(AuthResponse=0x14) in six low bits, NSD=00
     // Byte 0: PD(4) | skip(4) = 0101 0000 = 0x50
-    // Byte 1: messageType(6) | NSD(2) = 010100 00 = 0x50
+    // Byte 1: MT=0x14 in the six low bits, NSD=0
     // Bytes 2-5: SRES = 0xABCD1234
-    uint8_t data[] = {0x50, 0x50, 0xAB, 0xCD, 0x12, 0x34};
+    uint8_t data[] = {0x05, 0x14, 0xAB, 0xCD, 0x12, 0x34};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* ar = tryGet<L3AuthenticationResponse>(*msg);
@@ -192,13 +192,13 @@ TEST(MMRoundTripTest, AuthenticationResponse) {
     EXPECT_EQ(messageMTI(*parsed), L3AuthenticationResponse::MTI);
 }
 
-// GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=010100(AuthenticationResponse=0x14), NSD=00
+// TS 24.008 10.2: PD=0x05(MM) low nibble, MT=010100(AuthenticationResponse=0x14) in six low bits, NSD=00
 // Reference: L3_Templates.ttcn ts_ML3_MT_MM_AUTH_RESP_2G, GSML3MMMessages.h AuthenticationResponse=0x14
-// Byte 0: PD(4,high) | skip(4,low) = 0101 0000 = 0x50
-// Byte 1: messageType(6)<<2 | NSD(2) = 0x14<<2 | 0 = 0x50
+// Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
+// Byte 1: MT=0x14 in the six low bits, NSD=0
 // Bytes 2-5: SRES = 0xABCD1234 (GSM 04.08 10.5.3.2, 32 bits)
 TEST(MMRoundTripTest, AuthenticationResponse_Parse) {
-    uint8_t data[] = {0x50, 0x50, 0xAB, 0xCD, 0x12, 0x34};
+    uint8_t data[] = {0x05, 0x14, 0xAB, 0xCD, 0x12, 0x34};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* ar = tryGet<L3AuthenticationResponse>(*msg);
@@ -233,13 +233,13 @@ TEST(MMRoundTripTest, IdentityRequest_IMEI) {
     EXPECT_EQ(messageMTI(*parsed), L3IdentityRequest::MTI);
 }
 
-// GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=011000(IdentityRequest=0x18), NSD=00
+// TS 24.008 10.2: PD=0x05(MM) low nibble, MT=011000(IdentityRequest=0x18) in six low bits, NSD=00
 // Reference: L3_Templates.ttcn tr_ML3_MT_MM_ID_Req, GSML3MMMessages.h IdentityRequest=0x18
-// Byte 0: PD(4,high) | skip(4,low) = 0101 0000 = 0x50
-// Byte 1: messageType(6)<<2 | NSD(2) = 0x18<<2 | 0 = 0x60
+// Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
+// Byte 1: MT=0x18 in the six low bits, NSD=0
 // Byte 2: spare(4) | identityType(4) = 0000 0001 = 0x01 (IMSI per GSM 04.08 10.5.3.4)
 TEST(MMRoundTripTest, IdentityRequest_Parse) {
-    uint8_t data[] = {0x50, 0x60, 0x01};
+    uint8_t data[] = {0x05, 0x18, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3IdentityRequest::MTI);
@@ -349,7 +349,7 @@ TEST(MMRoundTripTest, IdentityResponse) {
 // Byte 0: PD(high=5)|skip(low=0) = 0x50
 // Byte 1: messageType(6)<<2|NSD(2) = 0x21<<2|0 = 0x84
 TEST(MMRoundTripTest, Parse_CMServiceAccept_Hex) {
-    auto msg = parseL3Hex("5084");
+    auto msg = parseL3Hex("0521");
     ASSERT_TRUE(msg);
     EXPECT_EQ(messagePD(*msg), L3PD::MobilityManagement);
     EXPECT_EQ(messageMTI(*msg), L3CMServiceAccept::MTI);
@@ -360,7 +360,7 @@ TEST(MMRoundTripTest, Parse_CMServiceAccept_Hex) {
 // Byte 0: PD(high=5)|skip(low=0) = 0x50
 // Byte 1: messageType(6)<<2|NSD(2) = 0x11<<2|0 = 0x44
 TEST(MMRoundTripTest, Parse_AuthenticationReject_Hex) {
-    auto msg = parseL3Hex("5044");
+    auto msg = parseL3Hex("0511");
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3AuthenticationReject::MTI);
 }
@@ -370,7 +370,7 @@ TEST(MMRoundTripTest, Parse_AuthenticationReject_Hex) {
 // Byte 0: PD(high=5)|skip(low=0) = 0x50
 // Byte 1: messageType(6)<<2|NSD(2) = 0x1B<<2|0 = 0x6C
 TEST(MMRoundTripTest, Parse_TMSIReallocationComplete_Hex) {
-    auto msg = parseL3Hex("506C");
+    auto msg = parseL3Hex("051B");
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3TMSIReallocationComplete::MTI);
 }
@@ -473,8 +473,8 @@ TEST(MMRoundTripTest, CMRequest_RoundTrip) {
 }
 
 TEST(MMRoundTripTest, CMRequest_Parse_Golden) {
-    // PD=0x05(MM), MTI=0x20<<2=0x80, CKSN=5|spare=0, CM2 LV(length=3, value=0x03 0x20 0x00), MI LV(length=4, TMSI=0x12345678)
-    uint8_t data[] = {0x50, 0x80, 0x50, 0x03, 0x03, 0x20, 0x00, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78};
+    // PD=0x05(MM) low nibble, MT=0x20, CKSN=5|spare=0, CM2 LV(length=3, value=0x03 0x20 0x00), MI LV(length=4, TMSI=0x12345678)
+    uint8_t data[] = {0x05, 0x20, 0x50, 0x03, 0x03, 0x20, 0x00, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CMRequest::MTI);
@@ -496,8 +496,8 @@ TEST(MMRoundTripTest, PagingMM_RoundTrip) {
 }
 
 TEST(MMRoundTripTest, PagingMM_Parse_Golden) {
-    // PD=0x05(MM), MTI=0x06<<2=0x18, MI LV(length=4, TMSI type=0x08, value=0x12345678)
-    uint8_t data[] = {0x50, 0x18, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78};
+    // PD=0x05(MM) low nibble, MT=0x06, MI LV(length=4, TMSI type=0x08, value=0x12345678)
+    uint8_t data[] = {0x05, 0x06, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3PagingMM::MTI);

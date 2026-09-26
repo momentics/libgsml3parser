@@ -42,6 +42,13 @@ struct L3Header {
     }
 };
 
+/** Base of the internal MTI range for RR short messages (TIF set).
+ *  The five-bit short-message code (TS 44.018) is remapped to
+ *  kRRTifShortBase | code; only the three length-framed synthetic codes
+ *  (Channel Request, Handover Access, Synchronization Channel Information)
+ *  live above that range. */
+inline constexpr int kRRTifShortBase = 0x100;
+
 /** Parse a 2-byte L3 header from the first two bytes of @p data. */
 Expected<L3Header> parseL3Header(std::span<const uint8_t> data);
 

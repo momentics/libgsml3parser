@@ -25,8 +25,8 @@
 //
 // [GOLDEN DATA VERIFICATION]
 // All SMS L3 message type identifiers verified against 3GPP TS 24.008 Table 10.6a.
-// SMS L3 header format: PD=0x09(SMS), Skip(4 bits) in byte 0;
-//   MTI(8 bits, raw - no NSD field) in byte 1.
+// SMS L3 header format: PD=0x09(SMS) in the low nibble of byte 0,
+//   TI(3 bits) in bits 7:5 and TIF(1 bit) in bit 4; MTI(8 bits, raw) in byte 1.
 // Note: MTI 0x12 and 0x13 overlap with CP-STATUS and CP-SMT respectively.
 // The parser resolves overlaps by preferring CP messages for backward compat.
 
@@ -95,7 +95,7 @@ TEST(SMSL3Messages, Write_SMSProvidedReplyExpected) {
     ParsedMessage pm(std::move(smVariant));
     auto hex = writeL3Hex(pm);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "901200"); // PD=0x09, MTI=0x12, TP-DCS=0x00
+    EXPECT_EQ(hex.value(), "091200"); // PD=0x09, MTI=0x12, TP-DCS=0x00
 }
 
 // =====================================================================
@@ -110,7 +110,7 @@ TEST(SMSL3Messages, Write_SMSSubmitRep) {
     ParsedMessage pm(std::move(smVariant));
     auto hex = writeL3Hex(pm);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "901300"); // PD=0x09, MTI=0x13, TP-DCS=0x00
+    EXPECT_EQ(hex.value(), "091300"); // PD=0x09, MTI=0x13, TP-DCS=0x00
 }
 
 // =====================================================================
@@ -307,7 +307,7 @@ TEST(SMSL3Messages, Roundtrip_SMSShortCodeInfo) {
 // =====================================================================
 
 TEST(SMSL3Messages, GoldenParse_SMSStatusReport) {
-    uint8_t data[] = {0x90, 0x11, 0x05, 0x01, 0x00};
+    uint8_t data[] = {0x09, 0x11, 0x05, 0x01, 0x00};
     auto result = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(result);
     EXPECT_EQ(messageName(*result), "SMSStatusReport");
@@ -327,7 +327,7 @@ TEST(SMSL3Messages, GoldenParse_SMSStatusReport) {
 // =====================================================================
 
 TEST(SMSL3Messages, GoldenParse_SMSStatusReportAck) {
-    uint8_t data[] = {0x90, 0x16, 0x0A};
+    uint8_t data[] = {0x09, 0x16, 0x0A};
     auto result = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(result);
     EXPECT_EQ(messageName(*result), "SMSStatusReportAck");
@@ -343,7 +343,7 @@ TEST(SMSL3Messages, GoldenParse_SMSStatusReportAck) {
 // =====================================================================
 
 TEST(SMSL3Messages, GoldenParse_SMSTSReject) {
-    uint8_t data[] = {0x90, 0x18, 0x0C};
+    uint8_t data[] = {0x09, 0x18, 0x0C};
     auto result = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(result);
     EXPECT_EQ(messageName(*result), "SMSTSReject");
@@ -359,7 +359,7 @@ TEST(SMSL3Messages, GoldenParse_SMSTSReject) {
 // =====================================================================
 
 TEST(SMSL3Messages, GoldenParse_SMSSubmitReject) {
-    uint8_t data[] = {0x90, 0x1A, 0x1C};
+    uint8_t data[] = {0x09, 0x1A, 0x1C};
     auto result = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(result);
     EXPECT_EQ(messageName(*result), "SMSSubmitReject");
@@ -375,7 +375,7 @@ TEST(SMSL3Messages, GoldenParse_SMSSubmitReject) {
 // =====================================================================
 
 TEST(SMSL3Messages, GoldenParse_SMSSFProvidedRepAck) {
-    uint8_t data[] = {0x90, 0x1C};
+    uint8_t data[] = {0x09, 0x1C};
     auto result = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(result);
     EXPECT_EQ(messageName(*result), "SMSSFProvidedReplyAck");
@@ -389,7 +389,7 @@ TEST(SMSL3Messages, GoldenParse_SMSSFProvidedRepAck) {
 // =====================================================================
 
 TEST(SMSL3Messages, GoldenParse_SMSShortCodeInfo) {
-    uint8_t data[] = {0x90, 0x1E, 0x03};
+    uint8_t data[] = {0x09, 0x1E, 0x03};
     auto result = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(result);
     EXPECT_EQ(messageName(*result), "SMSShortCodeInfo");
@@ -422,7 +422,7 @@ TEST(SMSL3Messages, EnumStrings) {
 // =====================================================================
 
 TEST(SMSL3Messages, GoldenParse_SMSDeliverRep) {
-    uint8_t data[] = {0x90, 0x15, 0x00, 0x04, 0x01, 0x00};
+    uint8_t data[] = {0x09, 0x15, 0x00, 0x04, 0x01, 0x00};
     auto result = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(result);
     EXPECT_EQ(messageName(*result), "SMSDeliverReply");
@@ -442,7 +442,7 @@ TEST(SMSL3Messages, GoldenParse_SMSDeliverRep) {
 // =====================================================================
 
 TEST(SMSL3Messages, GoldenParse_SMSNotificationWithUD) {
-    uint8_t data[] = {0x90, 0x1D, 0x01, 0x00, 0x02, 0xDE, 0xAD};
+    uint8_t data[] = {0x09, 0x1D, 0x01, 0x00, 0x02, 0xDE, 0xAD};
     auto result = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(result);
     EXPECT_EQ(messageName(*result), "SMSNotification");
@@ -464,7 +464,7 @@ TEST(SMSL3Messages, GoldenParse_SMSNotificationWithUD) {
 // =====================================================================
 
 TEST(SMSL3Messages, GoldenParse_SMSShortCodeInfoWithData) {
-    uint8_t data[] = {0x90, 0x1E, 0x03, 0x02, 0x12, 0x34};
+    uint8_t data[] = {0x09, 0x1E, 0x03, 0x02, 0x12, 0x34};
     auto result = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(result);
     EXPECT_EQ(messageName(*result), "SMSShortCodeInfo");
@@ -533,7 +533,7 @@ TEST(SMSL3Messages, BodyLengths) {
 // =====================================================================
 
 TEST(SMSL3Messages, GoldenParse_SMSStatusReportReject) {
-    uint8_t data[] = {0x90, 0x17, 0x20, 0x0C};
+    uint8_t data[] = {0x09, 0x17, 0x20, 0x0C};
     auto result = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(result);
     EXPECT_EQ(messageName(*result), "SMSStatusReportReject");

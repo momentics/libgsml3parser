@@ -68,18 +68,18 @@ struct PDBatch { int pd; const char* hex; int mti; };
 // TIF=1. The expected values below are the classes' static MTI constants
 // (messageMTI visits them).
 const PDBatch kBatch[] = {
-    {GSML3_PD_RR,  "60 0D 00",          0x0d},  // Channel Release
-    {GSML3_PD_MM,  "50 84",             0x21},  // CM Service Accept
-    {GSML3_PD_CC,  "3E 94 08 02 16 21", 0x25},  // Disconnect (TI=7)
-    {GSML3_PD_SS,  "B0 E8 00",          0x3a},  // SupServFacilityMessage (empty facility)
-    {GSML3_PD_GMM, "80 20 05",          0x20},  // GMM Status (cause=5)
-    {GSML3_PD_SM,  "A0 55 A7 01 05",    0x55},  // SM Status (cause=5)
-    {GSML3_PD_SMS, "90 04",             0x04},  // CP-Ack (no body)
-    {GSML3_PD_BCC, "10 00",             0x00},  // BCC Setup
+    {GSML3_PD_RR,  "06 0D 00",          0x0d},  // Channel Release
+    {GSML3_PD_MM,  "05 21",             0x21},  // CM Service Accept
+    {GSML3_PD_CC,  "E3 25 08 02 16 21", 0x25},  // Disconnect (TI=7)
+    {GSML3_PD_SS,  "0B 3A 00",          0x3a},  // SupServFacilityMessage (empty facility)
+    {GSML3_PD_GMM, "08 20 05",          0x20},  // GMM Status (cause=5)
+    {GSML3_PD_SM,  "0A 55 A7 01 05",    0x55},  // SM Status (cause=5)
+    {GSML3_PD_SMS, "09 04",             0x04},  // CP-Ack (no body)
+    {GSML3_PD_BCC, "01 00",             0x00},  // BCC Setup
     {GSML3_PD_GCC, "00 00 02",          0x00},  // GCC Setup
-    {GSML3_PD_LS,  "C0 01",             0x01},  // LocationServiceRequest
-    {GSML3_PD_EXT, "E0 01",             0x01},  // ExtendedMessage
-    {GSML3_PD_TST, "F0 01",             0x01},  // TestProcedureMessage
+    {GSML3_PD_LS,  "0C 01",             0x01},  // LocationServiceRequest
+    {GSML3_PD_EXT, "0E 01",             0x01},  // ExtendedMessage
+    {GSML3_PD_TST, "0F 01",             0x01},  // TestProcedureMessage
 };
 
 std::vector<uint8_t> fromHex(const char* hex) {
@@ -160,10 +160,10 @@ TEST(CApi, L3RoundTrip_AllDomains) {
 // allocation for typical messages) and keeps the previous content on
 // error.
 TEST(CApi, ParseInto_ReusesHandle) {
-    gsml3_message* m = gsml3_parse_l3_hex("60 0D 00", nullptr);
+    gsml3_message* m = gsml3_parse_l3_hex("06 0D 00", nullptr);
     ASSERT_NE(m, nullptr);
 
-    uint8_t mm[] = {0x50, 0x84};  // CM Service Accept
+    uint8_t mm[] = {0x05, 0x21};  // CM Service Accept
     EXPECT_EQ(gsml3_parse_l3_into(m, mm, sizeof(mm), nullptr), GSML3_OK);
     EXPECT_EQ(gsml3_message_pd(m), GSML3_PD_MM);
     EXPECT_EQ(gsml3_message_mti(m), 0x21);
@@ -171,7 +171,7 @@ TEST(CApi, ParseInto_ReusesHandle) {
     // Error input (truncated RR ChannelRelease): the handle keeps its
     // previous (valid) content. A single byte is NOT an error: one-octet
     // frames parse as RR ChannelRequest short messages.
-    uint8_t truncated[] = {0x60, 0x0D};
+    uint8_t truncated[] = {0x06, 0x0D};
     EXPECT_NE(gsml3_parse_l3_into(m, truncated, sizeof(truncated), nullptr), GSML3_OK);
     EXPECT_EQ(gsml3_message_pd(m), GSML3_PD_MM);
     EXPECT_EQ(gsml3_message_mti(m), 0x21);
@@ -184,12 +184,12 @@ TEST(CApi, L3ErrorPaths) {
     EXPECT_EQ(gsml3_parse_l3(nullptr, 4, nullptr), nullptr);
     EXPECT_GT(std::strlen(gsml3_last_error()), 0u);
 
-    uint8_t d[3] = {0x50, 0x84, 0x00};
+    uint8_t d[3] = {0x05, 0x21, 0x00};
     EXPECT_EQ(gsml3_parse_l3(d, 0, nullptr), nullptr);
 
     EXPECT_EQ(gsml3_parse_l3_hex(nullptr, nullptr), nullptr);
     EXPECT_EQ(gsml3_parse_l3_hex("zz", nullptr), nullptr);
-    EXPECT_EQ(gsml3_parse_l3_hex("60 0D", nullptr), nullptr);  // truncated RR ChannelRelease
+    EXPECT_EQ(gsml3_parse_l3_hex("06 0D", nullptr), nullptr);  // truncated RR ChannelRelease
     EXPECT_GT(std::strlen(gsml3_last_error()), 0u);
 
     // Strict framing rejects trailing bytes.
@@ -225,13 +225,13 @@ TEST(CApi, Config) {
     gsml3_config_set_log_level(c, GSML3_LOG_EMERG);
     gsml3_config_set_strict_framing(c, 1);
 
-    // "50 84" is a complete CM Service Accept: strict framing accepts it.
-    gsml3_message* ok = gsml3_parse_l3_hex("50 84", c);
+    // "05 21" is a complete CM Service Accept: strict framing accepts it.
+    gsml3_message* ok = gsml3_parse_l3_hex("05 21", c);
     ASSERT_NE(ok, nullptr);
     gsml3_message_free(ok);
 
     // Same message + trailing byte: strict framing rejects it.
-    uint8_t d[] = {0x50, 0x84, 0x00};
+    uint8_t d[] = {0x05, 0x21, 0x00};
     EXPECT_EQ(gsml3_parse_l3(d, sizeof(d), c), nullptr);
     gsml3_config_free(c);
 }
@@ -245,7 +245,7 @@ TEST(CApi, Concurrent_IndependentHandles) {
     for (int t = 0; t < 8; ++t) {
         threads.emplace_back([&failures]() {
             for (int i = 0; i < 1000; ++i) {
-                gsml3_message* m = gsml3_parse_l3_hex("60 0D 00", nullptr);
+                gsml3_message* m = gsml3_parse_l3_hex("06 0D 00", nullptr);
                 if (!m || gsml3_message_pd(m) != GSML3_PD_RR ||
                         gsml3_message_mti(m) != 0x0D) {
                     ++failures;
@@ -284,7 +284,7 @@ std::vector<uint8_t> makeRllDataReq(uint8_t chanNr, uint8_t linkId,
 // every field; the L3 view points into the handle's copy (the caller's
 // buffer is freed right after parse).
 TEST(CApiRsl, Parse_AgreesWithCpp) {
-    std::vector<uint8_t> frame = makeRllDataReq(0x7C, 1, {0x60, 0x0D, 0x00});
+    std::vector<uint8_t> frame = makeRllDataReq(0x7C, 1, {0x06, 0x0D, 0x00});
     auto cpp = RSLParser::parse(frame);
     ASSERT_TRUE(cpp);
     const RSLParsedMessage& c = *cpp;
@@ -325,7 +325,7 @@ TEST(CApiRsl, Parse_AgreesWithCpp) {
 // Test: every RSL builder produces exactly the bytes the C++ vector
 // overload produces, and the frame parses back with the expected fields.
 TEST(CApiRsl, Builders_AgreeWithCpp) {
-    const std::vector<uint8_t> l3 = {0x60, 0x0D, 0x00};
+    const std::vector<uint8_t> l3 = {0x06, 0x0D, 0x00};
     uint8_t out[512];
 
     struct Case {
@@ -415,7 +415,7 @@ TEST(CApiRsl, Builders_AgreeWithCpp) {
 // Test: buffer-too-small returns 0 (documented C contract).
 TEST(CApiRsl, Builder_BufferTooSmall) {
     uint8_t out[4];
-    const std::vector<uint8_t> l3 = {0x60, 0x0D, 0x00};
+    const std::vector<uint8_t> l3 = {0x06, 0x0D, 0x00};
     EXPECT_EQ(gsml3_rsl_build_data_req(out, sizeof(out), 0x7C, 1, l3.data(), l3.size()), 0u);
     EXPECT_GT(std::strlen(gsml3_last_error()), 0u);
 }
@@ -470,7 +470,7 @@ void cL1Cb(const uint8_t* frame, size_t frame_len, void* user) {
 // Test: frame decode through the C API agrees with the C++ decoder on
 // UI, I and S frames (zero-copy: info points into the input).
 TEST(CApiLapdm, FrameDecode_AgreesWithCpp) {
-    const std::vector<uint8_t> info = {0x60, 0x0D, 0x00};
+    const std::vector<uint8_t> info = {0x06, 0x0D, 0x00};
     auto ui = lapdm::makeUIFrame(SAPI::SAPI0, true, info);
     std::vector<uint8_t> uiBytes = lapdm::encodeFrame(ui);
 
@@ -537,7 +537,7 @@ TEST(CApiLapdm, Entity_LinkLifecycle) {
     EXPECT_EQ(gsml3_lapdm_entity_is_established(e), 1);
 
     // The peer sends a UI frame with L3: the L3 callback must fire.
-    const std::vector<uint8_t> l3 = {0x60, 0x0D, 0x00};
+    const std::vector<uint8_t> l3 = {0x06, 0x0D, 0x00};
     std::vector<uint8_t> ui = lapdm::encodeFrame(lapdm::makeUIFrame(SAPI::SAPI0, false, l3));
     gsml3_lapdm_entity_receive(e, ui.data(), ui.size());
     // Active-side establishment delivered an ESTABLISH_CONFIRM (empty
@@ -587,7 +587,7 @@ TEST(CApiLapdm, Entity_SendData_BeforeLink_Fails) {
     gsml3_lapdm_entity* e = gsml3_lapdm_entity_new(0, cL3Cb, cL1Cb, &cap);
     ASSERT_NE(e, nullptr);
     gsml3_lapdm_entity_open(e, GSML3_SAPI0, 1);
-    const uint8_t l3[] = {0x60, 0x0D, 0x00};
+    const uint8_t l3[] = {0x06, 0x0D, 0x00};
     EXPECT_NE(gsml3_lapdm_entity_send_data(e, l3, sizeof(l3)), GSML3_OK);
     EXPECT_GT(std::strlen(gsml3_last_error()), 0u);
     gsml3_lapdm_entity_free(e);
@@ -1336,7 +1336,7 @@ TEST(CApiTyped, Builders_RoundTrip) {
 // Test: typed getters on a message of the wrong type return sentinels
 // (no crash, documented behavior).
 TEST(CApiTyped, WrongType_Sentinels) {
-    gsml3_message* m = gsml3_parse_l3_hex("60 0D 00", nullptr);  // ChannelRelease
+    gsml3_message* m = gsml3_parse_l3_hex("06 0D 00", nullptr);  // ChannelRelease
     ASSERT_NE(m, nullptr);
     EXPECT_EQ(gsml3_msg_setup_ti(m), -1);
     EXPECT_EQ(gsml3_msg_disconnect_cause(m), -1);
@@ -1402,7 +1402,7 @@ TEST(CApi, MessageSizeMatchesWrite) {
 // Test: a too-small buffer reports the dedicated error class (no message
 // string comparison needed), and the next successful call clears it.
 TEST(CApi, BufferTooSmallErrorCode) {
-    gsml3_message* m = gsml3_parse_l3_hex("60 0D 00", nullptr);
+    gsml3_message* m = gsml3_parse_l3_hex("06 0D 00", nullptr);
     ASSERT_NE(m, nullptr);
     uint8_t tiny[1];
     EXPECT_EQ(gsml3_message_write(m, tiny, sizeof(tiny)), 0u);
@@ -1413,7 +1413,7 @@ TEST(CApi, BufferTooSmallErrorCode) {
     EXPECT_EQ(gsml3_last_error_code(), GSML3_OK);
 
     // The RSL and typed builders share the same contract.
-    const uint8_t l3[3] = {0x60, 0x0D, 0x00};
+    const uint8_t l3[3] = {0x06, 0x0D, 0x00};
     uint8_t small[2];
     EXPECT_EQ(gsml3_rsl_build_data_req(small, sizeof(small), 0x7C, 1, l3, 3), 0u);
     EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_BUFFER_TOO_SMALL);
@@ -1423,9 +1423,9 @@ TEST(CApi, BufferTooSmallErrorCode) {
 // Test: the human-readable dump agrees with the C++ messageText() and is
 // NUL-terminated.
 TEST(CApi, MessageDump) {
-    auto cpp = parseL3Hex("3E 94 08 02 16 21");  // Disconnect, TI=7
+    auto cpp = parseL3Hex("E3 25 08 02 16 21");  // Disconnect, TI=7
     ASSERT_TRUE(cpp) << cpp.error().message;
-    gsml3_message* m = gsml3_parse_l3_hex("3E 94 08 02 16 21", nullptr);
+    gsml3_message* m = gsml3_parse_l3_hex("E3 25 08 02 16 21", nullptr);
     ASSERT_NE(m, nullptr);
     char* dump = gsml3_message_dump(m);
     ASSERT_NE(dump, nullptr);
@@ -1579,7 +1579,7 @@ TEST(CApi, StaleErrorClearedBySuccess) {
     EXPECT_EQ(gsml3_last_error_code(), GSML3_ERR_INVALID_ARG);
 
     // Getters on a fresh handle clear the state again.
-    gsml3_message* m = gsml3_parse_l3_hex("60 0D 00", nullptr);
+    gsml3_message* m = gsml3_parse_l3_hex("06 0D 00", nullptr);
     ASSERT_NE(m, nullptr);
     EXPECT_EQ(gsml3_last_error_code(), GSML3_OK);
     (void)gsml3_message_pd(m);
@@ -1672,7 +1672,7 @@ TEST(CApiLapdm, SendUI_InvalidSapiRejected) {
     gsml3_lapdm_entity* e = gsml3_lapdm_entity_new(0, cL3Cb, cL1Cb, &cap);
     ASSERT_NE(e, nullptr);
     gsml3_lapdm_entity_open(e, GSML3_SAPI0, 1);
-    const uint8_t l3[3] = {0x60, 0x0D, 0x00};
+    const uint8_t l3[3] = {0x06, 0x0D, 0x00};
 
     // A value outside the 4-bit SAPI field would wrap and silently flip the
     // address octet's SAPI and C/R bits; it must be rejected instead.
@@ -1702,7 +1702,7 @@ TEST(CApiOrchestrator, FeedFailureReported) {
     gsml3_registry* r = gsml3_registry_new(0);
     ASSERT_NE(o, nullptr);
     ASSERT_NE(r, nullptr);
-    gsml3_message* m = gsml3_parse_l3_hex("60 0D 00", nullptr);  // no chain start
+    gsml3_message* m = gsml3_parse_l3_hex("06 0D 00", nullptr);  // no chain start
     ASSERT_NE(m, nullptr);
 
     auto bad1 = gsml3_orchestrator_feed(nullptr, m, nullptr);

@@ -96,32 +96,32 @@ TEST(GoldenGMMTest, MessageTypeValues) {
 
 // =====================================================================
 // GMM L3 Header Encoding Test
-// Byte 0: PD(4)=8(GMM) | Skip(4)=0 -> 0x80
+// Byte 0: PD=8(GMM) in the low nibble, TI/TIF zero -> 0x08
 // Byte 1: raw MTI (no shift!)
 // This is the key difference from MM/CC/SS headers.
 // =====================================================================
 
 TEST(GoldenGMMTest, HeaderEncoding) {
-    // AttachRequest: PD=8, MTI=0x01 -> header = 0x80 0x01
-    uint8_t data[] = {0x80, 0x01};
+    // AttachRequest: PD=8 (low nibble), MTI=0x01 -> header = 0x08 0x01
+    uint8_t data[] = {0x08, 0x01};
     auto hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
     EXPECT_EQ(hdr.value().pd, L3PD::GPRSMobilityManagement);
     EXPECT_EQ(hdr.value().mti, 0x01); // raw, not shifted!
 
-    // AttachAccept: PD=8, MTI=0x02 -> header = 0x80 0x02
+    // AttachAccept: PD=8 (low nibble), MTI=0x02 -> header = 0x08 0x02
     data[1] = 0x02;
     hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
     EXPECT_EQ(hdr.value().mti, 0x02);
 
-    // RAUpdateReject: PD=8, MTI=0x0b -> header = 0x80 0x0b
+    // RAUpdateReject: PD=8 (low nibble), MTI=0x0b -> header = 0x08 0x0b
     data[1] = 0x0b;
     hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
     EXPECT_EQ(hdr.value().mti, 0x0b);
 
-    // GMMStatus: PD=8, MTI=0x20 -> header = 0x80 0x20
+    // GMMStatus: PD=8 (low nibble), MTI=0x20 -> header = 0x08 0x20
     data[1] = 0x20;
     hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
@@ -132,13 +132,13 @@ TEST(GoldenGMMTest, HeaderEncoding) {
 // GMM Attach Complete (GSM 24.008 9.4.3) - minimal message
 // Reference: L3_Templates.ttcn ts_GMM_ATTACH_COMPL (line 2645)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x03 = MTI(8)=0x03(AttachComplete), raw encoding
 // No body octets.
 // =====================================================================
 
 TEST(GoldenGMMTest, AttachComplete_Minimal) {
-    uint8_t data[] = {0x80, 0x03};
+    uint8_t data[] = {0x08, 0x03};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3AttachComplete::MTI);
@@ -164,7 +164,7 @@ TEST(GoldenGMMTest, AttachComplete_RoundTrip) {
 // GMM Attach Reject (GSM 24.008 9.4.4) - with cause
 // Reference: L3_Templates.ttcn tr_GMM_ATTACH_REJECT (line 2625)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x04 = MTI(8)=0x04(AttachReject), raw encoding
 //   0x82 = Extended IEI flag(1)|IEI(7)=0x25(GMMCause)
 //   0x01 = Length(1)
@@ -173,7 +173,7 @@ TEST(GoldenGMMTest, AttachComplete_RoundTrip) {
 
 TEST(GoldenGMMTest, AttachReject_WithCause) {
     // GMMCause IEI=0x25, extended TLV: type=0xA5(0x80|0x25), length=1, value=GPRS_Service_Not_Allowed=0x0c
-    uint8_t data[] = {0x80, 0x04, 0xa5, 0x01, 0x0c};
+    uint8_t data[] = {0x08, 0x04, 0xa5, 0x01, 0x0c};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3AttachReject::MTI);
@@ -199,13 +199,13 @@ TEST(GoldenGMMTest, AttachReject_RoundTrip) {
 // GMM Routing Area Update Complete (GSM 24.008 9.4.16) - minimal
 // Reference: L3_Templates.ttcn ts_GMM_RAU_COMPL (line 2778)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0a = MTI(8)=0x0a(RoutingAreaUpdateComplete), raw encoding
 // No body octets.
 // =====================================================================
 
 TEST(GoldenGMMTest, RAUpdateComplete_Minimal) {
-    uint8_t data[] = {0x80, 0x0a};
+    uint8_t data[] = {0x08, 0x0a};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3RoutingAreaUpdateComplete::MTI);
@@ -227,13 +227,13 @@ TEST(GoldenGMMTest, RAUpdateComplete_RoundTrip) {
 // GMM P-TMSI Reallocation Complete (GSM 24.008 9.4.8) - minimal
 // Reference: L3_Templates.ttcn ts_GMM_PTMSI_REALL_COMPL (line 2795)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x11 = MTI(8)=0x11(P_TMSIReallocationComplete), raw encoding
 // No body octets.
 // =====================================================================
 
 TEST(GoldenGMMTest, PTMSIRreallocComplete_Minimal) {
-    uint8_t data[] = {0x80, 0x11};
+    uint8_t data[] = {0x08, 0x11};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3P_TMSIReallocationComplete::MTI);
@@ -255,13 +255,13 @@ TEST(GoldenGMMTest, PTMSIRreallocComplete_RoundTrip) {
 // GMM Auth And Ciphering Reject (GSM 24.008 9.4.9) - minimal
 // Reference: OpenBTS GPRSL3Messages.h AuthenticationAndCipheringRej=0x14
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x14 = MTI(8)=0x14(AuthenticationAndCipheringReject), raw encoding
 // No body octets.
 // =====================================================================
 
 TEST(GoldenGMMTest, AuthCipherReject_Minimal) {
-    uint8_t data[] = {0x80, 0x14};
+    uint8_t data[] = {0x08, 0x14};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3AuthenticationAndCipheringReject::MTI);
@@ -283,13 +283,13 @@ TEST(GoldenGMMTest, AuthCipherReject_RoundTrip) {
 // GMM Service Accept (GSM 24.008 9.4.21) - minimal
 // Reference: L3_Templates.ttcn tr_GMM_SERVICE_ACC (line 3120)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0d = MTI(8)=0x0d(ServiceAccept), raw encoding
 // No mandatory body octets.
 // =====================================================================
 
 TEST(GoldenGMMTest, ServiceAccept_Minimal) {
-    uint8_t data[] = {0x80, 0x0d};
+    uint8_t data[] = {0x08, 0x0d};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ServiceAccept::MTI);
@@ -311,13 +311,13 @@ TEST(GoldenGMMTest, ServiceAccept_RoundTrip) {
 // GMM Status (GSM 24.008 9.4.24) - with cause
 // Reference: 3GPP TS 24.008 Table 10.4, bidirectional message
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x20 = MTI(8)=0x20(GMMStatus), raw encoding
 //   0x15 = Cause=GMM_Synch_Failure (per 10.5.3.2.2)
 // =====================================================================
 
 TEST(GoldenGMMTest, GMMStatus_WithCause) {
-    uint8_t data[] = {0x80, 0x20, 0x15};
+    uint8_t data[] = {0x08, 0x20, 0x15};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3GMMStatus::MTI);
@@ -343,13 +343,13 @@ TEST(GoldenGMMTest, GMMStatus_RoundTrip) {
 // GMM Information (GSM 24.008) - minimal
 // Reference: OpenBTS GPRSL3Messages.h GMMInformation=0x21
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x21 = MTI(8)=0x21(GMMInformation), raw encoding
 // No mandatory body octets.
 // =====================================================================
 
 TEST(GoldenGMMTest, GMMInformation_Minimal) {
-    uint8_t data[] = {0x80, 0x21};
+    uint8_t data[] = {0x08, 0x21};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3GMMInformation::MTI);
@@ -371,13 +371,13 @@ TEST(GoldenGMMTest, GMMInformation_RoundTrip) {
 // GMM Detach Accept (GSM 24.008 9.4.6) - minimal
 // Reference: L3_Templates.ttcn ts_GMM_DET_ACCEPT_MO (line 3154)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x06 = MTI(8)=0x06(DetachAccept), raw encoding
 // No mandatory body octets for MS->SGSN direction.
 // =====================================================================
 
 TEST(GoldenGMMTest, DetachAccept_Minimal) {
-    uint8_t data[] = {0x80, 0x06};
+    uint8_t data[] = {0x08, 0x06};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3DetachAccept::MTI);
@@ -399,7 +399,7 @@ TEST(GoldenGMMTest, DetachAccept_RoundTrip) {
 // GMM Attach Accept (GSM 24.008 9.4.2) - golden parse
 // Reference: L3_Templates.ttcn tr_GMM_ATTACH_ACCEPT (line 2586)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x02 = MTI(8)=0x02(AttachAccept), raw encoding
 //   0x20 = attachResult(3)=GPRS(1)|spare(1)=0|forceToStandby(1)=0|updateTimer(2)=0|radioPriority(1)=0
 //   0x52 0xF0 0x10 = MCC/MNC BCD nibble-swapped: MCC=250, MNC=01
@@ -415,7 +415,7 @@ TEST(GoldenGMMTest, AttachAccept_GoldenParse) {
     // Body: firstOctet(1) + RAI(6) + PTMSI_TLV(7) = 14 bytes
     // PTMSI TLV: IEI=0x8c | len=5 | type_byte(0x08=TMSI) | TMSI(4)
     uint8_t data[] = {
-        0x80, 0x02,                            // header: PD=GMM, MTI=AttachAccept
+        0x08, 0x02,                            // header: PD=GMM, MTI=AttachAccept
         0x20,                                   // attachResult(3)=GPRS(1)|spare(1)=0|forceToStandby(1)=0|updateTimer(2)=0|radioPriority(1)=0
         0x52, 0xF0, 0x10, 0x12, 0x34, 0x56,    // RAI: MCC=250, MNC=01, LAC=0x1234, RAC=0x56
         0x8c, 0x05,                             // TLV: extended IEI=0x0c(allocatedPTMSI), length=5
@@ -441,13 +441,13 @@ TEST(GoldenGMMTest, AttachAccept_GoldenParse) {
 // GMM Detach Request (GSM 24.008 9.4.5) - golden parse
 // Reference: L3_Templates.ttcn ts_GMM_DET_REQ_MO (line 3004)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x05 = MTI(8)=0x05(DetachRequest), raw encoding
 //   0x10 = detachType(3)=GPRS(1)|powerOff(1)=0|spare(4)=0
 // =====================================================================
 
 TEST(GoldenGMMTest, DetachRequest_GoldenParse) {
-    uint8_t data[] = {0x80, 0x05, 0x10};
+    uint8_t data[] = {0x08, 0x05, 0x10};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3DetachRequest::MTI);
@@ -462,7 +462,7 @@ TEST(GoldenGMMTest, DetachRequest_GoldenParse) {
 // GMM Routing Area Update Request (GSM 24.008 9.4.12) - golden parse
 // Reference: L3_Templates.ttcn ts_GMM_RAU_REQ (line 2662)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x08 = MTI(8)=0x08(RoutingAreaUpdateRequest), raw encoding
 //   0x70 = updateType(3)=RAUpdated(0)|forL3(1)=0|CKSN(3)=7|spare(1)=0
 //   0x52 0xF0 0x10 = MCC/MNC BCD nibble-swapped: MCC=250, MNC=01
@@ -474,7 +474,7 @@ TEST(GoldenGMMTest, RAUpdateRequest_GoldenParse) {
     // Body: updateTypeCKSN(1) + oldRAI(6) = 7 bytes
     // First byte: updateType(3)=0|forL3(1)=0|CKSN(4)=7 -> 0000 0111 = 0x07
     uint8_t data[] = {
-        0x80, 0x08,                              // header: PD=GMM, MTI=RAUpdateRequest
+        0x08, 0x08,                              // header: PD=GMM, MTI=RAUpdateRequest
         0x07,                                     // updateType(3)=RAUpdated(0)|forL3(1)=0|CKSN(4)=7
         0x52, 0xF0, 0x10, 0x12, 0x34, 0x56       // RAI: MCC=250, MNC=01, LAC=0x1234, RAC=0x56
     };
@@ -497,7 +497,7 @@ TEST(GoldenGMMTest, RAUpdateRequest_GoldenParse) {
 // GMM Routing Area Update Accept (GSM 24.008 9.4.15) - golden parse
 // Reference: L3_Templates.ttcn tr_GMM_RAU_ACCEPT (line 2738)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x09 = MTI(8)=0x09(RoutingAreaUpdateAccept), raw encoding
 //   0x10 = forceToStandby(1)=0|updateResult(3)=RAUpdated(0)|spare(1)=0|raUpdateTimer(2)=0|radioPriority(1)=0
 //   0x52 0xF0 0x10 = MCC/MNC BCD nibble-swapped: MCC=250, MNC=01
@@ -513,7 +513,7 @@ TEST(GoldenGMMTest, RAUpdateAccept_GoldenParse) {
     // Body: firstOctet(1) + RAI(6) + PTMSI_TLV(7) = 14 bytes
     // First byte: forceToStandby(1)=0|updateResult(3)=0|spare(1)=0|raUpdateTimer(2)=0|radioPriority(1)=0 -> 0x00
     uint8_t data[] = {
-        0x80, 0x09,                               // header: PD=GMM, MTI=RAUpdateAccept
+        0x08, 0x09,                               // header: PD=GMM, MTI=RAUpdateAccept
         0x00,                                      // forceToStandby(1)=0|updateResult(3)=RAUpdated(0)|spare(1)=0|raUpdateTimer(2)=0|radioPriority(1)=0
         0x52, 0xF0, 0x10, 0x12, 0x34, 0x56,       // RAI: MCC=250, MNC=01, LAC=0x1234, RAC=0x56
         0x8c, 0x05,                                // TLV: extended IEI=0x0c(allocatedPTMSI), length=5
@@ -537,7 +537,7 @@ TEST(GoldenGMMTest, RAUpdateAccept_GoldenParse) {
 // GMM Routing Area Update Reject (GSM 24.008 9.4.17) - golden parse
 // Reference: L3_Templates.ttcn tr_GMM_RAU_REJECT (line 2717)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0b = MTI(8)=0x0b(RoutingAreaUpdateReject), raw encoding
 //   0xa5 = extended IEI for GMMCause (0x80 | 0x25)
 //   0x01 = length
@@ -545,7 +545,7 @@ TEST(GoldenGMMTest, RAUpdateAccept_GoldenParse) {
 // =====================================================================
 
 TEST(GoldenGMMTest, RAUpdateReject_GoldenParse) {
-    uint8_t data[] = {0x80, 0x0b, 0xa5, 0x01, 0x0c};
+    uint8_t data[] = {0x08, 0x0b, 0xa5, 0x01, 0x0c};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3RoutingAreaUpdateReject::MTI);
@@ -559,7 +559,7 @@ TEST(GoldenGMMTest, RAUpdateReject_GoldenParse) {
 // GMM Service Request (GSM 24.008 9.4.20) - golden parse
 // Reference: L3_Templates.ttcn ts_GMM_SERVICE_REQ (line 3095)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0c = MTI(8)=0x0c(ServiceRequest), raw encoding
 //   0x71 = CKSN(3)=7|spare(1)=0|serviceType(3)=1(signalling)|spare(1)=0
 //   0x05 = PTMSI LV length = 5 bytes
@@ -571,7 +571,7 @@ TEST(GoldenGMMTest, ServiceRequest_GoldenParse) {
     // Body: CKSN_serviceType(1) + PTMSI_LV(6) = 7 bytes
     // First byte: CKSN(4)=7|serviceType(4)=1 -> 0111 0001 = 0x71
     uint8_t data[] = {
-        0x80, 0x0c,                              // header: PD=GMM, MTI=ServiceRequest
+        0x08, 0x0c,                              // header: PD=GMM, MTI=ServiceRequest
         0x71,                                     // CKSN(4)=7|serviceType(4)=1(signalling)
         0x05,                                     // PTMSI LV length = 5 bytes
         0x08,                                     // type byte: spare(4)=0|type(3)=TMSI(4)|oe(1)=0 = 0x08
@@ -592,7 +592,7 @@ TEST(GoldenGMMTest, ServiceRequest_GoldenParse) {
 // GMM Service Reject (GSM 24.008 9.4.22) - golden parse
 // Reference: L3_Templates.ttcn tr_GMM_SERVICE_REJ (line 3137)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0e = MTI(8)=0x0e(ServiceReject), raw encoding
 //   0xa5 = extended IEI for GMMCause (0x80 | 0x25)
 //   0x01 = length
@@ -600,7 +600,7 @@ TEST(GoldenGMMTest, ServiceRequest_GoldenParse) {
 // =====================================================================
 
 TEST(GoldenGMMTest, ServiceReject_GoldenParse) {
-    uint8_t data[] = {0x80, 0x0e, 0xa5, 0x01, 0x0c};
+    uint8_t data[] = {0x08, 0x0e, 0xa5, 0x01, 0x0c};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ServiceReject::MTI);
@@ -614,7 +614,7 @@ TEST(GoldenGMMTest, ServiceReject_GoldenParse) {
 // GMM P-TMSI Reallocation Command (GSM 24.008 9.4.8) - golden parse
 // Reference: 3GPP TS 24.008 9.4.8 message structure
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x10 = MTI(8)=0x10(P_TMSIReallocationCommand), raw encoding
 //   0x00 = PTMSI_Type(1)=Native(0)|spare(7)=0
 //   0x52 0xF0 0x10 = MCC/MNC BCD nibble-swapped: MCC=250, MNC=01
@@ -629,7 +629,7 @@ TEST(GoldenGMMTest, ServiceReject_GoldenParse) {
 TEST(GoldenGMMTest, PTMSIRereallocCommand_GoldenParse) {
     // Body: PTMSI_Type(1) + RAI(6) + PTMSI_TLV(7) = 14 bytes
     uint8_t data[] = {
-        0x80, 0x10,                               // header: PD=GMM, MTI=P_TMSIReallocationCommand
+        0x08, 0x10,                               // header: PD=GMM, MTI=P_TMSIReallocationCommand
         0x00,                                      // PTMSI_Type(1)=Native(0)|spare(7)=0
         0x52, 0xF0, 0x10, 0x12, 0x34, 0x56,       // RAI: MCC=250, MNC=01, LAC=0x1234, RAC=0x56
         0x8c, 0x05,                                // TLV: extended IEI=0x0c(allocatedPTMSI), length=5
@@ -652,7 +652,7 @@ TEST(GoldenGMMTest, PTMSIRereallocCommand_GoldenParse) {
 // GMM Authentication And Ciphering Request (GSM 24.008 9.4.9) - golden parse
 // Reference: L3_Templates.ttcn tr_GMM_AUTH_REQ (line 2862)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x12 = MTI(8)=0x12(AuthenticationAndCipheringRequest), raw encoding
 //   0xE8 = cipheringAlgorithm(3)=GEA1(1)|spare(1)=0|imeisvRequest(1)=1|forceToStandby(1)=1|spare(4)=0
 //   0x0F = acReferenceNumber(4)=F(15)|spare(4)=0
@@ -668,7 +668,7 @@ TEST(GoldenGMMTest, AuthAndCipheringRequest_GoldenParse) {
     // and that RAND was read (non-zero), but individual RAND bytes depend on
     // the bit-reader's non-aligned extraction behavior.
     uint8_t data[] = {
-        0x80, 0x12,                               // header: PD=GMM, MTI=AuthAndCipheringRequest
+        0x08, 0x12,                               // header: PD=GMM, MTI=AuthAndCipheringRequest
         0x20,                                      // cipheringAlg(3)=GEA1(1)|spare|imeisvReq=0|forceStandby=0|spare
         0x0F,                                      // acReferenceNumber(4)=F(15)|spare(4)=0
         0x20,                                      // IEI nibble(4)=0x2 for AuthRAND | spare(4)=0
@@ -691,7 +691,7 @@ TEST(GoldenGMMTest, AuthAndCipheringRequest_GoldenParse) {
 // GMM Authentication And Ciphering Response (GSM 24.008 9.4.9) - golden parse
 // Reference: L3_Templates.ttcn ts_GMM_AUTH_RESP_2G (line 2886)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x13 = MTI(8)=0x13(AuthenticationAndCipheringResponse), raw encoding
 //   0xF0 = acReferenceNumber(4)=F(15)|spare(4)=0
 //   0x22 = IEI nibble(4)=0x2 for AuthRES | spare(4)=0x2
@@ -704,7 +704,7 @@ TEST(GoldenGMMTest, AuthAndCipheringResponse_GoldenParse) {
     // (mACReferenceNumber = o.value() & 0x0F), then reads spare(4 bits),
     // then calls L3AuthRES::parse for the RES value.
     uint8_t data[] = {
-        0x80, 0x13,                           // header: PD=GMM, MTI=AuthAndCipheringResponse
+        0x08, 0x13,                           // header: PD=GMM, MTI=AuthAndCipheringResponse
         0x0F,                                  // spare(4)=0|acReferenceNumber(4)=F(15) -> parser reads low nibble
         0x20,                                  // IEI nibble(4)=0x2 for AuthRES | spare(4)=0
         0xA1, 0xB2, 0xC3, 0xD4                // RES value (4 bytes)
@@ -722,14 +722,14 @@ TEST(GoldenGMMTest, AuthAndCipheringResponse_GoldenParse) {
 // GMM Identity Request (GSM 24.008 9.4.7) - golden parse
 // Reference: L3_Templates.ttcn tr_GMM_ID_REQ (line 2831)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x15 = MTI(8)=0x15(GMMIdentityRequest), raw encoding
 //   0x20 = identityType(3)=IMSI(1)|spare(1)=0|forceToStandby(1)=0|spare(4)=0
 //   0x00 = spare octet
 // =====================================================================
 
 TEST(GoldenGMMTest, GMMIdentityRequest_GoldenParse) {
-    uint8_t data[] = {0x80, 0x15, 0x20, 0x00};
+    uint8_t data[] = {0x08, 0x15, 0x20, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3GMMIdentityRequest::MTI);
@@ -744,7 +744,7 @@ TEST(GoldenGMMTest, GMMIdentityRequest_GoldenParse) {
 // GMM Identity Response (GSM 24.008 9.4.10) - golden parse
 // Reference: L3_Templates.ttcn ts_GMM_ID_RESP (line 2847)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x16 = MTI(8)=0x16(GMMIdentityResponse), raw encoding
 //   0x08 = mobileIdentity LV length = 8 bytes
 //   0x62 = type byte: spare(4)=0|type(3)=IMSI(1)|oe(1)=1
@@ -753,7 +753,7 @@ TEST(GoldenGMMTest, GMMIdentityRequest_GoldenParse) {
 
 TEST(GoldenGMMTest, GMMIdentityResponse_GoldenParse) {
     uint8_t data[] = {
-        0x80, 0x16,
+        0x08, 0x16,
         0x08, 0x62, 0x25, 0x09, 0x99, 0x00, 0x00, 0x00, 0x0F
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -769,7 +769,7 @@ TEST(GoldenGMMTest, GMMIdentityResponse_GoldenParse) {
 // GMM Authentication And Ciphering Failure (GSM 24.008 9.4.23) - golden parse
 // Reference: L3_Templates.ttcn ts_GMM_AUTH_FAIL_UMTS_AKA_RESYNC (line 2908)
 // Hex breakdown:
-//   0x80 = PD(4)=0x08(GMM), Skip(4)=0x00
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x1c = MTI(8)=0x1c(AuthenticationAndCipheringFailure), raw encoding
 //   0xa5 = extended IEI for GMMCause (0x80 | 0x25)
 //   0x01 = length
@@ -781,7 +781,7 @@ TEST(GoldenGMMTest, GMMIdentityResponse_GoldenParse) {
 
 TEST(GoldenGMMTest, AuthAndCipheringFailure_GoldenParse) {
     uint8_t data[] = {
-        0x80, 0x1c,
+        0x08, 0x1c,
         0xa5, 0x01, 0x15,
         0xb0, 0x0e,
         0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,

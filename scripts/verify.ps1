@@ -36,7 +36,7 @@ if (-not (Test-Path $exDir)) { throw "Examples directory not found: $exDir" }
 Get-ChildItem $exDir\*.exe | ForEach-Object {
     $args = @()
     # example_parse_file requires a hex string or file argument.
-    if ($_.Name -eq "example_parse_file.exe") { $args = @("060D00") }
+    if ($_.Name -eq "example_parse_file.exe") { $args = @("060D41") }
     # example_multithread accepts optional (threads, iterations); run with defaults.
     Write-Host "  Running $($_.Name) $args"
     & $_.FullName @args

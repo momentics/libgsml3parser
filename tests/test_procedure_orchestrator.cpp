@@ -491,8 +491,8 @@ TEST(ProcedureOrchestrator, CallRelease_UsesDisconnectTI) {
     int n = ResponseBuilder::buildResponseFromToken(
         ResponseToken::Release, {buf, sizeof(buf)}, &session);
     ASSERT_GT(n, 0);
-    // CC header byte 0: PD(4 bits) | TI(3 bits) | TIF(1 bit) = 0x30 | (5 << 1).
-    EXPECT_EQ(buf[0], static_cast<uint8_t>(0x30 | (5u << 1)));
+    // CC header byte 0: TI(3 bits) << 5 | TIF(1 bit) << 4 | PD(4 bits) = (5 << 5) | 0x03.
+    EXPECT_EQ(buf[0], static_cast<uint8_t>((5u << 5) | 0x03));
 }
 
 // Regression: starting a new orchestrator chain must clear stale response

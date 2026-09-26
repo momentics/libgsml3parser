@@ -41,16 +41,16 @@ import gsml3parser as g
 # ── Parse / serialize round trips ──────────────────────────────────────────
 
 def parse_hex_channel_release():
-    """'60 0D 00' = RR Channel Release (stable vector, mirrors the C test suite)."""
-    m = g.Message.from_hex("60 0D 00")
+    """'06 0D 00' = RR Channel Release (stable vector, mirrors the C test suite)."""
+    m = g.Message.from_hex("06 0D 00")
     try:
         assert m.name != ""
         assert m.pd == g.PD_RR == 6
         assert m.mti == 0x0D == 13
         assert m.ti == 0
         assert m.size() == 3
-        assert m.write() == bytes([0x60, 0x0D, 0x00])
-        assert m.hex() == "600d00"          # lowercase, no spaces (C contract)
+        assert m.write() == bytes([0x06, 0x0D, 0x00])
+        assert m.hex() == "060d00"          # lowercase, no spaces (C contract)
     finally:
         m.close()
 
@@ -58,18 +58,18 @@ def parse_hex_channel_release():
 # Byte-exact copy of the C test table `kBatch` in tests/test_c_api.cpp —
 # each vector is C-verified; values are NOT simplified or shortened here.
 K_BATCH = [
-    (g.PD_RR,   "60 0D 00",          0x0D),   # Channel Release
-    (g.PD_MM,   "50 84",             0x21),   # CM Service Accept
-    (g.PD_CC,   "3E 94 08 02 16 21", 0x25),   # Disconnect (TI=7)
-    (g.PD_SS,   "B0 E8 00",          0x3A),   # SupServFacilityMessage (empty facility)
-    (g.PD_GMM,  "80 20 05",          0x20),   # GMM Status (cause=5)
-    (g.PD_SM,   "A0 55 A7 01 05",    0x55),   # SM Status (cause=5)
-    (g.PD_SMS,  "90 04",             0x04),   # CP-Ack (no body)
-    (g.PD_BCC,  "10 00",             0x00),   # BCC Setup
+    (g.PD_RR,   "06 0D 00",          0x0D),   # Channel Release
+    (g.PD_MM,   "05 21",             0x21),   # CM Service Accept
+    (g.PD_CC,   "E3 25 08 02 16 21", 0x25),   # Disconnect (TI=7)
+    (g.PD_SS,   "0B 3A 00",          0x3A),   # SupServFacilityMessage (empty facility)
+    (g.PD_GMM,  "08 20 05",          0x20),   # GMM Status (cause=5)
+    (g.PD_SM,   "0A 55 A7 01 05",    0x55),   # SM Status (cause=5)
+    (g.PD_SMS,  "09 04",             0x04),   # CP-Ack (no body)
+    (g.PD_BCC,  "01 00",             0x00),   # BCC Setup
     (g.PD_GCC,  "00 00 02",          0x00),   # GCC Setup
-    (g.PD_LS,   "C0 01",             0x01),   # LocationServiceRequest
-    (g.PD_EXT,  "E0 01",             0x01),   # ExtendedMessage
-    (g.PD_TST,  "F0 01",             0x01),   # TestProcedureMessage
+    (g.PD_LS,   "0C 01",             0x01),   # LocationServiceRequest
+    (g.PD_EXT,  "0E 01",             0x01),   # ExtendedMessage
+    (g.PD_TST,  "0F 01",             0x01),   # TestProcedureMessage
 ]
 
 
@@ -102,13 +102,13 @@ def roundtrip_12_pd_vectors(pd, hexstr, mti):
 def parse_into_reuses_the_handle():
     """parse_into is the zero-extra-allocation reparse hot path; a failure keeps
     the PREVIOUS CONTENT (C semantics of gsml3_parse_l3_into). The failure
-    vector mirrors TEST(CApi, L3ErrorPaths): '60 0D' = truncated RR."""
-    m = g.Message.from_hex("60 0D 00")
+    vector mirrors TEST(CApi, L3ErrorPaths): '06 0D' = truncated RR."""
+    m = g.Message.from_hex("06 0D 00")
     try:
-        m.parse_into(bytes([0x50, 0x84]))     # -> CM Service Accept
+        m.parse_into(bytes([0x05, 0x21]))     # -> CM Service Accept
         assert m.name != "ChannelRelease" and m.pd == g.PD_MM
         with pytest.raises(g.GsmL3Error):
-            m.parse_into(bytes([0x60, 0x0D]))  # truncated RR ChannelRelease
+            m.parse_into(bytes([0x06, 0x0D]))  # truncated RR ChannelRelease
         assert m.pd == g.PD_MM                # previous content KEPT after failure
     finally:
         m.close()
@@ -119,15 +119,15 @@ def parse_into_reuses_the_handle():
 def error_paths():
     """Wrapper-level rejections (None/empty input -> TypeError BEFORE FFI) and
     C parse failures surfaced as typed GsmL3Errors with the synchronous last-
-    error copy. Vectors mirror TEST(CApi, L3ErrorPaths): '60 0D' is the
-    canonical truncated RR ChannelRelease (a lone octet '60' IS a complete
-    single-octet RR message for this core and parses fine — verified)."""
+    error copy. Vectors mirror TEST(CApi, L3ErrorPaths): '06 0D' is the
+    canonical truncated RR ChannelRelease (a lone octet '06' IS a complete
+    one-octet Channel Request on RACH for this core and parses fine)."""
     with pytest.raises(TypeError):
         g.Message.from_bytes(b"")             # empty input: language-level error
     with pytest.raises(TypeError):
         g.Message.from_bytes(None)
     with pytest.raises(g.GsmL3Error) as exc:
-        g.Message.from_hex("60 0D")           # truncated RR ChannelRelease (C vector)
+        g.Message.from_hex("06 0D")           # truncated RR ChannelRelease (C vector)
     assert exc.value.code == g.TRUNCATED == 2
     assert exc.value.message.strip() != ""    # synchronous last-error copy present
     with pytest.raises(g.GsmL3Error) as exc2:
@@ -137,12 +137,12 @@ def error_paths():
     # strict config mirrors TEST(CApi, L3ErrorPaths): trailing byte rejected under
     # strict framing, tolerated (consumed leniently) by default.
     with g.Config(strict_framing=True) as strict:
-        ok = g.Message.from_hex("50 84", cfg=strict)
+        ok = g.Message.from_hex("05 21", cfg=strict)
         ok.close()
         with pytest.raises(g.GsmL3Error):
-            g.Message.from_bytes(b"\x50\x84\x00", cfg=strict)
+            g.Message.from_bytes(b"\x05\x21\x00", cfg=strict)
     # default (lenient) config accepts the same trailing byte
-    lenient = g.Message.from_bytes(b"\x50\x84\x00")
+    lenient = g.Message.from_bytes(b"\x05\x21\x00")
     assert lenient.name != ""
     lenient.close()
 
@@ -260,7 +260,7 @@ def config_setters():
         cfg.set_log_level(99)          # out of range -> silently ignored by C
         cfg.set_log_level(3)           # GSML3_LOG_ERR
         cfg.set_strict_framing(True)   # takes effect on subsequent parses with this config
-        m = g.Message.from_hex("60 0D 00", cfg=cfg)
+        m = g.Message.from_hex("06 0D 00", cfg=cfg)
         m.close()
     finally:
         cfg.close()
@@ -314,6 +314,6 @@ def test_leak_smoke_1k():
     here every Message is explicitly closed, so the count of frees matches the
     count of parses exactly."""
     for _ in range(1000):
-        m = g.Message.from_hex("60 0D 00")   # RAII: freed by close() below
+        m = g.Message.from_hex("06 0D 00")   # RAII: freed by close() below
         m.write(); m.hex(); m.dump()
         m.close()

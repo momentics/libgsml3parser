@@ -43,8 +43,8 @@
 //     oct4=[causeValue(7)|ext3(1)=1] - matches GSM 24.008 10.5.4.11
 //   - Cause LV encoding verified against L3_Templates.ttcn ts_ML3_Cause_LV (line 78):
 //     No IEI, length(1) + oct3 + oct4 - matches GSM 24.008 10.5.4.11
-//   - CC header byte layout verified: PD=3('0011'B), TI(3 bits), TIF(1 bit) in byte 0;
-//     MTI(6 bits)|NSD(2 bits) in byte 1 - matches GSM 24.008 Table 11.2
+//   - CC header byte layout verified: PD=3('0011'B) in the low nibble of octet 0,
+//     TI(3 bits)|TIF(1 bit) in the high nibble; MT(6 bits) in the low bits of octet 1 - matches GSM 24.008 Table 11.2
 //   - CC Cause values (CCCause enum) verified against ITU-T Q.763 / GSM 24.008 Table 10.5.4.11:
 //     16=Normal_Call_Clearing, 17=User_Busy, 31=Normal_Unspecified, 95=Semantic_Error, etc.
 //   - CC CauseLocation values verified against GSM 24.008 Table 10.5.4.11:
@@ -82,10 +82,10 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 //   ts_ML3_MO_CC_REL_COMPL: messageType := '101010'B -> ReleaseComplete = 0x2a
 //   ts_ML3_MO_CC_START_DTMF: messageType := '110101'B -> StartDTMF = 0x35
 // GSM 24.008 Table 10.5.4 specifies all CC MTI values (6-bit field)
-// [GSM SPEC VERIFIED] CC messages use 6-bit MTI in byte 1, shifted left by 2 bits
-//   to make room for NSD(2). PD discriminator for CC is 3 ('0011'B).
-//   Byte 0 layout: PD(4)|TI(3)|TIF(1), where TI=Transaction Identifier,
-//   TIF=Transaction Identity Flag (0=ORIG, 1=REPL per GSM 24.008 Table 11.3).
+// [GSM SPEC VERIFIED] CC messages carry the 6-bit MTI in the low bits of octet 1
+//   (NSD not exposed, written zero). PD discriminator for CC is 3 ('0011'B).
+//   Octet 0 layout: TI(3)|TIF(1)|PD(4), where TI=Transaction Identifier,
+//   TIF=Transaction Identity Flag (0=ORIG, 1=REPL per TS 24.007 Table 11.3).
 //   All values verified against GSM 24.008 Table 10.5.4 and L3_Templates.ttcn.
 // =====================================================================
 
@@ -122,9 +122,9 @@ TEST(GoldenCC, MessageTypeValues) {
 // =====================================================================
 
 TEST(GoldenCC, CallProceeding_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
-    // Byte 1: messageType(6)=0x02(CallProceeding)|NSD(2)=0 = 0x08 [GSM 24.008 Table 10.5.4]
-    uint8_t data[] = {0x3E, 0x08};
+    // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
+    // Byte 1: MT=0x02(CallProceeding) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
+    uint8_t data[] = {0xE3, 0x02};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CallProceeding::MTI);
@@ -140,10 +140,10 @@ TEST(GoldenCC, CallProceeding_Parse) {
 // =====================================================================
 
 TEST(GoldenCC, Connect_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=1(REPL) = 0x3F [GSM 24.008 Table 11.3 TIF]
+    // Byte 0: TI=7 in bits 7:5, TIF=1 (REPL per TS 24.007 Table 11.3), PD=CC in the low nibble -> 0xF3
     //   L3_Templates.ttcn ts_ML3_MO_CC_CONNECT (line 1650): tiFlag := c_TIF_REPL
-    // Byte 1: messageType(6)=0x07(Connect)|NSD(2)=0 = 0x1C [GSM 24.008 Table 10.5.4]
-    uint8_t data[] = {0x3F, 0x1C};
+    // Byte 1: MT=0x07(Connect) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
+    uint8_t data[] = {0xF3, 0x07};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3Connect::MTI);
@@ -159,9 +159,9 @@ TEST(GoldenCC, Connect_Parse) {
 // =====================================================================
 
 TEST(GoldenCC, ConnectAcknowledge_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
-    // Byte 1: messageType(6)=0x0F(ConnectAcknowledge)|NSD(2)=0 = 0x3C [GSM 24.008 Table 10.5.4]
-    uint8_t data[] = {0x3E, 0x3C};
+    // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
+    // Byte 1: MT=0x0F(ConnectAcknowledge) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
+    uint8_t data[] = {0xE3, 0x0F};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ConnectAcknowledge::MTI);
@@ -177,9 +177,9 @@ TEST(GoldenCC, ConnectAcknowledge_Parse) {
 // =====================================================================
 
 TEST(GoldenCC, CallConfirmed_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
-    // Byte 1: messageType(6)=0x08(CallConfirmed)|NSD(2)=0 = 0x20 [GSM 24.008 Table 10.5.4]
-    uint8_t data[] = {0x3E, 0x20};
+    // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
+    // Byte 1: MT=0x08(CallConfirmed) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
+    uint8_t data[] = {0xE3, 0x08};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CallConfirmed::MTI);
@@ -199,14 +199,14 @@ TEST(GoldenCC, CallConfirmed_Parse) {
 // =====================================================================
 
 TEST(GoldenCC, CCStatus_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
-    // Byte 1: messageType(6)=0x3D(CCSStatus)|NSD(2)=0 -> 0x3D<<2 | 0 = 0xF4 [GSM 24.008 Table 10.5.4]
+    // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
+    // Byte 1: MT=0x3D(CCStatus) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
     // Byte 2: IEI = 0x08 (Cause, GSM 24.008 10.5.4.11)
     // Byte 3: Length = 2 (2 octets of Cause value part)
     // Byte 4: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x16
     // Byte 5: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21 [GSM 24.008 10.5.4.11]
     // Byte 6: CallState = 0x00 [GSM 24.008 10.5.4.6]
-    uint8_t data[] = {0x3E, 0xF4, 0x08, 0x02, 0x16, 0x21, 0x00};
+    uint8_t data[] = {0xE3, 0x3D, 0x08, 0x02, 0x16, 0x21, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CCStatus::MTI);
@@ -223,9 +223,9 @@ TEST(GoldenCC, CCStatus_Parse) {
 // =====================================================================
 
 TEST(GoldenCC, EmergencySetup_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
-    // Byte 1: messageType(6)=0x0E(EmergencySetup)|NSD(2)=0 = 0x38 [GSM 24.008 Table 10.5.4]
-    uint8_t data[] = {0x3E, 0x38};
+    // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
+    // Byte 1: MT=0x0E(EmergencySetup) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
+    uint8_t data[] = {0xE3, 0x0E};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3EmergencySetup::MTI);
@@ -239,9 +239,9 @@ TEST(GoldenCC, EmergencySetup_Parse) {
 // =====================================================================
 
 TEST(GoldenCC, Hold_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
-    // Byte 1: messageType(6)=0x18(Hold)|NSD(2)=0 = 0x60 [GSM 24.008 Table 10.5.4]
-    uint8_t data[] = {0x3E, 0x60};
+    // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
+    // Byte 1: MT=0x18(Hold) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
+    uint8_t data[] = {0xE3, 0x18};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3Hold::MTI);
@@ -255,9 +255,9 @@ TEST(GoldenCC, Hold_Parse) {
 // =====================================================================
 
 TEST(GoldenCC, Progress_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
-    // Byte 1: messageType(6)=0x03(Progress)|NSD(2)=0 = 0x0C [GSM 24.008 Table 10.5.4]
-    uint8_t data[] = {0x3E, 0x0C};
+    // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
+    // Byte 1: MT=0x03(Progress) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
+    uint8_t data[] = {0xE3, 0x03};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3Progress::MTI);
@@ -272,8 +272,8 @@ TEST(GoldenCC, Progress_Parse) {
 // =====================================================================
 
 TEST(GoldenCC, StartDTMF_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0(ORIG) = 0x3E [GSM 24.008 Table 11.2]
-    // Byte 1: messageType(6)=0x35(StartDTMF)|NSD(2)=0 = 0x35<<2 = 0xD4 [GSM 24.008 Table 10.5.4]
+    // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
+    // Byte 1: MT=0x35(StartDTMF) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
     // Byte 2: IEI = 0x2C (keypadFacility, GSM 24.008 10.5.4.17)
     //   L3_Templates.ttcn ts_ML3_MO_CC_START_DTMF (line 1727): elementIdentifier := '2C'O
     // Byte 3: keypadInformation = IA5 character code for '1' = 0x31
@@ -284,7 +284,7 @@ TEST(GoldenCC, StartDTMF_Parse) {
     //   0b01100001=0x61 in a 7-bit field. This is NOT standard IA5 encoding
     //   and deviates from GSM 24.008 10.5.4.17. Golden test uses correct
     //   IA5 value 0x31 per spec.
-    uint8_t data[] = {0x3E, 0xD4, 0x2C, 0x31};
+    uint8_t data[] = {0xE3, 0x35, 0x2C, 0x31};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3StartDTMF::MTI);
@@ -298,9 +298,9 @@ TEST(GoldenCC, StartDTMF_Parse) {
 // =====================================================================
 
 TEST(GoldenCC, StopDTMF_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
-    // Byte 1: messageType(6)=0x31(StopDTMF)|NSD(2)=0 = 0xC4 [GSM 24.008 Table 10.5.4]
-    uint8_t data[] = {0x3E, 0xC4};
+    // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
+    // Byte 1: MT=0x31(StopDTMF) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
+    uint8_t data[] = {0xE3, 0x31};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3StopDTMF::MTI);
@@ -319,12 +319,12 @@ TEST(GoldenCC, StopDTMF_Parse) {
 // =====================================================================
 
 TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
-    // Byte 1: messageType(6)=0x2A(ReleaseComplete)|NSD(2)=0 = 0xA8 [GSM 24.008 Table 10.5.4]
+    // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
+    // Byte 1: MT=0x2A(ReleaseComplete) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
     // Byte 2: Length = 2 (2 octets Cause value part, LV format, no IEI)
     // Byte 3: location(4)=3(Transit)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x36
     // Byte 4: ext(1)=1|causeValue(7)=16(Normal_Call_Clearing) = 0b1_0010000 = 0x21 [GSM 24.008 10.5.4.11]
-    uint8_t data[] = {0x3E, 0xA8, 0x02, 0x36, 0x21};
+    uint8_t data[] = {0xE3, 0x2A, 0x02, 0x36, 0x21};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ReleaseComplete::MTI);
@@ -344,8 +344,8 @@ TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
 // =====================================================================
 
 TEST(GoldenCC, Disconnect_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=0 = 0x3E [GSM 24.008 Table 11.2]
-    // Byte 1: messageType(6)=0x25(Disconnect)|NSD(2)=0 = 0x94 [GSM 24.008 Table 10.5.4]
+    // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
+    // Byte 1: MT=0x25(Disconnect) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
     // Called-Party-Number TLV (mandatory per GSM 24.008 9.3.7):
     // Byte 2: IEI = 0x5E (CalledPartyNumberBcd, GSM 24.008 10.5.4.7)
     // Byte 3: Length = 6 (1 type/plan octet + 5 BCD digit octets)
@@ -360,7 +360,7 @@ TEST(GoldenCC, Disconnect_Parse) {
     // Byte 12: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11|ext(1)=0 = 0x16
     // Byte 13: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21 [ITU-T Q.763]
     uint8_t data[] = {
-        0x3E, 0x94,
+        0xE3, 0x25,
         0x5E, 0x06, 0x11, 0x21, 0x43, 0x65, 0x87, 0x09,
         0x08, 0x02, 0x16, 0x21
     };
@@ -384,9 +384,9 @@ TEST(GoldenCC, Disconnect_Parse) {
 // =====================================================================
 
 TEST(GoldenCC, Release_Parse) {
-    // Byte 0: PD(4)=3(CC)|TI(3)=7|TIF(1)=1(REPL) = 0x3F [GSM 24.008 Table 11.3 TIF]
-    // Byte 1: messageType(6)=0x2D(Release)|NSD(2)=0 = 0xB4 [GSM 24.008 Table 10.5.4]
-    uint8_t data[] = {0x3F, 0xB4};
+    // Byte 0: TI=7 in bits 7:5, TIF=1 (REPL per TS 24.007 Table 11.3), PD=CC in the low nibble -> 0xF3
+    // Byte 1: MT=0x2D(Release) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
+    uint8_t data[] = {0xF3, 0x2D};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3Release::MTI);
@@ -918,4 +918,17 @@ TEST(GoldenCC, BSSCauseValues) {
     EXPECT_EQ(static_cast<uint8_t>(BSSCause::CCCH_Overload), 0x23);
     EXPECT_EQ(static_cast<uint8_t>(BSSCause::Processor_Overload), 0x24);
     EXPECT_EQ(static_cast<uint8_t>(BSSCause::Ciphering_Algorithm_Not_Supported), 0x40);
+}
+
+// Golden: CC Setup header layout (TS 24.078): octet 0 = (TI << 5) | PD(CC=3)
+// for TI=2; the message type sits in the six low bits of octet 1 with the
+// network signalling indicator zero.
+TEST(GoldenCC, HeaderLayout_TIAndMt) {
+    auto setup = L3Setup::builder().ti(2)
+        .calledParty(L3CalledPartyBCDNumber{"1234"}).build();
+    ParsedMessage pm{CCM{std::move(setup)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes)[0], static_cast<uint8_t>((2 << 5) | 0x03));
+    EXPECT_EQ((*bytes)[1] & 0x3F, L3Setup::MTI);
 }

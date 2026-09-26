@@ -29,16 +29,16 @@
 //   ts_ML3_MO_BCC (line 3813) and 3GPP TS 44.018 Table 10.4.3.
 // All GCC message type identifiers verified against osmo-ttcn3-hacks L3_Templates.ttcn
 //   ts_ML3_MO_GCC (line 3840) and 3GPP TS 44.018 Table 10.4.4.
-// BCC/GCC header format verified: PD=1(BCC)/PD=0(GCC), TI(3 bits), TIF(1 bit) in byte 0;
-//   MessageType(6 bits)<<2 in byte 1 (same encoding as CC/SS).
+// BCC/GCC header format verified: PD=1(BCC)/PD=0(GCC) in the low nibble of byte 0,
+//   TI(3 bits) in bits 7:5 and TIF(1 bit) in bit 4; MessageType(6 bits) in the low bits of byte 1 (same encoding as CC/SS/MM).
 // This differs from GMM/SMS/SM which use raw 8-bit MTI in byte 1.
 //
 // [GOLDEN VERIFICATION]
 // All byte-level parse test data cross-checked against osmo-ttcn3-hacks reference:
 //   - BCC discriminator '0001'B (PD=0x01) verified for ts_ML3_MO_BCC template
 //   - GCC discriminator '0000'B (PD=0x00) verified for ts_ML3_MO_GCC template
-//   - TI encoding: tio(3 bits)<<1 | tif(1 bit) in byte 0 low nibble
-//   - MTI encoding: messageType(6 bits)<<2 in byte 1
+//   - Byte 0 encoding: TI(3 bits)<<5 | TIF(1 bit)<<4 | PD(4 bits)
+//   - MTI encoding: messageType(6 bits) in the low bits of byte 1
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -58,8 +58,8 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 // =====================================================================
 // BCC MESSAGE TYPE VALUES (GSM 44.018 Table 10.4.3)
 // Reference: 3GPP TS 44.018 for broadcast call control message types
-// [GSM SPEC VERIFIED] BCC messages use 6-bit MTI shifted left by 2,
-//   same encoding as CC/SS (not raw 8-bit like GMM/SMS/SM).
+// [GSM SPEC VERIFIED] BCC messages use a 6-bit MTI in the low bits of byte 1,
+//   same encoding as CC/SS/MM (not raw 8-bit like GMM/SMS/SM).
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, BCCMessageTypeValues) {
@@ -74,8 +74,8 @@ TEST(GoldenBCCGCCTest, BCCMessageTypeValues) {
 // =====================================================================
 // GCC MESSAGE TYPE VALUES (GSM 44.018 Table 10.4.4)
 // Reference: 3GPP TS 44.018 for group call control message types
-// [GSM SPEC VERIFIED] GCC messages use 6-bit MTI shifted left by 2,
-//   same encoding as CC/SS/BCC.
+// [GSM SPEC VERIFIED] GCC messages use a 6-bit MTI in the low bits of byte 1,
+//   same encoding as CC/SS/MM/BCC.
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, GCCMessageTypeValues) {
@@ -90,29 +90,29 @@ TEST(GoldenBCCGCCTest, GCCMessageTypeValues) {
 
 // =====================================================================
 // BCC L3 Header Encoding Test
-// Byte 0: PD(4)=1(BCC) | TI(3)=0 | TIF(1)=0 -> 0x10
-// Byte 1: MTI(6)<<2 | NSD(2)=0 -> Setup=0x00
+// Byte 0: TI(3)=0 << 5 | TIF(1)=0 << 4 | PD(4)=1(BCC) -> 0x01
+// Byte 1: MTI(6) | NSD(2)=0 -> Setup=0x00
 // This matches CC/SS encoding, not GMM raw encoding.
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, BCCHeaderEncoding) {
-    // BCC Setup: PD=1, MTI=0x00 -> header = 0x10 0x00
-    uint8_t data[] = {0x10, 0x00};
+    // BCC Setup: PD=1, MTI=0x00 -> header = 0x01 0x00
+    uint8_t data[] = {0x01, 0x00};
     auto hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
     EXPECT_EQ(hdr.value().pd, L3PD::BroadcastCallControl);
     EXPECT_EQ(hdr.value().mti, 0x00);
     EXPECT_EQ(hdr.value().ti, 0u);
 
-    // BCC ReleaseComplete: PD=1, MTI=0x0a -> header = 0x10 0x28 (0x0a<<2)
-    data[1] = 0x28;
+    // BCC ReleaseComplete: PD=1, MTI=0x0a -> header = 0x01 0x0A
+    data[1] = 0x0A;
     hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
     EXPECT_EQ(hdr.value().pd, L3PD::BroadcastCallControl);
     EXPECT_EQ(hdr.value().mti, 0x0a);
 
-    // BCC Setup with TI=3: PD=1, TI=3 -> header = 0x16 0x00 (TI=3<<1=6)
-    data[0] = 0x16;
+    // BCC Setup with TI=3: PD=1, TI=3 -> header = 0x61 0x00 (TI=3<<5)
+    data[0] = 0x61;
     data[1] = 0x00;
     hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
@@ -123,8 +123,8 @@ TEST(GoldenBCCGCCTest, BCCHeaderEncoding) {
 
 // =====================================================================
 // GCC L3 Header Encoding Test
-// Byte 0: PD(4)=0(GCC) | TI(3)=0 | TIF(1)=0 -> 0x00
-// Byte 1: MTI(6)<<2 | NSD(2)=0 -> Setup=0x00
+// Byte 0: TI(3)=0 << 5 | TIF(1)=0 << 4 | PD(4)=0(GCC) -> 0x00
+// Byte 1: MTI(6) | NSD(2)=0 -> Setup=0x00
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, GCCHeaderEncoding) {
@@ -136,15 +136,15 @@ TEST(GoldenBCCGCCTest, GCCHeaderEncoding) {
     EXPECT_EQ(hdr.value().mti, 0x00);
     EXPECT_EQ(hdr.value().ti, 0u);
 
-    // GCC ReleaseComplete: PD=0, MTI=0x0a -> header = 0x00 0x28 (0x0a<<2)
-    data[1] = 0x28;
+    // GCC ReleaseComplete: PD=0, MTI=0x0a -> header = 0x00 0x0A
+    data[1] = 0x0A;
     hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
     EXPECT_EQ(hdr.value().pd, L3PD::GroupCallControl);
     EXPECT_EQ(hdr.value().mti, 0x0a);
 
-    // GCC Acknowledge: PD=0, MTI=0x02 -> header = 0x00 0x08 (0x02<<2)
-    data[1] = 0x08;
+    // GCC Acknowledge: PD=0, MTI=0x02 -> header = 0x00 0x02
+    data[1] = 0x02;
     hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
     EXPECT_EQ(hdr.value().pd, L3PD::GroupCallControl);
@@ -155,15 +155,15 @@ TEST(GoldenBCCGCCTest, GCCHeaderEncoding) {
 // BCC Setup (GSM 44.018 9.6.2.2) - message with body
 // Reference: L3_Templates.ttcn ts_ML3_MO_BCC (line 3813)
 // Hex breakdown:
-//   0x10 = PD(4)=0x01(BCC), TI(3)=0, TIF(1)=0
-//   0x00 = MTI(6)=0x00(Setup)<<2, NSD(2)=0
+//   0x01 = PD=0x01(BCC) in the low nibble, TI=0, TIF=0
+//   0x00 = MTI(6)=0x00(Setup), NSD(2)=0
 //   0xAA, 0xBB, 0xCC = Body octets (opaque IE data)
 // Note: BCC messages use >4 bytes to avoid ambiguity with HandoverAccess
 //   short message (which is exactly 4 bytes and takes parsing priority).
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, BCCSetup_GoldenParse) {
-    uint8_t data[] = {0x10, 0x00, 0xAA, 0xBB, 0xCC};
+    uint8_t data[] = {0x01, 0x00, 0xAA, 0xBB, 0xCC};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3BCCSetup::MTI);
@@ -196,13 +196,13 @@ TEST(GoldenBCCGCCTest, BCCSetup_RoundTrip) {
 // BCC Release Complete (GSM 44.018 9.6.2.9) - minimal message
 // Reference: L3_Templates.ttcn ts_ML3_MO_BCC wrapper
 // Hex breakdown:
-//   0x10 = PD(4)=0x01(BCC), TI(3)=0, TIF(1)=0
-//   0x28 = MTI(6)=0x0a(ReleaseComplete)<<2, NSD(2)=0
+//   0x01 = PD=0x01(BCC) in the low nibble, TI=0, TIF=0
+//   0x0A = MTI(6)=0x0a(ReleaseComplete), NSD(2)=0
 // No body octets.
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, BCCReleaseComplete_Minimal) {
-    uint8_t data[] = {0x10, 0x28};
+    uint8_t data[] = {0x01, 0x0A};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3BCCReleaseComplete::MTI);
@@ -227,13 +227,13 @@ TEST(GoldenBCCGCCTest, BCCReleaseComplete_RoundTrip) {
 // BCC Proceeding (GSM 44.018 9.6.2.3) - with body
 // Reference: L3_Templates.ttcn ts_ML3_MO_BCC wrapper
 // Hex breakdown:
-//   0x10 = PD(4)=0x01(BCC), TI(3)=0, TIF(1)=0
-//   0x04 = MTI(6)=0x01(Proceeding)<<2, NSD(2)=0
+//   0x01 = PD=0x01(BCC) in the low nibble, TI=0, TIF=0
+//   0x01 = MTI(6)=0x01(Proceeding), NSD(2)=0
 //   0xCC = Body octet (opaque IE data)
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, BCCProceeding_GoldenParse) {
-    uint8_t data[] = {0x10, 0x04, 0xCC};
+    uint8_t data[] = {0x01, 0x01, 0xCC};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3BCCProceeding::MTI);
@@ -246,12 +246,12 @@ TEST(GoldenBCCGCCTest, BCCProceeding_GoldenParse) {
 // =====================================================================
 // BCC Connect (GSM 44.018 9.6.2.6) - minimal
 // Hex breakdown:
-//   0x10 = PD(4)=0x01(BCC), TI(3)=0, TIF(1)=0
-//   0x14 = MTI(6)=0x05(Connect)<<2, NSD(2)=0
+//   0x01 = PD=0x01(BCC) in the low nibble, TI=0, TIF=0
+//   0x05 = MTI(6)=0x05(Connect), NSD(2)=0
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, BCCConnect_Minimal) {
-    uint8_t data[] = {0x10, 0x14};
+    uint8_t data[] = {0x01, 0x05};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3BCCConnect::MTI);
@@ -261,12 +261,12 @@ TEST(GoldenBCCGCCTest, BCCConnect_Minimal) {
 // =====================================================================
 // BCC Disconnect (GSM 44.018 9.6.2.7) - minimal
 // Hex breakdown:
-//   0x10 = PD(4)=0x01(BCC), TI(3)=0, TIF(1)=0
-//   0x18 = MTI(6)=0x06(Disconnect)<<2, NSD(2)=0
+//   0x01 = PD=0x01(BCC) in the low nibble, TI=0, TIF=0
+//   0x06 = MTI(6)=0x06(Disconnect), NSD(2)=0
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, BCCDisconnect_Minimal) {
-    uint8_t data[] = {0x10, 0x18};
+    uint8_t data[] = {0x01, 0x06};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3BCCDisconnect::MTI);
@@ -276,12 +276,12 @@ TEST(GoldenBCCGCCTest, BCCDisconnect_Minimal) {
 // =====================================================================
 // BCC Release (GSM 44.018 9.6.2.8) - minimal
 // Hex breakdown:
-//   0x10 = PD(4)=0x01(BCC), TI(3)=0, TIF(1)=0
-//   0x1C = MTI(6)=0x07(Release)<<2, NSD(2)=0
+//   0x01 = PD=0x01(BCC) in the low nibble, TI=0, TIF=0
+//   0x07 = MTI(6)=0x07(Release), NSD(2)=0
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, BCCRelease_Minimal) {
-    uint8_t data[] = {0x10, 0x1C};
+    uint8_t data[] = {0x01, 0x07};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3BCCRelease::MTI);
@@ -292,8 +292,8 @@ TEST(GoldenBCCGCCTest, BCCRelease_Minimal) {
 // GCC Setup (GSM 44.018 9.7.2.2) - message with body
 // Reference: L3_Templates.ttcn ts_ML3_MO_GCC (line 3840)
 // Hex breakdown:
-//   0x00 = PD(4)=0x00(GCC), TI(3)=0, TIF(1)=0
-//   0x00 = MTI(6)=0x00(Setup)<<2, NSD(2)=0
+//   0x00 = PD=0x00(GCC) in the low nibble, TI=0, TIF=0
+//   0x00 = MTI(6)=0x00(Setup), NSD(2)=0
 //   0xDD, 0xEE, 0xFF = Body octets (opaque IE data)
 // Note: GCC messages use >4 bytes to avoid ambiguity with HandoverAccess
 //   short message (which is exactly 4 bytes and takes parsing priority).
@@ -332,12 +332,12 @@ TEST(GoldenBCCGCCTest, GCCSetup_RoundTrip) {
 // =====================================================================
 // GCC Acknowledge (GSM 44.018 9.7.2.3) - minimal
 // Hex breakdown:
-//   0x00 = PD(4)=0x00(GCC), TI(3)=0, TIF(1)=0
-//   0x08 = MTI(6)=0x02(Acknowledge)<<2, NSD(2)=0
+//   0x00 = PD=0x00(GCC) in the low nibble, TI=0, TIF=0
+//   0x02 = MTI(6)=0x02(Acknowledge), NSD(2)=0
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, GCCAcknowledge_Minimal) {
-    uint8_t data[] = {0x00, 0x08};
+    uint8_t data[] = {0x00, 0x02};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3GCCAcknowledge::MTI);
@@ -347,12 +347,12 @@ TEST(GoldenBCCGCCTest, GCCAcknowledge_Minimal) {
 // =====================================================================
 // GCC Proceeding (GSM 44.018 9.7.2.4) - minimal
 // Hex breakdown:
-//   0x00 = PD(4)=0x00(GCC), TI(3)=0, TIF(1)=0
-//   0x04 = MTI(6)=0x01(Proceeding)<<2, NSD(2)=0
+//   0x00 = PD=0x00(GCC) in the low nibble, TI=0, TIF=0
+//   0x01 = MTI(6)=0x01(Proceeding), NSD(2)=0
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, GCCProceeding_Minimal) {
-    uint8_t data[] = {0x00, 0x04};
+    uint8_t data[] = {0x00, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3GCCProceeding::MTI);
@@ -362,12 +362,12 @@ TEST(GoldenBCCGCCTest, GCCProceeding_Minimal) {
 // =====================================================================
 // GCC Connect (GSM 44.018 9.7.2.6) - minimal
 // Hex breakdown:
-//   0x00 = PD(4)=0x00(GCC), TI(3)=0, TIF(1)=0
-//   0x14 = MTI(6)=0x05(Connect)<<2, NSD(2)=0
+//   0x00 = PD=0x00(GCC) in the low nibble, TI=0, TIF=0
+//   0x05 = MTI(6)=0x05(Connect), NSD(2)=0
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, GCCConnect_Minimal) {
-    uint8_t data[] = {0x00, 0x14};
+    uint8_t data[] = {0x00, 0x05};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3GCCConnect::MTI);
@@ -377,12 +377,12 @@ TEST(GoldenBCCGCCTest, GCCConnect_Minimal) {
 // =====================================================================
 // GCC Disconnect (GSM 44.018 9.7.2.7) - minimal
 // Hex breakdown:
-//   0x00 = PD(4)=0x00(GCC), TI(3)=0, TIF(1)=0
-//   0x18 = MTI(6)=0x06(Disconnect)<<2, NSD(2)=0
+//   0x00 = PD=0x00(GCC) in the low nibble, TI=0, TIF=0
+//   0x06 = MTI(6)=0x06(Disconnect), NSD(2)=0
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, GCCDisconnect_Minimal) {
-    uint8_t data[] = {0x00, 0x18};
+    uint8_t data[] = {0x00, 0x06};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3GCCDisconnect::MTI);
@@ -392,12 +392,12 @@ TEST(GoldenBCCGCCTest, GCCDisconnect_Minimal) {
 // =====================================================================
 // GCC Release (GSM 44.018 9.7.2.8) - minimal
 // Hex breakdown:
-//   0x00 = PD(4)=0x00(GCC), TI(3)=0, TIF(1)=0
-//   0x1C = MTI(6)=0x07(Release)<<2, NSD(2)=0
+//   0x00 = PD=0x00(GCC) in the low nibble, TI=0, TIF=0
+//   0x07 = MTI(6)=0x07(Release), NSD(2)=0
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, GCCRelease_Minimal) {
-    uint8_t data[] = {0x00, 0x1C};
+    uint8_t data[] = {0x00, 0x07};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3GCCRelease::MTI);
@@ -407,12 +407,12 @@ TEST(GoldenBCCGCCTest, GCCRelease_Minimal) {
 // =====================================================================
 // GCC Release Complete (GSM 44.018 9.7.2.9) - minimal
 // Hex breakdown:
-//   0x00 = PD(4)=0x00(GCC), TI(3)=0, TIF(1)=0
-//   0x28 = MTI(6)=0x0a(ReleaseComplete)<<2, NSD(2)=0
+//   0x00 = PD=0x00(GCC) in the low nibble, TI=0, TIF=0
+//   0x0A = MTI(6)=0x0a(ReleaseComplete), NSD(2)=0
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, GCCReleaseComplete_Minimal) {
-    uint8_t data[] = {0x00, 0x28};
+    uint8_t data[] = {0x00, 0x0A};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3GCCReleaseComplete::MTI);
@@ -540,7 +540,7 @@ TEST(GoldenBCCGCCTest, GCCSetup_BodyRoundTrip) {
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, BCCSetup_HexParse) {
-    auto res = parseL3Hex("10 00 AA BB CC");
+    auto res = parseL3Hex("01 00 AA BB CC");
     ASSERT_TRUE(res);
     EXPECT_EQ(messageMTI(*res), L3BCCSetup::MTI);
     EXPECT_EQ(messagePD(*res), L3PD::BroadcastCallControl);
@@ -584,8 +584,8 @@ TEST(GoldenBCCGCCTest, BCCFullRoundTrip) {
 
     auto hex = writeL3Hex(pm);
     ASSERT_TRUE(hex);
-    // Expected: PD=1, TI=3 -> byte0=0x16, MTI=0 -> byte1=0x00
-    EXPECT_EQ(hex.value(), "1600");
+    // Expected: PD=1, TI=3 -> byte0=0x61, MTI=0 -> byte1=0x00
+    EXPECT_EQ(hex.value(), "6100");
 
     auto parsed = parseL3Hex(hex.value());
     ASSERT_TRUE(parsed);
@@ -606,8 +606,8 @@ TEST(GoldenBCCGCCTest, GCCFullRoundTrip) {
 
     auto hex = writeL3Hex(pm);
     ASSERT_TRUE(hex);
-    // Expected: PD=0, TI=2 -> byte0=0x04, MTI=0 -> byte1=0x00
-    EXPECT_EQ(hex.value(), "0400");
+    // Expected: PD=0, TI=2 -> byte0=0x40, MTI=0 -> byte1=0x00
+    EXPECT_EQ(hex.value(), "4000");
 
     auto parsed = parseL3Hex(hex.value());
     ASSERT_TRUE(parsed);
@@ -657,7 +657,7 @@ TEST(GoldenBCCGCCTest, GCCTextOutput) {
 
 // BCC Call Confirmed - TS 44.018 §9.6.2.5, MTI=0x04
 TEST(GoldenBCCGCCTest, BCCCallConfirmed_Minimal) {
-    uint8_t data[] = {0x10, 0x10};
+    uint8_t data[] = {0x01, 0x04};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3BCCCallConfirmed::MTI);
@@ -673,7 +673,7 @@ TEST(GoldenBCCGCCTest, BCCCallConfirmed_RoundTrip) {
 
 // BCC Connect Acknowledge - TS 44.018 §9.6.2.10, MTI=0x09
 TEST(GoldenBCCGCCTest, BCCConnectAcknowledge_Minimal) {
-    uint8_t data[] = {0x10, 0x24};
+    uint8_t data[] = {0x01, 0x09};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3BCCConnectAcknowledge::MTI);
@@ -689,7 +689,7 @@ TEST(GoldenBCCGCCTest, BCCConnectAcknowledge_RoundTrip) {
 
 // GCC Call Confirmed - TS 44.018 §9.7.2.5, MTI=0x03
 TEST(GoldenBCCGCCTest, GCCCallConfirmed_Minimal) {
-    uint8_t data[] = {0x00, 0x0C};
+    uint8_t data[] = {0x00, 0x03};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3GCCCallConfirmed::MTI);
@@ -714,7 +714,7 @@ TEST(BCCBuilderTest, Setup) {
     ParsedMessage pm{BCCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x1E); // PD=1(BCC), TI=7, TIF=0(body follows)
+    EXPECT_EQ((*bytes)[0], 0xE1); // PD=1(BCC) in the low nibble, TI=7 in bits 7:5, TIF=0
 }
 
 // 3GPP TS 44.018 9.6.2.3: BCC Proceeding Builder
@@ -828,7 +828,7 @@ TEST(GCCBuilderTest, Setup) {
     ParsedMessage pm{GCCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x0E); // PD=0(GCC), TI=7, TIF=0(body follows)
+    EXPECT_EQ((*bytes)[0], 0xE0); // PD=0(GCC) in the low nibble, TI=7 in bits 7:5, TIF=0
 }
 
 // 3GPP TS 44.018 9.7.2.3: GCC Acknowledge Builder

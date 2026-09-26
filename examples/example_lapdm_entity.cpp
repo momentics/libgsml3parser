@@ -160,7 +160,7 @@ int main() {
 
     // --- Phase 3: Send UI data (unacknowledged) ---
     std::cout << "--- Phase 3: UI Data Transfer ---\n";
-    uint8_t l3Data[] = {0x60, 0x0D, 0x00}; // Channel Release
+    uint8_t l3Data[] = {0x06, 0x0D, 0x00}; // Channel Release
     auto uiResult = bts.sendUI(SAPI::SAPI0, std::span(l3Data));
     std::cout << "  BTS sendUI: " << (uiResult ? "OK" : "FAIL") << "\n";
 

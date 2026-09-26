@@ -80,18 +80,18 @@ void demoSpanSource() {
 
     // Representative messages from each PD domain.
     std::vector<std::pair<std::string, std::string>> hexMessages{
-        {"RR",   "600D00"},             // Channel Release
-        {"MM",   "5084"},               // CM Service Accept
-        {"CC",   "3E9408021621"},       // Disconnect (TI=7)
-        {"SS",   "B0E8"},               // Facility
-        {"GMM",  "802005"},              // GMM Status (cause=5)
-        {"SM",   "A055320105"},          // SM Status (cause=5)
-        {"SMS",  "9004"},                // CP Ack (2 bytes, no body)
-        {"BCC",  "1001"},                // BCC Setup
+        {"RR",   "060D00"},             // Channel Release
+        {"MM",   "0521"},               // CM Service Accept
+        {"CC",   "E32508021621"},       // Disconnect (TI=7)
+        {"SS",   "0B3A"},               // Facility
+        {"GMM",  "082005"},              // GMM Status (cause=5)
+        {"SM",   "0A55320105"},          // SM Status (cause=5)
+        {"SMS",  "0904"},                // CP Ack (2 bytes, no body)
+        {"BCC",  "0101"},                // BCC Setup
         {"GCC",  "000102"},              // GCC Setup
-        {"LS",   "C001"},                // LocationServiceRequest
-        {"EXT",  "E001"},                // ExtendedMessage
-        {"TST",  "F001"},                // TestProcedureMessage
+        {"LS",   "0C01"},                // LocationServiceRequest
+        {"EXT",  "0E01"},                // ExtendedMessage
+        {"TST",  "0F01"},                // TestProcedureMessage
     };
 
     // Concatenate all messages into one buffer with L2 length prefixes.
@@ -134,10 +134,10 @@ void demoRingBuffer() {
 
     // Producer: write frames asynchronously.
     std::vector<std::pair<std::string, std::string>> hexMessages{
-        {"RR",   "600D00"},             // Channel Release
-        {"MM",   "5084"},               // CM Service Accept
-        {"GMM",  "802005"},              // GMM Status
-        {"SMS",  "9004"},                // CP Ack (2 bytes, no body)
+        {"RR",   "060D00"},             // Channel Release
+        {"MM",   "0521"},               // CM Service Accept
+        {"GMM",  "082005"},              // GMM Status
+        {"SMS",  "0904"},                // CP Ack (2 bytes, no body)
     };
 
     auto producerThread = std::thread([&ring, &hexMessages]() {
@@ -178,7 +178,7 @@ void demoBuilder() {
     std::cout << "=== L3StreamBuilder Demo ===\n";
 
     // Build a processor from inline data.
-    std::vector<uint8_t> data = hexToBytes("600D00");  // Channel Release
+    std::vector<uint8_t> data = hexToBytes("060D00");  // Channel Release
     uint8_t len = static_cast<uint8_t>(data.size());
     data.insert(data.begin(), len);  // prepend L2 length
 
@@ -198,10 +198,10 @@ void demoInlineFramer() {
 
     // Build L2-framed buffer: [len][msg...][len][msg...]
     std::vector<std::pair<std::string, std::string>> hexMessages{
-        {"RR",   "600D00"},             // Channel Release
-        {"MM",   "5084"},               // CM Service Accept
-        {"CC",   "3E9408021621"},       // Disconnect (TI=7)
-        {"SMS",  "9004"},                // CP Ack (2 bytes, no body)
+        {"RR",   "060D00"},             // Channel Release
+        {"MM",   "0521"},               // CM Service Accept
+        {"CC",   "E32508021621"},       // Disconnect (TI=7)
+        {"SMS",  "0904"},                // CP Ack (2 bytes, no body)
     };
 
     std::vector<uint8_t> buffer;

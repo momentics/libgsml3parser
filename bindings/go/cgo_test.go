@@ -89,18 +89,18 @@ type pdBatch struct {
 }
 
 var kBatch = []pdBatch{
-	{PDRR, "60 0D 00", 0x0d},          // Channel Release
-	{PDMM, "50 84", 0x21},             // CM Service Accept
-	{PDCC, "3E 94 08 02 16 21", 0x25}, // Disconnect (TI=7)
-	{PDSS, "B0 E8 00", 0x3a},          // SupServFacilityMessage (empty facility)
-	{PDGmm, "80 20 05", 0x20},         // GMM Status (cause=5)
-	{PDSm, "A0 55 A7 01 05", 0x55},    // SM Status (cause=5)
-	{PDSms, "90 04", 0x04},            // CP-Ack (no body)
-	{PDBcc, "10 00", 0x00},            // BCC Setup
+	{PDRR, "06 0D 00", 0x0d},          // Channel Release
+	{PDMM, "05 21", 0x21},             // CM Service Accept
+	{PDCC, "E3 25 08 02 16 21", 0x25}, // Disconnect (TI=7)
+	{PDSS, "0B 3A 00", 0x3a},          // SupServFacilityMessage (empty facility)
+	{PDGmm, "08 20 05", 0x20},         // GMM Status (cause=5)
+	{PDSm, "0A 55 A7 01 05", 0x55},    // SM Status (cause=5)
+	{PDSms, "09 04", 0x04},            // CP-Ack (no body)
+	{PDBcc, "01 00", 0x00},            // BCC Setup
 	{PDGcc, "00 00 02", 0x00},         // GCC Setup
-	{PDLS, "C0 01", 0x01},             // LocationServiceRequest
-	{PDExt, "E0 01", 0x01},            // ExtendedMessage
-	{PdTst, "F0 01", 0x01},            // TestProcedureMessage
+	{PDLS, "0C 01", 0x01},             // LocationServiceRequest
+	{PDExt, "0E 01", 0x01},            // ExtendedMessage
+	{PdTst, "0F 01", 0x01},            // TestProcedureMessage
 }
 
 func TestParseRoundTrip(t *testing.T) {
@@ -160,7 +160,7 @@ func TestParseRoundTrip(t *testing.T) {
 	}
 
 	// Channel Release specifics (the demo's stable vector): size 3, exact bytes.
-	m, err := ParseHex("60 0D 00", nil)
+	m, err := ParseHex("06 0D 00", nil)
 	if err != nil {
 		t.Fatalf("channel release: %v", err)
 	}
@@ -172,11 +172,11 @@ func TestParseRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("channel release Write: %v", err)
 	}
-	if !bytes.Equal(wire, []byte{0x60, 0x0D, 0x00}) {
+	if !bytes.Equal(wire, []byte{0x06, 0x0D, 0x00}) {
 		t.Errorf("channel release wire = % X, want 60 0D 00", wire)
 	}
-	if hexStr, _ := m.Hex(); hexStr != "600d00" {
-		t.Errorf("channel release Hex() = %q, want %q", hexStr, "600d00")
+	if hexStr, _ := m.Hex(); hexStr != "060d00" {
+		t.Errorf("channel release Hex() = %q, want %q", hexStr, "060d00")
 	}
 	if ti := m.Ti(); ti != 0 {
 		t.Errorf("channel release Ti() = %d, want 0 (not CC/SS)", ti)
@@ -253,7 +253,7 @@ func TestNullSafety(t *testing.T) {
 	}
 
 	// Wrapper sentinels for closed handles (no FFI after close):
-	m, err := ParseHex("60 0D 00", nil)
+	m, err := ParseHex("06 0D 00", nil)
 	if err != nil {
 		t.Fatalf("parse for close probe: %v", err)
 	}
@@ -283,13 +283,13 @@ func TestErrorPaths(t *testing.T) {
 	// TEST(CApi, L3ErrorPaths): '60 0D' is the canonical truncated RR ChannelRelease.
 	// (A lone octet '60' IS a complete RR short-form message — do not use it as a
 	// truncation probe.)
-	if _, err := ParseHex("60 0D", nil); err == nil {
-		t.Fatal(`ParseHex("60 0D") must fail`)
+	if _, err := ParseHex("06 0D", nil); err == nil {
+		t.Fatal(`ParseHex("06 0D") must fail`)
 	} else {
-		requireErrCode(t, `ParseHex("60 0D")`, err, CodeTruncated)
+		requireErrCode(t, `ParseHex("06 0D")`, err, CodeTruncated)
 		e := err.(*Error)
 		if e.Msg == "" {
-			t.Errorf(`ParseHex("60 0D"): empty message — thread-local copy failed: %v`, err)
+			t.Errorf(`ParseHex("06 0D"): empty message — thread-local copy failed: %v`, err)
 		}
 	}
 
@@ -319,26 +319,26 @@ func TestErrorPaths(t *testing.T) {
 	// and cannot — manufacture an "invalid bytes" failure that the C core would
 	// report either. The truncation vectors above are the C-verified ones.
 
-	// Strict framing config: "50 84" parses; a trailing byte does NOT (mirror of
+	// Strict framing config: "05 21" parses; a trailing byte does NOT (mirror of
 	// the C Config test). Lenient (nil config) accepts both.
 	cfg, err := NewConfig()
 	if err != nil {
 		t.Fatalf("NewConfig: %v", err)
 	}
 	defer cfg.Close()
-	if m, err := Parse([]byte{0x50, 0x84}, cfg); err != nil || m == nil {
+	if m, err := Parse([]byte{0x05, 0x21}, cfg); err != nil || m == nil {
 		t.Errorf("lenient parse of 50 84 failed: %v", err)
 	}
 	if err := cfg.SetStrictFraming(true); err != nil {
 		t.Fatalf("SetStrictFraming: %v", err)
 	}
-	m, err := ParseHex("50 84", cfg)
+	m, err := ParseHex("05 21", cfg)
 	if err != nil {
 		t.Errorf("strict parse of exactly-consumed 50 84 must succeed: %v", err)
 	} else {
 		m.Close()
 	}
-	if _, err = Parse([]byte{0x50, 0x84, 0x00}, cfg); err == nil {
+	if _, err = Parse([]byte{0x05, 0x21, 0x00}, cfg); err == nil {
 		t.Error("strict framing must reject the trailing byte")
 	}
 
@@ -371,7 +371,7 @@ func TestErrorPaths(t *testing.T) {
 
 func TestBufferTooSmallClass(t *testing.T) {
 	// Message write into a deliberately undersized buffer: 0 written + code 11.
-	h := rawParseL3Hex("60 0D 00") // Channel Release = 3 bytes; 2-byte buffer is too small
+	h := rawParseL3Hex("06 0D 00") // Channel Release = 3 bytes; 2-byte buffer is too small
 	if h == nil {
 		t.Fatal("rawParseL3Hex(60 0D 00) failed in the test harness itself")
 	}
@@ -399,9 +399,9 @@ func TestBufferTooSmallClass(t *testing.T) {
 
 func TestMiniCodecCrossChecksCDecoder(t *testing.T) {
 	// UI: MS-side L3 injection — [0x01, 0x03] + raw info (NO length octet).
-	l3 := []byte{0x60, 0x0D, 0x00}
+	l3 := []byte{0x06, 0x0D, 0x00}
 	f := UIFrame(0, false, l3)
-	if !bytes.Equal(f, []byte{0x01, 0x03, 0x60, 0x0D, 0x00}) {
+	if !bytes.Equal(f, []byte{0x01, 0x03, 0x06, 0x0D, 0x00}) {
 		t.Fatalf("UIFrame bytes = % X, want 01 03 60 0d 00", f)
 	}
 	dec, err := DecodeFrame(f)
@@ -504,7 +504,7 @@ func TestMiniCodecCrossChecksCDecoder(t *testing.T) {
 // ── RSL wrapper smoke (build -> parse -> observe round trip) ─────────────────
 
 func TestRslRoundTrip(t *testing.T) {
-	l3 := []byte{0x50, 0x84}
+	l3 := []byte{0x05, 0x21}
 	frame, err := RslBuildDataReq(0x10, 1, l3)
 	if err != nil {
 		t.Fatalf("RslBuildDataReq: %v", err)

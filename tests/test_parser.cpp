@@ -20,24 +20,19 @@
 // SOFTWARE.
 
 // Cross-domain parser tests with spec-compliant hex values.
-// Reference: osmo-ttcn3-hacks L3_Templates.ttcn, GSM_RR_Types.ttcn, SS_Templates.ttcn.
 //
 // [GOLDEN VERIFICATION]
-// All parser hex test data verified against osmo-ttcn3-hacks reference:
-//   - RR ChannelRelease {0x60, 0x0D, 0x00}: PD=6(RR), MTI=0x0D(ChannelRelease), cause=0x00(Normal_Event)
-//     Verified against GSM_RR_Types.ttcn CHANNEL_RELEASE='00001101'B(0x0D)
-//   - RR SI1 {0x60, 0x19, 0x2B}: PD=6(RR), MTI=0x19(SI1), body=0x2B(rest octet padding)
-//     Verified against GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_1='00011001'B(0x19)
-//   - MM CMServiceAccept {0x50, 0x84}: PD=5(MM), raw MTI=0x84 -> messageType=0x21(CMServAcc)
-//     Verified against L3_Templates.ttcn tr_CM_SERV_ACC: messageType='100001'B(0x21)
-//   - CC CallProceeding {0x3E, 0x08}: PD=3(CC), TI=7, TIF=0, MTI=0x02(CallProc)<<2=0x08
-//     Verified against L3_Templates.ttcn tr_ML3_MT_CC_CALL_PROC: messageType='000010'B(0x02)
-//   - CC Alerting {0x3E, 0x04}: PD=3(CC), TI=7, TIF=0, MTI=0x01(Alerting)<<2=0x04
-//     Verified against L3_Templates.ttcn tr_ML3_MT_CC_ALERTING: messageType='000001'B(0x01)
-//   - SS ReleaseComplete {0xBE, 0xAA}: PD=11(SS), TI=7, TIF=0, raw MTI=0xAA -> messageType=0x2A(ReleaseComp)
-//   - SS Facility {0xBE, 0xEA}: PD=11(SS), TI=7, TIF=0, raw MTI=0xEA -> messageType=0x3A(Facility)
-//     Verified against SS_Templates.ttcn ts_SS_FACILITY_INVOKE
-//   - Error handling tests: InvalidPD (PD=0xF TestProcedure), UnknownMTI, TruncatedBody all verified
+// All parser hex test data follow the TS 24.008 / TS 44.018 L3 protocol
+// header layout: octet 0 = TI(7:5) | TIF(4) | PD(3:0); octet 1 carries the
+// message type (six low bits for MM/CC/NC-SS/GCC/BCC, raw octet otherwise):
+//   - RR ChannelRelease {0x06, 0x0D, 0x00}: PD=6(RR) low nibble, MTI=0x0D(ChannelRelease), cause=0x00(Normal_Event)
+//   - RR SI1 {0x06, 0x19, 0x2B}: PD=6(RR), MTI=0x19(SI1), body=0x2B(rest octet padding)
+//   - MM CMServiceAccept {0x05, 0x21}: PD=5(MM), MT=0x21(CMServAcc) in the six low bits of octet 1
+//   - CC CallProceeding {0xE3, 0x02}: PD=3(CC), TI=7 (bits 7:5), TIF=0, MT=0x02(CallProc)
+//   - CC Alerting {0xE3, 0x01}: PD=3(CC), TI=7, TIF=0, MT=0x01(Alerting)
+//   - SS ReleaseComplete {0xEB, 0x2A}: PD=11(SS), TI=7, TIF=0, MT=0x2A(ReleaseComp)
+//   - SS Facility {0xEB, 0x3A}: PD=11(SS), TI=7, TIF=0, MT=0x3A(Facility)
+//   - Error handling tests: InvalidPD (reserved low nibble), UnknownMTI, TruncatedBody all verified
 
 #include <gtest/gtest.h>
 #include <cstdlib>
@@ -63,8 +58,8 @@ using namespace gsml3parser;
 // =====================================================================
 
 TEST(ParserTest, ParseL3_RR_ChannelRelease) {
-    // RR header: PD=0x06, MTI=0x0D (ChannelRelease), body: cause=0x00
-    uint8_t data[] = {0x60, 0x0D, 0x00};
+    // RR header: PD=0x06 (low nibble of octet 0), MTI=0x0D (ChannelRelease), body: cause=0x00
+    uint8_t data[] = {0x06, 0x0D, 0x00};
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::RadioResource);
@@ -90,7 +85,7 @@ TEST(ParserTest, ParseL3_RR_SI1) {
 TEST(ParserTest, TruncatedSI1_ReturnsError) {
     // SI1 header with only a 1-byte body: truncated input must be a hard
     // error (TruncatedInput), never a silently default-constructed message.
-    uint8_t data[] = {0x60, 0x19, 0x2B};
+    uint8_t data[] = {0x06, 0x19, 0x2B};
     auto res = parseL3(std::span<const uint8_t>(data));
     EXPECT_FALSE(res);
     EXPECT_EQ(res.error().code, ParseError::Code::TruncatedInput);
@@ -113,8 +108,9 @@ TEST(ParserTest, ParseL3_RR_ClassmarkEnquiry) {
 }
 
 TEST(ParserTest, ParseL3_MM_CMServiceAccept) {
-    // MM header: PD=0x05, raw MTI=0x84 (NSD=1, messageType=0x21=CMServiceAccept), no body
-    uint8_t data[] = {0x50, 0x84};
+    // MM header: PD=0x05 (low nibble of octet 0); octet 1 = 0x21
+    // (MT=CMServiceAccept in the six low bits, NSD=0), no body
+    uint8_t data[] = {0x05, 0x21};
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::MobilityManagement);
@@ -136,8 +132,9 @@ TEST(ParserTest, ParseL3_MM_AuthenticationReject) {
 }
 
 TEST(ParserTest, ParseL3_CC_CallProceeding) {
-    // CC header: PD=0x03, TI=7, TIF=0 -> byte0=0x3E, MTI=0x08 (CallProceeding)
-    uint8_t data[] = {0x3E, 0x08};
+    // CC header: PD=0x03 low nibble, TI=7 in bits 7:5, TIF=0 -> byte0=0xE3;
+    // octet 1 = 0x02 (MT=CallProceeding, NSD=0)
+    uint8_t data[] = {0xE3, 0x02};
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::CallControl);
@@ -145,8 +142,9 @@ TEST(ParserTest, ParseL3_CC_CallProceeding) {
 }
 
 TEST(ParserTest, ParseL3_CC_Alerting) {
-    // CC header: PD=0x03, TI=7, TIF=0 -> byte0=0x3E, raw MTI=0x04 (NSD=0, messageType=(0x04&0xFC)>>2 = 0x01 = Alerting)
-    uint8_t data[] = {0x3E, 0x04};
+    // CC header: PD=0x03 low nibble, TI=7 in bits 7:5, TIF=0 -> byte0=0xE3;
+    // octet 1 = 0x01 (MT=Alerting, NSD=0)
+    uint8_t data[] = {0xE3, 0x01};
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::CallControl);
@@ -168,8 +166,9 @@ TEST(ParserTest, ParseL3_CC_Disconnect) {
 }
 
 TEST(ParserTest, ParseL3_SS_ReleaseComplete) {
-    // SS header: PD=0x0B, TI=7, TIF=0 -> byte0=0xBE, raw MTI=0xAA (NSD=1, messageType=(0xAA&0xFC)>>2 = 0x2A = ReleaseComplete)
-    uint8_t data[] = {0xBE, 0xAA};
+    // SS header: PD=0x0B low nibble, TI=7 in bits 7:5, TIF=0 -> byte0=0xEB;
+    // octet 1 = 0x2A (MT=ReleaseComplete, NSD=0)
+    uint8_t data[] = {0xEB, 0x2A};
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::NonCallSS);
@@ -177,8 +176,9 @@ TEST(ParserTest, ParseL3_SS_ReleaseComplete) {
 }
 
 TEST(ParserTest, ParseL3_SS_Facility) {
-    // SS header: PD=0x0B, TI=7, TIF=0 -> byte0=0xBE, raw MTI=0xEA (NSD=1, messageType=(0xEA&0xFC)>>2 = 0x3A = Facility)
-    uint8_t data[] = {0xBE, 0xEA};
+    // SS header: PD=0x0B low nibble, TI=7 in bits 7:5, TIF=0 -> byte0=0xEB;
+    // octet 1 = 0x3A (MT=Facility, NSD=0)
+    uint8_t data[] = {0xEB, 0x3A};
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::NonCallSS);
@@ -190,36 +190,39 @@ TEST(ParserTest, ParseL3_SS_Facility) {
 // =====================================================================
 
 TEST(ParserTest, ParseL3Hex_RR) {
-    auto res = parseL3Hex("600D00");
+    // PD=RR (low nibble of octet 0), MTI=Channel Release, cause=0x00.
+    auto res = parseL3Hex("060D00");
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::RadioResource);
     EXPECT_NE(tryGet<L3ChannelRelease>(*res), nullptr);
 }
 
 TEST(ParserTest, ParseL3Hex_MM) {
-    auto res = parseL3Hex("5084");
+    // PD=MM; MT=CM Service Accept in the six low bits of octet 1 (NSD=0).
+    auto res = parseL3Hex("0521");
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::MobilityManagement);
     EXPECT_NE(tryGet<L3CMServiceAccept>(*res), nullptr);
 }
 
 TEST(ParserTest, ParseL3Hex_CC) {
-    auto res = parseL3Hex("3E08");
+    // PD=CC, TI=7 in bits 7:5; MT=Call Proceeding (NSD=0).
+    auto res = parseL3Hex("E302");
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::CallControl);
     EXPECT_NE(tryGet<L3CallProceeding>(*res), nullptr);
 }
 
 TEST(ParserTest, ParseL3Hex_SS) {
-    // raw MTI=0xE8 -> messageType=(0xE8&0xFC)>>2 = 0x3A = Facility
-    auto res = parseL3Hex("BEE8");
+    // PD=SS, TI=7 in bits 7:5; MT=Facility in the six low bits (NSD=0).
+    auto res = parseL3Hex("EB3A");
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::NonCallSS);
     EXPECT_NE(tryGet<L3SupServFacilityMessage>(*res), nullptr);
 }
 
 TEST(ParserTest, ParseL3Hex_WithSpaces) {
-    auto res = parseL3Hex("60 0D 00");
+    auto res = parseL3Hex("06 0D 00");
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::RadioResource);
 }
@@ -237,8 +240,7 @@ TEST(ParserTest, EmptyInput) {
 
 TEST(ParserTest, SingleByte) {
     // A single octet is a Channel Request: the whole octet is the 8-bit
-    // request reference (RA), so any value parses (the previous
-    // heuristic rejected octets whose high nibble looked like a PD).
+    // request reference (RA), so any of the 256 values parses.
     uint8_t data[] = {0x60};
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
@@ -255,32 +257,33 @@ TEST(ParserTest, EmptyHex) {
 }
 
 TEST(ParserTest, TruncatedHex) {
-    // "600d" is an RR ChannelRelease header with no body bytes: the 8-bit
+    // "060d" is an RR ChannelRelease header with no body bytes: the 8-bit
     // cause is missing, so the parse must fail with TruncatedInput.
-    // (A single octet like "60" is a valid Channel Request.)
-    auto res = parseL3Hex("600d");
+    // (A single octet like "06" is a valid Channel Request.)
+    auto res = parseL3Hex("060d");
     EXPECT_FALSE(res);
     EXPECT_EQ(res.error().code, ParseError::Code::TruncatedInput);
 }
 
 TEST(ParserTest, InvalidPD) {
-    // PD=0x02 is an undefined/unsupported Protocol Discriminator
-    uint8_t data[] = {0x20, 0x01};
+    // PD=0x02 is a reserved Protocol Discriminator (TS 44.018 section 10.2);
+    // it occupies the low nibble of octet 0.
+    uint8_t data[] = {0x02, 0x01};
     auto res = parseL3(std::span<const uint8_t>(data));
     EXPECT_FALSE(res);
 }
 
 TEST(ParserTest, UnknownMTI_RR) {
     // PD=0x06 (RR), MTI=0xFF (unknown)
-    uint8_t data[] = {0x60, 0xFF};
+    uint8_t data[] = {0x06, 0xFF};
     auto res = parseL3(std::span<const uint8_t>(data));
     EXPECT_FALSE(res);
     EXPECT_EQ(res.error().code, ParseError::Code::InvalidMTI);
 }
 
 TEST(ParserTest, UnknownMTI_MM) {
-    // PD=0x05 (MM), raw MTI=0xFF (NSD=1, messageType=0x3F = unknown)
-    uint8_t data[] = {0x50, 0xFF};
+    // PD=0x05 (MM), octet 1=0xFF -> MT=0x3F = unknown
+    uint8_t data[] = {0x05, 0xFF};
     auto res = parseL3(std::span<const uint8_t>(data));
     EXPECT_FALSE(res);
     EXPECT_EQ(res.error().code, ParseError::Code::InvalidMTI);
@@ -288,7 +291,7 @@ TEST(ParserTest, UnknownMTI_MM) {
 
 TEST(ParserTest, TruncatedBody) {
     // RR header says ChannelRelease (needs 1 byte cause), but no body provided
-    uint8_t data[] = {0x60, 0x0D};
+    uint8_t data[] = {0x06, 0x0D};
     auto res = parseL3(std::span<const uint8_t>(data));
     EXPECT_FALSE(res);
     EXPECT_EQ(res.error().code, ParseError::Code::TruncatedInput);
@@ -303,8 +306,8 @@ TEST(ParserTest, WriteL3_RR) {
     uint8_t buf[64];
     auto res = writeL3(msg, buf, sizeof(buf));
     ASSERT_TRUE(res);
-    // Header: PD=0x06, MTI=0x0D, body: cause=0x00
-    EXPECT_EQ(buf[0], 0x60);
+    // Header: PD=0x06 (low nibble of octet 0), MTI=0x0D, body: cause=0x00
+    EXPECT_EQ(buf[0], 0x06);
     EXPECT_EQ(buf[1], 0x0D);
     EXPECT_EQ(buf[2], 0x00);
 }
@@ -314,9 +317,10 @@ TEST(ParserTest, WriteL3_MM) {
     uint8_t buf[64];
     auto res = writeL3(msg, buf, sizeof(buf));
     ASSERT_TRUE(res);
-    // Header: PD=0x05, raw MTI=0x84 (NSD=1)
-    EXPECT_EQ(buf[0], 0x50);
-    EXPECT_EQ(buf[1], 0x84);
+    // Header: PD=0x05 (low nibble of octet 0); octet 1 = MT in the six low
+    // bits (CM Service Accept = 0x21), NSD=0
+    EXPECT_EQ(buf[0], 0x05);
+    EXPECT_EQ(buf[1], 0x21);
 }
 
 TEST(ParserTest, WriteL3_CC) {
@@ -324,9 +328,10 @@ TEST(ParserTest, WriteL3_CC) {
     uint8_t buf[64];
     auto res = writeL3(msg, buf, sizeof(buf));
     ASSERT_TRUE(res);
-    // Header: PD=0x03, TI=7, TIF=0 -> byte0=0x3E, MTI=0x08
-    EXPECT_EQ(buf[0], 0x3E);
-    EXPECT_EQ(buf[1], 0x08);
+    // Header: PD=0x03 low nibble, TI=7 in bits 7:5, TIF=0 -> byte0=0xE3;
+    // octet 1 = MT (Call Proceeding = 0x02), NSD=0
+    EXPECT_EQ(buf[0], 0xE3);
+    EXPECT_EQ(buf[1], 0x02);
 }
 
 TEST(ParserTest, WriteL3_SS) {
@@ -351,35 +356,35 @@ TEST(ParserTest, WriteL3Hex_RR) {
     ParsedMessage msg{RRM{L3ChannelRelease(RRCause::Normal_Event)}};
     auto res = writeL3Hex(msg);
     ASSERT_TRUE(res);
-    EXPECT_EQ(res.value(), "600d00");
+    EXPECT_EQ(res.value(), "060d00");
 }
 
 TEST(ParserTest, WriteL3Hex_MM) {
     ParsedMessage msg{MMM{L3CMServiceAccept{}}};
     auto res = writeL3Hex(msg);
     ASSERT_TRUE(res);
-    EXPECT_EQ(res.value(), "5084");
+    EXPECT_EQ(res.value(), "0521");
 }
 
 TEST(ParserTest, WriteL3Hex_CC) {
     ParsedMessage msg{CCM{L3CallProceeding{}}};
     auto res = writeL3Hex(msg);
     ASSERT_TRUE(res);
-    EXPECT_EQ(res.value(), "3e08");
+    EXPECT_EQ(res.value(), "e302");
 }
 
 // =====================================================================
 // writeL3Bytes() - raw byte vector serialization
 // =====================================================================
 
-// GSM 04.08 9.1.7: Channel Release (RR, MTI=0x0D)
+// TS 44.018 9.1.7: Channel Release (RR, MTI=0x0D)
 TEST(ParserTest, WriteL3Bytes_ReturnsRawBytes) {
-    auto msg = parseL3Hex("600d00");
+    auto msg = parseL3Hex("060d00");
     ASSERT_TRUE(msg);
     auto bytes = writeL3Bytes(*msg);
     ASSERT_TRUE(bytes);
     EXPECT_EQ(bytes.value().size(), 3u);
-    EXPECT_EQ(bytes.value()[0], 0x60);
+    EXPECT_EQ(bytes.value()[0], 0x06);
     EXPECT_EQ(bytes.value()[1], 0x0D);
     EXPECT_EQ(bytes.value()[2], 0x00);
 }
@@ -429,7 +434,7 @@ TEST(ParserTest, RoundTrip_SS_Facility) {
 // =====================================================================
 
 TEST(ParserTest, ParseWithConfig) {
-    uint8_t data[] = {0x60, 0x0D, 0x00};
+    uint8_t data[] = {0x06, 0x0D, 0x00};
     ParserConfig cfg;
     cfg = cfg.withLogLevel(LogLevel::DEBUG);
     auto res = parseL3(std::span<const uint8_t>(data), cfg);
@@ -441,9 +446,9 @@ TEST(ParserTest, ParseWithConfig) {
 // Short messages - ChannelRequest (1 byte), HandoverAccess (4 bytes)
 // =====================================================================
 
-// RA 0x42: high nibble 0x4 is not a PD, so it parsed even before.
+// RA 0x42: the single octet is not an L3 header at all.
 TEST(ParserTest, ShortMessage_ChannelRequest) {
-    // 1-byte RACH message: PD is not standard, handled as short message
+    // 1-byte RACH message: framed by length, no standard L3 header
     uint8_t data[] = {0x42};
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
@@ -453,9 +458,8 @@ TEST(ParserTest, ShortMessage_ChannelRequest) {
 // Test: ALL 256 one-octet RACH values parse as ChannelRequest with the
 // full 8-bit RA preserved.
 // Importance: the RACH Channel Request is a single octet (TS 44.018 9.1.8);
-// the previous heuristic rejected 192 of 256 RA values and truncated the
-// rest to 4 bits. The network must echo the full RA in the
-// Immediate Assignment.
+// every RA value must parse with all eight bits kept intact, because the
+// network echoes the full RA in the Immediate Assignment.
 TEST(ParserTest, ShortMessage_ChannelRequest_AllRAValues) {
     for (int v = 0; v < 256; ++v) {
         uint8_t data[1] = {static_cast<uint8_t>(v)};
@@ -478,18 +482,16 @@ TEST(ParserTest, ShortMessage_HandoverAccess) {
     EXPECT_EQ(messagePD(*res), L3PD::RadioResource);
 }
 
-// Test: a 4-byte HandoverAccess whose first octet looks like an RR header
-// (nibble 0x6) and whose second byte is a valid RR MTI with a shorter body
-// must NOT be misparsed as the RR message. The standard parse
+// Test: a 4-byte HandoverAccess whose first octet is a valid RR header
+// (PD=RR in the low nibble) and whose second byte is a valid RR MTI with a
+// shorter body must NOT be misparsed as the RR message. The standard parse
 // wins only on exact frame consumption.
 TEST(ParserTest, ShortMessage_HandoverAccess_RRPrefixNotMisparsed) {
-    // {0x60, 0x12, 0x00, 0x00}: RR nibble, TIF=0 (low bit of byte 0 must
-    // be 0 — with TIF=1 the header maps the MTI into the 0x100+ short
-    // space and the standard parse fails on unknown MTI instead of
-    // leaving a tail), MTI 0x12 (RR Status, 1-byte body) would consume
-    // only 3 of the 4 bytes -> not exact -> the frame is a HandoverAccess.
-    // Last byte 0x00: the 5 reserved bits are zero .
-    uint8_t data[] = {0x60, 0x12, 0x00, 0x00};
+    // {0x06, 0x12, 0x00, 0x00}: PD=RR (low nibble of octet 0), TIF=0, MTI
+    // 0x12 (RR Status, 1-byte body) would consume only 3 of the 4 bytes ->
+    // not exact -> the frame is a HandoverAccess. Last byte 0x00: the 5
+    // reserved bits are zero.
+    uint8_t data[] = {0x06, 0x12, 0x00, 0x00};
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
     EXPECT_EQ(messageMTI(*res), L3HandoverAccess::MTI)
@@ -497,12 +499,11 @@ TEST(ParserTest, ShortMessage_HandoverAccess_RRPrefixNotMisparsed) {
 }
 
 // Test: a 4-byte frame with non-zero HandoverAccess reserved bits is
-// not misclassified as HandoverAccess (the previous short
-// parse accepted ANY 32-bit input). The standard parse wins instead:
+// not misclassified as HandoverAccess. The standard parse wins instead:
 // RR Status consumes 3 of the 4 bytes and the trailing octet is ignored
-// in lenient mode (strict framing, rejects it).
+// in lenient mode (strict framing rejects it).
 TEST(ParserTest, ShortMessage_HandoverAccess_ReservedBitsRejected) {
-    uint8_t data[] = {0x60, 0x12, 0x00, 0x03}; // HandoverAccess reserved = 0x03 (non-zero)
+    uint8_t data[] = {0x06, 0x12, 0x00, 0x03}; // HandoverAccess reserved = 0x03 (non-zero)
     auto res = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(res);
     EXPECT_EQ(messageMTI(*res), L3RRStatus::MTI)
@@ -548,11 +549,12 @@ TEST(ParserTest, ShortMessage_ExactCCMessageWins_7Bytes) {
     EXPECT_EQ(messagePD(*res), L3PD::CallControl);
 }
 
-// Test: 4-byte frames with reserved PD nibbles (0x02/0x04/0x07/0x0d) are
-// HandoverAccess, not "invalid PD" (parseL3Header now
-// rejects reserved PDs, so the short-message path must still be reached).
+// Test: 4-byte frames whose low nibble of octet 0 is a reserved PD
+// (0x02/0x04/0x07/0x0d) are HandoverAccess, not "invalid PD" errors
+// (parseL3Header rejects reserved PDs, so the short-message path must
+// still be reached for such frames).
 TEST(ParserTest, ShortMessage_HandoverAccess_ReservedPDNibble) {
-    for (uint8_t first : {0x21u, 0x41u, 0x71u, 0xD1u}) {
+    for (uint8_t first : {0x02u, 0x04u, 0x07u, 0x0Du}) {
         // Last byte 0x00: the 5 reserved bits are zero .
         uint8_t data[] = {first, 0x00, 0x00, 0x00};
         auto res = parseL3(std::span<const uint8_t>(data));
@@ -566,8 +568,8 @@ TEST(ParserTest, ShortMessage_HandoverAccess_ReservedPDNibble) {
 // =====================================================================
 
 TEST(ParserTest, ParseL3Hex_CaseInsensitive) {
-    auto resLower = parseL3Hex("600d00");
-    auto resUpper = parseL3Hex("600D00");
+    auto resLower = parseL3Hex("060d00");
+    auto resUpper = parseL3Hex("060D00");
     ASSERT_TRUE(resLower);
     ASSERT_TRUE(resUpper);
     EXPECT_EQ(messagePD(*resLower), messagePD(*resUpper));
@@ -593,8 +595,8 @@ TEST(ParserTest, BinaryRoundTrip) {
 // =====================================================================
 
 TEST(ParserTest, UnknownMTI_SM) {
-    // PD=0x0a (SM), MTI=0xFF (unknown SM message type)
-    uint8_t data[] = {0xA0, 0xFF};
+    // PD=0x0a (SM) in the low nibble of octet 0, MTI=0xFF (unknown SM message type)
+    uint8_t data[] = {0x0A, 0xFF};
     auto res = parseL3(std::span<const uint8_t>(data));
     EXPECT_FALSE(res);
     EXPECT_EQ(res.error().code, ParseError::Code::InvalidMTI);
@@ -602,7 +604,7 @@ TEST(ParserTest, UnknownMTI_SM) {
 
 TEST(ParserTest, UnknownMTI_SMS) {
     // PD=0x09 (SMS), MTI=0xFF (unknown SMS message type)
-    uint8_t data[] = {0x90, 0xFF};
+    uint8_t data[] = {0x09, 0xFF};
     auto res = parseL3(std::span<const uint8_t>(data));
     EXPECT_FALSE(res);
     EXPECT_EQ(res.error().code, ParseError::Code::InvalidMTI);
@@ -610,7 +612,7 @@ TEST(ParserTest, UnknownMTI_SMS) {
 
 TEST(ParserTest, UnknownMTI_GMM) {
     // PD=0x08 (GMM), MTI=0xFF (unknown GMM message type)
-    uint8_t data[] = {0x80, 0xFF};
+    uint8_t data[] = {0x08, 0xFF};
     auto res = parseL3(std::span<const uint8_t>(data));
     EXPECT_FALSE(res);
     EXPECT_EQ(res.error().code, ParseError::Code::InvalidMTI);
@@ -618,7 +620,7 @@ TEST(ParserTest, UnknownMTI_GMM) {
 
 TEST(ParserTest, UnknownMTI_LS) {
     // PD=0x0c (LS), MTI=0xFF (unknown LS message type)
-    uint8_t data[] = {0xC0, 0xFF};
+    uint8_t data[] = {0x0C, 0xFF};
     auto res = parseL3(std::span<const uint8_t>(data));
     EXPECT_FALSE(res);
     EXPECT_EQ(res.error().code, ParseError::Code::InvalidMTI);
@@ -652,32 +654,32 @@ TEST(ParserTest, SMS_MTIOverlap_CPTakesPrecedence) {
 // =====================================================================
 
 TEST(ParserTest, ParseL3Hex_SM) {
-    // SM: ActivatePDPContextRequest - PD=0x0a, MTI=0x41, body: pdpType(4)|spare(4)=0xF (IPv4), then QoS IE
-    auto res = parseL3Hex("A041 0F");
+    // SM: ActivatePDPContextRequest - PD=0x0a (low nibble), MTI=0x41, body: pdpType(4)|spare(4)=0xF (IPv4), then QoS IE
+    auto res = parseL3Hex("0A41 0F");
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::GPRSSessionManagement);
     EXPECT_NE(tryGet<L3ActivatePDPContextRequest>(*res), nullptr);
 }
 
 TEST(ParserTest, ParseL3Hex_LS) {
-    // LS: LocationServiceRequest - PD=0x0c, MTI=0x01, empty body
-    auto res = parseL3Hex("C001");
+    // LS: LocationServiceRequest - PD=0x0c (low nibble), MTI=0x01, empty body
+    auto res = parseL3Hex("0C01");
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::Location);
     EXPECT_NE(tryGet<L3LocationServiceRequest>(*res), nullptr);
 }
 
 TEST(ParserTest, ParseL3Hex_Extended) {
-    // Extended: PD=0x0e, MTI=0x42, body=AA BB CC
-    auto res = parseL3Hex("E042 AABBCC");
+    // Extended: PD=0x0e (low nibble), MTI=0x42, body=AA BB CC
+    auto res = parseL3Hex("0E42 AABBCC");
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::Extended);
     EXPECT_NE(tryGet<L3ExtendedMessage>(*res), nullptr);
 }
 
 TEST(ParserTest, ParseL3Hex_TestProcedure) {
-    // TestProcedure: PD=0x0f, MTI=0xA1, body=11 22 33
-    auto res = parseL3Hex("F0A1 112233");
+    // TestProcedure: PD=0x0f (low nibble), MTI=0xA1, body=11 22 33
+    auto res = parseL3Hex("0FA1 112233");
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::TestProcedure);
     EXPECT_NE(tryGet<L3TestProcedureMessage>(*res), nullptr);
@@ -754,7 +756,7 @@ TEST(ParserTest, RoundTrip_TestProcedure) {
 // =====================================================================
 
 TEST(ParserTest, BinaryRoundTrip_Extended) {
-    uint8_t data[] = {0xE0, 0x77, 0xDE, 0xAD};
+    uint8_t data[] = {0x0E, 0x77, 0xDE, 0xAD};
     auto orig = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(orig);
     uint8_t buf[64];
@@ -767,7 +769,7 @@ TEST(ParserTest, BinaryRoundTrip_Extended) {
 }
 
 TEST(ParserTest, BinaryRoundTrip_TestProcedure) {
-    uint8_t data[] = {0xF0, 0xBB, 0xCA, 0xFE};
+    uint8_t data[] = {0x0F, 0xBB, 0xCA, 0xFE};
     auto orig = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(orig);
     uint8_t buf[64];
@@ -792,8 +794,8 @@ TEST(ParserTest, BinaryRoundTrip_LS) {
 // Test: strict framing rejects trailing bytes after a complete message
 // (the lenient default ignored them silently).
 TEST(ParserTest, StrictFraming_TrailingDataRejected) {
-    // RR Status (3 bytes: 0x60 0x12 0x00) + 2 trailing bytes.
-    uint8_t data[] = {0x60, 0x12, 0x00, 0x01, 0x02};
+    // RR Status (3 bytes: 0x06 0x12 0x00) + 2 trailing bytes.
+    uint8_t data[] = {0x06, 0x12, 0x00, 0x01, 0x02};
     auto lenient = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(lenient) << "lenient mode keeps ignoring the tail";
 
@@ -805,7 +807,7 @@ TEST(ParserTest, StrictFraming_TrailingDataRejected) {
 
 // Test: strict framing accepts an exactly-consumed message.
 TEST(ParserTest, StrictFraming_ExactMessageAccepted) {
-    uint8_t data[] = {0x60, 0x0D, 0x00}; // Channel Release, exact
+    uint8_t data[] = {0x06, 0x0D, 0x00}; // Channel Release, exact
     auto strict = parseL3(std::span<const uint8_t>(data),
                           ParserConfig{}.withStrictFraming(true));
     ASSERT_TRUE(strict);

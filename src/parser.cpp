@@ -43,18 +43,27 @@
 namespace gsml3parser {
 
 // ── Parse dispatch tables ──────────────────────────────
-// Replaces the previous per-MTI switch arms (~360 lines) and the
-// macro-generated MessageTraits specializations (~285 lines) with
-// constexpr function-pointer tables indexed by MTI: O(1) dispatch
-// (one .rodata load, same class as a jump table), one generic wrapper
-// per parse signature, no macros.
+// constexpr function-pointer tables indexed by internal MTI: O(1)
+// dispatch (one .rodata load, same class as a jump table), one generic
+// wrapper per parse signature, no macros.
 //
-// Table size: 256 slots per domain (20 KB total for the 10 fixed-MTI
-// domains). Short messages (MTI >= 0x100) get no slot — they are framed
-// by length in parseL3() and have no standard-header form (an RR
-// TIF=1 header maps to MTI >= 0x100 and yields InvalidMTI, as before).
+// Table size: kMaxMtiSlots slots per domain — the highest internal code
+// is 0x110 (Synchronization Channel Information). RR short-message codes
+// occupy dispatcher slots from kRRTifShortBase (the TIF-set header form);
+// the length-framed synthetic codes (Channel Request, Handover Access,
+// Synchronization Channel Information) carry no standard L3 header and
+// are disambiguated by frame length in parseL3(), so they get no slot.
 
 namespace detail {
+
+/// Maximum internal MTI covered by a parse table: the highest internal
+/// code in the catalog is 0x110 (Synchronization Channel Information).
+inline constexpr size_t kMaxMtiSlots = 273;
+static_assert(kMaxMtiSlots >= 256);
+
+// Length-framed messages carry no standard L3 header; every other
+// short-message code (TIF set) is written with the standard header.
+constexpr bool isNoHeaderShort(int mti) { return mti >= 0x10E; }
 
 template<typename Variant>
 using ParseFn = Expected<Variant>(*)(BitReader&, int, unsigned);
@@ -77,24 +86,24 @@ Expected<Variant> parseInto(BitReader& reader, int mti, unsigned ti) {
 }
 
 template<typename Variant, typename T>
-constexpr void fillParseTableEntry(std::array<ParseFn<Variant>, 256>& table) {
-    if constexpr (T::MTI >= 0 && T::MTI < 256) {
+constexpr void fillParseTableEntry(std::array<ParseFn<Variant>, kMaxMtiSlots>& table) {
+    if constexpr (!isNoHeaderShort(T::MTI)) {
         // First alternative wins on MTI overlap: the SMS variant carries
         // both CP-layer (CP-STATUS 0x12, CP-SMT 0x13) and L3-layer
         // (SMSProvidedReplyExpected 0x12, SMSSubmitRep 0x13) messages;
         // the CP alternatives precede the L3 ones in the variant, so the
-        // CP parsers must keep their slots — matching the previous
-        // switch, where the first case won.
+        // CP parsers must keep their slots.
         if (table[static_cast<size_t>(T::MTI)] == nullptr) {
             table[static_cast<size_t>(T::MTI)] = &parseInto<Variant, T>;
         }
     }
-    // MTI >= 0x100 (short messages): no slot — see the section comment.
+    // Length-framed synthetic codes (>= 0x10E): no slot — see the section
+    // comment.
 }
 
 template<typename Variant, size_t... I>
 constexpr auto makeParseTableImpl(std::index_sequence<I...>) {
-    std::array<ParseFn<Variant>, 256> table{};
+    std::array<ParseFn<Variant>, kMaxMtiSlots> table{};
     (fillParseTableEntry<Variant, std::variant_alternative_t<I, Variant>>(table), ...);
     return table;
 }
@@ -119,10 +128,11 @@ constexpr auto kGCCParseTable = makeParseTable<GCCM>();
 constexpr auto kLSParseTable = makeParseTable<LSM>();
 
 template<typename Variant>
-Expected<Variant> parseFromTable(const std::array<ParseFn<Variant>, 256>& table,
-                                 BitReader& reader, int mti, unsigned ti,
-                                 std::string_view domainName) {
-    if (mti < 0 || mti >= 256 || table[static_cast<size_t>(mti)] == nullptr) {
+Expected<Variant> parseFromTable(const std::array<ParseFn<Variant>, kMaxMtiSlots>& table,
+                                  BitReader& reader, int mti, unsigned ti,
+                                  std::string_view domainName) {
+    if (mti < 0 || mti >= static_cast<int>(kMaxMtiSlots) ||
+        table[static_cast<size_t>(mti)] == nullptr) {
         // Cold error path: compose "Unknown <domain> MTI" (fits the
         // ParseError 47-char inline buffer; matches the previous
         // switch-default messages).
@@ -153,75 +163,28 @@ static bool decodeHexPair(const char* p, uint8_t& out) {
 
 // ── L3 header encoding helper ──────────────────────────────────────────
 
+// Wire layout of the L3 protocol header (TS 44.018 / TS 24.008):
+//   octet 0 = (TI << 5) | (TIF << 4) | PD          — PD is the LOW nibble
+//   octet 1:
+//     MM/CC/NC-SS/GCC/BCC : MT(6) in the low bits, NSD(2)=0 high bits
+//     RR TIF=0            : raw 8-bit message type
+//     RR TIF=1            : 5-bit short message code (high 3 bits = 0)
+//     GMM/SM/SMS/LCS/EXT/TESTPROC : raw 8-bit message type
 static void encodeL3Header(uint8_t* buf, L3PD pd, int mti, unsigned ti = 0, bool tif = false) {
-    switch (pd) {
-        case L3PD::RadioResource: {
-            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
-            buf[1] = static_cast<uint8_t>(mti & 0xFF);
-            break;
-        }
-        case L3PD::MobilityManagement: {
-            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
-            buf[1] = static_cast<uint8_t>(((mti & 0x3F) << 2) | 0);
-            break;
-        }
-        case L3PD::CallControl: {
-            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4 | (ti & 0x07) << 1);
-            if (tif) buf[0] |= 0x01;
-            buf[1] = static_cast<uint8_t>(((mti & 0x3F) << 2) | 0);
-            break;
-        }
-        case L3PD::NonCallSS: {
-            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4 | (ti & 0x07) << 1);
-            if (tif) buf[0] |= 0x01;
-            buf[1] = static_cast<uint8_t>(((mti & 0x3F) << 2) | 0);
-            break;
-        }
-        case L3PD::GPRSMobilityManagement: {
-            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
-            buf[1] = static_cast<uint8_t>(mti & 0xFF);
-            break;
-        }
-        case L3PD::GPRSSessionManagement: {
-            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
-            buf[1] = static_cast<uint8_t>(mti & 0xFF);
-            break;
-        }
-        case L3PD::SMS: {
-            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
-            buf[1] = static_cast<uint8_t>(mti & 0xFF);
-            break;
-        }
-        case L3PD::BroadcastCallControl: {
-            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4 | (ti & 0x07) << 1);
-            if (tif) buf[0] |= 0x01;
-            buf[1] = static_cast<uint8_t>(((mti & 0x3F) << 2) | 0);
-            break;
-        }
-        case L3PD::GroupCallControl: {
-            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4 | (ti & 0x07) << 1);
-            if (tif) buf[0] |= 0x01;
-            buf[1] = static_cast<uint8_t>(((mti & 0x3F) << 2) | 0);
-            break;
-        }
-        case L3PD::Location: {
-            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
-            buf[1] = static_cast<uint8_t>(mti & 0xFF);
-            break;
-        }
-        case L3PD::Extended: {
-            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
-            buf[1] = static_cast<uint8_t>(mti & 0xFF);
-            break;
-        }
-        case L3PD::TestProcedure: {
-            buf[0] = static_cast<uint8_t>((static_cast<uint8_t>(pd) & 0x0F) << 4);
-            buf[1] = static_cast<uint8_t>(mti & 0xFF);
-            break;
-        }
-        default:
-            break;
+    uint8_t octet1;
+    if (mti >= kRRTifShortBase && mti < kRRTifShortBase + 16 && pd == L3PD::RadioResource) {
+        // RR short message: the high three bits are reserved (zero).
+        octet1 = static_cast<uint8_t>(mti & 0x1F);
+    } else if (pd == L3PD::MobilityManagement || pd == L3PD::CallControl ||
+               pd == L3PD::NonCallSS || pd == L3PD::BroadcastCallControl ||
+               pd == L3PD::GroupCallControl) {
+        octet1 = static_cast<uint8_t>(mti & 0x3F);
+    } else {
+        octet1 = static_cast<uint8_t>(mti & 0xFF);
     }
+    buf[0] = static_cast<uint8_t>(((ti & 0x07) << 5) | (tif ? 0x10u : 0u) |
+                                  (static_cast<uint8_t>(pd) & 0x0F));
+    buf[1] = octet1;
 }
 
 namespace detail {
@@ -379,17 +342,16 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
 
     // For 4-byte and 7-byte data: handle short messages (no standard L3 header).
     // HandoverAccess is 4 bytes, SynchronizationChannelInformation is 7 bytes.
-    // These are RR short messages but their first byte's high nibble may match
-    // any PD value (including BCC=0x01, GCC=0x00), since they have no standard header.
+    // These are RR short messages but their first octet is not an L3 header,
+    // so its low nibble may equal any PD value (including BCC=0x01, GCC=0x00).
     if (data.size() == 4 || data.size() == 7) {
-        uint8_t pdNibble = (data[0] >> 4) & 0x0F;
+        uint8_t pdNibble = data[0] & 0x0F;   // PD occupies the low nibble of octet 0 (TS 24.008 L3 header).
 
         // BCC/GCC PD: short messages win. BCC Setup (MTI 0x00) and
         // BCC Proceeding (MTI 0x01) have opaque bodies that consume the
         // whole frame, so a standard parse would always "succeed exactly"
         // and swallow genuine HandoverAccess/SynchronizationChannelInformation
-        // frames (golden vectors {0x17, 0x00, ...} and {0x12, 0x34, ...}
-        // pin this behavior).
+        // frames.
         if (pdNibble == static_cast<uint8_t>(L3PD::BroadcastCallControl) ||
             pdNibble == static_cast<uint8_t>(L3PD::GroupCallControl)) {
             if (data.size() == 4) {
@@ -406,9 +368,9 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
             // Other PDs: the standard parse wins only on EXACT
             // consumption. A standard parse that leaves trailing bytes
             // means the frame is a short message whose first octet merely
-            // looks like a plausible header (e.g. HandoverAccess
-            // {0x60, 0x12, ..} used to be misparsed as RR Status with the
-            // trailing byte silently dropped).
+            // looks like a plausible header. Frames whose first octet holds
+            // a reserved low-nibble PD fail the header check here and fall
+            // through to the short-message parses below.
             auto hdrResult = parseL3Header(data);
             if (hdrResult) {
                 size_t bodyBits = (data.size() - 2) * 8;
@@ -521,8 +483,10 @@ Expected<size_t> writeL3Body(const ConcreteMsg& msg, uint8_t* out, size_t maxlen
         mtiVal = static_cast<int>(msg.mti());
     }
 
-    // Short messages: no standard L3 header, body only.
-    if constexpr (ConcreteMsg::MTI >= 0x100) {
+    // Length-framed synthetic codes carry no standard L3 header: body only.
+    // Every other short-message code (TIF set) is written with the
+    // standard header.
+    if constexpr (isNoHeaderShort(ConcreteMsg::MTI)) {
         size_t bodyLen = msg.bodyLength();
         if (bodyLen > maxlen) return Expected<size_t>::error(
             ParseError{ParseError::Code::BufferTooSmall, "output buffer too small"});
@@ -536,6 +500,11 @@ Expected<size_t> writeL3Body(const ConcreteMsg& msg, uint8_t* out, size_t maxlen
 
         if constexpr (requires { msg.ti(); }) {
             ti = msg.ti();
+        }
+
+        if constexpr (ConcreteMsg::MTI >= kRRTifShortBase &&
+                      ConcreteMsg::MTI < kRRTifShortBase + 16) {
+            tif = true; // RR short messages carry the transaction indicator flag.
         }
 
         size_t bodyLen = msg.bodyLength();
@@ -553,12 +522,11 @@ Expected<size_t> writeL3Body(const ConcreteMsg& msg, uint8_t* out, size_t maxlen
 }
 
 /// Exact wire length of a message: 2-byte header + body for standard
-/// messages, body only for short messages (MTI >= 0x100). Used to size
-/// the output container exactly (the previous 4 KB stack
-/// buffer is gone).
+/// messages and TIF-set short messages, body only for the length-framed
+/// synthetic codes (>= 0x10E). Used to size the output container exactly.
 template<typename ConcreteMsg>
 constexpr size_t wireLength(const ConcreteMsg& msg) noexcept {
-    if constexpr (ConcreteMsg::MTI >= 0x100) return msg.bodyLength();
+    if constexpr (isNoHeaderShort(ConcreteMsg::MTI)) return msg.bodyLength();
     else return 2 + msg.bodyLength();
 }
 

@@ -45,7 +45,7 @@ TEST(SMBuilders, ActivatePDPContextRequest) {
     ParsedMessage pm{SM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0xA0); // PD=10(SM)
+    EXPECT_EQ((*bytes)[0], 0x0A); // PD=SM in the low nibble
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);

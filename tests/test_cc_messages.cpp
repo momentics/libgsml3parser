@@ -24,16 +24,16 @@
 //
 // [GOLDEN VERIFICATION]
 // All CC hex parse test data verified against osmo-ttcn3-hacks reference:
-//   - Setup_Parse {0x3E, 0x14}: PD=3(CC), TI=7, TIF=0, MTI=0x05(Setup) -> byte0=0x3E, byte1=0x05<<2=0x14
+//   - Setup_Parse {0xE3, 0x05}: PD=CC in the low nibble of byte 0, TI=7 in bits 7:5, TIF=0, MT=Setup(0x05) in the six low bits of byte 1 (NSD=0)
 //     Verified against L3_Templates.ttcn ts_ML3_MO_CC_SETUP (discriminator='0011'B, messageType='000101'B)
-//   - Alerting_Parse {0x3E, 0x04}: PD=3(CC), TI=7, TIF=0, MTI=0x01(Alerting) -> byte0=0x3E, byte1=0x01<<2=0x04
+//   - Alerting_Parse {0xE3, 0x01}: PD=CC in the low nibble of byte 0, TI=7, TIF=0, MT=Alerting(0x01) (NSD=0)
 //     Verified against L3_Templates.ttcn tr_ML3_MT_CC_ALERTING (discriminator='0011'B, messageType='000001'B)
-//   - Disconnect_Parse {0x3E, 0x94, ...}: PD=3(CC), TI=7, TIF=0, MTI=0x25(Disconnect) -> byte0=0x3E, byte1=0x25<<2=0x94
+//   - Disconnect_Parse {0xE3, 0x25, ...}: PD=CC in the low nibble of byte 0, TI=7, TIF=0, MT=Disconnect(0x25) (NSD=0)
 //     Verified against L3_Templates.ttcn ts_ML3_MO_CC_DISC (discriminator='0011'B, messageType='100101'B)
 //   - CCCause_Values: verified against ITU-T Q.763 / GSM 24.008 Table 10.5.4.11
 //   - CCCauseLocation_Values: verified against GSM 24.008 Table 10.5.4.11 location field
-//   - Parse_Setup_Hex "3E14": same as Setup_Parse, hex string format
-//   - Parse_Release_Hex "3FB4": PD=3(CC), TI=7, TIF=1(REPL), MTI=0x2D(Release) -> byte0=0x3F, byte1=0x2D<<2=0xB4
+//   - Parse_Setup_Hex "E305": same as Setup_Parse, hex string format
+//   - Parse_Release_Hex "F32D": PD=CC in the low nibble of byte 0, TI=7, TIF=1(REPL), MT=Release(0x2D) (NSD=0)
 //     Verified against L3_Templates.ttcn ts_ML3_MO_CC_RELEASE (discriminator='0011'B, tiFlag=c_TIF_REPL)
 
 #include <gtest/gtest.h>
@@ -82,7 +82,7 @@ TEST(CCRoundTripTest, Setup_WithCalledParty) {
 // Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
 // Byte 1: messageType(6)<<2 | NSD(2) = 0x05<<2 | 0 = 0x14
 TEST(CCRoundTripTest, Setup_Parse) {
-    uint8_t data[] = {0x3E, 0x14};
+    uint8_t data[] = {0xE3, 0x05};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messagePD(*msg), L3PD::CallControl);
@@ -126,7 +126,7 @@ TEST(CCRoundTripTest, Alerting) {
 // Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
 // Byte 1: messageType(6)<<2 | NSD(2) = 0x01<<2 | 0 = 0x04
 TEST(CCRoundTripTest, Alerting_Parse) {
-    uint8_t data[] = {0x3E, 0x04};
+    uint8_t data[] = {0xE3, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3Alerting::MTI);
@@ -193,8 +193,8 @@ TEST(CCRoundTripTest, Disconnect_UserBusy) {
 //   Called-Party-Number is ALWAYS present in Disconnect (mandatory per spec).
 //   Called-Party-Number TLV: IEI=0x5E, length(1), typeOfNumber|numberingPlan(1), BCD digits.
 //   Cause TLV: IEI=0x08, length(1), value(2 octets) per GSM 24.008 10.5.4.11.
-// Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
-// Byte 1: messageType(6)<<2 | NSD(2) = 0x25<<2 | 0 = 0x94
+// Byte 0: TI=7 (bits 7:5) | TIF(4)=0 | PD=CC (low nibble) = 1110 0011 = 0xE3
+// Byte 1: MT(6)=Disconnect (0x25) in the low bits | NSD(2)=0 = 0x25
 // Called-Party-Number TLV (mandatory per GSM 24.008 9.3.7):
 //   Byte 2: IEI = 0x5E (CalledPartyNumberBcd, GSM 24.008 10.5.4.7)
 //   Byte 3: Length = 6 (1 type/plan octet + 5 BCD digit octets)
@@ -207,7 +207,7 @@ TEST(CCRoundTripTest, Disconnect_UserBusy) {
 //   Byte 13: causeValue(7)=0010000(Normal_Call_Clearing=16) | ext(1)=1 = 0x21
 TEST(CCRoundTripTest, Disconnect_Parse) {
     uint8_t data[] = {
-        0x3E, 0x94,
+        0xE3, 0x25,
         0x5E, 0x06, 0x11, 0x21, 0x43, 0x65, 0x87, 0x98,
         0x08, 0x02, 0x16, 0x21
     };
@@ -498,10 +498,10 @@ TEST(CCRoundTripTest, TI_DifferentValues) {
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=000101(Setup=0x05), NSD=00
 // Reference: L3_Templates.ttcn ts_ML3_MO_CC_SETUP, GSML3CCMessages.h Setup=0x05
-// Byte 0: PD(4,high)|TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
-// Byte 1: messageType(6)<<2|NSD(2) = 0x05<<2|0 = 0x14
+// Byte 0: TI(3,high)|TIF(1)|PD(4,low) = 1110 0011 = 0xE3
+// Byte 1: messageType(6)|NSD(2) = 0x05|0 = 0x05
 TEST(CCRoundTripTest, Parse_Setup_Hex) {
-    auto msg = parseL3Hex("3E14");
+    auto msg = parseL3Hex("E305");
     ASSERT_TRUE(msg);
     EXPECT_EQ(messagePD(*msg), L3PD::CallControl);
     EXPECT_EQ(messageMTI(*msg), L3Setup::MTI);
@@ -509,10 +509,10 @@ TEST(CCRoundTripTest, Parse_Setup_Hex) {
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=1(REPL), messageType=101101(Release=0x2D), NSD=00
 // Reference: L3_Templates.ttcn ts_ML3_MO_CC_RELEASE, GSML3CCMessages.h Release=0x2D
-// Byte 0: PD(4,high)|TIO(3)+TIF(1,low) = 0011 1111 = 0x3F
-// Byte 1: messageType(6)<<2|NSD(2) = 0x2D<<2|0 = 0xB4
+// Byte 0: TI(3,high)|TIF(1)|PD(4,low) = 1111 0011 = 0xF3
+// Byte 1: messageType(6)|NSD(2) = 0x2D|0 = 0x2D
 TEST(CCRoundTripTest, Parse_Release_Hex) {
-    auto msg = parseL3Hex("3FB4");
+    auto msg = parseL3Hex("F32D");
     ASSERT_TRUE(msg);
     EXPECT_EQ(messagePD(*msg), L3PD::CallControl);
     EXPECT_EQ(messageMTI(*msg), L3Release::MTI);
@@ -532,7 +532,7 @@ TEST(CCRoundTripTest, Facility_RoundTrip) {
 
 TEST(CCRoundTripTest, Facility_Parse_Golden) {
     // PD=0x03(CC), TI=7, TIF=0 -> byte0=0x3E, messageType=0x3a<<2=0xEA
-    uint8_t data[] = {0x3E, 0xEA, 0x01, 0x02, 0x03};
+    uint8_t data[] = {0xE3, 0x3A, 0x01, 0x02, 0x03};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3Facility::MTI);

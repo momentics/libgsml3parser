@@ -67,26 +67,26 @@ public:
 // ── SpanByteSource with known frames ───────────────────────────────────
 
 TEST(L3StreamProcessor, ParseAllFrames) {
-    // Three Channel Release messages.
+    // Three RR Status messages (constant 1-byte cause body).
     uint8_t data[] = {
-        0x60, 0x0D, 0x00,  // Channel Release #1
-        0x60, 0x0D, 0x01,  // Channel Release #2
-        0x60, 0x0D, 0x02   // Channel Release #3
+        0x06, 0x12, 0x41,  // RR Status #1
+        0x06, 0x12, 0x42,  // RR Status #2
+        0x06, 0x12, 0x43   // RR Status #3
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
 
     std::vector<int> mtis;
     while (proc.processOne([&mtis](const ParsedMessage& msg) {
-        if (tryGet<L3ChannelRelease>(msg)) {
-            mtis.push_back(L3ChannelRelease::MTI);
+        if (tryGet<L3RRStatus>(msg)) {
+            mtis.push_back(L3RRStatus::MTI);
         }
     })) {}
 
     ASSERT_EQ(mtis.size(), 3u);
-    ASSERT_EQ(mtis[0], 0x0D);
-    ASSERT_EQ(mtis[1], 0x0D);
-    ASSERT_EQ(mtis[2], 0x0D);
+    ASSERT_EQ(mtis[0], 0x12);
+    ASSERT_EQ(mtis[1], 0x12);
+    ASSERT_EQ(mtis[2], 0x12);
 
     const auto& stats = proc.stats();
     ASSERT_EQ(stats.parsedOk, 3u);
@@ -99,8 +99,8 @@ TEST(L3StreamProcessor, ParseAllFrames) {
 
 TEST(L3StreamProcessor, StatsTracking) {
     uint8_t data[] = {
-        0x60, 0x0D, 0x00,  // RR: Channel Release
-        0x50, 0x84,          // MM: CM Service Accept
+        0x06, 0x12, 0x41,  // RR: Status (fixed 3 bytes)
+        0x05, 0x21,          // MM: CM Service Accept (fixed 2 bytes)
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
@@ -117,11 +117,11 @@ TEST(L3StreamProcessor, StatsTracking) {
 // ── Error handling: corrupt frames continue processing ─────────────────
 
 TEST(L3StreamProcessor, CorruptFrameContinues) {
-    // Invalid frame followed by valid one.
+    // Invalid frame between two valid ones.
     uint8_t data[] = {
-        0x60, 0x0D, 0x00,  // Valid Channel Release
+        0x06, 0x12, 0x41,  // Valid RR Status (fixed 3 bytes)
         0xFF, 0xFF,          // Invalid (PD=0xF TestProcedure, treated as variable)
-        0x60, 0x0D, 0x01    // Valid Channel Release
+        0x06, 0x12, 0x42    // Valid RR Status (fixed 3 bytes)
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
@@ -166,10 +166,10 @@ TEST(L3StreamProcessor, RingBuffer_IdlePoll_CountedAsIdle) {
 
 TEST(L3StreamProcessor, ProcessN) {
     uint8_t data[] = {
-        0x60, 0x0D, 0x00,  // #1
-        0x60, 0x0D, 0x01,  // #2
-        0x60, 0x0D, 0x02,  // #3
-        0x60, 0x0D, 0x03   // #4
+        0x06, 0x12, 0x41,  // RR Status #1 (fixed 3 bytes)
+        0x06, 0x12, 0x42,  // #2
+        0x06, 0x12, 0x43,  // #3
+        0x06, 0x12, 0x44   // #4
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
@@ -185,7 +185,7 @@ TEST(L3StreamProcessor, ProcessN) {
 // ── resetStats ─────────────────────────────────────────────────────────
 
 TEST(L3StreamProcessor, ResetStats) {
-    uint8_t data[] = {0x60, 0x0D, 0x00};
+    uint8_t data[] = {0x06, 0x12, 0x41};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
 
@@ -202,7 +202,7 @@ TEST(L3StreamProcessor, ResetStats) {
 // ── L3StreamBuilder fluent API ─────────────────────────────────────────
 
 TEST(L3StreamBuilder, BuildFromSpan) {
-    uint8_t data[] = {0x60, 0x0D, 0x00};
+    uint8_t data[] = {0x06, 0x12, 0x41};
     auto proc = L3StreamBuilder()
         .source(std::span<const uint8_t>(data, std::size(data)))
         .useL2Length(false)  // header-based mode 
@@ -216,7 +216,7 @@ TEST(L3StreamBuilder, BuildFromSpan) {
 }
 
 TEST(L3StreamBuilder, BuildWithL2Length) {
-    uint8_t data[] = {0x03, 0x60, 0x0D, 0x00}; // L2 len=3 + Channel Release
+    uint8_t data[] = {0x03, 0x06, 0x0D, 0x00}; // L2 len=3 + Channel Release
     auto proc = L3StreamBuilder()
         .source(std::span<const uint8_t>(data, std::size(data)))
         .useL2Length(true)
@@ -241,10 +241,13 @@ TEST(L3StreamBuilder, Build_FileNotFound_ReturnsNullptr) {
 // ── Mixed message types ────────────────────────────────────────────────
 
 TEST(L3StreamProcessor, MixedMessageTypes) {
+    // The trailing variable-length RR frame carries an opaque body whose low
+    // nibbles are reserved PDs, so the boundary scan lands on the end of
+    // stream (emitted as the final tail frame).
     uint8_t data[] = {
-        0x60, 0x0D, 0x00,  // RR: Channel Release
-        0x50, 0x84,          // MM: CM Service Accept
-        0x60, 0x0E, 0x01, 0x02, 0x03, 0x04, 0x05,  // RR: Paging Response (7 bytes)
+        0x06, 0x12, 0x41,  // RR: Status (fixed 3 bytes)
+        0x05, 0x21,          // MM: CM Service Accept (fixed 2 bytes)
+        0x06, 0x07, 0x22, 0x47,  // RR: SystemInformationType2quater (opaque body)
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
@@ -264,14 +267,14 @@ TEST(L3StreamProcessor, MultiDomainStream) {
     // L2 length-prefixed frames for reliable multi-domain parsing.
     // Format: Length(1) | PD+MTI(2) | Body...
     uint8_t data[] = {
-        0x03, 0x60, 0x0D, 0x00,                             // RR: Channel Release (3 bytes)
-        0x02, 0x50, 0x84,                                    // MM: CM Service Accept (2 bytes)
-        0x06, 0x30, 0x94, 0x08, 0x02, 0x16, 0x21,          // CC: Disconnect (6 bytes)
-        0x02, 0xB0, 0xE8,                                    // SS: Facility (2 bytes)
-        0x09, 0x80, 0x01, 0x00, 0x04, 0x11, 0x03, 0x01, 0x02, 0x03, // GMM: AttachRequest (9 bytes)
-        0x04, 0xA0, 0x41, 0x0F, 0x00,                       // SM: ActivatePDPContextRequest (4 bytes)
-        0x07, 0x90, 0x01, 0x01, 0x04, 0x05, 0x06, 0x07,    // SMS: CPData (7 bytes)
-        0x02, 0x10, 0x01,                                    // BCC: Setup (2 bytes)
+        0x03, 0x06, 0x0D, 0x00,                             // RR: Channel Release (3 bytes)
+        0x02, 0x05, 0x21,                                    // MM: CM Service Accept (2 bytes)
+        0x06, 0x03, 0x25, 0x08, 0x02, 0x16, 0x21,          // CC: Disconnect (6 bytes)
+        0x02, 0x0B, 0x3A,                                    // SS: Facility (2 bytes)
+        0x09, 0x08, 0x01, 0x00, 0x04, 0x11, 0x03, 0x01, 0x02, 0x03, // GMM: AttachRequest (9 bytes)
+        0x04, 0x0A, 0x41, 0x0F, 0x00,                       // SM: ActivatePDPContextRequest (4 bytes)
+        0x07, 0x09, 0x01, 0x01, 0x04, 0x05, 0x06, 0x07,    // SMS: CPData (7 bytes)
+        0x02, 0x01, 0x00,                                    // BCC: Setup (2 bytes)
     };
     auto proc = L3StreamBuilder()
         .source(std::span<const uint8_t>(data, std::size(data)))
@@ -293,9 +296,9 @@ TEST(L3StreamProcessor, MultiDomainStream) {
 
 TEST(L3StreamProcessor, DomainMessageIdentification) {
     uint8_t data[] = {
-        0x60, 0x0D, 0x00,                             // RR: Channel Release
-        0x60, 0x0D, 0x01,                             // RR: Channel Release #2
-        0x60, 0x0D, 0x02,                             // RR: Channel Release #3
+        0x06, 0x12, 0x41,                             // RR: Status
+        0x06, 0x12, 0x42,                             // RR: Status #2
+        0x06, 0x12, 0x43,                             // RR: Status #3
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     L3StreamProcessor proc(src, {}, FrameConfig{.useL2Length = false});  // header-based mode 
@@ -306,22 +309,22 @@ TEST(L3StreamProcessor, DomainMessageIdentification) {
     })) {}
 
     ASSERT_EQ(names.size(), 3u);
-    EXPECT_EQ(names[0], "ChannelRelease");
-    EXPECT_EQ(names[1], "ChannelRelease");
-    EXPECT_EQ(names[2], "ChannelRelease");
+    EXPECT_EQ(names[0], "RRStatus");
+    EXPECT_EQ(names[1], "RRStatus");
+    EXPECT_EQ(names[2], "RRStatus");
 }
 
 // ── Large stream with repeated RR messages ─────────────────────────────
 
 TEST(L3StreamProcessor, LargeMultiDomainStream) {
     std::vector<uint8_t> data;
-    // RR ChannelRelease messages × 5
+    // RR Status messages × 5 (fixed 3 bytes each per the fixed-length table)
     for (int i = 0; i < 5; ++i) {
-        data.push_back(0x60); data.push_back(0x0D); data.push_back(static_cast<uint8_t>(i));
+        data.push_back(0x06); data.push_back(0x12); data.push_back(static_cast<uint8_t>(0x40 + i));
     }
-    // MM CMServiceAccept × 3
+    // MM CMServiceAccept × 3 (fixed 2 bytes each)
     for (int i = 0; i < 3; ++i) {
-        data.push_back(0x50); data.push_back(0x84);
+        data.push_back(0x05); data.push_back(0x21);
     }
 
     SpanByteSource src(std::span<const uint8_t>(data.data(), data.size()));
@@ -341,11 +344,11 @@ TEST(L3StreamProcessor, LargeMultiDomainStream) {
 TEST(L3StreamProcessor, L2FramedAllDomains) {
     // Each frame: Length(1) | L3 message...
     uint8_t data[] = {
-        0x09, 0x80, 0x01, 0x00, 0x04, 0x11, 0x03, 0x01, 0x02,   // GMM: AttachRequest (partial)
-        0x04, 0xA0, 0x41, 0x0F, 0x00,                             // SM: ActivatePDPContextRequest
-        0x07, 0x90, 0x01, 0x01, 0x04, 0x05, 0x06, 0x07,          // SMS: CPData
-        0x02, 0x10, 0x01,                                          // BCC: Setup
-        0x03, 0x00, 0x01, 0x02,                                    // GCC: Setup (3 bytes)
+        0x09, 0x08, 0x01, 0x00, 0x04, 0x11, 0x03, 0x01, 0x02,   // GMM: AttachRequest (partial)
+        0x04, 0x0A, 0x41, 0x0F, 0x00,                             // SM: ActivatePDPContextRequest
+        0x07, 0x09, 0x01, 0x01, 0x04, 0x05, 0x06, 0x07,          // SMS: CPData
+        0x02, 0x01, 0x00,                                          // BCC: Setup
+        0x03, 0x00, 0x00, 0x02,                                    // GCC: Setup (3 bytes)
     };
     auto proc = L3StreamBuilder()
         .source(std::span<const uint8_t>(data, std::size(data)))
@@ -406,12 +409,12 @@ TEST(L3StreamProcessor, AllTwelveDomains) {
     // LS: LocationServiceRequest
     appendFrame(ParsedMessage(LSM(L3LocationServiceRequest{})));
     // Extended: raw message with MTI=0x55 and body
-    uint8_t extData[] = {0xE0, 0x55, 0xAA, 0xBB};
+    uint8_t extData[] = {0x0E, 0x55, 0xAA, 0xBB};
     auto extParsed = parseL3(std::span<const uint8_t>(extData));
     ASSERT_TRUE(extParsed);
     appendFrame(*extParsed);
     // TestProcedure: raw message with MTI=0x99 and body
-    uint8_t tpData[] = {0xF0, 0x99, 0xCC};
+    uint8_t tpData[] = {0x0F, 0x99, 0xCC};
     auto tpParsed = parseL3(std::span<const uint8_t>(tpData));
     ASSERT_TRUE(tpParsed);
     appendFrame(*tpParsed);
@@ -475,8 +478,8 @@ TEST(L3StreamProcessor, AllDomainsMessageNames) {
     { L3BCCReleaseComplete rc; rc.ti(0); appendFrame(ParsedMessage(BCCM(std::move(rc)))); }
     { L3GCCReleaseComplete rc; rc.ti(0); appendFrame(ParsedMessage(GCCM(std::move(rc)))); }
     appendFrame(ParsedMessage(LSM(L3LocationServiceRequest{})));
-    { uint8_t d[] = {0xE0, 0x55, 0xAA, 0xBB}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p); appendFrame(*p); }
-    { uint8_t d[] = {0xF0, 0x99, 0xCC}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p); appendFrame(*p); }
+    { uint8_t d[] = {0x0E, 0x55, 0xAA, 0xBB}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p); appendFrame(*p); }
+    { uint8_t d[] = {0x0F, 0x99, 0xCC}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p); appendFrame(*p); }
 
     struct NameHandler : FrameHandler {
         std::vector<std::string>* mNames{};

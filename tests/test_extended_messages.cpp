@@ -35,7 +35,7 @@ using namespace gsml3parser;
 
 TEST(ExtendedMessageTest, Parse_Golden) {
     // PD=0x0e(Extended), MTI=0x42, body=0xAA 0xBB 0xCC
-    uint8_t data[] = {0xE4, 0x42, 0xAA, 0xBB, 0xCC};
+    uint8_t data[] = {0xCE, 0x42, 0xAA, 0xBB, 0xCC};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messagePD(*msg), L3PD::Extended);
@@ -52,7 +52,7 @@ TEST(ExtendedMessageTest, Parse_Golden) {
 
 TEST(ExtendedMessageTest, Parse_EmptyBody) {
     // PD=0x0e(Extended), MTI=0x01, no body octets
-    uint8_t data[] = {0xE0, 0x01};
+    uint8_t data[] = {0x0E, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messagePD(*msg), L3PD::Extended);
@@ -79,7 +79,7 @@ TEST(ExtendedMessageTest, RoundTrip) {
 TEST(ExtendedMessageTest, RoundTrip_WithBody) {
     L3ExtendedMessage orig(0x7F);
     // Manually set body via parse round-trip
-    uint8_t data[] = {0xE0, 0x7F, 0xDE, 0xAD};
+    uint8_t data[] = {0x0E, 0x7F, 0xDE, 0xAD};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto hex = writeL3Hex(*msg);
@@ -108,7 +108,7 @@ TEST(VisitorTests, TryGet_ExtendedMessage) {
 
 TEST(TestProcedureMessageTest, Parse_Golden) {
     // PD=0x0f(TestProcedure), MTI=0xA1, body=0x11 0x22 0x33 0x44
-    uint8_t data[] = {0xF0, 0xA1, 0x11, 0x22, 0x33, 0x44};
+    uint8_t data[] = {0x0F, 0xA1, 0x11, 0x22, 0x33, 0x44};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messagePD(*msg), L3PD::TestProcedure);
@@ -126,7 +126,7 @@ TEST(TestProcedureMessageTest, Parse_Golden) {
 
 TEST(TestProcedureMessageTest, Parse_EmptyBody) {
     // PD=0x0f(TestProcedure), MTI=0x00, no body
-    uint8_t data[] = {0xF0, 0x00};
+    uint8_t data[] = {0x0F, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messagePD(*msg), L3PD::TestProcedure);
@@ -150,7 +150,7 @@ TEST(TestProcedureMessageTest, RoundTrip) {
 }
 
 TEST(TestProcedureMessageTest, RoundTrip_WithBody) {
-    uint8_t data[] = {0xF0, 0xCC, 0xFE, 0xED, 0xFA, 0xCE};
+    uint8_t data[] = {0x0F, 0xCC, 0xFE, 0xED, 0xFA, 0xCE};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto hex = writeL3Hex(*msg);
@@ -180,7 +180,7 @@ TEST(VisitorTests, TryGet_TestProcedureMessage) {
 // ── L3Header parse for Extended/TestProcedure PDs ─────────────────────
 
 TEST(ExtendedHeaderTest, ParseL3Header_Extended) {
-    uint8_t data[] = {0xE0, 0x55};
+    uint8_t data[] = {0x0E, 0x55};
     auto hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
     EXPECT_EQ(hdr.value().pd, L3PD::Extended);
@@ -188,7 +188,7 @@ TEST(ExtendedHeaderTest, ParseL3Header_Extended) {
 }
 
 TEST(ExtendedHeaderTest, ParseL3Header_TestProcedure) {
-    uint8_t data[] = {0xF0, 0xAA};
+    uint8_t data[] = {0x0F, 0xAA};
     auto hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
     EXPECT_EQ(hdr.value().pd, L3PD::TestProcedure);

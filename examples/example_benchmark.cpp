@@ -158,10 +158,10 @@ int main() {
 
     // Representative messages for each PD domain.
     // RR: Channel Release (3 bytes) - PD=0x6, MTI=0x0D
-    uint8_t rrMsg[] = {0x60, 0x0D, 0x00};
+    uint8_t rrMsg[] = {0x06, 0x0D, 0x00};
 
     // MM: CM Service Accept (2 bytes) - PD=0x5, MTI=0x21
-    uint8_t mmMsg[] = {0x50, 0x84};
+    uint8_t mmMsg[] = {0x05, 0x21};
 
     // CC: Disconnect — built wire-exact via the message builder
     // the stream benchmark now uses L2-length framing, so every
@@ -171,33 +171,33 @@ int main() {
     std::vector<uint8_t> ccMsg = *ccBuilt;
 
     // SS: SupServ Facility (2 bytes) - PD=0xB, MTI=0x3A
-    uint8_t ssMsg[] = {0xB0, 0xE8};
+    uint8_t ssMsg[] = {0x0B, 0x3A};
 
     // GMM: GMM Status (3 bytes) - PD=0x8, MTI=0x20
-    uint8_t gmmMsg[] = {0x80, 0x20, 0x05};
+    uint8_t gmmMsg[] = {0x08, 0x20, 0x05};
 
     // SM: SM Status (4 bytes) - PD=0xA, MTI=0x55
-    uint8_t smMsg[] = {0xA0, 0x55, 0x32, 0x01};
+    uint8_t smMsg[] = {0x0A, 0x55, 0x32, 0x01};
 
     // SMS: CP Ack (2 bytes) — CP-ACK has no body (24.011 8.1.3;
     // the previous 4-byte vector was not a valid CP-ACK and
     // parsed as a HandoverAccess via the 4-byte short-message path).
-    uint8_t smsMsg[] = {0x90, 0x04};
+    uint8_t smsMsg[] = {0x09, 0x04};
 
     // BCC: Setup (2 bytes) - PD=0x1, MTI=0x01
-    uint8_t bccMsg[] = {0x10, 0x01};
+    uint8_t bccMsg[] = {0x01, 0x01};
 
     // GCC: Setup (3 bytes) - PD=0x0, MTI=0x01
     uint8_t gccMsg[] = {0x00, 0x01, 0x02};
 
     // LS: LocationServiceRequest (2 bytes) - PD=0x0c, MTI=0x01
-    uint8_t lsMsg[] = {0xC0, 0x01};
+    uint8_t lsMsg[] = {0x0C, 0x01};
 
     // EXT: ExtendedMessage (2 bytes) - PD=0x0e, MTI=0x01
-    uint8_t extMsg[] = {0xE0, 0x01};
+    uint8_t extMsg[] = {0x0E, 0x01};
 
     // TST: TestProcedureMessage (2 bytes) - PD=0x0f, MTI=0x01
-    uint8_t tstMsg[] = {0xF0, 0x01};
+    uint8_t tstMsg[] = {0x0F, 0x01};
 
     uint64_t iterations = 500000;
 

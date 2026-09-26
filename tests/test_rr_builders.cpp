@@ -40,7 +40,7 @@ TEST(RRBuilders, ImmediateAssignment_FullFields) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x3f);
 
     auto reparsed = parseL3(*bytes);
@@ -68,7 +68,7 @@ TEST(RRBuilders, ImmediateAssignmentReject_Wait30s) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x3a);
 }
 
@@ -96,7 +96,7 @@ TEST(RRBuilders, ImmediateAssignmentExtended_WithAdditionalChannel) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x39);
 }
 
@@ -109,7 +109,7 @@ TEST(RRBuilders, AssignmentCommand_Full) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x2e);
 }
 
@@ -125,7 +125,7 @@ TEST(RRBuilders, HandoverCommand_Full) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x2b);
 }
 
@@ -135,7 +135,7 @@ TEST(RRBuilders, AssignmentComplete_DefaultCause) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x29);
 
     auto reparsed = parseL3(*bytes);
@@ -169,7 +169,7 @@ TEST(RRBuilders, AssignmentFailure_Cause) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x2f);
 
     auto reparsed = parseL3(*bytes);
@@ -185,7 +185,7 @@ TEST(RRBuilders, HandoverComplete_DefaultCause) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x2c);
 
     auto reparsed = parseL3(*bytes);
@@ -203,7 +203,7 @@ TEST(RRBuilders, HandoverFailure_Cause) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x28);
 
     auto reparsed = parseL3(*bytes);
@@ -219,7 +219,7 @@ TEST(RRBuilders, ChannelRelease_DefaultCause) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x0d);
 
     auto reparsed = parseL3(*bytes);
@@ -253,7 +253,7 @@ TEST(RRBuilders, RRStatus_Cause) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x12);
 
     auto reparsed = parseL3(*bytes);
@@ -272,7 +272,7 @@ TEST(RRBuilders, CipheringModeCommand_Full) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x35);
 
     auto reparsed = parseL3(*bytes);
@@ -289,7 +289,7 @@ TEST(RRBuilders, CipheringModeComplete_Empty) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x32);
 }
 
@@ -302,7 +302,7 @@ TEST(RRBuilders, ChannelModeModify_Full) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x10);
 }
 
@@ -315,7 +315,7 @@ TEST(RRBuilders, ChannelModeModifyAcknowledge_Full) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x17);
 }
 
@@ -328,7 +328,7 @@ TEST(RRBuilders, AdditionalAssignment_WithPowerCommand) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x3b);
 
     auto reparsed = parseL3(*bytes);
@@ -346,7 +346,7 @@ TEST(RRBuilders, ConfigurationChangeCommand_WithChanDesc) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x30);
 }
 
@@ -356,7 +356,7 @@ TEST(RRBuilders, ConfigurationChangeAcknowledge_Empty) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x31);
 }
 
@@ -368,7 +368,7 @@ TEST(RRBuilders, ConfigurationChangeReject_Cause) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x33);
 
     auto reparsed = parseL3(*bytes);
@@ -386,7 +386,7 @@ TEST(RRBuilders, PartialRelease_WithChanDesc) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x0a);
 }
 
@@ -396,7 +396,7 @@ TEST(RRBuilders, PartialReleaseComplete_Empty) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x0f);
 }
 
@@ -409,7 +409,7 @@ TEST(RRBuilders, SystemInformationType1_Full) {
     ParsedMessage pm{RRM{std::move(si1)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x19);
 
     auto reparsed = parseL3(*bytes);
@@ -428,7 +428,7 @@ TEST(RRBuilders, SystemInformationType2_Full) {
     ParsedMessage pm{RRM{std::move(si2)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x1a);
 
     auto reparsed = parseL3(*bytes);
@@ -446,7 +446,7 @@ TEST(RRBuilders, SystemInformationType2bis_Full) {
     ParsedMessage pm{RRM{std::move(si2bis)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x02);
 
     auto reparsed = parseL3(*bytes);
@@ -463,7 +463,7 @@ TEST(RRBuilders, SystemInformationType2ter_Full) {
     ParsedMessage pm{RRM{std::move(si2ter)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x03);
 
     auto reparsed = parseL3(*bytes);
@@ -485,7 +485,7 @@ TEST(RRBuilders, SystemInformationType3_FullCell) {
     ParsedMessage pm{RRM{std::move(si3)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x1b);
 
     auto reparsed = parseL3(*bytes);
@@ -505,7 +505,7 @@ TEST(RRBuilders, SystemInformationType4_Full) {
     ParsedMessage pm{RRM{std::move(si4)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x1c);
 
     auto reparsed = parseL3(*bytes);
@@ -522,7 +522,7 @@ TEST(RRBuilders, SystemInformationType5_Full) {
     ParsedMessage pm{RRM{std::move(si5)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x1d);
 
     auto reparsed = parseL3(*bytes);
@@ -539,7 +539,7 @@ TEST(RRBuilders, SystemInformationType5bis_Full) {
     ParsedMessage pm{RRM{std::move(si5bis)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x05);
 
     auto reparsed = parseL3(*bytes);
@@ -556,7 +556,7 @@ TEST(RRBuilders, SystemInformationType5ter_Full) {
     ParsedMessage pm{RRM{std::move(si5ter)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x06);
 
     auto reparsed = parseL3(*bytes);
@@ -576,7 +576,7 @@ TEST(RRBuilders, SystemInformationType6_Full) {
     ParsedMessage pm{RRM{std::move(si6)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x1e);
 
     auto reparsed = parseL3(*bytes);
@@ -594,7 +594,7 @@ TEST(RRBuilders, SystemInformationType7_Full) {
     ParsedMessage pm{RRM{std::move(si7)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x1f);
 
     auto reparsed = parseL3(*bytes);
@@ -612,7 +612,7 @@ TEST(RRBuilders, SystemInformationType8_Full) {
     ParsedMessage pm{RRM{std::move(si8)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x18);
 
     auto reparsed = parseL3(*bytes);
@@ -631,7 +631,7 @@ TEST(RRBuilders, SystemInformationType9_Full) {
     ParsedMessage pm{RRM{std::move(si9)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x04);
 
     auto reparsed = parseL3(*bytes);
@@ -648,7 +648,7 @@ TEST(RRBuilders, SystemInformationType13_Full) {
     ParsedMessage pm{RRM{std::move(si13)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x00);
 
     auto reparsed = parseL3(*bytes);
@@ -667,7 +667,7 @@ TEST(RRBuilders, SystemInformationType16_Full) {
     ParsedMessage pm{RRM{std::move(si16)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x3d);
 
     auto reparsed = parseL3(*bytes);
@@ -685,7 +685,7 @@ TEST(RRBuilders, SystemInformationType17_Full) {
     ParsedMessage pm{RRM{std::move(si17)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x60);
+    EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x3e);
 
     auto reparsed = parseL3(*bytes);

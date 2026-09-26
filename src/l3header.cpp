@@ -30,55 +30,39 @@ Expected<L3Header> parseL3Header(std::span<const uint8_t> data) {
     }
 
     L3Header hdr;
+    const uint8_t byte0 = data[0];
+    const uint8_t byte1 = data[1];
 
-    // Byte 0: bits 7-4 = PD (high nibble).
-    // Only the 12 PD values defined in GSM 04.08 10.2 are valid; 0x02,
-    // 0x04, 0x07 and 0x0d are reserved. The previous static_cast produced
-    // an L3PD holding a non-enumerator value that passed isValid()
-    // .
-    uint8_t byte0 = data[0];
-    uint8_t pdNibble = (byte0 >> 4) & 0x0F;
-    switch (pdNibble) {
-        case 0x00: case 0x01: case 0x03: case 0x05: case 0x06:
-        case 0x08: case 0x09: case 0x0a: case 0x0b: case 0x0c:
-        case 0x0e: case 0x0f:
-            hdr.pd = static_cast<L3PD>(pdNibble);
-            break;
-        default:
-            return Expected<L3Header>::error(
-                {ParseError::Code::InvalidPD, "Invalid Protocol Discriminator"});
+    // Protocol discriminator: low nibble of the first L3 octet. The four
+    // high bits carry TI (3 bits) and the transaction indicator flag
+    // (TS 24.007 Table 11.3).
+    hdr.pd = static_cast<L3PD>(byte0 & 0x0F);
+    if (static_cast<uint8_t>(hdr.pd) == 0x02 || static_cast<uint8_t>(hdr.pd) == 0x04 ||
+        static_cast<uint8_t>(hdr.pd) == 0x07 || static_cast<uint8_t>(hdr.pd) == 0x0D) {
+        // 0x02, 0x04, 0x07 and 0x0D are reserved PDs (TS 44.018 section 10.2);
+        // parseL3Header rejects them with InvalidPD.
+        return Expected<L3Header>::error(
+            {ParseError::Code::InvalidPD, "Reserved Protocol Discriminator"});
     }
+    hdr.ti = (byte0 >> 5) & 0x07;
+    hdr.tif = ((byte0 >> 4) & 0x01) != 0;
 
-    // Byte 0 low nibble: bits 2-4 = TI (3 bits), bit 0 = TIF (1 bit)
-    // Matches BitVector layout: peekField(4,3) for TI, peekField(7,1) for TIF
-    hdr.ti = (byte0 >> 1) & 0x07;
-    hdr.tif = (byte0 & 0x01) != 0;
-
-    // Byte 1: raw MTI
-    uint8_t rawMti = data[1];
-
-    // MM, CC, SS: byte 1 = messageType(6)|NSD(2), mask and shift
+    // Message type octet, per protocol discriminator.
     if (hdr.pd == L3PD::MobilityManagement || hdr.pd == L3PD::CallControl ||
         hdr.pd == L3PD::NonCallSS || hdr.pd == L3PD::BroadcastCallControl ||
         hdr.pd == L3PD::GroupCallControl) {
-        hdr.mti = (rawMti & 0xFC) >> 2;
-    }
-    // GMM, SMS, SM: byte 1 = raw messageType(8), no NSD field
-    else if (hdr.pd == L3PD::GPRSMobilityManagement || hdr.pd == L3PD::SMS ||
-             hdr.pd == L3PD::GPRSSessionManagement) {
-        hdr.mti = rawMti;
-    }
-    // Location Services: byte 1 = raw messageType(8)
-    else if (hdr.pd == L3PD::Location) {
-        hdr.mti = rawMti;
-    }
-    // RR short messages: TIF=1 indicates MTI >= 0x100
-    else if (hdr.pd == L3PD::RadioResource && hdr.tif) {
-        hdr.mti = 0x100 + (rawMti & 0xFF);
-    }
-    // RR normal: raw byte directly
-    else {
-        hdr.mti = rawMti;
+        // 6-bit message type in the low half-octet; the two high bits are
+        // the network signalling indicator (informational, not exposed).
+        hdr.mti = byte1 & 0x3F;
+    } else if (hdr.pd == L3PD::RadioResource && hdr.tif) {
+        // RR short message: 5-bit code in the low half-octet of a
+        // reserved field (TS 44.018 Table 9.x short messages). The high
+        // three bits are reserved and are masked away.
+        hdr.mti = kRRTifShortBase | (byte1 & 0x1F);
+    } else {
+        // RR normal, GMM, SM, SMS, LCS and the extended/test PDs carry the
+        // message type as a full octet.
+        hdr.mti = byte1;
     }
 
     return Expected<L3Header>::hold(hdr);

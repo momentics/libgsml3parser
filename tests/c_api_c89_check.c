@@ -116,8 +116,8 @@ static void check_version_and_core(void)
           "no pending error initially");
 
     /* RR Channel Release: PD=0x06, MTI=0x0D. */
-    msg = gsml3_parse_l3_hex("60 0D 00", NULL);
-    check(msg != NULL, "parse 60 0D 00");
+    msg = gsml3_parse_l3_hex("06 0D 00", NULL);
+    check(msg != NULL, "parse 06 0D 00");
     if (msg) {
         const char* name;
 
@@ -133,7 +133,7 @@ static void check_version_and_core(void)
 
         n = gsml3_message_write(msg, buf, sizeof(buf));
         check(n == want && n == 3, "write 3 bytes");
-        check(buf[0] == 0x60 && buf[1] == 0x0D && buf[2] == 0x00, "wire bytes");
+        check(buf[0] == 0x06 && buf[1] == 0x0D && buf[2] == 0x00, "wire bytes");
         check(gsml3_last_error_code() == GSML3_OK, "success clears the error");
 
         /* The dedicated error class makes retry-with-larger-buffer trivial. */
@@ -143,7 +143,7 @@ static void check_version_and_core(void)
               "buffer-too-small error class");
 
         hex = gsml3_message_hex(msg);
-        check(hex != NULL && strcmp(hex, "600d00") == 0, "hex round-trip");
+        check(hex != NULL && strcmp(hex, "060d00") == 0, "hex round-trip");
         if (hex) gsml3_free(hex);
 
         dump = gsml3_message_dump(msg);
@@ -162,7 +162,7 @@ static void check_version_and_core(void)
     /* Error path: truncated input (RR ChannelRelease without its cause).
      * A single byte would NOT fail here: one-octet frames parse as RR
      * ChannelRequest short messages. */
-    bad = gsml3_parse_l3_hex("60 0D", NULL);
+    bad = gsml3_parse_l3_hex("06 0D", NULL);
     check(bad == NULL, "truncated parse fails");
     check(gsml3_last_error_code() != GSML3_OK, "parse error code set");
 
@@ -267,7 +267,7 @@ static void check_validation(void)
 
 static void check_rsl(void)
 {
-    static const uint8_t l3[3] = {0x60, 0x0D, 0x00};
+    static const uint8_t l3[3] = {0x06, 0x0D, 0x00};
     uint8_t out[256];
     size_t n;
     gsml3_rsl* r;
@@ -333,7 +333,7 @@ static void check_rsl(void)
 static void check_lapdm(void)
 {
     static const uint8_t ua[2] = {0x01, 0x63};       /* UA, SAPI0, PF=1   */
-    static const uint8_t ui[5] = {0x01, 0x03, 0x60, 0x0D, 0x00}; /* UI+SAPI0+L3 */
+    static const uint8_t ui[5] = {0x01, 0x03, 0x06, 0x0D, 0x00}; /* UI+SAPI0+L3 */
     gsml3_lapdm_frame_info f;
     gsml3_lapdm_entity* e;
     Capture cap;
@@ -366,7 +366,7 @@ static void check_lapdm(void)
 
     /* An out-of-range SAPI is rejected before it can corrupt the frame. */
     {
-        const uint8_t l3[3] = {0x60, 0x0D, 0x00};
+        const uint8_t l3[3] = {0x06, 0x0D, 0x00};
 
         check(gsml3_lapdm_entity_send_ui(e, 20, l3, 3) == GSML3_ERR_INVALID_ARG,
               "send_ui rejects SAPI > 15");
@@ -384,7 +384,7 @@ static void check_lapdm(void)
     check(cap.l3_count == 2, "unit data callback fired");
     check(cap.last_sapi == GSML3_SAPI0, "l3 callback sapi");
     check(cap.last_prim == GSML3_PRIM_L3_UNIT_DATA, "l3 primitive is unit data");
-    check(cap.last_data_len == 3 && memcmp(cap.last_data, "\x60\x0D\x00", 3) == 0,
+    check(cap.last_data_len == 3 && memcmp(cap.last_data, "\x06\x0D\x00", 3) == 0,
           "l3 payload round-trip");
 
     check(gsml3_lapdm_entity_send_disc(e) == GSML3_OK, "disc sent");
@@ -594,7 +594,7 @@ static void check_orchestrator(void)
     gsml3_step_result res;
 
     o = gsml3_orchestrator_new();
-    m = gsml3_parse_l3_hex("60 0D 00", NULL); /* no chain start */
+    m = gsml3_parse_l3_hex("06 0D 00", NULL); /* no chain start */
     check(o != NULL && m != NULL, "orchestrator and message new");
 
     /* A failed call is visible through the result's error field (the session

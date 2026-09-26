@@ -41,7 +41,7 @@ TEST(GMMBuilders, AttachComplete) {
     ParsedMessage pm{GMM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x80); // PD=8(GMM)
+    EXPECT_EQ((*bytes)[0], 0x08); // PD=GMM in the low nibble
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -61,7 +61,7 @@ TEST(GMMBuilders, AttachRequest) {
     ParsedMessage pm{GMM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x80); // PD=8(GMM)
+    EXPECT_EQ((*bytes)[0], 0x08); // PD=GMM in the low nibble
 }
 
 // 3GPP TS 24.008 9.4.2: Attach Accept

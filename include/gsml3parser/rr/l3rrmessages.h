@@ -379,46 +379,27 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── Classmark Enquiry (GSM 04.08 9.1.14) ──────────────────────────────
+// ── Classmark Enquiry (TS 44.018 9.1.14) ───────────────────────────────
+// Classmark Enquiry (TS 44.018): carries no value part; the MS answers
+// with its classmark.
 
 class L3ClassmarkEnquiry {
-    // Classmark type: which classmark the MS shall send
-    // (00 = classmark 1, 01 = classmark 2, 10 = classmark 3,
-    // 11 = classmark 2 and 3) — TS 44.018 9.1.14 (the
-    // previous header-only implementation dropped the mandatory
-    // 1-octet body; the TTCN-3 type carries it as classmarkEnquiryMask).
-    uint8_t mClassmarkType{0};
-
-    friend struct Builder;
 public:
     static constexpr int MTI = 0x13;
 
-    L3ClassmarkEnquiry() = default;
-    explicit L3ClassmarkEnquiry(unsigned type) : mClassmarkType(static_cast<uint8_t>(type & 0x03u)) {}
-
-    [[nodiscard]] unsigned classmarkType() const { return mClassmarkType; }
-
-    size_t bodyLength() const { return 1; }
+    size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    size_t l2BodyLength() const { return 1; }
-    [[nodiscard]] static Expected<L3ClassmarkEnquiry> parse(BitReader& br);
-    void write(BitWriter& bw) const;
+    [[nodiscard]] size_t l2BodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3ClassmarkEnquiry> parse(BitReader&);
+    void write(BitWriter&) const;
     void text(std::ostream& os) const;
 
     struct Builder {
-        uint8_t mClassmarkType{0};
-
-        /// Set the classmark type (0..3).
-        Builder& classmarkType(unsigned v) { mClassmarkType = static_cast<uint8_t>(v & 0x03u); return *this; }
         /// Build the final message.
-        [[nodiscard]] L3ClassmarkEnquiry build() const {
-            L3ClassmarkEnquiry msg;
-            msg.mClassmarkType = mClassmarkType;
-            return msg;
-        }
+        [[nodiscard]] L3ClassmarkEnquiry build() const;
     };
-
+    friend struct Builder;
     static Builder builder() { return Builder{}; }
 };
 
@@ -1845,7 +1826,9 @@ public:
 };
 
 // ── Synchronization Channel Information (GSM 04.08 9.1.30) ────────────
-// Short message: no standard L3 header, 7 bytes fixed.
+// Length-framed short message (TS 44.018): the internal MTI lies outside
+// the RR wire range; the message is framed by its length (7 bytes), not
+// by an L3 header.
 
 class L3SynchronizationChannelInformation {
     L3CellIdentity mCellIdentity;
@@ -1853,7 +1836,7 @@ class L3SynchronizationChannelInformation {
 
     friend struct Builder;
 public:
-    static constexpr int MTI = 0x100;
+    static constexpr int MTI = 0x110;
 
     L3SynchronizationChannelInformation() = default;
 
@@ -1889,7 +1872,9 @@ public:
 };
 
 // ── Channel Request (GSM 04.08 9.1.13) ────────────────────────────────
-// Short message: no standard L3 header, 1 byte.
+// Length-framed short message (TS 44.018): the internal MTI lies outside
+// the RR wire range; the message is framed by its length (1 byte), not
+// by an L3 header.
 
 class L3ChannelRequest {
     // Full 8-bit request reference (RA) from the RACH burst — TS 44.018 9.1.8.
@@ -1900,7 +1885,7 @@ class L3ChannelRequest {
 
     friend struct Builder;
 public:
-    static constexpr int MTI = 0x101;
+    static constexpr int MTI = 0x10E;
 
     L3ChannelRequest() = default;
     explicit L3ChannelRequest(unsigned wRef) : mRequestReference(static_cast<uint8_t>(wRef & 0xFFu)) {}
@@ -1932,14 +1917,16 @@ public:
 };
 
 // ── Handover Access (GSM 04.08 9.1.14a) ───────────────────────────────
-// Short message: no standard L3 header, 4 bytes.
+// Length-framed short message (TS 44.018): the internal MTI lies outside
+// the RR wire range; the message is framed by its length (4 bytes), not
+// by an L3 header.
 
 class L3HandoverAccess {
     unsigned mHandoverNumber{0};
 
     friend struct Builder;
 public:
-    static constexpr int MTI = 0x102;
+    static constexpr int MTI = 0x10F;
 
     L3HandoverAccess() = default;
     explicit L3HandoverAccess(unsigned wNumber) : mHandoverNumber(wNumber) {}
@@ -2510,14 +2497,14 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── DTM Assignment Failure (GSM 04.08 9.1.3d) ─────────────────────────
+// ── DTM Assignment Failure (TS 44.018 Table 9.x) ──────────────────────
 
 class L3DTMAssignmentFailure {
     RRCause mCause{RRCause::Normal_Event};
 
     friend struct Builder;
 public:
-    static constexpr int MTI = 0x80;
+    static constexpr int MTI = 0x48;
 
     L3DTMAssignmentFailure() = default;
     explicit L3DTMAssignmentFailure(RRCause cause) : mCause(cause) {}
@@ -2548,11 +2535,11 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── DTM Reject (GSM 04.08 9.1.3d) ─────────────────────────────────────
+// ── DTM Reject (TS 44.018 Table 9.x) ──────────────────────────────────
 
 class L3DTMReject {
 public:
-    static constexpr int MTI = 0x81;
+    static constexpr int MTI = 0x49;
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -2570,11 +2557,11 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── DTM Request (GSM 04.08 9.1.3d) ────────────────────────────────────
+// ── DTM Request (TS 44.018 Table 9.x) ─────────────────────────────────
 
 class L3DTMRequest {
 public:
-    static constexpr int MTI = 0x82;
+    static constexpr int MTI = 0x4A;
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -2592,7 +2579,7 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── Packet Assignment (GSM 04.08 9.1.3e) ───────────────────────────────
+// ── Packet Assignment (TS 44.018 Table 9.x) ───────────────────────────
 
 class L3PacketAssignment {
     L3ChannelDescription mChanDesc;
@@ -2600,7 +2587,7 @@ class L3PacketAssignment {
 
     friend struct Builder;
 public:
-    static constexpr int MTI = 0x83;
+    static constexpr int MTI = 0x4B;
 
     const L3ChannelDescription& channelDescription() const { return mChanDesc; }
     const L3TimingAdvance& timingAdvance() const { return mTA; }
@@ -2633,11 +2620,11 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── DTM Assignment Command (GSM 04.08 9.1.3d) ─────────────────────────
+// ── DTM Assignment Command (TS 44.018 Table 9.x) ──────────────────────
 
 class L3DTMAssignmentCommand {
 public:
-    static constexpr int MTI = 0x84;
+    static constexpr int MTI = 0x4C;
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -2655,11 +2642,11 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── DTM Information (GSM 04.08 9.1.3d) ────────────────────────────────
+// ── DTM Information (TS 44.018 Table 9.x) ─────────────────────────────
 
 class L3DTMInformation {
 public:
-    static constexpr int MTI = 0x85;
+    static constexpr int MTI = 0x4D;
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -2677,11 +2664,11 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── Packet Information (GSM 04.08 9.1.3e) ─────────────────────────────
+// ── Packet Information (TS 44.018 Table 9.x) ──────────────────────────
 
 class L3PacketInformation {
 public:
-    static constexpr int MTI = 0x86;
+    static constexpr int MTI = 0x4E;
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -2696,6 +2683,42 @@ public:
         [[nodiscard]] L3PacketInformation build() const;
     };
     friend struct Builder;
+    static Builder builder() { return Builder{}; }
+};
+
+// ── Immediate Packet Assignment (TS 44.018, DTM packet channel) ───────
+// The value part is kept opaque for round-trip fidelity.
+
+class L3ImmediatePacketAssignment {
+    std::vector<uint8_t> mBody;
+
+    friend struct Builder;
+public:
+    static constexpr int MTI = 0x69;   // '01101001'B
+
+    L3ImmediatePacketAssignment() = default;
+    const std::vector<uint8_t>& body() const { return mBody; }
+    size_t bodyLength() const { return mBody.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3ImmediatePacketAssignment> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mBody;
+
+        /// Set the opaque value part.
+        Builder& body(std::span<const uint8_t> v) { mBody.assign(v.begin(), v.end()); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3ImmediatePacketAssignment build() const {
+            L3ImmediatePacketAssignment msg;
+            msg.mBody = mBody;
+            return msg;
+        }
+    };
+
     static Builder builder() { return Builder{}; }
 };
 
@@ -3175,8 +3198,9 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── System Information Type 10 (GSM 04.08 9.1.44) ─────────────────────
-// Short message: no standard L3 header, sent on BCCH.
+// ── System Information Type 10 (TS 44.018 9.x) ────────────────────────
+// RR short message: TIF set, five-bit code '00000'B in the message type
+// octet; sent on BCCH.
 
 class L3SystemInformationType10 {
     L3CellIdentity mCI;
@@ -3186,7 +3210,7 @@ class L3SystemInformationType10 {
 
     friend struct Builder;
 public:
-    static constexpr int MTI = 0x106;
+    static constexpr int MTI = 0x100;
 
     const L3CellIdentity& ci() const { return mCI; }
     const L3LocationAreaIdentity& lai() const { return mLAI; }
@@ -3229,8 +3253,9 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── System Information Type 10bis (GSM 04.08 9.1.44a) ─────────────────
-// Short message: no standard L3 header, sent on BCCH.
+// ── System Information Type 10bis (TS 44.018 9.x) ─────────────────────
+// RR short message: TIF set, five-bit code '01010'B in the message type
+// octet; sent on BCCH.
 
 class L3SystemInformationType10bis {
     L3CellIdentity mCI;
@@ -3240,7 +3265,7 @@ class L3SystemInformationType10bis {
 
     friend struct Builder;
 public:
-    static constexpr int MTI = 0x107;
+    static constexpr int MTI = 0x10A;
 
     const L3CellIdentity& ci() const { return mCI; }
     const L3LocationAreaIdentity& lai() const { return mLAI; }
@@ -3283,8 +3308,9 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── System Information Type 10ter (GSM 04.08 9.1.44b) ─────────────────
-// Short message: no standard L3 header, sent on BCCH.
+// ── System Information Type 10ter (TS 44.018 9.x) ─────────────────────
+// RR short message: TIF set, five-bit code '01011'B in the message type
+// octet; sent on BCCH.
 
 class L3SystemInformationType10ter {
     L3CellIdentity mCI;
@@ -3294,7 +3320,7 @@ class L3SystemInformationType10ter {
 
     friend struct Builder;
 public:
-    static constexpr int MTI = 0x108;
+    static constexpr int MTI = 0x10B;
 
     const L3CellIdentity& ci() const { return mCI; }
     const L3LocationAreaIdentity& lai() const { return mLAI; }
@@ -3337,12 +3363,13 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── Notification FACCH (GSM 04.08 9.1.45) ─────────────────────────────
-// Short message: no standard L3 header, sent on FACCH.
+// ── Notification FACCH (TS 44.018 9.x) ────────────────────────────────
+// RR short message: TIF set, five-bit code '00001'B in the message type
+// octet; sent on FACCH.
 
 class L3NotificationFACCH {
 public:
-    static constexpr int MTI = 0x109;
+    static constexpr int MTI = 0x101;
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -3360,12 +3387,13 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── Uplink Free (GSM 04.08 9.1.45a) ───────────────────────────────────
-// Short message: no standard L3 header, sent on FACCH.
+// ── Uplink Free (TS 44.018 9.x) ───────────────────────────────────────
+// RR short message: TIF set, five-bit code '00010'B in the message type
+// octet; sent on FACCH.
 
 class L3UplinkFree {
 public:
-    static constexpr int MTI = 0x10A;
+    static constexpr int MTI = 0x102;
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -3383,15 +3411,16 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── Enhanced Measurement Report UL (GSM 04.08 9.1.45b) ────────────────
-// Short message: no standard L3 header, sent on FACCH.
+// ── Enhanced Measurement Report UL (TS 44.018 9.x) ────────────────────
+// RR short message: TIF set, five-bit code '00100'B in the message type
+// octet; sent on FACCH.
 
 class L3EnhancedMeasurementRepUL {
     std::vector<uint8_t> mData;
 
     friend struct Builder;
 public:
-    static constexpr int MTI = 0x10B;
+    static constexpr int MTI = 0x104;
 
     std::vector<uint8_t>& data() { return mData; }
     const std::vector<uint8_t>& data() const { return mData; }
@@ -3420,15 +3449,16 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── Measurement Info DL (GSM 04.08 9.1.45c) ───────────────────────────
-// Short message: no standard L3 header, sent on FACCH.
+// ── Measurement Info DL (TS 44.018 9.x) ───────────────────────────────
+// RR short message: TIF set, five-bit code '00101'B in the message type
+// octet; sent on FACCH.
 
 class L3MeasurementInfoDL {
     std::vector<uint8_t> mData;
 
     friend struct Builder;
 public:
-    static constexpr int MTI = 0x10C;
+    static constexpr int MTI = 0x105;
 
     std::vector<uint8_t>& data() { return mData; }
     const std::vector<uint8_t>& data() const { return mData; }
@@ -3457,12 +3487,13 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── VBS/VGCS Recon (GSM 04.08 9.1.45d) ────────────────────────────────
-// Short message: no standard L3 header, sent on FACCH.
+// ── VBS/VGCS Recon (TS 44.018 9.x) ────────────────────────────────────
+// RR short message: TIF set, five-bit code '00110'B in the message type
+// octet; sent on FACCH.
 
 class L3VBSVGCSRecon {
 public:
-    static constexpr int MTI = 0x10D;
+    static constexpr int MTI = 0x106;
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -3480,12 +3511,13 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── VBS/VGCS Recon 2 (GSM 04.08 9.1.45e) ──────────────────────────────
-// Short message: no standard L3 header, sent on FACCH.
+// ── VBS/VGCS Recon 2 (TS 44.018 9.x) ──────────────────────────────────
+// RR short message: TIF set, five-bit code '00111'B in the message type
+// octet; sent on FACCH.
 
 class L3VBSVGCSRecon2 {
 public:
-    static constexpr int MTI = 0x10E;
+    static constexpr int MTI = 0x107;
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -3503,12 +3535,13 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── VGCS Add Info (GSM 04.08 9.1.45f) ─────────────────────────────────
-// Short message: no standard L3 header, sent on FACCH.
+// ── VGCS Add Info (TS 44.018 9.x) ─────────────────────────────────────
+// RR short message: TIF set, five-bit code '01000'B in the message type
+// octet; sent on FACCH.
 
 class L3VGCSAddInfo {
 public:
-    static constexpr int MTI = 0x10F;
+    static constexpr int MTI = 0x108;
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -3526,12 +3559,13 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── VGCS SMS Info (GSM 04.08 9.1.45g) ─────────────────────────────────
-// Short message: no standard L3 header, sent on FACCH.
+// ── VGCS MS Info (TS 44.018 9.x) ──────────────────────────────────────
+// RR short message: TIF set, five-bit code '01001'B in the message type
+// octet; sent on FACCH.
 
 class L3VGCSMSInfo {
 public:
-    static constexpr int MTI = 0x110;
+    static constexpr int MTI = 0x109;
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -3549,12 +3583,13 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── VGCS Neighbor Cell Info (GSM 04.08 9.1.45h) ───────────────────────
-// Short message: no standard L3 header, sent on FACCH.
+// ── VGCS Neighbor Cell Info (TS 44.018 9.x) ───────────────────────────
+// RR short message: TIF set, five-bit code '01100'B in the message type
+// octet; sent on FACCH.
 
 class L3VGCSSNeighCellInfo {
 public:
-    static constexpr int MTI = 0x111;
+    static constexpr int MTI = 0x10C;
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }
@@ -3572,12 +3607,13 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── Notify App Data (GSM 04.08 9.1.45i) ───────────────────────────────
-// Short message: no standard L3 header, sent on FACCH.
+// ── Notify App Data (TS 44.018 9.x) ───────────────────────────────────
+// RR short message: TIF set, five-bit code '01101'B in the message type
+// octet; sent on FACCH.
 
 class L3NotifyAppData {
 public:
-    static constexpr int MTI = 0x112;
+    static constexpr int MTI = 0x10D;
 
     size_t bodyLength() const { return 0; }
     [[nodiscard]] int mti() const { return MTI; }

@@ -49,7 +49,7 @@ TEST(LSMessageTest, LocationServiceRequest_RoundTrip) {
 TEST(LSMessageTest, LocationServiceRequest_Parse_Golden) {
     // PD=0x0c(Location), byte1=MTI=0x01, body=0xAA 0xBB
     // L3 header: PD(4)|TI(3)|TIF(1) = 1100 0000 = 0xC0, MTI byte = 0x01
-    uint8_t data[] = {0xC0, 0x01, 0xAA, 0xBB};
+    uint8_t data[] = {0x0C, 0x01, 0xAA, 0xBB};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(static_cast<int>(messagePD(*msg)), static_cast<int>(L3PD::Location));
@@ -72,7 +72,7 @@ TEST(LSMessageTest, LocationServiceProviderMessage_RoundTrip) {
 
 TEST(LSMessageTest, LocationServiceProviderMessage_Parse_Golden) {
     // PD=0x0c(Location), byte1=MTI=0x02, body=0xCC 0xDD 0xEE
-    uint8_t data[] = {0xC0, 0x02, 0xCC, 0xDD, 0xEE};
+    uint8_t data[] = {0x0C, 0x02, 0xCC, 0xDD, 0xEE};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3LocationServiceProviderMessage::MTI);

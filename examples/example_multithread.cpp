@@ -59,19 +59,19 @@ struct ThreadStats {
 // the previous 4-byte vector parsed as a HandoverAccess, so the SMS
 // counter stayed 0 and RR was double-counted).
 std::vector<std::string> sExampleHexes = {
-    "600D00",                    // RR: Channel Release
-    "5084",                      // MM: CM Service Accept
-    "3E9408021621",              // CC: Disconnect (TI=7) — complete 6-byte wire form:
+    "060D00",                    // RR: Channel Release
+    "0521",                      // MM: CM Service Accept
+    "E32508021621",              // CC: Disconnect (TI=7) — complete 6-byte wire form:
                                  // 2-byte header + 4-byte body, exact consumption.
-    "B0E8",                      // SS: Facility
-    "802005",                     // GMM: GMM Status (cause=5)
-    "A055320105",                 // SM: SM Status (cause=5)
-    "9004",                       // SMS: CP Ack
-    "1001",                       // BCC: Setup
+    "0B3A",                      // SS: Facility
+    "082005",                     // GMM: GMM Status (cause=5)
+    "0A55320105",                 // SM: SM Status (cause=5)
+    "0904",                       // SMS: CP Ack
+    "0101",                       // BCC: Setup
     "000102",                     // GCC: Setup
-    "C001",                       // LS: LocationServiceRequest
-    "E001",                       // EXT: ExtendedMessage
-    "F001",                       // TST: TestProcedureMessage
+    "0C01",                       // LS: LocationServiceRequest
+    "0E01",                       // EXT: ExtendedMessage
+    "0F01",                       // TST: TestProcedureMessage
     };
 
 void workerThread(int id, ThreadStats& stats, int iterations) {

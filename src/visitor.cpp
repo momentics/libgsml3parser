@@ -93,6 +93,7 @@ struct NameVisitor {
     std::string_view operator()(const L3DTMReject&) const { return "DTMReject"; }
     std::string_view operator()(const L3DTMRequest&) const { return "DTMRequest"; }
     std::string_view operator()(const L3PacketAssignment&) const { return "PacketAssignment"; }
+    std::string_view operator()(const L3ImmediatePacketAssignment&) const { return "ImmediatePacketAssignment"; }
     std::string_view operator()(const L3DTMAssignmentCommand&) const { return "DTMAssignmentCommand"; }
     std::string_view operator()(const L3DTMInformation&) const { return "DTMInformation"; }
     std::string_view operator()(const L3PacketInformation&) const { return "PacketInformation"; }
@@ -382,6 +383,7 @@ struct MTIVisitor {
     int operator()(const L3DTMReject&) const { return L3DTMReject::MTI; }
     int operator()(const L3DTMRequest&) const { return L3DTMRequest::MTI; }
     int operator()(const L3PacketAssignment&) const { return L3PacketAssignment::MTI; }
+    int operator()(const L3ImmediatePacketAssignment&) const { return L3ImmediatePacketAssignment::MTI; }
     int operator()(const L3DTMAssignmentCommand&) const { return L3DTMAssignmentCommand::MTI; }
     int operator()(const L3DTMInformation&) const { return L3DTMInformation::MTI; }
     int operator()(const L3PacketInformation&) const { return L3PacketInformation::MTI; }

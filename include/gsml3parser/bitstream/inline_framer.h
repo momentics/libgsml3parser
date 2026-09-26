@@ -30,6 +30,7 @@
 #include <span>
 
 #include "gsml3parser/bitstream/frame_lengths.h"
+#include "gsml3parser/l3header.h"
 
 namespace gsml3parser {
 
@@ -49,7 +50,7 @@ namespace gsml3parser {
  * Header-based mode (useL2Length = false) is a heuristic for
  * variable-length messages (it scans for the next plausible L3 header)
  * and is NOT reliable on real variable-length streams: message bodies
- * (SMS, GMM, SI, CC with IEs) frequently contain bytes whose high nibble
+ * (SMS, GMM, SI, CC with IEs) frequently contain bytes whose low nibble
  * is a valid PD, creating false frame boundaries. Use it only for
  * synthetic/test streams of fixed-length or boundary-safe messages.
  *
@@ -138,29 +139,26 @@ inline std::optional<std::span<const uint8_t>> InlineFramer::nextFrame() noexcep
 
         uint8_t b0 = mData[mPos];
         uint8_t b1 = mData[mPos + 1];
-        int pd = (b0 >> 4) & 0x0F;
-        int rawMti = b1;
-        int mti = rawMti;
+        // PD occupies the low nibble of octet 0 (TS 24.008 L3 header).
+        int pd = b0 & 0x0F;
 
-        // Adjust MTI for MM/CC/SS/BCC/GCC (6-bit messageType + 2-bit NSD).
-        // BCC (0x01) and GCC (0x00) use the same CC-style header
-        // (TS 44.018 10.2) — the previous condition missed
-        // them, so their fixed-length table entries never matched.
+        // Internal MTI for the fixed-length table, per protocol discriminator:
+        // MM/CC/NC-SS/GCC/BCC carry a six-bit message type in the low bits of
+        // octet 1 (the two high bits are the network signalling indicator);
+        // RR with TIF set carries a five-bit short-message code remapped to
+        // kRRTifShortBase | code; all other PDs carry the raw 8-bit MTI.
+        int mti;
         if (pd == 0x05 || pd == 0x03 || pd == 0x0B || pd == 0x01 || pd == 0x00) {
-            mti = (rawMti & 0xFC) >> 2;
+            mti = b1 & 0x3F;
+        } else if (pd == 0x06 && ((b0 & 0x10u) != 0u)) {
+            // TIF bit (bit 4 of octet 0) set: RR short-message code.
+            mti = kRRTifShortBase | (b1 & 0x1F);
+        } else {
+            mti = b1;
         }
 
-        // Same boundary-candidate logic as L3Framer (C17):
-        // 0x00/0x01/0x0c high nibbles occur frequently inside
-        // variable-length bodies (e.g. GMM/SMS cause octets), so
-        // they are only accepted while framing BCC/GCC/LS
-        // messages (the two framers must
-        // behave identically).
-        const bool callControlLike = (pd == 0x00 || pd == 0x01 || pd == 0x0c);
-
         // Fixed-length lookup — single source of truth in
-        // bitstream/frame_lengths.h (the previous
-        // duplicated switch used wrong MTI values and lengths).
+        // bitstream/frame_lengths.h.
         size_t fixedLen = detail::fixedFrameLength(pd, mti);
 
         if (fixedLen != 0) {
@@ -173,14 +171,16 @@ inline std::optional<std::span<const uint8_t>> InlineFramer::nextFrame() noexcep
 
             frameLen = 0;
             for (size_t i = mPos + 2; i + 1 < searchEnd; ++i) {
-                uint8_t candidatePd = (mData[i] >> 4) & 0x0F;
-                if (candidatePd == 0x03 || candidatePd == 0x05 ||
-                    candidatePd == 0x06 || candidatePd == 0x0B ||
-                    candidatePd == 0x08 || candidatePd == 0x09 ||
-                    candidatePd == 0x0A || candidatePd == 0x0E ||
-                    candidatePd == 0x0F ||
-                    (callControlLike &&
-                     (candidatePd == 0x00 || candidatePd == 0x01 || candidatePd == 0x0C))) {
+                // PD occupies the low nibble of a header octet
+                // (TS 24.008 L3 header). Same candidate set as L3Framer:
+                // every TS-valid protocol discriminator.
+                uint8_t candidatePd = mData[i] & 0x0F;
+                if (candidatePd == 0x00 || candidatePd == 0x01 ||
+                    candidatePd == 0x03 || candidatePd == 0x05 ||
+                    candidatePd == 0x06 || candidatePd == 0x08 ||
+                    candidatePd == 0x09 || candidatePd == 0x0A ||
+                    candidatePd == 0x0B || candidatePd == 0x0C ||
+                    candidatePd == 0x0E || candidatePd == 0x0F) {
                     frameLen = i - mPos;
                     break;
                 }

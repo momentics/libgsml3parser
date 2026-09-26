@@ -655,10 +655,10 @@ TEST(GSMSpecTest, RACHTables) {
 // ── data2hex utility ───────────────────────────────────────────────────
 
 TEST(GSMSpecTest, Data2Hex) {
-    // Reference format: PD=0x06(RR) high nibble, skip=0 -> 0x60; MTI=0x19(SI1); body=0x0D
-    uint8_t data[] = {0x60, 0x19, 0x0D};
+    // Reference format: PD=0x06(RR) low nibble, TI=0, TIF=0 -> byte 0 = 0x06; MTI=0x19(SI1); body=0x0D
+    uint8_t data[] = {0x06, 0x19, 0x0D};
     std::string hex = data2hex(data, 3);
-    EXPECT_EQ(hex, "60190D");
+    EXPECT_EQ(hex, "06190D");
 }
 
 // ── Hex string parsing edge cases ──────────────────────────────────────

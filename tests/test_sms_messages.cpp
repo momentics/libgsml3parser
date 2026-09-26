@@ -26,8 +26,8 @@
 // [GOLDEN DATA VERIFICATION]
 // All SMS CP message type identifiers verified against osmo-ttcn3-hacks L3_Templates.ttcn
 //   and 3GPP TS 24.008 Table 10.6a (SMS Control Part).
-// SMS header format verified: PD=9('1001'B), Skip(4 bits) in byte 0;
-//   CP-MTI(8 bits, raw - no NSD field) in byte 1.
+// SMS header format verified: PD=9('1001'B) in the low nibble of byte 0,
+//   TI(3 bits) in bits 7:5 and TIF(1 bit) in bit 4; CP-MTI(8 bits, raw) in byte 1.
 // Message structures verified against L3_Templates.ttcn templates:
 //   ts_CP_DATA_MO, ts_CP_ACK_MO, ts_CP_ERROR_MO, tr_CP_DATA_MT,
 //   ts_RP_DATA_MO, ts_RP_ACK_MO, ts_RP_ERROR_MO, ts_RP_SMMA_MO,
@@ -36,7 +36,7 @@
 // [GOLDEN VERIFICATION]
 // All byte-level parse test data cross-checked against osmo-ttcn3-hacks reference:
 //   - CP-MTI values verified against L3_Templates.ttcn cP_messageType assignments
-//   - SMS header encoding: PD=9 in high nibble of byte 0, raw CP-MTI in byte 1 (no shift)
+//   - SMS header encoding: PD=9 in the low nibble of byte 0, raw CP-MTI in byte 1 (no shift)
 //   - RP-MTI encoding: Spare(5)=0 | RP-MTI(3) in first RP octet
 //   - TP-MTI encoding: TP-MTI(2) in high bits of first TP octet
 
@@ -59,7 +59,7 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 // SMS CP MESSAGE TYPE VALUES (GSM 24.008 Table 10.6a)
 // Reference: osmo-ttcn3-hacks L3_Templates.ttcn cP_messageType assignments
 // [GSM SPEC VERIFIED] SMS messages use 8-bit raw CP-MTI in byte 1,
-//   unlike MM/CC/SS which use 6-bit MTI shifted left by 2.
+//   unlike MM/CC/SS/BCC/GCC which take the MTI in the six low bits of byte 1.
 // =====================================================================
 
 TEST(GoldenSMSTest, MessageTypeValues) {
@@ -72,38 +72,38 @@ TEST(GoldenSMSTest, MessageTypeValues) {
 
 // =====================================================================
 // SMS L3 Header Encoding Test
-// Byte 0: PD(4)=9(SMS) | Skip(4)=0 -> 0x90
+// Byte 0: TI(3)=0 << 5 | TIF(1)=0 << 4 | PD(4)=9(SMS) -> 0x09
 // Byte 1: raw CP-MTI (no shift!)
 // This is the same format as GMM/SM headers.
 // =====================================================================
 
 TEST(GoldenSMSTest, HeaderEncoding) {
-    // CP-DATA: PD=9, CP-MTI=0x01 -> header = 0x90 0x01
-    uint8_t data[] = {0x90, 0x01};
+    // CP-DATA: PD=9, CP-MTI=0x01 -> header = 0x09 0x01
+    uint8_t data[] = {0x09, 0x01};
     auto hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
     EXPECT_EQ(hdr.value().pd, L3PD::SMS);
     EXPECT_EQ(hdr.value().mti, 0x01);
 
-    // CP-ACK: PD=9, CP-MTI=0x04 -> header = 0x90 0x04
+    // CP-ACK: PD=9, CP-MTI=0x04 -> header = 0x09 0x04
     data[1] = 0x04;
     hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
     EXPECT_EQ(hdr.value().mti, 0x04);
 
-    // CP-ERROR: PD=9, CP-MTI=0x10 -> header = 0x90 0x10
+    // CP-ERROR: PD=9, CP-MTI=0x10 -> header = 0x09 0x10
     data[1] = 0x10;
     hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
     EXPECT_EQ(hdr.value().mti, 0x10);
 
-    // CP-STATUS: PD=9, CP-MTI=0x12 -> header = 0x90 0x12
+    // CP-STATUS: PD=9, CP-MTI=0x12 -> header = 0x09 0x12
     data[1] = 0x12;
     hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
     EXPECT_EQ(hdr.value().mti, 0x12);
 
-    // CP-SMT: PD=9, CP-MTI=0x13 -> header = 0x90 0x13
+    // CP-SMT: PD=9, CP-MTI=0x13 -> header = 0x09 0x13
     data[1] = 0x13;
     hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
@@ -114,13 +114,13 @@ TEST(GoldenSMSTest, HeaderEncoding) {
 // SMS CP-ACK (GSM 24.011 8.1.3) - minimal message
 // Reference: L3_Templates.ttcn ts_CP_ACK_MO (line 3658)
 // Hex breakdown:
-//   0x90 = PD(4)=0x09(SMS), Skip(4)=0x00
+//   0x09 = PD=0x09(SMS) in the low nibble of byte 0, TI=0, TIF=0
 //   0x04 = CP-MTI(8)=0x04(CP-ACK), raw encoding
 // No body octets.
 // =====================================================================
 
 TEST(GoldenSMSTest, CPAck_Minimal) {
-    uint8_t data[] = {0x90, 0x04};
+    uint8_t data[] = {0x09, 0x04};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CPAck::MTI);
@@ -146,13 +146,13 @@ TEST(GoldenSMSTest, CPAck_RoundTrip) {
 // SMS CP-ERROR (GSM 24.011 8.1.4) - with cause
 // Reference: L3_Templates.ttcn ts_CP_ERROR_MO (line 3664)
 // Hex breakdown:
-//   0x90 = PD(4)=0x09(SMS), Skip(4)=0x00
+//   0x09 = PD=0x09(SMS) in the low nibble of byte 0, TI=0, TIF=0
 //   0x10 = CP-MTI(8)=0x10(CP-ERROR), raw encoding
 //   0x03 = CP-Cause=UnknownRPMessageType (7-bit value)
 // =====================================================================
 
 TEST(GoldenSMSTest, CPErr_WithCause) {
-    uint8_t data[] = {0x90, 0x10, 0x03};
+    uint8_t data[] = {0x09, 0x10, 0x03};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CPErr::MTI);
@@ -178,7 +178,7 @@ TEST(GoldenSMSTest, CPErr_RoundTrip) {
 // SMS CP-DATA (GSM 24.011 8.1.2) - with RPDU payload
 // Reference: L3_Templates.ttcn ts_CP_DATA_MO (line 3648)
 // Hex breakdown:
-//   0x90 = PD(4)=0x09(SMS), Skip(4)=0x00
+//   0x09 = PD=0x09(SMS) in the low nibble of byte 0, TI=0, TIF=0
 //   0x01 = CP-MTI(8)=0x01(CP-DATA), raw encoding
 //   0x02 = CP-User-Data-Length(8) = 2 octets of RPDU follow
 //   0x00 = RP header: Spare(5)=0 | RP-MTI(3)=0 (RP-DATA MO)
@@ -187,7 +187,7 @@ TEST(GoldenSMSTest, CPErr_RoundTrip) {
 
 TEST(GoldenSMSTest, CPData_WithRPDU) {
     // CP-DATA containing a minimal RP-DATA header (2 octets: rp-header + message-ref)
-    uint8_t data[] = {0x90, 0x01, 0x02, 0x00, 0x01};
+    uint8_t data[] = {0x09, 0x01, 0x02, 0x00, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CPData::MTI);
@@ -217,14 +217,14 @@ TEST(GoldenSMSTest, CPData_RoundTrip) {
 // SMS CP-STATUS (GSM 24.011 8.1.5) - minimal message
 // Reference: 3GPP TS 24.011 section 8.1.5
 // Hex breakdown:
-//   0x90 = PD(4)=0x09(SMS), Skip(4)=0x00
+//   0x09 = PD=0x09(SMS) in the low nibble of byte 0, TI=0, TIF=0
 //   0x12 = CP-MTI(8)=0x12(CP-STATUS), raw encoding
 //   0x00 = TP-OI(8) = 0
 //   0x00 = MTI(8) = 0 (no message reference since bit 1 == 0)
 // =====================================================================
 
 TEST(GoldenSMSTest, CPStatus_Minimal) {
-    uint8_t data[] = {0x90, 0x12, 0x00, 0x00};
+    uint8_t data[] = {0x09, 0x12, 0x00, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CPStatus::MTI);
@@ -252,7 +252,7 @@ TEST(GoldenSMSTest, CPStatus_RoundTrip) {
 // SMS CP-SMT (GSM 24.011 8.1.6) - with RPDU payload
 // Reference: 3GPP TS 24.011 section 8.1.6
 // Hex breakdown:
-//   0x90 = PD(4)=0x09(SMS), Skip(4)=0x00
+//   0x09 = PD=0x09(SMS) in the low nibble of byte 0, TI=0, TIF=0
 //   0x13 = CP-MTI(8)=0x13(CP-SMT), raw encoding
 //   0x02 = CP-User-Data-Length(8) = 2 octets of RPDU follow
 //   0x07 = RP header: Spare(5)=0 | RP-MTI(3)=7 (RP-SMMA MT)
@@ -260,7 +260,7 @@ TEST(GoldenSMSTest, CPStatus_RoundTrip) {
 // =====================================================================
 
 TEST(GoldenSMSTest, CPSMT_WithRPDU) {
-    uint8_t data[] = {0x90, 0x13, 0x02, 0x07, 0x05};
+    uint8_t data[] = {0x09, 0x13, 0x02, 0x07, 0x05};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CPSMT::MTI);
@@ -578,7 +578,7 @@ TEST(GoldenSMSTest, FullSMSWrapper_MO) {
 
     // Build full L3 message: header + CP body
     std::vector<uint8_t> l3msg;
-    l3msg.push_back(0x90); // PD=9, Skip=0
+    l3msg.push_back(0x09); // PD=9(SMS) in the low nibble, TI=0, TIF=0
     l3msg.push_back(0x01); // CP-MTI=1 (CP-DATA)
     l3msg.push_back(static_cast<uint8_t>(rpdu.size())); // CP-User-Data-Length
     l3msg.insert(l3msg.end(), rpdu.begin(), rpdu.end());
@@ -630,7 +630,7 @@ TEST(GoldenSMSTest, FullSMSWrapper_MT) {
 
     // Build full L3 message
     std::vector<uint8_t> l3msg;
-    l3msg.push_back(0x90); // PD=9, Skip=0
+    l3msg.push_back(0x09); // PD=9(SMS) in the low nibble, TI=0, TIF=0
     l3msg.push_back(0x01); // CP-MTI=1 (CP-DATA)
     l3msg.push_back(static_cast<uint8_t>(rpdu.size()));
     l3msg.insert(l3msg.end(), rpdu.begin(), rpdu.end());
@@ -761,7 +761,7 @@ TEST(SMSBuilderTest, CPData) {
     ParsedMessage pm{SMS{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x90); // PD=9(SMS)
+    EXPECT_EQ((*bytes)[0], 0x09); // PD=SMS in the low nibble
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);

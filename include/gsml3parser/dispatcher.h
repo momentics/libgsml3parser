@@ -49,10 +49,10 @@ public:
     ProtocolDispatcher(const ProtocolDispatcher&) = delete;
     ProtocolDispatcher& operator=(const ProtocolDispatcher&) = delete;
 
-    /// Number of MTI slots per PD in the handler table. The highest wire MTI
-    /// in the message catalog is 0x86 (RR, SystemInformationType2quater) = 134,
-    /// so 136 slots cover every real message type. MTI values >= kMaxMtiSlots
-    /// route to the domain/fallback handlers.
+    /// Number of MTI slots per PD in the handler table. Every standard-header
+    /// message type fits below kMaxMtiSlots; RR TIF-set short-message codes
+    /// (>= kRRTifShortBase) and the length-framed synthetic codes exceed it
+    /// and route to the domain/fallback handlers.
     static constexpr int kMaxMtiSlots = 136;
 
     /// Register a handler for a specific message type.

@@ -50,9 +50,9 @@ TEST(InlineFramer, ExtractL2Frames) {
     // Three Channel Release messages with L2 length prefix.
     // Format: Length(1) | PD+MTI + body...
     uint8_t data[] = {
-        0x03, 0x60, 0x0D, 0x00,  // len=3, Channel Release #1
-        0x03, 0x60, 0x0D, 0x01,  // len=3, Channel Release #2
-        0x03, 0x60, 0x0D, 0x02   // len=3, Channel Release #3
+        0x03, 0x06, 0x0D, 0x00,  // len=3, Channel Release #1
+        0x03, 0x06, 0x0D, 0x01,  // len=3, Channel Release #2
+        0x03, 0x06, 0x0D, 0x02   // len=3, Channel Release #3
     };
 
     InlineFramer framer(std::span<const uint8_t>(data, std::size(data)), true);
@@ -60,7 +60,7 @@ TEST(InlineFramer, ExtractL2Frames) {
     auto frame1 = framer.nextFrame();
     ASSERT_TRUE(frame1.has_value());
     EXPECT_EQ(frame1->size(), 3u);
-    EXPECT_EQ((*frame1)[0], 0x60);
+    EXPECT_EQ((*frame1)[0], 0x06);
     EXPECT_EQ((*frame1)[1], 0x0D);
     EXPECT_EQ((*frame1)[2], 0x00);
 
@@ -81,7 +81,7 @@ TEST(InlineFramer, ExtractL2Frames) {
 
 // InlineFramer returns views into the original buffer (zero-copy verification).
 TEST(InlineFramer, ZeroCopyVerification) {
-    uint8_t data[] = {0x03, 0x60, 0x0D, 0x00};
+    uint8_t data[] = {0x03, 0x06, 0x0D, 0x00};
     InlineFramer framer(std::span<const uint8_t>(data, std::size(data)), true);
 
     auto frame = framer.nextFrame();
@@ -98,8 +98,8 @@ TEST(InlineFramer, ZeroCopyVerification) {
 // InlineFramer reset allows re-processing from beginning.
 TEST(InlineFramer, Reset) {
     uint8_t data[] = {
-        0x03, 0x60, 0x0D, 0x00,
-        0x03, 0x60, 0x0D, 0x01
+        0x03, 0x06, 0x0D, 0x00,
+        0x03, 0x06, 0x0D, 0x01
     };
     InlineFramer framer(std::span<const uint8_t>(data, std::size(data)), true);
 
@@ -122,11 +122,11 @@ TEST(InlineFramer, Reset) {
 
 // InlineFramer extracts header-based frames without L2 length prefix.
 TEST(InlineFramer, ExtractHeaderBasedFrames) {
-    // Raw L3 messages (no L2 length prefix).
+    // Raw L3 messages (no L2 length prefix), all fixed-length per the table.
     uint8_t data[] = {
-        0x60, 0x0D, 0x00,  // Channel Release (fixed 3 bytes: 2 header + 1 body)
-        0x60, 0x0D, 0x01,  // Channel Release #2
-        0x50, 0x84           // CM Service Accept (fixed 2 bytes: 2 header + 0 body)
+        0x06, 0x12, 0x41,  // RR Status #1 (fixed 3 bytes: 2 header + 1 body)
+        0x06, 0x12, 0x42,  // RR Status #2
+        0x05, 0x21           // CM Service Accept (fixed 2 bytes: 2 header + 0 body)
     };
 
     InlineFramer framer(std::span<const uint8_t>(data, std::size(data)), false);
@@ -152,11 +152,11 @@ TEST(InlineFramer, ExtractHeaderBasedFrames) {
 // Importance: ZeroCopyStreamProcessor must return every frame of a complete
 // buffer; previously the last variable-length frame was lost.
 TEST(InlineFramer, TrailingVariableLengthFrame_Emitted) {
-    // RR ChannelRelease (3 bytes, fixed) + CC Setup (4 bytes, variable;
-    // body 0x20 0x21 has no plausible PD nibble, so no false boundary).
+    // RR Status (3 bytes, fixed) + CC Setup (4 bytes, variable; body
+    // 0x22 0x47 carries only reserved low nibbles, so no false boundary).
     const uint8_t buf[] = {
-        0x60, 0x0D, 0x00,        // RR Channel Release
-        0x30, 0x08, 0x20, 0x21   // CC Setup (MTI=0x02), body without PD-like nibbles
+        0x06, 0x12, 0x41,        // RR Status
+        0x03, 0x02, 0x22, 0x47   // CC Setup (MT=0x02), body without PD-like low nibbles
     };
     InlineFramer framer(std::span<const uint8_t>(buf, sizeof(buf)), false);
 
@@ -167,7 +167,7 @@ TEST(InlineFramer, TrailingVariableLengthFrame_Emitted) {
     auto f2 = framer.nextFrame();
     ASSERT_TRUE(f2.has_value());
     EXPECT_EQ(f2->size(), 4u);
-    EXPECT_EQ(f2->data()[0], 0x30);
+    EXPECT_EQ(f2->data()[0], 0x03);
 
     EXPECT_FALSE(framer.nextFrame().has_value());
 }
@@ -177,9 +177,9 @@ TEST(InlineFramer, TrailingVariableLengthFrame_Emitted) {
 // ZeroCopyStreamProcessor parses all frames from a contiguous buffer.
 TEST(ZeroCopyStreamProcessor, ParseAllFrames) {
     uint8_t data[] = {
-        0x03, 0x60, 0x0D, 0x00,  // len=3, Channel Release #1
-        0x03, 0x60, 0x0D, 0x01,  // len=3, Channel Release #2
-        0x03, 0x60, 0x0D, 0x02   // len=3, Channel Release #3
+        0x03, 0x06, 0x0D, 0x00,  // len=3, Channel Release #1
+        0x03, 0x06, 0x0D, 0x01,  // len=3, Channel Release #2
+        0x03, 0x06, 0x0D, 0x02   // len=3, Channel Release #3
     };
 
     ZeroCopyStreamProcessor proc(std::span<const uint8_t>(data, std::size(data)), true);
@@ -207,9 +207,9 @@ TEST(ZeroCopyStreamProcessor, ParseAllFrames) {
 TEST(ZeroCopyStreamProcessor, StatsMatchReference) {
     // Build L2-framed stream with mixed message types.
     uint8_t data[] = {
-        0x03, 0x60, 0x0D, 0x00,  // RR: Channel Release
-        0x02, 0x50, 0x84,          // MM: CM Service Accept
-        0x03, 0x60, 0x0D, 0x01,  // RR: Channel Release #2
+        0x03, 0x06, 0x0D, 0x00,  // RR: Channel Release
+        0x02, 0x05, 0x21,          // MM: CM Service Accept
+        0x03, 0x06, 0x0D, 0x01,  // RR: Channel Release #2
     };
 
     // Zero-copy processor.
@@ -236,9 +236,9 @@ TEST(ZeroCopyStreamProcessor, StatsMatchReference) {
 // forEach processes all messages and invokes handler for each.
 TEST(ZeroCopyStreamProcessor, ForEachCallbacks) {
     uint8_t data[] = {
-        0x03, 0x60, 0x0D, 0x00,
-        0x02, 0x50, 0x84,
-        0x03, 0x60, 0x0D, 0x01
+        0x03, 0x06, 0x0D, 0x00,
+        0x02, 0x05, 0x21,
+        0x03, 0x06, 0x0D, 0x01
     };
 
     ZeroCopyStreamProcessor proc(std::span<const uint8_t>(data, std::size(data)), true);
@@ -260,7 +260,7 @@ TEST(ZeroCopyStreamProcessor, OutperformsReferenceOnLargeBuffer) {
     benchmark::printHardwareId();
     // Build a large buffer with many repeated L2-framed messages.
     std::vector<uint8_t> data;
-    const uint8_t singleFrame[] = {0x03, 0x60, 0x0D, 0x00}; // Channel Release
+    const uint8_t singleFrame[] = {0x03, 0x06, 0x0D, 0x00}; // Channel Release
     for (int i = 0; i < 50000; ++i) {
         data.insert(data.end(), std::begin(singleFrame), std::end(singleFrame));
     }
@@ -303,9 +303,9 @@ TEST(ZeroCopyStreamProcessor, OutperformsReferenceOnLargeBuffer) {
 TEST(ZeroCopyStreamProcessor, ConcurrentIndependentProcessors) {
     // Build identical buffers for each thread.
     uint8_t frameData[] = {
-        0x03, 0x60, 0x0D, 0x00,
-        0x03, 0x60, 0x0D, 0x01,
-        0x03, 0x60, 0x0D, 0x02
+        0x03, 0x06, 0x0D, 0x00,
+        0x03, 0x06, 0x0D, 0x01,
+        0x03, 0x06, 0x0D, 0x02
     };
 
     std::vector<std::vector<uint8_t>> buffers(8);
@@ -339,16 +339,16 @@ TEST(ZeroCopyStreamProcessor, ConcurrentIndependentProcessors) {
 // Zero-copy processor handles header-based framing without L2 length.
 TEST(ZeroCopyStreamProcessor, HeaderBasedFraming) {
     uint8_t data[] = {
-        0x60, 0x0D, 0x00,  // Channel Release (fixed 3 bytes)
-        0x50, 0x84,          // CM Service Accept (fixed 2 bytes)
-        0x60, 0x0D, 0x01   // Channel Release #2
+        0x06, 0x12, 0x41,  // RR Status (fixed 3 bytes)
+        0x05, 0x21,          // CM Service Accept (fixed 2 bytes)
+        0x06, 0x12, 0x42   // RR Status #2
     };
 
     ZeroCopyStreamProcessor proc(std::span<const uint8_t>(data, std::size(data)), false);
 
     auto msg1 = proc.nextMessage();
     ASSERT_TRUE(msg1.has_value());
-    EXPECT_EQ(messageName(*msg1), "ChannelRelease");
+    EXPECT_EQ(messageName(*msg1), "RRStatus");
 
     auto msg2 = proc.nextMessage();
     ASSERT_TRUE(msg2.has_value());
@@ -356,7 +356,7 @@ TEST(ZeroCopyStreamProcessor, HeaderBasedFraming) {
 
     auto msg3 = proc.nextMessage();
     ASSERT_TRUE(msg3.has_value());
-    EXPECT_EQ(messageName(*msg3), "ChannelRelease");
+    EXPECT_EQ(messageName(*msg3), "RRStatus");
 
     auto msg4 = proc.nextMessage();
     ASSERT_FALSE(msg4.has_value());
@@ -391,9 +391,9 @@ TEST(ZeroCopyStreamProcessor, AllTwelveDomains) {
     // MM: CMServiceAccept
     appendFrame(ParsedMessage(MMM(L3CMServiceAccept{})));
     // CC: Disconnect (parse from raw bytes known to work)
-    { uint8_t d[] = {0x30, 0x94, 0x08, 0x02, 0x16, 0x21}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p.has_value()); appendFrame(*p); }
+    { uint8_t d[] = {0x03, 0x25, 0x08, 0x02, 0x16, 0x21}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p.has_value()); appendFrame(*p); }
     // SS: Facility (parse from raw bytes known to work)
-    { uint8_t d[] = {0xB0, 0xE8}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p.has_value()); appendFrame(*p); }
+    { uint8_t d[] = {0x0B, 0x3A}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p.has_value()); appendFrame(*p); }
     // GMM: AttachComplete
     appendFrame(ParsedMessage(GMM(L3AttachComplete{})));
     // SM: DeactivatePDPContextRequest
@@ -407,9 +407,9 @@ TEST(ZeroCopyStreamProcessor, AllTwelveDomains) {
     // LS: LocationServiceRequest
     appendFrame(ParsedMessage(LSM(L3LocationServiceRequest{})));
     // Extended: raw message with MTI=0x55 and body
-    { uint8_t d[] = {0xE0, 0x55, 0xAA, 0xBB}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p.has_value()); appendFrame(*p); }
+    { uint8_t d[] = {0x0E, 0x55, 0xAA, 0xBB}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p.has_value()); appendFrame(*p); }
     // TestProcedure: raw message with MTI=0x99 and body
-    { uint8_t d[] = {0xF0, 0x99, 0xCC}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p.has_value()); appendFrame(*p); }
+    { uint8_t d[] = {0x0F, 0x99, 0xCC}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p.has_value()); appendFrame(*p); }
 
     ZeroCopyStreamProcessor proc(std::span<const uint8_t>(data), true);
 
@@ -438,7 +438,7 @@ TEST(ZeroCopyStreamProcessor, AllTwelveDomains) {
 
 // Zero-copy processor resetStats clears all counters.
 TEST(ZeroCopyStreamProcessor, ResetStats) {
-    uint8_t data[] = {0x03, 0x60, 0x0D, 0x00};
+    uint8_t data[] = {0x03, 0x06, 0x0D, 0x00};
     ZeroCopyStreamProcessor proc(std::span<const uint8_t>(data, std::size(data)), true);
 
     while (proc.nextMessage()) {}
@@ -464,7 +464,7 @@ TEST(ZeroCopyStreamProcessor, EmptyBuffer) {
 // Truncated L2 frame: nextMessage returns std::nullopt gracefully.
 TEST(ZeroCopyStreamProcessor, TruncatedFrame) {
     // Length byte says 5, but only 3 bytes follow.
-    uint8_t data[] = {0x05, 0x60, 0x0D, 0x00};
+    uint8_t data[] = {0x05, 0x06, 0x0D, 0x00};
 
     ZeroCopyStreamProcessor proc(std::span<const uint8_t>(data, std::size(data)), true);
     auto msg = proc.nextMessage();
@@ -476,10 +476,10 @@ TEST(ZeroCopyStreamProcessor, TruncatedFrame) {
 // whole remainder of the buffer was abandoned after one bad octet).
 TEST(InlineFramer, L2Length_CorruptOctet_Resyncs) {
     std::vector<uint8_t> data = {
-        3, 0x60, 0x0D, 0x00,  // frame 1 (RR Channel Release, 3 bytes)
+        3, 0x06, 0x0D, 0x00,  // frame 1 (RR Channel Release, 3 bytes)
         0,                    // corrupt length octet
-        3, 0x60, 0x0D, 0x01,  // frame 2
-        3, 0x60, 0x0D, 0x02   // frame 3
+        3, 0x06, 0x0D, 0x01,  // frame 2
+        3, 0x06, 0x0D, 0x02   // frame 3
     };
     InlineFramer framer(std::span<const uint8_t>(data), /*useL2Length=*/true);
     int frames = 0;
@@ -495,9 +495,9 @@ TEST(InlineFramer, L2Length_CorruptOctet_Resyncs) {
 // .
 TEST(ZeroCopyStreamProcessor, L2Length_CorruptOctet_ResyncCounted) {
     std::vector<uint8_t> data = {
-        3, 0x60, 0x0D, 0x00,
+        3, 0x06, 0x0D, 0x00,
         0,
-        3, 0x60, 0x0D, 0x01
+        3, 0x06, 0x0D, 0x01
     };
     ZeroCopyStreamProcessor proc(std::span<const uint8_t>(data), /*useL2Length=*/true);
     int parsed = 0;

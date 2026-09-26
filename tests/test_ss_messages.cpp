@@ -24,7 +24,7 @@
 //
 // [GOLDEN VERIFICATION]
 // All SS hex parse test data verified against osmo-ttcn3-hacks reference:
-//   - Facility_Parse {0xBE, 0xE8}: PD=11(NonCallSS), TI=7, TIF=0 -> byte0=0xBE; MTI=0x3A(Facility)<<2=0xE8
+//   - Facility_Parse {0xEB, 0x3A}: PD=11(NonCallSS) low nibble, TI=7 (bits 7:5), TIF=0; MT=0x3A(Facility)
 //     Verified against SS_Templates.ttcn ts_SS_FACILITY_INVOKE: Facility is the primary SS message type
 //     GSM 24.008 Table 11.2: PD=0x0B for Supplementary Services (Non-Call)
 //   - Register message uses MTI=0x3B per SS_Templates.ttcn REGISTER_SS='0A'O (TCAP opcode within Facility)
@@ -70,7 +70,7 @@ TEST(SSRoundTripTest, Facility_WithData) {
 // Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 1011 1110 = 0xBE
 // Byte 1: messageType(6)<<2 | NSD(2) = 0x3A<<2 | 0 = 0xE8
 TEST(SSRoundTripTest, Facility_Parse) {
-    uint8_t data[] = {0xBE, 0xE8};
+    uint8_t data[] = {0xEB, 0x3A};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messagePD(*msg), L3PD::NonCallSS);

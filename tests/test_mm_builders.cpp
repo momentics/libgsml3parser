@@ -41,8 +41,8 @@ TEST(MMBuilders, CMServiceAccept) {
     ParsedMessage pm{MMM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x50); // PD=5(MM)
-    EXPECT_EQ((*bytes)[1], 0x84); // MTI=0x21<<2
+    EXPECT_EQ((*bytes)[0], 0x05); // PD=MM in the low nibble
+    EXPECT_EQ((*bytes)[1], 0x21); // MT=CM Service Accept (six low bits, NSD=0)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -56,7 +56,7 @@ TEST(MMBuilders, CMServiceAbort) {
     ParsedMessage pm{MMM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x50); // PD=5(MM)
+    EXPECT_EQ((*bytes)[0], 0x05); // PD=MM in the low nibble
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -142,8 +142,8 @@ TEST(MMBuilders, AuthenticationRequest) {
     ParsedMessage pm{MMM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x50); // PD=5(MM)
-    EXPECT_EQ((*bytes)[1], 0x48); // MTI=0x12<<2
+    EXPECT_EQ((*bytes)[0], 0x05); // PD=MM in the low nibble
+    EXPECT_EQ((*bytes)[1], 0x12); // MT=AuthenticationRequest (six low bits, NSD=0)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -238,8 +238,8 @@ TEST(MMBuilders, LocationUpdatingRequest_Full) {
     ParsedMessage pm{MMM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x50); // PD=5(MM)
-    EXPECT_EQ((*bytes)[1], 0x20); // MTI=0x08<<2
+    EXPECT_EQ((*bytes)[0], 0x05); // PD=MM in the low nibble
+    EXPECT_EQ((*bytes)[1], 0x08); // MT=LocationUpdatingRequest (six low bits, NSD=0)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);

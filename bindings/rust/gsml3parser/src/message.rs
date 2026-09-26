@@ -163,7 +163,7 @@ impl Message {
         })
     }
 
-    /// Parse a hex string (spaces allowed, e.g. "60 0D 00"). C-level failures
+    /// Parse a hex string (spaces allowed, e.g. "06 0D 00"). C-level failures
     /// (truncated frame / invalid characters) return the typed error; `cfg`
     /// may be `None`. A Rust `&str` never holds an interior NUL, so the C
     /// string contract holds by construction.
@@ -704,20 +704,20 @@ mod tests {
     /// 0x60 0x0D 0x00 — PD=RR(0x06), MTI=ChannelRelease(0x0D).
     #[test]
     fn parse_write_roundtrip_channel_release() {
-        let mut m = Message::parse(&[0x60, 0x0d, 0x00], None).expect("channel release parses");
+        let mut m = Message::parse(&[0x06, 0x0d, 0x00], None).expect("channel release parses");
         assert_eq!(m.pd().unwrap(), s::GSML3_PD_RR);
         assert_eq!(m.mti().unwrap(), 0x0d);
         assert_eq!(m.size().unwrap(), 3);
-        assert_eq!(m.to_vec().unwrap(), vec![0x60, 0x0d, 0x00]);
-        assert_eq!(m.hex_str().unwrap(), "600d00"); // lowercase, no spaces
+        assert_eq!(m.to_vec().unwrap(), vec![0x06, 0x0d, 0x00]);
+        assert_eq!(m.hex_str().unwrap(), "060d00"); // lowercase, no spaces
         assert!(!m.dump().unwrap().is_empty());
 
         // Zero-extra-alloc reparse path; same content after.
-        m.parse_into(&[0x60, 0x0d, 0x00]).expect("parse_into keeps the handle");
-        assert_eq!(m.to_vec().unwrap(), vec![0x60, 0x0d, 0x00]);
+        m.parse_into(&[0x06, 0x0d, 0x00]).expect("parse_into keeps the handle");
+        assert_eq!(m.to_vec().unwrap(), vec![0x06, 0x0d, 0x00]);
 
-        // Hex input accepts spaces ("60 0D 00") and round-trips byte-for-byte.
-        let h = Message::parse_hex("60 0D 00", None).expect("hex parses");
+        // Hex input accepts spaces ("06 0D 00") and round-trips byte-for-byte.
+        let h = Message::parse_hex("06 0D 00", None).expect("hex parses");
         assert_eq!(h.to_vec().unwrap(), m.to_vec().unwrap());
         drop(m); // Drop path: gsml3_message_free runs exactly once.
     }
@@ -728,9 +728,9 @@ mod tests {
         let e = Message::parse(&[], None).unwrap_err();
         assert_eq!(e.kind(), Some(ErrorKind::InvalidArg));
 
-        // Truncated frame: "60 0D" is the canonical truncated RR ChannelRelease —
+        // Truncated frame: "06 0D" is the canonical truncated RR ChannelRelease —
         // code TRUNCATED (2) with the C message copied synchronously.
-        let e = Message::parse_hex("60 0D", None).unwrap_err();
+        let e = Message::parse_hex("06 0D", None).unwrap_err();
         assert_eq!(e.kind(), Some(ErrorKind::Truncated));
         assert!(!e.msg.is_empty());
 
@@ -747,7 +747,7 @@ mod tests {
         assert!(!e.msg.is_empty());
 
         // An empty caller buffer is a wrapper-level rejection.
-        let m = Message::parse(&[0x60, 0x0d, 0x00], None).unwrap();
+        let m = Message::parse(&[0x06, 0x0d, 0x00], None).unwrap();
         let mut empty: [u8; 0] = [];
         assert_eq!(m.write_to(&mut empty).unwrap_err().kind(), Some(ErrorKind::InvalidArg));
 
@@ -762,15 +762,15 @@ mod tests {
     #[test]
     fn config_strict_framing_rejects_trailing_byte() {
         // Mirror of the C `Config` test / Go TestErrorPaths: lenient mode
-        // parses "50 84"...
+        // parses "05 21"...
         let cfg = Config::new().expect("config allocates");
-        assert!(Message::parse_hex("50 84", Some(&cfg)).is_ok());
+        assert!(Message::parse_hex("05 21", Some(&cfg)).is_ok());
 
         // Strict framing: a message that consumes EXACTLY the input still
         // parses; one with a trailing byte is rejected.
         cfg.set_strict_framing(true).expect("strict on");
-        assert!(Message::parse_hex("50 84", Some(&cfg)).is_ok());
-        let e = Message::parse(&[0x50, 0x84, 0x00], Some(&cfg)).unwrap_err();
+        assert!(Message::parse_hex("05 21", Some(&cfg)).is_ok());
+        let e = Message::parse(&[0x05, 0x21, 0x00], Some(&cfg)).unwrap_err();
         assert!(!matches!(e.kind(), Some(ErrorKind::Ok)), "strict framing must reject the trailing byte");
 
         // Out-of-range log levels are ignored per the ABI — no error either way.

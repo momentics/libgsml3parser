@@ -105,6 +105,7 @@ using RRM = std::variant<
     L3DTMReject,
     L3DTMRequest,
     L3PacketAssignment,
+    L3ImmediatePacketAssignment,
     L3DTMAssignmentCommand,
     L3DTMInformation,
     L3PacketInformation,

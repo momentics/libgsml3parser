@@ -46,8 +46,8 @@ TEST(CCBuilders, Setup_FullFields) {
     ParsedMessage pm{CCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x3E); // PD=CC, TI=7
-    EXPECT_EQ((*bytes)[1], 0x14); // MTI=Setup(0x05)<<2
+    EXPECT_EQ((*bytes)[0], 0xE3); // PD=CC in the low nibble, TI=7 in bits 7:5
+    EXPECT_EQ((*bytes)[1], 0x05); // MT=Setup in the six low bits (NSD=0)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -65,8 +65,8 @@ TEST(CCBuilders, Setup_Minimal) {
     ParsedMessage pm{CCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[0], 0x3E);
-    EXPECT_EQ((*bytes)[1], 0x14);
+    EXPECT_EQ((*bytes)[0], 0xE3);
+    EXPECT_EQ((*bytes)[1], 0x05);
 }
 
 // GSM 04.08 9.3.8: Emergency Setup
@@ -75,7 +75,7 @@ TEST(CCBuilders, EmergencySetup) {
     ParsedMessage pm{CCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[1], 0x38); // MTI=0x0e<<2
+    EXPECT_EQ((*bytes)[1], 0x0E); // MT=EmergencySetup (six low bits, NSD=0)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -91,7 +91,7 @@ TEST(CCBuilders, CallProceeding_WithProgress) {
     ParsedMessage pm{CCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[1], 0x08); // MTI=0x02<<2
+    EXPECT_EQ((*bytes)[1], 0x02); // MT=CallProceeding (six low bits, NSD=0)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -109,7 +109,7 @@ TEST(CCBuilders, Alerting_WithFields) {
     ParsedMessage pm{CCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[1], 0x04); // MTI=0x01<<2
+    EXPECT_EQ((*bytes)[1], 0x01); // MT=Alerting (six low bits, NSD=0)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -126,7 +126,7 @@ TEST(CCBuilders, Connect_WithConnectedNumber) {
     ParsedMessage pm{CCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[1], 0x1C); // MTI=0x07<<2
+    EXPECT_EQ((*bytes)[1], 0x07); // MT=Connect (six low bits, NSD=0)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -141,7 +141,7 @@ TEST(CCBuilders, ConnectAcknowledge) {
     ParsedMessage pm{CCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[1], 0x3C); // MTI=0x0f<<2
+    EXPECT_EQ((*bytes)[1], 0x0F); // MT=ConnectAcknowledge (six low bits, NSD=0)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -156,7 +156,7 @@ TEST(CCBuilders, CallConfirmed_WithCause) {
     ParsedMessage pm{CCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[1], 0x20); // MTI=0x08<<2
+    EXPECT_EQ((*bytes)[1], 0x08); // MT=CallConfirmed (six low bits, NSD=0)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -174,7 +174,7 @@ TEST(CCBuilders, Disconnect_UserBusy) {
     ParsedMessage pm{CCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[1], 0x94); // MTI=0x25<<2
+    EXPECT_EQ((*bytes)[1], 0x25); // MT=Disconnect (six low bits, NSD=0)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -191,7 +191,7 @@ TEST(CCBuilders, Release_WithAllFields) {
     ParsedMessage pm{CCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[1], 0xB4); // MTI=0x2D<<2
+    EXPECT_EQ((*bytes)[1], 0x2D); // MT=Release (six low bits, NSD=0)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -311,7 +311,7 @@ TEST(CCBuilders, Hold) {
     ParsedMessage pm{CCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[1], 0x60); // MTI=0x18<<2
+    EXPECT_EQ((*bytes)[1], 0x18); // MT=Hold (six low bits, NSD=0)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);

@@ -117,8 +117,9 @@ const char* rrMessageName(int mti) {
         case L3DTMRequest::MTI:              return "DTMRequest";
         case L3PacketAssignment::MTI:        return "PacketAssignment";
         case L3DTMAssignmentCommand::MTI:    return "DTMAssignmentCommand";
-        case L3DTMInformation::MTI:          return "DTMInformation";
-        case L3PacketInformation::MTI:       return "PacketInformation";
+        case L3DTMInformation::MTI:      return "DTMInformation";
+        case L3PacketInformation::MTI:   return "PacketInformation";
+        case L3ImmediatePacketAssignment::MTI: return "ImmediatePacketAssignment";
         case L3UTRANClassmarkChange::MTI:    return "UTRANClassmarkChange";
         case L3CDMA2000ClassmarkChange::MTI: return "CDMA2000ClassmarkChange";
         case L3IntersysToUTRANHOCommand::MTI: return "IntersysToUTRANHOCommand";
@@ -638,27 +639,18 @@ L3AssignmentFailure::Builder L3AssignmentFailure::builder() {
 
 // ── L3ClassmarkEnquiry ──────────────────────────────────────────────────
 
-Expected<L3ClassmarkEnquiry> L3ClassmarkEnquiry::parse(BitReader& br) {
-    L3ClassmarkEnquiry msg;
-    // 1 octet: classmark type (2 bits) + reserved (6 bits, '0' values)
-    // (TS 44.018 9.1.14).
-    auto r = br.readField(2); if (!r) return Expected<L3ClassmarkEnquiry>::error(r.error());
-    msg.mClassmarkType = static_cast<uint8_t>(r.value());
-    r = br.readField(6); if (!r) return Expected<L3ClassmarkEnquiry>::error(r.error());
-    if (r.value() != 0) {
-        return Expected<L3ClassmarkEnquiry>::error(
-            {ParseError::Code::InvalidValue, "ClassmarkEnquiry: reserved bits must be zero"});
-    }
-    return Expected<L3ClassmarkEnquiry>::hold(std::move(msg));
+Expected<L3ClassmarkEnquiry> L3ClassmarkEnquiry::parse(BitReader&) {
+    return Expected<L3ClassmarkEnquiry>::hold(L3ClassmarkEnquiry{});
 }
 
-void L3ClassmarkEnquiry::write(BitWriter& bw) const {
-    bw.writeField(mClassmarkType, 2);
-    bw.writeField(0, 6);
-}
+void L3ClassmarkEnquiry::write(BitWriter&) const {}
 
 void L3ClassmarkEnquiry::text(std::ostream& os) const {
-    os << "ClassmarkEnquiry: classmarkType=" << static_cast<unsigned>(mClassmarkType);
+    os << "ClassmarkEnquiry";
+}
+
+L3ClassmarkEnquiry L3ClassmarkEnquiry::Builder::build() const {
+    return L3ClassmarkEnquiry{};
 }
 
 // ── L3ClassmarkChange ──────────────────────────────────────────────────
@@ -1911,10 +1903,13 @@ size_t L3ImmediateAssignment::bodyLength() const {
 Expected<L3ImmediateAssignment> L3ImmediateAssignment::parse(BitReader& br) {
     L3ImmediateAssignment msg;
 
+    // Field order per TS 44.018 9.1.19: dedicated mode or TBF, page mode,
+    // channel description (dedicated-mode assignment), request reference,
+    // timing advance, mobile allocation, rest octets.
     { auto res = L3DedicatedModeOrTBF::parse(br); if (!res) return Expected<L3ImmediateAssignment>::error(res.error()); msg.mDedicatedModeOrTBF = std::move(res.value()); }
     { auto res = L3PageMode::parse(br); if (!res) return Expected<L3ImmediateAssignment>::error(res.error()); msg.mPageMode = std::move(res.value()); }
-    { auto res = L3RequestReference::parse(br); if (!res) return Expected<L3ImmediateAssignment>::error(res.error()); msg.mRequestReference = std::move(res.value()); }
     { auto res = L3ChannelDescription::parse(br); if (!res) return Expected<L3ImmediateAssignment>::error(res.error()); msg.mChannelDescription = std::move(res.value()); }
+    { auto res = L3RequestReference::parse(br); if (!res) return Expected<L3ImmediateAssignment>::error(res.error()); msg.mRequestReference = std::move(res.value()); }
     { auto res = L3TimingAdvance::parse(br); if (!res) return Expected<L3ImmediateAssignment>::error(res.error()); msg.mTimingAdvance = std::move(res.value()); }
 
     if (br.hasMore()) {
@@ -1943,10 +1938,11 @@ Expected<L3ImmediateAssignment> L3ImmediateAssignment::parse(BitReader& br) {
 }
 
 void L3ImmediateAssignment::write(BitWriter& bw) const {
+    // Same field order as parse (TS 44.018 9.1.19).
     mDedicatedModeOrTBF.write(bw);
     mPageMode.write(bw);
-    mRequestReference.write(bw);
     mChannelDescription.write(bw);
+    mRequestReference.write(bw);
     mTimingAdvance.write(bw);
 
     bw.writeField(static_cast<uint32_t>(mMobileAllocation.size()), 8);
@@ -3445,7 +3441,7 @@ void L3NotifyAppData::text(std::ostream& os) const {
     os << "NotifyAppData";
 }
 
-// ── L3SystemInformationType2quater (GSM 04.08 §9.1.34a, MTI=0x4e) ─────
+// ── L3SystemInformationType2quater (GSM 04.08 §9.1.34a) ────────────────
 
 Expected<L3SystemInformationType2quater> L3SystemInformationType2quater::parse(BitReader& br) {
     L3SystemInformationType2quater msg;
@@ -3463,6 +3459,29 @@ void L3SystemInformationType2quater::write(BitWriter& bw) const {
 
 void L3SystemInformationType2quater::text(std::ostream& os) const {
     os << "SystemInformationType2quater";
+    if (!mBody.empty()) os << " [" << mBody.size() << " octets]";
+}
+
+// ── L3ImmediatePacketAssignment (TS 44.018, DTM packet channel) ────────
+// The value part is kept opaque: it is copied through byte-for-byte so
+// that parse/write round-trips preserve the exact wire content.
+
+Expected<L3ImmediatePacketAssignment> L3ImmediatePacketAssignment::parse(BitReader& br) {
+    L3ImmediatePacketAssignment msg;
+    while (br.hasMore()) {
+        auto b = br.readField(8);
+        if (!b) return Expected<L3ImmediatePacketAssignment>::error(b.error());
+        msg.mBody.push_back(static_cast<uint8_t>(b.value()));
+    }
+    return Expected<L3ImmediatePacketAssignment>::hold(std::move(msg));
+}
+
+void L3ImmediatePacketAssignment::write(BitWriter& bw) const {
+    for (uint8_t b : mBody) bw.writeField(b, 8);
+}
+
+void L3ImmediatePacketAssignment::text(std::ostream& os) const {
+    os << "ImmediatePacketAssignment";
     if (!mBody.empty()) os << " [" << mBody.size() << " octets]";
 }
 

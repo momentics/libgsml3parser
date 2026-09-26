@@ -32,7 +32,7 @@ BSC over A-bis RSL, with zero third-party dependencies to carry.
 
 | Without libgsml3parser | With libgsml3parser |
 |------------------------|---------------------|
-| Hand-roll binary parsers for 200+ message types | `parseL3Hex("600D00")` — one call, typed result |
+| Hand-roll binary parsers for 200+ message types | `parseL3Hex("060D41")` — one call, typed result |
 | Manual byte construction for responses | Fluent builder: `.addTMSI(0x12345678, SDCCHType).build()` |
 | Scatter/gather FSM logic across handlers | Pre-built `ProcedureOrchestrator` auto-chains Location Update, Auth, Call Setup |
 | Track timers with raw `std::map` + cron jobs | `TimerManager` — fixed 32-slot arrays, zero allocation, T3101–T3395 built in |
@@ -64,7 +64,7 @@ Four layers, from raw bits to protocol state:
    pattern; plus A-bis RSL parsing and 13 frame builders for BSC integration.
 
 ```cpp
-auto msg = gsml3parser::parseL3Hex("600D00");            // RR Channel Release
+auto msg = gsml3parser::parseL3Hex("060D41");            // RR Channel Release
 if (msg) std::cout << gsml3parser::messageName(*msg);    // "ChannelRelease"
 
 auto paging = L3PagingRequestType2::builder()

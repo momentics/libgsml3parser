@@ -39,8 +39,8 @@ TEST(DispatcherTest, SpecificHandlerCalled) {
             called = true;
         }));
 
-    // "600d00" = RR PD(0x60), MTI=0x0D(ChannelRelease), cause=0x00
-    auto msg = parseL3Hex("600d00");
+    // "060d00" = RR (PD in the low nibble of octet 0), MTI=0x0D(ChannelRelease), cause=0x00
+    auto msg = parseL3Hex("060d00");
     ASSERT_TRUE(msg);
     disp.dispatch(*msg);
     EXPECT_TRUE(called);
@@ -53,7 +53,7 @@ TEST(DispatcherTest, DomainHandlerFallback) {
     disp.registerDomainHandler(L3PD::RadioResource,
         makeSharedHandler([&](const ParsedMessage&, void*) { domainCalled = true; }));
 
-    auto msg = parseL3Hex("600d00");
+    auto msg = parseL3Hex("060d00");
     ASSERT_TRUE(msg);
     disp.dispatch(*msg);
     EXPECT_TRUE(domainCalled);
@@ -66,7 +66,7 @@ TEST(DispatcherTest, DispatchRawBytes) {
     disp.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
         makeSharedHandler([&](const ParsedMessage&, void*) { called = true; }));
 
-    uint8_t data[] = {0x60, 0x0D, 0x00};
+    uint8_t data[] = {0x06, 0x0D, 0x00};
     EXPECT_TRUE(disp.dispatchRaw(std::span<const uint8_t>(data)));
     EXPECT_TRUE(called);
 }
@@ -81,7 +81,7 @@ TEST(DispatcherTest, SpecificOverridesDomain) {
     disp.registerHandler(L3PD::RadioResource, L3ChannelRelease::MTI,
         makeSharedHandler([&](const ParsedMessage&, void*) { specificCalled = true; }));
 
-    auto msg = parseL3Hex("600d00");
+    auto msg = parseL3Hex("060d00");
     ASSERT_TRUE(msg);
     disp.dispatch(*msg);
     EXPECT_TRUE(specificCalled);
@@ -94,7 +94,7 @@ TEST(DispatcherTest, GlobalFallback) {
     ProtocolDispatcher disp;
     disp.setFallbackHandler(makeSharedHandler([&](const ParsedMessage&, void*) { fallbackCalled = true; }));
 
-    auto msg = parseL3Hex("600d00");
+    auto msg = parseL3Hex("060d00");
     ASSERT_TRUE(msg);
     disp.dispatch(*msg);
     EXPECT_TRUE(fallbackCalled);
@@ -105,7 +105,7 @@ TEST(DispatcherTest, DispatchRawInvalidData) {
     ProtocolDispatcher disp;
     // A single octet is a valid Channel Request, so use an RR
     // ChannelRelease header with no body bytes to trigger a parse error.
-    uint8_t data[] = {0x60, 0x0D}; // Too short to be valid L3
+    uint8_t data[] = {0x06, 0x0D}; // Too short to be valid L3
     EXPECT_FALSE(disp.dispatchRaw(std::span<const uint8_t>(data)));
 }
 
@@ -197,7 +197,7 @@ TEST(DispatcherTest, DispatchWithTI_nonCC_ignoresTI) {
     disp.registerDomainHandler(L3PD::RadioResource,
         makeSharedHandler([&](const ParsedMessage&, void*) { domainCalled = true; }));
 
-    auto msg = parseL3Hex("600d00"); // RR ChannelRelease
+    auto msg = parseL3Hex("060d00"); // RR ChannelRelease
     ASSERT_TRUE(msg);
     disp.dispatchWithTI(*msg);
     EXPECT_TRUE(domainCalled);

@@ -25,19 +25,19 @@
 //
 // [GOLDEN VERIFICATION]
 // All round-trip hex parse test data verified against osmo-ttcn3-hacks reference:
-//   - RR ChannelRelease {0x60, 0x0D, 0x00}: PD=6(RR), MTI=0x0D(ChannelRelease), cause=0x00(Normal_Event)
+//   - RR ChannelRelease {0x06, 0x0D, 0x00}: PD=6(RR), MTI=0x0D(ChannelRelease), cause=0x00(Normal_Event)
 //     Verified against GSM_RR_Types.ttcn CHANNEL_RELEASE='00001101'B(0x0D), RR_Cause NORMAL='00'O
-//   - RR AssignmentComplete {0x60, 0x29, 0x00}: PD=6(RR), MTI=0x29(AssignmentComplete), cause=0x00(Normal_Event)
+//   - RR AssignmentComplete {0x06, 0x29, 0x00}: PD=6(RR), MTI=0x29(AssignmentComplete), cause=0x00(Normal_Event)
 //     Verified against GSM_RR_Types.ttcn ASSIGNMENT_COMPLETE='00101001'B(0x29)
-//   - RR AssignmentFailure {0x60, 0x2F, 0x09}: PD=6(RR), MTI=0x2F(AssignmentFailure), cause=0x09(Channel_Mode_Unacceptable)
+//   - RR AssignmentFailure {0x06, 0x2F, 0x09}: PD=6(RR), MTI=0x2F(AssignmentFailure), cause=0x09(Channel_Mode_Unacceptable)
 //     Verified against GSM_RR_Types.ttcn ASSIGNMENT_FAILURE='00101111'B(0x2F), RR_Cause CH_MODE_UNACC='09'O
-//   - RR HandoverComplete {0x60, 0x2C, 0x00}: PD=6(RR), MTI=0x2C(HandoverComplete), cause=0x00(Normal_Event)
+//   - RR HandoverComplete {0x06, 0x2C, 0x00}: PD=6(RR), MTI=0x2C(HandoverComplete), cause=0x00(Normal_Event)
 //     Verified against GSM_RR_Types.ttcn HANDOVER_COMPLETE='00101100'B(0x2C)
-//   - RR HandoverFailure {0x60, 0x28, 0x08}: PD=6(RR), MTI=0x28(HandoverFailure), cause=0x08(Handover_Impossible)
+//   - RR HandoverFailure {0x06, 0x28, 0x08}: PD=6(RR), MTI=0x28(HandoverFailure), cause=0x08(Handover_Impossible)
 //     Verified against GSM_RR_Types.ttcn HANDOVER_FAILURE='00101000'B(0x28), RR_Cause HNDOVER_IMP='08'O
-//   - RR ClassmarkChange {0x60, 0x16, 0x03, 0x20, 0x00, 0x80}: PD=6(RR), MTI=0x16(ClassmarkChange), CM2 LV
+//   - RR ClassmarkChange {0x06, 0x16, 0x03, 0x20, 0x00, 0x80}: PD=6(RR), MTI=0x16(ClassmarkChange), CM2 LV
 //     Verified against GSM_RR_Types.ttcn CLASSMARK_CHANGE='00010110'B(0x16)
-//   - RR ChannelModeModifyAcknowledge {0x60, 0x17, ChanDesc, ChanMode}: PD=6(RR), MTI=0x17(CMMAck)
+//   - RR ChannelModeModifyAcknowledge {0x06, 0x17, ChanDesc, ChanMode}: PD=6(RR), MTI=0x17(CMMAck)
 //     Verified against GSM_RR_Types.ttcn CHANNEL_MODE_MODIFY_ACKNOWLEDGE='00010111'B(0x17)
 //   - All SI message types (SI1-SI17) verified against GSM_RR_Types.ttcn RrMessageType enum values
 
@@ -297,12 +297,12 @@ TEST(RoundTripTest, ChannelRelease_Preemptive) {
 
 // RR Status (GSM 04.08 9.1.29)
 // Reference: L3_Templates.ttcn tr_RRM_RR_STATUS, GSM_RR_Types.ttcn RR_STATUS='00010010'B
-// GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x12(RRStatus), cause=0x60
-// Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
+// TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x12(RRStatus), cause=0x60
+// Byte 0: TI(7:5)=0 | TIF(4)=0 | PD(3:0)=0110 = 0x06
 // Byte 1: MTI = 0x12
 // Byte 2: cause = 0x60 (Invalid_Mandatory_Information)
 TEST(RoundTripTest, RRStatus) {
-    uint8_t data[] = {0x60, 0x12, 0x60};
+    uint8_t data[] = {0x06, 0x12, 0x60};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messagePD(*msg), L3PD::RadioResource);
@@ -325,12 +325,12 @@ TEST(RoundTripTest, AssignmentCommand) {
 
 // Assignment Complete (GSM 04.08 9.1.3)
 // Reference: GSM_RR_Types.ttcn ASSIGNMENT_COMPLETE='00101001'B = 0x29
-// GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x29(AssignmentComplete)
-// Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
+// TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x29(AssignmentComplete)
+// Byte 0: TI(7:5)=0 | TIF(4)=0 | PD(3:0)=0110 = 0x06
 // Byte 1: MTI = 0x29
 // Byte 2: cause = 0x00 (Normal_Event)
 TEST(RoundTripTest, AssignmentComplete) {
-    uint8_t data[] = {0x60, 0x29, 0x00};
+    uint8_t data[] = {0x06, 0x29, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* ac = tryGet<L3AssignmentComplete>(*msg);
@@ -344,10 +344,10 @@ TEST(RoundTripTest, AssignmentComplete) {
 
 // Assignment Failure (GSM 04.08 9.1.3)
 // Reference: GSM_RR_Types.ttcn ASSIGNMENT_FAILURE='00101111'B = 0x2F
-// GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x2F(AssignmentFailure)
-// Byte 0: 0x60, Byte 1: 0x2F, Byte 2: cause=0x09(Channel_Mode_Unacceptable)
+// TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x2F(AssignmentFailure)
+// Byte 0: 0x06, Byte 1: 0x2F, Byte 2: cause=0x09(Channel_Mode_Unacceptable)
 TEST(RoundTripTest, AssignmentFailure) {
-    uint8_t data[] = {0x60, 0x2F, 0x09};
+    uint8_t data[] = {0x06, 0x2F, 0x09};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* af = tryGet<L3AssignmentFailure>(*msg);
@@ -420,9 +420,9 @@ TEST(RoundTripTest, HandoverCommand) {
 
 // Handover Complete (GSM 04.08 9.1.16)
 // Reference: GSM_RR_Types.ttcn HANDOVER_COMPLETE='00101100'B = 0x2C
-// GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x2C(HandoverComplete), cause=Normal
+// TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x2C(HandoverComplete), cause=Normal
 TEST(RoundTripTest, HandoverComplete) {
-    uint8_t data[] = {0x60, 0x2C, 0x00};
+    uint8_t data[] = {0x06, 0x2C, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* hc = tryGet<L3HandoverComplete>(*msg);
@@ -436,9 +436,9 @@ TEST(RoundTripTest, HandoverComplete) {
 
 // Handover Failure (GSM 04.08 9.1.17)
 // Reference: GSM_RR_Types.ttcn HANDOVER_FAILURE='00101000'B = 0x28
-// GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x28(HandoverFailure), cause=Handover_Impossible
+// TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x28(HandoverFailure), cause=Handover_Impossible
 TEST(RoundTripTest, HandoverFailure) {
-    uint8_t data[] = {0x60, 0x28, 0x08};
+    uint8_t data[] = {0x06, 0x28, 0x08};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* hf = tryGet<L3HandoverFailure>(*msg);
@@ -512,11 +512,11 @@ TEST(RoundTripTest, ChannelModeModify) {
 
 // Channel Mode Modify Acknowledge (GSM 04.08 9.1.6)
 // Reference: GSM_RR_Types.ttcn CHANNEL_MODE_MODIFY_ACKNOWLEDGE='00010111'B = 0x17
-// GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x17(ChannelModeModifyAcknowledge)
-// Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
+// TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x17(ChannelModeModifyAcknowledge)
+// Byte 0: TI(7:5)=0 | TIF(4)=0 | PD(3:0)=0110 = 0x06 (TS 24.008 L3 header)
 // Byte 1: MTI = 0x17
 TEST(RoundTripTest, ChannelModeModifyAcknowledge) {
-    uint8_t data[] = {0x60, 0x17,
+    uint8_t data[] = {0x06, 0x17,
         // ChanDesc: typeAndOffset(5)=TDMA_TCHF(2), TN(3)=1, TSC(3)=7, h(1)=0, spare(2)=0, ARFCN(10)=100
         // Bits: 00010 001 111 0 00 0001100100
         // Byte 0: 00010001 = 0x11
@@ -605,14 +605,14 @@ TEST(RoundTripTest, HandoverAccess) {
 
 // Classmark Change (GSM 04.08 9.1.11)
 // Reference: L3_Templates.ttcn ts_RRM_CM_CHG, GSM_RR_Types.ttcn CLASSMARK_CHANGE='00010110'B
-// GSM 04.08 10.2: PD=0x06(RR) high nibble, skip=0, MTI=0x16(ClassmarkChange)
-// Byte 0: PD(4)|skip(4) = 0110 0000 = 0x60
+// TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x16(ClassmarkChange)
+// Byte 0: TI(7:5)=0 | TIF(4)=0 | PD(3:0)=0110 = 0x06 (TS 24.008 L3 header)
 // Byte 1: MTI = 0x16
 // Byte 2: CM2 length = 3 (L3MobileStationClassmark2 is 24 bits = 3 bytes)
 // Bytes 3-5: CM2 value
 TEST(RoundTripTest, ClassmarkChange) {
     uint8_t data[] = {
-        0x60, 0x16, // PD + MTI
+        0x06, 0x16, // PD + MTI
         0x03,       // CM2 length = 3
         0x20, 0x00, 0x80 // CM2 value (24 bits)
     };
@@ -1007,7 +1007,7 @@ TEST(RoundTripTest, SystemInformationType10_Write) {
     ParsedMessage msg{RRM{L3SystemInformationType10{}}};
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ((*hex).size(), 20); // 10 bytes * 2 hex chars
+    EXPECT_EQ((*hex).size(), 24); // 2-byte TIF=1 header + 10-byte body = 12 bytes * 2 hex chars
 }
 
 // System Information Type 10bis (GSM 04.08 9.1.44a, MTI=0x107)
@@ -1015,7 +1015,7 @@ TEST(RoundTripTest, SystemInformationType10bis_Write) {
     ParsedMessage msg{RRM{L3SystemInformationType10bis{}}};
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ((*hex).size(), 20);
+    EXPECT_EQ((*hex).size(), 24);
 }
 
 // System Information Type 10ter (GSM 04.08 9.1.44b, MTI=0x108)
@@ -1023,7 +1023,7 @@ TEST(RoundTripTest, SystemInformationType10ter_Write) {
     ParsedMessage msg{RRM{L3SystemInformationType10ter{}}};
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ((*hex).size(), 20);
+    EXPECT_EQ((*hex).size(), 24);
 }
 
 // Notification FACCH (GSM 04.08 9.1.45, MTI=0x109)
@@ -1047,7 +1047,7 @@ TEST(RoundTripTest, EnhancedMeasurementRepUL_Write) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto hex = writeL3Hex(pm);
     ASSERT_TRUE(hex);
-    EXPECT_EQ((*hex).size(), 8); // 4 bytes * 2 hex chars
+    EXPECT_EQ((*hex).size(), 12); // 2-byte TIF=1 header + 4-byte body = 6 bytes * 2 hex chars
 }
 
 // Measurement Info DL (GSM 04.08 9.1.45c, MTI=0x10C)
@@ -1057,7 +1057,7 @@ TEST(RoundTripTest, MeasurementInfoDL_Write) {
     ParsedMessage pm{RRM{std::move(msg)}};
     auto hex = writeL3Hex(pm);
     ASSERT_TRUE(hex);
-    EXPECT_EQ((*hex).size(), 4); // 2 bytes * 2 hex chars
+    EXPECT_EQ((*hex).size(), 8); // 2-byte TIF=1 header + 2-byte body = 4 bytes * 2 hex chars
 }
 
 // VBS/VGCS Recon (GSM 04.08 9.1.45d, MTI=0x10D)

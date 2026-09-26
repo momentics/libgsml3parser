@@ -229,7 +229,7 @@ func TestLinkLifecycle(t *testing.T) {
 		t.Fatal("IsEstablished = false after link established")
 	}
 
-	payload := []byte{0x60, 0x0D, 0x00} // Channel Release L3
+	payload := []byte{0x06, 0x0D, 0x00} // Channel Release L3
 	requireNoErr(t, "Receive UI", e.Receive(UIFrame(0, false, payload)))
 	requireNoErr(t, "SendDISC", e.SendDISC())
 	if st := e.State(); st != StateLapdmAwaitingRelease {
@@ -405,13 +405,13 @@ func TestStackNullValidation(t *testing.T) {
 	requireNoErr(t, "standalone entity", err)
 	defer e.Close()
 	requireNoErr(t, "Open(standalone)", e.Open(0, true))
-	if err := e.SendData([]byte{0x50, 0x84}); err == nil {
+	if err := e.SendData([]byte{0x05, 0x21}); err == nil {
 		t.Fatal("SendData before establishment must fail")
 	} else if er, ok := err.(*Error); !ok || er.Msg == "" {
 		t.Fatalf("SendData(no link) error = %v, want *Error with C message", err)
 	}
 	// ...but a UI send works in any state (C contract): no error.
-	if err := e.SendUI(0, []byte{0x50, 0x84}); err != nil {
+	if err := e.SendUI(0, []byte{0x05, 0x21}); err != nil {
 		t.Fatalf("SendUI without link must work in any state: %v", err)
 	}
 }
@@ -425,13 +425,13 @@ func TestDoubleCloseIsIdempotent(t *testing.T) {
 		t.Fatalf("config double close: %v", err)
 	}
 
-	m, err := ParseHex("60 0D 00", nil)
+	m, err := ParseHex("06 0D 00", nil)
 	requireNoErr(t, "ParseHex", err)
 	if err := m.Close(); err != nil || m.Close() != nil {
 		t.Fatalf("message double close: %v", err)
 	}
 
-	rsl, err := RslBuildDataReq(0x10, 1, []byte{0x50, 0x84})
+	rsl, err := RslBuildDataReq(0x10, 1, []byte{0x05, 0x21})
 	requireNoErr(t, "RslBuildDataReq", err)
 	f, err := RslParse(rsl)
 	requireNoErr(t, "RslParse", err)
@@ -558,7 +558,7 @@ func TestConcurrentEntities(t *testing.T) {
 		wg.Add(1)
 		go func(g int) {
 			defer wg.Done()
-			l3 := []byte{0x60, 0x0D, 0x00} // stable Channel Release vector (mirrors the C test suite)
+			l3 := []byte{0x06, 0x0D, 0x00} // stable Channel Release vector (mirrors the C test suite)
 			for i := 0; i < iterations; i++ {
 				tmsi := uint32(0xB0000000 + g*1000 + i)
 				stack, err := NewGsmL3Stack(StackOptions{TMSI: tmsi}) // AutoResponse=false default

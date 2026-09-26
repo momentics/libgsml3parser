@@ -70,8 +70,8 @@ Windows DLL resolve identically.
 ```python
 import gsml3parser as g                       # loads build_bindings/bin/gsml3parser.* (ABI-checked)
 
-msg = g.Message.from_hex("60 0D 00")          # parse: RR Channel Release
-print(msg.name, msg.size(), msg.hex())        # ChannelRelease 3 600d00
+msg = g.Message.from_hex("06 0D 00")          # parse: RR Channel Release
+print(msg.name, msg.size(), msg.hex())        # ChannelRelease 3 060d00
 msg.close()
 
 with g.GsmL3Stack(tmsi=0x87654321, auto_response=True) as stack:
@@ -95,7 +95,7 @@ import (
 )
 
 func main() { // full working demo with asserts: go run ./cmd/gsmexample
-	msg, err := gsml3parser.ParseHex("60 0D 00", nil)      // parse: RR Channel Release
+	msg, err := gsml3parser.ParseHex("06 0D 00", nil)      // parse: RR Channel Release
 	if err != nil { panic(err) }
 	fmt.Println(msg.Name(), msg.Size())                     // ChannelRelease (3, nil)
 	defer msg.Close()
@@ -127,7 +127,7 @@ use gsml3parser::{build_cm_service_request, GsmL3Stack, Message};
 // full working demo with asserts: cargo run -p gsml3parser --example bts_simulation
 
 fn run() -> Result<(), gsml3parser::GsmL3Error> {
-	let msg = Message::parse_hex("60 0D 00", None)?;      // parse: RR Channel Release
+	let msg = Message::parse_hex("06 0D 00", None)?;      // parse: RR Channel Release
 	println!("{}", msg.name()?);                           // ChannelRelease
 
 	let mut stack = GsmL3Stack::new(0x8765_4321, 0 /* plain registry */,

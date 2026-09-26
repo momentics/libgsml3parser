@@ -52,14 +52,14 @@ TEST(ThreadingTest, ConcurrentParseWithConfig) {
 
     // Different messages for each thread to exercise different code paths
     std::vector<std::vector<uint8_t>> msgBuffers = {
-        {0x60, 0x0D, 0x00},                             // RR ChannelRelease
-        {0x50, 0x84},                                    // MM CMServiceAccept
-        {0x30, 0x94, 0x08, 0x02, 0x16, 0x21},          // CC Disconnect
-        {0xB0, 0xE8},                                    // SS Facility
-        {0x80, 0x01, 0x00, 0x04, 0x11, 0x03, 0x01, 0x02, 0x03, 0x04}, // GMM AttachRequest
-        {0xA0, 0x41, 0x0F, 0x00},                       // SM ActivatePDPContextRequest
-        {0x90, 0x01, 0x01, 0x04, 0x05, 0x06, 0x07},    // SMS CPData
-        {0x10, 0x01},                                    // BCC Setup
+        {0x06, 0x0D, 0x00},                             // RR ChannelRelease
+        {0x05, 0x21},                                    // MM CMServiceAccept
+        {0x03, 0x25, 0x08, 0x02, 0x16, 0x21},          // CC Disconnect
+        {0x0B, 0x3A},                                    // SS Facility
+        {0x08, 0x01, 0x00, 0x04, 0x11, 0x03, 0x01, 0x02, 0x03, 0x04}, // GMM AttachRequest
+        {0x0A, 0x41, 0x0F, 0x00},                       // SM ActivatePDPContextRequest
+        {0x09, 0x01, 0x01, 0x04, 0x05, 0x06, 0x07},    // SMS CPData
+        {0x01, 0x01},                                    // BCC Setup
     };
 
     std::atomic<int> successCount{0};
@@ -222,12 +222,12 @@ TEST(ThreadingTest, HeavyConcurrentParse) {
 
     // Shared read-only pool - concurrent reads are safe.
     const std::vector<std::vector<uint8_t>> msgPool = {
-        {0x60, 0x0D, 0x00},                             // RR ChannelRelease (valid)
-        {0x50, 0x84},                                    // MM CMServiceAccept (valid)
-        {0x30, 0x94, 0x08, 0x02, 0x16, 0x21},          // CC Disconnect (valid)
-        {0xB0, 0xE8},                                    // SS Facility (valid)
+        {0x06, 0x0D, 0x00},                             // RR ChannelRelease (valid)
+        {0x05, 0x21},                                    // MM CMServiceAccept (valid)
+        {0x03, 0x25, 0x08, 0x02, 0x16, 0x21},          // CC Disconnect (valid)
+        {0x0B, 0x3A},                                    // SS Facility (valid)
         {},                                              // empty - expected to fail (TruncatedInput)
-        {0x20, 0x01},                                    // invalid PD=0x02 - expected to fail (InvalidPD)
+        {0x02, 0x01},                                    // invalid PD=0x02 - expected to fail (InvalidPD)
     };
 
     std::atomic<int> parseCount{0};
@@ -361,14 +361,14 @@ TEST(ThreadingTest, MultiDomainRoundTripConcurrent) {
 
     // Pre-serialized hex for each domain (verified parseable).
     std::vector<std::string> hexPool = {
-        "60 0D 00",                          // RR: ChannelRelease
-        "50 84",                              // MM: CMServiceAccept
-        "30 94 08 02 16 21",                 // CC: Disconnect
-        "B0 E8",                              // SS: Facility
-        "80 20 05",                            // GMM: GMMStatus(cause=5)
-        "A0 55 32 01 05",                      // SM: SMStatus(cause=5)
-        "90 04 01 02",                         // SMS: CPAck(ref=2)
-        "10 01",                               // BCC: Setup
+        "06 0D 00",                          // RR: ChannelRelease
+        "05 21",                              // MM: CMServiceAccept
+        "03 25 08 02 16 21",                 // CC: Disconnect
+        "0B E8",                              // SS: Facility
+        "08 20 05",                            // GMM: GMMStatus(cause=5)
+        "0A 55 32 01 05",                      // SM: SMStatus(cause=5)
+        "09 04 01 02",                         // SMS: CPAck(ref=2)
+        "01 01",                               // BCC: Setup
     };
 
     std::atomic<int> successCount{0};

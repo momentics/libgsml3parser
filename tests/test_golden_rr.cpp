@@ -92,7 +92,7 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 //   etc.
 // Spec-verified: All RR MTI values per 3GPP TS 44.018 Table 10.4.1 (8-bit field)
 // [GSM SPEC VERIFIED] RR messages use 8-bit MTI in byte 1 of L3 header.
-//   PD discriminator for RR is 6 ('0110'B), placed in high nibble of byte 0.
+//   PD discriminator for RR is 6 ('0110'B), placed in the low nibble of octet 0.
 //   All values cross-checked against GSM_RR_Types.ttcn RrMessageType enum definitions.
 // =====================================================================
 
@@ -162,7 +162,7 @@ TEST(GoldenRR, MessageTypeValues) {
 // =====================================================================
 
 TEST(GoldenRR, PagingRequestType1_Parse) {
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x21 (PagingRequestType1) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: ChannelNeeded12(4)|PageMode(4) = 0x10 [GSM_Types.ttcn ChannelNeeded12: second(2)|first(2)]
     //   ChannelNeeded12: second=00(ANY), first=01(SDCCH) -> high nibble = 0b0001 = 0x1
@@ -172,7 +172,7 @@ TEST(GoldenRR, PagingRequestType1_Parse) {
     // Byte 4: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
     // Bytes 5-8: TMSI = 0x12345678 (4 octets, MSB first)
     uint8_t data[] = {
-        0x60, 0x21, 0x10, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78
+        0x06, 0x21, 0x10, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -199,14 +199,14 @@ TEST(GoldenRR, PagingRequestType2_Parse) {
     //   ChannelNeeded(4 bits)|PageMode(4 bits) + GsmTmsi mi1(4 octets) + GsmTmsi mi2(4 octets) + [optional MobileIdentityTLV]
     // Reference: GSM_RR_Types.ttcn PagingRequestType2 (line 577): GsmTmsi mi1, GsmTmsi mi2
     //   GsmTmsi = type uint32_t GsmTmsi; (GSM_Types.ttcn line 26) - raw 4-byte TMSI, NOT length-prefixed!
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x22 (PagingRequestType2) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: ChannelNeeded12(4)=0x1|PageMode(4)=0(Normal) = 0x10
     //   GSM_Types.ttcn ChannelNeeded12: second(2)=00(ANY)|first(2)=01(SDCCH) -> 0b0001 = 0x1
     // Bytes 3-6: GsmTmsi mi1 = 0x12345678 (raw 4 octets, MSB first, no length prefix)
     // Bytes 7-10: GsmTmsi mi2 = 0xDEADBEEF (raw 4 octets, MSB first, no length prefix)
     uint8_t data[] = {
-        0x60, 0x22, 0x10,
+        0x06, 0x22, 0x10,
         0x12, 0x34, 0x56, 0x78,
         0xDE, 0xAD, 0xBE, 0xEF
     };
@@ -234,7 +234,7 @@ TEST(GoldenRR, PagingRequestType3_Parse) {
     //   ChannelNeeded(4 bits)|PageMode(4 bits) + GsmTmsi4 mi (4x raw 4-octet TMSIs) + [optional RestOctets]
     // Reference: GSM_RR_Types.ttcn PagingRequestType3 (line 587): GsmTmsi4 mi
     //   GsmTmsi4 = type record length(4) of GsmTmsi; -> 4 raw uint32_t TMSIs, NOT length-prefixed!
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x24 (PagingRequestType3) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: ChannelNeeded12(4)=0x1|PageMode(4)=0(Normal) = 0x10
     //   GSM_Types.ttcn ChannelNeeded12: second(2)=00(ANY)|first(2)=01(SDCCH) -> 0b0001 = 0x1
@@ -243,7 +243,7 @@ TEST(GoldenRR, PagingRequestType3_Parse) {
     // Bytes 11-14: GsmTmsi mi[2] = 0xABCDEF01 (raw 4 octets, MSB first, no length prefix)
     // Bytes 15-18: GsmTmsi mi[3] = 0x11223344 (raw 4 octets, MSB first, no length prefix)
     uint8_t data[] = {
-        0x60, 0x24, 0x10,
+        0x06, 0x24, 0x10,
         0x12, 0x34, 0x56, 0x78,
         0xDE, 0xAD, 0xBE, 0xEF,
         0xAB, 0xCD, 0xEF, 0x01,
@@ -274,7 +274,7 @@ TEST(GoldenRR, PagingResponse_Parse) {
     // Reference: GSM_RR_Types.ttcn PagingResponse record:
     //   OCT4 cipheringKeySequenceNumber, mobileStationClassmark2LV, MobileIdentityLV
     //   CKSN(4 bits) + implicit padding(4 bits) = 1 octet before CM2-LV
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x27 (PagingResponse) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: spare_half_octet(4)=0 | CKSN(4)=0 = 0x00
     //   GSM_RR_Types.ttcn PagingResponse record: spare_half_octet FIRST (high nibble), cksn SECOND (low nibble)
@@ -286,7 +286,7 @@ TEST(GoldenRR, PagingResponse_Parse) {
     // Byte 8: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08
     // Bytes 9-12: TMSI = 0x12345678 (MSB first)
     uint8_t data[] = {
-        0x60, 0x27, 0x00,
+        0x06, 0x27, 0x00,
         0x03, 0x20, 0x00, 0x80,
         0x05, 0x08, 0x12, 0x34, 0x56, 0x78
     };
@@ -309,11 +309,11 @@ TEST(GoldenRR, PagingResponse_Parse) {
 // =====================================================================
 
 TEST(GoldenRR, ClassmarkChange_Parse) {
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x16 (ClassmarkChange) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: CM2 LV length = 3 (Classmark 2 is 3 octets) [GSM 24.008 10.5.1.6]
     // Bytes 3-5: CM2 value (24 bits of capability flags)
-    uint8_t data[] = {0x60, 0x16, 0x03, 0x20, 0x00, 0x80};
+    uint8_t data[] = {0x06, 0x16, 0x03, 0x20, 0x00, 0x80};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ClassmarkChange::MTI);
@@ -340,12 +340,12 @@ TEST(GoldenRR, ClassmarkChange_Parse) {
 // =====================================================================
 
 TEST(GoldenRR, MeasurementReport_Parse) {
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x15 (MeasurementReport) [3GPP TS 44.018 Table 10.4.1]
     // Bytes 2-17: MeasurementResults (16 bytes, all zero = default values)
     //   GSM_RR_Types.ttcn MeasurementResults: 128-bit structure padded to 16 octets
     uint8_t data[] = {
-        0x60, 0x15,
+        0x06, 0x15,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
     };
@@ -373,7 +373,7 @@ TEST(GoldenRR, MeasurementReport_Parse) {
 // =====================================================================
 
 TEST(GoldenRR, HandoverCommand_Parse) {
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x2B (HandoverCommand) [3GPP TS 44.018 Table 10.4.1]
     // Bytes 2-3: CellDesc: ARFCN=100, NCC=5, BCC=3 [GSM 24.008 10.5.2.2]
     //   GSM_RR_Types.ttcn CellDescriptionV: FIELDORDER(lsb) - bcc first, then ncc, then arfcn
@@ -385,7 +385,7 @@ TEST(GoldenRR, HandoverCommand_Parse) {
     // Byte 8: PowerCmdAccType = 0x00 [GSM 24.008 10.5.2.28a]
     // Byte 9: SyncInd = 0x00 [GSM 24.008 10.5.2.39]
     uint8_t data[] = {
-        0x60, 0x2b,
+        0x06, 0x2b,
         0x74, 0x19,
         0x11, 0xE0, 0x64,
         0x17, 0x00, 0x00
@@ -410,12 +410,12 @@ TEST(GoldenRR, HandoverCommand_Parse) {
 // =====================================================================
 
 TEST(GoldenRR, AssignmentCommand_Parse) {
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x2E (AssignmentCommand) [3GPP TS 44.018 Table 10.4.1]
     // Bytes 2-4: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), spare(2), ARFCN(10) [GSM 24.008 10.5.2.5]
     //   {0x10, 0xE0, 0x64}: typeAndOffset=2(TDMA_TCHF), TN=0, TSC=7, h=0, ARFCN=100
     // Byte 5: PowerCmd = 0x00 [GSM 24.008 10.5.2.28, 5-bit power_command << 3]
-    uint8_t data[] = {0x60, 0x2e, 0x10, 0xE0, 0x64, 0x00};
+    uint8_t data[] = {0x06, 0x2e, 0x10, 0xE0, 0x64, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3AssignmentCommand::MTI);
@@ -437,7 +437,7 @@ TEST(GoldenRR, AssignmentCommand_Parse) {
 // =====================================================================
 
 TEST(GoldenRR, ImmediateAssignment_Parse) {
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x3F (ImmediateAssignment) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: DedOrTBF(4)=0(dedicated)|PageMode(4)=0(Normal) = 0x00
     //   GSM_RR_Types.ttcn DedicatedModeOrTbf (line 374): spare+tma+downlink+tbf
@@ -449,7 +449,7 @@ TEST(GoldenRR, ImmediateAssignment_Parse) {
     // Byte 9: TA = 0x00 [GSM 24.008 10.5.2.40, 6-bit timing_advance << 2]
     // Byte 10: MobileAlloc LV length = 0 (no mobile allocation)
     uint8_t data[] = {
-        0x60, 0x3f, 0x00,
+        0x06, 0x3f, 0x00,
         0x00, 0x00, 0x64,
         0x42, 0x00, 0x00,
         0x00, 0x00
@@ -473,14 +473,14 @@ TEST(GoldenRR, ImmediateAssignment_Parse) {
 // =====================================================================
 
 TEST(GoldenRR, ImmediateAssignmentReject_Parse) {
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x3A (ImmediateAssignmentReject) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: FeatureIndicator(4)=0|PageMode(4)=3(SameAsBefore) = 0x03
     //   FeatureIndicator: peo_bcch_change_mark(2)=0, cs_ir(1)=0, ps_ir(1)=0 [GSM_RR_Types.ttcn line 440]
     //   PageMode: PAGE_MODE_SAME_AS_BEFORE(3) [GSM_RR_Types.ttcn line 382, FIELDLENGTH(4)]
     //   ReqRefWaitInd4 payload is CONDITIONAL per GSM 24.008 9.1.20: "included if the network is able to identify
     //   for which pending channel request(s) an immediate assignment cannot be given." Minimal message omits it.
-    uint8_t data[] = {0x60, 0x3a, 0x03};
+    uint8_t data[] = {0x06, 0x3a, 0x03};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ImmediateAssignmentReject::MTI);
@@ -503,12 +503,12 @@ TEST(GoldenRR, ImmediateAssignmentReject_Parse) {
 // =====================================================================
 
 TEST(GoldenRR, ChannelModeModify_Parse) {
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x10 (ChannelModeModify) [3GPP TS 44.018 Table 10.4.1]
     // Bytes 2-4: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), spare(2), ARFCN(10) [GSM 24.008 10.5.2.5]
     //   {0x11, 0xE0, 0x64}: typeAndOffset=2(TDMA_TCHF), TN=1, TSC=7, h=0, ARFCN=100
     // Byte 5: ChanMode(4)=1(SpeechV1)|spare(4)=0 = 0x01 [GSM 24.008 10.5.2.6]
-    uint8_t data[] = {0x60, 0x10, 0x11, 0xE0, 0x64, 0x01};
+    uint8_t data[] = {0x06, 0x10, 0x11, 0xE0, 0x64, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ChannelModeModify::MTI);
@@ -526,14 +526,14 @@ TEST(GoldenRR, ChannelModeModify_Parse) {
 
 TEST(GoldenRR, GPRSSuspensionRequest_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x34 (GSM_RR_Types.ttcn: GPRS_SUSPENSION_REQUEST='00110100'B)
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x34 (GPRSSuspensionRequest) [3GPP TS 44.018 Table 10.4.1]
     // Bytes 2-5: TLLI = 0x12345678 (raw 4-octet MSB-first, GSM_Types.ttcn GprsTlli=OCT4)
     // Bytes 6-11: RA_ID (6 bytes per 3GPP TS 04.08 10.5.5.2 Routing Area Identity) = 0
     // Byte 12: SuspensionCause = 0x00 (0=Normal suspension)
     // Byte 13: ServiceSupport = 0x00 (bitmask of supported services)
     uint8_t data[] = {
-        0x60, 0x34,
+        0x06, 0x34,
         0x12, 0x34, 0x56, 0x78,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00
@@ -554,12 +554,12 @@ TEST(GoldenRR, GPRSSuspensionRequest_Parse) {
 
 TEST(GoldenRR, ApplicationInformation_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x38 (GSM_RR_Types.ttcn: APPLICATION_INFORMATION='00111000'B)
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x38 (ApplicationInformation) [3GPP TS 44.018 Table 10.4.1, section 9.1.53]
     // Byte 2: ProtocolIdentifier(4)=0|CR(4)=0 = 0x00 [GSM 24.008 10.5.2.74]
     // Byte 3: FirstSegment(1)=0|LastSegment(1)=0|spare(2)=0|data(4) = 0xAB
     // Byte 4: data continued = 0xCD
-    uint8_t data[] = {0x60, 0x38, 0x00, 0xAB, 0xCD};
+    uint8_t data[] = {0x06, 0x38, 0x00, 0xAB, 0xCD};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ApplicationInformation::MTI);
@@ -570,14 +570,14 @@ TEST(GoldenRR, ApplicationInformation_Parse) {
 // Reference: GSM_RR_Types.ttcn RrShortDisc (short message, no standard L3 header)
 // Structure: CI(16 bits) + LAI(40 bits: MCC/MNC BCD 24 + LAC 16) = 7 bytes total
 // [GOLDEN VERIFIED] SCH is a short message transmitted on BCCH without PD/MTI header.
-//   Uses internal MTI=0x100 for parser dispatch. Per GSM 04.08 9.1.30, SCH carries
+//   Uses internal MTI=0x110 (length-framed; no standard L3 header). Per GSM 04.08 9.1.30, SCH carries
 //   Cell Identity and Location Area Identity for cell selection/reselection.
 //   LAI MCC/MNC nibble-swapped BCD encoding verified against GSM_Types.ttcn TC_selftest_BcdMccMnc.
 // =====================================================================
 
 TEST(GoldenRR, SynchronizationChannelInformation_Parse) {
     // [GOLDEN VERIFIED] SCH is a short message on BCCH without PD/MTI header.
-    // Internal MTI=0x100 for parser dispatch. GSM 04.08 9.1.30: CI(16 bits) + LAI(40 bits).
+    // Internal MTI=0x110 (length-framed; no standard L3 header). GSM 04.08 9.1.30: CI(16 bits) + LAI(40 bits).
     // Byte 0-1: CellIdentity = 0x1234 (16 bits MSB-first)
     // Byte 2-4: MCC/MNC BCD nibble-swapped for MCC=250, MNC=01 -> {0x52, 0xF0, 0x10}
     //   [GSM 24.008 Figure 10.5.1.3: same encoding as LAI in MM messages]
@@ -593,14 +593,14 @@ TEST(GoldenRR, SynchronizationChannelInformation_Parse) {
 // Reference: GSM_RR_Types.ttcn RrShortDisc (short message on RACH, no standard L3 header)
 // Structure: RequestReference(8 bits = RA bitmask), sent on RACH without PD/MTI header
 // [GOLDEN VERIFIED] Channel Request is a short message transmitted on RACH.
-//   Uses internal MTI=0x101 for parser dispatch. Per GSM 04.08 9.1.13, the single
+//   Uses internal MTI=0x10E (length-framed; no standard L3 header). Per GSM 04.08 9.1.13, the single
 //   octet carries an 8-bit Request Reference (RA - Random Access value) used by
 //   the network to identify the MS in subsequent Immediate Assignment messages.
 // =====================================================================
 
 TEST(GoldenRR, ChannelRequest_Parse) {
     // [GOLDEN VERIFIED] Channel Request is a short message on RACH without PD/MTI header.
-    // Internal MTI=0x101 for parser dispatch. GSM 04.08 9.1.13: single octet RequestReference
+    // Internal MTI=0x10E (length-framed; no standard L3 header). GSM 04.08 9.1.13: single octet RequestReference
     // (RA - Random Access value, 8-bit bitmask used by network to identify MS in subsequent
     // Immediate Assignment messages). GSM_RR_Types.ttcn RrShortDisc: CHANNEL_REQUEST='00011'B.
     // Byte 0: RequestReference = 0x42 (RA value)
@@ -627,14 +627,14 @@ TEST(GoldenRR, ChannelRequest_Parse_ZeroRA) {
 // Reference: GSM_RR_Types.ttcn RrShortDisc (short message on HO access timeslot, no L3 header)
 // Structure: HandoverNumber(8) + HandoverReference(8) + TimingAdvance(8) + Spare(8) = 4 bytes
 // [GOLDEN VERIFIED] Handover Access is a short message sent by MS on the handover
-//   access timeslot assigned in Handover Command. Uses internal MTI=0x102 for parser dispatch.
+//   access timeslot assigned in Handover Command. Uses internal MTI=0x10F (length-framed; no standard L3 header).
 //   Per GSM 04.08 9.1.14a: HandoverNumber identifies the target cell, HandoverReference
 //   matches the one from Handover Command, TimingAdvance is the MS's current TA value.
 // =====================================================================
 
 TEST(GoldenRR, HandoverAccess_Parse) {
     // [GOLDEN VERIFIED] Handover Access is a short message on the handover access timeslot.
-    // Internal MTI=0x102 for parser dispatch. GSM 04.08 9.1.14a: HO Number(8)|HO Reference(8)|
+    // Internal MTI=0x10F (length-framed; no standard L3 header). GSM 04.08 9.1.14a: HO Number(8)|HO Reference(8)|
     // TimingAdvance(8)|Spare(8) = 4 bytes total. Sent by MS on the access timeslot assigned
     // in the Handover Command message. GSM_RR_Types.ttcn RrShortDisc: HANDOVER_ACCESS='00100'B.
     // Byte 0: HO Number = 0x17, Byte 1: HO Reference = 0x00, Byte 2: TA = 0x00, Byte 3: Spare = 0x00
@@ -661,7 +661,7 @@ TEST(GoldenRR, HandoverAccess_Parse) {
 // =====================================================================
 
 TEST(GoldenRR, CipheringModeCommand_Parse) {
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x35 (CipheringModeCommand) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: cipherModeSetting(4)=sC(1)=1(on)|algorithmIdentifier(3)=3(A5/3) | cipherModeResponse(4)=cR(0)=0|spare(3)=0 = 0xB0
     //   L3_Templates.ttcn ts_RRM_CiphModeCmd (line 690): cipherModeSetting is FIRST field -> high nibble,
@@ -670,7 +670,7 @@ TEST(GoldenRR, CipheringModeCommand_Parse) {
     //   cipherModeSetting: sC=1, algId=011(A5/3) -> 0b1011 = 0xB (high nibble)
     //   cipherModeResponse: cR=0, spare=000 -> 0b0000 = 0x0 (low nibble)
     //   Combined: 0xB0
-    uint8_t data[] = {0x60, 0x35, 0xB0};
+    uint8_t data[] = {0x06, 0x35, 0xB0};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CipheringModeCommand::MTI);
@@ -685,10 +685,10 @@ TEST(GoldenRR, CipheringModeCommand_Parse) {
 // =====================================================================
 
 TEST(GoldenRR, RRStatus_Parse_ProtocolError) {
-    // Byte 0: PD(4)|skip(4) = 0x60
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06
     // Byte 1: MTI = 0x12 (RRStatus)
     // Byte 2: cause = 0x6f (Protocol_Error_Unspecified)
-    uint8_t data[] = {0x60, 0x12, 0x6f};
+    uint8_t data[] = {0x06, 0x12, 0x6f};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* rs = tryGet<L3RRStatus>(*msg);
@@ -708,10 +708,10 @@ TEST(GoldenRR, RRStatus_Parse_ProtocolError) {
 // =====================================================================
 
 TEST(GoldenRR, PhysicalInformation_Parse) {
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x2D (PhysicalInformation) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: TA = 63<<2 = 0xFC [GSM 24.008 10.5.2.40: timing_advance(6)=63(max)|spare(2)=0]
-    uint8_t data[] = {0x60, 0x2d, 0xFC};
+    uint8_t data[] = {0x06, 0x2d, 0xFC};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3PhysicalInformation::MTI);
@@ -729,11 +729,11 @@ TEST(GoldenRR, PhysicalInformation_Parse) {
 // =====================================================================
 
 TEST(GoldenRR, AdditionalAssignment_Parse) {
-    // Byte 0: PD(4)=6(RR)|skip(4)=0 = 0x60 [GSM 24.008 Table 11.2]
+    // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x3B (AdditionalAssignment) [3GPP TS 44.018 Table 10.4.1]
     // Bytes 2-4: AdditionalChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), spare(2), ARFCN(10)
     //   {0x12, 0xA0, 0x56}: typeAndOffset=2, TN=2, TSC=5, h=0, ARFCN=86 [GSM 24.008 10.5.2.5]
-    uint8_t data[] = {0x60, 0x3b, 0x12, 0xA0, 0x56};
+    uint8_t data[] = {0x06, 0x3b, 0x12, 0xA0, 0x56};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3AdditionalAssignment::MTI);
@@ -826,7 +826,7 @@ TEST(GoldenRR, ChannelModeModify_RoundTrip) {
 TEST(GoldenRR, ChannelModeModifyAcknowledge_RoundTrip) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x17 (GSM_RR_Types.ttcn: CHANNEL_MODE_MODIFY_ACKNOWLEDGE='00010111'B)
     // Body = ChanDesc(3 octets) + ChanMode(1 octet): typeAndOffset=2(TDMA_TCHF), TN=1, TSC=7, ARFCN=100, mode=SpeechV1
-    uint8_t data[] = {0x60, 0x17, 0x11, 0xE0, 0x64, 0x01};
+    uint8_t data[] = {0x06, 0x17, 0x11, 0xE0, 0x64, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* cma = tryGet<L3ChannelModeModifyAcknowledge>(*msg);
@@ -870,7 +870,7 @@ TEST(GoldenRR, ClassmarkEnquiry_RoundTrip) {
 TEST(GoldenRR, ClassmarkChange_RoundTrip) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x16 (GSM_RR_Types.ttcn: CLASSMARK_CHANGE='00010110'B)
     // Body = CM2-LV: length=3, value={0x20, 0x00, 0x80} (Classmark 2 capability flags, GSM 24.008 10.5.1.6)
-    uint8_t data[] = {0x60, 0x16, 0x03, 0x20, 0x00, 0x80};
+    uint8_t data[] = {0x06, 0x16, 0x03, 0x20, 0x00, 0x80};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* cm = tryGet<L3ClassmarkChange>(*msg);
@@ -924,7 +924,7 @@ TEST(GoldenRR, PhysicalInformation_RoundTrip) {
 TEST(GoldenRR, RRStatus_RoundTrip) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x12 (GSM_RR_Types.ttcn: RR_STATUS='00010010'B)
     // Cause=0x60 = Invalid_Mandatory_Information (GSM_RR_Types.ttcn: GSM48_RR_CAUSE_INVALID_MAND_INF='60'O)
-    uint8_t data[] = {0x60, 0x12, 0x60};
+    uint8_t data[] = {0x06, 0x12, 0x60};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* rs = tryGet<L3RRStatus>(*msg);
@@ -943,7 +943,7 @@ TEST(GoldenRR, RRStatus_RoundTrip) {
 TEST(GoldenRR, AssignmentComplete_RoundTrip) {
     // [GOLDEN VERIFIED] AssignmentComplete: PD=6(RR), MTI=0x29. Body = cause(1 octet).
     // Cause=0x00 = Normal_Event (GSM_RR_Types.ttcn RR_Cause: GSM48_RR_CAUSE_NORMAL='00'O)
-    uint8_t data[] = {0x60, 0x29, 0x00};
+    uint8_t data[] = {0x06, 0x29, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* ac = tryGet<L3AssignmentComplete>(*msg);
@@ -962,7 +962,7 @@ TEST(GoldenRR, AssignmentComplete_RoundTrip) {
 TEST(GoldenRR, AssignmentFailure_RoundTrip) {
     // [GOLDEN VERIFIED] AssignmentFailure: PD=6(RR), MTI=0x2F. Body = cause(1 octet).
     // Cause=0x09 = Channel_Mode_Unacceptable (GSM_RR_Types.ttcn: GSM48_RR_CAUSE_CHAN_MODE_UNACCT='09'O)
-    uint8_t data[] = {0x60, 0x2f, 0x09};
+    uint8_t data[] = {0x06, 0x2f, 0x09};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* af = tryGet<L3AssignmentFailure>(*msg);
@@ -981,7 +981,7 @@ TEST(GoldenRR, AssignmentFailure_RoundTrip) {
 TEST(GoldenRR, HandoverComplete_RoundTrip) {
     // [GOLDEN VERIFIED] HandoverComplete: PD=6(RR), MTI=0x2C. Body = cause(1 octet).
     // Cause=0x00 = Normal_Event (GSM 24.008 9.1.16, GSM_RR_Types.ttcn HANDOVER_COMPLETE)
-    uint8_t data[] = {0x60, 0x2c, 0x00};
+    uint8_t data[] = {0x06, 0x2c, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* hc = tryGet<L3HandoverComplete>(*msg);
@@ -1000,7 +1000,7 @@ TEST(GoldenRR, HandoverComplete_RoundTrip) {
 TEST(GoldenRR, HandoverFailure_RoundTrip) {
     // [GOLDEN VERIFIED] HandoverFailure: PD=6(RR), MTI=0x28. Body = cause(1 octet).
     // Cause=0x08 = Handover_Impossible (GSM_RR_Types.ttcn: GSM48_RR_CAUSE_HNDOVER_IMP='08'O)
-    uint8_t data[] = {0x60, 0x28, 0x08};
+    uint8_t data[] = {0x06, 0x28, 0x08};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* hf = tryGet<L3HandoverFailure>(*msg);
@@ -1031,7 +1031,7 @@ TEST(GoldenRR, GPRSSuspensionRequest_RoundTrip) {
 
 TEST(GoldenRR, ConfigurationChangeCommand_Empty) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x30 (GSM_RR_Types.ttcn: CONFIGURATION_CHANGE_COMMAND='00110000'B)
-    uint8_t data[] = {0x60, 0x30};
+    uint8_t data[] = {0x06, 0x30};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ConfigurationChangeCommand::MTI);
@@ -1052,7 +1052,7 @@ TEST(GoldenRR, ConfigurationChangeCommand_RoundTrip) {
 
 TEST(GoldenRR, ConfigurationChangeAcknowledge_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x31 (GSM_RR_Types.ttcn: CONFIGURATION_CHANGE_ACK='00110001'B)
-    uint8_t data[] = {0x60, 0x31};
+    uint8_t data[] = {0x06, 0x31};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ConfigurationChangeAcknowledge::MTI);
@@ -1074,7 +1074,7 @@ TEST(GoldenRR, ConfigurationChangeAcknowledge_RoundTrip) {
 TEST(GoldenRR, ConfigurationChangeReject_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x33 (GSM_RR_Types.ttcn: CONFIGURATION_CHANGE_REJECT='00110011'B)
     // Cause=0x09 = Channel_Mode_Unacceptable
-    uint8_t data[] = {0x60, 0x33, 0x09};
+    uint8_t data[] = {0x06, 0x33, 0x09};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ConfigurationChangeReject::MTI);
@@ -1099,7 +1099,7 @@ TEST(GoldenRR, ConfigurationChangeReject_RoundTrip) {
 TEST(GoldenRR, PartialRelease_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x0A (GSM_RR_Types.ttcn: PARTIAL_RELEASE='00001010'B)
     // Body = ChannelDescription(3 octets): typeAndOffset=2(TDMA_TCHF), TN=0, TSC=7, h=0, ARFCN=100
-    uint8_t data[] = {0x60, 0x0a, 0x10, 0xE0, 0x64};
+    uint8_t data[] = {0x06, 0x0a, 0x10, 0xE0, 0x64};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3PartialRelease::MTI);
@@ -1120,7 +1120,7 @@ TEST(GoldenRR, PartialRelease_RoundTrip) {
 
 TEST(GoldenRR, PartialReleaseComplete_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x0F (GSM_RR_Types.ttcn: PARTIAL_RELEASE_COMPLETE='00001111'B)
-    uint8_t data[] = {0x60, 0x0f};
+    uint8_t data[] = {0x06, 0x0f};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3PartialReleaseComplete::MTI);
@@ -1143,7 +1143,7 @@ TEST(GoldenRR, ExtendedMeasurementReport_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x36 (GSM_RR_Types.ttcn: EXTENDED_MEASUREMENT_REPORT='00110110'B)
     // Body = MeasurementResults(16 octets, all zero = default values)
     uint8_t data[] = {
-        0x60, 0x36,
+        0x06, 0x36,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
     };
@@ -1167,7 +1167,7 @@ TEST(GoldenRR, ExtendedMeasurementReport_RoundTrip) {
 
 TEST(GoldenRR, ExtendedMeasurementOrder_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x37 (GSM_RR_Types.ttcn: EXTENDED_MEASUREMENT_ORDER='00110111'B)
-    uint8_t data[] = {0x60, 0x37, 0x01, 0x02, 0x03};
+    uint8_t data[] = {0x06, 0x37, 0x01, 0x02, 0x03};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ExtendedMeasurementOrder::MTI);
@@ -1190,7 +1190,7 @@ TEST(GoldenRR, FrequencyRedefinition_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x14 (GSM_RR_Types.ttcn: FREQUENCY_REDEFINITION='00010100'B)
     // Body = CellChannelDescription(16 octets bitmap) + RACHControlParameters(3 octets)
     uint8_t data[] = {
-        0x60, 0x14,
+        0x06, 0x14,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
         0x00, 0x00, 0x00
@@ -1214,7 +1214,7 @@ TEST(GoldenRR, FrequencyRedefinition_RoundTrip) {
 
 TEST(GoldenRR, NotificationResponse_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x26 (GSM_RR_Types.ttcn: NOTIFICATION_RESPONSE='00100110'B)
-    uint8_t data[] = {0x60, 0x26};
+    uint8_t data[] = {0x06, 0x26};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3NotificationResponse::MTI);
@@ -1234,7 +1234,7 @@ TEST(GoldenRR, NotificationResponse_RoundTrip) {
 
 TEST(GoldenRR, VGCSUplinkGrant_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x09 (GSM_RR_Types.ttcn: VGCS_UPLINK_GRANT='00001001'B)
-    uint8_t data[] = {0x60, 0x09};
+    uint8_t data[] = {0x06, 0x09};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3VGCSUplinkGrant::MTI);
@@ -1254,7 +1254,7 @@ TEST(GoldenRR, VGCSUplinkGrant_RoundTrip) {
 
 TEST(GoldenRR, UplinkRelease_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x0E (GSM_RR_Types.ttcn: UPLINK_RELEASE='00001110'B)
-    uint8_t data[] = {0x60, 0x0e};
+    uint8_t data[] = {0x06, 0x0e};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3UplinkRelease::MTI);
@@ -1274,7 +1274,7 @@ TEST(GoldenRR, UplinkRelease_RoundTrip) {
 
 TEST(GoldenRR, UplinkBusy_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x2A (GSM_RR_Types.ttcn: UPLINK_BUSY='00101010'B)
-    uint8_t data[] = {0x60, 0x2a};
+    uint8_t data[] = {0x06, 0x2a};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3UplinkBusy::MTI);
@@ -1296,7 +1296,7 @@ TEST(GoldenRR, UplinkBusy_RoundTrip) {
 TEST(GoldenRR, PriorityUplinkRequest_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x66 (GSM_RR_Types.ttcn: PRIORITY_UPLINK_REQUEST='01100110'B)
     // Body = TMSI(4 octets raw MSB-first)
-    uint8_t data[] = {0x60, 0x66, 0x12, 0x34, 0x56, 0x78};
+    uint8_t data[] = {0x06, 0x66, 0x12, 0x34, 0x56, 0x78};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3PriorityUplinkRequest::MTI);
@@ -1316,7 +1316,7 @@ TEST(GoldenRR, PriorityUplinkRequest_RoundTrip) {
 
 TEST(GoldenRR, DataIndication_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x67 (GSM_RR_Types.ttcn: DATA_INDICATION='01100111'B)
-    uint8_t data[] = {0x60, 0x67};
+    uint8_t data[] = {0x06, 0x67};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3DataIndication::MTI);
@@ -1336,7 +1336,7 @@ TEST(GoldenRR, DataIndication_RoundTrip) {
 
 TEST(GoldenRR, DataIndication2_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x68 (GSM_RR_Types.ttcn: DATA_INDICATION2='01101000'B)
-    uint8_t data[] = {0x60, 0x68};
+    uint8_t data[] = {0x06, 0x68};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3DataIndication2::MTI);
@@ -1351,13 +1351,13 @@ TEST(GoldenRR, DataIndication2_RoundTrip) {
 
 // =====================================================================
 // RR: DTM Assignment Failure (3GPP TS 44.018 9.1.3d)
-// Reference: GSM_RR_Types.ttcn DTM_ASSIGNMENT_FAILURE ('01001000'B = 0x80)
+// Reference: GSM_RR_Types.ttcn DTM_ASSIGNMENT_FAILURE ('01001000'B = 0x48)
 // =====================================================================
 
 TEST(GoldenRR, DTMAssignmentFailure_Parse) {
-    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x80 (GSM_RR_Types.ttcn: DTM_ASSIGNMENT_FAILURE='01001000'B)
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x48 (GSM_RR_Types.ttcn: DTM_ASSIGNMENT_FAILURE='01001000'B)
     // Body = cause(1 octet) = 0x00 (Normal_Event)
-    uint8_t data[] = {0x60, 0x80, 0x00};
+    uint8_t data[] = {0x06, 0x48, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3DTMAssignmentFailure::MTI);
@@ -1372,12 +1372,12 @@ TEST(GoldenRR, DTMAssignmentFailure_RoundTrip) {
 
 // =====================================================================
 // RR: DTM Reject (3GPP TS 44.018 9.1.3d)
-// Reference: GSM_RR_Types.ttcn DTM_REJECT ('01001001'B = 0x81)
+// Reference: GSM_RR_Types.ttcn DTM_REJECT ('01001001'B = 0x49)
 // =====================================================================
 
 TEST(GoldenRR, DTMReject_Parse) {
-    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x81 (GSM_RR_Types.ttcn: DTM_REJECT='01001001'B)
-    uint8_t data[] = {0x60, 0x81};
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x49 (GSM_RR_Types.ttcn: DTM_REJECT='01001001'B)
+    uint8_t data[] = {0x06, 0x49};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3DTMReject::MTI);
@@ -1392,12 +1392,12 @@ TEST(GoldenRR, DTMReject_RoundTrip) {
 
 // =====================================================================
 // RR: DTM Request (3GPP TS 44.018 9.1.3d)
-// Reference: GSM_RR_Types.ttcn DTM_REQUEST ('01001010'B = 0x82)
+// Reference: GSM_RR_Types.ttcn DTM_REQUEST ('01001010'B = 0x4A)
 // =====================================================================
 
 TEST(GoldenRR, DTMRequest_Parse) {
-    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x82 (GSM_RR_Types.ttcn: DTM_REQUEST='01001010'B)
-    uint8_t data[] = {0x60, 0x82};
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x4A (GSM_RR_Types.ttcn: DTM_REQUEST='01001010'B)
+    uint8_t data[] = {0x06, 0x4A};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3DTMRequest::MTI);
@@ -1412,14 +1412,14 @@ TEST(GoldenRR, DTMRequest_RoundTrip) {
 
 // =====================================================================
 // RR: Packet Assignment (3GPP TS 44.018 9.1.3e)
-// Reference: GSM_RR_Types.ttcn PACKET_ASSIGNMENT ('01001011'B = 0x83)
+// Reference: GSM_RR_Types.ttcn PACKET_ASSIGNMENT ('01001011'B = 0x4B)
 // Structure: ChannelDescription(3 octets) + TimingAdvance(1 octet)
 // =====================================================================
 
 TEST(GoldenRR, PacketAssignment_Parse) {
-    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x83 (GSM_RR_Types.ttcn: PACKET_ASSIGNMENT='01001011'B)
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x4B (GSM_RR_Types.ttcn: PACKET_ASSIGNMENT='01001011'B)
     // Body = ChannelDescription(3 octets) + TimingAdvance(1 octet)
-    uint8_t data[] = {0x60, 0x83, 0x10, 0xE0, 0x64, 0x00};
+    uint8_t data[] = {0x06, 0x4B, 0x10, 0xE0, 0x64, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3PacketAssignment::MTI);
@@ -1434,12 +1434,12 @@ TEST(GoldenRR, PacketAssignment_RoundTrip) {
 
 // =====================================================================
 // RR: DTM Assignment Command (3GPP TS 44.018 9.1.3d)
-// Reference: GSM_RR_Types.ttcn DTM_ASSIGNMENT_COMMAND ('01001100'B = 0x84)
+// Reference: GSM_RR_Types.ttcn DTM_ASSIGNMENT_COMMAND ('01001100'B = 0x4C)
 // =====================================================================
 
 TEST(GoldenRR, DTMAssignmentCommand_Parse) {
-    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x84 (GSM_RR_Types.ttcn: DTM_ASSIGNMENT_COMMAND='01001100'B)
-    uint8_t data[] = {0x60, 0x84};
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x4C (GSM_RR_Types.ttcn: DTM_ASSIGNMENT_COMMAND='01001100'B)
+    uint8_t data[] = {0x06, 0x4C};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3DTMAssignmentCommand::MTI);
@@ -1454,12 +1454,12 @@ TEST(GoldenRR, DTMAssignmentCommand_RoundTrip) {
 
 // =====================================================================
 // RR: DTM Information (3GPP TS 44.018 9.1.3d)
-// Reference: GSM_RR_Types.ttcn DTM_INFORMATION ('01001101'B = 0x85)
+// Reference: GSM_RR_Types.ttcn DTM_INFORMATION ('01001101'B = 0x4D)
 // =====================================================================
 
 TEST(GoldenRR, DTMInformation_Parse) {
-    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x85 (GSM_RR_Types.ttcn: DTM_INFORMATION='01001101'B)
-    uint8_t data[] = {0x60, 0x85};
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x4D (GSM_RR_Types.ttcn: DTM_INFORMATION='01001101'B)
+    uint8_t data[] = {0x06, 0x4D};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3DTMInformation::MTI);
@@ -1474,12 +1474,12 @@ TEST(GoldenRR, DTMInformation_RoundTrip) {
 
 // =====================================================================
 // RR: Packet Information (3GPP TS 44.018 9.1.3e)
-// Reference: GSM_RR_Types.ttcn PACKET_INFORMATION ('01001110'B = 0x86)
+// Reference: GSM_RR_Types.ttcn PACKET_INFORMATION ('01001110'B = 0x4E)
 // =====================================================================
 
 TEST(GoldenRR, PacketInformation_Parse) {
-    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x86 (GSM_RR_Types.ttcn: PACKET_INFORMATION='01001110'B)
-    uint8_t data[] = {0x60, 0x86};
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x4E (GSM_RR_Types.ttcn: PACKET_INFORMATION='01001110'B)
+    uint8_t data[] = {0x06, 0x4E};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3PacketInformation::MTI);
@@ -1499,7 +1499,7 @@ TEST(GoldenRR, PacketInformation_RoundTrip) {
 
 TEST(GoldenRR, UTRANClassmarkChange_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x60 (GSM_RR_Types.ttcn: UTRAN_CLASSMARK_CHANGE='01100000'B)
-    uint8_t data[] = {0x60, 0x60, 0x01, 0x02, 0x03};
+    uint8_t data[] = {0x06, 0x60, 0x01, 0x02, 0x03};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3UTRANClassmarkChange::MTI);
@@ -1519,7 +1519,7 @@ TEST(GoldenRR, UTRANClassmarkChange_RoundTrip) {
 
 TEST(GoldenRR, CDMA2000ClassmarkChange_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x62 (GSM_RR_Types.ttcn: CDMA2000_CLASSMARK_CHANGE='01100010'B)
-    uint8_t data[] = {0x60, 0x62};
+    uint8_t data[] = {0x06, 0x62};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CDMA2000ClassmarkChange::MTI);
@@ -1539,7 +1539,7 @@ TEST(GoldenRR, CDMA2000ClassmarkChange_RoundTrip) {
 
 TEST(GoldenRR, IntersysToUTRANHOCommand_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x63 (GSM_RR_Types.ttcn: INTERSYS_TO_UTRAN_HO_CMD='01100011'B)
-    uint8_t data[] = {0x60, 0x63};
+    uint8_t data[] = {0x06, 0x63};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3IntersysToUTRANHOCommand::MTI);
@@ -1559,7 +1559,7 @@ TEST(GoldenRR, IntersysToUTRANHOCommand_RoundTrip) {
 
 TEST(GoldenRR, IntersysToCDMA2000HOCommand_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x64 (GSM_RR_Types.ttcn: INTERSYS_TO_CDMA2000_HO_CMD='01100100'B)
-    uint8_t data[] = {0x60, 0x64};
+    uint8_t data[] = {0x06, 0x64};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3IntersysToCDMA2000HOCommand::MTI);
@@ -1579,7 +1579,7 @@ TEST(GoldenRR, IntersysToCDMA2000HOCommand_RoundTrip) {
 
 TEST(GoldenRR, GERANIUClassmarkChange_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x65 (GSM_RR_Types.ttcn: GERAN_IU_MODE_CLASSMARK_CHG='01100101'B)
-    uint8_t data[] = {0x60, 0x65};
+    uint8_t data[] = {0x06, 0x65};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3GERANIUClassmarkChange::MTI);
@@ -1601,7 +1601,7 @@ TEST(GoldenRR, GERANIUClassmarkChange_RoundTrip) {
 TEST(GoldenRR, SystemInformationType14_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x01 (GSM_RR_Types.ttcn: SYSTEM_INFORMATION_TYPE_14='00000001'B)
     // Body = CellIdentity(2) + CellSelectionParameters(2) + spare(1) = 5 octets per GSM 24.008 9.1.43d
-    uint8_t data[] = {0x60, 0x01, 0x12, 0x34, 0x00, 0x00, 0x00};
+    uint8_t data[] = {0x06, 0x01, 0x12, 0x34, 0x00, 0x00, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3SystemInformationType14::MTI);
@@ -1621,7 +1621,7 @@ TEST(GoldenRR, SystemInformationType14_RoundTrip) {
 
 TEST(GoldenRR, SystemInformationType15_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x43 (GSM_RR_Types.ttcn: SYSTEM_INFORMATION_TYPE_15='01000011'B)
-    uint8_t data[] = {0x60, 0x43};
+    uint8_t data[] = {0x06, 0x43};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3SystemInformationType15::MTI);
@@ -1641,7 +1641,7 @@ TEST(GoldenRR, SystemInformationType15_RoundTrip) {
 
 TEST(GoldenRR, SystemInformationType18_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x40 (GSM_RR_Types.ttcn: SYSTEM_INFORMATION_TYPE_18='01000000'B)
-    uint8_t data[] = {0x60, 0x40, 0x28, 0x00, 0x00, 0x00};
+    uint8_t data[] = {0x06, 0x40, 0x28, 0x00, 0x00, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3SystemInformationType18::MTI);
@@ -1661,7 +1661,7 @@ TEST(GoldenRR, SystemInformationType18_RoundTrip) {
 
 TEST(GoldenRR, SystemInformationType19_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x41 (GSM_RR_Types.ttcn: SYSTEM_INFORMATION_TYPE_19='01000001'B)
-    uint8_t data[] = {0x60, 0x41, 0x28, 0x00, 0x00, 0x00};
+    uint8_t data[] = {0x06, 0x41, 0x28, 0x00, 0x00, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3SystemInformationType19::MTI);
@@ -1681,7 +1681,7 @@ TEST(GoldenRR, SystemInformationType19_RoundTrip) {
 
 TEST(GoldenRR, SystemInformationType20_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x42 (GSM_RR_Types.ttcn: SYSTEM_INFORMATION_TYPE_20='01000010'B)
-    uint8_t data[] = {0x60, 0x42, 0x28, 0x00, 0x00, 0x00};
+    uint8_t data[] = {0x06, 0x42, 0x28, 0x00, 0x00, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3SystemInformationType20::MTI);
@@ -1701,7 +1701,7 @@ TEST(GoldenRR, SystemInformationType20_RoundTrip) {
 
 TEST(GoldenRR, SystemInformationType13alt_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x44 (GSM_RR_Types.ttcn: SYSTEM_INFORMATION_TYPE_13alt='01000100'B)
-    uint8_t data[] = {0x60, 0x44};
+    uint8_t data[] = {0x06, 0x44};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3SystemInformationType13alt::MTI);
@@ -1721,7 +1721,7 @@ TEST(GoldenRR, SystemInformationType13alt_RoundTrip) {
 
 TEST(GoldenRR, SystemInformationType2n_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x45 (GSM_RR_Types.ttcn: SYSTEM_INFORMATION_TYPE_2n='01000101'B)
-    uint8_t data[] = {0x60, 0x45};
+    uint8_t data[] = {0x06, 0x45};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3SystemInformationType2n::MTI);
@@ -1741,7 +1741,7 @@ TEST(GoldenRR, SystemInformationType2n_RoundTrip) {
 
 TEST(GoldenRR, SystemInformationType21_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x46 (GSM_RR_Types.ttcn: SYSTEM_INFORMATION_TYPE_21='01000110'B)
-    uint8_t data[] = {0x60, 0x46};
+    uint8_t data[] = {0x06, 0x46};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3SystemInformationType21::MTI);
@@ -1761,7 +1761,7 @@ TEST(GoldenRR, SystemInformationType21_RoundTrip) {
 
 TEST(GoldenRR, SystemInformationType22_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x47 (GSM_RR_Types.ttcn: SYSTEM_INFORMATION_TYPE_22='01000111'B)
-    uint8_t data[] = {0x60, 0x47};
+    uint8_t data[] = {0x06, 0x47};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3SystemInformationType22::MTI);
@@ -1781,7 +1781,7 @@ TEST(GoldenRR, SystemInformationType22_RoundTrip) {
 
 TEST(GoldenRR, SystemInformationType23_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x4F (GSM_RR_Types.ttcn: SYSTEM_INFORMATION_TYPE_23='01001111'B)
-    uint8_t data[] = {0x60, 0x4f};
+    uint8_t data[] = {0x06, 0x4f};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3SystemInformationType23::MTI);
@@ -1795,13 +1795,16 @@ TEST(GoldenRR, SystemInformationType23_RoundTrip) {
 }
 
 // =====================================================================
-// RR: Short messages (internal MTI >= 0x100) - round-trip tests
-// These use internal MTI codes and are written/read without standard L3 headers.
+// RR: Short messages (TIF set, five-bit code in octet 1) - round-trip
+// tests. The wire form is the standard 2-octet L3 header with TIF=1 and
+// PD=RR (octet 0 = 0x16 for TI=0), the five-bit message code in the low
+// bits of octet 1, high three bits zero; the internal MTI is
+// kRRTifShortBase | code.
 // =====================================================================
 
 TEST(GoldenRR, NotificationNCH_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x20 (GSM_RR_Types.ttcn: NOTIFICATION_NCH='00100000'B)
-    uint8_t data[] = {0x60, 0x20};
+    uint8_t data[] = {0x06, 0x20};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3NotificationNCH::MTI);
@@ -1816,7 +1819,7 @@ TEST(GoldenRR, NotificationNCH_RoundTrip) {
 
 TEST(GoldenRR, TalkerIndication_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x11 (GSM_RR_Types.ttcn: TALKER_INDICATION='00010001'B)
-    uint8_t data[] = {0x60, 0x11};
+    uint8_t data[] = {0x06, 0x11};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3TalkerIndication::MTI);
@@ -1830,101 +1833,111 @@ TEST(GoldenRR, TalkerIndication_RoundTrip) {
 }
 
 TEST(GoldenRR, SystemInformationType10_RoundTrip) {
-    // [GOLDEN VERIFIED] SI10 is a short message (RrShortDisc, 5-bit discriminator on BCCH).
-    // Uses internal MTI=0x106 for parser dispatch. GSM_RR_Types.ttcn RrShortDisc:
-    // SYSTEM_INFORMATION_TYPE_10 = '00000'B. Hex output size=20 chars (10 bytes = 2 header + 8 body).
+    // [GOLDEN VERIFIED] SI10 is an RR short message: five-bit code
+    // '00000'B (TS 44.018 short-message table), internal MTI=0x100.
+    // Wire form = TIF-set header + 10-octet body -> 12 bytes, 24 hex chars.
     ParsedMessage msg(RRM(L3SystemInformationType10{}));
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value().size(), 20);
+    EXPECT_EQ(hex.value().size(), 24);
 }
 
 TEST(GoldenRR, SystemInformationType10bis_RoundTrip) {
-    // [GOLDEN VERIFIED] SI10bis is a short message (RrShortDisc). GSM_RR_Types.ttcn:
-    // SYSTEM_INFORMATION_TYPE_10bis = '00001'B. Internal MTI=0x107.
+    // [GOLDEN VERIFIED] SI10bis is an RR short message: five-bit code
+    // '01010'B, internal MTI=0x10A. Wire form = TIF-set header + 10-octet body.
     ParsedMessage msg(RRM(L3SystemInformationType10bis{}));
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value().size(), 20);
+    EXPECT_EQ(hex.value().size(), 24);
 }
 
 TEST(GoldenRR, SystemInformationType10ter_RoundTrip) {
-    // [GOLDEN VERIFIED] SI10ter is a short message (RrShortDisc). GSM_RR_Types.ttcn:
-    // SYSTEM_INFORMATION_TYPE_10ter = '00010'B. Internal MTI=0x108.
+    // [GOLDEN VERIFIED] SI10ter is an RR short message: five-bit code
+    // '01011'B, internal MTI=0x10B. Wire form = TIF-set header + 10-octet body.
     ParsedMessage msg(RRM(L3SystemInformationType10ter{}));
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value().size(), 20);
+    EXPECT_EQ(hex.value().size(), 24);
 }
 
 TEST(GoldenRR, NotificationFACCH_RoundTrip) {
+    // RR short message code '00001'B: TIF-set header (0x16, 0x01), no body.
     ParsedMessage msg(RRM(L3NotificationFACCH{}));
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "");
+    EXPECT_EQ(hex.value(), "1601");
 }
 
 TEST(GoldenRR, UplinkFree_RoundTrip) {
+    // RR short message code '00010'B: TIF-set header (0x16, 0x02), no body.
     ParsedMessage msg(RRM(L3UplinkFree{}));
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "");
+    EXPECT_EQ(hex.value(), "1602");
 }
 
 TEST(GoldenRR, EnhancedMeasurementRepUL_RoundTrip) {
+    // RR short message code '00100'B: TIF-set header (0x16, 0x04), no body.
     ParsedMessage msg(RRM(L3EnhancedMeasurementRepUL{}));
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "");
+    EXPECT_EQ(hex.value(), "1604");
 }
 
 TEST(GoldenRR, MeasurementInfoDL_RoundTrip) {
+    // RR short message code '00101'B: TIF-set header (0x16, 0x05), no body.
     ParsedMessage msg(RRM(L3MeasurementInfoDL{}));
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "");
+    EXPECT_EQ(hex.value(), "1605");
 }
 
 TEST(GoldenRR, VBSVGCSRecon_RoundTrip) {
+    // RR short message code '00110'B: TIF-set header (0x16, 0x06), no body.
     ParsedMessage msg(RRM(L3VBSVGCSRecon{}));
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "");
+    EXPECT_EQ(hex.value(), "1606");
 }
 
 TEST(GoldenRR, VBSVGCSRecon2_RoundTrip) {
+    // RR short message code '00111'B: TIF-set header (0x16, 0x07), no body.
     ParsedMessage msg(RRM(L3VBSVGCSRecon2{}));
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "");
+    EXPECT_EQ(hex.value(), "1607");
 }
 
 TEST(GoldenRR, VGCSAddInfo_RoundTrip) {
+    // RR short message code '01000'B: TIF-set header (0x16, 0x08), no body.
     ParsedMessage msg(RRM(L3VGCSAddInfo{}));
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "");
+    EXPECT_EQ(hex.value(), "1608");
 }
 
 TEST(GoldenRR, VGCSMSInfo_RoundTrip) {
+    // RR short message code '01001'B: TIF-set header (0x16, 0x09), no body.
     ParsedMessage msg(RRM(L3VGCSMSInfo{}));
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "");
+    EXPECT_EQ(hex.value(), "1609");
 }
 
 TEST(GoldenRR, VGCSSNeighCellInfo_RoundTrip) {
+    // RR short message code '01100'B: TIF-set header (0x16, 0x0C), no body.
     ParsedMessage msg(RRM(L3VGCSSNeighCellInfo{}));
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "");
+    EXPECT_EQ(hex.value(), "160c");
 }
 
 TEST(GoldenRR, NotifyAppData_RoundTrip) {
+    // RR short message code '01101'B: TIF-set header (0x16, 0x0D), no body.
     ParsedMessage msg(RRM(L3NotifyAppData{}));
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "");
+    EXPECT_EQ(hex.value(), "160d");
 }
 
 // =====================================================================
@@ -1951,13 +1964,14 @@ TEST(GoldenRR, MessageTypeValues_Extended) {
     EXPECT_EQ(L3PriorityUplinkRequest::MTI, 0x66);
     EXPECT_EQ(L3DataIndication::MTI, 0x67);
     EXPECT_EQ(L3DataIndication2::MTI, 0x68);
-    EXPECT_EQ(L3DTMAssignmentFailure::MTI, 0x80);
-    EXPECT_EQ(L3DTMReject::MTI, 0x81);
-    EXPECT_EQ(L3DTMRequest::MTI, 0x82);
-    EXPECT_EQ(L3PacketAssignment::MTI, 0x83);
-    EXPECT_EQ(L3DTMAssignmentCommand::MTI, 0x84);
-    EXPECT_EQ(L3DTMInformation::MTI, 0x85);
-    EXPECT_EQ(L3PacketInformation::MTI, 0x86);
+    EXPECT_EQ(L3DTMAssignmentFailure::MTI, 0x48);
+    EXPECT_EQ(L3DTMReject::MTI, 0x49);
+    EXPECT_EQ(L3DTMRequest::MTI, 0x4A);
+    EXPECT_EQ(L3PacketAssignment::MTI, 0x4B);
+    EXPECT_EQ(L3ImmediatePacketAssignment::MTI, 0x69);
+    EXPECT_EQ(L3DTMAssignmentCommand::MTI, 0x4C);
+    EXPECT_EQ(L3DTMInformation::MTI, 0x4D);
+    EXPECT_EQ(L3PacketInformation::MTI, 0x4E);
     EXPECT_EQ(L3UTRANClassmarkChange::MTI, 0x60);
     EXPECT_EQ(L3CDMA2000ClassmarkChange::MTI, 0x62);
     EXPECT_EQ(L3IntersysToUTRANHOCommand::MTI, 0x63);
@@ -1973,17 +1987,126 @@ TEST(GoldenRR, MessageTypeValues_Extended) {
     EXPECT_EQ(L3SystemInformationType21::MTI, 0x46);
     EXPECT_EQ(L3SystemInformationType22::MTI, 0x47);
     EXPECT_EQ(L3SystemInformationType23::MTI, 0x4f);
-    EXPECT_EQ(L3SystemInformationType10::MTI, 0x106);
-    EXPECT_EQ(L3SystemInformationType10bis::MTI, 0x107);
-    EXPECT_EQ(L3SystemInformationType10ter::MTI, 0x108);
-    EXPECT_EQ(L3NotificationFACCH::MTI, 0x109);
-    EXPECT_EQ(L3UplinkFree::MTI, 0x10A);
-    EXPECT_EQ(L3EnhancedMeasurementRepUL::MTI, 0x10B);
-    EXPECT_EQ(L3MeasurementInfoDL::MTI, 0x10C);
-    EXPECT_EQ(L3VBSVGCSRecon::MTI, 0x10D);
-    EXPECT_EQ(L3VBSVGCSRecon2::MTI, 0x10E);
-    EXPECT_EQ(L3VGCSAddInfo::MTI, 0x10F);
-    EXPECT_EQ(L3VGCSMSInfo::MTI, 0x110);
-    EXPECT_EQ(L3VGCSSNeighCellInfo::MTI, 0x111);
-    EXPECT_EQ(L3NotifyAppData::MTI, 0x112);
+    // RR short messages (TIF set): internal MTI = kRRTifShortBase | five-bit code.
+    EXPECT_EQ(L3SystemInformationType10::MTI, 0x100);
+    EXPECT_EQ(L3NotificationFACCH::MTI, 0x101);
+    EXPECT_EQ(L3UplinkFree::MTI, 0x102);
+    EXPECT_EQ(L3EnhancedMeasurementRepUL::MTI, 0x104);
+    EXPECT_EQ(L3MeasurementInfoDL::MTI, 0x105);
+    EXPECT_EQ(L3VBSVGCSRecon::MTI, 0x106);
+    EXPECT_EQ(L3VBSVGCSRecon2::MTI, 0x107);
+    EXPECT_EQ(L3VGCSAddInfo::MTI, 0x108);
+    EXPECT_EQ(L3VGCSMSInfo::MTI, 0x109);
+    EXPECT_EQ(L3SystemInformationType10bis::MTI, 0x10A);
+    EXPECT_EQ(L3SystemInformationType10ter::MTI, 0x10B);
+    EXPECT_EQ(L3VGCSSNeighCellInfo::MTI, 0x10C);
+    EXPECT_EQ(L3NotifyAppData::MTI, 0x10D);
+}
+
+// Golden: RR Channel Release over a dedicated channel (TS 44.018): the L3
+// header octets are {PD=RR in the low nibble, TI/TIF high nibble = 0,
+// MTI=0x0D}. The vector below is a minimal 3-octet DTAP frame; the third
+// octet is the RR cause.
+TEST(GoldenRR, ChannelRelease_RefVector) {
+    uint8_t data[] = {0x06, 0x0D, 0x41};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messagePD(*msg), L3PD::RadioResource);
+    EXPECT_EQ(messageMTI(*msg), L3ChannelRelease::MTI);
+}
+
+// Golden: CCCH Immediate Assignment frame (TS 44.018 9.1.19) as captured on a
+// real AGCH block minus the L2 pseudolength octet. Header = {0x06, 0x3F};
+// body = dedicated-mode/tbf + page mode + channel description + request
+// reference (RA=0x25, T1P/T3/T2 = 0) + timing advance + empty mobile
+// allocation list.
+TEST(GoldenRR, ImmediateAssignment_RefVector) {
+    uint8_t data[] = {0x06, 0x3F,
+                      0x03, 0x0C, 0xE3, 0x69,
+                      0x25, 0x00, 0x00, 0x00, 0x00};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* ia = tryGet<L3ImmediateAssignment>(*msg);
+    ASSERT_NE(ia, nullptr);
+    EXPECT_EQ(ia->requestReference().ra(), 0x25u);
+    // Channel description: Bm_ACCH (RSL channel number 1), TN 4, TSC 7,
+    // ARFCN 873 (TS 44.018 10.5.2.5).
+    EXPECT_EQ(ia->channelDescription().tn(), 4u);
+    EXPECT_EQ(ia->channelDescription().tsc(), 7u);
+    EXPECT_EQ(ia->channelDescription().arfcn(), 873u);
+}
+
+// Golden: Classmark Enquiry is a header-only message (TS 44.018).
+TEST(GoldenRR, ClassmarkEnquiry_HeaderOnly) {
+    uint8_t data[] = {0x06, 0x13};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3ClassmarkEnquiry::MTI);
+}
+
+// Golden: the DTM and packet channel messages occupy MTI values 0x48..0x4E
+// (TS 44.018 Table 9.x). The vector below is a minimal DTM Reject frame.
+TEST(GoldenRR, DtmReject_RefMti) {
+    uint8_t data[] = {0x06, 0x49};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3DTMReject::MTI);
+}
+
+// Golden: an RR short message (TIF=1) as transmitted on a dedicated
+// channel: octet 0 = TIF bit | PD(RR) = 0x16; the low five bits of octet
+// 1 carry the code ('00001'B = Notification FACCH), high three bits zero.
+TEST(GoldenRR, ShortMessageTif_NotificationFacch) {
+    uint8_t data[] = {0x16, 0x01};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messagePD(*msg), L3PD::RadioResource);
+    EXPECT_EQ(messageMTI(*msg), L3NotificationFACCH::MTI);
+}
+
+// Golden: the short message round-trips through the builder with TIF set.
+TEST(GoldenRR, ShortMessageTif_WireShape) {
+    auto built = writeL3Bytes(ParsedMessage{RRM{L3NotificationFACCH{}}});
+    ASSERT_TRUE(built);
+    ASSERT_GE(built.value().size(), 2u);
+    EXPECT_EQ(built.value()[0], 0x16u);         // TIF | PD RR, TI absent
+    EXPECT_EQ(built.value()[1] & 0x1Fu, 0x01u); // short code
+    EXPECT_EQ(built.value()[1] & 0xE0u, 0x00u); // reserved high bits are zero
+}
+
+// Golden: an unallocated short code (3 — no such RR short message exists)
+// must be rejected as an invalid MTI, not swallowed silently.
+TEST(GoldenRR, ShortMessageTif_ReservedCodeRejected) {
+    uint8_t data[] = {0x16, 0x03};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_FALSE(msg);
+    EXPECT_EQ(msg.error().code, ParseError::Code::InvalidMTI);
+}
+
+// Golden: Immediate Packet Assignment (TS 44.018, MTI=0x69) carries an
+// opaque value part; the round-trip preserves it byte-for-byte for both an
+// empty and a five-octet body.
+TEST(GoldenRR, ImmediatePacketAssignment_RoundTrip_EmptyBody) {
+    ParsedMessage msg(RRM(L3ImmediatePacketAssignment{}));
+    auto hex = writeL3Hex(msg);
+    ASSERT_TRUE(hex);
+    EXPECT_EQ(hex.value(), "0669");
+    auto parsed = parseL3Hex(hex.value());
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(messageMTI(*parsed), L3ImmediatePacketAssignment::MTI);
+}
+
+TEST(GoldenRR, ImmediatePacketAssignment_RoundTrip_FiveOctetBody) {
+    ParsedMessage msg(RRM(L3ImmediatePacketAssignment::builder()
+                              .body(std::span<const uint8_t>({0xDE, 0xAD, 0xBE, 0xEF, 0x01})).build()));
+    auto hex = writeL3Hex(msg);
+    ASSERT_TRUE(hex);
+    EXPECT_EQ(hex.value().size(), 14u); // 2 header octets + 5 body octets
+    auto parsed = parseL3Hex(hex.value());
+    ASSERT_TRUE(parsed);
+    const auto* ipa = tryGet<L3ImmediatePacketAssignment>(*parsed);
+    ASSERT_NE(ipa, nullptr);
+    ASSERT_EQ(ipa->body().size(), 5u);
+    EXPECT_EQ(ipa->body()[0], 0xDE);
+    EXPECT_EQ(ipa->body()[4], 0x01);
 }

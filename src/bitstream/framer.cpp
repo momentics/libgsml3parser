@@ -129,18 +129,22 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
     {
         uint8_t b0 = mBuf[mPos];
         uint8_t b1 = mBuf[mPos + 1];
-        int pd = (b0 >> 4) & 0x0F;
+        // PD occupies the low nibble of octet 0 (TS 24.008 L3 header).
+        int pd = b0 & 0x0F;
 
-        // For CC/SS: bits [4:6] of byte 0 are TI, bit 7 is TIF.
-        // For all PDs: byte 1 is raw MTI.
-        int rawMti = b1;
-        int mti = rawMti;
-
-        // Adjust MTI for MM/CC/SS/BCC/GCC (6-bit messageType + 2-bit NSD).
-        // BCC (0x01) and GCC (0x00) use the same CC-style header (TS 44.018 10.2).
-        // LS (0x0c) carries a raw 8-bit MTI and needs no adjustment.
+        // Internal MTI for the fixed-length table, per protocol discriminator:
+        // MM/CC/NC-SS/GCC/BCC carry a six-bit message type in the low bits of
+        // octet 1 (the two high bits are the network signalling indicator);
+        // RR with TIF set carries a five-bit short-message code remapped to
+        // kRRTifShortBase | code; all other PDs carry the raw 8-bit MTI.
+        int mti;
         if (pd == 0x05 || pd == 0x03 || pd == 0x0b || pd == 0x01 || pd == 0x00) {
-            mti = (rawMti & 0xFC) >> 2;
+            mti = b1 & 0x3F;
+        } else if (pd == 0x06 && ((b0 & 0x10u) != 0u)) {
+            // TIF bit (bit 4 of octet 0) set: RR short-message code.
+            mti = kRRTifShortBase | (b1 & 0x1F);
+        } else {
+            mti = b1;
         }
 
         if (atEof) {
@@ -170,15 +174,6 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
                 // We attempt a greedy approach: parse the header and as much body
                 // as we can, looking for a natural boundary.
                 // For now, use a heuristic: scan for the next plausible L3 header.
-                //
-                // Boundary candidates depend on the PD of the message being framed
-                // (C17): while framing BCC (0x01), GCC (0x00) or LS (0x0c)
-                // messages, any of the 12 valid PDs may start the next message, so
-                // the full list is used. For all other PDs the original list is
-                // kept: 0x00/0x01/0x0c high nibbles occur frequently inside
-                // variable-length bodies (e.g. GMM/SMS cause octets) and listing
-                // them unconditionally would create false frame boundaries.
-                const bool callControlLike = (pd == 0x00 || pd == 0x01 || pd == 0x0c);
                 frameLen = 0;
                 // Resume the boundary scan where the previous attempt
                 // left off (the previous code rescanned from
@@ -188,19 +183,20 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
                 size_t scanFrom = mBoundaryScanPos;
                 if (scanFrom < mPos + 2) scanFrom = mPos + 2;
                 for (size_t i = scanFrom; i + 1 < mEnd && i < mPos + 2 + mConfig.maxMessageLength; ++i) {
-                    uint8_t candidatePd = (mBuf[i] >> 4) & 0x0F;
-                    // Check if this looks like a valid L3 header start.
-                    // Base valid PDs: 0x03, 0x05, 0x06, 0x0b, 0x08, 0x09, 0x0a, 0x0e, 0x0f.
-                    // Extended with 0x00 (GCC), 0x01 (BCC), 0x0c (LS) when framing
-                    // BCC/GCC/LS messages.
+                    // PD occupies the low nibble of a header octet
+                    // (TS 24.008 L3 header).
+                    uint8_t candidatePd = mBuf[i] & 0x0F;
+                    // A boundary candidate must hold a TS-valid protocol
+                    // discriminator: GCC 0x00, BCC 0x01, CC 0x03, MM 0x05,
+                    // RR 0x06, GMM 0x08, SMS 0x09, SM 0x0a, NC-SS 0x0b,
+                    // LCS 0x0c, extended 0x0e, test procedure 0x0f.
                     const bool plausible =
+                        candidatePd == 0x00 || candidatePd == 0x01 ||
                         candidatePd == 0x03 || candidatePd == 0x05 ||
-                        candidatePd == 0x06 || candidatePd == 0x0b ||
-                        candidatePd == 0x08 || candidatePd == 0x09 ||
-                        candidatePd == 0x0a || candidatePd == 0x0e ||
-                        candidatePd == 0x0f ||
-                        (callControlLike &&
-                         (candidatePd == 0x00 || candidatePd == 0x01 || candidatePd == 0x0c));
+                        candidatePd == 0x06 || candidatePd == 0x08 ||
+                        candidatePd == 0x09 || candidatePd == 0x0a ||
+                        candidatePd == 0x0b || candidatePd == 0x0c ||
+                        candidatePd == 0x0e || candidatePd == 0x0f;
                     if (plausible) {
                         // This might be the start of the next message.
                         frameLen = i - mPos;

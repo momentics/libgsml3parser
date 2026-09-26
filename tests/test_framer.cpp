@@ -34,8 +34,8 @@ using namespace gsml3parser;
 // ── Single frame extraction (header-based mode) ────────────────────────
 
 TEST(L3Framer, SingleFixedLengthFrame) {
-    // Channel Release: 60 0D 00 (PD=6 in high nibble, MTI=0x0D, 1 body byte)
-    uint8_t data[] = {0x60, 0x0D, 0x00};
+    // Channel Release: 06 0D 00 (PD=RR in the low nibble of octet 0, MTI=0x0D, 1 body byte)
+    uint8_t data[] = {0x06, 0x0D, 0x00};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
     cfg.useL2Length = false;  // header-based mode
@@ -45,14 +45,15 @@ TEST(L3Framer, SingleFixedLengthFrame) {
     ASSERT_TRUE(result.has_value());
     const auto& frame = result.value();
     ASSERT_EQ(frame.data.size(), 3u);
-    ASSERT_EQ(frame.data[0], 0x60);
+    ASSERT_EQ(frame.data[0], 0x06);
     ASSERT_EQ(frame.data[1], 0x0D);
     ASSERT_EQ(frame.data[2], 0x00);
 }
 
 TEST(L3Framer, SingleCMServiceAccept) {
-    // CM Service Accept: 50 84 (PD=5 in high nibble, MTI encoded in byte 1)
-    uint8_t data[] = {0x50, 0x84};
+    // CM Service Accept: 05 21 (PD=MM in the low nibble; MT=0x21 in the six
+    // low bits of octet 1)
+    uint8_t data[] = {0x05, 0x21};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
     cfg.useL2Length = false;  // header-based mode
@@ -67,9 +68,10 @@ TEST(L3Framer, SingleCMServiceAccept) {
 // ── Multiple frames back-to-back ───────────────────────────────────────
 
 TEST(L3Framer, MultipleFixedLengthFrames) {
+    // RR Status frames: constant 1-byte cause body -> fixed 3 bytes each.
     uint8_t data[] = {
-        0x60, 0x0D, 0x00,  // Channel Release #1
-        0x60, 0x0D, 0x01   // Channel Release #2
+        0x06, 0x12, 0x41,  // RR Status #1
+        0x06, 0x12, 0x42   // RR Status #2
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
@@ -84,9 +86,9 @@ TEST(L3Framer, MultipleFixedLengthFrames) {
     ASSERT_TRUE(r2.has_value());
     const auto& f2 = r2.value();
     ASSERT_EQ(f2.data.size(), 3u);
-    ASSERT_EQ(f2.data[0], 0x60);
-    ASSERT_EQ(f2.data[1], 0x0D);
-    ASSERT_EQ(f2.data[2], 0x01);
+    ASSERT_EQ(f2.data[0], 0x06);
+    ASSERT_EQ(f2.data[1], 0x12);
+    ASSERT_EQ(f2.data[2], 0x42);
 
     auto r3 = framer.nextFrame();
     ASSERT_FALSE(r3.has_value());
@@ -102,7 +104,7 @@ TEST(L3Framer, TruncatedFrame) {
     // octet), so at end of stream the framer emits the 2-byte tail and
     // the parser rejects it downstream (fixed-length
     // framing applies only to constant-body messages).
-    uint8_t data[] = {0x60, 0x0D};
+    uint8_t data[] = {0x06, 0x0D};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
     cfg.useL2Length = false;  // header-based mode
@@ -130,7 +132,7 @@ TEST(L3Framer, EmptySource) {
 
 TEST(L3Framer, L2LengthMode) {
     // L2 length octet (0x03) + 3-byte L3 message.
-    uint8_t data[] = {0x03, 0x60, 0x0D, 0x00};
+    uint8_t data[] = {0x03, 0x06, 0x0D, 0x00};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
     cfg.useL2Length = true;
@@ -145,8 +147,8 @@ TEST(L3Framer, L2LengthMode) {
 
 TEST(L3Framer, L2LengthMultipleFrames) {
     uint8_t data[] = {
-        0x03, 0x60, 0x0D, 0x00,  // Frame 1: length=3, Channel Release
-        0x02, 0x50, 0x84          // Frame 2: length=2, CM Service Accept
+        0x03, 0x06, 0x0D, 0x00,  // Frame 1: length=3, Channel Release
+        0x02, 0x05, 0x21          // Frame 2: length=2, CM Service Accept
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
@@ -164,7 +166,7 @@ TEST(L3Framer, L2LengthMultipleFrames) {
 
 TEST(L3Framer, L2LengthTruncated) {
     // L2 length says 5 bytes but only 3 available.
-    uint8_t data[] = {0x05, 0x60, 0x0D};
+    uint8_t data[] = {0x05, 0x06, 0x0D};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
     cfg.useL2Length = true;
@@ -179,7 +181,7 @@ TEST(L3Framer, L2LengthTruncated) {
 // ── buffered() tracking ────────────────────────────────────────────────
 
 TEST(L3Framer, BufferedCount) {
-    uint8_t data[] = {0x60, 0x0D, 0x00, 0x60, 0x0D, 0x01};
+    uint8_t data[] = {0x06, 0x12, 0x41, 0x06, 0x12, 0x42};
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
     cfg.useL2Length = false;  // header-based mode
@@ -200,12 +202,13 @@ TEST(L3Framer, BufferedCount) {
 // ── Variable-length message framing (header scan) ──────────────────────
 
 TEST(L3Framer, VariableLengthWithNextHeader) {
-    // Channel Request (variable-length RR, MTI=0x01) followed by Channel Release.
-    // Body bytes 0x21/0x40 are chosen so their high nibbles (0x02/0x04) are not
-    // valid PDs, keeping the scanned boundary at the real next header.
+    // System Information Type 13 (variable-length RR, MTI=0x01) followed by
+    // Channel Release. Body bytes 0x22/0x47 are chosen so their low nibbles
+    // (0x02/0x04, reserved PDs) are not valid PDs, keeping the scanned
+    // boundary at the real next header.
     uint8_t data[] = {
-        0x60, 0x01, 0x21, 0x40,  // Channel Request (4 bytes, scanned boundary)
-        0x60, 0x0D, 0x00          // Channel Release (3 bytes, fixed)
+        0x06, 0x01, 0x22, 0x47,  // SI13 frame (4 bytes, scanned boundary)
+        0x06, 0x0D, 0x00          // Channel Release (3 bytes)
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
@@ -221,16 +224,16 @@ TEST(L3Framer, VariableLengthWithNextHeader) {
     ASSERT_EQ(r2.value().data.size(), 3u);
 }
 
-// ── BCC/GCC/LS framing (header-based mode, C17) ────────────────────────
+// ── BCC/GCC/LS framing (header-based mode) ─────────────────────────────
 
 TEST(L3Framer, BCCSetupStreamThreeFrames) {
-    // Three BCC Setup frames back-to-back: 10 01 (PD=0x01, MTI=0x00, no body).
-    // Each frame is fixed-length (2 bytes) per fixedBodyLength(), so all three
-    // are extracted, including the last one at end of stream.
+    // Three BCC Setup frames back-to-back: 01 00 (PD=BCC in the low nibble,
+    // MT=0x00, no body). Each frame is 2 bytes, so all three are extracted,
+    // including the last one at end of stream.
     uint8_t data[] = {
-        0x10, 0x01,  // BCC Setup #1
-        0x10, 0x01,  // BCC Setup #2
-        0x10, 0x01   // BCC Setup #3
+        0x01, 0x00,  // BCC Setup #1
+        0x01, 0x00,  // BCC Setup #2
+        0x01, 0x00   // BCC Setup #3
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
@@ -241,8 +244,8 @@ TEST(L3Framer, BCCSetupStreamThreeFrames) {
         auto r = framer.nextFrame();
         ASSERT_TRUE(r.has_value()) << "frame " << i << " not extracted";
         ASSERT_EQ(r.value().data.size(), 2u);
-        ASSERT_EQ(r.value().data[0], 0x10);
-        ASSERT_EQ(r.value().data[1], 0x01);
+        ASSERT_EQ(r.value().data[0], 0x01);
+        ASSERT_EQ(r.value().data[1], 0x00);
     }
 
     auto r4 = framer.nextFrame();
@@ -250,16 +253,15 @@ TEST(L3Framer, BCCSetupStreamThreeFrames) {
 }
 
 TEST(L3Framer, GCCSetupStreamThreeFrames) {
-    // Three GCC Setup frames: 00 01 20 (PD=0x00, MTI=0x00, 1-byte opaque body).
-    // GCC Setup has a variable body, so it is framed by the boundary
-    // heuristic (C17), not the fixed-length table. The body
-    // octet 0x20 is chosen so its high nibble (0x02, a reserved PD) is not
-    // a plausible L3 header start — the previous body octet 0x02 (high
-    // nibble 0x00 = GCC) created a false boundary inside the frame.
+    // Three GCC Setup frames: 00 00 22 (PD=GCC in the low nibble, MT=0x00,
+    // 1-byte opaque body). GCC Setup has a variable body, so it is framed by
+    // the boundary heuristic, not the fixed-length table. The body octet 0x22
+    // is chosen so its low nibble (0x02, a reserved PD) is not a plausible
+    // L3 header start.
     uint8_t data[] = {
-        0x00, 0x01, 0x20,  // GCC Setup #1
-        0x00, 0x01, 0x20,  // GCC Setup #2
-        0x00, 0x01, 0x20   // GCC Setup #3
+        0x00, 0x00, 0x22,  // GCC Setup #1
+        0x00, 0x00, 0x22,  // GCC Setup #2
+        0x00, 0x00, 0x22   // GCC Setup #3
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
@@ -271,8 +273,8 @@ TEST(L3Framer, GCCSetupStreamThreeFrames) {
         ASSERT_TRUE(r.has_value()) << "frame " << i << " not extracted";
         ASSERT_EQ(r.value().data.size(), 3u);
         ASSERT_EQ(r.value().data[0], 0x00);
-        ASSERT_EQ(r.value().data[1], 0x01);
-        ASSERT_EQ(r.value().data[2], 0x20);
+        ASSERT_EQ(r.value().data[1], 0x00);
+        ASSERT_EQ(r.value().data[2], 0x22);
     }
 
     auto r4 = framer.nextFrame();
@@ -280,11 +282,12 @@ TEST(L3Framer, GCCSetupStreamThreeFrames) {
 }
 
 TEST(L3Framer, LSRequestStreamThreeFrames) {
-    // Three LS Location Service Request frames: C0 01 (PD=0x0c, MTI=0x01, no body).
+    // Three LS Location Service Request frames: 0C 01 (PD=LS in the low
+    // nibble, MTI=0x01, no body).
     uint8_t data[] = {
-        0xC0, 0x01,  // LS Request #1
-        0xC0, 0x01,  // LS Request #2
-        0xC0, 0x01   // LS Request #3
+        0x0C, 0x01,  // LS Request #1
+        0x0C, 0x01,  // LS Request #2
+        0x0C, 0x01   // LS Request #3
     };
     SpanByteSource src(std::span<const uint8_t>(data, std::size(data)));
     FrameConfig cfg;
@@ -295,7 +298,7 @@ TEST(L3Framer, LSRequestStreamThreeFrames) {
         auto r = framer.nextFrame();
         ASSERT_TRUE(r.has_value()) << "frame " << i << " not extracted";
         ASSERT_EQ(r.value().data.size(), 2u);
-        ASSERT_EQ(r.value().data[0], 0xC0);
+        ASSERT_EQ(r.value().data[0], 0x0C);
         ASSERT_EQ(r.value().data[1], 0x01);
     }
 
@@ -324,7 +327,7 @@ TEST(L3Framer, PagingResponse_L2LengthMode) {
     data.push_back(static_cast<uint8_t>(wire.value().size()));
     data.insert(data.end(), wire.value().begin(), wire.value().end());
     data.push_back(3);
-    data.push_back(0x60); data.push_back(0x0D); data.push_back(0x00);
+    data.push_back(0x06); data.push_back(0x0D); data.push_back(0x00);
 
     SpanByteSource src(std::span<const uint8_t>(data.data(), data.size()));
     FrameConfig cfg;
@@ -343,22 +346,19 @@ TEST(L3Framer, PagingResponse_L2LengthMode) {
     ASSERT_EQ(r2.value().data.size(), 3u);
 }
 
-// Header-based mode: a real Paging Response followed by a Channel
-// Release. The paging body (TMSI 0x21222324, zero classmark, CKSN=1)
-// contains no plausible PD nibble, so the heuristic boundary lands on
-// the real next header.
-TEST(L3Framer, PagingResponse_HeaderBasedHeuristic) {
-    auto pr = L3PagingResponse::builder()
-        .cksn(1)
-        .classmark(L3MobileStationClassmark2{})
-        .mobileId(L3MobileIdentity{0x21222324u})
-        .build();
-    ParsedMessage pm{RRM{std::move(pr)}};
+// Header-based mode: a variable-length RR frame (System Information Type
+// 2quater, opaque body) followed by a Channel Release. The boundary scan
+// accepts octets whose low nibble is a TS-valid PD; the body bytes
+// 0x22/0x47 carry reserved low nibbles (0x02/0x04), so the heuristic
+// boundary lands on the real next header.
+TEST(L3Framer, VariableLengthRR_HeaderBasedHeuristic) {
+    auto si = L3SystemInformationType2quater::builder().body({0x22, 0x47}).build();
+    ParsedMessage pm{RRM{std::move(si)}};
     auto wire = writeL3Bytes(pm);
     ASSERT_TRUE(wire);
 
     std::vector<uint8_t> data = *wire;
-    data.push_back(0x60); data.push_back(0x0D); data.push_back(0x00);
+    data.push_back(0x06); data.push_back(0x0D); data.push_back(0x00);
 
     SpanByteSource src(std::span<const uint8_t>(data.data(), data.size()));
     FrameConfig cfg;
@@ -370,7 +370,7 @@ TEST(L3Framer, PagingResponse_HeaderBasedHeuristic) {
     ASSERT_EQ(r1.value().data.size(), wire.value().size());
     auto parsed1 = parseL3(r1.value().data);
     ASSERT_TRUE(parsed1);
-    EXPECT_EQ(messageMTI(*parsed1), L3PagingResponse::MTI);
+    EXPECT_EQ(messageMTI(*parsed1), L3SystemInformationType2quater::MTI);
 
     auto r2 = framer.nextFrame();
     ASSERT_TRUE(r2.has_value());
@@ -382,7 +382,8 @@ TEST(L3Framer, PagingResponse_HeaderBasedHeuristic) {
 // Suite name follows the existing convention of test_framer.cpp ("L3Framer").
 TEST(L3Framer, Timestamp_BatchedAndSet) {
     std::vector<uint8_t> stream;
-    for (int i = 0; i < 10; ++i) stream.insert(stream.end(), {0x60, 0x0D, 0x00});
+    // RR Status frames: fixed 3 bytes each per the fixed-length table.
+    for (int i = 0; i < 10; ++i) stream.insert(stream.end(), {0x06, 0x12, 0x41});
     SpanByteSource src(std::span<const uint8_t>(stream.data(), stream.size()));
     FrameConfig cfg;
     cfg.useL2Length = false;  // header-based mode

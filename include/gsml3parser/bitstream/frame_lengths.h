@@ -30,9 +30,9 @@ namespace gsml3parser::detail {
 
 // Flat triple list: { pd, mti, totalWireLength, ... } terminated by
 // {0xFF, 0, 0}. pd is the 4-bit protocol discriminator; mti is the
-// message type in the SAME encoding the framers use (raw 8-bit for
-// RR/LS, shifted 6-bit for MM/CC/SS/BCC/GCC); totalWireLength = 2-byte
-// L3 header + constant body.
+// internal message type in the same encoding the framers compute (raw
+// 8-bit for RR/LS, six low bits of octet 1 for MM/CC/NC-SS/GCC/BCC);
+// totalWireLength = 2-byte L3 header + constant body.
 //
 // the previous hand-written tables in framer.cpp and
 // inline_framer.h used WRONG MTI values (e.g. 0x0E for Paging Response,
@@ -47,7 +47,7 @@ namespace gsml3parser::detail {
 inline constexpr size_t kFixedFrameEntries[] = {
     // Radio Resource (pd 0x06, raw 8-bit MTI)
     0x06, 0x12, 3,  // RR Status (1-byte body)
-    0x06, 0x13, 3,  // Classmark Enquiry (1-byte body)
+    0x06, 0x13, 2,  // Classmark Enquiry (no value part, TS 44.018 9.1.14)
     0x06, 0x28, 3,  // Handover Failure (1-byte body)
     0x06, 0x29, 3,  // Assignment Complete (1-byte body)
     0x06, 0x2C, 3,  // Handover Complete (1-byte body)

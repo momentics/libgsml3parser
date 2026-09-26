@@ -102,7 +102,7 @@ void demoSpecificHandlers() {
     // Simulate incoming messages.
     std::cout << "  Dispatching ChannelRelease (hex: 600d00):\n";
     {
-        auto msg = parseL3Hex("600d00");
+        auto msg = parseL3Hex("060d00");
         if (msg) disp.dispatch(*msg);
     }
 
@@ -149,7 +149,7 @@ void demoDomainFallback() {
     // Dispatch ChannelRelease -> goes to specific handler.
     std::cout << "  Sending ChannelRelease (600d00):\n";
     {
-        auto msg = parseL3Hex("600d00");
+        auto msg = parseL3Hex("060d00");
         if (msg) disp.dispatch(*msg);
     }
 
@@ -194,21 +194,21 @@ void demoGlobalFallback() {
     // ChannelRelease -> specific handler.
     std::cout << "  Sending RR ChannelRelease:\n";
     {
-        auto msg = parseL3Hex("600d00");
+        auto msg = parseL3Hex("060d00");
         if (msg) disp.dispatch(*msg);
     }
 
     // MM message -> fallback.
     std::cout << "  Sending MM CMServiceAccept:\n";
     {
-        auto msg = parseL3Hex("5084");
+        auto msg = parseL3Hex("0521");
         if (msg) disp.dispatch(*msg);
     }
 
     // CC message -> fallback.
     std::cout << "  Sending CC Disconnect:\n";
     {
-        auto msg = parseL3Hex("3E9408021621");
+        auto msg = parseL3Hex("E32508021621");
         if (msg) disp.dispatch(*msg);
     }
 
@@ -250,8 +250,8 @@ void demoFullPipeline() {
     };
 
     std::vector<IncomingFrame> frames = {
-        {"ChannelRelease", "600d00"},
-        {"PagingType2", "6022807856341203"}, // TMSI=0x12345678
+        {"ChannelRelease", "060d00"},
+        {"PagingType2", "0622807856341203"}, // TMSI=0x12345678
     };
 
     for (const auto& frame : frames) {
@@ -325,7 +325,7 @@ void demoPriority() {
     // ChannelRelease should hit specific handler.
     std::cout << "  ChannelRelease -> ";
     {
-        auto msg = parseL3Hex("600d00");
+        auto msg = parseL3Hex("060d00");
         if (msg) disp.dispatch(*msg);
     }
 
@@ -343,7 +343,7 @@ void demoPriority() {
     // MM message should hit global fallback.
     std::cout << "  MM CMServiceAccept -> ";
     {
-        auto msg = parseL3Hex("5084");
+        auto msg = parseL3Hex("0521");
         if (msg) disp.dispatch(*msg);
     }
 

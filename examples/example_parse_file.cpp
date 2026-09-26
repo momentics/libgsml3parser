@@ -139,18 +139,18 @@ int main(int argc, char* argv[]) {
     // Demo batch parsing with representative messages from all 12 PD domains
     std::cout << "\n--- Batch Parse Demo (All 12 PD Domains) ---\n";
     std::vector<std::pair<std::string, std::string>> batch{
-        {"RR",       "60 0D 00"},                          // Channel Release
-        {"MM",       "50 84"},                              // CM Service Accept
-        {"CC",       "3E 94 08 02 16 21"},                  // Disconnect (TI=7)
-        {"SS",       "B0 E8"},                              // Facility
-        {"GMM",      "80 20 05"},                            // GMM Status (cause=5)
-        {"SM",       "A0 55 32 01 05"},                      // SM Status (cause=5)
-        {"SMS",      "90 04 01 02"},                         // CP Ack (ref=2)
-        {"BCC",      "10 01"},                               // BCC Setup
-        {"GCC",      "00 01 02"},                            // GCC Setup
-        {"LS",       "C0 01"},                               // LocationServiceRequest
-        {"EXT",      "E0 01"},                               // ExtendedMessage
-        {"TST",      "F0 01"},                               // TestProcedureMessage
+        {"RR",       "06 0D 00"},                          // Channel Release
+        {"MM",       "05 21"},                              // CM Service Accept
+        {"CC",       "E3 25 08 02 16 21"},                  // Disconnect (TI=7)
+        {"SS",       "0B 3A"},                              // Facility
+        {"GMM",      "08 20 05"},                            // GMM Status (cause=5)
+        {"SM",       "0A 55 32 01 05"},                      // SM Status (cause=5)
+        {"SMS",      "09 04 01 02"},                         // CP Ack (ref=2)
+        {"BCC",      "01 00"},                               // BCC Setup
+        {"GCC",      "00 00 02"},                            // GCC Setup
+        {"LS",       "0C 01"},                               // LocationServiceRequest
+        {"EXT",      "0E 01"},                               // ExtendedMessage
+        {"TST",      "0F 01"},                               // TestProcedureMessage
     };
     demoBatchParse(batch);
 
