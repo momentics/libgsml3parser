@@ -489,14 +489,14 @@ TEST(CApiLapdm, FrameDecode_AgreesWithCpp) {
     EXPECT_GE(f.info, uiBytes.data());
     EXPECT_LE(f.info + f.info_len, uiBytes.data() + uiBytes.size());
 
-    auto ifr = lapdm::makeIFrame(SAPI::SAPI3, true, 2, 5, true, false, info);
+    auto ifr = lapdm::makeIFrame(SAPI::SAPI3, true, 2, 5, true, true, info);
     std::vector<uint8_t> ifBytes = lapdm::encodeFrame(ifr);
     ASSERT_EQ(gsml3_lapdm_frame_decode(ifBytes.data(), ifBytes.size(), &f), GSML3_OK);
     EXPECT_EQ(f.format, GSML3_LAPDM_FMT_I);
     EXPECT_EQ(f.nr, 2);
     EXPECT_EQ(f.ns, 5);
     EXPECT_EQ(f.pf, 1);
-    EXPECT_EQ(f.m_bit, 0);
+    EXPECT_EQ(f.m_bit, 1); // M=1: further segments of the same message follow
     EXPECT_EQ(f.sapi, GSML3_SAPI3);
 
     auto rr = lapdm::makeRRFrame(SAPI::SAPI0, 3, true);

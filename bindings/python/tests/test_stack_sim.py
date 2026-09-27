@@ -125,10 +125,11 @@ def test_stack_auto_response_mode():
 
 def stack_link_lifecycle():
     """Standalone entity (BTS side, C/R=1) driven by the mini-codec peer frames:
-    open -> LINK_RELEASED; SABME -> tx [0x09, 0x2F] (byte-exact), state AWAITING_
-    ESTABLISH; peer UA [0x01, 0x63] -> LINK_ESTABLISHED (+ ESTABLISH_CONFIRM L3
-    event, empty payload); UI with L3 -> UNIT_DATA event with the SAME payload;
-    DISC -> AWAITING_RELEASE; peer UA -> LINK_RELEASED. frames_received() == 3."""
+    open -> LINK_RELEASED; SABME -> tx [0x03, 0x3F, 0x01] (byte-exact), state
+    AWAITING_ESTABLISH; peer UA [0x01, 0x73, 0x01] -> LINK_ESTABLISHED (+
+    ESTABLISH_CONFIRM L3 event, empty payload); UI with L3 -> UNIT_DATA event
+    with the SAME payload; DISC -> AWAITING_RELEASE; peer UA -> LINK_RELEASED.
+    frames_received() == 3."""
     events, txs = [], []
 
     def on_l3(sapi, prim, l3p, l3_len, user):
@@ -143,16 +144,16 @@ def stack_link_lifecycle():
         e.open(sapi=0, command_bit=1)                               # BTS side
         assert e.state() == g.LAPDM_STATE_LINK_RELEASED
         e.send_sabme()
-        assert txs and txs[-1] == bytes([0x09, 0x2F])               # SABME from BTS (byte-exact)
+        assert txs and txs[-1] == bytes([0x03, 0x3F, 0x01])         # SABME from BTS (byte-exact)
         assert e.state() == g.LAPDM_STATE_AWAITING_ESTABLISH
-        e.receive(bytes([0x01, 0x63]))                              # MS -> UA
+        e.receive(bytes([0x01, 0x73, 0x01]))                        # MS -> UA (pf=1)
         assert e.state() == g.LAPDM_STATE_LINK_ESTABLISHED and e.is_established()
 
         payload = b"\x60\x0d\x00"                                   # Channel Release L3
         e.receive(g.lapdm_mini.ui(sapi=0, command=False, info=payload))
         e.send_disc()
         assert e.state() == g.LAPDM_STATE_AWAITING_RELEASE
-        e.receive(bytes([0x01, 0x63]))                              # MS -> UA (release ack)
+        e.receive(bytes([0x01, 0x73, 0x01]))                        # MS -> UA (release ack)
         assert e.state() == g.LAPDM_STATE_LINK_RELEASED and not e.is_established()
         frames_rx = e.frames_received()
 
@@ -188,10 +189,10 @@ def t200_retransmission():
     with g.LapdmEntity(profile=0, l1_cb=on_l1) as e:
         e.open(sapi=0, command_bit=1)
         e.send_sabme()
-        assert len(txs) == 1 and txs[0] == bytes([0x09, 0x2F])   # first SABME
+        assert len(txs) == 1 and txs[0] == bytes([0x03, 0x3F, 0x01])   # first SABME
         r = e.tick_t200(900)                                     # crosses T200(SDCCH)
         assert r == 1 and e.retransmissions() == 1
-        assert len(txs) == 2 and txs[1] == bytes([0x09, 0x2F])   # retransmitted SABME
+        assert len(txs) == 2 and txs[1] == bytes([0x03, 0x3F, 0x01])   # retransmitted SABME
 
 
 def frames_received_counting():
@@ -201,10 +202,10 @@ def frames_received_counting():
         e.open(0, 1)
         assert e.frames_received() == 0
         e.send_sabme()
-        e.receive(bytes([0x01, 0x63]))      # UA (establish)
+        e.receive(bytes([0x01, 0x73, 0x01]))   # UA (establish, pf=1)
         assert e.frames_received() == 1
-        e.receive(bytes([0x01, 0x5F]))      # UA (pf=0 variant — also accepted by C decode)
-        e.receive(bytes([0x01, 0x63]))      # another UA
+        e.receive(bytes([0x01, 0x63, 0x01]))   # UA (pf=0 variant — also accepted by C decode)
+        e.receive(bytes([0x01, 0x73, 0x01]))   # another UA
         assert e.frames_received() == 3
 
 
@@ -310,7 +311,7 @@ def test_tx_frames_produced_between_calls_are_never_lost():
     return frames for one input never consume frames of an earlier operation."""
     with g.GsmL3Stack(tmsi=0x66000001, auto_response=False) as stack:
         stack.lapdm_entity.send_sabme()
-        assert stack.drain_tx_frames() == [bytes([0x09, 0x2F])]   # first SABME taken out
+        assert stack.drain_tx_frames() == [bytes([0x03, 0x3F, 0x01])]   # first SABME taken out
 
         assert stack.tick_t200(900) == 1      # retransmitted SABME captured, still undrained
 
@@ -318,7 +319,7 @@ def test_tx_frames_produced_between_calls_are_never_lost():
         txs = stack.send_frame(g.lapdm_mini.ui(0, False, l3))      # manual mode: emits nothing for this input
         assert txs == []
 
-        assert stack.drain_tx_frames() == [bytes([0x09, 0x2F])]    # retransmission intact
+        assert stack.drain_tx_frames() == [bytes([0x03, 0x3F, 0x01])]    # retransmission intact
 
 
 def test_auto_response_batch_survives_a_failed_event():

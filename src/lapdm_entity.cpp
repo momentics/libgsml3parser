@@ -218,9 +218,8 @@ void LAPDmEntity::resetStats() noexcept {
 // ── Internal helpers ──────────────────────────────────────────────────
 
 std::span<const uint8_t> LAPDmEntity::encodeToTxBuf(const lapdm::LAPDmFrame& frame) {
-    // Worst case: address(1) + control(1) + length(1) + payload
-    // (I-frames, SABME/UA with echo payload). UI frames are shorter
-    // (no length byte).
+    // Every format-B frame is exactly address + control + header octet,
+    // plus the info field when present.
     size_t needed = 3 + frame.info.size();
     if (mTxBuf.size() < needed) mTxBuf.resize(needed);
     size_t n = lapdm::encodeFrameToBuffer(frame, mTxBuf.data(), mTxBuf.size());
@@ -300,9 +299,9 @@ void LAPDmEntity::trySendNextSegment() {
     size_t msgEnd = mTxMsgEnds[mTxMsgIdx];
     size_t remaining = msgEnd - mTxQueuePos;
     size_t chunkSize = std::min(remaining, mProfile.n201);
-    bool mBit = (remaining <= mProfile.n201); // M=1: Message complete (last segment)
+    bool moreBit = (remaining > mProfile.n201); // M=1: further segments follow
 
-    buildIFrame(std::span<const uint8_t>(mTxQueue.data() + mTxQueuePos, chunkSize), mBit);
+    buildIFrame(std::span<const uint8_t>(mTxQueue.data() + mTxQueuePos, chunkSize), moreBit);
     mTxQueuePos += chunkSize;
 
     // Current message fully sent: advance to the next queued message, if any.
@@ -352,13 +351,13 @@ void LAPDmEntity::sendREJ(bool pf) {
 
 // ── I-frame construction and send ─────────────────────────────────────
 
-void LAPDmEntity::buildIFrame(std::span<const uint8_t> payload, bool isLast) {
+void LAPDmEntity::buildIFrame(std::span<const uint8_t> payload, bool more) {
     uint8_t ns = mVS;
     uint8_t nr = mVR;
-    // Advance VS after building frame (GSM 04.06: NS = VS before increment).
+    // Advance VS after building frame (NS = VS before increment).
     mVS = static_cast<uint8_t>((mVS + 1) & 0x07u);
 
-    auto frame = lapdm::makeIFrame(mSapi, mCommandBit, nr, ns, false, isLast, payload);
+    auto frame = lapdm::makeIFrame(mSapi, mCommandBit, nr, ns, false, more, payload);
     auto encoded = encodeToTxBuf(frame);
     saveForRetransmission(encoded);
 }
@@ -553,11 +552,11 @@ void LAPDmEntity::receiveIFrame(const lapdm::LAPDmFrame& frame) {
     if (mState != LAPDmState::LinkEstablished) return;
 
     // Acknowledge received frames up to NR-1.
-    processAck(frame.nr);
+    processAck(frame.iCtrl.nr);
 
     // Sequence check: NS must equal VR (expected next).
-    if (frame.ns != mVR) {
-        sendREJ(frame.pf);
+    if (frame.iCtrl.ns != mVR) {
+        sendREJ(frame.iCtrl.pf);
         return;
     }
 
@@ -579,14 +578,15 @@ void LAPDmEntity::receiveIFrame(const lapdm::LAPDmFrame& frame) {
                                  frame.info.begin(), frame.info.end());
     }
 
-    // M-bit check (GSM 04.06 5.5.2): M=1 means Message complete (last segment).
-    if (frame.m) {
+    // M-bit check (TS 44.064): M=0 marks the final or only segment, at which
+    // point the reassembled message is complete.
+    if (!frame.more) {
         deliverL3(Primitive::L3_DATA, mReassemblyBuffer);
         mReassemblyBuffer.clear();
     }
 
     // Respond with RR.
-    sendRR(frame.pf);
+    sendRR(frame.iCtrl.pf);
 }
 
 // ── S-frame handler (GSM 04.06 5.3) ──────────────────────────────────
@@ -605,6 +605,13 @@ void LAPDmEntity::receiveSFrame(const lapdm::LAPDmFrame& frame) {
             if (frame.pf && frame.isCommand()) {
                 sendRR(true);
             }
+            break;
+        }
+        case lapdm::LAPDmSFrameType::RNR: {
+            // RNR (TS 44.064): the peer cannot accept I-frames for now.
+            // Acknowledgment processing is the same as for RR, but no
+            // response frame is required.
+            processAck(frame.nr);
             break;
         }
         case lapdm::LAPDmSFrameType::REJ: {

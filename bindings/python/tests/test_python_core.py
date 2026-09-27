@@ -219,7 +219,7 @@ def test_void_calls_surface_the_pending_error(op):
         e = g.LapdmEntity(0)
         cleanups.append(e.close)
         e.open(sapi=0, command_bit=1)      # warm up while the error state is still real
-        act = lambda: e.receive(bytes([0x01, 0x63]))
+        act = lambda: e.receive(bytes([0x01, 0x73, 0x01]))
     elif op == "hard_release":
         e = g.LapdmEntity(0)
         cleanups.append(e.close)

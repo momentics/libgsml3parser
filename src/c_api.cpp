@@ -202,7 +202,7 @@ inline constexpr int tokenHi      = static_cast<int>(ResponseToken::Setup);
 inline constexpr int rslCauseLo   = static_cast<int>(RSLErrorCause::NormalUnspecified);
 inline constexpr int rslCauseHi   = static_cast<int>(RSLErrorCause::EncryptionUnimplemented);
 inline constexpr int sapiLo       = 0;
-inline constexpr int sapiHi       = 15;
+inline constexpr int sapiHi       = 7;
 inline constexpr int serviceTypeLo = 0;  // L3CMServiceType::TypeCode::UndefinedType
 inline constexpr int serviceTypeHi = static_cast<int>(L3CMServiceType::TypeCode::LocationUpdateRequest);
 inline constexpr int updateTypeLo = 0;   // Location updating type: Normal / Periodic / IMSI Attach
@@ -838,14 +838,17 @@ GSML3_C_API int gsml3_lapdm_frame_decode(const uint8_t* data, size_t len,
         if (!r) { reportParseError(r.error()); return mapParseError(r.error()); }
         const auto& f = r.value();
         out->format = static_cast<int>(f.format);
+        // U/S types are reported as their canonical control octets (P/F=0).
         out->u_type = (f.format == lapdm::LAPDmControlFormat::U_Format)
-            ? static_cast<int>(f.uType) : -1;
+            ? lapdm::uFrameControlByte(f.uType, false) : -1;
         out->s_type = (f.format == lapdm::LAPDmControlFormat::S_Format)
-            ? static_cast<int>(f.sType) : -1;
-        out->nr = f.nr;
-        out->ns = f.ns;
-        out->pf = f.pf ? 1 : 0;
-        out->m_bit = f.m ? 1 : 0;
+            ? lapdm::LAPDmSControlField(0, f.sType, false).encode() : -1;
+        out->nr = (f.format == lapdm::LAPDmControlFormat::I_Format) ? f.iCtrl.nr
+                : (f.format == lapdm::LAPDmControlFormat::S_Format) ? f.nr : 0;
+        out->ns = (f.format == lapdm::LAPDmControlFormat::I_Format) ? f.iCtrl.ns : 0;
+        out->pf = (f.format == lapdm::LAPDmControlFormat::I_Format)
+            ? (f.iCtrl.pf ? 1 : 0) : (f.pf ? 1 : 0);
+        out->m_bit = f.more ? 1 : 0;
         out->sapi = static_cast<int>(f.address.sapi);
         out->command = f.address.command ? 1 : 0;
         out->info = f.info.data();
@@ -935,7 +938,7 @@ GSML3_C_API void gsml3_lapdm_entity_open(gsml3_lapdm_entity* e, int sapi,
                                           int command_bit) {
     clearLastError();
     if (!e) return;
-    if (sapi < 0 || sapi > 15) { setError(GSML3_ERR_INVALID_ARG, "invalid SAPI value (expected 0..15)"); return; }
+    if (sapi < 0 || sapi > 7) { setError(GSML3_ERR_INVALID_ARG, "invalid SAPI value (three-bit field: expected 0..7)"); return; }
     e->entity.open(static_cast<SAPI>(sapi), command_bit != 0);
 }
 
@@ -960,11 +963,11 @@ GSML3_C_API int gsml3_lapdm_entity_send_ui(gsml3_lapdm_entity* e, int sapi,
             setError(GSML3_ERR_INVALID_ARG, "NULL entity or L3 payload");
             return GSML3_ERR_INVALID_ARG;
         }
-        // SAPI is 4 bits in the LAPDm address octet: an out-of-range value
-        // would wrap and silently corrupt the SAPI and C/R fields, so it is
-        // rejected before it can reach the encoder.
+        // SAPI occupies three bits in the LAPDm address octet: an out-of-range
+        // value would wrap and silently corrupt the SAPI, C/R and EA fields, so
+        // it is rejected before it can reach the encoder.
         if (sapi < ranges::sapiLo || sapi > ranges::sapiHi) {
-            setError(GSML3_ERR_INVALID_ARG, "invalid SAPI value (expected 0..15)");
+            setError(GSML3_ERR_INVALID_ARG, "invalid SAPI value (three-bit field: expected 0..7)");
             return GSML3_ERR_INVALID_ARG;
         }
         auto r = e->entity.sendUI(static_cast<SAPI>(sapi), {l3, l3_len});

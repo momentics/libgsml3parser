@@ -79,12 +79,12 @@ enum class Primitive : uint8_t {
 
 std::ostream& operator<<(std::ostream& os, Primitive prim);
 
-// SAPI - Service Access Point Indicator, GSM 04.06
+// SAPI - Service Access Point Indicator, TS 44.064. Only the values 0 and 3
+// are defined on the Um interface; Undefined is a sentinel for address octets
+// carrying any other three-bit SAPI value.
 enum class SAPI : uint8_t {
     SAPI0 = 0,
     SAPI3 = 3,
-    SAPI0_Sacch = 4,
-    SAPI3_Sacch = 7,
     Undefined = 16
 };
 

@@ -208,8 +208,8 @@ class LapdmFrameInfo(ctypes.Structure):
         ("nr", ctypes.c_uint8),       # receive sequence number (I/S frames)
         ("ns", ctypes.c_uint8),       # send sequence number (I frames)
         ("pf", ctypes.c_int),         # Poll/Final bit
-        ("m_bit", ctypes.c_int),      # message-complete bit (I frames)
-        ("sapi", ctypes.c_int),       # 0..15
+        ("m_bit", ctypes.c_int),      # M bit of the header octet: 1 = further segments follow
+        ("sapi", ctypes.c_int),       # three-bit SAPI field (0 and 3 defined on Um)
         ("command", ctypes.c_int),    # C/R: 1 = command, 0 = response
         ("info", POINTER(ctypes.c_ubyte)),  # ZERO-COPY view into the input buffer
         ("info_len", ctypes.c_size_t),

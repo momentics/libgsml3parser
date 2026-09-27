@@ -41,53 +41,58 @@ TEST(LAPDmFrameTest, AddressField_EncodeDecode_SAPI0) {
     EXPECT_TRUE(decoded.ea);
 }
 
-// GSM 04.06 4.2.1: Address field encoding — SAPI3, CR=1, EA=1 -> 0x39
+// GSM 04.06: Address field encoding — SAPI3, CR=1, EA=1 -> (3<<2)|0x02|0x01 = 0x0F
 TEST(LAPDmFrameTest, AddressField_EncodeDecode_SAPI3_CR1) {
     auto addr = LAPDmAddressField(SAPI::SAPI3, true, true);
-    EXPECT_EQ(addr.encode(), 0x39u);
+    EXPECT_EQ(addr.encode(), 0x0Fu);
 }
 
-// GSM 04.06 5.2.1: UI frame with SAPI0, command, L3 payload
+// GSM 04.06: UI frame with SAPI0, command, L3 payload. Canonical U/S control
+// octets per TS 44.064: UI P/F=0/1 = 0x03/0x13; SABME 0x2F/0x3F; UA
+// 0x63/0x73; DM 0x0F/0x1F; DISC 0x43/0x53. S frames: RR(nr,pf) =
+// (nr<<5)|(pf<<4)|0x01; RNR = (...|0x05); REJ = (...|0x09). Every frame also
+// carries the header octet (L<<2)|M|0x01 after the control.
 TEST(LAPDmFrameTest, UI_Frame_Encode) {
     uint8_t payload[] = {0x06, 0x0D, 0x00}; // Channel Release
     auto frame = makeUIFrame(SAPI::SAPI0, true, std::span(payload));
     auto encoded = encodeFrame(frame);
-    EXPECT_EQ(encoded[0], 0x09u); // SAPI0, CR=1, EA=1
-    EXPECT_EQ(encoded[1], 0x03u); // UI
-    EXPECT_EQ(encoded.size(), 5u); // 2 header + 3 payload
+    EXPECT_EQ(encoded[0], 0x03u); // SAPI0, CR=1, EA=1
+    EXPECT_EQ(encoded[1], 0x03u); // UI (P/F=0)
+    EXPECT_EQ(encoded.size(), 6u); // address + control + header octet + 3 payload
 }
 
-// GSM 04.06 5.4.1: SABME command, PF=1, no payload
+// GSM 04.06: SABME command, P/F=1, no payload
 TEST(LAPDmFrameTest, SABME_Frame_Encode) {
     auto frame = makeSABMEFrame(SAPI::SAPI0, true, std::span<const uint8_t>{});
     auto encoded = encodeFrame(frame);
-    EXPECT_EQ(encoded[0], 0x09u); // SAPI0, CR=1
-    EXPECT_EQ(encoded[1], 0x2Fu); // SABME
+    EXPECT_EQ(encoded[0], 0x03u); // SAPI0, CR=1
+    EXPECT_EQ(encoded[1], 0x3Fu); // SABME (P/F=1)
+    EXPECT_EQ(encoded.size(), 3u); // frames without info are exactly 3 octets
 }
 
-// GSM 04.06 5.4.1.2: UA response, PF=1
+// GSM 04.06: UA response, P/F=1
 TEST(LAPDmFrameTest, UA_Frame_Encode) {
     auto frame = makeUAFrame(SAPI::SAPI0, true, std::span<const uint8_t>{});
     auto encoded = encodeFrame(frame);
     EXPECT_EQ(encoded[0], 0x01u); // SAPI0, CR=0 (response)
-    EXPECT_EQ(encoded[1], 0x63u); // UA
+    EXPECT_EQ(encoded[1], 0x73u); // UA (P/F=1)
 }
 
-// GSM 04.06 5.5.2: I-frame with NR=0, NS=1, P/F=0, M=1 (Message complete — last segment)
+// GSM 04.06: I-frame with NR=0, NS=1, P/F=0, M=0 (final segment — no further segments)
 TEST(LAPDmFrameTest, I_Frame_EncodeDecode) {
     uint8_t payload[] = {0x01, 0x02, 0x03};
-    auto frame = makeIFrame(SAPI::SAPI0, true, 0, 1, false, true, std::span(payload));
+    auto frame = makeIFrame(SAPI::SAPI0, true, 0, 1, false, false, std::span(payload));
     auto encoded = encodeFrame(frame);
-    EXPECT_EQ(encoded[0], 0x09u); // address: SAPI0, CR=1
-    EXPECT_EQ(encoded[1], 0x02u); // control: NR=0, P/F=0, NS=1 -> 000 0 001 0 = 0x02
-    EXPECT_EQ(encoded[2], 0x83u); // length: M=1, len=3 -> 10000011 = 0x83
+    EXPECT_EQ(encoded[0], 0x03u); // address: SAPI0, CR=1
+    EXPECT_EQ(encoded[1], 0x02u); // control: NR=0, P/F=0, NS=1 -> 000 0 010 0 = 0x02
+    EXPECT_EQ(encoded[2], 0x0Du); // header octet: L=3, M=0, fixed '1' -> 0000 1101 = 0x0D
 
     auto result = LAPDmFrame::decode(std::span(encoded));
     ASSERT_TRUE(result);
     const auto& f = *result;
     EXPECT_EQ(f.format, LAPDmControlFormat::I_Format);
-    EXPECT_EQ(f.nr, 0u);
-    EXPECT_EQ(f.ns, 1u);
+    EXPECT_EQ(f.iCtrl.nr, 0u);
+    EXPECT_EQ(f.iCtrl.ns, 1u);
 }
 
 // GSM 04.06 5.3.2: RR frame with NR=3, PF=1
@@ -95,8 +100,9 @@ TEST(LAPDmFrameTest, RR_Frame_EncodeDecode) {
     auto frame = makeRRFrame(SAPI::SAPI0, 3, true);
     auto encoded = encodeFrame(frame);
     EXPECT_EQ(encoded[0], 0x01u); // SAPI0, CR=0 (response)
-    // Control: NR=3(011), PF=1, Function=RR(00), Fixed=1 -> 011 1 00 1 = 0x71
+    // Control: NR=3(011), PF=1, Function=RR('00'), fixed '01' -> 011 1 00 01 = 0x71
     EXPECT_EQ(encoded[1], 0x71u);
+    EXPECT_EQ(encoded.size(), 3u); // header octet L=0, M=0 -> 0x01
 
     auto result = LAPDmFrame::decode(std::span(encoded));
     ASSERT_TRUE(result);
@@ -107,24 +113,24 @@ TEST(LAPDmFrameTest, RR_Frame_EncodeDecode) {
 TEST(LAPDmFrameTest, REJ_Frame_EncodeDecode) {
     auto frame = makeREJFrame(SAPI::SAPI0, 5, false);
     auto encoded = encodeFrame(frame);
-    // Control: NR=5(101), PF=0, Function=REJ(10), Fixed=1 -> 101 0 10 1 = 0xAD
-    EXPECT_EQ(encoded[1], 0xADu);
+    // Control: NR=5(101), PF=0, Function=REJ('10'), fixed '01' -> 101 0 10 01 = 0xA9
+    EXPECT_EQ(encoded[1], 0xA9u);
 }
 
-// GSM 04.06 5.4.4: DISC command, PF=1
+// GSM 04.06: DISC command, P/F=1
 TEST(LAPDmFrameTest, DISC_Frame_Encode) {
     auto frame = makeDISCFrame(SAPI::SAPI0, true);
     auto encoded = encodeFrame(frame);
-    EXPECT_EQ(encoded[0], 0x09u); // SAPI0, CR=1
-    EXPECT_EQ(encoded[1], 0x08u); // DISC (F=1)
+    EXPECT_EQ(encoded[0], 0x03u); // SAPI0, CR=1
+    EXPECT_EQ(encoded[1], 0x53u); // DISC (P/F=1)
 }
 
-// GSM 04.06 5.4.6: DM response, PF=1
+// GSM 04.06: DM response, P/F=1
 TEST(LAPDmFrameTest, DM_Frame_Encode) {
     auto frame = makeDMFrame(SAPI::SAPI0, true);
     auto encoded = encodeFrame(frame);
     EXPECT_EQ(encoded[0], 0x01u); // SAPI0, CR=0
-    EXPECT_EQ(encoded[1], 0x0Fu); // DM
+    EXPECT_EQ(encoded[1], 0x1Fu); // DM (P/F=1)
 }
 
 // Empty frame should fail decode
@@ -144,7 +150,7 @@ TEST(LAPDmFrameTest, Decode_OnlyAddressByte) {
 
 // I-frame declares length=10 but only 3 bytes of payload available
 TEST(LAPDmFrameTest, IFrame_Length_Mismatch) {
-    uint8_t data[] = {0x09, 0x02, 0x0A, 0x01, 0x02, 0x03};
+    uint8_t data[] = {0x03, 0x02, 0x29, 0x01, 0x02, 0x03}; // header octet L=10
     auto result = LAPDmFrame::decode(std::span(data));
     ASSERT_FALSE(result);
     EXPECT_EQ(result.error().code, ParseError::Code::TruncatedInput);
@@ -179,32 +185,32 @@ TEST(LAPDmFrameTest, UI_Frame_RoundTrip) {
     EXPECT_EQ(f.info[3], 0xFFu);
 }
 
-// Verify encode/decode round-trip for I-frame with M=0 (more segments follow)
-TEST(LAPDmFrameTest, I_Frame_RoundTrip_M0) {
+// Verify encode/decode round-trip for I-frame with M=1 (more segments follow)
+TEST(LAPDmFrameTest, I_Frame_RoundTrip_MoreSegmentsFollow) {
     uint8_t payload[] = {0xAA, 0xBB};
-    auto frame = makeIFrame(SAPI::SAPI3, true, 2, 3, false, false, std::span(payload));
+    auto frame = makeIFrame(SAPI::SAPI3, true, 2, 3, false, true, std::span(payload));
     auto encoded = encodeFrame(frame);
     auto result = LAPDmFrame::decode(std::span(encoded));
     ASSERT_TRUE(result);
     const auto& f = *result;
     EXPECT_EQ(f.format, LAPDmControlFormat::I_Format);
-    EXPECT_EQ(f.nr, 2u);
-    EXPECT_EQ(f.ns, 3u);
-    EXPECT_FALSE(f.m); // M=0: more segments follow
+    EXPECT_EQ(f.iCtrl.nr, 2u);
+    EXPECT_EQ(f.iCtrl.ns, 3u);
+    EXPECT_TRUE(f.more); // M=1: more segments follow
     EXPECT_EQ(f.info.size(), 2u);
 }
 
-// Verify encode/decode round-trip for I-frame with M=1 (Message complete)
-TEST(LAPDmFrameTest, I_Frame_RoundTrip_M1) {
+// Verify encode/decode round-trip for I-frame with M=0 (final segment)
+TEST(LAPDmFrameTest, I_Frame_RoundTrip_FinalSegment) {
     uint8_t payload[] = {0x01, 0x02, 0x03, 0x04};
-    auto frame = makeIFrame(SAPI::SAPI0, false, 0, 0, true, true, std::span(payload));
+    auto frame = makeIFrame(SAPI::SAPI0, false, 0, 0, true, false, std::span(payload));
     auto encoded = encodeFrame(frame);
     auto result = LAPDmFrame::decode(std::span(encoded));
     ASSERT_TRUE(result);
     const auto& f = *result;
     EXPECT_EQ(f.format, LAPDmControlFormat::I_Format);
-    EXPECT_TRUE(f.m); // M=1: Message complete (last segment)
-    EXPECT_TRUE(f.pf);
+    EXPECT_FALSE(f.more); // M=0: final segment
+    EXPECT_TRUE(f.iCtrl.pf);
     EXPECT_EQ(f.info.size(), 4u);
 }
 
@@ -237,7 +243,7 @@ TEST(LAPDmFrameTest, UA_WithEcho_RoundTrip) {
 
 // Verify RR frame decode returns correct NR and PF
 TEST(LAPDmFrameTest, RR_Frame_Decode) {
-    uint8_t raw[] = {0x01, 0x71}; // SAPI0 response, NR=3, PF=1
+    uint8_t raw[] = {0x01, 0x71, 0x01}; // SAPI0 response, NR=3, P/F=1, L=0/M=0
     auto result = LAPDmFrame::decode(std::span(raw));
     ASSERT_TRUE(result);
     const auto& f = *result;
@@ -249,7 +255,7 @@ TEST(LAPDmFrameTest, RR_Frame_Decode) {
 
 // Verify REJ frame decode returns correct NR and type
 TEST(LAPDmFrameTest, REJ_Frame_Decode) {
-    uint8_t raw[] = {0x01, 0xAD}; // SAPI0 response, NR=5, PF=0, REJ
+    uint8_t raw[] = {0x01, 0xA9, 0x01}; // SAPI0 response, NR=5, P/F=0, REJ
     auto result = LAPDmFrame::decode(std::span(raw));
     ASSERT_TRUE(result);
     const auto& f = *result;
@@ -258,9 +264,21 @@ TEST(LAPDmFrameTest, REJ_Frame_Decode) {
     EXPECT_EQ(f.nr, 5u);
 }
 
+// Verify RNR frame decode returns the RNR supervisory type
+TEST(LAPDmFrameTest, RNR_Frame_Decode) {
+    uint8_t raw[] = {0x01, 0x25, 0x01}; // SAPI0 response, NR=1, P/F=0, RNR
+    auto result = LAPDmFrame::decode(std::span(raw));
+    ASSERT_TRUE(result);
+    const auto& f = *result;
+    EXPECT_EQ(f.format, LAPDmControlFormat::S_Format);
+    EXPECT_EQ(f.sType, LAPDmSFrameType::RNR);
+    EXPECT_EQ(f.nr, 1u);
+    EXPECT_FALSE(f.pf);
+}
+
 // Verify DM frame decode
 TEST(LAPDmFrameTest, DM_Frame_Decode) {
-    uint8_t raw[] = {0x01, 0x0F}; // SAPI0 response, DM
+    uint8_t raw[] = {0x01, 0x0F, 0x01}; // SAPI0 response, DM (P/F=0)
     auto result = LAPDmFrame::decode(std::span(raw));
     ASSERT_TRUE(result);
     const auto& f = *result;
@@ -270,7 +288,7 @@ TEST(LAPDmFrameTest, DM_Frame_Decode) {
 
 // Verify DISC frame decode
 TEST(LAPDmFrameTest, DISC_Frame_Decode) {
-    uint8_t raw[] = {0x09, 0x08}; // SAPI0 command, DISC
+    uint8_t raw[] = {0x03, 0x53, 0x01}; // SAPI0 command, DISC (P/F=1)
     auto result = LAPDmFrame::decode(std::span(raw));
     ASSERT_TRUE(result);
     const auto& f = *result;
@@ -284,11 +302,12 @@ TEST(LAPDmFrameTest, EncodeToBuffer_Success) {
     auto frame = makeUIFrame(SAPI::SAPI0, true, std::span(payload));
     uint8_t buf[16] = {};
     size_t written = encodeFrameToBuffer(frame, buf, sizeof(buf));
-    EXPECT_EQ(written, 4u); // address + control + 2 payload bytes
-    EXPECT_EQ(buf[0], 0x09u);
+    EXPECT_EQ(written, 5u); // address + control + header octet + 2 payload bytes
+    EXPECT_EQ(buf[0], 0x03u);
     EXPECT_EQ(buf[1], 0x03u);
-    EXPECT_EQ(buf[2], 0x06u);
-    EXPECT_EQ(buf[3], 0x0Du);
+    EXPECT_EQ(buf[2], 0x09u); // L=2, M=0, fixed '1' -> 0000 1001
+    EXPECT_EQ(buf[3], 0x06u);
+    EXPECT_EQ(buf[4], 0x0Du);
 }
 
 // Verify encodeFrameToBuffer returns 0 when buffer too small
@@ -297,33 +316,34 @@ TEST(LAPDmFrameTest, EncodeToBuffer_TooSmall) {
     auto frame = makeUIFrame(SAPI::SAPI0, true, std::span(payload));
     uint8_t buf[2] = {};
     size_t written = encodeFrameToBuffer(frame, buf, sizeof(buf));
-    EXPECT_EQ(written, 0u); // Buffer too small for address + control + payload
+    EXPECT_EQ(written, 0u); // Buffer too small for the three-octet header + payload
 }
 
-// Verify I-frame encodeFrameToBuffer includes length byte
+// Verify I-frame encodeFrameToBuffer includes the header octet
 TEST(LAPDmFrameTest, IFrame_EncodeToBuffer) {
     uint8_t payload[] = {0x01, 0x02};
-    auto frame = makeIFrame(SAPI::SAPI0, false, 1, 2, true, true, std::span(payload));
+    auto frame = makeIFrame(SAPI::SAPI0, false, 1, 2, true, false, std::span(payload));
     uint8_t buf[16] = {};
     size_t written = encodeFrameToBuffer(frame, buf, sizeof(buf));
-    EXPECT_EQ(written, 5u); // address + control + length + 2 payload
-    EXPECT_EQ(buf[2], 0x82u); // M=1, len=2 -> 10000010 = 0x82
+    EXPECT_EQ(written, 5u); // address + control + header octet + 2 payload
+    EXPECT_EQ(buf[2], 0x09u); // L=2, M=0, fixed '1' -> 0000 1001
 }
 
-// Verify LAPDmLengthField encode/decode round-trip
+// Verify LAPDmLengthField encode/decode round-trip (TS 44.064 header octet:
+// [L(5:2)][M(1)][fixed '1'(0)])
 TEST(LAPDmFrameTest, LengthField_EncodeDecode) {
-    auto len = LAPDmLengthField(true, 3); // M=1, length=3
+    auto len = LAPDmLengthField(true, 3); // M=1 (more follow), length=3
     uint8_t encoded = len.encode();
-    EXPECT_EQ(encoded, 0x83u); // 10000011
+    EXPECT_EQ(encoded, 0x0Fu); // 0000 1111
     auto decoded = LAPDmLengthField::decode(encoded);
-    EXPECT_TRUE(decoded.m);
+    EXPECT_TRUE(decoded.more);
     EXPECT_EQ(decoded.length, 3u);
 
-    auto len2 = LAPDmLengthField(false, 63); // M=0, length=63
+    auto len2 = LAPDmLengthField(false, 63); // M=0 (final), length=63
     uint8_t encoded2 = len2.encode();
-    EXPECT_EQ(encoded2, 0x3Fu); // 00111111
+    EXPECT_EQ(encoded2, 0xFDu); // 1111 1101
     auto decoded2 = LAPDmLengthField::decode(encoded2);
-    EXPECT_FALSE(decoded2.m);
+    EXPECT_FALSE(decoded2.more);
     EXPECT_EQ(decoded2.length, 63u);
 }
 
@@ -338,23 +358,32 @@ TEST(LAPDmFrameTest, IControlField_EncodeDecode) {
     EXPECT_TRUE(decoded.pf);
 }
 
-// Verify S-control field encode/decode round-trip
+// Verify S-control field encode/decode round-trip ([NR(7:5)][P/F(4)][S(3:2)]
+// with the low two bits fixed to '01')
 TEST(LAPDmFrameTest, SControlField_EncodeDecode) {
-    auto ctrl = LAPDmSControlField(3, true, LAPDmSFrameType::RR);
+    auto ctrl = LAPDmSControlField(3, LAPDmSFrameType::RR, true);
     uint8_t encoded = ctrl.encode();
-    EXPECT_EQ(encoded, 0x71u); // 011 1 00 1
+    EXPECT_EQ(encoded, 0x71u); // 011 1 00 01
     auto decoded = LAPDmSControlField::decode(encoded);
     EXPECT_EQ(decoded.nr, 3u);
     EXPECT_TRUE(decoded.pf);
     EXPECT_EQ(decoded.type, LAPDmSFrameType::RR);
 
-    auto ctrl2 = LAPDmSControlField(5, false, LAPDmSFrameType::REJ);
+    auto ctrl2 = LAPDmSControlField(5, LAPDmSFrameType::REJ, false);
     uint8_t encoded2 = ctrl2.encode();
-    EXPECT_EQ(encoded2, 0xADu); // 101 0 10 1
+    EXPECT_EQ(encoded2, 0xA9u); // 101 0 10 01
     auto decoded2 = LAPDmSControlField::decode(encoded2);
     EXPECT_EQ(decoded2.nr, 5u);
     EXPECT_FALSE(decoded2.pf);
     EXPECT_EQ(decoded2.type, LAPDmSFrameType::REJ);
+
+    auto ctrl3 = LAPDmSControlField(1, LAPDmSFrameType::RNR, false);
+    uint8_t encoded3 = ctrl3.encode();
+    EXPECT_EQ(encoded3, 0x25u); // 001 0 01 01
+    auto decoded3 = LAPDmSControlField::decode(encoded3);
+    EXPECT_EQ(decoded3.nr, 1u);
+    EXPECT_FALSE(decoded3.pf);
+    EXPECT_EQ(decoded3.type, LAPDmSFrameType::RNR);
 }
 
 // Verify accessor methods on decoded frame
@@ -378,7 +407,7 @@ TEST(LAPDmFrameTest, Constexpr_EncodeDecode) {
     constexpr uint8_t encoded = addr.encode();
     static_assert(encoded == 0x01, "Address encoding must be constexpr");
 
-    constexpr auto decoded = LAPDmAddressField::decode(0x39);
+    constexpr auto decoded = LAPDmAddressField::decode(0x0F);
     static_assert(decoded.sapi == SAPI::SAPI3, "Address decoding must be constexpr");
     static_assert(decoded.command == true, "C/R bit must be extracted at compile time");
 }
@@ -387,35 +416,36 @@ TEST(LAPDmFrameTest, Constexpr_EncodeDecode) {
 TEST(LAPDmFrameTest, UI_Frame_EmptyPayload) {
     auto frame = makeUIFrame(SAPI::SAPI0, false, std::span<const uint8_t>{});
     auto encoded = encodeFrame(frame);
-    EXPECT_EQ(encoded.size(), 2u); // address + control only
+    EXPECT_EQ(encoded.size(), 3u); // address + control + header octet (L=0)
     EXPECT_EQ(encoded[0], 0x01u);
     EXPECT_EQ(encoded[1], 0x03u);
+    EXPECT_EQ(encoded[2], 0x01u);
 
     auto result = LAPDmFrame::decode(std::span(encoded));
     ASSERT_TRUE(result);
     EXPECT_FALSE((*result).hasInfo());
 }
 
-// Verify I-frame with empty payload (valid per GSM 04.06)
+// Verify I-frame with empty payload (valid per TS 44.064)
 TEST(LAPDmFrameTest, I_Frame_EmptyPayload) {
-    auto frame = makeIFrame(SAPI::SAPI0, true, 0, 1, false, true, std::span<const uint8_t>{});
+    auto frame = makeIFrame(SAPI::SAPI0, true, 0, 1, false, false, std::span<const uint8_t>{});
     auto encoded = encodeFrame(frame);
-    EXPECT_EQ(encoded.size(), 3u); // address + control + length
-    EXPECT_EQ(encoded[2], 0x80u); // M=1, len=0 -> 10000000
+    EXPECT_EQ(encoded.size(), 3u); // address + control + header octet
+    EXPECT_EQ(encoded[2], 0x01u); // L=0, M=0, fixed '1'
 
     auto result = LAPDmFrame::decode(std::span(encoded));
     ASSERT_TRUE(result);
     const auto& f = *result;
     EXPECT_EQ(f.format, LAPDmControlFormat::I_Format);
     EXPECT_FALSE(f.hasInfo());
-    EXPECT_TRUE(f.m);
+    EXPECT_FALSE(f.more);
 }
 
-// Verify DM frame decode with PF=0
+// Verify DM frame decode with P/F=0
 TEST(LAPDmFrameTest, DM_Frame_PF0) {
     auto frame = makeDMFrame(SAPI::SAPI0, false);
     auto encoded = encodeFrame(frame);
-    EXPECT_EQ(encoded[1], 0x0Bu); // DM with F=0: 0000 1011 (F bit cleared from 0x0F)
+    EXPECT_EQ(encoded[1], 0x0Fu); // DM with P/F=0
 
     auto result = LAPDmFrame::decode(std::span(encoded));
     ASSERT_TRUE(result);
@@ -424,9 +454,9 @@ TEST(LAPDmFrameTest, DM_Frame_PF0) {
     EXPECT_FALSE(f.pf);
 }
 
-// Verify SABME without payload decodes correctly (no length byte)
+// Verify SABME without payload decodes correctly (L=0 header octet)
 TEST(LAPDmFrameTest, SABME_NoPayload_Decode) {
-    uint8_t raw[] = {0x09, 0x2F}; // SAPI0 command, SABME, no payload
+    uint8_t raw[] = {0x03, 0x2F, 0x01}; // SAPI0 command, SABME (P/F=0), no payload
     auto result = LAPDmFrame::decode(std::span(raw));
     ASSERT_TRUE(result);
     const auto& f = *result;
@@ -434,15 +464,60 @@ TEST(LAPDmFrameTest, SABME_NoPayload_Decode) {
     EXPECT_FALSE(f.hasInfo());
 }
 
-// Verify UA without payload decodes correctly (no length byte)
+// Verify UA without payload decodes correctly (L=0 header octet)
 TEST(LAPDmFrameTest, UA_NoPayload_Decode) {
-    uint8_t raw[] = {0x01, 0x63}; // SAPI0 response, UA, PF=1
+    uint8_t raw[] = {0x01, 0x73, 0x01}; // SAPI0 response, UA, P/F=1
     auto result = LAPDmFrame::decode(std::span(raw));
     ASSERT_TRUE(result);
     const auto& f = *result;
     EXPECT_EQ(f.uType, LAPDmUFrameType::UA);
     EXPECT_FALSE(f.hasInfo());
     EXPECT_TRUE(f.pf);
+}
+
+// Golden: a bare SABME command on SAPI 0 as transmitted on a dedicated
+// channel (TS 44.064): address 0x03 (SAPI=0, C/R=1, EA=1), control 0x2F
+// (U3='001', P/F=0, U2='11'), header octet 0x01 (L=0, M=0).
+TEST(LAPDmFrameTest, Sabme_Bare) {
+    uint8_t wire[] = {0x03, 0x2F, 0x01};
+    auto r = LAPDmFrame::decode(std::span<const uint8_t>(wire));
+    ASSERT_TRUE(r);
+    const auto& f = *r;
+    EXPECT_EQ(f.uType, LAPDmUFrameType::SABME);
+    EXPECT_FALSE(f.pf);
+    EXPECT_EQ(f.address.sapi, SAPI::SAPI0);
+    EXPECT_TRUE(f.address.command);
+    EXPECT_TRUE(f.address.ea);
+    EXPECT_FALSE(f.hasInfo());
+}
+
+// Golden: SABME on SAPI 3 (C/R=1 -> address 0x0F) with contention-resolution
+// information (TS 44.064): header octet L=3, M=0, fixed '1'; payload follows.
+TEST(LAPDmFrameTest, Sabme_WithEcho) {
+    uint8_t wire[] = {0x0F, 0x2F, static_cast<uint8_t>((3 << 2) | 0x01), 0xAA, 0xBB, 0xCC};
+    auto r = LAPDmFrame::decode(std::span<const uint8_t>(wire));
+    ASSERT_TRUE(r);
+    const auto& f = *r;
+    EXPECT_EQ(f.uType, LAPDmUFrameType::SABME);
+    EXPECT_TRUE(f.hasInfo());
+    ASSERT_EQ(f.info.size(), 3u);
+    EXPECT_EQ(f.info[0], 0xAA);
+}
+
+// Golden: I-frame wire shape (TS 44.064): SAPI 3, C/R=0 -> address 0x0D;
+// N(R)=1, P/F=1, N(S)=2 -> control (1<<5)|(1<<4)|(2<<1) = 0x34; header octet
+// L=1, M=1 (more segments follow), fixed '1' -> 0x07; one payload byte.
+TEST(LAPDmFrameTest, IFrame_RefShape) {
+    uint8_t wire[] = {0x0D, 0x34, 0x07, 0x77};
+    auto r = LAPDmFrame::decode(std::span<const uint8_t>(wire));
+    ASSERT_TRUE(r);
+    const auto& f = *r;
+    EXPECT_EQ(f.format, LAPDmControlFormat::I_Format);
+    EXPECT_EQ(f.iCtrl.nr, 1u);
+    EXPECT_TRUE(f.iCtrl.pf);
+    EXPECT_EQ(f.iCtrl.ns, 2u);
+    EXPECT_TRUE(f.more);
+    ASSERT_EQ(f.info.size(), 1u);
 }
 
 // ── MockLAPDmEntity helper for state machine tests ────────────────────
@@ -570,7 +645,7 @@ TEST(LAPDmEntityTest, IFrame_InLinkReleased_IsIgnored) {
     mock.entity.open(SAPI::SAPI0, true);
 
     uint8_t payload[] = {0x06, 0x0D};
-    auto iframe = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 0, false, true, std::span(payload))); // M=1 complete
+    auto iframe = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 0, false, false, std::span(payload))); // M=0 complete
     mock.entity.receiveFrame(iframe);
 
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
@@ -641,7 +716,7 @@ TEST(LAPDmEntityTest, ReceiveSingleIFrame_DeliversToL3) {
     mock.entity.receiveFrame(sabme); // LinkEstablished
 
     uint8_t data[] = {0x06, 0x15, 0xC1, 0x02}; // Measurement Report
-    auto iframe = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 0, false, true, std::span(data))); // M=1 complete
+    auto iframe = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 0, false, false, std::span(data))); // M=0 complete
     mock.entity.receiveFrame(iframe);
 
     EXPECT_EQ(mock.l3Received.size(), 2u); // ESTABLISH_INDICATION + L3_DATA
@@ -656,21 +731,21 @@ TEST(LAPDmEntityTest, ReceiveSegmentedIFrames_Reassembles) {
     auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
     mock.entity.receiveFrame(sabme);
 
-    // Frame 1: NS=0, NR=0, M=0 (more segments follow), payload="ABCD"
+    // Frame 1: NS=0, NR=0, M=1 (more segments follow), payload="ABCD"
     uint8_t part1[] = {0x41, 0x42, 0x43, 0x44};
-    auto frame1 = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 0, false, false, std::span(part1)));
+    auto frame1 = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 0, false, true, std::span(part1)));
     mock.entity.receiveFrame(frame1);
 
-    // After frame 1: should NOT have delivered L3_DATA yet (M=0)
+    // After frame 1: should NOT have delivered L3_DATA yet (M=1)
     size_t dataCallsAfterFrame1 = 0;
     for (auto& [prim, _] : mock.l3Received) {
         if (prim == Primitive::L3_DATA) dataCallsAfterFrame1++;
     }
     EXPECT_EQ(dataCallsAfterFrame1, 0u);
 
-    // Frame 2: NS=1, NR=0, M=1 (Message complete — last segment), payload="EFGH"
+    // Frame 2: NS=1, NR=0, M=0 (Message complete — last segment), payload="EFGH"
     uint8_t part2[] = {0x45, 0x46, 0x47, 0x48};
-    auto frame2 = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 1, false, true, std::span(part2)));
+    auto frame2 = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 1, false, false, std::span(part2)));
     mock.entity.receiveFrame(frame2);
 
     // After frame 2: should have delivered complete reassembled message "ABCDEFGH"
@@ -694,17 +769,17 @@ TEST(LAPDmEntityTest, ReceiveThreeSegmentedIFrames_Reassembles) {
     auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
     mock.entity.receiveFrame(sabme);
 
-    // Segment 1: NS=0, M=0 (more follow), payload="AAA"
+    // Segment 1: NS=0, M=1 (more follow), payload="AAA"
     uint8_t p1[] = {0x41, 0x41, 0x41};
-    mock.entity.receiveFrame(encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 0, false, false, std::span(p1))));
+    mock.entity.receiveFrame(encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 0, false, true, std::span(p1))));
 
-    // Segment 2: NS=1, M=0 (more follow), payload="BBB"
+    // Segment 2: NS=1, M=1 (more follow), payload="BBB"
     uint8_t p2[] = {0x42, 0x42, 0x42};
-    mock.entity.receiveFrame(encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 1, false, false, std::span(p2))));
+    mock.entity.receiveFrame(encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 1, false, true, std::span(p2))));
 
-    // Segment 3: NS=2, M=1 (Message complete — last), payload="CCC"
+    // Segment 3: NS=2, M=0 (Message complete — last), payload="CCC"
     uint8_t p3[] = {0x43, 0x43, 0x43};
-    mock.entity.receiveFrame(encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 2, false, true, std::span(p3))));
+    mock.entity.receiveFrame(encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 2, false, false, std::span(p3))));
 
     // Verify reassembled message
     std::vector<uint8_t> lastData;
@@ -722,9 +797,9 @@ TEST(LAPDmEntityTest, OutOfOrderIFrame_SendsREJ) {
     auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
     mock.entity.receiveFrame(sabme);
 
-    // Send NS=2 but we expect NS=0 (VR=0), M=1 (complete message)
+    // Send NS=2 but we expect NS=0 (VR=0), M=0 (complete message)
     uint8_t data[] = {0x06, 0x0D};
-    auto iframe = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 2, false, true, std::span(data)));
+    auto iframe = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 2, false, false, std::span(data)));
     mock.entity.receiveFrame(iframe);
 
     // Should have sent REJ
@@ -742,13 +817,34 @@ TEST(LAPDmEntityTest, ValidIFrame_SendsRR) {
     mock.entity.receiveFrame(sabme);
 
     uint8_t data[] = {0x06, 0x0D};
-    auto iframe = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 0, false, true, std::span(data))); // M=1 complete
+    auto iframe = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 0, false, false, std::span(data))); // M=0 complete
     mock.entity.receiveFrame(iframe);
 
     auto lastSent = LAPDmFrame::decode(mock.l1Sent.back());
     ASSERT_TRUE(lastSent);
     EXPECT_EQ((*lastSent).format, LAPDmControlFormat::S_Format);
     EXPECT_EQ((*lastSent).sType, LAPDmSFrameType::RR);
+}
+
+// RNR from the peer acknowledges the outstanding I-frame but elicits no
+// response frame (TS 44.064: a reply to RNR is not required).
+TEST(LAPDmEntityTest, RNR_AcksOutstandingFrame_WithoutResponse) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI0, true);
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    mock.entity.receiveFrame(sabme);
+    ASSERT_TRUE(mock.entity.isEstablished());
+
+    std::vector<uint8_t> data(10, 0xAB);
+    ASSERT_TRUE(mock.entity.sendData(std::span<const uint8_t>(data.data(), data.size())));
+    ASSERT_TRUE(mock.entity.hasOutstandingFrame());
+
+    size_t sentBefore = mock.l1Sent.size();
+    // RNR with NR=1 acknowledges NS=0 (the single segment in flight).
+    mock.entity.receiveFrame(encodeFrame(makeRNRFrame(SAPI::SAPI0, 1, false)));
+
+    EXPECT_FALSE(mock.entity.hasOutstandingFrame()); // acknowledgment processed
+    EXPECT_EQ(mock.l1Sent.size(), sentBefore);       // no response frame emitted
 }
 
 // sendData with small payload sends single I-frame.
@@ -858,17 +954,18 @@ TEST(LAPDmEntityTest, SendData_50Bytes_SDCCH_SegmentsTransmittedOnAck) {
     // Acknowledge segment 2 (NS=1) with RR(NR=2) -> segment 3 (M=1) is sent.
     mock.entity.receiveFrame(encodeFrame(makeRRFrame(SAPI::SAPI0, 2, false)));
 
-    // Verify the full M-bit pattern: 0, 0, 1 (last segment completes the message).
-    std::vector<bool> mBits;
+    // Verify the full M-bit pattern: 1, 1, 0 (M=1 while segments follow; the
+    // final segment carries M=0 and completes the message).
+    std::vector<bool> moreBits;
     for (auto& frameBytes : mock.l1Sent) {
         auto decoded = LAPDmFrame::decode(frameBytes);
         if (decoded && (*decoded).format == LAPDmControlFormat::I_Format)
-            mBits.push_back((*decoded).m);
+            moreBits.push_back((*decoded).more);
     }
-    ASSERT_EQ(mBits.size(), 3u);
-    EXPECT_FALSE(mBits[0]);
-    EXPECT_FALSE(mBits[1]);
-    EXPECT_TRUE(mBits[2]);
+    ASSERT_EQ(moreBits.size(), 3u);
+    EXPECT_TRUE(moreBits[0]);
+    EXPECT_TRUE(moreBits[1]);
+    EXPECT_FALSE(moreBits[2]);
 }
 
 // Test: two sendData() calls while a frame is outstanding are both queued and
@@ -880,8 +977,8 @@ TEST(LAPDmEntityTest, SendData_WhileOutstanding_QueuesAndDrainsInOrder) {
     auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
     mock.entity.receiveFrame(sabme);
 
-    std::vector<uint8_t> big(50, 0xAB);   // 3 segments: 20(M=0) + 20(M=0) + 10(M=1)
-    std::vector<uint8_t> small(10, 0xCD); // 1 segment:  10(M=1)
+    std::vector<uint8_t> big(50, 0xAB);   // 3 segments: 20(M=1) + 20(M=1) + 10(M=0)
+    std::vector<uint8_t> small(10, 0xCD); // 1 segment:  10(M=0)
     ASSERT_TRUE(mock.entity.sendData(std::span<const uint8_t>(big.data(), big.size())));
     ASSERT_TRUE(mock.entity.sendData(std::span<const uint8_t>(small.data(), small.size())));
 
@@ -898,18 +995,18 @@ TEST(LAPDmEntityTest, SendData_WhileOutstanding_QueuesAndDrainsInOrder) {
         mock.entity.receiveFrame(encodeFrame(makeRRFrame(SAPI::SAPI0, nr, false)));
     }
 
-    // Total 4 I-frames; M bits: 0, 0, 1, 1.
-    std::vector<bool> mBits;
+    // Total 4 I-frames; M bits: 1, 1, 0, 0 (M=1 while segments follow).
+    std::vector<bool> moreBits;
     for (auto& frameBytes : mock.l1Sent) {
         auto decoded = LAPDmFrame::decode(frameBytes);
         if (decoded && (*decoded).format == LAPDmControlFormat::I_Format)
-            mBits.push_back((*decoded).m);
+            moreBits.push_back((*decoded).more);
     }
-    ASSERT_EQ(mBits.size(), 4u);
-    EXPECT_FALSE(mBits[0]);
-    EXPECT_FALSE(mBits[1]);
-    EXPECT_TRUE(mBits[2]);
-    EXPECT_TRUE(mBits[3]);
+    ASSERT_EQ(moreBits.size(), 4u);
+    EXPECT_TRUE(moreBits[0]);
+    EXPECT_TRUE(moreBits[1]);
+    EXPECT_FALSE(moreBits[2]);
+    EXPECT_FALSE(moreBits[3]);
 
     // Queue is drained: an extra acknowledgment sends nothing new.
     size_t before = mock.l1Sent.size();
@@ -943,18 +1040,19 @@ TEST(LAPDmEntityTest, SendData_AbnormalRelease_ClearsTxQueue) {
     std::vector<uint8_t> small(10, 0xCD);
     ASSERT_TRUE(mock.entity.sendData(std::span<const uint8_t>(small.data(), small.size())));
 
-    // Exactly one new I-frame (M=1) — no stale segments from the released queue.
+    // Exactly one new I-frame (M=0 — final segment) — no stale segments from
+    // the released queue.
     size_t newIFrames = 0;
-    bool lastM = false;
+    bool lastMore = true;
     for (size_t i = sentBefore; i < mock.l1Sent.size(); ++i) {
         auto decoded = LAPDmFrame::decode(mock.l1Sent[i]);
         if (decoded && (*decoded).format == LAPDmControlFormat::I_Format) {
             ++newIFrames;
-            lastM = (*decoded).m;
+            lastMore = (*decoded).more;
         }
     }
     EXPECT_EQ(newIFrames, 1u);
-    EXPECT_TRUE(lastM);
+    EXPECT_FALSE(lastMore);
 }
 
 // ── T200 Timer and Retransmission Tests (GSM 04.06 3.5) ───────────────
@@ -1140,7 +1238,7 @@ TEST(LAPDmEntityTest, ContentionResolution_TransitionsOnIFrame) {
 
     // Receive an I-frame -- should transition to LinkEstablished
     uint8_t data[] = {0x05, 0x09}; // CM Service Request
-    auto iframe = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 0, false, true, std::span(data))); // M=1 complete
+    auto iframe = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 0, false, false, std::span(data))); // M=0 complete
     mock.entity.receiveFrame(iframe);
 
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkEstablished);
@@ -1275,8 +1373,8 @@ TEST(LAPDmEntityTest, IFrame_PayloadExceedsN201_AbnormalRelease) {
 
     // Craft an I-frame with a 21-byte payload (N201 = 20 on SDCCH).
     std::vector<uint8_t> payload(21, 0x77);
-    auto iFrame = makeIFrame(SAPI::SAPI0, false, 0, 0, false, true,
-                             std::span<const uint8_t>(payload.data(), payload.size()));
+    auto iFrame = makeIFrame(SAPI::SAPI0, false, 0, 0, false, false,
+                              std::span<const uint8_t>(payload.data(), payload.size()));
     mock.entity.receiveFrame(encodeFrame(iFrame));
 
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
@@ -1297,15 +1395,15 @@ TEST(LAPDmEntityTest, Reassembly_Overflow_AbnormalRelease) {
     mock.entity.receiveFrame(sabme);
     ASSERT_TRUE(mock.entity.isEstablished());
 
-    // Stream M=0 segments of 20 bytes until the reassembly buffer would
-    // exceed 4096 bytes (205 segments = 4100 > 4096).
+    // Stream M=1 segments of 20 bytes (further segments always follow) until
+    // the reassembly buffer would exceed 4096 bytes (205 segments = 4100 > 4096).
     std::vector<uint8_t> payload(20, 0x11);
     for (int i = 0; i < 205 && mock.entity.isEstablished(); ++i) {
         auto iFrame = makeIFrame(SAPI::SAPI0, false,
-                                 static_cast<uint8_t>((i + 1) & 0x07u),
-                                 static_cast<uint8_t>(i & 0x07u),
-                                 false, false,
-                                 std::span<const uint8_t>(payload.data(), payload.size()));
+                                  static_cast<uint8_t>((i + 1) & 0x07u),
+                                  static_cast<uint8_t>(i & 0x07u),
+                                  false, true,
+                                  std::span<const uint8_t>(payload.data(), payload.size()));
         mock.entity.receiveFrame(encodeFrame(iFrame));
     }
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
@@ -1320,7 +1418,7 @@ TEST(LAPDmEntityTest, ReceiveFrame_WrongSapi_Dropped) {
     ASSERT_TRUE(mock.entity.isEstablished());
 
     size_t l3Before = mock.l3Received.size();
-    // UI frame with SAPI3 (address byte 0x31: SAPI=3, C/R=0, EA=1) on a SAPI0 entity.
+    // UI frame with SAPI3 (address byte 0x0D: SAPI=3, C/R=0, EA=1) on a SAPI0 entity.
     uint8_t l3[] = {0x06, 0x0D, 0x00};
     auto ui = makeUIFrame(SAPI::SAPI3, false, std::span<const uint8_t>(l3, 3));
     mock.entity.receiveFrame(encodeFrame(ui));

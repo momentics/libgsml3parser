@@ -332,8 +332,8 @@ static void check_rsl(void)
 
 static void check_lapdm(void)
 {
-    static const uint8_t ua[2] = {0x01, 0x63};       /* UA, SAPI0, PF=1   */
-    static const uint8_t ui[5] = {0x01, 0x03, 0x06, 0x0D, 0x00}; /* UI+SAPI0+L3 */
+    static const uint8_t ua[3] = {0x01, 0x73, 0x01};       /* UA, SAPI0, PF=1, L=0   */
+    static const uint8_t ui[6] = {0x01, 0x03, 0x0D, 0x06, 0x0D, 0x00}; /* UI+SAPI0+L3 (L=3) */
     gsml3_lapdm_frame_info f;
     gsml3_lapdm_entity* e;
     Capture cap;
@@ -361,7 +361,7 @@ static void check_lapdm(void)
 
     check(gsml3_lapdm_entity_send_sabme(e) == GSML3_OK, "sabme sent");
     check(cap.tx_count == 1, "sabme via L1 callback");
-    check(memcmp(cap.last_tx, "\x09\x2F", 2) == 0 && cap.last_tx_len == 2,
+    check(memcmp(cap.last_tx, "\x03\x3F\x01", 3) == 0 && cap.last_tx_len == 3,
           "sabme wire bytes");
 
     /* An out-of-range SAPI is rejected before it can corrupt the frame. */
@@ -369,7 +369,7 @@ static void check_lapdm(void)
         const uint8_t l3[3] = {0x06, 0x0D, 0x00};
 
         check(gsml3_lapdm_entity_send_ui(e, 20, l3, 3) == GSML3_ERR_INVALID_ARG,
-              "send_ui rejects SAPI > 15");
+              "send_ui rejects SAPI > 7");
         check(gsml3_last_error_code() == GSML3_ERR_INVALID_ARG,
               "sapi error class");
     }

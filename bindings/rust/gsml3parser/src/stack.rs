@@ -797,8 +797,8 @@ mod tests {
         let e = LapdmEntity::new(0).expect("entity");
         e.open(0, 1).expect("open as BTS side");
         e.send_sabme().expect("sabme from LinkReleased");
-        // L1 trampoline captured the transmit frame: BTS SABME is [0x09, 0x2F].
-        assert_eq!(e.drain_tx(), vec![vec![0x09, 0x2F]]);
+        // L1 trampoline captured the transmit frame: BTS SABME is [0x03, 0x3F, 0x01].
+        assert_eq!(e.drain_tx(), vec![vec![0x03, 0x3F, 0x01]]);
 
         e.receive(&crate::lapdm::mini::ui(0, false, &[0x60, 0x0d, 0x00]).unwrap()).expect("UI receive");
         // L3 trampoline captured the delivery with an owned payload copy.

@@ -53,7 +53,7 @@ Four layers, from raw bits to protocol state:
 
 1. **L3 Parser & Serializer** — hex/bytes ↔ typed `std::variant` objects; compile-time `tryGet<T>()`; a
    fluent `builder()` for every message type; zero heap on the hot path (`sizeof(ParsedMessage)` = 416 B).
-2. **LAPDm Protocol Entity** — GSM 04.06 / TS 45.006 state machine (SABME/UA/DISC), I-frame segmentation
+2. **LAPDm Protocol Entity** — GSM 04.06 / TS 44.064 state machine (SABME/UA/DISC), I-frame segmentation
    with k=1 and T200 retransmission, contention resolution, 4 KB-bounded reassembly.
 3. **BTS Stack Modules** — MSContext, TimerManager (T3101–T3395, zero-alloc O(active) tick),
    TransactionManager (O(1) TI index), RR/MM/CC state machines, ChannelPool / ShardedChannelPool,

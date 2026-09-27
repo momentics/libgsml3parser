@@ -128,15 +128,15 @@ fn link_lifecycle() {
     e.open(0, 1 /* BTS side */).expect("open → LINK_RELEASED");
     assert_eq!(e.state().unwrap(), s::GSML3_LAPDM_STATE_LINK_RELEASED);
 
-    // SABME from the BTS side: byte-exact [addr(0, command=1)=0x09][SABME pf=1=0x2F].
+    // SABME from the BTS side: byte-exact [addr(0, command=1)=0x03][SABME pf=1=0x3F][0x01].
     e.send_sabme().expect("sabme in LINK_RELEASED");
     assert_eq!(e.state().unwrap(), s::GSML3_LAPDM_STATE_AWAITING_ESTABLISH);
     let tx = e.drain_tx();
-    assert_eq!(tx, vec![vec![0x09, 0x2F]], "SABME tx must be byte-exact");
+    assert_eq!(tx, vec![vec![0x03, 0x3F, 0x01]], "SABME tx must be byte-exact");
 
-    // MS acknowledges with UA [0x01, 0x63]: the link is established and an
+    // MS acknowledges with UA [0x01, 0x73, 0x01]: the link is established and an
     // EMPTY-payload ESTABLISH_CONFIRM reaches L3.
-    e.receive(&[0x01, 0x63]).expect("receive UA");
+    e.receive(&[0x01, 0x73, 0x01]).expect("receive UA");
     assert_eq!(e.state().unwrap(), s::GSML3_LAPDM_STATE_LINK_ESTABLISHED);
     assert!(e.is_established().unwrap());
     let evs = e.drain_l3();
@@ -152,11 +152,11 @@ fn link_lifecycle() {
     assert_eq!(evs[0].primitive, s::GSML3_PRIM_L3_UNIT_DATA);
     assert_eq!(&evs[0].data, l3, "the L3 payload must arrive intact (owned copy)");
 
-    // DISC (BTS side) → AWAITING_RELEASE; MS UA [0x01, 0x63] → LINK_RELEASED.
+    // DISC (BTS side) → AWAITING_RELEASE; MS UA [0x01, 0x73, 0x01] → LINK_RELEASED.
     e.send_disc().expect("disc in LINK_ESTABLISHED");
     assert_eq!(e.state().unwrap(), s::GSML3_LAPDM_STATE_AWAITING_RELEASE);
     e.drain_tx(); // DISC frame captured — consume the collector
-    e.receive(&[0x01, 0x63]).expect("receive UA for disc");
+    e.receive(&[0x01, 0x73, 0x01]).expect("receive UA for disc");
     assert_eq!(e.state().unwrap(), s::GSML3_LAPDM_STATE_LINK_RELEASED);
     assert!(!e.is_established().unwrap());
 
@@ -183,11 +183,11 @@ fn t200_retransmission() {
     assert_eq!(e.tick_t200(400).unwrap(), 1, "T200 expiry must report a retransmission");
     assert_eq!(e.retransmissions().unwrap(), 1);
     let tx = e.drain_tx();
-    assert_eq!(tx, vec![vec![0x09, 0x2F]], "the retransmitted frame is the SABME again");
+    assert_eq!(tx, vec![vec![0x03, 0x3F, 0x01]], "the retransmitted frame is the SABME again");
     assert_eq!(e.state().unwrap(), s::GSML3_LAPDM_STATE_AWAITING_ESTABLISH, "still awaiting establish after one retransmission");
 
     // A UA arrives before N201: normal establishment (no abnormal release).
-    e.receive(&[0x01, 0x63]).expect("UA");
+    e.receive(&[0x01, 0x73, 0x01]).expect("UA");
     assert!(e.is_established().unwrap());
 }
 
@@ -198,8 +198,8 @@ fn t200_retransmission() {
 fn mini_codec_closed_loop_with_c_decoder() {
     let l3: &[u8] = &[0x60, 0x0d, 0x00];
 
-    // UI: [address][0x03 pf=0] + RAW info (no length octet).
-    assert_eq!(ms_ui(l3), [0x01, 0x03, 0x60, 0x0d, 0x00]); // canonical UI bytes: address 0x01 + control 0x03 (pf=0)
+    // UI: [address][0x03 pf=0][header octet L=3] + info.
+    assert_eq!(ms_ui(l3), [0x01, 0x03, 0x0d, 0x60, 0x0d, 0x00]); // canonical UI bytes: address 0x01 + control 0x03 (pf=0)
     let f = ms_ui(l3);
     let d = decode_frame(&f).unwrap();
     assert_eq!((d.format, d.u_type, d.sapi, d.command, d.pf), (s::GSML3_LAPDM_FMT_U, s::GSML3_LAPDM_U_UI, 0, 0, 0));
@@ -210,8 +210,8 @@ fn mini_codec_closed_loop_with_c_decoder() {
     assert_eq!((d.sapi, d.command), (3, 1));
     assert_eq!(d.payload, Some(l3));
 
-    // UA: the fixed byte vector of the link-lifecycle tests.
-    assert_eq!(mini::ua(), [0x01, 0x63]);
+    // UA: the fixed byte vector of the link-lifecycle tests (pf=1, L=0).
+    assert_eq!(mini::ua(), [0x01, 0x73, 0x01]);
     let f = mini::ua();
     let d = decode_frame(&f).unwrap();
     assert_eq!((d.format, d.u_type, d.pf), (s::GSML3_LAPDM_FMT_U, s::GSML3_LAPDM_U_UA, 1));
@@ -227,16 +227,16 @@ fn mini_codec_closed_loop_with_c_decoder() {
     let d = decode_frame(&f).unwrap();
     assert_eq!((d.u_type, d.pf), (s::GSML3_LAPDM_U_DISC, 1));
 
-    // S-frame RR: [address][(nr << 5) | 0x01] (pf=0).
+    // S-frame RR: [address][(nr << 5) | 0x01][0x01] (pf=0, L=0).
     let rr = mini::rr(1, 0).unwrap();
-    assert_eq!(rr, [0x01, 0x21]);
+    assert_eq!(rr, [0x01, 0x21, 0x01]);
     let d = decode_frame(&rr).unwrap();
     assert_eq!((d.format, d.s_type, d.nr), (s::GSML3_LAPDM_FMT_S, s::GSML3_LAPDM_S_RR, 1));
 
-    // I-frame: ctrl = (nr<<5)|(pf?0x10:0)|(ns<<1); length octet (m<<7)|len; +info.
+    // I-frame: ctrl = (nr<<5)|(pf?0x10:0)|(ns<<1); header octet (len<<2)|(m?1:0)|1; +info.
     let info: &[u8] = &[5, 6];
     let i = mini::i_frame(0, true, /* nr */ 1, /* ns */ 2, /* pf */ true, /* m */ false, info).unwrap();
-    assert_eq!(i, [0x09, 0x34, 0x02, 5, 6], "ctrl=0x34: nr=1<<5 | pf<<4 | ns=2<<1");
+    assert_eq!(i, [0x03, 0x34, 0x09, 5, 6], "ctrl=0x34: nr=1<<5 | pf<<4 | ns=2<<1; header L=2, M=0");
     let d = decode_frame(&i).unwrap();
     assert_eq!((d.format, d.ns, d.nr, d.pf, d.m_bit), (s::GSML3_LAPDM_FMT_I, 2, 1, 1, 0));
     assert_eq!(d.payload, Some(info), "the info view must alias the I-frame");

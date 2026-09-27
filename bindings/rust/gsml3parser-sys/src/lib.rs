@@ -121,11 +121,12 @@ pub const GSML3_LAPDM_FMT_S: c_int = 1;
 pub const GSML3_LAPDM_FMT_U: c_int = 2;
 pub const GSML3_LAPDM_U_UI: c_int = 0x03;
 pub const GSML3_LAPDM_U_SABME: c_int = 0x2F;
-pub const GSML3_LAPDM_U_UA: c_int = 0x63;
 pub const GSML3_LAPDM_U_DM: c_int = 0x0F;
-pub const GSML3_LAPDM_U_DISC: c_int = 0x08;
+pub const GSML3_LAPDM_U_DISC: c_int = 0x43;
+pub const GSML3_LAPDM_U_UA: c_int = 0x63;
 pub const GSML3_LAPDM_S_RR: c_int = 0x01;
-pub const GSML3_LAPDM_S_REJ: c_int = 0x0D;
+pub const GSML3_LAPDM_S_RNR: c_int = 0x05;
+pub const GSML3_LAPDM_S_REJ: c_int = 0x09;
 pub const GSML3_LAPDM_STATE_UNUSED: c_int = 0;
 pub const GSML3_LAPDM_STATE_LINK_RELEASED: c_int = 1;
 pub const GSML3_LAPDM_STATE_AWAITING_ESTABLISH: c_int = 2;
@@ -134,11 +135,10 @@ pub const GSML3_LAPDM_STATE_LINK_ESTABLISHED: c_int = 4;
 pub const GSML3_LAPDM_STATE_CONTENTION_RESOLUTION: c_int = 5;
 
 // ── SAPI values (mirror enum gsml3_sapi) ──────────────────────────────────────
+// Only 0 and 3 are defined on the Um interface (TS 44.064).
 
 pub const GSML3_SAPI0: c_int = 0;
 pub const GSML3_SAPI3: c_int = 3;
-pub const GSML3_SAPI0_SACCH: c_int = 4;
-pub const GSML3_SAPI3_SACCH: c_int = 7;
 
 // ── Interlayer primitives (mirror enum gsml3_primitive) ───────────────────────
 
@@ -275,9 +275,9 @@ pub struct gsml3_lapdm_frame_info {
     pub ns: u8,
     /// Poll/Final bit
     pub pf: c_int,
-    /// Message-complete bit (I frames)
+    /// M bit of the header octet: 1 = further segments of the same message follow
     pub m_bit: c_int,
-    /// SAPI 0..15
+    /// Three-bit SAPI field (0 and 3 are defined on Um)
     pub sapi: c_int,
     /// C/R: 1 = command, 0 = response
     pub command: c_int,

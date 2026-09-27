@@ -423,7 +423,7 @@ type FrameInfo struct {
 	SType   int // GSML3_LAPDM_S_* when Format == LapdmFmtS, else -1
 	NR, NS  uint8
 	PF      int // Poll/Final bit
-	MBit    int // message-complete bit (I frames)
+	MBit    int // M bit of the header octet: 1 = further segments follow (I frames)
 	SAPI    int
 	Command int // C/R: 1 = command, 0 = response
 

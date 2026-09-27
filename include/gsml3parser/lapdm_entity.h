@@ -19,13 +19,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-/// LAPDm state machine entity (GSM 04.06).
+/// LAPDm state machine entity (TS 44.064).
 /// Provides a full protocol implementation with SABME/UA/DISC link management,
 /// I-frame segmentation and reassembly, T200 timer with retransmission,
 /// and contention resolution. Single-threaded design with zero-allocation
 /// callbacks following the FlatHandler pattern.
 ///
-/// Reference: GSM 04.06 / 3GPP TS 45.006
+/// Reference: GSM 04.06 / 3GPP TS 44.064
 #pragma once
 
 #include <chrono>
@@ -54,21 +54,21 @@ enum class LAPDmState : uint8_t {
 /// Stream operator for LAPDmState (debug output).
 std::ostream& operator<<(std::ostream& os, LAPDmState state);
 
-/// Channel-specific LAPDm parameters (GSM 04.06 3.5).
-/// Each logical channel type has different N201 (max payload), N200 (max
-/// retransmissions), and T200 (ACK timer) values.
+/// Channel-specific LAPDm parameters: N201 (max I-frame payload), N200 (max
+/// retransmissions) and T200 (acknowledgment timer). The factory methods
+/// return channel-specific defaults for a software BTS.
 struct LAPDmChannelProfile {
     size_t n201;       ///< Max I-frame payload in octets (SDCCH=20, SACCH=18, FACCH=20)
     unsigned n200;     ///< Max retransmissions before abnormal release
     uint32_t t200Ms;   ///< T200 timer value in milliseconds
 
-    /// SDCCH channel profile: N201=20, N200=23, T200=900ms.
+    /// SDCCH defaults for a software BTS: N201=20, N200=23, T200=900ms.
     [[nodiscard]] static LAPDmChannelProfile SDCCH() noexcept;
 
-    /// SACCH channel profile: N201=18, N200=5, T200=3600ms.
+    /// SACCH defaults for a software BTS: N201=18, N200=5, T200=3600ms.
     [[nodiscard]] static LAPDmChannelProfile SACCH() noexcept;
 
-    /// FACCH channel profile: N201=20, N200=34, T200=900ms.
+    /// FACCH defaults for a software BTS: N201=20, N200=34, T200=900ms.
     [[nodiscard]] static LAPDmChannelProfile FACCH() noexcept;
 };
 
@@ -114,7 +114,9 @@ public:
     LAPDmEntity(LAPDmChannelProfile profile, L3ReceiveFn l3Cb, L1TransmitFn l1Cb, void* ctx = nullptr);
 
     /// Open the entity and transition to LinkReleased state.
-    /// @param sapi Service Access Point Indicator for this channel.
+    /// @param sapi Service Access Point Indicator for this channel; only
+    ///         SAPI::SAPI0 and SAPI::SAPI3 are defined on the Um interface
+    ///         (TS 44.064).
     /// @param commandBit true for BTS side (C/R=1), false for MS side (C/R=0).
     void open(SAPI sapi, bool commandBit) noexcept;
 
@@ -229,8 +231,9 @@ private:
     // acknowledged (processAck drains the queue via trySendNextSegment()).
     std::vector<uint8_t> mTxQueue;
     // Exclusive end offset in mTxQueue for each queued message (FIFO order).
-    // Message i occupies [mTxMsgEnds[i-1], mTxMsgEnds[i]) — the M bit is set on
-    // the last segment of each message, so boundaries must be tracked per message.
+    // Message i occupies [mTxMsgEnds[i-1], mTxMsgEnds[i]) — the M bit of the
+    // header octet is cleared on the final segment of each message, so
+    // boundaries must be tracked per message.
     std::vector<size_t> mTxMsgEnds;
     // Index of the message currently being segmented (into mTxMsgEnds).
     size_t mTxMsgIdx{0};
@@ -281,7 +284,7 @@ private:
     /// Dispatch incoming I-frames: sequence check, reassembly, ACK.
     void receiveIFrame(const lapdm::LAPDmFrame& frame);
 
-    /// Dispatch incoming S-frames (RR, REJ).
+    /// Dispatch incoming S-frames (RR, RNR, REJ).
     void receiveSFrame(const lapdm::LAPDmFrame& frame);
 
     /// Handle SABME U-frame.
@@ -314,9 +317,10 @@ private:
     /// Send REJ (Reject) response — GSM 04.06 5.3.3.
     void sendREJ(bool pf);
 
-    /// Build and send an I-frame for a payload chunk — GSM 04.06 5.5.2.
-    /// Advances mVS after building the frame.
-    void buildIFrame(std::span<const uint8_t> payload, bool isLast);
+    /// Build and send an I-frame for a payload chunk — TS 44.064. The `more`
+    /// argument is the M bit of the header octet: true when further segments
+    /// of the same message follow. Advances mVS after building the frame.
+    void buildIFrame(std::span<const uint8_t> payload, bool more);
 
     /// Send the next queued segment if no frame is outstanding (k=1).
     /// No-op when the queue is empty or a frame is still awaiting acknowledgment.

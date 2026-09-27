@@ -23,229 +23,179 @@
 
 namespace gsml3parser::lapdm {
 
+namespace detail {
+
+// Control octets for the five LAPDm U-frame types, index [type][P/F]
+// (TS 44.064 U-format control field).
+inline constexpr uint8_t kUControl[5][2] = {
+    {0x03, 0x13}, // UI    U3='000', U2='00'
+    {0x2F, 0x3F}, // SABME U3='001', U2='11'
+    {0x0F, 0x1F}, // DM    U3='000', U2='11'
+    {0x43, 0x53}, // DISC  U3='010', U2='00'
+    {0x63, 0x73}  // UA    U3='011', U2='00'; low two bits are fixed to '11'.
+};
+
+// Locate a control byte in the U-frame table; returns -1 when it matches no
+// canonical U-format octet.
+inline int matchUControl(uint8_t ctrl) {
+    for (int type = 0; type < 5; ++type) {
+        for (int pf = 0; pf < 2; ++pf) {
+            if (kUControl[type][static_cast<size_t>(pf)] == ctrl) return type * 2 + pf;
+        }
+    }
+    return -1;
+}
+
+} // namespace detail
+
+uint8_t uFrameControlByte(LAPDmUFrameType type, bool pf) noexcept {
+    return detail::kUControl[static_cast<size_t>(type)][pf ? 1u : 0u];
+}
+
 Expected<LAPDmFrame> LAPDmFrame::decode(std::span<const uint8_t> data) {
-    // Minimum frame: address (1 byte) + control (1 byte) = 2 bytes
-    if (data.size() < 2) {
+    // Format B (TS 44.064): every frame carries three header octets —
+    // address, control and the L/M/'1' header octet — before the info field.
+    if (data.size() < 3) {
         return Expected<LAPDmFrame>::error(
             ParseError(ParseError::Code::TruncatedInput, "LAPDm frame too short"));
     }
 
+    // Address octet: the high three bits are spare + GSM service access point
+    // discriminator and must be zero; EA (bit 0) must be set on Um.
+    if ((data[0] & 0xE0u) != 0) {
+        return Expected<LAPDmFrame>::error(
+            ParseError(ParseError::Code::InvalidValue, "Non-GSM service access point"));
+    }
+    if ((data[0] & 0x01u) == 0) {
+        return Expected<LAPDmFrame>::error(
+            ParseError(ParseError::Code::InvalidValue, "LAPDm EA bit not set"));
+    }
     LAPDmAddressField addr = LAPDmAddressField::decode(data[0]);
-    uint8_t ctrl = data[1];
-
-    // Check for DISC before I-frame check, since DISC (0x08/0x0C) has bit 0 = 0.
-    if (ctrl == 0x08 || ctrl == 0x0C) {
-        bool pf = (ctrl == 0x08);
-        return Expected<LAPDmFrame>::hold(LAPDmFrame{
-            addr, LAPDmControlFormat::U_Format, LAPDmUFrameType::DISC,
-            0, 0, pf, false, LAPDmSFrameType::RR, std::span<const uint8_t>{}
-        });
+    // Only SAPI 0 and SAPI 3 are defined on Um; any other three-bit value is
+    // reported as Undefined so the entity can drop the frame by SAPI.
+    const unsigned rawSapi = (data[0] >> 2) & 0x07u;
+    if (rawSapi != 0 && rawSapi != 3) {
+        addr.sapi = SAPI::Undefined;
     }
 
-    // ── I-frame: Fixed bit 0 = 0 ──
-    // GSM 04.06 4.4.1: Control layout [NR(7:5)][P/F(4)][NS(3:1)][Fixed(0)=0]
-    if ((ctrl & 0x01u) == 0) {
-        if (data.size() < 3) {
-            return Expected<LAPDmFrame>::error(
-                ParseError(ParseError::Code::TruncatedInput, "I-frame missing length byte"));
-        }
-
-        auto iCtrl = LAPDmIControlField::decode(ctrl);
-        auto lenField = LAPDmLengthField::decode(data[2]);
-        size_t payloadLen = static_cast<size_t>(lenField.length);
-
-        if (data.size() < 3 + payloadLen) {
-            return Expected<LAPDmFrame>::error(
-                ParseError(ParseError::Code::TruncatedInput,
-                           "I-frame payload shorter than declared length"));
-        }
-
-        return Expected<LAPDmFrame>::hold(LAPDmFrame{
-            addr, LAPDmControlFormat::I_Format, LAPDmUFrameType::UI,
-            iCtrl.nr, iCtrl.ns, iCtrl.pf, lenField.m,
-            LAPDmSFrameType::RR,
-            std::span<const uint8_t>(data.data() + 3, payloadLen)
-        });
+    // Header octet: bit 0 is the fixed '1' (frame octet / extension-length
+    // indicator), bits 5:2 are L, bit 1 is M.
+    if ((data[2] & 0x01u) == 0) {
+        return Expected<LAPDmFrame>::error(
+            ParseError(ParseError::Code::InvalidValue, "LAPDm header octet fixed bit not set"));
+    }
+    auto lenField = LAPDmLengthField::decode(data[2]);
+    const size_t payloadLen = static_cast<size_t>(lenField.length);
+    if (data.size() < 3 + payloadLen) {
+        return Expected<LAPDmFrame>::error(
+            ParseError(ParseError::Code::TruncatedInput, "LAPDm info field shorter than declared length"));
+    }
+    if (data.size() > 3 + payloadLen) {
+        return Expected<LAPDmFrame>::error(
+            ParseError(ParseError::Code::InvalidValue, "LAPDm frame has trailing bytes"));
     }
 
-    // ── U-frame or S-frame: Fixed bit 0 = 1 ──
-    // Try matching known U-frame control bytes first (all F=0/F=1 variants).
-    if (ctrl == 0x03 || ctrl == 0x07) {
-        // UI frame: [Address][Control][Info...]
-        bool pf = (ctrl == 0x07);
-        std::span<const uint8_t> info{};
-        if (data.size() > 2) {
-            info = std::span<const uint8_t>(data.data() + 2, data.size() - 2);
-        }
-        return Expected<LAPDmFrame>::hold(LAPDmFrame{
-            addr, LAPDmControlFormat::U_Format, LAPDmUFrameType::UI,
-            0, 0, pf, false, LAPDmSFrameType::RR, info
-        });
-    }
+    LAPDmFrame frame;
+    frame.address = addr;
+    frame.more = lenField.more;
+    frame.info = std::span<const uint8_t>(data.data() + 3, payloadLen);
 
-    if (ctrl == 0x2B || ctrl == 0x2F) {
-        // SABME frame: may carry payload with length byte (GSM 04.06 5.4.1.4)
-        bool pf = (ctrl == 0x2F);
-        std::span<const uint8_t> info{};
-        if (data.size() >= 3) {
-            auto lenField = LAPDmLengthField::decode(data[2]);
-            size_t payloadLen = static_cast<size_t>(lenField.length);
-            if (data.size() < 3 + payloadLen) {
+    // Frame format from the low two bits of the control octet.
+    const uint8_t ctrl = data[1];
+    switch (ctrl & 0x03u) {
+        case 0x00u:
+        case 0x02u: {
+            // I-frame: [NR(7:5)][P/F(4)][NS(3:1)][Fixed(0)=0]; the second bit is
+            // the LSB of N(S), so both '00' and '10' are legal.
+            frame.format = LAPDmControlFormat::I_Format;
+            frame.iCtrl = LAPDmIControlField::decode(ctrl);
+            break;
+        }
+        case 0x01u: {
+            // S-frame: the header octet must be exactly 0x01 (L=0, M=0) since
+            // S-frames carry no info field.
+            if (data[2] != 0x01u) {
                 return Expected<LAPDmFrame>::error(
-                    ParseError(ParseError::Code::TruncatedInput,
-                               "SABME payload shorter than declared length"));
+                    ParseError(ParseError::Code::InvalidValue, "S-frame must have an empty header octet"));
             }
-            info = std::span<const uint8_t>(data.data() + 3, payloadLen);
+            frame.format = LAPDmControlFormat::S_Format;
+            auto sCtrl = LAPDmSControlField::decode(ctrl);
+            frame.nr = sCtrl.nr;
+            frame.sType = sCtrl.type;
+            frame.pf = sCtrl.pf;
+            break;
         }
-        return Expected<LAPDmFrame>::hold(LAPDmFrame{
-            addr, LAPDmControlFormat::U_Format, LAPDmUFrameType::SABME,
-            0, 0, pf, false, LAPDmSFrameType::RR, info
-        });
-    }
-
-    if (ctrl == 0x5F || ctrl == 0x63) {
-        // UA frame: may carry echo payload with length byte
-        bool pf = (ctrl == 0x63);
-        std::span<const uint8_t> info{};
-        if (data.size() >= 3) {
-            auto lenField = LAPDmLengthField::decode(data[2]);
-            size_t payloadLen = static_cast<size_t>(lenField.length);
-            if (data.size() < 3 + payloadLen) {
+        case 0x03u: {
+            // U-frame: the control octet must be one of the ten canonical
+            // bytes (five types x two P/F values).
+            int matched = detail::matchUControl(ctrl);
+            if (matched < 0) {
                 return Expected<LAPDmFrame>::error(
-                    ParseError(ParseError::Code::TruncatedInput,
-                               "UA payload shorter than declared length"));
+                    ParseError(ParseError::Code::InvalidValue, "Unknown U-frame control octet"));
             }
-            info = std::span<const uint8_t>(data.data() + 3, payloadLen);
+            frame.format = LAPDmControlFormat::U_Format;
+            frame.uType = static_cast<LAPDmUFrameType>(matched / 2);
+            frame.pf = (matched & 1) != 0;
+            if ((frame.uType == LAPDmUFrameType::DM || frame.uType == LAPDmUFrameType::DISC) &&
+                lenField.length != 0) {
+                return Expected<LAPDmFrame>::error(
+                    ParseError(ParseError::Code::InvalidValue, "DM/DISC frames carry no info field"));
+            }
+            break;
         }
-        return Expected<LAPDmFrame>::hold(LAPDmFrame{
-            addr, LAPDmControlFormat::U_Format, LAPDmUFrameType::UA,
-            0, 0, pf, false, LAPDmSFrameType::RR, info
-        });
     }
 
-    if (ctrl == 0x0B || ctrl == 0x0F) {
-        // DM frame: [Address][Control] — no payload
-        bool pf = (ctrl == 0x0F);
-        return Expected<LAPDmFrame>::hold(LAPDmFrame{
-            addr, LAPDmControlFormat::U_Format, LAPDmUFrameType::DM,
-            0, 0, pf, false, LAPDmSFrameType::RR, std::span<const uint8_t>{}
-        });
-    }
+    return Expected<LAPDmFrame>::hold(frame);
+}
 
-    // ── S-frame: [Address][Control] — no payload ──
-    // GSM 04.06 4.4.2.1: [NR(7:5)][P/F(4)][Fixed(3)=1][Function(2:1)][Fixed(0)=1]
-    auto sCtrl = LAPDmSControlField::decode(ctrl);
-
-    return Expected<LAPDmFrame>::hold(LAPDmFrame{
-        addr, LAPDmControlFormat::S_Format, LAPDmUFrameType::UI,
-        sCtrl.nr, 0, sCtrl.pf, false, sCtrl.type, std::span<const uint8_t>{}
-    });
+size_t encodedFrameSize(const LAPDmFrame& frame) noexcept {
+    // Format B: address + control + header octet, plus the info field. S-frames
+    // carry no info field and are exactly three octets long.
+    if (frame.format == LAPDmControlFormat::S_Format) return 3;
+    return 3 + frame.info.size();
 }
 
 std::vector<uint8_t> encodeFrame(const LAPDmFrame& frame) {
-    // Calculate required buffer size
-    size_t needed = 2; // address + control (minimum)
-
-    if (frame.format == LAPDmControlFormat::I_Format) {
-        needed += 1 + frame.info.size(); // length byte + payload
-    } else if (frame.format == LAPDmControlFormat::U_Format) {
-        if (frame.uType == LAPDmUFrameType::SABME ||
-            frame.uType == LAPDmUFrameType::UA) {
-            if (!frame.info.empty()) {
-                needed += 1 + frame.info.size(); // length byte + info
-            }
-        } else {
-            needed += frame.info.size(); // raw info bytes
-        }
-    }
-    // S-frames: no extra bytes beyond address + control
-
-    std::vector<uint8_t> out(needed);
+    std::vector<uint8_t> out(encodedFrameSize(frame));
     size_t written = encodeFrameToBuffer(frame, out.data(), out.size());
     out.resize(written);
     return out;
 }
 
 size_t encodeFrameToBuffer(const LAPDmFrame& frame, uint8_t* out, size_t outSize) {
+    // Compute the full frame size up front so that an undersized buffer is
+    // rejected before anything is written.
+    const size_t needed = encodedFrameSize(frame);
+    if (outSize < needed) return 0;
+
     size_t offset = 0;
 
-    // ── Address byte ──
-    if (outSize < offset + 1) return 0;
+    // ── Address octet ──
     out[offset++] = frame.address.encode();
 
-    // ── Control byte and payload ──
+    // ── Control octet ──
     switch (frame.format) {
-        case LAPDmControlFormat::I_Format: {
-            // I-frame: [Address][Control][Length][Info...]
-            if (outSize < offset + 2) return 0;
-            out[offset++] = LAPDmIControlField(frame.nr, frame.ns, frame.pf).encode();
-
-            auto lenField = LAPDmLengthField(frame.m, static_cast<uint8_t>(frame.info.size()));
-            out[offset++] = lenField.encode();
-
-            if (outSize < offset + frame.info.size()) return 0;
-            for (size_t i = 0; i < frame.info.size(); ++i) {
-                out[offset++] = frame.info[i];
-            }
+        case LAPDmControlFormat::I_Format:
+            out[offset++] = frame.iCtrl.encode();
             break;
-        }
-
-        case LAPDmControlFormat::S_Format: {
-            // S-frame: [Address][Control] — no payload
-            if (outSize < offset + 1) return 0;
-            out[offset++] = LAPDmSControlField(frame.nr, frame.pf, frame.sType).encode();
+        case LAPDmControlFormat::S_Format:
+            out[offset++] = LAPDmSControlField(frame.nr, frame.sType, frame.pf).encode();
             break;
-        }
-
-        case LAPDmControlFormat::U_Format: {
-            // U-frame control byte: each type has specific values for pf=true and pf=false.
-            uint8_t ctrl;
-            if (frame.pf) {
-                switch (frame.uType) {
-                    case LAPDmUFrameType::UI:    ctrl = 0x07; break;
-                    case LAPDmUFrameType::SABME: ctrl = 0x2F; break;
-                    case LAPDmUFrameType::UA:    ctrl = 0x63; break;
-                    case LAPDmUFrameType::DM:    ctrl = 0x0F; break;
-                    case LAPDmUFrameType::DISC:  ctrl = 0x08; break;
-                    default:                     ctrl = 0x00; break;
-                }
-            } else {
-                switch (frame.uType) {
-                    case LAPDmUFrameType::UI:    ctrl = 0x03; break;
-                    case LAPDmUFrameType::SABME: ctrl = 0x2B; break;
-                    case LAPDmUFrameType::UA:    ctrl = 0x5F; break;
-                    case LAPDmUFrameType::DM:    ctrl = 0x0B; break;
-                    case LAPDmUFrameType::DISC:  ctrl = 0x0C; break;
-                    default:                     ctrl = 0x00; break;
-                }
-            }
-
-            if (outSize < offset + 1) return 0;
-            out[offset++] = ctrl;
-
-            // SABME and UA with payload use length byte encoding (GSM 04.06 5.4.1.4)
-            if ((frame.uType == LAPDmUFrameType::SABME ||
-                 frame.uType == LAPDmUFrameType::UA) && !frame.info.empty()) {
-                if (outSize < offset + 1) return 0;
-                out[offset++] = LAPDmLengthField(false,
-                               static_cast<uint8_t>(frame.info.size())).encode();
-
-                if (outSize < offset + frame.info.size()) return 0;
-                for (size_t i = 0; i < frame.info.size(); ++i) {
-                    out[offset++] = frame.info[i];
-                }
-            } else if (frame.uType == LAPDmUFrameType::UI) {
-                // UI: raw info bytes after control, no length byte
-                if (outSize < offset + frame.info.size()) return 0;
-                for (size_t i = 0; i < frame.info.size(); ++i) {
-                    out[offset++] = frame.info[i];
-                }
-            }
-            // DM and DISC: no info field
+        case LAPDmControlFormat::U_Format:
+            out[offset++] = uFrameControlByte(frame.uType, frame.pf);
             break;
-        }
     }
 
+    // ── Header octet (L/M/'1') and info field ──
+    if (frame.format == LAPDmControlFormat::S_Format) {
+        out[offset++] = 0x01u; // L=0, M=0, fixed '1'
+        return offset;
+    }
+    auto lenField = LAPDmLengthField(frame.more, static_cast<uint8_t>(frame.info.size()));
+    out[offset++] = lenField.encode();
+    for (size_t i = 0; i < frame.info.size(); ++i) {
+        out[offset++] = frame.info[i];
+    }
     return offset;
 }
 

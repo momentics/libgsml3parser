@@ -333,18 +333,19 @@ enum gsml3_lapdm_format {
     GSML3_LAPDM_FMT_S = 1,
     GSML3_LAPDM_FMT_U = 2
 };
-/* U-frame types (mirror gsml3parser::lapdm::LAPDmUFrameType 1:1). */
+/* U-frame types: the canonical control octet with P/F=0 (TS 44.064). */
 enum gsml3_lapdm_u_type {
     GSML3_LAPDM_U_UI = 0x03,
     GSML3_LAPDM_U_SABME = 0x2F,
-    GSML3_LAPDM_U_UA = 0x63,
     GSML3_LAPDM_U_DM = 0x0F,
-    GSML3_LAPDM_U_DISC = 0x08
+    GSML3_LAPDM_U_DISC = 0x43,
+    GSML3_LAPDM_U_UA = 0x63
 };
-/* S-frame types (mirror gsml3parser::lapdm::LAPDmSFrameType 1:1). */
+/* S-frame types: the canonical control octet with NR=0 and P/F=0 (TS 44.064). */
 enum gsml3_lapdm_s_type {
     GSML3_LAPDM_S_RR = 0x01,
-    GSML3_LAPDM_S_REJ = 0x0D
+    GSML3_LAPDM_S_RNR = 0x05,
+    GSML3_LAPDM_S_REJ = 0x09
 };
 /* LAPDm FSM states (mirror gsml3parser::LAPDmState 1:1). */
 enum gsml3_lapdm_state {
@@ -355,12 +356,11 @@ enum gsml3_lapdm_state {
     GSML3_LAPDM_STATE_LINK_ESTABLISHED = 4,
     GSML3_LAPDM_STATE_CONTENTION_RESOLUTION = 5
 };
-/* SAPI values (mirror gsml3parser::SAPI 1:1). */
+/* SAPI values (mirror gsml3parser::SAPI 1:1). Only the values 0 and 3 are
+ * defined on the Um interface (TS 44.064). */
 enum gsml3_sapi {
     GSML3_SAPI0 = 0,
-    GSML3_SAPI3 = 3,
-    GSML3_SAPI0_SACCH = 4,
-    GSML3_SAPI3_SACCH = 7
+    GSML3_SAPI3 = 3
 };
 /* Interlayer primitives (mirror gsml3parser::Primitive 1:1). */
 enum gsml3_primitive {
@@ -380,8 +380,9 @@ enum gsml3_primitive {
     GSML3_PRIM_HANDOVER_ACCESS = 14
 };
 
-/* Decoded LAPDm frame. ZERO-COPY: info points into the input buffer and
- * is valid while that buffer is alive. */
+/* Decoded LAPDm frame (TS 44.064 format B: address + control + header octet
+ * [L/M/'1'] [+ info]). ZERO-COPY: info points into the input buffer and is
+ * valid while that buffer is alive. */
 typedef struct gsml3_lapdm_frame_info {
     int format;       /* GSML3_LAPDM_FMT_* */
     int u_type;       /* GSML3_LAPDM_U_* when format == U, else -1 */
@@ -389,14 +390,15 @@ typedef struct gsml3_lapdm_frame_info {
     uint8_t nr;       /* receive sequence number (I/S frames) */
     uint8_t ns;       /* send sequence number (I frames) */
     int pf;           /* Poll/Final bit */
-    int m_bit;        /* message-complete bit (I frames) */
+    int m_bit;        /* M bit of the header octet: 1 = further segments of
+                       * the same message follow, 0 = final or only segment */
     int sapi;         /* GSML3_SAPI* value */
     int command;      /* C/R bit: 1 = command, 0 = response */
     const uint8_t* info;  /* info field (NULL when absent) */
     size_t info_len;
 } gsml3_lapdm_frame_info;
 
-/* Decode a raw LAPDm frame (address + control [+ length + info]).
+/* Decode a raw LAPDm frame (format B, at least three header octets).
  * GSML3_OK or an error code. */
 GSML3_C_API int gsml3_lapdm_frame_decode(const uint8_t* data, size_t len,
                                          gsml3_lapdm_frame_info* out);
@@ -421,20 +423,21 @@ GSML3_C_API gsml3_lapdm_entity* gsml3_lapdm_entity_new(int profile,
     gsml3_lapdm_l3_cb l3_cb, gsml3_lapdm_l1_cb l1_cb, void* user);
 /* Free the entity. NULL-safe. */
 GSML3_C_API void gsml3_lapdm_entity_free(gsml3_lapdm_entity* e);
-/* Open the entity (transition to LinkReleased). sapi: 0..15 (gsml3_sapi
- * names the common ones; values outside 0..15 are rejected — an invalid
- * value sets the thread-local error and leaves the entity in its previous
- * state). command_bit: 1 = BTS side (C/R=1), 0 = MS side (C/R=0). */
+/* Open the entity (transition to LinkReleased). sapi is the three-bit SAPI
+ * of the address octet: 0..7 (values outside the range are rejected — an
+ * invalid value sets the thread-local error and leaves the entity in its
+ * previous state); only 0 and 3 are defined on Um (gsml3_sapi). command_bit:
+ * 1 = BTS side (C/R=1), 0 = MS side (C/R=0). */
 GSML3_C_API void gsml3_lapdm_entity_open(gsml3_lapdm_entity* e, int sapi,
                                          int command_bit);
 /* Feed a raw LAPDm frame from L1 into the FSM. */
 GSML3_C_API void gsml3_lapdm_entity_receive(gsml3_lapdm_entity* e,
                                             const uint8_t* frame, size_t len);
- /* Send L3 data via a UI frame (no link establishment required, so this
-  * works in any state). sapi selects the address-octet SAPI of the emitted
-  * UI frame and may differ from the SAPI given to gsml3_lapdm_entity_open()
-  * (which alone owns the link FSM); out-of-range values (not 0..15) are
-  * rejected before encoding. GSML3_OK or error code. */
+  /* Send L3 data via a UI frame (no link establishment required, so this
+   * works in any state). sapi selects the address-octet SAPI of the emitted
+   * UI frame and may differ from the SAPI given to gsml3_lapdm_entity_open()
+   * (which alone owns the link FSM); values outside the three-bit field
+   * (0..7) are rejected before encoding. GSML3_OK or error code. */
 GSML3_C_API int gsml3_lapdm_entity_send_ui(gsml3_lapdm_entity* e, int sapi,
                                            const uint8_t* l3, size_t l3_len);
 /* Send L3 data via I-frames (segmented if needed; requires an

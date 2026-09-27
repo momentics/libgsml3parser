@@ -43,10 +43,10 @@ static ParsedMessage pipelineRoundTrip(const ParsedMessage& msg) {
         return ParsedMessage{RRM{L3ChannelRelease{RRCause::Normal_Event}}};
     }
 
-    // Encode L3 payload in a LAPDm UI frame.
+    // Encode L3 payload in a LAPDm UI frame: address + control + header octet.
     auto uiFrame = makeUIFrame(SAPI::SAPI0, false, *l3Bytes);
     auto lapdmFrame = encodeFrame(uiFrame);
-    if (lapdmFrame.size() != (*l3Bytes).size() + 2) {
+    if (lapdmFrame.size() != (*l3Bytes).size() + 3) {
         ADD_FAILURE() << "encodeFrame size mismatch";
         return ParsedMessage{RRM{L3ChannelRelease{RRCause::Normal_Event}}};
     }
@@ -357,8 +357,8 @@ TEST(BTSPipeline, MultiSAPIL3Messages) {
     // Frame on SAPI3 (data).
     auto uiFrame3 = makeUIFrame(SAPI::SAPI3, false, *l3Bytes);
     auto frame3 = encodeFrame(uiFrame3);
-    EXPECT_EQ(frame3[0], 0x31); // SAPI3, CR=0, EA=1
-    EXPECT_EQ(frame3[1], 0x03); // UI
+    EXPECT_EQ(frame3[0], 0x0D); // SAPI3, CR=0, EA=1
+    EXPECT_EQ(frame3[1], 0x03); // UI (P/F=0)
 
     // Both decode to the same L3 payload.
     auto decoded0 = LAPDmFrame::decode(frame0);

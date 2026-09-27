@@ -398,11 +398,11 @@ func TestBufferTooSmallClass(t *testing.T) {
 // ── Mini-codec closed loop: every generated frame cross-checked vs C decoder ──
 
 func TestMiniCodecCrossChecksCDecoder(t *testing.T) {
-	// UI: MS-side L3 injection — [0x01, 0x03] + raw info (NO length octet).
+	// UI: MS-side L3 injection — [address][0x03 (pf=0)][header octet (L<<2)|1] + info.
 	l3 := []byte{0x06, 0x0D, 0x00}
 	f := UIFrame(0, false, l3)
-	if !bytes.Equal(f, []byte{0x01, 0x03, 0x06, 0x0D, 0x00}) {
-		t.Fatalf("UIFrame bytes = % X, want 01 03 60 0d 00", f)
+	if !bytes.Equal(f, []byte{0x01, 0x03, 0x0D, 0x06, 0x0D, 0x00}) {
+		t.Fatalf("UIFrame bytes = % X, want 01 03 0d 06 0d 00", f)
 	}
 	dec, err := DecodeFrame(f)
 	if err != nil {
@@ -425,45 +425,45 @@ func TestMiniCodecCrossChecksCDecoder(t *testing.T) {
 		}
 	}
 
-	// UA: exactly [0x01, 0x63].
+	// UA: exactly [0x01, 0x73, 0x01] (pf=1, L=0).
 	ua := UAFrame()
-	if !bytes.Equal(ua, []byte{0x01, 0x63}) {
-		t.Fatalf("UAFrame = % X, want 01 63", ua)
+	if !bytes.Equal(ua, []byte{0x01, 0x73, 0x01}) {
+		t.Fatalf("UAFrame = % X, want 01 73 01", ua)
 	}
 	dec, err = DecodeFrame(ua)
 	if err != nil || dec.UType != LapdmUUA {
 		t.Errorf("UA decode = %v / %#x, want U type 0x63 (err %v)", dec.UType, dec.UType, err)
 	}
 
-	// SABME command from BTS side: exactly [0x09, 0x2F] (the lifecycle test vector).
-	if got := SABMEFrame(0, true); !bytes.Equal(got, []byte{0x09, 0x2F}) {
-		t.Fatalf("SABMEFrame(0,true) = % X, want 09 2f", got)
+	// SABME command from BTS side: exactly [0x03, 0x3F, 0x01] (pf=1, L=0).
+	if got := SABMEFrame(0, true); !bytes.Equal(got, []byte{0x03, 0x3F, 0x01}) {
+		t.Fatalf("SABMEFrame(0,true) = % X, want 03 3f 01", got)
 	}
 	dec, err = DecodeFrame(SABMEFrame(0, true))
 	if err != nil || dec.UType != LapdmUSabme || dec.Command != 1 {
 		t.Errorf("SABME decode: %v / %#x cmd %d (err %v)", dec.UType, dec.UType, dec.Command, err)
 	}
 
-	// DISC command: [0x09, 0x08].
-	if got := DISCFrame(0, true); !bytes.Equal(got, []byte{0x09, 0x08}) {
-		t.Fatalf("DISCFrame(0,true) = % X, want 09 08", got)
+	// DISC command: [0x03, 0x53, 0x01] (pf=1, L=0).
+	if got := DISCFrame(0, true); !bytes.Equal(got, []byte{0x03, 0x53, 0x01}) {
+		t.Fatalf("DISCFrame(0,true) = % X, want 03 53 01", got)
 	}
 	dec, err = DecodeFrame(DISCFrame(0, true))
 	if err != nil || dec.UType != LapdmUDisc {
 		t.Errorf("DISC decode: %#x (err %v)", dec.UType, err)
 	}
 
-	// DM response: [0x01, 0x0B].
-	if got := DMFrame(0); !bytes.Equal(got, []byte{0x01, 0x0B}) {
-		t.Fatalf("DMFrame = % X, want 01 0b", got)
+	// DM response: [0x01, 0x0F, 0x01] (pf=0, L=0).
+	if got := DMFrame(0); !bytes.Equal(got, []byte{0x01, 0x0F, 0x01}) {
+		t.Fatalf("DMFrame = % X, want 01 0f 01", got)
 	}
 	dec, err = DecodeFrame(DMFrame(0))
 	if err != nil || dec.UType != LapdmUDM || dec.Command != 0 {
 		t.Errorf("DM decode: %#x cmd %d (err %v)", dec.UType, dec.Command, err)
 	}
 
-	// RR S-frame with nr=2: [0x01, 0xA1] — S format, s_type RR.
-	if got := RRFrame(2, 0); !bytes.Equal(got, []byte{0x01, byte((2 << 5) | 0x01)}) {
+	// RR S-frame with nr=2: [0x01, 0x41, 0x01] — S format, s_type RR.
+	if got := RRFrame(2, 0); !bytes.Equal(got, []byte{0x01, byte((2 << 5) | 0x01), 0x01}) {
 		t.Fatalf("RRFrame = % X", got)
 	}
 	dec, err = DecodeFrame(RRFrame(2, 0))
@@ -471,10 +471,10 @@ func TestMiniCodecCrossChecksCDecoder(t *testing.T) {
 		t.Errorf("RR decode: fmt %d s_type %#x nr %d (err %v)", dec.Format, dec.SType, dec.NR, err)
 	}
 
-	// I-frame with nr=3 ns=5 pf=1 m=0 + info — layout: addr | ctrl | len | info.
+	// I-frame with nr=3 ns=5 pf=1 m=0 + info — layout: addr | ctrl | header (L/M/'1') | info.
 	info := []byte{0x3E, 0x94}
 	ifFrame := IFrame(3, true, 3, 5, true, false, info) // sapi 3, command (BTS)
-	wantI := []byte{miniAddr(3, true), (3 << 5) | 0x10 | (5 << 1), byte(len(info)), info[0], info[1]}
+	wantI := []byte{miniAddr(3, true), (3 << 5) | 0x10 | (5 << 1), byte(len(info)<<2) | 0x01, info[0], info[1]}
 	if !bytes.Equal(ifFrame, wantI) {
 		t.Fatalf("IFrame = % X, want % X", ifFrame, wantI)
 	}

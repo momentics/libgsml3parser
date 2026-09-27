@@ -414,9 +414,9 @@ pub struct FrameInfo<'a> {
     pub ns: u8,
     /// Poll/Final bit
     pub pf: i32,
-    /// Message-complete bit (I frames)
+    /// M bit of the header octet: 1 = further segments of the same message follow
     pub m_bit: i32,
-    /// SAPI 0..15
+    /// Three-bit SAPI field (0 and 3 are defined on Um)
     pub sapi: i32,
     /// C/R bit: 1 = command, 0 = response
     pub command: i32,
@@ -481,27 +481,29 @@ pub fn decode_frame<'a>(frame: &'a [u8]) -> Result<FrameInfo<'a>, GsmL3Error> {
     })
 }
 
-/// Minimal LAPDm (GSM 04.06) MS/peer-side frame builders for simulation and the
-/// demo — a byte-for-byte mirror of the Python `_lapdm` / Go `lapdmmini` mini
-/// codecs. Purpose: a simulation must BUILD Mobile-station-
-/// side frames to feed a BTS-side entity; the C core decodes peer frames and
-/// transmits only its own, so PRODUCTION TRANSMISSION GOES THROUGH THE C ENTITY
-/// (`send_ui` / `send_data` / `send_sabme` / `send_disc`) — never these helpers.
+/// Minimal LAPDm (TS 44.064) MS/peer-side frame builders for simulation and
+/// the demo — a byte-for-byte mirror of the Python `_lapdm` / Go `lapdmmini`
+/// mini codecs. Purpose: a simulation must BUILD Mobile-station-side frames to
+/// feed a BTS-side entity; the C core decodes peer frames and transmits only
+/// its own, so PRODUCTION TRANSMISSION GOES THROUGH THE C ENTITY (`send_ui` /
+/// `send_data` / `send_sabme` / `send_disc`) — never these helpers.
 ///
-/// Byte layout per `src/lapdm_frame.cpp`: address = (sapi << 4) | (command ?
-/// 0x08 : 0) | 0x01 (EA=1); U-control by (type, pf): UI 0x03/0x07, SABME
-/// 0x2B/0x2F, UA 0x5F/0x63, DM 0x0B/0x0F, DISC 0x0C/0x08; S-control =
-/// (nr << 5) | (pf ? 0x10 : 0) | type (RR 0x01 / REJ 0x0D); I-control =
-/// (nr << 5) | (pf ? 0x10 : 0) | (ns << 1), preceded by a length octet
-/// (m << 7 | len & 0x3F) before the info; UI carries RAW info, NO length octet.
-/// Validation mirrors the other bindings as an `Err(INVALID_ARG)` (programmer
-/// error in test/demo code, not a C-core failure): sapi 0..15, nr/ns 0..7,
-/// info <= 63 bytes. Every generated frame is cross-checked against
-/// [`decode_frame`] in the tests (closed loop).
+/// Byte layout per `src/lapdm_frame.cpp` (format B): every frame is address +
+/// control + header octet (L/M/'1') [+ info]. Address = (sapi << 2) |
+/// (command ? 0x02 : 0) | 0x01 (EA=1), high three bits zero; U-control by
+/// (type, pf): UI 0x03/0x13, SABME 0x2F/0x3F, DM 0x0F/0x1F, DISC 0x43/0x53,
+/// UA 0x63/0x73; S-control = (nr << 5) | (pf ? 0x10 : 0) | type (RR 0x01 /
+/// RNR 0x05 / REJ 0x09); I-control = (nr << 5) | (pf ? 0x10 : 0) | (ns << 1);
+/// header octet = (len << 2) | (m ? 1 : 0) | 1, with M=1 marking further
+/// segments of the same message. Validation mirrors the other bindings as an
+/// `Err(INVALID_ARG)` (programmer error in test/demo code, not a C-core
+/// failure): sapi 0..7 (only 0 and 3 defined on Um), nr/ns 0..7, info <= 63
+/// bytes. Every generated frame is cross-checked against [`decode_frame`] in
+/// the tests (closed loop).
 pub mod mini {
     use crate::error::GsmL3Error;
 
-    /// LAPDm info field limit: 7-bit length octet with m=0 (63 octets max).
+    /// LAPDm info field limit: six-bit length field (63 octets max).
     const MAX_INFO: usize = 63;
 
     /// Programmer-error factory (NOT a C-core failure): out-of-domain mini-
@@ -516,8 +518,8 @@ pub mod mini {
     }
 
     fn check_sapi(what: &str, sapi: u8) -> Result<(), GsmL3Error> {
-        if sapi > 15 {
-            return Err(invalid(&format!("{what}: sapi out of range 0..=15 (got {sapi})")));
+        if sapi > 7 {
+            return Err(invalid(&format!("{what}: sapi out of range 0..=7, three-bit field (got {sapi})")));
         }
         Ok(())
     }
@@ -536,56 +538,62 @@ pub mod mini {
         Ok(())
     }
 
-    /// The address octet of a normal (EA=1) SAPI address: (sapi << 4) |
-    /// (command ? 0x08 : 0) | 0x01.
+    /// The address octet of a normal (EA=1) SAPI address: (sapi << 2) |
+    /// (command ? 0x02 : 0) | 0x01.
     fn addr(sapi: u8, command: bool) -> u8 {
-        (sapi << 4) | u8::from(command) << 3 | 0x01
+        (sapi << 2) | u8::from(command) << 1 | 0x01
     }
 
-    /// UI frame, MS/peer side, pf=0: [address][0x03] + RAW info (no length octet).
+    /// The header octet of every format-B frame: (len << 2) | M | '1', with the
+    /// M bit in position 1.
+    fn header_octet(len: usize, m: bool) -> u8 {
+        ((len & 0x3F) as u8) << 2 | (if m { 0x02 } else { 0 }) | 0x01
+    }
+
+    /// UI frame, MS/peer side, pf=0: [address][0x03][header octet] + info.
     /// The L3 unit-data injection used by simulation.
     pub fn ui(sapi: u8, command: bool, info: &[u8]) -> Result<Vec<u8>, GsmL3Error> {
         check_sapi("ui", sapi)?;
         check_info("UI", info)?;
-        let mut f = vec![addr(sapi, command), 0x03]; // UI, pf=0
+        let mut f = vec![addr(sapi, command), 0x03, header_octet(info.len(), false)]; // UI, pf=0
         f.extend_from_slice(info);
         Ok(f)
     }
 
-    /// MS-side unnumbered acknowledgement: exactly [0x01, 0x63] (SAPI 0,
-    /// response, pf=1) — the byte vector the link-lifecycle test expects.
+    /// MS-side unnumbered acknowledgement: exactly [0x01, 0x73, 0x01] (SAPI 0,
+    /// response, pf=1, L=0) — the byte vector the link-lifecycle test expects.
     pub fn ua() -> Vec<u8> {
-        vec![addr(0, false), 0x63] // UA, pf=1
+        vec![addr(0, false), 0x73, 0x01] // UA, pf=1
     }
 
-    /// Set-Asynchronous-Balance-Mode command/response (pf=1): [address][0x2F].
+    /// Set-Asynchronous-Balance-Mode command/response (pf=1): [address][0x3F][0x01].
     pub fn sabme(sapi: u8, command: bool) -> Result<Vec<u8>, GsmL3Error> {
         check_sapi("sabme", sapi)?;
-        Ok(vec![addr(sapi, command), 0x2F])
+        Ok(vec![addr(sapi, command), 0x3F, 0x01])
     }
 
-    /// Discouraged-mode response (pf=0), e.g. a peer refusing a SABME:
-    /// [address][0x0B].
+    /// Disconnected-mode response (pf=0), e.g. a peer refusing a SABME:
+    /// [address][0x0F][0x01].
     pub fn dm(sapi: u8) -> Result<Vec<u8>, GsmL3Error> {
         check_sapi("dm", sapi)?;
-        Ok(vec![addr(sapi, false), 0x0B])
+        Ok(vec![addr(sapi, false), 0x0F, 0x01])
     }
 
-    /// Disconnect command/response (pf=1): [address][0x08].
+    /// Disconnect command/response (pf=1): [address][0x53][0x01].
     pub fn disc(sapi: u8, command: bool) -> Result<Vec<u8>, GsmL3Error> {
         check_sapi("disc", sapi)?;
-        Ok(vec![addr(sapi, command), 0x08])
+        Ok(vec![addr(sapi, command), 0x53, 0x01])
     }
 
-    /// Receive-Ready S-frame (response, pf=0): [address][(nr << 5) | 0x01].
+    /// Receive-Ready S-frame (response, pf=0): [address][(nr << 5) | 0x01][0x01].
     pub fn rr(nr: u8, sapi: u8) -> Result<Vec<u8>, GsmL3Error> {
         check_seq("RR nr", nr)?;
         check_sapi("rr", sapi)?;
-        Ok(vec![addr(sapi, false), (nr << 5) | 0x01]) // S/RR, pf=0
+        Ok(vec![addr(sapi, false), (nr << 5) | 0x01, 0x01]) // S/RR, pf=0
     }
 
-    /// I-frame: [address][(nr<<5)|(pf?0x10:0)|(ns<<1)] [(m<<7)|len] + info.
-    /// `m` marks message-complete segmentation.
+    /// I-frame: [address][(nr<<5)|(pf?0x10:0)|(ns<<1)] [(len<<2)|(m?1:0)|1] + info.
+    /// `m` marks further segments of the same message (M=1); M=0 on the final one.
     pub fn i_frame(sapi: u8, command: bool, nr: u8, ns: u8, pf: bool, m: bool, info: &[u8]) -> Result<Vec<u8>, GsmL3Error> {
         check_seq("I nr", nr)?;
         check_seq("I ns", ns)?;
@@ -595,11 +603,7 @@ pub mod mini {
         if pf {
             ctrl |= 0x10;
         }
-        let mut len_octet = info.len() as u8 & 0x3F;
-        if m {
-            len_octet |= 0x80;
-        }
-        let mut out = vec![addr(sapi, command), ctrl, len_octet];
+        let mut out = vec![addr(sapi, command), ctrl, header_octet(info.len(), m)];
         out.extend_from_slice(info);
         Ok(out)
     }
@@ -623,7 +627,7 @@ mod tests {
         e.close(); // second pass: pure no-op (take-pattern)
         // Every FFI-facing method is a closed-class error now (no FFI possible).
         assert!(e.state().unwrap_err().is_closed());
-        assert!(e.receive(&[0x01, 0x03]).unwrap_err().is_closed());
+        assert!(e.receive(&[0x01, 0x03, 0x01]).unwrap_err().is_closed());
         drop(e); // Drop after close: third pass — also a no-op, no panic, no double free
     }
 
@@ -632,7 +636,7 @@ mod tests {
         let mut e = LapdmEntity::new(0).expect("entity");
         e.open(0, 1).expect("open");
         // Drive one event through the real trampoline path first.
-        e.receive(&[0x01, 0x03, 0x60, 0x0d, 0x00]).expect("UI receive");
+        e.receive(&[0x01, 0x03, 0x0d, 0x60, 0x0d, 0x00]).expect("UI receive");
         assert!(!e.drain_l3().is_empty());
 
         // Before reclamation the box is the SOLE owner (strong count 1);

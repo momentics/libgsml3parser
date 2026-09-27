@@ -214,14 +214,14 @@ func TestLinkLifecycle(t *testing.T) {
 
 	requireNoErr(t, "SendSABME", e.SendSABME())
 	txs := e.DrainTX()
-	if len(txs) != 1 || !bytes.Equal(txs[0], []byte{0x09, 0x2F}) {
-		t.Fatalf("SABME tx = %v, want exactly [[0x09, 0x2F]] (byte-exact)", txs)
+	if len(txs) != 1 || !bytes.Equal(txs[0], []byte{0x03, 0x3F, 0x01}) {
+		t.Fatalf("SABME tx = %v, want exactly [[0x03, 0x3F, 0x01]] (byte-exact)", txs)
 	}
 	if st := e.State(); st != StateLapdmAwaitingEstablish {
 		t.Fatalf("state after SABME = %d, want AWAITING_ESTABLISH(2)", st)
 	}
 
-	requireNoErr(t, "Receive UA", e.Receive(UAFrame())) // [0x01, 0x63] MS -> BTS
+	requireNoErr(t, "Receive UA", e.Receive(UAFrame())) // [0x01, 0x73, 0x01] MS -> BTS
 	if st := e.State(); st != StateLapdmLinkEstablished {
 		t.Fatalf("state after UA = %d, want LINK_ESTABLISHED(4)", st)
 	}
@@ -293,8 +293,8 @@ func TestT200Retransmission(t *testing.T) {
 	requireNoErr(t, "Open#2", e2.Open(0, true))
 	requireNoErr(t, "SendSABME#2", e2.SendSABME())
 	txs := e2.DrainTX()
-	if len(txs) != 1 || !bytes.Equal(txs[0], []byte{0x09, 0x2F}) {
-		t.Fatalf("first SABME = %v, want [[0x09 0x2F]]", txs)
+	if len(txs) != 1 || !bytes.Equal(txs[0], []byte{0x03, 0x3F, 0x01}) {
+		t.Fatalf("first SABME = %v, want [[0x03 0x3F 0x01]]", txs)
 	}
 	r, err := e2.TickT200(900)
 	if err != nil || r != 1 {
@@ -304,8 +304,8 @@ func TestT200Retransmission(t *testing.T) {
 		t.Fatalf("retransmissions at expiry = %d, want 1", n)
 	}
 	txs = e2.DrainTX()
-	if len(txs) != 1 || !bytes.Equal(txs[0], []byte{0x09, 0x2F}) {
-		t.Fatalf("retransmitted SABME = %v, want [[0x09 0x2F]]", txs)
+	if len(txs) != 1 || !bytes.Equal(txs[0], []byte{0x03, 0x3F, 0x01}) {
+		t.Fatalf("retransmitted SABME = %v, want [[0x03 0x3F 0x01]]", txs)
 	}
 }
 

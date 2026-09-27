@@ -168,8 +168,8 @@ class FrameInfo:
     nr: int               # receive sequence number (I/S frames)
     ns: int               # send sequence number (I frames)
     pf: int               # Poll/Final bit
-    m_bit: int            # message-complete bit (I frames)
-    sapi: int             # 0..15
+    m_bit: int            # M bit of the header octet: 1 = further segments follow
+    sapi: int             # three-bit SAPI field (0 and 3 defined on Um)
     command: int          # C/R: 1 = command, 0 = response
     info_offset: int | None   # None when the frame has no info field
     info_len: int

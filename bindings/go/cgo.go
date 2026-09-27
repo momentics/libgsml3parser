@@ -222,7 +222,8 @@ const (
 	PrimHandoverAccess        = 14
 )
 
-// LAPDm frame formats, U/S types and FSM states (enums gsml3_lapdm_*).
+// LAPDm frame formats, U/S types and FSM states (enums gsml3_lapdm_*). The
+// U/S type values are the canonical control octets with P/F=0 (TS 44.064).
 const (
 	LapdmFmtI = 0 // GSML3_LAPDM_FMT_I
 	LapdmFmtS = 1 // GSML3_LAPDM_FMT_S
@@ -230,12 +231,13 @@ const (
 
 	LapdmUUI    = 0x03
 	LapdmUSabme = 0x2f
-	LapdmUUA    = 0x63
 	LapdmUDM    = 0x0f
-	LapdmUDisc  = 0x08
+	LapdmUDisc  = 0x43
+	LapdmUUA    = 0x63
 
 	LapdmSRR  = 0x01
-	LapdmSRej = 0x0d
+	LapdmSRnr = 0x05
+	LapdmSRej = 0x09
 
 	StateLapdmUnused               = 0
 	StateLapdmLinkReleased         = 1

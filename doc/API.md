@@ -1075,24 +1075,27 @@ Frame format discriminator (GSM 04.06 4.4):
 
 #### LAPDmUFrameType
 
-Unnumbered frame types (GSM 04.06 4.4.2.2):
+Unnumbered frame types (TS 44.064). Control octets are selected from the
+canonical table, index [type][P/F]:
 
-| Value | Control Byte | Description |
-|-------|-------------|-------------|
-| `UI` | `0x03` | Unnumbered Information — unacknowledged data |
-| `SABME` | `0x2F` | Set Asynchronous Balanced Mode Extended — link establishment |
-| `UA` | `0x63` | Unnumbered Acknowledgement — response to SABME/DISC |
-| `DM` | `0x0F` | Disconnected Mode — reject when no link available |
-| `DISC` | `0x08` | Disconnect — normal link release |
+| Value | P/F=0 | P/F=1 | Description |
+|-------|-------|-------|-------------|
+| `UI` | `0x03` | `0x13` | Unnumbered Information — unacknowledged data |
+| `SABME` | `0x2F` | `0x3F` | Set Asynchronous Balanced Mode Extended — link establishment |
+| `DM` | `0x0F` | `0x1F` | Disconnected Mode — reject when no link available |
+| `DISC` | `0x43` | `0x53` | Disconnect — normal link release |
+| `UA` | `0x63` | `0x73` | Unnumbered Acknowledgement — response to SABME/DISC |
 
 #### LAPDmSFrameType
 
-Supervisory frame types (GSM 04.06 4.4.2.1):
+Supervisory frame types (TS 44.064): the two-bit S function code in bits 3:2
+of the control octet, with the low two bits fixed to `01`:
 
-| Value | Description |
-|-------|-------------|
-| `RR` | Receive Ready — acknowledges I-frames up to NR-1 |
-| `REJ` | Reject — requests retransmission from NR |
+| Value | Code | Canonical Octet (NR=0, P/F=0) | Description |
+|-------|------|-------------------------------|-------------|
+| `RR` | `00` | `0x01` | Receive Ready — acknowledges I-frames up to NR-1 |
+| `RNR` | `01` | `0x05` | Receive Not Ready — no response required |
+| `REJ` | `10` | `0x09` | Reject — requests retransmission from NR |
 
 #### Field Structures
 
@@ -1100,10 +1103,15 @@ All field encode/decode methods are `constexpr` for compile-time evaluation:
 
 | Struct | Purpose | Spec |
 |--------|---------|------|
-| `LAPDmAddressField` | `[SAPI(7:4)][C/R(3)][Reserved(2:1)=00][EA(0)]` | GSM 04.06 4.2.1 |
-| `LAPDmIControlField` | `[NR(7:5)][P/F(4)][NS(3:1)][Fixed(0)=0]` | GSM 04.06 4.4.1 |
-| `LAPDmSControlField` | `[NR(7:5)][P/F(4)][Function(1:0)][Fixed(3)=1]` | GSM 04.06 4.4.2.1 |
-| `LAPDmLengthField` | `[M(7)][Reserved(6)=0][Length(5:0)]` | GSM 04.06 5.5.2 |
+| `LAPDmAddressField` | `[Spare+LPD(7:5)=0][SAPI(4:2)][C/R(1)][EA(0)]` | TS 44.064 frame header |
+| `LAPDmIControlField` | `[NR(7:5)][P/F(4)][NS(3:1)][Fixed(0)=0]` | TS 44.064 I-format |
+| `LAPDmSControlField` | `[NR(7:5)][P/F(4)][S(3:2)][Fixed(1:0)=01]` | TS 44.064 S-format |
+| `LAPDmLengthField` | `[L(5:2)][M(1)][Fixed(0)=1]` — the header octet of every frame | TS 44.064 format B |
+
+Every format-B frame is exactly three header octets (address, control, header
+octet) plus the info field when present; S-frames and DM/DISC frames carry no
+info (L=0). The M bit is 1 while further segments of the same message follow
+and 0 on the final or only segment.
 
 #### LAPDmFrame
 
@@ -1111,12 +1119,14 @@ Non-owning, zero-copy view over the input buffer. The `info` span points into th
 
 ```cpp
 struct LAPDmFrame {
-    LAPDmAddressField address;
-    LAPDmControlFormat format;
-    LAPDmUFrameType uType;     // U-frames
-    uint8_t nr, ns;            // sequence numbers (I/S frames)
-    bool pf, m;                // Poll/Final, Message complete
-    LAPDmSFrameType sType;     // S-frames
+    LAPDmAddressField address;   // SAPI (0/3), C/R, EA
+    LAPDmControlFormat format;   // I_Format / S_Format / U_Format
+    LAPDmIControlField iCtrl;    // I-frames: NR, NS, P/F
+    uint8_t nr;                  // S-frames: receive sequence number
+    LAPDmSFrameType sType;       // S-frames: RR / RNR / REJ
+    LAPDmUFrameType uType;       // U-frames: UI / SABME / DM / DISC / UA
+    bool pf;                     // Poll/Final (S and U frames)
+    bool more;                   // M bit: 1 = further segments follow
     std::span<const uint8_t> info; // zero-copy payload
 
     SAPI sapi() const noexcept;
@@ -1138,9 +1148,10 @@ All factory functions are `constexpr`:
 | `makeUAFrame(sapi, pf, info)` | Unnumbered Acknowledgement | GSM 04.06 5.4.1.2 |
 | `makeDMFrame(sapi, pf)` | Disconnected Mode response | GSM 04.06 5.4.6 |
 | `makeDISCFrame(sapi, command)` | Normal link release | GSM 04.06 5.4.4 |
-| `makeIFrame(sapi, command, nr, ns, pf, m, info)` | Information frame with segmentation | GSM 04.06 5.5.2 |
-| `makeRRFrame(sapi, nr, pf)` | Receive Ready supervisory | GSM 04.06 5.3.2 |
-| `makeREJFrame(sapi, nr, pf)` | Reject supervisory | GSM 04.06 5.3.3 |
+| `makeIFrame(sapi, command, nr, ns, pf, more, info)` | Information frame with segmentation (`more` = M bit) | TS 44.064 I-format |
+| `makeRRFrame(sapi, nr, pf)` | Receive Ready supervisory | TS 44.064 S-format |
+| `makeRNRFrame(sapi, nr, pf)` | Receive Not Ready supervisory | TS 44.064 S-format |
+| `makeREJFrame(sapi, nr, pf)` | Reject supervisory | TS 44.064 S-format |
 
 #### Encoding Functions
 
@@ -1154,8 +1165,8 @@ All factory functions are `constexpr`:
 ```cpp
 using namespace gsml3parser::lapdm;
 
-// Encode a UI frame for SAPI0
-uint8_t l3Data[] = {0x60, 0x0D, 0x00}; // Channel Release
+// Encode a UI frame for SAPI0 (RR Channel Release: PD in the low nibble)
+uint8_t l3Data[] = {0x06, 0x0D, 0x41};
 auto uiFrame = makeUIFrame(SAPI::SAPI0, true, std::span(l3Data));
 auto encoded = encodeFrame(uiFrame);
 
@@ -1546,10 +1557,12 @@ enum class Primitive : uint8_t {
 
 ```cpp
 enum class SAPI : uint8_t {
-    SAPI0 = 0, SAPI3 = 3, SAPI0_Sacch = 4,
-    SAPI3_Sacch = 7, Undefined = 16
+    SAPI0 = 0, SAPI3 = 3, Undefined = 16
 };
 ```
+
+SAPI values 0 and 3 only are defined on the Um interface (TS 44.064);
+`Undefined` is the sentinel reported for any other three-bit address value.
 
 ### MobileIDType
 
@@ -5072,7 +5085,7 @@ The library implements encodings defined by:
 
 | Standard | Scope | Coverage |
 |----------|-------|----------|
-| **GSM 04.06 / 3GPP TS 45.006** | LAPDm protocol for Um interface | `LAPDmFrame` zero-copy decode, `LAPDmEntity` full state machine (SABME/UA/DISC), I-frame segmentation/reassembly, T200 retransmission, contention resolution |
+| **GSM 04.06 / 3GPP TS 44.064** | LAPDm protocol for Um interface (format B on dedicated channels) | `LAPDmFrame` zero-copy decode, `LAPDmEntity` full state machine (SABME/UA/DISC), I-frame segmentation/reassembly, T200 retransmission, contention resolution |
 | **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | RR (98), MM (20), CC (24), GMM (23), SM (29), SMS (19 = 5 CP + 14 L3) message parsing and generation; SS (3), Extended and Test-Procedure PD catch-alls |
 | **GSM 04.07 / 3GPP TS 24.007** | Information element encoding rules | V, TV, TLV, LV formats; H/L rest octet padding (0x2B); bit ordering |
 | **GSM 04.80 / 3GPP TS 24.080** | Supplementary services on mobile | Facility, Register, Release Complete messages; SSOpCode/SSErrorCode enums; L3FacilityOpCode TCAP parser; L3USSDData IE |
