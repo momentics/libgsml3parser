@@ -80,3 +80,37 @@ TEST(FrameLengths, VariableLengthTypesAbsent) {
     EXPECT_EQ(detail::fixedFrameLength(0x01, L3BCCSetup::MTI), 0u);
     EXPECT_EQ(detail::fixedFrameLength(0x00, L3GCCSetup::MTI), 0u);
 }
+
+// The normative fixed-length table (TS 44.018 / 24.078 / 24.008), pinned
+// numerically: every constant-body message and its exact total wire length
+// (2-byte L3 header + body). Pinning the raw (pd, mti) pairs guards against
+// drift even if a class MTI or body length ever changes.
+TEST(FrameLengths, NormativeFixedLengthTable) {
+    // Radio Resource (TS 44.018).
+    EXPECT_EQ(detail::fixedFrameLength(0x06, 0x12), 3u); // RR Status (1-byte body)
+    EXPECT_EQ(detail::fixedFrameLength(0x06, 0x13), 2u); // Classmark Enquiry (no value part)
+    EXPECT_EQ(detail::fixedFrameLength(0x06, 0x28), 3u); // Handover Failure (cause)
+    EXPECT_EQ(detail::fixedFrameLength(0x06, 0x29), 3u); // Assignment Complete (cause)
+    EXPECT_EQ(detail::fixedFrameLength(0x06, 0x2C), 3u); // Handover Complete (cause)
+    EXPECT_EQ(detail::fixedFrameLength(0x06, 0x2F), 3u); // Assignment Failure (cause)
+    // Mobility Management (TS 24.008).
+    EXPECT_EQ(detail::fixedFrameLength(0x05, 0x21), 2u); // CM Service Accept (no value part)
+    EXPECT_EQ(detail::fixedFrameLength(0x05, 0x22), 3u); // CM Service Reject (cause)
+    EXPECT_EQ(detail::fixedFrameLength(0x05, 0x23), 2u); // CM Service Abort (no value part)
+    EXPECT_EQ(detail::fixedFrameLength(0x05, 0x29), 2u); // MM Abort (no value part)
+    EXPECT_EQ(detail::fixedFrameLength(0x05, 0x31), 3u); // MM Status (cause)
+    // Call Control (TS 24.078).
+    EXPECT_EQ(detail::fixedFrameLength(0x03, 0x3D), 6u); // CC Status (4-octet body)
+    EXPECT_EQ(detail::fixedFrameLength(0x03, 0x3E), 3u); // CC Notify (1-byte cause)
+    // Broadcast / Group Call Control.
+    EXPECT_EQ(detail::fixedFrameLength(0x01, 0x04), 2u); // BCC Call Confirmed (no body)
+    EXPECT_EQ(detail::fixedFrameLength(0x01, 0x09), 2u); // BCC Connect Acknowledge (no body)
+    EXPECT_EQ(detail::fixedFrameLength(0x00, 0x03), 2u); // GCC Call Confirmed (no body)
+
+    // Pairs outside the table must stay absent: RR 0x3E is System
+    // Information Type 17 and the Measurement Report carries a variable
+    // body on the air interface (TS 44.018), so header-based framing uses
+    // the boundary heuristic for them rather than this table.
+    EXPECT_EQ(detail::fixedFrameLength(0x06, L3SystemInformationType17::MTI), 0u);
+    EXPECT_EQ(detail::fixedFrameLength(0x06, L3MeasurementReport::MTI), 0u);
+}

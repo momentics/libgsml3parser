@@ -29,19 +29,17 @@
 namespace gsml3parser::detail {
 
 // Flat triple list: { pd, mti, totalWireLength, ... } terminated by
-// {0xFF, 0, 0}. pd is the 4-bit protocol discriminator; mti is the
-// internal message type in the same encoding the framers compute (raw
-// 8-bit for RR/LS, six low bits of octet 1 for MM/CC/NC-SS/GCC/BCC);
-// totalWireLength = 2-byte L3 header + constant body.
-//
-// the previous hand-written tables in framer.cpp and
-// inline_framer.h used WRONG MTI values (e.g. 0x0E for Paging Response,
-// which is 0x27 per TS 44.018 / GSM_RR_Types.ttcn) and wrong lengths
-// (e.g. RR Status 0 instead of 1, Assignment Complete 4 instead of 1),
-// so header-based framing corrupted streams containing those messages.
-// Only messages with a CONSTANT body length are listed; variable-body
-// messages are intentionally absent (header-based mode falls back to the
-// boundary heuristic; deterministic framing requires L2-length mode).
+// {0xFF, 0, 0}. Constant-body messages with exact wire length:
+// { pd, internal MTI, total bytes }. Variable-body messages are
+// intentionally absent. pd is the 4-bit protocol discriminator (low
+// nibble of L3 octet 0); mti is the internal message type in the same
+// encoding the framers compute from the header (six low bits of octet
+// 1 for MM/CC/NC-SS/GCC/BCC, kRRTifShortBase | code for RR short
+// messages with TIF set, raw 8-bit otherwise); totalWireLength =
+// 2-byte L3 header + constant body.
+// For a pair not listed here fixedFrameLength() returns 0 and the
+// header-based framer falls back to its boundary heuristic;
+// deterministic framing of variable bodies requires L2-length mode.
 // test_frame_lengths.cpp cross-checks every entry against the message
 // definitions (2 + T{}.bodyLength()).
 inline constexpr size_t kFixedFrameEntries[] = {
@@ -52,25 +50,26 @@ inline constexpr size_t kFixedFrameEntries[] = {
     0x06, 0x29, 3,  // Assignment Complete (1-byte body)
     0x06, 0x2C, 3,  // Handover Complete (1-byte body)
     0x06, 0x2F, 3,  // Assignment Failure (1-byte body)
-    // Mobility Management (pd 0x05, shifted 6-bit MTI)
+    // Mobility Management (pd 0x05, MT in the six low bits of octet 1)
     0x05, 0x21, 2,  // CM Service Accept (no body)
     0x05, 0x22, 3,  // CM Service Reject (1-byte body)
     0x05, 0x23, 2,  // CM Service Abort (no value part, TS 24.008 9.2.7)
     0x05, 0x29, 2,  // MM Abort (no value part, TS 24.008)
     0x05, 0x31, 3,  // MM Status (1-byte body)
-    // Call Control (pd 0x03, shifted 6-bit MTI)
+    // Call Control (pd 0x03, MT in the six low bits of octet 1)
     0x03, 0x3D, 6,  // CC Status (4-byte body: cause IE identifier 0x11 +
                     // two cause octets + call state, TS 24.078 9.3.19)
     0x03, 0x3E, 3,  // CC Notify (1-byte cause)
-    // Broadcast Call Control (pd 0x01, shifted 6-bit MTI)
+    // Broadcast Call Control (pd 0x01, MT in the six low bits of octet 1)
     0x01, 0x04, 2,  // BCC Call Confirmed (no body)
     0x01, 0x09, 2,  // BCC Connect Acknowledge (no body)
-    // Group Call Control (pd 0x00, shifted 6-bit MTI)
+    // Group Call Control (pd 0x00, MT in the six low bits of octet 1)
     0x00, 0x03, 2,  // GCC Call Confirmed (no body)
-    // NOT listed (variable bodies): MM 0x01 IMSI Detach
-    // Indication (LV classmark + LV mobile identity), LS 0x01 Location
-    // Service Request (opaque body), RR 0x27 Paging Response (7–15),
-    // RR 0x32 Ciphering Mode Complete (1 or 9 after SPEC-2).
+    // Not listed (variable bodies on the air interface, TS 44.018 /
+    // 24.008 / 24.078): IMSI Detach Indication (LV classmark + LV mobile
+    // identity), Location Service Request/Response (opaque body), Paging
+    // Response, Ciphering Mode Complete, all System Information messages,
+    // IE-bearing CC messages such as Setup/Connect, GMM, SM and SMS.
     0xFF, 0, 0      // terminator
 };
 
