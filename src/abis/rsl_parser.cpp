@@ -26,100 +26,54 @@ namespace gsml3parser {
 
 namespace {
 
-// RSL header sizes by discriminator:
-// RLL: discriminator(1) + msg_type(1) + chan_nr(1) + link_id(1) = 4 bytes
-// DCHAN: discriminator(1) + msg_type(1) + chan_nr(1) + reserved(1) = 4 bytes
-// CCHAN: discriminator(1) + msg_type(1) + chan_nr(1) + reserved(1) = 4 bytes
-// TRX: discriminator(1) + msg_type(1) + trx_nr(1) + reserved(1) = 4 bytes
-constexpr size_t RSL_HEADER_SIZE = 4;
-
-// Determine IE encoding format from type code.
-// TV = type + 1-byte value (no length field)
-// TLV = type + length(1) + value(length)
-// TL16V = type + length(2, big-endian) + value(length)
-enum class IEEncoding : uint8_t { TV, TLV, TL16V };
-
-IEEncoding ieEncoding(uint8_t type) noexcept {
-    switch (type) {
-        // TV IEs: fixed 1-byte value, no length field.
-        case 0x11: // ChanNr
-        case 0x12: // LinkIdent
-        case 0x21: // ActType
-        case 0x24: // BSPower
-        case 0x25: // MSPower
-        case 0x26: // HandoRef
-        case 0x28: // Cause
-        case 0x29: // AccessDelay
-        case 0x2d: // PagingGroup
-        case 0x2e: // ChanNeeded
-        case 0x31: // SysInfoType
-        case 0x33: // MeasResNr
-        case 0x36: // TimingAdvance
-        case 0x37: // MSTimingOffset
-        case 0x38: // ReleaseMode
-            return IEEncoding::TV;
-
-        // TL16V IEs: 16-bit length for large payloads.
-        case 0x30: // L3Info
-        case 0x32: // FullBCCHInfo
-            return IEEncoding::TL16V;
-
-        // All other IEs use standard TLV encoding.
-        default:
-            return IEEncoding::TLV;
-    }
-}
-
-// Parse IEs (TV, TLV, TL16V) from the payload after the RSL header.
-// Returns the number of IEs parsed (capped at MAX_IE).
+// Parse the information element list that follows the two RSL header octets.
+// Encoding classes per IE type code (TS 48.058 9.3, rslIeEncoding): TV IEs
+// carry a fixed-size value with no length field, LV IEs an 8-bit length, and
+// TL16V IEs a 16-bit big-endian length. A truncated IE stops the scan; the
+// IEs parsed so far are kept (graceful degradation on malformed frames).
 size_t parseIEs(const uint8_t* data, size_t len, RSLParsedMessage::IE ies[], size_t maxIes) {
     size_t count = 0;
     size_t pos = 0;
 
     while (pos < len && count < maxIes) {
-        uint8_t type = data[pos];
+        const uint8_t type = data[pos];
         ++pos;
 
-        switch (ieEncoding(type)) {
-            case IEEncoding::TV: {
-                // TV: type(1) + value(1), no length field.
-                if (pos >= len) break; // truncated
-                if (count < maxIes) {
-                    ies[count].type = type;
-                    ies[count].len = 1;
-                    ies[count].val = data + pos;
-                    ++count;
-                }
-                ++pos;
+        switch (rslIeEncoding(type)) {
+            case RSLEIEncoding::TV: {
+                // TV: type + fixed value octets, no length field.
+                const size_t vsize = rslIeTvValueSize(type);
+                if (pos + vsize > len) return count; // truncated value
+                ies[count].type = type;
+                ies[count].len = static_cast<uint16_t>(vsize);
+                ies[count].val = data + pos;
+                ++count;
+                pos += vsize;
                 break;
             }
-            case IEEncoding::TL16V: {
-                // TL16V: type(1) + length(2, big-endian) + value(length).
-                if (pos + 2 > len) break; // truncated length field
-                uint16_t vlen = static_cast<uint16_t>(data[pos]) << 8 | data[pos + 1];
+            case RSLEIEncoding::TL16V: {
+                // TL16V: type + length(2, big-endian) + value(length).
+                if (pos + 2 > len) return count; // truncated length field
+                const size_t vlen = static_cast<size_t>(static_cast<uint16_t>((data[pos] << 8) | data[pos + 1]));
                 pos += 2;
-                if (pos + vlen > len) break; // truncated value
-                if (count < maxIes) {
-                    ies[count].type = type;
-                    ies[count].len = vlen;
-                    ies[count].val = data + pos;
-                    ++count;
-                }
+                if (pos + vlen > len) return count; // truncated value
+                ies[count].type = type;
+                ies[count].len = static_cast<uint16_t>(vlen);
+                ies[count].val = data + pos;
+                ++count;
                 pos += vlen;
                 break;
             }
-            case IEEncoding::TLV: {
-                // TLV: type(1) + length(1) + value(length).
-                if (pos >= len) break; // truncated length
-                uint8_t vlen = data[pos];
+            case RSLEIEncoding::LV: {
+                // LV: type + length(1) + value(length).
+                if (pos >= len) return count; // truncated length
+                const size_t vlen = data[pos];
                 ++pos;
-                if (pos + vlen > len) break; // truncated value
-                if (count < maxIes) {
-                    ies[count].type = type;
-                    ies[count].len = vlen;
-                    ies[count].val = data + pos;
-                    ++count;
-                }
+                if (pos + vlen > len) return count; // truncated value
+                ies[count].type = type;
+                ies[count].len = static_cast<uint16_t>(vlen);
+                ies[count].val = data + pos;
+                ++count;
                 pos += vlen;
                 break;
             }
@@ -140,56 +94,43 @@ Expected<RSLParsedMessage> RSLParser::parse(std::span<const uint8_t> data)
             ParseError{ParseError::Code::TruncatedInput, "RSL message too short for header"});
     }
 
-    // Parse discriminator (7 high bits) and direction (bit 0).
-    // TS 48.058 7.1.1: bit 0 of the discriminator octet indicates the
-    // message direction (0 = BSC->BTS, 1 = BTS->BSC); receivers match on
-    // the 7 discriminator bits only, as osmo-bts does (msg_discr & 0xfe).
-    // The previous code rejected all BTS->BSC messages.
-    uint8_t discByte = data[0] & 0xFE;
-    msg.btsToBsc = (data[0] & 0x01u) != 0;
-    msg.discriminator = static_cast<RSLDiscriminator>(discByte);
+    // First octet: 7-bit message group plus the transparent indication
+    // flag in bit 0 (TS 48.058 9.1).
+    const auto firstOctet = decodeRslFirstOctet(data[0]);
+    if (!firstOctet) {
+        return Expected<RSLParsedMessage>::error(
+            ParseError{ParseError::Code::InvalidValue, "Reserved RSL message group"});
+    }
+    const auto group = rslGroupToDiscriminator(firstOctet->group);
+    if (!group) {
+        return Expected<RSLParsedMessage>::error(
+            ParseError{ParseError::Code::InvalidValue, "Unknown RSL message group"});
+    }
+    msg.discriminator = *group;
+    msg.transparent = firstOctet->transparent;
     msg.msgType = data[1];
 
-    // Validate discriminator is known.
-    if (discByte != static_cast<uint8_t>(RSLDiscriminator::RLL) &&
-        discByte != static_cast<uint8_t>(RSLDiscriminator::CommonChannel) &&
-        discByte != static_cast<uint8_t>(RSLDiscriminator::DedicatedChannel) &&
-        discByte != static_cast<uint8_t>(RSLDiscriminator::TRX) &&
-        discByte != static_cast<uint8_t>(RSLDiscriminator::IPAccess)) {
-        return Expected<RSLParsedMessage>::error(
-            ParseError{ParseError::Code::InvalidValue, "Unknown RSL discriminator"});
-    }
-
-    // All discriminators have a 4-byte common header.
-    if (data.size() < RSL_HEADER_SIZE) {
-        return Expected<RSLParsedMessage>::error(
-            ParseError{ParseError::Code::TruncatedInput, "RSL message truncated before header complete"});
-    }
-
-    msg.chanNr = data[2];
-
-    // RLL messages include link ID in byte 3.
-    if (msg.discriminator == RSLDiscriminator::RLL) {
-        msg.linkId = data[3];
-    } else {
-        msg.linkId = 0;
-    }
-
-    // Parse TLV IEs from payload after header.
-    const uint8_t* payloadStart = data.data() + RSL_HEADER_SIZE;
-    size_t payloadLen = data.size() - RSL_HEADER_SIZE;
+    // The remainder of the frame is the information element list; the
+    // Channel Number and Link Identifier are ordinary TV IEs of that list
+    // (TS 48.058 9.3.1/9.3.2).
+    const uint8_t* payloadStart = data.data() + 2;
+    const size_t payloadLen = data.size() - 2;
     msg.ieCount = parseIEs(payloadStart, payloadLen, msg.informationElements.data(), RSLParsedMessage::MAX_IE);
 
-    // Extract L3 payload for messages that carry it.
-    // RLL DATA_REQ/DATA_IND/UNIT_DATA_* and CCHAN/DCHAN BCCH_INFO,
-    // ENCR_CMD, PAGING_CMD: L3 is inside the L3Info IE (type 0x30,
-    // TL16V) (TS 48.058 8.3.1; RLL data previously read the
-    // raw payload after the header, which is not what real BSCs send).
-    // Note: when an RLL data message carries several L3Info IEs, the
-    // first one is used (one L3 PDU per RSL message in this library's
-    // pipeline).
-    if (msg.discriminator == RSLDiscriminator::RLL) {
-        uint8_t mtype = msg.msgType;
+    if (const auto* chanNrIE = findIE(msg, RSL_IE::ChanNr)) {
+        msg.chanNr = *chanNrIE->val;
+    }
+    if (const auto* linkIdIE = findIE(msg, RSL_IE::LinkIdent)) {
+        msg.linkId = *linkIdIE->val;
+    }
+
+    // Extract the L3 payload for messages that carry one. RLL data messages
+    // (DATA_REQ/DATA_IND/UNIT_DATA_*) and CCHAN/DCHAN messages such as
+    // BCCH_INFO, ENCR_CMD or PAGING_CMD wrap the L3 PDU in the L3
+    // Information IE (TL16V, TS 48.058 9.3.x); when several are present the
+    // first one is used (one L3 PDU per RSL frame in this library's pipeline).
+    if (msg.discriminator == RSLDiscriminator::Rll) {
+        const uint8_t mtype = msg.msgType;
         if (mtype == static_cast<uint8_t>(RSLL3MessageType::DataReq) ||
             mtype == static_cast<uint8_t>(RSLL3MessageType::DataInd) ||
             mtype == static_cast<uint8_t>(RSLL3MessageType::UnitDataReq) ||
@@ -198,18 +139,14 @@ Expected<RSLParsedMessage> RSLParser::parse(std::span<const uint8_t> data)
                 msg.l3Payload = std::span<const uint8_t>(l3IE->val, l3IE->len);
             }
         }
-    }
-    if (msg.discriminator == RSLDiscriminator::CommonChannel ||
-        msg.discriminator == RSLDiscriminator::DedicatedChannel) {
+    } else if (msg.discriminator == RSLDiscriminator::CommonChannel ||
+               msg.discriminator == RSLDiscriminator::DedicatedChannel) {
         if (auto* l3IE = findIE(msg, RSL_IE::L3Info)) {
-            // parseIEs already decoded the TL16V length into l3IE->len,
-            // so no re-derivation is needed (the previous loop
-            // recomputed the same value from val - 2).
             msg.l3Payload = std::span<const uint8_t>(l3IE->val, l3IE->len);
         }
     }
 
-    // FullBCCHInfo IE also carries L3-like system information.
+    // The Full BCCH Information IE also carries system information.
     if (msg.l3Payload.empty()) {
         auto* bcchIE = findIE(msg, RSL_IE::FullBCCHInfo);
         if (bcchIE && bcchIE->val) {
@@ -262,50 +199,87 @@ std::optional<RSLEncryptionInfo> RSLParser::getEncryptionInfo(const RSLParsedMes
 std::string_view RSLParser::messageName(RSLDiscriminator disc, uint8_t msgType)
 {
     switch (disc) {
-        case RSLDiscriminator::RLL:
+        case RSLDiscriminator::Rll:
             switch (static_cast<RSLL3MessageType>(msgType)) {
-                case RSLL3MessageType::DataReq:          return "DATA_REQ";
-                case RSLL3MessageType::DataInd:          return "DATA_IND";
-                case RSLL3MessageType::UnitDataReq:      return "UNIT_DATA_REQ";
-                case RSLL3MessageType::UnitDataInd:      return "UNIT_DATA_IND";
-                case RSLL3MessageType::EstablishmentInd: return "ESTABLISHMENT_IND";
-                case RSLL3MessageType::ReleaseReq:       return "RELEASE_REQ";
-                case RSLL3MessageType::ReleaseInd:       return "RELEASE_IND";
+                case RSLL3MessageType::DataReq:     return "DATA_REQ";
+                case RSLL3MessageType::DataInd:     return "DATA_IND";
+                case RSLL3MessageType::ErrorInd:    return "ERROR_IND";
+                case RSLL3MessageType::EstReq:      return "EST_REQ";
+                case RSLL3MessageType::EstConf:     return "EST_CONF";
+                case RSLL3MessageType::EstInd:      return "EST_IND";
+                case RSLL3MessageType::RelReq:      return "REL_REQ";
+                case RSLL3MessageType::RelConf:     return "REL_CONF";
+                case RSLL3MessageType::RelInd:      return "REL_IND";
+                case RSLL3MessageType::UnitDataReq: return "UNIT_DATA_REQ";
+                case RSLL3MessageType::UnitDataInd: return "UNIT_DATA_IND";
+                case RSLL3MessageType::SuspReq:     return "SUSP_REQ";
+                case RSLL3MessageType::SuspConf:    return "SUSP_CONF";
+                case RSLL3MessageType::ResReq:      return "RES_REQ";
+                case RSLL3MessageType::ReconReq:    return "RECON_REQ";
                 default: break;
             }
             break;
 
         case RSLDiscriminator::DedicatedChannel:
             switch (static_cast<RSLDChanMessageType>(msgType)) {
-                case RSLDChanMessageType::ChanActiv:      return "CHAN_ACTIV";
-                case RSLDChanMessageType::RFChanRel:      return "RF_CHAN_REL";
-                case RSLDChanMessageType::SACCHInfoModify: return "SACCH_INFO_MODIFY";
-                case RSLDChanMessageType::DeactivateSACCH: return "DEACTIVATE_SACCH";
-                case RSLDChanMessageType::EncrCmd:        return "ENCR_CMD";
-                case RSLDChanMessageType::ModeModifyReq:  return "MODE_MODIFY_REQ";
-                case RSLDChanMessageType::MS_PowerControl: return "MS_POWER_CONTROL";
-                case RSLDChanMessageType::BS_PowerControl: return "BS_POWER_CONTROL";
-                case RSLDChanMessageType::ChanActivAck:   return "CHAN_ACTIV_ACK";
-                case RSLDChanMessageType::ChanActivNack:  return "CHAN_ACTIV_NACK";
-                case RSLDChanMessageType::RFChanRelAck:   return "RF_CHAN_REL_ACK";
-                case RSLDChanMessageType::ConnFail:       return "CONN_FAIL";
-                case RSLDChanMessageType::MeasRes:        return "MEAS_RES";
-                case RSLDChanMessageType::HandoDet:       return "HANDO_DET";
+                case RSLDChanMessageType::ChanActiv:          return "CHAN_ACTIV";
+                case RSLDChanMessageType::ChanActivAck:       return "CHAN_ACTIV_ACK";
+                case RSLDChanMessageType::ChanActivNack:      return "CHAN_ACTIV_NACK";
+                case RSLDChanMessageType::ConnFail:           return "CONN_FAIL";
+                case RSLDChanMessageType::DeactivateSacch:    return "DEACTIVATE_SACCH";
+                case RSLDChanMessageType::EncrCmd:            return "ENCR_CMD";
+                case RSLDChanMessageType::HandoDet:           return "HANDO_DET";
+                case RSLDChanMessageType::MeasRes:            return "MEAS_RES";
+                case RSLDChanMessageType::ModeModifyReq:      return "MODE_MODIFY_REQ";
+                case RSLDChanMessageType::ModeModifyAck:      return "MODE_MODIFY_ACK";
+                case RSLDChanMessageType::ModeModifyNack:     return "MODE_MODIFY_NACK";
+                case RSLDChanMessageType::PhyContextReq:      return "PHY_CONTEXT_REQ";
+                case RSLDChanMessageType::PhyContextConf:     return "PHY_CONTEXT_CONF";
+                case RSLDChanMessageType::RfChanRel:          return "RF_CHAN_REL";
+                case RSLDChanMessageType::MsPowerControl:     return "MS_POWER_CONTROL";
+                case RSLDChanMessageType::BsPowerControl:     return "BS_POWER_CONTROL";
+                case RSLDChanMessageType::PreprocConfig:      return "PREPROC_CONFIG";
+                case RSLDChanMessageType::PreprocMeasRes:     return "PREPROC_MEAS_RES";
+                case RSLDChanMessageType::RfChanRelAck:       return "RF_CHAN_REL_ACK";
+                case RSLDChanMessageType::SacchInfoModify:    return "SACCH_INFO_MODIFY";
+                case RSLDChanMessageType::TalkerDet:          return "TALKER_DET";
+                case RSLDChanMessageType::ListenerDet:        return "LISTENER_DET";
+                case RSLDChanMessageType::RemoteCodecConfRep: return "REMOTE_CODEC_CONF_REP";
+                case RSLDChanMessageType::RtdRep:             return "RTD_REP";
+                case RSLDChanMessageType::PreHandoNotif:      return "PRE_HANDO_NOTIF";
+                case RSLDChanMessageType::MrCodecModReq:      return "MR_CODEC_MOD_REQ";
+                case RSLDChanMessageType::MrCodecModAck:      return "MR_CODEC_MOD_ACK";
+                case RSLDChanMessageType::MrCodecModNack:     return "MR_CODEC_MOD_NACK";
+                case RSLDChanMessageType::MrCodecModPer:      return "MR_CODEC_MOD_PER";
+                case RSLDChanMessageType::TfoRep:             return "TFO_REP";
+                case RSLDChanMessageType::TfoModReq:          return "TFO_MOD_REQ";
                 default: break;
             }
             break;
 
         case RSLDiscriminator::CommonChannel:
             switch (static_cast<RSLCChanMessageType>(msgType)) {
-                case RSLCChanMessageType::BCCHInfo:          return "BCCH_INFO";
+                case RSLCChanMessageType::BcchInfo:           return "BCCH_INFO";
+                case RSLCChanMessageType::CcchLoadInd:        return "CCCH_LOAD_IND";
+                case RSLCChanMessageType::ChanRqd:            return "CHAN_RQD";
+                case RSLCChanMessageType::DeleteInd:          return "DELETE_IND";
+                case RSLCChanMessageType::PagingCmd:          return "PAGING_CMD";
                 case RSLCChanMessageType::ImmediateAssignCmd: return "IMMEDIATE_ASSIGN_CMD";
-                case RSLCChanMessageType::PagingCmd:         return "PAGING_CMD";
-                case RSLCChanMessageType::SMSBCCmd:          return "SMS_BC_CMD";
-                case RSLCChanMessageType::CCCHLoadInd:       return "CCCH_LOAD_IND";
-                case RSLCChanMessageType::DeleteInd:         return "DELETE_IND";
-                case RSLCChanMessageType::ChanRqd:           return "CHAN_RQD";
+                case RSLCChanMessageType::SmsBcReq:           return "SMS_BC_REQ";
+                case RSLCChanMessageType::ChanConf:           return "CHAN_CONF";
+                case RSLCChanMessageType::RfResInd:           return "RF_RES_IND";
+                case RSLCChanMessageType::SacchFill:          return "SACCH_FILL";
+                case RSLCChanMessageType::Overload:           return "OVERLOAD";
+                case RSLCChanMessageType::ErrorReport:        return "ERROR_REPORT";
+                case RSLCChanMessageType::SmsBcCmd:           return "SMS_BC_CMD";
+                case RSLCChanMessageType::CbchLoadInd:        return "CBCH_LOAD_IND";
+                case RSLCChanMessageType::NotCmd:             return "NOT_CMD";
                 default: break;
             }
+            break;
+
+        case RSLDiscriminator::TrxManagement:
+            if (msgType == 0x41) return "LOCATION_INFO";
             break;
 
         default:

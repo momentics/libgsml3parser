@@ -31,44 +31,50 @@
 using namespace gsml3parser;
 
 // Helper: build a minimal RLL DATA_REQ with L3 payload.
-// L3 is wrapped in an L3Info IE (TL16V).
+// Frame shape (TS 48.058 8.3.1/9.1): first octet = RLL group (0x01) << 1 |
+// transparent, second octet = global message type, then the IE list: Channel
+// Number TV, Link Identifier TV, L3 Information TL16V.
 static std::vector<uint8_t> makeRLLDataReq(uint8_t chanNr, uint8_t linkId, std::initializer_list<uint8_t> l3) {
     std::vector<uint8_t> buf;
-    buf.push_back(static_cast<uint8_t>(RSLDiscriminator::RLL));
+    buf.push_back(rslFirstOctet(RSLDiscriminator::Rll, /*transparent=*/true));
     buf.push_back(static_cast<uint8_t>(RSLL3MessageType::DataReq));
+    buf.push_back(static_cast<uint8_t>(RSL_IE::ChanNr));
     buf.push_back(chanNr);
+    buf.push_back(static_cast<uint8_t>(RSL_IE::LinkIdent));
     buf.push_back(linkId);
-    // L3Info IE (type 0x30, TL16V) per TS 48.058 8.3.1.
-    buf.push_back(0x30);
+    // L3Info IE (TL16V) per TS 48.058 9.3.x.
+    buf.push_back(static_cast<uint8_t>(RSL_IE::L3Info));
     buf.push_back(0x00);
     buf.push_back(static_cast<uint8_t>(l3.size()));
     buf.insert(buf.end(), l3.begin(), l3.end());
     return buf;
 }
 
-// Helper: build a minimal RLL DATA_IND with L3 payload.
-// L3 is wrapped in an L3Info IE (TL16V).
+// Helper: build a minimal RLL DATA_IND with L3 payload (same IE list shape).
 static std::vector<uint8_t> makeRLLDataInd(uint8_t chanNr, uint8_t linkId, std::initializer_list<uint8_t> l3) {
     std::vector<uint8_t> buf;
-    buf.push_back(static_cast<uint8_t>(RSLDiscriminator::RLL));
+    buf.push_back(rslFirstOctet(RSLDiscriminator::Rll, /*transparent=*/true));
     buf.push_back(static_cast<uint8_t>(RSLL3MessageType::DataInd));
+    buf.push_back(static_cast<uint8_t>(RSL_IE::ChanNr));
     buf.push_back(chanNr);
+    buf.push_back(static_cast<uint8_t>(RSL_IE::LinkIdent));
     buf.push_back(linkId);
-    // L3Info IE (type 0x30, TL16V) per TS 48.058 8.3.1.
-    buf.push_back(0x30);
+    // L3Info IE (TL16V) per TS 48.058 9.3.x.
+    buf.push_back(static_cast<uint8_t>(RSL_IE::L3Info));
     buf.push_back(0x00);
     buf.push_back(static_cast<uint8_t>(l3.size()));
     buf.insert(buf.end(), l3.begin(), l3.end());
     return buf;
 }
 
-// Helper: build a DCHAN CHAN_ACTIV with IEs.
+// Helper: build a DCHAN CHAN_ACTIV with IEs. The Channel Number TV IE is the
+// first element of the list (TS 48.058 8.4).
 static std::vector<uint8_t> makeDChanActiv(uint8_t chanNr, const std::vector<uint8_t>& ies) {
     std::vector<uint8_t> buf;
-    buf.push_back(static_cast<uint8_t>(RSLDiscriminator::DedicatedChannel));
+    buf.push_back(rslFirstOctet(RSLDiscriminator::DedicatedChannel, /*transparent=*/false));
     buf.push_back(static_cast<uint8_t>(RSLDChanMessageType::ChanActiv));
+    buf.push_back(static_cast<uint8_t>(RSL_IE::ChanNr));
     buf.push_back(chanNr);
-    buf.push_back(0); // reserved
     buf.insert(buf.end(), ies.begin(), ies.end());
     return buf;
 }
@@ -76,10 +82,10 @@ static std::vector<uint8_t> makeDChanActiv(uint8_t chanNr, const std::vector<uin
 // Helper: build a CCHAN PAGING_CMD with IEs.
 static std::vector<uint8_t> makeCChanPaging(uint8_t chanNr, const std::vector<uint8_t>& ies) {
     std::vector<uint8_t> buf;
-    buf.push_back(static_cast<uint8_t>(RSLDiscriminator::CommonChannel));
+    buf.push_back(rslFirstOctet(RSLDiscriminator::CommonChannel, /*transparent=*/false));
     buf.push_back(static_cast<uint8_t>(RSLCChanMessageType::PagingCmd));
+    buf.push_back(static_cast<uint8_t>(RSL_IE::ChanNr));
     buf.push_back(chanNr);
-    buf.push_back(0); // reserved
     buf.insert(buf.end(), ies.begin(), ies.end());
     return buf;
 }
@@ -88,11 +94,11 @@ static std::vector<uint8_t> makeCChanPaging(uint8_t chanNr, const std::vector<ui
 // Importance: This is the primary BSC->BTS message carrying L3 data to forward to MS.
 // 3GPP: TS 48.058 RLL DATA_REQ.
 TEST(RSLP_parse_RLL_DataReq, ExtractsL3) {
-    auto buf = makeRLLDataReq(0x7c, 1, {0x09, 0x68, 0x02}); // L3 CM Service Request
+    auto buf = makeRLLDataReq(0x7c, 1, {0x05, 0x24, 0x02}); // L3 CM Service Request (PD=MM low nibble, MT=0x24)
     auto result = RSLParser::parse(buf);
     ASSERT_TRUE(result.has_value());
     auto& msg = *result;
-    EXPECT_EQ(msg.discriminator, RSLDiscriminator::RLL);
+    EXPECT_EQ(msg.discriminator, RSLDiscriminator::Rll);
     EXPECT_EQ(msg.msgType, static_cast<uint8_t>(RSLL3MessageType::DataReq));
     EXPECT_EQ(msg.chanNr, 0x7c);
     EXPECT_EQ(msg.linkId, 1);
@@ -100,19 +106,19 @@ TEST(RSLP_parse_RLL_DataReq, ExtractsL3) {
     auto l3 = RSLParser::extractL3(msg);
     ASSERT_TRUE(l3.has_value());
     EXPECT_EQ(l3->size(), 3u);
-    EXPECT_EQ(l3->data()[0], 0x09);
-    EXPECT_EQ(l3->data()[1], 0x68);
+    EXPECT_EQ(l3->data()[0], 0x05);
+    EXPECT_EQ(l3->data()[1], 0x24);
     EXPECT_EQ(l3->data()[2], 0x02);
 }
 
 // Test: Parse RLL DATA_IND and extract L3 payload.
 // Importance: BTS->BSC direction for forwarding MS L3 messages to the BSC.
 TEST(RSLP_parse_RLL_DataInd, ExtractsL3) {
-    auto buf = makeRLLDataInd(0x7e, 3, {0x0d, 0x04, 0x01, 0x02});
+    auto buf = makeRLLDataInd(0x7e, 3, {0x06, 0x0D, 0x01}); // L3 RR Channel Release (PD=RR low nibble)
     auto result = RSLParser::parse(buf);
     ASSERT_TRUE(result.has_value());
     auto& msg = *result;
-    EXPECT_EQ(msg.discriminator, RSLDiscriminator::RLL);
+    EXPECT_EQ(msg.discriminator, RSLDiscriminator::Rll);
     EXPECT_EQ(msg.msgType, static_cast<uint8_t>(RSLL3MessageType::DataInd));
     EXPECT_EQ(msg.chanNr, 0x7e);
     EXPECT_EQ(msg.linkId, 3);
@@ -123,10 +129,10 @@ TEST(RSLP_parse_RLL_DataInd, ExtractsL3) {
 // Importance: Channel activation is the primary BSC->BTS control message for dedicated channels.
 // 3GPP: TS 48.058 DCHAN CHAN_ACTIV.
 TEST(RSLP_parse_DCHAN_ChanActiv, ParsesIEs) {
-    // ChanMode IE: type=0x22, len=5, value=5 bytes
+    // ChanMode IE: type=0x06, len=5, value=5 bytes
     std::vector<uint8_t> ies = {
-        0x21, 0x01, // ActType IE (TV): activation type = 1
-        0x22, 0x05, 0x00, 0x01, 0x01, 0x00, 0x00, // ChanMode IE (TLV): 5 bytes
+        0x03, 0x01, // ActType IE (TV): activation type = 1
+        0x06, 0x05, 0x00, 0x01, 0x01, 0x00, 0x00, // ChanMode IE (LV): 5 bytes
     };
     auto buf = makeDChanActiv(0x78, ies);
     auto result = RSLParser::parse(buf);
@@ -152,20 +158,20 @@ TEST(RSLP_parse_DCHAN_ChanActiv, ParsesIEs) {
 TEST(RSLP_parse_DCHAN_EncrCmd, ExtractsL3AndEncrInfo) {
     // Build ENCR_CMD with EncrInfo IE and L3Info IE (TL16V).
     std::vector<uint8_t> buf;
-    buf.push_back(static_cast<uint8_t>(RSLDiscriminator::DedicatedChannel));
+    buf.push_back(rslFirstOctet(RSLDiscriminator::DedicatedChannel, /*transparent=*/false));
     buf.push_back(static_cast<uint8_t>(RSLDChanMessageType::EncrCmd));
-    buf.push_back(0x7c); // chanNr
-    buf.push_back(0);    // reserved
-    // EncrInfo IE: type=0x23, len=9, algo=1 (A5/1), key=8 bytes
-    buf.push_back(0x23); // type
-    buf.push_back(0x09); // len
-    buf.push_back(0x01); // algo A5/1
+    buf.push_back(static_cast<uint8_t>(RSL_IE::ChanNr)); // Channel Number TV IE
+    buf.push_back(0x7c);                                // chanNr
+    // EncrInfo IE: type=0x07, len=9, algo=1 (A5/1), key=8 bytes
+    buf.push_back(static_cast<uint8_t>(RSL_IE::EncrInfo)); // type
+    buf.push_back(0x09);                                   // len
+    buf.push_back(0x01);                                   // algo A5/1
     buf.insert(buf.end(), {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x11, 0x22}); // key
-    // L3Info IE (TL16V): type=0x30, len_hi=0, len_lo=4, value=4 bytes
-    buf.push_back(0x30); // type
-    buf.push_back(0x00); // len high
-    buf.push_back(0x04); // len low
-    buf.insert(buf.end(), {0x05, 0x38, 0x01, 0x00}); // CipheringModeCommand L3
+    // L3Info IE (TL16V): type=0x0B, len_hi=0, len_lo=4, value=4 bytes
+    buf.push_back(static_cast<uint8_t>(RSL_IE::L3Info)); // type
+    buf.push_back(0x00);                                 // len high
+    buf.push_back(0x04);                                 // len low
+    buf.insert(buf.end(), {0x06, 0x22, 0x01, 0x00});     // CipheringModeCommand L3 (PD=RR)
 
     auto result = RSLParser::parse(buf);
     ASSERT_TRUE(result.has_value());
@@ -174,7 +180,7 @@ TEST(RSLP_parse_DCHAN_EncrCmd, ExtractsL3AndEncrInfo) {
     auto l3 = RSLParser::extractL3(msg);
     ASSERT_TRUE(l3.has_value());
     EXPECT_EQ(l3->size(), 4u);
-    EXPECT_EQ(l3->data()[0], 0x05);
+    EXPECT_EQ(l3->data()[0], 0x06);
 
     auto* encrIE = RSLParser::findIE(msg, RSL_IE::EncrInfo);
     ASSERT_NE(encrIE, nullptr);
@@ -183,10 +189,10 @@ TEST(RSLP_parse_DCHAN_EncrCmd, ExtractsL3AndEncrInfo) {
 // Test: Parse CCHAN PAGING_CMD and extract IEs.
 // Importance: Paging is the primary mechanism for network-initiated MS contact.
 TEST(RSLP_parse_CCHAN_PagingCmd, ParsesIEs) {
-    // MSIdentity IE: type=0x2c, len=3, value=TMSI bytes
+    // MSIdentity IE: type=0x0C, len=3, value=TMSI bytes
     std::vector<uint8_t> ies = {
-        0x2c, 0x03, 0x12, 0x34, 0x56, // MSIdentity (TLV)
-        0x2d, 0x01,                   // PagingGroup (TV)
+        0x0C, 0x03, 0x12, 0x34, 0x56, // MSIdentity (LV)
+        0x0E, 0x01,                   // PagingGroup (TV)
     };
     auto buf = makeCChanPaging(0x00, ies);
     auto result = RSLParser::parse(buf);
@@ -204,12 +210,12 @@ TEST(RSLP_parse_CCHAN_PagingCmd, ParsesIEs) {
 // Importance: BCCH_INFO carries system information broadcast to all MS in the cell.
 TEST(RSLP_parse_CCHAN_BCCHInfo, ExtractsL3) {
     std::vector<uint8_t> buf;
-    buf.push_back(static_cast<uint8_t>(RSLDiscriminator::CommonChannel));
-    buf.push_back(static_cast<uint8_t>(RSLCChanMessageType::BCCHInfo));
-    buf.push_back(0x00); // chanNr (BCCH)
-    buf.push_back(0);    // reserved
-    // L3Info IE (TL16V): type=0x30, len=0x0006, value=6 bytes of SI
-    buf.push_back(0x30);
+    buf.push_back(rslFirstOctet(RSLDiscriminator::CommonChannel, /*transparent=*/false));
+    buf.push_back(static_cast<uint8_t>(RSLCChanMessageType::BcchInfo));
+    buf.push_back(static_cast<uint8_t>(RSL_IE::ChanNr)); // Channel Number TV IE
+    buf.push_back(RSLChannelNumber::encode(RSLChannelNumber::Bcch, 0)); // BCCH, TN 0 -> 0x80
+    // L3Info IE (TL16V): type=0x0B, len=0x0006, value=6 bytes of SI
+    buf.push_back(static_cast<uint8_t>(RSL_IE::L3Info));
     buf.push_back(0x00);
     buf.push_back(0x06);
     buf.insert(buf.end(), {0x0b, 0x48, 0x01, 0xaa, 0xbb, 0xcc});
@@ -223,13 +229,31 @@ TEST(RSLP_parse_CCHAN_BCCHInfo, ExtractsL3) {
     EXPECT_EQ(l3->size(), 6u);
 }
 
-// Test: Parsing a message shorter than the header returns an error.
+// Test: Parsing a message shorter than the two header octets returns an error.
 // Importance: Defensive parsing prevents buffer overread on malformed input.
 TEST(RSLP_parse_ShortMessage, ReturnsError) {
-    std::vector<uint8_t> shortMsg = {0x00, 0x21}; // Only discriminator + msgType, missing header
+    std::vector<uint8_t> shortMsg = {0x03}; // First octet only; the global message type is missing
     auto result = RSLParser::parse(shortMsg);
     ASSERT_FALSE(result.has_value());
     EXPECT_EQ(result.error().code, ParseError::Code::TruncatedInput);
+}
+
+// Test: A frame whose first-octet group is reserved (0) is rejected.
+// Importance: TS 48.058 9.1 reserves message group 0; accepting it would
+// misroute frames from other A-bis protocols.
+TEST(RSLP_parse_ReservedGroup, ReturnsError) {
+    std::vector<uint8_t> buf = {0x00, 0x01}; // group 0 (reserved), any message type
+    auto result = RSLParser::parse(buf);
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ParseError::Code::InvalidValue);
+}
+
+// Test: A frame with a message group outside the defined set is rejected.
+TEST(RSLP_parse_UnknownGroup, ReturnsError) {
+    std::vector<uint8_t> buf = {0x05, 0x01}; // group 2: no such RSL message group (TS 48.058 9.1)
+    auto result = RSLParser::parse(buf);
+    ASSERT_FALSE(result.has_value());
+    EXPECT_EQ(result.error().code, ParseError::Code::InvalidValue);
 }
 
 // Test: Parsing empty input returns an error.
@@ -244,8 +268,8 @@ TEST(RSLP_parse_EmptyMessage, ReturnsError) {
 TEST(RSLP_parse_TruncatedTLV, PartialParse_NoCrash) {
     // Header + IE type + length claiming 100 bytes but only 5 available.
     std::vector<uint8_t> buf = {
-        0x60, 0x01, 0x78, 0x00, // DCHAN CHAN_ACTIV header
-        0x22, 0x64, 0x00, 0x01, 0x02, 0x03, 0x04 // ChanMode claims 100 bytes, only 5 value bytes present
+        0x08, 0x21, 0x01, 0x78, // DCHAN CHAN_ACTIV: group + type + Channel Number TV IE
+        0x06, 0x64, 0x00, 0x01, 0x02, 0x03, 0x04 // ChanMode (LV) claims 100 bytes, only 5 value bytes present
     };
     auto result = RSLParser::parse(buf);
     ASSERT_TRUE(result.has_value()); // Header parsed, truncated TLV stops parsing gracefully
@@ -258,20 +282,20 @@ TEST(RSLP_parse_TruncatedTLV, PartialParse_NoCrash) {
 // Test: findIE returns pointer for existing IE.
 TEST(RSLP_findIE_Existing, Found) {
     std::vector<uint8_t> ies = {
-        0x21, 0x03, // ActType (TV): value=3
+        0x03, 0x01, // ActType (TV): value=1
     };
     auto buf = makeDChanActiv(0x78, ies);
     auto result = RSLParser::parse(buf);
     ASSERT_TRUE(result.has_value());
     auto* ie = RSLParser::findIE(*result, RSL_IE::ActType);
     ASSERT_NE(ie, nullptr);
-    EXPECT_EQ(ie->type, 0x21);
+    EXPECT_EQ(ie->type, static_cast<uint8_t>(RSL_IE::ActType));
 }
 
 // Test: findIE returns nullptr for non-existing IE.
 TEST(RSLP_findIE_NonExisting, Nullptr) {
     std::vector<uint8_t> ies = {
-        0x21, 0x03, // ActType only
+        0x03, 0x01, // ActType only
     };
     auto buf = makeDChanActiv(0x78, ies);
     auto result = RSLParser::parse(buf);
@@ -282,9 +306,9 @@ TEST(RSLP_findIE_NonExisting, Nullptr) {
 
 // Test: getChannelMode extracts valid ChannelMode from CHAN_ACTIV.
 TEST(RSLP_getChannelMode_Valid, ReturnsMode) {
-    // ChanMode IE: type=0x22, len=5, value with spdInd=2 (Speech)
+    // ChanMode IE: type=0x06, len=5, value with spdInd=2 (Speech)
     std::vector<uint8_t> ies = {
-        0x22, 0x05, 0x00, 0x02, 0x02, 0x00, 0x04, // ChanMode: reserved, Speech, TCH_Bm, dtx=0, rate=4
+        0x06, 0x05, 0x00, 0x02, 0x02, 0x00, 0x04, // ChanMode: reserved, Speech, TCH_Bm, dtx=0, rate=4
     };
     auto buf = makeDChanActiv(0x78, ies);
     auto result = RSLParser::parse(buf);
@@ -298,12 +322,12 @@ TEST(RSLP_getChannelMode_Valid, ReturnsMode) {
 // Test: getEncryptionInfo extracts algorithm ID and key from ENCR_CMD.
 TEST(RSLP_getEncryptionInfo_Valid, ReturnsInfo) {
     std::vector<uint8_t> buf;
-    buf.push_back(static_cast<uint8_t>(RSLDiscriminator::DedicatedChannel));
+    buf.push_back(rslFirstOctet(RSLDiscriminator::DedicatedChannel, /*transparent=*/false));
     buf.push_back(static_cast<uint8_t>(RSLDChanMessageType::EncrCmd));
+    buf.push_back(static_cast<uint8_t>(RSL_IE::ChanNr)); // Channel Number TV IE
     buf.push_back(0x7c);
-    buf.push_back(0);
-    // EncrInfo: type=0x23, len=9, algo=1, key=8 bytes
-    buf.push_back(0x23);
+    // EncrInfo: type=0x07, len=9, algo=1, key=8 bytes
+    buf.push_back(static_cast<uint8_t>(RSL_IE::EncrInfo));
     buf.push_back(0x09);
     buf.push_back(0x01);
     buf.insert(buf.end(), {0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0xba, 0xbe});
@@ -317,15 +341,16 @@ TEST(RSLP_getEncryptionInfo_Valid, ReturnsInfo) {
     EXPECT_EQ(info->key[0], 0xde);
 }
 
-// Test: messageName returns recognizable strings for known message types.
+// Test: messageName returns recognizable strings for known global message
+// types (TS 48.058 Table 8.x — one type space per frame, not per group).
 TEST(RSLP_messageName, KnownTypes) {
-    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::RLL, 0x21), "DATA_REQ");
-    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::RLL, 0x22), "DATA_IND");
-    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::DedicatedChannel, 0x01), "CHAN_ACTIV");
-    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::DedicatedChannel, 0x11), "CHAN_ACTIV_ACK");
-    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::CommonChannel, 0x03), "PAGING_CMD");
-    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::CommonChannel, 0x16), "CHAN_RQD");
-    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::RLL, 0xff), "UNKNOWN");
+    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::Rll, 0x01), "DATA_REQ");
+    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::Rll, 0x02), "DATA_IND");
+    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::DedicatedChannel, 0x21), "CHAN_ACTIV");
+    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::DedicatedChannel, 0x22), "CHAN_ACTIV_ACK");
+    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::CommonChannel, 0x15), "PAGING_CMD");
+    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::CommonChannel, 0x13), "CHAN_RQD");
+    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::Rll, 0xff), "UNKNOWN");
 }
 
 // Test: TL16V IEs longer than 255 bytes keep their full length in the IE
@@ -334,14 +359,15 @@ TEST(RSLP_messageName, KnownTypes) {
 // length field truncated payloads above 255 bytes.
 // 3GPP: TS 48.058 9.2.25 (FULL_BCCH_INFO), 9.2.30 (L3_INFO).
 TEST(RSLP_parse_CCHAN_L3Info, Over255Bytes_FullLengthKept) {
-    // CCHAN BCCH_INFO: disc(0x40) + type(0x01) + chanNr + reserved
-    // + L3Info IE: type(0x30) + len(2, big-endian = 300) + value(300 bytes).
+    // CCHAN BCCH_INFO: first octet (CCHAN group 0x06 << 1 = 0x0C) + type(0x11)
+    // + Channel Number TV IE + L3Info IE: type(0x0B) + len(2, big-endian = 300)
+    // + value(300 bytes).
     std::vector<uint8_t> raw;
-    raw.push_back(0x40);
-    raw.push_back(0x01);
+    raw.push_back(0x0C);
+    raw.push_back(static_cast<uint8_t>(RSLCChanMessageType::BcchInfo));
+    raw.push_back(static_cast<uint8_t>(RSL_IE::ChanNr));
     raw.push_back(0x00);
-    raw.push_back(0x00);
-    raw.push_back(0x30);
+    raw.push_back(static_cast<uint8_t>(RSL_IE::L3Info));
     raw.push_back(0x01); // 0x012C = 300
     raw.push_back(0x2C);
     for (int i = 0; i < 300; ++i) raw.push_back(static_cast<uint8_t>(i & 0xFF));
@@ -361,13 +387,14 @@ TEST(RSLP_parse_CCHAN_L3Info, Over255Bytes_FullLengthKept) {
 // in full via the l3Payload fallback path.
 TEST(RSLP_parse_DCHAN_FullBCCHInfo, Over255Bytes_FullPayloadExtracted) {
     // DCHAN message (no L3Info IE) carrying FullBCCHInfo:
-    // disc(0x60) + type + chanNr + reserved + type(0x32) + len(2) + value(300).
+    // first octet (DCHAN group 0x04 << 1 = 0x08) + type + Channel Number TV IE
+    // + type(0x27) + len(2) + value(300).
     std::vector<uint8_t> raw;
-    raw.push_back(0x60);
-    raw.push_back(0x20);
-    raw.push_back(0x00);
-    raw.push_back(0x00);
-    raw.push_back(0x32);
+    raw.push_back(0x08);
+    raw.push_back(static_cast<uint8_t>(RSLDChanMessageType::RfChanRel));
+    raw.push_back(static_cast<uint8_t>(RSL_IE::ChanNr));
+    raw.push_back(0x7c);
+    raw.push_back(static_cast<uint8_t>(RSL_IE::FullBCCHInfo));
     raw.push_back(0x01); // 0x012C = 300
     raw.push_back(0x2C);
     for (int i = 0; i < 300; ++i) raw.push_back(static_cast<uint8_t>(i & 0xFF));
@@ -382,37 +409,69 @@ TEST(RSLP_parse_DCHAN_FullBCCHInfo, Over255Bytes_FullPayloadExtracted) {
     EXPECT_EQ(l3->size(), 300u);
 }
 
-// Test: BTS->BSC discriminators (direction bit set, TS 48.058 7.1.1) are
-// accepted and the direction is reported (the previous parser
-// rejected all of them).
-TEST(RSLP_parse_DirectionBit, BtsToBscAccepted) {
-    // DCHAN CHAN_ACTIV_ACK with direction bit: 0x61 = 0x60 | 0x01.
-    std::vector<uint8_t> buf = {0x61, static_cast<uint8_t>(RSLDChanMessageType::ChanActivAck), 0x78, 0x00};
+// Test: the transparent indication flag (bit 0 of the first octet,
+// TS 48.058 9.1) is accepted for every group and reported.
+TEST(RSLP_parse_TransparentFlag, AcceptedAndReported) {
+    // DCHAN CHAN_ACTIV_ACK with the transparent flag set: 0x09 = (0x04 << 1) | 1.
+    std::vector<uint8_t> buf = {0x09, static_cast<uint8_t>(RSLDChanMessageType::ChanActivAck),
+                                static_cast<uint8_t>(RSL_IE::ChanNr), 0x78};
     auto result = RSLParser::parse(buf);
     ASSERT_TRUE(result.has_value());
     EXPECT_EQ((*result).discriminator, RSLDiscriminator::DedicatedChannel);
-    EXPECT_TRUE((*result).btsToBsc);
+    EXPECT_TRUE((*result).transparent);
 
-    // CCHAN CCCH_LOAD_IND with direction bit: 0x41.
-    std::vector<uint8_t> cbuf = {0x41, static_cast<uint8_t>(RSLCChanMessageType::CCCHLoadInd), 0x00, 0x00};
+    // CCHAN CCCH_LOAD_IND with the transparent flag set: 0x0D = (0x06 << 1) | 1.
+    std::vector<uint8_t> cbuf = {0x0D, static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd),
+                                 static_cast<uint8_t>(RSL_IE::ChanNr), 0x00};
     auto cresult = RSLParser::parse(cbuf);
     ASSERT_TRUE(cresult.has_value());
     EXPECT_EQ((*cresult).discriminator, RSLDiscriminator::CommonChannel);
-    EXPECT_TRUE((*cresult).btsToBsc);
+    EXPECT_TRUE((*cresult).transparent);
 
-    // RLL DATA_IND with direction bit: 0x01.
-    // L3 is wrapped in an L3Info IE (type 0x30, TL16V).
-    std::vector<uint8_t> rbuf = {0x01, static_cast<uint8_t>(RSLL3MessageType::DataInd), 0x7e, 0x03,
-                                 0x30, 0x00, 0x03, 0x09, 0x68, 0x02};
+    // RLL DATA_IND (transparent): 0x03 = (0x01 << 1) | 1.
+    // L3 is wrapped in an L3Info IE (type 0x0B, TL16V).
+    std::vector<uint8_t> rbuf = {0x03, static_cast<uint8_t>(RSLL3MessageType::DataInd),
+                                 static_cast<uint8_t>(RSL_IE::ChanNr), 0x7e,
+                                 static_cast<uint8_t>(RSL_IE::LinkIdent), 0x03,
+                                 0x0B, 0x00, 0x03, 0x06, 0x0D, 0x01};
     auto rresult = RSLParser::parse(rbuf);
     ASSERT_TRUE(rresult.has_value());
-    EXPECT_EQ((*rresult).discriminator, RSLDiscriminator::RLL);
-    EXPECT_TRUE((*rresult).btsToBsc);
+    EXPECT_EQ((*rresult).discriminator, RSLDiscriminator::Rll);
+    EXPECT_TRUE((*rresult).transparent);
     EXPECT_TRUE(RSLParser::hasL3Payload(*rresult));
 
-    // BSC->BTS (direction bit clear) still works and reports false.
-    std::vector<uint8_t> bbuf = {0x60, static_cast<uint8_t>(RSLDChanMessageType::ChanActiv), 0x78, 0x00};
+    // Flag clear (non-transparent control frame) reports false.
+    std::vector<uint8_t> bbuf = {0x08, static_cast<uint8_t>(RSLDChanMessageType::ChanActiv),
+                                 static_cast<uint8_t>(RSL_IE::ChanNr), 0x78};
     auto bresult = RSLParser::parse(bbuf);
     ASSERT_TRUE(bresult.has_value());
-    EXPECT_FALSE((*bresult).btsToBsc);
+    EXPECT_FALSE((*bresult).transparent);
+}
+
+// Golden: RLL DATA_REQ frame shape (TS 48.058 8.3/9.x): first octet =
+// group RLL (0x01) << 1 | transparent, global message type 0x01, then the TV
+// Channel Number and Link Identifier IEs and a TL16V L3 Information IE.
+TEST(RSLP_parse_RllDataReq_RefShape, ParsedPerIeList) {
+    uint8_t buf[] = {0x03, 0x01,
+                     static_cast<uint8_t>(RSL_IE::ChanNr), 0x08, // Bm_ACCH (code 1), TN 0
+                     static_cast<uint8_t>(RSL_IE::LinkIdent), 0x00,
+                     0x0B, 0x00, 0x03, 'A', 'B', 'C'};           // L3Info TL16V, len=3
+    auto res = RSLParser::parse(std::span<const uint8_t>(buf));
+    ASSERT_TRUE(res.has_value());
+    const auto& parsed = *res;
+    EXPECT_EQ(parsed.discriminator, RSLDiscriminator::Rll);
+    EXPECT_TRUE(parsed.transparent);
+    EXPECT_EQ(parsed.msgType, static_cast<uint8_t>(RSLL3MessageType::DataReq));
+    EXPECT_EQ(parsed.chanNr, 0x08u);
+    EXPECT_EQ(parsed.linkId, 0x00u);
+
+    // L3 IE: 0x0B with 16-bit length 3.
+    auto* l3IE = RSLParser::findIE(parsed, RSL_IE::L3Info);
+    ASSERT_NE(l3IE, nullptr);
+    EXPECT_EQ(l3IE->type, static_cast<uint8_t>(RSL_IE::L3Info));
+    EXPECT_EQ(l3IE->len, 3u);
+    auto l3 = RSLParser::extractL3(*res);
+    ASSERT_TRUE(l3.has_value());
+    EXPECT_EQ((*l3)[0], 'A');
+    EXPECT_EQ((*l3)[2], 'C');
 }

@@ -262,16 +262,19 @@ TEST(CApi, Concurrent_IndependentHandles) {
 
 namespace {
 
-// Build an RLL DATA_REQ frame: disc 0x00 | msgType 0x21 | chanNr |
-// linkId | L3Info IE (0x30, TL16V).
+// Build an RLL DATA_REQ frame: first octet (RLL group | transparent), global
+// message type, Channel Number TV IE, Link Identifier TV IE, L3Info IE (0x0B,
+// TL16V) — TS 48.058 8.3/9.x.
 std::vector<uint8_t> makeRllDataReq(uint8_t chanNr, uint8_t linkId,
                                     const std::vector<uint8_t>& l3) {
     std::vector<uint8_t> b;
-    b.push_back(0x00);  // discriminator RLL, BSC->BTS
-    b.push_back(0x21);  // DATA_REQ
+    b.push_back(0x03);  // (RLL 0x01 << 1) | transparent
+    b.push_back(0x01);  // DATA_REQ global message type
+    b.push_back(0x01);  // Channel Number TV IE
     b.push_back(chanNr);
+    b.push_back(0x02);  // Link Identifier TV IE
     b.push_back(linkId);
-    b.push_back(0x30);  // L3Info IE (TL16V)
+    b.push_back(0x0B);  // L3Info IE (TL16V)
     b.push_back(static_cast<uint8_t>(l3.size() >> 8));
     b.push_back(static_cast<uint8_t>(l3.size() & 0xFF));
     b.insert(b.end(), l3.begin(), l3.end());
@@ -298,21 +301,21 @@ TEST(CApiRsl, Parse_AgreesWithCpp) {
     EXPECT_EQ(gsml3_rsl_msg_type(r), c.msgType);
     EXPECT_EQ(gsml3_rsl_chan_nr(r), c.chanNr);
     EXPECT_EQ(gsml3_rsl_link_id(r), c.linkId);
-    EXPECT_EQ(gsml3_rsl_bts_to_bsc(r), c.btsToBsc ? 1 : 0);
+    EXPECT_EQ(gsml3_rsl_bts_to_bsc(r), c.transparent ? 1 : 0);
     EXPECT_EQ(gsml3_rsl_has_l3(r), 1);
 
     size_t l3len = 0;
     const uint8_t* l3 = gsml3_rsl_l3(r, &l3len);
     ASSERT_NE(l3, nullptr);
     EXPECT_EQ(l3len, 3u);
-    EXPECT_EQ(0, std::memcmp(l3, frame.data() + 7, 3));
+    EXPECT_EQ(0, std::memcmp(l3, frame.data() + 9, 3));
 
-    // IE access: the L3Info IE (0x30) is the first one.
+    // IE access: the Channel Number TV IE is the first one.
     EXPECT_EQ(gsml3_rsl_ie_count(r), c.ieCount);
     uint8_t ietype = 0; size_t ielen = 0; const uint8_t* ieval = nullptr;
     ASSERT_EQ(gsml3_rsl_ie_get(r, 0, &ietype, &ielen, &ieval), GSML3_OK);
-    EXPECT_EQ(ietype, 0x30);
-    EXPECT_EQ(ielen, 3u);
+    EXPECT_EQ(ietype, 0x01);
+    EXPECT_EQ(ielen, 1u);
     EXPECT_NE(gsml3_rsl_ie_get(r, 99, &ietype, &ielen, &ieval), GSML3_OK);
 
     // The handle owns a copy: the input buffer is dead, the views live.

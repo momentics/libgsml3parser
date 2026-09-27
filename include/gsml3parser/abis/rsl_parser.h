@@ -59,16 +59,15 @@ namespace gsml3parser {
 /// All pointers reference the original input buffer — no data is copied.
 /// The fixed-size IE array eliminates heap allocation for high-throughput scenarios.
 struct RSLParsedMessage {
-    RSLDiscriminator discriminator{RSLDiscriminator::RLL};
+    RSLDiscriminator discriminator{RSLDiscriminator::Rll};
     uint8_t msgType{0};
-    uint8_t chanNr{0};
-    uint8_t linkId{0};  ///< LAPDm link identifier (RLL messages only)
+    uint8_t chanNr{0};   ///< Channel number from the Channel Number IE (TS 48.058 9.3.1), 0 when absent
+    uint8_t linkId{0};   ///< Link identifier from the Link Identifier IE (RLL messages)
 
-    /// Message direction bit (TS 48.058 7.1.1): false = BSC->BTS,
-    /// true = BTS->BSC. The discriminator is matched on the 7 high bits;
-    /// bit 0 of the first octet carries the direction and is not part of
-    /// the discriminator value.
-    bool btsToBsc{false};
+    /// Transparent indication flag, bit 0 of the first octet (TS 48.058 9.1):
+    /// set when the frame carries L3 data transparently (e.g. RLL DATA
+    /// messages); the message group occupies the seven high bits.
+    bool transparent{false};
 
     /// Extracted L3 payload bytes (GSM 04.08 message).
     /// Only populated for messages that carry L3 data (DATA_REQ, DATA_IND, BCCH_INFO, ENCR_CMD, etc.).
@@ -105,13 +104,13 @@ static_assert(sizeof(RSLParsedMessage::IE) <= 16, "IE must be cache-friendly (<=
 class RSLParser {
 public:
     /// Parse an RSL message from raw bytes.
-    /// @param data Raw RSL message bytes (discriminator + msg_type + header + TLV IEs).
-    /// Minimum size depends on discriminator: RLL/DCHAN/CCHAN require at least 4 header bytes.
-    /// @return Parsed message with discriminator (7-bit, direction bit
-    ///         stripped) and btsToBsc (direction), message type, channel
-    ///         number, link ID, extracted L3 payload, and parsed information
-    ///         elements.
-    ///         Returns ParseError if the message is truncated or malformed.
+    /// @param data Raw RSL frame: first octet (message group + transparent
+    ///         flag, TS 48.058 9.1), second octet (global message type),
+    ///         followed by the information element list. Minimum size is 2.
+    /// @return Parsed message with discriminator, transparent flag, message
+    ///         type, channel number and link ID extracted from their IEs,
+    ///         the extracted L3 payload, and all parsed information elements.
+    ///         Returns ParseError if the frame is truncated or malformed.
     /// 3GPP TS 48.058 - RSL message structure.
     [[nodiscard]] static Expected<RSLParsedMessage> parse(std::span<const uint8_t> data);
 

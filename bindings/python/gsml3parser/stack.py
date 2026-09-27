@@ -1026,7 +1026,7 @@ class RslFrame:
 
     @property
     def discriminator(self) -> int:
-        """7-bit discriminator (direction bit stripped)."""
+        """7-bit message group of the first octet (TS 48.058 9.1)."""
         self._check()
         return int(lib.gsml3_rsl_discriminator(self._h))
 
@@ -1048,7 +1048,8 @@ class RslFrame:
 
     @property
     def bts_to_bsc(self) -> int:
-        """Direction: 1 = BTS->BSC, 0 = BSC->BTS."""
+        """Transparent indication flag, bit 0 of the first octet (TS 48.058
+        9.1): 1 for transparent frames such as RLL data, 0 otherwise."""
         self._check()
         return int(lib.gsml3_rsl_bts_to_bsc(self._h))
 

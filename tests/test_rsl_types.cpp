@@ -28,31 +28,33 @@
 
 using namespace gsml3parser;
 
-// Test: Channel number encode/decode round-trips correctly for dedicated channels.
+// Test: Channel number encode/decode round-trips correctly.
 // Importance: BTS must correctly extract timeslot and type from RSL channel numbers.
-// 3GPP: TS 48.058 section 7.2 - Channel Number encoding.
+// 3GPP: TS 48.058 9.3.1 - Channel Number IE value (code << 3 | tn).
 TEST(RSLT_ChannelNumber_EncodeDecode, RoundTrip) {
-    // Channel type codes: 6=SDCCH/8, 7=SDCCH/4, 14=TCH/H, 30=SDCCH+TCH/F, 31=TCH/F
-    for (uint8_t cbits : {6u, 7u, 14u, 30u, 31u}) {
+    // Channel codes (five high bits): 1=Bm ACCH, 2=Lm, 4=SDCCH/4, 8=SDCCH/8,
+    // 0x10=BCCH, 0x11=RACH, 0x1D=VAMOS Bm.
+    for (uint8_t code : {1u, 2u, 4u, 8u, 0x10u, 0x11u, 0x1Du}) {
         for (uint8_t ts = 0; ts < 8; ++ts) {
-            uint8_t encoded = RSLChannelNumber::encode(cbits, ts);
-            EXPECT_EQ(RSLChannelNumber::getCBits(encoded), cbits)
-                << "cbits=" << static_cast<int>(cbits) << " ts=" << static_cast<int>(ts);
+            uint8_t encoded = RSLChannelNumber::encode(code, ts);
+            EXPECT_EQ(RSLChannelNumber::getCBits(encoded), code)
+                << "code=" << static_cast<int>(code) << " ts=" << static_cast<int>(ts);
             EXPECT_EQ(RSLChannelNumber::getTimeslot(encoded), ts)
-                << "cbits=" << static_cast<int>(cbits) << " ts=" << static_cast<int>(ts);
+                << "code=" << static_cast<int>(code) << " ts=" << static_cast<int>(ts);
         }
     }
 }
 
-// Test: Common channel numbers are correctly identified as non-dedicated.
-// Importance: BCCH, RACH, PCH/AGCH must not be treated as dedicated channels.
+// Test: common-channel codes (16..31) are identified as non-dedicated.
+// Importance: BCCH, RACH, PCH/AGCH and the common-channel extensions must not
+// be treated as dedicated channels.
 TEST(RSLT_ChannelNumber_IsDedicated, Correct) {
-    EXPECT_FALSE(RSLChannelNumber::isDedicated(RSLChannelNumber::BCCH));
-    EXPECT_FALSE(RSLChannelNumber::isDedicated(RSLChannelNumber::RACH));
-    EXPECT_FALSE(RSLChannelNumber::isDedicated(RSLChannelNumber::PCH_AGCH));
-    // Dedicated channels: type code != common channel values.
-    EXPECT_TRUE(RSLChannelNumber::isDedicated(RSLChannelNumber::encode(6, 0)));  // SDCCH/8
-    EXPECT_TRUE(RSLChannelNumber::isDedicated(RSLChannelNumber::encode(31, 7))); // TCH/F
+    EXPECT_FALSE(RSLChannelNumber::isDedicated(RSLChannelNumber::encode(RSLChannelNumber::Bcch, 0)));
+    EXPECT_FALSE(RSLChannelNumber::isDedicated(RSLChannelNumber::encode(RSLChannelNumber::Rach, 3)));
+    EXPECT_FALSE(RSLChannelNumber::isDedicated(RSLChannelNumber::encode(RSLChannelNumber::PchAgch, 0)));
+    // Dedicated channels: codes below the common-channel range.
+    EXPECT_TRUE(RSLChannelNumber::isDedicated(RSLChannelNumber::encode(RSLChannelNumber::Sdcch8, 0)));  // SDCCH/8 sub 0
+    EXPECT_TRUE(RSLChannelNumber::isDedicated(RSLChannelNumber::encode(RSLChannelNumber::BmAcch, 7))); // TCH/F ACCH
 }
 
 // Test: ChannelMode isSignalling/isSpeech/isData return correct values.
@@ -80,10 +82,11 @@ TEST(RSLT_ChannelMode_SpeechData, Correct) {
 // Importance: Logging and diagnostics depend on readable names for all RSL types.
 TEST(RSLT_NameFunctions, AllNonEmpty) {
     // Discriminator names
-    ASSERT_NE(rslDiscriminatorName(RSLDiscriminator::RLL), "");
+    ASSERT_NE(rslDiscriminatorName(RSLDiscriminator::Rll), "");
     ASSERT_NE(rslDiscriminatorName(RSLDiscriminator::CommonChannel), "");
     ASSERT_NE(rslDiscriminatorName(RSLDiscriminator::DedicatedChannel), "");
-    ASSERT_NE(rslDiscriminatorName(RSLDiscriminator::TRX), "");
+    ASSERT_NE(rslDiscriminatorName(RSLDiscriminator::TrxManagement), "");
+    ASSERT_NE(rslDiscriminatorName(RSLDiscriminator::Lcs), "");
     ASSERT_NE(rslDiscriminatorName(RSLDiscriminator::IPAccess), "");
 
     // IE names

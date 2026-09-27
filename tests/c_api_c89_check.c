@@ -277,7 +277,7 @@ static void check_rsl(void)
     size_t ielen;
     const uint8_t* ieval;
 
-    /* Build DATA_REQ (BCCH/TS2, link 1), parse it back, compare. */
+    /* Build DATA_REQ (chan_nr 0x7C, link 1), parse it back, compare. */
     n = gsml3_rsl_build_data_req(out, sizeof(out), 0x7C, 1, l3, 3);
     check(n > 0, "rsl build data_req");
     r = gsml3_rsl_parse(out, n);
@@ -287,11 +287,14 @@ static void check_rsl(void)
 
         name = gsml3_rsl_name(r);
         check(name != NULL && strstr(name, "DATA") != NULL, "rsl name");
-        check(gsml3_rsl_discriminator(r) == 0x00, "rsl RLL discriminator");
-        check(gsml3_rsl_msg_type(r) == 0x21, "rsl DATA.req type");
+        /* First octet group: RLL = 0x01 (TS 48.058 9.1). */
+        check(gsml3_rsl_discriminator(r) == 0x01, "rsl RLL message group");
+        /* DATA_REQ global message type = 0x01. */
+        check(gsml3_rsl_msg_type(r) == 0x01, "rsl DATA.req type");
         check(gsml3_rsl_chan_nr(r) == 0x7C, "rsl channel number");
         check(gsml3_rsl_link_id(r) == 1, "rsl link id");
-        check(gsml3_rsl_bts_to_bsc(r) == 0, "rsl direction bit");
+        /* RLL data frames are transparent (first-octet bit 0 set). */
+        check(gsml3_rsl_bts_to_bsc(r) == 1, "rsl transparent flag");
 
         l3v = gsml3_rsl_l3(r, &l3len);
         check(l3v != NULL && l3len == 3, "rsl L3 view length");

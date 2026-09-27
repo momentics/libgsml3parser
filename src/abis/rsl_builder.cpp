@@ -27,21 +27,24 @@ namespace gsml3parser {
 
 namespace {
 
-// RSL common header: discriminator(1) + msg_type(1) + chan_nr(1) + extra(1) = 4 bytes.
+// RSL DCHAN/CCHAN frame prefix: first octet (message group + transparent
+// flag) + global message type + Channel Number TV IE = 4 bytes.
 constexpr size_t RSL_HEADER_SIZE = 4;
+// RLL data frame prefix adds the Link Identifier TV IE on top of that.
+constexpr size_t RSL_RLL_HEADER_SIZE = RSL_HEADER_SIZE + 2;
 
-// Write the common 4-byte RSL header.
-void writeHeader(uint8_t* buf, uint8_t disc, uint8_t msgType, uint8_t chanNr, uint8_t extra,
-                 bool btsToBsc) {
-    // TS 48.058 7.1.1: bit 0 of the discriminator octet is the
-    // direction bit (1 = BTS->BSC).
-    buf[0] = static_cast<uint8_t>(disc) | (btsToBsc ? 0x01u : 0x00u);
+// Write the common DCHAN/CCHAN frame prefix: first octet per TS 48.058 9.1,
+// global message type, then the Channel Number TV IE inlined as the first
+// element of the information element list.
+void writeHeader(uint8_t* buf, RSLDiscriminator disc, uint8_t msgType, uint8_t chanNr,
+                 bool transparent) {
+    buf[0] = rslFirstOctet(disc, transparent);
     buf[1] = msgType;
-    buf[2] = chanNr;
-    buf[3] = extra;
+    buf[2] = static_cast<uint8_t>(RSL_IE::ChanNr);
+    buf[3] = chanNr;
 }
 
-// Write a standard TLV IE (type + length + value).
+// Write an LV IE (type + 8-bit length + value).
 size_t writeTLV(uint8_t* buf, size_t offset, uint8_t type, const uint8_t* val, uint8_t len) {
     buf[offset] = type;
     buf[offset + 1] = len;
@@ -51,8 +54,8 @@ size_t writeTLV(uint8_t* buf, size_t offset, uint8_t type, const uint8_t* val, u
     return offset + 2 + len;
 }
 
-// Write a TL16V IE (type + 2-byte length + value) for large payloads like L3Info.
-[[maybe_unused]]
+// Write a TL16V IE (type + 16-bit big-endian length + value) for payloads
+// that can exceed 255 octets, such as L3 information.
 size_t writeTL16V(uint8_t* buf, size_t offset, uint8_t type, const uint8_t* val, uint16_t len) {
     buf[offset] = type;
     buf[offset + 1] = static_cast<uint8_t>((len >> 8) & 0xff);
@@ -63,44 +66,46 @@ size_t writeTL16V(uint8_t* buf, size_t offset, uint8_t type, const uint8_t* val,
     return offset + 3 + len;
 }
 
-// Write a TV IE (type + 1-byte value, no length field).
-size_t writeTV(uint8_t* buf, size_t offset, uint8_t type, uint8_t value) {
+// Write a TV IE (type + fixed value octets, no length field).
+size_t writeTVFixed(uint8_t* buf, size_t offset, uint8_t type, const uint8_t* val, size_t len) {
     buf[offset] = type;
-    buf[offset + 1] = value;
-    return offset + 2;
+    if (len > 0 && val) {
+        std::memcpy(buf + offset + 1, val, len);
+    }
+    return offset + 1 + len;
 }
 
-// Helper: build an RLL data message (DATA_REQ/DATA_IND/UNIT_DATA_REQ/UNIT_DATA_IND).
-// TS 48.058 8.3.1: the L3 PDU is carried inside an L3Info IE (type 0x30,
-// TL16V), not as raw octets after the header (the previous
-// raw layout was incompatible with real BSCs such as osmo-bts, which
-// send/expect the L3Info IE).
+// Helper: build an RLL data message (DATA_REQ/DATA_IND/UNIT_DATA_REQ/
+// UNIT_DATA_IND). TS 48.058 8.3.x: channel number and link identifier are
+// TV IEs of the list and the L3 PDU is carried inside the L3 Information IE
+// (TL16V). RLL data messages are transparent frames (flag set).
 int buildRLLData(std::span<uint8_t> out, uint8_t msgType, uint8_t chanNr, uint8_t linkId,
-                 std::span<const uint8_t> l3Payload, bool btsToBsc) {
-    size_t needed = RSL_HEADER_SIZE + 3 + l3Payload.size(); // header + TL16V IE
+                 std::span<const uint8_t> l3Payload) {
+    const size_t needed = RSL_RLL_HEADER_SIZE + 3 + l3Payload.size(); // prefix + TL16V L3Info
     if (out.size() < needed) return -1;
 
-    writeHeader(out.data(), static_cast<uint8_t>(RSLDiscriminator::RLL), msgType, chanNr, linkId, btsToBsc);
-    return static_cast<int>(
-        writeTL16V(out.data(), RSL_HEADER_SIZE, 0x30, l3Payload.data(),
-                   static_cast<uint16_t>(l3Payload.size())));
+    uint8_t* p = out.data();
+    p[0] = rslFirstOctet(RSLDiscriminator::Rll, /*transparent=*/true);
+    p[1] = msgType;
+    size_t off = 2;
+    off = writeTVFixed(p, off, static_cast<uint8_t>(RSL_IE::ChanNr), &chanNr, 1);
+    off = writeTVFixed(p, off, static_cast<uint8_t>(RSL_IE::LinkIdent), &linkId, 1);
+    off = writeTL16V(p, off, static_cast<uint8_t>(RSL_IE::L3Info), l3Payload.data(),
+                     static_cast<uint16_t>(l3Payload.size()));
+    return static_cast<int>(off);
 }
 
-// Helper: build a DCHAN message with chanNr.
-// All DCHAN builders produce BTS->BSC messages.
+// Helper: build a DCHAN frame prefix; control frames are non-transparent.
 int buildDChanMsg(std::span<uint8_t> out, uint8_t msgType, uint8_t chanNr) {
     if (out.size() < RSL_HEADER_SIZE) return -1;
-    writeHeader(out.data(), static_cast<uint8_t>(RSLDiscriminator::DedicatedChannel), msgType, chanNr, 0,
-                /*btsToBsc=*/true);
+    writeHeader(out.data(), RSLDiscriminator::DedicatedChannel, msgType, chanNr, /*transparent=*/false);
     return static_cast<int>(RSL_HEADER_SIZE);
 }
 
-// Helper: build a CCHAN message with chanNr.
-// All CCHAN builders produce BTS->BSC messages.
+// Helper: build a CCHAN frame prefix; control frames are non-transparent.
 int buildCChanMsg(std::span<uint8_t> out, uint8_t msgType, uint8_t chanNr) {
     if (out.size() < RSL_HEADER_SIZE) return -1;
-    writeHeader(out.data(), static_cast<uint8_t>(RSLDiscriminator::CommonChannel), msgType, chanNr, 0,
-                /*btsToBsc=*/true);
+    writeHeader(out.data(), RSLDiscriminator::CommonChannel, msgType, chanNr, /*transparent=*/false);
     return static_cast<int>(RSL_HEADER_SIZE);
 }
 
@@ -134,84 +139,76 @@ Expected<std::vector<uint8_t>> buildVector(std::initializer_list<size_t> sizeHin
 Expected<std::vector<uint8_t>> RSLBuilder::buildDataReq(
     uint8_t chanNr, uint8_t linkId, std::span<const uint8_t> l3Payload)
 {
-    return buildVector({RSL_HEADER_SIZE + l3Payload.size()},
+    return buildVector({RSL_RLL_HEADER_SIZE + 3 + l3Payload.size()},
         [&](std::span<uint8_t> out) {
-            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataReq), chanNr, linkId, l3Payload,
-                                /*btsToBsc=*/false);
+            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataReq), chanNr, linkId, l3Payload);
         });
 }
 
 int RSLBuilder::buildDataReq(std::span<uint8_t> out, uint8_t chanNr, uint8_t linkId,
     std::span<const uint8_t> l3Payload)
 {
-    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataReq), chanNr, linkId, l3Payload,
-                        /*btsToBsc=*/false);
+    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataReq), chanNr, linkId, l3Payload);
 }
 
 Expected<std::vector<uint8_t>> RSLBuilder::buildDataInd(
     uint8_t chanNr, uint8_t linkId, std::span<const uint8_t> l3Payload)
 {
-    return buildVector({RSL_HEADER_SIZE + l3Payload.size()},
+    return buildVector({RSL_RLL_HEADER_SIZE + 3 + l3Payload.size()},
         [&](std::span<uint8_t> out) {
-            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataInd), chanNr, linkId, l3Payload,
-                                /*btsToBsc=*/true);
+            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataInd), chanNr, linkId, l3Payload);
         });
 }
 
 int RSLBuilder::buildDataInd(std::span<uint8_t> out, uint8_t chanNr, uint8_t linkId,
     std::span<const uint8_t> l3Payload)
 {
-    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataInd), chanNr, linkId, l3Payload,
-                        /*btsToBsc=*/true);
+    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::DataInd), chanNr, linkId, l3Payload);
 }
 
 Expected<std::vector<uint8_t>> RSLBuilder::buildUnitDataReq(
     uint8_t chanNr, uint8_t linkId, std::span<const uint8_t> l3Payload)
 {
-    return buildVector({RSL_HEADER_SIZE + l3Payload.size()},
+    return buildVector({RSL_RLL_HEADER_SIZE + 3 + l3Payload.size()},
         [&](std::span<uint8_t> out) {
-            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataReq), chanNr, linkId, l3Payload,
-                                /*btsToBsc=*/false);
+            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataReq), chanNr, linkId, l3Payload);
         });
 }
 
 int RSLBuilder::buildUnitDataReq(std::span<uint8_t> out, uint8_t chanNr, uint8_t linkId,
     std::span<const uint8_t> l3Payload)
 {
-    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataReq), chanNr, linkId, l3Payload,
-                        /*btsToBsc=*/false);
+    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataReq), chanNr, linkId, l3Payload);
 }
 
 Expected<std::vector<uint8_t>> RSLBuilder::buildUnitDataInd(
     uint8_t chanNr, uint8_t linkId, std::span<const uint8_t> l3Payload)
 {
-    return buildVector({RSL_HEADER_SIZE + l3Payload.size()},
+    return buildVector({RSL_RLL_HEADER_SIZE + 3 + l3Payload.size()},
         [&](std::span<uint8_t> out) {
-            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataInd), chanNr, linkId, l3Payload,
-                                /*btsToBsc=*/true);
+            return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataInd), chanNr, linkId, l3Payload);
         });
 }
 
 int RSLBuilder::buildUnitDataInd(std::span<uint8_t> out, uint8_t chanNr, uint8_t linkId,
     std::span<const uint8_t> l3Payload)
 {
-    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataInd), chanNr, linkId, l3Payload,
-                        /*btsToBsc=*/true);
+    return buildRLLData(out, static_cast<uint8_t>(RSLL3MessageType::UnitDataInd), chanNr, linkId, l3Payload);
 }
 
 // ── DCHAN messages ────────────────────────────────────────────────────
 
 Expected<std::vector<uint8_t>> RSLBuilder::buildChanActivAck(uint8_t chanNr, uint16_t frameNumber)
 {
-    return buildVector({RSL_HEADER_SIZE + 4},
+    return buildVector({RSL_HEADER_SIZE + 3},
         [&](std::span<uint8_t> out) {
             int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::ChanActivAck), chanNr);
             if (n < 0) return -1;
-            // FrameNumber IE: type=0x2b, len=2, value=frameNumber(big-endian)
+            // Frame Number IE: TV with a fixed two-octet value (big-endian).
             uint8_t fnBytes[2];
             fnBytes[0] = static_cast<uint8_t>((frameNumber >> 8) & 0xff);
             fnBytes[1] = static_cast<uint8_t>(frameNumber & 0xff);
-            size_t off = writeTLV(out.data(), static_cast<size_t>(n),
+            size_t off = writeTVFixed(out.data(), static_cast<size_t>(n),
                 static_cast<uint8_t>(RSL_IE::FrameNumber), fnBytes, 2);
             return static_cast<int>(off);
         });
@@ -224,19 +221,21 @@ int RSLBuilder::buildChanActivAck(std::span<uint8_t> out, uint8_t chanNr, uint16
     uint8_t fnBytes[2];
     fnBytes[0] = static_cast<uint8_t>((frameNumber >> 8) & 0xff);
     fnBytes[1] = static_cast<uint8_t>(frameNumber & 0xff);
-    size_t off = writeTLV(out.data(), static_cast<size_t>(n),
+    size_t off = writeTVFixed(out.data(), static_cast<size_t>(n),
         static_cast<uint8_t>(RSL_IE::FrameNumber), fnBytes, 2);
     return static_cast<int>(off);
 }
 
 Expected<std::vector<uint8_t>> RSLBuilder::buildChanActivNack(uint8_t chanNr, RSLErrorCause cause)
 {
-    return buildVector({RSL_HEADER_SIZE + 2},
+    return buildVector({RSL_HEADER_SIZE + 3},
         [&](std::span<uint8_t> out) {
             int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::ChanActivNack), chanNr);
             if (n < 0) return -1;
-            size_t off = writeTV(out.data(), static_cast<size_t>(n),
-                static_cast<uint8_t>(RSL_IE::Cause), static_cast<uint8_t>(cause));
+            // Cause IE: LV with a one-octet value.
+            uint8_t causeByte = static_cast<uint8_t>(cause);
+            size_t off = writeTLV(out.data(), static_cast<size_t>(n),
+                static_cast<uint8_t>(RSL_IE::Cause), &causeByte, 1);
             return static_cast<int>(off);
         });
 }
@@ -245,8 +244,9 @@ int RSLBuilder::buildChanActivNack(std::span<uint8_t> out, uint8_t chanNr, RSLEr
 {
     int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::ChanActivNack), chanNr);
     if (n < 0) return -1;
-    size_t off = writeTV(out.data(), static_cast<size_t>(n),
-        static_cast<uint8_t>(RSL_IE::Cause), static_cast<uint8_t>(cause));
+    uint8_t causeByte = static_cast<uint8_t>(cause);
+    size_t off = writeTLV(out.data(), static_cast<size_t>(n),
+        static_cast<uint8_t>(RSL_IE::Cause), &causeByte, 1);
     return static_cast<int>(off);
 }
 
@@ -254,23 +254,24 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildRFChanRelAck(uint8_t chanNr)
 {
     return buildVector({RSL_HEADER_SIZE},
         [&](std::span<uint8_t> out) {
-            return buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::RFChanRelAck), chanNr);
+            return buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::RfChanRelAck), chanNr);
         });
 }
 
 int RSLBuilder::buildRFChanRelAck(std::span<uint8_t> out, uint8_t chanNr)
 {
-    return buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::RFChanRelAck), chanNr);
+    return buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::RfChanRelAck), chanNr);
 }
 
 Expected<std::vector<uint8_t>> RSLBuilder::buildConnFail(uint8_t chanNr, RSLErrorCause cause)
 {
-    return buildVector({RSL_HEADER_SIZE + 2},
+    return buildVector({RSL_HEADER_SIZE + 3},
         [&](std::span<uint8_t> out) {
             int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::ConnFail), chanNr);
             if (n < 0) return -1;
-            size_t off = writeTV(out.data(), static_cast<size_t>(n),
-                static_cast<uint8_t>(RSL_IE::Cause), static_cast<uint8_t>(cause));
+            uint8_t causeByte = static_cast<uint8_t>(cause);
+            size_t off = writeTLV(out.data(), static_cast<size_t>(n),
+                static_cast<uint8_t>(RSL_IE::Cause), &causeByte, 1);
             return static_cast<int>(off);
         });
 }
@@ -279,8 +280,9 @@ int RSLBuilder::buildConnFail(std::span<uint8_t> out, uint8_t chanNr, RSLErrorCa
 {
     int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::ConnFail), chanNr);
     if (n < 0) return -1;
-    size_t off = writeTV(out.data(), static_cast<size_t>(n),
-        static_cast<uint8_t>(RSL_IE::Cause), static_cast<uint8_t>(cause));
+    uint8_t causeByte = static_cast<uint8_t>(cause);
+    size_t off = writeTLV(out.data(), static_cast<size_t>(n),
+        static_cast<uint8_t>(RSL_IE::Cause), &causeByte, 1);
     return static_cast<int>(off);
 }
 
@@ -288,24 +290,26 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildMeasRes(
     uint8_t chanNr, uint8_t measNr, int8_t rxlevFull, int8_t rxqualFull,
     std::span<const uint8_t> l1Info)
 {
-    size_t estSize = RSL_HEADER_SIZE + 2 + 2 + 3 + (l1Info.empty() ? 0 : (2 + l1Info.size()));
+    size_t estSize = RSL_HEADER_SIZE + 2 + 2 + 3 + (l1Info.empty() ? 0 : 3);
     return buildVector({estSize},
         [&](std::span<uint8_t> out) {
             int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::MeasRes), chanNr);
             if (n < 0) return -1;
-            // MeasResNr IE (TV)
-            size_t off = writeTV(out.data(), static_cast<size_t>(n),
-                static_cast<uint8_t>(RSL_IE::MeasResNr), measNr);
-            // UplinkMeas IE (TLV): 3 bytes = rxlev(1) + rxqual(1) + reserved(1)
+            // MeasResNr IE (TV, 1 octet).
+            size_t off = writeTVFixed(out.data(), static_cast<size_t>(n),
+                static_cast<uint8_t>(RSL_IE::MeasResNr), &measNr, 1);
+            // UplinkMeas IE (LV): rxlev(1) + rxqual(1) + reserved(1).
             uint8_t uplinkData[3];
             uplinkData[0] = static_cast<uint8_t>(rxlevFull);
             uplinkData[1] = static_cast<uint8_t>(rxqualFull);
             uplinkData[2] = 0; // reserved
             off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::UplinkMeas), uplinkData, 3);
-            // Optional L1Info IE
+            // Optional L1Info IE (TV, fixed two octets per TS 48.058 9.3.10).
             if (!l1Info.empty()) {
-                off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::L1Info), l1Info.data(),
-                    static_cast<uint8_t>(l1Info.size()));
+                uint8_t l1Bytes[2];
+                l1Bytes[0] = l1Info[0];
+                l1Bytes[1] = l1Info.size() > 1 ? l1Info[1] : 0;
+                off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::L1Info), l1Bytes, 2);
             }
             return static_cast<int>(off);
         });
@@ -316,16 +320,18 @@ int RSLBuilder::buildMeasRes(std::span<uint8_t> out, uint8_t chanNr, uint8_t mea
 {
     int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::MeasRes), chanNr);
     if (n < 0) return -1;
-    size_t off = writeTV(out.data(), static_cast<size_t>(n),
-        static_cast<uint8_t>(RSL_IE::MeasResNr), measNr);
+    size_t off = writeTVFixed(out.data(), static_cast<size_t>(n),
+        static_cast<uint8_t>(RSL_IE::MeasResNr), &measNr, 1);
     uint8_t uplinkData[3];
     uplinkData[0] = static_cast<uint8_t>(rxlevFull);
     uplinkData[1] = static_cast<uint8_t>(rxqualFull);
     uplinkData[2] = 0;
     off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::UplinkMeas), uplinkData, 3);
     if (!l1Info.empty()) {
-        off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::L1Info), l1Info.data(),
-            static_cast<uint8_t>(l1Info.size()));
+        uint8_t l1Bytes[2];
+        l1Bytes[0] = l1Info[0];
+        l1Bytes[1] = l1Info.size() > 1 ? l1Info[1] : 0;
+        off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::L1Info), l1Bytes, 2);
     }
     return static_cast<int>(off);
 }
@@ -336,8 +342,8 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildHandoDet(uint8_t chanNr, uint8_t
         [&](std::span<uint8_t> out) {
             int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::HandoDet), chanNr);
             if (n < 0) return -1;
-            size_t off = writeTV(out.data(), static_cast<size_t>(n),
-                static_cast<uint8_t>(RSL_IE::AccessDelay), accessDelay);
+            size_t off = writeTVFixed(out.data(), static_cast<size_t>(n),
+                static_cast<uint8_t>(RSL_IE::AccessDelay), &accessDelay, 1);
             return static_cast<int>(off);
         });
 }
@@ -346,8 +352,8 @@ int RSLBuilder::buildHandoDet(std::span<uint8_t> out, uint8_t chanNr, uint8_t ac
 {
     int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::HandoDet), chanNr);
     if (n < 0) return -1;
-    size_t off = writeTV(out.data(), static_cast<size_t>(n),
-        static_cast<uint8_t>(RSL_IE::AccessDelay), accessDelay);
+    size_t off = writeTVFixed(out.data(), static_cast<size_t>(n),
+        static_cast<uint8_t>(RSL_IE::AccessDelay), &accessDelay, 1);
     return static_cast<int>(off);
 }
 
@@ -357,22 +363,22 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildCCCHLoadInd(
     uint8_t chanNr, uint16_t pagingLoad, uint16_t rachTotal,
     uint16_t rachBusy, uint16_t rachAccess)
 {
-    // Header(4) + 4x TV IEs (2 bytes each) = 12 bytes.
-    return buildVector({12},
+    // Header(4) + PagingLoad TV(3) + RachLoad LV(8) = 15 bytes.
+    return buildVector({15},
         [&](std::span<uint8_t> out) {
-            int n = buildCChanMsg(out, static_cast<uint8_t>(RSLCChanMessageType::CCCHLoadInd), chanNr);
+            int n = buildCChanMsg(out, static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd), chanNr);
             if (n < 0) return -1;
             size_t off = static_cast<size_t>(n);
-            // For CCCH_LOAD_IND, the load values are packed into specific IE positions.
-            // Using simple TV encoding for each counter.
+            // Paging Load IE: TV with a two-octet value (big-endian).
             uint8_t pl[2]; pl[0] = static_cast<uint8_t>((pagingLoad >> 8) & 0xff); pl[1] = static_cast<uint8_t>(pagingLoad & 0xff);
-            off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::PagingGroup), pl, 2);
-            uint8_t rt[2]; rt[0] = static_cast<uint8_t>((rachTotal >> 8) & 0xff); rt[1] = static_cast<uint8_t>(rachTotal & 0xff);
-            off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::ReqReference), rt, 2);
-            uint8_t rb[2]; rb[0] = static_cast<uint8_t>((rachBusy >> 8) & 0xff); rb[1] = static_cast<uint8_t>(rachBusy & 0xff);
-            off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::FrameNumber), rb, 2);
-            uint8_t ra[2]; ra[0] = static_cast<uint8_t>((rachAccess >> 8) & 0xff); ra[1] = static_cast<uint8_t>(rachAccess & 0xff);
-            off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::SysInfoType), ra, 2);
+            off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::PagingLoad), pl, 2);
+            // RACH Load IE: LV with a six-octet value — slot, busy and access
+            // counters as big-endian u16 each (TS 48.058 9.3.18).
+            uint8_t rl[6];
+            rl[0] = static_cast<uint8_t>((rachTotal >> 8) & 0xff); rl[1] = static_cast<uint8_t>(rachTotal & 0xff);
+            rl[2] = static_cast<uint8_t>((rachBusy >> 8) & 0xff);  rl[3] = static_cast<uint8_t>(rachBusy & 0xff);
+            rl[4] = static_cast<uint8_t>((rachAccess >> 8) & 0xff);rl[5] = static_cast<uint8_t>(rachAccess & 0xff);
+            off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::RachLoad), rl, 6);
             return static_cast<int>(off);
         });
 }
@@ -380,36 +386,36 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildCCCHLoadInd(
 int RSLBuilder::buildCCCHLoadInd(std::span<uint8_t> out, uint8_t chanNr, uint16_t pagingLoad,
     uint16_t rachTotal, uint16_t rachBusy, uint16_t rachAccess)
 {
-    int n = buildCChanMsg(out, static_cast<uint8_t>(RSLCChanMessageType::CCCHLoadInd), chanNr);
+    int n = buildCChanMsg(out, static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd), chanNr);
     if (n < 0) return -1;
     size_t off = static_cast<size_t>(n);
     uint8_t pl[2]; pl[0] = static_cast<uint8_t>((pagingLoad >> 8) & 0xff); pl[1] = static_cast<uint8_t>(pagingLoad & 0xff);
-    off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::PagingGroup), pl, 2);
-    uint8_t rt[2]; rt[0] = static_cast<uint8_t>((rachTotal >> 8) & 0xff); rt[1] = static_cast<uint8_t>(rachTotal & 0xff);
-    off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::ReqReference), rt, 2);
-    uint8_t rb[2]; rb[0] = static_cast<uint8_t>((rachBusy >> 8) & 0xff); rb[1] = static_cast<uint8_t>(rachBusy & 0xff);
-    off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::FrameNumber), rb, 2);
-    uint8_t ra[2]; ra[0] = static_cast<uint8_t>((rachAccess >> 8) & 0xff); ra[1] = static_cast<uint8_t>(rachAccess & 0xff);
-    off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::SysInfoType), ra, 2);
+    off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::PagingLoad), pl, 2);
+    uint8_t rl[6];
+    rl[0] = static_cast<uint8_t>((rachTotal >> 8) & 0xff); rl[1] = static_cast<uint8_t>(rachTotal & 0xff);
+    rl[2] = static_cast<uint8_t>((rachBusy >> 8) & 0xff);  rl[3] = static_cast<uint8_t>(rachBusy & 0xff);
+    rl[4] = static_cast<uint8_t>((rachAccess >> 8) & 0xff);rl[5] = static_cast<uint8_t>(rachAccess & 0xff);
+    off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::RachLoad), rl, 6);
     return static_cast<int>(off);
 }
 
 Expected<std::vector<uint8_t>> RSLBuilder::buildChanRqd(
     uint8_t chanNr, const L3RequestReference& reqRef, uint8_t accessDelay)
 {
-    return buildVector({RSL_HEADER_SIZE + 5 + 2},
+    return buildVector({RSL_HEADER_SIZE + 4 + 2},
         [&](std::span<uint8_t> out) {
             int n = buildCChanMsg(out, static_cast<uint8_t>(RSLCChanMessageType::ChanRqd), chanNr);
             if (n < 0) return -1;
             size_t off = static_cast<size_t>(n);
-            // ReqReference IE: type=0x2a, len=3, value=RA(1) + T1'(1) + T2(1)
+            // ReqReference IE: TV with a fixed three-octet value — RA plus the
+            // two-octet frame number T1'(5)|T3(6)|T2(5) (TS 48.058 9.3.19).
             uint8_t refBytes[3];
             refBytes[0] = reqRef.ra();
-            refBytes[1] = reqRef.t1p();
-            refBytes[2] = reqRef.t2();
-            off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::ReqReference), refBytes, 3);
-            // AccessDelay IE (TV)
-            off = writeTV(out.data(), off, static_cast<uint8_t>(RSL_IE::AccessDelay), accessDelay);
+            refBytes[1] = static_cast<uint8_t>(((reqRef.t1p() & 0x1Fu) << 3) | ((reqRef.t3() >> 3) & 0x07u));
+            refBytes[2] = static_cast<uint8_t>(((reqRef.t3() & 0x3Fu) << 5) | (reqRef.t2() & 0x1Fu));
+            off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::ReqReference), refBytes, 3);
+            // AccessDelay IE: TV, one octet.
+            off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::AccessDelay), &accessDelay, 1);
             return static_cast<int>(off);
         });
 }
@@ -422,10 +428,10 @@ int RSLBuilder::buildChanRqd(std::span<uint8_t> out, uint8_t chanNr,
     size_t off = static_cast<size_t>(n);
     uint8_t refBytes[3];
     refBytes[0] = reqRef.ra();
-    refBytes[1] = reqRef.t1p();
-    refBytes[2] = reqRef.t2();
-    off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::ReqReference), refBytes, 3);
-    off = writeTV(out.data(), off, static_cast<uint8_t>(RSL_IE::AccessDelay), accessDelay);
+    refBytes[1] = static_cast<uint8_t>(((reqRef.t1p() & 0x1Fu) << 3) | ((reqRef.t3() >> 3) & 0x07u));
+    refBytes[2] = static_cast<uint8_t>(((reqRef.t3() & 0x3Fu) << 5) | (reqRef.t2() & 0x1Fu));
+    off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::ReqReference), refBytes, 3);
+    off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::AccessDelay), &accessDelay, 1);
     return static_cast<int>(off);
 }
 

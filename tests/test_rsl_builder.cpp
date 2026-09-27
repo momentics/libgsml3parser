@@ -35,12 +35,12 @@ using namespace gsml3parser;
 // Importance: Round-trip validates that built messages are parseable by RSLParser.
 // 3GPP: TS 48.058 RLL DATA_REQ encoding.
 TEST(RSLB_buildDataReq_L3Payload, ParsesBack) {
-    std::vector<uint8_t> l3 = {0x09, 0x68, 0x02}; // CM Service Request
+    std::vector<uint8_t> l3 = {0x05, 0x24, 0x02}; // CM Service Request (PD=MM low nibble, MT=0x24)
     auto result = RSLBuilder::buildDataReq(0x7c, 1, l3);
     ASSERT_TRUE(result.has_value());
     auto parsed = RSLParser::parse(*result);
     ASSERT_TRUE(parsed.has_value());
-    EXPECT_EQ((*parsed).discriminator, RSLDiscriminator::RLL);
+    EXPECT_EQ((*parsed).discriminator, RSLDiscriminator::Rll);
     EXPECT_EQ((*parsed).msgType, static_cast<uint8_t>(RSLL3MessageType::DataReq));
     EXPECT_EQ((*parsed).chanNr, 0x7c);
     EXPECT_EQ((*parsed).linkId, 1);
@@ -52,7 +52,7 @@ TEST(RSLB_buildDataReq_L3Payload, ParsesBack) {
 
 // Test: Build DATA_IND and verify round-trip.
 TEST(RSLB_buildDataInd_EncodeDecode, RoundTrip) {
-    std::vector<uint8_t> l3 = {0x0d, 0x04, 0x01}; // Channel Release
+    std::vector<uint8_t> l3 = {0x06, 0x0D, 0x01}; // RR Channel Release (PD=RR low nibble)
     auto result = RSLBuilder::buildDataInd(0x7e, 5, l3);
     ASSERT_TRUE(result.has_value());
     auto parsed = RSLParser::parse(*result);
@@ -120,7 +120,7 @@ TEST(RSLB_buildCCCHLoadInd_Loads, ParsesBack) {
     auto parsed = RSLParser::parse(*result);
     ASSERT_TRUE(parsed.has_value());
     EXPECT_EQ((*parsed).discriminator, RSLDiscriminator::CommonChannel);
-    EXPECT_EQ((*parsed).msgType, static_cast<uint8_t>(RSLCChanMessageType::CCCHLoadInd));
+    EXPECT_EQ((*parsed).msgType, static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd));
     EXPECT_EQ((*parsed).chanNr, 0x00);
 }
 
@@ -135,10 +135,12 @@ TEST(RSLB_buildChanRqd_RefRef, ParsesBack) {
 
     auto* reqRefIE = RSLParser::findIE(*parsed, RSL_IE::ReqReference);
     ASSERT_NE(reqRefIE, nullptr);
+    // TV with the fixed three-octet value: RA plus the two-octet frame number
+    // T1'(5)|T3(6)|T2(5) (TS 48.058 9.3.19).
     EXPECT_EQ(reqRefIE->len, 3u);
     EXPECT_EQ(reqRefIE->val[0], ref.ra());
-    EXPECT_EQ(reqRefIE->val[1], ref.t1p());
-    EXPECT_EQ(reqRefIE->val[2], ref.t2());
+    EXPECT_EQ(reqRefIE->val[1], static_cast<uint8_t>((ref.t1p() << 3) | (ref.t3() >> 3)));
+    EXPECT_EQ(reqRefIE->val[2], static_cast<uint8_t>((ref.t3() << 5) | ref.t2()));
 
     auto* delayIE = RSLParser::findIE(*parsed, RSL_IE::AccessDelay);
     ASSERT_NE(delayIE, nullptr);
@@ -161,16 +163,18 @@ TEST(RSLB_buildHandoDet_Delay, ParsesBack) {
 
 // Test: Span overload for DATA_IND writes correct byte count.
 TEST(RSLB_buildDataInd_SpanOverload, CorrectBytes) {
-    std::vector<uint8_t> l3 = {0x09, 0x68, 0x02};
+    std::vector<uint8_t> l3 = {0x05, 0x24, 0x02};
     std::vector<uint8_t> buf(256, 0);
     int n = RSLBuilder::buildDataInd(buf, 0x7c, 2, l3);
     EXPECT_GT(n, 0);
-    // Header(4) + L3Info IE(3: type 0x30, TL16V length) + L3(3) = 10 bytes.
-    EXPECT_EQ(n, 10);
-    // L3Info IE header (type 0x30, TL16V length 3).
-    EXPECT_EQ(buf[4], 0x30);
-    EXPECT_EQ(buf[5], 0x00);
-    EXPECT_EQ(buf[6], 0x03);
+    // first(1) + type(1) + ChanNr IE(2) + LinkIdent IE(2) + L3Info TL16V(3) + L3(3) = 12.
+    EXPECT_EQ(n, 12);
+    EXPECT_EQ(buf[0], rslFirstOctet(RSLDiscriminator::Rll, /*transparent=*/true)); // 0x03
+    EXPECT_EQ(buf[1], static_cast<uint8_t>(RSLL3MessageType::DataInd));            // 0x02
+    // L3Info IE header (type 0x0B, TL16V length 3).
+    EXPECT_EQ(buf[6], static_cast<uint8_t>(RSL_IE::L3Info));
+    EXPECT_EQ(buf[7], 0x00);
+    EXPECT_EQ(buf[8], 0x03);
 
     auto parsed = RSLParser::parse(std::span<const uint8_t>(buf.data(), n));
     ASSERT_TRUE(parsed.has_value());
@@ -191,7 +195,7 @@ TEST(RSLB_buildRFChanRelAck, ParsesBack) {
     ASSERT_TRUE(result.has_value());
     auto parsed = RSLParser::parse(*result);
     ASSERT_TRUE(parsed.has_value());
-    EXPECT_EQ((*parsed).msgType, static_cast<uint8_t>(RSLDChanMessageType::RFChanRelAck));
+    EXPECT_EQ((*parsed).msgType, static_cast<uint8_t>(RSLDChanMessageType::RfChanRelAck));
     EXPECT_EQ((*parsed).chanNr, 0x7c);
 }
 
@@ -242,25 +246,26 @@ TEST(RSLB_buildDeleteInd, RoundTrip) {
     EXPECT_EQ(ie->len, 3u);
 }
 
-// Test: builders set the TS 48.058 direction bit correctly:
-// BTS->BSC messages carry bit 0 set; BSC->BTS (testing/loopback) clear.
-TEST(RSLB_build_DirectionBit, SetPerMessageDirection) {
-    std::array<uint8_t, 3> l3{0x09, 0x68, 0x02};
+// Test: builders set the TS 48.058 9.1 transparent flag correctly:
+// RLL data frames carry it set (L3 transported transparently); DCHAN/CCHAN
+// control frames clear it.
+TEST(RSLB_build_TransparentFlag, SetPerMessageGroup) {
+    std::array<uint8_t, 3> l3{0x05, 0x24, 0x02};
     auto l3Span = std::span<const uint8_t>(l3.data(), l3.size());
 
     auto ind = RSLBuilder::buildDataInd(0x7e, 3, l3Span);
     ASSERT_TRUE(ind.has_value());
-    EXPECT_EQ((*ind)[0], 0x01u); // RLL | BTS->BSC
+    EXPECT_EQ((*ind)[0], rslFirstOctet(RSLDiscriminator::Rll, true)); // 0x03
 
     auto req = RSLBuilder::buildDataReq(0x7c, 1, l3Span);
     ASSERT_TRUE(req.has_value());
-    EXPECT_EQ((*req)[0], 0x00u); // RLL | BSC->BTS
+    EXPECT_EQ((*req)[0], rslFirstOctet(RSLDiscriminator::Rll, true)); // 0x03
 
     auto ack = RSLBuilder::buildChanActivAck(0x78, 100);
     ASSERT_TRUE(ack.has_value());
-    EXPECT_EQ((*ack)[0], 0x61u); // DCHAN | BTS->BSC
+    EXPECT_EQ((*ack)[0], rslFirstOctet(RSLDiscriminator::DedicatedChannel, false)); // 0x08
 
     auto load = RSLBuilder::buildCCCHLoadInd(0x00, 50, 100, 30, 80);
     ASSERT_TRUE(load.has_value());
-    EXPECT_EQ((*load)[0], 0x41u); // CCHAN | BTS->BSC
+    EXPECT_EQ((*load)[0], rslFirstOctet(RSLDiscriminator::CommonChannel, false)); // 0x0C
 }

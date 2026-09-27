@@ -407,8 +407,9 @@ func (f *RslFrame) LinkID() int {
 	return int(C.gsml3_rsl_link_id(f.p))
 }
 
-// BtsToBsc returns 1 for BTS->BSC direction, 0 for BSC->BTS, -1 for a closed
-// handle.
+// BtsToBsc returns the transparent indication flag, bit 0 of the first octet
+// (TS 48.058 9.1): 1 for transparent frames such as RLL data, 0 otherwise;
+// -1 for a closed handle.
 func (f *RslFrame) BtsToBsc() int {
 	if f == nil || f.p == nil {
 		return -1

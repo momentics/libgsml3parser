@@ -266,15 +266,17 @@ GSML3_C_API void gsml3_rsl_free(gsml3_rsl* rsl);
 
 /* Message name ("DATA_REQ", "CHAN_ACTIV", ...). Static storage. */
 GSML3_C_API const char* gsml3_rsl_name(const gsml3_rsl* rsl);
-/* 7-bit discriminator (direction bit stripped), -1 if NULL. */
+/* 7-bit message group of the first octet (TS 48.058 9.1): RLL=0x01,
+ * DCHAN=0x04, CCHAN=0x06, TRX=0x08, LCS=0x10, IPACCESS=0x3F; -1 if NULL. */
 GSML3_C_API int gsml3_rsl_discriminator(const gsml3_rsl* rsl);
-/* Message type byte within the discriminator, -1 if NULL. */
+/* Global message type (second octet), -1 if NULL. */
 GSML3_C_API int gsml3_rsl_msg_type(const gsml3_rsl* rsl);
-/* Channel number, -1 if NULL. */
+/* Channel number from the Channel Number IE, -1 if NULL. */
 GSML3_C_API int gsml3_rsl_chan_nr(const gsml3_rsl* rsl);
-/* LAPDm link identifier (RLL), -1 if NULL. */
+/* Link identifier from the Link Identifier IE (RLL), -1 if NULL. */
 GSML3_C_API int gsml3_rsl_link_id(const gsml3_rsl* rsl);
-/* Direction: 1 = BTS->BSC, 0 = BSC->BTS; -1 if NULL. */
+/* Transparent indication flag, bit 0 of the first octet (TS 48.058 9.1):
+ * 1 = transparent frame (e.g. RLL data), 0 = non-transparent; -1 if NULL. */
 GSML3_C_API int gsml3_rsl_bts_to_bsc(const gsml3_rsl* rsl);
 /* 1 if the frame carries an L3 payload, 0 otherwise. */
 GSML3_C_API int gsml3_rsl_has_l3(const gsml3_rsl* rsl);

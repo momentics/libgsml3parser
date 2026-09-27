@@ -30,9 +30,9 @@
 /// 3GPP specification: TS 48.058 (A-bis interface RSL protocol).
 /// Thread safety: all methods are stateless static functions, fully thread-safe.
 /// Memory: span overloads perform zero heap allocation; vector overloads allocate once.
-/// Direction bit (TS 48.058 7.1.1): all BTS->BSC builders set bit 0 of the
-/// discriminator octet; buildDataReq/buildUnitDataReq are BSC->BTS
-/// (direction bit clear) and exist for testing/loopback.
+/// Transparent flag (TS 48.058 9.1): bit 0 of the first octet is set for RLL
+/// data frames, which carry L3 transparently (buildDataReq/buildDataInd/
+/// buildUnitDataReq/buildUnitDataInd); all DCHAN/CCHAN control builders clear it.
 ///
 /// Example:
 /// @code

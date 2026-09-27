@@ -21,10 +21,14 @@
 
 /// A-bis RSL (Radio Signal Link) type definitions and constants.
 ///
-/// Provides enumerations for RSL message discriminators, message types,
-/// information element codes, error causes, and channel number encoding.
-/// These types are used by RSLParser to decode BSC->BTS messages and by
-/// RSLBuilder to construct BTS->BSC messages.
+/// Provides enumerations for RSL message groups, global message types,
+/// information element codes, IE encoding classes, error causes, and the
+/// channel number value coding. These types are used by RSLParser to decode
+/// frames from the BSC and by RSLBuilder to construct frames for the BSC.
+///
+/// Frame layout (TS 48.058): octet 1 = message group (7 bits) + transparent
+/// indication flag (bit 0); octet 2 = global message type; octets 3..n = a
+/// list of information elements (TV, TLV or TL16V encoded).
 ///
 /// 3GPP specification: TS 48.058 (A-bis interface), GSM 04.08 (L3 mapping).
 /// Thread safety: all types are trivially copyable, safe for concurrent read.
@@ -32,115 +36,273 @@
 ///
 /// Example:
 /// @code
-///   auto chanNr = RSLChannelNumber::encode(0x1c, 3); // SDCCH/8, TS 3
-///   auto disc = RSLDiscriminator::DedicatedChannel;
-///   auto msgType = static_cast<uint8_t>(RSLDChanMessageType::ChanActiv);
+///   auto first = rslFirstOctet(RSLDiscriminator::Rll, true); // 0x03: RLL group, transparent
+///   auto chanNr = RSLChannelNumber::encode(RSLChannelNumber::Sdcch8, 3); // SDCCH/8 sub-channel 0, TS 3 -> 0x43
 /// @endcode
 #pragma once
 
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <span>
 #include <string_view>
 
 namespace gsml3parser {
 
-/// RSL Message Discriminators (TS 48.058).
-/// The discriminator byte determines which sub-protocol the message belongs to:
-/// RLL for radio link layer data transport, DCHAN for dedicated channel control,
-/// CCHAN for common channel control, TRX for transceiver-level management,
-/// or IPAccess for ip.access vendor-specific extensions.
-/// Note: on the wire the first octet is discriminator (7 bits) + direction
-/// (bit 0: 0 = BSC->BTS, 1 = BTS->BSC, TS 48.058 7.1.1). The enum values
-/// are the 7-bit discriminator with the direction bit clear.
+/// RSL message groups (TS 48.058 9.1). The first octet of an RSL frame
+/// carries the 7-bit message group and, in its low bit, the transparent
+/// indication flag.
 enum class RSLDiscriminator : uint8_t {
-    RLL              = 0x00,  ///< Radio Link Layer messages
-    CommonChannel    = 0x40,  ///< CCHAN - common channel control
-    DedicatedChannel = 0x60,  ///< DCHAN - dedicated channel control
-    TRX              = 0xa0,  ///< TRX-level management
-    IPAccess         = 0xc0   ///< ip.access vendor-specific
+    Rll              = 0x01,
+    CommonChannel    = 0x06,   // CCHAN
+    DedicatedChannel = 0x04,   // DCHAN
+    TrxManagement    = 0x08,   // TRX
+    Lcs              = 0x10,
+    IPAccess         = 0x3F
 };
 
-/// RSL Message Types for RLL discriminator.
-/// Used to transport L3 signalling data between BTS and BSC over established
-/// LAPDm radio links. DATA_REQ/DATA_IND carry numbered L3 messages, while
-/// UNIT_DATA variants handle unnumbered (connectionless) transfer.
+/// Encode the first octet of an RSL frame: the 7-bit message group shifted
+/// one bit up plus the transparent indication flag in bit 0 (TS 48.058 9.1).
+[[nodiscard]] constexpr uint8_t rslFirstOctet(RSLDiscriminator d, bool transparent) noexcept {
+    return static_cast<uint8_t>((static_cast<uint8_t>(d) & 0x7Fu) << 1 | (transparent ? 1u : 0u));
+}
+
+/// Decoded first octet of an RSL frame: the raw 7-bit message group and the
+/// transparent indication flag.
+struct RSLFirstOctet {
+    uint8_t group{0};      ///< 7-bit message group code (TS 48.058 9.1)
+    bool transparent{false}; ///< Transparent indication flag (bit 0 of the first octet)
+};
+
+/// Decode the first octet of an RSL frame (TS 48.058 9.1). Fails when the
+/// 7-bit message group is zero (reserved) or exceeds 0x3F.
+[[nodiscard]] constexpr std::optional<RSLFirstOctet> decodeRslFirstOctet(uint8_t octet) noexcept {
+    const uint8_t group = static_cast<uint8_t>(octet >> 1);
+    if (group == 0 || group > 0x3Fu) return std::nullopt;
+    return RSLFirstOctet{group, (octet & 0x01u) != 0};
+}
+
+/// Map a decoded 7-bit message group to the discriminator enum. Returns
+/// nullopt when the group is not defined by TS 48.058 9.1.
+[[nodiscard]] constexpr std::optional<RSLDiscriminator> rslGroupToDiscriminator(uint8_t group) noexcept {
+    switch (group) {
+        case 0x01: return RSLDiscriminator::Rll;
+        case 0x04: return RSLDiscriminator::DedicatedChannel;
+        case 0x06: return RSLDiscriminator::CommonChannel;
+        case 0x08: return RSLDiscriminator::TrxManagement;
+        case 0x10: return RSLDiscriminator::Lcs;
+        case 0x3F: return RSLDiscriminator::IPAccess;
+    }
+    return std::nullopt;
+}
+
+/// RSL message types of the RLL group (TS 48.058 8.3). The second octet of
+/// every RSL frame is a single global message type shared by all groups.
 enum class RSLL3MessageType : uint8_t {
-    DataReq          = 0x21,  ///< BSC->BTS: L3 data for MS (numbered)
-    DataInd          = 0x22,  ///< BTS->BSC: L3 data from MS (numbered)
-    UnitDataReq      = 0x41,  ///< BSC->BTS: unnumbered L3 data
-    UnitDataInd      = 0x42,  ///< BTS->BSC: unnumbered L3 data
-    EstablishmentInd = 0x61,  ///< BTS->BSC: LAPDm link established
-    ReleaseReq       = 0x81,  ///< BSC->BTS: release request
-    ReleaseInd       = 0xa1   ///< BTS->BSC: release indication
+    DataReq          = 0x01,  ///< DATA_REQ: L3 data for the MS (numbered)
+    DataInd          = 0x02,  ///< DATA_IND: L3 data from the MS (numbered)
+    ErrorInd         = 0x03,  ///< ERROR_IND: LAPDm link layer error report
+    EstReq           = 0x04,  ///< EST_REQ: radio link establishment request
+    EstConf          = 0x05,  ///< EST_CONF: radio link establishment confirm
+    EstInd           = 0x06,  ///< EST_IND: radio link establishment indication
+    RelReq           = 0x07,  ///< REL_REQ: radio link release request
+    RelConf          = 0x08,  ///< REL_CONF: radio link release confirm
+    RelInd           = 0x09,  ///< REL_IND: radio link release indication
+    UnitDataReq      = 0x0A,  ///< UNIT_DATA_REQ: unnumbered L3 transfer
+    UnitDataInd      = 0x0B,  ///< UNIT_DATA_IND: unnumbered L3 transfer
+    SuspReq          = 0x0C,  ///< SUSP_REQ (vendor extension)
+    SuspConf         = 0x0D,  ///< SUSP_CONF (vendor extension)
+    ResReq           = 0x0E,  ///< RES_REQ (vendor extension)
+    ReconReq         = 0x0F   ///< RECON_REQ (vendor extension)
 };
 
-/// RSL Message Types for DCHAN discriminator.
-/// Controls dedicated channel lifecycle: activation, power control,
-/// encryption setup, measurement reporting, and handover detection.
+/// RSL message types of the DCHAN group (TS 48.058 8.4): dedicated channel
+/// lifecycle — activation, power control, encryption setup, measurement
+/// reporting, mode modification, handover and codec management.
 enum class RSLDChanMessageType : uint8_t {
-    ChanActiv        = 0x01,  ///< BSC->BTS: channel activation command
-    RFChanRel        = 0x02,  ///< BSC->BTS: RF channel release command
-    SACCHInfoModify  = 0x03,  ///< BSC->BTS: SACCH info modify
-    DeactivateSACCH  = 0x04,  ///< BSC->BTS: deactivate SACCH
-    EncrCmd          = 0x06,  ///< BSC->BTS: encryption command
-    ModeModifyReq    = 0x07,  ///< BSC->BTS: mode modify request
-    MS_PowerControl  = 0x09,  ///< BSC->BTS: MS power control
-    BS_PowerControl  = 0x0a,  ///< BSC->BTS: BS power control
-    ChanActivAck     = 0x11,  ///< BTS->BSC: channel activation ACK
-    ChanActivNack    = 0x12,  ///< BTS->BSC: channel activation NACK
-    RFChanRelAck     = 0x15,  ///< BTS->BSC: RF channel release ACK
-    ConnFail         = 0x21,  ///< BTS->BSC: connection failure report
-    MeasRes          = 0x24,  ///< BTS->BSC: measurement result report
-    HandoDet         = 0x26   ///< BTS->BSC: handover detection
+    ChanActiv          = 0x21, ///< CHAN_ACTIV
+    ChanActivAck       = 0x22, ///< CHAN_ACTIV_ACK
+    ChanActivNack      = 0x23, ///< CHAN_ACTIV_NACK
+    ConnFail           = 0x24, ///< CONN_FAIL
+    DeactivateSacch    = 0x25, ///< DEACTIVATE_SACCH
+    EncrCmd            = 0x26, ///< ENCR_CMD
+    HandoDet           = 0x27, ///< HANDO_DET
+    MeasRes            = 0x28, ///< MEAS_RES
+    ModeModifyReq      = 0x29, ///< MODE_MODIFY_REQ
+    ModeModifyAck      = 0x2A, ///< MODE_MODIFY_ACK
+    ModeModifyNack     = 0x2B, ///< MODE_MODIFY_NACK
+    PhyContextReq      = 0x2C, ///< PHY_CONTEXT_REQ
+    PhyContextConf     = 0x2D, ///< PHY_CONTEXT_CONF
+    RfChanRel          = 0x2E, ///< RF_CHAN_REL
+    MsPowerControl     = 0x2F, ///< MS_POWER_CONTROL
+    BsPowerControl     = 0x30, ///< BS_POWER_CONTROL
+    PreprocConfig      = 0x31, ///< PREPROC_CONFIG
+    PreprocMeasRes     = 0x32, ///< PREPROC_MEAS_RES
+    RfChanRelAck       = 0x33, ///< RF_CHAN_REL_ACK
+    SacchInfoModify    = 0x34, ///< SACCH_INFO_MODIFY
+    TalkerDet          = 0x35, ///< TALKER_DET
+    ListenerDet        = 0x36, ///< LISTENER_DET
+    RemoteCodecConfRep = 0x37, ///< REMOTE_CODEC_CONF_REP
+    RtdRep             = 0x38, ///< RTD_REP
+    PreHandoNotif      = 0x39, ///< PRE_HANDO_NOTIF
+    MrCodecModReq      = 0x3A, ///< MR_CODEC_MOD_REQ
+    MrCodecModAck      = 0x3B, ///< MR_CODEC_MOD_ACK
+    MrCodecModNack     = 0x3C, ///< MR_CODEC_MOD_NACK
+    MrCodecModPer      = 0x3D, ///< MR_CODEC_MOD_PER
+    TfoRep             = 0x3E, ///< TFO_REP
+    TfoModReq          = 0x3F  ///< TFO_MOD_REQ
 };
 
-/// RSL Message Types for CCHAN discriminator.
-/// Manages common channels (BCCH, CCCH): system information broadcasting,
-/// paging, SMS broadcast, immediate assignment, and load reporting.
+/// RSL message types of the CCHAN group (TS 48.058 8.5): common channel
+/// management — system information, paging, SMS broadcast, immediate
+/// assignment and load reporting.
 enum class RSLCChanMessageType : uint8_t {
-    BCCHInfo         = 0x01,  ///< BSC->BTS: BCCH system information
-    ImmediateAssignCmd = 0x02, ///< BSC->BTS: immediate assignment command
-    PagingCmd        = 0x03,  ///< BSC->BTS: paging command
-    SMSBCCmd         = 0x04,  ///< BSC->BTS: SMS broadcast command
-    CCCHLoadInd      = 0x13,  ///< BTS->BSC: CCCH load indication
-    DeleteInd        = 0x14,  ///< BTS->BSC: delete indication
-    ChanRqd          = 0x16   ///< BTS->BSC: channel required request
+    BcchInfo           = 0x11, ///< BCCH_INFO
+    CcchLoadInd        = 0x12, ///< CCCH_LOAD_IND
+    ChanRqd            = 0x13, ///< CHAN_RQD
+    DeleteInd          = 0x14, ///< DELETE_IND
+    PagingCmd          = 0x15, ///< PAGING_CMD
+    ImmediateAssignCmd = 0x16, ///< IMMEDIATE_ASSIGN_CMD
+    SmsBcReq           = 0x17, ///< SMS_BC_REQ
+    ChanConf           = 0x18, ///< CHAN_CONF (vendor extension)
+    RfResInd           = 0x19, ///< RF_RES_IND
+    SacchFill          = 0x1A, ///< SACCH_FILL
+    Overload           = 0x1B, ///< OVERLOAD
+    ErrorReport        = 0x1C, ///< ERROR_REPORT
+    SmsBcCmd           = 0x1D, ///< SMS_BC_CMD
+    CbchLoadInd        = 0x1E, ///< CBCH_LOAD_IND
+    NotCmd             = 0x1F  ///< NOT_CMD
 };
 
-/// RSL Information Element type codes (TS 48.058).
-/// Each IE is encoded as TLV (Type-Length-Value) or TV (Type-Value, fixed 1-byte value).
-/// Used to carry channel parameters, encryption keys, measurement data, and L3 payloads
-/// within RSL messages.
+/// RSL information element type codes (TS 48.058 9.3). IEs carry channel
+/// parameters, encryption keys, measurement data, and L3 payloads within
+/// RSL messages. Values 0x10 and 0x1D are reserved and have no member here.
 enum class RSL_IE : uint8_t {
-    ChanNr           = 0x11,  ///< Channel Number (TV, 1 byte)
-    LinkIdent        = 0x12,  ///< Link Identifier (TV, 1 byte)
-    ActType          = 0x21,  ///< Activation Type (TV, 1 byte)
-    ChanMode         = 0x22,  ///< Channel Mode (TLV, 6 bytes)
-    EncrInfo         = 0x23,  ///< Encryption Info (TLV, 1..129 bytes)
-    BSPower          = 0x24,  ///< BS Power (TV, 1 byte)
-    MSPower          = 0x25,  ///< MS Power (TV, 1 byte)
-    HandoRef         = 0x26,  ///< Handover Reference (TV, 1 byte)
-    SACCHInfo        = 0x27,  ///< SACCH Information (TLV, variable)
-    Cause            = 0x28,  ///< Cause (TV, 1 byte)
-    AccessDelay      = 0x29,  ///< Access Delay (TV, 1 byte)
-    ReqReference     = 0x2a,  ///< Request Reference (TLV, 3 bytes)
-    FrameNumber      = 0x2b,  ///< Frame Number (TLV, 2 bytes)
-    MSIdentity       = 0x2c,  ///< MS Identity (TLV, variable)
-    PagingGroup      = 0x2d,  ///< Paging Group (TV, 1 byte)
-    ChanNeeded       = 0x2e,  ///< Channel Needed (TV, 1 byte)
-    FullImmAssInfo   = 0x2f,  ///< Full Immediate Assignment Info (TLV, variable)
-    L3Info           = 0x30,  ///< L3 Information (TL16V, variable, 16-bit length)
-    SysInfoType      = 0x31,  ///< System Information Type (TV, 1 byte)
-    FullBCCHInfo     = 0x32,  ///< Full BCCH Info (TL16V, 16-bit length, variable)
-    MeasResNr        = 0x33,  ///< Measurement Result Number (TV, 1 byte)
-    UplinkMeas       = 0x34,  ///< Uplink Measurements (TLV, 3..7 bytes)
-    L1Info           = 0x35,  ///< L1 Information (TLV, variable)
-    TimingAdvance    = 0x36,  ///< Timing Advance (TV, 1 byte)
-    MSTimingOffset   = 0x37,  ///< MS Timing Offset (TV, 1 byte)
-    ReleaseMode      = 0x38   ///< Release Mode (TV, 1 byte)
+    ChanNr           = 0x01, ///< Channel Number
+    LinkIdent        = 0x02, ///< Link Identifier
+    ActType          = 0x03, ///< Activation Type
+    BSPower          = 0x04, ///< BS Power
+    ChanIdent        = 0x05, ///< Channel Identification
+    ChanMode         = 0x06, ///< Channel Mode
+    EncrInfo         = 0x07, ///< Encryption Info
+    FrameNumber      = 0x08, ///< Frame Number
+    HandoRef         = 0x09, ///< Handover Reference
+    L1Info           = 0x0A, ///< L1 Information
+    L3Info           = 0x0B, ///< L3 Information
+    MSIdentity       = 0x0C, ///< MS Identity
+    MSPower          = 0x0D, ///< MS Power
+    PagingGroup      = 0x0E, ///< Paging Group
+    PagingLoad       = 0x0F, ///< Paging Load
+    AccessDelay      = 0x11, ///< Access Delay
+    RachLoad         = 0x12, ///< RACH Load
+    ReqReference     = 0x13, ///< Request Reference
+    ReleaseMode      = 0x14, ///< Release Mode
+    ResourceInfo     = 0x15, ///< Resource Info
+    RlmCause         = 0x16, ///< RLM Cause
+    StartngTime      = 0x17, ///< Starting Time
+    TimingAdvance    = 0x18, ///< Timing Advance
+    UplinkMeas       = 0x19, ///< Uplink Measurements
+    Cause            = 0x1A, ///< Cause
+    MeasResNr        = 0x1B, ///< Measurement Result Number
+    MsgId            = 0x1C, ///< Message Identifier
+    SysInfoType      = 0x1E, ///< System Information Type
+    MSPowerParam     = 0x1F, ///< MS Power Parameters
+    BSPowerParam     = 0x20, ///< BS Power Parameters
+    ImmAssInfo       = 0x23, ///< Immediate Assignment Info
+    SmscbInfo        = 0x24, ///< SMS-CB Info
+    MSTimingOffset   = 0x25, ///< MS Timing Offset
+    ErrMsg           = 0x26, ///< Error Message
+    FullBCCHInfo     = 0x27, ///< Full BCCH Information
+    ChanNeeded       = 0x28, ///< Channel Needed
+    CbCmdType        = 0x29, ///< CB Command Type
+    SmscbMsg         = 0x2A, ///< SMS-CB Message
+    FullImmAssInfo   = 0x2B, ///< Full Immediate Assignment Info
+    SacchInfo        = 0x2C, ///< SACCH Information
+    CbchLoadInfo     = 0x2D  ///< CBCH Load Info
 };
+
+/// RSL information element encoding classes (TS 48.058 9.3):
+/// - TV:    type + fixed value octets, no length field;
+/// - LV:    type + 8-bit length + value;
+/// - TL16V: type + 16-bit big-endian length + value (payloads above 255).
+enum class RSLEIEncoding : uint8_t { TV, LV, TL16V };
+
+/// Encoding class of an RSL IE type code (TS 48.058 9.3). The class is fixed
+/// per IE: TV IEs have a constant value size, LV/TL16V IEs carry their value
+/// length explicitly. Unknown type codes are decoded as LV (variable), which
+/// keeps malformed or vendor frames parseable without desynchronizing the IE
+/// list.
+[[nodiscard]] constexpr RSLEIEncoding rslIeEncoding(uint8_t iei) noexcept {
+    switch (iei) {
+        // TV: fixed value, no length octet.
+        case 0x01: // ChanNr (1)
+        case 0x02: // LinkIdent (1)
+        case 0x03: // ActType (1)
+        case 0x04: // BSPower (1)
+        case 0x08: // FrameNumber (2)
+        case 0x09: // HandoRef (1)
+        case 0x0A: // L1Info (2)
+        case 0x0D: // MSPower (1)
+        case 0x0E: // PagingGroup (1)
+        case 0x0F: // PagingLoad (2)
+        case 0x11: // AccessDelay (1)
+        case 0x13: // ReqReference (3)
+        case 0x14: // ReleaseMode (1)
+        case 0x17: // StartngTime (2)
+        case 0x18: // TimingAdvance (1)
+        case 0x1B: // MeasResNr (1)
+        case 0x1C: // MsgId (1)
+        case 0x1E: // SysInfoType (1)
+        case 0x25: // MSTimingOffset (1)
+        case 0x28: // ChanNeeded (1)
+        case 0x29: // CbCmdType (1)
+        case 0x2D: // CbchLoadInfo (1)
+            return RSLEIEncoding::TV;
+
+        // TL16V: 16-bit big-endian length for large payloads.
+        case 0x0B: // L3Info
+        case 0x27: // FullBCCHInfo
+            return RSLEIEncoding::TL16V;
+
+        // LV (8-bit length) and unknown codes.
+        default:
+            return RSLEIEncoding::LV;
+    }
+}
+
+/// Value size in octets of a TV IE (0 when the IE is not TV-encoded).
+[[nodiscard]] constexpr uint8_t rslIeTvValueSize(uint8_t iei) noexcept {
+    switch (iei) {
+        case 0x08: // FrameNumber
+        case 0x0A: // L1Info
+        case 0x0F: // PagingLoad
+        case 0x17: // StartngTime
+            return 2;
+        case 0x13: // ReqReference
+            return 3;
+        case 0x01: // ChanNr
+        case 0x02: // LinkIdent
+        case 0x03: // ActType
+        case 0x04: // BSPower
+        case 0x09: // HandoRef
+        case 0x0D: // MSPower
+        case 0x0E: // PagingGroup
+        case 0x11: // AccessDelay
+        case 0x14: // ReleaseMode
+        case 0x18: // TimingAdvance
+        case 0x1B: // MeasResNr
+        case 0x1C: // MsgId
+        case 0x1E: // SysInfoType
+        case 0x25: // MSTimingOffset
+        case 0x28: // ChanNeeded
+        case 0x29: // CbCmdType
+        case 0x2D: // CbchLoadInfo
+            return 1;
+        default:
+            return 0;
+    }
+}
 
 /// RSL Error causes for NACK and failure messages.
 enum class RSLErrorCause : uint8_t {
@@ -160,42 +322,55 @@ enum class RSLErrorCause : uint8_t {
     EncryptionUnimplemented = 0x0e
 };
 
-/// RSL Channel Number encoding (TS 48.058).
-/// Common channels use fixed values (BCCH=0x00, RACH=0x40, PCH/AGCH=0x60).
-/// Dedicated channels encode type bits (upper 5) and timeslot (lower 3).
+/// RSL Channel Number IE value coding (TS 48.058 9.3.1): a five-bit channel
+/// code in the high bits and a three-bit timeslot number in the low bits,
+/// i.e. value = (code << 3) | tn. Sub-channelized types use the code base
+/// plus the sub-channel index: Lm codes 2..3 ('0001's'B), SDCCH/4 codes
+/// 4..7 ('001'ss'B), SDCCH/8 codes 8..15 ('01sss'B).
 struct RSLChannelNumber {
-    static constexpr uint8_t BCCH       = 0x00;
-    static constexpr uint8_t RACH       = 0x40;
-    static constexpr uint8_t PCH_AGCH   = 0x60;
+    // Channel codes (the five most significant bits of the IE value).
+    static constexpr uint8_t Invalid = 0x00; ///< '00000'B — invalid
+    static constexpr uint8_t BmAcch  = 0x01; ///< '00001'B — TCH/F or TCH/H ACCH
+    static constexpr uint8_t Lm      = 0x02; ///< '0001's'B — TCH/H sub-slot, add 0/1
+    static constexpr uint8_t Sdcch4  = 0x04; ///< '001'ss'B — SDCCH/4, add sub-channel 0..3
+    static constexpr uint8_t Sdcch8  = 0x08; ///< '01sss'B — SDCCH/8, add sub-channel 0..7
+    static constexpr uint8_t Bcch    = 0x10; ///< '10000'B — BCCH
+    static constexpr uint8_t Rach    = 0x11; ///< '10001'B — RACH
+    static constexpr uint8_t PchAgch = 0x12; ///< '10010'B — PCH + AGCH
+    static constexpr uint8_t Pdch    = 0x18; ///< '11000'B — dynamic PDCH (vendor extension)
+    static constexpr uint8_t Cbch4   = 0x19; ///< '11001'B — CBCH/4 (vendor extension)
+    static constexpr uint8_t Cbch8   = 0x1A; ///< '11010'B — CBCH/8 (vendor extension)
+    static constexpr uint8_t VamosBm = 0x1D; ///< '11101'B — VAMOS TCH/F ACCH (vendor extension)
 
-    /// Encode dedicated channel number from type bits and timeslot.
-    /// @param cbits Channel type code (0-31, shifted to upper 5 bits)
-    /// @param ts Timeslot number (lower 3 bits, range 0-7)
-    /// @return Encoded channel number byte
-    [[nodiscard]] static uint8_t encode(uint8_t cbits, uint8_t ts) noexcept {
-        return ((cbits << 3) & 0xf8) | (ts & 0x07);
+    /// Encode a channel number from the five-bit code and timeslot.
+    /// @param code Channel type code (0-31, see constants above)
+    /// @param tn Timeslot number (0-7)
+    /// @return Encoded channel number octet
+    [[nodiscard]] static uint8_t encode(uint8_t code, uint8_t tn) noexcept {
+        return static_cast<uint8_t>(((code & 0x1Fu) << 3) | (tn & 0x07u));
     }
 
-    /// Extract channel type bits from encoded channel number.
-    /// @param chanNr Encoded channel number byte
-    /// @return Upper 5 bits (channel type identifier, 0-31)
+    /// Extract the five-bit channel code from an encoded channel number.
+    /// @param chanNr Encoded channel number octet
+    /// @return High five bits (channel type identifier, 0-31)
     [[nodiscard]] static uint8_t getCBits(uint8_t chanNr) noexcept {
-        return chanNr >> 3;
+        return static_cast<uint8_t>(chanNr >> 3);
     }
 
-    /// Extract timeslot from encoded channel number.
-    /// @param chanNr Encoded channel number byte
-    /// @return Lower 3 bits (timeslot 0-7)
+    /// Extract the timeslot from an encoded channel number.
+    /// @param chanNr Encoded channel number octet
+    /// @return Low three bits (timeslot 0-7)
     [[nodiscard]] static uint8_t getTimeslot(uint8_t chanNr) noexcept {
-        return chanNr & 0x07;
+        return chanNr & 0x07u;
     }
 
-    /// Check if channel number represents a dedicated channel.
-    /// Common channels have fixed values: BCCH=0x00, RACH=0x40, PCH/AGCH=0x60.
-    /// @param chanNr Encoded channel number byte
-    /// @return true if this is a dedicated physical channel
+    /// Check whether a channel number denotes a dedicated physical channel.
+    /// Common channels occupy codes 16..31 (BCCH, RACH, PCH/AGCH and the
+    /// vendor common-channel extensions).
+    /// @param chanNr Encoded channel number octet
+    /// @return true if this is a dedicated channel
     [[nodiscard]] static bool isDedicated(uint8_t chanNr) noexcept {
-        return chanNr != BCCH && chanNr != RACH && chanNr != PCH_AGCH;
+        return (chanNr & 0xC0u) != 0x80u;
     }
 };
 

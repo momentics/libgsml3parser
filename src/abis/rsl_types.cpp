@@ -26,10 +26,11 @@ namespace gsml3parser {
 std::string_view rslDiscriminatorName(RSLDiscriminator disc)
 {
     switch (disc) {
-        case RSLDiscriminator::RLL:              return "RLL";
+        case RSLDiscriminator::Rll:              return "RLL";
         case RSLDiscriminator::CommonChannel:    return "CCHAN";
         case RSLDiscriminator::DedicatedChannel: return "DCHAN";
-        case RSLDiscriminator::TRX:              return "TRX";
+        case RSLDiscriminator::TrxManagement:    return "TRX";
+        case RSLDiscriminator::Lcs:              return "LCS";
         case RSLDiscriminator::IPAccess:         return "IPAccess";
     }
     return "?";
@@ -41,29 +42,44 @@ std::string_view rslIEName(RSL_IE ie)
         case RSL_IE::ChanNr:           return "ChanNr";
         case RSL_IE::LinkIdent:        return "LinkIdent";
         case RSL_IE::ActType:          return "ActType";
+        case RSL_IE::BSPower:          return "BSPower";
+        case RSL_IE::ChanIdent:        return "ChanIdent";
         case RSL_IE::ChanMode:         return "ChanMode";
         case RSL_IE::EncrInfo:         return "EncrInfo";
-        case RSL_IE::BSPower:          return "BSPower";
-        case RSL_IE::MSPower:          return "MSPower";
-        case RSL_IE::HandoRef:         return "HandoRef";
-        case RSL_IE::SACCHInfo:        return "SACCHInfo";
-        case RSL_IE::Cause:            return "Cause";
-        case RSL_IE::AccessDelay:      return "AccessDelay";
-        case RSL_IE::ReqReference:     return "ReqReference";
         case RSL_IE::FrameNumber:      return "FrameNumber";
-        case RSL_IE::MSIdentity:       return "MSIdentity";
-        case RSL_IE::PagingGroup:      return "PagingGroup";
-        case RSL_IE::ChanNeeded:       return "ChanNeeded";
-        case RSL_IE::FullImmAssInfo:   return "FullImmAssInfo";
-        case RSL_IE::L3Info:           return "L3Info";
-        case RSL_IE::SysInfoType:      return "SysInfoType";
-        case RSL_IE::FullBCCHInfo:     return "FullBCCHInfo";
-        case RSL_IE::MeasResNr:        return "MeasResNr";
-        case RSL_IE::UplinkMeas:       return "UplinkMeas";
+        case RSL_IE::HandoRef:         return "HandoRef";
         case RSL_IE::L1Info:           return "L1Info";
-        case RSL_IE::TimingAdvance:    return "TimingAdvance";
-        case RSL_IE::MSTimingOffset:   return "MSTimingOffset";
+        case RSL_IE::L3Info:           return "L3Info";
+        case RSL_IE::MSIdentity:       return "MSIdentity";
+        case RSL_IE::MSPower:          return "MSPower";
+        case RSL_IE::PagingGroup:      return "PagingGroup";
+        case RSL_IE::PagingLoad:       return "PagingLoad";
+        case RSL_IE::AccessDelay:      return "AccessDelay";
+        case RSL_IE::RachLoad:         return "RachLoad";
+        case RSL_IE::ReqReference:     return "ReqReference";
         case RSL_IE::ReleaseMode:      return "ReleaseMode";
+        case RSL_IE::ResourceInfo:     return "ResourceInfo";
+        case RSL_IE::RlmCause:         return "RlmCause";
+        case RSL_IE::StartngTime:      return "StartngTime";
+        case RSL_IE::TimingAdvance:    return "TimingAdvance";
+        case RSL_IE::UplinkMeas:       return "UplinkMeas";
+        case RSL_IE::Cause:            return "Cause";
+        case RSL_IE::MeasResNr:        return "MeasResNr";
+        case RSL_IE::MsgId:            return "MsgId";
+        case RSL_IE::SysInfoType:      return "SysInfoType";
+        case RSL_IE::MSPowerParam:     return "MSPowerParam";
+        case RSL_IE::BSPowerParam:     return "BSPowerParam";
+        case RSL_IE::ImmAssInfo:       return "ImmAssInfo";
+        case RSL_IE::SmscbInfo:        return "SmscbInfo";
+        case RSL_IE::MSTimingOffset:   return "MSTimingOffset";
+        case RSL_IE::ErrMsg:           return "ErrMsg";
+        case RSL_IE::FullBCCHInfo:     return "FullBCCHInfo";
+        case RSL_IE::ChanNeeded:       return "ChanNeeded";
+        case RSL_IE::CbCmdType:        return "CbCmdType";
+        case RSL_IE::SmscbMsg:         return "SmscbMsg";
+        case RSL_IE::FullImmAssInfo:   return "FullImmAssInfo";
+        case RSL_IE::SacchInfo:        return "SacchInfo";
+        case RSL_IE::CbchLoadInfo:     return "CbchLoadInfo";
     }
     return "?";
 }

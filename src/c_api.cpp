@@ -554,7 +554,7 @@ GSML3_C_API int gsml3_rsl_link_id(const gsml3_rsl* rsl) {
 GSML3_C_API int gsml3_rsl_bts_to_bsc(const gsml3_rsl* rsl) {
     clearLastError();
     if (!rsl) return -1;
-    return rsl->parsed.btsToBsc ? 1 : 0;
+    return rsl->parsed.transparent ? 1 : 0;
 }
 
 GSML3_C_API int gsml3_rsl_has_l3(const gsml3_rsl* rsl) {

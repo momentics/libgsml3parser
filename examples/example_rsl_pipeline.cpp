@@ -45,17 +45,20 @@ int main()
     std::cout << "[1] BSC->BTS: RLL DATA_REQ with L3 CM Service Request\n";
     {
         // Simulate raw RSL frame from BSC: DATA_REQ carrying L3 CM Service Request.
-        // TS 48.058 8.3.1: real BSCs (e.g. osmo-bts) wrap the L3 PDU in an
-        // L3Info IE (type 0x30, TL16V).
+        // TS 48.058 8.3/9.x: first octet = RLL group (0x01) << 1 | transparent,
+        // second octet = global message type, then the IE list; the L3 PDU is
+        // carried in the L3 Information IE (TL16V).
         std::vector<uint8_t> rawRSL = {
-            0x00,                       // discriminator: RLL
-            0x21,                       // msgType: DATA_REQ
-            0x7c,                       // chanNr: dedicated channel (SDCCH/8, TS4)
-            0x01,                       // linkId: LAPDm link 1
-            // L3Info IE (type 0x30, TL16V): length 3
-            0x30, 0x00, 0x03,
-            // L3 payload: CM Service Request (PD=0x09, MTI=0x68, serviceType=2)
-            0x09, 0x68, 0x02
+            0x03,                       // first octet: RLL group | transparent
+            0x01,                       // msgType: DATA_REQ (global)
+            // Channel Number TV IE: dedicated channel (SDCCH/8 sub-channel 7, TS 4)
+            static_cast<uint8_t>(RSL_IE::ChanNr), 0x7c,
+            // Link Identifier TV IE: LAPDm link 1
+            static_cast<uint8_t>(RSL_IE::LinkIdent), 0x01,
+            // L3Info IE (type 0x0B, TL16V): length 3
+            0x0B, 0x00, 0x03,
+            // L3 payload: CM Service Request (PD=MM low nibble, MT=0x24, serviceType=2)
+            0x05, 0x24, 0x02
         };
 
         printHex("  Raw RSL", rawRSL);
@@ -109,14 +112,14 @@ int main()
     {
         // Simulate raw CHAN_ACTIV with ActType and ChanMode IEs.
         std::vector<uint8_t> rawActiv = {
-            0x60,                               // discriminator: DCHAN
-            0x01,                               // msgType: CHAN_ACTIV
-            0x78,                               // chanNr: SDCCH/4, TS0
-            0x00,                               // reserved
-            // ActType IE (TV): type=0x21, value=2 (IntraSDCCH4)
-            0x21, 0x02,
-            // ChanMode IE (TLV): type=0x22, len=5, value=signalling mode
-            0x22, 0x05, 0x00, 0x01, 0x01, 0x00, 0x00,
+            0x08,                               // first octet: DCHAN group (0x04 << 1), non-transparent
+            0x21,                               // msgType: CHAN_ACTIV (global)
+            // Channel Number TV IE: SDCCH/4 sub-channel 3, TS 0 -> (4+3)<<3|0 = 0x78
+            static_cast<uint8_t>(RSL_IE::ChanNr), 0x78,
+            // ActType IE (TV): type=0x03, value=2 (IntraSDCCH4)
+            0x03, 0x02,
+            // ChanMode IE (LV): type=0x06, len=5, value=signalling mode
+            0x06, 0x05, 0x00, 0x01, 0x01, 0x00, 0x00,
         };
 
         printHex("  Raw CHAN_ACTIV", rawActiv);

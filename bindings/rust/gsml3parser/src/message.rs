@@ -383,14 +383,14 @@ impl RslFrame {
         Ok(unsafe { CStr::from_ptr(raw) }.to_string_lossy().into_owned())
     }
 
-    /// 7-bit discriminator (direction bit stripped).
+    /// 7-bit message group of the first octet (TS 48.058 9.1).
     pub fn discriminator(&self) -> Result<i32, GsmL3Error> {
         let p = self.ptr("RslFrame::discriminator")?;
         // SAFETY: live handle.
         Ok(unsafe { s::gsml3_rsl_discriminator(p.as_ptr() as *const _) })
     }
 
-    /// Message type byte within the discriminator.
+    /// Global message type (second octet).
     pub fn msg_type(&self) -> Result<i32, GsmL3Error> {
         let p = self.ptr("RslFrame::msg_type")?;
         // SAFETY: live handle.
@@ -411,7 +411,8 @@ impl RslFrame {
         Ok(unsafe { s::gsml3_rsl_link_id(p.as_ptr() as *const _) })
     }
 
-    /// Direction: `true` = BTS→BSC, `false` = BSC→BTS.
+    /// Transparent indication flag, bit 0 of the first octet (TS 48.058 9.1):
+    /// `true` for transparent frames such as RLL data.
     pub fn bts_to_bsc(&self) -> Result<bool, GsmL3Error> {
         let p = self.ptr("RslFrame::bts_to_bsc")?;
         // SAFETY: live handle.
@@ -701,7 +702,7 @@ mod tests {
     use crate::error::ErrorKind;
 
     /// The stable Channel Release test vector, shared with the C API tests:
-    /// 0x60 0x0D 0x00 — PD=RR(0x06), MTI=ChannelRelease(0x0D).
+    /// 0x06 0x0D 0x00 — PD=RR in the low nibble of octet 0, MTI=ChannelRelease(0x0D).
     #[test]
     fn parse_write_roundtrip_channel_release() {
         let mut m = Message::parse(&[0x06, 0x0d, 0x00], None).expect("channel release parses");
