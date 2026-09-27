@@ -134,8 +134,8 @@ Expected<Variant> parseFromTable(const std::array<ParseFn<Variant>, kMaxMtiSlots
     if (mti < 0 || mti >= static_cast<int>(kMaxMtiSlots) ||
         table[static_cast<size_t>(mti)] == nullptr) {
         // Cold error path: compose "Unknown <domain> MTI" (fits the
-        // ParseError 47-char inline buffer; matches the previous
-        // switch-default messages).
+        // ParseError 47-char inline buffer; the same message format is used
+        // by all dispatch tables).
         std::string msg = "Unknown " + std::string(domainName) + " MTI";
         return Expected<Variant>::error(
             ParseError{ParseError::Code::InvalidMTI, msg, static_cast<size_t>(mti)});
@@ -333,8 +333,7 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
         // standard-header L3 message is at least two octets long, and the
         // RACH carries exactly this one-octet message. The full octet is
         // the 8-bit request reference (RA); any of the 256 values is
-        // valid, so no nibble filtering is applied (the previous
-        // heuristic rejected 192 of 256 legitimate RA values).
+        // valid, so no nibble filtering is applied.
         BitReader reader(data.data(), 8);
         auto res = L3ChannelRequest::parse(reader);
         return std::move(res).map([](L3ChannelRequest v){ return ParsedMessage(RRM(std::move(v))); });
@@ -402,10 +401,10 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
         // unexpectedly failed (impossible today: both short parsers always
         // succeed on full-length input) reaches the standard parse below,
         // which returns a proper error.
-        // Note: L3HandoverAccess::parse can now fail on
+        // Note: L3HandoverAccess::parse fails on
         // non-zero reserved bits — such a 4-byte frame falls through to
         // the standard parse below and produces a proper error instead of
-        // a fake HandoverAccess.
+        // a spurious HandoverAccess.
     }
 
     // Standard L3 header parsing.
@@ -458,8 +457,8 @@ Expected<ParsedMessage> parseL3Hex(std::string_view hex, const ParserConfig& cfg
 namespace detail {
 
 // ── Write path ───────────────────────────────────────────
-// domainPd<Variant>() replaces the previous MessageTraits specializations
-// (which served both parse and write dispatch): 12 one-line mappings.
+// domainPd<Variant>() maps each domain variant to its PD, serving both
+// parse and write dispatch: 12 one-line mappings.
 template<typename V> constexpr L3PD domainPd();
 template<> constexpr L3PD domainPd<RRM>() { return L3PD::RadioResource; }
 template<> constexpr L3PD domainPd<MMM>() { return L3PD::MobilityManagement; }

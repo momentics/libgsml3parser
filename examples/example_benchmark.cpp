@@ -97,9 +97,8 @@ static std::vector<uint8_t> buildL2Data(const std::vector<std::pair<const uint8_
 
 static uint64_t runStreamBenchmark(const char* label, std::span<const uint8_t> singleMsg, uint64_t iterations) {
     // L2-length framing: deterministic boundaries for any message type
-    // (the previous header-based framing silently dropped
-    // frames for variable-length messages and the benchmark never
-    // checked the count).
+    // (header-based framing would silently drop frames for variable-length
+    // messages, so the benchmark checks the parsed count).
     std::vector<std::pair<const uint8_t*, size_t>> one{ {singleMsg.data(), singleMsg.size()} };
     auto data = buildL2Data(one, iterations);
 
@@ -179,9 +178,9 @@ int main() {
     // SM: SM Status (4 bytes) - PD=0xA, MTI=0x55
     uint8_t smMsg[] = {0x0A, 0x55, 0x32, 0x01};
 
-    // SMS: CP Ack (2 bytes) — CP-ACK has no body (24.011 8.1.3;
-    // the previous 4-byte vector was not a valid CP-ACK and
-    // parsed as a HandoverAccess via the 4-byte short-message path).
+    // SMS: CP Ack (2 bytes) — CP-ACK has no body (TS 24.011 8.1.3;
+    // a 4-byte vector here would not be a valid CP-ACK and would parse as
+    // a HandoverAccess via the 4-byte short-message path).
     uint8_t smsMsg[] = {0x09, 0x04};
 
     // BCC: Setup (2 bytes) - PD=0x1, MTI=0x01

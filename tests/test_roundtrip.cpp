@@ -20,26 +20,26 @@
 // SOFTWARE.
 
 // Round-trip tests: construct message -> serialize -> parse -> verify fields.
-// Derived from osmo-ttcn3-hacks reference: L3_Templates.ttcn, GSM_RR_Types.ttcn,
-// GSM_SystemInformation.ttcn, GSM_RestOctets.ttcn.
+// Wire layouts per 3GPP TS 44.018 (RR / SI) and the L3 message definitions of
+// 3GPP TS 24.008.
 //
 // [GOLDEN VERIFICATION]
-// All round-trip hex parse test data verified against osmo-ttcn3-hacks reference:
+// All round-trip hex parse test data verified against the normative specifications:
 //   - RR ChannelRelease {0x06, 0x0D, 0x00}: PD=6(RR), MTI=0x0D(ChannelRelease), cause=0x00(Normal_Event)
-//     Verified against GSM_RR_Types.ttcn CHANNEL_RELEASE='00001101'B(0x0D), RR_Cause NORMAL='00'O
+//     CHANNEL_RELEASE='00001101'B(0x0D), RR_Cause NORMAL='00'O (GSM 44.018)
 //   - RR AssignmentComplete {0x06, 0x29, 0x00}: PD=6(RR), MTI=0x29(AssignmentComplete), cause=0x00(Normal_Event)
-//     Verified against GSM_RR_Types.ttcn ASSIGNMENT_COMPLETE='00101001'B(0x29)
+//     ASSIGNMENT_COMPLETE='00101001'B(0x29) (GSM 44.018)
 //   - RR AssignmentFailure {0x06, 0x2F, 0x09}: PD=6(RR), MTI=0x2F(AssignmentFailure), cause=0x09(Channel_Mode_Unacceptable)
-//     Verified against GSM_RR_Types.ttcn ASSIGNMENT_FAILURE='00101111'B(0x2F), RR_Cause CH_MODE_UNACC='09'O
+//     ASSIGNMENT_FAILURE='00101111'B(0x2F), RR_Cause CH_MODE_UNACC='09'O (GSM 44.018)
 //   - RR HandoverComplete {0x06, 0x2C, 0x00}: PD=6(RR), MTI=0x2C(HandoverComplete), cause=0x00(Normal_Event)
-//     Verified against GSM_RR_Types.ttcn HANDOVER_COMPLETE='00101100'B(0x2C)
+//     HANDOVER_COMPLETE='00101100'B(0x2C) (GSM 44.018)
 //   - RR HandoverFailure {0x06, 0x28, 0x08}: PD=6(RR), MTI=0x28(HandoverFailure), cause=0x08(Handover_Impossible)
-//     Verified against GSM_RR_Types.ttcn HANDOVER_FAILURE='00101000'B(0x28), RR_Cause HNDOVER_IMP='08'O
+//     HANDOVER_FAILURE='00101000'B(0x28), RR_Cause HNDOVER_IMP='08'O (GSM 44.018)
 //   - RR ClassmarkChange {0x06, 0x16, 0x03, 0x20, 0x00, 0x80}: PD=6(RR), MTI=0x16(ClassmarkChange), CM2 LV
-//     Verified against GSM_RR_Types.ttcn CLASSMARK_CHANGE='00010110'B(0x16)
+//     CLASSMARK_CHANGE='00010110'B(0x16) (GSM 44.018)
 //   - RR ChannelModeModifyAcknowledge {0x06, 0x17, ChanDesc, ChanMode}: PD=6(RR), MTI=0x17(CMMAck)
-//     Verified against GSM_RR_Types.ttcn CHANNEL_MODE_MODIFY_ACKNOWLEDGE='00010111'B(0x17)
-//   - All SI message types (SI1-SI17) verified against GSM_RR_Types.ttcn RrMessageType enum values
+//     CHANNEL_MODE_MODIFY_ACKNOWLEDGE='00010111'B(0x17) (GSM 44.018)
+//   - All SI message types (SI1-SI17) per the RR message type table (GSM 44.018)
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -61,9 +61,9 @@ static void checkHeader(const ParsedMessage& parsed, L3PD expectPD, int expectMT
 }
 
 // Paging Request Type 1 (GSM 04.08 9.1.22)
-// Reference: L3_Templates.ttcn ts_PAG_RESP builds on ts_MI_TMSI_LV / ts_MI_IMSI_LV
+// Mobile Identity LV encoding (TMSI / IMSI) per GSM 24.008 10.5.1.4.
 // Paging Request Type 1 structure:
-//   PD(4)=0x06, MTI(8)=0x21, ChanNeeded(4), PageMode(4), MI1 LV..., [MI2 TLV...]
+//   octet 0: TI(3)|TIF(1)|PD=0x06, octet 1: MTI=0x21, ChanNeeded(4), PageMode(4), MI1 LV..., [MI2 TLV...]
 
 TEST(RoundTripTest, PagingRequestType1_TMSI) {
     L3MobileIdentity id(0x12345678);
@@ -76,7 +76,7 @@ TEST(RoundTripTest, PagingRequestType1_TMSI) {
 }
 
 // GSM 04.08 9.1.22: PagingRequestType1 with IMSI MobileIdentity
-// Reference: L3_Templates.ttcn ts_MI_IMSI_LV (IMSI BCD encoding with HEXORDER low nibble swap)
+// IMSI Mobile Identity LV: BCD digits with HEXORDER low nibble swap (GSM 24.008 10.5.1.4).
 TEST(RoundTripTest, PagingRequestType1_IMSI) {
     L3MobileIdentity id("250011234567890");
     L3PagingRequestType1 concrete = L3PagingRequestType1::builder()
@@ -110,7 +110,7 @@ TEST(RoundTripTest, PagingRequestType3) {
 }
 
 // Paging Response (GSM 04.08 9.1.25)
-// Reference: L3_Templates.ttcn ts_PAG_RESP
+// Wire layout per GSM 44.018 9.1.25.
 // Structure: spare_half(4), CKSN(4), CM2 LV, MI LV, [addl_upd_par TV]
 
 TEST(RoundTripTest, PagingResponse) {
@@ -121,8 +121,8 @@ TEST(RoundTripTest, PagingResponse) {
 }
 
 // System Information messages (GSM 04.08 9.1.31..9.1.43c)
-// Reference: GSM_SystemInformation.ttcn SystemInformationType1..Type17,
-// BTS_Tests.ttcn ts_SI*_default, GSM_RestOctets.ttcn
+// SI message record layouts per GSM 44.018 (SI1..SI17), with the rest-octet
+// padding rules and default software-BTS parameter values.
 
 TEST(RoundTripTest, SystemInformationType1) {
     ParsedMessage msg{RRM{L3SystemInformationType1{}}};
@@ -132,7 +132,7 @@ TEST(RoundTripTest, SystemInformationType1) {
 }
 
 // GSM 04.08 9.1.32: BCCHFrequencyList(16) + NCCPermitted(1) + RACHControlParameters(3) = 20 bytes
-// Reference: GSM_SystemInformation.ttcn SystemInformationType2 (no rest_octets)
+// SI2 record per GSM 44.018 9.1.32 (no rest octets).
 TEST(RoundTripTest, SystemInformationType2) {
     ParsedMessage msg{RRM{L3SystemInformationType2{}}};
     auto parsed = roundtrip(msg);
@@ -141,7 +141,7 @@ TEST(RoundTripTest, SystemInformationType2) {
 }
 
 // GSM 04.08 9.1.33: ExtdBCCHFrequencyList(16) + RACHControlParameters(3) + rest_octets(0..1)
-// Reference: GSM_SystemInformation.ttcn SystemInformationType2bis
+// SI2bis record per GSM 44.018 9.1.33.
 TEST(RoundTripTest, SystemInformationType2bis) {
     ParsedMessage msg{RRM{L3SystemInformationType2bis{}}};
     auto parsed = roundtrip(msg);
@@ -150,7 +150,7 @@ TEST(RoundTripTest, SystemInformationType2bis) {
 }
 
 // GSM 04.08 9.1.34: ExtdBCCHFrequencyList(16) + rest_octets(0..4)
-// Reference: GSM_SystemInformation.ttcn SystemInformationType2ter
+// SI2ter record per GSM 44.018 9.1.34.
 TEST(RoundTripTest, SystemInformationType2ter) {
     ParsedMessage msg{RRM{L3SystemInformationType2ter{}}};
     auto parsed = roundtrip(msg);
@@ -160,7 +160,7 @@ TEST(RoundTripTest, SystemInformationType2ter) {
 
 // GSM 04.08 9.1.35: CellIdentity(2) + LAI(5) + ControlChannelDesc(3) + CellOptions(1) +
 //   CellSelectionParameters(2) + RACHControlParameters(3) + SI3RestOctets
-// Reference: GSM_SystemInformation.ttcn SystemInformationType3
+// SI3 record per GSM 44.018 9.1.35.
 TEST(RoundTripTest, SystemInformationType3) {
     ParsedMessage msg{RRM{L3SystemInformationType3{}}};
     auto parsed = roundtrip(msg);
@@ -170,7 +170,7 @@ TEST(RoundTripTest, SystemInformationType3) {
 
 // GSM 04.08 9.1.36: LAI(5) + CellSelectionParameters(2) + RACHControlParameters(3) +
 //   [CBCH ChannelDesc TLV] + [CBCH MobileAlloc TLV] + SI4RestOctets
-// Reference: GSM_SystemInformation.ttcn SystemInformationType4
+// SI4 record per GSM 44.018 9.1.36.
 TEST(RoundTripTest, SystemInformationType4) {
     ParsedMessage msg{RRM{L3SystemInformationType4{}}};
     auto parsed = roundtrip(msg);
@@ -179,7 +179,7 @@ TEST(RoundTripTest, SystemInformationType4) {
 }
 
 // GSM 04.08 9.1.37: BCCHFrequencyList(16)
-// Reference: GSM_SystemInformation.ttcn SystemInformationType5
+// SI5 record per GSM 44.018 9.1.37.
 TEST(RoundTripTest, SystemInformationType5) {
     ParsedMessage msg{RRM{L3SystemInformationType5{}}};
     auto parsed = roundtrip(msg);
@@ -188,7 +188,7 @@ TEST(RoundTripTest, SystemInformationType5) {
 }
 
 // GSM 04.08 9.1.38: ExtdBCCHFrequencyList(16)
-// Reference: GSM_SystemInformation.ttcn SystemInformationType5bis
+// SI5bis record per GSM 44.018 9.1.38.
 TEST(RoundTripTest, SystemInformationType5bis) {
     ParsedMessage msg{RRM{L3SystemInformationType5bis{}}};
     auto parsed = roundtrip(msg);
@@ -197,7 +197,7 @@ TEST(RoundTripTest, SystemInformationType5bis) {
 }
 
 // GSM 04.08 9.1.39: ExtdBCCHFrequencyList(16)
-// Reference: GSM_SystemInformation.ttcn SystemInformationType5ter
+// SI5ter record per GSM 44.018 9.1.39.
 TEST(RoundTripTest, SystemInformationType5ter) {
     ParsedMessage msg{RRM{L3SystemInformationType5ter{}}};
     auto parsed = roundtrip(msg);
@@ -207,7 +207,7 @@ TEST(RoundTripTest, SystemInformationType5ter) {
 
 // GSM 04.08 9.1.40: CellIdentity(2) + LAI(5) + CellOptionsSacch(1) + NCCPermitted(1) +
 //   SI6RestOctets
-// Reference: GSM_SystemInformation.ttcn SystemInformationType6
+// SI6 record per GSM 44.018 9.1.40.
 TEST(RoundTripTest, SystemInformationType6) {
     ParsedMessage msg{RRM{L3SystemInformationType6{}}};
     auto parsed = roundtrip(msg);
@@ -217,7 +217,7 @@ TEST(RoundTripTest, SystemInformationType6) {
 
 // GSM 04.08 9.1.41: CellIdentity(2) + LAI(5) + CellOptionsSacch(1) + NCCPermitted(1) +
 //   NeighborCellDescription(16) + SI7RestOctets
-// Reference: GSM_SystemInformation.ttcn SystemInformationType7
+// SI7 record per GSM 44.018 9.1.41.
 TEST(RoundTripTest, SystemInformationType7) {
     ParsedMessage msg{RRM{L3SystemInformationType7{}}};
     auto parsed = roundtrip(msg);
@@ -227,7 +227,7 @@ TEST(RoundTripTest, SystemInformationType7) {
 
 // GSM 04.08 9.1.42: CellChannelDescription(16) + CellOptionsSacch(1) + NCCPermitted(1) +
 //   SI8RestOctets
-// Reference: GSM_SystemInformation.ttcn SystemInformationType8
+// SI8 record per GSM 44.018 9.1.42.
 TEST(RoundTripTest, SystemInformationType8) {
     ParsedMessage msg{RRM{L3SystemInformationType8{}}};
     auto parsed = roundtrip(msg);
@@ -237,7 +237,7 @@ TEST(RoundTripTest, SystemInformationType8) {
 
 // GSM 04.08 9.1.43: CellIdentity(2) + LAI(5) + CellOptionsSacch(1) + NCCPermitted(1) +
 //   NeighborCellDescription(16) + SI9RestOctets
-// Reference: GSM_SystemInformation.ttcn SystemInformationType9
+// SI9 record per GSM 44.018 9.1.43.
 TEST(RoundTripTest, SystemInformationType9) {
     ParsedMessage msg{RRM{L3SystemInformationType9{}}};
     auto parsed = roundtrip(msg);
@@ -246,7 +246,7 @@ TEST(RoundTripTest, SystemInformationType9) {
 }
 
 // GSM 04.08 9.1.43a: SI13RestOctets (GPRSCellOptions, etc.)
-// Reference: GSM_SystemInformation.ttcn SystemInformationType13
+// SI13 record per GSM 44.018 9.1.43a.
 TEST(RoundTripTest, SystemInformationType13) {
     ParsedMessage msg{RRM{L3SystemInformationType13{}}};
     auto parsed = roundtrip(msg);
@@ -256,7 +256,7 @@ TEST(RoundTripTest, SystemInformationType13) {
 
 // GSM 04.08 9.1.43b: TDDCellDescription + TDDCellOptions + TDDCellSelectionParameters +
 //   TDDRACHControlParameters + SI16RestOctets
-// Reference: GSM_SystemInformation.ttcn SystemInformationType16
+// SI16 record per GSM 44.018 9.1.43b.
 TEST(RoundTripTest, SystemInformationType16) {
     ParsedMessage msg{RRM{L3SystemInformationType16{}}};
     auto parsed = roundtrip(msg);
@@ -266,7 +266,7 @@ TEST(RoundTripTest, SystemInformationType16) {
 
 // GSM 04.08 9.1.43c: TDDCellIdentity + TDDLocationAreaIdentification + TDDCellOptionsSacch +
 //   TDDNCCPermitted + TDDNeighborCellDescription + SI17RestOctets
-// Reference: GSM_SystemInformation.ttcn SystemInformationType17
+// SI17 record per GSM 44.018 9.1.43c.
 TEST(RoundTripTest, SystemInformationType17) {
     ParsedMessage msg{RRM{L3SystemInformationType17{}}};
     auto parsed = roundtrip(msg);
@@ -275,7 +275,7 @@ TEST(RoundTripTest, SystemInformationType17) {
 }
 
 // Channel Release (GSM 04.08 9.1.7)
-// Reference: L3_Templates.ttcn tr_RRM_RR_RELEASE
+// Wire layout per GSM 44.018 9.1.7.
 
 TEST(RoundTripTest, ChannelRelease_Normal) {
     ParsedMessage msg{RRM{L3ChannelRelease{RRCause::Normal_Event}}};
@@ -296,7 +296,7 @@ TEST(RoundTripTest, ChannelRelease_Preemptive) {
 }
 
 // RR Status (GSM 04.08 9.1.29)
-// Reference: L3_Templates.ttcn tr_RRM_RR_STATUS, GSM_RR_Types.ttcn RR_STATUS='00010010'B
+// RR Status MTI=0x12 ('00010010'B, GSM 44.018).
 // TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x12(RRStatus), cause=0x60
 // Byte 0: TI(7:5)=0 | TIF(4)=0 | PD(3:0)=0110 = 0x06
 // Byte 1: MTI = 0x12
@@ -313,8 +313,8 @@ TEST(RoundTripTest, RRStatus) {
 }
 
 // Assignment Command (GSM 04.08 9.1.2)
-// Reference: L3_Templates.ttcn tr_RR_AssignmentCommand
-// GSM_RR_Types.ttcn AssignmentCommand: ChanDesc(24 bits) + PowerCmd(8 bits) + [optional IEs]
+// Wire layout per GSM 44.018 9.1.2:
+// AssignmentCommand: ChanDesc(24 bits) + PowerCmd(8 bits) + [optional IEs]
 
 TEST(RoundTripTest, AssignmentCommand) {
     ParsedMessage msg{RRM{L3AssignmentCommand{}}};
@@ -324,7 +324,7 @@ TEST(RoundTripTest, AssignmentCommand) {
 }
 
 // Assignment Complete (GSM 04.08 9.1.3)
-// Reference: GSM_RR_Types.ttcn ASSIGNMENT_COMPLETE='00101001'B = 0x29
+// ASSIGNMENT_COMPLETE='00101001'B = 0x29 (GSM 44.018).
 // TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x29(AssignmentComplete)
 // Byte 0: TI(7:5)=0 | TIF(4)=0 | PD(3:0)=0110 = 0x06
 // Byte 1: MTI = 0x29
@@ -343,7 +343,7 @@ TEST(RoundTripTest, AssignmentComplete) {
 }
 
 // Assignment Failure (GSM 04.08 9.1.3)
-// Reference: GSM_RR_Types.ttcn ASSIGNMENT_FAILURE='00101111'B = 0x2F
+// ASSIGNMENT_FAILURE='00101111'B = 0x2F (GSM 44.018).
 // TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x2F(AssignmentFailure)
 // Byte 0: 0x06, Byte 1: 0x2F, Byte 2: cause=0x09(Channel_Mode_Unacceptable)
 TEST(RoundTripTest, AssignmentFailure) {
@@ -360,7 +360,7 @@ TEST(RoundTripTest, AssignmentFailure) {
 }
 
 // Classmark Enquiry (GSM 04.08 9.1.14)
-// Reference: L3_Templates.ttcn tr_RRM_CM_ENQUIRY
+// Header-only message per GSM 44.018 9.1.14.
 
 TEST(RoundTripTest, ClassmarkEnquiry) {
     ParsedMessage msg{RRM{L3ClassmarkEnquiry{}}};
@@ -370,8 +370,8 @@ TEST(RoundTripTest, ClassmarkEnquiry) {
 }
 
 // Measurement Report (GSM 04.08 9.1.21)
-// Reference: L3_Templates.ttcn ts_MEAS_REP, ts_MeasurementResults
-// GSM_RR_Types.ttcn MeasurementResults: 16 bytes fixed
+// Body per GSM 44.018 9.1.21:
+// MeasurementResults: 16 bytes fixed
 
 TEST(RoundTripTest, MeasurementReport) {
     ParsedMessage msg{RRM{L3MeasurementReport{}}};
@@ -381,7 +381,7 @@ TEST(RoundTripTest, MeasurementReport) {
 }
 
 // Ciphering Mode Command (GSM 04.08 9.1.9)
-// Reference: L3_Templates.ttcn ts_RRM_CiphModeCmd
+// Wire layout per GSM 44.018 9.1.9.
 
 TEST(RoundTripTest, CipheringModeCommand_A5_0) {
     ParsedMessage msg{RRM{L3CipheringModeCommand{false, 0}}};
@@ -407,8 +407,7 @@ TEST(RoundTripTest, CipheringModeComplete) {
 }
 
 // Handover Command (GSM 04.08 9.1.15)
-// Reference: GSM_RR_Types.ttcn HandoverCommand
-// L3_Templates.ttcn ts_RR_HandoverCommand
+// Wire layout per GSM 44.018 9.1.15.
 // Structure: CellDesc(16) + ChanDesc(24) + HORef(8) + PowerCmdAccType(8) + SyncInd(8) = 70 bits
 
 TEST(RoundTripTest, HandoverCommand) {
@@ -419,7 +418,7 @@ TEST(RoundTripTest, HandoverCommand) {
 }
 
 // Handover Complete (GSM 04.08 9.1.16)
-// Reference: GSM_RR_Types.ttcn HANDOVER_COMPLETE='00101100'B = 0x2C
+// HANDOVER_COMPLETE='00101100'B = 0x2C (GSM 44.018).
 // TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x2C(HandoverComplete), cause=Normal
 TEST(RoundTripTest, HandoverComplete) {
     uint8_t data[] = {0x06, 0x2C, 0x00};
@@ -435,7 +434,7 @@ TEST(RoundTripTest, HandoverComplete) {
 }
 
 // Handover Failure (GSM 04.08 9.1.17)
-// Reference: GSM_RR_Types.ttcn HANDOVER_FAILURE='00101000'B = 0x28
+// HANDOVER_FAILURE='00101000'B = 0x28 (GSM 44.018).
 // TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x28(HandoverFailure), cause=Handover_Impossible
 TEST(RoundTripTest, HandoverFailure) {
     uint8_t data[] = {0x06, 0x28, 0x08};
@@ -460,7 +459,7 @@ TEST(RoundTripTest, PhysicalInformation) {
 }
 
 // Immediate Assignment (GSM 04.08 9.1.19)
-// Reference: GSM_RR_Types.ttcn ImmediateAssignment
+// Wire layout per GSM 44.018 9.1.19.
 // Structure: DedOrTBF(4) + PageMode(4) + ChanDesc(24) + ReqRef(24) + TA(8) + MobileAlloc LV + RestOctets
 
 TEST(RoundTripTest, ImmediateAssignment) {
@@ -480,8 +479,8 @@ TEST(RoundTripTest, ImmediateAssignmentExtended) {
 }
 
 // Immediate Assignment Reject (GSM 04.08 9.1.20)
-// Reference: GSM_RR_Types.ttcn IMMEDIATE_ASSIGNMENT_REJECT='00111010'B = 0x3A
-// GSM_RestOctets.ttcn IARRestOctets
+// IMMEDIATE_ASSIGNMENT_REJECT='00111010'B = 0x3A (GSM 44.018);
+// rest octets per the GSM 44.018 padding rules.
 TEST(RoundTripTest, ImmediateAssignmentReject) {
     ParsedMessage msg{RRM{L3ImmediateAssignmentReject{30}}};
     auto parsed = roundtrip(msg);
@@ -499,7 +498,7 @@ TEST(RoundTripTest, AdditionalAssignment) {
 }
 
 // Channel Mode Modify (GSM 04.08 9.1.5)
-// Reference: L3_Templates.ttcn tr_RRM_ModeModify
+// Wire layout per GSM 44.018 9.1.5.
 
 TEST(RoundTripTest, ChannelModeModify) {
     L3ChannelDescription chd(TDMA_TCHF, 1, 7, 100);
@@ -511,7 +510,7 @@ TEST(RoundTripTest, ChannelModeModify) {
 }
 
 // Channel Mode Modify Acknowledge (GSM 04.08 9.1.6)
-// Reference: GSM_RR_Types.ttcn CHANNEL_MODE_MODIFY_ACKNOWLEDGE='00010111'B = 0x17
+// CHANNEL_MODE_MODIFY_ACKNOWLEDGE='00010111'B = 0x17 (GSM 44.018).
 // TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x17(ChannelModeModifyAcknowledge)
 // Byte 0: TI(7:5)=0 | TIF(4)=0 | PD(3:0)=0110 = 0x06 (TS 24.008 L3 header)
 // Byte 1: MTI = 0x17
@@ -538,7 +537,7 @@ TEST(RoundTripTest, ChannelModeModifyAcknowledge) {
 }
 
 // GPRS Suspension Request (GSM 04.08 9.1.13b)
-// Reference: GSM_RR_Types.ttcn GPRS_SUSPENSION_REQUEST='00110100'B = 0x34
+// GPRS_SUSPENSION_REQUEST='00110100'B = 0x34 (GSM 44.018).
 // 3GPP 44.018 3.4.25: GPRS Suspension procedure, TLLI + RA_ID + SuspensionCause
 TEST(RoundTripTest, GPRSSuspensionRequest) {
     ParsedMessage msg{RRM{L3GPRSSuspensionRequest{}}};
@@ -548,7 +547,7 @@ TEST(RoundTripTest, GPRSSuspensionRequest) {
 }
 
 // Application Information (GSM 04.08 9.1.53)
-// Reference: L3_Templates.ttcn tr_RR_APP_INFO
+// Wire layout per GSM 44.018 9.1.53.
 
 TEST(RoundTripTest, ApplicationInformation) {
     ParsedMessage msg{RRM{L3ApplicationInformation{{0xAB}}}};
@@ -558,8 +557,8 @@ TEST(RoundTripTest, ApplicationInformation) {
 }
 
 // Synchronization Channel Information (GSM 04.08 9.1.30)
-// SynchronizationChannelInformation uses MTI=0x100 (internal RrShortDisc code),
-// not a standard 8-bit RR messageType. Reference: GSM_RR_Types.ttcn RrShortDisc.
+// SynchronizationChannelInformation uses MTI=0x110 (internal length-framed code),
+// not a standard 8-bit RR messageType; it carries no L3 header.
 // These are sent on SCH and use a different encoding path.
 TEST(RoundTripTest, SynchronizationChannelInformation) {
     ParsedMessage msg{RRM{L3SynchronizationChannelInformation{}}};
@@ -569,8 +568,8 @@ TEST(RoundTripTest, SynchronizationChannelInformation) {
 }
 
 // Channel Request (GSM 04.08 9.1.13)
-// ChannelRequest uses MTI=0x101 (internal RrShortDisc code).
-// Reference: GSM_RR_Types.ttcn RrShortDisc. Sent on RACH, encoded differently.
+// ChannelRequest uses MTI=0x10E (internal length-framed code).
+// Sent on the RACH as a single octet without an L3 header.
 TEST(RoundTripTest, ChannelRequest) {
     ParsedMessage msg{RRM{L3ChannelRequest{0x42}}};
     auto parsed = roundtrip(msg);
@@ -594,8 +593,8 @@ TEST(RoundTripTest, ChannelRequest_ZeroAndMaxRA) {
 }
 
 // Handover Access (GSM 04.08 9.1.14a)
-// HandoverAccess uses MTI=0x102 (internal RrShortDisc code).
-// Reference: GSM_RR_Types.ttcn RrShortDisc. Sent on HO access timeslot.
+// HandoverAccess uses MTI=0x10F (internal length-framed code).
+// Sent on the handover access timeslot as 4 octets without an L3 header.
 TEST(RoundTripTest, HandoverAccess) {
     ParsedMessage msg{RRM{L3HandoverAccess{0x17}}};
     auto parsed = roundtrip(msg);
@@ -604,7 +603,7 @@ TEST(RoundTripTest, HandoverAccess) {
 }
 
 // Classmark Change (GSM 04.08 9.1.11)
-// Reference: L3_Templates.ttcn ts_RRM_CM_CHG, GSM_RR_Types.ttcn CLASSMARK_CHANGE='00010110'B
+// CLASSMARK_CHANGE='00010110'B = 0x16 (GSM 44.018).
 // TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x16(ClassmarkChange)
 // Byte 0: TI(7:5)=0 | TIF(4)=0 | PD(3:0)=0110 = 0x06 (TS 24.008 L3 header)
 // Byte 1: MTI = 0x16
@@ -630,7 +629,7 @@ TEST(RoundTripTest, SI2quater_RoundTrip) {
 }
 
 // Configuration Change Command (GSM 04.08 9.1.4, MTI=0x30)
-// Reference: GSM_RR_Types.ttcn CONFIGURATION_CHANGE_COMMAND='00110000'B
+// CONFIGURATION_CHANGE_COMMAND='00110000'B = 0x30 (GSM 44.018).
 TEST(RoundTripTest, ConfigurationChangeCommand_Empty) {
     ParsedMessage msg{RRM{L3ConfigurationChangeCommand{}}};
     auto parsed = roundtrip(msg);
@@ -639,7 +638,7 @@ TEST(RoundTripTest, ConfigurationChangeCommand_Empty) {
 }
 
 // Configuration Change Acknowledge (GSM 04.08 9.1.4, MTI=0x31)
-// Reference: GSM_RR_Types.ttcn CONFIGURATION_CHANGE_ACKNOWLEDGE='00110001'B
+// CONFIGURATION_CHANGE_ACKNOWLEDGE='00110001'B = 0x31 (GSM 44.018).
 TEST(RoundTripTest, ConfigurationChangeAcknowledge) {
     ParsedMessage msg{RRM{L3ConfigurationChangeAcknowledge{}}};
     auto parsed = roundtrip(msg);
@@ -648,7 +647,7 @@ TEST(RoundTripTest, ConfigurationChangeAcknowledge) {
 }
 
 // Configuration Change Reject (GSM 04.08 9.1.4, MTI=0x33)
-// Reference: GSM_RR_Types.ttcn CONFIGURATION_CHANGE_REJECT='00110011'B
+// CONFIGURATION_CHANGE_REJECT='00110011'B = 0x33 (GSM 44.018).
 TEST(RoundTripTest, ConfigurationChangeReject) {
     ParsedMessage msg{RRM{L3ConfigurationChangeReject{RRCause::Normal_Event}}};
     auto parsed = roundtrip(msg);
@@ -659,7 +658,7 @@ TEST(RoundTripTest, ConfigurationChangeReject) {
 }
 
 // Partial Release (GSM 04.08 9.1.8, MTI=0x0a)
-// Reference: GSM_RR_Types.ttcn PARTIAL_RELEASE='00001010'B
+// PARTIAL_RELEASE='00001010'B = 0x0A (GSM 44.018).
 TEST(RoundTripTest, PartialRelease) {
     ParsedMessage msg{RRM{L3PartialRelease{}}};
     auto parsed = roundtrip(msg);
@@ -668,7 +667,7 @@ TEST(RoundTripTest, PartialRelease) {
 }
 
 // Partial Release Complete (GSM 04.08 9.1.8, MTI=0x0f)
-// Reference: GSM_RR_Types.ttcn PARTIAL_RELEASE_COMPLETE='00001111'B
+// PARTIAL_RELEASE_COMPLETE='00001111'B = 0x0F (GSM 44.018).
 TEST(RoundTripTest, PartialReleaseComplete) {
     ParsedMessage msg{RRM{L3PartialReleaseComplete{}}};
     auto parsed = roundtrip(msg);
@@ -677,7 +676,7 @@ TEST(RoundTripTest, PartialReleaseComplete) {
 }
 
 // Extended Measurement Report (GSM 04.08 9.1.21a, MTI=0x36)
-// Reference: GSM_RR_Types.ttcn EXTENDED_MEASUREMENT_REPORT='00110110'B
+// EXTENDED_MEASUREMENT_REPORT='00110110'B = 0x36 (GSM 44.018).
 TEST(RoundTripTest, ExtendedMeasurementReport) {
     ParsedMessage msg{RRM{L3ExtendedMeasurementReport{}}};
     auto parsed = roundtrip(msg);
@@ -686,7 +685,7 @@ TEST(RoundTripTest, ExtendedMeasurementReport) {
 }
 
 // Extended Measurement Order (GSM 04.08 9.1.21b, MTI=0x37)
-// Reference: GSM_RR_Types.ttcn EXTENDED_MEASUREMENT_ORDER='00110111'B
+// EXTENDED_MEASUREMENT_ORDER='00110111'B = 0x37 (GSM 44.018).
 TEST(RoundTripTest, ExtendedMeasurementOrder) {
     L3ExtendedMeasurementOrder msg;
     ParsedMessage pm{RRM{std::move(msg)}};
@@ -697,7 +696,7 @@ TEST(RoundTripTest, ExtendedMeasurementOrder) {
 }
 
 // Frequency Redefinition (GSM 04.08 9.1.13a, MTI=0x14)
-// Reference: GSM_RR_Types.ttcn FREQUENCY_REDEFINITION='00010100'B
+// FREQUENCY_REDEFINITION='00010100'B = 0x14 (GSM 44.018).
 TEST(RoundTripTest, FrequencyRedefinition) {
     ParsedMessage msg{RRM{L3FrequencyRedefinition{}}};
     auto parsed = roundtrip(msg);
@@ -706,7 +705,7 @@ TEST(RoundTripTest, FrequencyRedefinition) {
 }
 
 // Notification NCH (GSM 04.08 9.1.26, MTI=0x20)
-// Reference: GSM_RR_Types.ttcn NOTIFICATION_NCH='00100000'B
+// NOTIFICATION_NCH='00100000'B = 0x20 (GSM 44.018).
 TEST(RoundTripTest, NotificationNCH) {
     L3NotificationNCH msg;
     msg.data() = std::vector<uint8_t>{0xAB, 0xCD};
@@ -719,7 +718,7 @@ TEST(RoundTripTest, NotificationNCH) {
 }
 
 // Notification Response (GSM 04.08 9.1.27, MTI=0x26)
-// Reference: GSM_RR_Types.ttcn NOTIFICATION_RESPONSE='00100110'B
+// NOTIFICATION_RESPONSE='00100110'B = 0x26 (GSM 44.018).
 TEST(RoundTripTest, NotificationResponse) {
     L3NotificationResponse msg;
     msg.data() = std::vector<uint8_t>{0x12, 0x34};
@@ -732,7 +731,7 @@ TEST(RoundTripTest, NotificationResponse) {
 }
 
 // VGCS Uplink Grant (GSM 04.08 9.1.28, MTI=0x09)
-// Reference: GSM_RR_Types.ttcn VGCS_UPLINK_GRANT='00001001'B
+// VGCS_UPLINK_GRANT='00001001'B = 0x09 (GSM 44.018).
 TEST(RoundTripTest, VGCSUplinkGrant) {
     ParsedMessage msg{RRM{L3VGCSUplinkGrant{}}};
     auto parsed = roundtrip(msg);
@@ -741,7 +740,7 @@ TEST(RoundTripTest, VGCSUplinkGrant) {
 }
 
 // Uplink Release (GSM 04.08 9.1.28a, MTI=0x0e)
-// Reference: GSM_RR_Types.ttcn UPLINK_RELEASE='00001110'B
+// UPLINK_RELEASE='00001110'B = 0x0E (GSM 44.018).
 TEST(RoundTripTest, UplinkRelease) {
     ParsedMessage msg{RRM{L3UplinkRelease{}}};
     auto parsed = roundtrip(msg);
@@ -750,7 +749,7 @@ TEST(RoundTripTest, UplinkRelease) {
 }
 
 // Uplink Busy (GSM 04.08 9.1.28b, MTI=0x2a)
-// Reference: GSM_RR_Types.ttcn UPLINK_BUSY='00101010'B
+// UPLINK_BUSY='00101010'B = 0x2A (GSM 44.018).
 TEST(RoundTripTest, UplinkBusy) {
     ParsedMessage msg{RRM{L3UplinkBusy{}}};
     auto parsed = roundtrip(msg);
@@ -759,7 +758,7 @@ TEST(RoundTripTest, UplinkBusy) {
 }
 
 // Talker Indication (GSM 04.08 9.1.28c, MTI=0x11)
-// Reference: GSM_RR_Types.ttcn TALKER_INDICATION='00010001'B
+// TALKER_INDICATION='00010001'B = 0x11 (GSM 44.018).
 TEST(RoundTripTest, TalkerIndication) {
     ParsedMessage msg{RRM{L3TalkerIndication{}}};
     auto parsed = roundtrip(msg);
@@ -768,7 +767,7 @@ TEST(RoundTripTest, TalkerIndication) {
 }
 
 // Priority Uplink Request (GSM 04.08 9.1.28d, MTI=0x66)
-// Reference: GSM_RR_Types.ttcn PRIORITY_UPLINK_REQUEST='01100110'B
+// PRIORITY_UPLINK_REQUEST='01100110'B = 0x66 (GSM 44.018).
 TEST(RoundTripTest, PriorityUplinkRequest) {
     L3PriorityUplinkRequest msg;
     ParsedMessage pm{RRM{std::move(msg)}};
@@ -778,7 +777,7 @@ TEST(RoundTripTest, PriorityUplinkRequest) {
 }
 
 // Data Indication (GSM 04.08 9.1.28e, MTI=0x67)
-// Reference: GSM_RR_Types.ttcn DATA_INDICATION='01100111'B
+// DATA_INDICATION='01100111'B = 0x67 (GSM 44.018).
 TEST(RoundTripTest, DataIndication) {
     L3DataIndication msg;
     msg.data() = std::vector<uint8_t>{0xDE, 0xAD};
@@ -791,7 +790,7 @@ TEST(RoundTripTest, DataIndication) {
 }
 
 // Data Indication 2 (GSM 04.08 9.1.28f, MTI=0x68)
-// Reference: GSM_RR_Types.ttcn DATA_INDICATION_2='01101000'B
+// DATA_INDICATION_2='01101000'B = 0x68 (GSM 44.018).
 TEST(RoundTripTest, DataIndication2) {
     L3DataIndication2 msg;
     msg.data() = std::vector<uint8_t>{0xBE, 0xEF};

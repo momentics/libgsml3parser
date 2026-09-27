@@ -21,12 +21,12 @@
 
 // GCC (Group Call Control) Message Classes - GSM L3 group call messages
 // Spec: 3GPP TS 44.018 sections 9.7, Table 10.4.4
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - ts_ML3_MO_GCC (line 3840)
-//            ETSI TS 102 225 (TETRA GCC), 3GPP TS 44.018 for GSM group calls
+// Message identifiers and wire layouts per 3GPP TS 44.018 (GCC, PD=0x00); the
+// group call service itself is defined in ETSI TS 102 225.
 //
 // L3 header (per 44.018 10.2, PD=0x00):
-//   Byte 0: PD(4)=0x00(GCC) | TI(3) | TIF(1)
-//   Byte 1: MessageType(6)<<2 | NSD(2)
+//   Byte 0: TI(3) | TIF(1) | PD(4)=0x00(GCC)
+//   Byte 1: NSD(2) | MessageType(6)
 //   Body: [message-specific IE fields, parsed as opaque for basic infrastructure]
 
 #pragma once

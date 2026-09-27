@@ -28,7 +28,7 @@
 ///
 /// 3GPP specification: TS 48.058 (A-bis interface RSL protocol).
 /// Thread safety: parse() is thread-safe (pure function on input span).
-/// Memory: sizeof(RSLParsedMessage) is fixed (~544 bytes on 64-bit), zero heap allocation.
+/// Memory: sizeof(RSLParsedMessage) is fixed (560 bytes on 64-bit), zero heap allocation.
 ///
 /// Example:
 /// @code

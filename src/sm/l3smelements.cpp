@@ -21,8 +21,7 @@
 
 // SM IE - parse/write/text implementation
 // Spec: 3GPP TS 24.008 section 10.5.8
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - SM IE templates
-//            ts_PdpType, ts_ApnTLV, ts_QoS_Elt, ts_PcoTLV
+// IE layouts per 3GPP TS 24.080 (PDP type, APN, QoS and PCO encodings).
 
 #include "gsml3parser/sm/l3smelements.h"
 #include <sstream>

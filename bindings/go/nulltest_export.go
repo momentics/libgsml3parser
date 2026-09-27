@@ -83,7 +83,7 @@ func rawMessageHexNull() bool { return C.gsml3_message_hex(nil) == nil }
 // rawParseL3IntoNull returns the C code of gsml3_parse_l3_into(NULL, ...) — the
 // documented contract is "not OK" on a NULL handle.
 func rawParseL3IntoNull() Code {
-	data := []byte{0x60, 0x0D, 0x00}
+	data := []byte{0x06, 0x0D, 0x00}
 	return Code(int(C.gsml3_parse_l3_into(nil, (*C.uint8_t)(unsafe.Pointer(&data[0])), C.size_t(len(data)), nil)))
 }
 
@@ -125,7 +125,7 @@ func rawFreeMessage(msg unsafe.Pointer) { C.gsml3_message_free((*C.gsml3_message
 // test: 0 written + GSML3_ERR_BUFFER_TOO_SMALL reported, never retried.
 func rawRslBuildTooSmall() (int, Code) {
 	buf := make([]byte, 4)
-	l3 := []byte{0x50, 0x84, 0x55}
+	l3 := []byte{0x05, 0x21, 0x55}
 	n := C.gsml3_rsl_build_data_req((*C.uint8_t)(unsafe.Pointer(&buf[0])), C.size_t(len(buf)),
 		0x10, 1, (*C.uint8_t)(unsafe.Pointer(&l3[0])), C.size_t(len(l3)))
 	return int(n), Code(int(C.gsml3_last_error_code())) // synchronous copy right after the failing call

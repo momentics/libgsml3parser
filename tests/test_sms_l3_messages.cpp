@@ -20,7 +20,7 @@
 // SOFTWARE.
 
 // SMS L3 Messages (TS 24.008 9.6) - round-trip and golden parse tests.
-// Reference: osmo-ttcn3-hacks L3_Templates.ttcn (SMS-TS-* templates).
+// Message set and identifiers per 3GPP TS 24.008 sections 9.6.1-9.6.14.
 // Spec: 3GPP TS 24.008 sections 9.6.1-9.6.14, Table 10.6a.
 //
 // [GOLDEN DATA VERIFICATION]
@@ -28,7 +28,7 @@
 // SMS L3 header format: PD=0x09(SMS) in the low nibble of byte 0,
 //   TI(3 bits) in bits 7:5 and TIF(1 bit) in bit 4; MTI(8 bits, raw) in byte 1.
 // Note: MTI 0x12 and 0x13 overlap with CP-STATUS and CP-SMT respectively.
-// The parser resolves overlaps by preferring CP messages for backward compat.
+// The parser resolves overlaps by preferring CP messages.
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>

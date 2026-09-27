@@ -21,12 +21,12 @@
 
 // SMS L3 Messages (TS 24.008 9.6) - TE-to-MS SMS primitives
 // Spec: 3GPP TS 24.008 sections 9.6.1-9.6.14, Table 10.6a
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - SMS-TS-* templates
+// Message identifiers per 3GPP TS 24.008 sections 9.6.1-9.6.14 (SMS-TS set).
 //
 // These are L3-level SMS primitives used for SMS-on-CS fallback and status
 // reporting. They share PD=0x09 with CP-layer messages but operate in a
 // different context. MTI 0x12 and 0x13 overlap with CP-STATUS and CP-SMT;
-// the parser resolves overlaps by preferring CP messages for backward compat.
+// the parser resolves overlaps by preferring CP messages.
 //
 // L3 header (per 24.008 10.5.1):
 //   Byte 0: PD(4)=0x09(SMS) | Skip(4)

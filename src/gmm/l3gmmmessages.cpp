@@ -21,8 +21,7 @@
 
 // GMM Messages - parse/write/text implementation
 // Spec: 3GPP TS 24.008 sections 9.4, Table 10.4
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - GMM message templates
-//            ref/OpenBTS/SGSNGGSN/GPRSL3Messages.h - L3GmmMsg::MessageType
+// Wire encodings per 3GPP TS 24.008 section 10 (GMM message set).
 
 #include "gsml3parser/gmm/l3gmmmessages.h"
 #include <sstream>
@@ -1097,16 +1096,17 @@ L3AuthenticationAndCipheringReject::Builder L3AuthenticationAndCipheringReject::
 Expected<L3GMMIdentityRequest> L3GMMIdentityRequest::parse(BitReader& br) {
     L3GMMIdentityRequest msg;
 
-    // identityType(3)|spare(1)|forceToStandby(1)|spare(4) = 1 octet... actually 2 octets per TTCN-3
+    // identityType(3)|spare(1)|forceToStandby(1)|spare(4) in the first octet of
+    // the two-octet value part (GMM Identity Request, TS 24.008 9.4.7).
     auto o1 = br.readField(8);
     if (!o1) return Expected<L3GMMIdentityRequest>::error(o1.error());
     msg.mIdentityType = static_cast<MobileIDType>((o1.value() >> 5) & 0x07);
     msg.mForceToStandby = ((o1.value() >> 4) & 0x01) != 0;
 
-    // Second (spare) octet: written by write() (bodyLength() == 2) and
-    // present in the TTCN-3 template; it must be consumed so the parse is
-    // the exact inverse of the write (a 4-byte frame whose
-    // standard parse leaves a tail is treated as a short message).
+    // Second (spare) octet of the two-octet value part: written by write()
+    // (bodyLength() == 2); it must be consumed so the parse is the exact
+    // inverse of the write (a 4-byte frame whose standard parse leaves a tail
+    // is treated as a short message).
     auto o2 = br.readField(8);
     if (!o2) return Expected<L3GMMIdentityRequest>::error(o2.error());
 

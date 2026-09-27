@@ -168,7 +168,7 @@ bool L3StreamProcessor::processOne(F&& handler) {
         } else {
             // TruncatedInput: the source is not exhausted but has no
             // data right now (live ring buffer) — an idle poll, not a
-            // truncation (previously this inflated the
+            // truncation (counting it as truncation would inflate the
             // truncation counter in real-time loops).
             mStats.idlePolls++;
         }

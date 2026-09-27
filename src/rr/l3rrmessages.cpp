@@ -168,7 +168,7 @@ L3PagingRequestType1::Builder& L3PagingRequestType1::Builder::addMobileId(const 
 L3PagingRequestType1 L3PagingRequestType1::Builder::build() {
     L3PagingRequestType1 msg;
     msg.mMobileIDs = mMobileIds;
-    // Always page at least one (default) identity, matching the legacy behavior.
+    // A paging request always carries at least one (default) identity.
     msg.mMobileIdCount = (mCount == 0) ? 1 : mCount;
     msg.mChannelsNeeded = mChannelsNeeded;
     return msg;
@@ -251,7 +251,7 @@ L3PagingRequestType2::Builder& L3PagingRequestType2::Builder::addTMSI(uint32_t t
 
 L3PagingRequestType2 L3PagingRequestType2::Builder::build() {
     L3PagingRequestType2 msg;
-    // The fixed 2-TMSI layout is zero-padded, matching the legacy behavior.
+    // The fixed 2-TMSI layout is zero-padded.
     msg.mTMSIs = mTMSIs;
     msg.mChannelsNeeded = mChannelsNeeded;
     return msg;
@@ -308,7 +308,7 @@ L3PagingRequestType3::Builder& L3PagingRequestType3::Builder::addTMSI(uint32_t t
 
 L3PagingRequestType3 L3PagingRequestType3::Builder::build() {
     L3PagingRequestType3 msg;
-    // The fixed 4-TMSI layout is zero-padded, matching the legacy behavior.
+    // The fixed 4-TMSI layout is zero-padded.
     msg.mTMSIs = mTMSIs;
     msg.mChannelsNeeded = mChannelsNeeded;
     return msg;
@@ -2339,8 +2339,7 @@ Expected<L3ChannelRequest> L3ChannelRequest::parse(BitReader& br) {
     L3ChannelRequest msg;
     // The entire octet is the 8-bit request reference (RA): establishment
     // cause + random reference (TS 44.018 Table 9.1.8.1). The network must
-    // echo the full RA in the Immediate Assignment, so all 8 bits are kept
-    // (previously only the high nibble was stored).
+    // echo the full RA in the Immediate Assignment, so all 8 bits are kept.
     auto r = br.readField(8); if (!r) return Expected<L3ChannelRequest>::error(r.error());
     msg.mRequestReference = static_cast<uint8_t>(r.value());
     return Expected<L3ChannelRequest>::hold(std::move(msg));

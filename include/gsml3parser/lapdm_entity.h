@@ -218,11 +218,10 @@ private:
     std::vector<uint8_t> mReassemblyBuffer;
 
     // TX encode buffer — lazy-allocated on first send and reused afterwards,
-    // so the steady-state send path performs no heap allocation (
-    // the previous code built a fresh std::vector via encodeFrame() per
-    // frame). The L1 callback receives a span into this buffer and must
-    // transmit or copy synchronously; it must not retain the span beyond
-    // the callback.
+    // so the steady-state send path performs no heap allocation (building a
+    // fresh std::vector via encodeFrame() per frame would allocate). The L1
+    // callback receives a span into this buffer and must transmit or copy
+    // synchronously; it must not retain the span beyond the callback.
     std::vector<uint8_t> mTxBuf;
 
     // TX segment queue — lazy-allocated, like mReassemblyBuffer. Holds the bytes
@@ -243,10 +242,10 @@ private:
     // Contention resolution checksum
     uint32_t mContentionChecksum{0};
 
-    // Maximum L3 message size for I-frame reassembly (the previous
-    // code appended I-frame payloads without any limit — a peer sending M=0
-    // segments forever grew the buffer unboundedly, a DoS vector on
-    // untrusted radio input). Matches FrameConfig::maxMessageLength.
+    // Maximum L3 message size for I-frame reassembly (appending I-frame
+    // payloads without any limit would let a peer sending M=0 segments
+    // forever grow the buffer unboundedly — a DoS vector on untrusted radio
+    // input). Matches FrameConfig::maxMessageLength.
     static constexpr size_t kMaxReassemblyBytes = 4096;
 
     // Statistics

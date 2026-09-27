@@ -21,10 +21,10 @@
 
 /// Strongly-typed external data structures for protocol procedures.
 ///
-/// Replaces the opaque `std::span<const uint8_t>` parameter previously passed to
-/// feedExternal with named, self-documenting structures. Each structure corresponds
-/// to a specific type of external data that a BTS application feeds into a procedure
-/// via feedExternalTyped().
+/// Named, self-documenting structures for the external data that a BTS
+/// application feeds into a procedure via feedExternalTyped() (in place of an
+/// opaque `std::span<const uint8_t>`). Each structure corresponds to a specific
+/// type of external data.
 /// All structures are small (<= 64 bytes) and passed by const reference to avoid copies.
 ///
 /// 3GPP specifications: TS 24.008 (authentication, location update), TS 04.08 (paging, ciphering).

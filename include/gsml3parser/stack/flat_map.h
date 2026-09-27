@@ -79,8 +79,8 @@ public:
     static constexpr size_t npos = static_cast<size_t>(-1);
 
     // Slab layout: entries live in contiguous slabs of
-    // kSlabEntries entries each, replacing the previous one-heap-block-
-    // per-entry storage (10M sessions = 10M ~2KB allocations). Slabs are
+    // kSlabEntries entries each (one-heap-block-per-entry storage would
+    // mean 10M sessions = 10M ~2KB allocations). Slabs are
     // never moved or reallocated, so an entry's address stays stable for
     // its whole lifetime (insertions, erasures of OTHER
     // entries, rehashes and growth never move it) — a hard requirement:
@@ -320,8 +320,7 @@ bool FlatMap<Key, Value>::erase(size_t idx) noexcept {
 
 template <typename Key, typename Value>
 void FlatMap<Key, Value>::clear() noexcept {
-    // Release every slab (matches the previous semantics: clear() frees
-    // all entry storage, not just the values).
+    // Release every slab (clear() frees all entry storage, not just the values).
     mSlabs.clear();
     mFree.clear();
     mEntryCount = 0;

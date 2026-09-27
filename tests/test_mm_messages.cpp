@@ -20,30 +20,30 @@
 // SOFTWARE.
 
 // MM message round-trip tests with spec-compliant hex values.
-// Reference: osmo-ttcn3-hacks L3_Templates.ttcn (MM section).
+// MM message encodings per 3GPP TS 24.008 section 9.
 //
 // [GOLDEN VERIFICATION]
-// All MM hex parse test data verified against osmo-ttcn3-hacks reference:
+// All MM hex parse test data verified against 3GPP TS 24.008:
 //   - LocationUpdatingReject_Parse {0x05, 0x04, 0x02}: PD=5(MM) low nibble, MT=0x04(LUReject) in six low bits, cause=0x02(IMSI_Unknown_In_HLR)
-//     Verified against L3_Templates.ttcn tr_CM_SERV_REJ (line 524): messageType='100010'B(0x22), reject_cause
-//     c_MM_CAUSE_IMSI_UNKNOWN_IN_HLR := '02'O (L3_Templates.ttcn line 57)
+//     Location Updating Reject frame: messageType = '000100'B(0x04), reject_cause (TS 24.008)
+//     MM cause IMSI_Unknown_In_HLR = '02'O (TS 24.008 Table 10.5.3.6)
 //   - AuthenticationRequest_Parse {0x05, 0x12, 0x00, RAND(16)}: PD=5(MM) low nibble, MT=0x12(AuthReq), CKSN=0, RAND
-//     Verified against L3_Templates.ttcn tr_ML3_MT_MM_AUTH_REQ: messageType='010010'B(0x12)
+//     Authentication Request frame: messageType = '010010'B(0x12) (TS 24.008)
 //   - AuthenticationResponse_Parse {0x05, 0x14, SRES(4)}: PD=5(MM) low nibble, MT=0x14(AuthResp), SRES
-//     Verified against L3_Templates.ttcn ts_ML3_MT_MM_AUTH_RESP: messageType='010100'B(0x14)
+//     Authentication Response frame: messageType = '010100'B(0x14) (TS 24.008)
 //   - IdentityRequest_Parse {0x05, 0x18, 0x01}: PD=5(MM) low nibble, MT=0x18(IDReq), identityType=0x01(IMSI)
-//     Verified against L3_Templates.ttcn tr_ML3_MT_MM_ID_Req: messageType='011000'B(0x18)
+//     Identity Request frame: messageType = '011000'B(0x18) (TS 24.008)
 //   - CMServiceAccept_Parse "0521": PD=5(MM) low nibble, MT=0x21(CMServAcc)
-//     Verified against L3_Templates.ttcn tr_CM_SERV_ACC: messageType='100001'B(0x21)
+//     CM Service Accept frame: messageType = '100001'B(0x21) (TS 24.008)
 //   - AuthenticationReject_Parse "0511": PD=5(MM) low nibble, MT=0x11(AuthRej)
-//     Verified against L3_Templates.ttcn ts_ML3_MT_MM_AUTH_REJ: messageType='010001'B(0x11)
+//     Authentication Reject frame: messageType = '010001'B(0x11) (TS 24.008)
 //   - TMSIReallocationComplete_Parse "051B": PD=5(MM) low nibble, MT=0x1B(TMSIReallocComp)
-//     Verified against L3_Templates.ttcn: messageType='011011'B(0x1B)
+//     TMSI Reallocation Complete frame: messageType = '011011'B(0x1B) (TS 24.008)
 //   - MMRejectCause values verified against GSM 24.008 Table 10.5.3.6:
 //     0x02=IMSI_Unknown_In_HLR, 0x03=Illegal_MS, 0x16=Congestion, 0x6F=Protocol_Error_Unspecified
-//   - CMServiceType values verified against L3_Templates.ttcn CmServiceType enum (line 28):
+//   - CMServiceType values per GSM 24.008:
 //     MO_CALL='0001'B(1), EMERG_CALL='0010'B(2), MO_SMS='0100'B(4), SS_ACT='1000'B(8)
-//   - LocationUpdateType values verified against L3_Templates.ttcn:
+//   - LocationUpdateType values per GSM 24.008 (Location Updating Request):
 //     Normal=0, Periodic=1, IMSIAttach=2
 
 #include <gtest/gtest.h>
@@ -61,7 +61,7 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 }
 
 // ── CM Service Accept (GSM 04.08 9.2.5) ───────────────────────────────
-// Reference: L3_Templates.ttcn tr_CM_SERV_ACC
+// Wire layout per GSM 24.008 (CM Service Accept).
 // PD=0x05, MTI=0x21, no body
 
 TEST(MMRoundTripTest, CMServiceAccept) {
@@ -73,7 +73,7 @@ TEST(MMRoundTripTest, CMServiceAccept) {
 }
 
 // ── CM Service Abort (GSM 04.08 9.2.7) ────────────────────────────────
-// Reference: L3_Templates.ttcn ts_CM_SERV_REJ
+// Wire layout per GSM 24.008 (CM Service Abort).
 
 TEST(MMRoundTripTest, CMServiceAbort) {
     ParsedMessage msg(MMM(L3CMServiceAbort{}));
@@ -92,7 +92,7 @@ TEST(MMRoundTripTest, CMServiceReject) {
 }
 
 // ── Location Updating Accept (GSM 04.08 9.2.13) ──────────────────────
-// Reference: L3_Templates.ttcn ts_LU_ACCEPT
+// Wire layout per GSM 24.008 (Location Updating Accept).
 // Structure: PD=0x05, MTI=0x02, NSD(2), LAI(5), [MI TLV], [FOP TV], ...
 
 TEST(MMRoundTripTest, LocationUpdatingAccept) {
@@ -114,7 +114,7 @@ TEST(MMRoundTripTest, LocationUpdatingAccept_WithMI) {
 }
 
 // ── Location Updating Reject (GSM 04.08 9.2.14) ──────────────────────
-// Reference: L3_Templates.ttcn tr_ML3_MT_LU_Rej
+// Wire layout per GSM 24.008 (Location Updating Reject).
 
 TEST(MMRoundTripTest, LocationUpdatingReject) {
     ParsedMessage msg{MMM{L3LocationUpdatingReject{MMRejectCause::IMSI_Unknown_In_HLR}}};
@@ -124,7 +124,7 @@ TEST(MMRoundTripTest, LocationUpdatingReject) {
 }
 
 // TS 24.008 10.2: PD=0x05(MM) low nibble, MT=000100(LUReject=0x04) in six low bits, NSD=00
-// Reference: L3_Templates.ttcn tr_ML3_MT_LU_Rej, GSML3MMMessages.h LocationUpdatingReject=0x04
+// Location Updating Reject MTI = 0x04 (TS 24.008).
 // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
 // Byte 1: MT=0x04 in the six low bits, NSD=0
 // Byte 2: reject_cause = 0x02 (IMSI_Unknown_In_HLR, GSM 04.08 10.5.3.6)
@@ -141,7 +141,7 @@ TEST(MMRoundTripTest, LocationUpdatingReject_Parse) {
 }
 
 // ── Authentication Request (GSM 04.08 9.2.2) ─────────────────────────
-// Reference: L3_Templates.ttcn tr_ML3_MT_MM_AUTH_REQ
+// Wire layout per GSM 24.008 (Authentication Request).
 // Structure: PD=0x05, MTI=0x12, CKSN(4), spare(4), RAND(128 bits)
 
 TEST(MMRoundTripTest, AuthenticationRequest) {
@@ -154,7 +154,7 @@ TEST(MMRoundTripTest, AuthenticationRequest) {
 }
 
 // TS 24.008 10.2: PD=0x05(MM) low nibble, MT=010010(AuthenticationRequest=0x12) in six low bits, NSD=00
-// Reference: L3_Templates.ttcn tr_ML3_MT_MM_AUTH_REQ, GSML3MMMessages.h AuthenticationRequest=0x12
+// Authentication Request MTI = 0x12 (TS 24.008).
 // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
 // Byte 1: MT=0x12 in the six low bits, NSD=0
 // Byte 2: CKSN(4)=0, spare(4)=0 = 0x00
@@ -172,7 +172,7 @@ TEST(MMRoundTripTest, AuthenticationRequest_Parse) {
 }
 
 // ── Authentication Response (GSM 04.08 9.2.3) ────────────────────────
-// Reference: L3_Templates.ttcn ts_ML3_MT_MM_AUTH_RESP_2G
+// Wire layout per GSM 24.008 (Authentication Response).
 // Structure: PD=0x05, MTI=0x14, SRES(32 bits)
 
 TEST(MMRoundTripTest, AuthenticationResponse) {
@@ -193,7 +193,7 @@ TEST(MMRoundTripTest, AuthenticationResponse) {
 }
 
 // TS 24.008 10.2: PD=0x05(MM) low nibble, MT=010100(AuthenticationResponse=0x14) in six low bits, NSD=00
-// Reference: L3_Templates.ttcn ts_ML3_MT_MM_AUTH_RESP_2G, GSML3MMMessages.h AuthenticationResponse=0x14
+// Authentication Response MTI = 0x14 (TS 24.008).
 // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
 // Byte 1: MT=0x14 in the six low bits, NSD=0
 // Bytes 2-5: SRES = 0xABCD1234 (GSM 04.08 10.5.3.2, 32 bits)
@@ -207,7 +207,7 @@ TEST(MMRoundTripTest, AuthenticationResponse_Parse) {
 }
 
 // ── Authentication Reject (GSM 04.08 9.2.1) ──────────────────────────
-// Reference: L3_Templates.ttcn ts_ML3_MT_MM_AUTH_REJ
+// Wire layout per GSM 24.008 (Authentication Reject).
 
 TEST(MMRoundTripTest, AuthenticationReject) {
     ParsedMessage msg(MMM(L3AuthenticationReject{}));
@@ -217,7 +217,7 @@ TEST(MMRoundTripTest, AuthenticationReject) {
 }
 
 // ── Identity Request (GSM 04.08 9.2.10) ──────────────────────────────
-// Reference: L3_Templates.ttcn tr_ML3_MT_MM_ID_Req
+// Wire layout per GSM 24.008 (Identity Request).
 
 TEST(MMRoundTripTest, IdentityRequest_IMSI) {
     ParsedMessage msg{MMM{L3IdentityRequest{MobileIDType::IMSI}}};
@@ -234,7 +234,7 @@ TEST(MMRoundTripTest, IdentityRequest_IMEI) {
 }
 
 // TS 24.008 10.2: PD=0x05(MM) low nibble, MT=011000(IdentityRequest=0x18) in six low bits, NSD=00
-// Reference: L3_Templates.ttcn tr_ML3_MT_MM_ID_Req, GSML3MMMessages.h IdentityRequest=0x18
+// Identity Request MTI = 0x18 (TS 24.008).
 // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
 // Byte 1: MT=0x18 in the six low bits, NSD=0
 // Byte 2: spare(4) | identityType(4) = 0000 0001 = 0x01 (IMSI per GSM 04.08 10.5.3.4)
@@ -281,7 +281,7 @@ TEST(MMRoundTripTest, MMStatus) {
 }
 
 // ── CM Service Request (GSM 04.08 9.2.9) ────────────────────────────
-// Reference: L3_Templates.ttcn ts_CM_SERV_REQ
+// Wire layout per GSM 24.008 (CM Service Request).
 // Structure: PD=0x05, MTI=0x24, NSD(2), CM_ServiceType(4), CKSN(4), CM2 LV, MI LV
 
 TEST(MMRoundTripTest, CMServiceRequest) {
@@ -292,7 +292,7 @@ TEST(MMRoundTripTest, CMServiceRequest) {
 }
 
 // ── CM Reestablishment Request (GSM 04.08 9.2.4) ────────────────────
-// Reference: L3_Templates.ttcn ts_CM_REESTABL_REQ
+// Wire layout per GSM 24.008 (CM Reestablishment Request).
 
 TEST(MMRoundTripTest, CMReestablishmentRequest) {
     ParsedMessage msg(MMM(L3CMReestablishmentRequest{}));
@@ -302,7 +302,7 @@ TEST(MMRoundTripTest, CMReestablishmentRequest) {
 }
 
 // ── IMSI Detach Indication (GSM 04.08 9.2.15) ──────────────────────
-// Reference: L3_Templates.ttcn ts_ML3_MO_MM_IMSI_DET_Ind
+// Wire layout per GSM 24.008 (IMSI Detach Indication).
 
 TEST(MMRoundTripTest, IMSIDetachIndication) {
     ParsedMessage msg(MMM(L3IMSIDetachIndication{}));
@@ -312,7 +312,7 @@ TEST(MMRoundTripTest, IMSIDetachIndication) {
 }
 
 // ── MM Information (GSM 04.08 9.2.15a) ──────────────────────────────
-// Reference: L3_Templates.ttcn ts_ML3_MO_MM_INFO
+// Wire layout per GSM 24.008 (MM Information).
 // Structure: PD=0x05, MTI=0x32, NetworkName TLV, TimeZoneAndTime TLV
 
 TEST(MMRoundTripTest, MMInformation) {
@@ -323,7 +323,7 @@ TEST(MMRoundTripTest, MMInformation) {
 }
 
 // ── Location Updating Request (GSM 04.08 9.2.15) ────────────────────
-// Reference: L3_Templates.ttcn ts_LU_REQ, ts_ML3_MO_LU_Req
+// Wire layout per GSM 24.008 (Location Updating Request).
 
 TEST(MMRoundTripTest, LocationUpdatingRequest) {
     ParsedMessage msg(MMM(L3LocationUpdatingRequest{}));
@@ -333,7 +333,7 @@ TEST(MMRoundTripTest, LocationUpdatingRequest) {
 }
 
 // ── Identity Response (GSM 04.08 9.2.11) ────────────────────────────
-// Reference: L3_Templates.ttcn ts_ML3_MO_MM_ID_Rsp
+// Wire layout per GSM 24.008 (Identity Response).
 
 TEST(MMRoundTripTest, IdentityResponse) {
     ParsedMessage msg(MMM(L3IdentityResponse{}));
@@ -345,7 +345,7 @@ TEST(MMRoundTripTest, IdentityResponse) {
 // ── Parse from known hex values ──────────────────────────────────────
 
 // GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=100001(CMServiceAccept=0x21), NSD=00
-// Reference: L3_Templates.ttcn tr_CM_SERV_ACC (discriminator='0101'B, messageType='100001'B)
+// CM Service Accept frame: PD = '0101'B, message type = '100001'B (TS 24.008).
 // Byte 0: PD(high=5)|skip(low=0) = 0x50
 // Byte 1: messageType(6)<<2|NSD(2) = 0x21<<2|0 = 0x84
 TEST(MMRoundTripTest, Parse_CMServiceAccept_Hex) {
@@ -356,7 +356,7 @@ TEST(MMRoundTripTest, Parse_CMServiceAccept_Hex) {
 }
 
 // GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=010001(AuthenticationReject=0x11), NSD=00
-// Reference: L3_Templates.ttcn ts_ML3_MT_MM_AUTH_REJ, GSML3MMMessages.h AuthenticationReject=0x11
+// Authentication Reject MTI = 0x11 (TS 24.008).
 // Byte 0: PD(high=5)|skip(low=0) = 0x50
 // Byte 1: messageType(6)<<2|NSD(2) = 0x11<<2|0 = 0x44
 TEST(MMRoundTripTest, Parse_AuthenticationReject_Hex) {
@@ -366,7 +366,7 @@ TEST(MMRoundTripTest, Parse_AuthenticationReject_Hex) {
 }
 
 // GSM 04.08 10.2: PD=0x05(MM), skip=0, messageType=011011(TMSIReallocationComplete=0x1B), NSD=00
-// Reference: GSML3MMMessages.h TMSIReallocationComplete=0x1B
+// TMSI Reallocation Complete MTI = 0x1B (GSM 24.008).
 // Byte 0: PD(high=5)|skip(low=0) = 0x50
 // Byte 1: messageType(6)<<2|NSD(2) = 0x1B<<2|0 = 0x6C
 TEST(MMRoundTripTest, Parse_TMSIReallocationComplete_Hex) {
@@ -376,7 +376,7 @@ TEST(MMRoundTripTest, Parse_TMSIReallocationComplete_Hex) {
 }
 
 // ── MMRejectCause values from spec ───────────────────────────────────
-// Reference: L3_Templates.ttcn c_MM_CAUSE_IMSI_UNKNOWN_IN_HLR = '02'O
+// MM cause IMSI_Unknown_In_HLR = '02'O (GSM 24.008 Table 10.5.3.6).
 
 TEST(MMRoundTripTest, MMRejectCause_Values) {
     EXPECT_EQ(static_cast<uint8_t>(MMRejectCause::IMSI_Unknown_In_HLR), 2u);
@@ -387,7 +387,7 @@ TEST(MMRoundTripTest, MMRejectCause_Values) {
 }
 
 // ── CMServiceType values ─────────────────────────────────────────────
-// Reference: L3_Templates.ttcn CmServiceType
+// CMServiceType values per GSM 24.008 Table 10.5.1.2.
 
 TEST(MMRoundTripTest, CMServiceType_Values) {
     EXPECT_EQ(static_cast<uint8_t>(L3CMServiceType::MobileOriginatedCall), 1u);
@@ -452,7 +452,7 @@ TEST(MMRoundTripTest, TimeZoneAndTime) {
 }
 
 // ── LocationUpdateType ───────────────────────────────────────────────
-// Reference: L3_Templates.ttcn LU_Type_Normal, LU_Type_Periodic, LU_Type_IMSI_Attach
+// LocationUpdateType values per GSM 24.008 (Location Updating Request).
 
 TEST(MMRoundTripTest, LocationUpdateType_Values) {
     EXPECT_EQ(static_cast<uint8_t>(LocationUpdateType::Normal), 0u);

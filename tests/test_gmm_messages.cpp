@@ -20,31 +20,32 @@
 // SOFTWARE.
 
 // Comprehensive GSM Layer 3 Golden Tests (Part 5: GMM).
-// Reference: osmo-ttcn3-hacks L3_Templates.ttcn (GMM section, lines 2358-3167).
+// Message identifiers and wire layouts per 3GPP TS 24.008 section 10 (GMM).
 // Spec: 3GPP TS 24.008 sections 9.4, Table 10.4.
 //
 // [GOLDEN DATA VERIFICATION]
-// All GMM message type identifiers verified against osmo-ttcn3-hacks L3_Templates.ttcn
-//   and 3GPP TS 24.008 Table 10.4 (GPRS Mobility Management).
-// GMM header format verified: PD=8('1000'B), Skip(4 bits) in byte 0;
+// All GMM message type identifiers per 3GPP TS 24.008 Table 10.4
+//   (GPRS Mobility Management).
+// GMM header format verified: PD=8('1000'B) in the low nibble of byte 0,
+//   TI(3 bits) in bits 7:5 and TIF(1 bit) in bit 4;
 //   MessageType(8 bits, raw - no NSD field) in byte 1.
-// This differs from MM/CC/SS where MTI is 6-bit shifted left by 2.
-// Message structures verified against L3_Templates.ttcn templates:
-//   ts_GMM_ATTACH_REQ, tr_GMM_ATTACH_ACCEPT, ts_GMM_ATTACH_COMPL, tr_GMM_ATTACH_REJECT,
-//   ts_GMM_RAU_REQ, tr_GMM_RAU_ACCEPT, tr_GMM_RAU_REJECT, ts_GMM_RAU_COMPL,
-//   ts_GMM_DET_REQ_MO, tr_GMM_DET_ACCEPT_MT, ts_GMM_DET_ACCEPT_MO,
-//   tr_GMM_AUTH_REQ, ts_GMM_AUTH_RESP_2G, ts_GMM_AUTH_FAIL_UMTS_AKA_RESYNC,
-//   tr_GMM_ID_REQ, ts_GMM_ID_RESP, ts_GMM_PTMSI_REALL_COMPL,
-//   ts_GMM_SERVICE_REQ, tr_GMM_SERVICE_ACC, tr_GMM_SERVICE_REJ.
+// This differs from MM/CC/SS which take the 6-bit MTI in the low bits of byte 1.
+// Message structures per 3GPP TS 24.008 section 10 (GMM message set):
+//   Attach Request / Accept / Complete / Reject,
+//   Routing Area Update Request / Accept / Reject / Complete,
+//   Detach Request (MO) / Accept (MT and MO),
+//   Authentication And Ciphering Request / Response (2G) / Failure (UMTS AKA resync),
+//   Identity Request / Response, P-TMSI Reallocation Complete,
+//   Service Request / Accept / Reject.
 //
 // [GOLDEN VERIFICATION]
-// All byte-level parse test data cross-checked against osmo-ttcn3-hacks reference:
-//   - GMM MTI values verified against L3_Templates.ttcn template messageType assignments
-//   - GMM header encoding: PD=8 in high nibble of byte 0, raw MTI in byte 1 (no shift)
+// All byte-level parse test data cross-checked against 3GPP TS 24.008 section 10:
+//   - GMM MTI values per the GMM message type table (TS 24.008 Table 10.4)
+//   - GMM header encoding: PD=8 in the low nibble of byte 0, raw MTI in byte 1 (no shift)
 //   - RAI encoding: MCC/MNC BCD nibble-swapped(3) + LAC(2) + RAC(1) = 6 octets
-//   - MS Network Capability LV format verified against ts_GMM_MsNetCapLV template
-//   - DRX Parameter TV format verified against ts_DrxParameterV template
-//   - PDP Context Status TLV format verified against ts_PDPContextStatusTLV template
+//   - MS Network Capability LV format per the GMM information element definitions
+//   - DRX Parameter TV format per the GMM information element definitions
+//   - PDP Context Status TLV format per the GMM information element definitions
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -63,9 +64,9 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 
 // =====================================================================
 // GMM MESSAGE TYPE VALUES (GSM 24.008 Table 10.4)
-// Reference: OpenBTS GPRSL3Messages.h L3GmmMsg::MessageType enum
+// Message type identifiers per GSM 24.008 Table 10.4.
 // [GSM SPEC VERIFIED] GMM messages use 8-bit raw MTI in byte 1,
-//   unlike MM/CC/SS which use 6-bit MTI shifted left by 2.
+//   unlike MM/CC/SS which take the 6-bit MTI in the low bits of byte 1.
 // =====================================================================
 
 TEST(GoldenGMMTest, MessageTypeValues) {
@@ -130,7 +131,7 @@ TEST(GoldenGMMTest, HeaderEncoding) {
 
 // =====================================================================
 // GMM Attach Complete (GSM 24.008 9.4.3) - minimal message
-// Reference: L3_Templates.ttcn ts_GMM_ATTACH_COMPL (line 2645)
+// Attach Complete wire layout (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x03 = MTI(8)=0x03(AttachComplete), raw encoding
@@ -149,7 +150,7 @@ TEST(GoldenGMMTest, AttachComplete_Minimal) {
 // =====================================================================
 // GMM Attach Complete Round-Trip
 // Construct empty AttachComplete -> serialize -> parse -> verify MTI preserved.
-// Reference: L3_Templates.ttcn ts_GMM_ATTACH_COMPL template structure
+// Attach Complete wire layout (GSM 24.008).
 // =====================================================================
 
 TEST(GoldenGMMTest, AttachComplete_RoundTrip) {
@@ -162,7 +163,7 @@ TEST(GoldenGMMTest, AttachComplete_RoundTrip) {
 
 // =====================================================================
 // GMM Attach Reject (GSM 24.008 9.4.4) - with cause
-// Reference: L3_Templates.ttcn tr_GMM_ATTACH_REJECT (line 2625)
+// Attach Reject wire layout (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x04 = MTI(8)=0x04(AttachReject), raw encoding
@@ -185,7 +186,7 @@ TEST(GoldenGMMTest, AttachReject_WithCause) {
 // =====================================================================
 // GMM Attach Reject Round-Trip
 // Construct with cause -> serialize -> parse -> verify cause preserved.
-// Reference: L3_Templates.ttcn tr_GMM_ATTACH_REJECT template structure
+// Attach Reject wire layout (GSM 24.008).
 // =====================================================================
 
 TEST(GoldenGMMTest, AttachReject_RoundTrip) {
@@ -197,7 +198,7 @@ TEST(GoldenGMMTest, AttachReject_RoundTrip) {
 
 // =====================================================================
 // GMM Routing Area Update Complete (GSM 24.008 9.4.16) - minimal
-// Reference: L3_Templates.ttcn ts_GMM_RAU_COMPL (line 2778)
+// Routing Area Update Complete wire layout (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0a = MTI(8)=0x0a(RoutingAreaUpdateComplete), raw encoding
@@ -213,7 +214,7 @@ TEST(GoldenGMMTest, RAUpdateComplete_Minimal) {
 
 // =====================================================================
 // GMM Routing Area Update Complete Round-Trip
-// Reference: L3_Templates.ttcn ts_GMM_RAU_COMPL template structure
+// Routing Area Update Complete wire layout (GSM 24.008).
 // =====================================================================
 
 TEST(GoldenGMMTest, RAUpdateComplete_RoundTrip) {
@@ -225,7 +226,7 @@ TEST(GoldenGMMTest, RAUpdateComplete_RoundTrip) {
 
 // =====================================================================
 // GMM P-TMSI Reallocation Complete (GSM 24.008 9.4.8) - minimal
-// Reference: L3_Templates.ttcn ts_GMM_PTMSI_REALL_COMPL (line 2795)
+// P-TMSI Reallocation Complete wire layout (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x11 = MTI(8)=0x11(P_TMSIReallocationComplete), raw encoding
@@ -241,7 +242,7 @@ TEST(GoldenGMMTest, PTMSIRreallocComplete_Minimal) {
 
 // =====================================================================
 // GMM P-TMSI Reallocation Complete Round-Trip
-// Reference: L3_Templates.ttcn ts_GMM_PTMSI_REALL_COMPL template structure
+// P-TMSI Reallocation Complete wire layout (GSM 24.008).
 // =====================================================================
 
 TEST(GoldenGMMTest, PTMSIRreallocComplete_RoundTrip) {
@@ -253,7 +254,7 @@ TEST(GoldenGMMTest, PTMSIRreallocComplete_RoundTrip) {
 
 // =====================================================================
 // GMM Auth And Ciphering Reject (GSM 24.008 9.4.9) - minimal
-// Reference: OpenBTS GPRSL3Messages.h AuthenticationAndCipheringRej=0x14
+// Authentication And Ciphering Reject MTI = 0x14 (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x14 = MTI(8)=0x14(AuthenticationAndCipheringReject), raw encoding
@@ -269,7 +270,7 @@ TEST(GoldenGMMTest, AuthCipherReject_Minimal) {
 
 // =====================================================================
 // GMM Auth And Ciphering Reject Round-Trip
-// Reference: OpenBTS GPRSL3Messages.h message structure
+// Authentication And Ciphering Reject wire layout (GSM 24.008).
 // =====================================================================
 
 TEST(GoldenGMMTest, AuthCipherReject_RoundTrip) {
@@ -281,7 +282,7 @@ TEST(GoldenGMMTest, AuthCipherReject_RoundTrip) {
 
 // =====================================================================
 // GMM Service Accept (GSM 24.008 9.4.21) - minimal
-// Reference: L3_Templates.ttcn tr_GMM_SERVICE_ACC (line 3120)
+// Service Accept wire layout (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0d = MTI(8)=0x0d(ServiceAccept), raw encoding
@@ -297,7 +298,7 @@ TEST(GoldenGMMTest, ServiceAccept_Minimal) {
 
 // =====================================================================
 // GMM Service Accept Round-Trip
-// Reference: L3_Templates.ttcn tr_GMM_SERVICE_ACC template structure
+// Service Accept wire layout (GSM 24.008).
 // =====================================================================
 
 TEST(GoldenGMMTest, ServiceAccept_RoundTrip) {
@@ -341,7 +342,7 @@ TEST(GoldenGMMTest, GMMStatus_RoundTrip) {
 
 // =====================================================================
 // GMM Information (GSM 24.008) - minimal
-// Reference: OpenBTS GPRSL3Messages.h GMMInformation=0x21
+// GMM Information MTI = 0x21 (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x21 = MTI(8)=0x21(GMMInformation), raw encoding
@@ -357,7 +358,7 @@ TEST(GoldenGMMTest, GMMInformation_Minimal) {
 
 // =====================================================================
 // GMM Information Round-Trip
-// Reference: OpenBTS GPRSL3Messages.h message structure
+// GMM Information wire layout (GSM 24.008).
 // =====================================================================
 
 TEST(GoldenGMMTest, GMMInformation_RoundTrip) {
@@ -369,7 +370,7 @@ TEST(GoldenGMMTest, GMMInformation_RoundTrip) {
 
 // =====================================================================
 // GMM Detach Accept (GSM 24.008 9.4.6) - minimal
-// Reference: L3_Templates.ttcn ts_GMM_DET_ACCEPT_MO (line 3154)
+// Detach Accept wire layout (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x06 = MTI(8)=0x06(DetachAccept), raw encoding
@@ -385,7 +386,7 @@ TEST(GoldenGMMTest, DetachAccept_Minimal) {
 
 // =====================================================================
 // GMM Detach Accept Round-Trip
-// Reference: L3_Templates.ttcn ts_GMM_DET_ACCEPT_MO template structure
+// Detach Accept wire layout (GSM 24.008).
 // =====================================================================
 
 TEST(GoldenGMMTest, DetachAccept_RoundTrip) {
@@ -397,7 +398,7 @@ TEST(GoldenGMMTest, DetachAccept_RoundTrip) {
 
 // =====================================================================
 // GMM Attach Accept (GSM 24.008 9.4.2) - golden parse
-// Reference: L3_Templates.ttcn tr_GMM_ATTACH_ACCEPT (line 2586)
+// Attach Accept golden parse vector (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x02 = MTI(8)=0x02(AttachAccept), raw encoding
@@ -439,7 +440,7 @@ TEST(GoldenGMMTest, AttachAccept_GoldenParse) {
 
 // =====================================================================
 // GMM Detach Request (GSM 24.008 9.4.5) - golden parse
-// Reference: L3_Templates.ttcn ts_GMM_DET_REQ_MO (line 3004)
+// Detach Request golden parse vector (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x05 = MTI(8)=0x05(DetachRequest), raw encoding
@@ -460,7 +461,7 @@ TEST(GoldenGMMTest, DetachRequest_GoldenParse) {
 
 // =====================================================================
 // GMM Routing Area Update Request (GSM 24.008 9.4.12) - golden parse
-// Reference: L3_Templates.ttcn ts_GMM_RAU_REQ (line 2662)
+// Routing Area Update Request golden parse vector (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x08 = MTI(8)=0x08(RoutingAreaUpdateRequest), raw encoding
@@ -495,7 +496,7 @@ TEST(GoldenGMMTest, RAUpdateRequest_GoldenParse) {
 
 // =====================================================================
 // GMM Routing Area Update Accept (GSM 24.008 9.4.15) - golden parse
-// Reference: L3_Templates.ttcn tr_GMM_RAU_ACCEPT (line 2738)
+// Routing Area Update Accept golden parse vector (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x09 = MTI(8)=0x09(RoutingAreaUpdateAccept), raw encoding
@@ -535,7 +536,7 @@ TEST(GoldenGMMTest, RAUpdateAccept_GoldenParse) {
 
 // =====================================================================
 // GMM Routing Area Update Reject (GSM 24.008 9.4.17) - golden parse
-// Reference: L3_Templates.ttcn tr_GMM_RAU_REJECT (line 2717)
+// Routing Area Update Reject golden parse vector (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0b = MTI(8)=0x0b(RoutingAreaUpdateReject), raw encoding
@@ -557,7 +558,7 @@ TEST(GoldenGMMTest, RAUpdateReject_GoldenParse) {
 
 // =====================================================================
 // GMM Service Request (GSM 24.008 9.4.20) - golden parse
-// Reference: L3_Templates.ttcn ts_GMM_SERVICE_REQ (line 3095)
+// Service Request golden parse vector (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0c = MTI(8)=0x0c(ServiceRequest), raw encoding
@@ -590,7 +591,7 @@ TEST(GoldenGMMTest, ServiceRequest_GoldenParse) {
 
 // =====================================================================
 // GMM Service Reject (GSM 24.008 9.4.22) - golden parse
-// Reference: L3_Templates.ttcn tr_GMM_SERVICE_REJ (line 3137)
+// Service Reject golden parse vector (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0e = MTI(8)=0x0e(ServiceReject), raw encoding
@@ -650,7 +651,7 @@ TEST(GoldenGMMTest, PTMSIRereallocCommand_GoldenParse) {
 
 // =====================================================================
 // GMM Authentication And Ciphering Request (GSM 24.008 9.4.9) - golden parse
-// Reference: L3_Templates.ttcn tr_GMM_AUTH_REQ (line 2862)
+// Authentication And Ciphering Request golden parse vector (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x12 = MTI(8)=0x12(AuthenticationAndCipheringRequest), raw encoding
@@ -689,7 +690,7 @@ TEST(GoldenGMMTest, AuthAndCipheringRequest_GoldenParse) {
 
 // =====================================================================
 // GMM Authentication And Ciphering Response (GSM 24.008 9.4.9) - golden parse
-// Reference: L3_Templates.ttcn ts_GMM_AUTH_RESP_2G (line 2886)
+// Authentication And Ciphering Response golden parse vector (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x13 = MTI(8)=0x13(AuthenticationAndCipheringResponse), raw encoding
@@ -720,7 +721,7 @@ TEST(GoldenGMMTest, AuthAndCipheringResponse_GoldenParse) {
 
 // =====================================================================
 // GMM Identity Request (GSM 24.008 9.4.7) - golden parse
-// Reference: L3_Templates.ttcn tr_GMM_ID_REQ (line 2831)
+// Identity Request golden parse vector (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x15 = MTI(8)=0x15(GMMIdentityRequest), raw encoding
@@ -742,7 +743,7 @@ TEST(GoldenGMMTest, GMMIdentityRequest_GoldenParse) {
 
 // =====================================================================
 // GMM Identity Response (GSM 24.008 9.4.10) - golden parse
-// Reference: L3_Templates.ttcn ts_GMM_ID_RESP (line 2847)
+// Identity Response golden parse vector (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x16 = MTI(8)=0x16(GMMIdentityResponse), raw encoding
@@ -767,7 +768,7 @@ TEST(GoldenGMMTest, GMMIdentityResponse_GoldenParse) {
 
 // =====================================================================
 // GMM Authentication And Ciphering Failure (GSM 24.008 9.4.23) - golden parse
-// Reference: L3_Templates.ttcn ts_GMM_AUTH_FAIL_UMTS_AKA_RESYNC (line 2908)
+// Authentication And Ciphering Failure golden parse vector (GSM 24.008).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x1c = MTI(8)=0x1c(AuthenticationAndCipheringFailure), raw encoding
@@ -855,7 +856,7 @@ TEST(GoldenGMMTest, MessagePD) {
 // =====================================================================
 // GMM IE: PDP Context Status (GSM 24.008 10.5.7.1)
 // TLV format: IEI=0x32 | Length(1) | Value(2 octets bitmap)
-// Reference: L3_Templates.ttcn ts_PDPContextStatusTLV (line 348)
+// PDP Context Status TLV per GSM 24.008 10.5.7.1.
 // =====================================================================
 
 TEST(GoldenGMMTest, PDPContextStatus_IE) {
@@ -871,7 +872,7 @@ TEST(GoldenGMMTest, PDPContextStatus_IE) {
 // =====================================================================
 // GMM IE: T3302 Timer (GSM 24.008 10.5.7.2)
 // TLV format: IEI=0x1b | Length(1) | Value(1 octet)
-// Reference: L3_Templates.ttcn GPRSTimer2 per Table 10.5a
+// Timer encoding per GSM 24.008 Table 10.5a (GPRSTimer2).
 // =====================================================================
 
 TEST(GoldenGMMTest, T3302Timer_IE) {
@@ -885,7 +886,7 @@ TEST(GoldenGMMTest, T3302Timer_IE) {
 // =====================================================================
 // GMM IE: DRX Parameter (GSM 24.008 10.5.5.13)
 // TV format: Value(2 octets)
-// Reference: L3_Templates.ttcn ts_DrxParameterV (line 2420)
+// DRX Parameter TV per GSM 24.008 10.5.5.13.
 // Octet 1: splitPGCycleCode=0x00(no DRX)
 // Octet 2: nonDRXTimer(3)=0, splitOnCCCH(1)=0, cnSpecificDRXCycleLength(4)=0
 // =====================================================================
@@ -904,7 +905,7 @@ TEST(GoldenGMMTest, DRXParameter_IE) {
 // =====================================================================
 // GMM IE: Routing Area Identification (GSM 24.008 10.5.6.2)
 // Fixed: MCC/MNC BCD(3) | LAC(2) | RAC(1) = 6 octets total
-// Reference: L3_Templates.ttcn RoutingAreaIdentificationV records
+// RAI fixed layout per GSM 24.008 10.5.6.2.
 // MCC=250, MNC=01 -> nibble-swapped {0x52, 0xF0, 0x10}
 // LAC=0x1234 -> {0x12, 0x34}
 // RAC=0x56
@@ -924,7 +925,7 @@ TEST(GoldenGMMTest, RoutingAreaIdentification_IE) {
 // =====================================================================
 // GMM IE: MS Network Capability (GSM 24.008 10.5.7.3)
 // Variable-length bit string, first octet: GEA1|SMS_ded|SMS_GPRS|UCS2|SS_screen(2)|SOL-SA|RevLevel
-// Reference: L3_Templates.ttcn ts_GMM_MsNetCapV (line 2362)
+// MS Network Capability LV per GSM 24.008 10.5.7.3.
 // =====================================================================
 
 TEST(GoldenGMMTest, MSNetworkCapability_IE) {
@@ -952,7 +953,7 @@ TEST(GoldenGMMTest, GMMCauseStrings) {
 // =====================================================================
 // GMM Enum Values
 // Verify that GMM enum values match 3GPP TS 24.008 specifications.
-// Reference: L3_Templates.ttcn enumerated types and function definitions
+// Enumerated GMM values per GSM 24.008 section 10.
 // =====================================================================
 
 TEST(GoldenGMMTest, EnumValues) {

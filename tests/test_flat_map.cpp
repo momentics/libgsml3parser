@@ -180,7 +180,7 @@ TEST(FlatMapTest, Scale_4MEntries) {
 }
 
 // Test: erasing one entry does NOT move any other entry (
-// the previous swap-with-last erase relocated the last entry into the
+// a swap-with-last erase would relocate the last entry into the
 // erased slot, invalidating every raw pointer derived from entry
 // addresses — owner self-pointers, registry indexes, app-held pointers).
 TEST(FlatMapTest, Erase_OtherEntries_KeepStableAddresses) {

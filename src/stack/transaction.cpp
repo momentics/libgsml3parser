@@ -215,9 +215,9 @@ Transaction* TransactionManager::match(const ParsedMessage& msg) {
     if (pd == L3PD::CallControl || pd == L3PD::NonCallSS) {
         // The parsed CC/SS message carries its own TI (set by the parser from
         // the L3 header), so use the O(1) TI index — the same path as the
-        // header-based match. Previously this overload ignored the TI and
-        // returned the first pending transaction of the same PD, which
-        // mis-correlated responses when several CC dialogs were pending.
+        // header-based match. Ignoring the TI and returning the first pending
+        // transaction of the same PD would mis-correlate responses when
+        // several CC dialogs are pending.
         uint8_t ti = messageTI(msg);
         if (ti < 8) {
             if (auto slotOpt = mTiIndex[ti]; slotOpt) {

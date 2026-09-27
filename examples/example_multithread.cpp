@@ -55,9 +55,9 @@ struct ThreadStats {
 };
 
 // Example messages for all 12 PD domains.
-// SMS CP Ack is 2 bytes (CP-ACK has no body, 24.011 8.1.3;
-// the previous 4-byte vector parsed as a HandoverAccess, so the SMS
-// counter stayed 0 and RR was double-counted).
+// SMS CP Ack is 2 bytes (CP-ACK has no body, TS 24.011 8.1.3;
+// a 4-byte vector would parse as a HandoverAccess, so the SMS counter
+// stays 0 and RR gets double-counted).
 std::vector<std::string> sExampleHexes = {
     "060D00",                    // RR: Channel Release
     "0521",                      // MM: CM Service Accept

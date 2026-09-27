@@ -29,7 +29,7 @@ Quickstart::
 
     import gsml3parser as g                       # loads build_bindings/bin/gsml3parser.*
 
-    msg = g.Message.from_hex("60 0D 00")          # RR Channel Release
+    msg = g.Message.from_hex("06 0D 00")          # RR Channel Release
     print(g.version(), msg.name, msg.size(), msg.write().hex())
 
     with g.GsmL3Stack(tmsi=0x87654321) as stack:  # registry + session + orchestrator + LAPDm entity

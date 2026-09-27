@@ -138,7 +138,7 @@ struct ImsiViewHash {
 };
 
 /// BTS subscriber registry. Manages multiple SubscriberSession instances and provides
-/// TMSI, IMSI and LAPDm link lookup indexes. Analogous to MMUserMap in OpenBTS.
+/// TMSI, IMSI and LAPDm link lookup indexes over the subscriber sessions.
 ///
 /// For million-subscriber scenarios use ShardedSubscriberRegistry which partitions
 /// sessions into shards with independent mutexes.
@@ -257,8 +257,8 @@ private:
     };
 
     // TMSI -> session (primary index). Flat open-addressing table: slab
-    // storage (one allocation per 64 entries, replacing the previous
-    // one-heap-block-per-entry storage), no pointer chasing.
+    // storage (one allocation per 64 entries; one-heap-block-per-entry
+    // storage would mean millions of allocations), no pointer chasing.
     FlatMap<uint32_t, SessionEntry> mByTMSI;
 
     // IMSI -> TMSI (secondary index: redirects to mByTMSI).
@@ -278,8 +278,8 @@ private:
     // values. TMSI 0 is reserved (all-zero TMSI per TS 24.008) and skipped.
     uint32_t mNextAutoTmsi{1};
 
-    // Active session count — O(1) count() (the previous count()
-    // scanned the whole map, O(N) at 1M+ sessions).
+    // Active session count — O(1) count() (scanning the whole map would be
+    // O(N) at 1M+ sessions).
     size_t mCount{0};
 
     // Sessions with >=1 running timer. Ticked by tickAllTimers() — O(active), not O(all).

@@ -21,12 +21,12 @@
 
 // BCC (Broadcast Call Control) Message Classes - GSM L3 broadcast call messages
 // Spec: 3GPP TS 44.018 sections 9.6, Table 10.4.3
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - ts_ML3_MO_BCC (line 3813)
-//            ETSI TS 102 225 (TETRA BCC), 3GPP TS 44.018 for GSM broadcast calls
+// Message identifiers and wire layouts per 3GPP TS 44.018 (BCC, PD=0x01); the
+// broadcast call service itself is defined in ETSI TS 102 225.
 //
 // L3 header (per 44.018 10.2, PD=0x01):
-//   Byte 0: PD(4)=0x01(BCC) | TI(3) | TIF(1)
-//   Byte 1: MessageType(6)<<2 | NSD(2)
+//   Byte 0: TI(3) | TIF(1) | PD(4)=0x01(BCC)
+//   Byte 1: NSD(2) | MessageType(6)
 //   Body: [message-specific IE fields, parsed as opaque for basic infrastructure]
 
 #pragma once

@@ -232,9 +232,8 @@ public:
     /// @return The number of expired timer IDs written to `out`.
     ///         IDs that do not fit are NOT lost: the corresponding timers
     ///         are re-armed with a 1 ms duration and reported on a later
-    ///         tick (the previous contract silently cleared
-    ///         their running state, so real-time loops could miss
-    ///         protocol timeouts).
+    ///         tick (silently clearing their running state would let
+    ///         real-time loops miss protocol timeouts).
     /// This overload avoids heap allocation by using a caller-provided buffer.
     size_t tick(std::chrono::milliseconds delta, std::span<L3TimerId> out);
 

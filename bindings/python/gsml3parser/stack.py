@@ -471,7 +471,7 @@ class Message:
 
     @classmethod
     def from_hex(cls, hexstr, cfg: "Config | None" = None) -> "Message":
-        """Parse a hex string (spaces allowed, e.g. '60 0D 00'). None ->
+        """Parse a hex string (spaces allowed, e.g. '06 0D 00'). None ->
         TypeError before FFI; '60' raises GsmL3Error(TRUNCATED=2), non-hex
         like 'zz' raises GsmL3Error(INVALID_ARG=1)."""
         if hexstr is None or not isinstance(hexstr, (str, bytes)):

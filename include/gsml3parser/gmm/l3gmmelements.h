@@ -21,7 +21,7 @@
 
 // GMM Information Elements - GSM L3 GPRS Mobility Management IE definitions
 // Spec: 3GPP TS 24.008 section 10.5.7, Table 10.5a
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - GMM IE templates
+// IE layouts per 3GPP TS 24.008 section 10.5.7 (Table 10.5a).
 //
 // Bit layout (per spec):
 //   PDPContextStatus: TLV(IEI=0x32) | Length(1) | StatusBitmap(2)

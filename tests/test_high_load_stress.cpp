@@ -656,9 +656,9 @@ TEST(Stress, _1MSession_ProcedureTick_Scale) {
 }
 
 // Test: high session churn with concurrently ACTIVE timers (
-// the previous FlatMap::erase moved the last entry into the erased
-// slot, so every remove() while other sessions had running timers
-// produced ghost ticks and lost expiries). 1M sessions, 10K active
+// FlatMap::erase must not move any other entry into the erased slot,
+// because every remove() while other sessions had running timers would
+// then produce ghost ticks and lost expiries). 1M sessions, 10K active
 // timers, 100K remove/create cycles; invariants:
 //   1. every reported expiry is bound to a session that is still in the
 //      registry (no ghost / no use-after-free);

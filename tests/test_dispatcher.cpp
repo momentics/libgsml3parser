@@ -226,7 +226,7 @@ TEST(DispatcherTest, RegisterHandler_MTI_OutOfRange_Ignored) {
 }
 
 // Test: the context passed to dispatch() is delivered to the callback
-// (it was previously silently dropped in every handler kind).
+// for every handler kind.
 TEST(DispatcherTest, DispatchContext_DeliveredToRawHandler) {
     static void* lastCtx = nullptr;
     ProtocolDispatcher d;

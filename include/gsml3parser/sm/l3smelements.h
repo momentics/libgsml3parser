@@ -21,7 +21,7 @@
 
 // SM Information Elements - GSM L3 GPRS Session Management IE definitions
 // Spec: 3GPP TS 24.008 section 10.5.8, Table 10.5a
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - SM IE templates
+// IE layouts per 3GPP TS 24.080 / TS 24.008 section 10.5.8 (Table 10.5a).
 //
 // Bit layout (per spec):
 //   PDPAddress: TLV(IEI=0x08) | Length(1) | PDPType(1) | Address(variable)

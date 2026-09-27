@@ -145,7 +145,7 @@ fn link_lifecycle() {
     assert!(evs[0].data.is_empty(), "ESTABLISH_CONFIRM carries no payload");
 
     // A UI frame on the established link delivers UNIT_DATA with its payload.
-    let l3: &[u8] = &[0x60, 0x0d, 0x00]; // stable Channel Release vector (mirrors the C test suite)
+    let l3: &[u8] = &[0x06, 0x0d, 0x00]; // stable Channel Release vector (mirrors the C test suite)
     e.receive(&ms_ui(l3)).expect("receive UI");
     let evs = e.drain_l3();
     assert_eq!(evs.len(), 1);
@@ -196,10 +196,10 @@ fn t200_retransmission() {
 /// fields — and validation errors stay on the Rust side (INVALID_ARG).
 #[test]
 fn mini_codec_closed_loop_with_c_decoder() {
-    let l3: &[u8] = &[0x60, 0x0d, 0x00];
+    let l3: &[u8] = &[0x06, 0x0d, 0x00];
 
     // UI: [address][0x03 pf=0][header octet L=3] + info.
-    assert_eq!(ms_ui(l3), [0x01, 0x03, 0x0d, 0x60, 0x0d, 0x00]); // canonical UI bytes: address 0x01 + control 0x03 (pf=0)
+    assert_eq!(ms_ui(l3), [0x01, 0x03, 0x0d, 0x06, 0x0d, 0x00]); // canonical UI bytes: address 0x01 + control 0x03 (pf=0)
     let f = ms_ui(l3);
     let d = decode_frame(&f).unwrap();
     assert_eq!((d.format, d.u_type, d.sapi, d.command, d.pf), (s::GSML3_LAPDM_FMT_U, s::GSML3_LAPDM_U_UI, 0, 0, 0));
@@ -319,7 +319,7 @@ fn null_safety() {
 }
 
 fn l3_slice() -> Vec<u8> {
-    vec![0x60, 0x0d, 0x00]
+    vec![0x06, 0x0d, 0x00]
 }
 
 /// The closed-stack invariant: after `close()` (or after the value was already
@@ -375,7 +375,7 @@ fn stack_closed_no_ffi() {
 fn concurrent_independent_stacks() {
     const THREADS: u32 = 8;
     const ITERS: u32 = 200;
-    const L3_CHANNEL_RELEASE: &[u8] = &[0x60, 0x0d, 0x00]; // stable Channel Release vector (mirrors the C test suite)
+    const L3_CHANNEL_RELEASE: &[u8] = &[0x06, 0x0d, 0x00]; // stable Channel Release vector (mirrors the C test suite)
 
     std::thread::scope(|scope| {
         for t in 0..THREADS {

@@ -113,7 +113,7 @@ TEST(TransactionTest, Matches_byTI_forCC) {
 
 // Test: a CC transaction must NOT be matched by an SS message carrying
 // the same TI — the dialog PD is part of the correlation key
-// (the previous TI-only check cross-matched CC/SS dialogs).
+// (a TI-only check would cross-match CC/SS dialogs).
 TEST(TransactionTest, Matches_TI_AlsoRequiresSamePD) {
     Transaction tx(L3PD::CallControl, L3Setup::MTI, 2, L3TimerId::T3101);
     // Same TI, different dialog PD: no match.
@@ -382,8 +382,8 @@ TEST(TransactionManagerTest, MultipleTI_independent) {
 }
 
 // match() without header for CC uses the message's own TI (O(1) exact
-// match). Previously this fell back to scanning by PD and returned the
-// first pending CC transaction regardless of TI.
+// match): it must return the pending CC transaction with that TI, not the
+// first pending CC transaction found by scanning PDs.
 TEST(TransactionManagerTest, Match_CC_withoutHeader_UsesMessageTI) {
     TransactionManager tm;
     tm.create(L3PD::CallControl, L3Setup::MTI, 1, L3TimerId::T3101);
@@ -460,7 +460,7 @@ TEST(TransactionManagerTest, Get_slotReuse_afterCleanup) {
     auto id2 = tm.create(L3PD::CallControl, L3Connect::MTI, 2, L3TimerId::T3101);
     ASSERT_TRUE(id2.has_value());
 
-    // The new transaction must be reachable by its ID (previously returned nullptr).
+    // The new transaction must be reachable by its ID.
     Transaction* tx2 = tm.get(*id2);
     ASSERT_NE(tx2, nullptr);
     EXPECT_EQ(tx2->ti(), 2);
@@ -469,7 +469,7 @@ TEST(TransactionManagerTest, Get_slotReuse_afterCleanup) {
 
 // Regression: filling the pool and reusing finished slots must not shift
 // live transactions, so every outstanding ID keeps resolving to its own
-// transaction (the old compaction-based design broke this).
+// transaction (ID stability is required for correct dialog correlation).
 TEST(TransactionManagerTest, Get_fullPool_slotReuse_idsStable) {
     TransactionManager tm;
     std::vector<uint32_t> ids;

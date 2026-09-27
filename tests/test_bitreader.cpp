@@ -161,8 +161,8 @@ TEST(BitReaderTest, EmptyBuffer) {
 }
 
 // Regression: misaligned field ending exactly at the last bit of the buffer
-// must return the correct value (previously triggered a negative right-shift,
-// i.e. undefined behavior, and returned 0x00 instead of 0xA5).
+// must return the correct value; a negative right-shift here would be
+// undefined behavior (and yields 0x00 instead of 0xA5).
 TEST(BitReaderTest, MisalignedFieldEndingAtBufferEnd) {
     // 12 bits total. After reading 4 bits, 8 bits remain starting at bit 4.
     uint8_t buf[] = {0xAA, 0x5C};
@@ -248,7 +248,7 @@ TEST(BitReaderTest, PeekFieldOver32Bits_ClampsTo32) {
 }
 
 // Regression: peekField on an empty/null buffer must return 0 WITHOUT undefined
-// behavior (previously `actual == 0` produced a negative right-shift).
+// behavior (the right-shift amount must not become negative when no bits remain).
 TEST(BitReaderTest, PeekFieldEmptyBuffer_ReturnsZeroNoUB) {
     uint8_t buf[] = {0x00};
     BitReader brEmpty(buf, 0);            // zero total bits

@@ -7,11 +7,12 @@ Complete catalog of all L3 message types, Information Elements, and enums implem
 For a summary table see [README.md](../README.md#supported-messages-summary).
 
 Dispatch notes:
-- MM/CC/SS/BCC/GCC headers use a 6-bit messageType: `mti = (byte1 & 0xFC) >> 2`.
+- Octet 0 of the L3 header is `(TI << 5) | (TIF << 4) | PD` — the PD is the low nibble (TS 24.007 Table 11.3).
+- MM/CC/SS/BCC/GCC headers use the six low bits of octet 1 as the messageType: `mti = byte1 & 0x3F` (the two high bits carry the NSD and are informational).
 - GMM/SMS/SM/LS use the raw 8-bit second octet.
-- RR uses the raw second octet; with TIF=1 (short/SACCH messages) `mti = 0x100 + raw` — MTIs ≥ 0x100 are listed with their dispatch value.
+- RR normally uses the raw second octet; with TIF=1 (short messages) the five-bit code in the low bits of octet 1 maps to `mti = kRRTifShortBase | (byte1 & 0x1F)` — internal MTIs ≥ 0x100 are listed with their dispatch value. Unallocated short codes are rejected as InvalidMTI.
 - SMS: the CP-layer classes win the parse slots for MTI 0x12 (`L3CPStatus`) and 0x13 (`L3CPSMT`); `L3SMSProvidedReplyExpected` (0x12) and `L3SMSSubmitRep` (0x13) remain constructible/writable but are not produced by `parseL3`.
-- RR messages with dispatch MTI 0x106–0x112 (SI10/10bis/10ter, NotificationFACCH, UplinkFree, EnhancedMeasurementRepUL, MeasurementInfoDL, VBSVGCSRecon(2), VGCSAddInfo, VGCSMSInfo, VGCSSNeighCellInfo, NotifyAppData) are build/serialize only — the parser has no slot for them.
+- The synthetic no-header RR messages are routed by frame length, not by an L3 header: ChannelRequest (0x10E, 1 byte), HandoverAccess (0x10F, 4 bytes), SynchronizationChannelInformation (0x110, 7 bytes).
 
 ---
 
@@ -126,7 +127,7 @@ Dispatch notes:
 | `L3TMSIReallocationCommand` | 0x1A | DL | New TMSI assignment |
 | `L3TMSIReallocationComplete` | 0x1B | UL | TMSI reallocation complete |
 
-## Radio Resource (PD=0x06) — 98 message types
+## Radio Resource (PD=0x06) — 99 message types
 
 ### Paging
 
@@ -173,9 +174,9 @@ Dispatch notes:
 
 | Message | MTI | Description |
 |---------|-----|-------------|
-| `L3SystemInformationType10` | 0x106 | CI + LAI + CellOptions + CellSelParams |
-| `L3SystemInformationType10bis` | 0x107 | CI + LAI + CellOptions + CellSelParams |
-| `L3SystemInformationType10ter` | 0x108 | CI + LAI + CellOptions + CellSelParams |
+| `L3SystemInformationType10` | 0x100 | CI + LAI + CellOptions + CellSelParams (code '00000'B) |
+| `L3SystemInformationType10bis` | 0x10A | CI + LAI + CellOptions + CellSelParams (code '01010'B) |
+| `L3SystemInformationType10ter` | 0x10B | CI + LAI + CellOptions + CellSelParams (code '01011'B) |
 
 ### Dedicated Channel (DCCH/FACCH)
 
@@ -216,9 +217,9 @@ Dispatch notes:
 
 | Message | MTI | Size | Description |
 |---------|-----|------|-------------|
-| `L3ChannelRequest` | 0x101 | 1 byte | RACH access with cause + TSC |
-| `L3HandoverAccess` | 0x102 | 4 bytes | Handover confirmation with HO reference |
-| `L3SynchronizationChannelInformation` | 0x100 | 7 bytes | SCH info with FN, TOA, BSIC |
+| `L3ChannelRequest` | 0x10E | 1 byte | RACH access: single-octet request reference (RA) |
+| `L3HandoverAccess` | 0x10F | 4 bytes | HO number + HO reference + timing advance + spare |
+| `L3SynchronizationChannelInformation` | 0x110 | 7 bytes | Cell identity + location area identity (TS 44.018 9.1.30) |
 
 ### VGCS/VBS and Notification
 
@@ -238,13 +239,14 @@ Dispatch notes:
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3DTMAssignmentFailure` | 0x80 | UL | Cause |
-| `L3DTMReject` | 0x81 | DL | Empty body |
-| `L3DTMRequest` | 0x82 | UL | Empty body |
-| `L3PacketAssignment` | 0x83 | DL | ChannelDescription + TimingAdvance |
-| `L3DTMAssignmentCommand` | 0x84 | DL | Empty body |
-| `L3DTMInformation` | 0x85 | UL | Empty body |
-| `L3PacketInformation` | 0x86 | DL | Empty body |
+| `L3DTMAssignmentFailure` | 0x48 | UL | Cause |
+| `L3DTMReject` | 0x49 | DL | Empty body |
+| `L3DTMRequest` | 0x4A | UL | Empty body |
+| `L3PacketAssignment` | 0x4B | DL | ChannelDescription + TimingAdvance |
+| `L3ImmediatePacketAssignment` | 0x69 | DL | Opaque variable value part (DTM packet channel) |
+| `L3DTMAssignmentCommand` | 0x4C | DL | Empty body |
+| `L3DTMInformation` | 0x4D | UL | Empty body |
+| `L3PacketInformation` | 0x4E | DL | Empty body |
 
 ### Inter-RAT
 
@@ -258,20 +260,21 @@ Dispatch notes:
 
 ### SACCH FACCH/VBS-VGCS (TIF=1)
 
-Build/serialize only (no parse slot, MTI 0x109–0x112):
+RR short messages carry the standard L3 header with TIF set (octet 0 = 0x16 for TI=0);
+the five-bit code in octet 1 maps to the internal MTI `kRRTifShortBase + code` (code 3 is reserved).
 
 | Message | MTI | Description |
 |---------|-----|-------------|
-| `L3NotificationFACCH` | 0x109 | FACCH notification |
-| `L3UplinkFree` | 0x10A | FACCH uplink free |
-| `L3EnhancedMeasurementRepUL` | 0x10B | FACCH measurement report UL |
-| `L3MeasurementInfoDL` | 0x10C | FACCH measurement info DL |
-| `L3VBSVGCSRecon` | 0x10D | VBS/VGCS reconfiguration |
-| `L3VBSVGCSRecon2` | 0x10E | VBS/VGCS reconfiguration 2 |
-| `L3VGCSAddInfo` | 0x10F | VGCS additional info |
-| `L3VGCSMSInfo` | 0x110 | VGCS SMS info |
-| `L3VGCSSNeighCellInfo` | 0x111 | VGCS neighbor cell info |
-| `L3NotifyAppData` | 0x112 | Notify application data |
+| `L3NotificationFACCH` | 0x101 | FACCH notification (code '00001'B) |
+| `L3UplinkFree` | 0x102 | FACCH uplink free (code '00010'B) |
+| `L3EnhancedMeasurementRepUL` | 0x104 | FACCH measurement report UL (code '00100'B) |
+| `L3MeasurementInfoDL` | 0x105 | FACCH measurement info DL (code '00101'B) |
+| `L3VBSVGCSRecon` | 0x106 | VBS/VGCS reconfiguration (code '00110'B) |
+| `L3VBSVGCSRecon2` | 0x107 | VBS/VGCS reconfiguration 2 (code '00111'B) |
+| `L3VGCSAddInfo` | 0x108 | VGCS additional info (code '01000'B) |
+| `L3VGCSMSInfo` | 0x109 | VGCS MS info (code '01001'B) |
+| `L3VGCSSNeighCellInfo` | 0x10C | VGCS neighbor cell info (code '01100'B) |
+| `L3NotifyAppData` | 0x10D | Notify application data (code '01101'B) |
 
 ## GPRS Mobility Management (PD=0x08) — 23 message types
 

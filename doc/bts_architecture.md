@@ -40,7 +40,7 @@ For traffic analyzers, protocol sniffers, test tools, fuzzing frameworks, and an
 ```cpp
 #include <gsml3parser/gsml3parser.hpp>
 
-auto msg = gsml3parser::parseL3Hex("600D00");  // RR Channel Release, cause 0
+auto msg = gsml3parser::parseL3Hex("060D00");  // RR Channel Release, cause 0
 if (msg) {
     std::cout << gsml3parser::messageName(*msg) << "\n";   // "ChannelRelease"
     auto bytes = gsml3parser::writeL3Bytes(*msg);          // -> Expected<vector<uint8_t>>
@@ -127,8 +127,8 @@ BTS Stack Mode (all modules)
 ┌──────────────────────────────────────────────────────────────────────┐
 │                     BTS Application (Your Code)                      │
 │  ┌─────────────┐  ┌──────────────┐  ┌────────────────────────────┐   │
-│  │ AuC/HLR     │  │ VLR/BSC      │  │ SIP/Media Gateway (OpenBTS)│   │
-│  │ Integration │  │ Decision API │  │ or RSL transport (osmo-bts)│   │
+│  │ AuC/HLR     │  │ VLR/BSC      │  │ SIP/Media Gateway (VoIP)   │   │
+│  │ Integration │  │ Decision API │  │ or RSL transport over A-bis│   │
 │  └──────┬──────┘  └──────┬───────┘  └──────────────┬─────────────┘   │
 │         │                │                         │                 │
 │         └────────────────┼─────────────────────────┘                 │
@@ -612,8 +612,8 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
   variable-body messages (SI, SMS, Setup with IEs, Paging
   Response, ...) use a boundary heuristic that scans for the next
   plausible L3 header (O(L) per frame via a resume cache),
-  which is UNRELIABLE on real variable-length streams (message bodies
-  frequently contain bytes with valid-PD high nibbles) — use it only for
+   which is UNRELIABLE on real variable-length streams (message bodies
+   frequently contain bytes whose low nibble is a valid PD) — use it only for
   synthetic/test streams. At end of stream the tail is emitted and
   validated by the parser.
 
@@ -621,11 +621,11 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
 
 | Document | Topic |
 |----------|-------|
-| [doc/API.md](API.md) | Full API reference (63 numbered sections) |
+| [doc/API.md](API.md) | Full API reference (64 numbered sections) |
 | [doc/bts_integration.md](bts_integration.md) | Step-by-step integration guide for ProcedureOrchestrator-based BTS |
 | [README.md](../README.md) | Library overview and quick start |
 | 3GPP TS 24.008 | Mobile radio interface L3 specification |
-| 3GPP TS 44.018 | Group call and broadcast call control |
-| GSM 04.06 / 3GPP TS 24.022 | LAPDm framing for Um interface |
+| 3GPP TS 44.018 | Radio resource (RR) protocol on the Um interface |
+| GSM 04.06 / 3GPP TS 44.064 | LAPDm framing for Um interface |
 | GSM 04.08 | Layer 3 specification (legacy reference) |
 | 3GPP TS 48.058 | A-bis RSL specification |

@@ -330,7 +330,7 @@ PROTOTYPES = {
     "gsml3_config_free":           ("V",  ("H",)),  # NULL-safe
     # ── S3 message (12) ──────────────────────────────────────────────────
     "gsml3_parse_l3":              ("P",  ("B", "SZ", "H")),   # cfg may be None/NULL
-    "gsml3_parse_l3_hex":          ("P",  ("CS", "H")),        # spaces allowed, e.g. "60 0D 00"
+    "gsml3_parse_l3_hex":          ("P",  ("CS", "H")),        # spaces allowed, e.g. "06 0D 00"
     "gsml3_parse_l3_into":         ("I",  ("H", "B", "SZ", "H")),  # reparse in place; previous content kept on error
     "gsml3_message_free":          ("V",  ("H",)),
     "gsml3_message_name":          ("CS", ("H",)),  # static storage, "" for NULL

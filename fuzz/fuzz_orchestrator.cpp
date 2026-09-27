@@ -21,8 +21,8 @@
 
 // Fuzz target: ProcedureOrchestrator fed with random L3 message chunks,
 // random typed external data (AuthChallenge / VLRDecision), random tick
-// deltas and response builds (audit D15). Exercises chain detection,
-// phase transitions, the T3102/T3103 phase timers (audit D3) and the
+// deltas and response builds. Exercises chain detection,
+// phase transitions, the T3102/T3103 phase timers and the
 // retransmission channel.
 #include <cstddef>
 #include <cstdint>

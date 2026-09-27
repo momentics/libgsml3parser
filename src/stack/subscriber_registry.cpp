@@ -75,8 +75,8 @@ SubscriberSession* SubscriberRegistry::createByIMSI(std::string_view imsi) {
 
     // Allocate a unique TMSI: advance the high-water mark past any in-use
     // value (user-assigned TMSIs may occupy arbitrary slots) and skip the
-    // reserved all-zero TMSI. The scan is bounded (the previous
-    // loop could spin forever once the TMSI space is exhausted): with K
+    // reserved all-zero TMSI. The scan is bounded (an unbounded loop would
+    // spin forever once the TMSI space is exhausted): with K
     // occupied slots, K+1 consecutive candidate values must contain a free
     // one (pigeonhole principle), so exceeding that bound means the 32-bit
     // TMSI space is full.
@@ -207,21 +207,21 @@ bool SubscriberRegistry::remove(SubscriberSession* session) noexcept {
     // Remove from the active-procedure index before destroying the session, so
     // tickAllProcedures() never ticks a destroyed session (use-after-free).
     handleProcedureActive(session, false);
-    // Erase the entry so memory is reclaimed (previously the entry
-    // stayed in the map with active=false, leaking on every removal).
+    // Erase the entry so memory is reclaimed (leaving it in the map with
+    // active=false would leak on every removal).
     // The pointer to THIS session is invalidated by this call. Pointers
     // to all other sessions remain valid: FlatMap erase is in-place and
-    // never moves other entries (the previous
-    // swap-with-last erase silently invalidated every external
-    // SubscriberSession* of the moved entry: active-timer/procedure
-    // sets, the link index, owner self-pointers and app-held pointers).
+    // never moves other entries (a swap-with-last erase would silently
+    // invalidate every external SubscriberSession* of the moved entry:
+    // active-timer/procedure sets, the link index, owner self-pointers
+    // and app-held pointers).
     mByTMSI.erase(idx);
     --mCount;
     return true;
 }
 
 void SubscriberRegistry::clear() noexcept {
-    // Erase all entries to release memory (previously only flagged inactive).
+    // Erase all entries to release memory (flagging them inactive would leak them).
     mByTMSI.clear();
     mByIMSI.clear();
     mByLink.clear();

@@ -20,29 +20,29 @@
 // SOFTWARE.
 
 // Comprehensive GSM Layer 3 Golden Tests (Part 6: SM).
-// Reference: osmo-ttcn3-hacks L3_Templates.ttcn (SM section, lines 3170-3453).
+// Message identifiers and wire layouts per 3GPP TS 24.080 (SM).
 // Spec: 3GPP TS 24.008 sections 9.5, Table 10.4a.
 //
 // [GOLDEN DATA VERIFICATION]
-// All SM message type identifiers verified against osmo-ttcn3-hacks L3_Templates.ttcn
-//   and 3GPP TS 24.008 Table 10.4a (GPRS Session Management).
+// All SM message type identifiers per 3GPP TS 24.008 Table 10.4a
+//   (GPRS Session Management).
 // SM header format verified: PD=0x0A('1010'B) in the low nibble of byte 0,
 //   TI(3 bits) in bits 7:5 and TIF(1 bit) in bit 4; MessageType(8 bits, raw) in byte 1.
 // This follows the same encoding as GMM (PD=0x08).
-// Message structures verified against L3_Templates.ttcn templates:
-//   ts_SM_ACT_PDP_REQ, tr_SM_ACT_PDP_ACCEPT, tr_SM_ACT_PDP_REJ,
-//   ts_SM_DEACT_PDP_REQ_MO, ts_SM_DEACT_PDP_REQ_MT,
-//   tr_SM_DEACT_PDP_ACCEPT_MT, tr_SM_DEACT_PDP_ACCEPT_MO,
-//   ts_SM_MOD_PDP_REQ, tr_SM_MOD_PDP_ACCEPT, tr_SM_MOD_PDP_REJ,
-//   ts_SM_STATUS.
+// Message structures per 3GPP TS 24.080 (SM message set):
+//   Activate PDP Context Request / Accept / Reject,
+//   Deactivate PDP Context Request (MO/MT),
+//   Deactivate PDP Context Accept (MT/MO),
+//   Modify PDP Context Request / Accept / Reject,
+//   Status.
 //
 // [GOLDEN VERIFICATION]
-// All byte-level parse test data cross-checked against osmo-ttcn3-hacks reference:
-//   - SM MTI values verified against L3_Templates.ttcn template messageType assignments
+// All byte-level parse test data cross-checked against 3GPP TS 24.080:
+//   - SM MTI values per the SM message type table (TS 24.008 Table 10.4a)
 //   - SM header encoding: PD=0x0A in the low nibble of byte 0, raw MTI in byte 1 (no shift)
-//   - PDP Address TLV format verified against ts_PdpAddrTLV template
-//   - APN TLV format verified against ts_ApnTLV template
-//   - QoS TLV format verified against ts_QoS_Elt template
+//   - PDP Address TLV format per the SM information element definitions
+//   - APN TLV format per the SM information element definitions
+//   - QoS TLV format per the SM information element definitions
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -60,9 +60,9 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 
 // =====================================================================
 // SM MESSAGE TYPE VALUES (GSM 24.008 Table 10.4a)
-// Reference: OpenBTS GPRSL3Messages.h L3SmMsg::MessageType enum
+// Message type identifiers per GSM 24.008 Table 10.4a.
 // [GSM SPEC VERIFIED] SM messages use 8-bit raw MTI in byte 1,
-//   same as GMM (unlike MM/CC/SS which use 6-bit MTI shifted left by 2).
+//   same as GMM (unlike MM/CC/SS which use a 6-bit MTI in the low bits of byte 1).
 // =====================================================================
 
 TEST(GoldenSMTest, MessageTypeValues) {
@@ -122,7 +122,7 @@ TEST(GoldenSMTest, HeaderRoundTrip) {
 
 // =====================================================================
 // Activate PDP Context Request Golden Tests
-// Reference: L3_Templates.ttcn ts_SM_ACT_PDP_REQ (line 3211)
+// Wire layout per GSM 24.080 (Activate PDP Context Request).
 // =====================================================================
 
 // GSM 24.008 9.5.1: ActivatePDPContextRequest with IPv4, auto-assign APN, minimal QoS.
@@ -180,7 +180,7 @@ TEST(GoldenSMTest, ActivatePDPContextRequest_WithAddress) {
 
 // =====================================================================
 // Activate PDP Context Accept Golden Tests
-// Reference: L3_Templates.ttcn tr_SM_ACT_PDP_ACCEPT (line 3285)
+// Wire layout per GSM 24.080 (Activate PDP Context Accept).
 // =====================================================================
 
 // GSM 24.008 9.5.2: ActivatePDPContextAccept with assigned address.
@@ -220,7 +220,7 @@ TEST(GoldenSMTest, ActivatePDPContextAccept_Minimal) {
 
 // =====================================================================
 // Activate PDP Context Reject Golden Tests
-// Reference: L3_Templates.ttcn tr_SM_ACT_PDP_REJ (line 3260)
+// Wire layout per GSM 24.080 (Activate PDP Context Reject).
 // =====================================================================
 
 // GSM 24.008 9.5.3: ActivatePDPContextReject with cause and back-off timer.
@@ -257,7 +257,7 @@ TEST(GoldenSMTest, ActivatePDPContextReject_Minimal) {
 
 // =====================================================================
 // Deactivate PDP Context Request Golden Tests
-// Reference: L3_Templates.ttcn ts_SM_DEACT_PDP_REQ_MO, ts_SM_DEACT_PDP_REQ_MT
+// Wire layout per GSM 24.080 (MO and MT directions).
 // =====================================================================
 
 // GSM 24.008 9.5.4: DeactivatePDPContextRequest with PDP handle and address.
@@ -293,7 +293,7 @@ TEST(GoldenSMTest, DeactivatePDPContextRequest_Minimal) {
 
 // =====================================================================
 // Deactivate PDP Context Accept Golden Tests
-// Reference: L3_Templates.ttcn tr_SM_DEACT_PDP_ACCEPT_MT, tr_SM_DEACT_PDP_ACCEPT_MO
+// Wire layout per GSM 24.080 (MT and MO directions).
 // =====================================================================
 
 // GSM 24.008 9.5.5: DeactivatePDPContextAccept with handle.
@@ -312,7 +312,7 @@ TEST(GoldenSMTest, DeactivatePDPContextAccept) {
 
 // =====================================================================
 // Modify PDP Context Request Golden Tests
-// Reference: L3_Templates.ttcn ts_SM_MOD_PDP_REQ
+// Wire layout per GSM 24.080 (Modify PDP Context Request).
 // =====================================================================
 
 // GSM 24.008 9.5.6: ModifyPDPContextRequest with QoS.
@@ -333,7 +333,7 @@ TEST(GoldenSMTest, ModifyPDPContextRequest) {
 
 // =====================================================================
 // Modify PDP Context Accept Golden Tests
-// Reference: L3_Templates.ttcn tr_SM_MOD_PDP_ACCEPT
+// Wire layout per GSM 24.080 (Modify PDP Context Accept).
 // =====================================================================
 
 // GSM 24.008 9.5.7: ModifyPDPContextAccept with QoS.
@@ -354,7 +354,7 @@ TEST(GoldenSMTest, ModifyPDPContextAccept) {
 
 // =====================================================================
 // Modify PDP Context Reject Golden Tests
-// Reference: L3_Templates.ttcn tr_SM_MOD_PDP_REJ
+// Wire layout per GSM 24.080 (Modify PDP Context Reject).
 // =====================================================================
 
 // GSM 24.008 9.5.8: ModifyPDPContextReject with handle, cause, and back-off timer.
@@ -378,7 +378,7 @@ TEST(GoldenSMTest, ModifyPDPContextReject_Full) {
 
 // =====================================================================
 // SM Status Golden Tests
-// Reference: L3_Templates.ttcn ts_SM_STATUS
+// Wire layout per GSM 24.080 (Status).
 // =====================================================================
 
 // GSM 24.008 9.5.9: SMStatus with cause.

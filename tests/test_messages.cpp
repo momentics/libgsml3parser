@@ -159,7 +159,7 @@ TEST(MessagesTest, RR_ImmediateAssignmentExtended) {
 
 TEST(MessagesTest, RR_ImmediateAssignmentReject) {
     // GSM 04.08 9.1.20: ImmediateAssignmentReject body = FeatureIndicator(4 bits) + PageMode(2 bits) + WaitIndication(4 bits) + [optional RequestReferences]
-    // Reference: GSM_RR_Types.ttcn ImmediateAssignmentReject (line 555): FeatureIndicator feature_ind, PageMode page_mode, ReqRefWaitInd4 payload
+    // Field order per TS 44.018 9.1.20: FeatureIndicator, PageMode, WaitIndication, [RequestReferences].
     // Minimum body is 1 byte: FeatureIndicator(4)|PageMode(2)|WaitIndication(4) = 10 bits -> padded to 2 bytes on wire
     L3ImmediateAssignmentReject msg(30);
     EXPECT_EQ(msg.mti(), L3ImmediateAssignmentReject::MTI);
@@ -194,13 +194,13 @@ TEST(MessagesTest, RR_SystemInformationType2) {
 TEST(MessagesTest, RR_SystemInformationType2bis) {
     L3SystemInformationType2bis msg;
     EXPECT_EQ(msg.mti(), L3SystemInformationType2bis::MTI);
-    // Reference: GSM_SystemInformation.ttcn SystemInformationType2bis:
+    // SI2bis body layout (TS 44.018):
     //   extd_bcch_freq_list(16) + rach_control(3) = 19 bytes (no ncc_permitted)
     EXPECT_EQ(msg.l2BodyLength(), 19u);
 }
 
 TEST(MessagesTest, RR_SystemInformationType2ter) {
-    // Per GSM_SystemInformation.ttcn, SI2ter = extd_bcch_freq_list(16) + rest_octets(0..4)
+    // Per TS 44.018, SI2ter = extd_bcch_freq_list(16) + rest_octets(0..4)
     // Body is 16 bytes (no RachControlParameters, no NCCPermitted unlike SI2/SI2bis)
     L3SystemInformationType2ter msg;
     EXPECT_EQ(msg.mti(), L3SystemInformationType2ter::MTI);
@@ -210,7 +210,7 @@ TEST(MessagesTest, RR_SystemInformationType2ter) {
 TEST(MessagesTest, RR_SystemInformationType4) {
     L3SystemInformationType4 msg;
     EXPECT_EQ(msg.mti(), L3SystemInformationType4::MTI);
-    // Reference GSM_SystemInformation.ttcn: LAI(5) + CellSelPar(2) + RachCtrl(3) + RestOctets(1) = 11 bytes
+    // SI4 body layout (TS 44.018): LAI(5) + CellSelPar(2) + RachCtrl(3) + RestOctets(1) = 11 bytes
     EXPECT_EQ(msg.l2BodyLength(), 11u);
 }
 

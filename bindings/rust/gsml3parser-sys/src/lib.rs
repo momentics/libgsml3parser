@@ -423,7 +423,7 @@ extern "C" {
         len: usize,
         cfg: *const gsml3_config,
     ) -> *mut gsml3_message;
-    /// Parse a hex string (spaces allowed, e.g. "60 0D 00"). NULL on error.
+    /// Parse a hex string (spaces allowed, e.g. "06 0D 00"). NULL on error.
     pub fn gsml3_parse_l3_hex(
         hex: *const c_char,
         cfg: *const gsml3_config,

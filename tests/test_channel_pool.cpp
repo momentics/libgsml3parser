@@ -29,8 +29,8 @@ using namespace gsml3parser;
 
 // ── RA Decoding Tests (GSM 04.08 Table 9.9) ────────────────────────────
 
-// RA decoding per TS 44.018 Table 9.1.8.1 (the previous 2-bit
-// mapping was replaced by full 8-bit pattern decoding).
+// RA decoding per TS 44.018 Table 9.1.8.1: the full 8-bit RA pattern
+// determines the requested channel type.
 TEST(ChannelPoolTest, DecodeChannelNeeded_SpecPatterns) {
     // 0000xxxx — location updating -> SDCCH (never TCH, even with VEA).
     EXPECT_EQ(decodeChannelNeeded(0x00, false, true), ChannelType::SDCCHType);

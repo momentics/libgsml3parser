@@ -190,7 +190,7 @@ struct FlatHandler {
     /**
      * Release one ownership reference to the shared handler storage
      * (no-op for non-shared handlers) and reset this handler to empty.
-     * Equivalent to the old destroySharedHandler() for a single owner.
+     * For a single owner this is equivalent to destroySharedHandler().
      */
     void release() noexcept {
         releaseShared();
@@ -289,11 +289,9 @@ inline void destroySharedHandler(FlatHandler& h) {
 // ── operator() implementation ──────────────────────────────────────────
 
 inline void FlatHandler::operator()(const ParsedMessage& msg, void* userCtx) const {
-    // Context delivery (the dispatch context was previously
-    // silently dropped — operator() passed the registered ctx in every
-    // case). The callback receives userCtx when provided; otherwise the
-    // context bound at registration (raw handlers) or nullptr (make*
-    // handlers register no context).
+    // Context delivery: the callback receives userCtx when provided;
+    // otherwise the context bound at registration (raw handlers) or
+    // nullptr (make* handlers register no context).
     if (isShared()) {
         static_cast<detail::SharedHandlerHolder*>(ctx)->handler->invoke(msg, userCtx);
         return;

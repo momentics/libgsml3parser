@@ -184,7 +184,7 @@ func Parse(data []byte, cfg *Config) (*Message, error) {
 	return &Message{p: p}, nil
 }
 
-// ParseHex parses a hex string (spaces allowed, e.g. "60 0D 00") into a fresh
+// ParseHex parses a hex string (spaces allowed, e.g. "06 0D 00") into a fresh
 // handle. Empty input is rejected before FFI; C errors are passed through.
 func ParseHex(hex string, cfg *Config) (*Message, error) {
 	if hex == "" {

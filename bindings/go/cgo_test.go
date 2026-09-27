@@ -173,7 +173,7 @@ func TestParseRoundTrip(t *testing.T) {
 		t.Fatalf("channel release Write: %v", err)
 	}
 	if !bytes.Equal(wire, []byte{0x06, 0x0D, 0x00}) {
-		t.Errorf("channel release wire = % X, want 60 0D 00", wire)
+		t.Errorf("channel release wire = % X, want 06 0D 00", wire)
 	}
 	if hexStr, _ := m.Hex(); hexStr != "060d00" {
 		t.Errorf("channel release Hex() = %q, want %q", hexStr, "060d00")
@@ -373,7 +373,7 @@ func TestBufferTooSmallClass(t *testing.T) {
 	// Message write into a deliberately undersized buffer: 0 written + code 11.
 	h := rawParseL3Hex("06 0D 00") // Channel Release = 3 bytes; 2-byte buffer is too small
 	if h == nil {
-		t.Fatal("rawParseL3Hex(60 0D 00) failed in the test harness itself")
+		t.Fatal("rawParseL3Hex(06 0D 00) failed in the test harness itself")
 	}
 	defer rawFreeMessage(h)
 	n, code := rawMessageWrite(h, 2)

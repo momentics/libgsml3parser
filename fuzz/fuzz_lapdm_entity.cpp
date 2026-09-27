@@ -21,7 +21,7 @@
 
 // Fuzz target: LAPDmEntity FSM driven by syntactically valid frames with
 // randomized parameters (SAPI, C/R, F, NS/NR, M bit, payload) in random
-// order, interleaved with T200 ticks (audit D15). Complements
+// order, interleaved with T200 ticks. Complements
 // fuzz_lapdm_decode, which feeds raw bytes to the frame decoder: this
 // target exercises the state machine (SABME/UA/DISC/DM, I-frame
 // segmentation/reassembly, REJ retransmission, abnormal release).

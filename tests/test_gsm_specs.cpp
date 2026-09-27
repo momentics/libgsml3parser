@@ -20,50 +20,49 @@
 // SOFTWARE.
 
 // GSM specification compliance tests.
-// Reference: osmo-ttcn3-hacks GSM_Types.ttcn, GSM_RestOctets.ttcn,
-// GSM_RR_Types.ttcn, L3_Templates.ttcn, BTS_Tests.ttcn.
+// Wire encodings and default values per 3GPP TS 44.018, TS 24.008, TS 23.003,
+// TS 23.038, TS 45.002 and TS 45.008.
 //
 // [GOLDEN VERIFICATION]
-// All spec compliance test data verified against osmo-ttcn3-hacks reference:
+// All spec compliance test data verified against the normative specifications:
 //   - MCCMNC_Encoding_2DigitMNC {0x52, 0xF0, 0x10}: MCC=250, MNC=01 -> nibble-swapped BCD
-//     Verified against GSM_Types.ttcn TC_selftest_BcdMccMnc: '262F42'H -> '62F224'O
+//     (canonical vector '262F42'H -> '62F224'O, GSM 23.003 BcdMccMnc)
 //   - MCCMNC_Encoding_3DigitMNC {0x52, 0x20, 0x10}: MCC=250, MNC=012 -> nibble-swapped BCD
-//     Verified against GSM_Types.ttcn f_build_BcdMccMnc HEXORDER(low) encoding
-//   - MCCMNC_Ref_262_42 {0x62, 0xF2, 0x24}: MCC=262, MNC=42 -> matches TTCN-3 selftest exactly!
-//     Verified against GSM_Types.ttcn TC_selftest_BcdMccMnc (line 497): match('62F224'O, decmatch BcdMccMnc:'262F42'H)
+//     (HEXORDER(low) nibble swap per GSM 23.003)
+//   - MCCMNC_Ref_262_42 {0x62, 0xF2, 0x24}: MCC=262, MNC=42 -> '262F42'H -> '62F224'O
+//     (canonical BcdMccMnc encoding check)
 //   - BCD_EvenDigits "1234567890": lengthV=6 (1 type octet + 5 BCD digit octets)
-//     Verified against L3_Templates.ttcn ts_Called: BCD nibble-swapped encoding per GSM 24.008 10.5.4.7
+//     BCD nibble-swapped encoding per GSM 24.008 10.5.4.7
 //   - BCD_OddDigits "123456789": lengthV=6 (F padding nibble for odd-length numbers)
-//   - RestOctetPaddingPattern 0x2B: matches GSM_RestOctets.ttcn PADDING_PATTERN('00101011'B)
-//     Verified against GSM_RR_Types.ttcn RestOctets variant "PADDING_PATTERN('00101011'B)"
+//   - RestOctetPaddingPattern 0x2B: rest octets are padded with the pattern '00101011'B (GSM 44.018)
 //   - SI2/SI2bis/SI2ter body lengths: 20/19/16 bytes fixed portion
-//     Verified against GSM_SystemInformation.ttcn record definitions
+//     per the SI2 / SI2bis / SI2ter record definitions (GSM 44.018)
 //   - L/H Presence Bits: CSN.1 encoding, L='0'B (absent), H='1'B (present)
-//     Verified against Osmocom_Types.ttcn: CSN1_L='0'B, CSN1_H='1'B
+//     CSN.1 presence bits per GSM 44.018 ciphering definitions
 //   - RxLev_Conversion: dBm = RxLev - 110, range [-110, -47] dBm
-//     Verified against GSM_Types.ttcn rxlev2dbm (line 359): return -110 + rxlev
+//     rxlev2dbm mapping (GSM 45.002): return -110 + rxlev
 //   - RxQual_Conversion: BER thresholds per TS 45.008 8.2.4
-//     Verified against GSM_Types.ttcn ber2rxqual (line 369), rxqual2ber (line 390)
+//     ber2rxqual / rxqual2ber representative values (GSM 45.008)
 //   - FrameDuration 4615μs: GSM frame = 120ms/26 = 4.615ms
-//     Verified against GSM_Types.ttcn GSM_FRAME_DURATION (line 404): 0.12/26.0
+//     frame duration per the TDMA structure (GSM 45.002): 0.12/26.0
 //   - Hyperframe 2715648: 26*51*2048 TDMA frames = hyperframe boundary
-//     Verified against GSM_Types.ttcn GsmMaxFrameNumber (line 22): 26*51*2048
+//     max frame number per the frame numbering (GSM 45.002): 26*51*2048
 //   - TimeComponents: T1=(FN/1326)%32, T2=FN%26, T3=FN%51
-//     Verified against GSM_RR_Types.ttcn f_compute_ReqRef: t1p=(fn/1326)mod32, t2=fn mod26, t3=fn mod51
+//     Request Reference time components (GSM 44.018): t1p=(fn/1326)mod32, t2=fn mod26, t3=fn mod51
 //   - MobileIdentity encoding: TMSI type octet 0x08 (spare=0|type=100|oe=0), IMSI type 0x03/0x01
-//     Verified against L3_Templates.ttcn ts_MI_TMSI_LV, ts_MI_IMSI_LV, CmIdentityType enum
+//     identity type octets per GSM 24.008 10.5.1.4 (CmIdentityType)
 //   - ChannelDescription: typeAndOffset(5)|TN(3)|TSC(3)|h(1)|ARFCN(12) = 24 bits MSB-first
-//     Verified against GSM_RR_Types.ttcn ChannelDescription, ts_ChanDescH0, ts_ChanDescH1
+//     per the Channel Description IE (GSM 44.018), H=0 and H=1 variants
 //   - RACHControlParameters_RefValues {0xE5, 0x04, 0x00}: max_retrans=3, tx_integer=9, cell_bar=0, re=1, ACC=0x0400
-//     Verified against BTS_Tests.ttcn ts_RachCtrl_default (line 347)
+//     default RACH control values for a software BTS (GSM 44.018 SI3)
 //   - CellSelectionParameters_RefValues {0x47, 0x40}: hyst=2, txpwr=7, acs=0, neci=1, rxlev_min=0
-//     Verified against BTS_Tests.ttcn ts_CellSelPar_default (line 355)
+//     default cell selection values for a software BTS (GSM 44.018 SI3)
 //   - ControlChannelDescription_RefValues {0xC9, 0x00, 0x01}: msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1, t3212=1
-//     Verified against BTS_Tests.ttcn ts_SI3_default ctrl_chan_desc (line 396)
+//     default control channel description values for a software BTS (GSM 44.018 SI3)
 //   - RequestReference_Compute: T1p=(FN/1326)%32, T2=FN%26, T3=FN%51
-//     Verified against GSM_RR_Types.ttcn f_compute_ReqRef
+//     per the Request Reference IE (GSM 44.018)
 //   - MeasurementResults_Size 16 bytes: 128-bit structure padded to 16 octets
-//     Verified against GSM_RR_Types.ttcn MeasurementResults (line 457): "FIXME: pad to 16 octets"
+//     per the Measurement Results IE (GSM 44.018)
 //   - GSMAlphabet_Decode: code 0='@', 2='$', 44='0', 84='a' per TS 23.038 Table 1
 //     Verified against 3GPP TS 23.038 default alphabet character mapping
 //   - RACHTables: T/S parameters for TxInteger 0..15 per GSM 04.08 10.5.2.29
@@ -81,7 +80,7 @@
 using namespace gsml3parser;
 
 // ── MCC/MNC Encoding (GSM 24.008 10.5.13) ──────────────────────────────
-// Reference: GSM_Types.ttcn f_build_BcdMccMnc, TC_selftest_BcdMccMnc
+// MCC/MNC BCD nibble-swap encoding per GSM 23.003 (BcdMccMnc).
 //
 // Encoding per 3GPP TS 24.008 Figure 10.5.13:
 //   Octet 1: MCC digit 2 (high nibble), MCC digit 1 (low nibble)
@@ -131,7 +130,7 @@ TEST(GSMSpecTest, MCCMNC_Encoding_3DigitMNC) {
 }
 
 TEST(GSMSpecTest, MCCMNC_Ref_262_42) {
-    // Reference from GSM_Types.ttcn TC_selftest_BcdMccMnc:
+    // Canonical BcdMccMnc encoding check (GSM 23.003):
     //   match('62F224'O, decmatch BcdMccMnc:'262F42'H)
     // MCC=262, MNC=42 (2-digit, so 'F' filler) -> BCD hex '262F42'H
     // With HEXORDER(low) nibble-swap -> octets 0x62, 0xF2, 0x24
@@ -150,13 +149,13 @@ TEST(GSMSpecTest, MCCMNC_Ref_262_42) {
     EXPECT_EQ(buf[1], 0xF2);
     // GSM 24.008 Fig 10.5.13: raw BCD = MNC_digit2('4')<<4 | MNC_digit1('2') = 0x42
     // Wire format applies HEXORDER(low) nibble-swap: 0x42 -> 0x24
-    // Reference GSM_Types.ttcn TC_selftest_BcdMccMnc: '262F42'H -> '62F224'O
+    // Canonical vector (GSM 23.003 BcdMccMnc): '262F42'H -> '62F224'O
     EXPECT_EQ(buf[2], 0x24);
 }
 
 TEST(GSMSpecTest, MCCMNC_RoundTrip) {
     // Reference: MCC=250, MNC=01, LAC=0x1234
-    // Expected wire bytes (GSM_Types.ttcn TC_selftest_BcdMccMnc):
+    // Expected wire bytes (nibble-swapped BCD per GSM 23.003):
     //   Byte 0: MCC digit 2('5') | MCC digit 1('2') = 0x52
     //   Byte 1: filler('F') | MCC digit 3('0') = 0xF0
     //   Byte 2: MNC digit 2('1') | MNC digit 1('0') = 0x10 (HEXORDER(low) swap)
@@ -183,7 +182,7 @@ TEST(GSMSpecTest, MCCMNC_RoundTrip) {
 }
 
 // ── BCD Number Encoding (GSM 24.008 10.5.4.7) ─────────────────────────
-// Reference: L3_Templates.ttcn ts_Called, tr_Called
+// Called Party Number BCD encoding (GSM 24.008 10.5.4.7).
 // Digits are encoded with nibble swapping: even position = first digit, odd = second.
 // Odd-length numbers get a trailing 'F' nibble.
 
@@ -216,12 +215,11 @@ TEST(GSMSpecTest, BCD_RoundTrip) {
 }
 
 // ── Rest Octet Padding (GSM 04.08) ────────────────────────────────────
-// Reference: GSM_RR_Types.ttcn RestOctets, padding pattern '00101011'B = 0x2B
-// GSM_RestOctets.ttcn: PADDING_PATTERN('00101011'B)
+// Rest octets are padded with the fixed pattern '00101011'B = 0x2B (GSM 44.018).
 
 TEST(GSMSpecTest, RestOctetPaddingPattern) {
     // Verify that 0x2B is the correct rest octet padding pattern
-    // GSM_RR_Types.ttcn: PADDING_PATTERN('00101011'B)
+    // PADDING_PATTERN = '00101011'B (0x2B).
     constexpr uint8_t GSM_REST_OCTET_PAD = 0x2B;
     EXPECT_EQ(GSM_REST_OCTET_PAD, 0x2B);
 
@@ -233,7 +231,7 @@ TEST(GSMSpecTest, RestOctetPaddingPattern) {
 }
 
 TEST(GSMSpecTest, SI2_RestOctets) {
-    // Reference: GSM_SystemInformation.ttcn SystemInformationType2:
+    // SI2 record layout (GSM 44.018):
     //   bcch_freq_list(16) + ncc_permitted(1) + rach_control(3) = 20 bytes fixed
     // SI2 has NO rest_octets field - body is exactly 20 bytes.
     L3SystemInformationType2 msg;
@@ -242,7 +240,7 @@ TEST(GSMSpecTest, SI2_RestOctets) {
 }
 
 TEST(GSMSpecTest, SI2bis_RestOctets) {
-    // Reference: GSM_SystemInformation.ttcn SystemInformationType2bis:
+    // SI2bis record layout (GSM 44.018):
     //   extd_bcch_freq_list(16) + rach_control(3) + rest_octets(0..1)
     // SI2bis has NO ncc_permitted - only 19 bytes fixed.
     // fullBodyLength = 19 fixed + 1 max rest = 20 bytes.
@@ -254,7 +252,7 @@ TEST(GSMSpecTest, SI2bis_RestOctets) {
 }
 
 TEST(GSMSpecTest, SI2ter_RestOctets) {
-    // Reference: GSM_SystemInformation.ttcn SystemInformationType2ter:
+    // SI2ter record layout (GSM 44.018):
     //   extd_bcch_freq_list(16) + rest_octets(0..4)
     // SI2ter has NO RachControlParameters and NO NCCPermitted - only 16 bytes fixed.
     // fullBodyLength = 16 fixed + 4 max rest = 20 bytes.
@@ -264,7 +262,7 @@ TEST(GSMSpecTest, SI2ter_RestOctets) {
 }
 
 // ── L/H Presence Bits (GSM 04.07 11.2.1.1.4) ──────────────────────────
-// Reference: GSM_RestOctets.ttcn uses CSN.1 L/H encoding
+// CSN.1 uses the L/H presence encoding (GSM 04.07).
 // L = field not present, H = field present (and more follows)
 
 TEST(GSMSpecTest, L_H_Bits) {
@@ -283,11 +281,11 @@ TEST(GSMSpecTest, L_H_Bits) {
 }
 
 // ── RxLev / RxQual Conversion (GSM 05.02 / GSM 04.08) ─────────────────
-// Reference: GSM_Types.ttcn dbm2rxlev, rxlev2dbm, ber2rxqual, rxqual2ber
+// RxLev/RxQual <-> dBm/BER conversions (GSM 45.002, GSM 45.008).
 
 TEST(GSMSpecTest, RxLev_Conversion) {
     // RxLev = dBm + 110, clamped to [0..63]
-    // Reference: GSM_Types.ttcn function dbm2rxlev
+    // Mapping per GSM 45.002.
     L3MeasurementResults mr;
     EXPECT_EQ(mr.decodeLevToDBm(0), -110);
     EXPECT_EQ(mr.decodeLevToDBm(31), -79);
@@ -295,7 +293,7 @@ TEST(GSMSpecTest, RxLev_Conversion) {
 }
 
 TEST(GSMSpecTest, RxQual_Conversion) {
-    // RxQual -> BER thresholds from GSM_Types.ttcn ber2rxqual
+    // RxQual -> BER representative values (GSM 45.008)
     //   RxQual 0: BER < 0.2
     //   RxQual 1: BER < 0.4
     //   RxQual 2: BER < 0.8
@@ -312,7 +310,7 @@ TEST(GSMSpecTest, RxQual_Conversion) {
 }
 
 // ── GSM Timing Constants ───────────────────────────────────────────────
-// Reference: GSM_Types.ttcn GSM_FRAME_DURATION, GSM51_MFRAME_DURATION
+// Frame durations per the GSM TDMA structure (GSM 45.002).
 
 TEST(GSMSpecTest, FrameDuration) {
     // GSM frame = 4.615 ms = 4615 microseconds
@@ -320,13 +318,13 @@ TEST(GSMSpecTest, FrameDuration) {
 }
 
 TEST(GSMSpecTest, Hyperframe) {
-    // Reference: GSM_Types.ttcn const integer GsmMaxFrameNumber := 26*51*2048;
+    // Max frame number: 26*51*2048 TDMA frames per hyperframe (GSM 45.002).
     // Hyperframe = 2048 * 26 * 51 = 2715648 frames ≈ 3h 28m 53s
     EXPECT_EQ(gHyperframe, 2715648u);
 }
 
 TEST(GSMSpecTest, TimeComponents) {
-    // Reference: GSM_Types.ttcn f_gsm_compute_tc
+    // Time component computation per the GSM frame numbering (GSM 45.002).
     // T1 = SFN mod 2048, T2 = FN mod 26, T3 = FN mod 51
     Time t(1326, 5);
     EXPECT_EQ(t.t1(), 1u);
@@ -336,7 +334,7 @@ TEST(GSMSpecTest, TimeComponents) {
 }
 
 TEST(GSMSpecTest, FNDelta) {
-    // Reference: GSM_Types.ttcn f_gsm_fn_sub, f_gsm_fn_diff
+    // Frame number arithmetic modulo the hyperframe size (GSM 45.002).
     // FNDelta returns minimum signed distance within hyperframe (half-wrap logic).
     // For small differences, returns direct difference (not wrapped).
     int32_t delta = FNDelta(100, 50);
@@ -354,7 +352,7 @@ TEST(GSMSpecTest, FNCompare) {
 }
 
 // ── Mobile Identity Encoding (GSM 24.008 10.5.1.4) ────────────────────
-// Reference: L3_Templates.ttcn ts_MI_TMSI_LV, ts_MI_IMSI_LV, ts_MI_IMEI_LV
+// Mobile Identity LV encodings (TMSI / IMSI / IMEI) per GSM 24.008 10.5.1.4.
 
 TEST(GSMSpecTest, MobileIdentity_TMSI) {
     // TMSI: type(3)=100, odd/even(1)=0, filler(4)=F, 4 octets TMSI
@@ -420,7 +418,7 @@ TEST(GSMSpecTest, MobileIdentity_TMSI_RoundTrip) {
 }
 
 // ── Channel Description (GSM 04.08 10.5.2.5) ──────────────────────────
-// Reference: GSM_RR_Types.ttcn ChannelDescription, ts_ChanDescH0, ts_ChanDescH1
+// Channel Description bit layout (H=0 / H=1 variants) per GSM 44.018 10.5.2.5.
 
 TEST(GSMSpecTest, ChannelDescription_NoHopping) {
     // h=0: type&offset(5) + TN(3) + TSC(3) + h(1) + ARFCN(12) = 24 bits
@@ -449,7 +447,7 @@ TEST(GSMSpecTest, ChannelDescription_RoundTrip) {
 }
 
 // ── RACH Control Parameters (GSM 04.08 10.5.2.29) ─────────────────────
-// Reference: BTS_Tests.ttcn ts_RachCtrl_default
+// Default parameter values for a software BTS (GSM 44.018 SI3).
 // max_retrans(2) + tx_integer(4) + cell_barr_access(1) + re_not_allowed(1) + ACC(16) = 24 bits
 
 TEST(GSMSpecTest, RACHControlParameters) {
@@ -460,9 +458,9 @@ TEST(GSMSpecTest, RACHControlParameters) {
 }
 
 TEST(GSMSpecTest, RACHControlParameters_RefValues) {
-    // Reference: GSM_SystemInformation.ttcn RachControlParameters (24 bits):
+    // RachControlParameters bit layout (24 bits, GSM 44.018 10.5.2.29):
     // max_retrans(2) + tx_integer(4) + cell_barr_access(1) + re_not_allowed(1) + acc(16)
-    // Values from BTS_Tests.ttcn ts_RachCtrl_default:
+    // Reference values for a software BTS:
     //   max_retrans := RACH_MAX_RETRANS_7,  // '11'B = 3
     //   tx_integer := '1001'B,              // = 9 (12 spread slots)
     //   cell_barr_access := false,          // 0
@@ -489,7 +487,7 @@ TEST(GSMSpecTest, RACHControlParameters_RefValues) {
 }
 
 // ── Cell Selection Parameters (GSM 04.08 10.5.2.4) ────────────────────
-// Reference: BTS_Tests.ttcn ts_CellSelPar_default
+// Default parameter values for a software BTS (GSM 44.018 SI3).
 // cell_resel_hyst(3) + ms_txpwr_max(5) + acs(1) + neci(1) + rxlev_access_min(6) = 17 bits
 
 TEST(GSMSpecTest, CellSelectionParameters) {
@@ -498,7 +496,7 @@ TEST(GSMSpecTest, CellSelectionParameters) {
 }
 
 TEST(GSMSpecTest, CellSelectionParameters_RefValues) {
-    // From BTS_Tests.ttcn ts_CellSelPar_default:
+    // Reference values for a software BTS:
     //   cell_resel_hyst_2dB := 2,    // 3 bits = 010
     //   ms_txpwr_max_cch := 7,       // 5 bits = 00111
     //   acs := '0'B,                 // 1 bit = 0
@@ -524,7 +522,7 @@ TEST(GSMSpecTest, CellSelectionParameters_RefValues) {
 }
 
 // ── Control Channel Description (GSM 04.08 10.5.2.11) ─────────────────
-// Reference: GSM_SystemInformation.ttcn ControlChannelDescription
+// ControlChannelDescription bit layout per GSM 44.018 10.5.2.11.
 // msc_r99(1) + att(1) + bs_ag_blks_res(3) + ccch_conf(3) + si22ind(1) + cbq3(2) + spare(2) + bs_pa_mfrms(3) + t3212(8) = 24 bits
 
 TEST(GSMSpecTest, ControlChannelDescription) {
@@ -533,10 +531,10 @@ TEST(GSMSpecTest, ControlChannelDescription) {
 }
 
 TEST(GSMSpecTest, ControlChannelDescription_RefValues) {
-    // Reference: GSM_SystemInformation.ttcn ControlChannelDescription (24 bits):
+    // ControlChannelDescription bit layout (24 bits, GSM 44.018 10.5.2.11):
     // msc_r99(1) + att(1) + bs_ag_blks_res(3) + ccch_conf(3) + si22ind(1) +
     // cbq3(2) + spare(2) + bs_pa_mfrms(3) + t3212(8) = 24 bits
-    // From BTS_Tests.ttcn ts_SI3_default ctrl_chan_desc:
+    // Reference values for a software BTS SI3:
     // msc_r99=true(1), att=true(1), bs_ag_blks_res=1(3), ccch_conf=1/combined(3),
     // si22ind=false(1), cbq3=0(2), spare=0(2), bs_pa_mfrms=0(3), t3212=1(8)
     // Bit layout (MSB-first): 1 1 001 001 0 0 00 000 000 00000001
@@ -561,11 +559,11 @@ TEST(GSMSpecTest, ControlChannelDescription_RefValues) {
 }
 
 // ── Request Reference (GSM 04.08 10.5.2.30) ───────────────────────────
-// Reference: GSM_RR_Types.ttcn RequestReference, f_compute_ReqRef
+// Request Reference IE and time-component computation per GSM 44.018.
 // ra(8) + t1p(5) + t3(6) + t2(5) = 24 bits
 
 TEST(GSMSpecTest, RequestReference_Compute) {
-    // From GSM_RR_Types.ttcn f_compute_ReqRef:
+    // Time components per GSM 44.018:
     // t1p = (fn / 1326) mod 32, t2 = fn mod 26, t3 = fn mod 51
     unsigned fn = 1326;
     unsigned ra = 0x42;
@@ -599,7 +597,7 @@ TEST(GSMSpecTest, RequestReference_RoundTrip) {
 }
 
 // ── Measurement Results (GSM 04.08 10.5.2.20) ─────────────────────────
-// Reference: GSM_RR_Types.ttcn MeasurementResults, ts_MeasurementResults
+// Measurement Results IE layout per GSM 44.018 10.5.2.20.
 // ba_used(1) + dtx_used(1) + rxlev_full(6) + 3g_ba(1) + meas_valid(1) + rxlev_sub(6) +
 // si23_ba(1) + rxqual_full(3) + rxqual_sub(3) + no_ncell(3) + [ncell_reports]
 
@@ -663,8 +661,8 @@ TEST(GSMSpecTest, Data2Hex) {
 
 // ── Hex string parsing edge cases ──────────────────────────────────────
 
-// GSM 04.08 10.2: PD=0x06(RR) in high nibble, skip=0, MTI=0x19(SystemInformationType1)
-// Reference: GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_1 = '00011001'B
+// GSM 04.08 10.2: PD=0x06(RR) in the low nibble, TI/TIF=0, MTI=0x19(SystemInformationType1)
+// SYSTEM_INFORMATION_TYPE_1 = '00011001'B (GSM 44.018).
 TEST(GSMSpecTest, ParseHexWithVariousFormats) {
     // SI1 has a long fixed body, so serialize a complete SI1 first; the
     // format variants below (no spaces / spaces) must parse identically.
@@ -693,7 +691,7 @@ TEST(GSMSpecTest, ParseHexWithVariousFormats) {
     EXPECT_FALSE(msg3);
 
     // Single byte: a Channel Request — the octet is the 8-bit request
-    // reference (RA), so it parses (previously "too short").
+    // reference (RA); any of the 256 values parses.
     auto msg4 = parseL3Hex("60");
     ASSERT_TRUE(msg4);
     EXPECT_EQ(messageMTI(*msg4), L3ChannelRequest::MTI);

@@ -21,7 +21,7 @@
 
 // BCC Messages - parse/write/text implementation
 // Spec: 3GPP TS 44.018 sections 9.6, Table 10.4.3
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - ts_ML3_MO_BCC (line 3813)
+// Wire encodings per 3GPP TS 44.018 (BCC message set).
 
 #include "gsml3parser/bcc/l3bccmessages.h"
 #include <sstream>

@@ -97,9 +97,9 @@ public:
     /// Hash a channel descriptor to a shard index. O(1), bitmask.
     static constexpr uint32_t hashDescriptor(const ChannelDescriptor& d) noexcept {
         // Pack all identifying fields without overlap and apply a real
-        // finalizer (the previous hash truncated ARFCN to
-        // 8 bits, ignored the channel type, and its second avalanche
-        // step (h ^= h >> 25) was dead code because h < 2^24 always).
+        // finalizer (truncating ARFCN to 8 bits or ignoring the channel type
+        // would skew the distribution; an extra avalanche step such as
+        // (h ^= h >> 25) is dead code here because h < 2^24 always).
         // Bit layout: type 5 bits (20 ChannelType values), trx 8,
         // timeslot 4 (eight TDMA timeslots per TRX, TS 45.010),
         // ARFCN 12 (channel description field, TS 44.018 10.5.2.5).

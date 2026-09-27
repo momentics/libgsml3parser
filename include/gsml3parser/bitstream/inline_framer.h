@@ -120,10 +120,9 @@ inline std::optional<std::span<const uint8_t>> InlineFramer::nextFrame() noexcep
             frameLen = static_cast<size_t>(mData[mPos]);
             if (frameLen == 0 || frameLen > mMaxFrameLen) {
                 // Corrupt length octet: skip it and resynchronize on the
-                // next byte (the previous code returned
-                // nullopt here WITHOUT advancing mPos, so the caller saw
-                // "buffer exhausted" and silently abandoned every
-                // remaining frame).
+                // next byte (returning nullopt here WITHOUT advancing mPos
+                // would make the caller see "buffer exhausted" and silently
+                // abandon every remaining frame).
                 ++mPos;
                 ++mResyncSkips;
                 continue;

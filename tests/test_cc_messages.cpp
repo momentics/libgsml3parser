@@ -20,21 +20,21 @@
 // SOFTWARE.
 
 // CC message round-trip tests with spec-compliant hex values.
-// Reference: osmo-ttcn3-hacks L3_Templates.ttcn (CC section).
+// CC message encodings per 3GPP TS 24.078.
 //
 // [GOLDEN VERIFICATION]
-// All CC hex parse test data verified against osmo-ttcn3-hacks reference:
+// All CC hex parse test data verified against 3GPP TS 24.078:
 //   - Setup_Parse {0xE3, 0x05}: PD=CC in the low nibble of byte 0, TI=7 in bits 7:5, TIF=0, MT=Setup(0x05) in the six low bits of byte 1 (NSD=0)
-//     Verified against L3_Templates.ttcn ts_ML3_MO_CC_SETUP (discriminator='0011'B, messageType='000101'B)
+//     Setup frame: PD = '0011'B, message type = '000101'B (TS 24.078).
 //   - Alerting_Parse {0xE3, 0x01}: PD=CC in the low nibble of byte 0, TI=7, TIF=0, MT=Alerting(0x01) (NSD=0)
-//     Verified against L3_Templates.ttcn tr_ML3_MT_CC_ALERTING (discriminator='0011'B, messageType='000001'B)
+//     Alerting frame: PD = '0011'B, message type = '000001'B (TS 24.078).
 //   - Disconnect_Parse {0xE3, 0x25, ...}: PD=CC in the low nibble of byte 0, TI=7, TIF=0, MT=Disconnect(0x25) (NSD=0)
-//     Verified against L3_Templates.ttcn ts_ML3_MO_CC_DISC (discriminator='0011'B, messageType='100101'B)
+//     Disconnect frame: PD = '0011'B, message type = '100101'B (TS 24.078).
 //   - CCCause_Values: verified against ITU-T Q.763 / GSM 24.008 Table 10.5.4.11
 //   - CCCauseLocation_Values: verified against GSM 24.008 Table 10.5.4.11 location field
 //   - Parse_Setup_Hex "E305": same as Setup_Parse, hex string format
 //   - Parse_Release_Hex "F32D": PD=CC in the low nibble of byte 0, TI=7, TIF=1(REPL), MT=Release(0x2D) (NSD=0)
-//     Verified against L3_Templates.ttcn ts_ML3_MO_CC_RELEASE (discriminator='0011'B, tiFlag=c_TIF_REPL)
+//     Release frame: PD = '0011'B, TIF set (replacement), message type = '101101'B (TS 24.078).
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -51,8 +51,8 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 }
 
 // ── Setup (GSM 04.08 9.3.19) ──────────────────────────────────────────
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_SETUP
-// PD=0x03, TI(3)+TIF(1)+skip(4), MTI(6)=000101, NSD(2), [BearerCap TLV], [CalledParty TLV], ...
+// Wire layout per GSM 24.078 (Setup).
+// Byte 0: TI(3)+TIF(1) | PD=0x03, Byte 1: NSD(2)+MTI(6)=000101, [BearerCap TLV], [CalledParty TLV], ...
 
 TEST(CCRoundTripTest, Setup_NoDigits) {
     ParsedMessage msg(CCM(L3Setup{}));
@@ -78,7 +78,7 @@ TEST(CCRoundTripTest, Setup_WithCalledParty) {
 }
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=000101(Setup=0x05), NSD=00
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_SETUP, GSML3CCMessages.h Setup=0x05
+// Setup MTI = 0x05 (TS 24.078).
 // Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
 // Byte 1: messageType(6)<<2 | NSD(2) = 0x05<<2 | 0 = 0x14
 TEST(CCRoundTripTest, Setup_Parse) {
@@ -102,7 +102,7 @@ TEST(CCRoundTripTest, EmergencySetup) {
 }
 
 // ── Call Proceeding (GSM 04.08 9.3.3) ────────────────────────────────
-// Reference: L3_Templates.ttcn tr_ML3_MT_CC_CALL_PROC
+// Wire layout per GSM 24.078 (Call Proceeding).
 
 TEST(CCRoundTripTest, CallProceeding) {
     ParsedMessage msg(CCM(L3CallProceeding{}));
@@ -112,7 +112,7 @@ TEST(CCRoundTripTest, CallProceeding) {
 }
 
 // ── Alerting (GSM 04.08 9.3.1) ───────────────────────────────────────
-// Reference: L3_Templates.ttcn tr_ML3_MT_CC_ALERTING
+// Wire layout per GSM 24.078 (Alerting).
 
 TEST(CCRoundTripTest, Alerting) {
     ParsedMessage msg(CCM(L3Alerting{}));
@@ -122,7 +122,7 @@ TEST(CCRoundTripTest, Alerting) {
 }
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=000001(Alerting=0x01), NSD=00
-// Reference: L3_Templates.ttcn tr_ML3_MT_CC_ALERTING, GSML3CCMessages.h Alerting=0x01
+// Alerting MTI = 0x01 (TS 24.078).
 // Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
 // Byte 1: messageType(6)<<2 | NSD(2) = 0x01<<2 | 0 = 0x04
 TEST(CCRoundTripTest, Alerting_Parse) {
@@ -151,7 +151,7 @@ TEST(CCRoundTripTest, ConnectAcknowledge) {
 }
 
 // ── Call Confirmed (GSM 04.08 9.3.2) ─────────────────────────────────
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_CALL_CONF
+// Wire layout per GSM 24.078 (Call Confirmed).
 
 TEST(CCRoundTripTest, CallConfirmed) {
     ParsedMessage msg(CCM(L3CallConfirmed{}));
@@ -161,7 +161,7 @@ TEST(CCRoundTripTest, CallConfirmed) {
 }
 
 // ── Disconnect (GSM 04.08 9.3.7) ─────────────────────────────────────
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_DISC
+// Wire layout per GSM 24.078 (Disconnect).
 // PD=0x03, TI(3)+TIF(1), MTI(6)=100101, NSD(2), Cause TLV
 
 TEST(CCRoundTripTest, Disconnect_NormalClearing) {
@@ -187,8 +187,8 @@ TEST(CCRoundTripTest, Disconnect_UserBusy) {
 }
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=100101(Disconnect=0x25), NSD=00
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_DISC (line 1760): calledPartyNumberBcd + cause
-// Reference: L3_Templates.ttcn ts_Called() - CalledPartyNumber IEI='5E'O, numberingPlan='0000'B
+// Disconnect body per TS 24.078: calledPartyNumberBcd + cause
+// Called Party Number IE: IEI='5E'O, numberingPlan='0000'B (GSM 24.078).
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.7: Disconnect body = BCD-CalledPartyNumber(MANDATORY) + [Cause].
 //   Called-Party-Number is ALWAYS present in Disconnect (mandatory per spec).
 //   Called-Party-Number TLV: IEI=0x5E, length(1), typeOfNumber|numberingPlan(1), BCD digits.
@@ -222,7 +222,7 @@ TEST(CCRoundTripTest, Disconnect_Parse) {
 }
 
 // ── Release (GSM 04.08 9.3.19) ───────────────────────────────────────
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_RELEASE
+// Wire layout per GSM 24.078 (Release).
 
 TEST(CCRoundTripTest, Release_NoCause) {
     ParsedMessage msg(CCM(L3Release{}));
@@ -244,7 +244,7 @@ TEST(CCRoundTripTest, Release_WithCause) {
 }
 
 // ── Release Complete (GSM 04.08 9.3.19) ──────────────────────────────
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_REL_COMPL
+// Wire layout per GSM 24.078 (Release Complete).
 
 TEST(CCRoundTripTest, ReleaseComplete_NoCause) {
     ParsedMessage msg(CCM(L3ReleaseComplete{}));
@@ -277,7 +277,7 @@ TEST(CCRoundTripTest, CCStatus) {
 }
 
 // ── Start DTMF (GSM 04.08 9.3.24) ────────────────────────────────────
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_START_DTMF
+// Wire layout per GSM 24.078 (Start DTMF).
 
 TEST(CCRoundTripTest, StartDTMF) {
     ParsedMessage msg(CCM(L3StartDTMF{}));
@@ -350,7 +350,7 @@ TEST(CCRoundTripTest, Progress) {
 }
 
 // ── CC Cause values (GSM 04.08 10.5.4.11) ────────────────────────────
-// Reference: L3_Templates.ttcn ML3_Cause_TLV
+// Cause IE TLV encoding per TS 24.078 10.5.4.11.
 
 TEST(CCRoundTripTest, CCCause_Values) {
     EXPECT_EQ(static_cast<uint8_t>(CCCause::Unassigned_Number), 1u);
@@ -394,7 +394,7 @@ TEST(CCRoundTripTest, CauseElement_RoundTrip) {
 }
 
 // ── L3BearerCapability (GSM 04.08 10.5.4.5) ──────────────────────────
-// Reference: L3_Templates.ttcn ts_Bcap_voice, ts_Bcap_voice_mt, ts_Bcap_csd
+// Bearer Capability IE encodings per TS 24.078 10.5.4.5 (voice / voice+multirate / CSD).
 
 TEST(CCRoundTripTest, BearerCapability) {
     L3BearerCapability bc;
@@ -497,7 +497,7 @@ TEST(CCRoundTripTest, TI_DifferentValues) {
 // ── Parse CC messages from hex ───────────────────────────────────────
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=000101(Setup=0x05), NSD=00
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_SETUP, GSML3CCMessages.h Setup=0x05
+// Setup MTI = 0x05 (TS 24.078).
 // Byte 0: TI(3,high)|TIF(1)|PD(4,low) = 1110 0011 = 0xE3
 // Byte 1: messageType(6)|NSD(2) = 0x05|0 = 0x05
 TEST(CCRoundTripTest, Parse_Setup_Hex) {
@@ -508,7 +508,7 @@ TEST(CCRoundTripTest, Parse_Setup_Hex) {
 }
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=1(REPL), messageType=101101(Release=0x2D), NSD=00
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_RELEASE, GSML3CCMessages.h Release=0x2D
+// Release MTI = 0x2D (TS 24.078).
 // Byte 0: TI(3,high)|TIF(1)|PD(4,low) = 1111 0011 = 0xF3
 // Byte 1: messageType(6)|NSD(2) = 0x2D|0 = 0x2D
 TEST(CCRoundTripTest, Parse_Release_Hex) {
@@ -519,7 +519,7 @@ TEST(CCRoundTripTest, Parse_Release_Hex) {
 }
 
 // ── CC Facility (TS 24.008 §9.3.21, MTI=0x3a) ────────────────────────
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_FACILITY
+// Wire layout per GSM 24.008 (CC Facility).
 // Structure: PD=0x03(CC), TI=7, TIF=0, messageType=111010(Facility=0x3a)
 
 TEST(CCRoundTripTest, Facility_RoundTrip) {

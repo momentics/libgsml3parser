@@ -800,12 +800,12 @@ mod tests {
         // L1 trampoline captured the transmit frame: BTS SABME is [0x03, 0x3F, 0x01].
         assert_eq!(e.drain_tx(), vec![vec![0x03, 0x3F, 0x01]]);
 
-        e.receive(&crate::lapdm::mini::ui(0, false, &[0x60, 0x0d, 0x00]).unwrap()).expect("UI receive");
+        e.receive(&crate::lapdm::mini::ui(0, false, &[0x06, 0x0d, 0x00]).unwrap()).expect("UI receive");
         // L3 trampoline captured the delivery with an owned payload copy.
         let evs = e.drain_l3();
         assert_eq!(evs.len(), 1);
         assert_eq!(evs[0].primitive, s::GSML3_PRIM_L3_UNIT_DATA);
-        assert_eq!(evs[0].data, vec![0x60, 0x0d, 0x00]);
+        assert_eq!(evs[0].data, vec![0x06, 0x0d, 0x00]);
 
         e.hard_release().expect("hard release");
         drop(e); // Drop reclaims the entity + context once (debug-asserted)

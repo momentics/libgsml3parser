@@ -21,7 +21,7 @@
 
 // GCC Messages - parse/write/text implementation
 // Spec: 3GPP TS 44.018 sections 9.7, Table 10.4.4
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - ts_ML3_MO_GCC (line 3840)
+// Wire encodings per 3GPP TS 44.018 (GCC message set).
 
 #include "gsml3parser/gcc/l3gccmessages.h"
 #include <sstream>

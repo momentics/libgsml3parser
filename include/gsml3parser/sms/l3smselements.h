@@ -21,10 +21,9 @@
 
 // SMS TP (Transport Part) Elements - GSM L3 SMS TPDU structures
 // Spec: 3GPP TS 23.040 sections 7.2, 9.2
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - TPDU templates
-//            ref/OpenBTS/SMS/SMSMessages.h - TP layer classes
+// TPDU field encodings per 3GPP TS 23.040 (SMS-TP layer).
 //
-// Bit layout (per GSM 03.40):
+// Bit layout (per TS 23.040):
 //   TP-Header-Octet: TP-MTI(2) | direction-specific fields(6)
 //   TP-DA/TP-OA: length(1) | TON_NPI(1) | BCD-digits(variable)
 //   TP-PID: 1 octet

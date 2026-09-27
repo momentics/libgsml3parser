@@ -627,8 +627,8 @@ TEST(ParserTest, UnknownMTI_LS) {
 }
 
 // Test: SMS MTI 0x12/0x13 overlap — the CP-layer parsers keep precedence
-// over the L3-layer duplicates (the dispatch table must
-// preserve the previous switch's first-case-wins behavior).
+// over the L3-layer duplicates (the dispatch table must keep its
+// first-match-wins behavior for overlapping MTIs).
 TEST(ParserTest, SMS_MTIOverlap_CPTakesPrecedence) {
     // CP-STATUS (MTI 0x12): body = 1-octet TP-Status.
     auto cpStatus = L3CPStatus::builder().tpOi(1).build();

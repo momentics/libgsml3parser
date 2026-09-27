@@ -21,11 +21,10 @@
 
 // SM Message Classes - GSM L3 GPRS Session Management messages
 // Spec: 3GPP TS 24.008 sections 9.5, Table 10.4a
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - SM message templates
-//            ref/OpenBTS/SGSNGGSN/GPRSL3Messages.h - L3SmMsg::MessageType enum
+// Message identifiers and wire layouts per 3GPP TS 24.080 (SM).
 //
 // L3 header (per 24.008 10.4a):
-//   Byte 0: PD(4)=0x0A(SM) | Skip(4)
+//   Byte 0: TI(3) | TIF(1) | PD(4)=0x0A(SM)
 //   Byte 1: MessageType(8 bits, raw - no NSD field)
 //   Body: [message-specific fields]
 

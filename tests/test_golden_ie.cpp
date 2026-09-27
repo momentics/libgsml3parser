@@ -20,61 +20,59 @@
 // SOFTWARE.
 
 // Comprehensive GSM Layer 3 IE (Information Element) Golden Tests.
-// Reference: osmo-ttcn3-hacks GSM_Types.ttcn, GSM_RR_Types.ttcn,
-// GSM_SystemInformation.ttcn, GSM_RestOctets.ttcn, L3_Templates.ttcn,
-// SS_Templates.ttcn, BTS_Tests.ttcn.
-// Spec: 3GPP TS 24.008 sections 10.5.1..10.5.5.
+// Wire layouts and identifiers per 3GPP TS 24.008 sections 10.5.1..10.5.5,
+// TS 24.078, TS 44.018 and TS 23.038.
 //
 // [GOLDEN DATA VERIFICATION]
-// LAI MCC/MNC BCD encoding verified against GSM_Types.ttcn TC_selftest_BcdMccMnc:
-//   MCC=262, MNC=42 -> nibble-swapped {0x62, 0xF2, 0x24} matches TTCN-3 reference.
+// LAI MCC/MNC BCD encoding per GSM 24.008 Figure 10.5.1.3 (nibble-swapped digits):
+//   MCC=262, MNC=42 -> nibble-swapped {0x62, 0xF2, 0x24}.
 // Mobile Identity TMSI type octet verified: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x08.
 // Mobile Identity IMSI type octet verified: spare(4)=0|type(3)=001(IMSI)|oe(1)=1 = 0x03.
-// Classmark1/2/3 default lengths verified against L3_Templates.ttcn ts_CM1, ts_CM2.
-// CipheringModeSetting encoding verified against L3_Templates.ttcn ts_RRM_CiphModeCmd:
+// Classmark1/2/3 default lengths per GSM 24.008 10.5.1.5..10.5.1.7 (1, 3 and 14 octets).
+// CipheringModeSetting encoding verified per TS 44.018 10.5.2.9:
 //   sC(1)|algorithmIdentifier(3) in low nibble of octet (spare high nibble).
-// CellSelectionParameters verified against BTS_Tests.ttcn ts_CellSelPar_default:
+// CellSelectionParameters vector values for a software BTS (GSM 24.008 SI3):
 //   {0x47, 0x40} -> hyst=2, txpwr=7, acs=0, neci=1, rxlev=0.
-// RACHControlParameters verified against BTS_Tests.ttcn ts_RachCtrl_default:
+// RACHControlParameters vector values for a software BTS (GSM 24.008 SI2/SI3):
 //   {0xE5, 0x04, 0x00} -> max_retrans=3, tx_int=9, cell_bar=false, re_not_allowed=1, ACC=0x0400.
-// ControlChannelDescription verified against BTS_Tests.ttcn ts_SI3_default:
+// ControlChannelDescription vector values for a software BTS (GSM 24.008 SI3):
 //   {0xC9, 0x00, 0x01} -> msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1, t3212=1.
 // PowerCommand encoding verified: power_command(5 MSB)|spare(3 LSB), cmd=15 -> 0x78.
 // TimingAdvance encoding verified: timing_advance(6 MSB)|spare(2 LSB), val=42 -> 0xA8.
 // GSM Alphabet decoding verified against 3GPP TS 23.038 Table 1 (default alphabet).
 // RxLev conversion verified: dBm = RxLev - 110, range -110 to -47 dBm.
-// GSM timing constants verified against GSM_Types.ttcn GsmMaxFrameNumber (2715648).
-// Rest octet padding pattern 0x2B verified against GSM_RestOctets.ttcn PADDING_PATTERN.
-// CC Cause IE encoding verified against L3_Templates.ttcn ML3_Cause_TLV:
+// GSM timing constants per TS 45.008: hyperframe = 2715648 TDMA frames.
+// Rest octet padding pattern 0x2B per the GSM 24.008 rest-octet rules.
+// CC Cause IE encoding verified per GSM 24.008 10.5.4.11:
 //   IEI=0x08, length=2, location+codingStd+causeValue per GSM 24.008 10.5.4.11.
 //
 // [GOLDEN VERIFICATION]
-// All IE byte-level encodings cross-checked against osmo-ttcn3-hacks reference:
-//   - LAI MCC/MNC BCD encoding verified against GSM_Types.ttcn TC_selftest_BcdMccMnc (line 497):
-//     MCC=262, MNC=42 -> '262F42'H -> HEXORDER(low) -> {0x62, 0xF2, 0x24} - matches TTCN-3!
+// All IE byte-level encodings verified against the normative specifications:
+//   - LAI MCC/MNC BCD encoding per GSM 24.008 Figure 10.5.1.3:
+//     MCC=262, MNC=42 -> '262F42'H -> nibble-swapped -> {0x62, 0xF2, 0x24}
 //   - MobileIdentity TMSI type octet: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x08
-//     Verified against L3_Templates.ttcn ts_MI_TMSI (CmIdentityType: TMSI='100'B)
+//     per GSM 24.008 10.5.1.4 (CmIdentityType: TMSI='100'B)
 //   - MobileIdentity IMSI type octet: spare(4)=0|type(3)=001(IMSI)|oe(1)=1 = 0x03
-//     Verified against L3_Templates.ttcn ts_MI_IMSI (CmIdentityType: IMSI='001'B)
-//   - Classmark1 length=1, Classmark2 length=3 verified against L3_Templates.ttcn ts_CM1, ts_CM2
+//     per GSM 24.008 10.5.1.4 (CmIdentityType: IMSI='001'B)
+//   - Classmark1 length=1, Classmark2 length=3 per GSM 24.008 10.5.1.5/10.5.1.6
 //   - CipheringModeSetting: sC(1)|algorithmIdentifier(3) in 4 bits
-//     Verified against L3_Templates.ttcn ts_RRM_CiphModeCmd (line 690)
-//   - CellSelectionParameters {0x47, 0x40} verified against BTS_Tests.ttcn ts_CellSelPar_default:
+//     per TS 44.018 10.5.2.9 (Ciphering Mode Command layout)
+//   - CellSelectionParameters {0x47, 0x40} vector values for a software BTS:
 //     cell_resel_hyst=2, ms_txpwr_max_cch=7, acs=0, neci=1, rxlev_access_min=0
-//   - RACHControlParameters {0xE5, 0x04, 0x00} verified against BTS_Tests.ttcn ts_RachCtrl_default:
+//   - RACHControlParameters {0xE5, 0x04, 0x00} vector values for a software BTS:
 //     max_retrans=3, tx_integer=9, cell_bar=false, re_not_allowed=1, ACC=0x0400
-//   - ControlChannelDescription {0xC9, 0x00, 0x01} verified against BTS_Tests.ttcn ts_SI3_default:
+//   - ControlChannelDescription {0xC9, 0x00, 0x01} vector values for a software BTS:
 //     msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1(combined), t3212=1(6 min)
 //   - PowerCommand: power_command(5 MSB)|spare(3 LSB), cmd=15 -> 0x78
 //   - TimingAdvance: timing_advance(6 MSB)|spare(2 LSB), val=42 -> 0xA8
 //   - GSM Alphabet decoding verified against 3GPP TS 23.038 Table 1 (default alphabet)
 //   - RxLev conversion: dBm = RxLev - 110, range -110 to -47 dBm (TS 45.008 8.1.4)
-//   - GSM timing constants verified against GSM_Types.ttcn:
-//     GsmMaxFrameNumber=26*51*2048=2715648, GSM_FRAME_DURATION=0.12/26.0=4.615ms
-//   - Rest octet padding 0x2B verified against GSM_RestOctets.ttcn PADDING_PATTERN('00101011'B)
+//   - GSM timing constants per TS 45.008:
+//     hyperframe=26*51*2048=2715648 frames, TDMA frame duration=0.12/26.0=4.615ms
+//   - Rest octet padding 0x2B per GSM 24.008 rest-octet rules (pattern '00101011'B)
 //   - ChannelDescription: typeAndOffset(5)|TN(3)|TSC(3)|h(1)|ARFCN(12) - 24 bits MSB-first (TS 44.018 10.5.2.5)
-//   - CellDescriptionV: bcc(3)|ncc(3)|arfcn(10) - 16 bits LSB-first (GSM_RR_Types.ttcn FIELDORDER(lsb))
-//   - RequestReference: RA(8)|T1p(5)|T3(6)|T2(5) - verified against GSM_RR_Types.ttcn f_compute_ReqRef
+//   - CellDescriptionV: bcc(3)|ncc(3)|arfcn(10) - 16 bits LSB-first (TS 24.008 10.5.2.2)
+//   - RequestReference: RA(8)|T1p(5)|T3(6)|T2(5) per TS 44.018 RACH procedure
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -117,7 +115,7 @@ static void ieRoundTripLen(const T& orig) {
 
 // =====================================================================
 // Common IEs: L3CellIdentity (GSM 04.08 10.5.1.1)
-// Reference: GSM_SystemInformation.ttcn SysinfoCellIdentity
+// Value part: cell identity number, 16 bits (GSM 24.008 10.5.1.1)
 // =====================================================================
 
 TEST(GoldenIE, CellIdentity_Default) {
@@ -147,18 +145,17 @@ TEST(GoldenIE, CellIdentity_Encoding) {
 
 // =====================================================================
 // Common IEs: L3LocationAreaIdentity (GSM 24.008 10.5.1.3 / GSM 04.08 10.5.1.3)
-// Reference: GSM_Types.ttcn f_build_BcdMccMnc (line 470):
+// MCC/MNC BCD encoding per GSM 24.008 Figure 10.5.1.3:
 //   MCC digit 2|MCC digit 1 -> octet 1, MNC digit 3|MCC digit 3 -> octet 2, MNC digit 2|MNC digit 1 -> octet 3
-//   HEXORDER(low) swaps nibbles within each octet
-// Reference: GSM_Types.ttcn TC_selftest_BcdMccMnc (line 497):
-//   match('62F224'O, decmatch BcdMccMnc:'262F42'H) -> MCC=262, MNC=42
+//   nibbles are swapped within each octet
+// Vector: MCC=262, MNC=42 (MNC padded with 'F') -> digits '262F42'H -> {0x62, 0xF2, 0x24}
 // Spec-verified: LAI = MCC/MNC(3 octets BCD) + LAC(2 octets) = 5 octets total
 // [GSM SPEC VERIFIED] GSM 24.008 Figure 10.5.1.3: BCD encoding with nibble swap.
 //   For 2-digit MNC, digit 3 is padded with 'F'. Encoding:
 //   Octet 1 = MCC_digit2(high)|MCC_digit1(low), e.g. MCC=262 -> '26' -> nibble-swapped -> 0x62
 //   Octet 2 = MNC_digit3_or_F(high)|MCC_digit3(low), e.g. MNC=42,F,2 -> '2F' -> swapped -> 0xF2
 //   Octet 3 = MNC_digit2(high)|MNC_digit1(low), e.g. '42' -> swapped -> 0x24
-//   TTCN-3 cross-check: enc_BcdMccMnc('262F42'H) = '62F224'O - matches!
+//   Digits '262F42'H with the per-octet nibble swap produce {0x62, 0xF2, 0x24}.
 // =====================================================================
 
 TEST(GoldenIE, LAI_Default) {
@@ -186,18 +183,18 @@ TEST(GoldenIE, LAI_Equality) {
 }
 
 TEST(GoldenIE, LAI_Ref_262_42) {
-    // Reference: GSM_Types.ttcn TC_selftest_BcdMccMnc (line 497):
-    //   match('62F224'O, decmatch BcdMccMnc:'262F42'H)
-    // Spec-verified: MCC=262, MNC=42 -> f_build_BcdMccMnc -> '262F42'H (MNC padded with F)
-    //   HEXORDER(low) swaps nibbles: '26'->0x62, '2F'->0xF2, '42'->0x24
-    //   Result: {0x62, 0xF2, 0x24} matches TTCN-3 reference!
+    // Vector (GSM 24.008 Figure 10.5.1.3):
+    //   digits '262F42'H (MNC padded with F) -> {0x62, 0xF2, 0x24}
+    // Spec-verified: MCC=262, MNC=42 -> BCD digits '262F42'H (MNC padded with F)
+    //   nibbles swapped per octet: '26'->0x62, '2F'->0xF2, '42'->0x24
+    //   Result: {0x62, 0xF2, 0x24}
     L3LocationAreaIdentity lai("262", "42", 0x002A);
     EXPECT_EQ(lai.mcc(), 262);
     EXPECT_EQ(lai.mnc(), 42);
     std::vector<uint8_t> buf(10, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     lai.write(writer);
-    // Spec-verified: GSM_Types.ttcn BcdMccMnc encoding with HEXORDER(low) nibble swap
+    // Spec-verified: MCC/MNC BCD encoding with the per-octet nibble swap (GSM 24.008 Figure 10.5.1.3)
     EXPECT_EQ(buf[0], 0x62);
     EXPECT_EQ(buf[1], 0xF2);
     EXPECT_EQ(buf[2], 0x24);
@@ -205,7 +202,7 @@ TEST(GoldenIE, LAI_Ref_262_42) {
 
 // =====================================================================
 // Common IEs: L3MobileIdentity (GSM 04.08 10.5.1.4)
-// Reference: L3_Templates.ttcn ts_MI_TMSI_LV, ts_MI_IMSI_LV, ts_MI_IMEI_LV
+// LV-encoded mobile identity vectors for TMSI, IMSI and IMEI (GSM 24.008 10.5.1.4)
 // [GSM SPEC VERIFIED] GSM 24.008 10.5.1.4: Type octet = spare(4)|typeOfIdentity(3)|oe(1)
 //   typeOfIdentity: 000=NoID, 001=IMSI, 010=IMEI, 011=IMEISV, 100=TMSI, 101=TMSI+RAI
 //   oe (odd-even indicator): 0=even digit count, 1=odd digit count (for BCD numbers)
@@ -273,7 +270,7 @@ TEST(GoldenIE, MobileIdentity_IMSI_Encoding) {
 
 // =====================================================================
 // Common IEs: L3MobileStationClassmark1 (GSM 04.08 10.5.1.5)
-// Reference: L3_Templates.ttcn ts_CM1
+// One-octet value part per GSM 24.008 10.5.1.5
 // 8 bits: revision(1)|spare(1)|ES_IND(1)|A5_1(1)|RF_Power(2)|spare(2)
 // =====================================================================
 
@@ -297,7 +294,7 @@ TEST(GoldenIE, Classmark1_Zero) {
 
 // =====================================================================
 // Common IEs: L3MobileStationClassmark2 (GSM 04.08 10.5.1.6)
-// Reference: L3_Templates.ttcn ts_CM2, ts_CM2_EGPRS
+// Three-octet value part per GSM 24.008 10.5.1.6 (Classmark 2, incl. EGPRS extensions)
 // 24 bits: revision(1)|spare(1)|ES_IND(1)|A5_1(1)|A5_3(1)|A5_2(1)|
 //   RF_Power(2)|PS(1)|SS(1)|SM(1)|VBS(1)|VGCS(1)|FC(1)|CM3(1)|
 //   LCS(1)|SoLSA(1)|CMSF(1)|spare(1)|PS_class(8)
@@ -346,7 +343,7 @@ TEST(GoldenIE, Classmark3_Default) {
 
 // =====================================================================
 // Common IEs: L3CipheringKeySequenceNumber (GSM 04.08 10.5.1.2)
-// Reference: L3_Templates.ttcn ts_CKSN
+// Ciphering key sequence number per GSM 24.008 10.5.1.2
 // =====================================================================
 
 TEST(GoldenIE, CipheringKeySeqNr_Default) {
@@ -366,7 +363,7 @@ TEST(GoldenIE, CipheringKeySeqNr_MaxValue) {
 
 // =====================================================================
 // Common IEs: L3ChannelDescription (GSM 04.08 10.5.2.5)
-// Reference: GSM_RR_Types.ttcn ChannelDescription, ts_ChanDescH0, ts_ChanDescH1
+// Both H=0 (ARFCN present) and H=1 (MAIO/HSN) variants per TS 44.018 10.5.2.5
 // 24 bits: typeAndOffset(5) + TN(3) + TSC(3) + h(1) + ARFCN(12) (TS 44.018 10.5.2.5)
 // =====================================================================
 
@@ -545,7 +542,7 @@ TEST(GoldenIE, AdditionalChannelDescription_RoundTrip) {
 
 // =====================================================================
 // Common IEs: L3PowerCommand (GSM 04.08 10.5.2.28)
-// Reference: BTS_Tests.ttcn ts_PowerCmd
+// One-octet power command value per GSM 24.008 10.5.2.28
 // 8 bits: power_command(5) | spare(3)
 // =====================================================================
 
@@ -566,7 +563,7 @@ TEST(GoldenIE, PowerCommand_MaxValue) {
 }
 
 TEST(GoldenIE, PowerCommand_Encoding) {
-    // Reference: BTS_Tests.ttcn ts_PowerCmd template
+    // Test vector: command = 15.
     // Spec-verified: GSM 24.008 10.5.2.28 Power Command
     //   power_command(5 bits MSB)|spare(3 bits LSB) = 1 octet
     //   command=15 -> 0b01111_000 = 0x78 (15 in high 5 bits, spare 0 in low 3 bits)
@@ -595,7 +592,7 @@ TEST(GoldenIE, PowerCommandAndAccessType_RoundTrip) {
 
 // =====================================================================
 // Common IEs: L3ChannelMode (GSM 04.08 10.5.2.6)
-// Reference: L3_Templates.ttcn ts_ChanMode
+// Channel mode nibble per GSM 24.008 10.5.2.6
 // 4 bits: speech_version(2) | signalling(1) | data(1)
 // =====================================================================
 
@@ -633,7 +630,7 @@ TEST(GoldenIE, ChannelMode_Equality) {
 
 // =====================================================================
 // Common IEs: L3TimingAdvance (GSM 04.08 10.5.2.40)
-// Reference: GSM_RR_Types.ttcn TimingAdvance (0..219)
+// One-octet timing advance value per GSM 24.008 10.5.2.40
 // 8 bits: timing_advance(6) | spare(2)
 // =====================================================================
 
@@ -654,7 +651,7 @@ TEST(GoldenIE, TimingAdvance_MaxValue) {
 }
 
 TEST(GoldenIE, TimingAdvance_Encoding) {
-    // Reference: GSM_RR_Types.ttcn TimingAdvance (line 434): integer (0..219)
+    // Timing advance is an integer value (range 0..219 per TS 45.008) in the top six bits.
     // Spec-verified: GSM 24.008 10.5.2.40 Timing Advance
     //   timing_advance(6 bits MSB)|spare(2 bits LSB) = 1 octet
     //   value=42 -> 0b101010_00 = 0xA8 (42 in high 6 bits, spare 0 in low 2 bits)
@@ -669,7 +666,7 @@ TEST(GoldenIE, TimingAdvance_Encoding) {
 
 // =====================================================================
 // Common IEs: L3CellDescription (GSM 04.08 10.5.2.2)
-// Reference: GSM_RR_Types.ttcn CellDescriptionV (LSB first: bcc(3), ncc(3), arfcn(10))
+// Cell description value part, packed LSB-first (TS 24.008 10.5.2.2): bcc(3), ncc(3), arfcn(10)
 // =====================================================================
 
 TEST(GoldenIE, CellDescription_Default) {
@@ -687,7 +684,7 @@ TEST(GoldenIE, CellDescription_RoundTrip) {
 
 // =====================================================================
 // Common IEs: L3HandoverReference (GSM 04.08 10.5.2.15)
-// Reference: GSM_RR_Types.ttcn HandoverReference
+// Handover reference (5 bits) per GSM 24.008 10.5.2.15
 // 8 bits: handover_reference(5) | spare(3)
 // =====================================================================
 
@@ -704,7 +701,7 @@ TEST(GoldenIE, HandoverReference_RoundTrip) {
 
 // =====================================================================
 // Common IEs: L3CipheringModeSetting (GSM 04.08 10.5.2.9)
-// Reference: L3_Templates.ttcn ts_CiphModeSetting
+// Ciphering mode setting nibble per GSM 24.008 10.5.2.9
 // 4 bits: ciphering(1) | algorithm(3)
 // =====================================================================
 
@@ -717,14 +714,14 @@ TEST(GoldenIE, CipheringModeSetting_Off) {
 TEST(GoldenIE, CipheringModeSetting_A5_3) {
     // GSM 24.008 10.5.2.9: cipheringModeSetting is 4 bits: sC(1)|algorithmIdentifier(3)
     // ciphering=true, algorithm=3(A5/3) -> sC=1, algId=011 -> 4-bit value = 0b1011 = 0x0B
-    // Reference: L3_Templates.ttcn ts_RRM_CiphModeCmd: cipherModeSetting: sC='1'B, algorithmIdentifier
+    // Vector: sC='1'B (ciphering on), algorithmIdentifier = A5/3.
     // Spec-verified round-trip per GSM 24.008 10.5.2.9
     L3CipheringModeSetting orig(true, 3);
     ieRoundTrip(orig);
 }
 
 TEST(GoldenIE, CipheringModeSetting_Encoding) {
-    // Reference: L3_Templates.ttcn ts_RRM_CiphModeCmd: cipherModeSetting: sC='1'B, algorithmIdentifier=alg_id (BIT3)
+    // Vector: sC='1'B (ciphering on), algorithmIdentifier = 3 bits (A5/3).
     // Spec-verified: GSM 24.008 10.5.2.9 Ciphering Mode Setting (4 bits)
     //   ciphering(1)=sC|algorithm(3)=algorithmIdentifier
     //   ciphering=true, algorithm=3(A5/3) -> sC(1)=1|algId(3)=011 -> 4-bit value = 0b1011 = 0x0B
@@ -740,7 +737,7 @@ TEST(GoldenIE, CipheringModeSetting_Encoding) {
 
 // =====================================================================
 // Common IEs: L3CipheringModeResponse (GSM 04.08 10.5.2.10)
-// Reference: L3_Templates.ttcn ts_CiphModeResp
+// Ciphering mode response bits per GSM 24.008 10.5.2.10
 // 2 bits: include_IMEISV(1) | spare(1)
 // =====================================================================
 
@@ -753,7 +750,7 @@ TEST(GoldenIE, CipheringModeResponse_Default) {
 
 // =====================================================================
 // Common IEs: L3SynchronizationIndication (GSM 04.08 10.5.2.39)
-// Reference: GSM_RR_Types.ttcn SynchronizationIndication
+// Synchronization indication octet per GSM 24.008 10.5.2.39
 // 8 bits: NCI(1) | ROT(1) | SI(6)
 // =====================================================================
 
@@ -773,7 +770,7 @@ TEST(GoldenIE, SynchronizationIndication_Values) {
 
 // =====================================================================
 // Common IEs: L3NCCPermitted (GSM 04.08 10.5.2.27)
-// Reference: GSM_SystemInformation.ttcn NCCPermitted
+// NCC permitted bitmask per GSM 24.008 10.5.2.27
 // 8 bits: ncc_permitted(8) - bitmask
 // =====================================================================
 
@@ -791,7 +788,7 @@ TEST(GoldenIE, NCCPermitted_Custom) {
 
 // =====================================================================
 // Common IEs: L3PageMode (GSM 04.08 10.5.2.26)
-// Reference: GSM_RR_Types.ttcn PageMode
+// Page mode values per TS 44.018
 // 2 bits: Normal(0), Extended(1), Reorganization(2), SameAsBefore(3)
 // =====================================================================
 
@@ -818,7 +815,7 @@ TEST(GoldenIE, PageMode_SameAsBefore) {
 
 // =====================================================================
 // Common IEs: L3RequestReference (GSM 04.08 10.5.2.30)
-// Reference: GSM_RR_Types.ttcn RequestReference, f_compute_ReqRef
+// Random access value plus timing fields per GSM 24.008 10.5.2.30
 // 24 bits: RA(8) + T1p(5) + T3(6) + T2(5)
 // =====================================================================
 
@@ -834,7 +831,7 @@ TEST(GoldenIE, RequestReference_Custom) {
 }
 
 TEST(GoldenIE, RequestReference_Compute) {
-    // From GSM_RR_Types.ttcn f_compute_ReqRef:
+    // Timing field derivation (TS 44.018 RACH procedure):
     // t1p = (fn / 1326) mod 32, t2 = fn mod 26, t3 = fn mod 51
     unsigned fn = 1326;
     unsigned ra = 0x42;
@@ -850,7 +847,7 @@ TEST(GoldenIE, RequestReference_Compute) {
 
 // =====================================================================
 // Common IEs: L3WaitIndication (GSM 04.08 10.5.2.43)
-// Reference: GSM_RR_Types.ttcn WaitIndication
+// Wait time value (one octet) per GSM 24.008 10.5.2.43
 // =====================================================================
 
 TEST(GoldenIE, WaitIndication_Default) {
@@ -886,7 +883,7 @@ TEST(GoldenIE, RRCauseElement_ProtocolError) {
 
 // =====================================================================
 // Common IEs: L3CellOptionsBCCH (GSM 04.08 10.5.2.3)
-// Reference: GSM_SystemInformation.ttcn CellOptions
+// BCCH cell options bits per GSM 24.008 10.5.2.3
 // 8 bits: dn_ind(1) | pwrc(1) | dtx(2) | radio_link_tout(4)
 // =====================================================================
 
@@ -898,7 +895,7 @@ TEST(GoldenIE, CellOptionsBCCH_Default) {
 
 // =====================================================================
 // Common IEs: L3CellOptionsSACCH (GSM 04.08 10.5.2.3a)
-// Reference: GSM_SystemInformation.ttcn CellOptionsSacch
+// SACCH cell options bits per GSM 24.008 10.5.2.3a
 // 8 bits: dtx_ext(1) | pwrc(1) | dtx(2) | radio_link_timeout(4)
 // =====================================================================
 
@@ -910,12 +907,12 @@ TEST(GoldenIE, CellOptionsSACCH_Default) {
 
 // =====================================================================
 // Common IEs: L3CellSelectionParameters (GSM 04.08 10.5.2.4)
-// Reference: BTS_Tests.ttcn ts_CellSelPar_default
+// Default vector values for a software BTS (GSM 24.008 SI3).
 // 17 bits: cell_resel_hyst(3) + ms_txpwr_max_cch(5) + acs(1) + neci(1) + rxlev_access_min(6)
 // [GSM SPEC VERIFIED] GSM 24.008 10.5.2.4: 2 octets + 1 bit (total 17 bits).
 //   Octet 1: cell_resel_hyst(3)|ms_txpwr_max_cch(5)|acs(1)
 //   Octet 2: neci(1)|rxlev_access_min(6)|spare(1, extends to next octet boundary)
-// Reference values from BTS_Tests.ttcn ts_CellSelPar_default:
+// Vector values (typical software BTS defaults):
 //   cell_resel_hyst=2, ms_txpwr_max_cch=7, acs=0, neci=1, rxlev_access_min=0
 //   {0x47, 0x40}: 0b010_00111_0 | 0b1_000000_0 = correct
 // =====================================================================
@@ -927,8 +924,8 @@ TEST(GoldenIE, CellSelectionParameters_Default) {
 }
 
 TEST(GoldenIE, CellSelectionParameters_RefValues) {
-    // Reference: BTS_Tests.ttcn ts_CellSelPar_default (line 355):
-    //   cell_resel_hyst_2dB=2, ms_txpwr_max_cch=mp_ms_power_level_exp(=7, see line 115), acs='0'B, neci=true, rxlev_access_min=0
+    // Vector (typical software BTS defaults):
+    //   cell_resel_hyst=2 dB, ms_txpwr_max_cch=7, acs='0'B, neci=true, rxlev_access_min=0
     // Spec-verified: GSM 24.008 10.5.2.4 Cell Selection Parameters (17 bits = 2 octets + 1 bit)
     //   cell_resel_hyst(3)|ms_txpwr_max_cch(5)|acs(1)|neci(1)|rxlev_access_min(6)
     //   {0x47, 0x40}: cell_resel_hyst=2, ms_txpwr_max_cch=7, acs=0, neci=1, rxlev_access_min=0
@@ -949,12 +946,12 @@ TEST(GoldenIE, CellSelectionParameters_RefValues) {
 
 // =====================================================================
 // Common IEs: L3RACHControlParameters (GSM 04.08 10.5.2.29)
-// Reference: BTS_Tests.ttcn ts_RachCtrl_default
+// Default vector values for a software BTS (GSM 24.008 SI2/SI3).
 // 25 bits: max_retrans(2) + tx_integer(4) + cell_barr_access(1) + re_not_allowed(1) + ACC(16)
 // [GSM SPEC VERIFIED] GSM 24.008 10.5.2.29: 3 octets (24 bits total).
 //   Octet 1: max_retrans(2)|tx_integer(4)|cell_barr_access(1)|re_not_allowed(1)|spare(2)
 //   Octet 2-3: ACC(16) access class barring bitmap
-// Reference values from BTS_Tests.ttcn ts_RachCtrl_default:
+// Vector values (typical software BTS defaults):
 //   max_retrans=3(11), tx_integer=9(1001), cell_bar_qualify=0, cell_barr_access=0,
 //   re_not_allowed=1, ACC=0x0400 (ACC[6] barred)
 //   {0xE5, 0x04, 0x00}: 0b11_1001_0_0 | 0b1_00000100_00000000 = correct
@@ -967,8 +964,8 @@ TEST(GoldenIE, RACHControlParameters_Default) {
 }
 
 TEST(GoldenIE, RACHControlParameters_RefValues) {
-    // Reference: BTS_Tests.ttcn ts_RachCtrl_default (line 347):
-    //   max_retrans=RACH_MAX_RETRANS_7(=3), tx_integer='1001'B(=9), cell_barr_access=false,
+    // Vector (typical software BTS defaults):
+    //   max_retrans=3, tx_integer='1001'B(=9), cell_barr_access=false,
     //   re_not_allowed=true, acc='0000010000000000'B (=0x0400, ACC[6] barred, bit 6 from MSB)
     // Spec-verified: GSM 24.008 10.5.2.29 RACH Control Parameters (24 bits = 3 octets)
     //   max_retrans(2)|tx_integer(4)|cell_barr_access(1)|re_not_allowed(1)|spare(2)|ACC(16)
@@ -991,13 +988,13 @@ TEST(GoldenIE, RACHControlParameters_RefValues) {
 
 // =====================================================================
 // Common IEs: L3ControlChannelDescription (GSM 04.08 10.5.2.11)
-// Reference: GSM_SystemInformation.ttcn ControlChannelDescription
+// The vector below is a typical software BTS SI3 control channel description.
 // 24 bits: msc_r99(1) + att(1) + bs_ag_blks_res(3) + ccch_conf(3) + si22ind(1) +
 //   cbq3(2) + spare(2) + bs_pa_mfrms(3) + t3212(8)
 // [GSM SPEC VERIFIED] GSM 24.008 10.5.2.11: 3 octets exactly (24 bits).
 //   Octet 1: msc_r99(1)|att(1)|bs_ag_blks_res(3)|ccch_conf(3)|si22ind(1)|cbq3(2)
 //   Octet 2-3: spare(2)|bs_pa_mfrms(3)|t3212(8) - t3212 spans bits of octet 2 and 3
-// Reference values from BTS_Tests.ttcn ts_SI3_default ctrl_chan_desc:
+// Vector values (typical software BTS SI3 defaults):
 //   msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1(1CCCH combined), si22ind=0,
 //   cbq3=0(IU mode not supported), spare=0, bs_pa_mfrms=0, t3212=1(6 minutes)
 //   {0xC9, 0x00, 0x01}: 0b1_1_001_001_0_00 | 0b00_000_000 | 0b00000001 = correct
@@ -1010,10 +1007,10 @@ TEST(GoldenIE, ControlChannelDescription_Default) {
 }
 
 TEST(GoldenIE, ControlChannelDescription_RefValues) {
-    // Reference: BTS_Tests.ttcn ts_SI3_default ctrl_chan_desc (line 396):
-    //   msc_r99=true, att=true, bs_ag_blks_res=1, ccch_conf=CCHAN_DESC_1CCCH_COMBINED(=1),
-    //   si22ind=false, cbq3=CBQ3_IU_MODE_NOT_SUPPORTED(=0), spare='00'B, bs_pa_mfrms=0, t3212=1
-    // Reference: GSM_SystemInformation.ttcn CCHAN_DESC_1CCCH_COMBINED ('001'B = 1, line 65)
+    // Vector (typical software BTS SI3 defaults):
+    //   msc_r99=true, att=true, bs_ag_blks_res=1, ccch_conf='001'B(1, 1CCCH combined),
+    //   si22ind=false, cbq3=0(IU mode not supported), spare='00'B, bs_pa_mfrms=0, t3212=1
+    // ccch_conf value '001'B = 1CCCH combined (GSM 24.008 10.5.2.11)
     // Spec-verified: GSM 24.008 10.5.2.11 Control Channel Description (24 bits = 3 octets)
     //   msc_r99(1)|att(1)|bs_ag_blks_res(3)|ccch_conf(3)|si22ind(1)|cbq3(2)|spare(2)|bs_pa_mfrms(3)|t3212(8)
     //   {0xC9, 0x00, 0x01}: msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1(combined), si22ind=0, cbq3=0, spare=0, bs_pa_mfrms=0, t3212=1
@@ -1062,7 +1059,7 @@ TEST(GoldenIE, CellChannelDescription_IE) {
 
 // =====================================================================
 // Common IEs: L3FrequencyList (GSM 04.08 10.5.2.13)
-// Reference: GSM_SystemInformation.ttcn BCCHFrequencyList
+// Bitmap of ARFCN presence per GSM 24.008 10.5.2.13
 // 16 bytes, variable bitmap format
 // =====================================================================
 
@@ -1130,7 +1127,7 @@ TEST(GoldenIE, NeighborCellsDescription_Default) {
 
 // =====================================================================
 // Common IEs: L3MeasurementResults (GSM 04.08 10.5.2.20)
-// Reference: GSM_RR_Types.ttcn MeasurementResults, ts_MeasurementResults
+// Field layout per GSM 24.008 10.5.2.20
 // 128 bits: ba_used(1) + dtx_used(1) + rxlev_full(6) + 3g_ba(1) +
 //   meas_valid(1) + rxlev_sub(6) + si23_ba(1) + rxqual_full(3) +
 //   rxqual_sub(3) + no_ncell(3) + [ncell reports]
@@ -1155,7 +1152,7 @@ TEST(GoldenIE, MeasurementResults_Zero) {
 
 // =====================================================================
 // Common IEs: L3MultiRateConfiguration (3GPP 44.018 10.5.2.21aa)
-// Reference: BTS_Tests.ttcn ts_MultiRate
+// Vectors exercise both full-rate and half-rate configurations.
 // 16 bits: spare(4) | half_rate(1) | spare(3) | rate_set(8)
 // =====================================================================
 
@@ -1181,7 +1178,7 @@ TEST(GoldenIE, ImmediateAssignmentInformation_Default) {
 
 // =====================================================================
 // Common IEs: L3DedicatedModeOrTBF (GSM 04.08 10.5.2.25b)
-// Reference: GSM_RR_Types.ttcn DedicatedModeOrTBF
+// Dedicated-mode/TBF indicator bits per TS 44.018
 // 4 bits: tbf(1) | downlink(1) | spare(2)
 // =====================================================================
 
@@ -1289,7 +1286,7 @@ TEST(GoldenIE, CellSelection_Default) {
 
 // =====================================================================
 // Common IEs: L3SI3RestOctets (GSM 04.08 10.5.2.34)
-// Reference: GSM_RestOctets.ttcn SI3RestOctets
+// Optional GPRS fields carried in the SI3 rest octets (TS 44.018 9.1.35)
 // =====================================================================
 
 TEST(GoldenIE, SI3RestOctets_Default) {
@@ -1308,7 +1305,7 @@ TEST(GoldenIE, SI4RestOctets_Default) {
 
 // =====================================================================
 // Common IEs: L3SI13RestOctets (GSM 04.08 10.5.2.37b)
-// Reference: GSM_RestOctets.ttcn SI13RestOctets
+// GPRS power control parameters in the SI13 rest octets (TS 44.018 9.1.43a)
 // =====================================================================
 
 TEST(GoldenIE, SI13RestOctets_Default) {
@@ -1341,7 +1338,7 @@ TEST(GoldenIE, IARestOctets_Default) {
 
 // =====================================================================
 // Common IEs: L3FollowOnProceed (GSM 04.08 10.5.2.38)
-// Reference: GSM_RR_Types.ttcn FollowOnProceed
+// Follow-on/proceed indicator per GSM 24.008 10.5.2.38
 // =====================================================================
 
 TEST(GoldenIE, FollowOnProceed_Default) {
@@ -1352,7 +1349,7 @@ TEST(GoldenIE, FollowOnProceed_Default) {
 
 // =====================================================================
 // Common IEs: L3RestOctets base
-// Reference: GSM_RestOctets.ttcn RestOctets
+// Generic rest octets (padding) per GSM 24.008
 // =====================================================================
 
 TEST(GoldenIE, RestOctets_Base) {
@@ -1372,7 +1369,7 @@ TEST(GoldenIE, OctetAlignedProtocolElement) {
 
 // =====================================================================
 // CC IEs: L3BearerCapability (GSM 04.08 10.5.4.5)
-// Reference: L3_Templates.ttcn ts_Bcap_voice, ts_Bcap_voice_mt, ts_Bcap_csd
+// Bearer capability value octets per GSM 24.008 10.5.4.5
 // =====================================================================
 
 TEST(GoldenIE, BearerCapability_Default) {
@@ -1397,7 +1394,7 @@ TEST(GoldenIE, SupportedCodecList_Default) {
 
 // =====================================================================
 // CC IEs: L3CalledPartyBCDNumber (GSM 04.08 10.5.4.7)
-// Reference: L3_Templates.ttcn ts_Called, tr_Called
+// Called party number value part per GSM 24.008 10.5.4.7
 // =====================================================================
 
 TEST(GoldenIE, CalledPartyBCDNumber_RoundTrip) {
@@ -1431,7 +1428,7 @@ TEST(GoldenIE, CalledPartyBCDNumber_National) {
 
 // =====================================================================
 // CC IEs: L3CallingPartyBCDNumber (GSM 04.08 10.5.4.9)
-// Reference: L3_Templates.ttcn ts_Calling
+// Calling party number value part per GSM 24.008 10.5.4.9
 // =====================================================================
 
 TEST(GoldenIE, CallingPartyBCDNumber_RoundTrip) {
@@ -1447,7 +1444,7 @@ TEST(GoldenIE, CallingPartyBCDNumber_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3CauseElement (GSM 04.08 10.5.4.11)
-// Reference: L3_Templates.ttcn ML3_Cause_TLV
+// Cause value part (location + coding standard + cause value) per GSM 24.008 10.5.4.11
 // =====================================================================
 
 TEST(GoldenIE, CauseElement_RoundTrip) {
@@ -1470,7 +1467,7 @@ TEST(GoldenIE, CauseElement_NormalClearing) {
 
 // =====================================================================
 // CC IEs: L3CallState (GSM 04.08 10.5.4.6)
-// Reference: L3_Templates.ttcn ts_CallState
+// Call state value octet per GSM 24.008 10.5.4.6
 // =====================================================================
 
 TEST(GoldenIE, CallState_RoundTrip) {
@@ -1481,7 +1478,7 @@ TEST(GoldenIE, CallState_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3ProgressIndicator (GSM 04.08 10.5.4.21)
-// Reference: L3_Templates.ttcn ts_Progress
+// Progress indicator bits per GSM 24.008 10.5.4.21
 // =====================================================================
 
 TEST(GoldenIE, ProgressIndicator_RoundTrip) {
@@ -1506,7 +1503,7 @@ TEST(GoldenIE, ProgressIndicator_Encoding) {
 
 // =====================================================================
 // CC IEs: L3KeypadFacility (GSM 04.08 10.5.4.17)
-// Reference: L3_Templates.ttcn ts_KeyPad
+// Keypad facility IA5 character per GSM 24.008 10.5.4.17
 // =====================================================================
 
 TEST(GoldenIE, KeypadFacility_RoundTrip) {
@@ -1530,7 +1527,7 @@ TEST(GoldenIE, KeypadFacility_Digit) {
 
 // =====================================================================
 // CC IEs: L3Signal (GSM 04.08 10.5.4.23)
-// Reference: L3_Templates.ttcn ts_Signal
+// Signal octet per GSM 24.008 10.5.4.23
 // =====================================================================
 
 TEST(GoldenIE, Signal_RoundTrip) {
@@ -1563,7 +1560,7 @@ TEST(GoldenIE, RepeatIndicator_Value) {
 
 // =====================================================================
 // CC IEs: L3SupServFacilityIE (GSM 04.08 10.5.4.1)
-// Reference: SS_Templates.ttcn ts_SS_FACILITY_INVOKE
+// Supplementary service facility invocation value, kept opaque (TS 24.079)
 // =====================================================================
 
 TEST(GoldenIE, SupServFacilityIE_RoundTrip) {
@@ -1573,7 +1570,7 @@ TEST(GoldenIE, SupServFacilityIE_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3SupServVersionIndicator (24.008 10.5.4.24)
-// Reference: SS_Templates.ttcn ts_SS_Version
+// Supplementary service version indicator octet per TS 24.079
 // =====================================================================
 
 TEST(GoldenIE, SupServVersionIndicator_RoundTrip) {
@@ -1584,7 +1581,7 @@ TEST(GoldenIE, SupServVersionIndicator_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3BCDDigits utility (GSM 04.08 10.5.4.7)
-// Reference: L3_Templates.ttcn ts_Called
+// BCD digit packing rules per GSM 24.008 10.5.4.7
 // =====================================================================
 
 TEST(GoldenIE, BCDDigits_Even) {
@@ -1603,7 +1600,7 @@ TEST(GoldenIE, BCDDigits_Odd) {
 
 // =====================================================================
 // MM IEs: L3CMServiceType (GSM 04.08 10.5.3.3)
-// Reference: L3_Templates.ttcn CmServiceType
+// CM service type bits per GSM 24.008 10.5.3.3
 // =====================================================================
 
 TEST(GoldenIE, CMServiceType_MO_Call) {
@@ -1640,7 +1637,7 @@ TEST(GoldenIE, CMServiceType_LocationService) {
 
 // =====================================================================
 // MM IEs: L3RejectCauseIE (GSM 04.08 10.5.3.6)
-// Reference: L3_Templates.ttcn tr_ML3_MT_LU_Rej
+// Reject cause octet per GSM 24.008 10.5.3.6
 // =====================================================================
 
 TEST(GoldenIE, RejectCauseIE) {
@@ -1679,7 +1676,7 @@ TEST(GoldenIE, SRES_RoundTrip) {
 
 // =====================================================================
 // MM IEs: L3NetworkName (GSM 04.08 10.5.3.5a)
-// Reference: L3_Templates.ttcn ts_NetworkName
+// Network name string (7-bit or UCS-2 alphabet) per GSM 24.008 10.5.3.5a
 // =====================================================================
 
 TEST(GoldenIE, NetworkName_RoundTrip) {
@@ -1696,7 +1693,7 @@ TEST(GoldenIE, NetworkName_Encoding) {
 
 // =====================================================================
 // MM IEs: L3TimeZoneAndTime (GSM 04.08 10.5.3.9)
-// Reference: L3_Templates.ttcn ts_TimeZoneAndTime
+// Time zone and time value part per GSM 24.008 10.5.3.9
 // =====================================================================
 
 TEST(GoldenIE, TimeZoneAndTime_RoundTrip) {
@@ -1791,7 +1788,7 @@ TEST(GoldenIE, BCD_NibbleEncode) {
 
 // =====================================================================
 // RACH Tables (GSM 04.08 10.5.2.29)
-// Reference: BTS_Tests.ttcn RACHSpreadSlots, RACHWaitSParam
+// RACH spreading slot count and wait parameter tables per GSM 24.008 10.5.2.29
 // =====================================================================
 
 TEST(GoldenIE, RACHTables) {
@@ -1803,16 +1800,16 @@ TEST(GoldenIE, RACHTables) {
 
 // =====================================================================
 // RxLev / RxQual Conversion (3GPP TS 45.008 Chapter 8 / GSM 05.02)
-// Reference: GSM_Types.ttcn dbm2rxlev (line 354): rxlev = dbm + 110
-// Reference: GSM_Types.ttcn rxlev2dbm (line 359): return -110 + rxlev
-// Reference: GSM_Types.ttcn ber2rxqual (line 369): BER threshold table
-// Reference: GSM_Types.ttcn rxqual2ber (line 390): RxQual -> BER representative values
+// dBm -> RxLev conversion (TS 45.008 8.1.4): rxlev = dbm + 110
+// RxLev -> dBm conversion: dbm = -110 + rxlev
+// BER -> RxQual threshold table per TS 45.008 8.2.4
+// RxQual -> BER representative values per TS 45.008 8.2.4
 // Spec-verified: TS 45.008 Chapter 8.1.4 (RxLev), Chapter 8.2.4 (RxQual)
 // [GSM SPEC VERIFIED] TS 45.008 8.1.4: RxLev = received_level_in_dBm + 110.
 //   Range: RxLev 0 = -110 dBm (minimum), RxLev 63 = -47 dBm (maximum).
 //   Values 0 and 255 are reserved/special. Valid range is 1-62 for normal operation.
 // TS 45.008 8.2.4: RxQual 0 (BER < 0.2%) through RxQual 7 (BER >= 12.8%).
-//   BER representative values: Qual 0 = 0.14%, Qual 7 = 18.10% (per GSM_Types.ttcn).
+//   BER representative values: Qual 0 = 0.14%, Qual 7 = 18.10% (TS 45.008 8.2.4).
 // =====================================================================
 
 TEST(GoldenIE, RxLev_Conversion) {
@@ -1826,7 +1823,7 @@ TEST(GoldenIE, RxLev_Conversion) {
 
 TEST(GoldenIE, RxQual_Conversion) {
     // Spec-verified: TS 45.008 8.2.4: RxQual 0 (BER<0.2%) < RxQual 7 (BER>=12.8%)
-    // GSM_Types.ttcn rxqual2ber: Qual 0=0.14%, Qual 7=18.10%
+    // TS 45.008 8.2.4 representative BER values: Qual 0=0.14%, Qual 7=18.10%
     L3MeasurementResults mr;
     float ber0 = mr.decodeQualToBER(0);
     float ber7 = mr.decodeQualToBER(7);
@@ -1835,8 +1832,8 @@ TEST(GoldenIE, RxQual_Conversion) {
 
 // =====================================================================
 // GSM Timing Constants (3GPP TS 45.008 / GSM 05.02)
-// Reference: GSM_Types.ttcn GsmMaxFrameNumber (line 22): 26*51*2048 = 2715648
-// Reference: GSM_Types.ttcn GSM_FRAME_DURATION (line 404): 0.12/26.0 = 4.615 ms
+// Hyperframe length per TS 45.008: 26*51*2048 = 2715648 TDMA frames
+// TDMA frame duration per TS 45.008: 120/26 ms = 4.615 ms
 // Spec-verified: GSM hyperframe = 2715648 TDMA frames = 3 hours 28 minutes 48 seconds
 // [GSM SPEC VERIFIED] TS 45.008 Chapter 5:
 //   1 TDMA frame = 1/26 of 120ms multiframe = 4.615384... ms (~4615 microseconds).
@@ -1853,7 +1850,7 @@ TEST(GoldenIE, FrameDuration) {
 }
 
 TEST(GoldenIE, Hyperframe) {
-    // Spec-verified: GSM_Types.ttcn GsmMaxFrameNumber = 26*51*2048 = 2715648
+    // Spec-verified: TS 45.008 hyperframe = 26*51*2048 = 2715648 TDMA frames
     // This is the TDMA frame number modulo (hyperframe boundary), not bit count
     EXPECT_EQ(gHyperframe, 2715648u);
 }
@@ -1881,7 +1878,7 @@ TEST(GoldenIE, FNCompare) {
 
 // =====================================================================
 // BCD Number Encoding (GSM 04.08 10.5.4.7)
-// Reference: L3_Templates.ttcn ts_Called, tr_Called
+// BCD number encoding vectors per GSM 24.008 10.5.4.7
 // =====================================================================
 
 TEST(GoldenIE, BCD_EvenDigits) {
@@ -1909,9 +1906,8 @@ TEST(GoldenIE, BCD_RoundTrip) {
 
 // =====================================================================
 // Rest Octet Padding (GSM 24.008 / 3GPP TS 44.018)
-// Reference: GSM_RR_Types.ttcn RestOctets (line 163):
-//   type octetstring RestOctets with { variant "PADDING(yes), PADDING_PATTERN('00101011'B)" }
-// Reference: GSM_RestOctets.ttcn (line 37): same PADDING_PATTERN('00101011'B)
+// Rest octet padding rule (GSM 24.008): unused trailing bits are filled with the
+//   pattern '00101011'B = 0x2B to preserve bit synchronization
 // Spec-verified: GSM 24.008 section 9.x messages use 0x2B ('00101011'B) as rest octet padding
 //   This pattern ensures sufficient transitions for bit synchronization
 // [GSM SPEC VERIFIED] Padding pattern '00101011'B = 0x2B is used throughout GSM L3
@@ -1923,7 +1919,7 @@ TEST(GoldenIE, BCD_RoundTrip) {
 
 TEST(GoldenIE, RestOctetPaddingPattern) {
     // Spec-verified: '00101011'B = 0x2B is the standard GSM rest octet padding pattern
-    // GSM_RR_Types.ttcn line 163, GSM_RestOctets.ttcn line 37, and all SI rest octet types
+    // (GSM 24.008 rest-octet rules, applied by all variable-length message rest octets)
     constexpr uint8_t GSM_REST_OCTET_PAD = 0x2B;
     EXPECT_EQ(GSM_REST_OCTET_PAD, 0x2B);
     std::vector<uint8_t> buf(1, 0);
@@ -1934,7 +1930,7 @@ TEST(GoldenIE, RestOctetPaddingPattern) {
 
 // =====================================================================
 // L/H Presence Bits (GSM 04.07 11.2.1.1.4)
-// Reference: GSM_RestOctets.ttcn CSN.1 L/H encoding
+// Two-bit L/H presence indicator per GSM 04.07
 // =====================================================================
 
 TEST(GoldenIE, L_H_Bits) {
@@ -1949,7 +1945,7 @@ TEST(GoldenIE, L_H_Bits) {
 
 // =====================================================================
 // SI2 body length (GSM 24.008 9.1.32 / 3GPP TS 44.018 9.1.32)
-// Reference: GSM_SystemInformation.ttcn SystemInformationType2 record definition
+// Fixed-length SI2 body per TS 44.018 9.1.32
 // Structure: bcch_freq_list(16 octets) + ncc_permitted(1 octet) + rach_control(3 octets) = 20 octets
 // Spec-verified: GSM 24.008 9.1.32 System Information Type 2 fixed body length
 // [GSM SPEC VERIFIED] SI2 has fixed body length of 20 octets (160 bits).
@@ -1968,7 +1964,7 @@ TEST(GoldenIE, SI2_BodyLength) {
 
 // =====================================================================
 // SI2bis body length (GSM 24.008 9.1.33 / 3GPP TS 44.018 9.1.33)
-// Reference: GSM_SystemInformation.ttcn SystemInformationType2bis record definition
+// Fixed-length SI2bis body per TS 44.018 9.1.33
 // Structure: extd_bcch_freq_list(16 octets) + rach_control(3 octets) = 19 octets
 // Spec-verified: GSM 24.008 9.1.33 System Information Type 2bis fixed body length
 // =====================================================================
@@ -1982,7 +1978,7 @@ TEST(GoldenIE, SI2bis_BodyLength) {
 
 // =====================================================================
 // SI2ter body length (GSM 24.008 9.1.34 / 3GPP TS 44.018 9.1.34)
-// Reference: GSM_SystemInformation.ttcn SystemInformationType2ter record definition
+// Fixed-length SI2ter body per TS 44.018 9.1.34
 // Structure: extd_bcch_freq_list(16 octets) = 16 octets
 // Spec-verified: GSM 24.008 9.1.34 System Information Type 2ter fixed body length
 // =====================================================================
@@ -2015,7 +2011,7 @@ TEST(GoldenIE, BeaconTimeslots) {
 
 // =====================================================================
 // CC IEs: L3ConnectedNumber (GSM 04.08 10.5.4.7)
-// Reference: L3_Templates.ttcn connectedNumber in tr_ML3_MT_CC_CONNECT (line 1685)
+// Connected number IE carried in CC Connect (GSM 24.078)
 // TLV format: IEI=0x9c, Length(1) | TypeOctet(1) | Digits...
 // =====================================================================
 
@@ -2053,8 +2049,8 @@ TEST(GoldenIE, ConnectedNumber_IEI) {
 
 // =====================================================================
 // CC IEs: L3SubAddress (GSM 04.08 10.5.4.3)
-// Reference: L3_Templates.ttcn callingPartySubAddress (line 1505),
-//   calledPartySubAddress (line 1507), connectedSubAddress (line 1660, 1686)
+// Sub-address IE variants carried in CC Setup/Alerting/Connect messages
+//   (calling party, called party and connected party)
 // TLV format: IEI=0x9a/0x9b, Length(1) | NumItems(1) | SubAddressItem...
 // =====================================================================
 
@@ -2071,8 +2067,8 @@ TEST(GoldenIE, SubAddress_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3RedirectingNumber (GSM 04.08 10.5.4.13)
-// Reference: L3_Templates.ttcn redirectingPartyBCDNumber (line 2012),
-//   redirectingPartySubaddress (line 2013)
+// Redirecting number IE per GSM 24.008 10.5.4.13, carried in CC Disconnect,
+//   together with the optional redirecting sub-address
 // TLV format: IEI=0x97, Length(1) | TypeOctet(1) | Digits... | [Reason(1)]
 // =====================================================================
 
@@ -2103,7 +2099,7 @@ TEST(GoldenIE, RedirectingNumber_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3CLIRSuppression (GSM 04.08 10.5.4.16)
-// Reference: L3_Templates.ttcn clir_Suppression (line 1516)
+// CLIR suppression value per GSM 24.008 10.5.4.16
 // TV format: IEI=0xc1, Value(1 octet)
 // =====================================================================
 
@@ -2124,7 +2120,7 @@ TEST(GoldenIE, CLIRSuppression_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3CLIRInvocation (GSM 04.08 10.5.4.17)
-// Reference: L3_Templates.ttcn clir_Invocation (line 1517)
+// CLIR invocation value per GSM 24.008 10.5.4.17
 // TV format: IEI=0xc2, Value(1 octet)
 // =====================================================================
 
@@ -2145,7 +2141,7 @@ TEST(GoldenIE, CLIRInvocation_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3NetworkCCCapabilities (GSM 04.08 10.5.4.15)
-// Reference: L3_Templates.ttcn networkCCCapabilities in tr_ML3_MT_CC_CALL_PROC (line 1573)
+// Network CC capabilities IE carried in CC Call Proceeding (GSM 24.078)
 // TLV format: IEI=0x7a, Length(1) | CapabilityBits(2 octets min)
 // =====================================================================
 
@@ -2172,7 +2168,7 @@ TEST(GoldenIE, NetworkCCCapabilities_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3LowLayerCompatibility (GSM 04.08 10.5.4.14)
-// Reference: L3_Templates.ttcn lowLayerCompatibility1/2 (line 1509-1510)
+// Low layer compatibility IE (variable length) per GSM 24.078
 // TLV format: IEI=0x86, variable length
 // =====================================================================
 
@@ -2199,7 +2195,7 @@ TEST(GoldenIE, LowLayerCompatibility_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3HighLayerCompatibility (GSM 04.08 10.5.4.14)
-// Reference: L3_Templates.ttcn highLayerCompatibility1/2 (line 1512-1513)
+// High layer compatibility IE (variable length) per GSM 24.078
 // TLV format: IEI=0x87, variable length
 // =====================================================================
 
@@ -2226,8 +2222,8 @@ TEST(GoldenIE, HighLayerCompatibility_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3UserUser (GSM 04.08 10.5.4.27)
-// Reference: L3_Templates.ttcn user_user in ts_ML3_MO_CC_SETUP (line 1514),
-//   tr_ML3_MT_CC_ALERTING (line 1595), tr_ML3_MT_CC_CONNECT (line 1687)
+// User-user IE (variable length) carried in CC Setup, Alerting and Connect
+//   (GSM 24.078 10.5.4.27)
 // TLV format: IEI=0x75, variable length
 // =====================================================================
 
@@ -2254,7 +2250,7 @@ TEST(GoldenIE, UserUser_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3Priority (GSM 04.08 10.5.4.19)
-// Reference: L3_Templates.ttcn priority in CC message templates
+// Priority IE (TV) carried in CC Setup and related messages
 // TV format: IEI=0x88, Value(1 octet): spare(1)|request(1)|priorityLevel(3)|spare(3)
 // =====================================================================
 
@@ -2277,8 +2273,8 @@ TEST(GoldenIE, Priority_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3StreamIdentifier (GSM 04.08 10.5.4.29)
-// Reference: L3_Templates.ttcn streamIdentifier in ts_ML3_MO_CC_SETUP (line 1521),
-//   ts_ML3_MO_CC_EMERG_SETUP (line 1544)
+// Stream identifier IE (TV) carried in CC Setup and emergency Setup
+//   (GSM 24.078 10.5.4.29)
 // TV format: IEI=0x8e, Value(1 octet): spare(3)|VBS/VGCS(1)|streamID(4)
 // =====================================================================
 
@@ -2331,7 +2327,7 @@ TEST(GoldenIE, AllowedActions_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3CCCapabilities (GSM 04.08 10.5.4.4)
-// Reference: L3_Templates.ttcn cC_Capabilities in ts_ML3_MO_CC_SETUP (line 1518)
+// CC capabilities IE carried in CC Setup (GSM 24.078 10.5.4.4)
 // TLV format: IEI=0x51, Length(1) | CapabilityBits(1 octet min): ext(1)|cap(7)
 // =====================================================================
 
@@ -2356,7 +2352,7 @@ TEST(GoldenIE, CCCapabilities_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3BackupBearerCapability (GSM 04.08 10.5.4.5b)
-// Reference: L3_Templates.ttcn backupBearerCapacity in tr_ML3_MT_CC_SETUP
+// Backup bearer capability IE carried in CC Setup (GSM 24.078 10.5.4.5b)
 // TLV format: IEI=0x7c, similar to L3BearerCapability
 // =====================================================================
 

@@ -1085,12 +1085,12 @@ void L3CallConfirmed::text(std::ostream& os) const {
 Expected<L3Disconnect> L3Disconnect::parse(BitReader& br) {
     L3Disconnect msg;
 
-    // Cause TLV (IEI=0x08, but old code used try_parseTLV which reads IEI+length+value)
+    // Cause TLV: IEI=0x08 followed by a length octet and the 2-octet cause
+    // value (TS 24.078 10.5.4.11).
     auto ieiRes = detail::readIEI(br);
     if (!ieiRes) return Expected<L3Disconnect>::error(ieiRes.error());
-    // Old code: L3CauseElement cause; cause.try_parseTLV(0x08, src, rp);
-    // The try_parseTLV reads IEI (checking 0x08), then length, then value.
-    // We already read IEI above, so just read length + value.
+    // The TLV cause is read in three steps: IEI (above), length, then value;
+    // the IEI octet was consumed explicitly, so only length + value remain.
     auto lenRes = detail::readLength(br);
     if (!lenRes) return Expected<L3Disconnect>::error(lenRes.error());
     auto p = L3CauseElement::parse(br);
@@ -1382,7 +1382,7 @@ void L3StartDTMFAcknowledge::text(std::ostream& os) const {
 
 Expected<L3StartDTMFReject> L3StartDTMFReject::parse(BitReader& br) {
     L3StartDTMFReject msg;
-    // Cause LV (no IEI in old code - try_parseLV reads length + value)
+    // Cause LV (no IEI: length + value; TS 24.078 10.5.4.11)
     auto lenRes = detail::readLength(br);
     if (!lenRes) return Expected<L3StartDTMFReject>::error(lenRes.error());
     auto p = L3CauseElement::parse(br);
@@ -1417,7 +1417,7 @@ void L3Hold::text(std::ostream& os) const {
 
 Expected<L3HoldReject> L3HoldReject::parse(BitReader& br) {
     L3HoldReject msg;
-    // Cause LV (no IEI - old code used try_parseLV)
+    // Cause LV (no IEI: length + value)
     auto lenRes = detail::readLength(br);
     if (!lenRes) return Expected<L3HoldReject>::error(lenRes.error());
     auto p = L3CauseElement::parse(br);

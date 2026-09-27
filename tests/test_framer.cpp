@@ -310,9 +310,8 @@ TEST(L3Framer, LSRequestStreamThreeFrames) {
 
 // [GOLDEN] A real Paging Response (variable body: CKSN + classmark +
 // mobile identity) framed in L2-length mode — the deterministic framing
-// path for variable-length messages (the previous test
-// pinned a 5-byte "fixed" body that matched neither the message
-// definition (body 7–15 bytes) nor any spec MTI).
+// path for variable-length messages (a pinned 5-byte "fixed" body would
+// match neither the message definition (body 7–15 bytes) nor any spec MTI).
 TEST(L3Framer, PagingResponse_L2LengthMode) {
     auto pr = L3PagingResponse::builder()
         .cksn(1)

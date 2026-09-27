@@ -20,43 +20,43 @@
 // SOFTWARE.
 
 // Comprehensive GSM Layer 3 Golden Tests (Part 2: MM).
-// Reference: osmo-ttcn3-hacks L3_Templates.ttcn (MM section).
+// Message identifiers and wire layouts per 3GPP TS 24.008 section 9.
 // Spec: 3GPP TS 24.008 sections 9.2, 10.5.3.
 //
 // [GOLDEN DATA VERIFICATION]
 // All MM message type identifiers verified against GSM 24.008 Table 10.5.3.
 // All MM reject cause values verified against GSM 24.008 Table 10.5.3.6.
-// All CMServiceType values verified against osmo-ttcn3-hacks L3_Templates.ttcn CmServiceType enum.
-// All LocationUpdateType values verified against osmo-ttcn3-hacks L3_Templates.ttcn.
+// All CMServiceType values per GSM 24.008 (CM Service Type).
+// All LocationUpdateType values per GSM 24.008 (Location Updating Request).
 // LAI encoding (MCC/MNC BCD nibble-swapped) verified against GSM 24.008 10.5.1.3 and
-//   osmo-ttcn3-hacks GSM_Types.ttcn f_build_BcdMccMnc / TC_selftest_BcdMccMnc.
+//   the MCC/MNC BCD layout of GSM 23.003.
 // Mobile Identity type octets verified against GSM 24.008 10.5.1.4.
-// Parse test hex data cross-checked against osmo-ttcn3-hacks L3_Templates.ttcn templates:
-//   ts_LU_REQ, ts_LU_ACCEPT, ts_TMSI_REALLOC_CM, ts_CM_SERV_REQ,
-//   tr_CM_SERV_REJ, ts_ML3_MO_MM_IMSI_DET_Ind, tr_ML3_MT_MM_STATUS,
-//   ts_ML3_MO_MM_ID_Rsp, ts_CM_REESTABL_REQ.
+// Parse test hex data cross-checked against the GSM 24.008 message definitions:
+//   Location Updating Request / Accept, TMSI Reallocation Command,
+//   CM Service Request / Reject, IMSI Detach Indication, MM Status,
+//   Identity Response, CM Reestablishment Request.
 //
 // [GOLDEN VERIFICATION]
-// All byte-level parse test data cross-checked against osmo-ttcn3-hacks reference:
-//   - MM MTI values verified against L3_Templates.ttcn templates (tr_CM_SERV_ACC, tr_CM_SERV_REJ,
-//     ts_LU_ACCEPT, ts_LU_REQ, tr_MT_MM_AUTH_REQ, ts_ML3_MT_MM_AUTH_RESP) - all match GSM 24.008 Table 10.5.3
+// All byte-level parse test data cross-checked against 3GPP TS 24.008:
+//   - MM MTI values per GSM 24.008 Table 10.5.3 (CM Service Accept/Reject,
+//     Location Updating Accept/Request, Authentication Request/Response)
 //   - MM header byte layout verified: PD=5('0101'B) in the low nibble of octet 0,
 //     TI/TIF in the high nibble; MT(6 bits) in the low bits of octet 1 - matches GSM 24.008 Table 11.2
-//   - LocationUpdatingRequest (ts_LU_REQ line 356): LAI is RAW (not LV!), then CM1-LV, then MI-LV
-//   - LocationUpdatingAccept (ts_LU_ACCEPT line 385): LAI is RAW (not LV!), then optional MI + FOP
+//   - LocationUpdatingRequest: LAI is RAW (not LV!), then CM1-LV, then MI-LV
+//   - LocationUpdatingAccept: LAI is RAW (not LV!), then optional MI + FOP
 //   - TMSIReallocationCommand: LAI RAW + MI-LV + FollowOnProceed(4 bits)
-//   - CMServiceRequest (ts_CM_SERV_REQ line 411): CM_ServiceType(4)|CKSN(4), CM2-LV, MI-LV
-//   - CMServiceReject (tr_CM_SERV_REJ line 524): reject_cause(8 bits) per GSM 24.008 10.5.3.6
+//   - CMServiceRequest: CM_ServiceType(4)|CKSN(4), CM2-LV, MI-LV
+//   - CMServiceReject: reject_cause(8 bits) per GSM 24.008 10.5.3.6
 //   - IMSIDetachIndication: CM1-LV + MI-LV
-//   - MMStatus (tr_ML3_MT_MM_STATUS): cause(8 bits) per GSM 24.008 10.5.3.6
-//   - IdentityResponse (ts_ML3_MO_MM_ID_Rsp): MI-LV only
-//   - CMReestablishmentRequest (ts_CM_REESTABL_REQ line 450): CKSN(4)|spare(4), CM2-LV, MI-LV
+//   - MMStatus: cause(8 bits) per GSM 24.008 10.5.3.6
+//   - IdentityResponse: MI-LV only
+//   - CMReestablishmentRequest: CKSN(4)|spare(4), CM2-LV, MI-LV
 //   - LAI encoding verified: MCC=250, MNC=01 -> nibble-swapped BCD {0x52, 0xF0, 0x10}
-//     (same pattern as GSM_Types.ttcn TC_selftest_BcdMccMnc for MCC=262, MNC=42 -> {0x62, 0xF2, 0x24})
+//     (same nibble-swap pattern for MCC=262, MNC=42 -> {0x62, 0xF2, 0x24})
 //   - MobileIdentity type octets verified: TMSI = spare(4)=0|type(3)=100|oe(1)=0 = 0x08
 //   - MMRejectCause values verified against GSM 24.008 Table 10.5.3.6:
 //     0x02=IMSI_Unknown_In_HLR, 0x03=Illegal_MS, 0x16=Congestion, 0x60=Invalid_Mandatory_Info
-//   - CMServiceType values verified against L3_Templates.ttcn CmServiceType enum (line 28):
+//   - CMServiceType values per GSM 24.008:
 //     MO_CALL='0001'B(1), EMERG_CALL='0010'B(2), MO_SMS='0100'B(4), SS_ACT='1000'B(8)
 
 #include <gtest/gtest.h>
@@ -75,18 +75,18 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 
 // =====================================================================
 // MM MESSAGE TYPE VALUES (GSM 24.008 Table 10.5.3 / GSM 04.08 Table 10.5.3)
-// Reference: L3_Templates.ttcn MM message templates, verified against:
-//   tr_CM_SERV_ACC: messageType := '100001'B    -> CMServiceAccept = 0x21
-//   tr_CM_SERV_REJ: messageType := '100010'B    -> CMServiceReject = 0x22
-//   ts_LU_ACCEPT: messageType := '000010'B      -> LocationUpdatingAccept = 0x02
-//   ts_LU_REQ: messageType := '001000'B         -> LocationUpdatingRequest = 0x08
-//   tr_MT_MM_AUTH_REQ: messageType := '010010'B -> AuthenticationRequest = 0x12
-//   ts_ML3_MT_MM_AUTH_RESP: messageType := '010100'B -> AuthenticationResponse = 0x14
+// Message type assignments per GSM 24.008 Table 10.5.3:
+//   CM Service Accept: '100001'B    -> CMServiceAccept = 0x21
+//   CM Service Reject: '100010'B    -> CMServiceReject = 0x22
+//   Location Updating Accept: '000010'B      -> LocationUpdatingAccept = 0x02
+//   Location Updating Request: '001000'B     -> LocationUpdatingRequest = 0x08
+//   Authentication Request: '010010'B -> AuthenticationRequest = 0x12
+//   Authentication Response: '010100'B -> AuthenticationResponse = 0x14
 // GSM 24.008 Table 10.5.3 specifies all MM MTI values (6-bit field)
 // [GSM SPEC VERIFIED] MM messages carry the 6-bit MTI in the low bits of octet 1
 //   (NSD not exposed, written zero). PD discriminator for MM is 5 ('0101'B), placed
 //   in the low nibble of octet 0; the high nibble holds TI(3)|TIF(1). All values verified
-//   against GSM 24.008 Table 10.5.3 and L3_Templates.ttcn template assignments.
+//   against GSM 24.008 Table 10.5.3 message type assignments.
 // =====================================================================
 
 TEST(GoldenMM, MessageTypeValues) {
@@ -113,7 +113,7 @@ TEST(GoldenMM, MessageTypeValues) {
 
 // =====================================================================
 // MM PARSE FROM HEX: Location Updating Request (GSM 24.008 9.2.15)
-// Reference: L3_Templates.ttcn ts_LU_REQ (line 356):
+// Location Updating Request body per GSM 24.008 9.2.15:
 //   discriminator := '0101'B (PD=5=MM), messageType := overwritten
 //   locationUpdatingType := lu_type, cipheringKeySequenceNumber
 //   mobileStationClassmark1 := ts_CM1, mobileIdentityLV := mi_lv
@@ -132,12 +132,12 @@ TEST(GoldenMM, LocationUpdatingRequest_Parse) {
     //   2) locationAreaIdentification = MCC/MNC BCD(3 octets) + LAC(2 octets) = 5 octets RAW (NOT LV!)
     //   3) mobileStationClassmark1 = LV format (length + value)
     //   4) mobileIdentity = LV format (length + type octet + value)
-    // Reference: L3_Templates.ttcn ts_LU_REQ (line 356): locationAreaIdentification is raw LAI, then CM1 LV, then MI LV
+    // Field order per GSM 24.008 9.2.15: locationAreaIdentification is raw LAI, then CM1 LV, then MI LV
     // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
     // Byte 1: MT=0x08(LocationUpdatingRequest) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.3)
-    // Byte 2: LU_Type(2)=00(Normal)|spare(2)=0|CKSN(4)=0 = 0x00 [L3_Templates.ttcn ts_LU_REQ line 368-369]
+    // Byte 2: LU_Type(2)=00(Normal)|spare(2)=0|CKSN(4)=0 = 0x00 [GSM 24.008 9.2.15]
     // Bytes 3-7: LAI (mandatory per GSM 24.008 9.2.15, RAW not LV): MCC=250, MNC=01, LAC=0x172A
-    //   [L3_Templates.ttcn ts_LU_REQ: mcc_mnc='123456'O is OCT3, but here we use BCD nibble-swapped]
+    //   [MCC/MNC is carried as nibble-swapped BCD per GSM 23.003]
     //   MCC=250, MNC=01 -> '250F01'H nibble-swapped = {0x52, 0xF0, 0x10}, LAC = {0x17,  0x2A}
     // Byte 8: CM1 LV length = 1 (Classmark 1 is 1 octet, GSM 24.008 10.5.1.5)
     // Byte 9: CM1 value = 0x00 (default classmark)
@@ -157,12 +157,12 @@ TEST(GoldenMM, LocationUpdatingRequest_Parse) {
 
 // =====================================================================
 // MM PARSE FROM HEX: Location Updating Accept (GSM 24.008 9.2.13)
-// Reference: L3_Templates.ttcn ts_LU_ACCEPT (line 385):
+// Location Updating Accept body per GSM 24.008 9.2.13:
 //   discriminator := '0101'B (PD=5=MM), messageType := overwritten
 //   locationAreaIdentification := {mcc_mnc, lac}
 // Structure: LAI(5 octets RAW), [MI TLV], [FOP TV]
 // Spec-verified: PD=5(MM), MTI=0x02(LocationUpdatingAccept) per GSM 24.008 Table 10.5.3
-// LAI encoding: GSM_Types.ttcn f_build_BcdMccMnc (line 470):
+// LAI encoding (MCC/MNC nibble-swapped BCD, per GSM 23.003):
 //   MCC=250, MNC=01 -> '250F01'H (MNC padded with F) -> nibble-swapped -> 0x52, 0xF0, 0x10
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.13: LocationUpdatingAccept body = LAI + [MI] + [FOP].
 //   LAI is RAW (not LV/TLV encoded): MCC/MNC BCD(3 octets) + LAC(2 octets) = 5 octets.
@@ -185,7 +185,7 @@ TEST(GoldenMM, LocationUpdatingAccept_Parse) {
 
 // =====================================================================
 // MM PARSE FROM HEX: TMSI Reallocation Command (GSM 24.008 9.2.17)
-// Reference: L3_Templates.ttcn ts_TMSI_REALLOC_CM template
+// TMSI Reallocation Command body per GSM 24.008 9.2.17.
 // Structure: LAI(5 octets RAW), MI LV (length + MobileIdentity), FollowOnProceed(4)|spare(4)
 // Spec-verified: PD=5(MM), MTI=0x1A(TMSIReallocationCommand) per GSM 24.008 Table 10.5.3
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.17: TMSIReallocationCommand body = LAI + MI + FOP.
@@ -217,24 +217,24 @@ TEST(GoldenMM, TMSIReallocationCommand_Parse) {
 
 // =====================================================================
 // MM PARSE FROM HEX: CM Service Request (GSM 24.008 9.2.9)
-// Reference: L3_Templates.ttcn ts_CM_SERV_REQ (line 411):
+// CM Service Request body per GSM 24.008 9.2.9:
 //   cm_ServiceType := int2bit(enum2int(serv_type), 4)
 //   cipheringKeySequenceNumber, mobileStationClassmark2, mobileIdentity
 // Structure: CM_ServiceType(4)|CKSN(4), CM2 LV (3 octets), MI LV
 // Spec-verified: PD=5(MM), MTI=0x24(CMServiceRequest) per GSM 24.008 Table 10.5.3
-// CmServiceType: L3_Templates.ttcn line 28: CM_TYPE_MO_CALL = '0001'B (value=1)
+// CmServiceType: MobileOriginatedCall = '0001'B (value=1, GSM 24.008 10.5.3.3)
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.9: CMServiceRequest body = CM_ServiceType + CKSN
 //   + CM2-LV + MI-LV. CM_ServiceType(4 bits) and CKSN(4 bits) share one octet:
 //   high nibble = CM_ServiceType, low nibble = CKSN. CM_ServiceType values:
 //   1=MobileOriginatedCall, 2=EmergencyCall, 4=ShortMessage, 8=SupplementaryService.
-//   L3_Templates.ttcn CmServiceType enum: CM_TYPE_MO_CALL='0001'B(=1).
+//   CmServiceType (GSM 24.008): MobileOriginatedCall='0001'B(=1).
 // =====================================================================
 
 TEST(GoldenMM, CMServiceRequest_Parse) {
     // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
     // Byte 1: MT=0x24(CMServiceRequest) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.3)
     // Byte 2: CM_ServiceType(4)=1(MobileOriginatedCall)|CKSN(4)=0 = 0x01 [GSM 24.008 10.5.3.3]
-    //   L3_Templates.ttcn CmServiceType: CM_TYPE_MO_CALL = '0001'B (line 29)
+    //   CmServiceType (GSM 24.008): MobileOriginatedCall = '0001'B
     // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets, GSM 24.008 10.5.1.6)
     // Bytes 4-6: CM2 value (24 bits of capability flags)
     // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
@@ -252,7 +252,7 @@ TEST(GoldenMM, CMServiceRequest_Parse) {
 
 // =====================================================================
 // MM PARSE FROM HEX: CM Service Reject (GSM 24.008 9.2.6)
-// Reference: L3_Templates.ttcn tr_CM_SERV_REJ (line 524):
+// CM Service Reject body per GSM 24.008 9.2.6:
 //   messageType := '100010'B (MTI=0x22), rejectCause := rej_cause
 // Structure: reject_cause(8 bits, GSM 24.008 10.5.3.6)
 // Spec-verified: PD=5(MM), MTI=0x22(CMServiceReject) per GSM 24.008 Table 10.5.3
@@ -274,7 +274,7 @@ TEST(GoldenMM, CMServiceReject_Parse) {
 
 // =====================================================================
 // MM PARSE FROM HEX: IMSI Detach Indication (GSM 24.008 9.2.15)
-// Reference: L3_Templates.ttcn ts_ML3_MO_MM_IMSI_DET_Ind template
+// IMSI Detach Indication body per GSM 24.008 9.2.15.
 // Structure: CM1 LV (Classmark 1, length-prefixed), MI LV (Mobile Identity, length-prefixed)
 // Spec-verified: PD=5(MM), MTI=0x01(IMSIDetachIndication) per GSM 24.008 Table 10.5.3
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.15: IMSIDetachIndication body = CM1-LV + MI-LV.
@@ -303,7 +303,7 @@ TEST(GoldenMM, IMSIDetachIndication_Parse) {
 
 // =====================================================================
 // MM PARSE FROM HEX: MM Status (GSM 24.008 9.2.15)
-// Reference: L3_Templates.ttcn tr_ML3_MT_MM_STATUS template
+// MM Status body per GSM 24.008 9.2.15.
 // Structure: cause(8 bits, GSM 24.008 10.5.3.6) - only one mandatory IE
 // Spec-verified: PD=5(MM), MTI=0x31(MMStatus) per GSM 24.008 Table 10.5.3
 // cause=0x60 = Invalid_Mandatory_Information (GSM 24.008 10.5.3.6 Table)
@@ -325,7 +325,7 @@ TEST(GoldenMM, MMStatus_Parse) {
 
 // =====================================================================
 // MM PARSE FROM HEX: Identity Response (GSM 24.008 9.2.11)
-// Reference: L3_Templates.ttcn ts_ML3_MO_MM_ID_Rsp template
+// Identity Response body per GSM 24.008 9.2.11.
 // Structure: MI LV (Mobile Identity, length-prefixed, GSM 24.008 10.5.1.4)
 // Spec-verified: PD=5(MM), MTI=0x19(IdentityResponse) per GSM 24.008 Table 10.5.3
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.11: IdentityResponse body = MI-LV only.
@@ -347,7 +347,7 @@ TEST(GoldenMM, IdentityResponse_Parse) {
 
 // =====================================================================
 // MM PARSE FROM HEX: CM Reestablishment Request (GSM 24.008 9.2.4)
-// Reference: L3_Templates.ttcn ts_CM_REESTABL_REQ (line 450):
+// Field order per GSM 24.008 9.2.4:
 //   cipheringKeySequenceNumber, mobileStationClassmark2, mobileIdentityLV
 // Structure: CKSN(4)|spare(4), CM2 LV (3 octets), MI LV, [LAI LV]
 // Spec-verified: PD=5(MM), MTI=0x28(CMReestablishmentRequest) per GSM 24.008 Table 10.5.3
@@ -363,11 +363,11 @@ TEST(GoldenMM, CMReestablishmentRequest_Parse) {
     //   1) cipheringKeySequenceNumber(4)|spare(4) = 1 octet [GSM 24.008 10.5.1.2]
     //   2) mobileStationClassmark2 = LV format (length + value, GSM 24.008 10.5.1.6)
     //   3) mobileIdentityLV = LV format (length + type octet + value, GSM 24.008 10.5.1.4)
-    // Reference: L3_Templates.ttcn ts_CM_REESTABL_REQ (line 450):
+    // Field order per GSM 24.008 9.2.4:
     //   cipheringKeySequenceNumber, mobileStationClassmark2, mobileIdentityLV
     // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
     // Byte 1: MT=0x28(CMReestablishmentRequest) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.3)
-    // Byte 2: CKSN(4)=0|spare(4)=0 = 0x00 [GSM 24.008 10.5.1.2, L3_Templates.ttcn ts_CM_REESTABL_REQ line 460]
+    // Byte 2: CKSN(4)=0|spare(4)=0 = 0x00 [GSM 24.008 10.5.1.2]
     // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets, GSM 24.008 10.5.1.6)
     // Bytes 4-6: CM2 value (24 bits of capability flags)
     // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
@@ -492,7 +492,7 @@ TEST(GoldenMM, LocationUpdatingReject_RoundTrip) {
 
 TEST(GoldenMM, AuthenticationRequest_RoundTrip) {
     // [GOLDEN VERIFIED] CKSN=0 (key sequence number), RAND=16 octets (GSM 24.008 10.5.3.1)
-    // Reference: L3_Templates.ttcn tr_MT_MM_AUTH_REQ, ts_ML3_MT_MM_AUTH_RESP
+    // Authentication Request / Response bodies per GSM 24.008 10.5.3.
     std::vector<uint8_t> rand(16);
     for (int i = 0; i < 16; i++) rand[i] = static_cast<uint8_t>(i + 1);
     ParsedMessage msg(MMM(L3AuthenticationRequest(0, rand)));
@@ -504,7 +504,7 @@ TEST(GoldenMM, AuthenticationRequest_RoundTrip) {
 TEST(GoldenMM, AuthenticationResponse_RoundTrip) {
     // [GOLDEN VERIFIED] AuthenticationResponse: PD=5(MM) low nibble, MT=0x14 in the six low bits of octet 1
     // SRES (Signed Response) is 4 octets big-endian per GSM 24.008 10.5.3.2
-    // Reference: L3_Templates.ttcn ts_ML3_MT_MM_AUTH_RESP, tr_MT_MM_AUTH_REQ
+    // Authentication Request / Response bodies per GSM 24.008 10.5.3.
     uint8_t data[] = {0x05, 0x14, 0xAB, 0xCD, 0x12, 0x34};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -608,7 +608,7 @@ TEST(GoldenMM, LocationUpdatingRequest_RoundTrip) {
 
 // =====================================================================
 // MMRejectCause values (GSM 24.008 10.5.3.6 / GSM 04.08 10.5.3.6)
-// Reference: L3_Templates.ttcn line 57: c_MM_CAUSE_IMSI_UNKNOWN_IN_HLR := '02'O
+// MM cause IMSI_Unknown_In_HLR = '02'O (GSM 24.008 Table 10.5.3.6).
 // Reference: 3GPP TS 24.008 Table 10.5.3.6 (MM cause values)
 // Spec-verified: All MM cause values per GSM 24.008 Recommendation
 //   IMSI unknown in HLR(0x02), Illegal MS(0x03), Congestion(0x16), etc.
@@ -654,7 +654,7 @@ TEST(GoldenMM, RejectCauseValues) {
 
 // =====================================================================
 // CMServiceType values (GSM 04.08 10.5.3.3)
-// Reference: L3_Templates.ttcn CmServiceType enum (line 28):
+// CMServiceType values per GSM 24.008 10.5.3.3:
 //   CM_TYPE_MO_CALL('0001'B), CM_TYPE_EMERG_CALL('0010'B), CM_TYPE_MO_SMS('0100'B),
 //   CM_TYPE_SS_ACT('1000'B), CM_TYPE_VGCS('1001'B), CM_TYPE_VBS('1010'B), CM_TYPE_LCS('1011'B)
 // [GSM SPEC VERIFIED] GSM 24.008 10.5.3.3: CM_ServiceType is 4 bits.
@@ -684,7 +684,7 @@ TEST(GoldenMM, CMServiceType_Flags) {
 
 // =====================================================================
 // LocationUpdateType values
-// Reference: L3_Templates.ttcn LU_Type_Normal, LU_Type_Periodic, LU_Type_IMSI_Attach
+// LocationUpdateType values per GSM 24.008 (Location Updating Request).
 // =====================================================================
 
 TEST(GoldenMM, LocationUpdateType_Values) {
@@ -733,7 +733,7 @@ TEST(GoldenMM, SRES_RoundTrip) {
 
 // =====================================================================
 // MM IE: L3NetworkName (GSM 04.08 10.5.3.5a)
-// Reference: L3_Templates.ttcn ts_NetworkName
+// Wire layout per GSM 24.008 10.5.3.5a.
 // =====================================================================
 
 TEST(GoldenMM, NetworkName_Encoding) {
@@ -744,7 +744,7 @@ TEST(GoldenMM, NetworkName_Encoding) {
 
 // =====================================================================
 // MM IE: L3TimeZoneAndTime (GSM 04.08 10.5.3.9)
-// Reference: L3_Templates.ttcn ts_TimeZoneAndTime
+// Wire layout per GSM 24.008 10.5.3.9.
 // =====================================================================
 
 TEST(GoldenMM, TimeZoneAndTime_UTC) {

@@ -316,8 +316,8 @@ TEST(ProcedureOrchestrator, IdentityVerification_UnexpectedMessage_ResendsReques
 }
 
 // Test: the IdentityVerification phase carries a T3102 (3 s) phase timer
-// with retransmissions (the phase previously had no timer and
-// hung forever when the MS never answered the Identity Request). The
+// with retransmissions (without it the chain would hang forever when the
+// MS never answers the Identity Request). The
 // initial Identity Request is queued on the retransmission channel when
 // the phase starts; each T3102 expiry re-queues it; after
 // kMaxIdentityRetransmissions (3) the chain times out.

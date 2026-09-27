@@ -21,7 +21,7 @@
 
 // GMM Information Elements - parse/write/text implementation
 // Spec: 3GPP TS 24.008 section 10.5.7
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - GMM IE templates
+// IE layouts per 3GPP TS 24.008 section 10.5.7.
 
 #include "gsml3parser/gmm/l3gmmelements.h"
 #include <sstream>

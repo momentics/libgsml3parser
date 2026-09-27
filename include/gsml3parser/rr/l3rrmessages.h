@@ -533,10 +533,8 @@ public:
 
 class L3CipheringModeComplete {
     // Ciphering mode response: 00 = ciphering off, 01 = ciphering on
-    // (TS 44.018 9.1.26; the previous header-only
-    // implementation dropped the mandatory response octet and the
-    // optional IMEISV — the TTCN-3 type carries
-    // mobileEquipmentIdentity := omit).
+    // (TS 44.018 9.1.26). The value part is the mandatory response octet
+    // followed by the optional mobile equipment identity (IMEISV).
     uint8_t mCipheringModeResponse{0};
     // IMEISV is carried wire-exact as 8 opaque octets (BCD IMEI + SV);
     // it is NOT an L3MobileIdentity (whose 2-bit type field does not
@@ -2224,7 +2222,7 @@ public:
 };
 
 // ── Notification NCH (GSM 04.08 9.1.26) ───────────────────────────────
-// Note: MTI=0x20 per GSM_RR_Types.ttcn NOTIFICATION_NCH='00100000'B.
+// Note: MTI=0x20 ('00100000'B), Notification NCH per the RR message type table.
 // Transmitted on CBCH; if same wire bytes could be SI Type 13 (MTI=0x00),
 // disambiguation is by channel context, not L3 parser.
 
@@ -2368,7 +2366,7 @@ public:
 };
 
 // ── Talker Indication (GSM 04.08 9.1.28c) ─────────────────────────────
-// MTI=0x11 per GSM_RR_Types.ttcn TALKER_INDICATION='00010001'B.
+// MTI=0x11 ('00010001'B), Talker Indication per the RR message type table.
 
 class L3TalkerIndication {
 public:
@@ -3634,7 +3632,7 @@ public:
 // System Information Type 2quater - GSM 04.08 §9.1.34a
 // Direction: DL (BCCH)
 // Carries: extended BCCH freq list, RACH ctrl params, CBCH description
-// MTI=0x07 per GSM_RR_Types.ttcn SYSTEM_INFORMATION_TYPE_2quater('00000111'B)
+// MTI=0x07 ('00000111'B), System Information Type 2quater
 class L3SystemInformationType2quater {
     std::vector<uint8_t> mBody;
 

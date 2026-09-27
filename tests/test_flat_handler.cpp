@@ -32,9 +32,9 @@ namespace {
 
 // ── Compile-time checks (C10 regression guards) ─────────────────────────
 //
-// makeHandler() must REFUSE function pointers: with the old unconstrained
-// template, F = T(*)(...) produced `static const F instance{}` — a null
-// function pointer — and the first invocation crashed. It must still
+// makeHandler() must REFUSE function pointers: unconstrained deduction of
+// F = T(*)(...) would produce `static const F instance{}` — a null
+// function pointer — and the first invocation would crash. It must still
 // ACCEPT stateless callables (non-capturing lambdas).
 //
 // The constraint is probed with a detection idiom: naming a constrained

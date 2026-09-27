@@ -60,7 +60,7 @@ public:
 
     /// Write \p count bytes verbatim. Uses a bulk memcpy when byte-aligned
     /// and the bytes fit in the buffer; otherwise falls back to per-octet
-    /// bit writes (the previous per-bit loop cost 8 operations
+    /// bit writes (a per-bit loop would cost 8 operations
     /// per byte on the aligned path).
     void writeBytes(const uint8_t* data, size_t count)
     {

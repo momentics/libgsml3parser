@@ -173,8 +173,8 @@ private:
     // expiry re-queues ResponseToken::IdentityRequest on the
     // retransmission channel (takeRetransmissionToken()) and restarts
     // the window; after kMaxIdentityRetransmissions the chain times out
-    // (the phase previously had no timer and hung forever
-    // when the MS never answered the Identity Request). Stopped by
+    // (without this timer the chain would hang forever
+    // when the MS never answers the Identity Request). Stopped by
     // cancelAll(), on phase completion, and on any transition out of
     // the timed phase.
     PhaseTimerPolicy mPhaseTimerPolicy{};

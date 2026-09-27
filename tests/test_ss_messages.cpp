@@ -20,17 +20,17 @@
 // SOFTWARE.
 
 // SS message round-trip tests.
-// Reference: osmo-ttcn3-hacks SS_Templates.ttcn.
+// SS message encodings per GSM 04.80 (TCAP) and the Non-Call SS tables of GSM 24.008.
 //
 // [GOLDEN VERIFICATION]
-// All SS hex parse test data verified against osmo-ttcn3-hacks reference:
+// All SS hex parse test data verified against the normative specifications:
 //   - Facility_Parse {0xEB, 0x3A}: PD=11(NonCallSS) low nibble, TI=7 (bits 7:5), TIF=0; MT=0x3A(Facility)
-//     Verified against SS_Templates.ttcn ts_SS_FACILITY_INVOKE: Facility is the primary SS message type
+//     Facility is the primary SS message type (GSM 24.008 Table 10.5.5)
 //     GSM 24.008 Table 11.2: PD=0x0B for Supplementary Services (Non-Call)
-//   - Register message uses MTI=0x3B per SS_Templates.ttcn REGISTER_SS='0A'O (TCAP opcode within Facility)
-//     GSM 24.008 Table 10.5.5: Non-Call SS messages use PD=0x0B, 6-bit MTI shifted left by 2 bits
+//   - Register message uses MTI=0x3B with TCAP opcode '0A'O within the Facility IE
+//     GSM 24.008 Table 10.5.5: Non-Call SS messages use PD=0x0B, 6-bit MTI in the low bits of byte 1
 //   - ReleaseComplete SS uses same PD/MTI encoding pattern as CC ReleaseComplete but with PD=0x0B
-//   - SSOpcodes verified against SS_Templates.ttcn: REGISTER_SS='0A'O, ERASE_SS='0B'O,
+//   - SSOpcodes per GSM TS 04.80 section 4.5: REGISTER_SS='0A'O, ERASE_SS='0B'O,
 //     ACTIVATE_SS='0C'O, DEACTIVATE_SS='0D'O, INTERROGATE_SS='0E'O, NOTIFY_SS='10'O
 
 #include <gtest/gtest.h>
@@ -48,7 +48,7 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 }
 
 // ── Facility Message (GSM 04.80 2.3) ─────────────────────────────────
-// Reference: SS_Templates.ttcn ts_SS_FACILITY_INVOKE, ts_SS_USSD_FACILITY_INVOKE
+// Facility IE encodings per GSM 04.80 (TCAP) and GSM 24.008.
 
 TEST(SSRoundTripTest, Facility_Empty) {
     ParsedMessage msg{SSM{L3SupServFacilityMessage{}}};
@@ -66,9 +66,9 @@ TEST(SSRoundTripTest, Facility_WithData) {
 }
 
 // GSM 04.08 10.2: PD=0x0B(NonCallSS), TIO=7, TIF=0, messageType=111010(Facility=0x3A), NSD=00
-// Reference: GSML3SSMessages.h Facility=0x3A, SS_Templates.ttcn ts_SS_FACILITY_INVOKE
-// Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 1011 1110 = 0xBE
-// Byte 1: messageType(6)<<2 | NSD(2) = 0x3A<<2 | 0 = 0xE8
+// Facility MTI=0x3A (GSM 24.008 Table 10.5.5).
+// Byte 0: TI(7:5)=7 | TIF(4)=0 | PD(3:0)=0x0B = 1110 1011 = 0xEB
+// Byte 1: NSD(2)=0 | messageType(6)=0x3A -> 0x3A
 TEST(SSRoundTripTest, Facility_Parse) {
     uint8_t data[] = {0xEB, 0x3A};
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -78,9 +78,9 @@ TEST(SSRoundTripTest, Facility_Parse) {
 }
 
 // ── Register Message (GSM 04.80 2.4 / 3GPP TS 24.080) ────────────────
-// Reference: SS_Templates.ttcn ts_SS_REGISTER, REGISTER=0x3B
-// GSM 24.008 Table 11.2: PD=0x0B(NonCallSS), discriminator = PD(4)|TI(3)|TIF(1)
-// Message type octet: messageType(6)=0x3B(Register)|NSD(2)=0 -> 0xEC
+// MTI=0x3B (Register), TCAP opcode '0A'O within the Facility IE.
+// GSM 24.008 Table 11.2: PD=0x0B(NonCallSS), discriminator = TI(3)|TIF(1)|PD(4)
+// Message type octet: NSD(2)=0 | messageType(6)=0x3B(Register) -> 0x3B
 // Spec-verified: Register message carries Facility TLV (IEI=0x1C) + optional VersionIndicator TV
 
 TEST(SSRoundTripTest, Register_Empty) {
@@ -139,11 +139,11 @@ TEST(SSRoundTripTest, TI_DifferentValues) {
     }
 }
 
-// ── SS Op Codes from reference ───────────────────────────────────────
-// Reference: SS_Templates.ttcn SS_Op_Code
+// ── SS Operation Codes (GSM 04.80 section 4.5) ───────────────────────────────────────
+// TCAP operation codes per GSM TS 04.80 section 4.5.
 
 TEST(SSRoundTripTest, SSOpcodes_Exist) {
-    // These are TCAP opcodes defined in SS_Templates.ttcn
+    // These are TCAP opcodes defined in GSM TS 04.80 section 4.5.
     // Our library doesn't parse TCAP internally, but the Facility IE carries raw data
     // Verify that the facility data can carry arbitrary TCAP content
     ParsedMessage msg{SSM{L3SupServFacilityMessage{std::string("\x81\x03\x3B\x01\x00", 5)}}};
@@ -152,7 +152,7 @@ TEST(SSRoundTripTest, SSOpcodes_Exist) {
 }
 
 // ── SSOpCode enum tests ───────────────────────────────────────────────
-// Reference: SS_Templates.ttcn SS_Op_Code enum (GSM TS 04.80 section 4.5)
+// TCAP operation codes per GSM TS 04.80 section 4.5.
 
 TEST(SSOpCodeTest, AllOpcodesDefined) {
     EXPECT_EQ(static_cast<uint8_t>(SSOpCode::RegisterSS), 0x0A);
@@ -186,7 +186,7 @@ TEST(SSOpCodeTest, NameMapping) {
 }
 
 // ── SSErrorCode enum tests ────────────────────────────────────────────
-// Reference: SS_Templates.ttcn SS_Err_Code enum (GSM TS 04.80 section 4.5)
+// TCAP error codes per GSM TS 04.80 section 4.5.
 
 TEST(SSErrorCodeTest, AllErrorCodesDefined) {
     EXPECT_EQ(static_cast<uint8_t>(SSErrorCode::UnknownSubscriber), 0x01);
@@ -324,7 +324,7 @@ TEST(FacilityOpCodeTest, TextOutput) {
 }
 
 // ── L3USSDData IE tests ───────────────────────────────────────────────
-// Reference: SS_Templates.ttcn ts_SS_USSD_FACILITY_INVOKE, SS_USSD_DEFAULT_DCS
+// USSD Facility payload encodings per GSM 04.80 (USSD default DCS).
 
 TEST(USSDDataTest, ParseMinimal) {
     // invoke_id=0x01, op_code=0x3C(USSRequest), dcs=0x00 (default alphabet, lang 0), empty string

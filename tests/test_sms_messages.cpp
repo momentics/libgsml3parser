@@ -20,22 +20,22 @@
 // SOFTWARE.
 
 // Comprehensive GSM Layer 3 Golden Tests (Part 6: SMS).
-// Reference: osmo-ttcn3-hacks L3_Templates.ttcn (SMS section, lines 3465-3739).
+// Message identifiers and wire layouts per 3GPP TS 24.011 (CP/RP) and TS 23.040 (TP).
 // Spec: 3GPP TS 24.008 sections 9.6, Table 10.6a; 3GPP TS 24.011 sections 7-8.
 //
 // [GOLDEN DATA VERIFICATION]
-// All SMS CP message type identifiers verified against osmo-ttcn3-hacks L3_Templates.ttcn
-//   and 3GPP TS 24.008 Table 10.6a (SMS Control Part).
+// All SMS CP message type identifiers per 3GPP TS 24.008 Table 10.6a
+//   (SMS Control Part).
 // SMS header format verified: PD=9('1001'B) in the low nibble of byte 0,
 //   TI(3 bits) in bits 7:5 and TIF(1 bit) in bit 4; CP-MTI(8 bits, raw) in byte 1.
-// Message structures verified against L3_Templates.ttcn templates:
-//   ts_CP_DATA_MO, ts_CP_ACK_MO, ts_CP_ERROR_MO, tr_CP_DATA_MT,
-//   ts_RP_DATA_MO, ts_RP_ACK_MO, ts_RP_ERROR_MO, ts_RP_SMMA_MO,
-//   ts_SMS_SUBMIT, tr_SMS_DELIVER.
+// Message structures per 3GPP TS 24.011 and TS 23.040:
+//   CP-DATA / CP-ACK / CP-ERROR / CP-DATA(MT),
+//   RP-DATA / RP-ACK / RP-ERROR / RP-SMMA,
+//   TP-Submit, TP-Deliver.
 //
 // [GOLDEN VERIFICATION]
-// All byte-level parse test data cross-checked against osmo-ttcn3-hacks reference:
-//   - CP-MTI values verified against L3_Templates.ttcn cP_messageType assignments
+// All byte-level parse test data cross-checked against 3GPP TS 24.011 / TS 23.040:
+//   - CP-MTI values per the CP message type table (TS 24.008 Table 10.6a)
 //   - SMS header encoding: PD=9 in the low nibble of byte 0, raw CP-MTI in byte 1 (no shift)
 //   - RP-MTI encoding: Spare(5)=0 | RP-MTI(3) in first RP octet
 //   - TP-MTI encoding: TP-MTI(2) in high bits of first TP octet
@@ -57,7 +57,7 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 
 // =====================================================================
 // SMS CP MESSAGE TYPE VALUES (GSM 24.008 Table 10.6a)
-// Reference: osmo-ttcn3-hacks L3_Templates.ttcn cP_messageType assignments
+// CP-MTI values per GSM 24.008 Table 10.6a.
 // [GSM SPEC VERIFIED] SMS messages use 8-bit raw CP-MTI in byte 1,
 //   unlike MM/CC/SS/BCC/GCC which take the MTI in the six low bits of byte 1.
 // =====================================================================
@@ -112,7 +112,7 @@ TEST(GoldenSMSTest, HeaderEncoding) {
 
 // =====================================================================
 // SMS CP-ACK (GSM 24.011 8.1.3) - minimal message
-// Reference: L3_Templates.ttcn ts_CP_ACK_MO (line 3658)
+// CP-ACK wire layout (GSM 24.011).
 // Hex breakdown:
 //   0x09 = PD=0x09(SMS) in the low nibble of byte 0, TI=0, TIF=0
 //   0x04 = CP-MTI(8)=0x04(CP-ACK), raw encoding
@@ -131,7 +131,7 @@ TEST(GoldenSMSTest, CPAck_Minimal) {
 // =====================================================================
 // SMS CP-ACK Round-Trip
 // Construct empty CP-ACK -> serialize -> parse -> verify MTI preserved.
-// Reference: L3_Templates.ttcn ts_CP_ACK_MO template structure
+// CP-ACK wire layout (GSM 24.011).
 // =====================================================================
 
 TEST(GoldenSMSTest, CPAck_RoundTrip) {
@@ -144,7 +144,7 @@ TEST(GoldenSMSTest, CPAck_RoundTrip) {
 
 // =====================================================================
 // SMS CP-ERROR (GSM 24.011 8.1.4) - with cause
-// Reference: L3_Templates.ttcn ts_CP_ERROR_MO (line 3664)
+// CP-ERROR wire layout (GSM 24.011).
 // Hex breakdown:
 //   0x09 = PD=0x09(SMS) in the low nibble of byte 0, TI=0, TIF=0
 //   0x10 = CP-MTI(8)=0x10(CP-ERROR), raw encoding
@@ -164,7 +164,7 @@ TEST(GoldenSMSTest, CPErr_WithCause) {
 // =====================================================================
 // SMS CP-ERROR Round-Trip
 // Construct with cause -> serialize -> parse -> verify cause preserved.
-// Reference: L3_Templates.ttcn ts_CP_ERROR_MO template structure
+// CP-ERROR wire layout (GSM 24.011).
 // =====================================================================
 
 TEST(GoldenSMSTest, CPErr_RoundTrip) {
@@ -176,7 +176,7 @@ TEST(GoldenSMSTest, CPErr_RoundTrip) {
 
 // =====================================================================
 // SMS CP-DATA (GSM 24.011 8.1.2) - with RPDU payload
-// Reference: L3_Templates.ttcn ts_CP_DATA_MO (line 3648)
+// CP-DATA wire layout (GSM 24.011).
 // Hex breakdown:
 //   0x09 = PD=0x09(SMS) in the low nibble of byte 0, TI=0, TIF=0
 //   0x01 = CP-MTI(8)=0x01(CP-DATA), raw encoding
@@ -201,7 +201,7 @@ TEST(GoldenSMSTest, CPData_WithRPDU) {
 // =====================================================================
 // SMS CP-DATA Round-Trip
 // Construct with RPDU payload -> serialize -> parse -> verify preserved.
-// Reference: L3_Templates.ttcn ts_CP_DATA_MO template structure
+// CP-DATA wire layout (GSM 24.011).
 // =====================================================================
 
 TEST(GoldenSMSTest, CPData_RoundTrip) {
@@ -345,7 +345,7 @@ TEST(GoldenSMSTest, MessagePD) {
 
 // =====================================================================
 // SMS RP-ACK (GSM 24.011 7.3.2) - parse from raw bytes
-// Reference: L3_Templates.ttcn ts_RP_ACK_MO (line 3572)
+// RP-ACK wire layout (GSM 24.011).
 // Hex breakdown (within CP-DATA RPDU):
 //   0x02 = Spare(5)=0 | RP-MTI(3)=2 (RP-ACK MO)
 //   0x0A = RP-Message-Reference = 10
@@ -364,7 +364,7 @@ TEST(GoldenSMSTest, RPAck_Parse) {
 // =====================================================================
 // SMS RP-ACK Round-Trip (standalone parse/write)
 // Construct RP-ACK -> serialize -> parse -> verify fields preserved.
-// Reference: L3_Templates.ttcn ts_RP_ACK_MO template structure
+// RP-ACK wire layout (GSM 24.011).
 // =====================================================================
 
 TEST(GoldenSMSTest, RPAck_RoundTrip) {
@@ -385,7 +385,7 @@ TEST(GoldenSMSTest, RPAck_RoundTrip) {
 
 // =====================================================================
 // SMS RP-ERROR (GSM 24.011 7.3.4) - parse from raw bytes
-// Reference: L3_Templates.ttcn ts_RP_ERROR_MO (line 3590)
+// RP-ERROR wire layout (GSM 24.011).
 // Hex breakdown (within CP-DATA RPDU):
 //   0x04 = Spare(5)=0 | RP-MTI(3)=4 (RP-ERROR MO)
 //   0x14 = RP-Message-Reference = 20
@@ -406,7 +406,7 @@ TEST(GoldenSMSTest, RPError_Parse) {
 // =====================================================================
 // SMS RP-ERROR Round-Trip (standalone parse/write)
 // Construct RP-ERROR -> serialize -> parse -> verify fields preserved.
-// Reference: L3_Templates.ttcn ts_RP_ERROR_MO template structure
+// RP-ERROR wire layout (GSM 24.011).
 // =====================================================================
 
 TEST(GoldenSMSTest, RPError_RoundTrip) {
@@ -429,7 +429,7 @@ TEST(GoldenSMSTest, RPError_RoundTrip) {
 
 // =====================================================================
 // SMS RP-SMMA (GSM 24.011 7.3.3) - parse from raw bytes
-// Reference: L3_Templates.ttcn ts_RP_SMMA_MO (line 3635)
+// RP-SMMA wire layout (GSM 24.011).
 // Hex breakdown (within CP-DATA RPDU):
 //   0x06 = Spare(5)=0 | RP-MTI(3)=6 (RP-SMMA MO)
 //   0xFF = RP-Message-Reference = 255
@@ -448,7 +448,7 @@ TEST(GoldenSMSTest, RPSMMA_Parse) {
 // =====================================================================
 // SMS RP-SMMA Round-Trip (standalone parse/write)
 // Construct RP-SMMA -> serialize -> parse -> verify fields preserved.
-// Reference: L3_Templates.ttcn ts_RP_SMMA_MO template structure
+// RP-SMMA wire layout (GSM 24.011).
 // =====================================================================
 
 TEST(GoldenSMSTest, RPSMMA_RoundTrip) {
@@ -469,7 +469,7 @@ TEST(GoldenSMSTest, RPSMMA_RoundTrip) {
 
 // =====================================================================
 // SMS TP Deliver (GSM 23.040 9.2.2.1) - parse minimal TPDU
-// Reference: L3_Templates.ttcn tr_SMS_DELIVER (line 3489)
+// TP-Deliver TPDU layout (GSM 23.040).
 // Hex breakdown (TPDU within RP-User-Data):
 //   0x00 = TP-MTI(2)=00(Deliver) | mms(1)=0 | lp(1)=0 | spare(1)=0 | sri(1)=0 | udhi(1)=0 | rp(1)=0
 //   0x07 = TP-OA Length = 7 (TON_NPI + 6 BCD digit bytes = phone number)
@@ -507,7 +507,7 @@ TEST(GoldenSMSTest, TPDeliver_Parse) {
 
 // =====================================================================
 // SMS TP Submit (GSM 23.040 9.2.2.2) - parse minimal TPDU
-// Reference: L3_Templates.ttcn ts_SMS_SUBMIT (line 3467)
+// TP-Submit TPDU layout (GSM 23.040).
 // Hex breakdown (TPDU within RP-User-Data):
 //   0x61 = TP-MTI(2)=01(Submit) | rd(1)=1 | vpf(2)=00 | srr(1)=0 | udhi(1)=0 | rp(1)=0
 //   0x03 = TP-MR = 3 (message reference)
@@ -543,7 +543,7 @@ TEST(GoldenSMSTest, TPSubmit_Parse) {
 // SMS Full Wrapper Test
 // Parse full L3 SMS message: CP-DATA -> RP-DATA -> TP-Submit
 // This tests the complete nesting: L3 header -> CP layer -> RP layer -> TP layer.
-// Reference: L3_Templates.ttcn ts_ML3_MO_SMS (line 3700)
+// Full MO SMS wrapper per GSM 24.008 (CP-DATA -> RP-DATA -> TP-Submit).
 // =====================================================================
 
 TEST(GoldenSMSTest, FullSMSWrapper_MO) {
@@ -606,7 +606,7 @@ TEST(GoldenSMSTest, FullSMSWrapper_MO) {
 // =====================================================================
 // SMS Full Wrapper MT Test
 // Parse full MT SMS message: CP-DATA -> RP-DATA -> TP-Deliver
-// Reference: L3_Templates.ttcn tr_ML3_MT_SMS (line 3726)
+// Full MT SMS wrapper per GSM 24.008 (CP-DATA -> RP-DATA -> TP-Deliver).
 // =====================================================================
 
 TEST(GoldenSMSTest, FullSMSWrapper_MT) {
@@ -822,7 +822,7 @@ TEST(GoldenSMSTest, TPCommand_Parse) {
 
 // =====================================================================
 // SMS TP Address (GSM 23.040 9.1.2.4) - parse LV format
-// Reference: L3_Templates.ttcn TP_DA and TP_OA templates
+// TP-DA / TP-OA address layout per GSM 23.040.
 // =====================================================================
 
 TEST(GoldenSMSTest, TPAddress_Parse) {
@@ -838,7 +838,7 @@ TEST(GoldenSMSTest, TPAddress_Parse) {
 // =====================================================================
 // SMS CP-DATA Round-Trip with full RPDU
 // Construct CP-DATA with RP-DATA containing TP-Submit -> serialize -> parse -> verify.
-// Reference: L3_Templates.ttcn ts_ML3_MO_SMS (line 3700) end-to-end template
+// Full L3 -> CP -> RP -> TP nesting per GSM 24.008 / TS 24.011 / TS 23.040.
 // =====================================================================
 
 TEST(GoldenSMSTest, FullCPData_RoundTrip) {

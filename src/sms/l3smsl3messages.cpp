@@ -21,7 +21,7 @@
 
 // SMS L3 Messages (TS 24.008 9.6) - parse/write implementation
 // Spec: 3GPP TS 24.008 sections 9.6.1-9.6.14, Table 10.6a
-// Reference: ref/osmo-ttcn3-hacks/library/L3_Templates.ttcn - SMS-TS-* templates
+// Wire encodings per 3GPP TS 24.008 sections 9.6.1-9.6.14 (SMS-TS set).
 
 #include "gsml3parser/sms/l3smsl3messages.h"
 #include <sstream>

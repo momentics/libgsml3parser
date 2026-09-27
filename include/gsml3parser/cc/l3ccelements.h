@@ -708,7 +708,7 @@ public:
 #endif
 
 // ── SS Operation Codes (GSM 04.80 section 4.5) ────────────────────────
-// Reference: ref/osmo-ttcn3-hacks/library/SS_Templates.ttcn SS_Op_Code enum
+// TCAP operation codes per GSM TS 04.80 section 4.5.
 
 #ifndef GSML3PARSER_SS_OPCODE_DEFINED
 #define GSML3PARSER_SS_OPCODE_DEFINED
@@ -738,7 +738,7 @@ enum class SSOpCode : uint8_t {
 #endif
 
 // ── SS Error Codes (GSM 04.80 section 4.5) ────────────────────────────
-// Reference: ref/osmo-ttcn3-hacks/library/SS_Templates.ttcn SS_Err_Code enum
+// TCAP error codes per GSM TS 04.80 section 4.5.
 
 #ifndef GSML3PARSER_SS_ERROR_CODE_DEFINED
 #define GSML3PARSER_SS_ERROR_CODE_DEFINED

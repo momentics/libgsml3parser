@@ -636,7 +636,7 @@ mod tests {
         let mut e = LapdmEntity::new(0).expect("entity");
         e.open(0, 1).expect("open");
         // Drive one event through the real trampoline path first.
-        e.receive(&[0x01, 0x03, 0x0d, 0x60, 0x0d, 0x00]).expect("UI receive");
+        e.receive(&[0x01, 0x03, 0x0d, 0x06, 0x0d, 0x00]).expect("UI receive");
         assert!(!e.drain_l3().is_empty());
 
         // Before reclamation the box is the SOLE owner (strong count 1);
@@ -657,7 +657,7 @@ mod tests {
         assert!(!e.is_established().unwrap());
 
         // send_data BEFORE an established link must fail with a C-side message.
-        let err = e.send_data(&[0x60, 0x0d, 0x00]).unwrap_err();
+        let err = e.send_data(&[0x06, 0x0d, 0x00]).unwrap_err();
         assert_ne!(err.kind(), Some(ErrorKind::Ok));
         assert!(!err.msg.is_empty());
 

@@ -20,23 +20,20 @@
 // SOFTWARE.
 
 // Comprehensive GSM Layer 3 Golden Tests (Part 7: BCC and GCC).
-// Reference: osmo-ttcn3-hacks L3_Templates.ttcn (BCC section, lines 3813-3838;
-//   GCC section, lines 3840-3865).
+// Message identifiers and wire layouts per 3GPP TS 44.018.
 // Spec: 3GPP TS 44.018 sections 9.6 (BCC), 9.7 (GCC), Table 10.4.3, Table 10.4.4.
 //
 // [GOLDEN DATA VERIFICATION]
-// All BCC message type identifiers verified against osmo-ttcn3-hacks L3_Templates.ttcn
-//   ts_ML3_MO_BCC (line 3813) and 3GPP TS 44.018 Table 10.4.3.
-// All GCC message type identifiers verified against osmo-ttcn3-hacks L3_Templates.ttcn
-//   ts_ML3_MO_GCC (line 3840) and 3GPP TS 44.018 Table 10.4.4.
+// All BCC message type identifiers per 3GPP TS 44.018 Table 10.4.3.
+// All GCC message type identifiers per 3GPP TS 44.018 Table 10.4.4.
 // BCC/GCC header format verified: PD=1(BCC)/PD=0(GCC) in the low nibble of byte 0,
 //   TI(3 bits) in bits 7:5 and TIF(1 bit) in bit 4; MessageType(6 bits) in the low bits of byte 1 (same encoding as CC/SS/MM).
 // This differs from GMM/SMS/SM which use raw 8-bit MTI in byte 1.
 //
 // [GOLDEN VERIFICATION]
-// All byte-level parse test data cross-checked against osmo-ttcn3-hacks reference:
-//   - BCC discriminator '0001'B (PD=0x01) verified for ts_ML3_MO_BCC template
-//   - GCC discriminator '0000'B (PD=0x00) verified for ts_ML3_MO_GCC template
+// All byte-level parse test data cross-checked against 3GPP TS 44.018:
+//   - BCC discriminator '0001'B (PD=0x01)
+//   - GCC discriminator '0000'B (PD=0x00)
 //   - Byte 0 encoding: TI(3 bits)<<5 | TIF(1 bit)<<4 | PD(4 bits)
 //   - MTI encoding: messageType(6 bits) in the low bits of byte 1
 
@@ -153,7 +150,7 @@ TEST(GoldenBCCGCCTest, GCCHeaderEncoding) {
 
 // =====================================================================
 // BCC Setup (GSM 44.018 9.6.2.2) - message with body
-// Reference: L3_Templates.ttcn ts_ML3_MO_BCC (line 3813)
+// Wire layout per GSM 44.018 9.6.2.2.
 // Hex breakdown:
 //   0x01 = PD=0x01(BCC) in the low nibble, TI=0, TIF=0
 //   0x00 = MTI(6)=0x00(Setup), NSD(2)=0
@@ -179,7 +176,7 @@ TEST(GoldenBCCGCCTest, BCCSetup_GoldenParse) {
 // =====================================================================
 // BCC Setup Round-Trip
 // Construct with body -> serialize -> parse -> verify body preserved.
-// Reference: L3_Templates.ttcn ts_ML3_MO_BCC template structure
+// BCC Setup wire layout (GSM 44.018).
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, BCCSetup_RoundTrip) {
@@ -194,7 +191,7 @@ TEST(GoldenBCCGCCTest, BCCSetup_RoundTrip) {
 
 // =====================================================================
 // BCC Release Complete (GSM 44.018 9.6.2.9) - minimal message
-// Reference: L3_Templates.ttcn ts_ML3_MO_BCC wrapper
+// Wire layout per GSM 44.018 9.6.2.9.
 // Hex breakdown:
 //   0x01 = PD=0x01(BCC) in the low nibble, TI=0, TIF=0
 //   0x0A = MTI(6)=0x0a(ReleaseComplete), NSD(2)=0
@@ -213,7 +210,7 @@ TEST(GoldenBCCGCCTest, BCCReleaseComplete_Minimal) {
 // =====================================================================
 // BCC Release Complete Round-Trip
 // Construct empty ReleaseComplete -> serialize -> parse -> verify MTI preserved.
-// Reference: L3_Templates.ttcn ts_ML3_MO_BCC template structure
+// BCC Release Complete wire layout (GSM 44.018).
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, BCCReleaseComplete_RoundTrip) {
@@ -225,7 +222,7 @@ TEST(GoldenBCCGCCTest, BCCReleaseComplete_RoundTrip) {
 
 // =====================================================================
 // BCC Proceeding (GSM 44.018 9.6.2.3) - with body
-// Reference: L3_Templates.ttcn ts_ML3_MO_BCC wrapper
+// Wire layout per GSM 44.018 9.6.2.3.
 // Hex breakdown:
 //   0x01 = PD=0x01(BCC) in the low nibble, TI=0, TIF=0
 //   0x01 = MTI(6)=0x01(Proceeding), NSD(2)=0
@@ -290,7 +287,7 @@ TEST(GoldenBCCGCCTest, BCCRelease_Minimal) {
 
 // =====================================================================
 // GCC Setup (GSM 44.018 9.7.2.2) - message with body
-// Reference: L3_Templates.ttcn ts_ML3_MO_GCC (line 3840)
+// Wire layout per GSM 44.018 9.7.2.2.
 // Hex breakdown:
 //   0x00 = PD=0x00(GCC) in the low nibble, TI=0, TIF=0
 //   0x00 = MTI(6)=0x00(Setup), NSD(2)=0
@@ -316,7 +313,7 @@ TEST(GoldenBCCGCCTest, GCCSetup_GoldenParse) {
 // =====================================================================
 // GCC Setup Round-Trip
 // Construct with body -> serialize -> parse -> verify body preserved.
-// Reference: L3_Templates.ttcn ts_ML3_MO_GCC template structure
+// GCC Setup wire layout (GSM 44.018).
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, GCCSetup_RoundTrip) {
@@ -422,7 +419,7 @@ TEST(GoldenBCCGCCTest, GCCReleaseComplete_Minimal) {
 // =====================================================================
 // GCC Release Complete Round-Trip
 // Construct empty ReleaseComplete -> serialize -> parse -> verify MTI preserved.
-// Reference: L3_Templates.ttcn ts_ML3_MO_GCC template structure
+// GCC Release Complete wire layout (GSM 44.018).
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, GCCReleaseComplete_RoundTrip) {
@@ -506,7 +503,7 @@ TEST(GoldenBCCGCCTest, GCCMessagePD) {
 // =====================================================================
 // BCC Round-Trip with body data
 // Construct Setup with body -> serialize -> parse -> verify body preserved.
-// Reference: L3_Templates.ttcn ts_ML3_MO_BCC template structure
+// BCC Setup wire layout (GSM 44.018).
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, BCCSetup_BodyRoundTrip) {
@@ -521,7 +518,7 @@ TEST(GoldenBCCGCCTest, BCCSetup_BodyRoundTrip) {
 // =====================================================================
 // GCC Round-Trip with body data
 // Construct Setup with body -> serialize -> parse -> verify body preserved.
-// Reference: L3_Templates.ttcn ts_ML3_MO_GCC template structure
+// GCC Setup wire layout (GSM 44.018).
 // =====================================================================
 
 TEST(GoldenBCCGCCTest, GCCSetup_BodyRoundTrip) {

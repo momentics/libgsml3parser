@@ -242,7 +242,7 @@ public:
 **Usage example:**
 
 ```cpp
-auto msg = parseL3Hex("600D00");
+auto msg = parseL3Hex("060D00");
 
 if (msg) {
     std::cout << messageName(*msg) << "\n";
@@ -411,15 +411,14 @@ Parse a 2-byte L3 header from raw data.
 Expected<L3Header> parseL3Header(std::span<const uint8_t> data);
 ```
 
-Returns `TruncatedInput` error if fewer than 2 bytes provided. Returns `InvalidPD` for unrecognized PD values (reserved nibbles 0x02, 0x04, 0x07, 0x0d).
+Returns `TruncatedInput` error if fewer than 2 bytes provided. Returns `InvalidPD` for reserved PD values (0x02, 0x04, 0x07, 0x0D).
 
-**Decoding rules:**
-- Byte 0 high nibble (bits 4-7): PD value
-- Byte 0 low nibble: bits 3-1 = TI, bit 0 = TIF (all PDs; TI is meaningful for the dialog domains CC/SS/BCC/GCC)
+**Decoding rules** (TS 24.007 Table 11.3 / TS 44.018 L3 protocol header):
+- Byte 0: `(TI << 5) | (TIF << 4) | PD` — the PD occupies the LOW nibble (bits 3-0), TI is bits 7-5, TIF is bit 4. TI is meaningful for the dialog domains CC/SS/BCC/GCC.
 - Byte 1: raw MTI octet
-- MM / CC / SS / BCC / GCC: `mti = (raw & 0xFC) >> 2` (6-bit messageType, 2 NSD bits discarded)
-- GMM / SMS / SM / LS: `mti = raw` (full 8-bit messageType)
-- RR: `mti = raw`; with TIF=1 (short messages on RACH/SACCH) `mti = 0x100 + raw`
+- MM / CC / SS / BCC / GCC: `mti = raw & 0x3F` (6-bit messageType in the low bits; the two high NSD bits are informational and not exposed)
+- GMM / SMS / SM / LS / EXTENDED / TESTPROC: `mti = raw` (full 8-bit messageType)
+- RR: `mti = raw`; with TIF=1 (short messages) the five-bit code sits in the low bits of octet 1, the high three bits are reserved and masked away: `mti = kRRTifShortBase | (raw & 0x1F)`
 
 ---
 
@@ -432,8 +431,8 @@ Returns `TruncatedInput` error if fewer than 2 bytes provided. Returns `InvalidP
 Each protocol domain has a `std::variant` type that holds all message types for that domain:
 
 ```cpp
-using RRM      = std::variant< /* 98 RR types */ >;
-using MMM      = std::variant< /* 20 MM types */ >;
+using RRM      = std::variant< /* 99 RR types */ >;
+using MMM      = std::variant< /* 19 MM types */ >;
 using CCM      = std::variant< /* 24 CC types */ >;
 using SSM      = std::variant< /* 3 SS types */ >;
 using GMM      = std::variant< /* 23 GMM types */ >;
@@ -459,7 +458,7 @@ Stored on the stack - no heap allocation. `sizeof(ParsedMessage) = 416` bytes on
 **Usage:**
 
 ```cpp
-auto msg = parseL3Hex("600D00");
+auto msg = parseL3Hex("060D00");
 if (msg) {
     const ParsedMessage& parsed = *msg;
 
@@ -541,7 +540,7 @@ Expected<std::vector<uint8_t>> writeL3Bytes(const ParsedMessage& msg);
 **Usage:**
 
 ```cpp
-auto msg = parseL3Hex("600D00");
+auto msg = parseL3Hex("060D00");
 if (msg) {
     auto bytes = writeL3Bytes(*msg);
     if (bytes) {
@@ -553,7 +552,7 @@ if (msg) {
 ### Round-trip Pattern
 
 ```cpp
-auto original = parseL3Hex("600D00");   // RR Channel Release, cause 0
+auto original = parseL3Hex("060D00");   // RR Channel Release, cause 0
 if (original) {
     auto hex = writeL3Hex(*original);
     if (hex) {
@@ -583,7 +582,7 @@ Returns pointer to the concrete type if the variant holds it, or `nullptr` other
 **Usage:**
 
 ```cpp
-auto msg = parseL3Hex("600D00");
+auto msg = parseL3Hex("060D00");
 if (msg) {
     if (auto* cr = tryGet<L3ChannelRelease>(*msg)) {
         std::cout << "Cause: " << static_cast<int>(cr->cause()) << "\n";
@@ -726,7 +725,7 @@ public:
 **Framing modes:**
 
 - **L2 length mode** (`useL2Length = true`, default): each frame is preceded by a single length octet. Deterministic; what production LAPDm / A-bis paths provide.
-- **Header-based mode** (`useL2Length = false`, opt-in): the frame length is derived from PD + MTI for all 12 protocol domains (BCC/GCC use the CC-style 6-bit MTI `byte1 = mti<<2 | nsd`; GMM/SMS/SM/LS use a raw 8-bit MTI). Fixed-body messages are framed exactly from a single compile-time table (`bitstream/frame_lengths.h`, cross-checked by `tests/test_frame_lengths.cpp`): RR RRStatus, ClassmarkEnquiry, HandoverFailure, AssignmentComplete, HandoverComplete, AssignmentFailure; MM CMServiceAccept, CMServiceReject, CMServiceAbort, MMStatus; CC CCStatus; BCC CallConfirmed, ConnectAcknowledge; GCC CallConfirmed. Every other message (SI, SMS, Setup with IEs, ...) is framed by a boundary heuristic: scan forward for the next plausible L3 header within `maxMessageLength` bytes (O(L), resume-cached across fills). While framing a BCC/GCC/LS message all 12 valid PDs are accepted as candidates; for other PDs a conservative list is used (0x03, 0x05, 0x06, 0x08, 0x09, 0x0a, 0x0b, 0x0e, 0x0f) to avoid false boundaries inside variable bodies. The heuristic is UNRELIABLE on real variable-length streams — message bodies frequently contain bytes whose high nibble is a valid PD — use L2 length mode for deterministic framing. At source EOF the tail is emitted as the final frame and validated by the parser.
+- **Header-based mode** (`useL2Length = false`, opt-in): the frame length is derived from PD + MTI for all 12 protocol domains (the PD is the low nibble of octet 0; MM/CC/NC-SS/GCC/BCC take the six low bits of octet 1 as the MTI, RR short messages with TIF set map to `kRRTifShortBase | code`, GMM/SMS/SM/LS and the extended/test PDs use the raw 8-bit MTI). Fixed-body messages are framed exactly from a single compile-time table (`bitstream/frame_lengths.h`, cross-checked by `tests/test_frame_lengths.cpp`): RR RRStatus, ClassmarkEnquiry, HandoverFailure, AssignmentComplete, HandoverComplete, AssignmentFailure; MM CMServiceAccept, CMServiceReject, CMServiceAbort, MMAbort, MMStatus; CC CCStatus, CCNotify; BCC CallConfirmed, ConnectAcknowledge; GCC CallConfirmed. Every other message (SI, SMS, Setup with IEs, ...) is framed by a boundary heuristic: scan forward for the next plausible L3 header within `maxMessageLength` bytes (O(L), resume-cached across fills); a boundary candidate must carry one of the twelve TS-valid protocol discriminators in the low nibble of octet 0 (GCC 0x00, BCC 0x01, CC 0x03, MM 0x05, RR 0x06, GMM 0x08, SMS 0x09, SM 0x0A, NC-SS 0x0B, LCS 0x0C, Extended 0x0E, TestProcedure 0x0F) to avoid false boundaries inside variable bodies. The heuristic is UNRELIABLE on real variable-length streams — message bodies frequently contain bytes whose low nibble is a valid PD — use L2 length mode for deterministic framing. At source EOF the tail is emitted as the final frame and validated by the parser.
 
 ### L3StreamProcessor
 
@@ -1383,11 +1382,11 @@ dispatcher.registerDomainHandler(gsml3parser::L3PD::RadioResource,
     }));
 
 // Dispatch parsed message
-auto msg = gsml3parser::parseL3Hex("600d00");
+auto msg = gsml3parser::parseL3Hex("060d00");
 if (msg) dispatcher.dispatch(*msg);
 
 // Or dispatch raw bytes directly
-uint8_t data[] = {0x60, 0x0D, 0x00};
+uint8_t data[] = {0x06, 0x0D, 0x00};
 dispatcher.dispatchRaw(std::span<const uint8_t>(data));
 ```
 
@@ -1420,7 +1419,7 @@ Builder patterns are implemented for all message types across all 12 protocol do
 
 | Domain | Messages with Builder |
 |--------|----------------------|
-| **RR** | All 98 types (Paging, System Information SI1–SI23 + Type 2quater, Handover, Assignment, Ciphering, etc.) |
+| **RR** | All 99 types (Paging, System Information SI1–SI23 + Type 2quater, Handover, Assignment, Ciphering, DTM/Packet, etc.) |
 | **MM** | All 19 types (Location Updating, Authentication, Identity, CM Service, MM Abort, TMSI Reallocation) |
 | **CC** | All 24 types (Setup, Notify, Unit Data, Connect, Disconnect, Release, DTMF, Hold, Facility, Progress, etc.) |
 | **GMM** | All 23 types (Attach, Detach, RA Update, Service Request, P-TMSI Reallocation, Auth+Ciphering, GMM Identity, etc.) |
@@ -1509,7 +1508,7 @@ The 19 `std::formatter` specializations below all format through `std::ostream <
 ```cpp
 #include <gsml3parser/enum_formatters.h>
 
-auto msg = gsml3parser::parseL3Hex("600D00");
+auto msg = gsml3parser::parseL3Hex("060D00");
 if (msg) {
     std::string line = std::format("PD: {}", gsml3parser::messagePD(*msg));
     // line == "PD: RadioResource"
@@ -1781,7 +1780,7 @@ Cell parameters and handover reference for handover procedures.
 
 ## 21. Radio Resource Messages
 
-**File:** `gsml3parser/rr/l3rrmessages.h` - 98 message types in the `RRM` variant (PD=0x06).
+**File:** `gsml3parser/rr/l3rrmessages.h` - 99 message types in the `RRM` variant (PD=0x06).
 
 Each message is a plain struct with:
 - `static Expected<Self> parse(BitReader&)`
@@ -1790,15 +1789,15 @@ Each message is a plain struct with:
 - `text(std::ostream&) const` -> human-readable output
 - `static Builder builder()` + `build()` -> fluent construction (see §15)
 
-Messages with dispatch MTI ≥ 0x106 (`L3SystemInformationType10/10bis/10ter`, `L3NotificationFACCH`, `L3UplinkFree`, `L3EnhancedMeasurementRepUL`, `L3MeasurementInfoDL`, `L3VBSVGCSRecon(2)`, `L3VGCSAddInfo`, `L3VGCSMSInfo`, `L3VGCSSNeighCellInfo`, `L3NotifyAppData`) have no parse dispatch slot: they are constructible/serializable only. The three length-based short messages (`L3ChannelRequest` 1 B, `L3HandoverAccess` 4 B, `L3SynchronizationChannelInformation` 7 B) are recognized by frame length on RACH/SCH.
+RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for TI=0 — and their five-bit codes map to dispatch MTIs from `kRRTifShortBase` (0x100–0x10D), so they have normal parse dispatch slots; unallocated short codes are rejected as InvalidMTI. The three length-framed messages with no header (`L3ChannelRequest` 1 B, `L3HandoverAccess` 4 B, `L3SynchronizationChannelInformation` 7 B) are recognized by frame length on RACH/SCH.
 
 ### Short Messages (no standard L3 header)
 
 | Message | Size | Description |
 |---------|------|-------------|
-| `L3ChannelRequest` | 1 byte | RACH access with cause + TSC |
-| `L3HandoverAccess` | 4 bytes | Handover confirmation with HO reference |
-| `L3SynchronizationChannelInformation` | 7 bytes | SCH info with FN, TOA, BSIC |
+| `L3ChannelRequest` | 1 byte | RACH access: single-octet request reference (RA) |
+| `L3HandoverAccess` | 4 bytes | HO number + HO reference + timing advance + spare |
+| `L3SynchronizationChannelInformation` | 7 bytes | Cell identity + location area identity (TS 44.018 9.1.30) |
 
 ### Paging Messages
 
@@ -1914,13 +1913,14 @@ Messages with dispatch MTI ≥ 0x106 (`L3SystemInformationType10/10bis/10ter`, `
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3DTMAssignmentFailure` | 0x80 | UL | Cause |
-| `L3DTMReject` | 0x81 | DL | Empty body |
-| `L3DTMRequest` | 0x82 | UL | Empty body |
-| `L3PacketAssignment` | 0x83 | DL | ChannelDescription + TimingAdvance |
-| `L3DTMAssignmentCommand` | 0x84 | DL | Empty body |
-| `L3DTMInformation` | 0x85 | UL | Empty body |
-| `L3PacketInformation` | 0x86 | DL | Empty body |
+| `L3DTMAssignmentFailure` | 0x48 | UL | Cause |
+| `L3DTMReject` | 0x49 | DL | Empty body |
+| `L3DTMRequest` | 0x4A | UL | Empty body |
+| `L3PacketAssignment` | 0x4B | DL | ChannelDescription + TimingAdvance |
+| `L3ImmediatePacketAssignment` | 0x69 | DL | Opaque variable value part (DTM packet channel) |
+| `L3DTMAssignmentCommand` | 0x4C | DL | Empty body |
+| `L3DTMInformation` | 0x4D | UL | Empty body |
+| `L3PacketInformation` | 0x4E | DL | Empty body |
 
 ### Inter-RAT Classmark Change Messages
 
@@ -1949,23 +1949,24 @@ Messages with dispatch MTI ≥ 0x106 (`L3SystemInformationType10/10bis/10ter`, `
 
 ### SACCH Short Messages (TIF=1)
 
-These carry the TIF=1 SACCH/BCCH encoding. The SI10-family types (0x106–0x108) and this FACCH/VBS-VGCS group (0x109–0x112) are constructible/serializable only — there is no parse dispatch slot for them (see section intro).
+These carry the standard L3 header with TIF set (octet 0 = 0x16 for TI=0); the five-bit code in
+octet 1 maps to the internal dispatch MTI `kRRTifShortBase + code` (code 3 is reserved — no class).
 
 | Message | MTI | Description |
 |---------|-----|-------------|
-| `L3SystemInformationType10` | 0x106 | CI + LAI + CellOptions + CellSelectionParameters |
-| `L3SystemInformationType10bis` | 0x107 | CI + LAI + CellOptions + CellSelectionParameters |
-| `L3SystemInformationType10ter` | 0x108 | CI + LAI + CellOptions + CellSelectionParameters |
-| `L3NotificationFACCH` | 0x109 | FACCH notification |
-| `L3UplinkFree` | 0x10A | FACCH uplink free |
-| `L3EnhancedMeasurementRepUL` | 0x10B | FACCH measurement report UL |
-| `L3MeasurementInfoDL` | 0x10C | FACCH measurement info DL |
-| `L3VBSVGCSRecon` | 0x10D | VBS/VGCS reconfiguration |
-| `L3VBSVGCSRecon2` | 0x10E | VBS/VGCS reconfiguration 2 |
-| `L3VGCSAddInfo` | 0x10F | VGCS additional info |
-| `L3VGCSMSInfo` | 0x110 | VGCS SMS info |
-| `L3VGCSSNeighCellInfo` | 0x111 | VGCS neighbor cell info |
-| `L3NotifyAppData` | 0x112 | Notify application data |
+| `L3SystemInformationType10` | 0x100 | CI + LAI + CellOptions + CellSelectionParameters (code '00000'B) |
+| `L3SystemInformationType10bis` | 0x10A | CI + LAI + CellOptions + CellSelectionParameters (code '01010'B) |
+| `L3SystemInformationType10ter` | 0x10B | CI + LAI + CellOptions + CellSelectionParameters (code '01011'B) |
+| `L3NotificationFACCH` | 0x101 | FACCH notification (code '00001'B) |
+| `L3UplinkFree` | 0x102 | FACCH uplink free (code '00010'B) |
+| `L3EnhancedMeasurementRepUL` | 0x104 | FACCH measurement report UL (code '00100'B) |
+| `L3MeasurementInfoDL` | 0x105 | FACCH measurement info DL (code '00101'B) |
+| `L3VBSVGCSRecon` | 0x106 | VBS/VGCS reconfiguration (code '00110'B) |
+| `L3VBSVGCSRecon2` | 0x107 | VBS/VGCS reconfiguration 2 (code '00111'B) |
+| `L3VGCSAddInfo` | 0x108 | VGCS additional info (code '01000'B) |
+| `L3VGCSMSInfo` | 0x109 | VGCS MS info (code '01001'B) |
+| `L3VGCSSNeighCellInfo` | 0x10C | VGCS neighbor cell info (code '01100'B) |
+| `L3NotifyAppData` | 0x10D | Notify application data (code '01101'B) |
 
 ---
 
@@ -2135,7 +2136,7 @@ All three are GSM 04.80 opaque containers: the body carries a CC-style Facility 
 
 **File:** `gsml3parser/cc/l3ccelements.h`
 
-TCAP operation codes defined in GSM TS 04.80 section 4.5. Reference: `ref/osmo-ttcn3-hacks/library/SS_Templates.ttcn` `SS_Op_Code` enum.
+TCAP operation codes as defined in GSM TS 04.80 section 4.5.
 
 ```cpp
 enum class SSOpCode : uint8_t {
@@ -2156,7 +2157,7 @@ std::string_view ssOpCodeName(SSOpCode code);
 
 ### SS Error Codes
 
-Error codes defined in GSM TS 04.80 section 4.5. Reference: `SS_Templates.ttcn` `SS_Err_Code` enum.
+TCAP error codes as defined in GSM TS 04.80 section 4.5.
 
 ```cpp
 enum class SSErrorCode : uint8_t {
@@ -2528,7 +2529,7 @@ The SMS layer uses a three-level encapsulation: L3 header -> CP message -> RP me
 **Spec:** 3GPP TS 44.018 sections 9.6, Table 10.4.3.
 **PD:** `0x01` (BroadcastCallControl).
 
-L3 header encoding matches CC: Byte 0 high nibble = PD, bits 1-3 = TI, bit 0 = TIF. Byte 1 encodes 6-bit messageType shifted left by 2, plus 2-bit NSD.
+L3 header encoding matches CC: Byte 0 = `(TI << 5) | (TIF << 4) | PD` with the PD in the low nibble (TS 24.007 Table 11.3). Byte 1 carries the 6-bit messageType in its low bits, plus the 2-bit NSD in the high bits.
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -2551,7 +2552,7 @@ Each message stores the body as an opaque octet sequence for basic infrastructur
 **Spec:** 3GPP TS 44.018 sections 9.7, Table 10.4.4.
 **PD:** `0x00` (GroupCallControl).
 
-L3 header encoding matches CC: Byte 0 high nibble = PD, bits 1-3 = TI, bit 0 = TIF. Byte 1 encodes 6-bit messageType shifted left by 2, plus 2-bit NSD.
+L3 header encoding matches CC: Byte 0 = `(TI << 5) | (TIF << 4) | PD` with the PD in the low nibble (TS 24.007 Table 11.3). Byte 1 carries the 6-bit messageType in its low bits, plus the 2-bit NSD in the high bits.
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -3577,7 +3578,7 @@ public:
 #include <gsml3parser/bitstream/inline_framer.h>
 
 // Buffer with L2-framed data: [len][msg...][len][msg...]
-std::vector<uint8_t> buffer = {3, 0x60, 0x0D, 0x00, 2, 0x50, 0x84};
+std::vector<uint8_t> buffer = {3, 0x06, 0x0D, 0x00, 2, 0x05, 0x21};
 
 InlineFramer framer(std::span{buffer}, true /* L2 length mode */);
 
@@ -3798,76 +3799,132 @@ registry.remove(session);
 
 Defines all RSL enumerations and structures for A-bis message parsing and construction.
 
-### Discriminators
+### First Octet and Message Groups
+
+The first octet of an RSL frame is `(message group << 1) | transparent` (TS 48.058 9.1): the high
+seven bits carry the message group and bit 0 is the transparent indication flag (set when the frame
+carries L3 as-is, e.g. RLL DATA_*). The second octet is a single global message type shared by all
+groups; the remaining octets are information elements.
+
+| Enum | Group | Description |
+|------|-------|-------------|
+| `RSLDiscriminator::Rll` | `0x01` | Radio Link Layer (L3 data transport) |
+| `RSLDiscriminator::DedicatedChannel` | `0x04` | DCHAN - dedicated channel control |
+| `RSLDiscriminator::CommonChannel` | `0x06` | CCHAN - common channel control |
+| `RSLDiscriminator::TrxManagement` | `0x08` | Transceiver-level management (LOCATION_INFO = 0x41; other TRX types out of scope) |
+| `RSLDiscriminator::Lcs` | `0x10` | Location Services |
+| `RSLDiscriminator::IPAccess` | `0x3F` | ip.access vendor-specific |
+
+Helpers: `rslFirstOctet(disc, transparent)` encodes the first octet; `decodeRslFirstOctet(octet)`
+decodes it (group 0 and groups above 0x3F are rejected); `rslGroupToDiscriminator(group)` maps a raw
+7-bit group to the enum.
+
+### RLL Message Types (TS 48.058 8.3)
 
 | Enum | Value | Description |
 |------|-------|-------------|
-| `RSLDiscriminator::RLL` | `0x00` | Radio Link Layer (L3 data transport) |
-| `RSLDiscriminator::CommonChannel` | `0x40` | CCHAN - common channel control |
-| `RSLDiscriminator::DedicatedChannel` | `0x60` | DCHAN - dedicated channel control |
-| `RSLDiscriminator::TRX` | `0xa0` | Transceiver-level management |
-| `RSLDiscriminator::IPAccess` | `0xc0` | ip.access vendor-specific |
+| `RSLL3MessageType::DataReq` | `0x01` | DATA_REQ: numbered L3 data for the MS (L3Info TL16V IE) |
+| `RSLL3MessageType::DataInd` | `0x02` | DATA_IND: numbered L3 data from the MS |
+| `RSLL3MessageType::ErrorInd` | `0x03` | ERROR_IND: LAPDm link-layer error report |
+| `RSLL3MessageType::EstReq` | `0x04` | EST_REQ: radio link establishment request |
+| `RSLL3MessageType::EstConf` | `0x05` | EST_CONF: radio link establishment confirm |
+| `RSLL3MessageType::EstInd` | `0x06` | EST_IND: radio link establishment indication |
+| `RSLL3MessageType::RelReq` | `0x07` | REL_REQ: radio link release request |
+| `RSLL3MessageType::RelConf` | `0x08` | REL_CONF: radio link release confirm |
+| `RSLL3MessageType::RelInd` | `0x09` | REL_IND: radio link release indication |
+| `RSLL3MessageType::UnitDataReq` | `0x0A` | UNIT_DATA_REQ: unnumbered (connectionless) L3 transfer |
+| `RSLL3MessageType::UnitDataInd` | `0x0B` | UNIT_DATA_IND: unnumbered L3 transfer |
+| `RSLL3MessageType::SuspReq / SuspConf / ResReq / ReconReq` | `0x0C–0x0F` | Vendor extensions (suspension, resume, reconversion) |
 
-### RLL Message Types
+### DCHAN Message Types (TS 48.058 8.4)
 
-| Enum | Value | Direction | Description |
-|------|-------|-----------|-------------|
-| `RSLL3MessageType::DataReq` | `0x21` | BSC->BTS | Numbered L3 data (L3Info TL16V IE) |
-| `RSLL3MessageType::DataInd` | `0x22` | BTS->BSC | Numbered L3 data (L3Info TL16V IE) |
-| `RSLL3MessageType::UnitDataReq` | `0x41` | BSC->BTS | Unnumbered (connectionless) L3 data |
-| `RSLL3MessageType::UnitDataInd` | `0x42` | BTS->BSC | Unnumbered (connectionless) L3 data |
-| `RSLL3MessageType::EstablishmentInd` | `0x61` | BTS->BSC | Link establishment indication |
-| `RSLL3MessageType::ReleaseReq` | `0x81` | BSC->BTS | RF link release request |
-| `RSLL3MessageType::ReleaseInd` | `0xa1` | BTS->BSC | RF link release indication |
+| Enum | Value | Description |
+|------|-------|-------------|
+| `RSLDChanMessageType::ChanActiv` | `0x21` | CHAN_ACTIV: channel activation (CHN_ACT) |
+| `RSLDChanMessageType::ChanActivAck` | `0x22` | CHAN_ACTIV_ACK: activation acknowledgment |
+| `RSLDChanMessageType::ChanActivNack` | `0x23` | CHAN_ACTIV_NACK: activation rejection (RSLErrorCause) |
+| `RSLDChanMessageType::ConnFail` | `0x24` | CONN_FAIL: connection failure (RSLErrorCause) |
+| `RSLDChanMessageType::DeactivateSacch` | `0x25` | DEACTIVATE_SACCH |
+| `RSLDChanMessageType::EncrCmd` | `0x26` | ENCR_CMD: encryption command (RSLEncryptionInfo IE) |
+| `RSLDChanMessageType::HandoDet` | `0x27` | HANDO_DET: handover detection (AccessDelay IE) |
+| `RSLDChanMessageType::MeasRes` | `0x28` | MEAS_RES: measurement result |
+| `RSLDChanMessageType::ModeModifyReq` | `0x29` | MODE_MODIFY_REQ |
+| `RSLDChanMessageType::ModeModifyAck` | `0x2A` | MODE_MODIFY_ACK |
+| `RSLDChanMessageType::ModeModifyNack` | `0x2B` | MODE_MODIFY_NACK (RSLErrorCause) |
+| `RSLDChanMessageType::PhyContextReq` | `0x2C` | PHY_CONTEXT_REQ |
+| `RSLDChanMessageType::PhyContextConf` | `0x2D` | PHY_CONTEXT_CONF |
+| `RSLDChanMessageType::RfChanRel` | `0x2E` | RF_CHAN_REL: RF channel release |
+| `RSLDChanMessageType::MsPowerControl` | `0x2F` | MS_POWER_CONTROL (MSPower IE) |
+| `RSLDChanMessageType::BsPowerControl` | `0x30` | BS_POWER_CONTROL (BSPower IE) |
+| `RSLDChanMessageType::PreprocConfig` | `0x31` | PREPROC_CONFIG (codec pre-configuration) |
+| `RSLDChanMessageType::PreprocMeasRes` | `0x32` | PREPROC_MEAS_RES |
+| `RSLDChanMessageType::RfChanRelAck` | `0x33` | RF_CHAN_REL_ACK |
+| `RSLDChanMessageType::SacchInfoModify` | `0x34` | SACCH_INFO_MODIFY |
+| `RSLDChanMessageType::TalkerDet` | `0x35` | TALKER_DET (VBS/VGCS) |
+| `RSLDChanMessageType::ListenerDet` | `0x36` | LISTENER_DET (VBS/VGCS) |
+| `RSLDChanMessageType::RemoteCodecConfRep` | `0x37` | REMOTE_CODEC_CONF_REP |
+| `RSLDChanMessageType::RtdRep` | `0x38` | RTD_REP (round-trip delay) |
+| `RSLDChanMessageType::PreHandoNotif` | `0x39` | PRE_HANDO_NOTIF |
+| `RSLDChanMessageType::MrCodecModReq / Ack / Nack / Per` | `0x3A–0x3D` | MR codec modification request/ack/nack/permanent |
+| `RSLDChanMessageType::TfoRep` | `0x3E` | TFO_REP (transparent voice) |
+| `RSLDChanMessageType::TfoModReq` | `0x3F` | TFO_MOD_REQ |
 
-### DCHAN Message Types
+### CCHAN Message Types (TS 48.058 8.5)
 
-| Enum | Value | Direction | Description |
-|------|-------|-----------|-------------|
-| `RSLDChanMessageType::ChanActiv` | `0x01` | BSC->BTS | Channel activation (CHN_ACT) |
-| `RSLDChanMessageType::RFChanRel` | `0x02` | BSC->BTS | RF channel release |
-| `RSLDChanMessageType::SACCHInfoModify` | `0x03` | BSC->BTS | SACCH information modification |
-| `RSLDChanMessageType::DeactivateSACCH` | `0x04` | BSC->BTS | Deactivate SACCH |
-| `RSLDChanMessageType::EncrCmd` | `0x06` | BSC->BTS | Encryption command (RSLEncryptionInfo IE) |
-| `RSLDChanMessageType::ModeModifyReq` | `0x07` | BSC->BTS | Mode modification request |
-| `RSLDChanMessageType::MS_PowerControl` | `0x09` | BSC->BTS | MS power control (MSPower IE) |
-| `RSLDChanMessageType::BS_PowerControl` | `0x0a` | BSC->BTS | BS power control (BSPower IE) |
-| `RSLDChanMessageType::ChanActivAck` | `0x11` | BTS->BSC | Activation ACK |
-| `RSLDChanMessageType::ChanActivNack` | `0x12` | BTS->BSC | Activation NACK (RSLErrorCause) |
-| `RSLDChanMessageType::RFChanRelAck` | `0x15` | BTS->BSC | RF channel release ACK |
-| `RSLDChanMessageType::ConnFail` | `0x21` | BTS->BSC | Connection failure (RSLErrorCause) |
-| `RSLDChanMessageType::MeasRes` | `0x24` | BTS->BSC | Measurement result |
-| `RSLDChanMessageType::HandoDet` | `0x26` | BTS->BSC | Handover detection (AccessDelay IE) |
-
-### CCHAN Message Types
-
-| Enum | Value | Direction | Description |
-|------|-------|-----------|-------------|
-| `RSLCChanMessageType::BCCHInfo` | `0x01` | BSC->BTS | System information (FullBCCHInfo TL16V IE) |
-| `RSLCChanMessageType::ImmediateAssignCmd` | `0x02` | BSC->BTS | Immediate assignment command |
-| `RSLCChanMessageType::PagingCmd` | `0x03` | BSC->BTS | Paging command (L3Info TL16V IE) |
-| `RSLCChanMessageType::SMSBCCmd` | `0x04` | BSC->BTS | SMS BCCH command (L3Info TL16V IE) |
-| `RSLCChanMessageType::CCCHLoadInd` | `0x13` | BTS->BSC | CCCH load report |
-| `RSLCChanMessageType::DeleteInd` | `0x14` | BTS->BSC | Delete indication (FullImmAssInfo IE) |
-| `RSLCChanMessageType::ChanRqd` | `0x16` | BTS->BSC | Channel required (ReqReference + AccessDelay IEs) |
+| Enum | Value | Description |
+|------|-------|-------------|
+| `RSLCChanMessageType::BcchInfo` | `0x11` | BCCH_INFO: system information (FullBCCHInfo TL16V IE) |
+| `RSLCChanMessageType::CcchLoadInd` | `0x12` | CCCH_LOAD_IND: CCCH load report |
+| `RSLCChanMessageType::ChanRqd` | `0x13` | CHAN_RQD: channel required (ReqReference + AccessDelay IEs) |
+| `RSLCChanMessageType::DeleteInd` | `0x14` | DELETE_IND: delete indication (FullImmAssInfo IE) |
+| `RSLCChanMessageType::PagingCmd` | `0x15` | PAGING_CMD: paging command (L3Info TL16V IE) |
+| `RSLCChanMessageType::ImmediateAssignCmd` | `0x16` | IMMEDIATE_ASSIGN_CMD |
+| `RSLCChanMessageType::SmsBcReq` | `0x17` | SMS_BC_REQ: SMS broadcast request |
+| `RSLCChanMessageType::ChanConf` | `0x18` | CHAN_CONF (vendor extension) |
+| `RSLCChanMessageType::RfResInd` | `0x19` | RF_RES_IND |
+| `RSLCChanMessageType::SacchFill` | `0x1A` | SACCH_FILL |
+| `RSLCChanMessageType::Overload` | `0x1B` | OVERLOAD |
+| `RSLCChanMessageType::ErrorReport` | `0x1C` | ERROR_REPORT |
+| `RSLCChanMessageType::SmsBcCmd` | `0x1D` | SMS_BC_CMD: SMS broadcast command (L3Info TL16V IE) |
+| `RSLCChanMessageType::CbchLoadInd` | `0x1E` | CBCH_LOAD_IND |
+| `RSLCChanMessageType::NotCmd` | `0x1F` | NOT_CMD |
 
 ### Information Elements
 
-The `RSL_IE` enum defines 26 IE types (`ChanNr = 0x11` ... `ReleaseMode = 0x38`). Most IEs use TLV encoding; fixed single-byte-value IEs use TV. Two IEs use **TL16V** (16-bit big-endian length) so payloads can exceed 255 bytes:
+`RSL_IE` defines the TS 48.058 §9.x IE type codes (`ChanNr = 0x01` ... `CbchLoadInfo = 0x2D`;
+0x10 and 0x1D are reserved). Every code has a fixed encoding class via `rslIeEncoding()`:
 
-- `RSL_IE::L3Info` (`0x30`) — the L3 payload carrier for RLL DATA_*/UNIT_DATA_* and CCHAN paging/SMS/BCCH commands;
-- `RSL_IE::FullBCCHInfo` (`0x32`) — full BCCH system-information payload.
+- **TV** (type + fixed value, no length octet): ChanNr 0x01, LinkIdent 0x02, ActType 0x03, BSPower 0x04,
+  FrameNumber 0x08 (2 B), HandoRef 0x09, L1Info 0x0A (2 B), MSPower 0x0D, PagingGroup 0x0E,
+  PagingLoad 0x0F (2 B), AccessDelay 0x11, ReqReference 0x13 (3 B), ReleaseMode 0x14, StartngTime 0x17 (2 B),
+  TimingAdvance 0x18, MeasResNr 0x1B, MsgId 0x1C, SysInfoType 0x1E, MSTimingOffset 0x25,
+  ChanNeeded 0x28, CbCmdType 0x29, CbchLoadInfo 0x2D;
+- **TL16V** (type + 16-bit big-endian length + value, for payloads above 255 bytes):
+  `L3Info` 0x0B — the L3 payload carrier for RLL DATA_*/UNIT_DATA_* and CCHAN paging/SMS/BCCH commands;
+  `FullBCCHInfo` 0x27 — full BCCH system-information payload;
+- **LV** (type + 8-bit length + value): MSIdentity 0x0C, RlmCause 0x16, ImmAssInfo 0x23, SmscbInfo 0x24,
+  FullImmAssInfo 0x2B, SmscbMsg 0x2A, SacchInfo 0x2C — and unknown codes (decoding them as LV keeps
+  malformed frames parseable without desynchronizing the IE list).
 
-`RSLErrorCause` (14 values, 0x01–0x0e) carries NACK/failure reasons; helpers `rslDiscriminatorName()`, `rslIEName()`, and `rslErrorCauseName()` return `std::string_view` names for logging.
+`RSLErrorCause` (14 values, 0x01–0x0e) carries NACK/failure reasons; helpers `rslDiscriminatorName()`,
+`rslIEName()`, and `rslErrorCauseName()` return `std::string_view` names for logging.
 
 ### Structures
 
-- **`RSLChannelNumber`** - Encode/decode dedicated channel numbers. Static methods: `encode(cbits, ts)`, `getCBits()`, `getTimeslot()`, `isDedicated()`. Constants: `BCCH=0x00`, `RACH=0x40`, `PCH_AGCH=0x60`.
+- **`RSLChannelNumber`** - Channel Number IE value coding (TS 48.058 §9.3.1): `value = (code << 3) | timeslot`.
+  Static methods: `encode(code, tn)`, `getCBits()`, `getTimeslot()`, `isDedicated()`. Channel codes:
+  `BmAcch=0x01` ('00001'B), `Lm=0x02` (+ sub-channel 0/1, VAMOS), `Sdcch4=0x04` (+ sub 0..3),
+  `Sdcch8=0x08` (+ sub 0..7), `Bcch=0x10`, `Rach=0x11`, `PchAgch=0x12`, `Pdch=0x18`, `Cbch4=0x19`,
+  `Cbch8=0x1A`, `VamosBm=0x1D` (vendor extensions).
 - **`RSLChannelMode`** - 5-byte channel mode (spdInd, chanRT, dtxDTU, chanRate). Methods: `isSignalling()`, `isSpeech()`, `isData()`.
 - **`RSLEncryptionInfo`** - algorithmId + key span for A5 ciphering.
 
 ### Helper Functions
 
+- `rslFirstOctet(disc, transparent)` -> uint8_t (first-octet encoding)
+- `decodeRslFirstOctet(octet)` -> optional<{group, transparent}>
+- `rslGroupToDiscriminator(group)` -> optional<RSLDiscriminator>
+- `rslIeEncoding(iei)` / `rslIeTvValueSize(iei)` — encoding class and TV value size of an IE code
 - `rslDiscriminatorName(disc)` -> string_view
 - `rslIEName(ie)` -> string_view
 - `rslErrorCauseName(cause)` -> string_view
@@ -3885,12 +3942,12 @@ Zero-heap-allocation parser for A-bis RSL messages. Extracts L3 payloads from RL
 ### `RSLParsedMessage`
 
 Fixed-size result struct (560 bytes on 64-bit, zero heap allocation — all spans point into the caller's input buffer, which must outlive the struct). Contains:
-- `discriminator`, `msgType`, `chanNr`, `linkId` (RLL only), `btsToBsc` - header fields
+- `discriminator`, `transparent`, `msgType`, `chanNr`, `linkId` (RLL only) — header fields
 - `l3Payload` - extracted L3 bytes (span into original buffer; empty when the message carries none)
 - `informationElements[MAX_IE=32]` + `ieCount`, and `ies()` span accessors - parsed TLV/TV IEs with `type`, 16-bit `len` (so TL16V L3 payloads over 255 bytes work), and non-owning `val` pointers into the original buffer
 - `rawData` - full message span for debugging
 
-L3 payload sources: RLL `DataReq/DataInd/UnitDataReq/UnitDataInd` via the first `L3Info` (0x30) TL16V IE; CCHAN/DCHAN messages likewise via `L3Info`; fallback to `FullBCCHInfo` (0x32).
+L3 payload sources: RLL `DataReq/DataInd/UnitDataReq/UnitDataInd` via the first `L3Info` (0x0B) TL16V IE; CCHAN/DCHAN messages likewise via `L3Info`; fallback to `FullBCCHInfo` (0x27).
 
 ### `RSLParser::parse(data)`
 
@@ -3925,7 +3982,9 @@ Constructs serialized RSL messages for BTS->BSC communication. Every method has 
 
 ### RLL Messages
 
-Direction: all builders set the discriminator direction bit to BTS->BSC except `buildDataReq`/`buildUnitDataReq`, which produce BSC->BTS frames (useful for testing/loopback of the parser).
+The transparent flag is set on RLL data frames (`buildDataReq`/`buildDataInd`/`buildUnitDataReq`/
+`buildUnitDataInd`) and cleared by all DCHAN/CCHAN control builders (TS 48.058 9.1).
+`buildDataReq`/`buildUnitDataReq` produce BSC->BTS-style frames (useful for testing/loopback of the parser).
 
 - `buildDataReq(chanNr, linkId, l3Payload)` - Encapsulate L3 in DATA_REQ
 - `buildDataInd(chanNr, linkId, l3Payload)` - Encapsulate L3 in DATA_IND
@@ -4071,7 +4130,7 @@ static_assert(sizeof(ProcedureStepResult) <= 32);
 
 A result may therefore carry both a token to build and a terminal `finalResult` (e.g. LocationUpdate VLR-accept: `action == SendResponseWithToken`, `responseToken == LocationUpdatingAccept`, `finalResult.state == Completed`).
 
-**Memory:** `sizeof(ProcedureStepResult) <= 32` bytes. The `responseToken` field (1 byte) replaces the old `SendResponse` action, keeping the struct within the cache-line budget for millions of concurrent calls.
+**Memory:** `sizeof(ProcedureStepResult) <= 32` bytes. The `responseToken` field (1 byte) names the response to build, keeping the struct within the cache-line budget for millions of concurrent calls.
 
 ### Procedure Base Class
 

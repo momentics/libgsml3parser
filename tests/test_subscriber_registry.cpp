@@ -245,8 +245,8 @@ TEST(SR_tickAllTimers, ExpiryBoundToCorrectSession) {
 
 // Test: expired timers also expire the session's pending transactions.
 // Importance: the registry owns the documented timer event path
-// (tick -> TransactionManager::onTimerExpired); previously nothing in the
-// production stack called onTimerExpired, leaving transactions pending forever.
+// (tick -> TransactionManager::onTimerExpired); without this path
+// expired timers would leave transactions pending forever.
 TEST(SR_tickAllTimers, ExpiresPendingTransactions) {
     SubscriberRegistry reg;
     auto* s = reg.createByTMSI(0x03030303);
@@ -468,8 +468,8 @@ TEST(SSR_tickAllTimers, Parallel_Correct) {
 
 // Test: remove() reclaims the session entry (no unbounded growth).
 // Importance: A long-running BTS with session churn must not leak memory;
-// previously removed entries stayed in the map forever with active=false,
-// which also made the TMSI un-reusable (createByTMSI returned nullptr).
+// an entry left in the map forever with active=false would also make the
+// TMSI un-reusable (createByTMSI returned nullptr).
 // 3GPP: TS 24.008 4.4 - subscriber data lifecycle at scale.
 TEST(SR_remove, ReclaimsEntry_MemoryStable) {
     SubscriberRegistry reg;
@@ -500,7 +500,7 @@ TEST(SR_remove, ReclaimsEntry_MemoryStable) {
 
 // Test: auto-assigned TMSI (createByIMSI) never collides with user-assigned
 // TMSIs, even after removals changed the map size.
-// Importance: The old size()+1 scheme collided after removals and returned
+// Importance: a size()+1 allocation would collide after removals and return
 // nullptr for valid new IMSIs; the high-water-mark scheme must not.
 TEST(SR_createByIMSI, AutoTMSI_NoCollisionAfterRemovals) {
     SubscriberRegistry reg;
@@ -639,7 +639,7 @@ TEST(SR_remove, OneMillion_O1Fast) {
     EXPECT_EQ(reg.count(), static_cast<size_t>(N) - ptrs.size());
 #if !defined(GSML3PARSER_ASAN) && !defined(GSML3PARSER_DEBUG)
     // Budget is machine-dependent: the point is to prove O(1) behavior.
-    // The old O(N) implementation took tens of seconds here (200K removals x
+    // An O(N) removal would take tens of seconds here (200K removals x
     // up to ~1M entries scanned per remove); at ~1 us/op per O(1) removal,
     // 500 ms still separates the two complexities on any hardware.
     EXPECT_LT(ms, 500.0) << "200K remove() over 1M sessions took " << ms << "ms (expected O(1), < 500ms)";
@@ -648,7 +648,7 @@ TEST(SR_remove, OneMillion_O1Fast) {
 
 // Test: ShardedSubscriberRegistry::remove() is O(1) — the shard is derived
 // directly from session->assignedTmsi, so exactly one shard is locked
-// (the previous implementation scanned all N shards with an exclusive lock).
+// (scanning all N shards with an exclusive lock would be O(N)).
 // Importance: session churn (detach) at scale must take a single shard lock.
 // 3GPP coverage: TS 24.008 4.4 - subscriber lifecycle at scale.
 TEST(Sharded_Remove_O1_SingleShardLock, Remove_SingleShard) {
@@ -733,9 +733,9 @@ TEST(SR_remove, MovesNoSession_TimerExpiryBoundToRealSession) {
 }
 
 // Test: a timer started AFTER the session was relocated by a foreign
-// erase is tracked via the (stable) owner self-pointer (
-// repro_owner: previously the observer fired with a stale owner and
-// tickAllTimers reported 0 expiries — the procedure hung forever).
+// erase is tracked via the (stable) owner self-pointer
+// (with a stale owner the observer would fire on the wrong session and
+// tickAllTimers would report 0 expiries — the procedure hangs forever).
 TEST(SR_remove, MovesNoSession_NewTimerTrackedAfterMove) {
     SubscriberRegistry reg;
     auto* a = reg.createByTMSI(1);

@@ -61,8 +61,8 @@ bool L3Framer::fillBuffer() {
     }
 
     // Ensure enough capacity. Exponential growth (x2) up to 1 MB, then
-    // linear +4 KB (the previous +4096-per-fill growth
-    // reallocated on every fill for long streams).
+    // linear +4 KB; a fixed increment per fill would reallocate on
+    // every fill for long streams.
     if (mBuf.size() <= mEnd) {
         size_t target = mEnd + 4096;
         if (mBuf.size() < (1u << 20)) target = std::max(target, mBuf.size() * 2);
@@ -149,15 +149,14 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
 
         if (atEof) {
             // Source exhausted: the remainder IS the final frame of the
-            // stream (the previous code reported TruncatedInput
-            // and the caller could not distinguish "need more data" from
-            // "end of stream", so the final variable-length frame of a
-            // stream was never emitted). The parser still validates the
-            // content downstream; a truncated frame surfaces as a parse
-            // error. (the tail decision must live here,
-            // driven by nextFrame(), not by a fillBuffer() call inside
-            // this function — the latter lost the tail for streams
-            // longer than the internal buffer.)
+            // stream; reporting TruncatedInput here would leave the caller
+            // unable to distinguish "need more data" from "end of stream",
+            // and the final variable-length frame of a stream would never
+            // be emitted. The parser still validates the content downstream;
+            // a truncated frame surfaces as a parse error. (The tail
+            // decision must live here, driven by nextFrame(), not by a
+            // fillBuffer() call inside this function — the latter loses the
+            // tail for streams longer than the internal buffer.)
             frameLen = mEnd - mPos;
             if (frameLen > mConfig.maxMessageLength) {
                 return Expected<ExtractedFrame>::error(
@@ -176,10 +175,9 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
                 // For now, use a heuristic: scan for the next plausible L3 header.
                 frameLen = 0;
                 // Resume the boundary scan where the previous attempt
-                // left off (the previous code rescanned from
-                // the frame start on every fill, O(L^2/4096) per
-                // variable-length frame). mBoundaryScanPos is reset when
-                // a frame is extracted or skipped.
+                // left off; rescanning from the frame start on every fill
+                // would be O(L^2/4096) per variable-length frame.
+                // mBoundaryScanPos is reset when a frame is extracted or skipped.
                 size_t scanFrom = mBoundaryScanPos;
                 if (scanFrom < mPos + 2) scanFrom = mPos + 2;
                 for (size_t i = scanFrom; i + 1 < mEnd && i < mPos + 2 + mConfig.maxMessageLength; ++i) {
@@ -279,9 +277,8 @@ Expected<ExtractedFrame> L3Framer::nextFrame() {
         if (!gotData) {
             // Source returned 0 bytes. Per the ByteSource contract a
             // finite source is at EOF here; a live source (RingBuffer)
-            // is merely empty right now (the previous code
-            // conflated the two, so callers could not distinguish
-            // end-of-stream from "try again later").
+            // is merely empty right now — conflating the two would leave
+            // callers unable to distinguish end-of-stream from "try again later".
             if (mSource.atEof()) {
                 // End of stream: give the buffered tail one final
                 // chance (header-based mode emits it; L2 mode errors).

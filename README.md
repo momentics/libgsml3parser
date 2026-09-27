@@ -44,7 +44,7 @@ BSC over A-bis RSL, with zero third-party dependencies to carry.
 | Audience | What You Get |
 |----------|-------------|
 | **Software BTS developers** | Drop-in replacement for the osmo-bts L3 layer: parse, build, FSMs, timers, procedures, LAPDm — link `gsml3parser` and go |
-| **Protocol testers & fuzzers** | Bidirectional binary↔typed API, golden vectors cross-validated against Osmocom TTCN-3, libFuzzer targets for every major entry point |
+| **Protocol testers & fuzzers** | Bidirectional binary↔typed API, golden vectors pinned to the normative TS wire layouts, libFuzzer targets for every major entry point |
 | **SDR / radio hobbyists** | Complete L2 (LAPDm) + L3 stack for the Um interface plus A-bis RSL — no networking or SIP dependencies |
 
 ## What You Get
@@ -73,7 +73,7 @@ auto paging = L3PagingRequestType2::builder()
 
 ## Supported Messages Summary
 
-All 12 protocol domains — RR 98 · SM 29 · CC 24 · GMM 23 · MM 20 · SMS 19 · BCC 8 · GCC 8 · SS 3 · LS 2 ·
+All 12 protocol domains — RR 99 · SM 29 · CC 24 · GMM 23 · MM 19 · SMS 19 · BCC 8 · GCC 8 · SS 3 · LS 2 ·
 Extended + Test PDs 2: **236 message types** in total, with Information Elements and enums defined per domain.
 
 Full catalog (MTIs, directions, IEs, dispatch edge cases such as TIF=1 short messages and parse-slot
@@ -177,7 +177,7 @@ Every detail lives in a dedicated guide; this README is the pitch and the index.
 
 Quality you can audit, not just trust:
 
-- GoogleTest suite: 2100+ tests — parse/golden-vector (cross-validated against Osmocom TTCN-3 vectors),
+- GoogleTest suite: 2100+ tests — parse/golden-vector (normative TS wire layouts),
   round-trip, builders, LAPDm FSM, dispatcher, all procedures and orchestrator chains, RSL, C ABI +
   strict-C89 header check, high-load stress (1M/2M sessions) and concurrency tests.
 - `ENABLE_FUZZING=ON` (Clang/LLVM) builds eight libFuzzer targets (L3 parse, RSL parse, LAPDm frame
@@ -193,6 +193,6 @@ one-instance-per-MS event-loop model keeps the hot path lock-free); `ShardedSubs
 
 ## License
 
-MIT License. See [COPYING](COPYING) for details. Golden test vectors validated against the
-[Osmocom](https://osmocom.org/) TTCN-3 testing infrastructure. Copyright 2026 momentics
+MIT License. See [COPYING](COPYING) for details. Golden test vectors are pinned to the normative
+3GPP TS wire layouts (TS 24.008, TS 44.018, TS 44.064, TS 48.058 and friends). Copyright 2026 momentics
 &lt;momentics@gmail.com&gt; and libgsml3parser contributors.

@@ -64,7 +64,7 @@ python bindings/python/examples/bts_simulation.py
 ```python
 import gsml3parser as g                      # loads the shared C core, ABI-checked
 
-msg = g.Message.from_hex("60 0D 00")         # RR Channel Release
+msg = g.Message.from_hex("06 0D 00")         # RR Channel Release
 print(msg.name, msg.pd, msg.size(), msg.write().hex())
 
 with g.GsmL3Stack(tmsi=0x87654321) as stack:   # registry + session + orchestrator + LAPDm entity

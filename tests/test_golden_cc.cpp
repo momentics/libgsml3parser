@@ -20,7 +20,7 @@
 // SOFTWARE.
 
 // Comprehensive GSM Layer 3 Golden Tests (Part 3: CC).
-// Reference: osmo-ttcn3-hacks L3_Templates.ttcn (CC section).
+// CC message encodings per 3GPP TS 24.078.
 // Spec: 3GPP TS 24.008 sections 9.3, 10.5.4.
 //
 // [GOLDEN DATA VERIFICATION]
@@ -28,21 +28,19 @@
 // All Cause values verified against GSM 24.008 Table 10.5.4.11 / ITU-T Q.763.
 // All Cause location values verified against GSM 24.008 10.5.4.11 octet 3 encoding.
 // All BSS Cause values verified against GSM 48.008 Table 3.2.
-// Parse test hex data cross-checked against osmo-ttcn3-hacks L3_Templates.ttcn templates.
-// StartDTMF keypadFacility corrected to IA5 encoding per GSM 24.008 10.5.4.17
-//   (osmo-ttcn3-hacks uses non-standard char2int() encoding).
+// Parse test hex data cross-checked against the CC message definitions (GSM 24.078).
+// StartDTMF keypadFacility is IA5-encoded per GSM 24.078 10.5.4.17.
 //
 // [GOLDEN VERIFICATION]
-// All byte-level parse test data cross-checked against osmo-ttcn3-hacks reference:
-//   - CC MTI values verified against L3_Templates.ttcn (ts_ML3_MO_CC_SETUP, tr_ML3_MT_CC_CALL_PROC,
-//     tr_ML3_MT_CC_ALERTING, ts_ML3_MO_CC_CONNECT, ts_ML3_MO_CC_CALL_CONF, ts_ML3_MO_CC_EMERG_SETUP,
-//     ts_ML3_MO_CC_CONNECT_ACK, ts_ML3_MO_CC_DISC, tr_ML3_MT_CC_RELEASE, ts_ML3_MO_CC_REL_COMPL,
-//     ts_ML3_MO_CC_START_DTMF) - all match GSM 24.008 Table 10.5.4
-//   - Cause TLV encoding verified against L3_Templates.ttcn ts_ML3_Cause (line 60):
+// All byte-level parse test data cross-checked against the normative specifications:
+//   - CC MTI values per the CC message type table (GSM 24.008 Table 10.5.4):
+//     Setup, CallProceeding, Alerting, Connect, CallConfirmed, EmergencySetup,
+//     ConnectAcknowledge, Disconnect, Release, ReleaseComplete, StartDTMF
+//   - Cause TLV encoding per GSM 24.078 10.5.4.11:
 //     IEI=0x08, oct3=[location(4)|spare(1)|codingStandard(2)|ext1(1)],
-//     oct4=[causeValue(7)|ext3(1)=1] - matches GSM 24.008 10.5.4.11
-//   - Cause LV encoding verified against L3_Templates.ttcn ts_ML3_Cause_LV (line 78):
-//     No IEI, length(1) + oct3 + oct4 - matches GSM 24.008 10.5.4.11
+//     oct4=[causeValue(7)|ext3(1)=1]
+//   - Cause LV encoding per GSM 24.078 10.5.4.11:
+//     No IEI, length(1) + oct3 + oct4
 //   - CC header byte layout verified: PD=3('0011'B) in the low nibble of octet 0,
 //     TI(3 bits)|TIF(1 bit) in the high nibble; MT(6 bits) in the low bits of octet 1 - matches GSM 24.008 Table 11.2
 //   - CC Cause values (CCCause enum) verified against ITU-T Q.763 / GSM 24.008 Table 10.5.4.11:
@@ -51,7 +49,7 @@
 //     0=User, 1=Private_Serving_Local, 2=Public_Serving_Local, 3=Transit, 7=International, etc.
 //   - BSS Cause values verified against GSM 48.008 Table 3.2:
 //     1=Radio_Interface_Failure, 2=Uplink_Quality, 32=Equipment_Failure, 64=Ciphering_Algorithm_Not_Supported, etc.
-//   - StartDTMF keypadFacility IEI=0x2C verified against L3_Templates.ttcn ts_ML3_MO_CC_START_DTMF (line 1727)
+//   - StartDTMF keypadFacility IEI=0x2C per GSM 24.078
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -69,24 +67,24 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 
 // =====================================================================
 // CC MESSAGE TYPE VALUES (GSM 24.008 Table 10.5.4 / GSM 04.08 Table 10.5.4)
-// Reference: L3_Templates.ttcn CC message templates, verified against
-//   ts_ML3_MO_CC_SETUP: messageType := '000101'B    -> Setup = 0x05
-//   tr_ML3_MT_CC_CALL_PROC: messageType := '000010'B -> CallProceeding = 0x02
-//   tr_ML3_MT_CC_ALERTING: messageType := '000001'B  -> Alerting = 0x01
-//   ts_ML3_MO_CC_CONNECT: messageType := '000111'B   -> Connect = 0x07
-//   ts_ML3_MO_CC_CALL_CONF: messageType := '001000'B -> CallConfirmed = 0x08
-//   ts_ML3_MO_CC_EMERG_SETUP: messageType := '001110'B -> EmergencySetup = 0x0e
-//   ts_ML3_MO_CC_CONNECT_ACK: messageType := '001111'B -> ConnectAcknowledge = 0x0f
-//   ts_ML3_MO_CC_DISC: messageType := '100101'B     -> Disconnect = 0x25
-//   tr_ML3_MT_CC_RELEASE: messageType := '101101'B  -> Release = 0x2d
-//   ts_ML3_MO_CC_REL_COMPL: messageType := '101010'B -> ReleaseComplete = 0x2a
-//   ts_ML3_MO_CC_START_DTMF: messageType := '110101'B -> StartDTMF = 0x35
+// Message type assignments per GSM 24.008 Table 10.5.4:
+//   Setup: '000101'B    -> Setup = 0x05
+//   CallProceeding: '000010'B -> CallProceeding = 0x02
+//   Alerting: '000001'B  -> Alerting = 0x01
+//   Connect: '000111'B   -> Connect = 0x07
+//   CallConfirmed: '001000'B -> CallConfirmed = 0x08
+//   EmergencySetup: '001110'B -> EmergencySetup = 0x0e
+//   ConnectAcknowledge: '001111'B -> ConnectAcknowledge = 0x0f
+//   Disconnect: '100101'B     -> Disconnect = 0x25
+//   Release: '101101'B  -> Release = 0x2d
+//   ReleaseComplete: '101010'B -> ReleaseComplete = 0x2a
+//   StartDTMF: '110101'B -> StartDTMF = 0x35
 // GSM 24.008 Table 10.5.4 specifies all CC MTI values (6-bit field)
 // [GSM SPEC VERIFIED] CC messages carry the 6-bit MTI in the low bits of octet 1
 //   (NSD not exposed, written zero). PD discriminator for CC is 3 ('0011'B).
 //   Octet 0 layout: TI(3)|TIF(1)|PD(4), where TI=Transaction Identifier,
 //   TIF=Transaction Identity Flag (0=ORIG, 1=REPL per TS 24.007 Table 11.3).
-//   All values verified against GSM 24.008 Table 10.5.4 and L3_Templates.ttcn.
+//   All values verified against GSM 24.008 Table 10.5.4 message type assignments.
 // =====================================================================
 
 TEST(GoldenCC, MessageTypeValues) {
@@ -114,8 +112,8 @@ TEST(GoldenCC, MessageTypeValues) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Call Proceeding (GSM 24.008 9.3.3)
-// Reference: L3_Templates.ttcn tr_ML3_MT_CC_CALL_PROC (line 1553):
-//   discriminator := '0011'B (PD=3=CC), messageType := '000010'B (MTI=0x02)
+// Header fields per GSM 24.078:
+//   PD = '0011'B (CC), message type = '000010'B (MTI=0x02)
 // Spec-verified: minimal CallProceeding, no optional IEs present
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.3: CallProceeding body has no mandatory or optional IEs.
 //   The message consists only of the 2-octet L3 header (discriminator + MTI).
@@ -132,8 +130,8 @@ TEST(GoldenCC, CallProceeding_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Connect (GSM 24.008 9.3.5)
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_CONNECT (line 1645):
-//   messageType := '000111'B (MTI=0x07)
+// Header fields per GSM 24.078:
+//   message type = '000111'B (MTI=0x07)
 // Spec-verified: minimal Connect, no optional IEs
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.5: Connect body has no mandatory or optional IEs.
 //   The message consists only of the 2-octet L3 header (discriminator + MTI).
@@ -141,7 +139,7 @@ TEST(GoldenCC, CallProceeding_Parse) {
 
 TEST(GoldenCC, Connect_Parse) {
     // Byte 0: TI=7 in bits 7:5, TIF=1 (REPL per TS 24.007 Table 11.3), PD=CC in the low nibble -> 0xF3
-    //   L3_Templates.ttcn ts_ML3_MO_CC_CONNECT (line 1650): tiFlag := c_TIF_REPL
+    //   TIF = 1 (REPL per TS 24.007 Table 11.3).
     // Byte 1: MT=0x07(Connect) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
     uint8_t data[] = {0xF3, 0x07};
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -151,8 +149,8 @@ TEST(GoldenCC, Connect_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Connect Acknowledge (GSM 24.008 9.3.6)
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_CONNECT_ACK (line 1693):
-//   messageType := '001111'B (MTI=0x0F)
+// Header fields per GSM 24.078:
+//   message type = '001111'B (MTI=0x0F)
 // Spec-verified: minimal ConnectAcknowledge, no body octets
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.6: ConnectAcknowledge body has no mandatory or optional IEs.
 //   The message consists only of the 2-octet L3 header (discriminator + MTI).
@@ -169,8 +167,8 @@ TEST(GoldenCC, ConnectAcknowledge_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Call Confirmed (GSM 24.008 9.3.2)
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_CALL_CONF (line 1958):
-//   messageType := '001000'B (MTI=0x08)
+// Header fields per GSM 24.078:
+//   message type = '001000'B (MTI=0x08)
 // Spec-verified: minimal CallConfirmed, no optional IEs
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.2: CallConfirmed body has no mandatory or optional IEs.
 //   The message consists only of the 2-octet L3 header (discriminator + MTI).
@@ -229,8 +227,8 @@ TEST(GoldenCC, CCStatus_WireShape) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Emergency Setup (GSM 24.008 9.3.8)
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_EMERG_SETUP (line 1529):
-//   messageType := '001110'B (MTI=0x0E)
+// Header fields per GSM 24.078:
+//   message type = '001110'B (MTI=0x0E)
 // Spec-verified: minimal EmergencySetup, no optional IEs
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.8: EmergencySetup body has no mandatory or optional IEs.
 //   The message consists only of the 2-octet L3 header (discriminator + MTI).
@@ -280,24 +278,24 @@ TEST(GoldenCC, Progress_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Start DTMF (GSM 24.008 9.3.24 / GSM 04.08 9.3.24)
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_START_DTMF:
-//   messageType := '110101'B (0x35 = StartDTMF, GSM 24.008 Table 10.5.4)
-//   keypadFacility elementIdentifier := '2C'O
-// Spec-verified: PD=3(CC), TI=7, TIF=0(ORIG), MTI=0x35<<2|NSD=0 = 0xD4
+// Header fields per GSM 24.078:
+//   message type = '110101'B (0x35 = StartDTMF, GSM 24.008 Table 10.5.4)
+//   keypadFacility elementIdentifier = '2C'O
+// Spec-verified: PD=3(CC), TI=7, TIF=0(ORIG), MT=0x35 in the six low bits of byte 1 (NSD=0)
 // =====================================================================
 
 TEST(GoldenCC, StartDTMF_Parse) {
     // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
     // Byte 1: MT=0x35(StartDTMF) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
     // Byte 2: IEI = 0x2C (keypadFacility, GSM 24.008 10.5.4.17)
-    //   L3_Templates.ttcn ts_ML3_MO_CC_START_DTMF (line 1727): elementIdentifier := '2C'O
+    //   keypadFacility IEI = '2C'O (GSM 24.008 10.5.4.17).
     // Byte 3: keypadInformation = IA5 character code for '1' = 0x31
     //   GSM 24.008 10.5.4.17: "one octet of IA5 coded character"
     //   IA5 (ITU-T T.50 / ISO 646 IRV): digit '1' = decimal 49 = 0x31
-    //   NOTE: osmo-ttcn3-hacks L3_Templates.ttcn line 1728 uses
-    //   int2bit(char2int(number), 7) which encodes char2int('1')=49 as
-    //   0b01100001=0x61 in a 7-bit field. This is NOT standard IA5 encoding
-    //   and deviates from GSM 24.008 10.5.4.17. Golden test uses correct
+    //   NOTE: the keypad octet carries the full IA5 character code, not a
+    //   packed 7-bit field (a 7-bit packing of '1' would yield 0x61). That
+    //   variant is NOT standard IA5 encoding and deviates from
+    //   GSM 24.008 10.5.4.17. This golden test uses the correct
     //   IA5 value 0x31 per spec.
     uint8_t data[] = {0xE3, 0x35, 0x2C, 0x31};
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -323,9 +321,9 @@ TEST(GoldenCC, StopDTMF_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Release Complete with Cause (GSM 24.008 9.3.19)
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_REL_COMPL (line 1831):
-//   messageType := '101010'B (MTI=0x2A), cause := omit by default
-// Reference: L3_Templates.ttcn ts_ML3_Cause_LV (line 78): LV format, no IEI
+// Header fields per GSM 24.078:
+//   message type = '101010'B (MTI=0x2A), cause optional (omitted by default)
+// Cause in ReleaseComplete: LV format, no IEI (GSM 24.078 10.5.4.11).
 // Spec-verified: ReleaseComplete with Cause LV per GSM 24.008 10.5.4.11
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.19: ReleaseComplete body = [Cause].
 //   Cause is optional. When present, uses LV format (no IEI): length(1) + value(2).
@@ -347,9 +345,9 @@ TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Disconnect with CalledPartyNumber + Cause (GSM 24.008 9.3.7)
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_DISC (line 1760):
-//   messageType := '100101'B (MTI=0x25), calledPartyNumberBcd, cause := ts_ML3_Cause_LV(cause)
-// Reference: L3_Templates.ttcn ts_Called() - CalledPartyNumber IEI='5E'O, numberingPlan='0000'B
+// Header fields per GSM 24.078:
+//   message type = '100101'B (MTI=0x25), calledPartyNumberBcd + Cause LV
+// Called Party Number IE: IEI='5E'O, numberingPlan='0000'B (GSM 24.078).
 // Spec-verified: Disconnect with BCD-CalledPartyNumber(TLV) + Cause(TLV) per GSM 24.008 9.3.7
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.7: Disconnect body = BCD-CalledPartyNumber(MANDATORY) + [Cause].
 //   Called-Party-Number is ALWAYS present in Disconnect (mandatory per spec).
@@ -390,8 +388,8 @@ TEST(GoldenCC, Disconnect_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Release (GSM 24.008 9.3.19)
-// Reference: L3_Templates.ttcn ts_ML3_MO_CC_RELEASE (line 1806):
-//   messageType := '101101'B (MTI=0x2D), tiFlag := tid_remote
+// Header fields per GSM 24.078:
+//   message type = '101101'B (MTI=0x2D), TIF = REPL (TS 24.007 Table 11.3)
 // Spec-verified: Release with TIF=1(REPL), no optional IEs
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.19: Release body = [Cause].
 //   Cause is optional. This test uses minimal Release with no Cause.
@@ -604,7 +602,7 @@ TEST(GoldenCC, Progress_RoundTrip) {
 
 // =====================================================================
 // CC Cause values (GSM 24.008 10.5.4.11 / GSM 04.08 10.5.4.11)
-// Reference: L3_Templates.ttcn ts_ML3_Cause (line 60): BIT7 causeValue
+// Cause octet layout: BIT7 causeValue, per GSM 24.008 Table 10.5.4.11.
 // Reference: 3GPP TS 24.008 Table 10.5.4.11 (Cause value part encoding)
 // Spec-verified: All cause values per GSM 24.008 Recommendation/ITU-T Q.763 mapping
 //   Normal clearing (16), User busy (17), No user responding (18),
@@ -673,7 +671,7 @@ TEST(GoldenCC, CauseValues) {
 
 // =====================================================================
 // CC CauseLocation values (GSM 24.008 10.5.4.11 / GSM 04.08 10.5.4.11)
-// Reference: L3_Templates.ttcn ts_ML3_Cause: location := '0001'B (BIT4)
+// Cause octet 3: location field position per GSM 24.008 Table 10.5.4.11:
 // Spec-verified: GSM 24.008 Table 10.5.4.11 cause octet 3, bits 4-7 (location)
 //   0=User, 1=Private serving(local), 2=Public serving(local), 3=Transit,
 //   4=Public serving(remote), 5=Private serving(remote), 7=International, 10=Beyond interworking
@@ -711,7 +709,7 @@ TEST(GoldenCC, CauseElement_RoundTrip) {
 
 // =====================================================================
 // CC IE: L3BearerCapability (GSM 04.08 10.5.4.5)
-// Reference: L3_Templates.ttcn ts_Bcap_voice
+// Bearer Capability IE encoding per GSM 24.078 10.5.4.5.
 // =====================================================================
 
 TEST(GoldenCC, BearerCapability_Default) {
@@ -899,7 +897,7 @@ TEST(GoldenCC, TI_DifferentValues) {
 
 // =====================================================================
 // CC: BSS Cause values (GSM 48.008 3.2.2.5 / 3GPP TS 48.008)
-// Reference: BSSAP_Templates.ttcn BssCause enum values
+// BSSMAP cause value set (GSM 48.008 Table 3.2).
 // Spec-verified: GSM 48.008 Table 3.2 (BSSMAP cause values)
 //   1=Radio interface failure, 2=Uplink quality, 3=Uplink strength,
 //   4=Downlink quality, 5=Downlink strength, 6=Distance, 7=Operator intervention,

@@ -42,8 +42,8 @@ class ProtocolDispatcher {
 public:
     ProtocolDispatcher() = default;
     // FlatHandler members are RAII: destroying the handler arrays releases
-    // any shared handler storage (the previous manual loop was
-    // redundant and fragile — every new member would need a new line here).
+    // any shared handler storage (a manual release loop would be redundant
+    // and fragile — every new member would need a new line here).
     ~ProtocolDispatcher() = default;
 
     ProtocolDispatcher(const ProtocolDispatcher&) = delete;

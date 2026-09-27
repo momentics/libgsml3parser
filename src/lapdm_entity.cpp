@@ -78,8 +78,8 @@ void LAPDmEntity::receiveFrame(std::span<const uint8_t> frameBytes) {
     const auto& frame = *result;
 
     // Drop frames addressed to a different SAPI: one entity serves one SAPI
-    // per logical channel (previously a UI frame for SAPI3 was
-    // delivered by a SAPI0 entity).
+    // per logical channel, so a UI frame for another SAPI must never be
+    // delivered here.
     if (frame.address.sapi != mSapi) return;
 
     // FSM dispatch via switch — O(1), no virtual calls.
@@ -619,8 +619,8 @@ void LAPDmEntity::receiveSFrame(const lapdm::LAPDmFrame& frame) {
             // REJ (GSM 04.06 5.3.3): the peer requests retransmission
             // starting from NR. With the k=1 constraint the only outstanding
             // frame is mPendingFrame; retransmit it when it is still
-            // unacknowledged (previously REJ was ignored until
-            // T200 expired, up to N200*T200 later). Retransmissions
+            // unacknowledged instead of waiting for T200 to expire
+            // (up to N200*T200 later). Retransmissions
             // triggered by REJ count toward the N200 budget exactly like
             // T200-expiry retransmissions (tickT200), so a peer cannot force
             // unbounded retransmits by sending REJ repeatedly.

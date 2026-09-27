@@ -32,9 +32,9 @@ ChannelType decodeChannelNeeded(uint8_t ra, bool neci, bool vea) {
     (void)neci; // NECI-specific variants are covered by the explicit patterns below.
 
     // 8-bit RA pattern decoding — TS 44.018 Table 9.1.8.1 / 9.1.8.2
-    // (the previous 2-bit (ra >> 5) & 0x03 mapping misclassified
-    // most patterns, e.g. originating call 111xxxxx became "location
-    // updating" -> SDCCH instead of TCH).
+    // (a 2-bit (ra >> 5) & 0x03 mapping would misclassify most patterns,
+    // e.g. originating call 111xxxxx as "location updating" -> SDCCH
+    // instead of TCH).
     if (ra < 0x20) return ChannelType::SDCCHType;   // 0000xxxx LU / 0001xxxx other SDCCH procedures
     if (ra < 0x30) return ChannelType::TCHFType;    // 0010xxxx answer to paging, TCH/F
     if (ra < 0x40) return ChannelType::TCHHType;    // 0011xxxx answer to paging, TCH/H or TCH/F
@@ -51,8 +51,8 @@ bool isLocationUpdatingRequest(uint8_t ra, bool neci) {
     (void)neci; // NECI variants are covered by the explicit pattern below.
     // 0000xxxx: location updating (NECI=1). The 0001xxxx form ("other
     // SDCCH procedures", NECI=1) is ambiguous with paging SDCCH-only
-    // accesses, so only 0000xxxx is reported as LU (the previous
-    // (ra >> 5) & 0x03 == 0x03 test matched 0110xxxx = re-establishment).
+    // accesses, so only 0000xxxx is reported as LU (a
+    // (ra >> 5) & 0x03 == 0x03 test would match 0110xxxx = re-establishment).
     return ra < 0x10;
 }
 
@@ -141,9 +141,9 @@ size_t ChannelPool::totalCount() const {
 std::optional<ChannelDescriptor> ChannelPool::allocateVEA(uint8_t ra) {
     // VEA (Very Early Assignment) applies to originating calls
     // (RA 111xxxxx): assign a TCH directly, falling back to SDCCH when no
-    // TCH is free (TS 44.018 5.2.4, the previous
-    // (ra >> 5) & 0x03 == 0 test applied VEA to location updating 000xxxxx,
-    // which must never be assigned a TCH).
+    // TCH is free (TS 44.018 5.2.4). A (ra >> 5) & 0x03 == 0 test would
+    // apply VEA to location updating 000xxxxx, which must never be
+    // assigned a TCH.
     if (ra >= 0xC0) {
         if (auto tch = allocate(ChannelType::TCHFType)) return tch;
         // Try TCHH as fallback within the TCH family.

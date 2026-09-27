@@ -204,8 +204,8 @@ inline void readCpuTopology(HardwareInfo& h) {
 
 // L1/L2/L3 sizes from CPUID leaf 0x04 (Deterministic Cache Parameters).
 // Leaf 4 does NOT advertise its subleaf count (calling it with ECX=0 returns
-// the first descriptor, not a count — treating that word as a count made the
-// old code bail out on every modern CPU); subleaves are iterated until the
+// the first descriptor, not a count — treating that word as a count makes
+// detection bail out on every modern CPU); subleaves are iterated until the
 // descriptor comes back all zeros. Field positions follow the layout observed
 // on current Intel/AMD CPUs (validated against known Raptor Lake sizes):
 //   type    = EAX[4:0]   1=Data, 2=Instruction, 3=Unified

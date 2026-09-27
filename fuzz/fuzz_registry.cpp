@@ -20,7 +20,7 @@
 // SOFTWARE.
 
 // Fuzz target: SubscriberRegistry random operation mix — create/find/
-// remove by TMSI, timer start/tick, channel assign/release (audit D15).
+// remove by TMSI, timer start/tick, channel assign/release.
 // The live-session vector tracks created sessions so remove() only ever
 // sees pointers owned by the registry (no use-after-free by construction).
 #include <cstddef>

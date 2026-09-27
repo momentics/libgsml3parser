@@ -52,8 +52,8 @@ pub(crate) fn tick_timers_into(reg: NonNull<c_void>, delta_ms: u32, cap: usize) 
         // Cannot happen per the ABI; refuse to over-read the buffer anyway.
         return Err(error::internal("Registry::tick_timers", "C wrote more timer expiries than the buffer capacity"));
     }
-    let mut out = Vec::with_capacity(n as usize);
-    for slot in buf.iter().take(n as usize) {
+    let mut out = Vec::with_capacity(n);
+    for slot in buf.iter().take(n) {
         // SAFETY: slots 0..n were fully written by the C call just made.
         let ev = unsafe { slot.assume_init_read() };
         out.push((ev.session as usize, ev.timer_id));

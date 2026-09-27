@@ -209,8 +209,8 @@ TEST(ShardedChannelPool, Allocate_RoundRobin_SpreadsShards) {
 }
 
 // Test: the channel descriptor hash spreads sequential ARFCNs across
-// shards (the previous hash was dominated by arfcn & 0xFF
-// and had a dead avalanche step).
+// shards (a hash dominated by arfcn & 0xFF with a dead avalanche step
+// would not spread them).
 TEST(ChannelPoolTest, HashDescriptor_Distribution) {
     std::array<int, 16> perShard{};
     for (uint16_t arfcn = 1; arfcn <= 1000; ++arfcn) {
