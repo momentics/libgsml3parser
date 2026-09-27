@@ -45,18 +45,61 @@
 
 namespace gsml3parser {
 
-// ── TP Data Coding Scheme (GSM 03.40 9.2.3.10) ────────────────────────
+// ── TP Data Coding Scheme (TS 23.040) ─────────────────────────
 
+/// Well-known full DCS octets for the default text and data codings
+/// (TS 23.040). Any other octet value remains representable; use
+/// decodeSmsDcs() to interpret it.
 enum class TPDCS : uint8_t {
-    Default_Alphabet = 0x00,
-    Default_8bit     = 0x08,
-    UCS2             = 0x0C,
-    Range_Indicator  = 0x40,
-    RLA_64           = 0x44,
-    RLA_128          = 0x45,
+    Default_Alphabet = 0x00, ///< GSM 7-bit default alphabet (TS 23.040).
+    Default_8bit     = 0x04, ///< 8-bit data coding (TS 23.040).
+    UCS2             = 0x08, ///< UCS2 coding (TS 23.040).
 };
 
 const char* TPDCS2Str(TPDCS dcs);
+
+/// Alphabet carried by a DCS octet (TS 23.040).
+enum class SmsDcsAlphabet : uint8_t { Gsm7Bit = 0, Data8Bit = 1, Ucs2 = 2, Undefined = 3 };
+
+/// Decoded view of one TP-DCS octet (TS 23.040).
+struct SmsDcsDecoded {
+    SmsDcsAlphabet alphabet;   ///< per the rules in decodeSmsDcs; Undefined when the group yields no alphabet
+    bool compressed{false};
+    bool hasMessageClass{false};
+    unsigned messageClass{0};  ///< dcs & 3 (0..3)
+};
+
+/// Decode a data coding scheme octet per TS 23.040. The coding
+/// group is CG = dcs >> 4. For CG in {0..3} the data coding scheme is
+/// (dcs >> 2) & 3 (GSM 7-bit default / 8-bit data / UCS2, '11' reserved),
+/// bit 0x20 is the compression flag, and the message class (dcs & 3)
+/// applies when CG == 0 and bit 0x10 is set. CG in {0xC, 0xD} selects the
+/// GSM 7-bit alphabet, CG == 0xE selects UCS2, and CG == 0xF selects
+/// 8-bit data when bit 0x04 is set (otherwise GSM 7-bit) with the message
+/// class always applicable.
+[[nodiscard]] constexpr SmsDcsDecoded decodeSmsDcs(uint8_t dcs) noexcept {
+    SmsDcsDecoded result;
+    const unsigned cg = dcs >> 4;
+    if ((cg & 0x0Cu) == 0u) {
+        switch ((dcs >> 2) & 0x03u) {
+            case 0:  result.alphabet = SmsDcsAlphabet::Gsm7Bit;   break;
+            case 1:  result.alphabet = SmsDcsAlphabet::Data8Bit;  break;
+            case 2:  result.alphabet = SmsDcsAlphabet::Ucs2;      break;
+            default: result.alphabet = SmsDcsAlphabet::Undefined; break;
+        }
+        result.compressed = (dcs & 0x20u) != 0u;
+        result.hasMessageClass = (cg == 0u) && ((dcs & 0x10u) != 0u);
+    } else if (cg == 0xCu || cg == 0xDu) {
+        result.alphabet = SmsDcsAlphabet::Gsm7Bit;
+    } else if (cg == 0xEu) {
+        result.alphabet = SmsDcsAlphabet::Ucs2;
+    } else {
+        result.alphabet = (dcs & 0x04u) ? SmsDcsAlphabet::Data8Bit : SmsDcsAlphabet::Gsm7Bit;
+        result.hasMessageClass = true;
+    }
+    result.messageClass = dcs & 0x03u;
+    return result;
+}
 
 // ── TP Protocol Identifier (GSM 03.40 9.2.3.9) ────────────────────────
 

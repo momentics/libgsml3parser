@@ -72,7 +72,7 @@
 //   - GSM timing constants verified against GSM_Types.ttcn:
 //     GsmMaxFrameNumber=26*51*2048=2715648, GSM_FRAME_DURATION=0.12/26.0=4.615ms
 //   - Rest octet padding 0x2B verified against GSM_RestOctets.ttcn PADDING_PATTERN('00101011'B)
-//   - ChannelDescription: typeAndOffset(5)|TN(3)|TSC(3)|h(1)|spare(2)|ARFCN(10) - 24 bits MSB-first
+//   - ChannelDescription: typeAndOffset(5)|TN(3)|TSC(3)|h(1)|ARFCN(12) - 24 bits MSB-first (TS 44.018 10.5.2.5)
 //   - CellDescriptionV: bcc(3)|ncc(3)|arfcn(10) - 16 bits LSB-first (GSM_RR_Types.ttcn FIELDORDER(lsb))
 //   - RequestReference: RA(8)|T1p(5)|T3(6)|T2(5) - verified against GSM_RR_Types.ttcn f_compute_ReqRef
 
@@ -367,7 +367,7 @@ TEST(GoldenIE, CipheringKeySeqNr_MaxValue) {
 // =====================================================================
 // Common IEs: L3ChannelDescription (GSM 04.08 10.5.2.5)
 // Reference: GSM_RR_Types.ttcn ChannelDescription, ts_ChanDescH0, ts_ChanDescH1
-// 24 bits: typeAndOffset(5) + TN(3) + TSC(3) + h(1) + spare(2) + ARFCN(10)
+// 24 bits: typeAndOffset(5) + TN(3) + TSC(3) + h(1) + ARFCN(12) (TS 44.018 10.5.2.5)
 // =====================================================================
 
 TEST(GoldenIE, ChannelDescription_Default) {
@@ -413,6 +413,92 @@ TEST(GoldenIE, ChannelDescription_RoundTrip) {
     EXPECT_EQ((*parsedResult).tn(), orig.tn());
     EXPECT_EQ((*parsedResult).tsc(), orig.tsc());
     EXPECT_EQ((*parsedResult).arfcn(), orig.arfcn());
+}
+
+// =====================================================================
+// Common IEs: L3ChannelDescription twelve-bit ARFCN (TS 44.018 10.5.2.5)
+// With H=0 the ARFCN occupies the full twelve bits after TSC(3)|H(1), so
+// values 1024..4095 are representable; for ARFCN < 1024 the wire bytes are
+// unchanged (the high two bits of the field are zero).
+// =====================================================================
+
+TEST(GoldenIE, ChannelDescription_ArfcnAbove1023_WireShape) {
+    // typeAndOffset=TCHF(00010)|TN=3(011) -> 0x13; TSC=7(111)|H=0|ARFCN top
+    // nibble 0x4 -> 0xE4; ARFCN bottom octet 0x01. ARFCN = 0x401 = 1025.
+    L3ChannelDescription orig(TDMA_TCHF, 3, 7, 1025);
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    EXPECT_EQ(writer.position(), 24u);
+    EXPECT_EQ(buf[0], 0x13u);
+    EXPECT_EQ(buf[1], 0xE4u);
+    EXPECT_EQ(buf[2], 0x01u);
+
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3ChannelDescription::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).typeAndOffset(), TDMA_TCHF);
+    EXPECT_EQ((*parsedResult).tn(), 3u);
+    EXPECT_EQ((*parsedResult).tsc(), 7u);
+    EXPECT_EQ((*parsedResult).hFlag(), 0u);
+    EXPECT_EQ((*parsedResult).arfcn(), 1025u);
+}
+
+TEST(GoldenIE, ChannelDescription_ArfcnBelow1024_UnchangedWire) {
+    // ARFCN = 873 (0x369): the twelve-bit field is zero-extended in its top
+    // two bits, so the octets match the historical layout exactly.
+    L3ChannelDescription orig(TDMA_TCHF, 3, 7, 873);
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    EXPECT_EQ(buf[0], 0x13u);
+    EXPECT_EQ(buf[1], 0xE3u);
+    EXPECT_EQ(buf[2], 0x69u);
+
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3ChannelDescription::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).arfcn(), 873u);
+}
+
+TEST(GoldenIE, ChannelDescription_ArfcnMaxValue) {
+    // The twelve-bit ARFCN field reaches its maximum, 4095.
+    L3ChannelDescription orig(TDMA_TCHF, 0, 0, 4095);
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3ChannelDescription::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).arfcn(), 4095u);
+}
+
+TEST(GoldenIE, ChannelDescription2_ArfcnAbove1023_RoundTrip) {
+    L3ChannelDescription2 orig(TDMA_TCHF, 3, 7, 2000);
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3ChannelDescription2::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).typeAndOffset(), TDMA_TCHF);
+    EXPECT_EQ((*parsedResult).tn(), 3u);
+    EXPECT_EQ((*parsedResult).tsc(), 7u);
+    EXPECT_EQ((*parsedResult).arfcn(), 2000u);
+}
+
+TEST(GoldenIE, AdditionalChannelDescription_ArfcnAbove1023_RoundTrip) {
+    L3AdditionalChannelDescription orig(TDMA_TCHF, 3, 5, 3000);
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3AdditionalChannelDescription::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).typeAndOffset(), TDMA_TCHF);
+    EXPECT_EQ((*parsedResult).tn(), 3u);
+    EXPECT_EQ((*parsedResult).tsc(), 5u);
+    EXPECT_EQ((*parsedResult).arfcn(), 3000u);
 }
 
 // =====================================================================
@@ -1658,6 +1744,49 @@ TEST(GoldenIE, GSMAlphabet_Decode) {
     EXPECT_EQ(decodeGSMChar(84), 'a');
     EXPECT_EQ(decodeGSMChar(85), 'b');
     EXPECT_EQ(decodeGSMChar(86), 'c');
+}
+
+// Out-of-range code points map to the space character (robustness policy,
+// TS 23.038 default alphabet). The guard boundary is kGsm7TableSize.
+TEST(GoldenIE, GSMAlphabet_Decode_OutOfRange) {
+    EXPECT_EQ(decodeGSMChar(static_cast<unsigned char>(kGsm7TableSize)), ' ');
+    EXPECT_EQ(decodeGSMChar(0xFFu), ' ');
+    // The last in-table code point still decodes (no off-by-one at the guard).
+    EXPECT_EQ(decodeGSMChar(static_cast<unsigned char>(kGsm7TableSize - 1)), 0x00);
+}
+
+// =====================================================================
+// BCD nibble mapping (TS 23.040)
+// gBCDAlphabet covers the sixteen nibble values: digits 0..9 at indices
+// 0..9, '*' at 10/11/13, '#' at 12/14 and the fill nibble 'F' rendered as
+// 'f' at index 15. Encoding maps digits to their value and everything else
+// (including padding) to the fill nibble 0x0F.
+// =====================================================================
+
+TEST(GoldenIE, BCD_NibbleDecode) {
+    EXPECT_EQ(decodeBCDChar(0), '0');
+    EXPECT_EQ(decodeBCDChar(5), '5');
+    EXPECT_EQ(decodeBCDChar(9), '9');
+    EXPECT_EQ(decodeBCDChar(10), '*');
+    EXPECT_EQ(decodeBCDChar(11), '*');
+    EXPECT_EQ(decodeBCDChar(12), '#');
+    EXPECT_EQ(decodeBCDChar(13), '*');
+    EXPECT_EQ(decodeBCDChar(14), '#');
+    EXPECT_EQ(decodeBCDChar(15), 'f');
+    // Indices beyond the sixteen nibble mappings render as '?'.
+    EXPECT_EQ(decodeBCDChar(0x10), '?');
+    EXPECT_EQ(decodeBCDChar(0x7F), '?');
+}
+
+TEST(GoldenIE, BCD_NibbleEncode) {
+    EXPECT_EQ(encodeBCDChar('0'), 0);
+    EXPECT_EQ(encodeBCDChar('9'), 9);
+    // Non-digits (padding, service symbols and letters) map to the fill nibble.
+    EXPECT_EQ(encodeBCDChar('+'), 0x0F);
+    EXPECT_EQ(encodeBCDChar('*'), 0x0F);
+    EXPECT_EQ(encodeBCDChar('#'), 0x0F);
+    EXPECT_EQ(encodeBCDChar('a'), 0x0F);
+    EXPECT_EQ(encodeBCDChar('\0'), 0x0F);
 }
 
 // =====================================================================

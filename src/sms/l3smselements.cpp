@@ -36,9 +36,6 @@ const char* TPDCS2Str(TPDCS dcs) {
         case TPDCS::Default_Alphabet: return "Default-Alphabet";
         case TPDCS::Default_8bit:     return "Default-8bit";
         case TPDCS::UCS2:             return "UCS2";
-        case TPDCS::Range_Indicator:  return "Reserved-Range";
-        case TPDCS::RLA_64:           return "RLA-64";
-        case TPDCS::RLA_128:          return "RLA-128";
     }
     return "Unknown";
 }

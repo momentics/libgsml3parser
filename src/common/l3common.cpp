@@ -598,8 +598,8 @@ Expected<L3ChannelDescription> L3ChannelDescription::parse(BitReader& br) {
         r = br.readField(6); if (!r) return Expected<L3ChannelDescription>::error(r.error()); result.mMAIO = static_cast<uint8_t>(r.value());
         r = br.readField(6); if (!r) return Expected<L3ChannelDescription>::error(r.error()); result.mHSN = static_cast<uint8_t>(r.value());
     } else {
-        r = br.readField(2); if (!r) return Expected<L3ChannelDescription>::error(r.error()); // spare
-        r = br.readField(10); if (!r) return Expected<L3ChannelDescription>::error(r.error()); result.mARFCN = static_cast<uint16_t>(r.value());
+        // Absolute RF channel number, twelve bits (TS 44.018 10.5.2.5).
+        r = br.readField(12); if (!r) return Expected<L3ChannelDescription>::error(r.error()); result.mARFCN = static_cast<uint16_t>(r.value());
     }
     result.mInitialized = true;
     return Expected<L3ChannelDescription>::hold(std::move(result));
@@ -614,8 +614,8 @@ void L3ChannelDescription::write(BitWriter& bw) const {
         bw.writeField(mMAIO, 6);
         bw.writeField(mHSN, 6);
     } else {
-        bw.writeField(0, 2);
-        bw.writeField(mARFCN, 10);
+        // Absolute RF channel number, twelve bits (TS 44.018 10.5.2.5).
+        bw.writeField(mARFCN, 12);
     }
 }
 
@@ -650,8 +650,8 @@ Expected<L3ChannelDescription2> L3ChannelDescription2::parse(BitReader& br) {
         r = br.readField(6); if (!r) return Expected<L3ChannelDescription2>::error(r.error()); result.mMAIO = static_cast<uint8_t>(r.value());
         r = br.readField(6); if (!r) return Expected<L3ChannelDescription2>::error(r.error()); result.mHSN = static_cast<uint8_t>(r.value());
     } else {
-        r = br.readField(2); if (!r) return Expected<L3ChannelDescription2>::error(r.error());
-        r = br.readField(10); if (!r) return Expected<L3ChannelDescription2>::error(r.error()); result.mARFCN = static_cast<uint16_t>(r.value());
+        // Absolute RF channel number, twelve bits (TS 44.018 10.5.2.5).
+        r = br.readField(12); if (!r) return Expected<L3ChannelDescription2>::error(r.error()); result.mARFCN = static_cast<uint16_t>(r.value());
     }
     return Expected<L3ChannelDescription2>::hold(std::move(result));
 }
@@ -665,8 +665,8 @@ void L3ChannelDescription2::write(BitWriter& bw) const {
         bw.writeField(mMAIO, 6);
         bw.writeField(mHSN, 6);
     } else {
-        bw.writeField(0, 2);
-        bw.writeField(mARFCN, 10);
+        // Absolute RF channel number, twelve bits (TS 44.018 10.5.2.5).
+        bw.writeField(mARFCN, 12);
     }
 }
 
@@ -697,8 +697,8 @@ Expected<L3AdditionalChannelDescription> L3AdditionalChannelDescription::parse(B
         r = br.readField(6); if (!r) return Expected<L3AdditionalChannelDescription>::error(r.error()); result.mMAIO = static_cast<uint8_t>(r.value());
         r = br.readField(6); if (!r) return Expected<L3AdditionalChannelDescription>::error(r.error()); result.mHSN = static_cast<uint8_t>(r.value());
     } else {
-        r = br.readField(2); if (!r) return Expected<L3AdditionalChannelDescription>::error(r.error());
-        r = br.readField(10); if (!r) return Expected<L3AdditionalChannelDescription>::error(r.error()); result.mARFCN = static_cast<uint16_t>(r.value());
+        // Absolute RF channel number, twelve bits (TS 44.018 10.5.2.5).
+        r = br.readField(12); if (!r) return Expected<L3AdditionalChannelDescription>::error(r.error()); result.mARFCN = static_cast<uint16_t>(r.value());
     }
     result.mInitialized = true;
     return Expected<L3AdditionalChannelDescription>::hold(std::move(result));
@@ -713,8 +713,8 @@ void L3AdditionalChannelDescription::write(BitWriter& bw) const {
         bw.writeField(mMAIO, 6);
         bw.writeField(mHSN, 6);
     } else {
-        bw.writeField(0, 2);
-        bw.writeField(mARFCN, 10);
+        // Absolute RF channel number, twelve bits (TS 44.018 10.5.2.5).
+        bw.writeField(mARFCN, 12);
     }
 }
 

@@ -52,7 +52,7 @@
 //     Verified against GSM_RR_Types.ttcn f_compute_ReqRef: t1p=(fn/1326)mod32, t2=fn mod26, t3=fn mod51
 //   - MobileIdentity encoding: TMSI type octet 0x08 (spare=0|type=100|oe=0), IMSI type 0x03/0x01
 //     Verified against L3_Templates.ttcn ts_MI_TMSI_LV, ts_MI_IMSI_LV, CmIdentityType enum
-//   - ChannelDescription: typeAndOffset(5)|TN(3)|TSC(3)|h(1)|spare(2)|ARFCN(10) = 24 bits MSB-first
+//   - ChannelDescription: typeAndOffset(5)|TN(3)|TSC(3)|h(1)|ARFCN(12) = 24 bits MSB-first
 //     Verified against GSM_RR_Types.ttcn ChannelDescription, ts_ChanDescH0, ts_ChanDescH1
 //   - RACHControlParameters_RefValues {0xE5, 0x04, 0x00}: max_retrans=3, tx_integer=9, cell_bar=0, re=1, ACC=0x0400
 //     Verified against BTS_Tests.ttcn ts_RachCtrl_default (line 347)
@@ -423,7 +423,7 @@ TEST(GSMSpecTest, MobileIdentity_TMSI_RoundTrip) {
 // Reference: GSM_RR_Types.ttcn ChannelDescription, ts_ChanDescH0, ts_ChanDescH1
 
 TEST(GSMSpecTest, ChannelDescription_NoHopping) {
-    // h=0: type&offset(5) + TN(3) + TSC(3) + h(1) + ARFCN(10) = 23 bits
+    // h=0: type&offset(5) + TN(3) + TSC(3) + h(1) + ARFCN(12) = 24 bits
     L3ChannelDescription chd(TDMA_SDCCH, 2, 7, 100);
     EXPECT_EQ(chd.typeAndOffset(), TDMA_SDCCH);
     EXPECT_EQ(chd.tn(), 2u);

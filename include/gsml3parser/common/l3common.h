@@ -334,7 +334,7 @@ class L3ChannelDescription {
     uint8_t mTN{};
     uint8_t mTSC{};
     unsigned mHFlag{};
-    uint16_t mARFCN{};
+    uint16_t mARFCN{}; ///< Absolute RF channel number, twelve bits (TS 44.018 10.5.2.5).
     uint8_t mMAIO{};
     uint8_t mHSN{};
     bool mInitialized{false};
@@ -365,7 +365,7 @@ class L3ChannelDescription2 {
     uint8_t mTN{};
     uint8_t mTSC{};
     unsigned mHFlag{};
-    uint16_t mARFCN{};
+    uint16_t mARFCN{}; ///< Absolute RF channel number, twelve bits (TS 44.018 10.5.2.5).
     uint8_t mMAIO{};
     uint8_t mHSN{};
 public:
@@ -396,7 +396,7 @@ class L3AdditionalChannelDescription {
     uint8_t mTN{};
     uint8_t mTSC{};
     unsigned mHFlag{};
-    uint16_t mARFCN{};
+    uint16_t mARFCN{}; ///< Absolute RF channel number, twelve bits (TS 44.018 10.5.2.5).
     uint8_t mMAIO{};
     uint8_t mHSN{};
     bool mInitialized{false};

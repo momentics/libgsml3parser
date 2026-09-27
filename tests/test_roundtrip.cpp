@@ -517,7 +517,7 @@ TEST(RoundTripTest, ChannelModeModify) {
 // Byte 1: MTI = 0x17
 TEST(RoundTripTest, ChannelModeModifyAcknowledge) {
     uint8_t data[] = {0x06, 0x17,
-        // ChanDesc: typeAndOffset(5)=TDMA_TCHF(2), TN(3)=1, TSC(3)=7, h(1)=0, spare(2)=0, ARFCN(10)=100
+        // ChanDesc: typeAndOffset(5)=TDMA_TCHF(2), TN(3)=1, TSC(3)=7, h(1)=0, ARFCN(12)=100
         // Bits: 00010 001 111 0 00 0001100100
         // Byte 0: 00010001 = 0x11
         // Byte 1: 11100000 = 0xE0

@@ -354,7 +354,7 @@ func TestErrorPaths(t *testing.T) {
 	} else if e, ok := err.(*Error); !ok || e.Code != CodeInvalidArg {
 		t.Fatalf("expected INVALID_ARG pass-through, got %v", err)
 	}
-	// Fixed-width frame fields (TN/TSC 0..7, ARFCN 0..1023) are range-checked in C:
+	// Fixed-width frame fields (TN/TSC 0..7, ARFCN 0..4095) are range-checked in C:
 	if _, err := BuildResponseImmediateAssignment(0, 9, 0, 100, 0); err == nil { // tn = 9 > 7
 		t.Error("BuildResponseImmediateAssignment(tn=9) must fail (fixed-width field)")
 	} else if e, ok := err.(*Error); !ok || e.Code != CodeInvalidArg {

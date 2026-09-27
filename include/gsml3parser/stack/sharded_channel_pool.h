@@ -101,11 +101,12 @@ public:
         // 8 bits, ignored the channel type, and its second avalanche
         // step (h ^= h >> 25) was dead code because h < 2^24 always).
         // Bit layout: type 5 bits (20 ChannelType values), trx 8,
-        // timeslot 8, ARFCN 11 (valid values are 10-bit, 0-1023).
+        // timeslot 4 (eight TDMA timeslots per TRX, TS 45.010),
+        // ARFCN 12 (channel description field, TS 44.018 10.5.2.5).
         uint32_t h = (static_cast<uint32_t>(d.type) & 0x1Fu)
                     | (static_cast<uint32_t>(d.trxNumber) << 5)
-                    | (static_cast<uint32_t>(d.timeslot) << 13)
-                    | ((static_cast<uint32_t>(d.arfcn) & 0x3FFu) << 21);
+                    | ((static_cast<uint32_t>(d.timeslot) & 0xFu) << 13)
+                    | ((static_cast<uint32_t>(d.arfcn) & 0xFFFu) << 17);
         h ^= h >> 16; h *= 0x7feb352du;
         h ^= h >> 15; h *= 0x846ca68bu;
         h ^= h >> 16;

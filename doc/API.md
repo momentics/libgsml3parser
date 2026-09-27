@@ -1682,7 +1682,7 @@ struct Bounded {
 
 | Type | Range | Description |
 |------|-------|-------------|
-| `Arfcn` | 0–1023 | Absolute Radio Frequency Channel Number (10 bits) |
+| `Arfcn` | 0–4095 | Absolute Radio Frequency Channel Number (12 bits, TS 44.018 10.5.2.5) |
 | `Bsic` | 0–63 | Base Station Identity Code (6 bits) |
 | `TimingAdvanceValue` | 0–63 | Timing Advance (6 bits) |
 | `Ncc` | 0–7 | Network Color Code (3 bits) |
@@ -2506,7 +2506,7 @@ The SMS layer uses a three-level encapsulation: L3 header -> CP message -> RP me
 
 | Enum | Values | Description |
 |------|--------|-------------|
-| `TPDCS` | 6 values | Default_Alphabet (7-bit), Default_8bit, UCS2, Range_Indicator, RLA_64, RLA_128 |
+| `TPDCS` | 3 values | Default_Alphabet (0x00, GSM 7-bit), Default_8bit (0x04), UCS2 (0x08) — full DCS octets; any octet is representable and is interpreted by `decodeSmsDcs()` (TS 23.040: alphabet, compression flag, message class) |
 | `TPPID` | 23 values | GSM 03.40 protocol identifiers: Default, GSM, X121, Telex, LandLine, SS7_DestinationAccess, TeX_Page, Packet_Switched_64k, TeX_Information, Packet_Switched_1200, SS7_Telephone_User, SS7_Telelex_User, SS7_Direct_Connection, SS7_MAP, SNA, X400_FTAM, Telematic_Application, SCF_Access, H323_Video, Internet_ST_FIP, CAP, SS7_SCCP, X25_Packet_Switched |
 
 ### TP Information Elements
@@ -2515,6 +2515,10 @@ The SMS layer uses a three-level encapsulation: L3 header -> CP message -> RP me
 |----|-------------|
 | `L3TPAddress` | TP-DA/TP-OA: LV format with TON/NPI + BCD digits |
 | `TPSCTimeStamp` | Service centre time stamp: year, month, day, hour, minute, second, timezone (7 octets) |
+
+### GSM 7-bit Alphabet Robustness
+
+`decodeGSMChar()` (in `gsml3parser/gsm_common.h`) maps a 7-bit code point to the ISO-8859-1 alphabet table. Code points outside the table are mapped to the space character per the robustness policy (TS 23.038 default alphabet).
 
 ---
 
@@ -4924,7 +4928,8 @@ ctypes/cffi, Rust, Go). One C89-clean header
   channel types, timer IDs, response tokens, ...) and digit strings
   (IMSI, called-party numbers, LAI components) are range-checked at the
   boundary, as are fixed-width frame fields (timeslot number and time
-  slot code 0..7, ARFCN 0..1023, timing advance 0..63, request-reference
+   slot code 0..7, ARFCN 0..4095 (twelve-bit field), timing advance 0..63,
+   request-reference
   timings): invalid values fail with `GSML3_ERR_INVALID_ARG` (or NULL / 0)
   and are never truncated into a frame; the reserved TMSI 0 is rejected by
   session keying and by every builder that carries a TMSI. No digit string

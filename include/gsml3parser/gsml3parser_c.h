@@ -965,7 +965,8 @@ GSML3_C_API size_t gsml3_msg_sup_serv_facility_data(const gsml3_message* msg,
   * service_type: L3CMServiceType::TypeCode value. All parameters are
   * range-checked against the protocol domain, including the fixed-width
   * frame fields of channel descriptions (timeslot and time slot code 0..7,
-  * ARFCN 0..1023) and timing advance (0..63), and the reserved all-zero
+  * ARFCN 0..4095, twelve-bit field per TS 44.018 10.5.2.5) and timing advance
+  * (0..63), and the reserved all-zero
   * TMSI: an out-of-domain value fails with GSML3_ERR_INVALID_ARG (return
   * 0) and is never truncated into the frame. */
 GSML3_C_API size_t gsml3_build_channel_release(uint8_t* out, size_t maxlen,

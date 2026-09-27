@@ -192,7 +192,7 @@ class Channel:
     type_and_offset: int  # gsml3parser::TypeAndOffset
     tn: int               # 0..7
     tsc: int              # 0..7
-    arfcn: int            # 0..1023
+    arfcn: int            # 0..4095 (twelve-bit field, TS 44.018 10.5.2.5)
 
 
 @dataclass(frozen=True)
@@ -1335,7 +1335,7 @@ class Registry:
         _check_session(sess, "sess")
         lib.gsml3_registry_assign_channel(
             self._h, sess._h, ch_type, _as_u8(trx, "trx"), _as_u8(ts, "ts"),
-            _as_int(arfcn, "arfcn", lo=0, hi=1023), _as_u8(lapdm_link, "lapdm_link"))
+            _as_int(arfcn, "arfcn", lo=0, hi=4095), _as_u8(lapdm_link, "lapdm_link"))
         code = int(lib.gsml3_last_error_code())
         if code != OK:
             raise_last_error(lib, code, "registry_assign_channel")
@@ -1730,7 +1730,7 @@ def response_build_physical_information(ta: int) -> bytes:
 
 def response_build_immediate_assignment(type_and_offset: int, tn: int, tsc: int,
                                         arfcn: int, ta: int) -> bytes:
-    """Channel description: tn/tsc 0..7 and arfcn 0..1023 are width-checked in C."""
+    """Channel description: tn/tsc 0..7 and arfcn 0..4095 are width-checked in C."""
     return _builder("gsml3_response_build_immediate_assignment",
                     (type_and_offset, tn, tsc, arfcn, ta))
 
@@ -1823,7 +1823,7 @@ def build_channel_request(ra: int) -> bytes:
 
 def build_immediate_assignment(type_and_offset: int, tn: int, tsc: int, arfcn: int,
                                ta: int, ra: int) -> bytes:
-    """tn/tsc 0..7, arfcn 0..1023, ta 0..63 — width-checked in C."""
+    """tn/tsc 0..7, arfcn 0..4095, ta 0..63 — width-checked in C."""
     return _builder("gsml3_build_immediate_assignment",
                     (type_and_offset, tn, tsc, arfcn, ta, ra))
 

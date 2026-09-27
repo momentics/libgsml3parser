@@ -216,7 +216,7 @@ inline constexpr int timerHi      = static_cast<int>(L3TimerId::T3395);
 namespace fields {
 inline constexpr int timeslotHi = 7;     // 3-bit TDMA timeslot number
 inline constexpr int tscHi      = 7;     // 3-bit time slot code
-inline constexpr int arfcnHi    = 1023;  // 10-bit ARFCN (H=0 channel description)
+inline constexpr int arfcnHi    = 4095;  // 12-bit ARFCN (H=0 channel description, TS 44.018 10.5.2.5)
 inline constexpr int timingHi   = 63;    // 6-bit timing advance
 inline constexpr int t1pHi      = 31;    // request-reference T1 timing (5 bits)
 inline constexpr int t2Hi       = 31;    // request-reference T2 timing (5 bits)

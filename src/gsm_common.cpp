@@ -46,7 +46,17 @@ const unsigned char gGSMAlphabet[] = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
-const char gBCDAlphabet[] = "0123456789.#abc";
+// The table holds the kGsm7TableSize default-alphabet code points (0..126)
+// followed by reserved zero-filled slots; decodeGSMChar() maps code points
+// outside the default range to space.
+static_assert(sizeof(gGSMAlphabet) >= kGsm7TableSize);
+
+// BCD nibble -> ASCII mapping (TS 23.040): the ten digits at
+// indices 0..9, '*' at 10/11/13, '#' at 12/14, and the fill nibble 'F'
+// rendered as 'f' at index 15.
+const char gBCDAlphabet[] = "0123456789**#*#f";
+
+static_assert(sizeof(gBCDAlphabet) - 1 == 16u);
 
 unsigned char encodeGSMChar(unsigned char ascii) {
     for (unsigned i = 0; i < sizeof(gGSMAlphabet); ++i) {
@@ -56,10 +66,10 @@ unsigned char encodeGSMChar(unsigned char ascii) {
 }
 
 char encodeBCDChar(char ascii) {
-    for (unsigned i = 0; i < sizeof(gBCDAlphabet) - 1; ++i) {
-        if (gBCDAlphabet[i] == ascii) return static_cast<char>(i);
-    }
-    return 'a'; // padding
+    // Digits map to their BCD value; everything else (including padding)
+    // maps to the fill nibble 0x0F (TS 23.040).
+    if (ascii >= '0' && ascii <= '9') return static_cast<char>(ascii - '0');
+    return 0x0Fu;
 }
 
 std::string data2hex(const unsigned char* data, unsigned nbytes) {

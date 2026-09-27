@@ -73,20 +73,30 @@ int FNCompare(int32_t v1, int32_t v2);
 
 // ── GSM alphabet tables ─────────────────────────────────────────────────
 
-/** GSM 7-bit alphabet -> ISO-8859-1 mapping */
+/** Number of GSM 7-bit default-alphabet code points (TS 23.038): 0..126. */
+inline constexpr unsigned kGsm7TableSize = 127u;
+
+/** GSM 7-bit alphabet -> ISO-8859-1 mapping; covers the kGsm7TableSize default
+ *  code points plus reserved zero-filled slots beyond them. */
 GSML3PARSER_DLL extern const unsigned char gGSMAlphabet[];
 
-/** BCD -> ASCII mapping */
+/** BCD nibble -> ASCII mapping: indices 0..15; index 15 renders the fill nibble */
 GSML3PARSER_DLL extern const char gBCDAlphabet[];
 
 unsigned char encodeGSMChar(unsigned char ascii);
-inline unsigned char decodeGSMChar(unsigned char sms) {
-    return gGSMAlphabet[static_cast<unsigned>(sms)];
+inline unsigned char decodeGSMChar(unsigned char code) {
+    // Code points outside the table map to the space character
+    // (robustness policy; TS 23.038 default alphabet).
+    if (code >= kGsm7TableSize) return ' ';
+    return gGSMAlphabet[static_cast<unsigned>(code)];
 }
 
 char encodeBCDChar(char ascii);
 inline char decodeBCDChar(char bcd) {
-    return gBCDAlphabet[static_cast<unsigned>(bcd)];
+    // Indices beyond the sixteen nibble mappings render as '?'.
+    const unsigned idx = static_cast<unsigned>(static_cast<unsigned char>(bcd));
+    if (idx > 0x0Fu) return '?';
+    return gBCDAlphabet[idx];
 }
 
 /** Convert raw bytes to a hex string. */

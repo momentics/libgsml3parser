@@ -1492,14 +1492,15 @@ TEST(CApi, InputValidation) {
     expectInvalid(gsml3_response_build_identity_request(buf, sizeof(buf), 9));
 
     // Fixed-width channel-description fields: values beyond the on-wire
-    // field width (3/3/10 bits) would be silently truncated by the encoders;
+    // field width (3/3/12 bits) would be silently truncated by the encoders;
     // the C boundary rejects them instead. Boundary values still build.
     expectInvalid(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 8, 0, 50, 0, 0));
     expectInvalid(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 0, 8, 50, 0, 0));
-    expectInvalid(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 0, 0, 1024, 0, 0));
-    EXPECT_GT(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 7, 7, 1023, 63, 0), 0u);
+    expectInvalid(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 0, 0, 4096, 0, 0));
+    EXPECT_GT(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 7, 7, 1024, 63, 0), 0u);
+    EXPECT_GT(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 7, 7, 4095, 63, 0), 0u);
     expectInvalid(gsml3_response_build_assignment_command(buf, sizeof(buf), 2, 9, 0, 50));
-    expectInvalid(gsml3_response_build_immediate_assignment(buf, sizeof(buf), 2, 0, 0, 2048, 1));
+    expectInvalid(gsml3_response_build_immediate_assignment(buf, sizeof(buf), 2, 0, 0, 4096, 1));
     EXPECT_GT(gsml3_build_physical_information(buf, sizeof(buf), 63), 0u);
     expectInvalid(gsml3_build_physical_information(buf, sizeof(buf), 64));
     expectInvalid(gsml3_response_build_physical_information(buf, sizeof(buf), 64));

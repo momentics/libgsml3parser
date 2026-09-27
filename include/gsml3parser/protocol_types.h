@@ -42,7 +42,7 @@ struct Bounded {
 };
 
 // GSM protocol field types with bounded ranges
-using Arfcn              = Bounded<uint16_t, 0, 1023>;   // 10 bits
+using Arfcn              = Bounded<uint16_t, 0, 4095>;   // 12 bits (TS 44.018 10.5.2.5)
 using Bsic               = Bounded<uint8_t,  0, 63>;     // 6 bits
 using TimingAdvanceValue = Bounded<uint8_t,  0, 63>;     // 6 bits
 using Ncc                = Bounded<uint8_t,  0, 7>;      // 3 bits

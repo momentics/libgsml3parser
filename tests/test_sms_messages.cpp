@@ -665,6 +665,118 @@ TEST(GoldenSMSTest, TPEnumStrings) {
 }
 
 // =====================================================================
+// SMS Data Coding Scheme (TS 23.040)
+// decodeSmsDcs() is checked against a local reference model of the TS
+// 23.040 DCS bit layout for all 256 octet values, plus hand-computed
+// spot checks of the well-known codings.
+// =====================================================================
+
+namespace {
+
+struct DcsExpectation {
+    SmsDcsAlphabet alphabet;
+    bool compressed;
+    bool hasMessageClass;
+    unsigned messageClass;
+};
+
+// Local reference model of the TS 23.040 DCS bit layout, used as the
+// expected-value source for the table test below: coding group CG = dcs >> 4.
+constexpr DcsExpectation dcsReference(uint8_t dcs) noexcept {
+    const unsigned cg = dcs >> 4;
+    DcsExpectation e{SmsDcsAlphabet::Undefined, false, false, dcs & 0x3u};
+    if ((cg & 0xCu) == 0u) {
+        // Coding groups 0..3: the scheme is (dcs >> 2) & 3.
+        switch ((dcs >> 2) & 0x3u) {
+            case 0:  e.alphabet = SmsDcsAlphabet::Gsm7Bit;   break;
+            case 1:  e.alphabet = SmsDcsAlphabet::Data8Bit;  break;
+            case 2:  e.alphabet = SmsDcsAlphabet::Ucs2;      break;
+            default: e.alphabet = SmsDcsAlphabet::Undefined; break;
+        }
+        e.compressed = (dcs & 0x20u) != 0u;
+        e.hasMessageClass = (cg == 0u) && ((dcs & 0x10u) != 0u);
+    } else if (cg >= 0xCu && cg <= 0xDu) {
+        // Coding groups 12/13 select the GSM 7-bit alphabet.
+        e.alphabet = SmsDcsAlphabet::Gsm7Bit;
+    } else if (cg == 0xEu) {
+        // Coding group 14 selects UCS2.
+        e.alphabet = SmsDcsAlphabet::Ucs2;
+    } else {
+        // Coding group 15: 8-bit data when bit 0x04 is set, otherwise GSM
+        // 7-bit; the message class always applies.
+        e.alphabet = (dcs & 0x04u) ? SmsDcsAlphabet::Data8Bit : SmsDcsAlphabet::Gsm7Bit;
+        e.hasMessageClass = true;
+    }
+    return e;
+}
+
+} // namespace
+
+TEST(GoldenSMSTest, DCS_WellKnownOctets) {
+    // TPDCS members hold the full well-known DCS octets (TS 23.040).
+    EXPECT_EQ(static_cast<uint8_t>(TPDCS::Default_Alphabet), 0x00u);
+    EXPECT_EQ(static_cast<uint8_t>(TPDCS::Default_8bit), 0x04u);
+    EXPECT_EQ(static_cast<uint8_t>(TPDCS::UCS2), 0x08u);
+}
+
+TEST(GoldenSMSTest, DCS_DecodeSpotChecks) {
+    // Default GSM 7-bit text; the message class does not apply for 0x00.
+    auto d0 = decodeSmsDcs(0x00);
+    EXPECT_EQ(d0.alphabet, SmsDcsAlphabet::Gsm7Bit);
+    EXPECT_FALSE(d0.compressed);
+    EXPECT_FALSE(d0.hasMessageClass);
+    EXPECT_EQ(d0.messageClass, 0u);
+
+    // Well-known data codings.
+    EXPECT_EQ(decodeSmsDcs(0x04).alphabet, SmsDcsAlphabet::Data8Bit);
+    EXPECT_EQ(decodeSmsDcs(0x08).alphabet, SmsDcsAlphabet::Ucs2);
+
+    // Coding group 1: the message class does not apply (it requires coding
+    // group 0 with bit 0x10 set).
+    auto d10 = decodeSmsDcs(0x10);
+    EXPECT_EQ(d10.alphabet, SmsDcsAlphabet::Gsm7Bit);
+    EXPECT_FALSE(d10.hasMessageClass);
+    EXPECT_EQ(d10.messageClass, 0u);
+
+    // Compressed flag (bit 0x20) in coding group 1.
+    auto d30 = decodeSmsDcs(0x30);
+    EXPECT_EQ(d30.alphabet, SmsDcsAlphabet::Gsm7Bit);
+    EXPECT_TRUE(d30.compressed);
+    EXPECT_FALSE(d30.hasMessageClass);
+
+    // Coding groups 12/13 select the GSM 7-bit alphabet; group 14 selects UCS2.
+    EXPECT_EQ(decodeSmsDcs(0xC0).alphabet, SmsDcsAlphabet::Gsm7Bit);
+    EXPECT_EQ(decodeSmsDcs(0xDE).alphabet, SmsDcsAlphabet::Gsm7Bit);
+    EXPECT_EQ(decodeSmsDcs(0xE1).alphabet, SmsDcsAlphabet::Ucs2);
+
+    // Coding group 15 with bit 0x04 set: 8-bit data, class always applies.
+    auto df6 = decodeSmsDcs(0xF6);
+    EXPECT_EQ(df6.alphabet, SmsDcsAlphabet::Data8Bit);
+    EXPECT_TRUE(df6.hasMessageClass);
+    EXPECT_EQ(df6.messageClass, 2u);
+
+    // Coding group 15 without bit 0x04: GSM 7-bit.
+    auto df0 = decodeSmsDcs(0xF0);
+    EXPECT_EQ(df0.alphabet, SmsDcsAlphabet::Gsm7Bit);
+    EXPECT_TRUE(df0.hasMessageClass);
+
+    // Reserved scheme '11' in coding group 0..3 yields no alphabet.
+    EXPECT_EQ(decodeSmsDcs(0x0C).alphabet, SmsDcsAlphabet::Undefined);
+}
+
+TEST(GoldenSMSTest, DCS_DecodeAllOctets) {
+    // per TS 23.040 DCS bit layout
+    for (int dcs = 0; dcs < 256; ++dcs) {
+        const auto got = decodeSmsDcs(static_cast<uint8_t>(dcs));
+        const auto want = dcsReference(static_cast<uint8_t>(dcs));
+        EXPECT_EQ(got.alphabet, want.alphabet) << "dcs=" << dcs;
+        EXPECT_EQ(got.compressed, want.compressed) << "dcs=" << dcs;
+        EXPECT_EQ(got.hasMessageClass, want.hasMessageClass) << "dcs=" << dcs;
+        EXPECT_EQ(got.messageClass, want.messageClass) << "dcs=" << dcs;
+    }
+}
+
+// =====================================================================
 // SMS TP Status Report (GSM 23.040 9.2.2.3) - minimal parse
 // Reference: 3GPP TS 23.040 section 9.2.2.3
 // =====================================================================

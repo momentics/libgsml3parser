@@ -329,7 +329,7 @@ pub struct gsml3_channel {
     pub tn: u8,
     /// Timeslot code 0..7
     pub tsc: u8,
-    /// Absolute radio-frequency channel number 0..1023
+    /// Absolute radio-frequency channel number 0..4095 (twelve-bit field)
     pub arfcn: u16,
 }
 

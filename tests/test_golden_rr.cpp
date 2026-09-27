@@ -33,7 +33,7 @@
 // HandoverCommand CellDescriptionV verified against GSM_RR_Types.ttcn FIELDORDER(lsb):
 //   bcc(3)|ncc(3)|arfcn(10) packed LSB-first across 2 octets.
 // ChannelDescription encoding verified against GSM 24.008 10.5.2.5:
-//   typeAndOffset(5)|TN(3)|TSC(3)|h(1)|spare(2)|ARFCN(10).
+//   typeAndOffset(5)|TN(3)|TSC(3)|h(1)|ARFCN(12).
 // CipheringModeCommand byte layout verified against L3_Templates.ttcn ts_RRM_CiphModeCmd:
 //   cipherModeSetting(4 MSB)|cipherModeResponse(4 LSB), sC=1|algId=A5/3 -> 0xB0.
 // CellSelectionParameters verified against BTS_Tests.ttcn ts_CellSelPar_default.
@@ -62,7 +62,7 @@
 //   - AdditionalAssignment type (GSM_RR_Types.ttcn ADDITIONAL_ASSIGNMENT) verified
 //   - GPRSSuspensionRequest type (GSM_RR_Types.ttcn GPRS_SUSPENSION_REQUEST) verified
 //   - ApplicationInformation type (GSM_RR_Types.ttcn APPLICATION_INFORMATION) verified
-// All ChannelDescription encodings verified: typeAndOffset(5)|TN(3)|TSC(3)|h(1)|spare(2)|ARFCN(10)
+// All ChannelDescription encodings verified: typeAndOffset(5)|TN(3)|TSC(3)|h(1)|ARFCN(12)
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -379,7 +379,7 @@ TEST(GoldenRR, HandoverCommand_Parse) {
     //   GSM_RR_Types.ttcn CellDescriptionV: FIELDORDER(lsb) - bcc first, then ncc, then arfcn
     //   bcc(3)=011, ncc(3)=101, arfcn(10)=0001100100
     //   LSB-first: 011|101|00 = 0x74, 00011001|00xxxxxx = 0x19 (arfcn=100=0x64, high 2 bits in byte 1)
-    // Bytes 4-6: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), spare(2), ARFCN(10) [GSM 24.008 10.5.2.5]
+    // Bytes 4-6: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), ARFCN(12) [GSM 24.008 10.5.2.5]
     //   {0x11, 0xE0, 0x64}: typeAndOffset=2(TDMA_TCHF), TN=1, TSC=7, h=0, ARFCN=100
     // Byte 7: HORef = 0x17 [GSM 24.008 10.5.2.15, 5-bit handover reference]
     // Byte 8: PowerCmdAccType = 0x00 [GSM 24.008 10.5.2.28a]
@@ -405,14 +405,14 @@ TEST(GoldenRR, HandoverCommand_Parse) {
 // Spec-verified: PD=6(RR), MTI=0x2E(AssignmentCommand) per 3GPP TS 44.018 Table 10.4.1
 // [GSM SPEC VERIFIED] GSM 24.008 9.1.2: AssignmentCommand body = ChanDesc + PowerCmd + [optional].
 //   ChannelDescription (GSM 24.008 10.5.2.5): 3 octets, MSB-first bit packing:
-//   typeAndOffset(5)|TN(3)|TSC(3)|h(1)|spare(2)|ARFCN(10).
+//   typeAndOffset(5)|TN(3)|TSC(3)|h(1)|ARFCN(12).
 //   PowerCommand (GSM 24.008 10.5.2.28): 1 octet, power_command(5 MSB)|spare(3 LSB).
 // =====================================================================
 
 TEST(GoldenRR, AssignmentCommand_Parse) {
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x2E (AssignmentCommand) [3GPP TS 44.018 Table 10.4.1]
-    // Bytes 2-4: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), spare(2), ARFCN(10) [GSM 24.008 10.5.2.5]
+    // Bytes 2-4: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), ARFCN(12) [GSM 24.008 10.5.2.5]
     //   {0x10, 0xE0, 0x64}: typeAndOffset=2(TDMA_TCHF), TN=0, TSC=7, h=0, ARFCN=100
     // Byte 5: PowerCmd = 0x00 [GSM 24.008 10.5.2.28, 5-bit power_command << 3]
     uint8_t data[] = {0x06, 0x2e, 0x10, 0xE0, 0x64, 0x00};
@@ -442,7 +442,7 @@ TEST(GoldenRR, ImmediateAssignment_Parse) {
     // Byte 2: DedOrTBF(4)=0(dedicated)|PageMode(4)=0(Normal) = 0x00
     //   GSM_RR_Types.ttcn DedicatedModeOrTbf (line 374): spare+tma+downlink+tbf
     //   GSM_RR_Types.ttcn PageMode (line 382): PAGE_MODE_NORMAL(0)
-    // Bytes 3-5: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), spare(2), ARFCN(10) [GSM 24.008 10.5.2.5]
+    // Bytes 3-5: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), ARFCN(12) [GSM 24.008 10.5.2.5]
     //   {0x00, 0x00, 0x64}: typeAndOffset=0(TDMA_SACCH), TN=0, TSC=0, h=0, ARFCN=100
     // Bytes 6-8: ReqRef: RA(8)=0x42, T1p(5)=0, T3(6)=0, T2(5)=0 [GSM 24.008 10.5.2.30]
     //   GSM_RR_Types.ttcn RequestReference (line 390): ra(8), t1p(5), t3(6), t2(5)
@@ -505,7 +505,7 @@ TEST(GoldenRR, ImmediateAssignmentReject_Parse) {
 TEST(GoldenRR, ChannelModeModify_Parse) {
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x10 (ChannelModeModify) [3GPP TS 44.018 Table 10.4.1]
-    // Bytes 2-4: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), spare(2), ARFCN(10) [GSM 24.008 10.5.2.5]
+    // Bytes 2-4: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), ARFCN(12) [GSM 24.008 10.5.2.5]
     //   {0x11, 0xE0, 0x64}: typeAndOffset=2(TDMA_TCHF), TN=1, TSC=7, h=0, ARFCN=100
     // Byte 5: ChanMode(4)=1(SpeechV1)|spare(4)=0 = 0x01 [GSM 24.008 10.5.2.6]
     uint8_t data[] = {0x06, 0x10, 0x11, 0xE0, 0x64, 0x01};
@@ -724,14 +724,14 @@ TEST(GoldenRR, PhysicalInformation_Parse) {
 // Spec-verified: PD=6(RR), MTI=0x3B(AdditionalAssignment) per 3GPP TS 44.018 Table 10.4.1
 // [GSM SPEC VERIFIED] GSM 24.008 9.1.1: AdditionalAssignment body = AdditionalChanDesc + [PowerCmd].
 //   AdditionalChannelDescription (same format as ChannelDescription, GSM 24.008 10.5.2.5):
-//   typeAndOffset(5)|TN(3)|TSC(3)|h(1)|spare(2)|ARFCN(10) = 3 octets.
+//   typeAndOffset(5)|TN(3)|TSC(3)|h(1)|ARFCN(12) = 3 octets.
 //   This test: typeAndOffset=2(TCHF), TN=2, TSC=5, h=0, ARFCN=86 -> {0x12, 0xA0, 0x56}.
 // =====================================================================
 
 TEST(GoldenRR, AdditionalAssignment_Parse) {
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x3B (AdditionalAssignment) [3GPP TS 44.018 Table 10.4.1]
-    // Bytes 2-4: AdditionalChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), spare(2), ARFCN(10)
+    // Bytes 2-4: AdditionalChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), ARFCN(12)
     //   {0x12, 0xA0, 0x56}: typeAndOffset=2, TN=2, TSC=5, h=0, ARFCN=86 [GSM 24.008 10.5.2.5]
     uint8_t data[] = {0x06, 0x3b, 0x12, 0xA0, 0x56};
     auto msg = parseL3(std::span<const uint8_t>(data));
