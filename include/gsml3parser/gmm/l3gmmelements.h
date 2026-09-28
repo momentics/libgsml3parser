@@ -196,7 +196,10 @@ public:
 };
 
 // ── Routing Area Identification (GSM 24.008 10.5.6.2) ─────────────────
-// Fixed: MCC/MNC BCD(3) | LAC(2) | RAC(1) = 6 octets total
+// Fixed: MCC/MNC BCD(3) | LAC(2) | RAC(1) = 6 octets total. The PLMN is
+// packed as [MCC2|MCC1][MNC3/F|MCC3][MNC2|MNC1] BCD octets (F fill for a
+// 2-digit MNC); digits are stored and exposed in natural written order
+// (TS 24.008 section 10.5.1.3).
 
 class L3RoutingAreaIdentification {
     std::array<unsigned, 3> mMCC{};

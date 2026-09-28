@@ -403,24 +403,24 @@ TEST(GoldenGMMTest, DetachAccept_RoundTrip) {
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x02 = MTI(8)=0x02(AttachAccept), raw encoding
 //   0x20 = attachResult(3)=GPRS(1)|spare(1)=0|forceToStandby(1)=0|updateTimer(2)=0|radioPriority(1)=0
-//   0x52 0xF0 0x10 = MCC/MNC BCD nibble-swapped: MCC=250, MNC=01
+//   0x52 0xF0 0x10 = MCC/MNC BCD: MCC=250, MNC=01 (TS 24.008 10.5.1.3 packing)
 //   0x12 0x34 = LAC = 0x1234
 //   0x56 = RAC = 0x56
 //   0x8c = extended IEI for allocatedPTMSI (0x80 | 0x0c)
 //   0x05 = length of PTMSI LV value = 5 bytes
-//   0x44 = type byte: spare(4)=0|type(3)=TMSI(4)|oe(1)=0
+//   0xF4 = first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B)
 //   0x12 0x34 0x56 0x78 = TMSI value = 0x12345678
 // =====================================================================
 
 TEST(GoldenGMMTest, AttachAccept_GoldenParse) {
     // Body: firstOctet(1) + RAI(6) + PTMSI_TLV(7) = 14 bytes
-    // PTMSI TLV: IEI=0x8c | len=5 | type_byte(0x08=TMSI) | TMSI(4)
+    // PTMSI TLV: IEI=0x8c | len=5 | type_byte(0xF4=TMSI) | TMSI(4)
     uint8_t data[] = {
         0x08, 0x02,                            // header: PD=GMM, MTI=AttachAccept
         0x20,                                   // attachResult(3)=GPRS(1)|spare(1)=0|forceToStandby(1)=0|updateTimer(2)=0|radioPriority(1)=0
         0x52, 0xF0, 0x10, 0x12, 0x34, 0x56,    // RAI: MCC=250, MNC=01, LAC=0x1234, RAC=0x56
         0x8c, 0x05,                             // TLV: extended IEI=0x0c(allocatedPTMSI), length=5
-        0x08,                                   // type byte: spare(4)=0|type(3)=TMSI(4)|oe(1)=0 = 0x08
+        0xF4,                                   // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) = 0xF4
         0x12, 0x34, 0x56, 0x78                  // TMSI value = 0x12345678
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -501,12 +501,12 @@ TEST(GoldenGMMTest, RAUpdateRequest_GoldenParse) {
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x09 = MTI(8)=0x09(RoutingAreaUpdateAccept), raw encoding
 //   0x10 = forceToStandby(1)=0|updateResult(3)=RAUpdated(0)|spare(1)=0|raUpdateTimer(2)=0|radioPriority(1)=0
-//   0x52 0xF0 0x10 = MCC/MNC BCD nibble-swapped: MCC=250, MNC=01
+//   0x52 0xF0 0x10 = MCC/MNC BCD: MCC=250, MNC=01 (TS 24.008 10.5.1.3 packing)
 //   0x12 0x34 = LAC = 0x1234
 //   0x56 = RAC = 0x56
 //   0x8c = extended IEI for allocatedPTMSI (0x80 | 0x0c)
 //   0x05 = length of PTMSI LV value = 5 bytes
-//   0x44 = type byte: spare(4)=0|type(3)=TMSI(4)|oe(1)=0
+//   0xF4 = first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B)
 //   0x12 0x34 0x56 0x78 = TMSI value = 0x12345678
 // =====================================================================
 
@@ -518,7 +518,7 @@ TEST(GoldenGMMTest, RAUpdateAccept_GoldenParse) {
         0x00,                                      // forceToStandby(1)=0|updateResult(3)=RAUpdated(0)|spare(1)=0|raUpdateTimer(2)=0|radioPriority(1)=0
         0x52, 0xF0, 0x10, 0x12, 0x34, 0x56,       // RAI: MCC=250, MNC=01, LAC=0x1234, RAC=0x56
         0x8c, 0x05,                                // TLV: extended IEI=0x0c(allocatedPTMSI), length=5
-        0x08,                                      // type byte: spare(4)=0|type(3)=TMSI(4)|oe(1)=0 = 0x08
+        0xF4,                                      // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) = 0xF4
         0x12, 0x34, 0x56, 0x78                     // TMSI value = 0x12345678
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -564,7 +564,7 @@ TEST(GoldenGMMTest, RAUpdateReject_GoldenParse) {
 //   0x0c = MTI(8)=0x0c(ServiceRequest), raw encoding
 //   0x71 = CKSN(3)=7|spare(1)=0|serviceType(3)=1(signalling)|spare(1)=0
 //   0x05 = PTMSI LV length = 5 bytes
-//   0x44 = type byte: spare(4)=0|type(3)=TMSI(4)|oe(1)=0
+//   0xF4 = first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B)
 //   0x12 0x34 0x56 0x78 = TMSI value = 0x12345678
 // =====================================================================
 
@@ -575,7 +575,7 @@ TEST(GoldenGMMTest, ServiceRequest_GoldenParse) {
         0x08, 0x0c,                              // header: PD=GMM, MTI=ServiceRequest
         0x71,                                     // CKSN(4)=7|serviceType(4)=1(signalling)
         0x05,                                     // PTMSI LV length = 5 bytes
-        0x08,                                     // type byte: spare(4)=0|type(3)=TMSI(4)|oe(1)=0 = 0x08
+        0xF4,                                     // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) = 0xF4
         0x12, 0x34, 0x56, 0x78                    // TMSI value = 0x12345678
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -618,12 +618,12 @@ TEST(GoldenGMMTest, ServiceReject_GoldenParse) {
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x10 = MTI(8)=0x10(P_TMSIReallocationCommand), raw encoding
 //   0x00 = PTMSI_Type(1)=Native(0)|spare(7)=0
-//   0x52 0xF0 0x10 = MCC/MNC BCD nibble-swapped: MCC=250, MNC=01
+//   0x52 0xF0 0x10 = MCC/MNC BCD: MCC=250, MNC=01 (TS 24.008 10.5.1.3 packing)
 //   0x12 0x34 = LAC = 0x1234
 //   0x56 = RAC = 0x56
 //   0x8c = extended IEI for allocatedPTMSI (0x80 | 0x0c)
 //   0x05 = length of PTMSI LV value = 5 bytes
-//   0x44 = type byte: spare(4)=0|type(3)=TMSI(4)|oe(1)=0
+//   0xF4 = first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B)
 //   0x12 0x34 0x56 0x78 = TMSI value = 0x12345678
 // =====================================================================
 
@@ -634,7 +634,7 @@ TEST(GoldenGMMTest, PTMSIRereallocCommand_GoldenParse) {
         0x00,                                      // PTMSI_Type(1)=Native(0)|spare(7)=0
         0x52, 0xF0, 0x10, 0x12, 0x34, 0x56,       // RAI: MCC=250, MNC=01, LAC=0x1234, RAC=0x56
         0x8c, 0x05,                                // TLV: extended IEI=0x0c(allocatedPTMSI), length=5
-        0x08,                                      // type byte: spare(4)=0|type(3)=TMSI(4)|oe(1)=0 = 0x08
+        0xF4,                                      // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) = 0xF4
         0x12, 0x34, 0x56, 0x78                     // TMSI value = 0x12345678
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -747,15 +747,16 @@ TEST(GoldenGMMTest, GMMIdentityRequest_GoldenParse) {
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x16 = MTI(8)=0x16(GMMIdentityResponse), raw encoding
-//   0x08 = mobileIdentity LV length = 8 bytes
-//   0x62 = type byte: spare(4)=0|type(3)=IMSI(1)|oe(1)=1
-//   0x25 0x09 0x99 0x00 0x00 0x00 0x0F = BCD IMSI "250999000000001"
+//   0x08 = mobileIdentity LV length = 8 bytes (1 + 15/2 for a 15-digit IMSI)
+//   0x29 = first octet: [first digit '2'(4)|odd count(1)=1|type(3)=IMSI('001')]
+//   0x05 0x99 0x09 0x00 0x00 0x00 0x10 = digit pairs [next or F][current]
+//     for IMSI "250999000000001" (TS 24.008 10.5.1.4)
 // =====================================================================
 
 TEST(GoldenGMMTest, GMMIdentityResponse_GoldenParse) {
     uint8_t data[] = {
         0x08, 0x16,
-        0x08, 0x62, 0x25, 0x09, 0x99, 0x00, 0x00, 0x00, 0x0F
+        0x08, 0x29, 0x05, 0x99, 0x09, 0x00, 0x00, 0x00, 0x10
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -764,6 +765,7 @@ TEST(GoldenGMMTest, GMMIdentityResponse_GoldenParse) {
     auto* idr = tryGet<L3GMMIdentityResponse>(*msg);
     ASSERT_NE(idr, nullptr);
     EXPECT_EQ(idr->mobileId().type(), MobileIDType::IMSI);
+    EXPECT_STREQ(idr->mobileId().digits(), "250999000000001");
 }
 
 // =====================================================================

@@ -71,28 +71,35 @@ int L3LocationAreaIdentity::mnc() const {
 }
 
 Expected<L3LocationAreaIdentity> L3LocationAreaIdentity::parse(BitReader& br) {
-    auto r = br.readField(4); if (!r) return Expected<L3LocationAreaIdentity>::error(r.error()); unsigned mcc1 = r.value();
-    r = br.readField(4); if (!r) return Expected<L3LocationAreaIdentity>::error(r.error()); unsigned mcc0 = r.value();
-    r = br.readField(4); if (!r) return Expected<L3LocationAreaIdentity>::error(r.error()); unsigned mnc2 = r.value();
-    r = br.readField(4); if (!r) return Expected<L3LocationAreaIdentity>::error(r.error()); unsigned mcc2_ = r.value();
-    r = br.readField(4); if (!r) return Expected<L3LocationAreaIdentity>::error(r.error()); unsigned mnc1 = r.value();
-    r = br.readField(4); if (!r) return Expected<L3LocationAreaIdentity>::error(r.error()); unsigned mnc0 = r.value();
+    // PLMN BCD packing (TS 24.008 section 10.5.1.3):
+    //   octet 1 = [MCC digit 2 | MCC digit 1]
+    //   octet 2 = [MNC digit 3 (or F fill for a 2-digit MNC) | MCC digit 3]
+    //   octet 3 = [MNC digit 2 | MNC digit 1]
+    auto r = br.readField(4); if (!r) return Expected<L3LocationAreaIdentity>::error(r.error()); unsigned mcc2_ = r.value();
+    r = br.readField(4); if (!r) return Expected<L3LocationAreaIdentity>::error(r.error()); unsigned mcc1_ = r.value();
+    r = br.readField(4); if (!r) return Expected<L3LocationAreaIdentity>::error(r.error()); unsigned mnc3_ = r.value();
+    r = br.readField(4); if (!r) return Expected<L3LocationAreaIdentity>::error(r.error()); unsigned mcc3_ = r.value();
+    r = br.readField(4); if (!r) return Expected<L3LocationAreaIdentity>::error(r.error()); unsigned mnc2_ = r.value();
+    r = br.readField(4); if (!r) return Expected<L3LocationAreaIdentity>::error(r.error()); unsigned mnc1_ = r.value();
     r = br.readField(16); if (!r) return Expected<L3LocationAreaIdentity>::error(r.error()); uint16_t lac = static_cast<uint16_t>(r.value());
 
     L3LocationAreaIdentity result;
-    result.mMCC[0] = mcc0; result.mMCC[1] = mcc1; result.mMCC[2] = mcc2_;
-    result.mMNC[0] = mnc0; result.mMNC[1] = mnc1; result.mMNC[2] = mnc2;
+    // Natural digit order: mMCC[0..2] = MCC digits 1..3, mMNC[0..2] = MNC
+    // digits 1..3 (0xF fill for a 2-digit MNC).
+    result.mMCC[0] = mcc1_; result.mMCC[1] = mcc2_; result.mMCC[2] = mcc3_;
+    result.mMNC[0] = mnc1_; result.mMNC[1] = mnc2_; result.mMNC[2] = mnc3_;
     result.mLAC = lac;
     return Expected<L3LocationAreaIdentity>::hold(std::move(result));
 }
 
 void L3LocationAreaIdentity::write(BitWriter& bw) const {
-    bw.writeField(mMCC[1], 4);
-    bw.writeField(mMCC[0], 4);
-    bw.writeField(mMNC[2], 4);
-    bw.writeField(mMCC[2], 4);
-    bw.writeField(mMNC[1], 4);
-    bw.writeField(mMNC[0], 4);
+    // PLMN BCD packing (TS 24.008 section 10.5.1.3): see parse for the layout.
+    bw.writeField(mMCC[1], 4);   // octet 1 high: MCC digit 2
+    bw.writeField(mMCC[0], 4);   // octet 1 low:  MCC digit 1
+    bw.writeField(mMNC[2], 4);   // octet 2 high: MNC digit 3 (0xF for a 2-digit MNC)
+    bw.writeField(mMCC[2], 4);   // octet 2 low:  MCC digit 3
+    bw.writeField(mMNC[1], 4);   // octet 3 high: MNC digit 2
+    bw.writeField(mMNC[0], 4);   // octet 3 low:  MNC digit 1
     bw.writeField(mLAC, 16);
 }
 
@@ -114,8 +121,16 @@ L3MobileIdentity::L3MobileIdentity(uint32_t wTMSI)
 }
 
 L3MobileIdentity::L3MobileIdentity(std::string_view wDigits)
-    : mType(MobileIDType::IMSI), mTMSI(0) {
+    : L3MobileIdentity(MobileIDType::IMSI, wDigits) {
+}
+
+L3MobileIdentity::L3MobileIdentity(MobileIDType wType, std::string_view wDigits)
+    : mType(MobileIDType::NoID), mTMSI(0) {
     mDigits.fill('\0');
+    if (wType != MobileIDType::IMSI && wType != MobileIDType::IMEI && wType != MobileIDType::IMEISV) {
+        return;
+    }
+    mType = wType;
     // Only BCD digits are encodable on the wire (write() turns each stored
     // character into a nibble); any other character would corrupt the frame.
     size_t n = 0;
@@ -144,46 +159,56 @@ bool L3MobileIdentity::operator<(const L3MobileIdentity& other) const {
 }
 
 size_t L3MobileIdentity::lengthV() const {
-    if (mType == MobileIDType::NoID) return 1;
+    // Mobile identity length (TS 24.008 section 9.1.3.x): one octet per digit
+    // pair plus the type octet; TMSI is always four octets; NoID one octet.
     if (mType == MobileIDType::TMSI) return 5;
+    if (mType == MobileIDType::NoID) return 1;
     size_t nDigits = std::string_view(mDigits.data()).size();
-    return 1 + (nDigits + 1) / 2;
+    return 1 + nDigits / 2;
 }
 
 Expected<L3MobileIdentity> L3MobileIdentity::parse(BitReader& br, size_t lengthBytes) {
-    auto r = br.readField(4); if (!r) return Expected<L3MobileIdentity>::error(r.error()); // spare
+    // First octet (TS 24.008 section 9.1.3.x):
+    //   [first digit(4) | odd count(1) | identity type(3)].
+    auto r = br.readField(4); if (!r) return Expected<L3MobileIdentity>::error(r.error()); unsigned firstDigit = r.value();
+    r = br.readField(1); if (!r) return Expected<L3MobileIdentity>::error(r.error()); bool oddCount = r.value() != 0;
     r = br.readField(3); if (!r) return Expected<L3MobileIdentity>::error(r.error());
     MobileIDType type = static_cast<MobileIDType>(r.value());
-    r = br.readField(1); if (!r) return Expected<L3MobileIdentity>::error(r.error()); // oe
 
     L3MobileIdentity result;
     result.mDigits.fill('\0');
 
     switch (type) {
         case MobileIDType::TMSI: {
-            result.mType = MobileIDType::TMSI;
+            // The spare 'F' nibble was consumed as the "first digit"; the
+            // identity is a 32-bit value in big-endian order.
             r = br.readField(32); if (!r) return Expected<L3MobileIdentity>::error(r.error());
+            result.mType = MobileIDType::TMSI;
             result.mTMSI = r.value();
             break;
         }
         case MobileIDType::IMSI:
         case MobileIDType::IMEI:
         case MobileIDType::IMEISV: {
+            // Digit pairs follow as [next digit or F fill][current digit].
             result.mType = type;
-            size_t remainingBytes = lengthBytes - 1; // minus type octet
             int numDigits = 0;
-            for (size_t i = 0; i < remainingBytes && numDigits < 19; ++i) {
-                r = br.readField(4); if (!r) return Expected<L3MobileIdentity>::error(r.error());
-                unsigned highNibble = r.value();
-                r = br.readField(4); if (!r) return Expected<L3MobileIdentity>::error(r.error());
-                unsigned lowNibble = r.value();
-                if (lowNibble != 0x0F && numDigits < 19) {
-                    result.mDigits[numDigits++] = static_cast<char>(lowNibble + '0');
-                }
-                if (highNibble != 0x0F && numDigits < 19) {
-                    result.mDigits[numDigits++] = static_cast<char>(highNibble + '0');
+            // The first digit occupies the high nibble of the type octet.
+            if (firstDigit < 10) {
+                result.mDigits[numDigits++] = static_cast<char>(firstDigit + '0');
+            }
+            size_t remainingBytes = lengthBytes - 1; // minus the type octet
+            for (size_t i = 0; i < remainingBytes; ++i) {
+                r = br.readField(4); if (!r) return Expected<L3MobileIdentity>::error(r.error()); unsigned nextDigit = r.value();
+                r = br.readField(4); if (!r) return Expected<L3MobileIdentity>::error(r.error()); unsigned currentDigit = r.value();
+                if (numDigits + 2 < static_cast<int>(result.mDigits.size())) {
+                    result.mDigits[numDigits++] = static_cast<char>(currentDigit + '0');
+                    result.mDigits[numDigits++] = static_cast<char>(nextDigit + '0');
                 }
             }
+            // An even digit count ends with an 'F' fill in the high nibble of
+            // the last byte; drop that trailing artifact.
+            if (!oddCount && numDigits > 0) --numDigits;
             result.mDigits[numDigits] = '\0';
             break;
         }
@@ -195,37 +220,37 @@ Expected<L3MobileIdentity> L3MobileIdentity::parse(BitReader& br, size_t lengthB
 }
 
 void L3MobileIdentity::write(BitWriter& bw) const {
-    if (mType == MobileIDType::NoID) {
-        bw.writeField(0, 4);
-        bw.writeField(0, 3);
-        bw.writeField(1, 1);
-        return;
+    // First octet (TS 24.008 section 9.1.3.x):
+    //   [first digit(4) | odd count(1) | identity type(3)].
+    size_t nDigits = 0;
+    if (mType == MobileIDType::IMSI || mType == MobileIDType::IMEI || mType == MobileIDType::IMEISV) {
+        nDigits = std::string_view(mDigits.data()).size();
     }
     if (mType == MobileIDType::TMSI) {
-        bw.writeField(0, 4);
-        bw.writeField(4, 3);
+        // TMSI: spare 'F' nibble, a zero bit, type '100'B and four octets.
+        bw.writeField(0x0F, 4);
         bw.writeField(0, 1);
+        bw.writeField(static_cast<unsigned>(mType), 3);
         bw.writeField(mTMSI, 32);
         return;
     }
-    size_t nDigits = std::string_view(mDigits.data()).size();
     if (nDigits == 0) {
-        bw.writeField(0, 4);
-        bw.writeField(0, 3);
-        bw.writeField(1, 1);
+        // NoID or an empty digit identity: spare 'F' nibble and a zero bit.
+        MobileIDType type = (nDigits == 0 && mType != MobileIDType::NoID) ? mType : MobileIDType::NoID;
+        bw.writeField(0x0F, 4);
+        bw.writeField(0, 1);
+        bw.writeField(static_cast<unsigned>(type), 3);
         return;
     }
-    bw.writeField(0, 4);
+    bw.writeField(mDigits[0] - '0', 4);          // first digit in the high nibble
+    bw.writeField(nDigits & 0x01u, 1);           // odd-count indicator
     bw.writeField(static_cast<unsigned>(mType), 3);
-    bw.writeField(1, 1);
-    size_t i = 0;
-    while (i < nDigits) {
+    for (size_t i = 1; i < nDigits; i += 2) {    // [next digit or F fill][current digit]
         if (i + 1 < nDigits)
             bw.writeField(mDigits[i + 1] - '0', 4);
         else
             bw.writeField(0x0F, 4);
         bw.writeField(mDigits[i] - '0', 4);
-        i += 2;
     }
 }
 

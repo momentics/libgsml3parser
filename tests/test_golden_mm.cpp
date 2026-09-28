@@ -51,9 +51,11 @@
 //   - MMStatus: cause(8 bits) per GSM 24.008 10.5.3.6
 //   - IdentityResponse: MI-LV only
 //   - CMReestablishmentRequest: CKSN(4)|spare(4), CM2-LV, MI-LV
-//   - LAI encoding verified: MCC=250, MNC=01 -> nibble-swapped BCD {0x52, 0xF0, 0x10}
-//     (same nibble-swap pattern for MCC=262, MNC=42 -> {0x62, 0xF2, 0x24})
-//   - MobileIdentity type octets verified: TMSI = spare(4)=0|type(3)=100|oe(1)=0 = 0x08
+//   - LAI encoding verified: MCC=250, MNC=01 -> BCD {0x52, 0xF0, 0x10} per
+//     TS 24.008 10.5.1.3 ([MCC2|MCC1][MNC3/F|MCC3][MNC2|MNC1])
+//     (same packing for MCC=262, MNC=42 -> {0x62, 0xF2, 0x24})
+//   - MobileIdentity first octets verified: TMSI = spare 'F'(4)|0(1)|type(3)=100 = 0xF4;
+//     digit identities start with [first digit(4)|odd count(1)|type(3)]
 //   - MMRejectCause values verified against GSM 24.008 Table 10.5.3.6:
 //     0x02=IMSI_Unknown_In_HLR, 0x03=Illegal_MS, 0x16=Congestion, 0x60=Invalid_Mandatory_Info
 //   - CMServiceType values per GSM 24.008:
@@ -142,13 +144,13 @@ TEST(GoldenMM, LocationUpdatingRequest_Parse) {
     // Byte 8: CM1 LV length = 1 (Classmark 1 is 1 octet, GSM 24.008 10.5.1.5)
     // Byte 9: CM1 value = 0x00 (default classmark)
     // Byte 10: MI LV length = 5 (1 type octet + 4 TMSI octets, GSM 24.008 10.5.1.4)
-    // Byte 11: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
+    // Byte 11: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4 [GSM 24.008 10.5.1.4]
     // Bytes 12-15: TMSI = 0x12345678 (4 octets, MSB first)
     uint8_t data[] = {
         0x05, 0x08, 0x00,
         0x52, 0xF0, 0x10, 0x17, 0x2A,
         0x01, 0x00,
-        0x05, 0x08, 0x12, 0x34, 0x56, 0x78
+        0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -201,13 +203,13 @@ TEST(GoldenMM, TMSIReallocationCommand_Parse) {
     // Bytes 2-4: LAI MCC/MNC BCD: MCC=250, MNC=01 -> {0x52, 0xF0, 0x10} [GSM 24.008 10.5.1.3]
     // Bytes 5-6: LAI LAC = 0x1234
     // Byte 7: MI LV length = 5 (1 type octet + 4 TMSI octets) [GSM 24.008 10.5.1.4]
-    // Byte 8: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
+    // Byte 8: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4 [GSM 24.008 10.5.1.4]
     // Bytes 9-12: TMSI = 0x87654321 (new TMSI assigned by network)
     // Byte 13: FollowOnProceed(4)=0|spare(4)=0 = 0x00 [GSM 24.008 10.5.2.38]
     uint8_t data[] = {
         0x05, 0x1A,
         0x52, 0xF0, 0x10, 0x12, 0x34,
-        0x05, 0x08, 0x87, 0x65, 0x43, 0x21,
+        0x05, 0xF4, 0x87, 0x65, 0x43, 0x21,
         0x00
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -238,12 +240,12 @@ TEST(GoldenMM, CMServiceRequest_Parse) {
     // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets, GSM 24.008 10.5.1.6)
     // Bytes 4-6: CM2 value (24 bits of capability flags)
     // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
-    // Byte 8: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
+    // Byte 8: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4 [GSM 24.008 10.5.1.4]
     // Bytes 9-12: TMSI = 0x12345678
     uint8_t data[] = {
         0x05, 0x24, 0x01,
         0x03, 0x20, 0x00, 0x80,
-        0x05, 0x08, 0x12, 0x34, 0x56, 0x78
+        0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -280,7 +282,7 @@ TEST(GoldenMM, CMServiceReject_Parse) {
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.15: IMSIDetachIndication body = CM1-LV + MI-LV.
 //   CM1 (Classmark 1) is LV-encoded: length(1 octet, value=1) + CM1_value(1 octet).
 //   MI (Mobile Identity) is LV-encoded: length(1 octet) + type_octet(1) + identity_value.
-//   For TMSI: length=5, type_octet=0x08 (spare=0|type=TMSI=4|oe=0), value=4 octets.
+//   For TMSI: length=5, type_octet=0xF4 (spare 'F'|0|type=TMSI='100'B), value=4 octets.
 // =====================================================================
 
 TEST(GoldenMM, IMSIDetachIndication_Parse) {
@@ -289,12 +291,12 @@ TEST(GoldenMM, IMSIDetachIndication_Parse) {
     // Byte 2: CM1 LV length = 1 (Classmark 1 is 1 octet, GSM 24.008 10.5.1.5)
     // Byte 3: CM1 value = 0x00 (default classmark)
     // Byte 4: MI LV length = 5 [GSM 24.008 10.5.1.4]
-    // Byte 5: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
+    // Byte 5: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4 [GSM 24.008 10.5.1.4]
     // Bytes 6-9: TMSI = 0x12345678
     uint8_t data[] = {
         0x05, 0x01,
         0x01, 0x00,
-        0x05, 0x08, 0x12, 0x34, 0x56, 0x78
+        0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -330,16 +332,16 @@ TEST(GoldenMM, MMStatus_Parse) {
 // Spec-verified: PD=5(MM), MTI=0x19(IdentityResponse) per GSM 24.008 Table 10.5.3
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.11: IdentityResponse body = MI-LV only.
 //   Mobile Identity is LV-encoded: length(1 octet) + type_octet(1) + identity_value.
-//   For TMSI: length=5, type_octet=0x08 (spare=0|type=TMSI=4|oe=0), value=4 octets BE.
+//   For TMSI: length=5, type_octet=0xF4 (spare 'F'|0|type=TMSI='100'B), value=4 octets BE.
 // =====================================================================
 
 TEST(GoldenMM, IdentityResponse_Parse) {
     // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
     // Byte 1: MT=0x19(IdentityResponse) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.3)
     // Byte 2: MI LV length = 5 (1 type octet + 4 TMSI octets) [GSM 24.008 10.5.1.4]
-    // Byte 3: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
+    // Byte 3: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4 [GSM 24.008 10.5.1.4]
     // Bytes 4-7: TMSI = 0x12345678
-    uint8_t data[] = {0x05, 0x19, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78};
+    uint8_t data[] = {0x05, 0x19, 0x05, 0xF4, 0x12, 0x34, 0x56, 0x78};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3IdentityResponse::MTI);
@@ -371,13 +373,13 @@ TEST(GoldenMM, CMReestablishmentRequest_Parse) {
     // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets, GSM 24.008 10.5.1.6)
     // Bytes 4-6: CM2 value (24 bits of capability flags)
     // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
-    // Byte 8: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
+    // Byte 8: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4 [GSM 24.008 10.5.1.4]
     // Bytes 9-12: TMSI = 0x12345678
     uint8_t data[] = {
         0x05, 0x28,
         0x00,
         0x03, 0x20, 0x00, 0x80,
-        0x05, 0x08, 0x12, 0x34, 0x56, 0x78
+        0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -473,7 +475,7 @@ TEST(GoldenMM, LocationUpdatingAccept_RoundTrip) {
 
 TEST(GoldenMM, LocationUpdatingAccept_WithMI_RoundTrip) {
     // [GOLDEN VERIFIED] LAI: MCC=250, MNC=01 -> BCD {0x52, 0xF0, 0x10}, LAC=0x1234
-    // MI: TMSI=0xDEADBEEF, type octet=0x08 (spare|TMSI|oe)
+    // MI: TMSI=0xDEADBEEF, first octet=0xF4 (spare 'F'|0|type '100'B)
     // FollowOn=true indicates additional message follows (GSM 24.008 10.5.2.38)
     L3LocationAreaIdentity lai("250", "01", 0x1234);
     L3MobileIdentity mi(0xDEADBEEF);
@@ -548,7 +550,7 @@ TEST(GoldenMM, IdentityResponse_RoundTrip) {
 
 TEST(GoldenMM, TMSIReallocationCommand_RoundTrip) {
     // [GOLDEN VERIFIED] LAI: MCC=250, MNC=01 -> BCD {0x52, 0xF0, 0x10}, LAC=0x1234
-    // TMSI: 0x12345678, type octet=0x08 (GSM 24.008 9.2.17, 10.5.1.4)
+    // TMSI: 0x12345678, first octet=0xF4 (GSM 24.008 9.2.17, 10.5.1.4)
     L3LocationAreaIdentity lai("250", "01", 0x1234);
     L3MobileIdentity tmsi(0x12345678);
     ParsedMessage msg(MMM(L3TMSIReallocationCommand::builder().lai(lai).tmsi(tmsi).build()));

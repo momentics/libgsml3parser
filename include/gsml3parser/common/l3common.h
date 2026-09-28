@@ -63,6 +63,10 @@ public:
 };
 
 // ── Location Area Identity (GSM 04.08 10.5.1.3) ────────────────────────
+// Location Area Identity: PLMN is packed as [MCC2|MCC1][MNC3/F|MCC3]
+// [MNC2|MNC1] BCD octets (F fill for a 2-digit MNC) followed by the 16-bit
+// LAC (TS 24.008 section 10.5.1.3). Digits are stored and exposed in their
+// natural written order.
 
 class L3LocationAreaIdentity {
     std::array<unsigned, 3> mMCC{};
@@ -84,6 +88,10 @@ public:
 };
 
 // ── Mobile Identity (GSM 04.08 10.5.1.4) ───────────────────────────────
+// Mobile identity value part (TS 24.008 section 9.1.3.x): the first octet
+// packs the first digit, the odd-count indicator and the three-bit identity
+// type; digit pairs follow as [next digit or F fill][current digit]; TMSI is
+// a spare 'F' nibble, a zero bit, type '100'B and four octets.
 
 class L3MobileIdentity {
     MobileIDType mType{MobileIDType::NoID};
@@ -93,6 +101,7 @@ public:
     L3MobileIdentity();
     explicit L3MobileIdentity(uint32_t wTMSI);
     explicit L3MobileIdentity(std::string_view wDigits);
+    L3MobileIdentity(MobileIDType wType, std::string_view wDigits);
 
     MobileIDType type() const { return mType; }
     const char* digits() const;

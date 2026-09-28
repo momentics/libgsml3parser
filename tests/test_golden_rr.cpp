@@ -167,10 +167,10 @@ TEST(GoldenRR, PagingRequestType1_Parse) {
     //   PageMode: NORMAL(0) (TS 44.018 9.1.22) -> low nibble = 0x0
     //   Combined: 0x10, per the TS 44.018 9.1.22 body layout.
     // Byte 3: MI LV length = 5 (1 type octet + 4 TMSI octets) [GSM 24.008 10.5.1.4]
-    // Byte 4: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08 [GSM 24.008 10.5.1.4]
+    // Byte 4: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4 [GSM 24.008 10.5.1.4]
     // Bytes 5-8: TMSI = 0x12345678 (4 octets, MSB first)
     uint8_t data[] = {
-        0x06, 0x21, 0x10, 0x05, 0x08, 0x12, 0x34, 0x56, 0x78
+        0x06, 0x21, 0x10, 0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -273,12 +273,12 @@ TEST(GoldenRR, PagingResponse_Parse) {
     // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets) [GSM 24.008 10.5.1.6]
     // Bytes 4-6: CM2 value (24 bits of capability flags)
     // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
-    // Byte 8: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 = 0x08
+    // Byte 8: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4
     // Bytes 9-12: TMSI = 0x12345678 (MSB first)
     uint8_t data[] = {
         0x06, 0x27, 0x00,
         0x03, 0x20, 0x00, 0x80,
-        0x05, 0x08, 0x12, 0x34, 0x56, 0x78
+        0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);

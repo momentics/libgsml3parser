@@ -149,15 +149,14 @@ void L3MSNetworkCapability::text(std::ostream& os) const {
 // ── L3RoutingAreaIdentification ───────────────────────────────────────
 
 L3RoutingAreaIdentification::L3RoutingAreaIdentification(const char* wMCC, const char* wMNC, unsigned wLAC, unsigned wRAC) {
-    // Parse MCC digits
-    int mccVal = 0;
+    // Natural digit order: mMCC[0..2] = MCC digits 1..3.
     for (int i = 0; i < 3; ++i) {
-        if (wMCC[i]) mccVal = mccVal * 10 + (wMCC[i] - '0');
-        mMCC[i] = wMCC[i] ? wMCC[i] - '0' : 0;
+        mMCC[i] = (wMCC[i] >= '0' && wMCC[i] <= '9') ? static_cast<unsigned>(wMCC[i] - '0') : 0;
     }
-    // Parse MNC digits
+    // MNC digits 1..3 in natural order; a 2-digit MNC stores the 'F' fill
+    // (0x0F) as the third digit.
     for (int i = 0; i < 3; ++i) {
-        mMNC[i] = wMNC[i] ? wMNC[i] - '0' : 0;
+        mMNC[i] = (wMNC[i] >= '0' && wMNC[i] <= '9') ? static_cast<unsigned>(wMNC[i] - '0') : 0x0F;
     }
     mLAC = static_cast<uint16_t>(wLAC);
     mRAC = static_cast<uint8_t>(wRAC);
@@ -180,17 +179,22 @@ int L3RoutingAreaIdentification::mnc() const {
 }
 
 Expected<L3RoutingAreaIdentification> L3RoutingAreaIdentification::parse(BitReader& br) {
+    // PLMN BCD packing (TS 24.008 section 10.5.1.3): same layout as the LAI,
+    // followed by the 16-bit LAC and the 8-bit RAC:
+    //   octet 1 = [MCC digit 2 | MCC digit 1]
+    //   octet 2 = [MNC digit 3 (or F fill for a 2-digit MNC) | MCC digit 3]
+    //   octet 3 = [MNC digit 2 | MNC digit 1]
     L3RoutingAreaIdentification rai;
-    // MCC/MNC BCD nibble-swapped per GSM: read 6 nibbles individually
-    auto r = br.readField(4); if (!r) return Expected<L3RoutingAreaIdentification>::error(r.error()); unsigned mcc1 = r.value();
-    r = br.readField(4); if (!r) return Expected<L3RoutingAreaIdentification>::error(r.error()); unsigned mcc0 = r.value();
-    r = br.readField(4); if (!r) return Expected<L3RoutingAreaIdentification>::error(r.error()); unsigned mnc2 = r.value();
-    r = br.readField(4); if (!r) return Expected<L3RoutingAreaIdentification>::error(r.error()); unsigned mcc2_ = r.value();
-    r = br.readField(4); if (!r) return Expected<L3RoutingAreaIdentification>::error(r.error()); unsigned mnc1 = r.value();
-    r = br.readField(4); if (!r) return Expected<L3RoutingAreaIdentification>::error(r.error()); unsigned mnc0 = r.value();
+    auto r = br.readField(4); if (!r) return Expected<L3RoutingAreaIdentification>::error(r.error()); unsigned mcc2_ = r.value();
+    r = br.readField(4); if (!r) return Expected<L3RoutingAreaIdentification>::error(r.error()); unsigned mcc1_ = r.value();
+    r = br.readField(4); if (!r) return Expected<L3RoutingAreaIdentification>::error(r.error()); unsigned mnc3_ = r.value();
+    r = br.readField(4); if (!r) return Expected<L3RoutingAreaIdentification>::error(r.error()); unsigned mcc3_ = r.value();
+    r = br.readField(4); if (!r) return Expected<L3RoutingAreaIdentification>::error(r.error()); unsigned mnc2_ = r.value();
+    r = br.readField(4); if (!r) return Expected<L3RoutingAreaIdentification>::error(r.error()); unsigned mnc1_ = r.value();
 
-    rai.mMCC[0] = mcc0; rai.mMCC[1] = mcc1; rai.mMCC[2] = mcc2_;
-    rai.mMNC[0] = mnc0; rai.mMNC[1] = mnc1; rai.mMNC[2] = mnc2;
+    // Natural digit order: see L3LocationAreaIdentity::parse.
+    rai.mMCC[0] = mcc1_; rai.mMCC[1] = mcc2_; rai.mMCC[2] = mcc3_;
+    rai.mMNC[0] = mnc1_; rai.mMNC[1] = mnc2_; rai.mMNC[2] = mnc3_;
 
     // LAC: 2 octets, MSB first
     r = br.readField(16); if (!r) return Expected<L3RoutingAreaIdentification>::error(r.error());
@@ -204,16 +208,15 @@ Expected<L3RoutingAreaIdentification> L3RoutingAreaIdentification::parse(BitRead
 }
 
 void L3RoutingAreaIdentification::write(BitWriter& bw) const {
-    // MCC/MNC BCD nibble-swapped (same as L3LocationAreaIdentity)
-    bw.writeField(mMCC[1], 4);
-    bw.writeField(mMCC[0], 4);
-    bw.writeField(mMNC[2], 4);
-    bw.writeField(mMCC[2], 4);
-    bw.writeField(mMNC[1], 4);
-    bw.writeField(mMNC[0], 4);
-    // LAC MSB first
+    // PLMN BCD packing (TS 24.008 section 10.5.1.3): same as the LAI,
+    // followed by the 16-bit LAC (MSB first) and the 8-bit RAC.
+    bw.writeField(mMCC[1], 4);   // octet 1 high: MCC digit 2
+    bw.writeField(mMCC[0], 4);   // octet 1 low:  MCC digit 1
+    bw.writeField(mMNC[2], 4);   // octet 2 high: MNC digit 3 (0xF for a 2-digit MNC)
+    bw.writeField(mMCC[2], 4);   // octet 2 low:  MCC digit 3
+    bw.writeField(mMNC[1], 4);   // octet 3 high: MNC digit 2
+    bw.writeField(mMNC[0], 4);   // octet 3 low:  MNC digit 1
     bw.writeField(mLAC, 16);
-    // RAC
     bw.writeField(mRAC, 8);
 }
 

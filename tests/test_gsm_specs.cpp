@@ -49,8 +49,9 @@
 //     max frame number per the frame numbering (GSM 45.002): 26*51*2048
 //   - TimeComponents: T1=(FN/1326)%32, T2=FN%26, T3=FN%51
 //     Request Reference time components (GSM 44.018): t1p=(fn/1326)mod32, t2=fn mod26, t3=fn mod51
-//   - MobileIdentity encoding: TMSI type octet 0x08 (spare=0|type=100|oe=0), IMSI type 0x03/0x01
-//     identity type octets per GSM 24.008 10.5.1.4 (CmIdentityType)
+//   - MobileIdentity encoding: TMSI first octet 0xF4 (spare 'F'|0|type '100');
+//     digit identities start with [first digit(4)|odd count(1)|type(3)] and
+//     digit pairs [next digit or F fill][current digit] per GSM 24.008 10.5.1.4
 //   - ChannelDescription: typeAndOffset(5)|TN(3)|TSC(3)|h(1)|ARFCN(12) = 24 bits MSB-first
 //     per the Channel Description IE (GSM 44.018), H=0 and H=1 variants
 //   - RACHControlParameters_RefValues {0xE5, 0x04, 0x00}: max_retrans=3, tx_integer=9, cell_bar=0, re=1, ACC=0x0400

@@ -24,10 +24,12 @@
 // TS 24.078, TS 44.018 and TS 23.038.
 //
 // [GOLDEN DATA VERIFICATION]
-// LAI MCC/MNC BCD encoding per GSM 24.008 Figure 10.5.1.3 (nibble-swapped digits):
-//   MCC=262, MNC=42 -> nibble-swapped {0x62, 0xF2, 0x24}.
-// Mobile Identity TMSI type octet verified: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x08.
-// Mobile Identity IMSI type octet verified: spare(4)=0|type(3)=001(IMSI)|oe(1)=1 = 0x03.
+// LAI MCC/MNC BCD packing per GSM 24.008 Figure 10.5.1.3:
+//   octet 1 = [MCC digit 2 | MCC digit 1], octet 2 = [MNC digit 3 or F | MCC digit 3],
+//   octet 3 = [MNC digit 2 | MNC digit 1]:
+//   MCC=262, MNC=42 -> {0x62, 0xF2, 0x24}.
+// Mobile Identity TMSI first octet verified: spare 'F'(4)|0(1)|type(3)=100(TMSI) = 0xF4.
+// Mobile Identity digit identities start with [first digit(4)|odd count(1)|type(3)].
 // Classmark1/2/3 default lengths per GSM 24.008 10.5.1.5..10.5.1.7 (1, 3 and 14 octets).
 // CipheringModeSetting encoding verified per TS 44.018 10.5.2.9:
 //   sC(1)|algorithmIdentifier(3) in low nibble of octet (spare high nibble).
@@ -50,10 +52,10 @@
 // All IE byte-level encodings verified against the normative specifications:
 //   - LAI MCC/MNC BCD encoding per GSM 24.008 Figure 10.5.1.3:
 //     MCC=262, MNC=42 -> '262F42'H -> nibble-swapped -> {0x62, 0xF2, 0x24}
-//   - MobileIdentity TMSI type octet: spare(4)=0|type(3)=100(TMSI)|oe(1)=0 = 0x08
+//   - MobileIdentity TMSI first octet: spare 'F'(4)|0(1)|type(3)=100(TMSI) = 0xF4
 //     per GSM 24.008 10.5.1.4 (CmIdentityType: TMSI='100'B)
-//   - MobileIdentity IMSI type octet: spare(4)=0|type(3)=001(IMSI)|oe(1)=1 = 0x03
-//     per GSM 24.008 10.5.1.4 (CmIdentityType: IMSI='001'B)
+//   - MobileIdentity digit identities start with [first digit(4)|odd count(1)|type(3)]
+//     per GSM 24.008 10.5.1.4 (e.g. IMSI "12345" -> 0x19, 0x32, 0x54)
 //   - Classmark1 length=1, Classmark2 length=3 per GSM 24.008 10.5.1.5/10.5.1.6
 //   - CipheringModeSetting: sC(1)|algorithmIdentifier(3) in 4 bits
 //     per TS 44.018 10.5.2.9 (Ciphering Mode Command layout)
@@ -75,9 +77,11 @@
 //   - RequestReference: RA(8)|T1p(5)|T3(6)|T2(5) per TS 44.018 RACH procedure
 
 #include <gtest/gtest.h>
+#include <cstring>
 #include <gsml3parser/parser.h>
 #include <gsml3parser/common/l3common.h>
 #include <gsml3parser/gsm_common.h>
+#include <gsml3parser/gmm/l3gmmelements.h>
 #include <gsml3parser/rr/l3rrmessages.h>
 #include <gsml3parser/cc/l3ccelements.h>
 #include <gsml3parser/mm/l3mmelements.h>
@@ -183,31 +187,111 @@ TEST(GoldenIE, LAI_Equality) {
 }
 
 TEST(GoldenIE, LAI_Ref_262_42) {
-    // Vector (GSM 24.008 Figure 10.5.1.3):
+    // Golden: LAI for PLMN 262/42, LAC 0x1234. The PLMN nibble packing is
+    // [MCC digit 2 | MCC digit 1][MNC digit 3 or F | MCC digit 3]
+    // [MNC digit 2 | MNC digit 1] per TS 24.008 section 10.5.1.3:
     //   digits '262F42'H (MNC padded with F) -> {0x62, 0xF2, 0x24}
-    // Spec-verified: MCC=262, MNC=42 -> BCD digits '262F42'H (MNC padded with F)
-    //   nibbles swapped per octet: '26'->0x62, '2F'->0xF2, '42'->0x24
-    //   Result: {0x62, 0xF2, 0x24}
-    L3LocationAreaIdentity lai("262", "42", 0x002A);
+    L3LocationAreaIdentity lai("262", "42", 0x1234);
     EXPECT_EQ(lai.mcc(), 262);
     EXPECT_EQ(lai.mnc(), 42);
+    EXPECT_EQ(lai.lac(), 0x1234);
     std::vector<uint8_t> buf(10, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     lai.write(writer);
     // Spec-verified: MCC/MNC BCD encoding with the per-octet nibble swap (GSM 24.008 Figure 10.5.1.3)
-    EXPECT_EQ(buf[0], 0x62);
-    EXPECT_EQ(buf[1], 0xF2);
-    EXPECT_EQ(buf[2], 0x24);
+    uint8_t wire[] = {0x62, 0xF2, 0x24, 0x12, 0x34};
+    EXPECT_EQ(0, std::memcmp(buf.data(), wire, 5));
+    // Parse back: digits are exposed in natural written order.
+    BitReader reader(buf.data(), writer.position());
+    auto parsed = L3LocationAreaIdentity::parse(reader);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ((*parsed).mcc(), 262);
+    EXPECT_EQ((*parsed).mnc(), 42);
+    EXPECT_EQ((*parsed).lac(), 0x1234);
+}
+
+TEST(GoldenIE, LAI_Packing_Vectors) {
+    // Canonical PLMN packing vectors (TS 24.008 section 10.5.1.3):
+    //   octet 1 = [MCC digit 2 | MCC digit 1]
+    //   octet 2 = [MNC digit 3 or F fill | MCC digit 3]
+    //   octet 3 = [MNC digit 2 | MNC digit 1]
+    struct Row {
+        const char* mcc;
+        const char* mnc;
+        uint16_t lac;
+        int mccValue;
+        int mncValue;
+        std::array<uint8_t, 5> wire;
+    };
+    const Row rows[] = {
+        {"262", "42",  0x1234, 262, 42,  {0x62, 0xF2, 0x24, 0x12, 0x34}},
+        {"901", "70",  0xABCD, 901, 70,  {0x09, 0xF1, 0x07, 0xAB, 0xCD}},
+        {"262", "421", 0x0000, 262, 421, {0x62, 0x12, 0x24, 0x00, 0x00}},
+    };
+    for (const Row& row : rows) {
+        L3LocationAreaIdentity lai(row.mcc, row.mnc, row.lac);
+        EXPECT_EQ(lai.mcc(), row.mccValue) << "MCC " << row.mcc;
+        EXPECT_EQ(lai.mnc(), row.mncValue) << "MNC " << row.mnc;
+
+        std::vector<uint8_t> buf(10, 0);
+        BitWriter writer(buf.data(), buf.size() * 8);
+        lai.write(writer);
+        EXPECT_EQ(0, std::memcmp(buf.data(), row.wire.data(), 5))
+            << "write for PLMN " << row.mcc << "/" << row.mnc;
+
+        BitReader reader(buf.data(), writer.position());
+        auto parsed = L3LocationAreaIdentity::parse(reader);
+        ASSERT_TRUE(parsed);
+        EXPECT_EQ((*parsed).mcc(), row.mccValue);
+        EXPECT_EQ((*parsed).mnc(), row.mncValue);
+        EXPECT_EQ((*parsed).lac(), static_cast<int>(row.lac));
+    }
+}
+
+TEST(GoldenIE, RAI_901_70) {
+    // Golden: RAI for PLMN 901/70, LAC 0x0001, RAC 0x5A (TS 24.008 section
+    // 10.5.1.3 PLMN packing + LAC(2) + RAC(1)): wire 09 F1 07 00 01 5A.
+    L3RoutingAreaIdentification rai("901", "70", 0x0001, 0x5A);
+    EXPECT_EQ(rai.mcc(), 901);
+    EXPECT_EQ(rai.mnc(), 70);
+    std::vector<uint8_t> buf(10, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    rai.write(writer);
+    uint8_t wire[] = {0x09, 0xF1, 0x07, 0x00, 0x01, 0x5A};
+    EXPECT_EQ(0, std::memcmp(buf.data(), wire, 6));
+
+    BitReader reader(buf.data(), writer.position());
+    auto parsed = L3RoutingAreaIdentification::parse(reader);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ((*parsed).mcc(), 901);
+    EXPECT_EQ((*parsed).mnc(), 70);
+    EXPECT_EQ((*parsed).lac(), 0x0001);
+    EXPECT_EQ((*parsed).rac(), 0x5A);
+}
+
+TEST(GoldenIE, RAI_2DigitMNC_Constructor) {
+    // A two-digit MNC must store the 'F' fill as its third digit so that the
+    // wire octet 2 carries [F | MCC digit 3] and mnc() returns 42 (not 420).
+    L3RoutingAreaIdentification rai("262", "42", 0x1234, 0x00);
+    EXPECT_EQ(rai.mcc(), 262);
+    EXPECT_EQ(rai.mnc(), 42);
+    std::vector<uint8_t> buf(10, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    rai.write(writer);
+    uint8_t wire[] = {0x62, 0xF2, 0x24, 0x12, 0x34, 0x00};
+    EXPECT_EQ(0, std::memcmp(buf.data(), wire, 6));
 }
 
 // =====================================================================
 // Common IEs: L3MobileIdentity (GSM 04.08 10.5.1.4)
 // LV-encoded mobile identity vectors for TMSI, IMSI and IMEI (GSM 24.008 10.5.1.4)
-// [GSM SPEC VERIFIED] GSM 24.008 10.5.1.4: Type octet = spare(4)|typeOfIdentity(3)|oe(1)
-//   typeOfIdentity: 000=NoID, 001=IMSI, 010=IMEI, 011=IMEISV, 100=TMSI, 101=TMSI+RAI
-//   oe (odd-even indicator): 0=even digit count, 1=odd digit count (for BCD numbers)
-//   TMSI: type octet = 0b0000_1000 = 0x08 (type=4=TMSI, oe=0 for even 4-byte value)
-//   IMSI: type octet = 0b0000_0001 | oe(1) = 0x01 or 0x03 (type=1=IMSI, oe depends on digit count)
+// [GSM SPEC VERIFIED] GSM 24.008 10.5.1.4: first octet =
+//   [first digit(4)|odd count(1)|typeOfIdentity(3)] for digit identities,
+//   [spare 'F'(4)|0(1)|type(3)] for TMSI (0xF4) and NoID (0xF0).
+//   typeOfIdentity: 000=NoID, 001=IMSI, 010=IMEI, 011=IMEISV, 100=TMSI
+//   odd count: 1 when the digit count is odd.
+//   Digit pairs follow as [next digit or F fill][current digit]; the F fill
+//   appears only for an even digit count (last pair).
 // =====================================================================
 
 TEST(GoldenIE, MobileIdentity_TMSI) {
@@ -250,8 +334,8 @@ TEST(GoldenIE, MobileIdentity_TMSI_Encoding) {
     std::vector<uint8_t> buf(16, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     id.write(writer);
-    // GSM 24.008 10.5.1.4: spare(4)=0|typeOfIdentity(3)=100(TMSI)|oddevenIndicator(1)=0 -> 0b0000_1000 = 0x08
-    EXPECT_EQ(buf[0], 0x08);
+    // GSM 24.008 10.5.1.4: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) -> 0b1111_0_100 = 0xF4
+    EXPECT_EQ(buf[0], 0xF4);
     // Bytes 1-4: TMSI value in big-endian order
     EXPECT_EQ(buf[1], 0xDE);
     EXPECT_EQ(buf[2], 0xAD);
@@ -264,8 +348,105 @@ TEST(GoldenIE, MobileIdentity_IMSI_Encoding) {
     std::vector<uint8_t> buf(16, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     id.write(writer);
-    // GSM 24.008 10.5.1.4: spare(4)=0|typeOfIdentity(3)=001(IMSI)|oddevenIndicator(1)=1(odd) -> 0b0000_0011 = 0x03
-    EXPECT_EQ(buf[0], 0x03);
+    // GSM 24.008 10.5.1.4: first octet = [first digit '2'(4)|odd count(1)=1 (15 digits)|
+    // typeOfIdentity(3)=001(IMSI)] -> 0b0010_1_001 = 0x29
+    EXPECT_EQ(buf[0], 0x29);
+}
+
+// Golden: TMSI mobile identity (TS 24.008 section 9.1.3.x): spare 'F'
+// nibble, zero bit, type '100'B -> first octet 0xF4, then four octets.
+TEST(GoldenIE, MobileIdentity_TMSI_GoldenVector) {
+    uint8_t wire[] = {0xF4, 0x12, 0x34, 0x56, 0x78};
+
+    BitReader reader(wire, sizeof(wire) * 8);
+    auto parsed = L3MobileIdentity::parse(reader, 5);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ((*parsed).type(), MobileIDType::TMSI);
+    EXPECT_TRUE((*parsed).isTMSI());
+    EXPECT_EQ((*parsed).tmsi(), 0x12345678u);
+
+    L3MobileIdentity id(0x12345678);
+    EXPECT_EQ(id.lengthV(), 5u);
+    std::vector<uint8_t> buf(16, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    id.write(writer);
+    EXPECT_EQ(0, std::memcmp(buf.data(), wire, sizeof(wire)));
+}
+
+// Golden: IMSI "12345" (odd digit count): first octet [digit '1'][odd=1]
+// [type IMSI '001'] = 0x19; then [3|2]=0x32, [5|4]=0x54.
+TEST(GoldenIE, MobileIdentity_IMSI_GoldenVector) {
+    uint8_t wire[] = {0x19, 0x32, 0x54};
+
+    BitReader reader(wire, sizeof(wire) * 8);
+    auto parsed = L3MobileIdentity::parse(reader, 3);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ((*parsed).type(), MobileIDType::IMSI);
+    EXPECT_STREQ((*parsed).digits(), "12345");
+
+    L3MobileIdentity id("12345");
+    EXPECT_EQ(id.lengthV(), 3u);
+    std::vector<uint8_t> buf(16, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    id.write(writer);
+    EXPECT_EQ(0, std::memcmp(buf.data(), wire, sizeof(wire)));
+}
+
+// Golden: IMSI "2624212345" (even digit count): first octet [digit '2']
+// [odd=0][type IMSI '001'] = 0x21; the last pair carries the F fill.
+TEST(GoldenIE, MobileIdentity_IMSI_Even_GoldenVector) {
+    uint8_t wire[] = {0x21, 0x26, 0x24, 0x21, 0x43, 0xF5};
+
+    BitReader reader(wire, sizeof(wire) * 8);
+    auto parsed = L3MobileIdentity::parse(reader, 6);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ((*parsed).type(), MobileIDType::IMSI);
+    EXPECT_STREQ((*parsed).digits(), "2624212345");
+
+    L3MobileIdentity id("2624212345");
+    EXPECT_EQ(id.lengthV(), 6u);
+    std::vector<uint8_t> buf(16, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    id.write(writer);
+    EXPECT_EQ(0, std::memcmp(buf.data(), wire, sizeof(wire)));
+}
+
+// Golden: IMEI "49015420323751" (14 digits, even): first octet [digit '4']
+// [odd=0][type IMEI '010'] = 0x42.
+TEST(GoldenIE, MobileIdentity_IMEI_GoldenVector) {
+    uint8_t wire[] = {0x42, 0x09, 0x51, 0x24, 0x30, 0x32, 0x57, 0xF1};
+
+    BitReader reader(wire, sizeof(wire) * 8);
+    auto parsed = L3MobileIdentity::parse(reader, 8);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ((*parsed).type(), MobileIDType::IMEI);
+    EXPECT_STREQ((*parsed).digits(), "49015420323751");
+
+    L3MobileIdentity id(MobileIDType::IMEI, "49015420323751");
+    EXPECT_EQ(id.lengthV(), 8u);
+    std::vector<uint8_t> buf(16, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    id.write(writer);
+    EXPECT_EQ(0, std::memcmp(buf.data(), wire, sizeof(wire)));
+}
+
+// An even digit count ends with an 'F' fill in the high nibble of the last
+// pair: IMSI "1234" -> 11 32 F4.
+TEST(GoldenIE, MobileIdentity_IMSI_ShortEven_GoldenVector) {
+    uint8_t wire[] = {0x11, 0x32, 0xF4};
+
+    BitReader reader(wire, sizeof(wire) * 8);
+    auto parsed = L3MobileIdentity::parse(reader, 3);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ((*parsed).type(), MobileIDType::IMSI);
+    EXPECT_STREQ((*parsed).digits(), "1234");
+
+    L3MobileIdentity id("1234");
+    EXPECT_EQ(id.lengthV(), 3u);
+    std::vector<uint8_t> buf(16, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    id.write(writer);
+    EXPECT_EQ(0, std::memcmp(buf.data(), wire, sizeof(wire)));
 }
 
 // =====================================================================
