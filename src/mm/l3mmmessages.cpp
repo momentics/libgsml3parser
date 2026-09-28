@@ -235,21 +235,19 @@ void L3MMAbort::text(std::ostream& os) const {
 // ── L3CMServiceRequest (MTI=0x24) ──────────────────────────────────────
 
 size_t L3CMServiceRequest::bodyLength() const {
-    return 1 + lvLen(mClassmark.lengthV()) + lvLen(mMobileIdentity.lengthV());
+    return 1 + lvLen(mClassmark.lengthV()) + lvLen(mMobileIdentity.lengthV()) + mAdditionalIes.size();
 }
 
 Expected<L3CMServiceRequest> L3CMServiceRequest::parse(BitReader& br) {
     L3CMServiceRequest msg;
-    // Spare ciphering key sequence number (4 bits)
+    // CM Service Request (TS 24.008 section 9.1.3.x): the first half-octet
+    // is the CM service type, the second carries the ciphering key sequence
+    // number (three bits) with one reserved bit.
     {
-        auto r = br.readField(4);
-        if (!r) return Expected<L3CMServiceRequest>::error(r.error());
-    }
-    // Service type (4 bits)
-    {
-        auto stRes = L3CMServiceType::parse(br);
-        if (!stRes) return Expected<L3CMServiceRequest>::error(stRes.error());
-        msg.mServiceType = stRes.value();
+        auto o = br.readField(8);
+        if (!o) return Expected<L3CMServiceRequest>::error(o.error());
+        msg.mServiceType = L3CMServiceType{static_cast<L3CMServiceType::TypeCode>((o.value() >> 4) & 0x0Fu)};
+        msg.mCKSN = (o.value() >> 1) & 0x07u;
     }
     // Classmark2 (LV: length octet + 3 bytes value)
     {
@@ -267,15 +265,22 @@ Expected<L3CMServiceRequest> L3CMServiceRequest::parse(BitReader& br) {
         if (!miRes) return Expected<L3CMServiceRequest>::error(miRes.error());
         msg.mMobileIdentity = miRes.value();
     }
+    // Optional IEs (priority level, additional update parameter, device
+    // properties) are kept opaque and re-emitted verbatim.
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3CMServiceRequest>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
+    }
     return Expected<L3CMServiceRequest>::hold(msg);
 }
 
 void L3CMServiceRequest::write(BitWriter& bw) const {
-    bw.writeField(0, 4);
-    mServiceType.write(bw);
+    bw.writeField(((static_cast<unsigned>(mServiceType.type()) & 0x0Fu) << 4) |
+                 ((mCKSN & 0x07u) << 1), 8);
     bw.writeField(static_cast<uint32_t>(mClassmark.lengthV()), 8);
     mClassmark.write(bw);
     writeLVMI(mMobileIdentity, bw);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3CMServiceRequest::text(std::ostream& os) const {
@@ -512,25 +517,22 @@ void L3LocationUpdatingReject::text(std::ostream& os) const {
 // ── L3LocationUpdatingRequest (MTI=0x08) ───────────────────────────────
 
 size_t L3LocationUpdatingRequest::bodyLength() const {
-    return 1 + mLAI.lengthV() + lvLen(mClassmark.lengthV()) + lvLen(mMobileIdentity.lengthV());
+    return 1 + mLAI.lengthV() + lvLen(mClassmark.lengthV()) + lvLen(mMobileIdentity.lengthV())
+           + mAdditionalIes.size();
 }
 
 Expected<L3LocationUpdatingRequest> L3LocationUpdatingRequest::parse(BitReader& br) {
     L3LocationUpdatingRequest msg;
-    // LU_Type(2)|spare(2)|CKSN(4)
+    // Location Updating Request (TS 24.008 section 9.1.3.x): the first
+    // half-octet packs the updating type (two bits), one spare bit and the
+    // follow-on request indicator; the second half-octet carries the
+    // ciphering key sequence number (three bits) plus one reserved bit.
     {
-        auto ut = br.readField(2);
-        if (!ut) return Expected<L3LocationUpdatingRequest>::error(ut.error());
-        msg.mUpdateType = ut.value();
-    }
-    {
-        auto sp = br.readField(2);
-        if (!sp) return Expected<L3LocationUpdatingRequest>::error(sp.error());
-    }
-    {
-        auto ck = br.readField(4);
-        if (!ck) return Expected<L3LocationUpdatingRequest>::error(ck.error());
-        msg.mCKSN = ck.value();
+        auto o = br.readField(8);
+        if (!o) return Expected<L3LocationUpdatingRequest>::error(o.error());
+        msg.mUpdateType = (o.value() >> 6) & 0x03u;
+        msg.mFollowOnRequest = ((o.value() >> 4) & 0x01u) != 0;
+        msg.mCKSN = (o.value() >> 1) & 0x07u;
     }
     // LAI (raw V, 5 bytes mandatory, NOT LV-prefixed)
     {
@@ -554,17 +556,23 @@ Expected<L3LocationUpdatingRequest> L3LocationUpdatingRequest::parse(BitReader& 
         if (!miRes) return Expected<L3LocationUpdatingRequest>::error(miRes.error());
         msg.mMobileIdentity = miRes.value();
     }
+    // Optional IEs (additional update parameter, device properties) are
+    // kept opaque and re-emitted verbatim.
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3LocationUpdatingRequest>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
+    }
     return Expected<L3LocationUpdatingRequest>::hold(msg);
 }
 
 void L3LocationUpdatingRequest::write(BitWriter& bw) const {
-    bw.writeField(mUpdateType & 0x03, 2);
-    bw.writeField(0, 2);
-    bw.writeField(mCKSN & 0x0F, 4);
+    bw.writeField(((mUpdateType & 0x03u) << 6) | (mFollowOnRequest ? 0x10u : 0u) |
+                 ((mCKSN & 0x07u) << 1), 8);
     mLAI.write(bw);
     bw.writeField(static_cast<uint32_t>(mClassmark.lengthV()), 8);
     mClassmark.write(bw);
     writeLVMI(mMobileIdentity, bw);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3LocationUpdatingRequest::text(std::ostream& os) const {
@@ -670,29 +678,33 @@ void L3MMStatus::text(std::ostream& os) const {
 
 Expected<L3AuthenticationRequest> L3AuthenticationRequest::parse(BitReader& br) {
     L3AuthenticationRequest msg;
+    // Authentication Request (TS 24.008 section 9.1.3.x): the first octet
+    // carries the ciphering key sequence number (three bits) in its high
+    // half-octet, followed by five spare bits, then the 16-octet RAND; any
+    // further optional authentication parameters are kept opaque.
     {
-        auto sp = br.readField(4);
-        if (!sp) return Expected<L3AuthenticationRequest>::error(sp.error());
-    }
-    {
-        auto ck = br.readField(4);
-        if (!ck) return Expected<L3AuthenticationRequest>::error(ck.error());
-        msg.mCKSN = ck.value();
+        auto o = br.readField(8);
+        if (!o) return Expected<L3AuthenticationRequest>::error(o.error());
+        msg.mCKSN = (o.value() >> 5) & 0x07u;
     }
     for (size_t i = 0; i < 16; ++i) {
         auto rb = br.readField(8);
         if (!rb) return Expected<L3AuthenticationRequest>::error(rb.error());
         msg.mRAND[i] = static_cast<uint8_t>(rb.value());
     }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3AuthenticationRequest>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
+    }
     return Expected<L3AuthenticationRequest>::hold(msg);
 }
 
 void L3AuthenticationRequest::write(BitWriter& bw) const {
-    bw.writeField(0, 4);
-    bw.writeField(mCKSN, 4);
+    bw.writeField((mCKSN & 0x07u) << 5, 8);
     for (const auto& b : mRAND) {
         bw.writeField(b, 8);
     }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3AuthenticationRequest::text(std::ostream& os) const {
@@ -804,6 +816,7 @@ L3AuthenticationRequest L3AuthenticationRequest::Builder::build() const {
     L3AuthenticationRequest msg;
     msg.mCKSN = m_cksn;
     msg.mRAND = m_rand;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -864,10 +877,12 @@ L3IdentityResponse::Builder L3IdentityResponse::builder() {
 L3LocationUpdatingRequest L3LocationUpdatingRequest::Builder::build() const {
     L3LocationUpdatingRequest msg;
     msg.mUpdateType = m_updateType;
+    msg.mFollowOnRequest = m_followOnRequest;
     msg.mCKSN = m_cksn;
     msg.mClassmark = m_classmark;
     msg.mMobileIdentity = m_mobileIdentity;
     msg.mLAI = m_lai;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -893,6 +908,8 @@ L3CMServiceRequest L3CMServiceRequest::Builder::build() const {
     msg.mClassmark = m_classmark;
     msg.mMobileIdentity = m_mobileIdentity;
     msg.mServiceType = m_serviceType;
+    msg.mCKSN = m_cksn;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 

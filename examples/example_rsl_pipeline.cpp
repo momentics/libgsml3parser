@@ -57,8 +57,10 @@ int main()
             static_cast<uint8_t>(RSL_IE::LinkIdent), 0x01,
             // L3Info IE (type 0x0B, TL16V): length 3
             0x0B, 0x00, 0x03,
-            // L3 payload: CM Service Request (PD=MM low nibble, MT=0x24, serviceType=2)
-            0x05, 0x24, 0x02
+            // L3 payload: CM Service Request (PD=MM low nibble, MT=0x24; first
+            // body octet = service type in the high half-octet (1 = MO call) and
+            // CKSN=0 in bits 3:1)
+            0x05, 0x24, 0x10
         };
 
         printHex("  Raw RSL", rawRSL);

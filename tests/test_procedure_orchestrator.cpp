@@ -47,7 +47,7 @@ using namespace std::chrono_literals;
 static ParsedMessage makeCMServiceRequestLU() {
     return ParsedMessage{MMM{
         L3CMServiceRequest::builder()
-            .serviceType(L3CMServiceType{L3CMServiceType::TypeCode::LocationUpdateRequest})
+            .cmServiceType(L3CMServiceType::TypeCode::LocationUpdateRequest)
             .mobileIdentity(L3MobileIdentity{0x12345678u})
             .build()}};
 }
@@ -55,7 +55,7 @@ static ParsedMessage makeCMServiceRequestLU() {
 static ParsedMessage makeCMServiceRequestMO() {
     return ParsedMessage{MMM{
         L3CMServiceRequest::builder()
-            .serviceType(L3CMServiceType{L3CMServiceType::TypeCode::MobileOriginatedCall})
+            .cmServiceType(L3CMServiceType::TypeCode::MobileOriginatedCall)
             .mobileIdentity(L3MobileIdentity{0x12345678u})
             .build()}};
 }
@@ -374,7 +374,7 @@ TEST(ProcedureOrchestrator, CMServiceRequest_UnsupportedServiceType_Ignored) {
     ProcedureOrchestrator orchestrator;
 
     auto cmReq = L3CMServiceRequest::builder()
-        .serviceType(L3CMServiceType{L3CMServiceType::TypeCode::ShortMessage})
+        .cmServiceType(L3CMServiceType::TypeCode::ShortMessage)
         .build();
     ParsedMessage msg{MMM{std::move(cmReq)}};
     auto result = orchestrator.feed(msg, &session);

@@ -280,7 +280,7 @@ TEST(SR_tickAllProcedures, OnlyActiveSessionsTicked) {
             // AUTH_CHECK -> LU_REQUEST -> WAITING_EXTERNAL + startTimer(T3103)).
             for (int step = 0; step < 4; ++step) {
                 auto cmReq = L3CMServiceRequest::builder()
-                    .serviceType(L3CMServiceType{L3CMServiceType::LocationUpdateRequest})
+                    .cmServiceType(L3CMServiceType::LocationUpdateRequest)
                     .build();
                 ParsedMessage msg{MMM{std::move(cmReq)}};
                 s->procedures.feed(msg, s, {});
@@ -308,12 +308,12 @@ TEST(SSR_tickAllProcedures, Parallel_Correct) {
     // (one FSM state per feed; see SR_tickAllProcedures.OnlyActiveSessionsTicked).
     for (int step = 0; step < 4; ++step) {
         ParsedMessage msg{MMM{L3CMServiceRequest::builder()
-            .serviceType(L3CMServiceType{L3CMServiceType::LocationUpdateRequest}).build()}};
+            .cmServiceType(L3CMServiceType::LocationUpdateRequest).build()}};
         s1->procedures.feed(msg, s1, {});
     }
     for (int step = 0; step < 4; ++step) {
         ParsedMessage msg{MMM{L3CMServiceRequest::builder()
-            .serviceType(L3CMServiceType{L3CMServiceType::LocationUpdateRequest}).build()}};
+            .cmServiceType(L3CMServiceType::LocationUpdateRequest).build()}};
         s2->procedures.feed(msg, s2, {});
     }
 

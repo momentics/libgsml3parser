@@ -47,7 +47,7 @@ using namespace std::chrono_literals;
 // Helper: build a CM Service Request with LocationUpdate service type.
 static ParsedMessage makeCMServiceRequest() {
     return ParsedMessage{MMM{L3CMServiceRequest::builder()
-        .serviceType(L3CMServiceType{L3CMServiceType::LocationUpdateRequest})
+        .cmServiceType(L3CMServiceType::LocationUpdateRequest)
         .build()}};
 }
 

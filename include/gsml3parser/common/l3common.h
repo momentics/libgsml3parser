@@ -43,6 +43,13 @@ namespace detail {
 size_t skipLV(BitReader& br, size_t lengthBytes);
 size_t skipTLV(BitReader& br, unsigned expectedIEI);
 bool parseHasT(BitReader& br, unsigned expectedIEI);
+/// Consume all remaining whole octets into \p out as an opaque sequence of
+/// optional information elements not modelled by the message class
+/// (TS 24.008 / TS 24.068 optional IEs). Returns false when the input is
+/// truncated mid-octet (TruncatedInput).
+bool readOpaqueTail(BitReader& br, std::vector<uint8_t>& out);
+/// Re-emit an opaque optional-IE sequence verbatim, octet by octet.
+void writeOpaqueTail(const std::vector<uint8_t>& v, BitWriter& bw);
 } // namespace detail
 
 // ── Cell Identity (GSM 04.08 10.5.1.1) ─────────────────────────────────

@@ -792,7 +792,7 @@ namespace {
 // returns a value: they expand to an early `return`).
 gsml3_message* makeCmServiceRequestLU(uint32_t tmsi) {
     auto msg = L3CMServiceRequest::builder()
-        .serviceType(L3CMServiceType{L3CMServiceType::TypeCode::LocationUpdateRequest})
+        .cmServiceType(L3CMServiceType::TypeCode::LocationUpdateRequest)
         .mobileIdentity(L3MobileIdentity{tmsi})
         .build();
     ParsedMessage pm{MMM{std::move(msg)}};
@@ -910,7 +910,7 @@ TEST(CApiOrchestrator, MOCallSetupChain) {
 
     // Step 1: CMServiceRequest (MO call) -> CMServiceAccept.
     auto cmReq = L3CMServiceRequest::builder()
-        .serviceType(L3CMServiceType{L3CMServiceType::TypeCode::MobileOriginatedCall})
+        .cmServiceType(L3CMServiceType::TypeCode::MobileOriginatedCall)
         .mobileIdentity(L3MobileIdentity{0x87654321})
         .build();
     ParsedMessage pm{MMM{std::move(cmReq)}};
@@ -955,7 +955,7 @@ TEST(CApiOrchestrator, CallSetupMO_T3101_Timeout) {
 
     // Step 1: CMServiceRequest (MO call) -> CMServiceAccept.
     auto cmReq = L3CMServiceRequest::builder()
-        .serviceType(L3CMServiceType{L3CMServiceType::TypeCode::MobileOriginatedCall})
+        .cmServiceType(L3CMServiceType::TypeCode::MobileOriginatedCall)
         .mobileIdentity(L3MobileIdentity{0x87654321})
         .build();
     ParsedMessage pm{MMM{std::move(cmReq)}};
@@ -999,7 +999,7 @@ TEST(CApiOrchestrator, UnsupportedServiceType_Ignored) {
     ASSERT_NE(s, nullptr);
 
     auto cmReq = L3CMServiceRequest::builder()
-        .serviceType(L3CMServiceType{L3CMServiceType::TypeCode::ShortMessage})
+        .cmServiceType(L3CMServiceType::TypeCode::ShortMessage)
         .mobileIdentity(L3MobileIdentity{0x12345678})
         .build();
     ParsedMessage pm{MMM{std::move(cmReq)}};
@@ -1229,8 +1229,9 @@ TEST(CApiTyped, Builders_RoundTrip) {
         gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
         ASSERT_NE(m, nullptr);
         EXPECT_STREQ(gsml3_message_name(m), "CMServiceRequest");
-        // The CM service type is a 4-bit field on the wire (this library's
-        // L3CMServiceType encoding): LU = 105 round-trips as its low nibble.
+        // The CM service type is a 4-bit field in the high half-octet of the
+        // first body octet (L3CMServiceType encoding): LU = 105 round-trips as
+        // its low nibble value (5) after wire truncation.
         // Cross-check against the direct C++ parse of the same bytes: the
         // C getter must agree with the C++ API value exactly.
         auto cppR = parseL3(std::span<const uint8_t>(buf, n));

@@ -103,7 +103,7 @@ TEST(PR_Feed, CMServiceRequest_LU_CreatesLocationUpdate) {
     SubscriberSession session;
 
     auto cmReq = L3CMServiceRequest::builder()
-        .serviceType(L3CMServiceType{L3CMServiceType::LocationUpdateRequest})
+        .cmServiceType(L3CMServiceType::LocationUpdateRequest)
         .build();
     ParsedMessage msg{MMM{std::move(cmReq)}};
     auto result = runner.feed(msg, &session, {});

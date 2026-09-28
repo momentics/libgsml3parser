@@ -279,7 +279,7 @@ TEST(Stress, _100KSessions_ProcedureRunner_Feed_Fast) {
 
         // Feed a CMServiceRequest through ProcedureRunner to auto-create a procedure
         auto cmReq = L3CMServiceRequest::builder()
-            .serviceType(L3CMServiceType{L3CMServiceType::LocationUpdateRequest})
+            .cmServiceType(L3CMServiceType::LocationUpdateRequest)
             .build();
         ParsedMessage msg{MMM{std::move(cmReq)}};
 
@@ -638,7 +638,7 @@ TEST(Stress, _1MSession_ProcedureTick_Scale) {
         auto* s = reg.findByTMSI(i);
         for (int step = 0; step < 4; ++step) {
             auto cmReq = L3CMServiceRequest::builder()
-                .serviceType(L3CMServiceType{L3CMServiceType::LocationUpdateRequest})
+                .cmServiceType(L3CMServiceType::LocationUpdateRequest)
                 .build();
             ParsedMessage msg{MMM{std::move(cmReq)}};
             s->procedures.feed(msg, s, {});

@@ -42,10 +42,11 @@
 //     Location Updating Accept/Request, Authentication Request/Response)
 //   - MM header byte layout verified: PD=5('0101'B) in the low nibble of octet 0,
 //     TI/TIF in the high nibble; MT(6 bits) in the low bits of octet 1 - matches GSM 24.008 Table 11.2
-//   - LocationUpdatingRequest: LAI is RAW (not LV!), then CM1-LV, then MI-LV
+//   - LocationUpdatingRequest: first octet [lu(2)|spare(1)|fop(1)][CKSN(3)|spare(1)],
+//     LAI is RAW (not LV!), then CM1-LV, then MI-LV
 //   - LocationUpdatingAccept: LAI is RAW (not LV!), then optional MI + FOP
 //   - TMSIReallocationCommand: LAI RAW + MI-LV + FollowOnProceed(4 bits)
-//   - CMServiceRequest: CM_ServiceType(4)|CKSN(4), CM2-LV, MI-LV
+//   - CMServiceRequest: first octet CM_ServiceType(4)|CKSN(3)|spare(1), CM2-LV, MI-LV
 //   - CMServiceReject: reject_cause(8 bits) per GSM 24.008 10.5.3.6
 //   - IMSIDetachIndication: CM1-LV + MI-LV
 //   - MMStatus: cause(8 bits) per GSM 24.008 10.5.3.6
@@ -119,10 +120,11 @@ TEST(GoldenMM, MessageTypeValues) {
 //   discriminator := '0101'B (PD=5=MM), messageType := overwritten
 //   locationUpdatingType := lu_type, cipheringKeySequenceNumber
 //   mobileStationClassmark1 := ts_CM1, mobileIdentityLV := mi_lv
-// Structure: LU_Type(2)|spare(2)|CKSN(4), LAI RAW(5 octets), CM1 LV, MI LV
+// Structure: LU_Type(2)|spare(1)|FOP(1)|CKSN(3)|spare(1), LAI RAW(5 octets), CM1 LV, MI LV
 // Spec-verified: PD=5(MM), MTI=0x08(LocationUpdatingRequest) per GSM 24.008 Table 10.5.3
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.15 body field order (MANDATORY):
-//   1) locationUpdatingType(2)|spare(2)|CKSN(4) = 1 octet
+//   1) locationUpdatingType(2)|spare(1)|followOnRequestIndicator(1) +
+//      cipheringKeySequenceNumber(3)|spare(1) = 1 octet
 //   2) locationAreaIdentification = MCC/MNC BCD(3) + LAC(2) = 5 octets RAW (NOT LV!)
 //   3) mobileStationClassmark1 = LV format (length + value)
 //   4) mobileIdentity = LV format (length + type octet + value)
@@ -130,14 +132,15 @@ TEST(GoldenMM, MessageTypeValues) {
 
 TEST(GoldenMM, LocationUpdatingRequest_Parse) {
     // GSM 24.008 9.2.15: LocationUpdatingRequest body field order (MANDATORY):
-    //   1) locationUpdatingType(2)|spare(2)|CKSN(4) = 1 octet
+    //   1) locationUpdatingType(2)|spare(1)|followOnRequestIndicator(1) +
+    //      cipheringKeySequenceNumber(3)|spare(1) = 1 octet
     //   2) locationAreaIdentification = MCC/MNC BCD(3 octets) + LAC(2 octets) = 5 octets RAW (NOT LV!)
     //   3) mobileStationClassmark1 = LV format (length + value)
     //   4) mobileIdentity = LV format (length + type octet + value)
     // Field order per GSM 24.008 9.2.15: locationAreaIdentification is raw LAI, then CM1 LV, then MI LV
     // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
     // Byte 1: MT=0x08(LocationUpdatingRequest) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.3)
-    // Byte 2: LU_Type(2)=00(Normal)|spare(2)=0|CKSN(4)=0 = 0x00 [GSM 24.008 9.2.15]
+    // Byte 2: LU_Type(2)=00(Normal)|spare(1)=0|FOP(1)=0|CKSN(3)=0|spare(1)=0 = 0x00 [GSM 24.008 9.2.15]
     // Bytes 3-7: LAI (mandatory per GSM 24.008 9.2.15, RAW not LV): MCC=250, MNC=01, LAC=0x172A
     //   [MCC/MNC is carried as nibble-swapped BCD per GSM 23.003]
     //   MCC=250, MNC=01 -> '250F01'H nibble-swapped = {0x52, 0xF0, 0x10}, LAC = {0x17,  0x2A}
@@ -155,6 +158,101 @@ TEST(GoldenMM, LocationUpdatingRequest_Parse) {
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3LocationUpdatingRequest::MTI);
+}
+
+// Golden: Location Updating Request first body octet (TS 24.008): updating
+// type = IMSI Attach ('10'B) in bits 7:6, follow-on request indicator set in
+// bit 4, CKSN=3 in bits 3:1 with the reserved bit clear.
+// octet = (2 << 6) | (1 << 4) | (3 << 1) = 0x96.
+TEST(GoldenMM, LocationUpdatingRequest_FirstOctet_Golden) {
+    uint8_t data[] = {
+        0x05, 0x08, 0x96,
+        0x52, 0xF0, 0x10, 0x17, 0x2A,
+        0x01, 0x00,
+        0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* lur = tryGet<L3LocationUpdatingRequest>(*msg);
+    ASSERT_NE(lur, nullptr);
+    EXPECT_EQ(lur->getLocationUpdatingType(), LocationUpdateType::IMSIAttach);
+    EXPECT_TRUE(lur->followOnRequest());
+    EXPECT_EQ(lur->cksn(), 3u);
+
+    // Builder path: the same values must produce the identical first octet.
+    auto built = L3LocationUpdatingRequest::builder()
+        .updateType(2)
+        .followOnRequest(true)
+        .cksn(3)
+        .classmark(L3MobileStationClassmark1{})
+        .mobileIdentity(L3MobileIdentity(0x12345678))
+        .lai(L3LocationAreaIdentity("250", "01", 0x172A))
+        .build();
+    ParsedMessage pm{MMM{built}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes)[2], 0x96);
+
+    // Round-trip: parse and compare field values.
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    const auto* rl = tryGet<L3LocationUpdatingRequest>(*reparsed);
+    ASSERT_NE(rl, nullptr);
+    EXPECT_EQ(rl->getLocationUpdatingType(), LocationUpdateType::IMSIAttach);
+    EXPECT_TRUE(rl->followOnRequest());
+    EXPECT_EQ(rl->cksn(), 3u);
+}
+
+// Golden: Authentication Request first body octet (TS 24.008): the ciphering
+// key sequence number (three bits) occupies bits 7:5 with five spare bits.
+// CKSN=5 -> octet = (5 << 5) = 0xA0.
+TEST(GoldenMM, AuthenticationRequest_FirstOctet_Golden) {
+    uint8_t rand[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
+    uint8_t data[] = {0x05, 0x12, 0xA0};
+    // A truncated body (RAND missing) must report truncation.
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_FALSE(msg);
+
+    uint8_t frame[] = {
+        0x05, 0x12, 0xA0,
+        1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
+    };
+    auto full = parseL3(std::span<const uint8_t>(frame));
+    ASSERT_TRUE(full);
+    const auto* auth = tryGet<L3AuthenticationRequest>(*full);
+    ASSERT_NE(auth, nullptr);
+    EXPECT_EQ(auth->cksn(), 5u);
+    {
+        bool randMatches = true;
+        for (size_t i = 0; i < 16; ++i) {
+            if (auth->rand()[i] != rand[i]) randMatches = false;
+        }
+        EXPECT_TRUE(randMatches);
+    }
+
+    // Builder path: CKSN=5 must land in the high half-octet (bits 7:5).
+    auto built = L3AuthenticationRequest::builder()
+        .cksn(5)
+        .rand(std::span<const uint8_t>(rand))
+        .build();
+    ParsedMessage pm{MMM{built}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes)[2], 0xA0);
+
+    // Round-trip with CKSN and RAND assertions.
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    const auto* ra = tryGet<L3AuthenticationRequest>(*reparsed);
+    ASSERT_NE(ra, nullptr);
+    EXPECT_EQ(ra->cksn(), 5u);
+    {
+        bool randMatches = true;
+        for (size_t i = 0; i < 16; ++i) {
+            if (ra->rand()[i] != rand[i]) randMatches = false;
+        }
+        EXPECT_TRUE(randMatches);
+    }
 }
 
 // =====================================================================
@@ -222,12 +320,13 @@ TEST(GoldenMM, TMSIReallocationCommand_Parse) {
 // CM Service Request body per GSM 24.008 9.2.9:
 //   cm_ServiceType := int2bit(enum2int(serv_type), 4)
 //   cipheringKeySequenceNumber, mobileStationClassmark2, mobileIdentity
-// Structure: CM_ServiceType(4)|CKSN(4), CM2 LV (3 octets), MI LV
+// Structure: CM_ServiceType(4)|CKSN(3)|spare(1), CM2 LV (3 octets), MI LV
 // Spec-verified: PD=5(MM), MTI=0x24(CMServiceRequest) per GSM 24.008 Table 10.5.3
 // CmServiceType: MobileOriginatedCall = '0001'B (value=1, GSM 24.008 10.5.3.3)
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.9: CMServiceRequest body = CM_ServiceType + CKSN
-//   + CM2-LV + MI-LV. CM_ServiceType(4 bits) and CKSN(4 bits) share one octet:
-//   high nibble = CM_ServiceType, low nibble = CKSN. CM_ServiceType values:
+//   + CM2-LV + MI-LV. The first octet packs the CM service type (four bits,
+//   high half-octet) and the ciphering key sequence number (three bits in
+//   bits 3:1 with one reserved bit, low half-octet). CM_ServiceType values:
 //   1=MobileOriginatedCall, 2=EmergencyCall, 4=ShortMessage, 8=SupplementaryService.
 //   CmServiceType (GSM 24.008): MobileOriginatedCall='0001'B(=1).
 // =====================================================================
@@ -235,7 +334,7 @@ TEST(GoldenMM, TMSIReallocationCommand_Parse) {
 TEST(GoldenMM, CMServiceRequest_Parse) {
     // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
     // Byte 1: MT=0x24(CMServiceRequest) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.3)
-    // Byte 2: CM_ServiceType(4)=1(MobileOriginatedCall)|CKSN(4)=0 = 0x01 [GSM 24.008 10.5.3.3]
+    // Byte 2: CM_ServiceType(4)=1(MobileOriginatedCall)|CKSN(3)=0|spare(1)=0 = 0x10 [GSM 24.008 10.5.3.3]
     //   CmServiceType (GSM 24.008): MobileOriginatedCall = '0001'B
     // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets, GSM 24.008 10.5.1.6)
     // Bytes 4-6: CM2 value (24 bits of capability flags)
@@ -243,13 +342,51 @@ TEST(GoldenMM, CMServiceRequest_Parse) {
     // Byte 8: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4 [GSM 24.008 10.5.1.4]
     // Bytes 9-12: TMSI = 0x12345678
     uint8_t data[] = {
-        0x05, 0x24, 0x01,
+        0x05, 0x24, 0x10,
         0x03, 0x20, 0x00, 0x80,
         0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CMServiceRequest::MTI);
+}
+
+// Golden: CM Service Request first body octet (TS 24.008): the CM service
+// type occupies the high half-octet (service type 1 = MobileOriginatedCall),
+// CKSN=5 in bits 3:1, reserved bit 0.
+// octet = (1 << 4) | (5 << 1) = 0x1A.
+TEST(GoldenMM, CMServiceRequest_FirstOctet_Golden) {
+    uint8_t data[] = {
+        0x05, 0x24, 0x1A,
+        0x03, 0x20, 0x00, 0x80,
+        0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* cm = tryGet<L3CMServiceRequest>(*msg);
+    ASSERT_NE(cm, nullptr);
+    EXPECT_EQ(cm->serviceType(), L3CMServiceType::MobileOriginatedCall);
+    EXPECT_EQ(cm->cksn(), 5u);
+
+    // Builder path: the same values must produce the identical first octet.
+    auto built = L3CMServiceRequest::builder()
+        .cmServiceType(1)
+        .cksn(5)
+        .classmark(L3MobileStationClassmark2{})
+        .mobileIdentity(L3MobileIdentity(0x12345678))
+        .build();
+    ParsedMessage pm{MMM{built}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes)[2], 0x1A);
+
+    // Round-trip: parse and compare field values.
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    const auto* rc = tryGet<L3CMServiceRequest>(*reparsed);
+    ASSERT_NE(rc, nullptr);
+    EXPECT_EQ(rc->serviceType(), L3CMServiceType::MobileOriginatedCall);
+    EXPECT_EQ(rc->cksn(), 5u);
 }
 
 // =====================================================================

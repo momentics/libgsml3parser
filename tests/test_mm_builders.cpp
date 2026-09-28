@@ -270,7 +270,7 @@ TEST(MMBuilders, CMServiceRequest) {
     auto msg = L3CMServiceRequest::builder()
         .classmark(L3MobileStationClassmark2{})
         .mobileIdentity(L3MobileIdentity(0x12345678))
-        .serviceType(L3CMServiceType{L3CMServiceType::MobileOriginatedCall})
+        .cmServiceType(L3CMServiceType::MobileOriginatedCall)
         .build();
     ParsedMessage pm{MMM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);

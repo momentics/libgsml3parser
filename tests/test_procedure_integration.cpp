@@ -43,7 +43,7 @@ using namespace std::chrono_literals;
 // Helper: build a CMServiceRequest with the given service type code.
 static ParsedMessage makeCMServiceRequest(L3CMServiceType::TypeCode svcType) {
     auto cmReq = L3CMServiceRequest::builder()
-        .serviceType(L3CMServiceType{svcType})
+        .cmServiceType(static_cast<unsigned>(svcType))
         .build();
     return ParsedMessage{MMM{std::move(cmReq)}};
 }

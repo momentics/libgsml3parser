@@ -64,7 +64,7 @@ static void simulateLocationUpdateChain() {
     // Step 1: MS sends CMServiceRequest (LocationUpdate)
     auto cmReq = ParsedMessage{MMM{
         L3CMServiceRequest::builder()
-            .serviceType(L3CMServiceType{L3CMServiceType::TypeCode::LocationUpdateRequest})
+            .cmServiceType(L3CMServiceType::TypeCode::LocationUpdateRequest)
             .mobileIdentity(L3MobileIdentity{0x12345678u})
             .build()}};
 
@@ -158,7 +158,7 @@ static void simulateMOCallSetupChain() {
     // Step 1: MS sends CMServiceRequest (MO Call)
     auto cmReq = ParsedMessage{MMM{
         L3CMServiceRequest::builder()
-            .serviceType(L3CMServiceType{L3CMServiceType::TypeCode::MobileOriginatedCall})
+            .cmServiceType(L3CMServiceType::TypeCode::MobileOriginatedCall)
             .mobileIdentity(L3MobileIdentity{0x87654321u})
             .build()}};
 

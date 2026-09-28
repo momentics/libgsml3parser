@@ -1600,6 +1600,23 @@ size_t skipTLV(BitReader& br, unsigned expectedIEI) {
     return len;
 }
 
+// Opaque tail (TS 24.008 / TS 24.068 optional information elements): the
+// octets that follow the mandatory part of a message but are not modelled
+// by typed fields are kept verbatim so the write path re-emits them without
+// loss. An empty sequence costs zero heap allocation.
+bool readOpaqueTail(BitReader& br, std::vector<uint8_t>& out) {
+    while (br.hasMore()) {
+        auto b = br.readField(8);
+        if (!b) return false;
+        out.push_back(static_cast<uint8_t>(b.value()));
+    }
+    return true;
+}
+
+void writeOpaqueTail(const std::vector<uint8_t>& v, BitWriter& bw) {
+    for (uint8_t b : v) bw.writeField(b, 8);
+}
+
 } // namespace detail
 
 } // namespace gsml3parser

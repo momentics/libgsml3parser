@@ -3298,7 +3298,7 @@ GSML3_C_API size_t gsml3_build_cm_service_request(uint8_t* out, size_t maxlen,
         if (!ok) return 0; // cIdentity() already reported the reason
         return typedBuild<MMM>(out, maxlen, [&]{
             return MMM{L3CMServiceRequest::builder()
-                           .serviceType(L3CMServiceType{static_cast<L3CMServiceType::TypeCode>(service_type)})
+                           .cmServiceType(service_type)
                            .mobileIdentity(mi)
                            .build()};
         });

@@ -148,14 +148,18 @@ public:
 };
 
 // ── Location Updating Request (GSM 04.08 9.2.15) ──────────────────────
+// Unrecognized optional information elements are kept as an opaque
+// sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
 class L3LocationUpdatingRequest {
 private:
     unsigned mUpdateType{0};
+    bool mFollowOnRequest{false};
     unsigned mCKSN{0};
     L3MobileStationClassmark1 mClassmark;
     L3MobileIdentity mMobileIdentity;
     L3LocationAreaIdentity mLAI;
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -163,13 +167,17 @@ public:
 
     struct Builder {
         unsigned m_updateType{0};
+        bool m_followOnRequest{false};
         unsigned m_cksn{0};
         L3MobileStationClassmark1 m_classmark;
         L3MobileIdentity m_mobileIdentity;
         L3LocationAreaIdentity m_lai;
+        std::vector<uint8_t> m_additionalIes;
 
         /// Set update type: 0=Normal, 1=Periodic, 2=IMSI Attach.
         Builder& updateType(unsigned v) { m_updateType = v; return *this; }
+        /// Set the follow-on request indicator (one bit).
+        Builder& followOnRequest(bool v) { m_followOnRequest = v; return *this; }
         /// Set CKSN value.
         Builder& cksn(unsigned v) { m_cksn = v; return *this; }
         /// Set classmark.
@@ -178,6 +186,11 @@ public:
         Builder& mobileIdentity(L3MobileIdentity v) { m_mobileIdentity = std::move(v); return *this; }
         /// Set location area identity.
         Builder& lai(L3LocationAreaIdentity v) { m_lai = v; return *this; }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
         /// Build the final message.
         [[nodiscard]] L3LocationUpdatingRequest build() const;
     };
@@ -187,7 +200,13 @@ public:
     const L3LocationAreaIdentity& lai() const { return mLAI; }
     size_t bodyLength() const;
     LocationUpdateType getLocationUpdatingType() const { return static_cast<LocationUpdateType>(mUpdateType & 0x3); }
-    unsigned getFollowOnRequest() const { return mUpdateType & 0x8; }
+    /// Follow-on request indicator: set when the mobile station has a
+    /// further request to send (TS 24.008 section 9.1.3.x).
+    [[nodiscard]] bool followOnRequest() const { return mFollowOnRequest; }
+    /// Ciphering key sequence number (three bits, TS 24.008).
+    [[nodiscard]] unsigned cksn() const { return mCKSN; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
     [[nodiscard]] static Expected<L3LocationUpdatingRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -221,6 +240,8 @@ public:
 };
 
 // ── Authentication Request (GSM 04.08 9.2.2) ──────────────────────────
+// Unrecognized optional information elements are kept as an opaque
+// sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
 class L3AuthenticationRequest {
 private:
@@ -228,6 +249,7 @@ private:
     // Fixed 128-bit RAND (TS 24.008 10.5.1.21) stored inline so the message is
     // trivially copyable and constructible with zero heap allocation.
     std::array<uint8_t, 16> mRAND{};
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -244,12 +266,15 @@ public:
     /// RAND as a zero-copy span (128-bit, wire order).
     [[nodiscard]] std::span<const uint8_t> rand() const { return mRAND; }
 
-    /// CKSN value (4 bits, TS 24.008 10.5.1.24).
+    /// CKSN value (three bits, TS 24.008 10.5.1.24).
     [[nodiscard]] unsigned cksn() const { return mCKSN; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     struct Builder {
         unsigned m_cksn{0};
         std::array<uint8_t, 16> m_rand{};
+        std::vector<uint8_t> m_additionalIes;
 
         /// Set CKSN value.
         Builder& cksn(unsigned v) { m_cksn = v; return *this; }
@@ -263,12 +288,17 @@ public:
             for (size_t i = 0; i < m_rand.size() && i < v.size(); ++i) m_rand[i] = v[i];
             return *this;
         }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
         /// Build the final message.
         [[nodiscard]] L3AuthenticationRequest build() const;
     };
 
     static Builder builder();
-    size_t bodyLength() const { return 17; }
+    size_t bodyLength() const { return 17 + mAdditionalIes.size(); }
     [[nodiscard]] static Expected<L3AuthenticationRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -418,12 +448,16 @@ public:
 };
 
 // ── CM Service Request (GSM 04.08 9.2.9) ──────────────────────────────
+// Unrecognized optional information elements are kept as an opaque
+// sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
 class L3CMServiceRequest {
 private:
     L3MobileStationClassmark2 mClassmark;
     L3MobileIdentity mMobileIdentity;
     L3CMServiceType mServiceType;
+    unsigned mCKSN{0};
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -433,13 +467,25 @@ public:
         L3MobileStationClassmark2 m_classmark;
         L3MobileIdentity m_mobileIdentity;
         L3CMServiceType m_serviceType;
+        unsigned m_cksn{0};
+        std::vector<uint8_t> m_additionalIes;
 
         /// Set the classmark.
         Builder& classmark(L3MobileStationClassmark2 v) { m_classmark = v; return *this; }
         /// Set the mobile identity.
         Builder& mobileIdentity(L3MobileIdentity v) { m_mobileIdentity = std::move(v); return *this; }
-        /// Set the service type.
-        Builder& serviceType(L3CMServiceType v) { m_serviceType = v; return *this; }
+        /// Set the CM service type (four-bit wire value, TS 24.008 10.5.3.3).
+        Builder& cmServiceType(unsigned v) {
+            m_serviceType = L3CMServiceType{static_cast<L3CMServiceType::TypeCode>(v)};
+            return *this;
+        }
+        /// Set the ciphering key sequence number (three bits on the wire).
+        Builder& cksn(unsigned v) { m_cksn = v; return *this; }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
         /// Build the final message.
         [[nodiscard]] L3CMServiceRequest build() const;
     };
@@ -447,6 +493,10 @@ public:
     static Builder builder();
     const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
     L3CMServiceType::TypeCode serviceType() const { return mServiceType.type(); }
+    /// Ciphering key sequence number (three bits, TS 24.008).
+    [[nodiscard]] unsigned cksn() const { return mCKSN; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3CMServiceRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;

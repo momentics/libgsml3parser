@@ -34,7 +34,7 @@ int main() {
     std::cout << "\n--- Step 1: CMServiceRequest(LocationUpdating) ---\n";
     auto cmReq = L3CMServiceRequest::builder()
         .mobileIdentity(L3MobileIdentity(0x12345678))
-        .serviceType(L3CMServiceType(L3CMServiceType::LocationUpdateRequest))
+        .cmServiceType(L3CMServiceType::LocationUpdateRequest)
         .build();
     ParsedMessage cmReqMsg{std::move(cmReq)};
 
