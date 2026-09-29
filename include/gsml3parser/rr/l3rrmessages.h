@@ -1939,9 +1939,10 @@ public:
 };
 
 // ── Handover Access (GSM 04.08 9.1.14a) ───────────────────────────────
-// Length-framed short message (TS 44.018): the internal MTI lies outside
-// the RR wire range; the message is framed by its length (4 bytes), not
-// by an L3 header.
+// Length-framed short message: the internal MTI lies outside the RR wire
+// range; the message is framed by its length (4 bytes), not by an L3
+// header. Handover Access (TS 44.018): 27-bit payload followed by five
+// reserved bits; the payload is kept as an opaque value.
 
 class L3HandoverAccess {
     unsigned mHandoverNumber{0};

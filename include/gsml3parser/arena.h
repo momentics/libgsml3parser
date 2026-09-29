@@ -59,7 +59,7 @@ public:
     void* allocate(size_t bytes, size_t alignment = alignof(std::max_align_t));
 
     /// Release all blocks and reset the usage counter.
-    /// All previously returned pointers become invalid.
+    /// Every pointer obtained from this arena becomes invalid.
     void reset();
 
     /// Bytes remaining in the current (last) block.
@@ -75,9 +75,8 @@ public:
 
 private:
     struct Block {
-        // Default-initialized storage (NOT zero-filled - the
-        // previous std::vector<uint8_t> value-initialized every new block,
-        // a wasted 64 KB+ memset per block on the allocation path).
+        // Default-initialized storage (NOT zero-filled): zeroing every new
+        // block (64 KB+) is pure overhead on the allocation path.
         // NOTE: std::make_unique<uint8_t[]>(n) value-initializes the array
         // (zero-fills it), so the allocation below uses plain new[].
         std::unique_ptr<uint8_t[]> data;

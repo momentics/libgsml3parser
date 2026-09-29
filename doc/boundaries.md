@@ -49,7 +49,7 @@ TX: `ResponseBuilder` writes complete L3 bytes into a caller buffer; the app fra
 
 **Reason:** Codec implementations are large, patent-encumbered, and have their own ecosystems.
 
-**Integration point:** Once the call reaches the active state (`CallSetupMOPercedure`/`CallSetupMTProcedure` complete with `"call_active"`, i.e. after the ConnectAcknowledge exchange), the BTS application switches the TCH timeslots to its codec pipeline. The library no longer participates in TCH user-data flow; it only manages subsequent call-control signaling (Disconnect/Release).
+**Integration point:** Once the call reaches the active state (`CallSetupMOPercedure`/`CallSetupMTProcedure` complete with `"call_active"`, i.e. after the ConnectAcknowledge exchange), the BTS application switches the TCH timeslots to its codec pipeline. The library does not participate in TCH user-data flow once the call is active; it only manages subsequent call-control signaling (Disconnect/Release).
 
 ### Ciphering Algorithms (A5/1, A5/2, A5/3)
 

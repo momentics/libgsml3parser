@@ -336,7 +336,7 @@ The library provides well-defined integration points for external systems that a
 
 ### TCH Traffic Channel
 
-When a call reaches the connected state (`ResponseToken::Connect`), the library is no longer involved in user data flow. The BTS application switches to its speech codec pipeline (AMR, FR, HR) for TCH timeslots. The library only manages subsequent call control signaling (Disconnect, Release).
+When a call reaches the connected state (`ResponseToken::Connect`), the library is not involved in user data flow. The BTS application switches to its speech codec pipeline (AMR, FR, HR) for TCH timeslots. The library only manages subsequent call control signaling (Disconnect, Release).
 
 ## 5. Thread Model
 
@@ -483,7 +483,7 @@ BTS ──[RLL DATA_IND]──► BSC: ResponseBuilder bytes -> RSLBuilder::buil
 BSC ──[DCHAN CHAN_ACTIV]──► BTS: RSLParser::parse() -> getChannelMode() -> activate channel
 BTS ──[DCHAN CHAN_ACTIV_ACK]──► BSC: RSLBuilder::buildChanActivAck() -> send
 
-BTS ──[DCHAN MEAS_RES]──► BSC: RSLBuilder::buildMeasRes(rxlev, rxqual) -> send
+BTS ──[DCHAN MEAS_RES]──► BSC: RSLBuilder::buildMeasRes(rxlevFull, rxlevSub, rxqFull, rxqSub, dtxDownlink) -> send
 BTS ──[CCHAN CCCH_LOAD_IND]──► BSC: RSLBuilder::buildCCCHLoadInd() -> send
 ```
 
@@ -627,5 +627,5 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
 | 3GPP TS 24.008 | Mobile radio interface L3 specification |
 | 3GPP TS 44.018 | Radio resource (RR) protocol on the Um interface |
 | GSM 04.06 / 3GPP TS 44.064 | LAPDm framing for Um interface |
-| GSM 04.08 | Layer 3 specification (legacy reference) |
+| GSM 04.08 | Layer 3 specification (TS 24.008) |
 | 3GPP TS 48.058 | A-bis RSL specification |

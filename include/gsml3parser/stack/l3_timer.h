@@ -206,8 +206,8 @@ public:
     void tick(std::chrono::milliseconds delta, Callback&& onExpired) {
         bool wasActive = runningCount() > 0;
         // Snapshot the running set so a timer started (or stopped) by the
-        // callback is not ticked within the same pass (the
-        // previous in-place loop could double-tick a callback-started timer).
+        // callback is not ticked within the same pass; an in-place loop
+        // would double-tick a callback-started timer.
         std::array<bool, MAX_TIMERS> running{};
         for (size_t i = 0; i < MAX_TIMERS; ++i) {
             running[i] = mInitialized[i] && mTimers[i].isRunning();

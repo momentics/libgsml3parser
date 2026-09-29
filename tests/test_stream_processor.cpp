@@ -151,8 +151,8 @@ TEST(L3StreamProcessor, EmptySource) {
 }
 
 // Test: an idle poll on a live (non-exhausted) RingBuffer counts
-// toward idlePolls, not sourceExhausted (the
-// previous stat conflated "empty right now" with "truncated").
+// toward idlePolls, not sourceExhausted ("empty right now" is not the
+// same as "source truncated").
 TEST(L3StreamProcessor, RingBuffer_IdlePoll_CountedAsIdle) {
     RingBuffer ring(1024);
     L3StreamProcessor proc(ring);

@@ -310,7 +310,7 @@ TEST(FlatMapTest, Reserve_SlabPreallocation_NoGrowthDuringInsert) {
 
 // Test: heavy churn recycles dead entries in place (same slab addresses),
 // so steady 1-remove/1-create performs no allocations. The
-// free list is LIFO, so key i re-occupies some previously used address
+// free list is LIFO, so key i re-occupies some earlier-used address
 // (not necessarily its own): the invariant is that the SET of live
 // addresses after re-insertion equals the set before the erase burst —
 // nothing allocated, nothing moved.

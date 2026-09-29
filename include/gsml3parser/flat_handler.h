@@ -231,7 +231,7 @@ static_assert(sizeof(FlatHandler) == 2 * sizeof(void*),
  * Creates a FlatHandler from a stateless callable (non-capturing lambda).
  * No heap allocation.
  *
- * Function pointers and function types are REJECTED (C10): a
+ * Function pointers and function types are REJECTED: a
  * default-constructed function pointer is null, so the static instance
  * stored by this factory would crash on the first invocation. For plain
  * function pointers with a user context, use the FlatHandler constructor

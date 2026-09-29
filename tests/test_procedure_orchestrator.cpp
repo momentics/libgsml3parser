@@ -265,7 +265,7 @@ TEST(ProcedureOrchestrator, ResponseContext_Reset_OnNewChain) {
     SubscriberSession session;
     session.context.setTMSI(0x12345678u);
 
-    // Simulate a previously completed chain that left stale response parameters behind
+    // Simulate an earlier completed chain that left stale response parameters behind
     // (e.g. an old RAND and channel that must not leak into the next chain).
     std::memset(session.response.rand.data(), 0xAB, 16);
     session.response.hasRand = true;
@@ -290,8 +290,8 @@ TEST(ProcedureOrchestrator, IdentityVerification_ResponseReceived_NoRequestToken
     auto r1 = orchestrator.feed(makeCMServiceRequestLU(), &session);
     EXPECT_EQ(r1.responseToken, ResponseToken::CMServiceAccept);
 
-    // Step 2: IdentityResponse received -> the phase is no longer waiting, so the
-    // result must NOT carry an IdentityRequest token (C4 fix). The chain advances
+    // Step 2: IdentityResponse received -> the phase stops waiting, so the
+    // result must NOT carry an IdentityRequest token. The chain advances
     // to Authentication and the caller needs no response.
     auto r2 = orchestrator.feed(makeIdentityResponse(), &session);
     EXPECT_EQ(r2.action, ProcedureStepResult::Action::Continue);
@@ -392,7 +392,7 @@ TEST(ProcedureOrchestrator, LocationUpdate_TimerExpiry) {
     driveToLocationUpdatePhase(orchestrator, session);
 
     // Tick well past the T3103 expiry without a VLR decision: the chain is
-    // cancelled and reported as one timeout failure (C15 fix).
+    // cancelled and reported as one timeout failure.
     size_t failed = orchestrator.tickAll(std::chrono::milliseconds(6000));
     EXPECT_EQ(failed, 1u);
     EXPECT_EQ(orchestrator.lastResponseToken(), ResponseToken::None);
@@ -496,7 +496,7 @@ TEST(ProcedureOrchestrator, CallRelease_UsesDisconnectTI) {
 }
 
 // Regression: starting a new orchestrator chain must clear stale response
-// parameters left over from a previously completed chain (same rule as
+// parameters left over from an earlier completed chain (same rule as
 // ProcedureRunner::feed auto-creation).
 TEST(ProcedureOrchestrator, ResponseContext_Reset_OnOrchestratorNewChain) {
     SubscriberSession session;

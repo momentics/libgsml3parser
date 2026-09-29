@@ -8,9 +8,10 @@
 [![Version](https://img.shields.io/badge/Version-0.19.0-blue.svg)](https://github.com/momentics/libgsml3parser/releases)
 
 A type-safe, **zero-allocation C++20** library with **no external dependencies**, spanning the full GSM
-signalling chain of a software Base Transceiver Station: parse and build all **236 L3 message types
-across 12 PD domains**, run the complete **LAPDm** (L2) entity and **A-bis RSL** interface, manage
-per-subscriber state (context, FSMs, timers, transactions), and drive ten spec-based **protocol
+signalling chain of a software Base Transceiver Station: **236 L3 message classes across 12 PD
+domains** — typed fields for RR/SM/CC/GMM/MM/SMS/SS, opaque-body parsing for BCC/GCC/LS, and
+passthrough for the Extended/Test PDs — plus the complete **LAPDm** (L2) entity and **A-bis RSL**
+interface, per-subscriber state (context, FSMs, timers, transactions), and ten spec-based **protocol
 procedures** — from raw radio bytes up to working MO/MT call flows.
 
 ## Why This Library?
@@ -19,10 +20,10 @@ Building a software BTS means implementing the entire Layer-3 signalling stack: 
 binary messages, driving protocol state machines, tracking timers, correlating request-response
 transactions, and generating correct responses at real-time speed. The existing solutions each leave a gap:
 
-- **osmo-bts** (C / libosmocore) — hand-coded parsers per message type, no builder API, implicit FSMs
+- **Hand-written C BTS stacks** — hand-coded parsers per message type, no builder API, implicit FSMs
   scattered across handler code;
-- **OpenBTS / srsRAN** — custom C++ structs with manual byte construction and limited coverage;
-- **TTCN-3 test suites** — excellent for validation, unusable as a production protocol stack.
+- **Ad-hoc C++ stacks** — custom structs with manual byte construction and limited coverage;
+- **TTCN-3 conformance suites** — excellent for validation, unusable as a production protocol stack.
 
 libgsml3parser closes the gap: one type-safe C++20 package that provides everything from raw
 parse/serialize to per-subscriber procedure state machines — ready to connect to any SDR backend or a
@@ -43,7 +44,7 @@ BSC over A-bis RSL, with zero third-party dependencies to carry.
 
 | Audience | What You Get |
 |----------|-------------|
-| **Software BTS developers** | Drop-in replacement for the osmo-bts L3 layer: parse, build, FSMs, timers, procedures, LAPDm — link `gsml3parser` and go |
+| **Software BTS developers** | Drop-in L3 layer for a software BTS: parse, build, FSMs, timers, procedures, LAPDm — link `gsml3parser` and go |
 | **Protocol testers & fuzzers** | Bidirectional binary↔typed API, golden vectors pinned to the normative TS wire layouts, libFuzzer targets for every major entry point |
 | **SDR / radio hobbyists** | Complete L2 (LAPDm) + L3 stack for the Um interface plus A-bis RSL — no networking or SIP dependencies |
 
@@ -79,6 +80,56 @@ Extended + Test PDs 2: **236 message types** in total, with Information Elements
 Full catalog (MTIs, directions, IEs, dispatch edge cases such as TIF=1 short messages and parse-slot
 shadowing): [doc/messages.md](doc/messages.md).
 
+## Wire Format Conformance
+
+All parse/build paths follow the normative 3GPP TS wire layouts; golden vectors are pinned in the
+test suite. Highlights of the non-obvious encodings:
+
+**Identities (TS 24.008)** — LAI/RAI pack the PLMN as `[MCC2|MCC1][MNC3/F|MCC3][MNC2|MNC1]` BCD octets
+plus a 16-bit LAC (plus one RAC octet for RAI); `mcc()`/`mnc()` return the digits in natural order.
+The mobile identity value starts with `[first digit(4)|odd-count(1)|type(3)]` and encodes digit pairs
+as `[next digit or F fill|current digit]`; a TMSI starts with the spare 'F' nibble, a zero bit and
+type '100'B (first octet `0xF4`).
+
+**MM (TS 24.008)** — CM Service Request body starts with one octet: CM service type in the high
+half-octet, CKSN(3)|reserved(1) in the low; Location Updating Request starts with
+`[luType(2)|spare(1)|FOP(1)]` + `[CKSN(3)|reserved(1)]`. Optional IEs after the mandatory part are
+preserved opaquely and re-emitted verbatim.
+
+**GMM / SM (TS 44.068)** — Attach/RAU Request pack update/attach type, forL3 and the GPRS CKSN in a
+single octet; the DRX parameter is two value octets without an identifier and the MS radio access
+capability is a mandatory LV. Reject/failure/status messages start with a single bare cause value
+octet. SM ACTIVATE PDP CONTEXT REQUEST carries NSAPI + LLC SAPI in the first octet, QoS and PDP
+address as positional LVs, the APN as TLV `0x28`, PCO as TLV `0x27` and an optional request type
+`0xAx`; DEACTIVATE PDP CONTEXT REQUEST starts with the SM cause octet followed by an optional
+tear-down indicator TV `0x09`.
+
+**RR (TS 44.018)** — Ciphering Mode Command is exactly one body octet
+`[sC(1)|algorithm(3)][cR(1)|spare(3)]`; SI1 carries the cell channel description (ARFCN(10)+BSIC(6),
+two octets) plus RACH control parameters (three octets) and at most one rest octet; the access-class
+bitmap is a 16-bit value written low byte first (AC *i* ↔ bit *i*); Paging Request Type 1/2/3 carry
+the four-bit page mode between channel-needed and the identities; channel numbers use the five-bit
+type-and-offset codes (`'00001'B` Bm ACCH … `'10000'B` BCCH, `'10001'B` RACH, `'10010'B` PCH+AGCH,
+PDCH/CBCH/VAMOS extensions) with `channelCodeLm/Sdcch4/Sdcch8` helpers.
+
+**LAPDm (GSM 04.06 / TS 51.010-1)** — an initial SABME is accepted on SAPI 0 only when it carries
+contention-resolution information; every UA we send mirrors the P/F of the received command; DM while
+awaiting establishment cancels T200 and releases the link; a T200-expired I-frame is retransmitted
+with P/F set and the current V(R) in N(R).
+
+**A-bis RSL (TS 48.058)** — the Channel Mode IE (0x06) value is exactly four octets:
+[reserved(6)|DTX_d(1)|DTX_u(1)], speed indicator (`Speech=0x01`, `Data=0x02`, `Signalling=0x03`),
+channel rate type (`Sdcch=0x01`, `TchF=0x08`, `TchH=0x09`, …, VAMOS extensions `0x88`/`0x89`) and a
+union octet (speech algorithm / opaque data rate / `0x00` for signalling). Error causes use the
+canonical section 9.3.26 values (`RadioLinkFail=0x01`, `ResUnavail=0x2F`, `Proto=0x6F`,
+`Interworking=0x7F`, …) and reserved gaps are rejected on emit. The Uplink Measurements IE (0x19) is
+three value octets — `[RFU|DTX_d|rxlev_full(6)]`, `[res(2)|rxlev_sub(6)]`, `[res(2)|rxq_full(3)|rxq_sub(3)]`
+— with any vendor supplementary bytes preserved verbatim. The Frame Number IE (0x08) packs t1p(5),
+t3(6) and t2(5) derived from an absolute TDMA frame number (`t1p=(fn/1326)%32`, `t3=fn%51`,
+`t2=fn%26`). The IE catalog covers the full section 9 set (0x01–0x3C; 0x1D is not allocated) plus
+vendor extensions 0x60–0x63 and the IPAccess group, encoded as TV with fixed sizes, TL16V for
+`L3Info` (0x0B) only, and LV for everything else — including Full BCCH Info (0x27).
+
 ## Quick Start
 
 ```bash
@@ -112,15 +163,15 @@ results are attributed to the machine that produced them; a full annotated run:
 
 ## How It Compares
 
-| Aspect | osmo-bts (C) | OpenBTS / srsRAN | libgsml3parser |
-|--------|-------------|-------------------|----------------|
-| **Language** | C (libosmocore) | Legacy C++ | C++20 |
+| Aspect | Hand-written C stack | Ad-hoc C++ stack | libgsml3parser |
+|--------|---------------------|------------------|----------------|
+| **Language** | C | C++ (manual memory) | C++20 |
 | **Type safety** | enum + manual cast | custom structs | `std::variant` + `tryGet<T>()` — compile-time, no RTTI |
 | **Message types** | hand-coded per message | partial coverage | 236 typed messages, all 12 PD domains |
 | **Builder API** | none (manual struct) | partial | fluent builder for every type |
 | **FSM + timers + correlation** | implicit in handlers | custom | built-in stack modules + procedure framework |
-| **LAPDm / A-bis RSL** | libosmocore (separate) | custom | full LAPDm entity + RSL parse/build included |
-| **Dependencies** | libosmocore + osmo-* | multiple | **zero** (C++20 stdlib only) |
+| **LAPDm / A-bis RSL** | separate library | custom | full LAPDm entity + RSL parse/build included |
+| **Dependencies** | external core library | multiple | **zero** (C++20 stdlib only) |
 
 ## Documentation — Start Here
 

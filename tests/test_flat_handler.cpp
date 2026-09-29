@@ -30,7 +30,7 @@ using namespace gsml3parser;
 
 namespace {
 
-// ── Compile-time checks (C10 regression guards) ─────────────────────────
+// ── Compile-time checks (regression guards) ──────────────────────────────
 //
 // makeHandler() must REFUSE function pointers: unconstrained deduction of
 // F = T(*)(...) would produce `static const F instance{}` — a null
@@ -51,7 +51,7 @@ struct makeHandlerAccepts<F,
 using HandlerFunctionPointer = void (*)(const ParsedMessage&, void*);
 
 static_assert(!makeHandlerAccepts<HandlerFunctionPointer>::value,
-              "makeHandler must reject function pointers (C10)");
+              "makeHandler must reject function pointers");
 
 struct StatelessProbe {
     void operator()(const ParsedMessage&, void*) const noexcept {}
@@ -101,7 +101,7 @@ TEST(FlatHandlerTest, Constructor_FreeFunctionWithContext) {
     EXPECT_EQ(ctx.calls, 1);
 
     // Copies of a non-shared handler are trivial value copies.
-    // Field-wise comparison: FlatHandler no longer defines operator==
+    // Field-wise comparison: FlatHandler defines no operator==
     // (comparing holder pointers made two co-owning copies
     // of a shared handler "unequal").
     FlatHandler copy = h;

@@ -841,7 +841,7 @@ public:
 | Method | Description |
 |--------|-------------|
 | `allocate(bytes, alignment)` | Bump-allocate with specified alignment. Returns `nullptr` on failure. |
-| `reset()` | Reclaim all memory. All previously returned pointers become invalid. |
+| `reset()` | Reclaim all memory; every pointer obtained from this arena becomes invalid. |
 | `remaining()` | Remaining capacity without allocation. Use to decide when to reset. |
 | `used()` | Bytes consumed since last reset |
 | `capacity()` | Total buffer size |
@@ -1265,6 +1265,20 @@ Unused ──open()──> LinkReleased
                                                  LinkReleased
 ```
 
+#### Establishment, Contention and Timer Behaviour
+
+LAPDm behaviour rules (TS 51.010-1 / GSM 04.06 section 5):
+
+| Situation | Behaviour |
+|-----------|-----------|
+| Initial SABME command on SAPI 0 with P/F clear and a contention-resolution payload | Accepted: answered by a UA whose F bit mirrors the received P/F; the payload is echoed |
+| Initial SABME command on a SAPI other than 0 | Dropped silently (no response, no state change) — MS-originated establishment is only valid on SAPI 0 |
+| Initial SABME command on SAPI 0 without information (L = 0) | Dropped silently |
+| UA while awaiting establishment | Accepted with any F value; the contention check runs on the payload, then the entity enters LinkEstablished |
+| DM while awaiting establishment | Cancels T200 and the retransmission loop (no further SABME); the entity enters LinkReleased and delivers L3_RELEASE_INDICATION |
+| T200 expiry on an unacknowledged I-frame | The outstanding I-frame is retransmitted with P/F set and the current V(R) in N(R); N(S) is unchanged |
+| N(R) received in any frame | Progress only when N(R) equals V(A) (no-op) or V(S) (acknowledges the single outstanding frame, window k=1); any other value is stale and ignored so a retransmission cannot roll V(A) backwards |
+
 #### Performance Characteristics
 
 | Metric | Value |
@@ -1602,6 +1616,26 @@ enum class ChannelType : uint8_t {
 };
 ```
 
+### TypeAndOffset — Five-Bit Channel Codes
+
+The `TypeAndOffset` codes (TS 44.018 section 9.2.3, shared with the RSL channel number of TS 48.058
+section 9.3.1) are carried in RR channel descriptions:
+
+| Bits | Value | Meaning |
+|------|-------|---------|
+| `00000` | 0 (`TDMA_MISC`) | invalid; also the not-initialized sentinel |
+| `00001` | 1 (`TDMA_Bm_ACCH`) | TCH/F or TCH/H ACCH (Bm) |
+| `0001s` | 2–3 (`TDMA_LM_0/1`) | Lm sub-slot s |
+| `001ss` | 4–7 (`TDMA_SDCCH4_0..3`) | SDCCH/4 sub-slot ss |
+| `01sss` | 8–15 (`TDMA_SDCCH8_0..7`) | SDCCH/8 sub-slot sss |
+| `10000` / `10001` / `10010` | 16 / 17 / 18 | BCCH / RACH / PCH + AGCH (`TDMA_BCCH`, `TDMA_RACH`, `TDMA_PCH_AGCH`) |
+| `11000` / `11001` / `11010` | 24 / 25 / 26 | PDCH, CBCH/4, CBCH/8 (vendor extensions) |
+| `11101` | 29 | VAMOS Bm ACCH (`TDMA_VAMOS_BM`) |
+| `1111s` | 30–31 | VAMOS Lm sub-slot s (`TDMA_VAMOS_LM_0/1`) |
+
+Helpers: `channelCodeLm(sub)`, `channelCodeSdcch4(sub)`, `channelCodeSdcch8(sub)`.
+`L3ChannelDescription2::initialized()` is true for any non-zero code.
+
 ### GSMAlphabet
 
 ```cpp
@@ -1707,6 +1741,13 @@ All IEs are plain value types with a static `Expected<T> parse(BitReader&)`, `wr
 
 Mobile station identifier (TMSI, IMSI, IMEI, IMEISV).
 
+Value part per TS 24.008 section 9.1.3.x: the first octet packs
+[first digit(4) | odd-count(1) | identity type(3)] — the odd-count bit is set when the
+digit count is odd; for TMSI it is the spare 'F' nibble, a zero bit and type '100'B
+(first octet `0xF4`). Subsequent digit pairs follow as [next digit or 'F' fill | current
+digit]. Length: 1 + nDigits/2 octets (integer division) for digit identities, 5 for TMSI,
+1 for NoID.
+
 | Method | Description |
 |--------|-------------|
 | `L3MobileIdentity(uint32_t tmsi)` | Construct from TMSI |
@@ -1717,7 +1758,18 @@ Mobile station identifier (TMSI, IMSI, IMEI, IMEISV).
 
 ### L3LocationAreaIdentity
 
-MCC + MNC (BCD encoded) + LAC.
+PLMN packed as BCD octets followed by the 16-bit LAC (TS 24.008 section 10.5.1.3):
+
+| Octet | Nibbles |
+|-------|---------|
+| 1 | MCC digit 2 \| MCC digit 1 |
+| 2 | MNC digit 3 ('F' fill for a two-digit MNC) \| MCC digit 3 |
+| 3 | MNC digit 2 \| MNC digit 1 |
+| 4–5 | LAC (big-endian) |
+
+MCC is always three digits; MNC is two or three digits. `mcc()`/`mnc()` return the
+digits in natural order. `L3RoutingAreaIdentification` (GMM elements) is the same PLMN +
+LAC plus one RAC octet — six octets total.
 
 | Method | Description |
 |--------|-------------|
@@ -1727,6 +1779,12 @@ MCC + MNC (BCD encoded) + LAC.
 ### L3CellIdentity
 
 2-byte cell identifier.
+
+### L3CellChannelDescription
+
+Sixteen-bit cell channel description: [ARFCN(10)][BSIC(6)] with the BSIC packed as [NCC(3)|BCC(3)]
+(TS 44.018 section 9.2.3); `lengthV() == 2`. Used by SI1 and by the repeated neighbor-cell records of
+SI17/18/19.
 
 ### L3MobileStationClassmark1/2/3
 
@@ -1800,7 +1858,7 @@ RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for 
 | Message | Size | Description |
 |---------|------|-------------|
 | `L3ChannelRequest` | 1 byte | RACH access: single-octet request reference (RA) |
-| `L3HandoverAccess` | 4 bytes | HO number + HO reference + timing advance + spare |
+| `L3HandoverAccess` | 4 bytes | 27-bit payload + five reserved bits (TS 44.018); the payload is kept as an opaque value |
 | `L3SynchronizationChannelInformation` | 7 bytes | Cell identity + location area identity (TS 44.018 9.1.30) |
 
 ### Paging Messages
@@ -1816,7 +1874,7 @@ RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for 
 
 | Message | MTI | Description |
 |---------|-----|-------------|
-| `L3SystemInformationType1` | 0x19 | Cell access parameters, CBCH flag |
+| `L3SystemInformationType1` | 0x19 | Cell channel description (2 octets: ARFCN + BSIC), RACH control parameters (3 octets), [rest octet] |
 | `L3SystemInformationType2` | 0x1a | BCCH freq list, NCC permitted, RACH control |
 | `L3SystemInformationType2bis` | 0x02 | Extended BCCH freq list (GPRS) |
 | `L3SystemInformationType2ter` | 0x03 | BCCH freq list with GPRS cell options |
@@ -1998,11 +2056,11 @@ octet 1 maps to the internal dispatch MTI `kRRTifShortBase + code` (code 3 is re
 | `L3IMSIDetachIndication` | 0x01 | UL | MobileIdentity (IMSI detach) |
 | `L3LocationUpdatingAccept` | 0x02 | DL | LAI [+ new MobileIdentity] |
 | `L3LocationUpdatingReject` | 0x04 | DL | Reject cause |
-| `L3LocationUpdatingRequest` | 0x08 | UL | MobileIdentity + LAI + update type |
+| `L3LocationUpdatingRequest` | 0x08 | UL | Update type + follow-on + CKSN (one octet: [lu(2)][spare(1)][FOP(1)][CKSN(3)][reserved(1)]), LAI (V, five octets), classmark1 (LV), mobile identity (LV) |
 | `L3CMServiceAccept` | 0x21 | DL | Empty body |
 | `L3CMServiceReject` | 0x22 | DL | Reject cause |
 | `L3CMServiceAbort` | 0x23 | DL | No value part (TS 24.008 9.2.7) |
-| `L3CMServiceRequest` | 0x24 | UL | MobileIdentity + CM service type |
+| `L3CMServiceRequest` | 0x24 | UL | CM service type (high half-octet) + CKSN (one octet), classmark2 (LV), mobile identity (LV) |
 | `L3CMReestablishmentRequest` | 0x28 | UL | MobileIdentity (TMSI) |
 | `L3MMAbort` | 0x29 | DL/UL | No value part (TS 24.008) |
 | `L3IdentityResponse` | 0x19 | UL | MobileIdentity |
@@ -2011,7 +2069,7 @@ octet 1 maps to the internal dispatch MTI `kRRTifShortBase + code` (code 3 is re
 | `L3TMSIReallocationCommand` | 0x1A | DL | New TMSI + old TMSI |
 | `L3TMSIReallocationComplete` | 0x1B | UL | Empty body |
 | `L3MMStatus` | 0x31 | UL/DL | Cause + spare |
-| `L3AuthenticationRequest` | 0x12 | DL | CKSN + RAND (128-bit) |
+| `L3AuthenticationRequest` | 0x12 | DL | CKSN (high half-octet of the first octet, three bits) + RAND (16 octets); optional authentication parameters kept opaque |
 | `L3AuthenticationResponse` | 0x14 | UL | SRES (32-bit) |
 | `L3AuthenticationReject` | 0x11 | DL | Empty body |
 
@@ -2308,9 +2366,9 @@ if (ussd) {
 | `L3T3302Timer` | 0x1b | TLV | T3302 timer value (GPRS Timer 2 encoding) |
 | `L3MSNetworkCapability` | - | V | MS network capability bit string |
 | `L3RoutingAreaIdentification` | - | V | MCC/MNC BCD(3) + LAC(2) + RAC(1) = 6 octets |
-| `L3DRXParameter` | 0x1a | TV | DRX cycle code + timer settings (2 octets) |
+| `L3DRXParameter` | - | V | DRX parameter: split PG cycle code + DRX cycle length/timer, two value octets without an identifier (TS 44.068 section 9.5) |
 | `L3GMMCKSN` | - | bit-field | Ciphering key sequence number (3 bits) |
-| `L3GMMCauseIE` | 0x25 | TLV | GMM cause value |
+| `L3GMMCauseIE` | - | V | GMM cause value octet without an identifier; the first body octet of reject, failure and status messages (TS 44.068 section 9.5) |
 | `L3AuthRAND` | 0x15 | TLV | 128-bit authentication challenge |
 | `L3AuthRES` | 0x16 | TLV | 32-bit authentication response |
 | `L3AuthFailureParam` | 0x30 | TLV | AUTS failure parameter (variable) |
@@ -2332,16 +2390,16 @@ if (ussd) {
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3AttachRequest` | 0x01 | UL | MS Network Capability, attach type, CKSN, DRX, MobileIdentity, old RAI |
+| `L3AttachRequest` | 0x01 | UL | MS network capability (LV), attach type + forL3 + GPRS CKSN (one octet), DRX parameter (V, two octets), mobile identity (LV), old RAI (V, six octets), MS radio access capability (LV) |
 | `L3AttachAccept` | 0x02 | DL | Attach result, force-to-standby, update timer, RAI, [PTMSI] |
 | `L3AttachComplete` | 0x03 | UL | Empty body |
-| `L3AttachReject` | 0x04 | DL | GMM cause, [T3302 timer] |
+| `L3AttachReject` | 0x04 | DL | GMM cause (value octet); optional IEs kept opaque |
 | `L3DetachRequest` | 0x05 | Bidir | Detach type, power-off flag, [PTMSI], [cause] |
 | `L3DetachAccept` | 0x06 | Bidir | Force-to-standby flag |
-| `L3RoutingAreaUpdateRequest` | 0x08 | UL | Update type, CKSN, old RAI, [MS RA cap] |
+| `L3RoutingAreaUpdateRequest` | 0x08 | UL | Update type + forL3 + GPRS CKSN (one octet), old RAI (V, six octets), MS radio access capability (LV) |
 | `L3RoutingAreaUpdateAccept` | 0x09 | DL | Force-to-standby, update result, timer, radio priority, RAI, [PTMSI] |
 | `L3RoutingAreaUpdateComplete` | 0x0a | UL | Empty body |
-| `L3RoutingAreaUpdateReject` | 0x0b | DL | Force-to-standby, GMM cause, [T3302 timer] |
+| `L3RoutingAreaUpdateReject` | 0x0b | DL | GMM cause (value octet); optional IEs kept opaque |
 | `L3ServiceRequest` | 0x0c | UL | CKSN, service type, PTMSI, [PDP context status] |
 | `L3ServiceAccept` | 0x0d | DL | [PDP context status] |
 | `L3ServiceReject` | 0x0e | DL | GMM cause, [T3346 timer] |
@@ -2370,13 +2428,18 @@ if (ussd) {
 
 | IE | IEI | Format | Description |
 |----|-----|--------|-------------|
-| `L3PDPAddress` | 0x08 | TLV | PDP type (IPv4/IPv6/PPP/IPsec) + address bytes |
-| `L3QoS` | 0x09 | TLV | QoS profile: type + up to 18 element types |
-| `L3AccessPointName` | 0x2F | TLV | APN string (UTF-8 encoded) |
-| `L3ProtocolConfigOptions` | 0x3C | TLV | Protocol config options (e.g. IPCP=0xC029 for IPv4) |
-| `L3SMCauseIE` | 0x27 | TV | SM cause value |
-| `L3BackOffTimer` | 0x28 | TV | Back-off timer value (GPRS Timer 2 encoding) |
+| `L3PDPAddress` | - | LV | PDP type (IPv4/IPv6/PPP/IPsec) + address bytes; positional length octet, no identifier |
+| `L3QoS` | - | LV | QoS profile: type + up to 18 element types; positional length octet, no identifier |
+| `L3AccessPointName` | 0x28 | TLV | APN string (UTF-8 encoded) |
+| `L3ProtocolConfigOptions` | 0x27 | TLV | Protocol config options (e.g. IPCP=0xC029 for IPv4) |
+| `L3SMCauseIE` | - | V | SM cause value octet without an identifier; the first body octet of reject, failure and status messages (TS 44.068 section 9.5) |
+| `L3BackOffTimer` | - | TV | Back-off timer; not modelled as a typed body field — kept in the message's opaque additional-IE sequence |
 | `L3PDPHandle` | - | bit-field | PDP context identifier (4 bits, 0–15) |
+| `L3TearDownIndicator` | 0x09 | TV | Tear-down indicator: identifier nibble '1001'B + flag + spare bits (TS 44.068 section 10.5.6.10) |
+
+The request type (TS 44.068 section 10.5.6.17) is carried in one octet: the high nibble
+'1010'B identifies the IE and the low nibble holds the value; typed accessors
+`hasRequestType()`/`requestType()` consume it on the activate request.
 | `L3TMGI` | 0x42 | TLV | Temporary Mobile Group Identity: PLMN(3) + ServiceID(2) + SessionID(1) |
 
 ### SM Enums
@@ -2392,10 +2455,10 @@ if (ussd) {
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3ActivatePDPContextRequest` | 0x41 | UL | PDP type, [PDP address], APN, QoS, [PCO] |
+| `L3ActivatePDPContextRequest` | 0x41 | UL | NSAPI + LLC SAPI (one octet), requested QoS (LV), requested PDP address (LV), APN (TLV 0x28), [PCO (TLV 0x27)], [request type (0xAx)] |
 | `L3ActivatePDPContextAccept` | 0x42 | DL | PDP handle, [PDP address], QoS, [PCO] |
-| `L3ActivatePDPContextReject` | 0x43 | DL | SM cause, [Back-off timer] |
-| `L3DeactivatePDPContextRequest` | 0x46 | Bidir | PDP handle, [PDP type], [PDP address] |
+| `L3ActivatePDPContextReject` | 0x43 | DL | SM cause (value octet); optional IEs kept opaque |
+| `L3DeactivatePDPContextRequest` | 0x46 | Bidir | SM cause (value octet), [tear-down indicator (TV 0x09)], [PCO (TLV 0x27)] |
 | `L3DeactivatePDPContextAccept` | 0x47 | Bidir | PDP handle |
 | `L3ModifyPDPContextRequest` | 0x48 | DL | PDP handle, QoS, [PCO] |
 | `L3ModifyPDPContextAccept` | 0x49 | UL | PDP handle, QoS, [PCO] |
@@ -3385,7 +3448,7 @@ FlatHandler makeHandler(F) noexcept;
 ```
 
 No heap allocation. The lambda is converted to a function pointer at compile time.
-Function pointers and function types are rejected (C10): a default-constructed
+Function pointers and function types are rejected: a default-constructed
 function pointer is null and would crash on the first invocation. For plain
 function pointers with a user context, use the constructor directly:
 `FlatHandler h{myFunction, myCtx};`
@@ -3877,7 +3940,7 @@ decodes it (group 0 and groups above 0x3F are rejected); `rslGroupToDiscriminato
 
 | Enum | Value | Description |
 |------|-------|-------------|
-| `RSLCChanMessageType::BcchInfo` | `0x11` | BCCH_INFO: system information (FullBCCHInfo TL16V IE) |
+| `RSLCChanMessageType::BcchInfo` | `0x11` | BCCH_INFO: system information (FullBCCHInfo LV IE) |
 | `RSLCChanMessageType::CcchLoadInd` | `0x12` | CCCH_LOAD_IND: CCCH load report |
 | `RSLCChanMessageType::ChanRqd` | `0x13` | CHAN_RQD: channel required (ReqReference + AccessDelay IEs) |
 | `RSLCChanMessageType::DeleteInd` | `0x14` | DELETE_IND: delete indication (FullImmAssInfo IE) |
@@ -3895,23 +3958,43 @@ decodes it (group 0 and groups above 0x3F are rejected); `rslGroupToDiscriminato
 
 ### Information Elements
 
-`RSL_IE` defines the TS 48.058 §9.x IE type codes (`ChanNr = 0x01` ... `CbchLoadInfo = 0x2D`;
-0x10 and 0x1D are reserved). Every code has a fixed encoding class via `rslIeEncoding()`:
+`RSL_IE` defines the TS 48.058 section 9.x IE type codes (0x1D is not allocated). Every code has a
+fixed encoding class via `rslIeEncoding()`:
 
-- **TV** (type + fixed value, no length octet): ChanNr 0x01, LinkIdent 0x02, ActType 0x03, BSPower 0x04,
-  FrameNumber 0x08 (2 B), HandoRef 0x09, L1Info 0x0A (2 B), MSPower 0x0D, PagingGroup 0x0E,
-  PagingLoad 0x0F (2 B), AccessDelay 0x11, ReqReference 0x13 (3 B), ReleaseMode 0x14, StartngTime 0x17 (2 B),
-  TimingAdvance 0x18, MeasResNr 0x1B, MsgId 0x1C, SysInfoType 0x1E, MSTimingOffset 0x25,
-  ChanNeeded 0x28, CbCmdType 0x29, CbchLoadInfo 0x2D;
+- **TV** (type + fixed value, no length octet; value sizes in parentheses):
+  ChanNr 0x01 (2), LinkIdent 0x02 (1), ActType 0x03 (1), BSPower 0x04 (1),
+  FrameNumber 0x08 (2), HandoRef 0x09 (1), L1Info 0x0A (2), MSPower 0x0D (1), PagingGroup 0x0E (1),
+  PagingLoad 0x0F (2), AccessDelay 0x11 (1), ReqReference 0x13 (3), ReleaseMode 0x14 (1),
+  StartngTime 0x17 (2), TimingAdvance 0x18 (1), MeasResNr 0x1B (1), MsgId 0x1C (1),
+  SysInfoType 0x1E (1), MSTimingOffset 0x25 (1), ChanNeeded 0x28 (1), CbCmdType 0x29 (1),
+  CbchLoadInfo 0x2D (1);
 - **TL16V** (type + 16-bit big-endian length + value, for payloads above 255 bytes):
-  `L3Info` 0x0B — the L3 payload carrier for RLL DATA_*/UNIT_DATA_* and CCHAN paging/SMS/BCCH commands;
-  `FullBCCHInfo` 0x27 — full BCCH system-information payload;
-- **LV** (type + 8-bit length + value): MSIdentity 0x0C, RlmCause 0x16, ImmAssInfo 0x23, SmscbInfo 0x24,
-  FullImmAssInfo 0x2B, SmscbMsg 0x2A, SacchInfo 0x2C — and unknown codes (decoding them as LV keeps
-  malformed frames parseable without desynchronizing the IE list).
+  `L3Info` 0x0B only — the L3 payload carrier for RLL DATA_*/UNIT_DATA_* and CCHAN paging/SMS commands;
+- **LV** (type + 8-bit length + value): all remaining codes — in particular ChanIdent 0x05,
+  ChanMode 0x06 (four value octets), EncrInfo 0x07, MSIdentity 0x0C, PyhsContext 0x10, RachLoad 0x12,
+  ResourceInfo 0x15, RlmCause 0x16, UplinkMeas 0x19 (three value octets, optional vendor supplementary
+  bytes appended raw), Cause 0x1A, MSPowerParam 0x1F, BSPowerParam 0x20, PreprocParam 0x21,
+  PreprocMeas 0x22, ImmAssInfo 0x23, SmscbInfo 0x24, ErrMsg 0x26, FullBCCHInfo 0x27,
+  SmscbMsg 0x2A, FullImmAssInfo 0x2B, SacchInfo 0x2C, the group-call/NCH EMLPP UIC main-channel MR
+  codec RTD TFO and LLP APDU codes 0x2E–0x3C — plus the vendor extensions 0x60–0x63 (Osmo) and the
+  ip.access IPAccess group 0xE0–0xFD, and unknown codes (decoding them as LV keeps malformed frames
+  parseable without desynchronizing the IE list).
 
-`RSLErrorCause` (14 values, 0x01–0x0e) carries NACK/failure reasons; helpers `rslDiscriminatorName()`,
-`rslIEName()`, and `rslErrorCauseName()` return `std::string_view` names for logging.
+`RSLErrorCause` (TS 48.058 section 9.3.26) carries NACK/failure reasons; the code space contains
+reserved gaps that must not be emitted on the wire (`isRslErrorCause()` validates an octet):
+
+| Category | Values |
+|----------|--------|
+| Radio link failure | `RadioIfFail=0x00`, `RadioLinkFail=0x01`, `HandoverAccFail=0x02`, `TalkerAccFail=0x03`, `OmIntervention=0x07`, `NormalUnspec=0x0F`, `TMsrfpciExp=0x18` |
+| BTS/TRX failure | `EquipmentFail=0x20`, `RrUnavail=0x21`, `TerrChFail=0x22`, `CcchOverload=0x23`, `AcchOverload=0x24`, `ProcessorOverload=0x25`, `BtsNotEquipped=0x27`, `RemoteTrauFailure=0x28`, `NotifOverflow=0x29` |
+| Service unavailable | `ResUnavail=0x2F`, `TranscUnavail=0x30`, `ServOptUnavail=0x3F`, `EncrUnimpl=0x40`, `ServOptUnimpl=0x4F` |
+| Channel/IPA failure | `RchAlrActvAlloc=0x50`, `IpaRchNotActvAlloc=0x51`, `IpaConnInvalid=0x52`, `IpaConnInUse=0x53`, `IpaConnAlreadyExists=0x54` |
+| Protocol error | `InvalidMessage=0x5F`, `MsgDiscr=0x60`, `MsgType=0x61`, `MsgSeq=0x62`, `IeError=0x63`, `MandIeError=0x64`, `OptIeError=0x65`, `IeNonexist=0x66`, `IeLength=0x67`, `IeContent=0x68`, `Proto=0x6F` |
+| Interworking | `Interworking=0x7F` |
+
+Helpers `rslDiscriminatorName()`, `rslIEName()`, and `rslErrorCauseName()` return `std::string_view`
+names for logging. The RLM Cause IE (0x16) is a separate LV encoding of radio link management causes
+and is not part of this enum.
 
 ### Structures
 
@@ -3920,7 +4003,22 @@ decodes it (group 0 and groups above 0x3F are rejected); `rslGroupToDiscriminato
   `BmAcch=0x01` ('00001'B), `Lm=0x02` (+ sub-channel 0/1, VAMOS), `Sdcch4=0x04` (+ sub 0..3),
   `Sdcch8=0x08` (+ sub 0..7), `Bcch=0x10`, `Rach=0x11`, `PchAgch=0x12`, `Pdch=0x18`, `Cbch4=0x19`,
   `Cbch8=0x1A`, `VamosBm=0x1D` (vendor extensions).
-- **`RSLChannelMode`** - 5-byte channel mode (spdInd, chanRT, dtxDTU, chanRate). Methods: `isSignalling()`, `isSpeech()`, `isData()`.
+- **`RSLChannelMode`** - 4-byte Channel Mode IE value (TS 48.058 section 9.3.6): `dtx`, `spdInd`,
+  `chanRateType`, `valueOctet`; `sizeof == 4`. Methods: `dtxDownlink()`, `dtxUplink()`,
+  `isSignalling()`, `isSpeech()`, `isData()`. Speed indicator: `Speech=0x01`, `Data=0x02`,
+  `Signalling=0x03`; channel rate types include `Sdcch=0x01`, `TchF=0x08`, `TchH=0x09`,
+  `TchFBdMslot=0x0A`, `TchFDlMslot=0x1A`, `TchFGroup=0x18`, `TchHGroup=0x19`,
+  `TchFBcast=0x28`, `TchHBcast=0x29` and the VAMOS vendor extensions. Octet layout:
+  octet 1 = [reserved(6)|DTX_d(1)|DTX_u(1)], octet 2 = speed indicator, octet 3 = channel rate
+  type, octet 4 = speech coding algorithm (speech) / opaque data rate code (data) / 0x00
+  (signalling); the parser accepts exactly four value octets.
+- **`RSLUplinkMeas`** - Uplink Measurements IE value part (TS 48.058 section 9.3.25): three octets —
+  [RFU(1)|DTX_d(1)|rxlev_full(6)], [reserved(2)|rxlev_sub(6)], [reserved(2)|rxq_full(3)|rxq_sub(3)];
+  a longer value appends vendor supplementary measurement information, kept raw (not decoded).
+- **`RSLFrameNumber`** - Frame Number / Starting Time IE value part (TS 48.058 section 9.3.8): two
+  octets packing t1p(5)|t3(6)|t2(5). The builder takes an absolute TDMA frame number (0..42431) and
+  encodes `t1p = (fn/1326) % 32`, `t3 = fn % 51`, `t2 = fn % 26`; the inverse composition back to an
+  absolute frame number is not unique, so the parser returns the three fields as-is.
 - **`RSLEncryptionInfo`** - algorithmId + key span for A5 ciphering.
 
 ### Helper Functions
@@ -3968,7 +4066,21 @@ Find IE by type code. Returns pointer or nullptr.
 
 ### `RSLParser::getChannelMode(parsed)`
 
-Extract ChannelMode from CHAN_ACTIV. Returns `optional<RSLChannelMode>`.
+Extract the four-octet Channel Mode IE value (TS 48.058 section 9.3.6). Returns
+`optional<RSLChannelMode>`; nullopt when the ChanMode IE is missing or not exactly four octets.
+
+### `RSLParser::getUplinkMeas(parsed)`
+
+Decode the Uplink Measurements IE of MEAS_RES (TS 48.058 section 9.3.25). Returns
+`optional<RSLUplinkMeas>` (dtxDownlink, rxlevFull, rxlevSub, rxqFull, rxqSub); nullopt when the IE is
+missing or shorter than its three value octets — a longer value (vendor supplementary information)
+decodes its first three octets only.
+
+### `RSLParser::getFrameNumber(parsed)`
+
+Decode the Frame Number / Starting Time IE of a message carrying it (e.g. CHAN_ACTIV_ACK; TS 48.058
+section 9.3.8). Returns `optional<RSLFrameNumber>` with the t1p/t3/t2 fields; nullopt when the IE is
+missing or not its two value octets.
 
 ### `RSLParser::getEncryptionInfo(parsed)`
 
@@ -3997,11 +4109,14 @@ The transparent flag is set on RLL data frames (`buildDataReq`/`buildDataInd`/`b
 
 ### DCHAN Messages
 
-- `buildChanActivAck(chanNr, frameNumber)` - Channel activation acknowledgment
+- `buildChanActivAck(chanNr, frameNumber)` - Channel activation acknowledgment; `frameNumber` is the
+  absolute TDMA frame number (0..42431), encoded as the starting-time fields t1p/t3/t2 (TS 48.058)
 - `buildChanActivNack(chanNr, cause)` - Channel activation rejection
 - `buildRFChanRelAck(chanNr)` - RF channel release acknowledgment
 - `buildConnFail(chanNr, cause)` - Connection failure report
-- `buildMeasRes(chanNr, measNr, rxlev, rxqual, l1Info)` - Measurement results
+- `buildMeasRes(chanNr, measNr, rxlevFull, rxlevSub, rxqFull, rxqSub, dtxDownlink, l1Info)` -
+  Measurement results: Uplink Measurements IE with the canonical three value octets (rxlev fields are
+  six bits, rxqual fields three bits; extra high bits are discarded)
 - `buildHandoDet(chanNr, accessDelay)` - Handover detection
 
 ### CCHAN Messages
@@ -5154,7 +5269,7 @@ The library implements encodings defined by:
 | Standard | Scope | Coverage |
 |----------|-------|----------|
 | **GSM 04.06 / 3GPP TS 44.064** | LAPDm protocol for Um interface (format B on dedicated channels) | `LAPDmFrame` zero-copy decode, `LAPDmEntity` full state machine (SABME/UA/DISC), I-frame segmentation/reassembly, T200 retransmission, contention resolution |
-| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | RR (98), MM (20), CC (24), GMM (23), SM (29), SMS (19 = 5 CP + 14 L3) message parsing and generation; SS (3), Extended and Test-Procedure PD catch-alls |
+| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | RR (99), MM (19), CC (24), GMM (23), SM (29), SMS (19 = 5 CP + 14 L3) message parsing and generation; SS (3), Extended and Test-Procedure PD catch-alls |
 | **GSM 04.07 / 3GPP TS 24.007** | Information element encoding rules | V, TV, TLV, LV formats; H/L rest octet padding (0x2B); bit ordering |
 | **GSM 04.80 / 3GPP TS 24.080** | Supplementary services on mobile | Facility, Register, Release Complete messages; SSOpCode/SSErrorCode enums; L3FacilityOpCode TCAP parser; L3USSDData IE |
 | **GSM 02.90 / 3GPP TS 23.038** | USSD alphabet and encoding | GSM 7-bit default/extended alphabet, UCS2, DCS handling in L3USSDData |

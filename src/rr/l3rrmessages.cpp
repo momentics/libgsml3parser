@@ -2350,10 +2350,10 @@ Expected<L3HandoverAccess> L3HandoverAccess::parse(BitReader& br) {
     L3HandoverAccess msg;
     auto r = br.readField(27); if (!r) return Expected<L3HandoverAccess>::error(r.error());
     msg.mHandoverNumber = r.value();
-    // 5 reserved bits, '0' values (GSM 04.08 9.1.38; the
-    // previous parser accepted ANY 32-bit input, so a garbage 4-byte
-    // frame whose standard parse left a tail was misclassified as a
-    // HandoverAccess and could trigger a spurious handover procedure).
+    // 5 reserved bits, '0' values (GSM 04.08 9.1.38). Non-zero reserved
+    // bits are rejected so that a garbage 4-byte frame whose standard
+    // parse leaves a tail is not misclassified as a HandoverAccess and
+    // trigger a spurious handover procedure.
     r = br.readField(5); if (!r) return Expected<L3HandoverAccess>::error(r.error());
     if (r.value() != 0) {
         return Expected<L3HandoverAccess>::error(

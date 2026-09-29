@@ -258,7 +258,7 @@ Expected<TESTPROC> parseL3TestProc(BitReader& reader, uint8_t mti) {
             auto rrRes = parseL3RR(reader, hdr.mti);
             if (rrRes) return rrRes.map([](RRM v){ return ParsedMessage(std::move(v)); });
             // Truncated body (e.g. incomplete SI message) is a hard error:
-            // never fabricate a default-constructed message (C11).
+            // never fabricate a default-constructed message.
             return Expected<ParsedMessage>::error(rrRes.error());
         }
         case L3PD::MobilityManagement:

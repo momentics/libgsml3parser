@@ -46,7 +46,7 @@
 ///            /sys edac (memory slots, best effort), /etc/os-release (OS).
 ///
 /// NOTE: <windows.h> is deliberately NOT included: it pollutes the
-/// preprocessor with legacy macros (e.g. nb30.h defines DEREGISTERED), which
+/// preprocessor with device-specific macros (e.g. nb30.h defines DEREGISTERED), which
 /// breaks C++ identifiers in translation units that include this header.
 /// Instead, minimal extern "C" declarations matching the SDK signatures are
 /// used, so the header is redeclaration-compatible with <windows.h>.
@@ -269,7 +269,7 @@ inline void readCaches(HardwareInfo& h) {
         }
     }
     // Map L1 sizes to data/instruction, handling both observed type legends:
-    // current {1=Data, 2=Instruction} and legacy {0=Data, 1=Instruction}. A
+    // the {1=Data, 2=Instruction} legend and the {0=Data, 1=Instruction} legend. A
     // single visible code means a unified L1 (or one split entry lost to VM
     // masking); it is reported as the data cache.
     if (l1ByCode[1] != 0 && l1ByCode[2] != 0) {

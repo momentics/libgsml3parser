@@ -210,11 +210,11 @@ TEST(BTSProceduresTest, TimerExpiry_causesTransactionFailure) {
     // Handle the expiry in TransactionManager
     txnMgr.onTimerExpired(L3TimerId::T3101);
 
-    // The transaction should no longer be pending (expired)
+    // The expired transaction is not pending
     EXPECT_EQ(txnMgr.get(*txnId), nullptr);
     EXPECT_EQ(txnMgr.pendingCount(), 0u);
 
-    // Timer is no longer running after expiry
+    // The timer stops running at expiry
     EXPECT_FALSE(tm.isRunning(L3TimerId::T3101));
 }
 
@@ -972,7 +972,7 @@ TEST(BTSProceduresTest, Timer_Transaction_Expiry_Coordination) {
 
     // Handle expiry in TransactionManager
     txnMgr.onTimerExpired(L3TimerId::T3101);
-    EXPECT_EQ(txnMgr.get(*id1), nullptr); // Expired, no longer pending
+    EXPECT_EQ(txnMgr.get(*id1), nullptr); // Expired: not pending
     EXPECT_NE(txnMgr.get(*id2), nullptr);  // Still pending
     EXPECT_NE(txnMgr.get(*id3), nullptr);  // Still pending
 

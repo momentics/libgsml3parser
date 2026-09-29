@@ -149,9 +149,9 @@ public:
     L3StreamBuilder& ringBufferSize(size_t v);
     [[nodiscard]] std::unique_ptr<L3StreamProcessor> build();
 
-    /// True when sourceFile() failed to open the path (the
-    /// previous code silently produced a processor over an empty
-    /// RingBuffer, so a missing file looked like an empty stream).
+    /// True when sourceFile() failed to open the path. Without this flag a
+    /// missing file would look like an empty stream (a processor over an
+    /// empty RingBuffer).
     [[nodiscard]] bool hasFileError() const noexcept { return !mFileError.empty(); }
 };
 

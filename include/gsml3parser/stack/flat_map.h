@@ -36,8 +36,8 @@ namespace gsml3parser {
 /// tens of millions of concurrent streams).
 ///
 /// Storage: entries live in contiguous slabs of kSlabEntries
-/// (64) entries — one slab allocation per 64 entries instead of the
-/// previous one heap block per entry (10M sessions = 10M ~2KB mallocs,
+/// (64) entries — one slab allocation per 64 entries rather than one
+/// heap block per entry (10M sessions would mean 10M ~2KB mallocs,
 /// ~21 GB RSS, allocator churn and poor traversal locality). Slabs are
 /// never moved or reallocated, so every entry address is stable for the
 /// entry's whole lifetime: insertions, erasures of OTHER entries,

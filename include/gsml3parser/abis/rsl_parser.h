@@ -139,20 +139,20 @@ public:
     [[nodiscard]] static Expected<RSLParsedMessage> parse(std::span<const uint8_t> data);
 
     /// Extract L3 payload from a parsed RSL message.
-    /// @param parsed Previously parsed RSL message.
+    /// @param parsed The parsed RSL message.
     /// @return L3 payload bytes (GSM 04.08 format), or std::nullopt if this message type
     ///         does not carry L3 data.
     [[nodiscard]] static std::optional<std::span<const uint8_t>> extractL3(const RSLParsedMessage& parsed);
 
     /// Check whether the parsed message carries an L3 payload.
-    /// @param parsed Previously parsed RSL message.
+    /// @param parsed The parsed RSL message.
     /// @return true if l3Payload is non-empty.
     [[nodiscard]] static bool hasL3Payload(const RSLParsedMessage& parsed) noexcept {
         return !parsed.l3Payload.empty();
     }
 
     /// Find an information element by type code.
-    /// @param parsed Previously parsed RSL message.
+    /// @param parsed The parsed RSL message.
     /// @param ieType The IE type code to search for.
     /// @return Pointer to the matching IE, or nullptr if not found.
     [[nodiscard]] static const RSLParsedMessage::IE* findIE(

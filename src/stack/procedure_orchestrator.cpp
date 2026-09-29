@@ -251,7 +251,7 @@ ProcedureStepResult ProcedureOrchestrator::feed(const ParsedMessage& msg,
         }
 
         // Start a new chain: clear stale response parameters left over from any
-        // previously completed chain so the new procedure begins from a clean
+        // earlier completed chain so the new procedure begins from a clean
         // context (same rule as ProcedureRunner::feed auto-creation).
         if (session) session->response.reset();
 
@@ -501,8 +501,8 @@ ProcedureStepResult ProcedureOrchestrator::handleIdentityVerification(
     auto mti = messageMTI(msg);
 
     if (pd == L3PD::MobilityManagement && mti == L3IdentityResponse::MTI) {
-        // Identity received: the phase is no longer waiting for an
-        // IdentityResponse, so no IdentityRequest token is returned (C4).
+        // Identity received: the phase stops waiting for an IdentityResponse,
+        // so no IdentityRequest token is returned.
         // The chain advances to Authentication and the caller needs no response.
         if (session) {
             session->mmSM.setState(MMStateMachine::State::IDENTITY_VERIFIED);

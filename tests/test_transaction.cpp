@@ -244,7 +244,7 @@ TEST(TransactionManagerTest, OnTimerExpired_marksExpired) {
 
     tm.onTimerExpired(L3TimerId::T3101);
 
-    // T3101 transaction should be expired (no longer pending, so get returns nullptr)
+    // The expired T3101 transaction is not pending, so get returns nullptr
     EXPECT_EQ(tm.get(*id1), nullptr);
     // T3106 transaction should still be pending
     Transaction* tx2 = tm.get(*id2);
@@ -269,7 +269,7 @@ TEST(TransactionManagerTest, Cleanup_removesFinished) {
     EXPECT_EQ(tm.totalCount(), 1u);
     EXPECT_EQ(tm.pendingCount(), 1u);
 
-    // The completed transaction should no longer be accessible
+    // A completed transaction is not accessible via get
     EXPECT_EQ(tm.get(*id1), nullptr);
 }
 
@@ -345,7 +345,7 @@ TEST(TransactionManagerTest, Get_returnsNulloptForFinished) {
 
     if (Transaction* tx = tm.get(*id)) tx->cancel();
 
-    // Cancelled transaction is no longer pending - get returns nullptr
+    // A cancelled transaction is not pending - get returns nullptr
     EXPECT_EQ(tm.get(*id), nullptr);
 }
 

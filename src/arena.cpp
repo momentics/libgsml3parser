@@ -64,7 +64,7 @@ void* Arena::allocate(size_t bytes, size_t alignment) {
     // allocation (and at least kMinBlockSize) so that capacity() stays
     // strictly greater than used() in practice and small allocations are
     // amortized. Blocks are append-only: existing blocks are never moved or
-    // reallocated, so previously returned pointers stay valid.
+    // reallocated, so earlier returned pointers stay valid.
     size_t blockCapacity = (bytes + alignment) * 2;
     if (blockCapacity < kMinBlockSize) blockCapacity = kMinBlockSize;
 

@@ -886,7 +886,7 @@ TEST(CApiOrchestrator, LURequest_NotChainStart_OverWire) {
     ASSERT_NE(s, nullptr);
 
     // A re-parsed LocationUpdate CMServiceRequest: the service type is
-    // read back from the 4-bit wire field, so it no longer matches the
+    // read back from the 4-bit wire field, so it does not match the
     // chain-start policy (LU = 105 / MO call = 1).
     gsml3_message* cmReq = makeCmServiceRequestLU(0x12345678);
     ASSERT_NE(cmReq, nullptr);

@@ -110,14 +110,14 @@ Dispatch notes:
 | `L3IMSIDetachIndication` | 0x01 | UL | IMSI detach indication |
 | `L3LocationUpdatingAccept` | 0x02 | DL | Location updating accepted |
 | `L3LocationUpdatingReject` | 0x04 | DL | Location updating rejected |
-| `L3LocationUpdatingRequest` | 0x08 | UL | Location update request |
+| `L3LocationUpdatingRequest` | 0x08 | UL | Update type + follow-on + CKSN (one octet), LAI (five octets), classmark1, mobile identity |
 | `L3AuthenticationReject` | 0x11 | DL | Authentication rejected |
-| `L3AuthenticationRequest` | 0x12 | DL | Authentication challenge (RAND) |
+| `L3AuthenticationRequest` | 0x12 | DL | CKSN (high half-octet) + RAND (16 octets); optional parameters kept opaque |
 | `L3AuthenticationResponse` | 0x14 | UL | Authentication response (SRES) |
 | `L3CMServiceAccept` | 0x21 | DL | CM service accepted |
 | `L3CMServiceReject` | 0x22 | DL | CM service rejected |
 | `L3CMServiceAbort` | 0x23 | DL | CM service aborted |
-| `L3CMServiceRequest` | 0x24 | UL | CM service request |
+| `L3CMServiceRequest` | 0x24 | UL | CM service type + CKSN (one octet), classmark2, mobile identity |
 | `L3CMReestablishmentRequest` | 0x28 | UL | CM re-establishment request |
 | `L3MMAbort` | 0x29 | Bidir | MM abort (no value part, TS 24.008) |
 | `L3MMStatus` | 0x31 | Bidir | MM status report |
@@ -142,7 +142,7 @@ Dispatch notes:
 
 | Message | MTI | Description |
 |---------|-----|-------------|
-| `L3SystemInformationType1` | 0x19 | Cell access parameters, CBCH flag |
+| `L3SystemInformationType1` | 0x19 | Cell channel description (ARFCN + BSIC, two octets), RACH control parameters (three octets), [rest octet] |
 | `L3SystemInformationType2` | 0x1a | BCCH freq list, NCC permitted, RACH control |
 | `L3SystemInformationType2bis` | 0x02 | Extended BCCH freq list (GPRS) |
 | `L3SystemInformationType2ter` | 0x03 | BCCH freq list with GPRS cell options |
@@ -200,8 +200,8 @@ Dispatch notes:
 | `L3MeasurementReport` | 0x15 | UL | RxLev/RxQual + neighbors |
 | `L3ExtendedMeasurementReport` | 0x36 | UL | Extended measurement results |
 | `L3ExtendedMeasurementOrder` | 0x37 | DL | Measurement order |
-| `L3CipheringModeCommand` | 0x35 | DL | Ciphering setting + key seq |
-| `L3CipheringModeComplete` | 0x32 | UL | Empty body |
+| `L3CipheringModeCommand` | 0x35 | DL | One octet: start-ciphering + algorithm (high half), response bit (low half) |
+| `L3CipheringModeComplete` | 0x32 | UL | No fixed fields; optional mobile equipment identity kept opaque |
 | `L3ChannelModeModify` | 0x10 | DL | Channel desc + mode [+ multi-rate] |
 | `L3ChannelModeModifyAcknowledge` | 0x17 | UL | Channel desc + mode |
 | `L3GPRSSuspensionRequest` | 0x34 | UL | TLLI, RA ID, suspension cause |
@@ -218,7 +218,7 @@ Dispatch notes:
 | Message | MTI | Size | Description |
 |---------|-----|------|-------------|
 | `L3ChannelRequest` | 0x10E | 1 byte | RACH access: single-octet request reference (RA) |
-| `L3HandoverAccess` | 0x10F | 4 bytes | HO number + HO reference + timing advance + spare |
+| `L3HandoverAccess` | 0x10F | 4 bytes | 27-bit payload + five reserved bits (TS 44.018); the payload is kept as an opaque value |
 | `L3SynchronizationChannelInformation` | 0x110 | 7 bytes | Cell identity + location area identity (TS 44.018 9.1.30) |
 
 ### VGCS/VBS and Notification
@@ -280,16 +280,16 @@ the five-bit code in octet 1 maps to the internal MTI `kRRTifShortBase + code` (
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3AttachRequest` | 0x01 | UL | GPRS attach request |
+| `L3AttachRequest` | 0x01 | UL | MS network capability (LV), attach type + forL3 + GPRS CKSN (one octet), DRX parameter (V, two octets), mobile identity (LV), old RAI (V, six octets), MS radio access capability (LV) |
 | `L3AttachAccept` | 0x02 | DL | GPRS attach accepted |
 | `L3AttachComplete` | 0x03 | UL | Attach complete |
-| `L3AttachReject` | 0x04 | DL | Attach rejected |
+| `L3AttachReject` | 0x04 | DL | GMM cause (value octet); optional IEs kept opaque |
 | `L3DetachRequest` | 0x05 | Bidir | Detach request |
 | `L3DetachAccept` | 0x06 | Bidir | Detach accepted |
-| `L3RoutingAreaUpdateRequest` | 0x08 | UL | RA update request |
+| `L3RoutingAreaUpdateRequest` | 0x08 | UL | Update type + forL3 + GPRS CKSN (one octet), old RAI (V, six octets), MS radio access capability (LV) |
 | `L3RoutingAreaUpdateAccept` | 0x09 | DL | RA update accepted |
 | `L3RoutingAreaUpdateComplete` | 0x0a | UL | RA update complete |
-| `L3RoutingAreaUpdateReject` | 0x0b | DL | RA update rejected |
+| `L3RoutingAreaUpdateReject` | 0x0b | DL | GMM cause (value octet); optional IEs kept opaque |
 | `L3ServiceRequest` | 0x0c | UL | Packet service request |
 | `L3ServiceAccept` | 0x0d | DL | Service accepted |
 | `L3ServiceReject` | 0x0e | DL | Service rejected |
@@ -312,9 +312,9 @@ the five-bit code in octet 1 maps to the internal MTI `kRRTifShortBase + code` (
 | `L3T3302Timer` | T3302 timer value |
 | `L3MSNetworkCapability` | MS network capability bit string |
 | `L3RoutingAreaIdentification` | MCC/MNC + LAC + RAC (6 octets) |
-| `L3DRXParameter` | DRX cycle code and timer settings |
-| `L3GMMCKSN` | Ciphering key sequence number |
-| `L3GMMCauseIE` | GMM cause value |
+| `L3DRXParameter` | DRX parameter (two value octets, no identifier) |
+| `L3GMMCKSN` | Ciphering key sequence number (three bits) |
+| `L3GMMCauseIE` | GMM cause value octet (no identifier; first body octet of reject/failure/status messages) |
 | `L3AuthRAND` | 128-bit authentication challenge |
 | `L3AuthRES` | 32-bit authentication response |
 | `L3AuthFailureParam` | AUTS failure parameter |
@@ -389,10 +389,10 @@ The variant holds 5 CP-layer + 14 L3-layer messages. The RP/TP classes below par
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3ActivatePDPContextRequest` | 0x41 | UL | Activate PDP context request |
+| `L3ActivatePDPContextRequest` | 0x41 | UL | NSAPI + LLC SAPI (one octet), requested QoS (LV), requested PDP address (LV), APN (TLV 0x28), [PCO (TLV 0x27)], [request type (0xAx)] |
 | `L3ActivatePDPContextAccept` | 0x42 | DL | PDP context activated |
-| `L3ActivatePDPContextReject` | 0x43 | DL | PDP context activation rejected |
-| `L3DeactivatePDPContextRequest` | 0x46 | Bidir | Deactivate PDP context request |
+| `L3ActivatePDPContextReject` | 0x43 | DL | SM cause (value octet); optional IEs kept opaque |
+| `L3DeactivatePDPContextRequest` | 0x46 | Bidir | SM cause (value octet), [tear-down indicator (TV 0x09)], [PCO (TLV 0x27)] |
 | `L3DeactivatePDPContextAccept` | 0x47 | Bidir | PDP context deactivated |
 | `L3ModifyPDPContextRequest` | 0x48 | DL | Modify PDP context (QoS change) |
 | `L3ModifyPDPContextAccept` | 0x49 | UL | PDP context modified |
@@ -453,13 +453,14 @@ The variant holds 5 CP-layer + 14 L3-layer messages. The RP/TP classes below par
 
 | IE | Description |
 |----|-------------|
-| `L3PDPAddress` | PDP type (IPv4/IPv6/PPP) + address |
-| `L3QoS` | QoS profile (type + 18 element types) |
-| `L3AccessPointName` | APN string (UTF-8) |
-| `L3ProtocolConfigOptions` | Protocol config (e.g. IPCP for IPv4) |
-| `L3SMCauseIE` | SM cause value |
-| `L3BackOffTimer` | Back-off timer (GPRS Timer 2 encoding) |
+| `L3PDPAddress` | PDP type + address (LV, no identifier) |
+| `L3QoS` | QoS profile: type + up to 18 element types (LV, no identifier) |
+| `L3AccessPointName` | APN string (UTF-8), TLV IEI 0x28 |
+| `L3ProtocolConfigOptions` | Protocol config (e.g. IPCP for IPv4), TLV IEI 0x27 |
+| `L3SMCauseIE` | SM cause value octet (no identifier; first body octet of reject/failure/status messages) |
+| `L3BackOffTimer` | Back-off timer (GPRS Timer 2 encoding); kept in the message's opaque additional-IE sequence |
 | `L3PDPHandle` | PDP context identifier (0–15) |
+| `L3TearDownIndicator` | Tear-down indicator (TV, IEI 0x09: identifier nibble + flag) |
 | `L3TMGI` | Temporary Mobile Group Identity: PLMN(3) + ServiceID(2) + SessionID(1) |
 
 Enums: `PDPType`, `QoSType`, `QoSElementType`, `SMCause`.

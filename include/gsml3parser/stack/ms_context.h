@@ -129,11 +129,11 @@ public:
     void setClassmark(const L3MobileStationClassmark1& cm);
 
     /// Get stored classmark.
-    /// @return The classmark if previously set, std::nullopt otherwise.
+    /// @return The stored classmark, or std::nullopt if none is stored.
     std::optional<L3MobileStationClassmark1> classmark() const noexcept;
 
     /// Location Area Identity known for this MS.
-    /// @return The LAI if previously set, std::nullopt otherwise.
+    /// @return The stored LAI, or std::nullopt if none is stored.
     /// 3GPP TS 24.008 10.5.1.3 - Location Area Identity.
     std::optional<L3LocationAreaIdentity> lai() const noexcept;
 

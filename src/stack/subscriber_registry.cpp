@@ -152,7 +152,7 @@ SubscriberSession* SubscriberRegistry::findByLink(uint8_t trx, uint8_t ts, uint8
 
 void SubscriberRegistry::assignChannel(SubscriberSession* session, ChannelDescriptor desc,
                                         uint8_t lapdmLink) noexcept {
-    // Remove old link entry if channel was previously assigned.
+    // Remove the link entry of the channel the session held before reassignment.
     if (session->channel.has_value()) {
         uint32_t oldKey = encodeLinkKey(session->context.trxNumber(),
                                         session->context.timeslot(),

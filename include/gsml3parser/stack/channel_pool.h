@@ -161,7 +161,7 @@ public:
     /// No heap allocation on the hot path (vector shrink does not reallocate for single pop).
     [[nodiscard]] std::optional<ChannelDescriptor> allocate(ChannelType type);
 
-    /// Release a previously allocated channel back to the pool.
+    /// Release an allocated channel back to the pool.
     /// @param desc The channel descriptor to release.
     /// @return True if the channel was known to this pool and released, false otherwise.
     /// Restores the channel to the free-list for its type.

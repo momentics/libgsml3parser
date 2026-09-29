@@ -706,9 +706,8 @@ TEST(SSR_hashTMSI, SequentialTmsi_EvenShardDistribution) {
 
 // Test: removing session A must not relocate session B, so B's running
 // timer keeps ticking on the REAL session address and the reported
-// expiry is bound to the real session (repro_uf: the
-// previous swap-with-last erase made tickAllTimers tick a ghost and
-// left B's timer running forever).
+// expiry is bound to the real session (a swap-with-last erase would make
+// tickAllTimers tick a ghost address and leave B's timer running forever).
 TEST(SR_remove, MovesNoSession_TimerExpiryBoundToRealSession) {
     SubscriberRegistry reg;
     auto* a = reg.createByTMSI(1);
