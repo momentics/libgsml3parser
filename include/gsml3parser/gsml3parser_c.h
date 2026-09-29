@@ -292,11 +292,11 @@ GSML3_C_API int gsml3_rsl_ie_get(const gsml3_rsl* rsl, size_t index,
                                  const uint8_t** val);
 
  /* RSL builders (zero-alloc; write into the caller's buffer). Return
-  * bytes written, 0 on error or buffer too small. cause: RSLErrorCause
+  * bytes written, 0 on error or buffer too small. cause: an RSLErrorCause
   * value (see include/gsml3parser/abis/rsl_types.h); the request-reference
-  * timing fields of gsml3_rsl_build_chan_rqd; both range-checked:
-  * out-of-domain values fail with GSML3_ERR_INVALID_ARG before a frame is
-  * produced. */
+  * timing fields of gsml3_rsl_build_chan_rqd; the measurement fields of
+  * gsml3_rsl_build_meas_res; all domain-checked: out-of-domain values fail
+  * with GSML3_ERR_INVALID_ARG before a frame is produced. */
 GSML3_C_API size_t gsml3_rsl_build_data_req(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t link_id, const uint8_t* l3, size_t l3_len);
 GSML3_C_API size_t gsml3_rsl_build_data_ind(uint8_t* out, size_t maxlen,
@@ -313,9 +313,13 @@ GSML3_C_API size_t gsml3_rsl_build_rf_chan_rel_ack(uint8_t* out, size_t maxlen,
     uint8_t chan_nr);
 GSML3_C_API size_t gsml3_rsl_build_conn_fail(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, int cause);
+/* Uplink measurements: six-bit RX levels, three-bit RX qualities (TS 48.058
+ * section 9.3.25), the downlink DTX indicator bit (0/1) and the optional L1
+ * information octet (section 9.3.10; 0 omits the L1 Information IE). */
 GSML3_C_API size_t gsml3_rsl_build_meas_res(uint8_t* out, size_t maxlen,
-    uint8_t chan_nr, uint8_t meas_nr, int8_t rxlev, int8_t rxqual,
-    const uint8_t* l1, size_t l1_len);
+    uint8_t chan_nr, uint8_t meas_nr,
+    uint8_t rxlev_full, uint8_t rxlev_sub, uint8_t rxq_full, uint8_t rxq_sub,
+    int dtx_downlink, uint8_t l1_info);
 GSML3_C_API size_t gsml3_rsl_build_hando_det(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t access_delay);
 GSML3_C_API size_t gsml3_rsl_build_ccch_load_ind(uint8_t* out, size_t maxlen,

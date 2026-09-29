@@ -62,7 +62,10 @@ TEST(RSLB_buildDataInd_EncodeDecode, RoundTrip) {
     EXPECT_EQ((*parsed).linkId, 5);
 }
 
-// Test: Build CHAN_ACTIV_ACK with frame number and parse back.
+// Test: Build CHAN_ACTIV_ACK with frame number and parse back. The Frame
+// Number IE value is the starting-time coding (TS 48.058 9.3.8) of the
+// absolute TDMA frame number: for FN=0x1234 (4660), t1p=(4660/1326)%32=3,
+// t3=4660%51=19, t2=4660%26=6, which pack to {0x1A, 0x66}.
 TEST(RSLB_buildChanActivAck_FrameNumber, ParsesBack) {
     auto result = RSLBuilder::buildChanActivAck(0x78, 0x1234);
     ASSERT_TRUE(result.has_value());
@@ -75,14 +78,41 @@ TEST(RSLB_buildChanActivAck_FrameNumber, ParsesBack) {
     auto* fnIE = RSLParser::findIE(*parsed, RSL_IE::FrameNumber);
     ASSERT_NE(fnIE, nullptr);
     EXPECT_EQ(fnIE->len, 2u);
-    // Frame number is big-endian: 0x12, 0x34
-    EXPECT_EQ(fnIE->val[0], 0x12);
-    EXPECT_EQ(fnIE->val[1], 0x34);
+    // Starting-time octets: (t1p<<3)|(t3>>3) and ((t3&7)<<5)|t2.
+    EXPECT_EQ(fnIE->val[0], 0x1A);
+    EXPECT_EQ(fnIE->val[1], 0x66);
+
+    auto fn = RSLParser::getFrameNumber(*parsed);
+    ASSERT_TRUE(fn.has_value());
+    EXPECT_EQ(fn->t1p, 3u);
+    EXPECT_EQ(fn->t3, 19u);
+    EXPECT_EQ(fn->t2, 6u);
+}
+
+// Golden: CHAN_ACTIV_ACK for the canonical absolute TDMA frame number FN=207
+// (TS 48.058 9.3.8): t1p=(207/1326)%32=0, t3=207%51=3, t2=207%26=25 pack to
+// the two value octets {0x00, 0x79}.
+TEST(RSLB_buildChanActivAck_FrameNumber207, RefVector) {
+    auto result = RSLBuilder::buildChanActivAck(0x78, 207);
+    ASSERT_TRUE(result.has_value());
+    auto parsed = RSLParser::parse(*result);
+    ASSERT_TRUE(parsed.has_value());
+
+    auto* fnIE = RSLParser::findIE(*parsed, RSL_IE::FrameNumber);
+    ASSERT_NE(fnIE, nullptr);
+    EXPECT_EQ(fnIE->val[0], 0x00);
+    EXPECT_EQ(fnIE->val[1], 0x79);
+
+    auto fn = RSLParser::getFrameNumber(*parsed);
+    ASSERT_TRUE(fn.has_value());
+    EXPECT_EQ(fn->t1p, 0u);
+    EXPECT_EQ(fn->t3, 3u);
+    EXPECT_EQ(fn->t2, 25u);
 }
 
 // Test: Build CHAN_ACTIV_NACK with cause and parse back.
 TEST(RSLB_buildChanActivNack_Cause, ParsesBack) {
-    auto result = RSLBuilder::buildChanActivNack(0x78, RSLErrorCause::ResourceUnavailable);
+    auto result = RSLBuilder::buildChanActivNack(0x78, RSLErrorCause::ResUnavail);
     ASSERT_TRUE(result.has_value());
     auto parsed = RSLParser::parse(*result);
     ASSERT_TRUE(parsed.has_value());
@@ -91,17 +121,24 @@ TEST(RSLB_buildChanActivNack_Cause, ParsesBack) {
     auto* causeIE = RSLParser::findIE(*parsed, RSL_IE::Cause);
     ASSERT_NE(causeIE, nullptr);
     EXPECT_EQ(causeIE->len, 1u);
-    EXPECT_EQ(causeIE->val[0], static_cast<uint8_t>(RSLErrorCause::ResourceUnavailable));
+    EXPECT_EQ(causeIE->val[0], static_cast<uint8_t>(RSLErrorCause::ResUnavail));
 }
 
-// Test: Build MEAS_RES with RXLEV/RXQUAL and parse back.
-TEST(RSLB_buildMeasRes_RXLEV_RXQUAL, ParsesBack) {
-    std::vector<uint8_t> l1Info = {0x01, 0x02};
-    auto result = RSLBuilder::buildMeasRes(0x7c, 5, -45, 3, l1Info);
+// Golden: MEAS_RES uplink measurements (TS 48.058 9.3.25) — RX level
+// full=40, sub=35; RX quality full=5, sub=6; DTX downlink clear encode to the
+// three value octets {0x28, 0x23, 0x2E}. The IE sequence MeasResNr + UplinkMeas
+// is the canonical seven-octet vector.
+TEST(RSLB_buildMeasRes_UplinkMeas, RefVector) {
+    auto result = RSLBuilder::buildMeasRes(0x7c, 5, 40, 35, 5, 6, false, 0);
     ASSERT_TRUE(result.has_value());
     auto parsed = RSLParser::parse(*result);
     ASSERT_TRUE(parsed.has_value());
     EXPECT_EQ((*parsed).msgType, static_cast<uint8_t>(RSLDChanMessageType::MeasRes));
+
+    // Seven-octet IE vector: MeasResNr TV (2) + UplinkMeas LV (5).
+    const uint8_t expectedIes[7] = {0x1B, 0x05, 0x19, 0x03, 0x28, 0x23, 0x2E};
+    ASSERT_GE((*result).size(), 4u + sizeof(expectedIes));
+    EXPECT_EQ(0, std::memcmp((*result).data() + 4, expectedIes, sizeof(expectedIes)));
 
     auto* measNrIE = RSLParser::findIE(*parsed, RSL_IE::MeasResNr);
     ASSERT_NE(measNrIE, nullptr);
@@ -111,6 +148,67 @@ TEST(RSLB_buildMeasRes_RXLEV_RXQUAL, ParsesBack) {
     auto* uplinkIE = RSLParser::findIE(*parsed, RSL_IE::UplinkMeas);
     ASSERT_NE(uplinkIE, nullptr);
     EXPECT_EQ(uplinkIE->len, 3u);
+    EXPECT_EQ(uplinkIE->val[0], 0x28u);
+    EXPECT_EQ(uplinkIE->val[1], 0x23u);
+    EXPECT_EQ(uplinkIE->val[2], 0x2Eu);
+
+    auto meas = RSLParser::getUplinkMeas(*parsed);
+    ASSERT_TRUE(meas.has_value());
+    EXPECT_FALSE(meas->dtxDownlink);
+    EXPECT_EQ(meas->rxlevFull, 40u);
+    EXPECT_EQ(meas->rxlevSub, 35u);
+    EXPECT_EQ(meas->rxqFull, 5u);
+    EXPECT_EQ(meas->rxqSub, 6u);
+
+    // l1_info == 0: the L1 Information IE is omitted.
+    EXPECT_EQ(RSLParser::findIE(*parsed, RSL_IE::L1Info), nullptr);
+}
+
+// Test: Build MEAS_RES with the DTX downlink indicator set and a non-zero L1
+// information octet (TS 48.058 9.3.25/9.3.10) and parse back.
+TEST(RSLB_buildMeasRes_DtxAndL1Info, ParsesBack) {
+    auto result = RSLBuilder::buildMeasRes(0x7c, 5, 40, 35, 5, 6, true, 0x1A);
+    ASSERT_TRUE(result.has_value());
+    auto parsed = RSLParser::parse(*result);
+    ASSERT_TRUE(parsed.has_value());
+
+    // DTX_d set in the first value octet: [0|1|101000] = 0x68.
+    auto* uplinkIE = RSLParser::findIE(*parsed, RSL_IE::UplinkMeas);
+    ASSERT_NE(uplinkIE, nullptr);
+    EXPECT_EQ(uplinkIE->val[0], 0x68u);
+
+    auto meas = RSLParser::getUplinkMeas(*parsed);
+    ASSERT_TRUE(meas.has_value());
+    EXPECT_TRUE(meas->dtxDownlink);
+    EXPECT_EQ(meas->rxlevFull, 40u);
+
+    auto* l1IE = RSLParser::findIE(*parsed, RSL_IE::L1Info);
+    ASSERT_NE(l1IE, nullptr);
+    EXPECT_EQ(l1IE->len, 2u);
+    EXPECT_EQ(l1IE->val[0], 0x1Au);
+    EXPECT_EQ(l1IE->val[1], 0x00u);
+}
+
+// Test: excess high bits of the measurement fields are discarded on encode
+// (RX level is six-bit, RX quality three-bit, TS 48.058 9.3.25).
+TEST(RSLB_buildMeasRes_FieldMasking, TruncatedToWidth) {
+    auto result = RSLBuilder::buildMeasRes(0x7c, 1, 0xFF, 0xFF, 0xFF, 0xFF, false, 0);
+    ASSERT_TRUE(result.has_value());
+    auto parsed = RSLParser::parse(*result);
+    ASSERT_TRUE(parsed.has_value());
+
+    auto* uplinkIE = RSLParser::findIE(*parsed, RSL_IE::UplinkMeas);
+    ASSERT_NE(uplinkIE, nullptr);
+    EXPECT_EQ(uplinkIE->val[0], 0x3Fu); // [0|0|111111]
+    EXPECT_EQ(uplinkIE->val[1], 0x3Fu); // [00|111111]
+    EXPECT_EQ(uplinkIE->val[2], 0x3Fu); // [00|111|111]
+
+    auto meas = RSLParser::getUplinkMeas(*parsed);
+    ASSERT_TRUE(meas.has_value());
+    EXPECT_EQ(meas->rxlevFull, 63u);
+    EXPECT_EQ(meas->rxlevSub, 63u);
+    EXPECT_EQ(meas->rxqFull, 7u);
+    EXPECT_EQ(meas->rxqSub, 7u);
 }
 
 // Test: Build CCCH_LOAD_IND and parse back.
@@ -201,7 +299,7 @@ TEST(RSLB_buildRFChanRelAck, ParsesBack) {
 
 // Test: Build CONN_FAIL with cause parses back.
 TEST(RSLB_buildConnFail_Cause, ParsesBack) {
-    auto result = RSLBuilder::buildConnFail(0x7c, RSLErrorCause::EquipmentFailure);
+    auto result = RSLBuilder::buildConnFail(0x7c, RSLErrorCause::EquipmentFail);
     ASSERT_TRUE(result.has_value());
     auto parsed = RSLParser::parse(*result);
     ASSERT_TRUE(parsed.has_value());
@@ -209,7 +307,7 @@ TEST(RSLB_buildConnFail_Cause, ParsesBack) {
 
     auto* causeIE = RSLParser::findIE(*parsed, RSL_IE::Cause);
     ASSERT_NE(causeIE, nullptr);
-    EXPECT_EQ(causeIE->val[0], static_cast<uint8_t>(RSLErrorCause::EquipmentFailure));
+    EXPECT_EQ(causeIE->val[0], static_cast<uint8_t>(RSLErrorCause::EquipmentFail));
 }
 
 // Test: Build UNIT_DATA_REQ round-trip.

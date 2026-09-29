@@ -558,10 +558,12 @@ extern "C" {
         maxlen: usize,
         chan_nr: c_uchar,
         meas_nr: c_uchar,
-        rxlev: i8,
-        rxqual: i8,
-        l1: *const c_uchar,
-        l1_len: usize,
+        rxlev_full: u8,
+        rxlev_sub: u8,
+        rxq_full: u8,
+        rxq_sub: u8,
+        dtx_downlink: c_int,
+        l1_info: u8,
     ) -> usize;
     pub fn gsml3_rsl_build_hando_det(
         out: *mut c_uchar,

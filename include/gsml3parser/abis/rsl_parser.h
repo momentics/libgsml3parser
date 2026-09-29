@@ -76,8 +76,8 @@ struct RSLParsedMessage {
     /// TLV Information Element descriptor. Each IE points into the original buffer.
     struct IE {
         uint8_t type{0};
-        uint16_t len{0}; ///< IE length in bytes (16-bit: TL16V IEs such as L3Info /
-                         ///< FullBCCHInfo can exceed 255 bytes).
+        uint16_t len{0}; ///< IE length in bytes (16-bit: the TL16V L3Info IE can
+                         ///< exceed 255 bytes).
         const uint8_t* val{nullptr};
     };
 
@@ -98,6 +98,30 @@ struct RSLParsedMessage {
 };
 
 static_assert(sizeof(RSLParsedMessage::IE) <= 16, "IE must be cache-friendly (<= 16 bytes)");
+
+/// Uplink Measurements IE value part (TS 48.058 section 9.3.25): three octets
+/// pack the downlink DTX indicator, the full-rate and sub-rate RX levels
+/// (six bits each) and the full-rate and sub-rate RX qualities (three bits
+/// each). A longer IE value appends vendor supplementary measurement
+/// information, which this accessor does not decode (the raw bytes stay in
+/// the IE storage).
+struct RSLUplinkMeas {
+    bool dtxDownlink{false}; ///< DTX indicator bit (dtx_d)
+    uint8_t rxlevFull{0};    ///< RX level, full rate (0-63)
+    uint8_t rxlevSub{0};     ///< RX level, sub rate (0-63)
+    uint8_t rxqFull{0};      ///< RX quality, full rate (0-7)
+    uint8_t rxqSub{0};       ///< RX quality, sub rate (0-7)
+};
+
+/// Frame Number / Starting Time IE value part (TS 48.058 section 9.3.8): two
+/// octets pack the three starting-time fields t1p (5 bits), t3 (6 bits) and
+/// t2 (5 bits). The inverse composition back to an absolute TDMA frame number
+/// is not unique, so the decoded fields are returned as-is.
+struct RSLFrameNumber {
+    uint8_t t1p{0}; ///< Starting time field t1' (5 bits)
+    uint8_t t3{0};  ///< Starting time field t3 (6 bits)
+    uint8_t t2{0};  ///< Starting time field t2 (5 bits)
+};
 
 /// RSL message parser. Decodes raw A-bis RSL frames into structured messages
 /// with extracted information elements and L3 payloads.
@@ -136,8 +160,28 @@ public:
 
     /// Get Channel Mode from a CHAN_ACTIV message.
     /// @param parsed Parsed CHAN_ACTIV message.
-    /// @return Channel mode structure, or std::nullopt if ChanMode IE is missing or too short.
+    /// @return Channel mode structure, or std::nullopt when the ChanMode IE is
+    ///         missing or its value is not the four-octet coding (TS 48.058
+    ///         section 9.3.6).
     [[nodiscard]] static std::optional<RSLChannelMode> getChannelMode(
+        const RSLParsedMessage& parsed) noexcept;
+
+    /// Get the decoded Uplink Measurements from a MEAS_RES message.
+    /// @param parsed Parsed MEAS_RES message.
+    /// @return Uplink measurement fields, or std::nullopt when the UplinkMeas
+    ///         IE is missing or shorter than its three value octets (TS 48.058
+    ///         section 9.3.25); a longer value (vendor supplementary
+    ///         information) decodes its first three octets only.
+    [[nodiscard]] static std::optional<RSLUplinkMeas> getUplinkMeas(
+        const RSLParsedMessage& parsed) noexcept;
+
+    /// Get the Frame Number / Starting Time fields from a message carrying the
+    /// Frame Number IE (e.g. CHAN_ACTIV_ACK).
+    /// @param parsed Parsed RSL message.
+    /// @return The t1p/t3/t2 starting-time fields, or std::nullopt when the
+    ///         FrameNumber IE is missing or not its two value octets
+    ///         (TS 48.058 section 9.3.8).
+    [[nodiscard]] static std::optional<RSLFrameNumber> getFrameNumber(
         const RSLParsedMessage& parsed) noexcept;
 
     /// Get Encryption Info from an ENCR_CMD or CHAN_ACTIV message.

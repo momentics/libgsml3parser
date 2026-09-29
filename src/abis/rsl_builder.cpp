@@ -198,16 +198,26 @@ int RSLBuilder::buildUnitDataInd(std::span<uint8_t> out, uint8_t chanNr, uint8_t
 
 // ── DCHAN messages ────────────────────────────────────────────────────
 
+// Encode the Frame Number / Starting Time IE value from an absolute TDMA
+// frame number (TS 48.058 section 9.3.8): the two value octets pack the
+// starting-time fields t1p(5)|t3(6)|t2(5).
+void writeFrameNumberValue(uint8_t* fnBytes, uint32_t frameNumber) {
+    const uint8_t t1p = static_cast<uint8_t>((frameNumber / 1326u) % 32u);
+    const uint8_t t3  = static_cast<uint8_t>(frameNumber % 51u);
+    const uint8_t t2  = static_cast<uint8_t>(frameNumber % 26u);
+    fnBytes[0] = static_cast<uint8_t>((t1p << 3) | (t3 >> 3));
+    fnBytes[1] = static_cast<uint8_t>(((t3 & 0x07u) << 5) | t2);
+}
+
 Expected<std::vector<uint8_t>> RSLBuilder::buildChanActivAck(uint8_t chanNr, uint16_t frameNumber)
 {
     return buildVector({RSL_HEADER_SIZE + 3},
         [&](std::span<uint8_t> out) {
             int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::ChanActivAck), chanNr);
             if (n < 0) return -1;
-            // Frame Number IE: TV with a fixed two-octet value (big-endian).
+            // Frame Number IE: TV with the fixed two-octet starting-time value.
             uint8_t fnBytes[2];
-            fnBytes[0] = static_cast<uint8_t>((frameNumber >> 8) & 0xff);
-            fnBytes[1] = static_cast<uint8_t>(frameNumber & 0xff);
+            writeFrameNumberValue(fnBytes, frameNumber);
             size_t off = writeTVFixed(out.data(), static_cast<size_t>(n),
                 static_cast<uint8_t>(RSL_IE::FrameNumber), fnBytes, 2);
             return static_cast<int>(off);
@@ -219,8 +229,7 @@ int RSLBuilder::buildChanActivAck(std::span<uint8_t> out, uint8_t chanNr, uint16
     int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::ChanActivAck), chanNr);
     if (n < 0) return -1;
     uint8_t fnBytes[2];
-    fnBytes[0] = static_cast<uint8_t>((frameNumber >> 8) & 0xff);
-    fnBytes[1] = static_cast<uint8_t>(frameNumber & 0xff);
+    writeFrameNumberValue(fnBytes, frameNumber);
     size_t off = writeTVFixed(out.data(), static_cast<size_t>(n),
         static_cast<uint8_t>(RSL_IE::FrameNumber), fnBytes, 2);
     return static_cast<int>(off);
@@ -286,11 +295,25 @@ int RSLBuilder::buildConnFail(std::span<uint8_t> out, uint8_t chanNr, RSLErrorCa
     return static_cast<int>(off);
 }
 
+// Encode the Uplink Measurements IE value (TS 48.058 section 9.3.25): three
+// octets — [RFU(1)|DTX_d(1)|rxlev_full_up(6)], [reserved(2)|rxlev_sub_up(6)],
+// [reserved(2)|rxqual_full_up(3)|rxqual_sub_up(3)]. Excess high bits of the
+// level (six-bit) and quality (three-bit) parameters are discarded.
+void writeUplinkMeasValue(uint8_t* uplinkData, uint8_t rxlevFull, uint8_t rxlevSub,
+                          uint8_t rxqFull, uint8_t rxqSub, bool dtxDownlink) {
+    // First octet: [RFU(1)|DTX_d(1)|rxlev_full_up(6)] — the DTX indicator is
+    // bit 6, the six-bit RX level occupies bits 5..0.
+    uplinkData[0] = static_cast<uint8_t>((dtxDownlink ? 0x40u : 0x00u) | (rxlevFull & 0x3Fu));
+    uplinkData[1] = static_cast<uint8_t>(rxlevSub & 0x3Fu);
+    uplinkData[2] = static_cast<uint8_t>(((rxqFull & 0x07u) << 3) | (rxqSub & 0x07u));
+}
+
 Expected<std::vector<uint8_t>> RSLBuilder::buildMeasRes(
-    uint8_t chanNr, uint8_t measNr, int8_t rxlevFull, int8_t rxqualFull,
-    std::span<const uint8_t> l1Info)
+    uint8_t chanNr, uint8_t measNr,
+    uint8_t rxlevFull, uint8_t rxlevSub, uint8_t rxqFull, uint8_t rxqSub,
+    bool dtxDownlink, uint8_t l1Info)
 {
-    size_t estSize = RSL_HEADER_SIZE + 2 + 2 + 3 + (l1Info.empty() ? 0 : 3);
+    const size_t estSize = RSL_HEADER_SIZE + 2 + 2 + 3 + (l1Info ? 3 : 0);
     return buildVector({estSize},
         [&](std::span<uint8_t> out) {
             int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::MeasRes), chanNr);
@@ -298,17 +321,13 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildMeasRes(
             // MeasResNr IE (TV, 1 octet).
             size_t off = writeTVFixed(out.data(), static_cast<size_t>(n),
                 static_cast<uint8_t>(RSL_IE::MeasResNr), &measNr, 1);
-            // UplinkMeas IE (LV): rxlev(1) + rxqual(1) + reserved(1).
+            // UplinkMeas IE (LV): the canonical three value octets.
             uint8_t uplinkData[3];
-            uplinkData[0] = static_cast<uint8_t>(rxlevFull);
-            uplinkData[1] = static_cast<uint8_t>(rxqualFull);
-            uplinkData[2] = 0; // reserved
+            writeUplinkMeasValue(uplinkData, rxlevFull, rxlevSub, rxqFull, rxqSub, dtxDownlink);
             off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::UplinkMeas), uplinkData, 3);
             // Optional L1Info IE (TV, fixed two octets per TS 48.058 9.3.10).
-            if (!l1Info.empty()) {
-                uint8_t l1Bytes[2];
-                l1Bytes[0] = l1Info[0];
-                l1Bytes[1] = l1Info.size() > 1 ? l1Info[1] : 0;
+            if (l1Info != 0) {
+                uint8_t l1Bytes[2] = {l1Info, 0x00};
                 off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::L1Info), l1Bytes, 2);
             }
             return static_cast<int>(off);
@@ -316,21 +335,18 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildMeasRes(
 }
 
 int RSLBuilder::buildMeasRes(std::span<uint8_t> out, uint8_t chanNr, uint8_t measNr,
-    int8_t rxlevFull, int8_t rxqualFull, std::span<const uint8_t> l1Info)
+    uint8_t rxlevFull, uint8_t rxlevSub, uint8_t rxqFull, uint8_t rxqSub,
+    bool dtxDownlink, uint8_t l1Info)
 {
     int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::MeasRes), chanNr);
     if (n < 0) return -1;
     size_t off = writeTVFixed(out.data(), static_cast<size_t>(n),
         static_cast<uint8_t>(RSL_IE::MeasResNr), &measNr, 1);
     uint8_t uplinkData[3];
-    uplinkData[0] = static_cast<uint8_t>(rxlevFull);
-    uplinkData[1] = static_cast<uint8_t>(rxqualFull);
-    uplinkData[2] = 0;
+    writeUplinkMeasValue(uplinkData, rxlevFull, rxlevSub, rxqFull, rxqSub, dtxDownlink);
     off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::UplinkMeas), uplinkData, 3);
-    if (!l1Info.empty()) {
-        uint8_t l1Bytes[2];
-        l1Bytes[0] = l1Info[0];
-        l1Bytes[1] = l1Info.size() > 1 ? l1Info[1] : 0;
+    if (l1Info != 0) {
+        uint8_t l1Bytes[2] = {l1Info, 0x00};
         off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::L1Info), l1Bytes, 2);
     }
     return static_cast<int>(off);

@@ -129,10 +129,11 @@ TEST(RSLP_parse_RLL_DataInd, ExtractsL3) {
 // Importance: Channel activation is the primary BSC->BTS control message for dedicated channels.
 // 3GPP: TS 48.058 DCHAN CHAN_ACTIV.
 TEST(RSLP_parse_DCHAN_ChanActiv, ParsesIEs) {
-    // ChanMode IE: type=0x06, len=5, value=5 bytes
+    // ChanMode IE: type=0x06, len=4, value=4 octets (TS 48.058 9.3.6)
     std::vector<uint8_t> ies = {
         0x03, 0x01, // ActType IE (TV): activation type = 1
-        0x06, 0x05, 0x00, 0x01, 0x01, 0x00, 0x00, // ChanMode IE (LV): 5 bytes
+        // ChanMode IE (LV): dtx=both, Speech, TCH/F, GSM1 speech algorithm.
+        0x06, 0x04, 0x03, 0x01, 0x08, 0x01,
     };
     auto buf = makeDChanActiv(0x78, ies);
     auto result = RSLParser::parse(buf);
@@ -150,7 +151,7 @@ TEST(RSLP_parse_DCHAN_ChanActiv, ParsesIEs) {
 
     auto* chanMode = RSLParser::findIE(msg, RSL_IE::ChanMode);
     ASSERT_NE(chanMode, nullptr);
-    EXPECT_EQ(chanMode->len, 5u);
+    EXPECT_EQ(chanMode->len, 4u);
 }
 
 // Test: Parse DCHAN ENCR_CMD and extract L3 payload + encryption info.
@@ -305,18 +306,112 @@ TEST(RSLP_findIE_NonExisting, Nullptr) {
 }
 
 // Test: getChannelMode extracts valid ChannelMode from CHAN_ACTIV.
+// Golden (TS 48.058 9.3.6): SDCCH signalling channel without DTX — the four
+// value octets are dtx=0x00, speed indicator Signalling (0x03), channel rate
+// and type SDCCH (0x01), and the no-resource union octet 0x00.
 TEST(RSLP_getChannelMode_Valid, ReturnsMode) {
-    // ChanMode IE: type=0x06, len=5, value with spdInd=2 (Speech)
     std::vector<uint8_t> ies = {
-        0x06, 0x05, 0x00, 0x02, 0x02, 0x00, 0x04, // ChanMode: reserved, Speech, TCH_Bm, dtx=0, rate=4
+        0x06, 0x04, 0x00, 0x03, 0x01, 0x00, // ChanMode: SDCCH signalling, DTX off
     };
     auto buf = makeDChanActiv(0x78, ies);
     auto result = RSLParser::parse(buf);
     ASSERT_TRUE(result.has_value());
     auto mode = RSLParser::getChannelMode(*result);
     ASSERT_TRUE(mode.has_value());
-    EXPECT_TRUE(mode->isSpeech());
-    EXPECT_FALSE(mode->isSignalling());
+    EXPECT_TRUE(mode->isSignalling());
+    EXPECT_FALSE(mode->isSpeech());
+    EXPECT_EQ(mode->spdInd, static_cast<uint8_t>(RSLChannelMode::SpeedIndicator::Signalling));
+    EXPECT_EQ(mode->chanRateType, static_cast<uint8_t>(RSLChannelMode::ChanRateType::Sdcch));
+    EXPECT_EQ(mode->valueOctet, 0x00u);
+    EXPECT_FALSE(mode->dtxDownlink());
+    EXPECT_FALSE(mode->dtxUplink());
+}
+
+// Test: a Channel Mode IE value of the wrong length is rejected (the coding is
+// exactly four octets, TS 48.058 9.3.6).
+TEST(RSLP_getChannelMode_BadLength, Nullopt) {
+    // Five-octet value: not the defined Channel Mode IE coding.
+    std::vector<uint8_t> ies = {
+        0x06, 0x05, 0x00, 0x03, 0x01, 0x00, 0x00,
+    };
+    auto buf = makeDChanActiv(0x78, ies);
+    auto result = RSLParser::parse(buf);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_FALSE(RSLParser::getChannelMode(*result).has_value());
+
+    // Truncated three-octet value: also rejected.
+    std::vector<uint8_t> iesShort = {
+        0x06, 0x03, 0x00, 0x03, 0x01,
+    };
+    auto bufShort = makeDChanActiv(0x78, iesShort);
+    auto resultShort = RSLParser::parse(bufShort);
+    ASSERT_TRUE(resultShort.has_value());
+    EXPECT_FALSE(RSLParser::getChannelMode(*resultShort).has_value());
+}
+
+// Golden: Uplink Measurements IE value (TS 48.058 9.3.25) decodes the three
+// canonical octets — RX level full=40, sub=35, RX quality full=5, sub=6, DTX
+// downlink clear: [00|101000]=0x28, [00|100011]=0x23, [00|101|110]=0x2E.
+TEST(RSLP_getUplinkMeas_RefVector, Decoded) {
+    std::vector<uint8_t> ies = {
+        0x1B, 0x07,                       // MeasResNr IE (TV): sequence number 7
+        0x19, 0x03, 0x28, 0x23, 0x2E,     // UplinkMeas IE (LV): three value octets
+    };
+    auto buf = makeDChanActiv(0x78, ies);
+    auto result = RSLParser::parse(buf);
+    ASSERT_TRUE(result.has_value());
+
+    auto meas = RSLParser::getUplinkMeas(*result);
+    ASSERT_TRUE(meas.has_value());
+    EXPECT_FALSE(meas->dtxDownlink);
+    EXPECT_EQ(meas->rxlevFull, 40u);
+    EXPECT_EQ(meas->rxlevSub, 35u);
+    EXPECT_EQ(meas->rxqFull, 5u);
+    EXPECT_EQ(meas->rxqSub, 6u);
+}
+
+// Test: the DTX downlink indicator bit and a vendor-extended (longer) Uplink
+// Measurements value are handled by getUplinkMeas (TS 48.058 9.3.25): the
+// first three octets decode, the appended supplementary bytes stay in the IE
+// storage.
+TEST(RSLP_getUplinkMeas_DtxAndVendorTail, Decoded) {
+    std::vector<uint8_t> ies = {
+        0x19, 0x0B, 0x6A, 0x23, 0x2E, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00, 0x01,
+        // octet 0x6A = [0|1(DTX_d)|101010] -> DTX downlink set, RX level full 42
+    };
+    auto buf = makeDChanActiv(0x78, ies);
+    auto result = RSLParser::parse(buf);
+    ASSERT_TRUE(result.has_value());
+
+    auto* ie = RSLParser::findIE(*result, RSL_IE::UplinkMeas);
+    ASSERT_NE(ie, nullptr);
+    EXPECT_EQ(ie->len, 11u); // 3 value octets + 8 vendor supplementary bytes
+
+    auto meas = RSLParser::getUplinkMeas(*result);
+    ASSERT_TRUE(meas.has_value());
+    EXPECT_TRUE(meas->dtxDownlink);
+    EXPECT_EQ(meas->rxlevFull, 42u);
+    EXPECT_EQ(meas->rxlevSub, 35u);
+    EXPECT_EQ(meas->rxqFull, 5u);
+    EXPECT_EQ(meas->rxqSub, 6u);
+}
+
+// Golden: Frame Number IE value (TS 48.058 9.3.8) — the canonical absolute TDMA
+// frame number 207 decomposes into t1p=0, t3=3, t2=25, which pack to the two
+// octets {0x00, 0x79}: (0<<3)|(3>>3)=0x00, ((3&7)<<5)|25=0x79.
+TEST(RSLP_getFrameNumber_RefVector, Decoded) {
+    std::vector<uint8_t> ies = {
+        0x08, 0x00, 0x79, // FrameNumber IE (TV): two value octets
+    };
+    auto buf = makeDChanActiv(0x78, ies);
+    auto result = RSLParser::parse(buf);
+    ASSERT_TRUE(result.has_value());
+
+    auto fn = RSLParser::getFrameNumber(*result);
+    ASSERT_TRUE(fn.has_value());
+    EXPECT_EQ(fn->t1p, 0u);
+    EXPECT_EQ(fn->t3, 3u);
+    EXPECT_EQ(fn->t2, 25u);
 }
 
 // Test: getEncryptionInfo extracts algorithm ID and key from ENCR_CMD.
@@ -383,30 +478,29 @@ TEST(RSLP_parse_CCHAN_L3Info, Over255Bytes_FullLengthKept) {
     EXPECT_EQ((*l3)[299], static_cast<uint8_t>(299 & 0xFF));
 }
 
-// Test: FullBCCHInfo (TL16V) payloads longer than 255 bytes are extracted
-// in full via the l3Payload fallback path.
-TEST(RSLP_parse_DCHAN_FullBCCHInfo, Over255Bytes_FullPayloadExtracted) {
+// Test: FullBCCHInfo (LV, TS 48.058 9.3.x) payloads are extracted in full via
+// the l3Payload fallback path at the maximum 8-bit length of 255 bytes.
+TEST(RSLP_parse_DCHAN_FullBCCHInfo, LvPayloadExtracted) {
     // DCHAN message (no L3Info IE) carrying FullBCCHInfo:
     // first octet (DCHAN group 0x04 << 1 = 0x08) + type + Channel Number TV IE
-    // + type(0x27) + len(2) + value(300).
+    // + type(0x27) + len(1) + value(255).
     std::vector<uint8_t> raw;
     raw.push_back(0x08);
     raw.push_back(static_cast<uint8_t>(RSLDChanMessageType::RfChanRel));
     raw.push_back(static_cast<uint8_t>(RSL_IE::ChanNr));
     raw.push_back(0x7c);
     raw.push_back(static_cast<uint8_t>(RSL_IE::FullBCCHInfo));
-    raw.push_back(0x01); // 0x012C = 300
-    raw.push_back(0x2C);
-    for (int i = 0; i < 300; ++i) raw.push_back(static_cast<uint8_t>(i & 0xFF));
+    raw.push_back(0xFF); // LV length = 255
+    for (int i = 0; i < 255; ++i) raw.push_back(static_cast<uint8_t>(i & 0xFF));
 
     auto result = RSLParser::parse(raw);
     ASSERT_TRUE(result.has_value());
     auto* ie = RSLParser::findIE(*result, RSL_IE::FullBCCHInfo);
     ASSERT_NE(ie, nullptr);
-    EXPECT_EQ(ie->len, 300u);
+    EXPECT_EQ(ie->len, 255u);
     auto l3 = RSLParser::extractL3(*result);
     ASSERT_TRUE(l3.has_value());
-    EXPECT_EQ(l3->size(), 300u);
+    EXPECT_EQ(l3->size(), 255u);
 }
 
 // Test: the transparent indication flag (bit 0 of the first octet,

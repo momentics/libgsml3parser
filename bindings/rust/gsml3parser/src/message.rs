@@ -574,26 +574,37 @@ pub fn rsl_build_conn_fail(out: &mut [u8], chan_nr: u8, cause: i32) -> Result<us
     build_result("rsl_build_conn_fail", n)
 }
 
-/// RSL MEASUREMENT RESULT (RXLEV/RXQUAL 8-bit signed; optional L1 info).
+/// RSL MEASUREMENT RESULT (TS 48.058 section 9.3.25): uplink RX levels are
+/// six-bit fields, RX qualities three-bit fields (excess high bits are
+/// discarded on the C side), `dtx_downlink` is the DTX indicator bit and
+/// `l1_info` is the optional L1 information octet (section 9.3.10; zero omits
+/// the IE). Field widths are range-checked in C. The argument count mirrors
+/// the flat C ABI signature of the measurement report builder.
+#[allow(clippy::too_many_arguments)]
 pub fn rsl_build_meas_res(
     out: &mut [u8],
     chan_nr: u8,
     meas_nr: u8,
-    rxlev: i8,
-    rxqual: i8,
-    l1: &[u8],
+    rxlev_full: u8,
+    rxlev_sub: u8,
+    rxq_full: u8,
+    rxq_sub: u8,
+    dtx_downlink: bool,
+    l1_info: u8,
 ) -> Result<usize, GsmL3Error> {
-    // SAFETY: valid out/l1 slices for this call.
+    // SAFETY: valid out slice for this call.
     let n = unsafe {
         s::gsml3_rsl_build_meas_res(
             out.as_mut_ptr(),
             out.len(),
             chan_nr,
             meas_nr,
-            rxlev,
-            rxqual,
-            l1.as_ptr(),
-            l1.len(),
+            rxlev_full,
+            rxlev_sub,
+            rxq_full,
+            rxq_sub,
+            if dtx_downlink { 1 } else { 0 },
+            l1_info,
         )
     };
     build_result("rsl_build_meas_res", n)

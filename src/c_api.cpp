@@ -138,6 +138,19 @@ inline bool checkEnumValue(int v, int lo, int hi, const char* what) {
     return true;
 }
 
+// Domain check for an RSL error cause octet: the code space of TS 48.058
+// section 9.3.26 has reserved gaps, so membership in the defined set — not a
+// plain range — is the valid domain.
+inline bool checkRslCause(int v) {
+    if (v < 0 || v > 0xFF || !isRslErrorCause(static_cast<uint8_t>(v))) {
+        char msg[96];
+        std::snprintf(msg, sizeof(msg), "invalid RSL cause value %d (TS 48.058 9.3.26)", v);
+        setError(GSML3_ERR_INVALID_ARG, msg);
+        return false;
+    }
+    return true;
+}
+
 // Validation of BCD digit strings accepted from the caller: ASCII digits
 // only (plus one optional leading '+'), length in [minLen, maxLen]. The
 // C++ storage truncates silently; failing fast here keeps the wire format
@@ -201,8 +214,6 @@ inline constexpr int chanTypeLo   = static_cast<int>(ChannelType::SCHType);
 inline constexpr int chanTypeHi   = static_cast<int>(ChannelType::UndefinedCHType);
 inline constexpr int tokenLo      = 0;  // ResponseToken::None
 inline constexpr int tokenHi      = static_cast<int>(ResponseToken::Setup);
-inline constexpr int rslCauseLo   = static_cast<int>(RSLErrorCause::NormalUnspecified);
-inline constexpr int rslCauseHi   = static_cast<int>(RSLErrorCause::EncryptionUnimplemented);
 inline constexpr int sapiLo       = 0;
 inline constexpr int sapiHi       = 7;
 inline constexpr int serviceTypeLo = 0;  // L3CMServiceType::TypeCode::UndefinedType
@@ -223,6 +234,8 @@ inline constexpr int timingHi   = 63;    // 6-bit timing advance
 inline constexpr int t1pHi      = 31;    // request-reference T1 timing (5 bits)
 inline constexpr int t2Hi       = 31;    // request-reference T2 timing (5 bits)
 inline constexpr int t3Hi       = 63;    // request-reference T3 timing (6 bits)
+inline constexpr int rxlevHi    = 63;    // uplink measurement RX level (6 bits, TS 48.058 9.3.25)
+inline constexpr int rxqHi      = 7;     // uplink measurement RX quality (3 bits, TS 48.058 9.3.25)
 } // namespace fields
 
 // Channel description fields exactly as emitted by
@@ -697,7 +710,7 @@ GSML3_C_API size_t gsml3_rsl_build_chan_activ_nack(uint8_t* out, size_t maxlen,
     try {
         clearLastError();
         if (!out || maxlen == 0) { setError(GSML3_ERR_INVALID_ARG, "NULL output buffer"); return 0; }
-        if (!checkEnumValue(cause, ranges::rslCauseLo, ranges::rslCauseHi, "cause"))
+        if (!checkRslCause(cause))
             return 0;
         int n = RSLBuilder::buildChanActivNack({out, maxlen}, chan_nr,
                                                 static_cast<RSLErrorCause>(cause));
@@ -728,7 +741,7 @@ GSML3_C_API size_t gsml3_rsl_build_conn_fail(uint8_t* out, size_t maxlen,
     try {
         clearLastError();
         if (!out || maxlen == 0) { setError(GSML3_ERR_INVALID_ARG, "NULL output buffer"); return 0; }
-        if (!checkEnumValue(cause, ranges::rslCauseLo, ranges::rslCauseHi, "cause"))
+        if (!checkRslCause(cause))
             return 0;
         int n = RSLBuilder::buildConnFail({out, maxlen}, chan_nr,
                                           static_cast<RSLErrorCause>(cause));
@@ -741,16 +754,24 @@ GSML3_C_API size_t gsml3_rsl_build_conn_fail(uint8_t* out, size_t maxlen,
 }
 
 GSML3_C_API size_t gsml3_rsl_build_meas_res(uint8_t* out, size_t maxlen,
-    uint8_t chan_nr, uint8_t meas_nr, int8_t rxlev, int8_t rxqual,
-    const uint8_t* l1, size_t l1_len) {
+    uint8_t chan_nr, uint8_t meas_nr,
+    uint8_t rxlev_full, uint8_t rxlev_sub, uint8_t rxq_full, uint8_t rxq_sub,
+    int dtx_downlink, uint8_t l1_info) {
     try {
         clearLastError();
-        if (!out || maxlen == 0 || (l1_len && !l1)) {
-            setError(GSML3_ERR_INVALID_ARG, "NULL output buffer or L1 info");
+        if (!out || maxlen == 0) { setError(GSML3_ERR_INVALID_ARG, "NULL output buffer"); return 0; }
+        if (rxlev_full > static_cast<uint8_t>(fields::rxlevHi) ||
+            rxlev_sub  > static_cast<uint8_t>(fields::rxlevHi) ||
+            rxq_full   > static_cast<uint8_t>(fields::rxqHi) ||
+            rxq_sub    > static_cast<uint8_t>(fields::rxqHi)) {
+            setError(GSML3_ERR_INVALID_ARG, "uplink measurement field out of range (6-bit levels, 3-bit qualities)");
             return 0;
         }
+        if (!checkEnumValue(dtx_downlink, 0, 1, "dtx_downlink"))
+            return 0;
         int n = RSLBuilder::buildMeasRes({out, maxlen}, chan_nr, meas_nr,
-                                         rxlev, rxqual, {l1, l1_len});
+                                         rxlev_full, rxlev_sub, rxq_full, rxq_sub,
+                                         dtx_downlink != 0, l1_info);
         if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {

@@ -1151,12 +1151,17 @@ def rsl_build_conn_fail(chan_nr: int, cause: int) -> bytes:
     return _builder("gsml3_rsl_build_conn_fail", (_as_u8(chan_nr, "chan_nr"), cause))
 
 
-def rsl_build_meas_res(chan_nr: int, meas_nr: int, rxlev: int, rxqual: int, l1) -> bytes:
-    """rxlev/rxqual are signed 8-bit measurements."""
-    b = _byteslike(l1, "l1")
+def rsl_build_meas_res(chan_nr: int, meas_nr: int, rxlev_full: int, rxlev_sub: int,
+                       rxq_full: int, rxq_sub: int, dtx_downlink: bool = False,
+                       l1_info: int = 0) -> bytes:
+    """Uplink measurements per TS 48.058 section 9.3.25: RX levels are six-bit
+    fields (0-63), RX qualities three-bit fields (0-7); ``l1_info`` is the
+    optional L1 information octet (section 9.3.10), 0 omits the IE."""
     return _builder("gsml3_rsl_build_meas_res",
                     (_as_u8(chan_nr, "chan_nr"), _as_u8(meas_nr, "meas_nr"),
-                     _as_i8(rxlev, "rxlev"), _as_i8(rxqual, "rxqual"), b, len(b)))
+                     _as_u8(rxlev_full, "rxlev_full"), _as_u8(rxlev_sub, "rxlev_sub"),
+                     _as_u8(rxq_full, "rxq_full"), _as_u8(rxq_sub, "rxq_sub"),
+                     1 if dtx_downlink else 0, _as_u8(l1_info, "l1_info")))
 
 
 def rsl_build_hando_det(chan_nr: int, access_delay: int) -> bytes:

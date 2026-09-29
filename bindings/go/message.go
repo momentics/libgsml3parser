@@ -551,10 +551,17 @@ func RslBuildConnFail(chanNr byte, cause int) ([]byte, error) {
 	})
 }
 
-// RslBuildMeasRes builds a MEASUREMENT RESULT report: RX level/quality (signed 8-bit) plus optional L1 measurements.
-func RslBuildMeasRes(chanNr byte, measNr byte, rxLev, rxQual int8, l1 []byte) ([]byte, error) {
+// RslBuildMeasRes builds a MEASUREMENT RESULT report with the uplink measurements of
+// TS 48.058 section 9.3.25: RX levels are six-bit fields (0-255 accepted, excess high
+// bits discarded), RX qualities three-bit fields, dtxDownlink is the DTX indicator bit
+// and l1Info is the optional L1 information octet (section 9.3.10; 0 omits the IE).
+func RslBuildMeasRes(chanNr byte, measNr byte, rxlevFull, rxlevSub, rxqFull, rxqSub byte, dtxDownlink bool, l1Info byte) ([]byte, error) {
 	return serializeInto("rsl.BuildMeasRes", func(out *C.uint8_t, maxLen C.size_t) C.size_t {
-		return C.gsml3_rsl_build_meas_res(out, maxLen, C.uint8_t(chanNr), C.uint8_t(measNr), C.int8_t(rxLev), C.int8_t(rxQual), bytePtr(l1), C.size_t(len(l1)))
+		dtx := C.int(0)
+		if dtxDownlink {
+			dtx = 1
+		}
+		return C.gsml3_rsl_build_meas_res(out, maxLen, C.uint8_t(chanNr), C.uint8_t(measNr), C.uint8_t(rxlevFull), C.uint8_t(rxlevSub), C.uint8_t(rxqFull), C.uint8_t(rxqSub), dtx, C.uint8_t(l1Info))
 	})
 }
 

@@ -120,8 +120,9 @@ int main()
             static_cast<uint8_t>(RSL_IE::ChanNr), 0x78,
             // ActType IE (TV): type=0x03, value=2 (IntraSDCCH4)
             0x03, 0x02,
-            // ChanMode IE (LV): type=0x06, len=5, value=signalling mode
-            0x06, 0x05, 0x00, 0x01, 0x01, 0x00, 0x00,
+            // ChanMode IE (LV): type=0x06, len=4 — SDCCH signalling, DTX off
+            // (TS 48.058 9.3.6: dtx, speed indicator, channel rate type, union octet)
+            0x06, 0x04, 0x00, 0x03, 0x01, 0x00,
         };
 
         printHex("  Raw CHAN_ACTIV", rawActiv);
@@ -162,7 +163,9 @@ int main()
     // ── 4. BTS sends MEAS_RES with measurement results -> BSC ──
     std::cout << "\n[4] BTS->BSC: DCHAN MEAS_RES with uplink measurements\n";
     {
-        auto measFrame = RSLBuilder::buildMeasRes(0x7c, 1, -52, 2);
+        // Uplink measurements (TS 48.058 9.3.25): six-bit RX levels, three-bit
+        // RX qualities, DTX downlink clear, no L1 information octet.
+        auto measFrame = RSLBuilder::buildMeasRes(0x7c, 1, 40, 35, 5, 6, false, 0);
         if (!measFrame) {
             std::cerr << "  ERROR: Failed to build MEAS_RES\n";
             return 1;
@@ -173,10 +176,11 @@ int main()
         auto parsed = RSLParser::parse(*measFrame);
         if (parsed) {
             std::cout << "  MEAS_RES round-trip OK\n";
-            auto* uplinkIE = RSLParser::findIE(*parsed, RSL_IE::UplinkMeas);
-            if (uplinkIE && uplinkIE->len >= 2) {
-                std::cout << "  RXLEV: " << static_cast<int>(static_cast<int8_t>(uplinkIE->val[0])) << " dBm\n";
-                std::cout << "  RXQUAL: " << static_cast<int>(uplinkIE->val[1]) << "\n";
+            if (auto meas = RSLParser::getUplinkMeas(*parsed)) {
+                std::cout << "  RXLEV full/sub: " << static_cast<int>(meas->rxlevFull)
+                          << " / " << static_cast<int>(meas->rxlevSub) << "\n";
+                std::cout << "  RXQUAL full/sub: " << static_cast<int>(meas->rxqFull)
+                          << " / " << static_cast<int>(meas->rxqSub) << "\n";
             }
         }
     }

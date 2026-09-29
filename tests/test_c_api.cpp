@@ -364,8 +364,9 @@ TEST(CApiRsl, Builders_AgreeWithCpp) {
         EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
     }
     {
-        auto cpp = RSLBuilder::buildChanActivNack(0x78, RSLErrorCause::EquipmentFailure).value();
-        size_t n = gsml3_rsl_build_chan_activ_nack(out, sizeof(out), 0x78, 0x03);
+        // Equipment failure cause is 0x20 on the wire (TS 48.058 9.3.26).
+        auto cpp = RSLBuilder::buildChanActivNack(0x78, RSLErrorCause::EquipmentFail).value();
+        size_t n = gsml3_rsl_build_chan_activ_nack(out, sizeof(out), 0x78, 0x20);
         ASSERT_EQ(n, cpp.size());
         EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
     }
@@ -376,15 +377,17 @@ TEST(CApiRsl, Builders_AgreeWithCpp) {
         EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
     }
     {
-        auto cpp = RSLBuilder::buildConnFail(0x78, RSLErrorCause::ResourceUnavailable).value();
-        size_t n = gsml3_rsl_build_conn_fail(out, sizeof(out), 0x78, 0x06);
+        // Resource unavailable cause is 0x2F on the wire (TS 48.058 9.3.26).
+        auto cpp = RSLBuilder::buildConnFail(0x78, RSLErrorCause::ResUnavail).value();
+        size_t n = gsml3_rsl_build_conn_fail(out, sizeof(out), 0x78, 0x2F);
         ASSERT_EQ(n, cpp.size());
         EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
     }
     {
-        const std::vector<uint8_t> l1 = {0x01, 0x02, 0x03};
-        auto cpp = RSLBuilder::buildMeasRes(0x78, 5, -47, 3, l1).value();
-        size_t n = gsml3_rsl_build_meas_res(out, sizeof(out), 0x78, 5, -47, 3, l1.data(), l1.size());
+        // Uplink measurements (TS 48.058 9.3.25): six-bit RX levels, three-bit
+        // RX qualities, DTX downlink clear, L1 information octet omitted.
+        auto cpp = RSLBuilder::buildMeasRes(0x78, 5, 40, 35, 5, 6, false, 0).value();
+        size_t n = gsml3_rsl_build_meas_res(out, sizeof(out), 0x78, 5, 40, 35, 5, 6, 0, 0);
         ASSERT_EQ(n, cpp.size());
         EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
     }

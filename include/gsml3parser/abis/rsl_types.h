@@ -32,7 +32,7 @@
 ///
 /// 3GPP specification: TS 48.058 (A-bis interface), GSM 04.08 (L3 mapping).
 /// Thread safety: all types are trivially copyable, safe for concurrent read.
-/// Memory: sizeof(RSLChannelMode) == 5 bytes (packed), sizeof(RSLEncryptionInfo) == 16 bytes (span = 2 pointers).
+/// Memory: sizeof(RSLChannelMode) == 4 bytes (packed), sizeof(RSLEncryptionInfo) == 16 bytes (span = 2 pointers).
 ///
 /// Example:
 /// @code
@@ -177,7 +177,8 @@ enum class RSLCChanMessageType : uint8_t {
 
 /// RSL information element type codes (TS 48.058 9.3). IEs carry channel
 /// parameters, encryption keys, measurement data, and L3 payloads within
-/// RSL messages. Values 0x10 and 0x1D are reserved and have no member here.
+/// RSL messages; the vendor extension blocks (Osmo, ip.access) follow the
+/// same coding. Type code 0x1D is not defined and has no member here.
 enum class RSL_IE : uint8_t {
     ChanNr           = 0x01, ///< Channel Number
     LinkIdent        = 0x02, ///< Link Identifier
@@ -194,6 +195,7 @@ enum class RSL_IE : uint8_t {
     MSPower          = 0x0D, ///< MS Power
     PagingGroup      = 0x0E, ///< Paging Group
     PagingLoad       = 0x0F, ///< Paging Load
+    PyhsContext      = 0x10, ///< PYHS Context (vendor extension)
     AccessDelay      = 0x11, ///< Access Delay
     RachLoad         = 0x12, ///< RACH Load
     ReqReference     = 0x13, ///< Request Reference
@@ -209,6 +211,8 @@ enum class RSL_IE : uint8_t {
     SysInfoType      = 0x1E, ///< System Information Type
     MSPowerParam     = 0x1F, ///< MS Power Parameters
     BSPowerParam     = 0x20, ///< BS Power Parameters
+    PreprocParam     = 0x21, ///< Preprocessing Parameters
+    PreprocMeas      = 0x22, ///< Preprocessing Measurement
     ImmAssInfo       = 0x23, ///< Immediate Assignment Info
     SmscbInfo        = 0x24, ///< SMS-CB Info
     MSTimingOffset   = 0x25, ///< MS Timing Offset
@@ -219,7 +223,44 @@ enum class RSL_IE : uint8_t {
     SmscbMsg         = 0x2A, ///< SMS-CB Message
     FullImmAssInfo   = 0x2B, ///< Full Immediate Assignment Info
     SacchInfo        = 0x2C, ///< SACCH Information
-    CbchLoadInfo     = 0x2D  ///< CBCH Load Info
+    CbchLoadInfo     = 0x2D, ///< CBCH Load Info
+    SmscbChanIndicator = 0x2E, ///< SMS-CB Channel Indicator
+    GroupCallRef     = 0x2F, ///< Group Call Reference
+    GroupChanDesc    = 0x30, ///< Group Channel Description
+    NchDrxInfo       = 0x31, ///< NCH DRX Information
+    CmdIndicator     = 0x32, ///< Command Indicator
+    EmlppPrio        = 0x33, ///< EMLPP Priority
+    Uic              = 0x34, ///< UIC (UICC) Information
+    MainChanRef      = 0x35, ///< Main Channel Reference
+    MrConfig         = 0x36, ///< Multirate Configuration
+    MrControl        = 0x37, ///< Multirate Control
+    SuppCodecTypes   = 0x38, ///< Supported Codec Types
+    CodecConfig      = 0x39, ///< Codec Configuration
+    Rtd              = 0x3A, ///< Round Trip Delay
+    TfoStatus        = 0x3B, ///< TFO Status
+    LlpApdu          = 0x3C, ///< LLP APDU
+    OsMoRepAcchCap   = 0x60, ///< Osmo: reported ACCH capability (vendor extension)
+    OsMoTrainingSequence = 0x61, ///< Osmo: training sequence set (vendor extension)
+    OsMoTopAcchCap   = 0x62, ///< Osmo: top ACCH capability (vendor extension)
+    OsMoOsmuxCid     = 0x63, ///< Osmo: Osmux CID (vendor extension)
+    IpacSrtpConfig   = 0xE0, ///< ip.access: SRTP configuration
+    IpacProxyUdp     = 0xE1, ///< ip.access: proxy UDP
+    IpacBscmplTout   = 0xE2, ///< ip.access: BSCMPL timeout
+    IpacRemoteIp     = 0xF0, ///< ip.access: remote IP address
+    IpacRemotePort   = 0xF1, ///< ip.access: remote port
+    IpacRtpPayload   = 0xF2, ///< ip.access: RTP payload type
+    IpacLocalPort    = 0xF3, ///< ip.access: local port
+    IpacSpeechMode   = 0xF4, ///< ip.access: speech mode
+    IpacLocalIp      = 0xF5, ///< ip.access: local IP address
+    IpacConnStat     = 0xF6, ///< ip.access: connection statistics
+    IpacHoCParms     = 0xF7, ///< ip.access: handover C parameters
+    IpacConnId       = 0xF8, ///< ip.access: connection identifier
+    IpacRtpCsdFmt    = 0xF9, ///< ip.access: RTP CSD format
+    IpacRtpJitBuf    = 0xFA, ///< ip.access: RTP jitter buffer
+    IpacRtpCompr     = 0xFB, ///< ip.access: RTP compression
+    IpacRtpPayload2  = 0xFC, ///< ip.access: second RTP payload type
+    IpacRtpMplex     = 0xFD, ///< ip.access: RTP multiplex
+    IpacRtpMplexId   = 0xFE  ///< ip.access: RTP multiplex identifier
 };
 
 /// RSL information element encoding classes (TS 48.058 9.3):
@@ -230,9 +271,10 @@ enum class RSLEIEncoding : uint8_t { TV, LV, TL16V };
 
 /// Encoding class of an RSL IE type code (TS 48.058 9.3). The class is fixed
 /// per IE: TV IEs have a constant value size, LV/TL16V IEs carry their value
-/// length explicitly. Unknown type codes are decoded as LV (variable), which
-/// keeps malformed or vendor frames parseable without desynchronizing the IE
-/// list.
+/// length explicitly. Only the L3 Information IE (0x0B) uses the 16-bit
+/// length form; the Full BCCH Information IE (0x27) is an ordinary LV IE.
+/// Unknown type codes are decoded as LV (variable), which keeps malformed or
+/// vendor frames parseable without desynchronizing the IE list.
 [[nodiscard]] constexpr RSLEIEncoding rslIeEncoding(uint8_t iei) noexcept {
     switch (iei) {
         // TV: fixed value, no length octet.
@@ -258,14 +300,15 @@ enum class RSLEIEncoding : uint8_t { TV, LV, TL16V };
         case 0x28: // ChanNeeded (1)
         case 0x29: // CbCmdType (1)
         case 0x2D: // CbchLoadInfo (1)
+        case 0x2E: // SmscbChanIndicator (1)
+        case 0x37: // MrControl (1)
             return RSLEIEncoding::TV;
 
         // TL16V: 16-bit big-endian length for large payloads.
-        case 0x0B: // L3Info
-        case 0x27: // FullBCCHInfo
+        case 0x0B: // L3Info (the only TL16V IE)
             return RSLEIEncoding::TL16V;
 
-        // LV (8-bit length) and unknown codes.
+        // LV (8-bit length): FullBCCHInfo, all other defined IEs and unknown codes.
         default:
             return RSLEIEncoding::LV;
     }
@@ -298,29 +341,82 @@ enum class RSLEIEncoding : uint8_t { TV, LV, TL16V };
         case 0x28: // ChanNeeded
         case 0x29: // CbCmdType
         case 0x2D: // CbchLoadInfo
+        case 0x2E: // SmscbChanIndicator
+        case 0x37: // MrControl
             return 1;
         default:
             return 0;
     }
 }
 
-/// RSL Error causes for NACK and failure messages.
+/// RSL error cause values (TS 48.058 section 9.3.26). Carried by the Cause IE
+/// of NACK and failure messages; each value is a single octet on the wire.
 enum class RSLErrorCause : uint8_t {
-    NormalUnspecified       = 0x01,
-    RRUnavailable           = 0x02,
-    EquipmentFailure        = 0x03,
-    ServiceOptionUnavailable = 0x04,
-    ServiceOptionUnimplemented = 0x05,
-    ResourceUnavailable     = 0x06,
-    IEContentError          = 0x07,
-    MandatoryIEMissing      = 0x08,
-    OptionalIEError         = 0x09,
-    MessageSeqError         = 0x0a,
-    MessageTypeError        = 0x0b,
-    DiscriminatorError      = 0x0c,
-    ProtocolError           = 0x0d,
-    EncryptionUnimplemented = 0x0e
+    // Normal events.
+    RadioIfFail          = 0x00, ///< Radio interface failure
+    RadioLinkFail        = 0x01, ///< Radio link failure
+    HandoverAccFail      = 0x02, ///< Handover access failure
+    TalkerAccFail        = 0x03, ///< Talker access failure
+    OmIntervention       = 0x07, ///< OM intervention
+    NormalUnspec         = 0x0F, ///< Normal, unspecified
+    TMsrfpciExp          = 0x18, ///< TMSI/RFCI expiry
+    // Resource unavailable.
+    EquipmentFail        = 0x20, ///< Equipment failure
+    RrUnavail            = 0x21, ///< RR layer unavailable
+    TerrChFail           = 0x22, ///< Terrestrial channel failure
+    CcchOverload         = 0x23, ///< CCCH overload
+    AcchOverload         = 0x24, ///< ACCH overload
+    ProcessorOverload    = 0x25, ///< Processor overload
+    BtsNotEquipped       = 0x27, ///< BTS not equipped
+    RemoteTrauFailure    = 0x28, ///< Remote TRAU failure
+    NotifOverflow        = 0x29, ///< Notification overflow
+    ResUnavail           = 0x2F, ///< Resource unavailable
+    // Service or option not available.
+    TranscUnavail        = 0x30, ///< Transcoder unavailable
+    ServOptUnavail       = 0x3F, ///< Service option unavailable
+    // Service or option not implemented.
+    EncrUnimpl           = 0x40, ///< Encryption not implemented
+    ServOptUnimpl        = 0x4F, ///< Service option not implemented
+    // Invalid message.
+    RchAlrActvAlloc      = 0x50, ///< Channel already active/allocated
+    IpaRchNotActvAlloc   = 0x51, ///< IPA channel not active/allocated
+    IpaConnInvalid       = 0x52, ///< IPA connection invalid
+    IpaConnInUse         = 0x53, ///< IPA connection in use
+    IpaConnAlreadyExists = 0x54, ///< IPA connection already exists
+    InvalidMessage       = 0x5F, ///< Invalid message
+    // Protocol error.
+    MsgDiscr             = 0x60, ///< Message discriminator error
+    MsgType              = 0x61, ///< Message type error
+    MsgSeq               = 0x62, ///< Message sequence error
+    IeError              = 0x63, ///< IE error
+    MandIeError          = 0x64, ///< Mandatory IE error
+    OptIeError           = 0x65, ///< Optional IE error
+    IeNonexist           = 0x66, ///< IE non-existent
+    IeLength             = 0x67, ///< IE wrong length
+    IeContent            = 0x68, ///< IE wrong content
+    Proto                = 0x6F, ///< Protocol error
+    // Interworking.
+    Interworking         = 0x7F  ///< Interworking, unspecified
 };
+
+/// Domain check for a raw RSL error cause octet (TS 48.058 section 9.3.26):
+/// true only when the value is one of the defined causes above; the code
+/// space contains reserved gaps that must not be emitted on the wire.
+[[nodiscard]] constexpr bool isRslErrorCause(uint8_t value) noexcept {
+    switch (value) {
+        case 0x00u: case 0x01u: case 0x02u: case 0x03u: case 0x07u:
+        case 0x0Fu: case 0x18u: case 0x20u: case 0x21u: case 0x22u:
+        case 0x23u: case 0x24u: case 0x25u: case 0x27u: case 0x28u:
+        case 0x29u: case 0x2Fu: case 0x30u: case 0x3Fu: case 0x40u:
+        case 0x4Fu: case 0x50u: case 0x51u: case 0x52u: case 0x53u:
+        case 0x54u: case 0x5Fu: case 0x60u: case 0x61u: case 0x62u:
+        case 0x63u: case 0x64u: case 0x65u: case 0x66u: case 0x67u:
+        case 0x68u: case 0x6Fu: case 0x7Fu:
+            return true;
+        default:
+            return false;
+    }
+}
 
 /// RSL Channel Number IE value coding (TS 48.058 9.3.1): a five-bit channel
 /// code in the high bits and a three-bit timeslot number in the low bits,
@@ -383,24 +479,30 @@ enum class RSLActivationType : uint8_t {
     InterSyncHandover        = 0x05
 };
 
-/// Channel Mode structure (5 octets per GSM 04.08 10.5.2.6).
-/// Describes the physical channel characteristics: signalling/speech/data indicator,
-/// channel rate and type, DTX settings, and coding algorithm.
+/// Channel Mode IE value part (TS 48.058 section 9.3.6): exactly four octets —
+/// the DTX indicators, the speech/data/signalling indicator, the channel rate
+/// and type, and a fourth octet whose meaning depends on the indicator: the
+/// speech coding algorithm for speech channels, an opaque data rate code for
+/// data channels, and zero for signalling channels (no resource).
 struct RSLChannelMode {
-    uint8_t reserved{0};
-    uint8_t spdInd{0};     ///< Speed Indicator: 1=Signalling, 2=Speech, 3=Data
-    uint8_t chanRT{0};     ///< Channel Rate and Type
-    uint8_t dtxDTU{0};     ///< DTX/DTU settings
-    uint8_t chanRate{0};   ///< Speech coding algorithm / data rate
+    uint8_t dtx{0};            ///< [reserved(6)|DTX_d(1)|DTX_u(1)]
+    uint8_t spdInd{0};         ///< Speed indicator: 1=speech, 2=data, 3=signalling
+    uint8_t chanRateType{0};   ///< Channel rate and type; see ChanRateType
+    uint8_t valueOctet{0};     ///< Speech algorithm / data rate code / 0x00 (signalling)
 
-    enum SpeedIndicator : uint8_t { Signalling = 0x01, Speech = 0x02, Data = 0x03 };
-    enum ChanRateType : uint8_t { SDCCH = 0x01, TCH_Bm = 0x02, TCH_Lm = 0x03 };
+    enum SpeedIndicator : uint8_t { Speech = 0x01, Data = 0x02, Signalling = 0x03 };
+    enum ChanRateType : uint8_t {
+        Sdcch = 0x01, TchF = 0x08, TchH = 0x09, TchFBdMslot = 0x0A,
+        TchFDlMslot = 0x1A, TchFGroup = 0x18, TchHGroup = 0x19,
+        TchFBcast = 0x28, TchHBcast = 0x29, OsMoTchFVamos = 0x88, OsMoTchHVamos = 0x89 };
 
-    [[nodiscard]] bool isSignalling() const noexcept { return spdInd == static_cast<uint8_t>(SpeedIndicator::Signalling); }
-    [[nodiscard]] bool isSpeech() const noexcept { return spdInd == static_cast<uint8_t>(SpeedIndicator::Speech); }
-    [[nodiscard]] bool isData() const noexcept { return spdInd == static_cast<uint8_t>(SpeedIndicator::Data); }
+    [[nodiscard]] constexpr bool dtxDownlink() const noexcept { return (dtx & 0x02u) != 0; }
+    [[nodiscard]] constexpr bool dtxUplink()   const noexcept { return (dtx & 0x01u) != 0; }
+    [[nodiscard]] constexpr bool isSignalling() const noexcept { return spdInd == SpeedIndicator::Signalling; }
+    [[nodiscard]] constexpr bool isSpeech()     const noexcept { return spdInd == SpeedIndicator::Speech; }
+    [[nodiscard]] constexpr bool isData()       const noexcept { return spdInd == SpeedIndicator::Data; }
 };
-static_assert(sizeof(RSLChannelMode) == 5, "RSLChannelMode must be exactly 5 bytes");
+static_assert(sizeof(RSLChannelMode) == 4, "RSLChannelMode must be exactly 4 bytes");
 
 /// Encryption information carried in ENCR_CMD or CHAN_ACTIV.
 /// Specifies the ciphering algorithm (A5/0, A5/1, etc.) and provides a view

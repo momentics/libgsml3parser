@@ -176,12 +176,51 @@ const RSLParsedMessage::IE* RSLParser::findIE(const RSLParsedMessage& parsed, RS
 
 std::optional<RSLChannelMode> RSLParser::getChannelMode(const RSLParsedMessage& parsed) noexcept
 {
+    // Channel Mode IE value (TS 48.058 section 9.3.6): exactly four octets —
+    // [reserved(6)|DTX_d(1)|DTX_u(1)], speed indicator, channel rate and type,
+    // and the union octet selected by the speed indicator.
     auto* ie = findIE(parsed, RSL_IE::ChanMode);
-    if (!ie || !ie->val || ie->len < sizeof(RSLChannelMode)) return std::nullopt;
+    if (!ie || !ie->val || ie->len != sizeof(RSLChannelMode)) return std::nullopt;
 
     RSLChannelMode mode{};
     std::memcpy(&mode, ie->val, sizeof(RSLChannelMode));
     return mode;
+}
+
+std::optional<RSLUplinkMeas> RSLParser::getUplinkMeas(const RSLParsedMessage& parsed) noexcept
+{
+    // Uplink Measurements IE value (TS 48.058 section 9.3.25): three octets —
+    // [RFU(1)|DTX_d(1)|rxlev_full_up(6)], [reserved(2)|rxlev_sub_up(6)],
+    // [reserved(2)|rxqual_full_up(3)|rxqual_sub_up(3)]. A longer value appends
+    // vendor supplementary measurement information and is not decoded here.
+    auto* ie = findIE(parsed, RSL_IE::UplinkMeas);
+    if (!ie || !ie->val || ie->len < 3) return std::nullopt;
+
+    RSLUplinkMeas meas{};
+    const uint8_t* v = ie->val;
+    meas.dtxDownlink = (v[0] & 0x40u) != 0;
+    meas.rxlevFull   = static_cast<uint8_t>(v[0] & 0x3Fu);
+    meas.rxlevSub    = static_cast<uint8_t>(v[1] & 0x3Fu);
+    meas.rxqFull     = static_cast<uint8_t>((v[2] >> 3) & 0x07u);
+    meas.rxqSub      = static_cast<uint8_t>(v[2] & 0x07u);
+    return meas;
+}
+
+std::optional<RSLFrameNumber> RSLParser::getFrameNumber(const RSLParsedMessage& parsed) noexcept
+{
+    // Frame Number IE value (TS 48.058 section 9.3.8): two octets pack the
+    // starting-time fields t1p(5)|t3(6)|t2(5):
+    //   octet 1 = (t1p << 3) | (t3 >> 3)
+    //   octet 2 = ((t3 & 0x07) << 5) | t2
+    auto* ie = findIE(parsed, RSL_IE::FrameNumber);
+    if (!ie || !ie->val || ie->len != 2) return std::nullopt;
+
+    const uint8_t* v = ie->val;
+    RSLFrameNumber fn{};
+    fn.t1p = static_cast<uint8_t>(v[0] >> 3);
+    fn.t3  = static_cast<uint8_t>(((v[0] & 0x07u) << 3) | (v[1] >> 5));
+    fn.t2  = static_cast<uint8_t>(v[1] & 0x1Fu);
+    return fn;
 }
 
 std::optional<RSLEncryptionInfo> RSLParser::getEncryptionInfo(const RSLParsedMessage& parsed) noexcept

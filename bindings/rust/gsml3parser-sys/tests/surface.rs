@@ -156,10 +156,12 @@ fn _use_all_128() {
         usize,
         c_uchar,
         c_uchar,
-        i8,
-        i8,
-        *const c_uchar,
-        usize,
+        u8,
+        u8,
+        u8,
+        u8,
+        c_int,
+        u8,
     ) -> usize = gsml3parser_sys::gsml3_rsl_build_meas_res;
     let _: unsafe extern "C" fn(
         *mut c_uchar,

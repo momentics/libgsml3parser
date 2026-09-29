@@ -122,7 +122,9 @@ public:
 
     /// Build CHAN_ACTIV_ACK message.
     /// @param chanNr Activated channel number.
-    /// @param frameNumber FN at which activation took effect.
+    /// @param frameNumber Absolute TDMA frame number (0..42431) at which the
+    ///        activation took effect, encoded as the starting-time fields
+    ///        t1p/t3/t2 per TS 48.058 section 9.3.8.
     /// @return Serialized RSL frame or ParseError on failure.
     [[nodiscard]] static Expected<std::vector<uint8_t>> buildChanActivAck(
         uint8_t chanNr, uint16_t frameNumber);
@@ -161,21 +163,32 @@ public:
     [[nodiscard]] static int buildConnFail(std::span<uint8_t> out,
         uint8_t chanNr, RSLErrorCause cause);
 
-    /// Build MEAS_RES message with uplink measurement results.
+    /// Build MEAS_RES message with uplink measurement results. The Uplink
+    /// Measurements IE carries the canonical three-octet value (TS 48.058
+    /// section 9.3.25): RX levels are six-bit fields, RX qualities three-bit
+    /// fields; excess high bits of the parameters are discarded.
     /// @param chanNr Reporting channel number.
     /// @param measNr Measurement result sequence number.
-    /// @param rxlevFull RXLEV on full-rate timeslot (dBm offset).
-    /// @param rxqualFull RXQUAL on full-rate timeslot (0-7).
-    /// @param l1Info Optional L1 information bytes.
+    /// @param rxlevFull RX level on full rate (0-63).
+    /// @param rxlevSub RX level on sub rate (0-63).
+    /// @param rxqFull RX quality on full rate (0-7).
+    /// @param rxqSub RX quality on sub rate (0-7).
+    /// @param dtxDownlink Downlink DTX indicator bit (dtx_d).
+    /// @param l1Info Value octet of the optional L1 Information IE (MS power
+    ///        level and FPC bit, TS 48.058 section 9.3.10); zero omits the IE,
+    ///        a non-zero value emits it with a zero actual-timing-advance
+    ///        octet.
     /// @return Serialized RSL frame or ParseError on failure.
     [[nodiscard]] static Expected<std::vector<uint8_t>> buildMeasRes(
-        uint8_t chanNr, uint8_t measNr, int8_t rxlevFull, int8_t rxqualFull,
-        std::span<const uint8_t> l1Info = {});
+        uint8_t chanNr, uint8_t measNr,
+        uint8_t rxlevFull, uint8_t rxlevSub, uint8_t rxqFull, uint8_t rxqSub,
+        bool dtxDownlink, uint8_t l1Info);
 
     /// Build MEAS_RES into pre-allocated buffer (zero heap alloc).
     [[nodiscard]] static int buildMeasRes(std::span<uint8_t> out,
-        uint8_t chanNr, uint8_t measNr, int8_t rxlevFull, int8_t rxqualFull,
-        std::span<const uint8_t> l1Info = {});
+        uint8_t chanNr, uint8_t measNr,
+        uint8_t rxlevFull, uint8_t rxlevSub, uint8_t rxqFull, uint8_t rxqSub,
+        bool dtxDownlink, uint8_t l1Info);
 
     /// Build HANDO_DET message (handover detection report).
     /// @param chanNr Source channel number.
