@@ -489,7 +489,8 @@ TEST(FullRoundTrip, SS_Domain) {
 
 // GMM domain (GPRS Mobility Management)
 TEST(FullRoundTrip, GMM_Domain) {
-    expectWriteOnly(ParsedMessage{GMM{L3AttachRequest{}}}, "L3AttachRequest");
+    expectRoundTrip(ParsedMessage{GMM{L3AttachRequest{}}},
+        L3PD::GPRSMobilityManagement, L3AttachRequest::MTI, "L3AttachRequest");
 
     expectRoundTrip(ParsedMessage{GMM{L3AttachAccept{}}},
         L3PD::GPRSMobilityManagement, L3AttachAccept::MTI, "L3AttachAccept");

@@ -44,7 +44,8 @@
 //   - GMM header encoding: PD=8 in the low nibble of byte 0, raw MTI in byte 1 (no shift)
 //   - RAI encoding: MCC/MNC BCD nibble-swapped(3) + LAC(2) + RAC(1) = 6 octets
 //   - MS Network Capability LV format per the GMM information element definitions
-//   - DRX Parameter TV format per the GMM information element definitions
+//   - DRX Parameter value format (two octets without an identifier) per the
+//     GMM information element definitions
 //   - PDP Context Status TLV format per the GMM information element definitions
 
 #include <gtest/gtest.h>
@@ -162,25 +163,26 @@ TEST(GoldenGMMTest, AttachComplete_RoundTrip) {
 }
 
 // =====================================================================
-// GMM Attach Reject (GSM 24.008 9.4.4) - with cause
-// Attach Reject wire layout (GSM 24.008).
+// GMM Attach Reject (TS 44.068 section 9.5) - with cause
+// Attach Reject wire layout (TS 44.068): the body starts with the GMM
+// cause as a single value octet carried without an identifier; any
+// further optional IEs follow.
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x04 = MTI(8)=0x04(AttachReject), raw encoding
-//   0x82 = Extended IEI flag(1)|IEI(7)=0x25(GMMCause)
-//   0x01 = Length(1)
-//   0x0c = CauseValue=GPRS_Service_Not_Allowed
+//   0x0c = cause value = GPRS_Service_Not_Allowed (single octet, no IEI)
 // =====================================================================
 
 TEST(GoldenGMMTest, AttachReject_WithCause) {
-    // GMMCause IEI=0x25, extended TLV: type=0xA5(0x80|0x25), length=1, value=GPRS_Service_Not_Allowed=0x0c
-    uint8_t data[] = {0x08, 0x04, 0xa5, 0x01, 0x0c};
+    // GMM cause carried as a bare value octet (TS 44.068): no IEI, no length.
+    uint8_t data[] = {0x08, 0x04, 0x0c};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3AttachReject::MTI);
     auto* rej = tryGet<L3AttachReject>(*msg);
     ASSERT_NE(rej, nullptr);
     EXPECT_EQ(rej->cause(), GMMCause::GPRS_Service_Not_Allowed);
+    EXPECT_EQ(rej->bodyLength(), 1u);
 }
 
 // =====================================================================
@@ -460,24 +462,106 @@ TEST(GoldenGMMTest, DetachRequest_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Routing Area Update Request (GSM 24.008 9.4.12) - golden parse
-// Routing Area Update Request golden parse vector (GSM 24.008).
+// GMM Attach Request (TS 44.068 section 9.5) - golden parse
+// Attach Request golden parse vector (TS 44.068): MS network capability
+// (LV), attach type + GMM CKSN in one octet, DRX parameter (two value
+// octets without an identifier), mobile identity (LV), old routing area
+// identity (six value octets), MS radio access capability (LV, mandatory).
+// Parsing this frame must succeed: the DRX parameter is read as two value
+// octets with no identifier.
+// Hex breakdown:
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
+//   0x01 = MTI(8)=0x01(AttachRequest), raw encoding
+//   0x02 = msNetworkCapability LV length = 2
+//   0x01 0x02 = msNetworkCapability value
+//   0x24 = attachType(3)='001'(GPRS attach)|forL3(1)=0 | gprsCKSN(3)=2|spare(1)=0
+//   0xFF 0x00 = DRX parameter value octets: splitPGCycleCode=0xFF, rest zero
+//   0x05 = mobileIdentity LV length = 5
+//   0xF4 = first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) (TS 24.008 9.1.3.x)
+//   0x12 0x34 0x56 0x78 = TMSI value = 0x12345678
+//   09 F1 07 = MCC/MNC BCD: MCC=901, MNC=70 (TS 24.008 10.5.1.3 packing)
+//   0x00 0x01 = LAC = 0x0001
+//   0x5A = RAC = 0x5A
+//   0x02 = msRACap LV length = 2 (mandatory on the wire, no identifier)
+//   0xAA 0xBB = msRACap value
+// =====================================================================
+
+TEST(GoldenGMMTest, AttachRequest_GoldenParse) {
+    // Body: mscap LV(3) + firstOctet(1) + drx V(2) + MI LV(6) + oldRAI(6)
+    //       + msRACap LV(3) = 21 bytes
+    uint8_t data[] = {
+        0x08, 0x01,                              // header: PD=GMM, MTI=AttachRequest
+        0x02, 0x01, 0x02,                        // msNetworkCapability LV (len=2)
+        0x24,                                     // attachType GPRS|forL3=0 | CKSN=2|spare=0
+        0xFF, 0x00,                              // DRX parameter (two value octets, no identifier)
+        0x05, 0xF4, 0x12, 0x34, 0x56, 0x78,      // mobileIdentity LV: TMSI=0x12345678
+        0x09, 0xF1, 0x07, 0x00, 0x01, 0x5A,      // oldRAI: MCC=901, MNC=70, LAC=0x0001, RAC=0x5A
+        0x02, 0xAA, 0xBB                         // msRACap LV (len=2)
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3AttachRequest::MTI);
+    EXPECT_EQ(messageName(*msg), "AttachRequest");
+    auto* req = tryGet<L3AttachRequest>(*msg);
+    ASSERT_NE(req, nullptr);
+    EXPECT_EQ(req->attachType(), GMMAttachType::GPRSAttach);
+    EXPECT_EQ(req->forL3(), false);
+    EXPECT_EQ(req->cksn(), 2u);
+    EXPECT_EQ(req->drxParam().splitPGCycleCode(), 0xFF);
+    EXPECT_EQ(req->mobileId().tmsi(), 0x12345678u);
+    EXPECT_EQ(req->oldRAI().mcc(), 901);
+    EXPECT_EQ(req->oldRAI().mnc(), 70);
+    EXPECT_EQ(req->oldRAI().lac(), 0x0001);
+    EXPECT_EQ(req->oldRAI().rac(), 0x5A);
+    ASSERT_EQ(req->msRACap().size(), 2u);
+    EXPECT_EQ(req->msRACap()[0], 0xAA);
+    EXPECT_EQ(req->msRACap()[1], 0xBB);
+
+    // Builder path: the same values must reproduce identical bytes.
+    const uint8_t racap[] = {0xAA, 0xBB};
+    auto built = L3AttachRequest::builder()
+        .msNetworkCapability(L3MSNetworkCapability(std::vector<uint8_t>{0x01, 0x02}))
+        .attachType(GMMAttachType::GPRSAttach)
+        .forL3(false)
+        .cksn(2)
+        .drxParam(req->drxParam())
+        .mobileIdentity(L3MobileIdentity(0x12345678))
+        .oldRAI(req->oldRAI())
+        .msRACap(std::span<const uint8_t>(racap))
+        .build();
+    ParsedMessage pm{GMM{built}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ((*bytes)[i], data[i]);
+    }
+}
+
+// =====================================================================
+// GMM Routing Area Update Request (TS 44.068 section 9.5) - golden parse
+// Routing Area Update Request golden parse vector (TS 44.068): update
+// type + forL3 in the high half-octet and the GMM CKSN in bits 3:1 of
+// the first body octet, old routing area identity (six value octets),
+// MS radio access capability (LV, mandatory on the wire).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x08 = MTI(8)=0x08(RoutingAreaUpdateRequest), raw encoding
-//   0x70 = updateType(3)=RAUpdated(0)|forL3(1)=0|CKSN(3)=7|spare(1)=0
-//   0x52 0xF0 0x10 = MCC/MNC BCD nibble-swapped: MCC=250, MNC=01
-//   0x12 0x34 = LAC = 0x1234
-//   0x56 = RAC = 0x56
+//   0x14 = updateType(3)='000'(RA updated)|forL3(1)=1 | gprsCKSN(3)=2|spare(1)=0
+//   09 F1 07 = MCC/MNC BCD: MCC=901, MNC=70 (TS 24.008 10.5.1.3 packing)
+//   0x00 0x01 = LAC = 0x0001
+//   0x5A = RAC = 0x5A
+//   0x02 = msRACap LV length = 2 (mandatory, no identifier)
+//   0xAA 0xBB = msRACap value
 // =====================================================================
 
 TEST(GoldenGMMTest, RAUpdateRequest_GoldenParse) {
-    // Body: updateTypeCKSN(1) + oldRAI(6) = 7 bytes
-    // First byte: updateType(3)=0|forL3(1)=0|CKSN(4)=7 -> 0000 0111 = 0x07
+    // Body: firstOctet(1) + oldRAI(6) + msRACap LV(3) = 10 bytes
     uint8_t data[] = {
         0x08, 0x08,                              // header: PD=GMM, MTI=RAUpdateRequest
-        0x07,                                     // updateType(3)=RAUpdated(0)|forL3(1)=0|CKSN(4)=7
-        0x52, 0xF0, 0x10, 0x12, 0x34, 0x56       // RAI: MCC=250, MNC=01, LAC=0x1234, RAC=0x56
+        0x14,                                     // updateType RA updated|forL3=1 | CKSN=2|spare=0
+        0x09, 0xF1, 0x07, 0x00, 0x01, 0x5A,      // RAI: MCC=901, MNC=70, LAC=0x0001, RAC=0x5A
+        0x02, 0xAA, 0xBB                         // msRACap LV (len=2)
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -486,12 +570,32 @@ TEST(GoldenGMMTest, RAUpdateRequest_GoldenParse) {
     auto* rau = tryGet<L3RoutingAreaUpdateRequest>(*msg);
     ASSERT_NE(rau, nullptr);
     EXPECT_EQ(rau->updateType(), GMMUpdateType::RAUpdated);
-    EXPECT_EQ(rau->forL3(), false);
-    EXPECT_EQ(rau->cksn(), 0x07);
-    EXPECT_EQ(rau->oldRAI().mcc(), 250);
-    EXPECT_EQ(rau->oldRAI().mnc(), 1);
-    EXPECT_EQ(rau->oldRAI().lac(), 0x1234);
-    EXPECT_EQ(rau->oldRAI().rac(), 0x56);
+    EXPECT_EQ(rau->forL3(), true);
+    EXPECT_EQ(rau->cksn(), 2u);
+    EXPECT_EQ(rau->oldRAI().mcc(), 901);
+    EXPECT_EQ(rau->oldRAI().mnc(), 70);
+    EXPECT_EQ(rau->oldRAI().lac(), 0x0001);
+    EXPECT_EQ(rau->oldRAI().rac(), 0x5A);
+    ASSERT_EQ(rau->msRACap().size(), 2u);
+    EXPECT_EQ(rau->msRACap()[0], 0xAA);
+    EXPECT_EQ(rau->msRACap()[1], 0xBB);
+
+    // Builder path: the same values must reproduce identical bytes.
+    const uint8_t racap[] = {0xAA, 0xBB};
+    auto built = L3RoutingAreaUpdateRequest::builder()
+        .updateType(GMMUpdateType::RAUpdated)
+        .forL3(true)
+        .cksn(2)
+        .oldRAI(L3RoutingAreaIdentification("901", "70", 0x0001, 0x5A))
+        .msRACap(std::span<const uint8_t>(racap))
+        .build();
+    ParsedMessage pm{GMM{built}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ((*bytes)[i], data[i]);
+    }
 }
 
 // =====================================================================
@@ -535,18 +639,19 @@ TEST(GoldenGMMTest, RAUpdateAccept_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Routing Area Update Reject (GSM 24.008 9.4.17) - golden parse
-// Routing Area Update Reject golden parse vector (GSM 24.008).
+// GMM Routing Area Update Reject (TS 44.068 section 9.5) - golden parse
+// Routing Area Update Reject golden parse vector (TS 44.068): the body
+// starts with the GMM cause as a single value octet carried without an
+// identifier; any further optional IEs follow.
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0b = MTI(8)=0x0b(RoutingAreaUpdateReject), raw encoding
-//   0xa5 = extended IEI for GMMCause (0x80 | 0x25)
-//   0x01 = length
-//   0x0c = cause value = GPRS_Service_Not_Allowed
+//   0x0c = cause value = GPRS_Service_Not_Allowed (single octet, no IEI)
 // =====================================================================
 
 TEST(GoldenGMMTest, RAUpdateReject_GoldenParse) {
-    uint8_t data[] = {0x08, 0x0b, 0xa5, 0x01, 0x0c};
+    // GMM cause carried as a bare value octet (TS 44.068): no IEI, no length.
+    uint8_t data[] = {0x08, 0x0b, 0x0c};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3RoutingAreaUpdateReject::MTI);
@@ -554,6 +659,7 @@ TEST(GoldenGMMTest, RAUpdateReject_GoldenParse) {
     auto* rej = tryGet<L3RoutingAreaUpdateReject>(*msg);
     ASSERT_NE(rej, nullptr);
     EXPECT_EQ(rej->cause(), GMMCause::GPRS_Service_Not_Allowed);
+    EXPECT_EQ(rej->bodyLength(), 1u);
 }
 
 // =====================================================================
@@ -590,18 +696,19 @@ TEST(GoldenGMMTest, ServiceRequest_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Service Reject (GSM 24.008 9.4.22) - golden parse
-// Service Reject golden parse vector (GSM 24.008).
+// GMM Service Reject (TS 44.068 section 9.5) - golden parse
+// Service Reject golden parse vector (TS 44.068): the body starts with
+// the GMM cause as a single value octet carried without an identifier;
+// any further optional IEs follow.
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0e = MTI(8)=0x0e(ServiceReject), raw encoding
-//   0xa5 = extended IEI for GMMCause (0x80 | 0x25)
-//   0x01 = length
-//   0x0c = cause value = GPRS_Service_Not_Allowed
+//   0x0c = cause value = GPRS_Service_Not_Allowed (single octet, no IEI)
 // =====================================================================
 
 TEST(GoldenGMMTest, ServiceReject_GoldenParse) {
-    uint8_t data[] = {0x08, 0x0e, 0xa5, 0x01, 0x0c};
+    // GMM cause carried as a bare value octet (TS 44.068): no IEI, no length.
+    uint8_t data[] = {0x08, 0x0e, 0x0c};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ServiceReject::MTI);
@@ -609,6 +716,7 @@ TEST(GoldenGMMTest, ServiceReject_GoldenParse) {
     auto* rej = tryGet<L3ServiceReject>(*msg);
     ASSERT_NE(rej, nullptr);
     EXPECT_EQ(rej->cause(), GMMCause::GPRS_Service_Not_Allowed);
+    EXPECT_EQ(rej->bodyLength(), 1u);
 }
 
 // =====================================================================
@@ -769,15 +877,16 @@ TEST(GoldenGMMTest, GMMIdentityResponse_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Authentication And Ciphering Failure (GSM 24.008 9.4.23) - golden parse
-// Authentication And Ciphering Failure golden parse vector (GSM 24.008).
+// GMM Authentication And Ciphering Failure (TS 44.068 section 9.5) - golden parse
+// Authentication And Ciphering Failure golden parse vector (TS 44.068):
+// the body starts with the GMM cause as a single value octet carried
+// without an identifier, followed by the authentication failure
+// parameter TLV (IEI + length + AUTS).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x1c = MTI(8)=0x1c(AuthenticationAndCipheringFailure), raw encoding
-//   0xa5 = extended IEI for GMMCause (0x80 | 0x25)
-//   0x01 = length
-//   0x15 = cause value = Synch_Failure
-//   0xb0 = extended IEI for AuthFailureParam (0x80 | 0x30)
+//   0x15 = cause value = Synch_Failure (single octet, no IEI)
+//   0x30 = authentication failure parameter IEI (TLV: IEI + length + AUTS)
 //   0x0e = length (14 bytes AUTS)
 //   0xAA repeated 14 times = AUTS data
 // =====================================================================
@@ -785,8 +894,8 @@ TEST(GoldenGMMTest, GMMIdentityResponse_GoldenParse) {
 TEST(GoldenGMMTest, AuthAndCipheringFailure_GoldenParse) {
     uint8_t data[] = {
         0x08, 0x1c,
-        0xa5, 0x01, 0x15,
-        0xb0, 0x0e,
+        0x15,
+        0x30, 0x0e,
         0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA,
         0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA
     };
@@ -886,9 +995,9 @@ TEST(GoldenGMMTest, T3302Timer_IE) {
 }
 
 // =====================================================================
-// GMM IE: DRX Parameter (GSM 24.008 10.5.5.13)
-// TV format: Value(2 octets)
-// DRX Parameter TV per GSM 24.008 10.5.5.13.
+// GMM IE: DRX Parameter (TS 44.068 section 10.5.5.13)
+// Value format: two octets carried without an identifier
+// DRX parameter value per TS 44.068 10.5.5.13.
 // Octet 1: splitPGCycleCode=0x00(no DRX)
 // Octet 2: nonDRXTimer(3)=0, splitOnCCCH(1)=0, cnSpecificDRXCycleLength(4)=0
 // =====================================================================

@@ -28,7 +28,7 @@
 //   T3302: TLV(IEI=0x1b) | Length(1) | TimerValue(1)
 //   MSNetworkCapability: V-format (variable length, bit fields per 10.5.7.3)
 //   RoutingAreaIdentification: MCC/MNC BCD(3) | LAC(2) | RAC(1) = 6 octets
-//   DRXParameter: TV(IEI=0x1a) | Value(2 octets, per 10.5.5.13)
+//   DRXParameter: V-format (two value octets, no identifier, per 10.5.5.13)
 
 #pragma once
 
@@ -223,8 +223,8 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── DRX Parameter (GSM 24.008 10.5.5.13) ─────────────────────────────
-// TV format: IEI=0x1a | Value(2 octets)
+// ── DRX Parameter (TS 44.068 section 10.5.5.13) ───────────────────────
+// Value format: two octets carried without an identifier.
 // Octet 1: splitPGCycleCode(8)
 // Octet 2: nonDRXTimer(3)|splitOnCCCH(1)|cnSpecificDRXCycleLength(4)
 
@@ -234,7 +234,6 @@ class L3DRXParameter {
     unsigned mSplitOnCCCH{};
     unsigned mCNSpecificDRXCycleLength{};
 public:
-    static constexpr uint8_t IEI = 0x1a;
     L3DRXParameter() = default;
 
     bool operator==(const L3DRXParameter&) const = default;
@@ -269,13 +268,13 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── GMM Cause IE (GSM 24.008 10.5.3.2) ────────────────────────────────
-// TLV format: IEI=0x25 | Length(1) | CauseValue(1)
+// ── GMM Cause (TS 44.068 section 9.5) ─────────────────────────────────
+// The GMM cause is a single value octet carried without an identifier at
+// the start of the body of reject and failure messages.
 
 class L3GMMCauseIE {
     GMMCause mCause{GMMCause::Unspecified};
 public:
-    static constexpr uint8_t IEI = 0x25;
     L3GMMCauseIE() = default;
     explicit L3GMMCauseIE(GMMCause cause) : mCause(cause) {}
 

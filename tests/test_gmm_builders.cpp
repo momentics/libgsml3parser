@@ -177,7 +177,6 @@ TEST(GMMBuilders, RoutingAreaUpdateComplete) {
 // 3GPP TS 24.008 9.4.17: Routing Area Update Reject
 TEST(GMMBuilders, RoutingAreaUpdateReject) {
     auto msg = L3RoutingAreaUpdateReject::builder()
-        .forceToStandby(false)
         .cause(GMMCause::GprsNotAllowed)
         .build();
     ParsedMessage pm{GMM{std::move(msg)}};

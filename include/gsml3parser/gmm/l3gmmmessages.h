@@ -32,6 +32,7 @@
 
 #include <cstdint>
 #include <ostream>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -45,10 +46,14 @@
 
 namespace gsml3parser {
 
-// ── Attach Request (GSM 24.008 9.4.1) ─────────────────────────────────
-// MS->SGSN: msNetworkCapability(LV) | attachType(4 bits) | CKSN(4 bits) |
-//           drxParam(TV) | mobileIdentity(LV) | oldRoutingAreaID(raw) |
-//           [msRACap(LV)] | [pTMSISignature(TV)] | ...
+// ── Attach Request (TS 44.068 section 9.5) ────────────────────────────
+// MS->SGSN: msNetworkCapability(LV) | attachType(3)|forL3(1) in the high
+// half-octet and gprsCKSN(3)|spare(1) in the low one (one octet) |
+// drxParam(V, two octets, no identifier) | mobileIdentity(LV) |
+// oldRoutingAreaID(V, six octets) | msRACap(LV, mandatory on the wire) |
+// [opaque optional IEs].
+// Unrecognized optional information elements are kept as an opaque
+// sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
 class L3AttachRequest {
     L3MSNetworkCapability mMsNetworkCapability;
@@ -58,8 +63,8 @@ class L3AttachRequest {
     L3DRXParameter mDRXParam;
     L3MobileIdentity mMobileIdentity;
     L3RoutingAreaIdentification mOldRAI;
-    bool mHaveMsRACap{false};
     std::vector<uint8_t> mMsRACap;
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -73,8 +78,8 @@ public:
         L3DRXParameter m_drxParam;
         L3MobileIdentity m_mobileIdentity;
         L3RoutingAreaIdentification m_oldRAI;
-        bool m_haveMsRACap{false};
         std::vector<uint8_t> m_msRACap;
+        std::vector<uint8_t> m_additionalIes;
 
         /// Set MS network capability.
         Builder& msNetworkCapability(L3MSNetworkCapability v) { m_msNetworkCapability = v; return *this; }
@@ -82,7 +87,7 @@ public:
         Builder& attachType(GMMAttachType v) { m_attachType = v; return *this; }
         /// Set forL3 flag.
         Builder& forL3(bool v) { m_forL3 = v; return *this; }
-        /// Set CKSN value.
+        /// Set CKSN value (three bits).
         Builder& cksn(uint8_t v) { mCKSN = v; return *this; }
         /// Set DRX parameter.
         Builder& drxParam(L3DRXParameter v) { m_drxParam = v; return *this; }
@@ -90,8 +95,17 @@ public:
         Builder& mobileIdentity(L3MobileIdentity v) { m_mobileIdentity = v; return *this; }
         /// Set old routing area identification.
         Builder& oldRAI(L3RoutingAreaIdentification v) { m_oldRAI = v; return *this; }
-        /// Set MS radio access capability with flag.
-        Builder& msRACap(std::vector<uint8_t> v) { m_haveMsRACap = true; m_msRACap = std::move(v); return *this; }
+        /// Set MS radio access capability (LV on the wire; the IE is
+        /// mandatory in a valid GMM attach request).
+        Builder& msRACap(std::span<const uint8_t> v) {
+            m_msRACap.assign(v.begin(), v.end());
+            return *this;
+        }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
 
         /// Build the final message.
         [[nodiscard]] L3AttachRequest build() const;
@@ -101,13 +115,15 @@ public:
 
     GMMAttachType attachType() const { return mAttachType; }
     bool forL3() const { return mForL3; }
+    /// Ciphering key sequence number (three bits, TS 44.068).
     uint8_t cksn() const { return mCKSN; }
     const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
     const L3RoutingAreaIdentification& oldRAI() const { return mOldRAI; }
     const L3DRXParameter& drxParam() const { return mDRXParam; }
     const L3MSNetworkCapability& msNetworkCapability() const { return mMsNetworkCapability; }
-    bool hasMsRACap() const { return mHaveMsRACap; }
     const std::vector<uint8_t>& msRACap() const { return mMsRACap; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3AttachRequest> parse(BitReader& br);
@@ -203,13 +219,14 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// ── Attach Reject (GSM 24.008 9.4.4) ──────────────────────────────────
-// SGSN->MS: gmmCause(TLV) | [T3302(TLV)] | [T3346(TLV)]
+// ── Attach Reject (TS 44.068 section 9.5) ─────────────────────────────
+// SGSN->MS: gmmCause(V, one octet) | [opaque optional IEs]
+// Unrecognized optional information elements are kept as an opaque
+// sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
 class L3AttachReject {
     GMMCause mCause{GMMCause::Unspecified};
-    bool mHaveT3302{false};
-    L3T3302Timer mT3302;
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -217,13 +234,15 @@ public:
 
     struct Builder {
         GMMCause m_cause{GMMCause::Unspecified};
-        bool m_haveT3302{false};
-        L3T3302Timer m_t3302;
+        std::vector<uint8_t> m_additionalIes;
 
         /// Set GMM cause.
         Builder& cause(GMMCause v) { m_cause = v; return *this; }
-        /// Set T3302 timer with flag.
-        Builder& t3302(L3T3302Timer v) { m_haveT3302 = true; m_t3302 = v; return *this; }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
 
         /// Build the final message.
         [[nodiscard]] L3AttachReject build() const;
@@ -232,8 +251,8 @@ public:
     static Builder builder();
 
     GMMCause cause() const { return mCause; }
-    bool hasT3302() const { return mHaveT3302; }
-    const L3T3302Timer& t3302() const { return mT3302; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3AttachReject> parse(BitReader& br);
@@ -244,9 +263,13 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// ── Detach Request (GSM 24.008 9.4.5) ─────────────────────────────────
-// MS->SGSN or SGSN->MS: detachType(4 bits) | spare(4) | [PTMSI(TLV)] | [PTMSISignature(TLV)]
-// SGSN->MS additionally: forceToStandby(1)|spare(3) | gmmCause(TLV)
+// ── Detach Request (TS 44.068 section 9.5) ────────────────────────────
+// MS->SGSN or SGSN->MS: detachType(3)|powerOff/forceToStandby(1) in the
+// high half-octet and spare(4) in the low one; then the optional IEs:
+// P-TMSI (TLV, IEI 0x0c) and, in the network-to-MS direction, the GMM
+// cause carried as a type-value pair (IEI 0x25 + one value octet).
+// Unrecognized optional information elements are kept as an opaque
+// sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
 class L3DetachRequest {
     uint8_t mDetachType{0};
@@ -254,7 +277,9 @@ class L3DetachRequest {
     bool mForceToStandby{false};
     bool mHavePTMSI{false};
     L3MobileIdentity mPTMSI;
+    bool mHaveCause{false};
     GMMCause mCause{GMMCause::Unspecified};
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -266,7 +291,9 @@ public:
         bool m_forceToStandby{false};
         bool m_havePTMSI{false};
         L3MobileIdentity m_ptmsi;
+        bool m_haveCause{false};
         GMMCause m_cause{GMMCause::Unspecified};
+        std::vector<uint8_t> m_additionalIes;
 
         /// Set detach type.
         Builder& detachType(uint8_t v) { m_detachType = v; return *this; }
@@ -276,8 +303,13 @@ public:
         Builder& forceToStandby(bool v) { m_forceToStandby = v; return *this; }
         /// Set PTMSI with flag.
         Builder& ptmsi(L3MobileIdentity v) { m_havePTMSI = true; m_ptmsi = std::move(v); return *this; }
-        /// Set GMM cause.
-        Builder& cause(GMMCause v) { m_cause = v; return *this; }
+        /// Set GMM cause with presence flag (type-value pair, IEI 0x25).
+        Builder& cause(GMMCause v) { m_haveCause = true; m_cause = v; return *this; }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
 
         /// Build the final message.
         [[nodiscard]] L3DetachRequest build() const;
@@ -290,7 +322,10 @@ public:
     bool forceToStandby() const { return mForceToStandby; }
     bool hasPTMSI() const { return mHavePTMSI; }
     const L3MobileIdentity& ptmsi() const { return mPTMSI; }
+    bool hasCause() const { return mHaveCause; }
     GMMCause cause() const { return mCause; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3DetachRequest> parse(BitReader& br);
@@ -335,17 +370,21 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// ── Routing Area Update Request (GSM 24.008 9.4.12) ───────────────────
-// MS->SGSN: updateType(4 bits) | CKSN(4 bits) | oldRoutingAreaID(raw) |
-//           [msRACap(LV)] | [oldPTMSISignature(TV)] | ...
+// ── Routing Area Update Request (TS 44.068 section 9.5) ───────────────
+// MS->SGSN: updateType(3)|forL3(1) in the high half-octet and
+// gprsCKSN(3)|spare(1) in the low one (one octet) | oldRoutingAreaID(V,
+// six octets) | msRACap(LV, mandatory on the wire) | [opaque optional
+// IEs].
+// Unrecognized optional information elements are kept as an opaque
+// sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
 class L3RoutingAreaUpdateRequest {
     GMMUpdateType mUpdateType{GMMUpdateType::RAUpdated};
     bool mForL3{false};
     uint8_t mCKSN{0};
     L3RoutingAreaIdentification mOldRAI;
-    bool mHaveMsRACap{false};
     std::vector<uint8_t> mMsRACap;
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -356,19 +395,28 @@ public:
         bool m_forL3{false};
         uint8_t mCKSN{0};
         L3RoutingAreaIdentification m_oldRAI;
-        bool m_haveMsRACap{false};
         std::vector<uint8_t> m_msRACap;
+        std::vector<uint8_t> m_additionalIes;
 
         /// Set update type.
         Builder& updateType(GMMUpdateType v) { m_updateType = v; return *this; }
         /// Set forL3 flag.
         Builder& forL3(bool v) { m_forL3 = v; return *this; }
-        /// Set CKSN value.
+        /// Set CKSN value (three bits).
         Builder& cksn(uint8_t v) { mCKSN = v; return *this; }
         /// Set old routing area identification.
         Builder& oldRAI(L3RoutingAreaIdentification v) { m_oldRAI = v; return *this; }
-        /// Set MS radio access capability with flag.
-        Builder& msRACap(std::vector<uint8_t> v) { m_haveMsRACap = true; m_msRACap = std::move(v); return *this; }
+        /// Set MS radio access capability (LV on the wire; the IE is
+        /// mandatory in a valid GMM routing area update request).
+        Builder& msRACap(std::span<const uint8_t> v) {
+            m_msRACap.assign(v.begin(), v.end());
+            return *this;
+        }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
 
         /// Build the final message.
         [[nodiscard]] L3RoutingAreaUpdateRequest build() const;
@@ -378,10 +426,12 @@ public:
 
     GMMUpdateType updateType() const { return mUpdateType; }
     bool forL3() const { return mForL3; }
+    /// Ciphering key sequence number (three bits, TS 44.068).
     uint8_t cksn() const { return mCKSN; }
     const L3RoutingAreaIdentification& oldRAI() const { return mOldRAI; }
-    bool hasMsRACap() const { return mHaveMsRACap; }
     const std::vector<uint8_t>& msRACap() const { return mMsRACap; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3RoutingAreaUpdateRequest> parse(BitReader& br);
@@ -477,31 +527,30 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// ── Routing Area Update Reject (GSM 24.008 9.4.17) ────────────────────
-// SGSN->MS: forceToStandby(1)|spare(3)|gmmCause(4) - actually cause is TLV
+// ── Routing Area Update Reject (TS 44.068 section 9.5) ────────────────
+// SGSN->MS: gmmCause(V, one octet) | [opaque optional IEs]
+// Unrecognized optional information elements are kept as an opaque
+// sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
 class L3RoutingAreaUpdateReject {
-    bool mForceToStandby{false};
     GMMCause mCause{GMMCause::Unspecified};
-    bool mHaveT3302{false};
-    L3T3302Timer mT3302;
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
     static constexpr int MTI = 0x0b;
 
     struct Builder {
-        bool m_forceToStandby{false};
         GMMCause m_cause{GMMCause::Unspecified};
-        bool m_haveT3302{false};
-        L3T3302Timer m_t3302;
+        std::vector<uint8_t> m_additionalIes;
 
-        /// Set force to standby flag.
-        Builder& forceToStandby(bool v) { m_forceToStandby = v; return *this; }
         /// Set GMM cause.
         Builder& cause(GMMCause v) { m_cause = v; return *this; }
-        /// Set T3302 timer with flag.
-        Builder& t3302(L3T3302Timer v) { m_haveT3302 = true; m_t3302 = v; return *this; }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
 
         /// Build the final message.
         [[nodiscard]] L3RoutingAreaUpdateReject build() const;
@@ -509,10 +558,9 @@ public:
 
     static Builder builder();
 
-    bool forceToStandby() const { return mForceToStandby; }
     GMMCause cause() const { return mCause; }
-    bool hasT3302() const { return mHaveT3302; }
-    const L3T3302Timer& t3302() const { return mT3302; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3RoutingAreaUpdateReject> parse(BitReader& br);
@@ -589,11 +637,14 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// ── Service Reject (GSM 24.008 9.4.22) ────────────────────────────────
-// SGSN->MS: gmmCause(TLV) | [T3346(TLV)]
+// ── Service Reject (TS 44.068 section 9.5) ────────────────────────────
+// SGSN->MS: gmmCause(V, one octet) | [opaque optional IEs]
+// Unrecognized optional information elements are kept as an opaque
+// sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
 class L3ServiceReject {
     GMMCause mCause{GMMCause::Unspecified};
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -601,9 +652,15 @@ public:
 
     struct Builder {
         GMMCause m_cause{GMMCause::Unspecified};
+        std::vector<uint8_t> m_additionalIes;
 
         /// Set GMM cause.
         Builder& cause(GMMCause v) { m_cause = v; return *this; }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
 
         /// Build the final message.
         [[nodiscard]] L3ServiceReject build() const;
@@ -612,6 +669,8 @@ public:
     static Builder builder();
 
     GMMCause cause() const { return mCause; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3ServiceReject> parse(BitReader& br);
@@ -883,12 +942,16 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// ── Authentication And Ciphering Failure (GSM 24.008 9.4.23) ──────────
-// MS->SGSN: gmmCause(TLV) | authenticationFailureParameter(TLV)
+// ── Authentication And Ciphering Failure (TS 44.068 section 9.5) ──────
+// MS->SGSN: gmmCause(V, one octet) | authenticationFailureParameter
+// (TLV, IEI 0x30) | [opaque optional IEs]
+// Unrecognized optional information elements are kept as an opaque
+// sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
 class L3AuthenticationAndCipheringFailure {
     GMMCause mCause{GMMCause::Synch_Failure};
     L3AuthFailureParam mAuthFailureParam;
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -897,11 +960,17 @@ public:
     struct Builder {
         GMMCause m_cause{GMMCause::Synch_Failure};
         L3AuthFailureParam m_authFailureParam;
+        std::vector<uint8_t> m_additionalIes;
 
         /// Set GMM cause.
         Builder& cause(GMMCause v) { m_cause = v; return *this; }
         /// Set authentication failure parameter.
         Builder& authFailureParam(L3AuthFailureParam v) { m_authFailureParam = std::move(v); return *this; }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
 
         /// Build the final message.
         [[nodiscard]] L3AuthenticationAndCipheringFailure build() const;
@@ -911,6 +980,8 @@ public:
 
     GMMCause cause() const { return mCause; }
     const L3AuthFailureParam& authFailureParam() const { return mAuthFailureParam; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3AuthenticationAndCipheringFailure> parse(BitReader& br);

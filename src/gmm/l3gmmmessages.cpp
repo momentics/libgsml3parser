@@ -47,29 +47,35 @@ void writeLVMI(const L3MobileIdentity& mi, BitWriter& bw) {
 
 } // anonymous namespace
 
-// ── L3AttachRequest (GSM 24.008 9.4.1) ────────────────────────────────
+// ── L3AttachRequest (TS 44.068 section 9.5) ───────────────────────────
 
 size_t L3AttachRequest::bodyLength() const {
     size_t len = 0;
     // msNetworkCapability: LV format (length + value)
     len += lvLen(mMsNetworkCapability.lengthV());
-    // attachType(4)|CKSN(4) = 1 octet
+    // attachType(3)|forL3(1) | gprsCKSN(3)|spare(1) = 1 octet
     len += 1;
-    // drxParam: TV (IEI=0x1a, 2 octets value)
-    len += 3;
+    // drxParam: V format (two value octets, no identifier)
+    len += L3DRXParameter::lengthV();
     // mobileIdentity: LV
     len += lvLen(mMobileIdentity.lengthV());
-    // oldRoutingAreaID: raw 6 octets
-    len += 6;
-    // optional msRACap: LV
-    if (mHaveMsRACap) len += lvLen(mMsRACap.size());
+    // oldRoutingAreaID: fixed six value octets
+    len += L3RoutingAreaIdentification::lengthV();
+    // msRACap: LV (mandatory on the wire)
+    len += lvLen(mMsRACap.size());
+    // additional optional IEs, kept opaque
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3AttachRequest> L3AttachRequest::parse(BitReader& br) {
     L3AttachRequest msg;
 
-    // 24.008 9.4.1: msNetworkCapability (LV format)
+    // GMM ATTACH REQUEST (TS 44.068): MS network capability (LV), attach
+    // type + GMM CKSN in one octet, DRX parameter (two value octets, no
+    // IEI), mobile identity (LV), old routing area identity (six value
+    // octets), MS radio access capabilities (LV, mandatory); any further
+    // optional IEs are kept opaque.
     {
         auto len = br.readField(8);
         if (!len) return Expected<L3AttachRequest>::error(len.error());
@@ -78,23 +84,18 @@ Expected<L3AttachRequest> L3AttachRequest::parse(BitReader& br) {
         msg.mMsNetworkCapability = std::move(cap).value();
     }
 
-    // 24.008 10.5.5.19: attachType(3)|forL3(1)|CKSN(3)|spare(1) = 1 octet
+    // attachType(3)|forL3(1) in the high half-octet, gprsCKSN(3)|spare(1)
+    // in the low one.
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3AttachRequest>::error(o.error());
-        msg.mAttachType = static_cast<GMMAttachType>((o.value() >> 5) & 0x07);
-        msg.mForL3 = ((o.value() >> 4) & 0x01) != 0;
-        msg.mCKSN = o.value() & 0x0F;
+        msg.mAttachType = static_cast<GMMAttachType>((o.value() >> 5) & 0x07u);
+        msg.mForL3 = ((o.value() >> 4) & 0x01u) != 0;
+        msg.mCKSN = static_cast<uint8_t>((o.value() >> 1) & 0x07u);
     }
 
-    // 24.008 10.5.5.13: drxParam (TV, IEI=0x1a, 4-bit type + 2 octets value)
+    // drxParam: exactly two value octets, no identifier.
     {
-        auto ieType = br.readField(4);
-        if (!ieType) return Expected<L3AttachRequest>::error(ieType.error());
-        if (ieType.value() != L3DRXParameter::IEI) {
-            return Expected<L3AttachRequest>::error(
-                ParseError{ParseError::Code::InvalidIE, "expected DRX param IEI", br.position() - 4});
-        }
         auto drx = L3DRXParameter::parse(br);
         if (!drx) return Expected<L3AttachRequest>::error(drx.error());
         msg.mDRXParam = std::move(drx).value();
@@ -107,47 +108,33 @@ Expected<L3AttachRequest> L3AttachRequest::parse(BitReader& br) {
         msg.mMobileIdentity = std::move(mi).value();
     }
 
-    // oldRoutingAreaID (raw, 6 octets)
+    // oldRoutingAreaID (fixed six value octets)
     {
         auto rai = L3RoutingAreaIdentification::parse(br);
         if (!rai) return Expected<L3AttachRequest>::error(rai.error());
         msg.mOldRAI = std::move(rai).value();
     }
 
-    // Optional IEs: parse remaining as TLV/TV
-    while (br.hasMore()) {
-        auto ieType = br.peekField(4);
-        uint8_t iei4 = static_cast<uint8_t>(ieType);
-
-        if (iei4 == 0x0F) {
-            // Extended IEI: full byte type
-            auto fullType = br.readField(8);
-            if (!fullType) return Expected<L3AttachRequest>::error(fullType.error());
-            uint8_t iei = static_cast<uint8_t>(fullType.value());
-            // MS Radio Access Capability (LV) - common IE
-            if (iei == 0x62 || iei == 0xe2) {
-                auto len = br.readField(8);
-                if (!len) return Expected<L3AttachRequest>::error(len.error());
-                msg.mHaveMsRACap = true;
-                msg.mMsRACap.resize(len.value());
-                if (len.value() > 0) {
-                    auto r = br.readBytes(msg.mMsRACap.data(), len.value());
-                    if (!r) return Expected<L3AttachRequest>::error(r.error());
-                }
-            } else {
-                // Unknown extended IE: skip
-                auto len = br.readField(8);
-                if (!len) return Expected<L3AttachRequest>::error(len.error());
-                size_t skipBits = len.value() * 8;
-                if (br.position() + skipBits > br.remainingBits() + br.position()) break;
-            }
-        } else if (iei4 == L3DRXParameter::IEI) {
-            // Already parsed, shouldn't appear again
-            break;
-        } else {
-            // Unknown 4-bit IEI
-            break;
+    // msRACap (LV, mandatory on the wire; no identifier)
+    {
+        auto len = br.readField(8);
+        if (!len) return Expected<L3AttachRequest>::error(len.error());
+        size_t vLen = len.value();
+        if (vLen * 8 > br.remainingBits()) {
+            return Expected<L3AttachRequest>::error(
+                ParseError{ParseError::Code::TruncatedInput, "truncated msRACap", br.position() - 8});
         }
+        msg.mMsRACap.resize(vLen);
+        if (vLen > 0) {
+            auto r = br.readBytes(msg.mMsRACap.data(), vLen);
+            if (!r) return Expected<L3AttachRequest>::error(r.error());
+        }
+    }
+
+    // Unrecognized optional IEs are kept opaque and re-emitted verbatim.
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3AttachRequest>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
     }
 
     return Expected<L3AttachRequest>::hold(std::move(msg));
@@ -158,26 +145,24 @@ void L3AttachRequest::write(BitWriter& bw) const {
     bw.writeField(static_cast<uint32_t>(mMsNetworkCapability.lengthV()), 8);
     mMsNetworkCapability.write(bw);
 
-    // attachType(3)|forL3(1)|CKSN(3)|spare(1)
-    bw.writeField(((static_cast<uint8_t>(mAttachType) & 0x07) << 5) |
-                  ((mForL3 ? 1 : 0) << 4) | (mCKSN & 0x0F), 8);
+    // attachType(3)|forL3(1) | gprsCKSN(3)|spare(1)
+    bw.writeField(((static_cast<uint8_t>(mAttachType) & 0x07u) << 5) |
+                  ((mForL3 ? 1u : 0u) << 4) | ((mCKSN & 0x07u) << 1), 8);
 
-    // drxParam: TV (4-bit IEI + value)
-    bw.writeField(L3DRXParameter::IEI, 4);
+    // drxParam: two value octets, no identifier
     mDRXParam.write(bw);
 
     // mobileIdentity: LV
     writeLVMI(mMobileIdentity, bw);
 
-    // oldRoutingAreaID: raw
+    // oldRoutingAreaID: fixed six value octets
     mOldRAI.write(bw);
 
-    // optional msRACap: LV
-    if (mHaveMsRACap) {
-        bw.writeField(0xF0 | 0x62, 8);  // extended IEI
-        bw.writeField(static_cast<uint32_t>(mMsRACap.size()), 8);
-        bw.writeBytes(mMsRACap.data(), mMsRACap.size());
-    }
+    // msRACap: LV (mandatory on the wire)
+    bw.writeField(static_cast<uint32_t>(mMsRACap.size()), 8);
+    if (!mMsRACap.empty()) bw.writeBytes(mMsRACap.data(), mMsRACap.size());
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3AttachRequest::text(std::ostream& os) const {
@@ -186,7 +171,7 @@ void L3AttachRequest::text(std::ostream& os) const {
         case GMMAttachType::GPRSAttach: os << "GPRS"; break;
         case GMMAttachType::CombinedGPRSAndIMSIAttach: os << "Combined"; break;
     }
-    os << ",CKSN=" << (mCKSN >> 1 & 0x07) << ",forL3=" << mForL3 << ")";
+    os << ",CKSN=" << static_cast<int>(mCKSN) << ",forL3=" << mForL3 << ")";
     mMobileIdentity.text(os);
 }
 
@@ -195,12 +180,12 @@ L3AttachRequest L3AttachRequest::Builder::build() const {
     msg.mMsNetworkCapability = m_msNetworkCapability;
     msg.mAttachType = m_attachType;
     msg.mForL3 = m_forL3;
-    msg.mCKSN = mCKSN;
+    msg.mCKSN = static_cast<uint8_t>(mCKSN & 0x07u);
     msg.mDRXParam = m_drxParam;
     msg.mMobileIdentity = m_mobileIdentity;
     msg.mOldRAI = m_oldRAI;
-    msg.mHaveMsRACap = m_haveMsRACap;
     msg.mMsRACap = m_msRACap;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -325,53 +310,34 @@ L3AttachComplete::Builder L3AttachComplete::builder() {
     return Builder{};
 }
 
-// ── L3AttachReject (GSM 24.008 9.4.4) ────────────────────────────────
+// ── L3AttachReject (TS 44.068 section 9.5) ────────────────────────────
 
 size_t L3AttachReject::bodyLength() const {
-    size_t len = tlvLen(1); // gmmCause TLV
-    if (mHaveT3302) len += tlvLen(1);
-    return len;
+    // gmmCause (one value octet) + opaque optional IEs
+    return 1 + mAdditionalIes.size();
 }
 
 Expected<L3AttachReject> L3AttachReject::parse(BitReader& br) {
     L3AttachReject msg;
 
-    while (br.hasMore()) {
-        auto type = br.readField(8);
-        if (!type) return Expected<L3AttachReject>::error(type.error());
-        uint8_t rawType = static_cast<uint8_t>(type.value());
-        uint8_t iei = rawType & 0x7F;
+    // The body starts with the GMM cause as a single value octet carried
+    // without an identifier (TS 44.068 section 9.5).
+    auto r = br.readField(8);
+    if (!r) return Expected<L3AttachReject>::error(r.error());
+    msg.mCause = static_cast<GMMCause>(r.value());
 
-        auto len = br.readField(8);
-        if (!len) return Expected<L3AttachReject>::error(len.error());
-        size_t vLen = len.value();
-
-        if (iei == L3GMMCauseIE::IEI && vLen >= 1) {
-            auto cause = br.readField(8);
-            if (cause) msg.mCause = static_cast<GMMCause>(cause.value());
-        } else if (iei == L3T3302Timer::IEI && vLen >= 1) {
-            auto t = br.readField(8);
-            if (t) {
-                msg.mHaveT3302 = true;
-                msg.mT3302 = L3T3302Timer{static_cast<uint8_t>(t.value())};
-            }
-        } else {
-            // Skip unknown
-        }
+    // Unrecognized optional IEs are kept opaque and re-emitted verbatim.
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3AttachReject>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
     }
 
     return Expected<L3AttachReject>::hold(std::move(msg));
 }
 
 void L3AttachReject::write(BitWriter& bw) const {
-    bw.writeField(0x80 | L3GMMCauseIE::IEI, 8);
-    bw.writeField(1, 8);
     bw.writeField(static_cast<uint8_t>(mCause), 8);
-    if (mHaveT3302) {
-        bw.writeField(0x80 | L3T3302Timer::IEI, 8);
-        bw.writeField(1, 8);
-        bw.writeField(mT3302.value(), 8);
-    }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3AttachReject::text(std::ostream& os) const {
@@ -381,8 +347,7 @@ void L3AttachReject::text(std::ostream& os) const {
 L3AttachReject L3AttachReject::Builder::build() const {
     L3AttachReject msg;
     msg.mCause = m_cause;
-    msg.mHaveT3302 = m_haveT3302;
-    msg.mT3302 = m_t3302;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -390,10 +355,14 @@ L3AttachReject::Builder L3AttachReject::builder() {
     return Builder{};
 }
 
-// ── L3DetachRequest (GSM 24.008 9.4.5) ───────────────────────────────
+// ── L3DetachRequest (TS 44.068 section 9.5) ───────────────────────────
 
 size_t L3DetachRequest::bodyLength() const {
-    return 1; // detachType(4)|spare(4)
+    size_t len = 1; // detachType(3)|powerOff/forceToStandby(1)|spare(4)
+    if (mHavePTMSI) len += tlvLen(mPTMSI.lengthV());
+    if (mHaveCause) len += 2; // gmmCause TV: IEI + one value octet
+    len += mAdditionalIes.size();
+    return len;
 }
 
 Expected<L3DetachRequest> L3DetachRequest::parse(BitReader& br) {
@@ -401,37 +370,54 @@ Expected<L3DetachRequest> L3DetachRequest::parse(BitReader& br) {
 
     auto o = br.readField(8);
     if (!o) return Expected<L3DetachRequest>::error(o.error());
-    msg.mDetachType = (o.value() >> 4) & 0x07;
-    msg.mPowerOff = (o.value() & 0x08) != 0;
+    msg.mDetachType = (o.value() >> 4) & 0x07u;
+    msg.mPowerOff = ((o.value() >> 3) & 0x01u) != 0;
 
-    // Optional IEs
+    // Optional IEs: the P-TMSI as a TLV (IEI 0x0c + LV value) and, in the
+    // network-to-MS direction, the GMM cause as a type-value pair (IEI 0x25
+    // + one value octet); any other IE is kept opaque (TS 44.068).
     while (br.hasMore()) {
-        auto type = br.readField(8);
-        if (!type) return Expected<L3DetachRequest>::error(type.error());
-        uint8_t rawType = static_cast<uint8_t>(type.value());
-        uint8_t iei = rawType & 0x7F;
-
-        auto len = br.readField(8);
-        if (!len) return Expected<L3DetachRequest>::error(len.error());
-        size_t vLen = len.value();
-
-        if (iei == 0x0c && vLen >= 2) {
-            auto mi = L3MobileIdentity::parse(br, vLen);
-            if (mi) {
-                msg.mHavePTMSI = true;
-                msg.mPTMSI = std::move(mi).value();
-            }
-        } else if (iei == L3GMMCauseIE::IEI && vLen >= 1) {
+        uint8_t raw = static_cast<uint8_t>(br.peekField(8));
+        if ((raw & 0x7Fu) == 0x0Cu) {
+            auto type = br.readField(8);
+            if (!type) return Expected<L3DetachRequest>::error(type.error());
+            auto len = br.readField(8);
+            if (!len) return Expected<L3DetachRequest>::error(len.error());
+            auto mi = L3MobileIdentity::parse(br, len.value());
+            if (!mi) return Expected<L3DetachRequest>::error(mi.error());
+            msg.mHavePTMSI = true;
+            msg.mPTMSI = std::move(mi).value();
+        } else if ((raw & 0x7Fu) == 0x25u) {
+            auto type = br.readField(8);
+            if (!type) return Expected<L3DetachRequest>::error(type.error());
             auto cause = br.readField(8);
-            if (cause) msg.mCause = static_cast<GMMCause>(cause.value());
+            if (!cause) return Expected<L3DetachRequest>::error(cause.error());
+            msg.mHaveCause = true;
+            msg.mCause = static_cast<GMMCause>(cause.value());
+        } else {
+            break; // unknown IE: the remainder is kept opaque
         }
+    }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3DetachRequest>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
     }
 
     return Expected<L3DetachRequest>::hold(std::move(msg));
 }
 
 void L3DetachRequest::write(BitWriter& bw) const {
-    bw.writeField((mDetachType << 4) | (mPowerOff ? 0x08 : 0), 8);
+    bw.writeField(((mDetachType & 0x07u) << 4) | (mPowerOff ? 0x08u : 0u), 8);
+    if (mHavePTMSI) {
+        bw.writeField(0x0Cu, 8);
+        bw.writeField(static_cast<uint32_t>(mPTMSI.lengthV()), 8);
+        mPTMSI.write(bw);
+    }
+    if (mHaveCause) {
+        bw.writeField(0x25u, 8);
+        bw.writeField(static_cast<uint8_t>(mCause), 8);
+    }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3DetachRequest::text(std::ostream& os) const {
@@ -445,7 +431,9 @@ L3DetachRequest L3DetachRequest::Builder::build() const {
     msg.mForceToStandby = m_forceToStandby;
     msg.mHavePTMSI = m_havePTMSI;
     msg.mPTMSI = m_ptmsi;
+    msg.mHaveCause = m_haveCause;
     msg.mCause = m_cause;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -486,67 +474,70 @@ L3DetachAccept::Builder L3DetachAccept::builder() {
     return Builder{};
 }
 
-// ── L3RoutingAreaUpdateRequest (GSM 24.008 9.4.12) ───────────────────
+// ── L3RoutingAreaUpdateRequest (TS 44.068 section 9.5) ────────────────
 
 size_t L3RoutingAreaUpdateRequest::bodyLength() const {
-    size_t len = 1; // updateType|CKSN
-    len += 6;       // oldRoutingAreaID (raw)
-    if (mHaveMsRACap) len += lvLen(mMsRACap.size());
+    size_t len = 1; // updateType(3)|forL3(1) | gprsCKSN(3)|spare(1)
+    len += L3RoutingAreaIdentification::lengthV(); // oldRoutingAreaID (six value octets)
+    len += lvLen(mMsRACap.size());                 // msRACap LV (mandatory on the wire)
+    len += mAdditionalIes.size();                  // opaque optional IEs
     return len;
 }
 
 Expected<L3RoutingAreaUpdateRequest> L3RoutingAreaUpdateRequest::parse(BitReader& br) {
     L3RoutingAreaUpdateRequest msg;
 
-    // 24.008 9.4.12: updateType(3)|forL3(1)|CKSN(3)|spare(1) = 1 octet
+    // GMM ROUTING AREA UPDATE REQUEST (TS 44.068): update type + forL3 in
+    // the high half-octet and the GMM CKSN in bits 3:1 of the first octet,
+    // old routing area identity (six value octets), MS radio access
+    // capabilities (LV, mandatory); any further optional IEs are kept opaque.
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3RoutingAreaUpdateRequest>::error(o.error());
-        msg.mUpdateType = static_cast<GMMUpdateType>((o.value() >> 5) & 0x07);
-        msg.mForL3 = ((o.value() >> 4) & 0x01) != 0;
-        msg.mCKSN = o.value() & 0x0F;
+        msg.mUpdateType = static_cast<GMMUpdateType>((o.value() >> 5) & 0x07u);
+        msg.mForL3 = ((o.value() >> 4) & 0x01u) != 0;
+        msg.mCKSN = static_cast<uint8_t>((o.value() >> 1) & 0x07u);
     }
 
-    // oldRoutingAreaID (raw, 6 octets)
+    // oldRoutingAreaID (fixed six value octets)
     {
         auto rai = L3RoutingAreaIdentification::parse(br);
         if (!rai) return Expected<L3RoutingAreaUpdateRequest>::error(rai.error());
         msg.mOldRAI = std::move(rai).value();
     }
 
-    // Optional IEs
-    while (br.hasMore()) {
-        auto type = br.readField(8);
-        if (!type) return Expected<L3RoutingAreaUpdateRequest>::error(type.error());
-        uint8_t rawType = static_cast<uint8_t>(type.value());
-        uint8_t iei = rawType & 0x7F;
-
+    // msRACap (LV, mandatory on the wire; no identifier)
+    {
         auto len = br.readField(8);
         if (!len) return Expected<L3RoutingAreaUpdateRequest>::error(len.error());
         size_t vLen = len.value();
-
-        if (iei == 0x62 || iei == 0xe2) {
-            msg.mHaveMsRACap = true;
-            msg.mMsRACap.resize(vLen);
-            if (vLen > 0) {
-                auto r = br.readBytes(msg.mMsRACap.data(), vLen);
-                if (!r) return Expected<L3RoutingAreaUpdateRequest>::error(r.error());
-            }
+        if (vLen * 8 > br.remainingBits()) {
+            return Expected<L3RoutingAreaUpdateRequest>::error(
+                ParseError{ParseError::Code::TruncatedInput, "truncated msRACap", br.position() - 8});
         }
+        msg.mMsRACap.resize(vLen);
+        if (vLen > 0) {
+            auto r = br.readBytes(msg.mMsRACap.data(), vLen);
+            if (!r) return Expected<L3RoutingAreaUpdateRequest>::error(r.error());
+        }
+    }
+
+    // Unrecognized optional IEs are kept opaque and re-emitted verbatim.
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3RoutingAreaUpdateRequest>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
     }
 
     return Expected<L3RoutingAreaUpdateRequest>::hold(std::move(msg));
 }
 
 void L3RoutingAreaUpdateRequest::write(BitWriter& bw) const {
-    bw.writeField(((static_cast<uint8_t>(mUpdateType) & 0x07) << 5) |
-                  ((mForL3 ? 1 : 0) << 4) | (mCKSN & 0x0F), 8);
+    bw.writeField(((static_cast<uint8_t>(mUpdateType) & 0x07u) << 5) |
+                  ((mForL3 ? 1u : 0u) << 4) | ((mCKSN & 0x07u) << 1), 8);
     mOldRAI.write(bw);
-    if (mHaveMsRACap) {
-        bw.writeField(0x80 | 0x62, 8);
-        bw.writeField(static_cast<uint32_t>(mMsRACap.size()), 8);
-        bw.writeBytes(mMsRACap.data(), mMsRACap.size());
-    }
+    bw.writeField(static_cast<uint32_t>(mMsRACap.size()), 8);
+    if (!mMsRACap.empty()) bw.writeBytes(mMsRACap.data(), mMsRACap.size());
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3RoutingAreaUpdateRequest::text(std::ostream& os) const {
@@ -557,17 +548,17 @@ void L3RoutingAreaUpdateRequest::text(std::ostream& os) const {
         case GMMUpdateType::CombinedRALAWithImsiAttach: os << "CombinedRA-LA-IMSI"; break;
         case GMMUpdateType::PeriodicUpdating: os << "Periodic"; break;
     }
-    os << ",CKSN=" << (mCKSN >> 1 & 0x07) << ")";
+    os << ",CKSN=" << static_cast<int>(mCKSN) << ")";
 }
 
 L3RoutingAreaUpdateRequest L3RoutingAreaUpdateRequest::Builder::build() const {
     L3RoutingAreaUpdateRequest msg;
     msg.mUpdateType = m_updateType;
     msg.mForL3 = m_forL3;
-    msg.mCKSN = mCKSN;
+    msg.mCKSN = static_cast<uint8_t>(mCKSN & 0x07u);
     msg.mOldRAI = m_oldRAI;
-    msg.mHaveMsRACap = m_haveMsRACap;
     msg.mMsRACap = m_msRACap;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -682,51 +673,34 @@ L3RoutingAreaUpdateComplete::Builder L3RoutingAreaUpdateComplete::builder() {
     return Builder{};
 }
 
-// ── L3RoutingAreaUpdateReject (GSM 24.008 9.4.17) ────────────────────
+// ── L3RoutingAreaUpdateReject (TS 44.068 section 9.5) ─────────────────
 
 size_t L3RoutingAreaUpdateReject::bodyLength() const {
-    size_t len = tlvLen(1); // gmmCause TLV
-    if (mHaveT3302) len += tlvLen(1);
-    return len;
+    // gmmCause (one value octet) + opaque optional IEs
+    return 1 + mAdditionalIes.size();
 }
 
 Expected<L3RoutingAreaUpdateReject> L3RoutingAreaUpdateReject::parse(BitReader& br) {
     L3RoutingAreaUpdateReject msg;
 
-    while (br.hasMore()) {
-        auto type = br.readField(8);
-        if (!type) return Expected<L3RoutingAreaUpdateReject>::error(type.error());
-        uint8_t rawType = static_cast<uint8_t>(type.value());
-        uint8_t iei = rawType & 0x7F;
+    // The body starts with the GMM cause as a single value octet carried
+    // without an identifier (TS 44.068 section 9.5).
+    auto r = br.readField(8);
+    if (!r) return Expected<L3RoutingAreaUpdateReject>::error(r.error());
+    msg.mCause = static_cast<GMMCause>(r.value());
 
-        auto len = br.readField(8);
-        if (!len) return Expected<L3RoutingAreaUpdateReject>::error(len.error());
-        size_t vLen = len.value();
-
-        if (iei == L3GMMCauseIE::IEI && vLen >= 1) {
-            auto cause = br.readField(8);
-            if (cause) msg.mCause = static_cast<GMMCause>(cause.value());
-        } else if (iei == L3T3302Timer::IEI && vLen >= 1) {
-            auto t = br.readField(8);
-            if (t) {
-                msg.mHaveT3302 = true;
-                msg.mT3302 = L3T3302Timer{static_cast<uint8_t>(t.value())};
-            }
-        }
+    // Unrecognized optional IEs are kept opaque and re-emitted verbatim.
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3RoutingAreaUpdateReject>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
     }
 
     return Expected<L3RoutingAreaUpdateReject>::hold(std::move(msg));
 }
 
 void L3RoutingAreaUpdateReject::write(BitWriter& bw) const {
-    bw.writeField(0x80 | L3GMMCauseIE::IEI, 8);
-    bw.writeField(1, 8);
     bw.writeField(static_cast<uint8_t>(mCause), 8);
-    if (mHaveT3302) {
-        bw.writeField(0x80 | L3T3302Timer::IEI, 8);
-        bw.writeField(1, 8);
-        bw.writeField(mT3302.value(), 8);
-    }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3RoutingAreaUpdateReject::text(std::ostream& os) const {
@@ -735,10 +709,8 @@ void L3RoutingAreaUpdateReject::text(std::ostream& os) const {
 
 L3RoutingAreaUpdateReject L3RoutingAreaUpdateReject::Builder::build() const {
     L3RoutingAreaUpdateReject msg;
-    msg.mForceToStandby = m_forceToStandby;
     msg.mCause = m_cause;
-    msg.mHaveT3302 = m_haveT3302;
-    msg.mT3302 = m_t3302;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -816,36 +788,34 @@ L3ServiceAccept::Builder L3ServiceAccept::builder() {
     return Builder{};
 }
 
-// ── L3ServiceReject (GSM 24.008 9.4.22) ──────────────────────────────
+// ── L3ServiceReject (TS 44.068 section 9.5) ───────────────────────────
 
 size_t L3ServiceReject::bodyLength() const {
-    return tlvLen(1); // gmmCause TLV
+    // gmmCause (one value octet) + opaque optional IEs
+    return 1 + mAdditionalIes.size();
 }
 
 Expected<L3ServiceReject> L3ServiceReject::parse(BitReader& br) {
     L3ServiceReject msg;
 
-    while (br.hasMore()) {
-        auto type = br.readField(8);
-        if (!type) return Expected<L3ServiceReject>::error(type.error());
-        uint8_t iei = type.value() & 0x7F;
+    // The body starts with the GMM cause as a single value octet carried
+    // without an identifier (TS 44.068 section 9.5).
+    auto r = br.readField(8);
+    if (!r) return Expected<L3ServiceReject>::error(r.error());
+    msg.mCause = static_cast<GMMCause>(r.value());
 
-        auto len = br.readField(8);
-        if (!len) return Expected<L3ServiceReject>::error(len.error());
-
-        if (iei == L3GMMCauseIE::IEI && len.value() >= 1) {
-            auto cause = br.readField(8);
-            if (cause) msg.mCause = static_cast<GMMCause>(cause.value());
-        }
+    // Unrecognized optional IEs are kept opaque and re-emitted verbatim.
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ServiceReject>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
     }
 
     return Expected<L3ServiceReject>::hold(std::move(msg));
 }
 
 void L3ServiceReject::write(BitWriter& bw) const {
-    bw.writeField(0x80 | L3GMMCauseIE::IEI, 8);
-    bw.writeField(1, 8);
     bw.writeField(static_cast<uint8_t>(mCause), 8);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ServiceReject::text(std::ostream& os) const {
@@ -855,6 +825,7 @@ void L3ServiceReject::text(std::ostream& os) const {
 L3ServiceReject L3ServiceReject::Builder::build() const {
     L3ServiceReject msg;
     msg.mCause = m_cause;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1167,52 +1138,51 @@ L3GMMIdentityResponse::Builder L3GMMIdentityResponse::builder() {
     return Builder{};
 }
 
-// ── L3AuthenticationAndCipheringFailure (GSM 24.008 9.4.23) ───────────
+// ── L3AuthenticationAndCipheringFailure (TS 44.068 section 9.5) ───────
 
 size_t L3AuthenticationAndCipheringFailure::bodyLength() const {
-    size_t len = tlvLen(1); // gmmCause
-    len += tlvLen(mAuthFailureParam.lengthV()); // authenticationFailureParameter
-    return len;
+    // gmmCause (one value octet) + authenticationFailureParameter TLV
+    return 1 + tlvLen(mAuthFailureParam.lengthV()) + mAdditionalIes.size();
 }
 
 Expected<L3AuthenticationAndCipheringFailure> L3AuthenticationAndCipheringFailure::parse(BitReader& br) {
     L3AuthenticationAndCipheringFailure msg;
 
-    while (br.hasMore()) {
-        auto type = br.readField(8);
-        if (!type) return Expected<L3AuthenticationAndCipheringFailure>::error(type.error());
-        uint8_t iei = type.value() & 0x7F;
+    // The body starts with the GMM cause as a single value octet carried
+    // without an identifier (TS 44.068 section 9.5).
+    auto r = br.readField(8);
+    if (!r) return Expected<L3AuthenticationAndCipheringFailure>::error(r.error());
+    msg.mCause = static_cast<GMMCause>(r.value());
 
-        auto len = br.readField(8);
-        if (!len) return Expected<L3AuthenticationAndCipheringFailure>::error(len.error());
-        size_t vLen = len.value();
-
-        if (iei == L3GMMCauseIE::IEI && vLen >= 1) {
-            auto cause = br.readField(8);
-            if (cause) msg.mCause = static_cast<GMMCause>(cause.value());
-        } else if (iei == L3AuthFailureParam::IEI) {
-            // Parse AUTS with known length
-            msg.mAuthFailureParam.mAUTS.resize(vLen);
-            if (vLen > 0) {
-                auto r = br.readBytes(msg.mAuthFailureParam.mAUTS.data(), vLen);
-                if (!r) return Expected<L3AuthenticationAndCipheringFailure>::error(r.error());
-            }
+    // authenticationFailureParameter (TLV, IEI 0x30), when present.
+    if (br.hasMore()) {
+        uint8_t raw = static_cast<uint8_t>(br.peekField(8));
+        if ((raw & 0x7Fu) == L3AuthFailureParam::IEI) {
+            auto type = br.readField(8);
+            if (!type) return Expected<L3AuthenticationAndCipheringFailure>::error(type.error());
+            auto param = L3AuthFailureParam::parse(br);
+            if (!param) return Expected<L3AuthenticationAndCipheringFailure>::error(param.error());
+            msg.mAuthFailureParam = std::move(param).value();
         }
+    }
+
+    // Unrecognized optional IEs are kept opaque and re-emitted verbatim.
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3AuthenticationAndCipheringFailure>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
     }
 
     return Expected<L3AuthenticationAndCipheringFailure>::hold(std::move(msg));
 }
 
 void L3AuthenticationAndCipheringFailure::write(BitWriter& bw) const {
-    bw.writeField(0x80 | L3GMMCauseIE::IEI, 8);
-    bw.writeField(1, 8);
     bw.writeField(static_cast<uint8_t>(mCause), 8);
 
-    bw.writeField(0x80 | L3AuthFailureParam::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(mAuthFailureParam.mAUTS.size()), 8);
-    if (!mAuthFailureParam.mAUTS.empty()) {
-        bw.writeBytes(mAuthFailureParam.mAUTS.data(), mAuthFailureParam.mAUTS.size());
-    }
+    // authenticationFailureParameter: IEI octet + length + AUTS value.
+    bw.writeField(L3AuthFailureParam::IEI, 8);
+    mAuthFailureParam.write(bw);
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3AuthenticationAndCipheringFailure::text(std::ostream& os) const {
@@ -1223,6 +1193,7 @@ L3AuthenticationAndCipheringFailure L3AuthenticationAndCipheringFailure::Builder
     L3AuthenticationAndCipheringFailure msg;
     msg.mCause = m_cause;
     msg.mAuthFailureParam = m_authFailureParam;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
