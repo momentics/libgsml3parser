@@ -47,6 +47,7 @@ TEST(FrameLengths, TableMatchesMessageDefinitions) {
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3AssignmentComplete::MTI), 2 + L3AssignmentComplete{}.bodyLength()) << "Assignment Complete";
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3HandoverComplete::MTI), 2 + L3HandoverComplete{}.bodyLength()) << "Handover Complete";
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3AssignmentFailure::MTI), 2 + L3AssignmentFailure{}.bodyLength()) << "Assignment Failure";
+    EXPECT_EQ(detail::fixedFrameLength(0x06, L3CipheringModeCommand::MTI), 2 + L3CipheringModeCommand{}.bodyLength()) << "Ciphering Mode Command";
     EXPECT_EQ(detail::fixedFrameLength(0x05, L3CMServiceAccept::MTI), 2 + L3CMServiceAccept{}.bodyLength()) << "CM Service Accept";
     // L3CMServiceReject has no default ctor (explicit cause ctor), so build
     // a default-cause instance; bodyLength() is a constant 1 regardless.
@@ -93,6 +94,7 @@ TEST(FrameLengths, NormativeFixedLengthTable) {
     EXPECT_EQ(detail::fixedFrameLength(0x06, 0x29), 3u); // Assignment Complete (cause)
     EXPECT_EQ(detail::fixedFrameLength(0x06, 0x2C), 3u); // Handover Complete (cause)
     EXPECT_EQ(detail::fixedFrameLength(0x06, 0x2F), 3u); // Assignment Failure (cause)
+    EXPECT_EQ(detail::fixedFrameLength(0x06, 0x35), 3u); // Ciphering Mode Command (1-byte body)
     // Mobility Management (TS 24.008).
     EXPECT_EQ(detail::fixedFrameLength(0x05, 0x21), 2u); // CM Service Accept (no value part)
     EXPECT_EQ(detail::fixedFrameLength(0x05, 0x22), 3u); // CM Service Reject (cause)

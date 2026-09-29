@@ -175,24 +175,26 @@ enum class GSMAlphabet : uint8_t {
 
 std::ostream& operator<<(std::ostream& os, GSMAlphabet alphabet);
 
-// Type And Offset for L3ChannelDescription - GSM 04.08 10.5.2.5
-// Encodes channel type (3 bits) and TDMA offset (2 bits).
+// Channel type and offset (five bits) shared by the RR channel description
+// (TS 44.018 section 9.2.3) and the RSL channel number (TS 48.058 9.3.1).
 enum TypeAndOffset : uint8_t {
-    TDMA_SACCH  = 0,
-    TDMA_SDCCH  = 1,
-    TDMA_TCHF   = 2,
-    TDMA_TCHH   = 3,
-    TDMA_CBCH   = 4,
-    TDMA_PDTCH  = 5,
-    TDMA_PACCCH = 6,
-    TDMA_PAGCH  = 7,
-    TDMA_PCCCH  = 8,
-    TDMA_PNCH   = 9,
-    TDMA_PRACH  = 10,
-    TDMA_PTCCH  = 11,
-    TDMA_PDCH   = 12,
-    TDMA_PACCH  = 13,
-    TDMA_MISC   = 15
+    TDMA_MISC       = 0,   ///< '00000' invalid; also the not-initialized value
+    TDMA_Bm_ACCH    = 1,   ///< '00001' TCH/F or TCH/H ACCH (Bm)
+    TDMA_LM_0 = 2,  TDMA_LM_1 = 3,          ///< '0001s' Lm sub-slot
+    TDMA_SDCCH4_0 = 4, TDMA_SDCCH4_1 = 5, TDMA_SDCCH4_2 = 6, TDMA_SDCCH4_3 = 7,
+    TDMA_SDCCH8_0 = 8,  TDMA_SDCCH8_1 = 9,  TDMA_SDCCH8_2 = 10, TDMA_SDCCH8_3 = 11,
+    TDMA_SDCCH8_4 = 12, TDMA_SDCCH8_5 = 13, TDMA_SDCCH8_6 = 14, TDMA_SDCCH8_7 = 15,
+    TDMA_BCCH     = 16,  TDMA_RACH = 17,  TDMA_PCH_AGCH = 18,
+    TDMA_PDCH     = 24,  TDMA_CBCH4 = 25, TDMA_CBCH8 = 26,
+    TDMA_VAMOS_BM = 29,
+    TDMA_VAMOS_LM_0 = 30, TDMA_VAMOS_LM_1 = 31
 };
+
+/// Five-bit channel code for an Lm (half-rate) sub-slot.
+constexpr uint8_t channelCodeLm(unsigned sub)    noexcept { return static_cast<uint8_t>(0x02u | (sub & 0x01u)); }
+/// Five-bit channel code for an SDCCH/4 sub-slot.
+constexpr uint8_t channelCodeSdcch4(unsigned sub)noexcept { return static_cast<uint8_t>(0x04u | (sub & 0x03u)); }
+/// Five-bit channel code for an SDCCH/8 sub-slot.
+constexpr uint8_t channelCodeSdcch8(unsigned sub)noexcept { return static_cast<uint8_t>(0x08u | (sub & 0x07u)); }
 
 } // namespace gsml3parser

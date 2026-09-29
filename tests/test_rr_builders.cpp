@@ -34,7 +34,7 @@ TEST(RRBuilders, ImmediateAssignment_FullFields) {
         .pageMode(L3PageMode(0))
         .dedicatedModeOrTBF(L3DedicatedModeOrTBF(false, false))
         .requestReference(L3RequestReference(1, 2, 3, 4))
-        .channelDescription(L3ChannelDescription(TDMA_SDCCH, 0, 1, 100))
+        .channelDescription(L3ChannelDescription(TDMA_SDCCH8_0, 0, 1, 100))
         .timingAdvance(L3TimingAdvance(32))
         .build();
     ParsedMessage pm{RRM{std::move(msg)}};
@@ -53,7 +53,7 @@ TEST(RRBuilders, ImmediateAssignment_FullFields) {
 // GSM 04.08 9.1.19: Immediate Assignment (minimal)
 TEST(RRBuilders, ImmediateAssignment_Minimal) {
     auto msg = L3ImmediateAssignment::builder()
-        .channelDescription(L3ChannelDescription(TDMA_TCHF, 1, 0, 50))
+        .channelDescription(L3ChannelDescription(TDMA_Bm_ACCH, 1, 0, 50))
         .build();
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
@@ -90,7 +90,7 @@ TEST(RRBuilders, PhysicalInformation_TA42) {
 // GSM 04.08 9.1.18: Immediate Assignment Extended
 TEST(RRBuilders, ImmediateAssignmentExtended_WithAdditionalChannel) {
     auto msg = L3ImmediateAssignmentExtended::builder()
-        .channelDescription(L3ChannelDescription(TDMA_SDCCH, 0, 1, 100))
+        .channelDescription(L3ChannelDescription(TDMA_SDCCH8_0, 0, 1, 100))
         .timingAdvance(L3TimingAdvance(64))
         .build();
     ParsedMessage pm{RRM{std::move(msg)}};
@@ -103,7 +103,7 @@ TEST(RRBuilders, ImmediateAssignmentExtended_WithAdditionalChannel) {
 // GSM 04.08 9.1.2: Assignment Command
 TEST(RRBuilders, AssignmentCommand_Full) {
     auto msg = L3AssignmentCommand::builder()
-        .channel(L3ChannelDescription(TDMA_TCHF, 1, 0, 50))
+        .channel(L3ChannelDescription(TDMA_Bm_ACCH, 1, 0, 50))
         .powerCommand(L3PowerCommand())
         .build();
     ParsedMessage pm{RRM{std::move(msg)}};
@@ -117,7 +117,7 @@ TEST(RRBuilders, AssignmentCommand_Full) {
 TEST(RRBuilders, HandoverCommand_Full) {
     auto msg = L3HandoverCommand::builder()
         .cellDescription(L3CellDescription())
-        .channelDescriptionAfter(L3ChannelDescription2(TDMA_TCHF, 1, 0, 50))
+        .channelDescriptionAfter(L3ChannelDescription2(TDMA_Bm_ACCH, 1, 0, 50))
         .handoverReference(L3HandoverReference())
         .powerCommandAccessType(L3PowerCommandAndAccessType())
         .syncIndication(L3SynchronizationIndication())
@@ -296,7 +296,7 @@ TEST(RRBuilders, CipheringModeComplete_Empty) {
 // GSM 04.08 9.1.5: Channel Mode Modify
 TEST(RRBuilders, ChannelModeModify_Full) {
     auto msg = L3ChannelModeModify::builder()
-        .description(L3ChannelDescription(TDMA_TCHF, 1, 0, 50))
+        .description(L3ChannelDescription(TDMA_Bm_ACCH, 1, 0, 50))
         .mode(L3ChannelMode(L3ChannelMode::SpeechV1))
         .build();
     ParsedMessage pm{RRM{std::move(msg)}};
@@ -309,7 +309,7 @@ TEST(RRBuilders, ChannelModeModify_Full) {
 // GSM 04.08 9.1.6: Channel Mode Modify Acknowledge
 TEST(RRBuilders, ChannelModeModifyAcknowledge_Full) {
     auto msg = L3ChannelModeModifyAcknowledge::builder()
-        .description(L3ChannelDescription(TDMA_TCHF, 1, 0, 50))
+        .description(L3ChannelDescription(TDMA_Bm_ACCH, 1, 0, 50))
         .mode(L3ChannelMode(L3ChannelMode::SpeechV1))
         .build();
     ParsedMessage pm{RRM{std::move(msg)}};
@@ -322,7 +322,7 @@ TEST(RRBuilders, ChannelModeModifyAcknowledge_Full) {
 // GSM 04.08 9.1.1: Additional Assignment
 TEST(RRBuilders, AdditionalAssignment_WithPowerCommand) {
     auto msg = L3AdditionalAssignment::builder()
-        .additionalChannel(L3AdditionalChannelDescription(TDMA_SDCCH, 0, 1, 100))
+        .additionalChannel(L3AdditionalChannelDescription(TDMA_SDCCH8_0, 0, 1, 100))
         .powerCommand(L3PowerCommand())
         .build();
     ParsedMessage pm{RRM{std::move(msg)}};
@@ -341,7 +341,7 @@ TEST(RRBuilders, AdditionalAssignment_WithPowerCommand) {
 // GSM 04.08 9.1.4: Configuration Change Command
 TEST(RRBuilders, ConfigurationChangeCommand_WithChanDesc) {
     auto msg = L3ConfigurationChangeCommand::builder()
-        .channelDescription(L3ChannelDescription(TDMA_TCHF, 1, 0, 50))
+        .channelDescription(L3ChannelDescription(TDMA_Bm_ACCH, 1, 0, 50))
         .build();
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
@@ -381,7 +381,7 @@ TEST(RRBuilders, ConfigurationChangeReject_Cause) {
 // GSM 04.08 9.1.8: Partial Release
 TEST(RRBuilders, PartialRelease_WithChanDesc) {
     auto msg = L3PartialRelease::builder()
-        .channelDescription(L3ChannelDescription(TDMA_TCHF, 1, 0, 50))
+        .channelDescription(L3ChannelDescription(TDMA_Bm_ACCH, 1, 0, 50))
         .build();
     ParsedMessage pm{RRM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
@@ -403,12 +403,19 @@ TEST(RRBuilders, PartialReleaseComplete_Empty) {
 // GSM 04.08 9.1.31: System Information Type 1
 TEST(RRBuilders, SystemInformationType1_Full) {
     auto si1 = L3SystemInformationType1::builder()
-        .cellChannelDescription(L3FrequencyList())
-        .rachControlParameters(L3RACHControlParameters())
+        .cellChannelDescription(100, 0x12)
+        .rachControlParameters(L3RACHControlParameters(3, 9, false, 1, 0x03FF))
+        .restOctet(0x00)
         .build();
+    // Fixed part: cell channel description (two octets) + RACH control
+    // parameters (three octets); the rest octet adds one more
+    // (TS 44.018 section 9.1.31).
+    EXPECT_EQ(si1.bodyLength(), 6u);
     ParsedMessage pm{RRM{std::move(si1)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
+    // L3 header (two octets) + body (six octets): an eight-octet frame.
+    EXPECT_EQ((*bytes).size(), 8u);
     EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x19);
 
@@ -416,6 +423,30 @@ TEST(RRBuilders, SystemInformationType1_Full) {
     ASSERT_TRUE(reparsed);
     auto* parsed = tryGet<L3SystemInformationType1>(*reparsed);
     ASSERT_TRUE(parsed);
+    EXPECT_EQ(parsed->cellChannelDescription().arfcn(), 100u);
+    EXPECT_EQ(parsed->cellChannelDescription().bsic(), 0x12u);
+    EXPECT_EQ(parsed->rachControl().ac(), 0x03FFu);
+}
+
+// GSM 04.08 9.1.31: System Information Type 1 without the rest octet
+// carries a five-octet body (TS 44.018 section 9.1.31).
+TEST(RRBuilders, SystemInformationType1_NoRestOctet) {
+    auto si1 = L3SystemInformationType1::builder()
+        .cellChannelDescription(100, 0x12)
+        .rachControlParameters(L3RACHControlParameters())
+        .build();
+    EXPECT_EQ(si1.bodyLength(), 5u);
+    ParsedMessage pm{RRM{std::move(si1)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes).size(), 7u);
+
+    auto reparsed = parseL3(*bytes);
+    ASSERT_TRUE(reparsed);
+    auto* parsed = tryGet<L3SystemInformationType1>(*reparsed);
+    ASSERT_TRUE(parsed);
+    EXPECT_FALSE(parsed->hasRestOctets());
+    EXPECT_EQ(parsed->cellChannelDescription().arfcn(), 100u);
 }
 
 // GSM 04.08 9.1.32: System Information Type 2

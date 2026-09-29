@@ -555,9 +555,11 @@ TEST(GoldenIE, ChannelDescription_Default) {
 }
 
 TEST(GoldenIE, ChannelDescription_SDCCH) {
-    L3ChannelDescription orig(TDMA_SDCCH, 2, 7, 100);
+    // SDCCH/8 sub-slot 0 ('01000'B = 8): canonical five-bit code per
+    // TS 44.018 section 9.2.3.
+    L3ChannelDescription orig(TDMA_SDCCH8_0, 2, 7, 100);
     EXPECT_TRUE(orig.initialized());
-    EXPECT_EQ(orig.typeAndOffset(), TDMA_SDCCH);
+    EXPECT_EQ(orig.typeAndOffset(), TDMA_SDCCH8_0);
     EXPECT_EQ(orig.tn(), 2u);
     EXPECT_EQ(orig.tsc(), 7u);
     EXPECT_EQ(orig.arfcn(), 100u);
@@ -565,22 +567,25 @@ TEST(GoldenIE, ChannelDescription_SDCCH) {
 }
 
 TEST(GoldenIE, ChannelDescription_TCHF) {
-    L3ChannelDescription orig(TDMA_TCHF, 5, 3, 200);
+    // TCH/F assignment uses the Bm code ('00001'B = 1, TS 44.018 9.2.3).
+    L3ChannelDescription orig(TDMA_Bm_ACCH, 5, 3, 200);
     ieRoundTrip(orig);
 }
 
 TEST(GoldenIE, ChannelDescription_TCHH) {
-    L3ChannelDescription orig(TDMA_TCHH, 0, 0, 1);
+    // TCH/H assignment uses the same Bm code (TS 44.018 9.2.3).
+    L3ChannelDescription orig(TDMA_Bm_ACCH, 0, 0, 1);
     ieRoundTrip(orig);
 }
 
 TEST(GoldenIE, ChannelDescription_CBCH) {
-    L3ChannelDescription orig(TDMA_CBCH, 1, 4, 50);
+    // CBCH/8 ('11010'B = 26): vendor-extension code (TS 48.058 9.3.1).
+    L3ChannelDescription orig(TDMA_CBCH8, 1, 4, 50);
     ieRoundTrip(orig);
 }
 
 TEST(GoldenIE, ChannelDescription_RoundTrip) {
-    L3ChannelDescription orig(TDMA_TCHF, 3, 7, 100);
+    L3ChannelDescription orig(TDMA_Bm_ACCH, 3, 7, 100);
     std::vector<uint8_t> buf(8, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     orig.write(writer);
@@ -601,35 +606,35 @@ TEST(GoldenIE, ChannelDescription_RoundTrip) {
 // =====================================================================
 
 TEST(GoldenIE, ChannelDescription_ArfcnAbove1023_WireShape) {
-    // typeAndOffset=TCHF(00010)|TN=3(011) -> 0x13; TSC=7(111)|H=0|ARFCN top
+    // typeAndOffset=Bm_ACCH(00001)|TN=3(011) -> 0x0B; TSC=7(111)|H=0|ARFCN top
     // nibble 0x4 -> 0xE4; ARFCN bottom octet 0x01. ARFCN = 0x401 = 1025.
-    L3ChannelDescription orig(TDMA_TCHF, 3, 7, 1025);
+    L3ChannelDescription orig(TDMA_Bm_ACCH, 3, 7, 1025);
     std::vector<uint8_t> buf(8, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     orig.write(writer);
     EXPECT_EQ(writer.position(), 24u);
-    EXPECT_EQ(buf[0], 0x13u);
+    EXPECT_EQ(buf[0], 0x0Bu);
     EXPECT_EQ(buf[1], 0xE4u);
     EXPECT_EQ(buf[2], 0x01u);
 
     BitReader reader(buf.data(), writer.position());
     auto parsedResult = L3ChannelDescription::parse(reader);
     ASSERT_TRUE(parsedResult);
-    EXPECT_EQ((*parsedResult).typeAndOffset(), TDMA_TCHF);
+    EXPECT_EQ((*parsedResult).typeAndOffset(), TDMA_Bm_ACCH);
     EXPECT_EQ((*parsedResult).tn(), 3u);
     EXPECT_EQ((*parsedResult).tsc(), 7u);
     EXPECT_EQ((*parsedResult).hFlag(), 0u);
     EXPECT_EQ((*parsedResult).arfcn(), 1025u);
 }
 
-TEST(GoldenIE, ChannelDescription_ArfcnBelow1024_UnchangedWire) {
+TEST(GoldenIE, ChannelDescription_ArfcnBelow1024_ZeroExtendedWire) {
     // ARFCN = 873 (0x369): the twelve-bit field is zero-extended in its top
-    // two bits, so the octets match the historical layout exactly.
-    L3ChannelDescription orig(TDMA_TCHF, 3, 7, 873);
+    // two bits, so only the low ten bits appear in the wire octets.
+    L3ChannelDescription orig(TDMA_Bm_ACCH, 3, 7, 873);
     std::vector<uint8_t> buf(8, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     orig.write(writer);
-    EXPECT_EQ(buf[0], 0x13u);
+    EXPECT_EQ(buf[0], 0x0Bu);
     EXPECT_EQ(buf[1], 0xE3u);
     EXPECT_EQ(buf[2], 0x69u);
 
@@ -641,7 +646,7 @@ TEST(GoldenIE, ChannelDescription_ArfcnBelow1024_UnchangedWire) {
 
 TEST(GoldenIE, ChannelDescription_ArfcnMaxValue) {
     // The twelve-bit ARFCN field reaches its maximum, 4095.
-    L3ChannelDescription orig(TDMA_TCHF, 0, 0, 4095);
+    L3ChannelDescription orig(TDMA_Bm_ACCH, 0, 0, 4095);
     std::vector<uint8_t> buf(8, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     orig.write(writer);
@@ -652,28 +657,28 @@ TEST(GoldenIE, ChannelDescription_ArfcnMaxValue) {
 }
 
 TEST(GoldenIE, ChannelDescription2_ArfcnAbove1023_RoundTrip) {
-    L3ChannelDescription2 orig(TDMA_TCHF, 3, 7, 2000);
+    L3ChannelDescription2 orig(TDMA_Bm_ACCH, 3, 7, 2000);
     std::vector<uint8_t> buf(8, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     orig.write(writer);
     BitReader reader(buf.data(), writer.position());
     auto parsedResult = L3ChannelDescription2::parse(reader);
     ASSERT_TRUE(parsedResult);
-    EXPECT_EQ((*parsedResult).typeAndOffset(), TDMA_TCHF);
+    EXPECT_EQ((*parsedResult).typeAndOffset(), TDMA_Bm_ACCH);
     EXPECT_EQ((*parsedResult).tn(), 3u);
     EXPECT_EQ((*parsedResult).tsc(), 7u);
     EXPECT_EQ((*parsedResult).arfcn(), 2000u);
 }
 
 TEST(GoldenIE, AdditionalChannelDescription_ArfcnAbove1023_RoundTrip) {
-    L3AdditionalChannelDescription orig(TDMA_TCHF, 3, 5, 3000);
+    L3AdditionalChannelDescription orig(TDMA_Bm_ACCH, 3, 5, 3000);
     std::vector<uint8_t> buf(8, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     orig.write(writer);
     BitReader reader(buf.data(), writer.position());
     auto parsedResult = L3AdditionalChannelDescription::parse(reader);
     ASSERT_TRUE(parsedResult);
-    EXPECT_EQ((*parsedResult).typeAndOffset(), TDMA_TCHF);
+    EXPECT_EQ((*parsedResult).typeAndOffset(), TDMA_Bm_ACCH);
     EXPECT_EQ((*parsedResult).tn(), 3u);
     EXPECT_EQ((*parsedResult).tsc(), 5u);
     EXPECT_EQ((*parsedResult).arfcn(), 3000u);
@@ -689,9 +694,9 @@ TEST(GoldenIE, ChannelDescription2_Default) {
 }
 
 TEST(GoldenIE, ChannelDescription2_FromChannelDescription) {
-    L3ChannelDescription orig(TDMA_TCHF, 3, 7, 100);
+    L3ChannelDescription orig(TDMA_Bm_ACCH, 3, 7, 100);
     L3ChannelDescription2 chd2(orig);
-    EXPECT_EQ(chd2.typeAndOffset(), TDMA_TCHF);
+    EXPECT_EQ(chd2.typeAndOffset(), TDMA_Bm_ACCH);
     EXPECT_EQ(chd2.tn(), 3u);
     EXPECT_EQ(chd2.tsc(), 7u);
     EXPECT_EQ(chd2.arfcn(), 100u);
@@ -708,7 +713,7 @@ TEST(GoldenIE, AdditionalChannelDescription_Default) {
 }
 
 TEST(GoldenIE, AdditionalChannelDescription_RoundTrip) {
-    L3AdditionalChannelDescription orig(TDMA_TCHF, 3, 5, 150);
+    L3AdditionalChannelDescription orig(TDMA_Bm_ACCH, 3, 5, 150);
     std::vector<uint8_t> buf(8, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     orig.write(writer);
@@ -918,8 +923,8 @@ TEST(GoldenIE, CipheringModeSetting_Encoding) {
 
 // =====================================================================
 // Common IEs: L3CipheringModeResponse (GSM 04.08 10.5.2.10)
-// Ciphering mode response bits per GSM 24.008 10.5.2.10
-// 2 bits: include_IMEISV(1) | spare(1)
+// Ciphering mode response bits per TS 44.018 (ciphering mode command body)
+// 4 bits: cR(1) | spare(3) — the response bit leads its half-octet
 // =====================================================================
 
 TEST(GoldenIE, CipheringModeResponse_Default) {
@@ -927,6 +932,18 @@ TEST(GoldenIE, CipheringModeResponse_Default) {
     EXPECT_EQ(orig.lengthV(), 0u);
     EXPECT_FALSE(orig.includeIMEISV());
     ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, CipheringModeResponse_Encoding) {
+    // Vector: cR='1'B (include IMEISV), spare='000'B.
+    // Spec-verified: TS 44.018 ciphering mode response (4 bits):
+    //   cR(1)=1 | spare(3)=000 -> 4-bit value = 0b1000 = 0x08, written
+    //   MSB-first so the bit lands in the high nibble of the octet.
+    L3CipheringModeResponse orig(true);
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    EXPECT_EQ((buf[0] >> 4) & 0x0F, 0x08u);
 }
 
 // =====================================================================
@@ -970,7 +987,8 @@ TEST(GoldenIE, NCCPermitted_Custom) {
 // =====================================================================
 // Common IEs: L3PageMode (GSM 04.08 10.5.2.26)
 // Page mode values per TS 44.018
-// 2 bits: Normal(0), Extended(1), Reorganization(2), SameAsBefore(3)
+// 4-bit field (two spare bits + two mode bits): Normal(0), Extended(1),
+// Reorganization(2), SameAsBefore(3)
 // =====================================================================
 
 TEST(GoldenIE, PageMode_Normal) {
@@ -1128,14 +1146,14 @@ TEST(GoldenIE, CellSelectionParameters_RefValues) {
 // =====================================================================
 // Common IEs: L3RACHControlParameters (GSM 04.08 10.5.2.29)
 // Default vector values for a software BTS (GSM 24.008 SI2/SI3).
-// 25 bits: max_retrans(2) + tx_integer(4) + cell_barr_access(1) + re_not_allowed(1) + ACC(16)
-// [GSM SPEC VERIFIED] GSM 24.008 10.5.2.29: 3 octets (24 bits total).
-//   Octet 1: max_retrans(2)|tx_integer(4)|cell_barr_access(1)|re_not_allowed(1)|spare(2)
-//   Octet 2-3: ACC(16) access class barring bitmap
+// 24 bits: max_retrans(2) + tx_integer(4) + cell_barr_access(1) + re_not_allowed(1) + ACC(16)
+// [GSM SPEC VERIFIED] TS 44.018 10.5.2.29: 3 octets (24 bits total).
+//   Octet 1: max_retrans(2)|tx_integer(4)|cell_barr_access(1)|re_not_allowed(1)
+//   Octet 2-3: ACC(16) access class bitmap, low octet first (octet 2 = classes 0-7)
 // Vector values (typical software BTS defaults):
-//   max_retrans=3(11), tx_integer=9(1001), cell_bar_qualify=0, cell_barr_access=0,
-//   re_not_allowed=1, ACC=0x0400 (ACC[6] barred)
-//   {0xE5, 0x04, 0x00}: 0b11_1001_0_0 | 0b1_00000100_00000000 = correct
+//   max_retrans=3(11), tx_integer=9(1001), cell_bar_access=0, re_not_allowed=1,
+//   ACC=0x03FF (access classes 0-9 permitted)
+//   {0xE5, 0xFF, 0x03}: 0b11_1001_0_1 | 0b11111111_00000011 = correct
 // =====================================================================
 
 TEST(GoldenIE, RACHControlParameters_Default) {
@@ -1147,24 +1165,44 @@ TEST(GoldenIE, RACHControlParameters_Default) {
 TEST(GoldenIE, RACHControlParameters_RefValues) {
     // Vector (typical software BTS defaults):
     //   max_retrans=3, tx_integer='1001'B(=9), cell_barr_access=false,
-    //   re_not_allowed=true, acc='0000010000000000'B (=0x0400, ACC[6] barred, bit 6 from MSB)
-    // Spec-verified: GSM 24.008 10.5.2.29 RACH Control Parameters (24 bits = 3 octets)
-    //   max_retrans(2)|tx_integer(4)|cell_barr_access(1)|re_not_allowed(1)|spare(2)|ACC(16)
-    //   {0xE5, 0x04, 0x00}: max_retrans=3, tx_integer=9, cell_barr_access=0, re_not_allowed=1, ACC=0x0400
+    //   re_not_allowed=true, ACC=0x03FF (access classes 0-9 permitted)
+    // Spec-verified: TS 44.018 10.5.2.29 RACH Control Parameters (24 bits = 3 octets)
+    //   max_retrans(2)|tx_integer(4)|cell_barr_access(1)|re_not_allowed(1)|ACC(16, low octet first)
+    //   {0xE5, 0xFF, 0x03}: max_retrans=3, tx_integer=9, cell_barr_access=0, re_not_allowed=1, ACC=0x03FF
     std::vector<uint8_t> buf(4, 0);
     buf[0] = 0xE5;
-    buf[1] = 0x04;
-    buf[2] = 0x00;
+    buf[1] = 0xFF;
+    buf[2] = 0x03;
     BitReader reader(buf.data(), 24);
     auto parsedResult = L3RACHControlParameters::parse(reader);
     ASSERT_TRUE(parsedResult);
-    // Spec-verified: byte 0 = 0xE5 = 0b1110_0101 -> max_retrans(2)=11=3, tx_integer(4)=1001=9, cell_barr_access(1)=0, re_not_allowed(1)=1, spare(2)=01
-    //   byte 1 = 0x04, byte 2 = 0x00 -> ACC(16) = 0x0400 (ACC[6] barred, bit 6 from MSB per GSM convention)
+    // Spec-verified: byte 0 = 0xE5 = 0b1110_0101 -> max_retrans(2)=11=3, tx_integer(4)=1001=9, cell_barr_access(1)=0, re_not_allowed(1)=1
+    //   byte 1 = 0xFF (access classes 0-7 permitted), byte 2 = 0x03 (classes 8-9 permitted)
+    //   -> ACC(16) = 0x03FF: bit i of the bitmap corresponds to access class i (TS 44.018 10.5.2.29)
     EXPECT_EQ((*parsedResult).maxRetrans(), 3u);
     EXPECT_EQ((*parsedResult).txInteger(), 9u);
     EXPECT_EQ((*parsedResult).cellBarAccess(), false);
     EXPECT_EQ((*parsedResult).re(), 1u);
-    EXPECT_EQ((*parsedResult).ac(), 0x0400u);
+    EXPECT_EQ((*parsedResult).ac(), 0x03FFu);
+}
+
+TEST(GoldenIE, RACHControlParameters_AccLowByteFirst) {
+    // Access classes 0-9 permitted (ACC = 0x03FF) must serialize as the two
+    // octets {0xFF, 0x03}: the low octet (classes 0-7) is transmitted first
+    // (TS 44.018 section 10.5.2.29).
+    L3RACHControlParameters orig(3, 9, false, 1, 0x03FF);
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    EXPECT_EQ(writer.position(), 24u);
+    EXPECT_EQ(buf[0], 0xE5u);
+    EXPECT_EQ(buf[1], 0xFFu);
+    EXPECT_EQ(buf[2], 0x03u);
+
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3RACHControlParameters::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).ac(), 0x03FFu);
 }
 
 // =====================================================================
@@ -1216,26 +1254,41 @@ TEST(GoldenIE, ControlChannelDescription_RefValues) {
 
 // =====================================================================
 // Common IEs: L3CellChannelDescription (GSM 04.08 10.5.2.1b)
-// 20 bits: ARFCN(10) + BSIC(6) + channelSpacing(1) + spare(1)
+// 16 bits: ARFCN(10) + BSIC(6 = NCC(3)|BCC(3))
 // =====================================================================
 
 TEST(GoldenIE, CellChannelDescription_Default) {
     L3CellChannelDescription orig;
-    EXPECT_EQ(orig.lengthV(), 3u);
+    EXPECT_EQ(orig.lengthV(), 2u);
     ieRoundTrip(orig);
 }
 
 TEST(GoldenIE, CellChannelDescription_Custom) {
-    L3CellChannelDescription orig(100, 0x1F, 1);
+    L3CellChannelDescription orig(100, 0x1F);
     ieRoundTrip(orig);
 }
 
 TEST(GoldenIE, CellChannelDescription_IE) {
-    L3CellChannelDescription chd(100, 0x12, 1);
+    // Golden: ARFCN=100 (ten bits '0001100100') and BSIC=0x12 (six bits
+    // '010010', NCC|BCC) pack into the two octets 0x19 0x12
+    // (TS 44.018 section 9.2.3 cell channel description).
+    L3CellChannelDescription chd(100, 0x12);
     EXPECT_EQ(chd.arfcn(), 100u);
     EXPECT_EQ(chd.bsic(), 0x12u);
-    EXPECT_EQ(chd.channelSpacing(), 1u);
-    EXPECT_EQ(chd.lengthV(), 3u);
+    EXPECT_EQ(chd.lengthV(), 2u);
+
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    chd.write(writer);
+    EXPECT_EQ(writer.position(), 16u);
+    EXPECT_EQ(buf[0], 0x19u);
+    EXPECT_EQ(buf[1], 0x12u);
+
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3CellChannelDescription::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).arfcn(), 100u);
+    EXPECT_EQ((*parsedResult).bsic(), 0x12u);
 }
 
 // =====================================================================

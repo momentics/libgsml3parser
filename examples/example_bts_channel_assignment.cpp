@@ -74,7 +74,7 @@ void demoImmediateAssignment() {
         .pageMode(L3PageMode(0))
         .dedicatedModeOrTBF(L3DedicatedModeOrTBF(false, false))
         .requestReference(L3RequestReference(1, 2, 3, 4))
-        .channelDescription(L3ChannelDescription(TDMA_SDCCH, 0, 1, 100))
+        .channelDescription(L3ChannelDescription(TDMA_SDCCH8_0, 0, 1, 100))
         .timingAdvance(L3TimingAdvance(32))
         .build();
 
@@ -136,7 +136,7 @@ void demoTimedAssignment() {
     std::cout << "Includes startTime for frame-synchronized assignment\n\n";
 
     auto ia = L3ImmediateAssignment::builder()
-        .channelDescription(L3ChannelDescription(TDMA_TCHF, 1, 0, 50))
+        .channelDescription(L3ChannelDescription(TDMA_Bm_ACCH, 1, 0, 50))
         .timingAdvance(L3TimingAdvance(64))
         .startTime(12345, true)
         .build();

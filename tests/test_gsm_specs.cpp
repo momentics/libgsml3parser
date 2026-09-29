@@ -423,15 +423,15 @@ TEST(GSMSpecTest, MobileIdentity_TMSI_RoundTrip) {
 
 TEST(GSMSpecTest, ChannelDescription_NoHopping) {
     // h=0: type&offset(5) + TN(3) + TSC(3) + h(1) + ARFCN(12) = 24 bits
-    L3ChannelDescription chd(TDMA_SDCCH, 2, 7, 100);
-    EXPECT_EQ(chd.typeAndOffset(), TDMA_SDCCH);
+    L3ChannelDescription chd(TDMA_SDCCH8_0, 2, 7, 100);
+    EXPECT_EQ(chd.typeAndOffset(), TDMA_SDCCH8_0);
     EXPECT_EQ(chd.tn(), 2u);
     EXPECT_EQ(chd.tsc(), 7u);
     EXPECT_EQ(chd.arfcn(), 100u);
 }
 
 TEST(GSMSpecTest, ChannelDescription_RoundTrip) {
-    L3ChannelDescription orig(TDMA_TCHF, 5, 3, 200);
+    L3ChannelDescription orig(TDMA_Bm_ACCH, 5, 3, 200);
 
     std::vector<uint8_t> buf(8, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
@@ -459,22 +459,22 @@ TEST(GSMSpecTest, RACHControlParameters) {
 }
 
 TEST(GSMSpecTest, RACHControlParameters_RefValues) {
-    // RachControlParameters bit layout (24 bits, GSM 44.018 10.5.2.29):
+    // RachControlParameters bit layout (24 bits, TS 44.018 10.5.2.29):
     // max_retrans(2) + tx_integer(4) + cell_barr_access(1) + re_not_allowed(1) + acc(16)
     // Reference values for a software BTS:
-    //   max_retrans := RACH_MAX_RETRANS_7,  // '11'B = 3
+    //   max_retrans := '11'B,               // = 3 (7 max retransmissions)
     //   tx_integer := '1001'B,              // = 9 (12 spread slots)
     //   cell_barr_access := false,          // 0
     //   re_not_allowed := true,             // 1
-    //   acc := '0000010000000000'B          // ACC[4] barred
-    // Bit layout (MSB-first): 11 1001 0 1 0000010000000000
+    //   acc := 0x03FF                       // access classes 0-9 permitted
+    // Bit layout (MSB-first): 11 1001 0 1 11111111 00000011
     // Byte 0: 11100101 = 0xE5
-    // Byte 1: 00000100 = 0x04
-    // Byte 2: 00000000 = 0x00
+    // Byte 1: 11111111 = 0xFF (access classes 0-7, low octet first)
+    // Byte 2: 00000011 = 0x03 (access classes 8-9)
     std::vector<uint8_t> buf(4, 0);
     buf[0] = 0xE5;
-    buf[1] = 0x04;
-    buf[2] = 0x00;
+    buf[1] = 0xFF;
+    buf[2] = 0x03;
 
     BitReader reader(buf.data(), 24);
     auto parsedResult = L3RACHControlParameters::parse(reader);
@@ -484,7 +484,8 @@ TEST(GSMSpecTest, RACHControlParameters_RefValues) {
     EXPECT_EQ((*parsedResult).txInteger(), 9u);
     EXPECT_EQ((*parsedResult).cellBarAccess(), false);
     EXPECT_EQ((*parsedResult).re(), 1u);
-    EXPECT_EQ((*parsedResult).ac(), 0x0400u);
+    // Bit i of the ACC bitmap corresponds to access class i (TS 44.018 10.5.2.29).
+    EXPECT_EQ((*parsedResult).ac(), 0x03FFu);
 }
 
 // ── Cell Selection Parameters (GSM 04.08 10.5.2.4) ────────────────────

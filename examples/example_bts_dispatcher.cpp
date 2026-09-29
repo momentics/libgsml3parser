@@ -276,7 +276,7 @@ void demoFullPipeline() {
     std::cout << "\n  Building and dispatching ImmediateAssignment:\n";
     {
         auto ia = L3ImmediateAssignment::builder()
-            .channelDescription(L3ChannelDescription(TDMA_SDCCH, 0, 1, 100))
+            .channelDescription(L3ChannelDescription(TDMA_SDCCH8_0, 0, 1, 100))
             .timingAdvance(L3TimingAdvance(32))
             .build();
         ParsedMessage pm{RRM{std::move(ia)}};

@@ -193,8 +193,10 @@ inline constexpr int ccCauseLo    = 0;  // CCCause::Unknown_L3_Cause
 inline constexpr int ccCauseHi    = static_cast<int>(CCCause::Interworking_Unspecified);
 inline constexpr int idTypeLo     = static_cast<int>(MobileIDType::NoID);
 inline constexpr int idTypeHi     = static_cast<int>(MobileIDType::TMSI);
-inline constexpr int typeOffsetLo = 0;  // TypeAndOffset::TDMA_SACCH
-inline constexpr int typeOffsetHi = static_cast<int>(TDMA_MISC);
+// Five-bit channel type and offset code (TS 44.018 9.2.3 / TS 48.058 9.3.1):
+// '00000' is the invalid/not-initialized value, '11111' the top code.
+inline constexpr int typeOffsetLo = 0;
+inline constexpr int typeOffsetHi = 31;
 inline constexpr int chanTypeLo   = static_cast<int>(ChannelType::SCHType);
 inline constexpr int chanTypeHi   = static_cast<int>(ChannelType::UndefinedCHType);
 inline constexpr int tokenLo      = 0;  // ResponseToken::None
@@ -2433,24 +2435,6 @@ GSML3_C_API int gsml3_msg_ciphering_mode_command_algorithm(const gsml3_message* 
     }
 }
 
-GSML3_C_API int gsml3_msg_ciphering_mode_complete_response(const gsml3_message* msg) {
-    try {
-        return typedGetInt<L3CipheringModeComplete>(msg, [](auto& m){ return (int)m.cipheringModeResponse(); });
-    } catch (...) {
-        setLastErrorUnexpected("unexpected exception in gsml3_msg_ciphering_mode_complete_response");
-        return -1;
-    }
-}
-
-GSML3_C_API int gsml3_msg_ciphering_mode_complete_has_imeisv(const gsml3_message* msg) {
-    try {
-        return typedGetInt<L3CipheringModeComplete>(msg, [](auto& m){ return m.hasImeisv() ? 1 : 0; });
-    } catch (...) {
-        setLastErrorUnexpected("unexpected exception in gsml3_msg_ciphering_mode_complete_has_imeisv");
-        return -1;
-    }
-}
-
 GSML3_C_API int gsml3_msg_handover_complete_cause(const gsml3_message* msg) {
     try {
         return typedGetInt<L3HandoverComplete>(msg, [](auto& m){ return (int)m.cause(); });
@@ -3240,14 +3224,13 @@ GSML3_C_API size_t gsml3_build_ciphering_mode_command(uint8_t* out, size_t maxle
     }
 }
 
-GSML3_C_API size_t gsml3_build_ciphering_mode_complete(uint8_t* out,
-                                                        size_t maxlen, int response) {
+GSML3_C_API size_t gsml3_build_ciphering_mode_complete(uint8_t* out, size_t maxlen) {
     try {
-        // 2-bit ciphering-mode response: 0 or 1 only.
-        if (!checkEnumValue(response, 0, 1, "response")) return 0;
+        // Ciphering Mode Complete carries no fixed body fields (TS 44.018):
+        // the built frame is header-only; an optional mobile equipment
+        // identity is not exposed through this boundary.
         return typedBuild<RRM>(out, maxlen, [&]{
-            return RRM{L3CipheringModeComplete::builder()
-                           .response(static_cast<unsigned>(response)).build()};
+            return RRM{L3CipheringModeComplete::builder().build()};
         });
     } catch (...) {
         setLastErrorUnexpected("unexpected exception in gsml3_build_ciphering_mode_complete");

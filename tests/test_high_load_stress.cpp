@@ -428,13 +428,13 @@ TEST(Stress, ResponseBuilder_Span_ZeroHeapAllocations) {
     sess.response.calledNumber[8] = '\0';
     sess.response.calledNumberLen = 8;
     sess.response.hasCalledNumber = true;
-    sess.response.channel = L3ChannelDescription(TDMA_SDCCH, 0, 1, 100);
+    sess.response.channel = L3ChannelDescription(TDMA_SDCCH8_0, 0, 1, 100);
     sess.response.hasChannel = true;
     sess.response.cipherAlgo = 1;
     sess.response.hasCipherAlgo = true;
     sess.response.identity = L3MobileIdentity{0x12345678u};
     sess.response.hasIdentity = true;
-    sess.response.hoChannel = L3ChannelDescription(TDMA_TCHF, 0, 0, 150);
+    sess.response.hoChannel = L3ChannelDescription(TDMA_Bm_ACCH, 0, 0, 150);
     sess.response.hasHoChannel = true;
     auto lai = L3LocationAreaIdentity("244", "15", 1234);
 

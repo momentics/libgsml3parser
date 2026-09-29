@@ -1438,7 +1438,7 @@ Builder patterns are implemented for all message types across all 12 protocol do
 using namespace gsml3parser;
 
 auto msg = L3ImmediateAssignment::builder()
-    .channelDescription(L3ChannelDescription(TDMA_SDCCH, 0, 1, 100))
+    .channelDescription(L3ChannelDescription(TDMA_SDCCH8_0, 0, 1, 100))
     .timingAdvance(L3TimingAdvance(32))
     .build();
 
@@ -1746,7 +1746,9 @@ RxLevAccessMin, CellBarred, CAC, ACs for GPRS.
 
 ### L3RACHControlParameters
 
-MaxRepetition, RACH-Timeout, Initial-Duration, Maximum-Duration, Periodic-Window.
+Max retransmissions (2 bits), TX integer (4 bits), the cell-barred-access and RE
+bits, and the 16-bit access class bitmap: bit i corresponds to access class i
+(i = 0..15), low octet first on the wire (TS 44.018 section 10.5.2.29).
 
 ### L3MeasurementResults
 
@@ -1762,7 +1764,9 @@ Absolute or relative power control command with optional access type.
 
 ### L3CipheringModeSetting / L3CipheringModeResponse
 
-4-bit ciphering algorithm + mode flag / IMEISV inclusion flag.
+The Ciphering Mode Command body is one octet: the setting — sC(1)|algorithm(3)
+— in the high half-octet, then the response — cR(1)|spare(3) (IMEISV inclusion
+flag) in the low half-octet (TS 44.018).
 
 ### L3MultiRateConfiguration
 
@@ -1850,8 +1854,8 @@ RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for 
 | `L3ClassmarkChange` | 0x16 | UL | Classmark2/3 |
 | `L3ClassmarkEnquiry` | 0x13 | DL | Empty body |
 | `L3MeasurementReport` | 0x15 | UL | RxLev/RxQual + neighbors |
-| `L3CipheringModeCommand` | 0x35 | DL | Ciphering setting + key seq |
-| `L3CipheringModeComplete` | 0x32 | UL | Empty body |
+| `L3CipheringModeCommand` | 0x35 | DL | One octet: ciphering setting + response |
+| `L3CipheringModeComplete` | 0x32 | UL | No fixed fields (optional MEI kept opaque) |
 | `L3ChannelModeModify` | 0x10 | DL | Channel desc + mode [+ multi-rate] |
 | `L3ChannelModeModifyAcknowledge` | 0x17 | UL | Channel desc + mode |
 | `L3GPRSSuspensionRequest` | 0x34 | UL | TLLI, RA ID, suspension cause |

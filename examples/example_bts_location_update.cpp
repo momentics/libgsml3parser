@@ -103,7 +103,7 @@ void step2_assignSDCCH() {
         .pageMode(L3PageMode(0))
         .dedicatedModeOrTBF(L3DedicatedModeOrTBF(false, false))
         .requestReference(L3RequestReference(1, 2, 3, 4))
-        .channelDescription(L3ChannelDescription(TDMA_SDCCH, 0, ch->timeslot, ch->arfcn))
+        .channelDescription(L3ChannelDescription(TDMA_SDCCH8_0, 0, ch->timeslot, ch->arfcn))
         .timingAdvance(L3TimingAdvance(24))
         .build();
 

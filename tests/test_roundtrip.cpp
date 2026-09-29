@@ -501,7 +501,7 @@ TEST(RoundTripTest, AdditionalAssignment) {
 // Wire layout per GSM 44.018 9.1.5.
 
 TEST(RoundTripTest, ChannelModeModify) {
-    L3ChannelDescription chd(TDMA_TCHF, 1, 7, 100);
+    L3ChannelDescription chd(TDMA_Bm_ACCH, 1, 7, 100);
     L3ChannelMode mode(L3ChannelMode::SpeechV1);
     ParsedMessage msg{RRM{L3ChannelModeModify{chd, mode}}};
     auto parsed = roundtrip(msg);
@@ -516,19 +516,19 @@ TEST(RoundTripTest, ChannelModeModify) {
 // Byte 1: MTI = 0x17
 TEST(RoundTripTest, ChannelModeModifyAcknowledge) {
     uint8_t data[] = {0x06, 0x17,
-        // ChanDesc: typeAndOffset(5)=TDMA_TCHF(2), TN(3)=1, TSC(3)=7, h(1)=0, ARFCN(12)=100
-        // Bits: 00010 001 111 0 00 0001100100
-        // Byte 0: 00010001 = 0x11
+        // ChanDesc: typeAndOffset(5)=TDMA_Bm_ACCH(1), TN(3)=1, TSC(3)=7, h(1)=0, ARFCN(12)=100
+        // Bits: 00001 001 111 0 00 0001100100
+        // Byte 0: 00001001 = 0x09
         // Byte 1: 11100000 = 0xE0
         // Byte 2: 00011001 00 -> 01100100 = 0x64
-        0x11, 0xE0, 0x64,
+        0x09, 0xE0, 0x64,
         // ChanMode: SpeechV1 = 1
         0x01};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* cma = tryGet<L3ChannelModeModifyAcknowledge>(*msg);
     ASSERT_TRUE(cma);
-    EXPECT_EQ(cma->description().typeAndOffset(), TDMA_TCHF);
+    EXPECT_EQ(cma->description().typeAndOffset(), TDMA_Bm_ACCH);
     EXPECT_EQ(cma->mode().mode(), L3ChannelMode::SpeechV1);
 
     auto parsed = roundtrip(*msg);

@@ -31,11 +31,11 @@ using namespace gsml3parser;
 // ── IE Tests ─────────────────────────────────────────────────────────────
 
 TEST(IE_Tests, CellChannelDescription) {
-    L3CellChannelDescription chd(100, 0x12, 1);
+    // Sixteen-bit value part: [ARFCN(10)][BSIC(6)] (TS 44.018 section 9.2.3).
+    L3CellChannelDescription chd(100, 0x12);
     EXPECT_EQ(chd.arfcn(), 100u);
     EXPECT_EQ(chd.bsic(), 0x12u);
-    EXPECT_EQ(chd.channelSpacing(), 1u);
-    EXPECT_EQ(chd.lengthV(), 3u);
+    EXPECT_EQ(chd.lengthV(), 2u);
 }
 
 TEST(IE_Tests, ControlChannelDescription) {
@@ -50,8 +50,8 @@ TEST(IE_Tests, ControlChannelDescription) {
 }
 
 TEST(IE_Tests, ChannelDescription) {
-    L3ChannelDescription chd(TDMA_SDCCH, 0, 1, 100);
-    EXPECT_EQ(chd.typeAndOffset(), TDMA_SDCCH);
+    L3ChannelDescription chd(TDMA_SDCCH8_0, 0, 1, 100);
+    EXPECT_EQ(chd.typeAndOffset(), TDMA_SDCCH8_0);
     EXPECT_EQ(chd.tn(), 0u);
     EXPECT_EQ(chd.tsc(), 1u);
     EXPECT_EQ(chd.arfcn(), 100u);
@@ -87,8 +87,8 @@ TEST(IE_Tests, ImmediateAssignmentInformation) {
 }
 
 TEST(IE_Tests, AdditionalChannelDescription) {
-    L3AdditionalChannelDescription chd(TDMA_TCHF, 5, 3, 200);
-    EXPECT_EQ(chd.typeAndOffset(), TDMA_TCHF);
+    L3AdditionalChannelDescription chd(TDMA_Bm_ACCH, 5, 3, 200);
+    EXPECT_EQ(chd.typeAndOffset(), TDMA_Bm_ACCH);
     EXPECT_EQ(chd.tn(), 5u);
     EXPECT_EQ(chd.tsc(), 3u);
     EXPECT_EQ(chd.arfcn(), 200u);
@@ -120,9 +120,9 @@ TEST(MessagesTest, RR_CipheringModeCommand) {
 TEST(MessagesTest, RR_CipheringModeComplete) {
     L3CipheringModeComplete msg;
     EXPECT_EQ(msg.mti(), L3CipheringModeComplete::MTI);
-    // 1-octet body: ciphering mode response (2 bits) + reserved (6 bits);
-    // +8 octets when the optional IMEISV is present.
-    EXPECT_EQ(msg.l2BodyLength(), 1u);
+    // No fixed body fields (TS 44.018): header-only by default, plus the
+    // optional trailing octets when a mobile equipment identity is carried.
+    EXPECT_EQ(msg.l2BodyLength(), 0u);
 }
 
 TEST(MessagesTest, RR_PagingRequestType1) {

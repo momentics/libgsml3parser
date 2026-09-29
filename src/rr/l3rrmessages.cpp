@@ -171,6 +171,7 @@ L3PagingRequestType1 L3PagingRequestType1::Builder::build() {
     // A paging request always carries at least one (default) identity.
     msg.mMobileIdCount = (mCount == 0) ? 1 : mCount;
     msg.mChannelsNeeded = mChannelsNeeded;
+    msg.mPageMode = mPageMode;
     return msg;
 }
 
@@ -188,7 +189,7 @@ Expected<L3PagingRequestType1> L3PagingRequestType1::parse(BitReader& br) {
     msg.mChannelsNeeded[1] = channelNeededType(r.value());
     r = br.readField(2); if (!r) return Expected<L3PagingRequestType1>::error(r.error());
     msg.mChannelsNeeded[0] = channelNeededType(r.value());
-    r = br.readField(4); if (!r) return Expected<L3PagingRequestType1>::error(r.error());
+    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType1>::error(res.error()); msg.mPageMode = std::move(res.value()); }
 
     {
         auto lenR = br.readField(8); if (!lenR) return Expected<L3PagingRequestType1>::error(lenR.error());
@@ -199,9 +200,11 @@ Expected<L3PagingRequestType1> L3PagingRequestType1::parse(BitReader& br) {
         }
     }
 
+    // Optional second mobile identity (TLV, element identifier 0x17; the
+    // identifier octet on the wire carries the '1'000 0000'B presence flag).
     if (br.hasMore()) {
         unsigned peek = br.peekField(8);
-        if (peek == 0x17) {
+        if ((peek & 0x7Fu) == 0x17u) {
             { auto _ = br.readField(8); if (!_) return Expected<L3PagingRequestType1>::error(_.error()); }
             auto lenR = br.readField(8); if (!lenR) return Expected<L3PagingRequestType1>::error(lenR.error());
             auto res = L3MobileIdentity::parse(br, lenR.value());
@@ -219,7 +222,7 @@ void L3PagingRequestType1::write(BitWriter& bw) const {
     size_t sz = mMobileIdCount;
     bw.writeField(channelNeededCode(mChannelsNeeded[sz > 1 ? 1 : 0]), 2);
     bw.writeField(channelNeededCode(mChannelsNeeded[0]), 2);
-    bw.writeField(0x0, 4);
+    mPageMode.write(bw);
     bw.writeField(static_cast<uint32_t>(mMobileIDs[0].lengthV()), 8);
     mMobileIDs[0].write(bw);
     if (sz > 1) {
@@ -254,6 +257,7 @@ L3PagingRequestType2 L3PagingRequestType2::Builder::build() {
     // The fixed 2-TMSI layout is zero-padded.
     msg.mTMSIs = mTMSIs;
     msg.mChannelsNeeded = mChannelsNeeded;
+    msg.mPageMode = mPageMode;
     return msg;
 }
 
@@ -267,7 +271,7 @@ Expected<L3PagingRequestType2> L3PagingRequestType2::parse(BitReader& br) {
     msg.mChannelsNeeded[1] = channelNeededType(r.value());
     r = br.readField(2); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
     msg.mChannelsNeeded[0] = channelNeededType(r.value());
-    r = br.readField(4); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
+    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType2>::error(res.error()); msg.mPageMode = std::move(res.value()); }
 
     for (size_t i = 0; i < msg.mTMSIs.size(); ++i) {
         r = br.readField(32); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
@@ -280,7 +284,7 @@ Expected<L3PagingRequestType2> L3PagingRequestType2::parse(BitReader& br) {
 void L3PagingRequestType2::write(BitWriter& bw) const {
     bw.writeField(channelNeededCode(mChannelsNeeded[1]), 2);
     bw.writeField(channelNeededCode(mChannelsNeeded[0]), 2);
-    bw.writeField(0x0, 4);
+    mPageMode.write(bw);
     for (const auto& tmsi : mTMSIs) {
         bw.writeField(tmsi, 32);
     }
@@ -311,6 +315,7 @@ L3PagingRequestType3 L3PagingRequestType3::Builder::build() {
     // The fixed 4-TMSI layout is zero-padded.
     msg.mTMSIs = mTMSIs;
     msg.mChannelsNeeded = mChannelsNeeded;
+    msg.mPageMode = mPageMode;
     return msg;
 }
 
@@ -324,7 +329,7 @@ Expected<L3PagingRequestType3> L3PagingRequestType3::parse(BitReader& br) {
     msg.mChannelsNeeded[1] = channelNeededType(r.value());
     r = br.readField(2); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
     msg.mChannelsNeeded[0] = channelNeededType(r.value());
-    r = br.readField(4); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
+    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType3>::error(res.error()); msg.mPageMode = std::move(res.value()); }
 
     for (size_t i = 0; i < msg.mTMSIs.size(); ++i) {
         r = br.readField(32); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
@@ -337,7 +342,7 @@ Expected<L3PagingRequestType3> L3PagingRequestType3::parse(BitReader& br) {
 void L3PagingRequestType3::write(BitWriter& bw) const {
     bw.writeField(channelNeededCode(mChannelsNeeded[1]), 2);
     bw.writeField(channelNeededCode(mChannelsNeeded[0]), 2);
-    bw.writeField(0x0, 4);
+    mPageMode.write(bw);
     for (const auto& tmsi : mTMSIs) {
         bw.writeField(tmsi, 32);
     }
@@ -731,13 +736,10 @@ void L3MeasurementReport::text(std::ostream& os) const {
 
 // ── L3CipheringModeCommand ─────────────────────────────────────────────
 
+// Single body octet: the cipher mode setting ([sC(1)|algorithm(3)]) comes
+// first, then the cipher mode response ([cR(1)|spare(3)]) (TS 44.018).
 Expected<L3CipheringModeCommand> L3CipheringModeCommand::parse(BitReader& br) {
     L3CipheringModeCommand msg;
-    {
-        auto res = L3CipheringModeResponse::parse(br);
-        if (!res) return Expected<L3CipheringModeCommand>::error(res.error());
-        msg.mCipheringModeResponse = std::move(res.value());
-    }
     {
         auto res = L3CipheringModeSetting::parse(br);
         if (!res) return Expected<L3CipheringModeCommand>::error(res.error());
@@ -745,13 +747,18 @@ Expected<L3CipheringModeCommand> L3CipheringModeCommand::parse(BitReader& br) {
         msg.mCiphering = cms.ciphering();
         msg.mAlgorithm = cms.algorithm();
     }
+    {
+        auto res = L3CipheringModeResponse::parse(br);
+        if (!res) return Expected<L3CipheringModeCommand>::error(res.error());
+        msg.mCipheringModeResponse = std::move(res.value());
+    }
     return Expected<L3CipheringModeCommand>::hold(std::move(msg));
 }
 
 void L3CipheringModeCommand::write(BitWriter& bw) const {
-    mCipheringModeResponse.write(bw);
     L3CipheringModeSetting cms(mCiphering, mAlgorithm);
     cms.write(bw);
+    mCipheringModeResponse.write(bw);
 }
 
 void L3CipheringModeCommand::text(std::ostream& os) const {
@@ -774,42 +781,26 @@ L3CipheringModeCommand::Builder L3CipheringModeCommand::builder() {
 
 // ── L3CipheringModeComplete ────────────────────────────────────────────
 
+// No fixed body fields; any trailing octets (an optional mobile equipment
+// identity) are kept as an opaque sequence and re-emitted verbatim
+// (TS 44.018).
 Expected<L3CipheringModeComplete> L3CipheringModeComplete::parse(BitReader& br) {
     L3CipheringModeComplete msg;
-    // 1 octet: ciphering mode response (2 bits) + reserved (6 bits,
-    // '0' values) (TS 44.018 9.1.26).
-    auto r = br.readField(2); if (!r) return Expected<L3CipheringModeComplete>::error(r.error());
-    msg.mCipheringModeResponse = static_cast<uint8_t>(r.value());
-    r = br.readField(6); if (!r) return Expected<L3CipheringModeComplete>::error(r.error());
-    if (r.value() != 0) {
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
         return Expected<L3CipheringModeComplete>::error(
-            {ParseError::Code::InvalidValue, "CipheringModeComplete: reserved bits must be zero"});
-    }
-    // Optional IMEISV: 8 opaque octets when present (wire-exact; not an
-    // L3MobileIdentity — see the class comment).
-    if (br.remainingBits() >= 64) {
-        for (size_t i = 0; i < 8; ++i) {
-            r = br.readField(8); if (!r) return Expected<L3CipheringModeComplete>::error(r.error());
-            msg.mImeisv[i] = static_cast<uint8_t>(r.value());
-        }
-        msg.mHasImeisv = true;
-    }
+            {ParseError::Code::TruncatedInput, "truncated optional IEs"});
     return Expected<L3CipheringModeComplete>::hold(std::move(msg));
 }
 
 void L3CipheringModeComplete::write(BitWriter& bw) const {
-    bw.writeField(mCipheringModeResponse, 2);
-    bw.writeField(0, 6);
-    if (mHasImeisv) {
-        for (uint8_t b : mImeisv) bw.writeField(b, 8);
-    }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3CipheringModeComplete::text(std::ostream& os) const {
-    os << "CipheringModeComplete: response=" << static_cast<unsigned>(mCipheringModeResponse);
-    if (mHasImeisv) {
-        os << " imeisv=";
-        for (uint8_t b : mImeisv) os << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned>(b);
+    os << "CipheringModeComplete";
+    if (!mAdditionalIes.empty()) {
+        os << ": additionalIes=";
+        for (uint8_t b : mAdditionalIes) os << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned>(b);
         os << std::dec << std::setfill(' ');
     }
 }
@@ -1083,7 +1074,7 @@ void L3ApplicationInformation::text(std::ostream& os) const {
 Expected<L3SystemInformationType1> L3SystemInformationType1::parse(BitReader& br) {
     L3SystemInformationType1 msg;
     {
-        auto res = L3FrequencyList::parse(br);
+        auto res = L3CellChannelDescription::parse(br);
         if (!res) return Expected<L3SystemInformationType1>::error(res.error());
         msg.mCellChannelDescription = std::move(res.value());
     }

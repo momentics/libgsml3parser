@@ -55,7 +55,7 @@ static ParsedMessage makeDummyMsg() {
 }
 
 static L3ChannelDescription makeTargetChannel() {
-    return L3ChannelDescription(TDMA_TCHF, 0, 0, 150);
+    return L3ChannelDescription(TDMA_Bm_ACCH, 0, 0, 150);
 }
 
 // ── Tests ──────────────────────────────────────────────────────────────────

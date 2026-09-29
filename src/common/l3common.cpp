@@ -552,24 +552,22 @@ void L3NeighborCellsDescription::text(std::ostream& os) const {
 
 // ── L3CellChannelDescription ───────────────────────────────────────────
 
+// Sixteen bits: [ARFCN(10)][BSIC(6) = NCC(3)|BCC(3)] (TS 44.018 section
+// 9.2.3 cell channel description).
 Expected<L3CellChannelDescription> L3CellChannelDescription::parse(BitReader& br) {
     L3CellChannelDescription result;
     auto r = br.readField(10); if (!r) return Expected<L3CellChannelDescription>::error(r.error()); result.mARfcn = static_cast<uint16_t>(r.value());
     r = br.readField(6); if (!r) return Expected<L3CellChannelDescription>::error(r.error()); result.mBSIC = static_cast<uint8_t>(r.value());
-    r = br.readField(1); if (!r) return Expected<L3CellChannelDescription>::error(r.error()); result.mChannelSpacing = r.value();
-    r = br.readField(1); if (!r) return Expected<L3CellChannelDescription>::error(r.error()); // spare
     return Expected<L3CellChannelDescription>::hold(std::move(result));
 }
 
 void L3CellChannelDescription::write(BitWriter& bw) const {
     bw.writeField(mARfcn, 10);
     bw.writeField(mBSIC, 6);
-    bw.writeField(mChannelSpacing, 1);
-    bw.writeField(0, 1);
 }
 
 void L3CellChannelDescription::text(std::ostream& os) const {
-    os << "CellChannel[ARfcn=" << mARfcn << " BSIC=" << mBSIC << " Spacing=" << mChannelSpacing << "]";
+    os << "CellChannel[ARfcn=" << mARfcn << " BSIC=" << static_cast<unsigned>(mBSIC) << "]";
 }
 
 // ── L3ControlChannelDescription ────────────────────────────────────────
@@ -879,15 +877,17 @@ void L3CipheringModeSetting::text(std::ostream& os) const {
 
 // ── L3CipheringModeResponse ────────────────────────────────────────────
 
+// Four bits: [cR(1)][spare(3)] — the response bit leads its half-octet
+// (TS 44.018 section 9.1.x).
 Expected<L3CipheringModeResponse> L3CipheringModeResponse::parse(BitReader& br) {
-    auto r = br.readField(3); if (!r) return Expected<L3CipheringModeResponse>::error(r.error()); // spare
-    r = br.readField(1); if (!r) return Expected<L3CipheringModeResponse>::error(r.error()); bool imeisv = r.value() != 0;
+    auto r = br.readField(1); if (!r) return Expected<L3CipheringModeResponse>::error(r.error()); bool imeisv = r.value() != 0;
+    r = br.readField(3); if (!r) return Expected<L3CipheringModeResponse>::error(r.error()); // spare
     return Expected<L3CipheringModeResponse>::hold(L3CipheringModeResponse(imeisv));
 }
 
 void L3CipheringModeResponse::write(BitWriter& bw) const {
-    bw.writeField(0, 3);
     bw.writeField(mIncludeIMEISV ? 1 : 0, 1);
+    bw.writeField(0, 3);
 }
 
 void L3CipheringModeResponse::text(std::ostream& os) const {
@@ -1076,7 +1076,11 @@ Expected<L3RACHControlParameters> L3RACHControlParameters::parse(BitReader& br) 
     r = br.readField(4); if (!r) return Expected<L3RACHControlParameters>::error(r.error()); result.mTxInteger = r.value();
     r = br.readField(1); if (!r) return Expected<L3RACHControlParameters>::error(r.error()); result.mCellBarAccess = r.value();
     r = br.readField(1); if (!r) return Expected<L3RACHControlParameters>::error(r.error()); result.mRE = r.value();
-    r = br.readField(16); if (!r) return Expected<L3RACHControlParameters>::error(r.error()); result.mAC = static_cast<uint16_t>(r.value());
+    // Access class bitmap (TS 44.018 section 10.5.2.29): bit i corresponds to
+    // access class i; the low octet (classes 0-7) is transmitted first.
+    auto o0 = br.readField(8); if (!o0) return Expected<L3RACHControlParameters>::error(o0.error());
+    r = br.readField(8); if (!r) return Expected<L3RACHControlParameters>::error(r.error());
+    result.mAC = static_cast<uint16_t>(o0.value() | (r.value() << 8));
     return Expected<L3RACHControlParameters>::hold(std::move(result));
 }
 
@@ -1085,7 +1089,8 @@ void L3RACHControlParameters::write(BitWriter& bw) const {
     bw.writeField(mTxInteger, 4);
     bw.writeField(mCellBarAccess, 1);
     bw.writeField(mRE, 1);
-    bw.writeField(mAC, 16);
+    bw.writeField(mAC & 0xFFu, 8);
+    bw.writeField((mAC >> 8) & 0xFFu, 8);
 }
 
 void L3RACHControlParameters::text(std::ostream& os) const {

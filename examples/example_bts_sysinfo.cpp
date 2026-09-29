@@ -80,14 +80,17 @@ bool roundTrip(const char* name, ParsedMessage&& pm) {
     return true;
 }
 
-// Build SI1: Cell Channel Description (frequency list) + RACH parameters.
+// Build SI1: cell channel description (ARFCN + BSIC) + RACH control
+// parameters + one rest octet (TS 44.018 section 9.1.31): an eight-octet L3
+// frame in total.
 void demoSI1() {
     std::cout << "=== System Information Type 1 ===\n";
-    std::cout << "Contains frequency list and RACH control parameters\n\n";
+    std::cout << "Contains cell channel description and RACH control parameters\n\n";
 
     auto si1 = L3SystemInformationType1::builder()
-        .cellChannelDescription(L3FrequencyList())
-        .rachControlParameters(L3RACHControlParameters())
+        .cellChannelDescription(100, 0x12)
+        .rachControlParameters(L3RACHControlParameters(3, 9, false, 1, 0x03FF))
+        .restOctet(0x00)
         .build();
 
     if (!roundTrip("SI1", ParsedMessage{RRM{std::move(si1)}})) {
@@ -186,8 +189,9 @@ void demoBroadcastCycle() {
 
     // SI1
     auto si1 = L3SystemInformationType1::builder()
-        .cellChannelDescription(L3FrequencyList())
-        .rachControlParameters(L3RACHControlParameters())
+        .cellChannelDescription(100, 0x12)
+        .rachControlParameters(L3RACHControlParameters(3, 9, false, 1, 0x03FF))
+        .restOctet(0x00)
         .build();
     messages.emplace_back("SI1", ParsedMessage{RRM{std::move(si1)}});
 

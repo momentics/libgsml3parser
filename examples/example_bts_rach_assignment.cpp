@@ -103,7 +103,7 @@ void step2_allocateChannelAndBuildIA() {
         .pageMode(L3PageMode(0))
         .dedicatedModeOrTBF(L3DedicatedModeOrTBF(false, false))
         .requestReference(L3RequestReference(1, 2, 3, 4))
-        .channelDescription(L3ChannelDescription(TDMA_SDCCH, 0, ch->timeslot, ch->arfcn))
+        .channelDescription(L3ChannelDescription(TDMA_SDCCH8_0, 0, ch->timeslot, ch->arfcn))
         .timingAdvance(L3TimingAdvance(32))
         .build();
 
@@ -269,7 +269,7 @@ void step7_roundtripVerification() {
     printSeparator("Step 7: Full Round-Trip Verification");
 
     auto ia = L3ImmediateAssignment::builder()
-        .channelDescription(L3ChannelDescription(TDMA_SDCCH, 0, 2, 150))
+        .channelDescription(L3ChannelDescription(TDMA_SDCCH8_0, 0, 2, 150))
         .timingAdvance(L3TimingAdvance(64))
         .build();
 

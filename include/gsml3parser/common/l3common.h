@@ -251,19 +251,21 @@ private:
 
 // ── Cell Channel Description (GSM 04.08 10.5.2.1b) ────────────────────
 
+// Cell channel description: sixteen bits, [ARFCN(10)][BSIC(6)] with the BSIC
+// packed as [NCC(3)|BCC(3)] (TS 44.018 section 9.2.3). The same value part
+// is reused for the repeated neighbor-cell records of System Information
+// Type 17/18/19.
 class L3CellChannelDescription {
     uint16_t mARfcn{};
-    uint8_t mBSIC{};
-    unsigned mChannelSpacing{};
+    uint8_t mBSIC{};      ///< NCC(3)|BCC(3)
 public:
     L3CellChannelDescription() = default;
-    L3CellChannelDescription(unsigned arfcn, unsigned bsic, unsigned spacing)
-        : mARfcn(static_cast<uint16_t>(arfcn)), mBSIC(static_cast<uint8_t>(bsic)), mChannelSpacing(spacing) {}
+    L3CellChannelDescription(unsigned arfcn, unsigned bsic)
+        : mARfcn(static_cast<uint16_t>(arfcn)), mBSIC(static_cast<uint8_t>(bsic & 0x3Fu)) {}
 
     uint16_t arfcn() const { return mARfcn; }
     uint8_t bsic() const { return mBSIC; }
-    unsigned channelSpacing() const { return mChannelSpacing; }
-    static constexpr size_t lengthV() { return 3; }
+    static constexpr size_t lengthV() { return 2; }
 
     [[nodiscard]] static Expected<L3CellChannelDescription> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -389,7 +391,9 @@ public:
     L3ChannelDescription2(TypeAndOffset tao, unsigned tn, unsigned tsc, unsigned arfcn);
     explicit L3ChannelDescription2(const L3ChannelDescription& other);
 
-    bool initialized() const { return mTypeAndOffset != TDMA_MISC; }
+    // '00000' is the invalid channel code and marks a default-constructed
+    // description as not initialized (TS 44.018 section 9.2.3).
+    bool initialized() const { return mTypeAndOffset != 0; }
     uint8_t typeAndOffset() const { return mTypeAndOffset; }
     uint8_t tn() const { return mTN; }
     uint8_t tsc() const { return mTSC; }
@@ -576,6 +580,9 @@ public:
 
 // ── Ciphering Mode Response (GSM 04.08 10.5.2.10) ─────────────────────
 
+// Ciphering mode response (TS 44.018 section 9.1.x): the response bit (cR)
+// occupies the most significant bit of its half-octet, followed by three
+// spare bits.
 class L3CipheringModeResponse {
     bool mIncludeIMEISV{};
 public:
@@ -583,7 +590,7 @@ public:
     explicit L3CipheringModeResponse(bool includeIMEISV) : mIncludeIMEISV(includeIMEISV) {}
 
     bool includeIMEISV() const { return mIncludeIMEISV; }
-    static constexpr size_t lengthV() { return 0; } // 2 bits
+    static constexpr size_t lengthV() { return 0; } // 4 bits: response bit + three spare
 
     [[nodiscard]] static Expected<L3CipheringModeResponse> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -634,11 +641,20 @@ public:
 class L3PageMode {
     uint8_t mPageMode{};
 public:
+    /// Page mode values (TS 44.018): a four-bit field whose low two bits
+    /// carry the mode, the upper two bits spare.
+    enum Value : uint8_t {
+        Normal = 0,
+        Extended = 1,
+        Reorganization = 2,
+        SameAsBefore = 3
+    };
+
     L3PageMode() = default;
-    explicit L3PageMode(unsigned mode) : mPageMode(static_cast<uint8_t>(mode)) {}
+    explicit L3PageMode(unsigned mode) : mPageMode(static_cast<uint8_t>(mode & 0x03u)) {}
 
     uint8_t pageMode() const { return mPageMode; }
-    static constexpr size_t lengthV() { return 0; } // 2 bits
+    static constexpr size_t lengthV() { return 0; } // 4 bits: two spare + two mode
 
     [[nodiscard]] static Expected<L3PageMode> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -771,6 +787,10 @@ public:
 
 // ── RACH Control Parameters (GSM 04.08 10.5.2.29) ─────────────────────
 
+// RACH control parameters (TS 44.018 section 10.5.2.29): max retransmissions,
+// TX integer, the cell-barred-access and RE bits, and the 16-bit access class
+// bitmap whose bit i corresponds to access class i (i = 0..15); on the wire
+// the low octet (access classes 0-7) is sent first.
 class L3RACHControlParameters {
     unsigned mMaxRetrans{};
     unsigned mTxInteger{};
@@ -779,6 +799,10 @@ class L3RACHControlParameters {
     uint16_t mAC{};
 public:
     L3RACHControlParameters() = default;
+    L3RACHControlParameters(unsigned maxRetrans, unsigned txInteger, bool cellBarAccess,
+                            unsigned re, uint16_t ac)
+        : mMaxRetrans(maxRetrans & 0x03u), mTxInteger(txInteger & 0x0Fu),
+          mCellBarAccess(cellBarAccess ? 1u : 0u), mRE(re & 0x01u), mAC(ac) {}
 
     unsigned maxRetrans() const { return mMaxRetrans; }
     unsigned txInteger() const { return mTxInteger; }

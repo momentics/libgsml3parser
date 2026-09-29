@@ -30,14 +30,16 @@ namespace gsml3parser {
 namespace {
 // Map a logical ChannelType to a TypeAndOffset for L3ChannelDescription.
 // Used to expose the real assignment target on the session's ResponseContext.
+// Traffic channels use the Bm code ('00001', TCH/F or TCH/H ACCH); SDCCH and
+// CBCH targets use the first SDCCH/8 / CBCH/8 sub-slot codes (TS 44.018 9.2.3).
 TypeAndOffset typeAndOffsetFor(ChannelType ch) {
     switch (ch) {
-        case ChannelType::SDCCHType: return TDMA_SDCCH;
-        case ChannelType::TCHFType:  return TDMA_TCHF;
-        case ChannelType::TCHHType:  return TDMA_TCHH;
-        case ChannelType::SACCHType: return TDMA_SACCH;
-        case ChannelType::CBCHType:  return TDMA_CBCH;
-        default:                     return TDMA_SDCCH;
+        case ChannelType::TCHFType:  return TDMA_Bm_ACCH;
+        case ChannelType::TCHHType:  return TDMA_Bm_ACCH;
+        case ChannelType::SACCHType: return TDMA_Bm_ACCH;
+        case ChannelType::SDCCHType: return static_cast<TypeAndOffset>(channelCodeSdcch8(0));
+        case ChannelType::CBCHType:  return TDMA_CBCH8;
+        default:                     return static_cast<TypeAndOffset>(channelCodeSdcch8(0));
     }
 }
 } // namespace

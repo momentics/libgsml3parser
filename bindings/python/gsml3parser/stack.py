@@ -685,14 +685,6 @@ class Message:
         self._check()
         return int(lib.gsml3_msg_ciphering_mode_command_algorithm(self._h))
 
-    def ciphering_mode_complete_response(self) -> int:
-        self._check()
-        return int(lib.gsml3_msg_ciphering_mode_complete_response(self._h))
-
-    def ciphering_mode_complete_has_imeisv(self) -> int:
-        self._check()
-        return int(lib.gsml3_msg_ciphering_mode_complete_has_imeisv(self._h))
-
     def handover_complete_cause(self) -> int:
         self._check()
         return int(lib.gsml3_msg_handover_complete_cause(self._h))
@@ -1873,8 +1865,10 @@ def build_ciphering_mode_command(algo: int) -> bytes:
     return _builder("gsml3_build_ciphering_mode_command", (_as_u8(algo, "algo"),))
 
 
-def build_ciphering_mode_complete(response: int) -> bytes:
-    return _builder("gsml3_build_ciphering_mode_complete", (_as_int(response, "response", lo=0),))
+def build_ciphering_mode_complete() -> bytes:
+    """Ciphering Mode Complete carries no fixed body fields (TS 44.018); the
+    built frame is header-only."""
+    return _builder("gsml3_build_ciphering_mode_complete", ())
 
 
 def build_handover_complete(rr_cause: int) -> bytes:

@@ -212,6 +212,87 @@ TEST(GoldenRR, PagingRequestType2_Parse) {
 }
 
 // =====================================================================
+// Golden: Paging Request Type 2 (TS 44.018): channel needed second=ANY,
+// first=TCH/F ('00''10'), page mode EXTENDED ('0001'), then two raw TMSIs.
+// The four-bit page mode sits between channel needed and the identities.
+// =====================================================================
+
+TEST(GoldenRR, PagingRequestType2_RefVector) {
+    uint8_t data[] = {0x06, 0x22, 0x21,
+                      0x12, 0x34, 0x56, 0x78,
+                      0x9A, 0xBC, 0xDE, 0xF0};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* p = tryGet<L3PagingRequestType2>(*msg);
+    ASSERT_NE(p, nullptr);
+    EXPECT_EQ(static_cast<unsigned>(p->pageMode()), 1u);   // extended
+    EXPECT_EQ(p->channelsNeeded()[0], ChannelType::TCHFType);
+    EXPECT_EQ(p->channelsNeeded()[1], ChannelType::AnyDCCHType);
+    // TMSI values asserted per the class API (two 32-bit identities).
+    EXPECT_EQ(p->tmsis()[0], 0x12345678u);
+    EXPECT_EQ(p->tmsis()[1], 0x9ABCDEF0u);
+
+    // Builder: Reorganization page mode lands in the low nibble of the
+    // channel-needed/page-mode octet (second=ANY, first=TCH/F -> 0b0010).
+    auto built = L3PagingRequestType2::builder()
+                     .addTMSI(0x12345678u, ChannelType::TCHFType)
+                     .addTMSI(0x9ABCDEF0u, ChannelType::AnyDCCHType)
+                     .pageMode(L3PageMode::Reorganization)
+                     .build();
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes)[2], 0x22u);   // chan_needed '00''10' | page mode '0010'
+    auto parsed = roundtrip(pm);
+    ASSERT_TRUE(parsed);
+    const auto* reparsed = tryGet<L3PagingRequestType2>(*parsed);
+    ASSERT_NE(reparsed, nullptr);
+    EXPECT_EQ(static_cast<unsigned>(reparsed->pageMode()),
+              static_cast<unsigned>(L3PageMode::Reorganization));
+}
+
+TEST(GoldenRR, PagingRequestType1_PageMode) {
+    // Type 1: channel needed second=ANY|first=TCH/F (0b0010), page mode
+    // SAME_AS_BEFORE (0b0011), then the two mobile identities.
+    auto built = L3PagingRequestType1::builder()
+                     .addMobileId(L3MobileIdentity(0x12345678u), ChannelType::TCHFType)
+                     .addMobileId(L3MobileIdentity(0x9ABCDEF0u), ChannelType::AnyDCCHType)
+                     .pageMode(L3PageMode::SameAsBefore)
+                     .build();
+    EXPECT_EQ(static_cast<unsigned>(built.pageMode()), 3u);
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    // Byte 2: second(2)=00 | first(2)=10 | page mode(4)=0011 -> 0x23.
+    EXPECT_EQ((*bytes)[2], 0x23u);
+
+    auto parsed = roundtrip(pm);
+    ASSERT_TRUE(parsed);
+    const auto* reparsed = tryGet<L3PagingRequestType1>(*parsed);
+    ASSERT_NE(reparsed, nullptr);
+    EXPECT_EQ(static_cast<unsigned>(reparsed->pageMode()), 3u);
+}
+
+TEST(GoldenRR, PagingRequestType3_PageMode) {
+    auto built = L3PagingRequestType3::builder()
+                     .addTMSI(0x12345678u, ChannelType::SDCCHType)
+                     .pageMode(L3PageMode::Extended)
+                     .build();
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    // Byte 2: second(2)=00 (ANY, default) | first(2)=01 (SDCCH) |
+    // page mode(4)=0001 -> 0x11.
+    EXPECT_EQ((*bytes)[2], 0x11u);
+
+    auto parsed = roundtrip(pm);
+    ASSERT_TRUE(parsed);
+    const auto* reparsed = tryGet<L3PagingRequestType3>(*parsed);
+    ASSERT_NE(reparsed, nullptr);
+    EXPECT_EQ(static_cast<unsigned>(reparsed->pageMode()), 1u);
+}
+
+// =====================================================================
 // RR PARSE FROM HEX: Paging Request Type 3 (3GPP TS 44.018 9.1.24 / GSM 04.08 9.1.24)
 // Frame shape: PD = '0110'B (RR), MTI = '00100100'B (PagingRequestType3, 0x24).
 // Body per TS 44.018 9.1.24: ChannelNeeded(4 bits) chan_needed, PageMode(4 bits) page_mode,
@@ -366,14 +447,14 @@ TEST(GoldenRR, HandoverCommand_Parse) {
     //   bcc(3)=011, ncc(3)=101, arfcn(10)=0001100100
     //   LSB-first: 011|101|00 = 0x74, 00011001|00xxxxxx = 0x19 (arfcn=100=0x64, high 2 bits in byte 1)
     // Bytes 4-6: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), ARFCN(12) [GSM 24.008 10.5.2.5]
-    //   {0x11, 0xE0, 0x64}: typeAndOffset=2(TDMA_TCHF), TN=1, TSC=7, h=0, ARFCN=100
+    //   {0x09, 0xE0, 0x64}: typeAndOffset=1(TDMA_Bm_ACCH, TCH/F or TCH/H ACCH), TN=1, TSC=7, h=0, ARFCN=100
     // Byte 7: HORef = 0x17 [GSM 24.008 10.5.2.15, 5-bit handover reference]
     // Byte 8: PowerCmdAccType = 0x00 [GSM 24.008 10.5.2.28a]
     // Byte 9: SyncInd = 0x00 [GSM 24.008 10.5.2.39]
     uint8_t data[] = {
         0x06, 0x2b,
         0x74, 0x19,
-        0x11, 0xE0, 0x64,
+        0x09, 0xE0, 0x64,
         0x17, 0x00, 0x00
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -397,9 +478,9 @@ TEST(GoldenRR, AssignmentCommand_Parse) {
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x2E (AssignmentCommand) [3GPP TS 44.018 Table 10.4.1]
     // Bytes 2-4: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), ARFCN(12) [GSM 24.008 10.5.2.5]
-    //   {0x10, 0xE0, 0x64}: typeAndOffset=2(TDMA_TCHF), TN=0, TSC=7, h=0, ARFCN=100
+    //   {0x08, 0xE0, 0x64}: typeAndOffset=1(TDMA_Bm_ACCH, TCH/F or TCH/H ACCH), TN=0, TSC=7, h=0, ARFCN=100
     // Byte 5: PowerCmd = 0x00 [GSM 24.008 10.5.2.28, 5-bit power_command << 3]
-    uint8_t data[] = {0x06, 0x2e, 0x10, 0xE0, 0x64, 0x00};
+    uint8_t data[] = {0x06, 0x2e, 0x08, 0xE0, 0x64, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3AssignmentCommand::MTI);
@@ -426,14 +507,14 @@ TEST(GoldenRR, ImmediateAssignment_Parse) {
     //   DedicatedModeOrTbf (TS 44.018 9.1.19): tbf=0 (dedicated mode), downlink, spare bits zero
     //   PageMode (TS 44.018 9.1.19): NORMAL(0)
     // Bytes 3-5: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), ARFCN(12) [GSM 24.008 10.5.2.5]
-    //   {0x00, 0x00, 0x64}: typeAndOffset=0(TDMA_SACCH), TN=0, TSC=0, h=0, ARFCN=100
+    //   {0x08, 0x00, 0x64}: typeAndOffset=1(TDMA_Bm_ACCH, TCH/F or TCH/H ACCH), TN=0, TSC=0, h=0, ARFCN=100
     // Bytes 6-8: ReqRef: RA(8)=0x42, T1p(5)=0, T3(6)=0, T2(5)=0 [GSM 24.008 10.5.2.30]
     //   TS 24.008 10.5.2.30: ra(8), t1p(5), t3(6), t2(5)
     // Byte 9: TA = 0x00 [GSM 24.008 10.5.2.40, 6-bit timing_advance << 2]
     // Byte 10: MobileAlloc LV length = 0 (no mobile allocation)
     uint8_t data[] = {
         0x06, 0x3f, 0x00,
-        0x00, 0x00, 0x64,
+        0x08, 0x00, 0x64,
         0x42, 0x00, 0x00,
         0x00, 0x00
     };
@@ -487,9 +568,9 @@ TEST(GoldenRR, ChannelModeModify_Parse) {
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x10 (ChannelModeModify) [3GPP TS 44.018 Table 10.4.1]
     // Bytes 2-4: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), ARFCN(12) [GSM 24.008 10.5.2.5]
-    //   {0x11, 0xE0, 0x64}: typeAndOffset=2(TDMA_TCHF), TN=1, TSC=7, h=0, ARFCN=100
+    //   {0x09, 0xE0, 0x64}: typeAndOffset=1(TDMA_Bm_ACCH, TCH/F or TCH/H ACCH), TN=1, TSC=7, h=0, ARFCN=100
     // Byte 5: ChanMode(4)=1(SpeechV1)|spare(4)=0 = 0x01 [GSM 24.008 10.5.2.6]
-    uint8_t data[] = {0x06, 0x10, 0x11, 0xE0, 0x64, 0x01};
+    uint8_t data[] = {0x06, 0x10, 0x09, 0xE0, 0x64, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ChannelModeModify::MTI);
@@ -645,7 +726,7 @@ TEST(GoldenRR, CipheringModeCommand_Parse) {
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x35 (CipheringModeCommand) [3GPP TS 44.018 Table 10.4.1]
     // Byte 2: cipherModeSetting(4)=sC(1)=1(on)|algorithmIdentifier(3)=3(A5/3) | cipherModeResponse(4)=cR(0)=0|spare(3)=0 = 0xB0
-    //   TS 24.008 10.5.2.9: cipherModeSetting is the FIRST field -> high nibble,
+    //   TS 44.018: cipherModeSetting is the FIRST field -> high nibble,
     //   cipherModeResponse is the SECOND field -> low nibble (CipheringModeCommand record):
     //   cipherModeSetting(4 MSB)|cipherModeResponse(4 LSB).
     //   cipherModeSetting: sC=1, algId=011(A5/3) -> 0b1011 = 0xB (high nibble)
@@ -655,6 +736,106 @@ TEST(GoldenRR, CipheringModeCommand_Parse) {
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CipheringModeCommand::MTI);
+    const auto* cm = tryGet<L3CipheringModeCommand>(*msg);
+    ASSERT_NE(cm, nullptr);
+    EXPECT_TRUE(cm->isCiphering());          // sC bit (bit 7 of the octet)
+    EXPECT_EQ(cm->algorithm(), 3u);          // A5/3 (bits 6:4)
+    EXPECT_FALSE(cm->includeIMEISV());       // cR bit (bit 3) — clear
+}
+
+// =====================================================================
+// Golden: Ciphering Mode Command (TS 44.018): the single body octet packs
+// start-ciphering (bit 7), algorithm identifier (bits 6:4, '001' = A5/1)
+// and the response bit (bit 3, clear) with its three spare bits.
+// =====================================================================
+
+TEST(GoldenRR, CipheringModeCommand_RefVector) {
+    uint8_t data[] = {0x06, 0x35, 0x90};   // sC=1, alg=1 (A5/1), cR=0
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* cm = tryGet<L3CipheringModeCommand>(*msg);
+    ASSERT_NE(cm, nullptr);
+    EXPECT_TRUE(cm->isCiphering());          // sC bit (bit 7 of the octet)
+    EXPECT_EQ(cm->algorithm(), 1u);          // A5/1 (bits 6:4)
+    EXPECT_FALSE(cm->includeIMEISV());       // cR bit (bit 3) — clear
+
+    // The builder emits the identical octet for the same field values.
+    auto built = L3CipheringModeCommand::builder().ciphering(true).algorithm(1).build();
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), 3u);
+    EXPECT_EQ((*bytes)[0], 0x06u);
+    EXPECT_EQ((*bytes)[1], 0x35u);
+    EXPECT_EQ((*bytes)[2], 0x90u);
+}
+
+TEST(GoldenRR, CipheringModeCommand_StartCipheringOnly) {
+    // 0x80 = '1'000_0000: start-ciphering set (bit 7), algorithm '000'
+    // (no ciphering algorithm), cR clear — pins sC as the top bit of the octet.
+    uint8_t data[] = {0x06, 0x35, 0x80};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* cm = tryGet<L3CipheringModeCommand>(*msg);
+    ASSERT_NE(cm, nullptr);
+    EXPECT_TRUE(cm->isCiphering());
+    EXPECT_EQ(cm->algorithm(), 0u);
+    EXPECT_FALSE(cm->includeIMEISV());
+}
+
+TEST(GoldenRR, CipheringModeCommand_ResponseBit) {
+    // sC=1, alg='000' (no algorithm), cR='1' (include IMEISV):
+    // 1_000 | 1_000 = 0x88.
+    uint8_t data[] = {0x06, 0x35, 0x88};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* cm = tryGet<L3CipheringModeCommand>(*msg);
+    ASSERT_NE(cm, nullptr);
+    EXPECT_TRUE(cm->isCiphering());
+    EXPECT_EQ(cm->algorithm(), 0u);
+    EXPECT_TRUE(cm->includeIMEISV());        // cR bit (bit 3) set
+}
+
+// =====================================================================
+// Golden: Ciphering Mode Complete (TS 44.018): no fixed body fields — the
+// message is header-only unless an optional mobile equipment identity
+// follows, which is kept as an opaque sequence.
+// =====================================================================
+
+TEST(GoldenRR, CipheringModeComplete_RefVector) {
+    uint8_t data[] = {0x06, 0x32};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* cc = tryGet<L3CipheringModeComplete>(*msg);
+    ASSERT_NE(cc, nullptr);
+    EXPECT_EQ(cc->bodyLength(), 0u);
+    EXPECT_TRUE(cc->additionalIes().empty());
+
+    // The header-only message serializes to exactly the two L3 header octets.
+    auto built = L3CipheringModeComplete::builder().build();
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes).size(), 2u);
+    EXPECT_EQ((*bytes)[0], 0x06u);
+    EXPECT_EQ((*bytes)[1], 0x32u);
+}
+
+TEST(GoldenRR, CipheringModeComplete_OpaqueTailRoundTrip) {
+    // An optional trailing octet sequence (mobile equipment identity) is
+    // preserved and re-emitted verbatim.
+    uint8_t mei[] = {0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x10, 0x21};
+    auto built = L3CipheringModeComplete::builder()
+                     .additionalIes(std::span<const uint8_t>(mei))
+                     .build();
+    EXPECT_EQ(built.bodyLength(), 8u);
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto parsed = roundtrip(pm);
+    ASSERT_TRUE(parsed);
+    const auto* cc = tryGet<L3CipheringModeComplete>(*parsed);
+    ASSERT_NE(cc, nullptr);
+    EXPECT_EQ(cc->additionalIes(),
+              (std::vector<uint8_t>{0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x10, 0x21}));
 }
 
 // =====================================================================
@@ -791,7 +972,7 @@ TEST(GoldenRR, AdditionalAssignment_RoundTrip) {
 // =====================================================================
 
 TEST(GoldenRR, ChannelModeModify_RoundTrip) {
-    L3ChannelDescription chd(TDMA_TCHF, 1, 7, 100);
+    L3ChannelDescription chd(TDMA_Bm_ACCH, 1, 7, 100);
     L3ChannelMode mode(L3ChannelMode::SpeechV1);
     ParsedMessage msg(RRM(L3ChannelModeModify(chd, mode)));
     auto parsed = roundtrip(msg);
@@ -806,13 +987,13 @@ TEST(GoldenRR, ChannelModeModify_RoundTrip) {
 
 TEST(GoldenRR, ChannelModeModifyAcknowledge_RoundTrip) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x17 ('00010111'B, TS 44.018 Table 10.4.1)
-    // Body = ChanDesc(3 octets) + ChanMode(1 octet): typeAndOffset=2(TDMA_TCHF), TN=1, TSC=7, ARFCN=100, mode=SpeechV1
-    uint8_t data[] = {0x06, 0x17, 0x11, 0xE0, 0x64, 0x01};
+    // Body = ChanDesc(3 octets) + ChanMode(1 octet): typeAndOffset=1(TDMA_Bm_ACCH), TN=1, TSC=7, ARFCN=100, mode=SpeechV1
+    uint8_t data[] = {0x06, 0x17, 0x09, 0xE0, 0x64, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     auto* cma = tryGet<L3ChannelModeModifyAcknowledge>(*msg);
     ASSERT_TRUE(cma);
-    EXPECT_EQ(cma->description().typeAndOffset(), TDMA_TCHF);
+    EXPECT_EQ(cma->description().typeAndOffset(), TDMA_Bm_ACCH);
     EXPECT_EQ(cma->mode().mode(), L3ChannelMode::SpeechV1);
     auto parsed = roundtrip(*msg);
     ASSERT_TRUE(parsed);
@@ -1079,8 +1260,8 @@ TEST(GoldenRR, ConfigurationChangeReject_RoundTrip) {
 
 TEST(GoldenRR, PartialRelease_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x0A ('00001010'B, TS 44.018 Table 10.4.1)
-    // Body = ChannelDescription(3 octets): typeAndOffset=2(TDMA_TCHF), TN=0, TSC=7, h=0, ARFCN=100
-    uint8_t data[] = {0x06, 0x0a, 0x10, 0xE0, 0x64};
+    // Body = ChannelDescription(3 octets): typeAndOffset=1(TDMA_Bm_ACCH), TN=0, TSC=7, h=0, ARFCN=100
+    uint8_t data[] = {0x06, 0x0a, 0x08, 0xE0, 0x64};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3PartialRelease::MTI);

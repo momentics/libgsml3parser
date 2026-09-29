@@ -43,12 +43,16 @@ const char* rrMessageName(int mti);
 
 // ── Paging Request Type 1 (GSM 04.08 9.1.22) ──────────────────────────
 
+// Paging Request Type 1 (TS 44.018): the body opens with channel needed — two
+// two-bit fields, second paged mobile first — then the four-bit page mode,
+// followed by up to two mobile identities (LV, the second as a TLV).
 class L3PagingRequestType1 {
     // Up to 2 paged mobiles (GSM 04.08 9.1.22) stored inline so the message is
     // constructible with zero heap allocation on the response path.
     std::array<L3MobileIdentity, 2> mMobileIDs{};
     size_t mMobileIdCount{0};
     std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
+    L3PageMode mPageMode{};
 public:
     static constexpr int MTI = 0x21;
 
@@ -58,8 +62,13 @@ public:
         std::array<L3MobileIdentity, 2> mMobileIds{};
         size_t mCount{0};
         std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
+        L3PageMode mPageMode{};
     public:
         Builder& addMobileId(const L3MobileIdentity& id, ChannelType type);
+        /// Set the page mode (four-bit field between channel needed and the identities).
+        Builder& pageMode(L3PageMode v) { mPageMode = v; return *this; }
+        /// Set the page mode from its two-bit value (0..3, see L3PageMode::Value).
+        Builder& pageMode(unsigned v) { mPageMode = L3PageMode(v); return *this; }
         L3PagingRequestType1 build();
     };
 
@@ -67,6 +76,7 @@ public:
 
     std::span<const L3MobileIdentity> mobileIds() const { return {mMobileIDs.data(), mMobileIdCount}; }
     const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
+    [[nodiscard]] unsigned pageMode() const { return mPageMode.pageMode(); }
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -79,11 +89,14 @@ public:
 
 // ── Paging Request Type 2 (GSM 04.08 9.1.23) ──────────────────────────
 
+// Paging Request Type 2 (TS 44.018): channel needed, four-bit page mode and
+// two raw TMSIs (each four octets), optionally a third mobile identity TLV.
 class L3PagingRequestType2 {
     // Exactly 2 paged TMSIs (GSM 04.08 9.1.23) stored inline for zero-heap
     // construction on the response path.
     std::array<uint32_t, 2> mTMSIs{};
     std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
+    L3PageMode mPageMode{};
 public:
     static constexpr int MTI = 0x22;
 
@@ -93,8 +106,13 @@ public:
         std::array<uint32_t, 2> mTMSIs{};
         size_t mCount{0};
         std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
+        L3PageMode mPageMode{};
     public:
         Builder& addTMSI(uint32_t tmsi, ChannelType type);
+        /// Set the page mode (four-bit field between channel needed and the TMSIs).
+        Builder& pageMode(L3PageMode v) { mPageMode = v; return *this; }
+        /// Set the page mode from its two-bit value (0..3, see L3PageMode::Value).
+        Builder& pageMode(unsigned v) { mPageMode = L3PageMode(v); return *this; }
         L3PagingRequestType2 build();
     };
 
@@ -102,6 +120,7 @@ public:
 
     std::span<const uint32_t> tmsis() const { return mTMSIs; }
     const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
+    [[nodiscard]] unsigned pageMode() const { return mPageMode.pageMode(); }
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -114,11 +133,14 @@ public:
 
 // ── Paging Request Type 3 (GSM 04.08 9.1.24) ──────────────────────────
 
+// Paging Request Type 3 (TS 44.018): channel needed, four-bit page mode and
+// four raw TMSIs (each four octets).
 class L3PagingRequestType3 {
     // Exactly 4 paged TMSIs (GSM 04.08 9.1.24) stored inline for zero-heap
     // construction on the response path.
     std::array<uint32_t, 4> mTMSIs{};
     std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
+    L3PageMode mPageMode{};
 public:
     static constexpr int MTI = 0x24;
 
@@ -128,8 +150,13 @@ public:
         std::array<uint32_t, 4> mTMSIs{};
         size_t mCount{0};
         std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
+        L3PageMode mPageMode{};
     public:
         Builder& addTMSI(uint32_t tmsi, ChannelType type);
+        /// Set the page mode (four-bit field between channel needed and the TMSIs).
+        Builder& pageMode(L3PageMode v) { mPageMode = v; return *this; }
+        /// Set the page mode from its two-bit value (0..3, see L3PageMode::Value).
+        Builder& pageMode(unsigned v) { mPageMode = L3PageMode(v); return *this; }
         L3PagingRequestType3 build();
     };
 
@@ -137,6 +164,7 @@ public:
 
     std::span<const uint32_t> tmsis() const { return mTMSIs; }
     const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
+    [[nodiscard]] unsigned pageMode() const { return mPageMode.pageMode(); }
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -485,6 +513,10 @@ public:
 
 // ── Ciphering Mode Command (GSM 04.08 9.1.9) ──────────────────────────
 
+// Ciphering Mode Command (TS 44.018): a single body octet packing the cipher
+// mode setting first — start-ciphering bit (bit 7) and three-bit algorithm
+// identifier (bits 6:4, '001' = A5/1) — followed by the cipher mode response:
+// the cR bit (bit 3) and three spare bits.
 class L3CipheringModeCommand {
     bool mCiphering{false};
     int mAlgorithm{0};
@@ -531,16 +563,11 @@ public:
 
 // ── Ciphering Mode Complete (GSM 04.08 9.1.10) ────────────────────────
 
+// Ciphering Mode Complete (TS 44.018): carries no fixed fields; an optional
+// mobile equipment identity is kept as an opaque sequence (empty by default,
+// i.e. the message is header-only).
 class L3CipheringModeComplete {
-    // Ciphering mode response: 00 = ciphering off, 01 = ciphering on
-    // (TS 44.018 9.1.26). The value part is the mandatory response octet
-    // followed by the optional mobile equipment identity (IMEISV).
-    uint8_t mCipheringModeResponse{0};
-    // IMEISV is carried wire-exact as 8 opaque octets (BCD IMEI + SV);
-    // it is NOT an L3MobileIdentity (whose 2-bit type field does not
-    // exist in this position on the wire).
-    std::array<uint8_t, 8> mImeisv{};
-    bool mHasImeisv{false};
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -548,11 +575,11 @@ public:
 
     L3CipheringModeComplete() = default;
 
-    [[nodiscard]] unsigned cipheringModeResponse() const { return mCipheringModeResponse; }
-    [[nodiscard]] bool hasImeisv() const { return mHasImeisv; }
-    [[nodiscard]] const std::array<uint8_t, 8>& imeisv() const { return mImeisv; }
+    /// Unrecognized optional information elements are kept as an opaque
+    /// sequence and re-emitted verbatim (TS 44.018 optional IEs).
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
-    size_t bodyLength() const { return 1 + (mHasImeisv ? 8 : 0); }
+    size_t bodyLength() const { return mAdditionalIes.size(); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
     size_t l2BodyLength() const { return bodyLength(); }
@@ -561,20 +588,14 @@ public:
     void text(std::ostream& os) const;
 
     struct Builder {
-        uint8_t mCipheringModeResponse{0};
-        std::array<uint8_t, 8> mImeisv{};
-        bool mHasImeisv{false};
+        std::vector<uint8_t> mAdditionalIes;
 
-        /// Set the ciphering mode response (0 = off, 1 = on).
-        Builder& response(unsigned v) { mCipheringModeResponse = static_cast<uint8_t>(v & 0x03u); return *this; }
-        /// Attach the optional IMEISV (8 opaque octets: BCD IMEI + SV).
-        Builder& imeisv(std::array<uint8_t, 8> v) { mImeisv = v; mHasImeisv = true; return *this; }
+        /// Set the optional trailing octets (e.g. a mobile equipment identity).
+        Builder& additionalIes(std::span<const uint8_t> v) { mAdditionalIes.assign(v.begin(), v.end()); return *this; }
         /// Build the final message.
         [[nodiscard]] L3CipheringModeComplete build() const {
             L3CipheringModeComplete msg;
-            msg.mCipheringModeResponse = mCipheringModeResponse;
-            msg.mImeisv = mImeisv;
-            msg.mHasImeisv = mHasImeisv;
+            msg.mAdditionalIes = mAdditionalIes;
             return msg;
         }
     };
@@ -842,8 +863,11 @@ public:
 
 // ── System Information Type 1 (GSM 04.08 9.1.31) ──────────────────────
 
+// System Information Type 1 (TS 44.018 section 9.1.31): the cell channel
+// description (ARFCN + BSIC, two octets), the RACH control parameters (three
+// octets) and at most one rest octet.
 class L3SystemInformationType1 {
-    L3FrequencyList mCellChannelDescription;
+    L3CellChannelDescription mCellChannelDescription;
     L3RACHControlParameters mRACHControlParameters;
     bool mHaveRestOctets{false};
     uint8_t mRestOctet{0};
@@ -854,12 +878,12 @@ public:
 
     L3SystemInformationType1() = default;
 
-    const L3FrequencyList& cellChannelDescription() const { return mCellChannelDescription; }
+    const L3CellChannelDescription& cellChannelDescription() const { return mCellChannelDescription; }
     const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
     bool hasRestOctets() const { return mHaveRestOctets; }
     uint8_t restOctet() const { return mRestOctet; }
 
-    size_t bodyLength() const { return 19 + (mHaveRestOctets ? 1 : 0); }
+    size_t bodyLength() const { return 5 + (mHaveRestOctets ? 1 : 0); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
@@ -869,13 +893,13 @@ public:
     void text(std::ostream& os) const;
 
     struct Builder {
-        L3FrequencyList mCellChannelDescription{};
+        L3CellChannelDescription mCellChannelDescription{};
         L3RACHControlParameters mRACHControlParameters{};
         bool mHaveRestOctets{false};
         uint8_t mRestOctet{0};
 
-        /// Set the cell channel description (frequency list).
-        Builder& cellChannelDescription(L3FrequencyList v) { mCellChannelDescription = v; return *this; }
+        /// Set the cell channel description (ARFCN, BSIC = NCC|BCC).
+        Builder& cellChannelDescription(unsigned arfcn, unsigned bsic) { mCellChannelDescription = L3CellChannelDescription(arfcn, bsic); return *this; }
         /// Set RACH control parameters.
         Builder& rachControlParameters(L3RACHControlParameters v) { mRACHControlParameters = v; return *this; }
         /// Set optional rest octet (sets mHaveRestOctets flag).

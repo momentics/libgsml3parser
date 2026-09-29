@@ -764,7 +764,7 @@ TEST(RRStateMachineTest, FullCycle_Message_Response_Parse) {
     EXPECT_EQ(fsm.state(), RRStateMachine::State::CHANNEL_REQUESTED);
 
     // Build ImmediateAssignment response
-    auto ch = L3ChannelDescription(TDMA_SDCCH, 0, 1, 100);
+    auto ch = L3ChannelDescription(TDMA_SDCCH8_0, 0, 1, 100);
     auto respBytes = ResponseBuilder::buildImmediateAssignment(ch, 32);
     ASSERT_TRUE(respBytes.has_value());
     auto parsed = parseL3(std::span<const uint8_t>(respBytes.value().data(), respBytes.value().size()));
@@ -775,7 +775,7 @@ TEST(RRStateMachineTest, FullCycle_Message_Response_Parse) {
 // RR: Span overload writes to pre-allocated buffer with correct byte count
 TEST(RRStateMachineTest, ResponseBuilder_SpanOverload_ZeroAlloc) {
     uint8_t buf[512];
-    auto ch = L3ChannelDescription(TDMA_SDCCH, 0, 1, 100);
+    auto ch = L3ChannelDescription(TDMA_SDCCH8_0, 0, 1, 100);
     int n = ResponseBuilder::buildImmediateAssignment({buf, sizeof(buf)}, ch, 32);
     ASSERT_GT(n, 0);
 

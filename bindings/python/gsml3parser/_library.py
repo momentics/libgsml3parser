@@ -483,8 +483,6 @@ PROTOTYPES = {
     "gsml3_msg_paging_response_identity":             ("I",   ("H", "PID")),
     "gsml3_msg_ciphering_mode_command_ciphering":     ("I",   ("H",)),
     "gsml3_msg_ciphering_mode_command_algorithm":     ("I",   ("H",)),
-    "gsml3_msg_ciphering_mode_complete_response":     ("I",   ("H",)),
-    "gsml3_msg_ciphering_mode_complete_has_imeisv":   ("I",   ("H",)),
     "gsml3_msg_handover_complete_cause":              ("I",   ("H",)),
     "gsml3_msg_handover_command_cell":                ("I",   ("H", "P16", "P8V", "P8V")),
     "gsml3_msg_physical_information_ta":              ("I",   ("H",)),
@@ -557,7 +555,7 @@ PROTOTYPES = {
     "gsml3_build_paging_request_type3":            ("SZ", ("PB", "SZ", "U32", "U32", "U32", "U32")),
     "gsml3_build_paging_response":                 ("SZ", ("PB", "SZ", "I", "U32", "CS")),
     "gsml3_build_ciphering_mode_command":          ("SZ", ("PB", "SZ", "U8")),
-    "gsml3_build_ciphering_mode_complete":         ("SZ", ("PB", "SZ", "I")),
+    "gsml3_build_ciphering_mode_complete":         ("SZ", ("PB", "SZ")),
     "gsml3_build_handover_complete":               ("SZ", ("PB", "SZ", "I")),
     "gsml3_build_physical_information":            ("SZ", ("PB", "SZ", "U8")),
     "gsml3_build_cm_service_request":              ("SZ", ("PB", "SZ", "I", "I", "U32", "CS")),  # service_type, id_type, tmsi, imsi|None

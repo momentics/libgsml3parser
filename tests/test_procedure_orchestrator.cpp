@@ -269,7 +269,7 @@ TEST(ProcedureOrchestrator, ResponseContext_Reset_OnNewChain) {
     // (e.g. an old RAND and channel that must not leak into the next chain).
     std::memset(session.response.rand.data(), 0xAB, 16);
     session.response.hasRand = true;
-    session.response.channel = L3ChannelDescription(TDMA_SDCCH, 0, 1, 100);
+    session.response.channel = L3ChannelDescription(TDMA_SDCCH8_0, 0, 1, 100);
     session.response.hasChannel = true;
 
     // Start a new chain: the runner auto-creates a LocationUpdate procedure and must

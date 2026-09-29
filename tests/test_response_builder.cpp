@@ -30,7 +30,7 @@ using namespace gsml3parser;
 
 // Helper: build a minimal channel description for tests.
 static L3ChannelDescription makeChannel() {
-    return L3ChannelDescription(TDMA_SDCCH, 0, 1, 100);
+    return L3ChannelDescription(TDMA_SDCCH8_0, 0, 1, 100);
 }
 
 // Helper: verify that serialized bytes can be round-tripped through parseL3().

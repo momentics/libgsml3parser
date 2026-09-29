@@ -100,7 +100,7 @@ TEST(BTSPipeline, FullChannelReleaseCycle) {
 // Full BTS Immediate Assignment cycle: Builder -> L3 bytes -> LAPDm -> unwrap -> parse -> verify
 TEST(BTSPipeline, FullImmediateAssignmentCycle) {
     auto ia = L3ImmediateAssignment::builder()
-        .channelDescription(L3ChannelDescription(TDMA_SDCCH, 0, 1, 100))
+        .channelDescription(L3ChannelDescription(TDMA_SDCCH8_0, 0, 1, 100))
         .timingAdvance(L3TimingAdvance(32))
         .build();
 
@@ -131,7 +131,7 @@ TEST(BTSPipeline, FullSystemInformationType3Cycle) {
 // Full BTS Assignment Command cycle: Builder -> L3 bytes -> LAPDm -> unwrap -> parse -> verify
 TEST(BTSPipeline, FullAssignmentCommandCycle) {
     auto ac = L3AssignmentCommand::builder()
-        .channel(L3ChannelDescription(TDMA_TCHF, 1, 0, 50))
+        .channel(L3ChannelDescription(TDMA_Bm_ACCH, 1, 0, 50))
         .build();
 
     ParsedMessage pm{RRM{std::move(ac)}};
@@ -145,7 +145,7 @@ TEST(BTSPipeline, FullAssignmentCommandCycle) {
 TEST(BTSPipeline, FullHandoverCommandCycle) {
     auto ho = L3HandoverCommand::builder()
         .cellDescription(L3CellDescription())
-        .channelDescriptionAfter(L3ChannelDescription2(TDMA_TCHF, 1, 0, 50))
+        .channelDescriptionAfter(L3ChannelDescription2(TDMA_Bm_ACCH, 1, 0, 50))
         .handoverReference(L3HandoverReference())
         .powerCommandAccessType(L3PowerCommandAndAccessType())
         .syncIndication(L3SynchronizationIndication())

@@ -785,7 +785,8 @@ GSML3_C_API size_t gsml3_response_build_ciphering_mode_command(uint8_t* out,
     size_t maxlen, uint8_t algo);
 GSML3_C_API size_t gsml3_response_build_physical_information(uint8_t* out,
     size_t maxlen, uint8_t ta);
-/* type_and_offset: gsml3parser::TypeAndOffset value (types.h). */
+/* type_and_offset: five-bit channel type and offset code (TS 44.018 9.2.3 /
+ * TS 48.058 9.3.1); gsml3parser::TypeAndOffset values in types.h. */
 GSML3_C_API size_t gsml3_response_build_immediate_assignment(uint8_t* out,
     size_t maxlen, int type_and_offset, uint8_t tn, uint8_t tsc,
     uint16_t arfcn, uint8_t ta);
@@ -819,8 +820,9 @@ GSML3_C_API size_t gsml3_response_build_setup(uint8_t* out, size_t maxlen,
  * the message is not the expected type.
  */
 
-/* Channel description (GSM 04.08 10.5.2.5). type_and_offset:
- * gsml3parser::TypeAndOffset value (types.h). */
+/* Channel description (GSM 04.08 10.5.2.5). type_and_offset: five-bit
+ * channel type and offset code (TS 44.018 9.2.3 / TS 48.058 9.3.1);
+ * gsml3parser::TypeAndOffset values in types.h. */
 typedef struct gsml3_channel {
     int type_and_offset;
     uint8_t tn;
@@ -872,8 +874,8 @@ GSML3_C_API int gsml3_msg_paging_response_identity(const gsml3_message* msg,
                                                     gsml3_mobile_identity* id);
 GSML3_C_API int gsml3_msg_ciphering_mode_command_ciphering(const gsml3_message* msg);
 GSML3_C_API int gsml3_msg_ciphering_mode_command_algorithm(const gsml3_message* msg);
-GSML3_C_API int gsml3_msg_ciphering_mode_complete_response(const gsml3_message* msg);
-GSML3_C_API int gsml3_msg_ciphering_mode_complete_has_imeisv(const gsml3_message* msg);
+/* Ciphering Mode Complete carries no fixed body fields (TS 44.018); only the
+ * L3 header is exposed, via gsml3_build_ciphering_mode_complete(). */
 GSML3_C_API int gsml3_msg_handover_complete_cause(const gsml3_message* msg);
 /* Target cell of the handover command. */
 GSML3_C_API int gsml3_msg_handover_command_cell(const gsml3_message* msg,
@@ -993,9 +995,8 @@ GSML3_C_API size_t gsml3_build_paging_request_type3(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_build_paging_response(uint8_t* out, size_t maxlen,
     int id_type, uint32_t tmsi, const char* imsi);
 GSML3_C_API size_t gsml3_build_ciphering_mode_command(uint8_t* out, size_t maxlen,
-                                                       uint8_t algo);
-GSML3_C_API size_t gsml3_build_ciphering_mode_complete(uint8_t* out,
-                                                        size_t maxlen, int response);
+                                                        uint8_t algo);
+GSML3_C_API size_t gsml3_build_ciphering_mode_complete(uint8_t* out, size_t maxlen);
 GSML3_C_API size_t gsml3_build_handover_complete(uint8_t* out, size_t maxlen,
                                                   int rr_cause);
 GSML3_C_API size_t gsml3_build_physical_information(uint8_t* out, size_t maxlen,

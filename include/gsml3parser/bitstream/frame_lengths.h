@@ -50,6 +50,7 @@ inline constexpr size_t kFixedFrameEntries[] = {
     0x06, 0x29, 3,  // Assignment Complete (1-byte body)
     0x06, 0x2C, 3,  // Handover Complete (1-byte body)
     0x06, 0x2F, 3,  // Assignment Failure (1-byte body)
+    0x06, 0x35, 3,  // Ciphering Mode Command (1-byte body, TS 44.018)
     // Mobility Management (pd 0x05, MT in the six low bits of octet 1)
     0x05, 0x21, 2,  // CM Service Accept (no body)
     0x05, 0x22, 3,  // CM Service Reject (1-byte body)
