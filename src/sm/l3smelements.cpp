@@ -20,8 +20,7 @@
 // SOFTWARE.
 
 // SM IE - parse/write/text implementation
-// Spec: 3GPP TS 24.008 section 10.5.8
-// IE layouts per 3GPP TS 24.080 (PDP type, APN, QoS and PCO encodings).
+// Spec: 3GPP TS 44.068 (GSM 24.008) sections 9.5 and 10.5.6.
 
 #include "gsml3parser/sm/l3smelements.h"
 #include <sstream>
@@ -53,21 +52,25 @@ const char* SMCause2Str(SMCause cause) {
     return "Unknown";
 }
 
-// ── L3PDPAddress (GSM 24.008 10.5.8.1) ───────────────────────────────
+// ── L3PDPAddress (TS 44.068 section 10.5.6.4) ─────────────────────────
 
 Expected<L3PDPAddress> L3PDPAddress::parse(BitReader& br, size_t lengthBytes) {
     L3PDPAddress addr;
 
-    if (lengthBytes < 1) {
+    // The value always carries the origin/type octet and the type number.
+    if (lengthBytes < 2) {
         return Expected<L3PDPAddress>::error(
             ParseError{ParseError::Code::TruncatedInput, "PDP address too short", br.position()});
     }
 
-    auto type = br.readField(8);
-    if (!type) return Expected<L3PDPAddress>::error(type.error());
-    addr.mType = static_cast<PDPType>(type.value());
+    auto o1 = br.readField(8);
+    if (!o1) return Expected<L3PDPAddress>::error(o1.error());
+    addr.mOrigin = static_cast<uint8_t>(o1.value()) & 0x0Fu; // high nibble is spare
+    auto o2 = br.readField(8);
+    if (!o2) return Expected<L3PDPAddress>::error(o2.error());
+    addr.mTypeNumber = static_cast<uint8_t>(o2.value());
 
-    size_t addrLen = lengthBytes - 1;
+    size_t addrLen = lengthBytes - 2;
     if (addrLen > 0) {
         addr.mAddress.resize(addrLen);
         auto r = br.readBytes(addr.mAddress.data(), addrLen);
@@ -78,30 +81,37 @@ Expected<L3PDPAddress> L3PDPAddress::parse(BitReader& br, size_t lengthBytes) {
 }
 
 void L3PDPAddress::write(BitWriter& bw) const {
-    bw.writeField(static_cast<uint8_t>(mType), 8);
+    // Octet 1: spare(4) | pdpTypeOrigin(4); octet 2: pdpTypeNumber.
+    bw.writeField((mOrigin & 0x0Fu), 8);
+    bw.writeField(mTypeNumber, 8);
     if (!mAddress.empty()) {
         bw.writeBytes(mAddress.data(), mAddress.size());
     }
 }
 
 void L3PDPAddress::text(std::ostream& os) const {
-    os << "PDPAddr(type=" << static_cast<int>(mType);
-    if (mType == PDPType::IPv4 && mAddress.size() == 4) {
+    PDPType t = type();
+    os << "PDPAddr(type=";
+    if (t == PDPType::IPv4) os << "IPv4";
+    else if (t == PDPType::IPv6) os << "IPv6";
+    else os << "0x" << std::hex << static_cast<int>(mTypeNumber) << std::dec;
+    if (t == PDPType::IPv4 && mAddress.size() == 4) {
         os << ",addr=" << static_cast<int>(mAddress[0]) << "."
-                  << static_cast<int>(mAddress[1]) << "."
-                  << static_cast<int>(mAddress[2]) << "."
-                  << static_cast<int>(mAddress[3]);
+                   << static_cast<int>(mAddress[1]) << "."
+                   << static_cast<int>(mAddress[2]) << "."
+                   << static_cast<int>(mAddress[3]);
     } else if (!mAddress.empty()) {
         os << ",addr=";
         for (size_t i = 0; i < mAddress.size(); ++i) {
             if (i > 0) os << ":";
             os << std::hex << static_cast<int>(mAddress[i]);
         }
+        os << std::dec;
     }
     os << ")";
 }
 
-// ── L3QoS (GSM 24.008 10.5.8.2) ──────────────────────────────────────
+// ── L3QoS (TS 44.068 section 10.5.6.5) ────────────────────────────────
 
 Expected<L3QoS> L3QoS::parse(BitReader& br, size_t lengthBytes) {
     L3QoS qos;
@@ -149,7 +159,7 @@ void L3QoS::text(std::ostream& os) const {
     os << ")";
 }
 
-// ── L3AccessPointName (GSM 24.008 10.5.8.3) ──────────────────────────
+// ── L3AccessPointName (TS 44.068 section 10.5.6.1) ───────────────────
 
 Expected<L3AccessPointName> L3AccessPointName::parse(BitReader& br, size_t lengthBytes) {
     L3AccessPointName apn;
@@ -171,24 +181,14 @@ void L3AccessPointName::text(std::ostream& os) const {
     os << "APN(" << mValue << ")";
 }
 
-// ── L3ProtocolConfigOptions (GSM 24.008 10.5.8.4) ────────────────────
+// ── L3ProtocolConfigOptions (TS 44.068 section 10.5.6.3) ──────────────
 
 Expected<L3ProtocolConfigOptions> L3ProtocolConfigOptions::parse(BitReader& br, size_t lengthBytes) {
     L3ProtocolConfigOptions pco;
 
-    if (lengthBytes < 1) {
-        return Expected<L3ProtocolConfigOptions>::error(
-            ParseError{ParseError::Code::TruncatedInput, "PCO too short", br.position()});
-    }
-
-    auto type = br.readField(8);
-    if (!type) return Expected<L3ProtocolConfigOptions>::error(type.error());
-    pco.mType = static_cast<uint8_t>(type.value());
-
-    size_t dataLen = lengthBytes - 1;
-    if (dataLen > 0) {
-        pco.mData.resize(dataLen);
-        auto r = br.readBytes(pco.mData.data(), dataLen);
+    if (lengthBytes > 0) {
+        pco.mValue.resize(lengthBytes);
+        auto r = br.readBytes(pco.mValue.data(), lengthBytes);
         if (!r) return Expected<L3ProtocolConfigOptions>::error(r.error());
     }
 
@@ -196,25 +196,21 @@ Expected<L3ProtocolConfigOptions> L3ProtocolConfigOptions::parse(BitReader& br, 
 }
 
 void L3ProtocolConfigOptions::write(BitWriter& bw) const {
-    bw.writeField(mType, 8);
-    if (!mData.empty()) {
-        bw.writeBytes(mData.data(), mData.size());
+    if (!mValue.empty()) {
+        bw.writeBytes(mValue.data(), mValue.size());
     }
 }
 
 void L3ProtocolConfigOptions::text(std::ostream& os) const {
-    os << "PCO(type=0x" << std::hex << static_cast<int>(mType);
-    if (!mData.empty()) {
-        os << ",data=";
-        for (size_t i = 0; i < mData.size(); ++i) {
-            if (i > 0) os << ":";
-            os << std::hex << static_cast<int>(mData[i]);
-        }
+    os << "PCO(";
+    for (size_t i = 0; i < mValue.size(); ++i) {
+        if (i > 0) os << ":";
+        os << std::hex << std::setfill('0') << std::setw(2) << static_cast<int>(mValue[i]);
     }
     os << ")";
 }
 
-// ── L3SMCauseIE (GSM 24.008 10.5.3.2.3) ──────────────────────────────
+// ── L3SMCauseIE (TS 44.068 section 9.5) ───────────────────────────────
 
 Expected<L3SMCauseIE> L3SMCauseIE::parse(BitReader& br) {
     auto val = br.readField(8);
@@ -230,7 +226,7 @@ void L3SMCauseIE::text(std::ostream& os) const {
     os << "SMCause(" << SMCause2Str(mCause) << ")";
 }
 
-// ── L3BackOffTimer (GSM 24.008 10.5.8.6) ─────────────────────────────
+// ── L3BackOffTimer (TS 44.068 section 10.5.6.x) ───────────────────────
 
 Expected<L3BackOffTimer> L3BackOffTimer::parse(BitReader& br) {
     auto val = br.readField(8);
@@ -246,7 +242,29 @@ void L3BackOffTimer::text(std::ostream& os) const {
     os << "BackOffTimer(0x" << std::hex << static_cast<int>(mValue) << ")";
 }
 
-// ── L3PDPHandle (GSM 24.008 10.5.8.7) ────────────────────────────────
+// ── L3TearDownIndicator (TS 44.068 section 10.5.6.10) ────────────────
+
+Expected<L3TearDownIndicator> L3TearDownIndicator::parse(BitReader& br) {
+    auto o = br.readField(8);
+    if (!o) return Expected<L3TearDownIndicator>::error(o.error());
+    uint8_t octet = static_cast<uint8_t>(o.value());
+    if ((octet & 0xF0u) != (IEI << 4)) {
+        return Expected<L3TearDownIndicator>::error(
+            ParseError{ParseError::Code::InvalidIE, "tear-down indicator identifier", br.position()});
+    }
+    // The flag is the most significant bit of the value nibble.
+    return Expected<L3TearDownIndicator>::hold(L3TearDownIndicator{(octet & 0x08u) != 0});
+}
+
+void L3TearDownIndicator::write(BitWriter& bw) const {
+    bw.writeField((IEI << 4) | (mFlag ? 0x08u : 0x00u), 8);
+}
+
+void L3TearDownIndicator::text(std::ostream& os) const {
+    os << "TearDownIndicator(" << (mFlag ? "true" : "false") << ")";
+}
+
+// ── L3PDPHandle (TS 44.068 section 9.5) ───────────────────────────────
 
 Expected<L3PDPHandle> L3PDPHandle::parse(BitReader& br) {
     auto val = br.readField(4);
@@ -262,7 +280,7 @@ void L3PDPHandle::text(std::ostream& os) const {
     os << "PDPHandle(" << static_cast<int>(mValue) << ")";
 }
 
-// ── L3TMGI (GSM 24.008 10.5.6.14) ─────────────────────────────────────
+// ── L3TMGI (GSM 24.008 10.5.6.x) ──────────────────────────────────────
 
 Expected<L3TMGI> L3TMGI::parse(BitReader& br, size_t lengthBytes) {
     L3TMGI tmgi;

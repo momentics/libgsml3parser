@@ -144,7 +144,7 @@ int main(int argc, char* argv[]) {
         {"CC",       "E3 25 08 02 16 21"},                  // Disconnect (TI=7)
         {"SS",       "0B 3A"},                              // Facility
         {"GMM",      "08 20 05"},                            // GMM Status (cause=5)
-        {"SM",       "0A 55 32 01 05"},                      // SM Status (cause=5)
+        {"SM",       "0A 55 05"},                            // SM Status (cause=5)
         {"SMS",      "09 04 01 02"},                         // CP Ack (ref=2)
         {"BCC",      "01 00"},                               // BCC Setup
         {"GCC",      "00 00 02"},                            // GCC Setup

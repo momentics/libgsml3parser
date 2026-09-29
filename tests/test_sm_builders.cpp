@@ -38,7 +38,8 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 // 3GPP TS 24.008 9.5.1: Activate PDP Context Request
 TEST(SMBuilders, ActivatePDPContextRequest) {
     auto msg = L3ActivatePDPContextRequest::builder()
-        .pdpType(PDPType::IPv4)
+        .nsapi(5)
+        .llcSapi(3)
         .apn(L3AccessPointName("internet"))
         .qos(L3QoS{})
         .build();
@@ -50,12 +51,17 @@ TEST(SMBuilders, ActivatePDPContextRequest) {
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
     EXPECT_EQ(messageMTI(*reparsed), L3ActivatePDPContextRequest::MTI);
+    auto* m = tryGet<L3ActivatePDPContextRequest>(*reparsed);
+    ASSERT_NE(m, nullptr);
+    EXPECT_EQ(m->nsapi(), 5u);
+    EXPECT_EQ(m->llcSapi(), 3u);
+    EXPECT_EQ(m->pdpAddress().type(), PDPType::IPv4);
 }
 
 // 3GPP TS 24.008 9.5.2: Activate PDP Context Accept
 TEST(SMBuilders, ActivatePDPContextAccept) {
     auto msg = L3ActivatePDPContextAccept::builder()
-        .pdpHandle(1)
+        .llcSapi(1)
         .qos(L3QoS{})
         .build();
     ParsedMessage pm{SM{std::move(msg)}};
@@ -84,7 +90,8 @@ TEST(SMBuilders, ActivatePDPContextReject) {
 // 3GPP TS 24.008 9.5.4: Deactivate PDP Context Request
 TEST(SMBuilders, DeactivatePDPContextRequest) {
     auto msg = L3DeactivatePDPContextRequest::builder()
-        .pdpHandle(1)
+        .cause(SMCause::ReqAccepted)
+        .tearDownIndicator(true)
         .build();
     ParsedMessage pm{SM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
@@ -93,12 +100,15 @@ TEST(SMBuilders, DeactivatePDPContextRequest) {
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
     EXPECT_EQ(messageMTI(*reparsed), L3DeactivatePDPContextRequest::MTI);
+    auto* m = tryGet<L3DeactivatePDPContextRequest>(*reparsed);
+    ASSERT_NE(m, nullptr);
+    EXPECT_TRUE(m->tearDownIndicator());
 }
 
 // 3GPP TS 24.008 9.5.5: Deactivate PDP Context Accept
 TEST(SMBuilders, DeactivatePDPContextAccept) {
     auto msg = L3DeactivatePDPContextAccept::builder()
-        .pdpHandle(1)
+        .additionalIes(std::vector<uint8_t>{0x27, 0x01, 0x01})
         .build();
     ParsedMessage pm{SM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
@@ -142,7 +152,6 @@ TEST(SMBuilders, ModifyPDPContextAccept) {
 // 3GPP TS 24.008 9.5.8: Modify PDP Context Reject
 TEST(SMBuilders, ModifyPDPContextReject) {
     auto msg = L3ModifyPDPContextReject::builder()
-        .pdpHandle(1)
         .cause(SMCause::Invalid_Mandatory_Information)
         .build();
     ParsedMessage pm{SM{std::move(msg)}};
@@ -187,7 +196,6 @@ TEST(SMBuilders, RequestPDPContextActivation) {
 // 3GPP TS 24.008 9.5.10: Request PDP Context Activation Reject
 TEST(SMBuilders, RequestPDPContextActivationReject) {
     auto msg = L3RequestPDPContextActivationReject::builder()
-        .pdpHandle(2)
         .cause(SMCause::Invalid_Mandatory_Information)
         .build();
     ParsedMessage pm{SM{std::move(msg)}};
@@ -263,7 +271,6 @@ TEST(SMBuilders, ActivateSecondaryPDPContextAccept) {
 // 3GPP TS 24.008 9.5.13: Activate Secondary PDP Context Reject
 TEST(SMBuilders, ActivateSecondaryPDPContextReject) {
     auto msg = L3ActivateSecondaryPDPContextReject::builder()
-        .pdpHandle(3)
         .cause(SMCause::Invalid_Mandatory_Information)
         .build();
     ParsedMessage pm{SM{std::move(msg)}};
@@ -309,7 +316,6 @@ TEST(SMBuilders, ActivateAAPDPContextAccept) {
 // 3GPP TS 24.008 9.5.16: Activate AA PDP Context Reject
 TEST(SMBuilders, ActivateAAPDPContextReject) {
     auto msg = L3ActivateAAPDPContextReject::builder()
-        .pdpHandle(4)
         .cause(SMCause::Invalid_Mandatory_Information)
         .build();
     ParsedMessage pm{SM{std::move(msg)}};
@@ -352,8 +358,8 @@ TEST(SMBuilders, DeactivateAAPDPContextAccept) {
 // 3GPP TS 24.008 9.5.18: Activate MBMS Context Request
 TEST(SMBuilders, ActivateMBMSContextRequest) {
     auto msg = L3ActivateMBMSContextRequest::builder()
-        .tmgi(L3TMGI{})
         .qos(L3QoS{})
+        .additionalIes(std::vector<uint8_t>{0xC2, 0x06, 0x45, 0xF7, 0x10, 0x12, 0x34, 0x05})
         .build();
     ParsedMessage pm{SM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
@@ -396,8 +402,8 @@ TEST(SMBuilders, ActivateMBMSContextReject) {
 // 3GPP TS 24.008 9.5.21: Request MBMS Context Activation
 TEST(SMBuilders, RequestMBMSContextActivation) {
     auto msg = L3RequestMBMSContextActivation::builder()
-        .tmgi(L3TMGI{})
         .qos(L3QoS{})
+        .additionalIes(std::vector<uint8_t>{0xC2, 0x06, 0x45, 0xF7, 0x10, 0x12, 0x34, 0x05})
         .build();
     ParsedMessage pm{SM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
@@ -441,7 +447,6 @@ TEST(SMBuilders, RequestSecondaryPDPContextActivation) {
 // 3GPP TS 24.008 9.5.24: Request Secondary PDP Context Activation Reject
 TEST(SMBuilders, RequestSecondaryPDPContextActivationReject) {
     auto msg = L3RequestSecondaryPDPContextActivationReject::builder()
-        .pdpHandle(6)
         .cause(SMCause::Invalid_Mandatory_Information)
         .build();
     ParsedMessage pm{SM{std::move(msg)}};

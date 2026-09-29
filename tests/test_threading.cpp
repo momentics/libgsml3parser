@@ -366,7 +366,7 @@ TEST(ThreadingTest, MultiDomainRoundTripConcurrent) {
         "03 25 08 02 16 21",                 // CC: Disconnect
         "0B E8",                              // SS: Facility
         "08 20 05",                            // GMM: GMMStatus(cause=5)
-        "0A 55 32 01 05",                      // SM: SMStatus(cause=5)
+        "0A 55 05",                      // SM: SMStatus(cause=5)
         "09 04 01 02",                         // SMS: CPAck(ref=2)
         "01 01",                               // BCC: Setup
     };

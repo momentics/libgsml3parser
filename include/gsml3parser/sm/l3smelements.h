@@ -20,16 +20,19 @@
 // SOFTWARE.
 
 // SM Information Elements - GSM L3 GPRS Session Management IE definitions
-// Spec: 3GPP TS 24.008 section 10.5.8, Table 10.5a
-// IE layouts per 3GPP TS 24.080 / TS 24.008 section 10.5.8 (Table 10.5a).
+// Spec: 3GPP TS 44.068 (GSM 24.008) sections 9.5 and 10.5.6.
 //
-// Bit layout (per spec):
-//   PDPAddress: TLV(IEI=0x08) | Length(1) | PDPType(1) | Address(variable)
-//   QoS: TLV(IEI=0x09) | Length(1) | QoSElement(...)
-//   AccessPointName: TLV(IEI=0x2F) | Length(1) | APNString(variable UTF-8)
-//   ProtocolConfigOptions: TLV(IEI=0x3C) | Length(1) | Type(1) | ConfigData(variable)
-//   SMCause: TV(IEI=0x27) | CauseValue(1)
-//   BackOffTimer: TV(IEI=0x28) | TimerValue(1)
+// IE encodings on the wire:
+//   PDPAddress: positional LV (no identifier): Length(1) |
+//               [spare(4)|pdpTypeOrigin(4)] | pdpTypeNumber(1) |
+//               AddressInfo(variable; empty when dynamically assigned)
+//   QoS: positional LV (no identifier): Length(1) | QoS value octets
+//   AccessPointName: TLV, IEI=0x28: IEI(1) | Length(1) | APN string
+//   ProtocolConfigOptions: TLV, IEI=0x27: IEI(1) | Length(1) | option data
+//   SMCause: bare value octet without an identifier; the first body octet of
+//            SM reject, failure and status messages
+//   TearDownIndicator: TV in a single octet: identifier '1001'B (high nibble)
+//            + [tear-down flag(1)|spare(3)] (low nibble)
 
 #pragma once
 
@@ -46,19 +49,17 @@
 
 namespace gsml3parser {
 
-// ── PDP Type (GSM 24.008 10.5.8.1) ────────────────────────────────────
-// Identifies the protocol for which a PDP context is activated.
+// ── PDP Type (TS 44.068 section 10.5.6.4) ─────────────────────────────
+// PDP type numbers for the IETF origin, carried in the second octet of the
+// PDP address value. The origin itself ('0001'B = IETF) is stored separately.
 
 enum class PDPType : uint8_t {
-    IPv4      = 0,
-    IPv6      = 2,
-    IPsecAH   = 3,
-    PPP       = 6,
-    Private   = 0xF0,
+    IPv4      = 0x21,
+    IPv6      = 0x53,
     Unknown   = 0xFF
 };
 
-// ── QoS Type (GSM 24.008 10.5.8.2) ────────────────────────────────────
+// ── QoS Type (TS 44.068 section 10.5.6.5) ─────────────────────────────
 // Indicates the nature of the QoS profile.
 
 enum class QoSType : uint8_t {
@@ -93,33 +94,47 @@ enum class SMCause : uint8_t {
 
 const char* SMCause2Str(SMCause cause);
 
-// ── PDP Address (GSM 24.008 10.5.8.1) ─────────────────────────────────
-// TLV format: IEI=0x08 | Length(1) | PDPType(1) | Address(variable)
-// For IPv4: 4 bytes; for IPv6: 16 bytes; PPP: variable; Private: variable
+// ── PDP Address (TS 44.068 section 10.5.6.4) ──────────────────────────
+// Positional LV value (no information element identifier):
+//   octet 1: [spare(4) | pdpTypeOrigin(4)]   ('0001'B = IETF origin -> 0x01)
+//   octet 2: pdpTypeNumber                   (IPv4 = 0x21, IPv6 = 0x53)
+//   octets 3..: address information          (empty when dynamically assigned)
 
 class L3PDPAddress {
-    PDPType mType{PDPType::IPv4};
-    std::vector<uint8_t> mAddress;
+    uint8_t mOrigin{0x01};          ///< PDP type origin, four bits (IETF = '0001'B)
+    uint8_t mTypeNumber{0x21};      ///< PDP type number octet
+    std::vector<uint8_t> mAddress;  ///< Address information; empty = dynamic allocation
+
 public:
-    static constexpr uint8_t IEI = 0x08;
+    static constexpr uint8_t kOriginIETF = 0x01u; ///< PDP type origin '0001'B (IETF)
+
     L3PDPAddress() = default;
-    L3PDPAddress(PDPType type, std::vector<uint8_t> addr)
-        : mType(type), mAddress(std::move(addr)) {}
+    explicit L3PDPAddress(PDPType type, std::vector<uint8_t> addr)
+        : mOrigin(kOriginIETF), mTypeNumber(static_cast<uint8_t>(type)), mAddress(std::move(addr)) {}
+    /// Raw form for type numbers not covered by the PDPType enum.
+    L3PDPAddress(uint8_t origin, uint8_t typeNumber, std::vector<uint8_t> addr)
+        : mOrigin(origin & 0x0Fu), mTypeNumber(typeNumber), mAddress(std::move(addr)) {}
 
     bool operator==(const L3PDPAddress&) const = default;
 
-    PDPType type() const { return mType; }
+    /// Semantic PDP type (IETF origin): IPv4, IPv6 or Unknown.
+    PDPType type() const {
+        if (mOrigin == kOriginIETF && mTypeNumber == static_cast<uint8_t>(PDPType::IPv4)) return PDPType::IPv4;
+        if (mOrigin == kOriginIETF && mTypeNumber == static_cast<uint8_t>(PDPType::IPv6)) return PDPType::IPv6;
+        return PDPType::Unknown;
+    }
+    uint8_t origin() const { return mOrigin; }
+    uint8_t typeNumber() const { return mTypeNumber; }
     const std::vector<uint8_t>& address() const { return mAddress; }
-    size_t lengthV() const { return 1 + mAddress.size(); }
+    size_t lengthV() const { return 2 + mAddress.size(); }
 
     [[nodiscard]] static Expected<L3PDPAddress> parse(BitReader& br, size_t lengthBytes);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
 };
 
-// ── QoS Element (GSM 24.008 10.5.8.2) ─────────────────────────────────
-// TLV format: IEI=0x09 | Length(1) | Type(1) | QoSElement(...)
-// Each QoS element is a sub-structure with its own type and value.
+// ── QoS Element (TS 44.068 section 10.5.6.5) ──────────────────────────
+// The QoS profile value octets following the LV length octet.
 
 enum class QoSElementType : uint8_t {
     QoSClass            = 1,
@@ -142,14 +157,14 @@ enum class QoSElementType : uint8_t {
     ExternalPriority    = 18
 };
 
-// ── QoS Profile (GSM 24.008 10.5.8.2) ─────────────────────────────────
-// Contains the QoS type and a collection of QoS elements.
+// ── QoS Profile (TS 44.068 section 10.5.6.5) ──────────────────────────
+// Positional LV value (no information element identifier): a QoS type octet
+// followed by the remaining QoS profile octets, kept opaque.
 
 class L3QoS {
     QoSType mType{QoSType::Requested};
     std::vector<uint8_t> mElements;
 public:
-    static constexpr uint8_t IEI = 0x09;
     L3QoS() = default;
     L3QoS(QoSType type, std::vector<uint8_t> elements)
         : mType(type), mElements(std::move(elements)) {}
@@ -165,13 +180,13 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── Access Point Name (GSM 24.008 10.5.8.3) ───────────────────────────
-// TLV format: IEI=0x2F | Length(1) | APNString(variable, UTF-8)
+// ── Access Point Name (TS 44.068 section 10.5.6.1) ────────────────────
+// TLV format: IEI=0x28 | Length(1) | APNString(variable, UTF-8)
 
 class L3AccessPointName {
     std::string mValue;
 public:
-    static constexpr uint8_t IEI = 0x2F;
+    static constexpr uint8_t IEI = 0x28;
     L3AccessPointName() = default;
     explicit L3AccessPointName(std::string value) : mValue(std::move(value)) {}
 
@@ -185,37 +200,35 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── Protocol Configuration Options (GSM 24.008 10.5.8.4) ──────────────
-// TLV format: IEI=0x3C | Length(1) | Type(1) | ConfigData(variable)
-// Type identifies the protocol family (e.g., IPCP=0xC029 for IPv4).
+// ── Protocol Configuration Options (TS 44.068 section 10.5.6.3) ───────
+// TLV format: IEI=0x27 | Length(1) | PCO option data (opaque list of PPP
+// IPCP-style options).
 
 class L3ProtocolConfigOptions {
-    uint8_t mType{0};
-    std::vector<uint8_t> mData;
+    std::vector<uint8_t> mValue;
 public:
-    static constexpr uint8_t IEI = 0x3C;
+    static constexpr uint8_t IEI = 0x27;
     L3ProtocolConfigOptions() = default;
-    L3ProtocolConfigOptions(uint8_t type, std::vector<uint8_t> data)
-        : mType(type), mData(std::move(data)) {}
+    explicit L3ProtocolConfigOptions(std::vector<uint8_t> value)
+        : mValue(std::move(value)) {}
 
     bool operator==(const L3ProtocolConfigOptions&) const = default;
 
-    uint8_t type() const { return mType; }
-    const std::vector<uint8_t>& data() const { return mData; }
-    size_t lengthV() const { return 1 + mData.size(); }
+    const std::vector<uint8_t>& value() const { return mValue; }
+    size_t lengthV() const { return mValue.size(); }
 
     [[nodiscard]] static Expected<L3ProtocolConfigOptions> parse(BitReader& br, size_t lengthBytes);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
 };
 
-// ── SM Cause IE (GSM 24.008 10.5.3.2.3) ───────────────────────────────
-// TV format: IEI=0x27 | CauseValue(1 octet)
+// ── SM Cause (TS 44.068 section 9.5) ──────────────────────────────────
+// The SM cause is a single value octet carried without an identifier at the
+// start of the body of SM reject, failure and status messages.
 
 class L3SMCauseIE {
     SMCause mCause{SMCause::ReqAccepted};
 public:
-    static constexpr uint8_t IEI = 0x27;
     L3SMCauseIE() = default;
     explicit L3SMCauseIE(SMCause cause) : mCause(cause) {}
 
@@ -229,14 +242,14 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── Back-Off Timer (GSM 24.008 10.5.8.6) ──────────────────────────────
-// TV format: IEI=0x28 | TimerValue(1 octet)
-// Encodes the timer value using GPRS Timer 2 encoding.
+// ── Back-Off Timer (TS 44.068 section 10.5.6.x) ───────────────────────
+// Optional TV information element of SM reject messages; it is not modelled
+// as a typed body field and is preserved in the opaque additional-IE
+// sequence of the message that carries it.
 
 class L3BackOffTimer {
     uint8_t mValue{0};
 public:
-    static constexpr uint8_t IEI = 0x28;
     L3BackOffTimer() = default;
     explicit L3BackOffTimer(uint8_t value) : mValue(value) {}
 
@@ -250,8 +263,38 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── PDP Handle (GSM 24.008 10.5.8.7) ──────────────────────────────────
-// 4-bit field identifying an activated PDP context (0-15).
+// ── Request type (TS 44.068 section 10.5.6.17) ────────────────────────
+// TV information element carried in a single octet: the high nibble '1010'B
+// identifies the IE and the low nibble holds the request type value.
+constexpr uint8_t kSMRequestTypeIdentifier = 0xAu; ///< identifier nibble '1010'B
+constexpr uint8_t kSMRequestTypeMask = 0xF0u;      ///< mask selecting the identifier nibble
+
+// ── Tear-Down Indicator (TS 44.068 section 10.5.6.10) ─────────────────
+// TV information element carried in a single octet: the high nibble is the
+// four-bit identifier '1001'B and the low nibble holds the tear-down flag
+// (most significant bit of the nibble) followed by three spare bits.
+
+class L3TearDownIndicator {
+    bool mFlag{false};
+public:
+    static constexpr uint8_t IEI = 0x09u; ///< identifier nibble '1001'B (high half of the octet)
+
+    L3TearDownIndicator() = default;
+    explicit L3TearDownIndicator(bool flag) : mFlag(flag) {}
+
+    bool operator==(const L3TearDownIndicator&) const = default;
+
+    bool flag() const { return mFlag; }
+    static constexpr size_t lengthV() { return 1; } ///< one octet: identifier + value nibble
+
+    /// Reads the single octet and verifies the '1001'B identifier nibble.
+    [[nodiscard]] static Expected<L3TearDownIndicator> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── PDP Handle (TS 44.068 section 9.5) ────────────────────────────────
+// Four-bit value identifying an activated PDP context.
 
 class L3PDPHandle {
     uint8_t mValue{0};
@@ -269,15 +312,16 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── TMGI - Temporary Mobile Group Identity (GSM 24.008 10.5.6.14) ──────
-// TLV format: IEI=0x42 | Length(1)=6 | PLMN Identity(3) | Service ID(2) | Session ID(1)
+// ── TMGI - Temporary Mobile Group Identity (GSM 24.008 10.5.6.x) ───────
+// TLV value: Length(1)=6 | PLMN Identity(3) | Service ID(2) | Session ID(1).
+// In SM MBMS messages the TMGI IE is preserved in the opaque additional-IE
+// sequence of the message; this class decodes its six value octets.
 
 class L3TMGI {
     std::array<uint8_t, 3> mPLMN{0, 0, 0};
     uint16_t mServiceId{0};
     uint8_t mSessionId{0};
 public:
-    static constexpr uint8_t IEI = 0x42;
     L3TMGI() = default;
     L3TMGI(std::array<uint8_t, 3> plmn, uint16_t serviceId, uint8_t sessionId)
         : mPLMN(std::move(plmn)), mServiceId(serviceId), mSessionId(sessionId) {}

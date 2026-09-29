@@ -20,10 +20,10 @@
 // SOFTWARE.
 
 // SM Messages - parse/write/text implementation
-// Spec: 3GPP TS 24.008 sections 9.5, Table 10.4a
-// Wire encodings per 3GPP TS 24.080 (SM message set).
+// Spec: 3GPP TS 44.068 (GSM 24.008) section 9.5.
 
 #include "gsml3parser/sm/l3smmessages.h"
+#include "gsml3parser/common/l3common.h"
 #include <sstream>
 #include <iomanip>
 
@@ -33,8 +33,12 @@ namespace {
 
 size_t tlvLen(size_t vLen) { return 2 + vLen; }
 
-// Parse a TLV IE: reads Type(1) | Length(1) | Value(length bytes)
-// Returns the raw IEI (masked from extended bit) and the value length.
+// Information element identifier of the "PDP type and address" TLV used in
+// SM accept messages (TS 44.068 section 9.5).
+constexpr uint8_t kPdpAddressTlvIEI = 0x2Bu;
+
+// Consume a TLV header: reads Type(1) | Length(1). Returns the identifier
+// octet (extension bit masked off) and the value length.
 Expected<uint8_t> readTLVHeader(BitReader& br, size_t& outLen) {
     auto type = br.readField(8);
     if (!type) return Expected<uint8_t>::error(type.error());
@@ -47,145 +51,189 @@ Expected<uint8_t> readTLVHeader(BitReader& br, size_t& outLen) {
     return Expected<uint8_t>::hold(static_cast<uint8_t>(rawType & 0x7F));
 }
 
-// Skip value bytes of known length.
-Expected<void> skipValue(BitReader& br, size_t lenBytes) {
+// Append a TLV whose header was already consumed (identifier \p iei, value
+// length \p lenBytes) to the opaque tail verbatim; the value octets are read
+// from the stream.
+Expected<void> appendTlvToTail(BitReader& br, std::vector<uint8_t>& tail, uint8_t iei, size_t lenBytes) {
+    tail.push_back(iei);
+    tail.push_back(static_cast<uint8_t>(lenBytes));
     if (lenBytes > 0) {
-        std::vector<uint8_t> tmp(lenBytes);
-        auto r = br.readBytes(tmp.data(), lenBytes);
-        if (!r) return Expected<void>::error(r.error());
+        for (size_t i = 0; i < lenBytes; ++i) {
+            auto b = br.readField(8);
+            if (!b) return Expected<void>::error(b.error());
+            tail.push_back(static_cast<uint8_t>(b.value()));
+        }
     }
     return Expected<void>::hold();
 }
 
 } // anonymous namespace
 
-// ── L3ActivatePDPContextRequest (GSM 24.008 9.5.1) ────────────────────
+// ── L3ActivatePDPContextRequest (TS 44.068 section 9.5) ───────────────
 
 size_t L3ActivatePDPContextRequest::bodyLength() const {
-    size_t len = 1; // pdpType(4)|spare(4)
-    if (mHavePDPAddress) len += tlvLen(mPDPAddress.lengthV());
-    len += tlvLen(mAPN.lengthV());
-    len += tlvLen(mQoS.lengthV());
+    size_t len = 2; // NSAPI octet + LLC SAPI octet
+    len += 1 + mQoS.lengthV();         // requested QoS (LV)
+    len += 1 + mPDPAddress.lengthV();  // requested PDP address (LV)
+    len += tlvLen(mAPN.lengthV());     // APN (TLV, mandatory)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    if (mHasRequestType) len += 1;     // request type TV octet
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ActivatePDPContextRequest> L3ActivatePDPContextRequest::parse(BitReader& br) {
+    // SM ACTIVATE PDP CONTEXT REQUEST (TS 44.068): NSAPI and the requested
+    // LLC SAPI in the first two octets, requested QoS (LV) and requested
+    // PDP type and address (LV), access point name (TLV, IEI 0x28,
+    // mandatory); protocol configuration options (TLV, IEI 0x27), the
+    // request type TV and any further optional IEs follow when present.
     L3ActivatePDPContextRequest msg;
 
-    // 24.008 9.5.1: pdpType(4)|spare(4) = 1 octet
+    auto o1 = br.readField(8);
+    if (!o1) return Expected<L3ActivatePDPContextRequest>::error(o1.error());
+    msg.mNSapi = static_cast<uint8_t>((o1.value() >> 4) & 0x0Fu);
+
+    auto o2 = br.readField(8);
+    if (!o2) return Expected<L3ActivatePDPContextRequest>::error(o2.error());
+    msg.mLLcSapi = static_cast<uint8_t>((o2.value() >> 4) & 0x0Fu);
+
+    // Requested QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3ActivatePDPContextRequest>::error(qlen.error());
     {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3ActivatePDPContextRequest>::error(o.error());
-        msg.mPDPType = static_cast<PDPType>(o.value());
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3ActivatePDPContextRequest>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
     }
 
-    // Spare 4 bits
+    // Requested PDP type and address: LV (mandatory).
+    auto alen = br.readField(8);
+    if (!alen) return Expected<L3ActivatePDPContextRequest>::error(alen.error());
     {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3ActivatePDPContextRequest>::error(spare.error());
+        auto addr = L3PDPAddress::parse(br, alen.value());
+        if (!addr) return Expected<L3ActivatePDPContextRequest>::error(addr.error());
+        msg.mPDPAddress = std::move(addr).value();
     }
 
-    // Parse TLV IEs: PDPAddress(TLV,IEI=0x08), APN(TLV,IEI=0x2F), QoS(TLV,IEI=0x09), PCO(TLV,IEI=0x3C)
-    while (br.hasMore()) {
+    // Access point name: TLV 0x28 (mandatory).
+    {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3ActivatePDPContextRequest>::error(iei.error());
+        if (iei.value() != L3AccessPointName::IEI) {
+            return Expected<L3ActivatePDPContextRequest>::error(
+                ParseError{ParseError::Code::InvalidIE, "activate PDP context request: missing access point name", br.position()});
+        }
+        auto apn = L3AccessPointName::parse(br, vLen);
+        if (!apn) return Expected<L3ActivatePDPContextRequest>::error(apn.error());
+        msg.mAPN = std::move(apn).value();
+    }
 
-        if (iei.value() == L3PDPAddress::IEI) {
-            auto addr = L3PDPAddress::parse(br, vLen);
-            if (addr) {
-                msg.mHavePDPAddress = true;
-                msg.mPDPAddress = std::move(addr).value();
+    // Optional IE region: request type TV (one octet '1010'B|value), PCO
+    // TLV 0x27, everything else preserved in the opaque tail.
+    while (br.remainingBits() >= 8) {
+        uint32_t next = br.peekField(8);
+        if ((next & kSMRequestTypeMask) == (static_cast<uint32_t>(kSMRequestTypeIdentifier) << 4)) {
+            auto o = br.readField(8);
+            if (!o) return Expected<L3ActivatePDPContextRequest>::error(o.error());
+            if (!msg.mHasRequestType) {
+                msg.mHasRequestType = true;
+                msg.mRequestType = static_cast<uint8_t>(o.value() & 0x0Fu);
             } else {
-                skipValue(br, vLen);
+                msg.mAdditionalIes.push_back(static_cast<uint8_t>(o.value()));
             }
-        } else if (iei.value() == L3AccessPointName::IEI) {
-            auto apn = L3AccessPointName::parse(br, vLen);
-            if (apn) {
-                msg.mAPN = std::move(apn).value();
-            } else {
-                skipValue(br, vLen);
-            }
-        } else if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) {
-                msg.mQoS = std::move(qos).value();
-            } else {
-                skipValue(br, vLen);
-            }
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) {
+            continue;
+        }
+        if (br.remainingBits() < 16) break; // lone octet without a length: malformed
+        size_t vLen = 0;
+        auto iei = readTLVHeader(br, vLen);
+        if (!iei) return Expected<L3ActivatePDPContextRequest>::error(iei.error());
+        bool typed = false;
+        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
                 msg.mHavePCO = true;
                 msg.mPCO = std::move(pco).value();
-            } else {
-                skipValue(br, vLen);
+                typed = true;
             }
-        } else {
-            skipValue(br, vLen);
         }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3ActivatePDPContextRequest>::error(t.error());
+        }
+    }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ActivatePDPContextRequest>::error(
+            ParseError{ParseError::Code::TruncatedInput, "activate PDP context request: truncated optional IEs", br.position()});
     }
 
     return Expected<L3ActivatePDPContextRequest>::hold(std::move(msg));
 }
 
 void L3ActivatePDPContextRequest::write(BitWriter& bw) const {
-    // pdpType(4)|spare(4)
-    bw.writeField(static_cast<uint8_t>(mPDPType) & 0x0F, 4);
-    bw.writeField(0, 4);
+    // NSAPI(4)|spare(4), LLC SAPI(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mNSapi) & 0x0Fu) << 4, 8);
+    bw.writeField((static_cast<uint32_t>(mLLcSapi) & 0x0Fu) << 4, 8);
 
-    // PDPAddress: TLV (optional)
-    if (mHavePDPAddress) {
-        bw.writeField(0x80 | L3PDPAddress::IEI, 8);
-        bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
-        mPDPAddress.write(bw);
-    }
-
-    // APN: TLV (mandatory)
-    bw.writeField(0x80 | L3AccessPointName::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
-    mAPN.write(bw);
-
-    // QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
+    // Requested QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
     mQoS.write(bw);
 
-    // PCO: TLV (optional)
+    // Requested PDP type and address: LV (mandatory).
+    bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
+    mPDPAddress.write(bw);
+
+    // Access point name: TLV 0x28 (mandatory).
+    bw.writeField(L3AccessPointName::IEI, 8);
+    bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
+    mAPN.write(bw);
+
+    // Protocol configuration options: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    // Request type TV: one octet '1010'B|value (optional).
+    if (mHasRequestType) {
+        bw.writeField((static_cast<uint32_t>(kSMRequestTypeIdentifier) << 4) | (mRequestType & 0x0Fu), 8);
+    }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ActivatePDPContextRequest::text(std::ostream& os) const {
-    os << "ActivatePDPReq(pdpType=" << static_cast<int>(mPDPType);
-    if (mHavePDPAddress) {
-        os << ", ";
-        mPDPAddress.text(os);
-    }
-    os << ", ";
-    mAPN.text(os);
+    os << "ActivatePDPReq(nsapi=" << static_cast<int>(mNSapi)
+       << ",sapi=" << static_cast<int>(mLLcSapi);
     os << ", ";
     mQoS.text(os);
+    os << ", ";
+    mPDPAddress.text(os);
+    os << ", ";
+    mAPN.text(os);
     if (mHavePCO) {
         os << ", ";
         mPCO.text(os);
+    }
+    if (mHasRequestType) {
+        os << ",reqType=" << static_cast<int>(requestType());
     }
     os << ")";
 }
 
 L3ActivatePDPContextRequest L3ActivatePDPContextRequest::Builder::build() const {
     L3ActivatePDPContextRequest msg;
-    msg.mPDPType = m_pdpType;
-    msg.mHavePDPAddress = m_havePDPAddress;
+    msg.mNSapi = m_nsapi & 0x0Fu;
+    msg.mLLcSapi = m_llcSapi & 0x0Fu;
+    msg.mQoS = m_qos;
     msg.mPDPAddress = m_pdpAddress;
     msg.mAPN = m_apn;
-    msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mHasRequestType = m_hasRequestType;
+    msg.mRequestType = m_requestType & 0x0Fu;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -193,96 +241,107 @@ L3ActivatePDPContextRequest::Builder L3ActivatePDPContextRequest::builder() {
     return Builder{};
 }
 
-// ── L3ActivatePDPContextAccept (GSM 24.008 9.5.2) ────────────────────
+// ── L3ActivatePDPContextAccept (TS 44.068 section 9.5) ────────────────
 
 size_t L3ActivatePDPContextAccept::bodyLength() const {
-    size_t len = 1; // pdpHandle(4)|spare(4)
+    size_t len = 1; // LLC SAPI(4)|spare(4)
+    len += 1 + mQoS.lengthV();         // negotiated QoS (LV)
+    len += 1;                          // radio priority for SMS(4)|spare(4)
     if (mHavePDPAddress) len += tlvLen(mPDPAddress.lengthV());
-    len += tlvLen(mQoS.lengthV());
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ActivatePDPContextAccept> L3ActivatePDPContextAccept::parse(BitReader& br) {
+    // SM ACTIVATE PDP CONTEXT ACCEPT (TS 44.068): negotiated LLC SAPI in the
+    // first octet, negotiated QoS (LV), radio priority for SMS (four bits)
+    // with three spare bits, then optional IEs: PDP type and address
+    // (TLV, IEI 0x2B), protocol configuration options (TLV, IEI 0x27); any
+    // further optional IEs are kept opaque.
     L3ActivatePDPContextAccept msg;
 
-    // 24.008 9.5.2: pdpHandle(4)|spare(4) = 1 octet
+    auto o = br.readField(8);
+    if (!o) return Expected<L3ActivatePDPContextAccept>::error(o.error());
+    msg.mLLcSapi = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    // Negotiated QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3ActivatePDPContextAccept>::error(qlen.error());
     {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3ActivatePDPContextAccept>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3ActivatePDPContextAccept>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
     }
 
-    // Spare 4 bits
-    {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3ActivatePDPContextAccept>::error(spare.error());
-    }
+    // Radio priority for SMS(4)|spare(4).
+    auto rp = br.readField(8);
+    if (!rp) return Expected<L3ActivatePDPContextAccept>::error(rp.error());
+    msg.mRadioPriority = static_cast<uint8_t>((rp.value() >> 4) & 0x0Fu);
 
-    // Parse TLV IEs: PDPAddress(TLV,IEI=0x08), QoS(TLV,IEI=0x09), PCO(TLV,IEI=0x3C)
-    while (br.hasMore()) {
+    // Optional IE region: PDP address TLV 0x2B, PCO TLV 0x27, rest opaque.
+    while (br.remainingBits() >= 16) {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3ActivatePDPContextAccept>::error(iei.error());
-
-        if (iei.value() == L3PDPAddress::IEI) {
-            auto addr = L3PDPAddress::parse(br, vLen);
-            if (addr) {
+        bool typed = false;
+        if (iei.value() == kPdpAddressTlvIEI && !msg.mHavePDPAddress) {
+            if (auto addr = L3PDPAddress::parse(br, vLen)) {
                 msg.mHavePDPAddress = true;
                 msg.mPDPAddress = std::move(addr).value();
-            } else {
-                skipValue(br, vLen);
+                typed = true;
             }
-        } else if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) {
-                msg.mQoS = std::move(qos).value();
-            } else {
-                skipValue(br, vLen);
-            }
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) {
+        } else if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
                 msg.mHavePCO = true;
                 msg.mPCO = std::move(pco).value();
-            } else {
-                skipValue(br, vLen);
+                typed = true;
             }
-        } else {
-            skipValue(br, vLen);
         }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3ActivatePDPContextAccept>::error(t.error());
+        }
+    }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ActivatePDPContextAccept>::error(
+            ParseError{ParseError::Code::TruncatedInput, "activate PDP context accept: truncated optional IEs", br.position()});
     }
 
     return Expected<L3ActivatePDPContextAccept>::hold(std::move(msg));
 }
 
 void L3ActivatePDPContextAccept::write(BitWriter& bw) const {
-    // pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
+    // LLC SAPI(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mLLcSapi) & 0x0Fu) << 4, 8);
 
-    // PDPAddress: TLV (optional)
+    // Negotiated QoS: LV (mandatory).
+    bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
+    mQoS.write(bw);
+
+    // Radio priority for SMS(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mRadioPriority) & 0x0Fu) << 4, 8);
+
+    // PDP type and address: TLV 0x2B (optional).
     if (mHavePDPAddress) {
-        bw.writeField(0x80 | L3PDPAddress::IEI, 8);
+        bw.writeField(kPdpAddressTlvIEI, 8);
         bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
         mPDPAddress.write(bw);
     }
 
-    // QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
-    mQoS.write(bw);
-
-    // PCO: TLV (optional)
+    // Protocol configuration options: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ActivatePDPContextAccept::text(std::ostream& os) const {
-    os << "ActivatePDPAcc(handle=" << static_cast<int>(mPDPHandle);
+    os << "ActivatePDPAcc(sapi=" << static_cast<int>(mLLcSapi);
+    os << ",radioPriority=" << static_cast<int>(mRadioPriority);
     if (mHavePDPAddress) {
         os << ", ";
         mPDPAddress.text(os);
@@ -298,12 +357,14 @@ void L3ActivatePDPContextAccept::text(std::ostream& os) const {
 
 L3ActivatePDPContextAccept L3ActivatePDPContextAccept::Builder::build() const {
     L3ActivatePDPContextAccept msg;
-    msg.mPDPHandle = m_pdpHandle;
+    msg.mLLcSapi = m_llcSapi & 0x0Fu;
+    msg.mQoS = m_qos;
+    msg.mRadioPriority = m_radioPriority & 0x0Fu;
     msg.mHavePDPAddress = m_havePDPAddress;
     msg.mPDPAddress = m_pdpAddress;
-    msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -311,51 +372,37 @@ L3ActivatePDPContextAccept::Builder L3ActivatePDPContextAccept::builder() {
     return Builder{};
 }
 
-// ── L3ActivatePDPContextReject (GSM 24.008 9.5.3) ────────────────────
+// ── L3ActivatePDPContextReject (TS 44.068 section 9.5) ────────────────
 
 size_t L3ActivatePDPContextReject::bodyLength() const {
-    size_t len = tlvLen(1); // smCause TLV
-    if (mHaveBackOffTimer) len += tlvLen(1);
+    size_t len = 1; // smCause value octet
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ActivatePDPContextReject> L3ActivatePDPContextReject::parse(BitReader& br) {
+    // SM ACTIVATE PDP CONTEXT REJECT (TS 44.068): the body starts with the
+    // SM cause value octet (no identifier); any further optional IEs
+    // (protocol configuration options, back-off timer, re-attempt indicator)
+    // are kept opaque.
     L3ActivatePDPContextReject msg;
 
-    while (br.hasMore()) {
-        size_t vLen = 0;
-        auto iei = readTLVHeader(br, vLen);
-        if (!iei) return Expected<L3ActivatePDPContextReject>::error(iei.error());
+    auto c = br.readField(8);
+    if (!c) return Expected<L3ActivatePDPContextReject>::error(c.error());
+    msg.mCause = static_cast<SMCause>(c.value());
 
-        if (iei.value() == L3SMCauseIE::IEI && vLen >= 1) {
-            auto cause = br.readField(8);
-            if (cause) msg.mCause = static_cast<SMCause>(cause.value());
-        } else if (iei.value() == L3BackOffTimer::IEI && vLen >= 1) {
-            auto t = br.readField(8);
-            if (t) {
-                msg.mHaveBackOffTimer = true;
-                msg.mBackOffTimer = L3BackOffTimer{static_cast<uint8_t>(t.value())};
-            }
-        } else {
-            skipValue(br, vLen);
-        }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ActivatePDPContextReject>::error(
+            ParseError{ParseError::Code::TruncatedInput, "activate PDP context reject: truncated optional IEs", br.position()});
     }
 
     return Expected<L3ActivatePDPContextReject>::hold(std::move(msg));
 }
 
 void L3ActivatePDPContextReject::write(BitWriter& bw) const {
-    // smCause: TLV
-    bw.writeField(0x80 | L3SMCauseIE::IEI, 8);
-    bw.writeField(1, 8);
+    // smCause: value octet (no identifier).
     bw.writeField(static_cast<uint8_t>(mCause), 8);
-
-    // BackOffTimer: TLV (optional)
-    if (mHaveBackOffTimer) {
-        bw.writeField(0x80 | L3BackOffTimer::IEI, 8);
-        bw.writeField(1, 8);
-        bw.writeField(mBackOffTimer.value(), 8);
-    }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ActivatePDPContextReject::text(std::ostream& os) const {
@@ -365,8 +412,7 @@ void L3ActivatePDPContextReject::text(std::ostream& os) const {
 L3ActivatePDPContextReject L3ActivatePDPContextReject::Builder::build() const {
     L3ActivatePDPContextReject msg;
     msg.mCause = m_cause;
-    msg.mHaveBackOffTimer = m_haveBackOffTimer;
-    msg.mBackOffTimer = m_backOffTimer;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -374,89 +420,102 @@ L3ActivatePDPContextReject::Builder L3ActivatePDPContextReject::builder() {
     return Builder{};
 }
 
-// ── L3DeactivatePDPContextRequest (GSM 24.008 9.5.4) ─────────────────
+// ── L3DeactivatePDPContextRequest (TS 44.068 section 9.5) ─────────────
 
 size_t L3DeactivatePDPContextRequest::bodyLength() const {
-    size_t len = 1; // pdpHandle(4)|spare(4)
-    if (mHavePDPType) len += 1; // PDPType TV
-    if (mHavePDPAddress) len += tlvLen(mPDPAddress.lengthV());
+    size_t len = 1; // smCause value octet
+    if (mHasTearDownIndicator) len += 1; // tear-down indicator TV octet
+    if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3DeactivatePDPContextRequest> L3DeactivatePDPContextRequest::parse(BitReader& br) {
+    // SM DEACTIVATE PDP CONTEXT REQUEST (TS 44.068): the body starts with
+    // the SM cause value octet (no identifier); an optional tear-down
+    // indicator TV octet ('1001'B + [flag(1)|spare(3)]), an optional
+    // protocol configuration options TLV (IEI 0x27) and any further
+    // optional IEs (MBMS PCO, T3396 timer value, WLAN offload indication)
+    // follow.
     L3DeactivatePDPContextRequest msg;
 
-    // 24.008 9.5.4: pdpHandle(4)|spare(4) = 1 octet
-    {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3DeactivatePDPContextRequest>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
-    }
+    auto c = br.readField(8);
+    if (!c) return Expected<L3DeactivatePDPContextRequest>::error(c.error());
+    msg.mCause = static_cast<SMCause>(c.value());
 
-    // Spare 4 bits
-    {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3DeactivatePDPContextRequest>::error(spare.error());
-    }
-
-    while (br.hasMore()) {
+    while (br.remainingBits() >= 8) {
+        uint32_t next = br.peekField(8);
+        if ((next & 0xF0u) == (static_cast<uint32_t>(L3TearDownIndicator::IEI) << 4)) {
+            auto tdi = L3TearDownIndicator::parse(br);
+            if (!tdi) return Expected<L3DeactivatePDPContextRequest>::error(tdi.error());
+            msg.mTearDownIndicator = std::move(tdi).value();
+            msg.mHasTearDownIndicator = true;
+            continue;
+        }
+        if (br.remainingBits() < 16) break; // lone octet without a length: malformed
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3DeactivatePDPContextRequest>::error(iei.error());
-
-        if (iei.value() == L3PDPAddress::IEI) {
-            auto addr = L3PDPAddress::parse(br, vLen);
-            if (addr) {
-                msg.mHavePDPAddress = true;
-                msg.mPDPAddress = std::move(addr).value();
-            } else {
-                skipValue(br, vLen);
+        bool typed = false;
+        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
+                msg.mHavePCO = true;
+                msg.mPCO = std::move(pco).value();
+                typed = true;
             }
-        } else {
-            skipValue(br, vLen);
         }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3DeactivatePDPContextRequest>::error(t.error());
+        }
+    }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3DeactivatePDPContextRequest>::error(
+            ParseError{ParseError::Code::TruncatedInput, "deactivate PDP context request: truncated optional IEs", br.position()});
     }
 
     return Expected<L3DeactivatePDPContextRequest>::hold(std::move(msg));
 }
 
 void L3DeactivatePDPContextRequest::write(BitWriter& bw) const {
-    // pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
+    // smCause: value octet (no identifier).
+    bw.writeField(static_cast<uint8_t>(mCause), 8);
 
-    // PDPType: TV (optional)
-    if (mHavePDPType) {
-        bw.writeField(static_cast<uint8_t>(mPDPType), 8);
+    // Tear-down indicator: TV in one octet (optional).
+    if (mHasTearDownIndicator) {
+        mTearDownIndicator.write(bw);
     }
 
-    // PDPAddress: TLV (optional)
-    if (mHavePDPAddress) {
-        bw.writeField(0x80 | L3PDPAddress::IEI, 8);
-        bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
-        mPDPAddress.write(bw);
+    // Protocol configuration options: TLV 0x27 (optional).
+    if (mHavePCO) {
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
+        mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3DeactivatePDPContextRequest::text(std::ostream& os) const {
-    os << "DeactivatePDPReq(handle=" << static_cast<int>(mPDPHandle);
-    if (mHavePDPType) {
-        os << ",pdpType=" << static_cast<int>(mPDPType);
+    os << "DeactivatePDPReq(cause=" << SMCause2Str(mCause);
+    if (mHasTearDownIndicator) {
+        os << ",tearDown=" << (mTearDownIndicator.flag() ? "true" : "false");
     }
-    if (mHavePDPAddress) {
+    if (mHavePCO) {
         os << ", ";
-        mPDPAddress.text(os);
+        mPCO.text(os);
     }
     os << ")";
 }
 
 L3DeactivatePDPContextRequest L3DeactivatePDPContextRequest::Builder::build() const {
     L3DeactivatePDPContextRequest msg;
-    msg.mPDPHandle = m_pdpHandle;
-    msg.mHavePDPType = m_havePDPType;
-    msg.mPDPType = m_pdpType;
-    msg.mHavePDPAddress = m_havePDPAddress;
-    msg.mPDPAddress = m_pdpAddress;
+    msg.mCause = m_cause;
+    msg.mHasTearDownIndicator = m_hasTearDownIndicator;
+    msg.mTearDownIndicator = m_tearDownIndicator;
+    msg.mHavePCO = m_havePCO;
+    msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -464,35 +523,33 @@ L3DeactivatePDPContextRequest::Builder L3DeactivatePDPContextRequest::builder() 
     return Builder{};
 }
 
-// ── L3DeactivatePDPContextAccept (GSM 24.008 9.5.5) ──────────────────
+// ── L3DeactivatePDPContextAccept (TS 44.068 section 9.5) ──────────────
 
 Expected<L3DeactivatePDPContextAccept> L3DeactivatePDPContextAccept::parse(BitReader& br) {
+    // SM DEACTIVATE PDP CONTEXT ACCEPT (TS 44.068): carries no fixed body
+    // fields; optional IEs (protocol configuration options and others) are
+    // kept as an opaque sequence.
     L3DeactivatePDPContextAccept msg;
 
-    // pdpHandle(4)|spare(4) = 1 octet
-    auto o = br.readField(4);
-    if (!o) return Expected<L3DeactivatePDPContextAccept>::error(o.error());
-    msg.mPDPHandle = static_cast<uint8_t>(o.value());
-
-    // Spare 4 bits
-    auto spare = br.readField(4);
-    if (!spare) return Expected<L3DeactivatePDPContextAccept>::error(spare.error());
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3DeactivatePDPContextAccept>::error(
+            ParseError{ParseError::Code::TruncatedInput, "deactivate PDP context accept: truncated optional IEs", br.position()});
+    }
 
     return Expected<L3DeactivatePDPContextAccept>::hold(std::move(msg));
 }
 
 void L3DeactivatePDPContextAccept::write(BitWriter& bw) const {
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3DeactivatePDPContextAccept::text(std::ostream& os) const {
-    os << "DeactivatePDPAcc(handle=" << static_cast<int>(mPDPHandle) << ")";
+    os << "DeactivatePDPAcc()";
 }
 
 L3DeactivatePDPContextAccept L3DeactivatePDPContextAccept::Builder::build() const {
     L3DeactivatePDPContextAccept msg;
-    msg.mPDPHandle = m_pdpHandle;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -500,74 +557,76 @@ L3DeactivatePDPContextAccept::Builder L3DeactivatePDPContextAccept::builder() {
     return Builder{};
 }
 
-// ── L3ModifyPDPContextRequest (GSM 24.008 9.5.6) ─────────────────────
+// ── L3ModifyPDPContextRequest (TS 44.068 section 9.5) ─────────────────
 
 size_t L3ModifyPDPContextRequest::bodyLength() const {
     size_t len = 1; // pdpHandle(4)|spare(4)
-    len += tlvLen(mQoS.lengthV());
+    len += 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ModifyPDPContextRequest> L3ModifyPDPContextRequest::parse(BitReader& br) {
+    // SM MODIFY PDP CONTEXT REQUEST (TS 44.068): PDP handle in the first
+    // octet, requested QoS (LV); optional IEs follow (protocol configuration
+    // options TLV 0x27 and others, kept opaque).
     L3ModifyPDPContextRequest msg;
 
-    // pdpHandle(4)|spare(4) = 1 octet
+    auto o = br.readField(8);
+    if (!o) return Expected<L3ModifyPDPContextRequest>::error(o.error());
+    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    // QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3ModifyPDPContextRequest>::error(qlen.error());
     {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3ModifyPDPContextRequest>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3ModifyPDPContextRequest>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
     }
 
-    // Spare 4 bits
-    {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3ModifyPDPContextRequest>::error(spare.error());
-    }
-
-    while (br.hasMore()) {
+    while (br.remainingBits() >= 16) {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3ModifyPDPContextRequest>::error(iei.error());
-
-        if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) {
-                msg.mQoS = std::move(qos).value();
-            } else {
-                skipValue(br, vLen);
-            }
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) {
+        bool typed = false;
+        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
                 msg.mHavePCO = true;
                 msg.mPCO = std::move(pco).value();
-            } else {
-                skipValue(br, vLen);
+                typed = true;
             }
-        } else {
-            skipValue(br, vLen);
         }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3ModifyPDPContextRequest>::error(t.error());
+        }
+    }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ModifyPDPContextRequest>::error(
+            ParseError{ParseError::Code::TruncatedInput, "modify PDP context request: truncated optional IEs", br.position()});
     }
 
     return Expected<L3ModifyPDPContextRequest>::hold(std::move(msg));
 }
 
 void L3ModifyPDPContextRequest::write(BitWriter& bw) const {
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
+    // pdpHandle(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
 
-    // QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
+    // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
     mQoS.write(bw);
 
-    // PCO: TLV (optional)
+    // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ModifyPDPContextRequest::text(std::ostream& os) const {
@@ -583,10 +642,11 @@ void L3ModifyPDPContextRequest::text(std::ostream& os) const {
 
 L3ModifyPDPContextRequest L3ModifyPDPContextRequest::Builder::build() const {
     L3ModifyPDPContextRequest msg;
-    msg.mPDPHandle = m_pdpHandle;
+    msg.mPDPHandle = m_pdpHandle & 0x0Fu;
     msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -594,74 +654,75 @@ L3ModifyPDPContextRequest::Builder L3ModifyPDPContextRequest::builder() {
     return Builder{};
 }
 
-// ── L3ModifyPDPContextAccept (GSM 24.008 9.5.7) ──────────────────────
+// ── L3ModifyPDPContextAccept (TS 44.068 section 9.5) ──────────────────
 
 size_t L3ModifyPDPContextAccept::bodyLength() const {
     size_t len = 1; // pdpHandle(4)|spare(4)
-    len += tlvLen(mQoS.lengthV());
+    len += 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ModifyPDPContextAccept> L3ModifyPDPContextAccept::parse(BitReader& br) {
+    // SM MODIFY PDP CONTEXT ACCEPT (TS 44.068): PDP handle in the first
+    // octet, QoS (LV); optional IEs follow (kept opaque except PCO TLV 0x27).
     L3ModifyPDPContextAccept msg;
 
-    // pdpHandle(4)|spare(4) = 1 octet
+    auto o = br.readField(8);
+    if (!o) return Expected<L3ModifyPDPContextAccept>::error(o.error());
+    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    // QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3ModifyPDPContextAccept>::error(qlen.error());
     {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3ModifyPDPContextAccept>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3ModifyPDPContextAccept>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
     }
 
-    // Spare 4 bits
-    {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3ModifyPDPContextAccept>::error(spare.error());
-    }
-
-    while (br.hasMore()) {
+    while (br.remainingBits() >= 16) {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3ModifyPDPContextAccept>::error(iei.error());
-
-        if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) {
-                msg.mQoS = std::move(qos).value();
-            } else {
-                skipValue(br, vLen);
-            }
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) {
+        bool typed = false;
+        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
                 msg.mHavePCO = true;
                 msg.mPCO = std::move(pco).value();
-            } else {
-                skipValue(br, vLen);
+                typed = true;
             }
-        } else {
-            skipValue(br, vLen);
         }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3ModifyPDPContextAccept>::error(t.error());
+        }
+    }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ModifyPDPContextAccept>::error(
+            ParseError{ParseError::Code::TruncatedInput, "modify PDP context accept: truncated optional IEs", br.position()});
     }
 
     return Expected<L3ModifyPDPContextAccept>::hold(std::move(msg));
 }
 
 void L3ModifyPDPContextAccept::write(BitWriter& bw) const {
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
+    // pdpHandle(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
 
-    // QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
+    // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
     mQoS.write(bw);
 
-    // PCO: TLV (optional)
+    // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ModifyPDPContextAccept::text(std::ostream& os) const {
@@ -677,10 +738,11 @@ void L3ModifyPDPContextAccept::text(std::ostream& os) const {
 
 L3ModifyPDPContextAccept L3ModifyPDPContextAccept::Builder::build() const {
     L3ModifyPDPContextAccept msg;
-    msg.mPDPHandle = m_pdpHandle;
+    msg.mPDPHandle = m_pdpHandle & 0x0Fu;
     msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -688,81 +750,46 @@ L3ModifyPDPContextAccept::Builder L3ModifyPDPContextAccept::builder() {
     return Builder{};
 }
 
-// ── L3ModifyPDPContextReject (GSM 24.008 9.5.8) ──────────────────────
+// ── L3ModifyPDPContextReject (TS 44.068 section 9.5) ──────────────────
 
 size_t L3ModifyPDPContextReject::bodyLength() const {
-    size_t len = 1; // pdpHandle(4)|spare(4)
-    len += tlvLen(1); // smCause TLV
-    if (mHaveBackOffTimer) len += tlvLen(1);
+    size_t len = 1; // smCause value octet
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ModifyPDPContextReject> L3ModifyPDPContextReject::parse(BitReader& br) {
+    // SM MODIFY PDP CONTEXT REJECT (TS 44.068): the body starts with the
+    // SM cause value octet (no identifier); any further optional IEs
+    // (back-off timer and others) are kept opaque.
     L3ModifyPDPContextReject msg;
 
-    // pdpHandle(4)|spare(4) = 1 octet
-    {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3ModifyPDPContextReject>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
-    }
+    auto c = br.readField(8);
+    if (!c) return Expected<L3ModifyPDPContextReject>::error(c.error());
+    msg.mCause = static_cast<SMCause>(c.value());
 
-    // Spare 4 bits
-    {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3ModifyPDPContextReject>::error(spare.error());
-    }
-
-    while (br.hasMore()) {
-        size_t vLen = 0;
-        auto iei = readTLVHeader(br, vLen);
-        if (!iei) return Expected<L3ModifyPDPContextReject>::error(iei.error());
-
-        if (iei.value() == L3SMCauseIE::IEI && vLen >= 1) {
-            auto cause = br.readField(8);
-            if (cause) msg.mCause = static_cast<SMCause>(cause.value());
-        } else if (iei.value() == L3BackOffTimer::IEI && vLen >= 1) {
-            auto t = br.readField(8);
-            if (t) {
-                msg.mHaveBackOffTimer = true;
-                msg.mBackOffTimer = L3BackOffTimer{static_cast<uint8_t>(t.value())};
-            }
-        } else {
-            skipValue(br, vLen);
-        }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ModifyPDPContextReject>::error(
+            ParseError{ParseError::Code::TruncatedInput, "modify PDP context reject: truncated optional IEs", br.position()});
     }
 
     return Expected<L3ModifyPDPContextReject>::hold(std::move(msg));
 }
 
 void L3ModifyPDPContextReject::write(BitWriter& bw) const {
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
-
-    // smCause: TLV
-    bw.writeField(0x80 | L3SMCauseIE::IEI, 8);
-    bw.writeField(1, 8);
+    // smCause: value octet (no identifier).
     bw.writeField(static_cast<uint8_t>(mCause), 8);
-
-    // BackOffTimer: TLV (optional)
-    if (mHaveBackOffTimer) {
-        bw.writeField(0x80 | L3BackOffTimer::IEI, 8);
-        bw.writeField(1, 8);
-        bw.writeField(mBackOffTimer.value(), 8);
-    }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ModifyPDPContextReject::text(std::ostream& os) const {
-    os << "ModifyPDPRej(handle=" << static_cast<int>(mPDPHandle)
-        << ",cause=" << SMCause2Str(mCause) << ")";
+    os << "ModifyPDPRej(cause=" << SMCause2Str(mCause) << ")";
 }
 
 L3ModifyPDPContextReject L3ModifyPDPContextReject::Builder::build() const {
     L3ModifyPDPContextReject msg;
-    msg.mPDPHandle = m_pdpHandle;
     msg.mCause = m_cause;
-    msg.mHaveBackOffTimer = m_haveBackOffTimer;
-    msg.mBackOffTimer = m_backOffTimer;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -770,35 +797,35 @@ L3ModifyPDPContextReject::Builder L3ModifyPDPContextReject::builder() {
     return Builder{};
 }
 
-// ── L3SMStatus (GSM 24.008 9.5.9) ────────────────────────────────────
+// ── L3SMStatus (TS 44.068 section 9.5) ────────────────────────────────
 
 size_t L3SMStatus::bodyLength() const {
-    return tlvLen(1); // smCause TLV
+    size_t len = 1; // smCause value octet
+    len += mAdditionalIes.size();
+    return len;
 }
 
 Expected<L3SMStatus> L3SMStatus::parse(BitReader& br) {
+    // SM STATUS (TS 44.068): the body is the SM cause value octet without
+    // an identifier; any further optional IEs are kept opaque.
     L3SMStatus msg;
 
-    while (br.hasMore()) {
-        size_t vLen = 0;
-        auto iei = readTLVHeader(br, vLen);
-        if (!iei) return Expected<L3SMStatus>::error(iei.error());
+    auto c = br.readField(8);
+    if (!c) return Expected<L3SMStatus>::error(c.error());
+    msg.mCause = static_cast<SMCause>(c.value());
 
-        if (iei.value() == L3SMCauseIE::IEI && vLen >= 1) {
-            auto cause = br.readField(8);
-            if (cause) msg.mCause = static_cast<SMCause>(cause.value());
-        } else {
-            skipValue(br, vLen);
-        }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3SMStatus>::error(
+            ParseError{ParseError::Code::TruncatedInput, "SM status: truncated optional IEs", br.position()});
     }
 
     return Expected<L3SMStatus>::hold(std::move(msg));
 }
 
 void L3SMStatus::write(BitWriter& bw) const {
-    bw.writeField(0x80 | L3SMCauseIE::IEI, 8);
-    bw.writeField(1, 8);
+    // smCause: value octet (no identifier).
     bw.writeField(static_cast<uint8_t>(mCause), 8);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3SMStatus::text(std::ostream& os) const {
@@ -808,6 +835,7 @@ void L3SMStatus::text(std::ostream& os) const {
 L3SMStatus L3SMStatus::Builder::build() const {
     L3SMStatus msg;
     msg.mCause = m_cause;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -815,101 +843,131 @@ L3SMStatus::Builder L3SMStatus::builder() {
     return Builder{};
 }
 
-// ── L3RequestPDPContextActivation (GSM 24.008 9.5.10) ─────────────────
+// ── L3RequestPDPContextActivation (TS 44.068 section 9.5) ─────────────
 
 size_t L3RequestPDPContextActivation::bodyLength() const {
-    size_t len = 1;
-    if (mHavePDPAddress) len += tlvLen(mPDPAddress.lengthV());
-    len += tlvLen(mAPN.lengthV());
-    len += tlvLen(mQoS.lengthV());
+    size_t len = 1; // pdpHandle(4)|spare(4)
+    len += 1 + mQoS.lengthV();         // QoS (LV)
+    len += 1 + mPDPAddress.lengthV();  // PDP address (LV)
+    len += tlvLen(mAPN.lengthV());     // APN (TLV, mandatory)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3RequestPDPContextActivation> L3RequestPDPContextActivation::parse(BitReader& br) {
+    // SM REQUEST PDP CONTEXT ACTIVATION (TS 44.068): PDP handle in the first
+    // octet, QoS (LV), PDP type and address (LV), access point name (TLV,
+    // IEI 0x28); protocol configuration options (TLV, IEI 0x27) and any
+    // further optional IEs follow.
     L3RequestPDPContextActivation msg;
-    // Read pdpHandle(4)|spare(4)
+
+    auto o = br.readField(8);
+    if (!o) return Expected<L3RequestPDPContextActivation>::error(o.error());
+    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    // QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3RequestPDPContextActivation>::error(qlen.error());
     {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3RequestPDPContextActivation>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3RequestPDPContextActivation>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
     }
+
+    // PDP type and address: LV (mandatory).
+    auto alen = br.readField(8);
+    if (!alen) return Expected<L3RequestPDPContextActivation>::error(alen.error());
     {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3RequestPDPContextActivation>::error(spare.error());
+        auto addr = L3PDPAddress::parse(br, alen.value());
+        if (!addr) return Expected<L3RequestPDPContextActivation>::error(addr.error());
+        msg.mPDPAddress = std::move(addr).value();
     }
-    // Parse TLV: PDPAddress | APN | QoS | PCO
-    while (br.hasMore()) {
+
+    // APN: TLV 0x28 (mandatory).
+    {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3RequestPDPContextActivation>::error(iei.error());
-        if (iei.value() == L3PDPAddress::IEI) {
-            auto addr = L3PDPAddress::parse(br, vLen);
-            if (addr) { msg.mHavePDPAddress = true; msg.mPDPAddress = std::move(addr).value(); }
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3AccessPointName::IEI) {
-            auto apn = L3AccessPointName::parse(br, vLen);
-            if (apn) msg.mAPN = std::move(apn).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) msg.mQoS = std::move(qos).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) { msg.mHavePCO = true; msg.mPCO = std::move(pco).value(); }
-            else skipValue(br, vLen);
-        } else {
-            skipValue(br, vLen);
+        if (iei.value() != L3AccessPointName::IEI) {
+            return Expected<L3RequestPDPContextActivation>::error(
+                ParseError{ParseError::Code::InvalidIE, "request PDP context activation: missing access point name", br.position()});
+        }
+        auto apn = L3AccessPointName::parse(br, vLen);
+        if (!apn) return Expected<L3RequestPDPContextActivation>::error(apn.error());
+        msg.mAPN = std::move(apn).value();
+    }
+
+    while (br.remainingBits() >= 16) {
+        size_t vLen = 0;
+        auto iei = readTLVHeader(br, vLen);
+        if (!iei) return Expected<L3RequestPDPContextActivation>::error(iei.error());
+        bool typed = false;
+        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
+                msg.mHavePCO = true;
+                msg.mPCO = std::move(pco).value();
+                typed = true;
+            }
+        }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3RequestPDPContextActivation>::error(t.error());
         }
     }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3RequestPDPContextActivation>::error(
+            ParseError{ParseError::Code::TruncatedInput, "request PDP context activation: truncated optional IEs", br.position()});
+    }
+
     return Expected<L3RequestPDPContextActivation>::hold(std::move(msg));
 }
 
 void L3RequestPDPContextActivation::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
-    // Write PDPAddress: TLV (optional)
-    if (mHavePDPAddress) {
-        bw.writeField(0x80 | L3PDPAddress::IEI, 8);
-        bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
-        mPDPAddress.write(bw);
-    }
-    // Write APN: TLV (mandatory)
-    bw.writeField(0x80 | L3AccessPointName::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
-    mAPN.write(bw);
-    // Write QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
+    // pdpHandle(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+
+    // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
     mQoS.write(bw);
-    // Write PCO: TLV (optional)
+
+    // PDP type and address: LV (mandatory).
+    bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
+    mPDPAddress.write(bw);
+
+    // APN: TLV 0x28 (mandatory).
+    bw.writeField(L3AccessPointName::IEI, 8);
+    bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
+    mAPN.write(bw);
+
+    // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3RequestPDPContextActivation::text(std::ostream& os) const {
     os << "RequestPDPAct(handle=" << static_cast<int>(mPDPHandle);
-    if (mHavePDPAddress) { os << ", "; mPDPAddress.text(os); }
-    os << ", "; mAPN.text(os);
     os << ", "; mQoS.text(os);
+    os << ", "; mPDPAddress.text(os);
+    os << ", "; mAPN.text(os);
     if (mHavePCO) { os << ", "; mPCO.text(os); }
     os << ")";
 }
 
 L3RequestPDPContextActivation L3RequestPDPContextActivation::Builder::build() const {
     L3RequestPDPContextActivation msg;
-    msg.mPDPHandle = m_pdpHandle;
-    msg.mHavePDPAddress = m_havePDPAddress;
+    msg.mPDPHandle = m_pdpHandle & 0x0Fu;
+    msg.mQoS = m_qos;
     msg.mPDPAddress = m_pdpAddress;
     msg.mAPN = m_apn;
-    msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -917,58 +975,46 @@ L3RequestPDPContextActivation::Builder L3RequestPDPContextActivation::builder() 
     return Builder{};
 }
 
-// ── L3RequestPDPContextActivationReject (GSM 24.008 9.5.10) ───────────
+// ── L3RequestPDPContextActivationReject (TS 44.068 section 9.5) ───────
 
 size_t L3RequestPDPContextActivationReject::bodyLength() const {
-    return 1 + tlvLen(1);
+    size_t len = 1; // smCause value octet
+    len += mAdditionalIes.size();
+    return len;
 }
 
 Expected<L3RequestPDPContextActivationReject> L3RequestPDPContextActivationReject::parse(BitReader& br) {
+    // SM REQUEST PDP CONTEXT ACTIVATION REJECT (TS 44.068): the body starts
+    // with the SM cause value octet (no identifier); any further optional
+    // IEs are kept opaque.
     L3RequestPDPContextActivationReject msg;
-    // Read pdpHandle(4)|spare(4)
-    {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3RequestPDPContextActivationReject>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+
+    auto c = br.readField(8);
+    if (!c) return Expected<L3RequestPDPContextActivationReject>::error(c.error());
+    msg.mCause = static_cast<SMCause>(c.value());
+
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3RequestPDPContextActivationReject>::error(
+            ParseError{ParseError::Code::TruncatedInput, "request PDP context activation reject: truncated optional IEs", br.position()});
     }
-    {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3RequestPDPContextActivationReject>::error(spare.error());
-    }
-    // Parse TLV: smCause
-    while (br.hasMore()) {
-        size_t vLen = 0;
-        auto iei = readTLVHeader(br, vLen);
-        if (!iei) return Expected<L3RequestPDPContextActivationReject>::error(iei.error());
-        if (iei.value() == L3SMCauseIE::IEI && vLen >= 1) {
-            auto cause = br.readField(8);
-            if (cause) msg.mCause = static_cast<SMCause>(cause.value());
-        } else {
-            skipValue(br, vLen);
-        }
-    }
+
     return Expected<L3RequestPDPContextActivationReject>::hold(std::move(msg));
 }
 
 void L3RequestPDPContextActivationReject::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
-    // Write smCause: TLV
-    bw.writeField(0x80 | L3SMCauseIE::IEI, 8);
-    bw.writeField(1, 8);
+    // smCause: value octet (no identifier).
     bw.writeField(static_cast<uint8_t>(mCause), 8);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3RequestPDPContextActivationReject::text(std::ostream& os) const {
-    os << "RequestPDPActRej(handle=" << static_cast<int>(mPDPHandle)
-        << ",cause=" << SMCause2Str(mCause) << ")";
+    os << "RequestPDPActRej(cause=" << SMCause2Str(mCause) << ")";
 }
 
 L3RequestPDPContextActivationReject L3RequestPDPContextActivationReject::Builder::build() const {
     L3RequestPDPContextActivationReject msg;
-    msg.mPDPHandle = m_pdpHandle;
     msg.mCause = m_cause;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -976,61 +1022,76 @@ L3RequestPDPContextActivationReject::Builder L3RequestPDPContextActivationReject
     return Builder{};
 }
 
-// ── L3ModifyPDPContextRequestMS (GSM 24.008 9.5.6) ────────────────────
+// ── L3ModifyPDPContextRequestMS (TS 44.068 section 9.5) ───────────────
 
 size_t L3ModifyPDPContextRequestMS::bodyLength() const {
-    size_t len = 1;
-    len += tlvLen(mQoS.lengthV());
+    size_t len = 1; // pdpHandle(4)|spare(4)
+    len += 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ModifyPDPContextRequestMS> L3ModifyPDPContextRequestMS::parse(BitReader& br) {
+    // SM MODIFY PDP CONTEXT REQUEST, MS->SGSN (TS 44.068): PDP handle in
+    // the first octet, requested QoS (LV); optional IEs follow (kept opaque
+    // except PCO TLV 0x27).
     L3ModifyPDPContextRequestMS msg;
-    // Read pdpHandle(4)|spare(4)
+
+    auto o = br.readField(8);
+    if (!o) return Expected<L3ModifyPDPContextRequestMS>::error(o.error());
+    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    // QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3ModifyPDPContextRequestMS>::error(qlen.error());
     {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3ModifyPDPContextRequestMS>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3ModifyPDPContextRequestMS>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
     }
-    {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3ModifyPDPContextRequestMS>::error(spare.error());
-    }
-    // Parse TLV: QoS | PCO
-    while (br.hasMore()) {
+
+    while (br.remainingBits() >= 16) {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3ModifyPDPContextRequestMS>::error(iei.error());
-        if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) msg.mQoS = std::move(qos).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) { msg.mHavePCO = true; msg.mPCO = std::move(pco).value(); }
-            else skipValue(br, vLen);
-        } else {
-            skipValue(br, vLen);
+        bool typed = false;
+        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
+                msg.mHavePCO = true;
+                msg.mPCO = std::move(pco).value();
+                typed = true;
+            }
+        }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3ModifyPDPContextRequestMS>::error(t.error());
         }
     }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ModifyPDPContextRequestMS>::error(
+            ParseError{ParseError::Code::TruncatedInput, "modify PDP context request (MS): truncated optional IEs", br.position()});
+    }
+
     return Expected<L3ModifyPDPContextRequestMS>::hold(std::move(msg));
 }
 
 void L3ModifyPDPContextRequestMS::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
-    // Write QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
+    // pdpHandle(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+
+    // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
     mQoS.write(bw);
-    // Write PCO: TLV (optional)
+
+    // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ModifyPDPContextRequestMS::text(std::ostream& os) const {
@@ -1042,10 +1103,11 @@ void L3ModifyPDPContextRequestMS::text(std::ostream& os) const {
 
 L3ModifyPDPContextRequestMS L3ModifyPDPContextRequestMS::Builder::build() const {
     L3ModifyPDPContextRequestMS msg;
-    msg.mPDPHandle = m_pdpHandle;
+    msg.mPDPHandle = m_pdpHandle & 0x0Fu;
     msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1053,61 +1115,76 @@ L3ModifyPDPContextRequestMS::Builder L3ModifyPDPContextRequestMS::builder() {
     return Builder{};
 }
 
-// ── L3ModifyPDPContextAcceptNet (GSM 24.008 9.5.7) ────────────────────
+// ── L3ModifyPDPContextAcceptNet (TS 44.068 section 9.5) ───────────────
 
 size_t L3ModifyPDPContextAcceptNet::bodyLength() const {
-    size_t len = 1;
-    len += tlvLen(mQoS.lengthV());
+    size_t len = 1; // pdpHandle(4)|spare(4)
+    len += 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ModifyPDPContextAcceptNet> L3ModifyPDPContextAcceptNet::parse(BitReader& br) {
+    // SM MODIFY PDP CONTEXT ACCEPT, SGSN->MS (TS 44.068): PDP handle in
+    // the first octet, QoS (LV); optional IEs follow (kept opaque except
+    // PCO TLV 0x27).
     L3ModifyPDPContextAcceptNet msg;
-    // Read pdpHandle(4)|spare(4)
+
+    auto o = br.readField(8);
+    if (!o) return Expected<L3ModifyPDPContextAcceptNet>::error(o.error());
+    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    // QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3ModifyPDPContextAcceptNet>::error(qlen.error());
     {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3ModifyPDPContextAcceptNet>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3ModifyPDPContextAcceptNet>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
     }
-    {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3ModifyPDPContextAcceptNet>::error(spare.error());
-    }
-    // Parse TLV: QoS | PCO
-    while (br.hasMore()) {
+
+    while (br.remainingBits() >= 16) {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3ModifyPDPContextAcceptNet>::error(iei.error());
-        if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) msg.mQoS = std::move(qos).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) { msg.mHavePCO = true; msg.mPCO = std::move(pco).value(); }
-            else skipValue(br, vLen);
-        } else {
-            skipValue(br, vLen);
+        bool typed = false;
+        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
+                msg.mHavePCO = true;
+                msg.mPCO = std::move(pco).value();
+                typed = true;
+            }
+        }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3ModifyPDPContextAcceptNet>::error(t.error());
         }
     }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ModifyPDPContextAcceptNet>::error(
+            ParseError{ParseError::Code::TruncatedInput, "modify PDP context accept (SGSN): truncated optional IEs", br.position()});
+    }
+
     return Expected<L3ModifyPDPContextAcceptNet>::hold(std::move(msg));
 }
 
 void L3ModifyPDPContextAcceptNet::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
-    // Write QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
+    // pdpHandle(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+
+    // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
     mQoS.write(bw);
-    // Write PCO: TLV (optional)
+
+    // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ModifyPDPContextAcceptNet::text(std::ostream& os) const {
@@ -1119,10 +1196,11 @@ void L3ModifyPDPContextAcceptNet::text(std::ostream& os) const {
 
 L3ModifyPDPContextAcceptNet L3ModifyPDPContextAcceptNet::Builder::build() const {
     L3ModifyPDPContextAcceptNet msg;
-    msg.mPDPHandle = m_pdpHandle;
+    msg.mPDPHandle = m_pdpHandle & 0x0Fu;
     msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1130,101 +1208,131 @@ L3ModifyPDPContextAcceptNet::Builder L3ModifyPDPContextAcceptNet::builder() {
     return Builder{};
 }
 
-// ── L3ActivateSecondaryPDPContextRequest (GSM 24.008 9.5.11) ──────────
+// ── L3ActivateSecondaryPDPContextRequest (TS 44.068 section 9.5) ──────
 
 size_t L3ActivateSecondaryPDPContextRequest::bodyLength() const {
-    size_t len = 1;
-    if (mHavePDPAddress) len += tlvLen(mPDPAddress.lengthV());
-    len += tlvLen(mAPN.lengthV());
-    len += tlvLen(mQoS.lengthV());
+    size_t len = 1; // pdpHandle(4)|spare(4)
+    len += 1 + mQoS.lengthV();         // QoS (LV)
+    len += 1 + mPDPAddress.lengthV();  // PDP address (LV)
+    len += tlvLen(mAPN.lengthV());     // APN (TLV, mandatory)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ActivateSecondaryPDPContextRequest> L3ActivateSecondaryPDPContextRequest::parse(BitReader& br) {
+    // SM ACTIVATE SECONDARY PDP CONTEXT REQUEST (TS 44.068): PDP handle in
+    // the first octet, requested QoS (LV), requested PDP type and address
+    // (LV), access point name (TLV, IEI 0x28); protocol configuration
+    // options (TLV, IEI 0x27) and any further optional IEs follow.
     L3ActivateSecondaryPDPContextRequest msg;
-    // Read pdpHandle(4)|spare(4)
+
+    auto o = br.readField(8);
+    if (!o) return Expected<L3ActivateSecondaryPDPContextRequest>::error(o.error());
+    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    // QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3ActivateSecondaryPDPContextRequest>::error(qlen.error());
     {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3ActivateSecondaryPDPContextRequest>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3ActivateSecondaryPDPContextRequest>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
     }
+
+    // PDP type and address: LV (mandatory).
+    auto alen = br.readField(8);
+    if (!alen) return Expected<L3ActivateSecondaryPDPContextRequest>::error(alen.error());
     {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3ActivateSecondaryPDPContextRequest>::error(spare.error());
+        auto addr = L3PDPAddress::parse(br, alen.value());
+        if (!addr) return Expected<L3ActivateSecondaryPDPContextRequest>::error(addr.error());
+        msg.mPDPAddress = std::move(addr).value();
     }
-    // Parse TLV: PDPAddress | APN | QoS | PCO
-    while (br.hasMore()) {
+
+    // APN: TLV 0x28 (mandatory).
+    {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3ActivateSecondaryPDPContextRequest>::error(iei.error());
-        if (iei.value() == L3PDPAddress::IEI) {
-            auto addr = L3PDPAddress::parse(br, vLen);
-            if (addr) { msg.mHavePDPAddress = true; msg.mPDPAddress = std::move(addr).value(); }
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3AccessPointName::IEI) {
-            auto apn = L3AccessPointName::parse(br, vLen);
-            if (apn) msg.mAPN = std::move(apn).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) msg.mQoS = std::move(qos).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) { msg.mHavePCO = true; msg.mPCO = std::move(pco).value(); }
-            else skipValue(br, vLen);
-        } else {
-            skipValue(br, vLen);
+        if (iei.value() != L3AccessPointName::IEI) {
+            return Expected<L3ActivateSecondaryPDPContextRequest>::error(
+                ParseError{ParseError::Code::InvalidIE, "activate secondary PDP context request: missing access point name", br.position()});
+        }
+        auto apn = L3AccessPointName::parse(br, vLen);
+        if (!apn) return Expected<L3ActivateSecondaryPDPContextRequest>::error(apn.error());
+        msg.mAPN = std::move(apn).value();
+    }
+
+    while (br.remainingBits() >= 16) {
+        size_t vLen = 0;
+        auto iei = readTLVHeader(br, vLen);
+        if (!iei) return Expected<L3ActivateSecondaryPDPContextRequest>::error(iei.error());
+        bool typed = false;
+        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
+                msg.mHavePCO = true;
+                msg.mPCO = std::move(pco).value();
+                typed = true;
+            }
+        }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3ActivateSecondaryPDPContextRequest>::error(t.error());
         }
     }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ActivateSecondaryPDPContextRequest>::error(
+            ParseError{ParseError::Code::TruncatedInput, "activate secondary PDP context request: truncated optional IEs", br.position()});
+    }
+
     return Expected<L3ActivateSecondaryPDPContextRequest>::hold(std::move(msg));
 }
 
 void L3ActivateSecondaryPDPContextRequest::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
-    // Write PDPAddress: TLV (optional)
-    if (mHavePDPAddress) {
-        bw.writeField(0x80 | L3PDPAddress::IEI, 8);
-        bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
-        mPDPAddress.write(bw);
-    }
-    // Write APN: TLV (mandatory)
-    bw.writeField(0x80 | L3AccessPointName::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
-    mAPN.write(bw);
-    // Write QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
+    // pdpHandle(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+
+    // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
     mQoS.write(bw);
-    // Write PCO: TLV (optional)
+
+    // PDP type and address: LV (mandatory).
+    bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
+    mPDPAddress.write(bw);
+
+    // APN: TLV 0x28 (mandatory).
+    bw.writeField(L3AccessPointName::IEI, 8);
+    bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
+    mAPN.write(bw);
+
+    // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ActivateSecondaryPDPContextRequest::text(std::ostream& os) const {
     os << "ActSecPDPReq(handle=" << static_cast<int>(mPDPHandle);
-    if (mHavePDPAddress) { os << ", "; mPDPAddress.text(os); }
-    os << ", "; mAPN.text(os);
     os << ", "; mQoS.text(os);
+    os << ", "; mPDPAddress.text(os);
+    os << ", "; mAPN.text(os);
     if (mHavePCO) { os << ", "; mPCO.text(os); }
     os << ")";
 }
 
 L3ActivateSecondaryPDPContextRequest L3ActivateSecondaryPDPContextRequest::Builder::build() const {
     L3ActivateSecondaryPDPContextRequest msg;
-    msg.mPDPHandle = m_pdpHandle;
-    msg.mHavePDPAddress = m_havePDPAddress;
+    msg.mPDPHandle = m_pdpHandle & 0x0Fu;
+    msg.mQoS = m_qos;
     msg.mPDPAddress = m_pdpAddress;
     msg.mAPN = m_apn;
-    msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1232,72 +1340,91 @@ L3ActivateSecondaryPDPContextRequest::Builder L3ActivateSecondaryPDPContextReque
     return Builder{};
 }
 
-// ── L3ActivateSecondaryPDPContextAccept (GSM 24.008 9.5.12) ───────────
+// ── L3ActivateSecondaryPDPContextAccept (TS 44.068 section 9.5) ───────
 
 size_t L3ActivateSecondaryPDPContextAccept::bodyLength() const {
-    size_t len = 1;
+    size_t len = 1; // pdpHandle(4)|spare(4)
+    len += 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePDPAddress) len += tlvLen(mPDPAddress.lengthV());
-    len += tlvLen(mQoS.lengthV());
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ActivateSecondaryPDPContextAccept> L3ActivateSecondaryPDPContextAccept::parse(BitReader& br) {
+    // SM ACTIVATE SECONDARY PDP CONTEXT ACCEPT (TS 44.068): PDP handle in
+    // the first octet, negotiated QoS (LV); optional IEs follow: PDP type
+    // and address (TLV, IEI 0x2B), protocol configuration options (TLV,
+    // IEI 0x27); any further optional IEs are kept opaque.
     L3ActivateSecondaryPDPContextAccept msg;
-    // Read pdpHandle(4)|spare(4)
+
+    auto o = br.readField(8);
+    if (!o) return Expected<L3ActivateSecondaryPDPContextAccept>::error(o.error());
+    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    // QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3ActivateSecondaryPDPContextAccept>::error(qlen.error());
     {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3ActivateSecondaryPDPContextAccept>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3ActivateSecondaryPDPContextAccept>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
     }
-    {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3ActivateSecondaryPDPContextAccept>::error(spare.error());
-    }
-    // Parse TLV: PDPAddress | QoS | PCO
-    while (br.hasMore()) {
+
+    while (br.remainingBits() >= 16) {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3ActivateSecondaryPDPContextAccept>::error(iei.error());
-        if (iei.value() == L3PDPAddress::IEI) {
-            auto addr = L3PDPAddress::parse(br, vLen);
-            if (addr) { msg.mHavePDPAddress = true; msg.mPDPAddress = std::move(addr).value(); }
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) msg.mQoS = std::move(qos).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) { msg.mHavePCO = true; msg.mPCO = std::move(pco).value(); }
-            else skipValue(br, vLen);
-        } else {
-            skipValue(br, vLen);
+        bool typed = false;
+        if (iei.value() == kPdpAddressTlvIEI && !msg.mHavePDPAddress) {
+            if (auto addr = L3PDPAddress::parse(br, vLen)) {
+                msg.mHavePDPAddress = true;
+                msg.mPDPAddress = std::move(addr).value();
+                typed = true;
+            }
+        } else if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
+                msg.mHavePCO = true;
+                msg.mPCO = std::move(pco).value();
+                typed = true;
+            }
+        }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3ActivateSecondaryPDPContextAccept>::error(t.error());
         }
     }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ActivateSecondaryPDPContextAccept>::error(
+            ParseError{ParseError::Code::TruncatedInput, "activate secondary PDP context accept: truncated optional IEs", br.position()});
+    }
+
     return Expected<L3ActivateSecondaryPDPContextAccept>::hold(std::move(msg));
 }
 
 void L3ActivateSecondaryPDPContextAccept::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
-    // Write PDPAddress: TLV (optional)
+    // pdpHandle(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+
+    // QoS: LV (mandatory).
+    bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
+    mQoS.write(bw);
+
+    // PDP type and address: TLV 0x2B (optional).
     if (mHavePDPAddress) {
-        bw.writeField(0x80 | L3PDPAddress::IEI, 8);
+        bw.writeField(kPdpAddressTlvIEI, 8);
         bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
         mPDPAddress.write(bw);
     }
-    // Write QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
-    mQoS.write(bw);
-    // Write PCO: TLV (optional)
+
+    // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ActivateSecondaryPDPContextAccept::text(std::ostream& os) const {
@@ -1310,12 +1437,13 @@ void L3ActivateSecondaryPDPContextAccept::text(std::ostream& os) const {
 
 L3ActivateSecondaryPDPContextAccept L3ActivateSecondaryPDPContextAccept::Builder::build() const {
     L3ActivateSecondaryPDPContextAccept msg;
-    msg.mPDPHandle = m_pdpHandle;
+    msg.mPDPHandle = m_pdpHandle & 0x0Fu;
+    msg.mQoS = m_qos;
     msg.mHavePDPAddress = m_havePDPAddress;
     msg.mPDPAddress = m_pdpAddress;
-    msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1323,58 +1451,46 @@ L3ActivateSecondaryPDPContextAccept::Builder L3ActivateSecondaryPDPContextAccept
     return Builder{};
 }
 
-// ── L3ActivateSecondaryPDPContextReject (GSM 24.008 9.5.13) ───────────
+// ── L3ActivateSecondaryPDPContextReject (TS 44.068 section 9.5) ───────
 
 size_t L3ActivateSecondaryPDPContextReject::bodyLength() const {
-    return 1 + tlvLen(1);
+    size_t len = 1; // smCause value octet
+    len += mAdditionalIes.size();
+    return len;
 }
 
 Expected<L3ActivateSecondaryPDPContextReject> L3ActivateSecondaryPDPContextReject::parse(BitReader& br) {
+    // SM ACTIVATE SECONDARY PDP CONTEXT REJECT (TS 44.068): the body starts
+    // with the SM cause value octet (no identifier); any further optional
+    // IEs are kept opaque.
     L3ActivateSecondaryPDPContextReject msg;
-    // Read pdpHandle(4)|spare(4)
-    {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3ActivateSecondaryPDPContextReject>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+
+    auto c = br.readField(8);
+    if (!c) return Expected<L3ActivateSecondaryPDPContextReject>::error(c.error());
+    msg.mCause = static_cast<SMCause>(c.value());
+
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ActivateSecondaryPDPContextReject>::error(
+            ParseError{ParseError::Code::TruncatedInput, "activate secondary PDP context reject: truncated optional IEs", br.position()});
     }
-    {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3ActivateSecondaryPDPContextReject>::error(spare.error());
-    }
-    // Parse TLV: smCause
-    while (br.hasMore()) {
-        size_t vLen = 0;
-        auto iei = readTLVHeader(br, vLen);
-        if (!iei) return Expected<L3ActivateSecondaryPDPContextReject>::error(iei.error());
-        if (iei.value() == L3SMCauseIE::IEI && vLen >= 1) {
-            auto cause = br.readField(8);
-            if (cause) msg.mCause = static_cast<SMCause>(cause.value());
-        } else {
-            skipValue(br, vLen);
-        }
-    }
+
     return Expected<L3ActivateSecondaryPDPContextReject>::hold(std::move(msg));
 }
 
 void L3ActivateSecondaryPDPContextReject::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
-    // Write smCause: TLV
-    bw.writeField(0x80 | L3SMCauseIE::IEI, 8);
-    bw.writeField(1, 8);
+    // smCause: value octet (no identifier).
     bw.writeField(static_cast<uint8_t>(mCause), 8);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ActivateSecondaryPDPContextReject::text(std::ostream& os) const {
-    os << "ActSecPDPRej(handle=" << static_cast<int>(mPDPHandle)
-        << ",cause=" << SMCause2Str(mCause) << ")";
+    os << "ActSecPDPRej(cause=" << SMCause2Str(mCause) << ")";
 }
 
 L3ActivateSecondaryPDPContextReject L3ActivateSecondaryPDPContextReject::Builder::build() const {
     L3ActivateSecondaryPDPContextReject msg;
-    msg.mPDPHandle = m_pdpHandle;
     msg.mCause = m_cause;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1382,101 +1498,131 @@ L3ActivateSecondaryPDPContextReject::Builder L3ActivateSecondaryPDPContextReject
     return Builder{};
 }
 
-// ── L3ActivateAAPDPContextRequest (GSM 24.008 9.5.14) ─────────────────
+// ── L3ActivateAAPDPContextRequest (TS 44.068 section 9.5) ─────────────
 
 size_t L3ActivateAAPDPContextRequest::bodyLength() const {
-    size_t len = 1;
-    if (mHavePDPAddress) len += tlvLen(mPDPAddress.lengthV());
-    len += tlvLen(mAPN.lengthV());
-    len += tlvLen(mQoS.lengthV());
+    size_t len = 1; // pdpHandle(4)|spare(4)
+    len += 1 + mQoS.lengthV();         // QoS (LV)
+    len += 1 + mPDPAddress.lengthV();  // PDP address (LV)
+    len += tlvLen(mAPN.lengthV());     // APN (TLV, mandatory)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ActivateAAPDPContextRequest> L3ActivateAAPDPContextRequest::parse(BitReader& br) {
+    // SM ACTIVATE AA PDP CONTEXT REQUEST (TS 44.068): PDP handle in the
+    // first octet, requested QoS (LV), requested PDP type and address (LV),
+    // access point name (TLV, IEI 0x28); protocol configuration options
+    // (TLV, IEI 0x27) and any further optional IEs follow.
     L3ActivateAAPDPContextRequest msg;
-    // Read pdpHandle(4)|spare(4)
+
+    auto o = br.readField(8);
+    if (!o) return Expected<L3ActivateAAPDPContextRequest>::error(o.error());
+    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    // QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3ActivateAAPDPContextRequest>::error(qlen.error());
     {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3ActivateAAPDPContextRequest>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3ActivateAAPDPContextRequest>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
     }
+
+    // PDP type and address: LV (mandatory).
+    auto alen = br.readField(8);
+    if (!alen) return Expected<L3ActivateAAPDPContextRequest>::error(alen.error());
     {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3ActivateAAPDPContextRequest>::error(spare.error());
+        auto addr = L3PDPAddress::parse(br, alen.value());
+        if (!addr) return Expected<L3ActivateAAPDPContextRequest>::error(addr.error());
+        msg.mPDPAddress = std::move(addr).value();
     }
-    // Parse TLV: PDPAddress | APN | QoS | PCO
-    while (br.hasMore()) {
+
+    // APN: TLV 0x28 (mandatory).
+    {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3ActivateAAPDPContextRequest>::error(iei.error());
-        if (iei.value() == L3PDPAddress::IEI) {
-            auto addr = L3PDPAddress::parse(br, vLen);
-            if (addr) { msg.mHavePDPAddress = true; msg.mPDPAddress = std::move(addr).value(); }
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3AccessPointName::IEI) {
-            auto apn = L3AccessPointName::parse(br, vLen);
-            if (apn) msg.mAPN = std::move(apn).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) msg.mQoS = std::move(qos).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) { msg.mHavePCO = true; msg.mPCO = std::move(pco).value(); }
-            else skipValue(br, vLen);
-        } else {
-            skipValue(br, vLen);
+        if (iei.value() != L3AccessPointName::IEI) {
+            return Expected<L3ActivateAAPDPContextRequest>::error(
+                ParseError{ParseError::Code::InvalidIE, "activate AA PDP context request: missing access point name", br.position()});
+        }
+        auto apn = L3AccessPointName::parse(br, vLen);
+        if (!apn) return Expected<L3ActivateAAPDPContextRequest>::error(apn.error());
+        msg.mAPN = std::move(apn).value();
+    }
+
+    while (br.remainingBits() >= 16) {
+        size_t vLen = 0;
+        auto iei = readTLVHeader(br, vLen);
+        if (!iei) return Expected<L3ActivateAAPDPContextRequest>::error(iei.error());
+        bool typed = false;
+        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
+                msg.mHavePCO = true;
+                msg.mPCO = std::move(pco).value();
+                typed = true;
+            }
+        }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3ActivateAAPDPContextRequest>::error(t.error());
         }
     }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ActivateAAPDPContextRequest>::error(
+            ParseError{ParseError::Code::TruncatedInput, "activate AA PDP context request: truncated optional IEs", br.position()});
+    }
+
     return Expected<L3ActivateAAPDPContextRequest>::hold(std::move(msg));
 }
 
 void L3ActivateAAPDPContextRequest::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
-    // Write PDPAddress: TLV (optional)
-    if (mHavePDPAddress) {
-        bw.writeField(0x80 | L3PDPAddress::IEI, 8);
-        bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
-        mPDPAddress.write(bw);
-    }
-    // Write APN: TLV (mandatory)
-    bw.writeField(0x80 | L3AccessPointName::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
-    mAPN.write(bw);
-    // Write QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
+    // pdpHandle(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+
+    // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
     mQoS.write(bw);
-    // Write PCO: TLV (optional)
+
+    // PDP type and address: LV (mandatory).
+    bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
+    mPDPAddress.write(bw);
+
+    // APN: TLV 0x28 (mandatory).
+    bw.writeField(L3AccessPointName::IEI, 8);
+    bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
+    mAPN.write(bw);
+
+    // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ActivateAAPDPContextRequest::text(std::ostream& os) const {
     os << "ActAAPDPReq(handle=" << static_cast<int>(mPDPHandle);
-    if (mHavePDPAddress) { os << ", "; mPDPAddress.text(os); }
-    os << ", "; mAPN.text(os);
     os << ", "; mQoS.text(os);
+    os << ", "; mPDPAddress.text(os);
+    os << ", "; mAPN.text(os);
     if (mHavePCO) { os << ", "; mPCO.text(os); }
     os << ")";
 }
 
 L3ActivateAAPDPContextRequest L3ActivateAAPDPContextRequest::Builder::build() const {
     L3ActivateAAPDPContextRequest msg;
-    msg.mPDPHandle = m_pdpHandle;
-    msg.mHavePDPAddress = m_havePDPAddress;
+    msg.mPDPHandle = m_pdpHandle & 0x0Fu;
+    msg.mQoS = m_qos;
     msg.mPDPAddress = m_pdpAddress;
     msg.mAPN = m_apn;
-    msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1484,72 +1630,91 @@ L3ActivateAAPDPContextRequest::Builder L3ActivateAAPDPContextRequest::builder() 
     return Builder{};
 }
 
-// ── L3ActivateAAPDPContextAccept (GSM 24.008 9.5.15) ──────────────────
+// ── L3ActivateAAPDPContextAccept (TS 44.068 section 9.5) ──────────────
 
 size_t L3ActivateAAPDPContextAccept::bodyLength() const {
-    size_t len = 1;
+    size_t len = 1; // pdpHandle(4)|spare(4)
+    len += 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePDPAddress) len += tlvLen(mPDPAddress.lengthV());
-    len += tlvLen(mQoS.lengthV());
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ActivateAAPDPContextAccept> L3ActivateAAPDPContextAccept::parse(BitReader& br) {
+    // SM ACTIVATE AA PDP CONTEXT ACCEPT (TS 44.068): PDP handle in the
+    // first octet, negotiated QoS (LV); optional IEs follow: PDP type and
+    // address (TLV, IEI 0x2B), protocol configuration options (TLV, IEI
+    // 0x27); any further optional IEs are kept opaque.
     L3ActivateAAPDPContextAccept msg;
-    // Read pdpHandle(4)|spare(4)
+
+    auto o = br.readField(8);
+    if (!o) return Expected<L3ActivateAAPDPContextAccept>::error(o.error());
+    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    // QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3ActivateAAPDPContextAccept>::error(qlen.error());
     {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3ActivateAAPDPContextAccept>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3ActivateAAPDPContextAccept>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
     }
-    {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3ActivateAAPDPContextAccept>::error(spare.error());
-    }
-    // Parse TLV: PDPAddress | QoS | PCO
-    while (br.hasMore()) {
+
+    while (br.remainingBits() >= 16) {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3ActivateAAPDPContextAccept>::error(iei.error());
-        if (iei.value() == L3PDPAddress::IEI) {
-            auto addr = L3PDPAddress::parse(br, vLen);
-            if (addr) { msg.mHavePDPAddress = true; msg.mPDPAddress = std::move(addr).value(); }
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) msg.mQoS = std::move(qos).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) { msg.mHavePCO = true; msg.mPCO = std::move(pco).value(); }
-            else skipValue(br, vLen);
-        } else {
-            skipValue(br, vLen);
+        bool typed = false;
+        if (iei.value() == kPdpAddressTlvIEI && !msg.mHavePDPAddress) {
+            if (auto addr = L3PDPAddress::parse(br, vLen)) {
+                msg.mHavePDPAddress = true;
+                msg.mPDPAddress = std::move(addr).value();
+                typed = true;
+            }
+        } else if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
+                msg.mHavePCO = true;
+                msg.mPCO = std::move(pco).value();
+                typed = true;
+            }
+        }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3ActivateAAPDPContextAccept>::error(t.error());
         }
     }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ActivateAAPDPContextAccept>::error(
+            ParseError{ParseError::Code::TruncatedInput, "activate AA PDP context accept: truncated optional IEs", br.position()});
+    }
+
     return Expected<L3ActivateAAPDPContextAccept>::hold(std::move(msg));
 }
 
 void L3ActivateAAPDPContextAccept::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
-    // Write PDPAddress: TLV (optional)
+    // pdpHandle(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+
+    // QoS: LV (mandatory).
+    bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
+    mQoS.write(bw);
+
+    // PDP type and address: TLV 0x2B (optional).
     if (mHavePDPAddress) {
-        bw.writeField(0x80 | L3PDPAddress::IEI, 8);
+        bw.writeField(kPdpAddressTlvIEI, 8);
         bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
         mPDPAddress.write(bw);
     }
-    // Write QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
-    mQoS.write(bw);
-    // Write PCO: TLV (optional)
+
+    // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ActivateAAPDPContextAccept::text(std::ostream& os) const {
@@ -1562,12 +1727,13 @@ void L3ActivateAAPDPContextAccept::text(std::ostream& os) const {
 
 L3ActivateAAPDPContextAccept L3ActivateAAPDPContextAccept::Builder::build() const {
     L3ActivateAAPDPContextAccept msg;
-    msg.mPDPHandle = m_pdpHandle;
+    msg.mPDPHandle = m_pdpHandle & 0x0Fu;
+    msg.mQoS = m_qos;
     msg.mHavePDPAddress = m_havePDPAddress;
     msg.mPDPAddress = m_pdpAddress;
-    msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1575,58 +1741,46 @@ L3ActivateAAPDPContextAccept::Builder L3ActivateAAPDPContextAccept::builder() {
     return Builder{};
 }
 
-// ── L3ActivateAAPDPContextReject (GSM 24.008 9.5.16) ──────────────────
+// ── L3ActivateAAPDPContextReject (TS 44.068 section 9.5) ──────────────
 
 size_t L3ActivateAAPDPContextReject::bodyLength() const {
-    return 1 + tlvLen(1);
+    size_t len = 1; // smCause value octet
+    len += mAdditionalIes.size();
+    return len;
 }
 
 Expected<L3ActivateAAPDPContextReject> L3ActivateAAPDPContextReject::parse(BitReader& br) {
+    // SM ACTIVATE AA PDP CONTEXT REJECT (TS 44.068): the body starts with
+    // the SM cause value octet (no identifier); any further optional IEs
+    // are kept opaque.
     L3ActivateAAPDPContextReject msg;
-    // Read pdpHandle(4)|spare(4)
-    {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3ActivateAAPDPContextReject>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+
+    auto c = br.readField(8);
+    if (!c) return Expected<L3ActivateAAPDPContextReject>::error(c.error());
+    msg.mCause = static_cast<SMCause>(c.value());
+
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ActivateAAPDPContextReject>::error(
+            ParseError{ParseError::Code::TruncatedInput, "activate AA PDP context reject: truncated optional IEs", br.position()});
     }
-    {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3ActivateAAPDPContextReject>::error(spare.error());
-    }
-    // Parse TLV: smCause
-    while (br.hasMore()) {
-        size_t vLen = 0;
-        auto iei = readTLVHeader(br, vLen);
-        if (!iei) return Expected<L3ActivateAAPDPContextReject>::error(iei.error());
-        if (iei.value() == L3SMCauseIE::IEI && vLen >= 1) {
-            auto cause = br.readField(8);
-            if (cause) msg.mCause = static_cast<SMCause>(cause.value());
-        } else {
-            skipValue(br, vLen);
-        }
-    }
+
     return Expected<L3ActivateAAPDPContextReject>::hold(std::move(msg));
 }
 
 void L3ActivateAAPDPContextReject::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
-    // Write smCause: TLV
-    bw.writeField(0x80 | L3SMCauseIE::IEI, 8);
-    bw.writeField(1, 8);
+    // smCause: value octet (no identifier).
     bw.writeField(static_cast<uint8_t>(mCause), 8);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ActivateAAPDPContextReject::text(std::ostream& os) const {
-    os << "ActAAPDPRej(handle=" << static_cast<int>(mPDPHandle)
-        << ",cause=" << SMCause2Str(mCause) << ")";
+    os << "ActAAPDPRej(cause=" << SMCause2Str(mCause) << ")";
 }
 
 L3ActivateAAPDPContextReject L3ActivateAAPDPContextReject::Builder::build() const {
     L3ActivateAAPDPContextReject msg;
-    msg.mPDPHandle = m_pdpHandle;
     msg.mCause = m_cause;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1634,23 +1788,29 @@ L3ActivateAAPDPContextReject::Builder L3ActivateAAPDPContextReject::builder() {
     return Builder{};
 }
 
-// ── L3DeactivateAAPDPContextRequest (GSM 24.008 9.5.17) ───────────────
+// ── L3DeactivateAAPDPContextRequest (TS 44.068 section 9.5) ───────────
 
 Expected<L3DeactivateAAPDPContextRequest> L3DeactivateAAPDPContextRequest::parse(BitReader& br) {
+    // SM DEACTIVATE AA PDP CONTEXT REQUEST (TS 44.068): PDP handle in the
+    // first octet; any further optional IEs are kept opaque.
     L3DeactivateAAPDPContextRequest msg;
-    // Read pdpHandle(4)|spare(4)
-    auto o = br.readField(4);
+
+    auto o = br.readField(8);
     if (!o) return Expected<L3DeactivateAAPDPContextRequest>::error(o.error());
-    msg.mPDPHandle = static_cast<uint8_t>(o.value());
-    auto spare = br.readField(4);
-    if (!spare) return Expected<L3DeactivateAAPDPContextRequest>::error(spare.error());
+    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3DeactivateAAPDPContextRequest>::error(
+            ParseError{ParseError::Code::TruncatedInput, "deactivate AA PDP context request: truncated optional IEs", br.position()});
+    }
+
     return Expected<L3DeactivateAAPDPContextRequest>::hold(std::move(msg));
 }
 
 void L3DeactivateAAPDPContextRequest::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
+    // pdpHandle(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3DeactivateAAPDPContextRequest::text(std::ostream& os) const {
@@ -1659,7 +1819,8 @@ void L3DeactivateAAPDPContextRequest::text(std::ostream& os) const {
 
 L3DeactivateAAPDPContextRequest L3DeactivateAAPDPContextRequest::Builder::build() const {
     L3DeactivateAAPDPContextRequest msg;
-    msg.mPDPHandle = m_pdpHandle;
+    msg.mPDPHandle = m_pdpHandle & 0x0Fu;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1667,23 +1828,29 @@ L3DeactivateAAPDPContextRequest::Builder L3DeactivateAAPDPContextRequest::builde
     return Builder{};
 }
 
-// ── L3DeactivateAAPDPContextAccept (GSM 24.008 9.5.17) ────────────────
+// ── L3DeactivateAAPDPContextAccept (TS 44.068 section 9.5) ────────────
 
 Expected<L3DeactivateAAPDPContextAccept> L3DeactivateAAPDPContextAccept::parse(BitReader& br) {
+    // SM DEACTIVATE AA PDP CONTEXT ACCEPT (TS 44.068): PDP handle in the
+    // first octet; any further optional IEs are kept opaque.
     L3DeactivateAAPDPContextAccept msg;
-    // Read pdpHandle(4)|spare(4)
-    auto o = br.readField(4);
+
+    auto o = br.readField(8);
     if (!o) return Expected<L3DeactivateAAPDPContextAccept>::error(o.error());
-    msg.mPDPHandle = static_cast<uint8_t>(o.value());
-    auto spare = br.readField(4);
-    if (!spare) return Expected<L3DeactivateAAPDPContextAccept>::error(spare.error());
+    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3DeactivateAAPDPContextAccept>::error(
+            ParseError{ParseError::Code::TruncatedInput, "deactivate AA PDP context accept: truncated optional IEs", br.position()});
+    }
+
     return Expected<L3DeactivateAAPDPContextAccept>::hold(std::move(msg));
 }
 
 void L3DeactivateAAPDPContextAccept::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
+    // pdpHandle(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3DeactivateAAPDPContextAccept::text(std::ostream& os) const {
@@ -1692,7 +1859,8 @@ void L3DeactivateAAPDPContextAccept::text(std::ostream& os) const {
 
 L3DeactivateAAPDPContextAccept L3DeactivateAAPDPContextAccept::Builder::build() const {
     L3DeactivateAAPDPContextAccept msg;
-    msg.mPDPHandle = m_pdpHandle;
+    msg.mPDPHandle = m_pdpHandle & 0x0Fu;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1700,71 +1868,83 @@ L3DeactivateAAPDPContextAccept::Builder L3DeactivateAAPDPContextAccept::builder(
     return Builder{};
 }
 
-// ── L3ActivateMBMSContextRequest (GSM 24.008 9.5.18) ──────────────────
+// ── L3ActivateMBMSContextRequest (TS 44.068 section 9.5) ──────────────
 
 size_t L3ActivateMBMSContextRequest::bodyLength() const {
-    size_t len = tlvLen(L3TMGI::lengthV());
-    len += tlvLen(mQoS.lengthV());
+    size_t len = 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ActivateMBMSContextRequest> L3ActivateMBMSContextRequest::parse(BitReader& br) {
+    // SM ACTIVATE MBMS CONTEXT REQUEST (TS 44.068): requested QoS (LV);
+    // protocol configuration options (TLV, IEI 0x27) and any further
+    // optional IEs (including the TMGI TLV) are kept opaque.
     L3ActivateMBMSContextRequest msg;
-    // Parse TLV: TMGI | QoS | PCO
-    while (br.hasMore()) {
+
+    // QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3ActivateMBMSContextRequest>::error(qlen.error());
+    {
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3ActivateMBMSContextRequest>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
+    }
+
+    while (br.remainingBits() >= 16) {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3ActivateMBMSContextRequest>::error(iei.error());
-        if (iei.value() == L3TMGI::IEI) {
-            auto tmgi = L3TMGI::parse(br, vLen);
-            if (tmgi) msg.mTMGI = std::move(tmgi).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) msg.mQoS = std::move(qos).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) { msg.mHavePCO = true; msg.mPCO = std::move(pco).value(); }
-            else skipValue(br, vLen);
-        } else {
-            skipValue(br, vLen);
+        bool typed = false;
+        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
+                msg.mHavePCO = true;
+                msg.mPCO = std::move(pco).value();
+                typed = true;
+            }
+        }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3ActivateMBMSContextRequest>::error(t.error());
         }
     }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ActivateMBMSContextRequest>::error(
+            ParseError{ParseError::Code::TruncatedInput, "activate MBMS context request: truncated optional IEs", br.position()});
+    }
+
     return Expected<L3ActivateMBMSContextRequest>::hold(std::move(msg));
 }
 
 void L3ActivateMBMSContextRequest::write(BitWriter& bw) const {
-    // Write TMGI: TLV (mandatory)
-    bw.writeField(0x80 | L3TMGI::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(L3TMGI::lengthV()), 8);
-    mTMGI.write(bw);
-    // Write QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
+    // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
     mQoS.write(bw);
-    // Write PCO: TLV (optional)
+
+    // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ActivateMBMSContextRequest::text(std::ostream& os) const {
-    os << "ActMBMSReq("; mTMGI.text(os);
-    os << ", "; mQoS.text(os);
+    os << "ActMBMSReq(";
+    mQoS.text(os);
     if (mHavePCO) { os << ", "; mPCO.text(os); }
     os << ")";
 }
 
 L3ActivateMBMSContextRequest L3ActivateMBMSContextRequest::Builder::build() const {
     L3ActivateMBMSContextRequest msg;
-    msg.mTMGI = m_tmgi;
     msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1772,61 +1952,76 @@ L3ActivateMBMSContextRequest::Builder L3ActivateMBMSContextRequest::builder() {
     return Builder{};
 }
 
-// ── L3ActivateMBMSContextAccept (GSM 24.008 9.5.19) ───────────────────
+// ── L3ActivateMBMSContextAccept (TS 44.068 section 9.5) ───────────────
 
 size_t L3ActivateMBMSContextAccept::bodyLength() const {
-    size_t len = 1;
-    len += tlvLen(mQoS.lengthV());
+    size_t len = 1; // pdpHandle(4)|spare(4)
+    len += 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ActivateMBMSContextAccept> L3ActivateMBMSContextAccept::parse(BitReader& br) {
+    // SM ACTIVATE MBMS CONTEXT ACCEPT (TS 44.068): PDP handle in the first
+    // octet, negotiated QoS (LV); optional IEs follow (kept opaque except
+    // PCO TLV 0x27).
     L3ActivateMBMSContextAccept msg;
-    // Read pdpHandle(4)|spare(4)
+
+    auto o = br.readField(8);
+    if (!o) return Expected<L3ActivateMBMSContextAccept>::error(o.error());
+    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    // QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3ActivateMBMSContextAccept>::error(qlen.error());
     {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3ActivateMBMSContextAccept>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3ActivateMBMSContextAccept>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
     }
-    {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3ActivateMBMSContextAccept>::error(spare.error());
-    }
-    // Parse TLV: QoS | PCO
-    while (br.hasMore()) {
+
+    while (br.remainingBits() >= 16) {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3ActivateMBMSContextAccept>::error(iei.error());
-        if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) msg.mQoS = std::move(qos).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) { msg.mHavePCO = true; msg.mPCO = std::move(pco).value(); }
-            else skipValue(br, vLen);
-        } else {
-            skipValue(br, vLen);
+        bool typed = false;
+        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
+                msg.mHavePCO = true;
+                msg.mPCO = std::move(pco).value();
+                typed = true;
+            }
+        }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3ActivateMBMSContextAccept>::error(t.error());
         }
     }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ActivateMBMSContextAccept>::error(
+            ParseError{ParseError::Code::TruncatedInput, "activate MBMS context accept: truncated optional IEs", br.position()});
+    }
+
     return Expected<L3ActivateMBMSContextAccept>::hold(std::move(msg));
 }
 
 void L3ActivateMBMSContextAccept::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
-    // Write QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
+    // pdpHandle(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+
+    // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
     mQoS.write(bw);
-    // Write PCO: TLV (optional)
+
+    // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ActivateMBMSContextAccept::text(std::ostream& os) const {
@@ -1838,10 +2033,11 @@ void L3ActivateMBMSContextAccept::text(std::ostream& os) const {
 
 L3ActivateMBMSContextAccept L3ActivateMBMSContextAccept::Builder::build() const {
     L3ActivateMBMSContextAccept msg;
-    msg.mPDPHandle = m_pdpHandle;
+    msg.mPDPHandle = m_pdpHandle & 0x0Fu;
     msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1849,34 +2045,36 @@ L3ActivateMBMSContextAccept::Builder L3ActivateMBMSContextAccept::builder() {
     return Builder{};
 }
 
-// ── L3ActivateMBMSContextReject (GSM 24.008 9.5.20) ───────────────────
+// ── L3ActivateMBMSContextReject (TS 44.068 section 9.5) ───────────────
 
 size_t L3ActivateMBMSContextReject::bodyLength() const {
-    return tlvLen(1);
+    size_t len = 1; // smCause value octet
+    len += mAdditionalIes.size();
+    return len;
 }
 
 Expected<L3ActivateMBMSContextReject> L3ActivateMBMSContextReject::parse(BitReader& br) {
+    // SM ACTIVATE MBMS CONTEXT REJECT (TS 44.068): the body starts with
+    // the SM cause value octet (no identifier); any further optional IEs
+    // are kept opaque.
     L3ActivateMBMSContextReject msg;
-    // Parse TLV: smCause
-    while (br.hasMore()) {
-        size_t vLen = 0;
-        auto iei = readTLVHeader(br, vLen);
-        if (!iei) return Expected<L3ActivateMBMSContextReject>::error(iei.error());
-        if (iei.value() == L3SMCauseIE::IEI && vLen >= 1) {
-            auto cause = br.readField(8);
-            if (cause) msg.mCause = static_cast<SMCause>(cause.value());
-        } else {
-            skipValue(br, vLen);
-        }
+
+    auto c = br.readField(8);
+    if (!c) return Expected<L3ActivateMBMSContextReject>::error(c.error());
+    msg.mCause = static_cast<SMCause>(c.value());
+
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ActivateMBMSContextReject>::error(
+            ParseError{ParseError::Code::TruncatedInput, "activate MBMS context reject: truncated optional IEs", br.position()});
     }
+
     return Expected<L3ActivateMBMSContextReject>::hold(std::move(msg));
 }
 
 void L3ActivateMBMSContextReject::write(BitWriter& bw) const {
-    // Write smCause: TLV
-    bw.writeField(0x80 | L3SMCauseIE::IEI, 8);
-    bw.writeField(1, 8);
+    // smCause: value octet (no identifier).
     bw.writeField(static_cast<uint8_t>(mCause), 8);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ActivateMBMSContextReject::text(std::ostream& os) const {
@@ -1886,6 +2084,7 @@ void L3ActivateMBMSContextReject::text(std::ostream& os) const {
 L3ActivateMBMSContextReject L3ActivateMBMSContextReject::Builder::build() const {
     L3ActivateMBMSContextReject msg;
     msg.mCause = m_cause;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1893,71 +2092,83 @@ L3ActivateMBMSContextReject::Builder L3ActivateMBMSContextReject::builder() {
     return Builder{};
 }
 
-// ── L3RequestMBMSContextActivation (GSM 24.008 9.5.21) ────────────────
+// ── L3RequestMBMSContextActivation (TS 44.068 section 9.5) ────────────
 
 size_t L3RequestMBMSContextActivation::bodyLength() const {
-    size_t len = tlvLen(L3TMGI::lengthV());
-    len += tlvLen(mQoS.lengthV());
+    size_t len = 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3RequestMBMSContextActivation> L3RequestMBMSContextActivation::parse(BitReader& br) {
+    // SM REQUEST MBMS CONTEXT ACTIVATION (TS 44.068): requested QoS (LV);
+    // protocol configuration options (TLV, IEI 0x27) and any further
+    // optional IEs (including the TMGI TLV) are kept opaque.
     L3RequestMBMSContextActivation msg;
-    // Parse TLV: TMGI | QoS | PCO
-    while (br.hasMore()) {
+
+    // QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3RequestMBMSContextActivation>::error(qlen.error());
+    {
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3RequestMBMSContextActivation>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
+    }
+
+    while (br.remainingBits() >= 16) {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3RequestMBMSContextActivation>::error(iei.error());
-        if (iei.value() == L3TMGI::IEI) {
-            auto tmgi = L3TMGI::parse(br, vLen);
-            if (tmgi) msg.mTMGI = std::move(tmgi).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) msg.mQoS = std::move(qos).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) { msg.mHavePCO = true; msg.mPCO = std::move(pco).value(); }
-            else skipValue(br, vLen);
-        } else {
-            skipValue(br, vLen);
+        bool typed = false;
+        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
+                msg.mHavePCO = true;
+                msg.mPCO = std::move(pco).value();
+                typed = true;
+            }
+        }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3RequestMBMSContextActivation>::error(t.error());
         }
     }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3RequestMBMSContextActivation>::error(
+            ParseError{ParseError::Code::TruncatedInput, "request MBMS context activation: truncated optional IEs", br.position()});
+    }
+
     return Expected<L3RequestMBMSContextActivation>::hold(std::move(msg));
 }
 
 void L3RequestMBMSContextActivation::write(BitWriter& bw) const {
-    // Write TMGI: TLV (mandatory)
-    bw.writeField(0x80 | L3TMGI::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(L3TMGI::lengthV()), 8);
-    mTMGI.write(bw);
-    // Write QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
+    // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
     mQoS.write(bw);
-    // Write PCO: TLV (optional)
+
+    // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3RequestMBMSContextActivation::text(std::ostream& os) const {
-    os << "ReqMBMSAct("; mTMGI.text(os);
-    os << ", "; mQoS.text(os);
+    os << "ReqMBMSAct(";
+    mQoS.text(os);
     if (mHavePCO) { os << ", "; mPCO.text(os); }
     os << ")";
 }
 
 L3RequestMBMSContextActivation L3RequestMBMSContextActivation::Builder::build() const {
     L3RequestMBMSContextActivation msg;
-    msg.mTMGI = m_tmgi;
     msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -1965,34 +2176,36 @@ L3RequestMBMSContextActivation::Builder L3RequestMBMSContextActivation::builder(
     return Builder{};
 }
 
-// ── L3RequestMBMSContextActivationReject (GSM 24.008 9.5.22) ──────────
+// ── L3RequestMBMSContextActivationReject (TS 44.068 section 9.5) ──────
 
 size_t L3RequestMBMSContextActivationReject::bodyLength() const {
-    return tlvLen(1);
+    size_t len = 1; // smCause value octet
+    len += mAdditionalIes.size();
+    return len;
 }
 
 Expected<L3RequestMBMSContextActivationReject> L3RequestMBMSContextActivationReject::parse(BitReader& br) {
+    // SM REQUEST MBMS CONTEXT ACTIVATION REJECT (TS 44.068): the body
+    // starts with the SM cause value octet (no identifier); any further
+    // optional IEs are kept opaque.
     L3RequestMBMSContextActivationReject msg;
-    // Parse TLV: smCause
-    while (br.hasMore()) {
-        size_t vLen = 0;
-        auto iei = readTLVHeader(br, vLen);
-        if (!iei) return Expected<L3RequestMBMSContextActivationReject>::error(iei.error());
-        if (iei.value() == L3SMCauseIE::IEI && vLen >= 1) {
-            auto cause = br.readField(8);
-            if (cause) msg.mCause = static_cast<SMCause>(cause.value());
-        } else {
-            skipValue(br, vLen);
-        }
+
+    auto c = br.readField(8);
+    if (!c) return Expected<L3RequestMBMSContextActivationReject>::error(c.error());
+    msg.mCause = static_cast<SMCause>(c.value());
+
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3RequestMBMSContextActivationReject>::error(
+            ParseError{ParseError::Code::TruncatedInput, "request MBMS context activation reject: truncated optional IEs", br.position()});
     }
+
     return Expected<L3RequestMBMSContextActivationReject>::hold(std::move(msg));
 }
 
 void L3RequestMBMSContextActivationReject::write(BitWriter& bw) const {
-    // Write smCause: TLV
-    bw.writeField(0x80 | L3SMCauseIE::IEI, 8);
-    bw.writeField(1, 8);
+    // smCause: value octet (no identifier).
     bw.writeField(static_cast<uint8_t>(mCause), 8);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3RequestMBMSContextActivationReject::text(std::ostream& os) const {
@@ -2002,6 +2215,7 @@ void L3RequestMBMSContextActivationReject::text(std::ostream& os) const {
 L3RequestMBMSContextActivationReject L3RequestMBMSContextActivationReject::Builder::build() const {
     L3RequestMBMSContextActivationReject msg;
     msg.mCause = m_cause;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -2009,101 +2223,132 @@ L3RequestMBMSContextActivationReject::Builder L3RequestMBMSContextActivationReje
     return Builder{};
 }
 
-// ── L3RequestSecondaryPDPContextActivation (GSM 24.008 9.5.23) ────────
+// ── L3RequestSecondaryPDPContextActivation (TS 44.068 section 9.5) ────
 
 size_t L3RequestSecondaryPDPContextActivation::bodyLength() const {
-    size_t len = 1;
-    if (mHavePDPAddress) len += tlvLen(mPDPAddress.lengthV());
-    len += tlvLen(mAPN.lengthV());
-    len += tlvLen(mQoS.lengthV());
+    size_t len = 1; // pdpHandle(4)|spare(4)
+    len += 1 + mQoS.lengthV();         // QoS (LV)
+    len += 1 + mPDPAddress.lengthV();  // PDP address (LV)
+    len += tlvLen(mAPN.lengthV());     // APN (TLV, mandatory)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3RequestSecondaryPDPContextActivation> L3RequestSecondaryPDPContextActivation::parse(BitReader& br) {
+    // SM REQUEST SECONDARY PDP CONTEXT ACTIVATION (TS 44.068): PDP handle
+    // in the first octet, requested QoS (LV), requested PDP type and
+    // address (LV), access point name (TLV, IEI 0x28); protocol
+    // configuration options (TLV, IEI 0x27) and any further optional IEs
+    // follow.
     L3RequestSecondaryPDPContextActivation msg;
-    // Read pdpHandle(4)|spare(4)
+
+    auto o = br.readField(8);
+    if (!o) return Expected<L3RequestSecondaryPDPContextActivation>::error(o.error());
+    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    // QoS: LV (mandatory).
+    auto qlen = br.readField(8);
+    if (!qlen) return Expected<L3RequestSecondaryPDPContextActivation>::error(qlen.error());
     {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3RequestSecondaryPDPContextActivation>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+        auto qos = L3QoS::parse(br, qlen.value());
+        if (!qos) return Expected<L3RequestSecondaryPDPContextActivation>::error(qos.error());
+        msg.mQoS = std::move(qos).value();
     }
+
+    // PDP type and address: LV (mandatory).
+    auto alen = br.readField(8);
+    if (!alen) return Expected<L3RequestSecondaryPDPContextActivation>::error(alen.error());
     {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3RequestSecondaryPDPContextActivation>::error(spare.error());
+        auto addr = L3PDPAddress::parse(br, alen.value());
+        if (!addr) return Expected<L3RequestSecondaryPDPContextActivation>::error(addr.error());
+        msg.mPDPAddress = std::move(addr).value();
     }
-    // Parse TLV: PDPAddress | APN | QoS | PCO
-    while (br.hasMore()) {
+
+    // APN: TLV 0x28 (mandatory).
+    {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3RequestSecondaryPDPContextActivation>::error(iei.error());
-        if (iei.value() == L3PDPAddress::IEI) {
-            auto addr = L3PDPAddress::parse(br, vLen);
-            if (addr) { msg.mHavePDPAddress = true; msg.mPDPAddress = std::move(addr).value(); }
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3AccessPointName::IEI) {
-            auto apn = L3AccessPointName::parse(br, vLen);
-            if (apn) msg.mAPN = std::move(apn).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3QoS::IEI) {
-            auto qos = L3QoS::parse(br, vLen);
-            if (qos) msg.mQoS = std::move(qos).value();
-            else skipValue(br, vLen);
-        } else if (iei.value() == L3ProtocolConfigOptions::IEI) {
-            auto pco = L3ProtocolConfigOptions::parse(br, vLen);
-            if (pco) { msg.mHavePCO = true; msg.mPCO = std::move(pco).value(); }
-            else skipValue(br, vLen);
-        } else {
-            skipValue(br, vLen);
+        if (iei.value() != L3AccessPointName::IEI) {
+            return Expected<L3RequestSecondaryPDPContextActivation>::error(
+                ParseError{ParseError::Code::InvalidIE, "request secondary PDP context activation: missing access point name", br.position()});
+        }
+        auto apn = L3AccessPointName::parse(br, vLen);
+        if (!apn) return Expected<L3RequestSecondaryPDPContextActivation>::error(apn.error());
+        msg.mAPN = std::move(apn).value();
+    }
+
+    while (br.remainingBits() >= 16) {
+        size_t vLen = 0;
+        auto iei = readTLVHeader(br, vLen);
+        if (!iei) return Expected<L3RequestSecondaryPDPContextActivation>::error(iei.error());
+        bool typed = false;
+        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+            if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
+                msg.mHavePCO = true;
+                msg.mPCO = std::move(pco).value();
+                typed = true;
+            }
+        }
+        if (!typed) {
+            auto t = appendTlvToTail(br, msg.mAdditionalIes, iei.value(), vLen);
+            if (!t) return Expected<L3RequestSecondaryPDPContextActivation>::error(t.error());
         }
     }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3RequestSecondaryPDPContextActivation>::error(
+            ParseError{ParseError::Code::TruncatedInput, "request secondary PDP context activation: truncated optional IEs", br.position()});
+    }
+
     return Expected<L3RequestSecondaryPDPContextActivation>::hold(std::move(msg));
 }
 
 void L3RequestSecondaryPDPContextActivation::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
-    // Write PDPAddress: TLV (optional)
-    if (mHavePDPAddress) {
-        bw.writeField(0x80 | L3PDPAddress::IEI, 8);
-        bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
-        mPDPAddress.write(bw);
-    }
-    // Write APN: TLV (mandatory)
-    bw.writeField(0x80 | L3AccessPointName::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
-    mAPN.write(bw);
-    // Write QoS: TLV (mandatory)
-    bw.writeField(0x80 | L3QoS::IEI, 8);
+    // pdpHandle(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+
+    // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
     mQoS.write(bw);
-    // Write PCO: TLV (optional)
+
+    // PDP type and address: LV (mandatory).
+    bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
+    mPDPAddress.write(bw);
+
+    // APN: TLV 0x28 (mandatory).
+    bw.writeField(L3AccessPointName::IEI, 8);
+    bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
+    mAPN.write(bw);
+
+    // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
-        bw.writeField(0x80 | L3ProtocolConfigOptions::IEI, 8);
+        bw.writeField(L3ProtocolConfigOptions::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mPCO.lengthV()), 8);
         mPCO.write(bw);
     }
+
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3RequestSecondaryPDPContextActivation::text(std::ostream& os) const {
     os << "ReqSecPDPAct(handle=" << static_cast<int>(mPDPHandle);
-    if (mHavePDPAddress) { os << ", "; mPDPAddress.text(os); }
-    os << ", "; mAPN.text(os);
     os << ", "; mQoS.text(os);
+    os << ", "; mPDPAddress.text(os);
+    os << ", "; mAPN.text(os);
     if (mHavePCO) { os << ", "; mPCO.text(os); }
     os << ")";
 }
 
 L3RequestSecondaryPDPContextActivation L3RequestSecondaryPDPContextActivation::Builder::build() const {
     L3RequestSecondaryPDPContextActivation msg;
-    msg.mPDPHandle = m_pdpHandle;
-    msg.mHavePDPAddress = m_havePDPAddress;
+    msg.mPDPHandle = m_pdpHandle & 0x0Fu;
+    msg.mQoS = m_qos;
     msg.mPDPAddress = m_pdpAddress;
     msg.mAPN = m_apn;
-    msg.mQoS = m_qos;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -2111,58 +2356,46 @@ L3RequestSecondaryPDPContextActivation::Builder L3RequestSecondaryPDPContextActi
     return Builder{};
 }
 
-// ── L3RequestSecondaryPDPContextActivationReject (GSM 24.008 9.5.24) ──
+// ── L3RequestSecondaryPDPContextActivationReject (TS 44.068 9.5) ──────
 
 size_t L3RequestSecondaryPDPContextActivationReject::bodyLength() const {
-    return 1 + tlvLen(1);
+    size_t len = 1; // smCause value octet
+    len += mAdditionalIes.size();
+    return len;
 }
 
 Expected<L3RequestSecondaryPDPContextActivationReject> L3RequestSecondaryPDPContextActivationReject::parse(BitReader& br) {
+    // SM REQUEST SECONDARY PDP CONTEXT ACTIVATION REJECT (TS 44.068): the
+    // body starts with the SM cause value octet (no identifier); any
+    // further optional IEs are kept opaque.
     L3RequestSecondaryPDPContextActivationReject msg;
-    // Read pdpHandle(4)|spare(4)
-    {
-        auto o = br.readField(4);
-        if (!o) return Expected<L3RequestSecondaryPDPContextActivationReject>::error(o.error());
-        msg.mPDPHandle = static_cast<uint8_t>(o.value());
+
+    auto c = br.readField(8);
+    if (!c) return Expected<L3RequestSecondaryPDPContextActivationReject>::error(c.error());
+    msg.mCause = static_cast<SMCause>(c.value());
+
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3RequestSecondaryPDPContextActivationReject>::error(
+            ParseError{ParseError::Code::TruncatedInput, "request secondary PDP context activation reject: truncated optional IEs", br.position()});
     }
-    {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3RequestSecondaryPDPContextActivationReject>::error(spare.error());
-    }
-    // Parse TLV: smCause
-    while (br.hasMore()) {
-        size_t vLen = 0;
-        auto iei = readTLVHeader(br, vLen);
-        if (!iei) return Expected<L3RequestSecondaryPDPContextActivationReject>::error(iei.error());
-        if (iei.value() == L3SMCauseIE::IEI && vLen >= 1) {
-            auto cause = br.readField(8);
-            if (cause) msg.mCause = static_cast<SMCause>(cause.value());
-        } else {
-            skipValue(br, vLen);
-        }
-    }
+
     return Expected<L3RequestSecondaryPDPContextActivationReject>::hold(std::move(msg));
 }
 
 void L3RequestSecondaryPDPContextActivationReject::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
-    // Write smCause: TLV
-    bw.writeField(0x80 | L3SMCauseIE::IEI, 8);
-    bw.writeField(1, 8);
+    // smCause: value octet (no identifier).
     bw.writeField(static_cast<uint8_t>(mCause), 8);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3RequestSecondaryPDPContextActivationReject::text(std::ostream& os) const {
-    os << "ReqSecPDPActRej(handle=" << static_cast<int>(mPDPHandle)
-        << ",cause=" << SMCause2Str(mCause) << ")";
+    os << "ReqSecPDPActRej(cause=" << SMCause2Str(mCause) << ")";
 }
 
 L3RequestSecondaryPDPContextActivationReject L3RequestSecondaryPDPContextActivationReject::Builder::build() const {
     L3RequestSecondaryPDPContextActivationReject msg;
-    msg.mPDPHandle = m_pdpHandle;
     msg.mCause = m_cause;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -2170,23 +2403,29 @@ L3RequestSecondaryPDPContextActivationReject::Builder L3RequestSecondaryPDPConte
     return Builder{};
 }
 
-// ── L3SMNotification (GSM 24.008 9.5.25) ──────────────────────────────
+// ── L3SMNotification (TS 44.068 section 9.5) ──────────────────────────
 
 Expected<L3SMNotification> L3SMNotification::parse(BitReader& br) {
+    // SM NOTIFICATION (TS 44.068): PDP handle in the first octet; any
+    // further optional IEs are kept opaque.
     L3SMNotification msg;
-    // Read pdpHandle(4)|spare(4)
-    auto o = br.readField(4);
+
+    auto o = br.readField(8);
     if (!o) return Expected<L3SMNotification>::error(o.error());
-    msg.mPDPHandle = static_cast<uint8_t>(o.value());
-    auto spare = br.readField(4);
-    if (!spare) return Expected<L3SMNotification>::error(spare.error());
+    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3SMNotification>::error(
+            ParseError{ParseError::Code::TruncatedInput, "SM notification: truncated optional IEs", br.position()});
+    }
+
     return Expected<L3SMNotification>::hold(std::move(msg));
 }
 
 void L3SMNotification::write(BitWriter& bw) const {
-    // Write pdpHandle(4)|spare(4)
-    bw.writeField(mPDPHandle & 0x0F, 4);
-    bw.writeField(0, 4);
+    // pdpHandle(4)|spare(4).
+    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3SMNotification::text(std::ostream& os) const {
@@ -2195,7 +2434,8 @@ void L3SMNotification::text(std::ostream& os) const {
 
 L3SMNotification L3SMNotification::Builder::build() const {
     L3SMNotification msg;
-    msg.mPDPHandle = m_pdpHandle;
+    msg.mPDPHandle = m_pdpHandle & 0x0Fu;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 

@@ -73,7 +73,7 @@ const PDBatch kBatch[] = {
     {GSML3_PD_CC,  "E3 25 08 02 16 21", 0x25},  // Disconnect (TI=7)
     {GSML3_PD_SS,  "0B 3A 00",          0x3a},  // SupServFacilityMessage (empty facility)
     {GSML3_PD_GMM, "08 20 05",          0x20},  // GMM Status (cause=5)
-    {GSML3_PD_SM,  "0A 55 A7 01 05",    0x55},  // SM Status (cause=5)
+    {GSML3_PD_SM,  "0A 55 05",    0x55},  // SM Status (cause=5)
     {GSML3_PD_SMS, "09 04",             0x04},  // CP-Ack (no body)
     {GSML3_PD_BCC, "01 00",             0x00},  // BCC Setup
     {GSML3_PD_GCC, "00 00 02",          0x00},  // GCC Setup
