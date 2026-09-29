@@ -545,6 +545,11 @@ public:
     {}
 };
 
+// Contention-resolution information carried by an MS-originated initial SABME
+// on SAPI 0: a Paging Response (TS 44.018 / TS 24.008) — the first L3 message
+// of the link, echoed verbatim in the UA response.
+constexpr uint8_t kPagingResponse[] = {0x06, 0x27, 0x04, 0x60, 0x00};
+
 // ── FSM State Transition Tests (GSM 04.06 3.5.2) ──────────────────────
 
 // Initial state before open() should be Unused.
@@ -560,16 +565,18 @@ TEST(LAPDmEntityTest, Open_TransitionsToLinkReleased) {
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
 }
 
-// MS sends SABME -> BTS receives -> sends UA -> link established.
+// MS sends SABME with contention-resolution information -> BTS answers with a
+// UA echoing the payload -> link established (contention resolution pending).
 TEST(LAPDmEntityTest, SABME_ThenUA_EstablishesLink) {
     MockLAPDmEntity btsMock;
     btsMock.entity.open(SAPI::SAPI0, true); // BTS = command
 
-    // MS sends SABME to BTS
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    // MS sends SABME to BTS (carrying the contention-resolution payload)
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     btsMock.entity.receiveFrame(sabme);
 
-    EXPECT_EQ(btsMock.entity.state(), LAPDmState::LinkEstablished);
+    EXPECT_EQ(btsMock.entity.state(), LAPDmState::ContentionResolution);
+    EXPECT_TRUE(btsMock.entity.isEstablished());
     EXPECT_EQ(btsMock.l3Received.size(), 1u);
     EXPECT_EQ(btsMock.l3Received[0].first, Primitive::L3_ESTABLISH_INDICATION);
     // BTS should have sent UA
@@ -599,10 +606,11 @@ TEST(LAPDmEntityTest, ActiveSide_SABME_ThenReceivesUA) {
 TEST(LAPDmEntityTest, DISC_Release) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    // Establish link first (receive SABME from peer)
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    // Establish link first (receive SABME from peer with contention-resolution
+    // information; the link is established, resolution pending on SAPI 0)
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
-    EXPECT_EQ(mock.entity.state(), LAPDmState::LinkEstablished);
+    EXPECT_EQ(mock.entity.state(), LAPDmState::ContentionResolution);
 
     // Send DISC
     (void)mock.entity.sendDISC();
@@ -618,7 +626,7 @@ TEST(LAPDmEntityTest, DISC_Release) {
 TEST(LAPDmEntityTest, DISC_FromPeer) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     // Peer sends DISC
@@ -632,7 +640,7 @@ TEST(LAPDmEntityTest, DISC_FromPeer) {
 TEST(LAPDmEntityTest, HardRelease) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     mock.entity.hardRelease();
@@ -656,19 +664,25 @@ TEST(LAPDmEntityTest, IFrame_InLinkReleased_IsIgnored) {
 TEST(LAPDmEntityTest, ReEstablishment_InLinkEstablished) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme1 = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme1 = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme1);
+    EXPECT_EQ(mock.entity.state(), LAPDmState::ContentionResolution);
+
+    // The first received I-frame completes contention resolution and moves the
+    // entity into LinkEstablished.
+    uint8_t data[] = {0x06, 0x0D};
+    auto ifr = encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 0, false, false, std::span(data)));
+    mock.entity.receiveFrame(ifr);
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkEstablished);
 
     // Send an I-frame to advance VS counter (proves counters are non-zero)
-    uint8_t data[] = {0x06, 0x0D};
     auto result = mock.entity.sendData(std::span(data));
     ASSERT_TRUE(result);
     EXPECT_TRUE(mock.entity.hasOutstandingFrame());
 
     // Peer sends SABM again (re-establishment) -- no payload
-    auto sabme2 = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
-    mock.entity.receiveFrame(sabme2);
+    uint8_t bareSabme[] = {0x03, 0x2F, 0x01};
+    mock.entity.receiveFrame(std::span(bareSabme));
 
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkEstablished); // Stays established
     EXPECT_FALSE(mock.entity.hasOutstandingFrame()); // Counters cleared by re-establishment
@@ -680,7 +694,7 @@ TEST(LAPDmEntityTest, ReEstablishment_InLinkEstablished) {
 TEST(LAPDmEntityTest, SendUI_DeliversL3Data) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     uint8_t data[] = {0x06, 0x0D, 0x00}; // Channel Release
@@ -712,7 +726,7 @@ TEST(LAPDmEntityTest, ReceiveUI_DeliversToL3) {
 TEST(LAPDmEntityTest, ReceiveSingleIFrame_DeliversToL3) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true); // BTS
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme); // LinkEstablished
 
     uint8_t data[] = {0x06, 0x15, 0xC1, 0x02}; // Measurement Report
@@ -728,7 +742,7 @@ TEST(LAPDmEntityTest, ReceiveSingleIFrame_DeliversToL3) {
 TEST(LAPDmEntityTest, ReceiveSegmentedIFrames_Reassembles) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     // Frame 1: NS=0, NR=0, M=1 (more segments follow), payload="ABCD"
@@ -766,7 +780,7 @@ TEST(LAPDmEntityTest, ReceiveSegmentedIFrames_Reassembles) {
 TEST(LAPDmEntityTest, ReceiveThreeSegmentedIFrames_Reassembles) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     // Segment 1: NS=0, M=1 (more follow), payload="AAA"
@@ -794,7 +808,7 @@ TEST(LAPDmEntityTest, ReceiveThreeSegmentedIFrames_Reassembles) {
 TEST(LAPDmEntityTest, OutOfOrderIFrame_SendsREJ) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     // Send NS=2 but we expect NS=0 (VR=0), M=0 (complete message)
@@ -813,7 +827,7 @@ TEST(LAPDmEntityTest, OutOfOrderIFrame_SendsREJ) {
 TEST(LAPDmEntityTest, ValidIFrame_SendsRR) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     uint8_t data[] = {0x06, 0x0D};
@@ -831,7 +845,7 @@ TEST(LAPDmEntityTest, ValidIFrame_SendsRR) {
 TEST(LAPDmEntityTest, RNR_AcksOutstandingFrame_WithoutResponse) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
     ASSERT_TRUE(mock.entity.isEstablished());
 
@@ -851,7 +865,7 @@ TEST(LAPDmEntityTest, RNR_AcksOutstandingFrame_WithoutResponse) {
 TEST(LAPDmEntityTest, SendData_SingleFrame) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     uint8_t data[10];
@@ -878,7 +892,7 @@ TEST(LAPDmEntityTest, SendData_SingleFrame) {
 TEST(LAPDmEntityTest, SendData_WhileOutstanding_SecondMessageQueued) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     uint8_t data[10];
@@ -897,7 +911,7 @@ TEST(LAPDmEntityTest, SendData_WhileOutstanding_SecondMessageQueued) {
 TEST(LAPDmEntityTest, SendData_AfterAck_Succeeds) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     uint8_t data[10];
@@ -933,7 +947,7 @@ TEST(LAPDmEntityTest, SendData_BeforeLink_Fails) {
 TEST(LAPDmEntityTest, SendData_50Bytes_SDCCH_SegmentsTransmittedOnAck) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     std::vector<uint8_t> data(50, 0xAB);
@@ -973,7 +987,7 @@ TEST(LAPDmEntityTest, SendData_50Bytes_SDCCH_SegmentsTransmittedOnAck) {
 TEST(LAPDmEntityTest, SendData_WhileOutstanding_QueuesAndDrainsInOrder) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     std::vector<uint8_t> big(50, 0xAB);   // 3 segments: 20(M=1) + 20(M=1) + 10(M=0)
@@ -1019,7 +1033,7 @@ TEST(LAPDmEntityTest, SendData_WhileOutstanding_QueuesAndDrainsInOrder) {
 TEST(LAPDmEntityTest, SendData_AbnormalRelease_ClearsTxQueue) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     std::vector<uint8_t> big(50, 0xAB);
@@ -1032,7 +1046,7 @@ TEST(LAPDmEntityTest, SendData_AbnormalRelease_ClearsTxQueue) {
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
 
     // Re-establish the link (peer sends SABME).
-    mock.entity.receiveFrame(encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{})));
+    mock.entity.receiveFrame(encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse))));
     ASSERT_TRUE(mock.entity.isEstablished());
 
     size_t sentBefore = mock.l1Sent.size();
@@ -1060,7 +1074,7 @@ TEST(LAPDmEntityTest, SendData_AbnormalRelease_ClearsTxQueue) {
 TEST(LAPDmEntityTest, T200_Retransmission) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     // Send data (starts T200)
@@ -1084,7 +1098,7 @@ TEST(LAPDmEntityTest, T200_Retransmission) {
 TEST(LAPDmEntityTest, T200_NoRetransmission_WhenAcknowledged) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     uint8_t data[10];
@@ -1105,7 +1119,7 @@ TEST(LAPDmEntityTest, T200_AbnormalRelease_AfterN200) {
     // Use SACCH profile (N200=5) for faster test
     MockLAPDmEntity mock(LAPDmChannelProfile::SACCH());
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     uint8_t data[10];
@@ -1149,7 +1163,7 @@ TEST(LAPDmEntityTest, SABME_T200_Expiry_AbnormalRelease) {
 TEST(LAPDmEntityTest, T200_Incremental_Ticks) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     uint8_t data[10];
@@ -1188,7 +1202,7 @@ TEST(LAPDmEntityTest, Statistics_Tracking) {
     EXPECT_EQ(mock.entity.framesReceived(), 0u);
     EXPECT_EQ(mock.entity.retransmissions(), 0u);
 
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     EXPECT_GT(mock.entity.framesReceived(), 0u);
@@ -1243,8 +1257,9 @@ TEST(LAPDmEntityTest, ContentionResolution_TransitionsOnIFrame) {
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkEstablished);
 }
 
-// SAPI3 with SABME payload goes directly to LinkEstablished (no contention resolution).
-TEST(LAPDmEntityTest, ContentionResolution_SAPI3_GoesDirectlyToEstablished) {
+// An initial SABME on SAPI 3 produces no response at all: MS-originated
+// establishment is only valid on SAPI 0 (GSM 04.06 section 5.4.1).
+TEST(LAPDmEntityTest, InitialSabme_SAPI3_DroppedSilently) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI3, true);
 
@@ -1252,8 +1267,9 @@ TEST(LAPDmEntityTest, ContentionResolution_SAPI3_GoesDirectlyToEstablished) {
     auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI3, false, std::span(payload)));
     mock.entity.receiveFrame(sabme);
 
-    // SAPI3 should go directly to LinkEstablished, not ContentionResolution
-    EXPECT_EQ(mock.entity.state(), LAPDmState::LinkEstablished);
+    EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased); // No state change
+    EXPECT_EQ(mock.l1Sent.size(), 0u);                        // No UA at all
+    EXPECT_EQ(mock.l3Received.size(), 0u);                    // No L3 indication
 }
 
 // DISC in ContentionResolution releases the link.
@@ -1300,7 +1316,7 @@ TEST(LAPDmChannelProfileTest, FACCH_Parameters) {
 TEST(LAPDmEntityTest, SACCH_Profile_N200_Limit) {
     MockLAPDmEntity mock(LAPDmChannelProfile::SACCH());
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
 
     uint8_t data[10];
@@ -1337,7 +1353,7 @@ TEST(LAPDmEntityTest, MemoryUsage_FreshInstance_NoHeap) {
 TEST(LAPDmEntityTest, SendUI_Repeated_SizesCorrect) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
     ASSERT_TRUE(mock.entity.isEstablished());
 
@@ -1366,7 +1382,7 @@ TEST(LAPDmEntityTest, SendUI_Repeated_SizesCorrect) {
 TEST(LAPDmEntityTest, IFrame_PayloadExceedsN201_AbnormalRelease) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
     ASSERT_TRUE(mock.entity.isEstablished());
 
@@ -1390,7 +1406,7 @@ TEST(LAPDmEntityTest, IFrame_PayloadExceedsN201_AbnormalRelease) {
 TEST(LAPDmEntityTest, Reassembly_Overflow_AbnormalRelease) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
     ASSERT_TRUE(mock.entity.isEstablished());
 
@@ -1412,7 +1428,7 @@ TEST(LAPDmEntityTest, Reassembly_Overflow_AbnormalRelease) {
 TEST(LAPDmEntityTest, ReceiveFrame_WrongSapi_Dropped) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
     ASSERT_TRUE(mock.entity.isEstablished());
 
@@ -1430,7 +1446,7 @@ TEST(LAPDmEntityTest, ReceiveFrame_WrongSapi_Dropped) {
 TEST(LAPDmEntityTest, REJ_RetransmitsOutstandingFrame) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
-    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span<const uint8_t>{}));
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
     mock.entity.receiveFrame(sabme);
     ASSERT_TRUE(mock.entity.isEstablished());
 
@@ -1452,4 +1468,165 @@ TEST(LAPDmEntityTest, REJ_RetransmitsOutstandingFrame) {
         if (decoded && (*decoded).format == LAPDmControlFormat::I_Format) ++iFramesAfter;
     }
     EXPECT_EQ(iFramesAfter, 2u) << "REJ must trigger immediate retransmission";
+}
+
+// ── Establishment and Timer Recovery Behaviour (GSM 04.06 / TS 51.010-1) ──
+
+// An initial SABME command with P/F clear must be accepted on SAPI 0 and
+// answered by a UA whose F bit mirrors the command (GSM 04.06 section 5.4).
+TEST(LAPDmEntityTest, InitialSabme_PF0_Accepted_UAMirrorsFinal) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI0, true); // BTS side
+
+    // SABME with P/F clear (control 0x2F), SAPI 0 command address 0x03,
+    // header octet L=2 (0x09) and two octets of contention information.
+    uint8_t wire[] = {0x03, 0x2F, 0x09, 0x06, 0x27};
+    mock.entity.receiveFrame(std::span(wire));
+
+    EXPECT_EQ(mock.entity.state(), LAPDmState::ContentionResolution);
+    ASSERT_EQ(mock.l3Received.size(), 1u);
+    EXPECT_EQ(mock.l3Received[0].first, Primitive::L3_ESTABLISH_INDICATION);
+
+    // The UA echoes the payload and mirrors the cleared F bit.
+    auto ua = LAPDmFrame::decode(mock.l1Sent.back());
+    ASSERT_TRUE(ua);
+    EXPECT_EQ((*ua).uType, LAPDmUFrameType::UA);
+    EXPECT_FALSE((*ua).pf);
+    ASSERT_EQ((*ua).info.size(), 2u);
+    EXPECT_EQ((*ua).info[0], 0x06u);
+    EXPECT_EQ((*ua).info[1], 0x27u);
+
+    // A SABME carrying the same contention information with P/F set is
+    // answered by a UA with F set and completes contention resolution.
+    uint8_t wirePf[] = {0x03, 0x3F, 0x09, 0x06, 0x27};
+    mock.entity.receiveFrame(std::span(wirePf));
+
+    EXPECT_EQ(mock.entity.state(), LAPDmState::LinkEstablished);
+    auto ua2 = LAPDmFrame::decode(mock.l1Sent.back());
+    ASSERT_TRUE(ua2);
+    EXPECT_EQ((*ua2).uType, LAPDmUFrameType::UA);
+    EXPECT_TRUE((*ua2).pf);
+}
+
+// An initial SABME on SAPI 0 without information is dropped silently: no
+// response and no state change (GSM 04.06 section 5.4).
+TEST(LAPDmEntityTest, InitialSabme_NoPayload_DroppedSilently) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI0, true);
+
+    uint8_t wire[] = {0x03, 0x2F, 0x01}; // SABME (P/F clear), L=0
+    mock.entity.receiveFrame(std::span(wire));
+
+    EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
+    EXPECT_EQ(mock.l1Sent.size(), 0u);
+    EXPECT_EQ(mock.l3Received.size(), 0u);
+}
+
+// A UA response is accepted with any F bit value while awaiting
+// establishment (lenient acceptance, GSM 04.06 section 5.4.1).
+TEST(LAPDmEntityTest, UA_Accepted_WithFinalClear) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI3, true);
+
+    ASSERT_TRUE(mock.entity.sendSABME());
+    EXPECT_EQ(mock.entity.state(), LAPDmState::AwaitingEstablish);
+
+    // UA with P/F clear (control 0x63), SAPI 3 response address 0x0D, L=0.
+    uint8_t wire[] = {0x0D, 0x63, 0x01};
+    mock.entity.receiveFrame(std::span(wire));
+
+    EXPECT_EQ(mock.entity.state(), LAPDmState::LinkEstablished);
+    EXPECT_EQ(mock.l3Received.back().first, Primitive::L3_ESTABLISH_CONFIRM);
+}
+
+// DM while awaiting establishment cancels T200: after N200 ticks no further
+// SABME is emitted and a release indication is delivered once (GSM 04.06
+// section 5.4; TS 51.010-1 section 25).
+TEST(LAPDmEntityTest, DM_WhileAwaitingEstablish_CancelsT200) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI3, true);
+
+    ASSERT_TRUE(mock.entity.sendSABME()); // one SABME on the wire
+    EXPECT_EQ(mock.entity.state(), LAPDmState::AwaitingEstablish);
+    ASSERT_EQ(mock.l1Sent.size(), 1u);
+
+    auto dm = encodeFrame(makeDMFrame(SAPI::SAPI3, true));
+    mock.entity.receiveFrame(dm);
+
+    EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
+    size_t relInd = 0;
+    for (auto& [prim, _] : mock.l3Received) {
+        if (prim == Primitive::L3_RELEASE_INDICATION) ++relInd;
+    }
+    EXPECT_EQ(relInd, 1u);
+
+    // T200 is cancelled: full expiries emit no further frames.
+    for (unsigned i = 0; i < 24; ++i) {
+        mock.entity.tickT200(std::chrono::milliseconds(1000));
+    }
+    EXPECT_EQ(mock.l1Sent.size(), 1u); // no SABME retransmission
+    EXPECT_EQ(mock.entity.retransmissions(), 0u);
+}
+
+// An unacknowledged I-frame is retransmitted with P/F set and the current
+// V(R) in N(R); N(S) is unchanged (GSM 04.06 section 5.5, timer recovery).
+TEST(LAPDmEntityTest, IFrame_Retransmission_T200Expiry_PollAndCurrentVR) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI0, true);
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
+    mock.entity.receiveFrame(sabme);
+    ASSERT_TRUE(mock.entity.isEstablished());
+
+    std::vector<uint8_t> data(10, 0xAB);
+    ASSERT_TRUE(mock.entity.sendData(std::span<const uint8_t>(data.data(), data.size())));
+    // First transmission: NS=0, NR=0 (V(R) at send time), P/F clear.
+
+    // The peer sends its own I-frame (NS=0, NR=0): accepted, V(R) advances to 1.
+    uint8_t peer[] = {0x41, 0x42};
+    mock.entity.receiveFrame(encodeFrame(makeIFrame(SAPI::SAPI0, false, 0, 0, false, false, std::span(peer))));
+
+    // T200 expires: the outstanding frame is rebuilt with P/F set and the
+    // current V(R) in N(R); N(S) and payload are unchanged.
+    ASSERT_TRUE(mock.entity.tickT200(std::chrono::milliseconds(1000)));
+    EXPECT_EQ(mock.entity.retransmissions(), 1u);
+
+    auto rt = LAPDmFrame::decode(mock.l1Sent.back());
+    ASSERT_TRUE(rt);
+    EXPECT_EQ((*rt).format, LAPDmControlFormat::I_Format);
+    EXPECT_TRUE((*rt).iCtrl.pf);
+    EXPECT_EQ((*rt).iCtrl.nr, 1u); // current V(R)
+    EXPECT_EQ((*rt).iCtrl.ns, 0u); // N(S) unchanged
+    ASSERT_EQ((*rt).info.size(), 10u);
+    for (size_t i = 0; i < data.size(); ++i) {
+        EXPECT_EQ((*rt).info[i], 0xABu);
+    }
+}
+
+// A stale acknowledgment (N(R) equal to neither V(A) nor V(S)) is ignored so a
+// retransmission cannot roll V(A) backwards with the k=1 window
+// (GSM 04.06 section 5.5).
+TEST(LAPDmEntityTest, StaleAck_Ignored_NoRollback) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI0, true);
+    auto sabme = encodeFrame(makeSABMEFrame(SAPI::SAPI0, false, std::span(kPagingResponse)));
+    mock.entity.receiveFrame(sabme);
+    ASSERT_TRUE(mock.entity.isEstablished());
+
+    std::vector<uint8_t> data(10, 0xAB);
+    ASSERT_TRUE(mock.entity.sendData(std::span<const uint8_t>(data.data(), data.size())));
+    ASSERT_TRUE(mock.entity.hasOutstandingFrame()); // NS=0 in flight
+
+    // Acknowledge the outstanding frame (NR=1 == V(S)).
+    mock.entity.receiveFrame(encodeFrame(makeRRFrame(SAPI::SAPI0, 1, false)));
+    EXPECT_FALSE(mock.entity.hasOutstandingFrame());
+
+    // A stale RR carrying NR=0 (equal to neither V(A)=1 nor V(S)=1) is ignored:
+    // V(A) must not roll back.
+    size_t sentBefore = mock.l1Sent.size();
+    mock.entity.receiveFrame(encodeFrame(makeRRFrame(SAPI::SAPI0, 0, false)));
+    EXPECT_FALSE(mock.entity.hasOutstandingFrame());
+    EXPECT_EQ(mock.l1Sent.size(), sentBefore); // no retransmission triggered
+
+    // T200 was stopped by the valid acknowledgment and stays stopped.
+    EXPECT_FALSE(mock.entity.tickT200(std::chrono::milliseconds(10000)));
 }

@@ -139,21 +139,28 @@ int main() {
     std::cout << "  MS state:  " << static_cast<int>(ms.state()) << " (LinkReleased)\n\n";
 
     // --- Phase 2: MS initiates link establishment (SABME) ---
+    // An MS-originated initial SABME on SAPI 0 carries the contention-
+    // resolution information — a Paging Response (GSM 04.06 section 5.4.1).
     std::cout << "--- Phase 2: Link Establishment ---\n";
-    auto sabmeResult = ms.sendSABME();
+    uint8_t pagingResponse[] = {0x06, 0x27, 0x04, 0x60, 0x00};
+    auto sabmeResult = ms.sendSABME(std::span(pagingResponse));
     if (!sabmeResult) {
         std::cerr << "sendSABME failed: " << sabmeResult.error().message << "\n";
         return 1;
     }
-    std::cout << "  MS sent SABME, state: " << static_cast<int>(ms.state()) << " (AwaitingEstablish)\n";
+    std::cout << "  MS sent SABME with Paging Response, state: "
+              << static_cast<int>(ms.state()) << " (AwaitingEstablish)\n";
 
-    // Deliver MS->BTS frames: BTS receives SABME, sends UA back
+    // Deliver MS->BTS frames: the BTS answers with a UA echoing the payload;
+    // on SAPI 0 the link enters the contention-resolution phase.
     link.deliverToBts(bts);
-    std::cout << "  BTS received SABME, state: " << static_cast<int>(bts.state()) << " (LinkEstablished)\n";
+    std::cout << "  BTS received SABME, state: " << static_cast<int>(bts.state())
+              << " (ContentionResolution)\n";
 
-    // Deliver BTS->MS frames: MS receives UA
+    // Deliver BTS->MS frames: the MS receives the UA and confirms the link.
     link.deliverToMs(ms);
-    std::cout << "  MS received UA, state: " << static_cast<int>(ms.state()) << " (LinkEstablished)\n";
+    std::cout << "  MS received UA, state: " << static_cast<int>(ms.state())
+              << " (LinkEstablished)\n";
 
     std::cout << "  BTS L3 events: " << btsEvents.size() << "\n";
     std::cout << "  MS L3 events:  " << msEvents.size() << "\n\n";

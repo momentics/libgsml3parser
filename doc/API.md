@@ -1272,7 +1272,7 @@ Unused ──open()──> LinkReleased
 | `sizeof(LAPDmEntity)` | < 512 bytes (enforced by `static_assert`) |
 | Heap allocations | Zero on `receiveFrame()` hot path |
 | Callbacks | Raw function pointer + void* ctx — zero heap per instance |
-| Dynamic buffers | `mPendingFrame`, `mTxBuf` (TX encode buffer, reused after first send), `mReassemblyBuffer` (bounded at 4 KB), `mTxQueue` (TX segment queue) — all lazy-allocated |
+| Dynamic buffers | `mPendingInfo` (outstanding I-frame payload, rebuilt on retransmission), `mTxBuf` (TX encode buffer, reused after first send), `mReassemblyBuffer` (bounded at 4 KB), `mTxQueue` (TX segment queue) — all lazy-allocated |
 | Thread safety | NOT thread-safe; one instance per SAPI per logical channel |
 
 **Usage:**

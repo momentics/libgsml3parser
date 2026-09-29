@@ -147,8 +147,13 @@ public:
 
     /// Initiate link establishment by sending SABME — GSM 04.06 5.4.1.
     /// Transitions to AwaitingEstablish state. Requires LinkReleased state.
+    /// @param info Contention-resolution information carried by the command:
+    ///         an MS-originated initial establishment on SAPI 0 must include a
+    ///         Paging Response here (GSM 04.06 section 5.4.1); leave empty for
+    ///         all other initiations. The payload is retransmitted verbatim
+    ///         with the command.
     /// @return Success, or error if not in LinkReleased state.
-    [[nodiscard]] Expected<void> sendSABME();
+    [[nodiscard]] Expected<void> sendSABME(std::span<const uint8_t> info = {});
 
     /// Initiate normal link release by sending DISC — GSM 04.06 5.4.4.
     /// Transitions to AwaitingRelease state. Requires LinkEstablished or
@@ -206,8 +211,24 @@ private:
     uint8_t mVA{0}; // Acknowledge state: NR+1 of last acknowledged I-frame
     uint8_t mVR{0}; // Receive state: expected next NS
 
-    // Retransmission buffer — lazy-allocated, empty initially
-    std::vector<uint8_t> mPendingFrame;
+    // Outstanding-frame storage (k=1 constraint): at most one frame awaits
+    // acknowledgment. An expired T200 or a REJ rebuilds that frame with its
+    // original parameters and retransmits it — an I-frame goes out with P/F
+    // set and the current V(R) in N(R), N(S) unchanged (GSM 04.06 section
+    // 5.5; TS 51.010-1 timer recovery). mPendingInfo is lazy-allocated, empty
+    // initially.
+    enum class PendingKind : uint8_t {
+        None = 0,   ///< No outstanding frame
+        IFrame = 1, ///< Outstanding I-frame (described by the fields below)
+        Sabme = 2,  ///< Outstanding SABME command
+        Disc = 3    ///< Outstanding DISC command
+    };
+    PendingKind mPending{PendingKind::None};
+    uint8_t mPendingNs{0};      ///< N(S) of the outstanding I-frame
+    bool mPendingMore{false};   ///< M bit of the outstanding I-frame
+    /// Payload of the outstanding I-frame, or the contention-resolution
+    /// information of an outstanding SABME command (retransmitted verbatim).
+    std::vector<uint8_t> mPendingInfo;
     unsigned mRC{0}; // Retransmission counter
 
     // T200 timer
@@ -262,8 +283,13 @@ private:
     /// return a span over the encoded bytes.
     std::span<const uint8_t> encodeToTxBuf(const lapdm::LAPDmFrame& frame);
 
-    /// Save a frame for potential retransmission and start T200 timer.
-    void saveForRetransmission(std::span<const uint8_t> frameBytes);
+    /// Mark the just-sent frame as outstanding, transmit it and start T200.
+    void saveForRetransmission(PendingKind kind, std::span<const uint8_t> frameBytes);
+
+    /// Rebuild the outstanding frame (if any) with its original parameters —
+    /// for an I-frame: P/F set, current V(R) in N(R), N(S) unchanged — and
+    /// send it. No-op when nothing is outstanding.
+    void retransmitPending();
 
     /// Clear all protocol counters, timers, and buffers.
     void clearCounters() noexcept;
@@ -304,8 +330,9 @@ private:
     /// Send UA response frame — GSM 04.06 5.4.1.2.
     void sendUA(bool pf);
 
-    /// Send UA with echoed payload for contention resolution.
-    void sendUAWithEcho(std::span<const uint8_t> info);
+    /// Send UA with echoed payload for contention resolution; the F bit
+    /// mirrors the P/F of the received command (GSM 04.06 section 5.4.1).
+    void sendUAWithEcho(std::span<const uint8_t> info, bool pf);
 
     /// Send DM (Disconnected Mode) response frame — GSM 04.06 5.4.6.
     void sendDM(bool pf);
@@ -333,7 +360,7 @@ private:
 };
 
 /// Entity without dynamic buffers must fit in < 512 bytes.
-/// Dynamic buffers (mPendingFrame, mReassemblyBuffer) are lazy-allocated.
+/// Dynamic buffers (mPendingInfo, mReassemblyBuffer) are lazy-allocated.
 static_assert(sizeof(LAPDmEntity) < 512, "LAPDmEntity too large for scale");
 
 } // namespace gsml3parser
