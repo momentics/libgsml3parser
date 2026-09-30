@@ -1989,30 +1989,31 @@ TEST(GoldenIE, TimeZoneAndTime_Local) {
 // GSM Alphabet (3GPP TS 23.038 Table 1 / GSM 03.38 Table 1)
 // Reference: GSM 7-bit default alphabet character mapping
 // Spec-verified: Standard GSM 03.38 Table 1 character code points
-//   0='@', 1='\', 2='$', 3='(', 4=')', 5='?', 6='\'', 7='!', 8='"',
-//   44='0', 45='1', ..., 48='4', ...
-//   84='a', 85='b', 86='c', ... (lowercase starts at code 84)
+//   0='@', 2='$', 7=0xEC, 16='D', 27=' ', 32='!',
+//   47='0', 48='1', ..., 56='9', ...
+//   64='A', ..., 89='Z' (uppercase), 96='a', ..., 121='z' (lowercase)
 // [GSM SPEC VERIFIED] 3GPP TS 23.038 Table 1 default alphabet:
-//   Codes 0-19: Special characters (@\$(?'"* etc.)
-//   Codes 20-39: Uppercase A-Z (with some specials like Ñ, ä, ö at positions)
-//   Codes 40-43: Punctuation ({|}~)
-//   Codes 44-53: Digits 0-9 plus punctuation
-//   Codes 54-67: Lowercase a-f (used for escaping uppercase/greek)
-//   Codes 68-73: More specials
-//   Codes 74-83: More specials
-//   Codes 84-103: Lowercase g-z
-//   Key mappings: code 0='@', code 44='0', code 45='1', code 84='a'
+//   Codes 0-15: Special characters and accented vowels
+//   Codes 16-31: Uppercase D F G L O P C S T Z, space, accented letters
+//   Codes 32-46: Punctuation
+//   Codes 47-56: Digits 0-9
+//   Codes 57-63: Punctuation (':' ';' '<' '=' '>' '?' and 0xA1)
+//   Codes 64-89: Uppercase A-Z
+//   Codes 90-95: Accented uppercase (0xC4, 0xD6, 0xD1, 0xDC, 0xA7, 0xBF)
+//   Codes 96-121: Lowercase a-z
+//   Codes 122-126: Accented lowercase (0xE4, 0xF6, 0xF1, 0xFC, 0xE1)
+//   Key mappings: code 0='@', code 47='0', code 64='A', code 96='a'
 // =====================================================================
 
 TEST(GoldenIE, GSMAlphabet_Decode) {
     // Spec-verified: 3GPP TS 23.038 Table 1 default alphabet mapping
     EXPECT_EQ(decodeGSMChar(0), '@');
     EXPECT_EQ(decodeGSMChar(2), '$');
-    EXPECT_EQ(decodeGSMChar(44), '0');
-    EXPECT_EQ(decodeGSMChar(48), '4');
-    EXPECT_EQ(decodeGSMChar(84), 'a');
-    EXPECT_EQ(decodeGSMChar(85), 'b');
-    EXPECT_EQ(decodeGSMChar(86), 'c');
+    EXPECT_EQ(decodeGSMChar(44), '-');
+    EXPECT_EQ(decodeGSMChar(48), '1');
+    EXPECT_EQ(decodeGSMChar(96), 'a');
+    EXPECT_EQ(decodeGSMChar(97), 'b');
+    EXPECT_EQ(decodeGSMChar(98), 'c');
 }
 
 // Out-of-range code points map to the space character (robustness policy,
@@ -2020,8 +2021,9 @@ TEST(GoldenIE, GSMAlphabet_Decode) {
 TEST(GoldenIE, GSMAlphabet_Decode_OutOfRange) {
     EXPECT_EQ(decodeGSMChar(static_cast<unsigned char>(kGsm7TableSize)), ' ');
     EXPECT_EQ(decodeGSMChar(0xFFu), ' ');
-    // The last in-table code point still decodes (no off-by-one at the guard).
-    EXPECT_EQ(decodeGSMChar(static_cast<unsigned char>(kGsm7TableSize - 1)), 0x00);
+    // The last in-table code point still decodes (no off-by-one at the guard):
+    // code 126 is the accented lowercase 'y with diaeresis' (0xE1).
+    EXPECT_EQ(decodeGSMChar(static_cast<unsigned char>(kGsm7TableSize - 1)), 0xE1u);
 }
 
 // =====================================================================

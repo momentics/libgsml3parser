@@ -28,28 +28,15 @@ namespace gsml3parser {
 
 // ── GSM 7-bit alphabet ──────────────────────────────────────────────────
 
-const unsigned char gGSMAlphabet[] = {
-    '@', 0xA3, '$', 0xA5, 0xE8, 0xE9, 0xF9, 0xE4, 0xF2, 0xE7,
-    0x0A, 0xD8, 0xF0, 0x0D, 0xC5, 0xE5,
-    'D', '_', 'F', 'G', 'L', 'O', 'P', 'C', 'S', 'T', 'Z',
-    ' ', 0xC6, 0xE6, 0xDF, 0xC9,
-    '!', '"', '#', 0xA4, '%', '&', '\'', '(', ')', '*', '+', ',',
-    '0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
-    ':', ';', '<', '=', '>', '?', 0xA1, 0x1B,
-    'A', 'B', 'C', 'E', 'H', 'I', 'J', 'K', 'M', 'N',
-    'Q', 'R', 'S', 'U', 'V', 'W', 'X', 'Y',
-    0xC4, 0xD6, 0xD1, 0xDC,
-    'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k',
-    'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v',
-    'w', 'x', 'y', 'z', 0xE4, 0xF6, 0xF1,
-    0xFC, 0xE1, 0xA7, 0xBF, 0x1A,
-    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-};
-
-// The table holds the kGsm7TableSize default-alphabet code points (0..126)
-// followed by reserved zero-filled slots; decodeGSMChar() maps code points
-// outside the default range to space.
-static_assert(sizeof(gGSMAlphabet) >= kGsm7TableSize);
+// GSM 7-bit default alphabet (TS 23.038): 127 code points mapped to
+// ISO-8859-1; code points beyond the default range decode as space.
+const unsigned char gGSMAlphabet[] =
+    "@\243$\245\350\351\371\354\362\347\n\330\370\r\305\345"
+    "D_FGLOPCSTZ \306\346\337\311!\"#\244%&\'()*+,-./0123456789:;<=>?\241"
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZ\304\326\321\334\247\277"
+    "abcdefghijklmnopqrstuvwxyz\344\366\361\374\341";
+static_assert(sizeof(gGSMAlphabet) - 1 == kGsm7TableSize,
+              "the default alphabet table must hold exactly the 127 code points");
 
 // BCD nibble -> ASCII mapping (TS 23.040): the ten digits at
 // indices 0..9, '*' at 10/11/13, '#' at 12/14, and the fill nibble 'F'
@@ -59,7 +46,7 @@ const char gBCDAlphabet[] = "0123456789**#*#f";
 static_assert(sizeof(gBCDAlphabet) - 1 == 16u);
 
 unsigned char encodeGSMChar(unsigned char ascii) {
-    for (unsigned i = 0; i < sizeof(gGSMAlphabet); ++i) {
+    for (unsigned i = 0; i < kGsm7TableSize; ++i) {
         if (gGSMAlphabet[i] == ascii) return static_cast<unsigned char>(i);
     }
     return ' ';
@@ -87,19 +74,29 @@ std::string data2hex(const char* data, unsigned nbytes) {
 
 // ── RACH tables ─────────────────────────────────────────────────────────
 
+// RACH transmission parameters indexed by the broadcast Tx integer
+// (0..15), per TS 44.018 section 10.5.2.29: T (number of slots used to
+// spread the RACH transmission) and S (wait parameter for non-combined
+// and combined CCCH).
 const unsigned RACHSpreadSlots[16] = {
-    3,  5,  7, 10, 14, 21, 28, 42,
-    7, 10, 14, 21, 28, 42, 42, 42
+    3, 4, 5, 6,
+    7, 8, 9, 10,
+    11, 12, 14, 16,
+    20, 25, 32, 50
 };
 
 const unsigned RACHWaitSParam[16] = {
-    2, 3, 3, 3, 3, 3, 3, 3,
-    4, 4, 4, 4, 4, 4, 4, 4
+    55, 76, 109, 163, 217,
+    55, 76, 109, 163, 217,
+    55, 76, 109, 163, 217,
+    55
 };
 
 const unsigned RACHWaitSParamCombined[16] = {
-    2, 3, 3, 3, 3, 3, 3, 3,
-    3, 3, 3, 3, 3, 3, 3, 3
+    41, 52, 58, 86, 115,
+    41, 52, 58, 86, 115,
+    41, 52, 58, 86, 115,
+    41
 };
 
 // ── Time ────────────────────────────────────────────────────────────────

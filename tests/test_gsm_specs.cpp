@@ -627,29 +627,48 @@ TEST(GSMSpecTest, MeasurementResults_RoundTrip) {
 // ── GSM Alphabet ───────────────────────────────────────────────────────
 
 TEST(GSMSpecTest, GSMAlphabet_Decode) {
-    // GSM 7-bit default alphabet per GSM 03.38 Table 1:
-    // gGSMAlphabet[0] = '@', [1] = 0xa3, [2] = '$', [3] = 0xa5, ...
-    // [44..53] = '0'..'9', [62..79] = 'A'..'Z' (missing D,F,G,L,O,P,T,Z in standard order)
-    // [84..94] = 'a'..'k', [95..105] = 'l'..'v', [106..112] = 'w'..'z' + accented
+    // GSM 7-bit default alphabet (TS 23.038): the table holds the 127 code
+    // points; digits occupy 47..56, uppercase 64..89, lowercase 96..121,
+    // accented characters 122..126. Code points outside the default range
+    // decode as space.
     EXPECT_EQ(decodeGSMChar(0), '@');
-    EXPECT_EQ(decodeGSMChar(2), '$');
-    EXPECT_EQ(decodeGSMChar(44), '0');
-    EXPECT_EQ(decodeGSMChar(48), '4');
-    EXPECT_EQ(decodeGSMChar(84), 'a');
-    EXPECT_EQ(decodeGSMChar(85), 'b');
-    EXPECT_EQ(decodeGSMChar(86), 'c');
+    EXPECT_EQ(decodeGSMChar(7), 0xECu);    // 'i with grave'
+    EXPECT_EQ(decodeGSMChar(44), '-');
+    EXPECT_EQ(decodeGSMChar(45), '.');
+    EXPECT_EQ(decodeGSMChar(46), '/');
+    EXPECT_EQ(decodeGSMChar(47), '0');
+    EXPECT_EQ(decodeGSMChar(56), '9');
+    EXPECT_EQ(decodeGSMChar(63), 0xA1u);   // inverted exclamation mark
+    EXPECT_EQ(decodeGSMChar(64), 'A');
+    EXPECT_EQ(decodeGSMChar(89), 'Z');
+    EXPECT_EQ(decodeGSMChar(95), 0xBFu);   // inverted question mark
+    EXPECT_EQ(decodeGSMChar(96), 'a');
+    EXPECT_EQ(decodeGSMChar(121), 'z');
+    EXPECT_EQ(decodeGSMChar(122), 0xE4u);  // a with diaeresis
+    EXPECT_EQ(decodeGSMChar(127), ' ');    // outside the default range
+    // The encoder is the inverse mapping for the default-range code points.
+    EXPECT_EQ(encodeGSMChar('0'), 47);
+    EXPECT_EQ(encodeGSMChar('a'), 96);
+    EXPECT_EQ(encodeGSMChar('A'), 64);
+    EXPECT_EQ(encodeGSMChar('-'), 44);
 }
 
 // ── RACH Tables (GSM 04.08 10.5.2.29) ──────────────────────────────────
 // Reference: RACHSpreadSlots indexed by TxInteger
 
 TEST(GSMSpecTest, RACHTables) {
-    // TxInteger ranges from 0..15
-    // T parameter (spread slots) and S parameter (wait period)
-    for (int i = 0; i < 16; i++) {
-        EXPECT_GT(RACHSpreadSlots[i], 0u);
-        EXPECT_GT(RACHWaitSParam[i], 0u);
-    }
+    // T and S values indexed by the broadcast Tx integer (TS 44.018 section
+    // 10.5.2.29 / Table 3.1).
+    EXPECT_EQ(RACHSpreadSlots[0], 3u);
+    EXPECT_EQ(RACHSpreadSlots[4], 7u);
+    EXPECT_EQ(RACHSpreadSlots[10], 14u);
+    EXPECT_EQ(RACHSpreadSlots[15], 50u);
+    EXPECT_EQ(RACHWaitSParam[0], 55u);
+    EXPECT_EQ(RACHWaitSParam[4], 217u);
+    EXPECT_EQ(RACHWaitSParam[5], 55u);   // the pattern repeats with period 5
+    EXPECT_EQ(RACHWaitSParamCombined[0], 41u);
+    EXPECT_EQ(RACHWaitSParamCombined[4], 115u);
+    EXPECT_EQ(RACHWaitSParamCombined[5], 41u);
 }
 
 // ── data2hex utility ───────────────────────────────────────────────────

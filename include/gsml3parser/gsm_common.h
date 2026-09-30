@@ -76,8 +76,8 @@ int FNCompare(int32_t v1, int32_t v2);
 /** Number of GSM 7-bit default-alphabet code points (TS 23.038): 0..126. */
 inline constexpr unsigned kGsm7TableSize = 127u;
 
-/** GSM 7-bit alphabet -> ISO-8859-1 mapping; covers the kGsm7TableSize default
- *  code points plus reserved zero-filled slots beyond them. */
+/** GSM 7-bit default alphabet (TS 23.038): maps the kGsm7TableSize code
+ *  points (0..126) to ISO-8859-1. */
 GSML3PARSER_DLL extern const unsigned char gGSMAlphabet[];
 
 /** BCD nibble -> ASCII mapping: indices 0..15; index 15 renders the fill nibble */
