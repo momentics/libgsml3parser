@@ -39,7 +39,7 @@
 // RACHControlParameters default values for a software BTS (GSM 44.018 SI3).
 // ControlChannelDescription default values for a software BTS (GSM 44.018 SI3).
 // PowerCommand encoding verified: power_command(5 MSB)|spare(3 LSB).
-// TimingAdvance encoding verified: timing_advance(6 MSB)|spare(2 LSB).
+// TimingAdvance encoding verified: spare(2 MSB)=0|timing_advance(6 LSB); octet = value for 0..63.
 // Rest octet padding pattern 0x2B (rest-octet rules, GSM 44.018).
 //
 // [GOLDEN VERIFICATION]
@@ -497,7 +497,7 @@ TEST(GoldenRR, AssignmentCommand_Parse) {
 //   DedicatedModeOrTBF (4 bits): tbf(1)|downlink(1)|spare(2), high nibble of byte.
 //   PageMode (4 bits): NORMAL(0), EXTENDED(1), REORGANIZATION(2), SAME_AS_BEFORE(3).
 //   RequestReference (GSM 24.008 10.5.2.30): 3 octets, RA(8)|T1p(5)|T3(6)|T2(5).
-//   TimingAdvance (GSM 24.008 10.5.2.40): 1 octet, TA(6 MSB)|spare(2 LSB).
+//   TimingAdvance (GSM 04.08 10.5.2.40): 1 octet, spare(2 MSB)=0|TA(6 LSB); octet equals the value for 0..63.
 // =====================================================================
 
 TEST(GoldenRR, ImmediateAssignment_Parse) {
@@ -510,7 +510,7 @@ TEST(GoldenRR, ImmediateAssignment_Parse) {
     //   {0x08, 0x00, 0x64}: typeAndOffset=1(TDMA_Bm_ACCH, TCH/F or TCH/H ACCH), TN=0, TSC=0, h=0, ARFCN=100
     // Bytes 6-8: ReqRef: RA(8)=0x42, T1p(5)=0, T3(6)=0, T2(5)=0 [GSM 24.008 10.5.2.30]
     //   TS 24.008 10.5.2.30: ra(8), t1p(5), t3(6), t2(5)
-    // Byte 9: TA = 0x00 [GSM 24.008 10.5.2.40, 6-bit timing_advance << 2]
+    // Byte 9: TA = 0x00 [GSM 24.008 10.5.2.40, octet = TA value (spare bits zero)]
     // Byte 10: MobileAlloc LV length = 0 (no mobile allocation)
     uint8_t data[] = {
         0x06, 0x3f, 0x00,
@@ -863,17 +863,17 @@ TEST(GoldenRR, RRStatus_Parse_ProtocolError) {
 // MTI per TS 44.018 Table 10.4.1: PHYSICAL_INFORMATION ('00101101'B = 0x2D).
 // Structure: TimingAdvance(8 bits, GSM 24.008 10.5.2.40)
 // Spec-verified: PD=6(RR), MTI=0x2D(PhysicalInformation) per 3GPP TS 44.018 Table 10.4.1
-// TimingAdvance: 6-bit value (0-63) shifted left by 2 bits, spare(2)=0
+// TimingAdvance: one octet, spare(2 MSB)=0|timing_advance(6 LSB); TA=63 -> 0b00_111111 = 0x3F
 // [GSM SPEC VERIFIED] GSM 24.008 9.1.12: PhysicalInformation body = TimingAdvance(1 octet).
-//   TimingAdvance encoding: timing_advance(6 MSB)|spare(2 LSB). Value range 0-63.
-//   This test uses TA=63 (maximum), encoded as 63<<2 = 0b111111_00 = 0xFC.
+//   TimingAdvance encoding: spare(2 MSB)=0|timing_advance(6 LSB); for 0..63 the octet equals the value.
+//   This test uses TA=63 (maximum), encoded as 0b00_111111 = 0x3F.
 // =====================================================================
 
 TEST(GoldenRR, PhysicalInformation_Parse) {
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x2D (PhysicalInformation) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: TA = 63<<2 = 0xFC [GSM 24.008 10.5.2.40: timing_advance(6)=63(max)|spare(2)=0]
-    uint8_t data[] = {0x06, 0x2d, 0xFC};
+    // Byte 2: TA=63 -> 0b00_111111 = 0x3F [GSM 24.008 10.5.2.40: spare(2 MSB)=0|timing_advance(6 LSB)]
+    uint8_t data[] = {0x06, 0x2d, 0x3F};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3PhysicalInformation::MTI);

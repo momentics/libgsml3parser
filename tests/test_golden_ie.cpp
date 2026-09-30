@@ -40,7 +40,7 @@
 // ControlChannelDescription vector values for a software BTS (GSM 24.008 SI3):
 //   {0xC9, 0x00, 0x01} -> msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1, t3212=1.
 // PowerCommand encoding verified: power_command(5 MSB)|spare(3 LSB), cmd=15 -> 0x78.
-// TimingAdvance encoding verified: timing_advance(6 MSB)|spare(2 LSB), val=42 -> 0xA8.
+// TimingAdvance encoding verified: spare(2 MSB)=0|timing_advance(6 LSB), val=42 -> 0x2A.
 // GSM Alphabet decoding verified against 3GPP TS 23.038 Table 1 (default alphabet).
 // RxLev conversion verified: dBm = RxLev - 110, range -110 to -47 dBm.
 // GSM timing constants per TS 45.008: hyperframe = 2715648 TDMA frames.
@@ -66,7 +66,7 @@
 //   - ControlChannelDescription {0xC9, 0x00, 0x01} vector values for a software BTS:
 //     msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1(combined), t3212=1(6 min)
 //   - PowerCommand: power_command(5 MSB)|spare(3 LSB), cmd=15 -> 0x78
-//   - TimingAdvance: timing_advance(6 MSB)|spare(2 LSB), val=42 -> 0xA8
+//   - TimingAdvance: spare(2 MSB)=0|timing_advance(6 LSB), val=42 -> 0x2A
 //   - GSM Alphabet decoding verified against 3GPP TS 23.038 Table 1 (default alphabet)
 //   - RxLev conversion: dBm = RxLev - 110, range -110 to -47 dBm (TS 45.008 8.1.4)
 //   - GSM timing constants per TS 45.008:
@@ -817,7 +817,7 @@ TEST(GoldenIE, ChannelMode_Equality) {
 // =====================================================================
 // Common IEs: L3TimingAdvance (GSM 04.08 10.5.2.40)
 // One-octet timing advance value per GSM 24.008 10.5.2.40
-// 8 bits: timing_advance(6) | spare(2)
+// 8 bits: spare(2 MSB) | timing_advance(6 LSB); for 0..63 the octet equals the value (TS 44.018 section 10.5.2.40)
 // =====================================================================
 
 TEST(GoldenIE, TimingAdvance_Default) {
@@ -837,17 +837,35 @@ TEST(GoldenIE, TimingAdvance_MaxValue) {
 }
 
 TEST(GoldenIE, TimingAdvance_Encoding) {
-    // Timing advance is an integer value (range 0..219 per TS 45.008) in the top six bits.
+    // Timing advance is an integer value (range 0..219 per TS 45.008) in the low six bits.
     // Spec-verified: GSM 24.008 10.5.2.40 Timing Advance
-    //   timing_advance(6 bits MSB)|spare(2 bits LSB) = 1 octet
-    //   value=42 -> 0b101010_00 = 0xA8 (42 in high 6 bits, spare 0 in low 2 bits)
+    //   spare(2 bits MSB)=0|timing_advance(6 bits LSB) = 1 octet
+    //   value=42 -> 0b00_101010 = 0x2A (spare 0 in high 2 bits, 42 in low 6 bits)
     L3TimingAdvance ta(42);
     std::vector<uint8_t> buf(4, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     ta.write(writer);
-    // GSM 24.008 10.5.2.40: timing_advance(6 bits MSB)|spare(2 bits LSB) = 1 octet
-    // timing_advance=42 -> 0b101010_00 = 0xA8 (42 in high 6 bits, spare 0 in low 2 bits)
-    EXPECT_EQ(buf[0], 0xA8);
+    // GSM 24.008 10.5.2.40: spare(2 bits MSB)=0|timing_advance(6 bits LSB) = 1 octet
+    // timing_advance=42 -> 0b00_101010 = 0x2A (spare 0 in high 2 bits, 42 in low 6 bits)
+    EXPECT_EQ(buf[0], 0x2A);
+}
+
+// Golden: Timing Advance octet (TS 44.018 section 10.5.2.40): two spare bits in
+// the high position, six-bit value in the low position; the wire octet equals
+// the timing advance for values 0..63.
+TEST(GoldenIE, TimingAdvance_ParseVector) {
+    std::vector<uint8_t> buf(1);
+    buf[0] = 0x2A;   // TA = 42
+    BitReader reader(buf.data(), 8);
+    auto res = L3TimingAdvance::parse(reader);
+    ASSERT_TRUE(res);
+    EXPECT_EQ((*res).timingAdvance(), 42u);
+
+    buf[0] = 0x3F;   // TA = 63 (maximum)
+    BitReader r2(buf.data(), 8);
+    auto res2 = L3TimingAdvance::parse(r2);
+    ASSERT_TRUE(res2);
+    EXPECT_EQ((*res2).timingAdvance(), 63u);
 }
 
 // =====================================================================

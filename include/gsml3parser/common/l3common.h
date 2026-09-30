@@ -508,6 +508,7 @@ public:
 class L3TimingAdvance {
     uint8_t mTimingAdvance{};
 public:
+    // One wire octet: [spare(2)=0 | TA(6)]; for 0-63 the octet equals the value (TS 44.018 section 10.5.2.40).
     L3TimingAdvance() = default;
     explicit L3TimingAdvance(unsigned ta) : mTimingAdvance(static_cast<uint8_t>(ta)) {}
 

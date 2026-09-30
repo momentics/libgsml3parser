@@ -1818,7 +1818,8 @@ Absolute or relative power control command with optional access type.
 
 ### L3TimingAdvance
 
-6-bit timing advance value (0–63).
+6-bit timing advance value (0–63), one wire octet: [spare(2)=0 | TA(6)];
+for 0–63 the octet equals the value (TS 44.018 section 10.5.2.40).
 
 ### L3CipheringModeSetting / L3CipheringModeResponse
 

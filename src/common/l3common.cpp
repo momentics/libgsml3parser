@@ -806,15 +806,18 @@ void L3ChannelMode::text(std::ostream& os) const {
 // ── L3TimingAdvance ────────────────────────────────────────────────────
 
 Expected<L3TimingAdvance> L3TimingAdvance::parse(BitReader& br) {
-    auto r = br.readField(6); if (!r) return Expected<L3TimingAdvance>::error(r.error());
+    // Timing Advance (TS 44.018 section 10.5.2.40): one octet, two spare bits in the
+    // high position followed by the six-bit value; for values 0..63 the wire octet
+    // equals the timing advance.
+    auto r = br.readField(2); if (!r) return Expected<L3TimingAdvance>::error(r.error()); // spare
+    r = br.readField(6); if (!r) return Expected<L3TimingAdvance>::error(r.error());
     uint8_t ta = static_cast<uint8_t>(r.value());
-    r = br.readField(2); if (!r) return Expected<L3TimingAdvance>::error(r.error()); // spare
     return Expected<L3TimingAdvance>::hold(L3TimingAdvance(ta));
 }
 
 void L3TimingAdvance::write(BitWriter& bw) const {
+    bw.writeField(0, 2); // spare (high bits)
     bw.writeField(mTimingAdvance & 0x3F, 6);
-    bw.writeField(0, 2);
 }
 
 void L3TimingAdvance::text(std::ostream& os) const {
