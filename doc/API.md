@@ -1806,7 +1806,8 @@ RxLevAccessMin, CellBarred, CAC, ACs for GPRS.
 
 Max retransmissions (2 bits), TX integer (4 bits), the cell-barred-access and RE
 bits, and the 16-bit access class bitmap: bit i corresponds to access class i
-(i = 0..15), low octet first on the wire (TS 44.018 section 10.5.2.29).
+(i = 0..15), low octet first on the wire; a set bit bars the corresponding
+class, emergency calls use access class 10 (TS 44.018 section 10.5.2.29).
 
 ### L3MeasurementResults
 

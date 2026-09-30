@@ -107,7 +107,8 @@ tear-down indicator TV `0x09`.
 **RR (TS 44.018)** — Ciphering Mode Command is exactly one body octet
 `[sC(1)|algorithm(3)][cR(1)|spare(3)]`; SI1 carries the cell channel description (ARFCN(10)+BSIC(6),
 two octets) plus RACH control parameters (three octets) and at most one rest octet; the access-class
-bitmap is a 16-bit value written low byte first (AC *i* ↔ bit *i*); Paging Request Type 1/2/3 carry
+bitmap is a 16-bit value written low byte first (AC *i* ↔ bit *i*); a set bit bars the class
+(emergency = class 10); Paging Request Type 1/2/3 carry
 the four-bit page mode between channel-needed and the identities; channel numbers use the five-bit
 type-and-offset codes (`'00001'B` Bm ACCH … `'10000'B` BCCH, `'10001'B` RACH, `'10010'B` PCH+AGCH,
 PDCH/CBCH/VAMOS extensions) with `channelCodeLm/Sdcch4/Sdcch8` helpers.

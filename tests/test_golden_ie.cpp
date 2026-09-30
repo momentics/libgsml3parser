@@ -36,7 +36,7 @@
 // CellSelectionParameters vector values for a software BTS (GSM 24.008 SI3):
 //   {0x47, 0x40} -> hyst=2, txpwr=7, acs=0, neci=1, rxlev=0.
 // RACHControlParameters vector values for a software BTS (GSM 24.008 SI2/SI3):
-//   {0xE5, 0x04, 0x00} -> max_retrans=3, tx_int=9, cell_bar=false, re_not_allowed=1, ACC=0x0400.
+//   {0xE5, 0xFF, 0x03} -> max_retrans=3, tx_int=9, cell_bar=false, re_not_allowed=1, ACC=0x03FF (classes 0-9 barred).
 // ControlChannelDescription vector values for a software BTS (GSM 24.008 SI3):
 //   {0xC9, 0x00, 0x01} -> msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1, t3212=1.
 // PowerCommand encoding verified: power_command(5 MSB)|spare(3 LSB), cmd=15 -> 0x78.
@@ -61,8 +61,8 @@
 //     per TS 44.018 10.5.2.9 (Ciphering Mode Command layout)
 //   - CellSelectionParameters {0x47, 0x40} vector values for a software BTS:
 //     cell_resel_hyst=2, ms_txpwr_max_cch=7, acs=0, neci=1, rxlev_access_min=0
-//   - RACHControlParameters {0xE5, 0x04, 0x00} vector values for a software BTS:
-//     max_retrans=3, tx_integer=9, cell_bar=false, re_not_allowed=1, ACC=0x0400
+//   - RACHControlParameters {0xE5, 0xFF, 0x03} vector values for a software BTS:
+//     max_retrans=3, tx_integer=9, cell_bar=false, re_not_allowed=1, ACC=0x03FF (classes 0-9 barred)
 //   - ControlChannelDescription {0xC9, 0x00, 0x01} vector values for a software BTS:
 //     msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1(combined), t3212=1(6 min)
 //   - PowerCommand: power_command(5 MSB)|spare(3 LSB), cmd=15 -> 0x78
@@ -1170,7 +1170,7 @@ TEST(GoldenIE, CellSelectionParameters_RefValues) {
 //   Octet 2-3: ACC(16) access class bitmap, low octet first (octet 2 = classes 0-7)
 // Vector values (typical software BTS defaults):
 //   max_retrans=3(11), tx_integer=9(1001), cell_bar_access=0, re_not_allowed=1,
-//   ACC=0x03FF (access classes 0-9 permitted)
+//   ACC=0x03FF (access classes 0-9 barred; a set bit bars the class)
 //   {0xE5, 0xFF, 0x03}: 0b11_1001_0_1 | 0b11111111_00000011 = correct
 // =====================================================================
 
@@ -1183,7 +1183,7 @@ TEST(GoldenIE, RACHControlParameters_Default) {
 TEST(GoldenIE, RACHControlParameters_RefValues) {
     // Vector (typical software BTS defaults):
     //   max_retrans=3, tx_integer='1001'B(=9), cell_barr_access=false,
-    //   re_not_allowed=true, ACC=0x03FF (access classes 0-9 permitted)
+    //   re_not_allowed=true, ACC=0x03FF (access classes 0-9 barred; a set bit bars the class)
     // Spec-verified: TS 44.018 10.5.2.29 RACH Control Parameters (24 bits = 3 octets)
     //   max_retrans(2)|tx_integer(4)|cell_barr_access(1)|re_not_allowed(1)|ACC(16, low octet first)
     //   {0xE5, 0xFF, 0x03}: max_retrans=3, tx_integer=9, cell_barr_access=0, re_not_allowed=1, ACC=0x03FF
@@ -1195,8 +1195,9 @@ TEST(GoldenIE, RACHControlParameters_RefValues) {
     auto parsedResult = L3RACHControlParameters::parse(reader);
     ASSERT_TRUE(parsedResult);
     // Spec-verified: byte 0 = 0xE5 = 0b1110_0101 -> max_retrans(2)=11=3, tx_integer(4)=1001=9, cell_barr_access(1)=0, re_not_allowed(1)=1
-    //   byte 1 = 0xFF (access classes 0-7 permitted), byte 2 = 0x03 (classes 8-9 permitted)
-    //   -> ACC(16) = 0x03FF: bit i of the bitmap corresponds to access class i (TS 44.018 10.5.2.29)
+    //   byte 1 = 0xFF (classes 0-7 barred), byte 2 = 0x03 (classes 8-9 barred)
+    //   -> ACC(16) = 0x03FF: bit i of the bitmap corresponds to access class i; a set bit bars
+    //      the class (TS 44.018 10.5.2.29)
     EXPECT_EQ((*parsedResult).maxRetrans(), 3u);
     EXPECT_EQ((*parsedResult).txInteger(), 9u);
     EXPECT_EQ((*parsedResult).cellBarAccess(), false);
@@ -1205,7 +1206,7 @@ TEST(GoldenIE, RACHControlParameters_RefValues) {
 }
 
 TEST(GoldenIE, RACHControlParameters_AccLowByteFirst) {
-    // Access classes 0-9 permitted (ACC = 0x03FF) must serialize as the two
+    // Access classes 0-9 barred (ACC = 0x03FF) must serialize as the two
     // octets {0xFF, 0x03}: the low octet (classes 0-7) is transmitted first
     // (TS 44.018 section 10.5.2.29).
     L3RACHControlParameters orig(3, 9, false, 1, 0x03FF);
@@ -1221,6 +1222,25 @@ TEST(GoldenIE, RACHControlParameters_AccLowByteFirst) {
     auto parsedResult = L3RACHControlParameters::parse(reader);
     ASSERT_TRUE(parsedResult);
     EXPECT_EQ((*parsedResult).ac(), 0x03FFu);
+}
+
+TEST(GoldenIE, RACHControlParameters_EmergencyBarred) {
+    // Barred mask 0x0400: only the emergency access class (class 10) is barred;
+    // the low ACC octet (classes 0-7) is 0x00 and is transmitted first
+    // (TS 44.018 section 10.5.2.29).
+    L3RACHControlParameters orig(3, 9, false, 1, 0x0400);
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    EXPECT_EQ(writer.position(), 24u);
+    EXPECT_EQ(buf[0], 0xE5u);
+    EXPECT_EQ(buf[1], 0x00u);
+    EXPECT_EQ(buf[2], 0x04u);
+
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3RACHControlParameters::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).ac(), 0x0400u);
 }
 
 // =====================================================================
