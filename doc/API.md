@@ -2457,7 +2457,7 @@ The request type (TS 44.068 section 10.5.6.17) is carried in one octet: the high
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3ActivatePDPContextRequest` | 0x41 | UL | NSAPI + LLC SAPI (one octet), requested QoS (LV), requested PDP address (LV), APN (TLV 0x28), [PCO (TLV 0x27)], [request type (0xAx)] |
+| `L3ActivatePDPContextRequest` | 0x41 | UL | NSAPI and LLC SAPI (two octets: [NSAPI(4)|spare(4)][LLC SAPI(4)|spare(4)]), requested QoS (LV), requested PDP address (LV), APN (TLV 0x28), [PCO (TLV 0x27)], [request type (0xAx)] |
 | `L3ActivatePDPContextAccept` | 0x42 | DL | PDP handle, [PDP address], QoS, [PCO] |
 | `L3ActivatePDPContextReject` | 0x43 | DL | SM cause (value octet); optional IEs kept opaque |
 | `L3DeactivatePDPContextRequest` | 0x46 | Bidir | SM cause (value octet), [tear-down indicator (TV 0x09)], [PCO (TLV 0x27)] |

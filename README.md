@@ -96,11 +96,12 @@ half-octet, CKSN(3)|reserved(1) in the low; Location Updating Request starts wit
 `[luType(2)|spare(1)|FOP(1)]` + `[CKSN(3)|reserved(1)]`. Optional IEs after the mandatory part are
 preserved opaquely and re-emitted verbatim.
 
-**GMM / SM (TS 44.068)** — Attach/RAU Request pack update/attach type, forL3 and the GPRS CKSN in a
+**GMM / SM (TS 24.008)** — Attach/RAU Request pack update/attach type, forL3 and the GPRS CKSN in a
 single octet; the DRX parameter is two value octets without an identifier and the MS radio access
 capability is a mandatory LV. Reject/failure/status messages start with a single bare cause value
-octet. SM ACTIVATE PDP CONTEXT REQUEST carries NSAPI + LLC SAPI in the first octet, QoS and PDP
-address as positional LVs, the APN as TLV `0x28`, PCO as TLV `0x27` and an optional request type
+octet. SM ACTIVATE PDP CONTEXT REQUEST carries the NSAPI and the negotiated LLC SAPI as two
+octets ([NSAPI(4)|spare(4)][LLC SAPI(4)|spare(4)]), requested QoS and requested PDP address as
+positional LVs, the APN as TLV `0x28`, PCO as TLV `0x27` and an optional request type
 `0xAx`; DEACTIVATE PDP CONTEXT REQUEST starts with the SM cause octet followed by an optional
 tear-down indicator TV `0x09`.
 

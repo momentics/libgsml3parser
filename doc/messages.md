@@ -133,9 +133,9 @@ Dispatch notes:
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3PagingRequestType1` | 0x21 | DL | PageMode + MobileIdentity [+ second ID] |
-| `L3PagingRequestType2` | 0x22 | DL | PageMode + TMSI (4 bytes) |
-| `L3PagingRequestType3` | 0x24 | DL | PageMode + IMSI/IMEI digits |
+| `L3PagingRequestType1` | 0x21 | DL | channel-needed(4) + page mode(4) + mobile identity (LV) [+ optional second identity (TLV)] |
+| `L3PagingRequestType2` | 0x22 | DL | channel-needed(4) + page mode(4) + two raw TMSIs (8 octets) |
+| `L3PagingRequestType3` | 0x24 | DL | channel-needed(4) + page mode(4) + four raw TMSIs (16 octets) |
 | `L3PagingResponse` | 0x27 | UL | MobileIdentity [+ Classmark2/3] |
 
 ### System Information (BCCH/SACCH)
@@ -389,7 +389,7 @@ The variant holds 5 CP-layer + 14 L3-layer messages. The RP/TP classes below par
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3ActivatePDPContextRequest` | 0x41 | UL | NSAPI + LLC SAPI (one octet), requested QoS (LV), requested PDP address (LV), APN (TLV 0x28), [PCO (TLV 0x27)], [request type (0xAx)] |
+| `L3ActivatePDPContextRequest` | 0x41 | UL | NSAPI and LLC SAPI (two octets: [NSAPI(4)|spare(4)][LLC SAPI(4)|spare(4)]), requested QoS (LV), requested PDP address (LV), APN (TLV 0x28), [PCO (TLV 0x27)], [request type (0xAx)] |
 | `L3ActivatePDPContextAccept` | 0x42 | DL | PDP context activated |
 | `L3ActivatePDPContextReject` | 0x43 | DL | SM cause (value octet); optional IEs kept opaque |
 | `L3DeactivatePDPContextRequest` | 0x46 | Bidir | SM cause (value octet), [tear-down indicator (TV 0x09)], [PCO (TLV 0x27)] |
