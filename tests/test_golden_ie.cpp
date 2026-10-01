@@ -87,6 +87,7 @@
 #include <gsml3parser/mm/l3mmelements.h>
 #include <gsml3parser/bitreader.h>
 #include <gsml3parser/bitwriter.h>
+#include <gsml3parser/visitor.h>
 
 using namespace gsml3parser;
 
@@ -511,6 +512,62 @@ TEST(GoldenIE, Classmark2_Zero) {
     EXPECT_EQ(buf[0], 0x00);
     EXPECT_EQ(buf[1], 0x00);
     EXPECT_EQ(buf[2], 0x00);
+}
+
+TEST(GoldenIE, Classmark2_AllBitsSet) {
+    // Golden: Classmark 2 with every defined capability bit set (TS 24.008
+    // section 10.5.1.6): octet1 [spare|rev(2)=11|ES|A5/1|RF power(3)=111],
+    // octet2 [spare|PS|SS screen(2)=11|SM|VBS|VGCS|FC],
+    // octet3 [CM3|spare|LCS-VA|UCS-2 spare|SoLSA|CMSP|A5/3|A5/2]
+    // = {0xFF, 0xFF, 0xFF}.
+    uint8_t raw[] = {0xFF, 0xFF, 0xFF};
+    BitReader reader(raw, sizeof(raw) * 8);
+    auto parsed = L3MobileStationClassmark2::parse(reader);
+    ASSERT_TRUE(parsed);
+    const auto& cm2 = parsed.value();
+    EXPECT_EQ(cm2.lengthV(), 3u);
+    // Every defined capability bit is set.
+    EXPECT_EQ(cm2.revisionLevel(), 3u);       // revision level(2) = '11'
+    EXPECT_EQ(cm2.esInd(), 1u);
+    EXPECT_EQ(cm2.a5_1(), 1u);
+    EXPECT_EQ(cm2.rfPowerCapability(), 7u);   // RF power(3) = '111'
+    EXPECT_EQ(cm2.cm3(), 1u);
+    EXPECT_EQ(cm2.a5_3(), 1u);
+    EXPECT_EQ(cm2.a5_2(), 1u);
+
+    // write() keeps every defined bit in its canonical position; the
+    // reserved spare bits are emitted as zero:
+    // octet1 [0|11|1|1|111] = 0x7F, octet2 [0|1|11|1|1|1|1] = 0x7F,
+    // octet3 [1|0|1|0|1|1|1|1] = 0xAF.
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    cm2.write(writer);
+    EXPECT_EQ(buf[0], 0x7F);
+    EXPECT_EQ(buf[1], 0x7F);
+    EXPECT_EQ(buf[2], 0xAF);
+
+    // The written value parses back with every capability bit still set.
+    BitReader reread(buf.data(), 24);
+    auto reparsedIE = L3MobileStationClassmark2::parse(reread);
+    ASSERT_TRUE(reparsedIE);
+    EXPECT_EQ(reparsedIE.value(), cm2);
+
+    // Full-message round-trip through Paging Response keeps every bit,
+    // including cm3 = 1.
+    L3PagingResponse resp = L3PagingResponse::builder()
+        .cksn(5)
+        .classmark(cm2)
+        .mobileId(L3MobileIdentity(0x12345678u))
+        .build();
+    ParsedMessage pm{RRM{std::move(resp)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    auto rt = parseL3(std::span<const uint8_t>(bytes.value().data(), bytes.value().size()));
+    ASSERT_TRUE(rt);
+    const auto* reparsed = tryGet<L3PagingResponse>(*rt);
+    ASSERT_NE(reparsed, nullptr);
+    EXPECT_EQ(reparsed->classmark(), cm2);
+    EXPECT_EQ(reparsed->cksn(), 5u);
 }
 
 // =====================================================================

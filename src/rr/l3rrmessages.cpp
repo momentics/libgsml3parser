@@ -185,11 +185,13 @@ size_t L3PagingRequestType1::bodyLength() const {
 
 Expected<L3PagingRequestType1> L3PagingRequestType1::parse(BitReader& br) {
     L3PagingRequestType1 msg;
+    // First body octet: page mode (four bits), then the channel needed —
+    // second(2)|first(2) two-bit fields (TS 44.018 section 9.1.22).
+    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType1>::error(res.error()); msg.mPageMode = std::move(res.value()); }
     auto r = br.readField(2); if (!r) return Expected<L3PagingRequestType1>::error(r.error());
     msg.mChannelsNeeded[1] = channelNeededType(r.value());
     r = br.readField(2); if (!r) return Expected<L3PagingRequestType1>::error(r.error());
     msg.mChannelsNeeded[0] = channelNeededType(r.value());
-    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType1>::error(res.error()); msg.mPageMode = std::move(res.value()); }
 
     {
         auto lenR = br.readField(8); if (!lenR) return Expected<L3PagingRequestType1>::error(lenR.error());
@@ -200,8 +202,9 @@ Expected<L3PagingRequestType1> L3PagingRequestType1::parse(BitReader& br) {
         }
     }
 
-    // Optional second mobile identity (TLV, element identifier 0x17; the
-    // identifier octet on the wire carries the '1'000 0000'B presence flag).
+    // Optional second mobile identity (TLV, element identifier 0x17; TS
+    // 44.018 section 9.1.22). The identifier octet is compared through the
+    // seven-bit mask so frames carrying a set spare bit also parse.
     if (br.hasMore()) {
         unsigned peek = br.peekField(8);
         if ((peek & 0x7Fu) == 0x17u) {
@@ -220,13 +223,16 @@ Expected<L3PagingRequestType1> L3PagingRequestType1::parse(BitReader& br) {
 
 void L3PagingRequestType1::write(BitWriter& bw) const {
     size_t sz = mMobileIdCount;
-    bw.writeField(channelNeededCode(mChannelsNeeded[sz > 1 ? 1 : 0]), 2);
-    bw.writeField(channelNeededCode(mChannelsNeeded[0]), 2);
+    // Symmetric to parse: page mode first, then channel needed
+    // second(2)|first(2) (TS 44.018 section 9.1.22).
     mPageMode.write(bw);
+    bw.writeField(channelNeededCode(mChannelsNeeded[1]), 2);
+    bw.writeField(channelNeededCode(mChannelsNeeded[0]), 2);
     bw.writeField(static_cast<uint32_t>(mMobileIDs[0].lengthV()), 8);
     mMobileIDs[0].write(bw);
     if (sz > 1) {
-        bw.writeField(0x97, 8);
+        // Second identity: TLV with element identifier 0x17.
+        bw.writeField(0x17, 8);
         bw.writeField(static_cast<uint32_t>(mMobileIDs[1].lengthV()), 8);
         mMobileIDs[1].write(bw);
     }
@@ -258,35 +264,62 @@ L3PagingRequestType2 L3PagingRequestType2::Builder::build() {
     msg.mTMSIs = mTMSIs;
     msg.mChannelsNeeded = mChannelsNeeded;
     msg.mPageMode = mPageMode;
+    msg.mThirdIdentity = mThirdIdentity;
+    msg.mHaveThirdIdentity = mHaveThirdIdentity;
     return msg;
 }
 
 size_t L3PagingRequestType2::bodyLength() const {
-    return 1 + mTMSIs.size() * 4;
+    return 1 + mTMSIs.size() * 4 +
+           (mHaveThirdIdentity ? 2 + mThirdIdentity.lengthV() : 0);
 }
 
 Expected<L3PagingRequestType2> L3PagingRequestType2::parse(BitReader& br) {
     L3PagingRequestType2 msg;
+    // First body octet: page mode (four bits), then the channel needed —
+    // second(2)|first(2) two-bit fields (TS 44.018 section 9.1.23).
+    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType2>::error(res.error()); msg.mPageMode = std::move(res.value()); }
     auto r = br.readField(2); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
     msg.mChannelsNeeded[1] = channelNeededType(r.value());
     r = br.readField(2); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
     msg.mChannelsNeeded[0] = channelNeededType(r.value());
-    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType2>::error(res.error()); msg.mPageMode = std::move(res.value()); }
 
     for (size_t i = 0; i < msg.mTMSIs.size(); ++i) {
         r = br.readField(32); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
         msg.mTMSIs[i] = static_cast<uint32_t>(r.value());
     }
 
+    // Optional third identity (TLV, element identifier 0x17; TS 44.018
+    // section 9.1.23).
+    if (br.hasMore()) {
+        unsigned peek = br.peekField(8);
+        if ((peek & 0x7Fu) == 0x17u) {
+            { auto _ = br.readField(8); if (!_) return Expected<L3PagingRequestType2>::error(_.error()); }
+            auto lenR = br.readField(8); if (!lenR) return Expected<L3PagingRequestType2>::error(lenR.error());
+            auto res = L3MobileIdentity::parse(br, lenR.value());
+            if (!res) return Expected<L3PagingRequestType2>::error(res.error());
+            msg.mThirdIdentity = std::move(res.value());
+            msg.mHaveThirdIdentity = true;
+        }
+    }
+
     return Expected<L3PagingRequestType2>::hold(std::move(msg));
 }
 
 void L3PagingRequestType2::write(BitWriter& bw) const {
+    // Symmetric to parse: page mode first, then channel needed
+    // second(2)|first(2) (TS 44.018 section 9.1.23).
+    mPageMode.write(bw);
     bw.writeField(channelNeededCode(mChannelsNeeded[1]), 2);
     bw.writeField(channelNeededCode(mChannelsNeeded[0]), 2);
-    mPageMode.write(bw);
     for (const auto& tmsi : mTMSIs) {
         bw.writeField(tmsi, 32);
+    }
+    if (mHaveThirdIdentity) {
+        // Optional third identity (TLV, element identifier 0x17).
+        bw.writeField(0x17, 8);
+        bw.writeField(static_cast<uint32_t>(mThirdIdentity.lengthV()), 8);
+        mThirdIdentity.write(bw);
     }
 }
 
@@ -294,6 +327,10 @@ void L3PagingRequestType2::text(std::ostream& os) const {
     os << "PagingRequestType2: ";
     for (const auto& tmsi : mTMSIs) {
         os << "TMSI=0x" << std::hex << tmsi << std::dec;
+    }
+    if (mHaveThirdIdentity) {
+        os << ' ';
+        mThirdIdentity.text(os);
     }
 }
 
@@ -325,11 +362,13 @@ size_t L3PagingRequestType3::bodyLength() const {
 
 Expected<L3PagingRequestType3> L3PagingRequestType3::parse(BitReader& br) {
     L3PagingRequestType3 msg;
+    // First body octet: page mode (four bits), then the channel needed —
+    // second(2)|first(2) two-bit fields (TS 44.018 section 9.1.24).
+    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType3>::error(res.error()); msg.mPageMode = std::move(res.value()); }
     auto r = br.readField(2); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
     msg.mChannelsNeeded[1] = channelNeededType(r.value());
     r = br.readField(2); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
     msg.mChannelsNeeded[0] = channelNeededType(r.value());
-    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType3>::error(res.error()); msg.mPageMode = std::move(res.value()); }
 
     for (size_t i = 0; i < msg.mTMSIs.size(); ++i) {
         r = br.readField(32); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
@@ -340,9 +379,11 @@ Expected<L3PagingRequestType3> L3PagingRequestType3::parse(BitReader& br) {
 }
 
 void L3PagingRequestType3::write(BitWriter& bw) const {
+    // Symmetric to parse: page mode first, then channel needed
+    // second(2)|first(2) (TS 44.018 section 9.1.24).
+    mPageMode.write(bw);
     bw.writeField(channelNeededCode(mChannelsNeeded[1]), 2);
     bw.writeField(channelNeededCode(mChannelsNeeded[0]), 2);
-    mPageMode.write(bw);
     for (const auto& tmsi : mTMSIs) {
         bw.writeField(tmsi, 32);
     }
@@ -363,9 +404,11 @@ size_t L3PagingResponse::bodyLength() const {
 
 Expected<L3PagingResponse> L3PagingResponse::parse(BitReader& br) {
     L3PagingResponse msg;
-    auto r = br.readField(4); if (!r) return Expected<L3PagingResponse>::error(r.error());
-    msg.mCKSN = r.value();
+    // First body octet: [spare(4)][ciphering key sequence number(4)]
+    // (TS 44.018 section 9.1.25).
+    auto r = br.readField(4); if (!r) return Expected<L3PagingResponse>::error(r.error()); // spare half-octet
     r = br.readField(4); if (!r) return Expected<L3PagingResponse>::error(r.error());
+    msg.mCKSN = r.value() & 0x0Fu;
 
     {
         auto lenR = br.readField(8); if (!lenR) return Expected<L3PagingResponse>::error(lenR.error());
@@ -384,8 +427,9 @@ Expected<L3PagingResponse> L3PagingResponse::parse(BitReader& br) {
 }
 
 void L3PagingResponse::write(BitWriter& bw) const {
-    bw.writeField(mCKSN & 0x0F, 4);
+    // Symmetric to parse: spare half-octet, then CKSN (TS 44.018 9.1.25).
     bw.writeField(0, 4);
+    bw.writeField(mCKSN & 0x0F, 4);
     bw.writeField(static_cast<uint32_t>(L3MobileStationClassmark2::lengthV()), 8);
     mClassmark.write(bw);
     bw.writeField(static_cast<uint32_t>(mMobileID.lengthV()), 8);
@@ -545,15 +589,14 @@ Expected<L3AssignmentCommand> L3AssignmentCommand::parse(BitReader& br) {
         }
     }
 
+    // Multi-rate configuration (TLV, IEI 0x03; TS 44.018 section 9.1.2):
+    // identifier octet, one length octet, value octets.
     if (msg.isAMR() && br.hasMore()) {
         unsigned peek = br.peekField(8);
-        if ((peek & 0x7F) == 0x15) {
+        if ((peek & 0x7F) == 0x03) {
             auto ieiR = br.readField(8); if (!ieiR) return Expected<L3AssignmentCommand>::error(ieiR.error());
-            bool ext = (ieiR.value() & 0x80) != 0;
-            if (ext) {
-                auto lR = br.readField(8); if (!lR) return Expected<L3AssignmentCommand>::error(lR.error());
-                (void)lR;
-            }
+            auto lR = br.readField(8); if (!lR) return Expected<L3AssignmentCommand>::error(lR.error());
+            (void)lR;
             auto res = L3MultiRateConfiguration::parse(br);
             if (!res) return Expected<L3AssignmentCommand>::error(res.error());
             msg.mMultiRate = std::move(res.value());
@@ -571,7 +614,8 @@ void L3AssignmentCommand::write(BitWriter& bw) const {
         mMode1.write(bw);
     }
     if (isAMR()) {
-        bw.writeField(0x95, 8);
+        // Multi-rate configuration: TLV with IEI 0x03 (TS 44.018 section 9.1.2).
+        bw.writeField(0x03, 8);
         bw.writeField(static_cast<uint32_t>(mMultiRate.lengthV()), 8);
         mMultiRate.write(bw);
     }
@@ -698,7 +742,8 @@ void L3ClassmarkChange::write(BitWriter& bw) const {
     bw.writeField(static_cast<uint32_t>(L3MobileStationClassmark2::lengthV()), 8);
     mClassmark.write(bw);
     if (mHaveAdditionalClassmark) {
-        bw.writeField(0xA0, 8);
+        // Additional classmark: TLV with element identifier 0x20.
+        bw.writeField(0x20, 8);
         bw.writeField(static_cast<uint32_t>(L3MobileStationClassmark3::lengthV()), 8);
         mAdditionalClassmark.write(bw);
     }
@@ -877,15 +922,14 @@ Expected<L3ChannelModeModify> L3ChannelModeModify::parse(BitReader& br) {
         if (!res) return Expected<L3ChannelModeModify>::error(res.error());
         msg.mMode = std::move(res.value());
     }
+    // Multi-rate configuration (TLV, IEI 0x03; TS 44.018 section 9.1.5):
+    // identifier octet, one length octet, value octets.
     if (msg.isAMR() && br.hasMore()) {
         unsigned peek = br.peekField(8);
-        if ((peek & 0x7F) == 0x15) {
+        if ((peek & 0x7F) == 0x03) {
             auto ieiR = br.readField(8); if (!ieiR) return Expected<L3ChannelModeModify>::error(ieiR.error());
-            bool ext = (ieiR.value() & 0x80) != 0;
-            if (ext) {
-                auto lR = br.readField(8); if (!lR) return Expected<L3ChannelModeModify>::error(lR.error());
-                (void)lR;
-            }
+            auto lR = br.readField(8); if (!lR) return Expected<L3ChannelModeModify>::error(lR.error());
+            (void)lR;
             auto res = L3MultiRateConfiguration::parse(br);
             if (!res) return Expected<L3ChannelModeModify>::error(res.error());
             msg.mMultiRate = std::move(res.value());
@@ -898,7 +942,8 @@ void L3ChannelModeModify::write(BitWriter& bw) const {
     mDescription.write(bw);
     mMode.write(bw);
     if (isAMR()) {
-        bw.writeField(0x95, 8);
+        // Multi-rate configuration: TLV with IEI 0x03 (TS 44.018 section 9.1.5).
+        bw.writeField(0x03, 8);
         bw.writeField(static_cast<uint32_t>(mMultiRate.lengthV()), 8);
         mMultiRate.write(bw);
     }
@@ -1887,7 +1932,7 @@ L3SystemInformationType17::Builder L3SystemInformationType17::builder() {
 size_t L3ImmediateAssignment::bodyLength() const {
     size_t len = 1 + 1 + mRequestReference.lengthV() + mChannelDescription.lengthV() + mTimingAdvance.lengthV();
     if (!mMobileAllocation.empty()) len += 1 + mMobileAllocation.size();
-    if (mStartTimePresent) len += 1 + 3;
+    if (mStartTimePresent) len += 1 + 2;   // IEI 0x7C + two T1/T3/T2 octets
     return len;
 }
 
@@ -1920,8 +1965,15 @@ Expected<L3ImmediateAssignment> L3ImmediateAssignment::parse(BitReader& br) {
         if (peek == 0x7c) {
             { auto _ = br.readField(8); if (!_) return Expected<L3ImmediateAssignment>::error(_.error()); }
             msg.mStartTimePresent = true;
-            auto r2 = br.readField(23); if (!r2) return Expected<L3ImmediateAssignment>::error(r2.error());
-            msg.mStartTimeFrame = r2.value();
+            // Starting time (IEI 0x7C): two value octets packing T1(5),
+            // T3(6), T2(5) derived from the absolute frame number
+            // (TS 44.018 section 10.5.2.39).
+            auto r0 = br.readField(8); if (!r0) return Expected<L3ImmediateAssignment>::error(r0.error());
+            auto r1 = br.readField(8); if (!r1) return Expected<L3ImmediateAssignment>::error(r1.error());
+            unsigned o0 = r0.value(), o1 = r1.value();
+            msg.mStartTime.t1 = static_cast<uint8_t>(o0 >> 3);
+            msg.mStartTime.t3 = static_cast<uint8_t>(((o0 & 0x07u) << 3) | (o1 >> 5));
+            msg.mStartTime.t2 = static_cast<uint8_t>(o1 & 0x1Fu);
         }
     }
 
@@ -1942,8 +1994,11 @@ void L3ImmediateAssignment::write(BitWriter& bw) const {
     }
 
     if (mStartTimePresent) {
+        // Symmetric to parse: IEI 0x7C, then T1/T3/T2 octets (TS 44.018
+        // section 10.5.2.39).
         bw.writeField(0x7c, 8);
-        bw.writeField(mStartTimeFrame, 23);
+        bw.writeField((static_cast<uint32_t>(mStartTime.t1) << 3) | (mStartTime.t3 >> 3), 8);
+        bw.writeField(((static_cast<uint32_t>(mStartTime.t3) & 0x07u) << 5) | mStartTime.t2, 8);
     }
 }
 
@@ -1952,6 +2007,11 @@ void L3ImmediateAssignment::text(std::ostream& os) const {
     mChannelDescription.text(os);
     os << " TA=";
     mTimingAdvance.text(os);
+    if (mStartTimePresent) {
+        os << " StartTime[T1=" << static_cast<unsigned>(mStartTime.t1)
+           << " T3=" << static_cast<unsigned>(mStartTime.t3)
+           << " T2=" << static_cast<unsigned>(mStartTime.t2) << "]";
+    }
 }
 
 L3ImmediateAssignment L3ImmediateAssignment::Builder::build() const {
@@ -1963,7 +2023,7 @@ L3ImmediateAssignment L3ImmediateAssignment::Builder::build() const {
     msg.mTimingAdvance = mTimingAdvance;
     msg.mMobileAllocation = mMobileAllocation;
     msg.mStartTimePresent = mStartTimePresent;
-    msg.mStartTimeFrame = mStartTimeFrame;
+    msg.mStartTime = mStartTime;
     return msg;
 }
 
@@ -1976,7 +2036,7 @@ L3ImmediateAssignment::Builder L3ImmediateAssignment::builder() {
 size_t L3ImmediateAssignmentExtended::bodyLength() const {
     size_t len = 1 + 1 + mRequestReference.lengthV() + mChannelDescription.lengthV() + mTimingAdvance.lengthV();
     if (!mMobileAllocation.empty()) len += 1 + mMobileAllocation.size();
-    if (mStartTimePresent) len += 1 + 3;
+    if (mStartTimePresent) len += 1 + 2;   // IEI 0x7C + two T1/T3/T2 octets
     if (mHaveAdditionalChannel) len += mAdditionalChannel.lengthV();
     return len;
 }
@@ -2007,8 +2067,15 @@ Expected<L3ImmediateAssignmentExtended> L3ImmediateAssignmentExtended::parse(Bit
         if (peek == 0x7c) {
             { auto _ = br.readField(8); if (!_) return Expected<L3ImmediateAssignmentExtended>::error(_.error()); }
             msg.mStartTimePresent = true;
-            auto r = br.readField(23); if (!r) return Expected<L3ImmediateAssignmentExtended>::error(r.error());
-            msg.mStartTimeFrame = r.value();
+            // Starting time (IEI 0x7C): two value octets packing T1(5),
+            // T3(6), T2(5) derived from the absolute frame number
+            // (TS 44.018 section 10.5.2.39).
+            auto r0 = br.readField(8); if (!r0) return Expected<L3ImmediateAssignmentExtended>::error(r0.error());
+            auto r1 = br.readField(8); if (!r1) return Expected<L3ImmediateAssignmentExtended>::error(r1.error());
+            unsigned o0 = r0.value(), o1 = r1.value();
+            msg.mStartTime.t1 = static_cast<uint8_t>(o0 >> 3);
+            msg.mStartTime.t3 = static_cast<uint8_t>(((o0 & 0x07u) << 3) | (o1 >> 5));
+            msg.mStartTime.t2 = static_cast<uint8_t>(o1 & 0x1Fu);
         }
     }
 
@@ -2035,8 +2102,11 @@ void L3ImmediateAssignmentExtended::write(BitWriter& bw) const {
     }
 
     if (mStartTimePresent) {
+        // Symmetric to parse: IEI 0x7C, then T1/T3/T2 octets (TS 44.018
+        // section 10.5.2.39).
         bw.writeField(0x7c, 8);
-        bw.writeField(mStartTimeFrame, 23);
+        bw.writeField((static_cast<uint32_t>(mStartTime.t1) << 3) | (mStartTime.t3 >> 3), 8);
+        bw.writeField(((static_cast<uint32_t>(mStartTime.t3) & 0x07u) << 5) | mStartTime.t2, 8);
     }
 
     if (mHaveAdditionalChannel) {
@@ -2049,6 +2119,11 @@ void L3ImmediateAssignmentExtended::text(std::ostream& os) const {
     mChannelDescription.text(os);
     os << " TA=";
     mTimingAdvance.text(os);
+    if (mStartTimePresent) {
+        os << " StartTime[T1=" << static_cast<unsigned>(mStartTime.t1)
+           << " T3=" << static_cast<unsigned>(mStartTime.t3)
+           << " T2=" << static_cast<unsigned>(mStartTime.t2) << "]";
+    }
     if (mHaveAdditionalChannel) {
         os << " ";
         mAdditionalChannel.text(os);
@@ -2064,7 +2139,7 @@ L3ImmediateAssignmentExtended L3ImmediateAssignmentExtended::Builder::build() co
     msg.mTimingAdvance = mTimingAdvance;
     msg.mMobileAllocation = mMobileAllocation;
     msg.mStartTimePresent = mStartTimePresent;
-    msg.mStartTimeFrame = mStartTimeFrame;
+    msg.mStartTime = mStartTime;
     msg.mHaveAdditionalChannel = mHaveAdditionalChannel;
     msg.mAdditionalChannel = mAdditionalChannel;
     return msg;

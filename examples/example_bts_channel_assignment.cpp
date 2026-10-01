@@ -138,7 +138,7 @@ void demoTimedAssignment() {
     auto ia = L3ImmediateAssignment::builder()
         .channelDescription(L3ChannelDescription(TDMA_Bm_ACCH, 1, 0, 50))
         .timingAdvance(L3TimingAdvance(64))
-        .startTime(12345, true)
+        .startTime(12345)
         .build();
 
     ParsedMessage pm{RRM{std::move(ia)}};
@@ -165,7 +165,9 @@ void demoTimedAssignment() {
     if (ia2) {
         std::cout << "  Timed assignment verified:\n";
         std::cout << "    hasStartTime=" << ia2->hasStartTime() << "\n";
-        std::cout << "    startTimeFrame=" << ia2->startTimeFrame() << "\n";
+        std::cout << "    startTime T1=" << static_cast<unsigned>(ia2->startTimeT1())
+                  << " T3=" << static_cast<unsigned>(ia2->startTimeT3())
+                  << " T2=" << static_cast<unsigned>(ia2->startTimeT2()) << "\n";
     }
     std::cout << "\n";
 }

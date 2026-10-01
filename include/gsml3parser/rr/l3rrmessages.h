@@ -43,9 +43,10 @@ const char* rrMessageName(int mti);
 
 // ── Paging Request Type 1 (GSM 04.08 9.1.22) ──────────────────────────
 
-// Paging Request Type 1 (TS 44.018): the body opens with channel needed — two
-// two-bit fields, second paged mobile first — then the four-bit page mode,
-// followed by up to two mobile identities (LV, the second as a TLV).
+// Paging Request Type 1 (TS 44.018 section 9.1.22): the first body octet
+// packs the page mode (four bits) followed by the channel needed (second,
+// then first two-bit field); the body carries up to two mobile identities
+// (LV, the second as a TLV).
 class L3PagingRequestType1 {
     // Up to 2 paged mobiles (GSM 04.08 9.1.22) stored inline so the message is
     // constructible with zero heap allocation on the response path.
@@ -65,7 +66,7 @@ public:
         L3PageMode mPageMode{};
     public:
         Builder& addMobileId(const L3MobileIdentity& id, ChannelType type);
-        /// Set the page mode (four-bit field between channel needed and the identities).
+        /// Set the page mode (upper four bits of the first body octet).
         Builder& pageMode(L3PageMode v) { mPageMode = v; return *this; }
         /// Set the page mode from its two-bit value (0..3, see L3PageMode::Value).
         Builder& pageMode(unsigned v) { mPageMode = L3PageMode(v); return *this; }
@@ -89,14 +90,20 @@ public:
 
 // ── Paging Request Type 2 (GSM 04.08 9.1.23) ──────────────────────────
 
-// Paging Request Type 2 (TS 44.018): channel needed, four-bit page mode and
-// two raw TMSIs (each four octets), optionally a third mobile identity TLV.
+// Paging Request Type 2 (TS 44.018 section 9.1.23): the first body octet
+// packs the page mode (four bits) followed by the channel needed (second,
+// then first two-bit field); the body carries two raw TMSIs (each four
+// octets), optionally a third mobile identity TLV.
 class L3PagingRequestType2 {
     // Exactly 2 paged TMSIs (GSM 04.08 9.1.23) stored inline for zero-heap
     // construction on the response path.
     std::array<uint32_t, 2> mTMSIs{};
     std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
     L3PageMode mPageMode{};
+    // Optional third identity (TS 44.018 section 9.1.23): fixed-size fields,
+    // no heap allocation.
+    L3MobileIdentity mThirdIdentity{};
+    bool mHaveThirdIdentity{false};
 public:
     static constexpr int MTI = 0x22;
 
@@ -107,12 +114,17 @@ public:
         size_t mCount{0};
         std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
         L3PageMode mPageMode{};
+        L3MobileIdentity mThirdIdentity{};
+        bool mHaveThirdIdentity{false};
     public:
         Builder& addTMSI(uint32_t tmsi, ChannelType type);
-        /// Set the page mode (four-bit field between channel needed and the TMSIs).
+        /// Set the page mode (upper four bits of the first body octet).
         Builder& pageMode(L3PageMode v) { mPageMode = v; return *this; }
         /// Set the page mode from its two-bit value (0..3, see L3PageMode::Value).
         Builder& pageMode(unsigned v) { mPageMode = L3PageMode(v); return *this; }
+        /// Set the optional third mobile identity (emitted as a TLV, element
+        /// identifier 0x17).
+        Builder& addThirdIdentity(const L3MobileIdentity& id) { mThirdIdentity = id; mHaveThirdIdentity = true; return *this; }
         L3PagingRequestType2 build();
     };
 
@@ -121,6 +133,8 @@ public:
     std::span<const uint32_t> tmsis() const { return mTMSIs; }
     const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
     [[nodiscard]] unsigned pageMode() const { return mPageMode.pageMode(); }
+    bool hasThirdIdentity() const { return mHaveThirdIdentity; }
+    const L3MobileIdentity& thirdIdentity() const { return mThirdIdentity; }
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -133,8 +147,10 @@ public:
 
 // ── Paging Request Type 3 (GSM 04.08 9.1.24) ──────────────────────────
 
-// Paging Request Type 3 (TS 44.018): channel needed, four-bit page mode and
-// four raw TMSIs (each four octets).
+// Paging Request Type 3 (TS 44.018 section 9.1.24): the first body octet
+// packs the page mode (four bits) followed by the channel needed (second,
+// then first two-bit field); the body carries four raw TMSIs (each four
+// octets).
 class L3PagingRequestType3 {
     // Exactly 4 paged TMSIs (GSM 04.08 9.1.24) stored inline for zero-heap
     // construction on the response path.
@@ -153,7 +169,7 @@ public:
         L3PageMode mPageMode{};
     public:
         Builder& addTMSI(uint32_t tmsi, ChannelType type);
-        /// Set the page mode (four-bit field between channel needed and the TMSIs).
+        /// Set the page mode (upper four bits of the first body octet).
         Builder& pageMode(L3PageMode v) { mPageMode = v; return *this; }
         /// Set the page mode from its two-bit value (0..3, see L3PageMode::Value).
         Builder& pageMode(unsigned v) { mPageMode = L3PageMode(v); return *this; }
@@ -1543,6 +1559,15 @@ public:
 
 // ── Immediate Assignment (GSM 04.08 9.1.19) ───────────────────────────
 
+/// Starting time fields of the immediate assignment messages: the absolute
+/// TDMA frame number is encoded as the starting-time fields T1(5)/T3(6)/
+/// T2(5) per TS 44.018 section 10.5.2.39 (two value octets after IEI 0x7C).
+struct StartTime {
+    uint8_t t1{0};
+    uint8_t t3{0};
+    uint8_t t2{0};
+};
+
 class L3ImmediateAssignment {
     L3PageMode mPageMode;
     L3DedicatedModeOrTBF mDedicatedModeOrTBF;
@@ -1551,7 +1576,7 @@ class L3ImmediateAssignment {
     L3TimingAdvance mTimingAdvance;
     std::vector<uint8_t> mMobileAllocation;
     bool mStartTimePresent{false};
-    uint32_t mStartTimeFrame{0};
+    StartTime mStartTime{};
 
     friend struct Builder;
 public:
@@ -1563,7 +1588,12 @@ public:
     const L3RequestReference& requestReference() const { return mRequestReference; }
     const L3TimingAdvance& timingAdvance() const { return mTimingAdvance; }
     bool hasStartTime() const { return mStartTimePresent; }
-    uint32_t startTimeFrame() const { return mStartTimeFrame; }
+    /// Starting time field T1 (five bits).
+    [[nodiscard]] uint8_t startTimeT1() const { return mStartTime.t1; }
+    /// Starting time field T3 (six bits).
+    [[nodiscard]] uint8_t startTimeT3() const { return mStartTime.t3; }
+    /// Starting time field T2 (five bits).
+    [[nodiscard]] uint8_t startTimeT2() const { return mStartTime.t2; }
 
     struct Builder {
         L3PageMode mPageMode{};
@@ -1573,7 +1603,7 @@ public:
         L3TimingAdvance mTimingAdvance{};
         std::vector<uint8_t> mMobileAllocation;
         bool mStartTimePresent{false};
-        uint32_t mStartTimeFrame{0};
+        StartTime mStartTime{};
 
         /// Set the page mode (normal/urgent).
         Builder& pageMode(L3PageMode v) { mPageMode = v; return *this; }
@@ -1587,8 +1617,24 @@ public:
         Builder& timingAdvance(L3TimingAdvance v) { mTimingAdvance = v; return *this; }
         /// Set mobile allocation list.
         Builder& mobileAllocation(std::vector<uint8_t> v) { mMobileAllocation = std::move(v); return *this; }
-        /// Set optional start time frame.
-        Builder& startTime(uint32_t fn, bool present = true) { mStartTimeFrame = fn; mStartTimePresent = present; return *this; }
+        /// Set the optional starting time from an absolute TDMA frame number;
+        /// the frame number is decomposed into T1/T3/T2 per TS 44.018
+        /// section 10.5.2.39: T1 = (fn/1326) % 32, T3 = fn % 51, T2 = fn % 26.
+        Builder& startTime(uint32_t fn) {
+            mStartTime.t1 = static_cast<uint8_t>((fn / 1326u) % 32u);
+            mStartTime.t3 = static_cast<uint8_t>(fn % 51u);
+            mStartTime.t2 = static_cast<uint8_t>(fn % 26u);
+            mStartTimePresent = true;
+            return *this;
+        }
+        /// Set the optional starting time from the decomposed T1/T3/T2 fields.
+        Builder& startTimeFields(uint8_t t1, uint8_t t3, uint8_t t2) {
+            mStartTime.t1 = static_cast<uint8_t>(t1 & 0x1Fu);
+            mStartTime.t3 = static_cast<uint8_t>(t3 & 0x3Fu);
+            mStartTime.t2 = static_cast<uint8_t>(t2 & 0x1Fu);
+            mStartTimePresent = true;
+            return *this;
+        }
         /// Build the final message.
         [[nodiscard]] L3ImmediateAssignment build() const;
     };
@@ -1614,7 +1660,7 @@ class L3ImmediateAssignmentExtended {
     L3TimingAdvance mTimingAdvance;
     std::vector<uint8_t> mMobileAllocation;
     bool mStartTimePresent{false};
-    uint32_t mStartTimeFrame{0};
+    StartTime mStartTime{};
     bool mHaveAdditionalChannel{false};
     L3AdditionalChannelDescription mAdditionalChannel;
 
@@ -1627,6 +1673,13 @@ public:
     const L3ChannelDescription& channelDescription() const { return mChannelDescription; }
     bool hasAdditionalChannel() const { return mHaveAdditionalChannel; }
     const L3AdditionalChannelDescription& additionalChannel() const { return mAdditionalChannel; }
+    bool hasStartTime() const { return mStartTimePresent; }
+    /// Starting time field T1 (five bits).
+    [[nodiscard]] uint8_t startTimeT1() const { return mStartTime.t1; }
+    /// Starting time field T3 (six bits).
+    [[nodiscard]] uint8_t startTimeT3() const { return mStartTime.t3; }
+    /// Starting time field T2 (five bits).
+    [[nodiscard]] uint8_t startTimeT2() const { return mStartTime.t2; }
 
     struct Builder {
         L3PageMode mPageMode{};
@@ -1636,7 +1689,7 @@ public:
         L3TimingAdvance mTimingAdvance{};
         std::vector<uint8_t> mMobileAllocation;
         bool mStartTimePresent{false};
-        uint32_t mStartTimeFrame{0};
+        StartTime mStartTime{};
         bool mHaveAdditionalChannel{false};
         L3AdditionalChannelDescription mAdditionalChannel;
 
@@ -1652,8 +1705,24 @@ public:
         Builder& timingAdvance(L3TimingAdvance v) { mTimingAdvance = v; return *this; }
         /// Set mobile allocation list.
         Builder& mobileAllocation(std::vector<uint8_t> v) { mMobileAllocation = std::move(v); return *this; }
-        /// Set optional start time frame.
-        Builder& startTime(uint32_t fn, bool present = true) { mStartTimeFrame = fn; mStartTimePresent = present; return *this; }
+        /// Set the optional starting time from an absolute TDMA frame number;
+        /// the frame number is decomposed into T1/T3/T2 per TS 44.018
+        /// section 10.5.2.39: T1 = (fn/1326) % 32, T3 = fn % 51, T2 = fn % 26.
+        Builder& startTime(uint32_t fn) {
+            mStartTime.t1 = static_cast<uint8_t>((fn / 1326u) % 32u);
+            mStartTime.t3 = static_cast<uint8_t>(fn % 51u);
+            mStartTime.t2 = static_cast<uint8_t>(fn % 26u);
+            mStartTimePresent = true;
+            return *this;
+        }
+        /// Set the optional starting time from the decomposed T1/T3/T2 fields.
+        Builder& startTimeFields(uint8_t t1, uint8_t t3, uint8_t t2) {
+            mStartTime.t1 = static_cast<uint8_t>(t1 & 0x1Fu);
+            mStartTime.t3 = static_cast<uint8_t>(t3 & 0x3Fu);
+            mStartTime.t2 = static_cast<uint8_t>(t2 & 0x1Fu);
+            mStartTimePresent = true;
+            return *this;
+        }
         /// Set additional channel description (sets mHaveAdditionalChannel flag).
         Builder& additionalChannel(L3AdditionalChannelDescription v) { mAdditionalChannel = v; mHaveAdditionalChannel = true; return *this; }
         /// Build the final message.
@@ -1848,9 +1917,10 @@ public:
 };
 
 // ── Synchronization Channel Information (GSM 04.08 9.1.30) ────────────
-// Length-framed short message (TS 44.018): the internal MTI lies outside
-// the RR wire range; the message is framed by its length (7 bytes), not
-// by an L3 header.
+// Length-framed short message (TS 44.018): the internal MTI lies above the
+// TIF-set RR short-message range, so a wire short frame can never be
+// misclassified as this message; the frame is identified by its length
+// (7 bytes), not by an L3 header.
 
 class L3SynchronizationChannelInformation {
     L3CellIdentity mCellIdentity;
@@ -1858,7 +1928,7 @@ class L3SynchronizationChannelInformation {
 
     friend struct Builder;
 public:
-    static constexpr int MTI = 0x110;
+    static constexpr int MTI = 0x180;
 
     L3SynchronizationChannelInformation() = default;
 
@@ -1894,9 +1964,10 @@ public:
 };
 
 // ── Channel Request (GSM 04.08 9.1.13) ────────────────────────────────
-// Length-framed short message (TS 44.018): the internal MTI lies outside
-// the RR wire range; the message is framed by its length (1 byte), not
-// by an L3 header.
+// Length-framed short message (TS 44.018): the internal MTI lies above the
+// TIF-set RR short-message range, so a wire short frame can never be
+// misclassified as this message; the frame is identified by its length
+// (1 byte), not by an L3 header.
 
 class L3ChannelRequest {
     // Full 8-bit request reference (RA) from the RACH burst — TS 44.018 9.1.8.
@@ -1907,7 +1978,7 @@ class L3ChannelRequest {
 
     friend struct Builder;
 public:
-    static constexpr int MTI = 0x10E;
+    static constexpr int MTI = 0x181;
 
     L3ChannelRequest() = default;
     explicit L3ChannelRequest(unsigned wRef) : mRequestReference(static_cast<uint8_t>(wRef & 0xFFu)) {}
@@ -1939,9 +2010,10 @@ public:
 };
 
 // ── Handover Access (GSM 04.08 9.1.14a) ───────────────────────────────
-// Length-framed short message: the internal MTI lies outside the RR wire
-// range; the message is framed by its length (4 bytes), not by an L3
-// header. Handover Access (TS 44.018): 27-bit payload followed by five
+// Length-framed short message: the internal MTI lies above the TIF-set RR
+// short-message range, so a wire short frame can never be misclassified as
+// this message; the frame is identified by its length (4 bytes), not by an
+// L3 header. Handover Access (TS 44.018): 27-bit payload followed by five
 // reserved bits; the payload is kept as an opaque value.
 
 class L3HandoverAccess {
@@ -1949,7 +2021,7 @@ class L3HandoverAccess {
 
     friend struct Builder;
 public:
-    static constexpr int MTI = 0x10F;
+    static constexpr int MTI = 0x182;
 
     L3HandoverAccess() = default;
     explicit L3HandoverAccess(unsigned wNumber) : mHandoverNumber(wNumber) {}

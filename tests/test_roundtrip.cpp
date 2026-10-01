@@ -557,7 +557,7 @@ TEST(RoundTripTest, ApplicationInformation) {
 }
 
 // Synchronization Channel Information (GSM 04.08 9.1.30)
-// SynchronizationChannelInformation uses MTI=0x110 (internal length-framed code),
+// SynchronizationChannelInformation uses MTI=0x180 (internal length-framed code),
 // not a standard 8-bit RR messageType; it carries no L3 header.
 // These are sent on SCH and use a different encoding path.
 TEST(RoundTripTest, SynchronizationChannelInformation) {
@@ -568,7 +568,7 @@ TEST(RoundTripTest, SynchronizationChannelInformation) {
 }
 
 // Channel Request (GSM 04.08 9.1.13)
-// ChannelRequest uses MTI=0x10E (internal length-framed code).
+// ChannelRequest uses MTI=0x181 (internal length-framed code).
 // Sent on the RACH as a single octet without an L3 header.
 TEST(RoundTripTest, ChannelRequest) {
     ParsedMessage msg{RRM{L3ChannelRequest{0x42}}};
@@ -593,7 +593,7 @@ TEST(RoundTripTest, ChannelRequest_ZeroAndMaxRA) {
 }
 
 // Handover Access (GSM 04.08 9.1.14a)
-// HandoverAccess uses MTI=0x10F (internal length-framed code).
+// HandoverAccess uses MTI=0x182 (internal length-framed code).
 // Sent on the handover access timeslot as 4 octets without an L3 header.
 TEST(RoundTripTest, HandoverAccess) {
     ParsedMessage msg{RRM{L3HandoverAccess{0x17}}};
@@ -1039,7 +1039,8 @@ TEST(RoundTripTest, UplinkFree_Write) {
     ASSERT_TRUE(hex);
 }
 
-// Enhanced Measurement Report UL (GSM 04.08 9.1.45b, MTI=0x10B)
+// Enhanced Measurement Report UL (GSM 04.08 9.1.45b): TIF short code '00100'B,
+// internal MTI = kRRTifShortBase | 4 = 0x104.
 TEST(RoundTripTest, EnhancedMeasurementRepUL_Write) {
     L3EnhancedMeasurementRepUL msg;
     msg.data() = std::vector<uint8_t>{0x01, 0x02, 0x03, 0x04};
@@ -1049,7 +1050,8 @@ TEST(RoundTripTest, EnhancedMeasurementRepUL_Write) {
     EXPECT_EQ((*hex).size(), 12); // 2-byte TIF=1 header + 4-byte body = 6 bytes * 2 hex chars
 }
 
-// Measurement Info DL (GSM 04.08 9.1.45c, MTI=0x10C)
+// Measurement Info DL (GSM 04.08 9.1.45c): TIF short code '00101'B,
+// internal MTI = kRRTifShortBase | 5 = 0x105.
 TEST(RoundTripTest, MeasurementInfoDL_Write) {
     L3MeasurementInfoDL msg;
     msg.data() = std::vector<uint8_t>{0x0A, 0x0B};
@@ -1059,42 +1061,48 @@ TEST(RoundTripTest, MeasurementInfoDL_Write) {
     EXPECT_EQ((*hex).size(), 8); // 2-byte TIF=1 header + 2-byte body = 4 bytes * 2 hex chars
 }
 
-// VBS/VGCS Recon (GSM 04.08 9.1.45d, MTI=0x10D)
+// VBS/VGCS Recon (GSM 04.08 9.1.45d): TIF short code '00110'B,
+// internal MTI = kRRTifShortBase | 6 = 0x106.
 TEST(RoundTripTest, VBSVGCSRecon_Write) {
     ParsedMessage msg{RRM{L3VBSVGCSRecon{}}};
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
 }
 
-// VBS/VGCS Recon 2 (GSM 04.08 9.1.45e, MTI=0x10E)
+// VBS/VGCS Recon 2 (GSM 04.08 9.1.45e): TIF short code '00111'B,
+// internal MTI = kRRTifShortBase | 7 = 0x107.
 TEST(RoundTripTest, VBSVGCSRecon2_Write) {
     ParsedMessage msg{RRM{L3VBSVGCSRecon2{}}};
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
 }
 
-// VGCS Add Info (GSM 04.08 9.1.45f, MTI=0x10F)
+// VGCS Add Info (GSM 04.08 9.1.45f): TIF short code '01000'B,
+// internal MTI = kRRTifShortBase | 8 = 0x108.
 TEST(RoundTripTest, VGCSAddInfo_Write) {
     ParsedMessage msg{RRM{L3VGCSAddInfo{}}};
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
 }
 
-// VGCS SMS Info (GSM 04.08 9.1.45g, MTI=0x110)
+// VGCS SMS Info (GSM 04.08 9.1.45g): TIF short code '01001'B,
+// internal MTI = kRRTifShortBase | 9 = 0x109.
 TEST(RoundTripTest, VGCSMSInfo_Write) {
     ParsedMessage msg{RRM{L3VGCSMSInfo{}}};
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
 }
 
-// VGCS Neighbor Cell Info (GSM 04.08 9.1.45h, MTI=0x111)
+// VGCS Neighbor Cell Info (GSM 04.08 9.1.45h): TIF short code '01100'B,
+// internal MTI = kRRTifShortBase | 12 = 0x10C.
 TEST(RoundTripTest, VGCSSNeighCellInfo_Write) {
     ParsedMessage msg{RRM{L3VGCSSNeighCellInfo{}}};
     auto hex = writeL3Hex(msg);
     ASSERT_TRUE(hex);
 }
 
-// Notify App Data (GSM 04.08 9.1.45i, MTI=0x112)
+// Notify App Data (GSM 04.08 9.1.45i): TIF short code '01101'B,
+// internal MTI = kRRTifShortBase | 13 = 0x10D.
 TEST(RoundTripTest, NotifyAppData_Write) {
     ParsedMessage msg{RRM{L3NotifyAppData{}}};
     auto hex = writeL3Hex(msg);

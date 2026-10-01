@@ -149,12 +149,14 @@ TEST(GoldenRR, MessageTypeValues) {
 // =====================================================================
 // RR PARSE FROM HEX: Paging Request Type 1 (3GPP TS 44.018 9.1.22 / GSM 04.08 9.1.22)
 // Frame shape: PD = '0110'B (RR), MTI = '00100001'B (PagingRequestType1, 0x21).
-// Body per TS 44.018 9.1.22: ChannelNeeded(4 bits) chan_needed, PageMode(4 bits) page_mode,
+// Body per TS 44.018 9.1.22: PageMode(4 bits) page_mode, ChannelNeeded(4 bits) chan_needed,
 //   MobileIdentityLV mi1
 // Spec-verified: PD=6(RR), MTI=0x21(PagingRequestType1) per 3GPP TS 44.018 Table 10.4.1
-// [GSM SPEC VERIFIED] PagingRequestType1 body = ChannelNeeded12(8 bits) + PageMode(4 bits)
-//   + MobileIdentityLV(variable). ChannelNeeded12 encodes two ChannelNeeded values:
-//   second(2)|first(2), packed as high nibble (TS 23.003 channel types):
+// [GSM SPEC VERIFIED] PagingRequestType1 body = PageMode(4 bits) + ChannelNeeded12(4 bits)
+//   + MobileIdentityLV(variable). The first octet packs the page mode (high nibble)
+//   followed by channel needed second|first in the low half-octet;
+//   ChannelNeeded12 encodes two ChannelNeeded values:
+//   second(2)|first(2) (TS 23.003 channel types):
 //   ANY(0), SDCCH(1), TCH_F(2), TCH_H(3).
 //   PageMode per TS 44.018 9.1.22: NORMAL(0), EXTENDED(1), REORGANIZATION(2), SAME_AS_BEFORE(3).
 // =====================================================================
@@ -162,9 +164,9 @@ TEST(GoldenRR, MessageTypeValues) {
 TEST(GoldenRR, PagingRequestType1_Parse) {
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x21 (PagingRequestType1) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: ChannelNeeded12(4)|PageMode(4) = 0x10 [ChannelNeeded12: second(2)|first(2)]
-    //   ChannelNeeded12 (TS 23.003): second=00(ANY), first=01(SDCCH) -> high nibble = 0b0001 = 0x1
-    //   PageMode: NORMAL(0) (TS 44.018 9.1.22) -> low nibble = 0x0
+    // Byte 2: PageMode(4)|ChannelNeeded12(4) = 0x10
+    //   PageMode: EXTENDED(1) (TS 44.018 9.1.22) -> high nibble = 0x1
+    //   ChannelNeeded12 (TS 23.003): second=00(ANY), first=00(ANY) -> low nibble = 0b0000 = 0x0
     //   Combined: 0x10, per the TS 44.018 9.1.22 body layout.
     // Byte 3: MI LV length = 5 (1 type octet + 4 TMSI octets) [GSM 24.008 10.5.1.4]
     // Byte 4: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4 [GSM 24.008 10.5.1.4]
@@ -181,11 +183,13 @@ TEST(GoldenRR, PagingRequestType1_Parse) {
 // =====================================================================
 // RR PARSE FROM HEX: Paging Request Type 2 (3GPP TS 44.018 9.1.23 / GSM 04.08 9.1.23)
 // Frame shape: PD = '0110'B (RR), MTI = '00100010'B (PagingRequestType2, 0x22).
-// Body per TS 44.018 9.1.23: ChannelNeeded(4 bits) chan_needed, PageMode(4 bits) page_mode,
+// Body per TS 44.018 9.1.23: PageMode(4 bits) page_mode, ChannelNeeded(4 bits) chan_needed,
 //   TMSI mi1 (4 raw octets), TMSI mi2 (4 raw octets)
 // Spec-verified: PD=6(RR), MTI=0x22(PagingRequestType2) per 3GPP TS 44.018 Table 10.4.1
-// [GSM SPEC VERIFIED] PagingRequestType2 body = ChannelNeeded12(8 bits) + PageMode(4 bits)
+// [GSM SPEC VERIFIED] PagingRequestType2 body = PageMode(4 bits) + ChannelNeeded12(4 bits)
 //   + TMSI mi1(4 octets RAW) + TMSI mi2(4 octets RAW).
+//   The first octet packs the page mode (high nibble) followed by channel needed
+//   second|first in the low half-octet.
 //   IMPORTANT: TMSI values are raw 4-octet integers,
 //   NOT length-prefixed MobileIdentityLV! This differs from PagingRequestType1 which uses
 //   MobileIdentityLV (length + type octet + value).
@@ -193,12 +197,13 @@ TEST(GoldenRR, PagingRequestType1_Parse) {
 
 TEST(GoldenRR, PagingRequestType2_Parse) {
     // GSM 24.008 9.1.23: PagingRequestType2 structure:
-    //   ChannelNeeded(4 bits)|PageMode(4 bits) + TMSI mi1(4 octets) + TMSI mi2(4 octets) + [optional MobileIdentityTLV]
+    //   PageMode(4 bits)|ChannelNeeded(4 bits) + TMSI mi1(4 octets) + TMSI mi2(4 octets) + [optional MobileIdentityTLV]
     // The two mobile identities are raw 4-byte TMSI values - NOT length-prefixed!
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x22 (PagingRequestType2) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: ChannelNeeded12(4)=0x1|PageMode(4)=0(Normal) = 0x10
-    //   ChannelNeeded12 (TS 23.003): second(2)=00(ANY)|first(2)=01(SDCCH) -> 0b0001 = 0x1
+    // Byte 2: PageMode(4)=1(Extended)|ChannelNeeded12(4)=0 = 0x10
+    //   PageMode (TS 44.018 9.1.23): EXTENDED(1) -> high nibble = 0x1
+    //   ChannelNeeded12 (TS 23.003): second(2)=00(ANY)|first(2)=00(ANY) -> low nibble = 0b0000 = 0x0
     // Bytes 3-6: GsmTmsi mi1 = 0x12345678 (raw 4 octets, MSB first, no length prefix)
     // Bytes 7-10: GsmTmsi mi2 = 0xDEADBEEF (raw 4 octets, MSB first, no length prefix)
     uint8_t data[] = {
@@ -212,9 +217,10 @@ TEST(GoldenRR, PagingRequestType2_Parse) {
 }
 
 // =====================================================================
-// Golden: Paging Request Type 2 (TS 44.018): channel needed second=ANY,
-// first=TCH/F ('00''10'), page mode EXTENDED ('0001'), then two raw TMSIs.
-// The four-bit page mode sits between channel needed and the identities.
+// Golden: Paging Request Type 2 (TS 44.018): page mode REORGANIZATION
+// ('0010'), channel needed second=ANY, first=SDCCH ('00''01'), then two
+// raw TMSIs. The first body octet packs the page mode in the high
+// half-octet and the channel needed (second|first) in the low half-octet.
 // =====================================================================
 
 TEST(GoldenRR, PagingRequestType2_RefVector) {
@@ -225,24 +231,24 @@ TEST(GoldenRR, PagingRequestType2_RefVector) {
     ASSERT_TRUE(msg);
     const auto* p = tryGet<L3PagingRequestType2>(*msg);
     ASSERT_NE(p, nullptr);
-    EXPECT_EQ(static_cast<unsigned>(p->pageMode()), 1u);   // extended
-    EXPECT_EQ(p->channelsNeeded()[0], ChannelType::TCHFType);
+    EXPECT_EQ(static_cast<unsigned>(p->pageMode()), 2u);   // reorganization
+    EXPECT_EQ(p->channelsNeeded()[0], ChannelType::SDCCHType);
     EXPECT_EQ(p->channelsNeeded()[1], ChannelType::AnyDCCHType);
     // TMSI values asserted per the class API (two 32-bit identities).
     EXPECT_EQ(p->tmsis()[0], 0x12345678u);
     EXPECT_EQ(p->tmsis()[1], 0x9ABCDEF0u);
 
-    // Builder: Reorganization page mode lands in the low nibble of the
-    // channel-needed/page-mode octet (second=ANY, first=TCH/F -> 0b0010).
+    // Builder: Reorganization page mode lands in the high nibble of the
+    // first body octet (second=ANY, first=TCH/F -> 0b0010).
     auto built = L3PagingRequestType2::builder()
-                     .addTMSI(0x12345678u, ChannelType::TCHFType)
-                     .addTMSI(0x9ABCDEF0u, ChannelType::AnyDCCHType)
-                     .pageMode(L3PageMode::Reorganization)
-                     .build();
+                      .addTMSI(0x12345678u, ChannelType::TCHFType)
+                      .addTMSI(0x9ABCDEF0u, ChannelType::AnyDCCHType)
+                      .pageMode(L3PageMode::Reorganization)
+                      .build();
     ParsedMessage pm{RRM{std::move(built)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[2], 0x22u);   // chan_needed '00''10' | page mode '0010'
+    EXPECT_EQ((*bytes)[2], 0x22u);   // page mode '0010' | chan second 00 | first 10
     auto parsed = roundtrip(pm);
     ASSERT_TRUE(parsed);
     const auto* reparsed = tryGet<L3PagingRequestType2>(*parsed);
@@ -251,20 +257,62 @@ TEST(GoldenRR, PagingRequestType2_RefVector) {
               static_cast<unsigned>(L3PageMode::Reorganization));
 }
 
+TEST(GoldenRR, PagingRequestType2_ThirdIdentity) {
+    // Golden: Paging Request Type 2 with the optional third mobile identity
+    // (TLV, element identifier 0x17) after the two raw TMSIs (TS 44.018).
+    uint8_t data[] = {0x06, 0x22, 0x01,
+                      0x12, 0x34, 0x56, 0x78,
+                      0xDE, 0xAD, 0xBE, 0xEF,
+                      0x17, 0x05, 0xF4, 0x9A, 0xBC, 0xDE, 0xF1};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* p = tryGet<L3PagingRequestType2>(*msg);
+    ASSERT_NE(p, nullptr);
+    EXPECT_TRUE(p->hasThirdIdentity());
+    EXPECT_EQ(p->thirdIdentity().tmsi(), 0x9ABCDEF1u);
+    // The first body octet: page mode NORMAL(0), channel needed
+    // second=ANY|first=SDCCH.
+    EXPECT_EQ(static_cast<unsigned>(p->pageMode()), 0u);
+    EXPECT_EQ(p->channelsNeeded()[0], ChannelType::SDCCHType);
+    EXPECT_EQ(p->channelsNeeded()[1], ChannelType::AnyDCCHType);
+
+    // Builder: the third identity is emitted as a TLV (IEI 0x17 + length).
+    auto built = L3PagingRequestType2::builder()
+                      .addTMSI(0x12345678u, ChannelType::SDCCHType)
+                      .addTMSI(0xDEADBEEFu, ChannelType::AnyDCCHType)
+                      .addThirdIdentity(L3MobileIdentity(0x9ABCDEF1u))
+                      .build();
+    EXPECT_TRUE(built.hasThirdIdentity());
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    // The built frame matches the golden vector byte for byte.
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
+    }
+    auto parsed = roundtrip(pm);
+    ASSERT_TRUE(parsed);
+    const auto* reparsed = tryGet<L3PagingRequestType2>(*parsed);
+    ASSERT_NE(reparsed, nullptr);
+    EXPECT_TRUE(reparsed->hasThirdIdentity());
+    EXPECT_EQ(reparsed->thirdIdentity().tmsi(), 0x9ABCDEF1u);
+}
+
 TEST(GoldenRR, PagingRequestType1_PageMode) {
-    // Type 1: channel needed second=ANY|first=TCH/F (0b0010), page mode
-    // SAME_AS_BEFORE (0b0011), then the two mobile identities.
+    // Type 1: page mode SAME_AS_BEFORE (0b0011), channel needed
+    // second=ANY|first=TCH/F (0b0010), then the two mobile identities.
     auto built = L3PagingRequestType1::builder()
-                     .addMobileId(L3MobileIdentity(0x12345678u), ChannelType::TCHFType)
-                     .addMobileId(L3MobileIdentity(0x9ABCDEF0u), ChannelType::AnyDCCHType)
-                     .pageMode(L3PageMode::SameAsBefore)
-                     .build();
+                      .addMobileId(L3MobileIdentity(0x12345678u), ChannelType::TCHFType)
+                      .addMobileId(L3MobileIdentity(0x9ABCDEF0u), ChannelType::AnyDCCHType)
+                      .pageMode(L3PageMode::SameAsBefore)
+                      .build();
     EXPECT_EQ(static_cast<unsigned>(built.pageMode()), 3u);
     ParsedMessage pm{RRM{std::move(built)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    // Byte 2: second(2)=00 | first(2)=10 | page mode(4)=0011 -> 0x23.
-    EXPECT_EQ((*bytes)[2], 0x23u);
+    // Byte 2: page mode(4)=0011 | second(2)=00 | first(2)=10 -> 0x32.
+    EXPECT_EQ((*bytes)[2], 0x32u);
 
     auto parsed = roundtrip(pm);
     ASSERT_TRUE(parsed);
@@ -281,8 +329,8 @@ TEST(GoldenRR, PagingRequestType3_PageMode) {
     ParsedMessage pm{RRM{std::move(built)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    // Byte 2: second(2)=00 (ANY, default) | first(2)=01 (SDCCH) |
-    // page mode(4)=0001 -> 0x11.
+    // Byte 2: page mode(4)=0001 | second(2)=00 (ANY, default) |
+    // first(2)=01 (SDCCH) -> 0x11.
     EXPECT_EQ((*bytes)[2], 0x11u);
 
     auto parsed = roundtrip(pm);
@@ -295,23 +343,26 @@ TEST(GoldenRR, PagingRequestType3_PageMode) {
 // =====================================================================
 // RR PARSE FROM HEX: Paging Request Type 3 (3GPP TS 44.018 9.1.24 / GSM 04.08 9.1.24)
 // Frame shape: PD = '0110'B (RR), MTI = '00100100'B (PagingRequestType3, 0x24).
-// Body per TS 44.018 9.1.24: ChannelNeeded(4 bits) chan_needed, PageMode(4 bits) page_mode,
+// Body per TS 44.018 9.1.24: PageMode(4 bits) page_mode, ChannelNeeded(4 bits) chan_needed,
 //   mi - a fixed record of exactly 4 raw TMSI values (4 x 4 octets)
 // Spec-verified: PD=6(RR), MTI=0x24(PagingRequestType3) per 3GPP TS 44.018 Table 10.4.1
-// [GSM SPEC VERIFIED] PagingRequestType3 body = ChannelNeeded12(8 bits) + PageMode(4 bits)
-//   + GsmTmsi4 mi(16 octets RAW). GsmTmsi4 is a fixed record of exactly 4 TMSI values,
+// [GSM SPEC VERIFIED] PagingRequestType3 body = PageMode(4 bits) + ChannelNeeded12(4 bits)
+//   + GsmTmsi4 mi(16 octets RAW). The first octet packs the page mode (high nibble)
+//   followed by channel needed second|first in the low half-octet.
+//   GsmTmsi4 is a fixed record of exactly 4 TMSI values,
 //   each 4 octets (32 bits), MSB-first. Total body = 1 + 16 = 17 octets minimum.
 //   IMPORTANT: All TMSI values are raw integers, NOT length-prefixed MobileIdentityLV!
 // =====================================================================
 
 TEST(GoldenRR, PagingRequestType3_Parse) {
     // GSM 24.008 9.1.24: PagingRequestType3 structure:
-    //   ChannelNeeded(4 bits)|PageMode(4 bits) + mi (4x raw 4-octet TMSIs) + [optional RestOctets]
+    //   PageMode(4 bits)|ChannelNeeded(4 bits) + mi (4x raw 4-octet TMSIs) + [optional RestOctets]
     // mi is a fixed record of 4 TMSI values -> 4 raw 4-octet integers, NOT length-prefixed!
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x24 (PagingRequestType3) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: ChannelNeeded12(4)=0x1|PageMode(4)=0(Normal) = 0x10
-    //   ChannelNeeded12 (TS 23.003): second(2)=00(ANY)|first(2)=01(SDCCH) -> 0b0001 = 0x1
+    // Byte 2: PageMode(4)=1(Extended)|ChannelNeeded12(4)=0 = 0x10
+    //   PageMode (TS 44.018 9.1.24): EXTENDED(1) -> high nibble = 0x1
+    //   ChannelNeeded12 (TS 23.003): second(2)=00(ANY)|first(2)=00(ANY) -> low nibble = 0b0000 = 0x0
     // Bytes 3-6: GsmTmsi mi[0] = 0x12345678 (raw 4 octets, MSB first, no length prefix)
     // Bytes 7-10: GsmTmsi mi[1] = 0xDEADBEEF (raw 4 octets, MSB first, no length prefix)
     // Bytes 11-14: GsmTmsi mi[2] = 0xABCDEF01 (raw 4 octets, MSB first, no length prefix)
@@ -364,6 +415,29 @@ TEST(GoldenRR, PagingResponse_Parse) {
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3PagingResponse::MTI);
+}
+
+TEST(GoldenRR, PagingResponse_CksnLowNibble) {
+    // Golden: Paging Response (TS 44.018): the first body octet packs a spare
+    // half-octet and the four-bit ciphering key sequence number; CKSN = 5 -> 0x05.
+    uint8_t data[] = {0x06, 0x27, 0x05, 0x03, /*CM2 3 octets*/ 0x20, 0x00, 0x80,
+                      0x05, 0xF4, 0x12, 0x34, 0x56, 0x78};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* p = tryGet<L3PagingResponse>(*msg);
+    ASSERT_NE(p, nullptr);
+    EXPECT_EQ(p->cksn(), 5u);
+
+    // Builder: .cksn(5) puts the value in the low nibble of the first body
+    // octet (spare high nibble stays zero).
+    auto built = L3PagingResponse::builder()
+                     .cksn(5)
+                     .mobileId(L3MobileIdentity(0x12345678u))
+                     .build();
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes)[2], 0x05u);
 }
 
 // =====================================================================
@@ -632,14 +706,14 @@ TEST(GoldenRR, ApplicationInformation_Parse) {
 // Length-framed short message (no standard L3 header), per GSM 04.08 9.1.30
 // Structure: CI(16 bits) + LAI(40 bits: MCC/MNC BCD 24 + LAC 16) = 7 bytes total
 // [GOLDEN VERIFIED] SCH is a short message transmitted on BCCH without PD/MTI header.
-//   Uses internal MTI=0x110 (length-framed; no standard L3 header). Per GSM 04.08 9.1.30, SCH carries
+//   Uses internal MTI=0x180 (length-framed; no standard L3 header). Per GSM 04.08 9.1.30, SCH carries
 //   Cell Identity and Location Area Identity for cell selection/reselection.
 //   LAI MCC/MNC nibble-swapped BCD encoding per GSM 24.008 10.5.1.7.
 // =====================================================================
 
 TEST(GoldenRR, SynchronizationChannelInformation_Parse) {
     // [GOLDEN VERIFIED] SCH is a short message on BCCH without PD/MTI header.
-    // Internal MTI=0x110 (length-framed; no standard L3 header). GSM 04.08 9.1.30: CI(16 bits) + LAI(40 bits).
+    // Internal MTI=0x180 (length-framed; no standard L3 header). GSM 04.08 9.1.30: CI(16 bits) + LAI(40 bits).
     // Byte 0-1: CellIdentity = 0x1234 (16 bits MSB-first)
     // Byte 2-4: MCC/MNC BCD nibble-swapped for MCC=250, MNC=01 -> {0x52, 0xF0, 0x10}
     //   [GSM 24.008 Figure 10.5.1.3: same encoding as LAI in MM messages]
@@ -655,14 +729,14 @@ TEST(GoldenRR, SynchronizationChannelInformation_Parse) {
 // Length-framed short message sent on RACH (no standard L3 header), per GSM 04.08 9.1.13
 // Structure: RequestReference(8 bits = RA bitmask), sent on RACH without PD/MTI header
 // [GOLDEN VERIFIED] Channel Request is a short message transmitted on RACH.
-//   Uses internal MTI=0x10E (length-framed; no standard L3 header). Per GSM 04.08 9.1.13, the single
+//   Uses internal MTI=0x181 (length-framed; no standard L3 header). Per GSM 04.08 9.1.13, the single
 //   octet carries an 8-bit Request Reference (RA - Random Access value) used by
 //   the network to identify the MS in subsequent Immediate Assignment messages.
 // =====================================================================
 
 TEST(GoldenRR, ChannelRequest_Parse) {
     // [GOLDEN VERIFIED] Channel Request is a short message on RACH without PD/MTI header.
-    // Internal MTI=0x10E (length-framed; no standard L3 header). GSM 04.08 9.1.13: single octet RequestReference
+    // Internal MTI=0x181 (length-framed; no standard L3 header). GSM 04.08 9.1.13: single octet RequestReference
     // (RA - Random Access value, 8-bit bitmask used by network to identify MS in subsequent
     // Immediate Assignment messages).
     // Byte 0: RequestReference = 0x42 (RA value)
@@ -690,14 +764,14 @@ TEST(GoldenRR, ChannelRequest_Parse_ZeroRA) {
 // Length-framed short message on the handover access timeslot (no standard L3 header), per GSM 04.08 9.1.14a
 // Structure: HandoverNumber(8) + HandoverReference(8) + TimingAdvance(8) + Spare(8) = 4 bytes
 // [GOLDEN VERIFIED] Handover Access is a short message sent by MS on the handover
-//   access timeslot assigned in Handover Command. Uses internal MTI=0x10F (length-framed; no standard L3 header).
+//   access timeslot assigned in Handover Command. Uses internal MTI=0x182 (length-framed; no standard L3 header).
 //   Per GSM 04.08 9.1.14a: HandoverNumber identifies the target cell, HandoverReference
 //   matches the one from Handover Command, TimingAdvance is the MS's current TA value.
 // =====================================================================
 
 TEST(GoldenRR, HandoverAccess_Parse) {
     // [GOLDEN VERIFIED] Handover Access is a short message on the handover access timeslot.
-    // Internal MTI=0x10F (length-framed; no standard L3 header). GSM 04.08 9.1.14a: HO Number(8)|HO Reference(8)|
+    // Internal MTI=0x182 (length-framed; no standard L3 header). GSM 04.08 9.1.14a: HO Number(8)|HO Reference(8)|
     // TimingAdvance(8)|Spare(8) = 4 bytes total. Sent by MS on the access timeslot assigned
     // in the Handover Command message.
     // Byte 0: HO Number = 0x17, Byte 1: HO Reference = 0x00, Byte 2: TA = 0x00, Byte 3: Spare = 0x00
@@ -2198,6 +2272,52 @@ TEST(GoldenRR, ImmediateAssignment_RefVector) {
     EXPECT_EQ(ia->channelDescription().arfcn(), 873u);
 }
 
+// Golden: Immediate Assignment starting time (TS 44.018 section 10.5.2.39):
+// the absolute frame number FN=207 decomposes into T1=(FN/1326)%32=0,
+// T3=FN%51=3, T2=FN%26=25 and is encoded after IEI 0x7C as two octets
+// {0x00, 0x79} = [(T1<<3)|(T3>>3)] / [((T3&7)<<5)|T2].
+TEST(GoldenRR, ImmediateAssignment_StartTime) {
+    auto built = L3ImmediateAssignment::builder()
+        .channelDescription(L3ChannelDescription(TDMA_Bm_ACCH, 4, 7, 873))
+        .requestReference(L3RequestReference(0x25u, 0u, 0u, 0u))
+        .timingAdvance(L3TimingAdvance(0))
+        .startTime(207)
+        .build();
+    EXPECT_TRUE(built.hasStartTime());
+    EXPECT_EQ(static_cast<unsigned>(built.startTimeT1()), 0u);
+    EXPECT_EQ(static_cast<unsigned>(built.startTimeT3()), 3u);
+    EXPECT_EQ(static_cast<unsigned>(built.startTimeT2()), 25u);
+
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    // The starting-time TLV closes the body: IEI 0x7C + {0x00, 0x79}.
+    size_t n = bytes.value().size();
+    ASSERT_GE(n, 3u);
+    EXPECT_EQ((*bytes)[n - 3], 0x7Cu);
+    EXPECT_EQ((*bytes)[n - 2], 0x00u);
+    EXPECT_EQ((*bytes)[n - 1], 0x79u);
+
+    auto parsed = parseL3(std::span<const uint8_t>(bytes.value().data(), bytes.value().size()));
+    ASSERT_TRUE(parsed);
+    const auto* ia = tryGet<L3ImmediateAssignment>(*parsed);
+    ASSERT_NE(ia, nullptr);
+    EXPECT_TRUE(ia->hasStartTime());
+    EXPECT_EQ(static_cast<unsigned>(ia->startTimeT1()), 0u);
+    EXPECT_EQ(static_cast<unsigned>(ia->startTimeT3()), 3u);
+    EXPECT_EQ(static_cast<unsigned>(ia->startTimeT2()), 25u);
+
+    // The parse -> write round-trip reproduces the same bytes.
+    auto rt = roundtrip(pm);
+    ASSERT_TRUE(rt);
+    auto rtBytes = writeL3Bytes(*rt);
+    ASSERT_TRUE(rtBytes);
+    ASSERT_EQ(rtBytes.value().size(), bytes.value().size());
+    for (size_t i = 0; i < bytes.value().size(); ++i) {
+        EXPECT_EQ((*rtBytes)[i], (*bytes)[i]) << "byte " << i;
+    }
+}
+
 // Golden: Classmark Enquiry is a header-only message (TS 44.018).
 TEST(GoldenRR, ClassmarkEnquiry_HeaderOnly) {
     uint8_t data[] = {0x06, 0x13};
@@ -2243,6 +2363,36 @@ TEST(GoldenRR, ShortMessageTif_ReservedCodeRejected) {
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_FALSE(msg);
     EXPECT_EQ(msg.error().code, ParseError::Code::InvalidMTI);
+}
+
+// Golden: the unallocated short code 14 (TS 44.018 Table 10.4.2 leaves it
+// empty) must decode to an unknown/error message, never to one of the
+// header-less length-framed messages, whose internal MTIs live above the
+// TIF short range (0x180..0x182). A one-octet Channel Request still parses
+// by frame length.
+TEST(GoldenRR, ShortMessageTif_Code14Rejected) {
+    // TIF=1 frame with five-bit code 14.
+    uint8_t data[] = {0x16, 0x0E};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_FALSE(msg);
+    EXPECT_EQ(msg.error().code, ParseError::Code::InvalidMTI);
+
+    // The same octets without the TIF bit form an RR header (SI6) with an
+    // empty body: the frame must fail as unknown/truncated, never decode to
+    // a length-framed short message.
+    uint8_t data2[] = {0x06, 0x1E};
+    auto msg2 = parseL3(std::span<const uint8_t>(data2));
+    ASSERT_FALSE(msg2);
+
+    // A length-framed Channel Request (one octet RA) still parses and maps
+    // to the header-less synthetic MTI.
+    uint8_t data3[] = {0x42};
+    auto msg3 = parseL3(std::span<const uint8_t>(data3));
+    ASSERT_TRUE(msg3);
+    EXPECT_EQ(messageMTI(*msg3), L3ChannelRequest::MTI);
+    const auto* cr = tryGet<L3ChannelRequest>(*msg3);
+    ASSERT_NE(cr, nullptr);
+    EXPECT_EQ(cr->requestReference(), 0x42u);
 }
 
 // Golden: Immediate Packet Assignment (TS 44.018, MTI=0x69) carries an

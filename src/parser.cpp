@@ -48,22 +48,24 @@ namespace gsml3parser {
 // wrapper per parse signature, no macros.
 //
 // Table size: kMaxMtiSlots slots per domain — the highest internal code
-// is 0x110 (Synchronization Channel Information). RR short-message codes
-// occupy dispatcher slots from kRRTifShortBase (the TIF-set header form);
-// the length-framed synthetic codes (Channel Request, Handover Access,
-// Synchronization Channel Information) carry no standard L3 header and
-// are disambiguated by frame length in parseL3(), so they get no slot.
+// is 0x182 (Handover Access). RR short-message codes occupy dispatcher
+// slots from kRRTifShortBase (the TIF-set header form); codes not
+// assigned by TS 44.018 Table 10.4.2 leave their slot empty and fail as
+// unknown messages. The length-framed synthetic messages (Synchronization
+// Channel Information, Channel Request, Handover Access) carry no standard
+// L3 header, are disambiguated by frame length in parseL3(), and live
+// above the short range (0x180..0x182), so they get no slot.
 
 namespace detail {
 
 /// Maximum internal MTI covered by a parse table: the highest internal
-/// code in the catalog is 0x110 (Synchronization Channel Information).
-inline constexpr size_t kMaxMtiSlots = 273;
-static_assert(kMaxMtiSlots >= 256);
+/// code in the catalog is 0x182 (Handover Access).
+inline constexpr size_t kMaxMtiSlots = 387;   // 0x183
+static_assert(kMaxMtiSlots >= 0x183);
 
 // Length-framed messages carry no standard L3 header; every other
 // short-message code (TIF set) is written with the standard header.
-constexpr bool isNoHeaderShort(int mti) { return mti >= 0x10E; }
+constexpr bool isNoHeaderShort(int mti) { return mti >= 0x180; }
 
 template<typename Variant>
 using ParseFn = Expected<Variant>(*)(BitReader&, int, unsigned);
@@ -97,7 +99,7 @@ constexpr void fillParseTableEntry(std::array<ParseFn<Variant>, kMaxMtiSlots>& t
             table[static_cast<size_t>(T::MTI)] = &parseInto<Variant, T>;
         }
     }
-    // Length-framed synthetic codes (>= 0x10E): no slot — see the section
+    // Length-framed synthetic codes (>= 0x180): no slot — see the section
     // comment.
 }
 
@@ -522,7 +524,7 @@ Expected<size_t> writeL3Body(const ConcreteMsg& msg, uint8_t* out, size_t maxlen
 
 /// Exact wire length of a message: 2-byte header + body for standard
 /// messages and TIF-set short messages, body only for the length-framed
-/// synthetic codes (>= 0x10E). Used to size the output container exactly.
+/// synthetic codes (>= 0x180). Used to size the output container exactly.
 template<typename ConcreteMsg>
 constexpr size_t wireLength(const ConcreteMsg& msg) noexcept {
     if constexpr (isNoHeaderShort(ConcreteMsg::MTI)) return msg.bodyLength();

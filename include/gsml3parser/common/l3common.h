@@ -184,6 +184,8 @@ public:
     unsigned a5_3() const { return mA5_3; }
     unsigned a5_2() const { return mA5_2; }
     unsigned rfPowerCapability() const { return mRFPowerCapability; }
+    /// CM3 indicator (classmark 3 support, TS 24.008 section 10.5.1.6).
+    unsigned cm3() const { return mCM3; }
 };
 
 // ── Mobile Station Classmark 3 (GSM 04.08 10.5.1.7) ───────────────────
