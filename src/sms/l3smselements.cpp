@@ -159,7 +159,10 @@ Expected<L3TPAddress> L3TPAddress::parse(BitReader& br) {
 void L3TPAddress::write(BitWriter& bw) const {
     bw.writeField(mLength, 8);
     if (mLength >= 1) {
-        bw.writeField(((static_cast<uint8_t>(mTon) & 0x07) << 4) | (static_cast<uint8_t>(mNpi) & 0x0F), 8);
+        // TON/NPI octet: the most significant bit is a spare set to one,
+        // followed by the type of number (three bits) and the numbering
+        // plan identification (four bits) (TS 23.040 section 9.1.2.4).
+        bw.writeField(0x80 | ((static_cast<uint8_t>(mTon) & 0x07) << 4) | (static_cast<uint8_t>(mNpi) & 0x0F), 8);
         for (uint8_t d : mDigits) {
             bw.writeField(d, 8);
         }
@@ -273,6 +276,7 @@ size_t L3TPSubmit::bodyLength() const {
     len += mDestinationAddress.totalLength(); // TP-DA
     len += 1; // TP-PID
     len += 1; // TP-DCS
+    len += mValidityPeriod.size(); // TP-VP (present when VPF != 0)
     len += 1; // TP-UDL
     len += mUserData.size(); // TP-UD
     return len;
@@ -310,13 +314,26 @@ Expected<L3TPSubmit> L3TPSubmit::parse(BitReader& br) {
     if (!dcs) return Expected<L3TPSubmit>::error(dcs.error());
     msg.mDcs = static_cast<TPDCS>(dcs.value());
 
-    // Skip optional TP-VP (validity period) based on VPF
+    // Optional TP-VP (validity period), present when the VPF bits select a
+    // non-zero encoding: one octet (relative), seven octets (encoded) or ten
+    // octets (enhanced). The octets are preserved verbatim (TS 23.040
+    // section 9.2.2.2).
     if (msg.mVpf == 0x01) {
-        auto _ = br.readField(8); (void)_; // relative VP (1 octet)
+        auto vp = br.readField(8);
+        if (!vp) return Expected<L3TPSubmit>::error(vp.error());
+        msg.mValidityPeriod.push_back(static_cast<uint8_t>(vp.value()));
     } else if (msg.mVpf == 0x02) {
-        for (int i = 0; i < 7; ++i) { auto _ = br.readField(8); (void)_; } // encoded VP (7 octets)
+        for (size_t i = 0; i < 7; ++i) {
+            auto vp = br.readField(8);
+            if (!vp) return Expected<L3TPSubmit>::error(vp.error());
+            msg.mValidityPeriod.push_back(static_cast<uint8_t>(vp.value()));
+        }
     } else if (msg.mVpf == 0x03) {
-        for (int i = 0; i < 10; ++i) { auto _ = br.readField(8); (void)_; } // enhanced VP (10 octets)
+        for (size_t i = 0; i < 10; ++i) {
+            auto vp = br.readField(8);
+            if (!vp) return Expected<L3TPSubmit>::error(vp.error());
+            msg.mValidityPeriod.push_back(static_cast<uint8_t>(vp.value()));
+        }
     }
 
     // TP-UDL
@@ -347,6 +364,9 @@ void L3TPSubmit::write(BitWriter& bw) const {
     mDestinationAddress.write(bw);
     bw.writeField(static_cast<uint8_t>(mPid), 8);
     bw.writeField(static_cast<uint8_t>(mDcs), 8);
+    for (uint8_t b : mValidityPeriod) {
+        bw.writeField(b, 8);
+    }
     bw.writeField(static_cast<uint32_t>(mUserData.size()), 8);
 
     for (uint8_t b : mUserData) {
@@ -357,8 +377,9 @@ void L3TPSubmit::write(BitWriter& bw) const {
 void L3TPSubmit::text(std::ostream& os) const {
     os << "TP-Submit(da=";
     mDestinationAddress.text(os);
-    os << ",pid=" << static_cast<int>(mPid) << ",dcs=" << static_cast<int>(mDcs)
-       << ",udl=" << mUserData.size() << ")";
+    os << ",pid=" << static_cast<int>(mPid) << ",dcs=" << static_cast<int>(mDcs);
+    if (!mValidityPeriod.empty()) os << ",vp=" << mValidityPeriod.size();
+    os << ",udl=" << mUserData.size() << ")";
 }
 
 // ── L3TPStatusReport (23.040 9.2.2.3) ─────────────────────────────────

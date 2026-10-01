@@ -35,6 +35,7 @@
 #include <cstdint>
 #include <optional>
 #include <ostream>
+#include <span>
 #include <vector>
 
 #include "../expected.h"
@@ -211,6 +212,9 @@ public:
 // ── TP Submit (GSM 03.40 9.2.2.2) ─────────────────────────────────────
 // TP-MTI='01'B: rd(1)|vpf(2)|srr(1)|udhi(1)|rp(1) | TP-MR | TP-DA | TP-PID | TP-DCS
 //   | [TP-VP] | TP-UDL | TP-UD
+// The validity period octets are present when the VPF bits in the header
+// select a non-zero encoding (one, seven or ten octets) and are preserved
+// verbatim (TS 23.040 section 9.2.2.2).
 
 class L3TPSubmit {
     bool mRd{true};
@@ -222,7 +226,10 @@ class L3TPSubmit {
     L3TPAddress mDestinationAddress;
     TPPID mPid{TPPID::Default};
     TPDCS mDcs{TPDCS::Default_Alphabet};
+    std::vector<uint8_t> mValidityPeriod;
     std::vector<uint8_t> mUserData;
+
+    friend struct Builder;
 
 public:
     static constexpr int TP_MTI = 0x01;
@@ -236,12 +243,79 @@ public:
     const L3TPAddress& destinationAddress() const { return mDestinationAddress; }
     TPPID pid() const { return mPid; }
     TPDCS dcs() const { return mDcs; }
+    /// Validity period octets, empty when the VPF bits select no encoding.
+    [[nodiscard]] std::span<const uint8_t> validityPeriod() const { return mValidityPeriod; }
     const std::vector<uint8_t>& userData() const { return mUserData; }
 
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3TPSubmit> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
+
+    struct Builder {
+        bool mRd{true};
+        uint8_t mVpf{0};
+        bool mSrr{false};
+        bool mUdhi{false};
+        bool mRp{false};
+        uint8_t mMr{0};
+        L3TPAddress mDestinationAddress;
+        TPPID mPid{TPPID::Default};
+        TPDCS mDcs{TPDCS::Default_Alphabet};
+        std::vector<uint8_t> mValidityPeriod;
+        std::vector<uint8_t> mUserData;
+
+        /// Set the re-sent (RD) flag.
+        Builder& rd(bool v) { mRd = v; return *this; }
+        /// Set the validity period format (VPF) bits: 0 = no validity period,
+        /// 1 = relative (one octet), 2 = encoded (seven octets),
+        /// 3 = enhanced (ten octets).
+        Builder& vpf(uint8_t v) { mVpf = static_cast<uint8_t>(v & 0x03u); return *this; }
+        /// Set the status report requested (SRR) flag.
+        Builder& srr(bool v) { mSrr = v; return *this; }
+        /// Set the user data header indicator (UDHI) flag.
+        Builder& udhi(bool v) { mUdhi = v; return *this; }
+        /// Set the reply path (RP) flag.
+        Builder& rp(bool v) { mRp = v; return *this; }
+        /// Set the TP message reference.
+        Builder& messageReference(uint8_t v) { mMr = v; return *this; }
+        /// Set the destination address.
+        Builder& destinationAddress(const L3TPAddress& v) { mDestinationAddress = v; return *this; }
+        /// Set the protocol identifier.
+        Builder& pid(TPPID v) { mPid = v; return *this; }
+        /// Set the data coding scheme.
+        Builder& dcs(TPDCS v) { mDcs = v; return *this; }
+        /// Set the validity period octets, preserved verbatim on the wire
+        /// (TS 23.040 section 9.2.2.2).
+        Builder& validityPeriod(std::span<const uint8_t> v) {
+            mValidityPeriod.assign(v.begin(), v.end());
+            return *this;
+        }
+        /// Set the user data.
+        Builder& userData(std::span<const uint8_t> v) {
+            mUserData.assign(v.begin(), v.end());
+            return *this;
+        }
+
+        /// Build the final message.
+        [[nodiscard]] L3TPSubmit build() const {
+            L3TPSubmit msg;
+            msg.mRd = mRd;
+            msg.mVpf = mVpf;
+            msg.mSrr = mSrr;
+            msg.mUdhi = mUdhi;
+            msg.mRp = mRp;
+            msg.mMr = mMr;
+            msg.mDestinationAddress = mDestinationAddress;
+            msg.mPid = mPid;
+            msg.mDcs = mDcs;
+            msg.mValidityPeriod = mValidityPeriod;
+            msg.mUserData = mUserData;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
 };
 
 // ── TP Status Report (GSM 03.40 9.2.2.3) ──────────────────────────────

@@ -166,6 +166,7 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 
     bool haveFacility() const { return mFacility.mExtant; }
+    const std::string& getMapComponents() const { return mFacility.mData; }
     CCCause cause() const { return mCause.cause(); }
     CCCauseLocation causeLocation() const { return mCause.location(); }
 

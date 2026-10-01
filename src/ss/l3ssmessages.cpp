@@ -28,7 +28,9 @@ namespace gsml3parser {
 // ── TLV/LV helper functions ────────────────────────────────────────────
 
 static void writeTLV(BitWriter& bw, unsigned iei, const uint8_t* data, size_t len) {
-    bw.writeField(0x80 | (iei & 0x7F), 8);
+    // The element identifier octet carries a zero spare bit followed by the
+    // seven-bit identifier (TS 24.008); parsers accept either form.
+    bw.writeField(iei & 0x7F, 8);
     bw.writeField(static_cast<uint32_t>(len), 8);
     bw.writeBytes(data, len);
 }
@@ -37,17 +39,16 @@ static bool try_parseTLV(BitReader& br, unsigned iei, std::vector<uint8_t>& out)
     auto r = br.readField(8);
     if (!r) return false;
     uint8_t tag = static_cast<uint8_t>(r.value());
-    if ((tag & 0x7F) != static_cast<uint8_t>(iei & 0x7F)) return false;
-    if (tag & 0x80) {
-        auto lenR = br.readField(8);
-        if (!lenR) return false;
-        size_t len = lenR.value();
-        out.resize(len);
-        auto readR = br.readBytes(out.data(), len);
-        if (!readR) return false;
-    } else {
-        out.clear();
-    }
+    uint8_t iei7 = static_cast<uint8_t>(iei & 0x7F);
+    if ((tag & 0x7F) != iei7) return false;
+    // TLV: the value length octet follows the identifier regardless of the
+    // spare bit (TS 24.008); both wire forms are accepted.
+    auto lenR = br.readField(8);
+    if (!lenR) return false;
+    size_t len = lenR.value();
+    out.resize(len);
+    auto readR = br.readBytes(out.data(), len);
+    if (!readR) return false;
     return true;
 }
 
@@ -98,8 +99,7 @@ void L3SupServFacilityMessage::text(std::ostream& os) const {
 // ── L3SupServRegisterMessage ───────────────────────────────────────────
 
 size_t L3SupServRegisterMessage::bodyLength() const {
-    size_t len = 1;
-    if (mFacility.mExtant) len += 1 + mFacility.lengthV();
+    size_t len = 2 + mFacility.lengthV(); // facility TLV (mandatory, may be empty)
     len += mHaveVersion ? 3 : 0;
     return len;
 }
@@ -132,13 +132,10 @@ Expected<L3SupServRegisterMessage> L3SupServRegisterMessage::parse(BitReader& br
 }
 
 void L3SupServRegisterMessage::write(BitWriter& bw) const {
-    if (mFacility.mExtant) {
-        writeTLV(bw, 0x1c,
-                  reinterpret_cast<const uint8_t*>(mFacility.mData.data()),
-                  mFacility.lengthV());
-    } else {
-        bw.writeField(0x1c, 8);
-    }
+    // The facility IE is mandatory and may be empty (TS 24.080 section 2.4).
+    writeTLV(bw, 0x1c,
+              reinterpret_cast<const uint8_t*>(mFacility.mData.data()),
+              mFacility.lengthV());
 
     if (mHaveVersion) {
         bw.writeField(0x7F, 8);
@@ -173,21 +170,20 @@ Expected<L3SupServReleaseCompleteMessage> L3SupServReleaseCompleteMessage::parse
         bool ext = (tag & 0x80) != 0;
 
         if (iei == 0x08) {
-            if (ext) {
-                r = br.readField(8);
-                if (!r) return Expected<L3SupServReleaseCompleteMessage>::error(r.error());
-            }
+            // Cause: TLV with a two-octet value (TS 24.078 / TS 24.080
+            // release complete).
+            r = br.readField(8);
+            if (!r) return Expected<L3SupServReleaseCompleteMessage>::error(r.error());
             auto causeRes = L3CauseElement::parse(br);
             if (!causeRes) return Expected<L3SupServReleaseCompleteMessage>::error(causeRes.error());
             msg.mCause = std::move(causeRes).value();
             msg.mHaveCause = true;
         } else if (iei == 0x1c) {
-            size_t len = 0;
-            if (ext) {
-                r = br.readField(8);
-                if (!r) return Expected<L3SupServReleaseCompleteMessage>::error(r.error());
-                len = r.value();
-            }
+            // Facility: TLV with a variable-length value (TS 24.078 /
+            // TS 24.080 release complete).
+            r = br.readField(8);
+            if (!r) return Expected<L3SupServReleaseCompleteMessage>::error(r.error());
+            size_t len = r.value();
             if (len > 0) {
                 auto facRes = L3OctetAlignedProtocolElement::parse(br, len);
                 if (!facRes) return Expected<L3SupServReleaseCompleteMessage>::error(facRes.error());
@@ -218,7 +214,9 @@ void L3SupServReleaseCompleteMessage::write(BitWriter& bw) const {
                   mFacility.lengthV());
     }
     if (mHaveCause) {
-        bw.writeField(0x88, 8);
+        // Cause: TLV, element identifier 0x08 (TS 24.078 / TS 24.080
+        // release complete).
+        bw.writeField(0x08, 8);
         bw.writeField(static_cast<uint32_t>(L3CauseElement::lengthV()), 8);
         mCause.write(bw);
     }

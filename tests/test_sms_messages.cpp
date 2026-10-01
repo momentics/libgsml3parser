@@ -540,6 +540,91 @@ TEST(GoldenSMSTest, TPSubmit_Parse) {
 }
 
 // =====================================================================
+// SMS TP Submit with Validity Period (GSM 23.040 9.2.2.2)
+// The TP-VP octets follow TP-DCS and precede TP-UDL when the VPF bits in
+// the header octet select a non-zero encoding:
+//   VPF=1 -> one octet (relative), VPF=2 -> seven octets (encoded),
+//   VPF=3 -> ten octets (enhanced). The octets are preserved verbatim.
+// =====================================================================
+
+TEST(GoldenSMSTest, TPSubmit_VP_RoundTrip) {
+    uint8_t data[] = {
+        0x68,                     // header: MTI=01, rd=1, vpf=01, srr=0, udhi=0, rp=0
+        0x03,                     // TP-MR = 3
+        0x05, 0x91, 0x23, 0x45,   // TP-DA: length=5 (TON_NPI + 4 digit bytes follow)
+        0x67, 0x89,               // ...digits
+        0x00,                     // TP-PID = Default
+        0x00,                     // TP-DCS = Default_Alphabet
+        0x0A,                     // TP-VP (relative): one octet
+        0x05,                     // TP-UDL = 5
+        0x48, 0x65, 0x6C, 0x6C, 0x6F // "Hello"
+    };
+    BitReader br(data, sizeof(data) * 8);
+    auto submit = L3TPSubmit::parse(br);
+    ASSERT_TRUE(submit);
+    EXPECT_EQ(submit.value().vpf(), 1u);
+    ASSERT_EQ(submit.value().validityPeriod().size(), 1u);
+    EXPECT_EQ(submit.value().validityPeriod()[0], 0x0Au);
+    // The validity period octet is accounted for in the body length.
+    EXPECT_EQ(submit.value().bodyLength(), sizeof(data));
+    // Round-trip: re-encoding reproduces the vector byte-for-byte.
+    uint8_t out[64];
+    BitWriter bw(out, sizeof(out) * 8);
+    submit.value().write(bw);
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ(out[i], data[i]) << "byte " << i;
+    }
+    // Builder path: the same fields produce the same wire octets.
+    L3TPSubmit built = L3TPSubmit::builder()
+        .rd(true)
+        .vpf(1)
+        .messageReference(3)
+        .destinationAddress(submit.value().destinationAddress())
+        .validityPeriod(std::span<const uint8_t>(data + 10, 1))
+        .userData(std::span<const uint8_t>(data + 12, 5))
+        .build();
+    EXPECT_EQ(built.bodyLength(), sizeof(data));
+    uint8_t out2[64];
+    BitWriter bw2(out2, sizeof(out2) * 8);
+    built.write(bw2);
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ(out2[i], data[i]) << "byte " << i;
+    }
+}
+
+TEST(GoldenSMSTest, TPSubmit_VPEnhanced_RoundTrip) {
+    // VPF=3 (enhanced validity period): ten octets between TP-DCS and TP-UDL.
+    uint8_t data[] = {
+        0x78,                     // header: MTI=01, rd=1, vpf=11, srr=0, udhi=0, rp=0
+        0x07,                     // TP-MR = 7
+        0x05, 0x91, 0x23, 0x45,   // TP-DA: length=5 (TON_NPI + 4 digit bytes follow)
+        0x67, 0x89,               // ...digits
+        0x00,                     // TP-PID = Default
+        0x00,                     // TP-DCS = Default_Alphabet
+        0x01, 0x02, 0x03, 0x04, 0x05, // TP-VP (enhanced): first five octets
+        0x06, 0x07, 0x08, 0x09, 0x0A, // ...last five octets
+        0x02,                     // TP-UDL = 2
+        0x48, 0x69                // "Hi"
+    };
+    BitReader br(data, sizeof(data) * 8);
+    auto submit = L3TPSubmit::parse(br);
+    ASSERT_TRUE(submit);
+    EXPECT_EQ(submit.value().vpf(), 3u);
+    ASSERT_EQ(submit.value().validityPeriod().size(), 10u);
+    EXPECT_EQ(submit.value().validityPeriod()[0], 0x01u);
+    EXPECT_EQ(submit.value().validityPeriod()[9], 0x0Au);
+    // The ten validity period octets are accounted for in the body length.
+    EXPECT_EQ(submit.value().bodyLength(), sizeof(data));
+    // Round-trip: re-encoding reproduces the vector byte-for-byte.
+    uint8_t out[64];
+    BitWriter bw(out, sizeof(out) * 8);
+    submit.value().write(bw);
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ(out[i], data[i]) << "byte " << i;
+    }
+}
+
+// =====================================================================
 // SMS Full Wrapper Test
 // Parse full L3 SMS message: CP-DATA -> RP-DATA -> TP-Submit
 // This tests the complete nesting: L3 header -> CP layer -> RP layer -> TP layer.

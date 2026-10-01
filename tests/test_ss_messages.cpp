@@ -124,6 +124,87 @@ TEST(SSRoundTripTest, ReleaseComplete_WithCause) {
     EXPECT_EQ(hex1.value(), hex2.value());
 }
 
+// Golden: SS Release Complete with cause (TS 24.080 release complete): the
+// cause is carried as a TLV element with identifier 0x08 and a two-octet
+// value [loc(4)|spare|std=11|ext=0][cause(7)|ext=1].
+TEST(SSRoundTripTest, ReleaseComplete_CauseTLV_Golden) {
+    uint8_t data[] = {
+        0xEB,                 // PD=11(NonCallSS), TI=7, TIF=0
+        0x2A,                 // MTI=Release Complete
+        0x08,                 // cause TLV: element identifier 0x08
+        0x02,                 // cause value length = 2 octets
+        0x16,                 // [loc(4)=Private_Serving_Local|spare|std=11|ext=0]
+        0x21                  // [cause(7)=Normal_Call_Clearing|ext=1]
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messagePD(*msg), L3PD::NonCallSS);
+    EXPECT_EQ(messageMTI(*msg), L3SupServReleaseCompleteMessage::MTI);
+    auto* rc = tryGet<L3SupServReleaseCompleteMessage>(*msg);
+    ASSERT_TRUE(rc);
+    EXPECT_FALSE(rc->haveFacility());
+    EXPECT_EQ(rc->cause(), CCCause::Normal_Call_Clearing);
+    EXPECT_EQ(rc->causeLocation(), CCCauseLocation::Private_Serving_Local);
+    // The writer emits the cause TLV with identifier 0x08: the body starts
+    // with {0x08, 0x02} and re-encoding matches the golden vector.
+    uint8_t out[16];
+    BitWriter bw(out, sizeof(out) * 8);
+    rc->write(bw);
+    for (size_t i = 0; i < sizeof(data) - 2; ++i) {
+        EXPECT_EQ(out[i], data[2 + i]) << "body byte " << i;
+    }
+    // Builder round-trip reproduces the same wire octets.
+    L3SupServReleaseCompleteMessage built = L3SupServReleaseCompleteMessage::builder()
+        .ti(7)
+        .cause(CCCause::Normal_Call_Clearing, CCCauseLocation::Private_Serving_Local)
+        .build();
+    auto parsed = roundtrip(ParsedMessage{SSM{built}});
+    ASSERT_TRUE(parsed);
+    auto* rc2 = tryGet<L3SupServReleaseCompleteMessage>(*parsed);
+    ASSERT_TRUE(rc2);
+    EXPECT_EQ(rc2->cause(), CCCause::Normal_Call_Clearing);
+}
+
+// Golden: SS Release Complete with facility and cause (TS 24.080): the
+// facility TLV (identifier 0x1c) precedes the cause TLV (identifier 0x08).
+TEST(SSRoundTripTest, ReleaseComplete_FacilityCause_Golden) {
+    uint8_t data[] = {
+        0xEB,                 // PD=11(NonCallSS), TI=7, TIF=0
+        0x2A,                 // MTI=Release Complete
+        0x1C, 0x03,           // facility TLV: element identifier 0x1c, length 3
+        0x81, 0x01, 0x13,     // TCAP INVOKE: tag=0x81, invoke_id=1, op_code=0x13
+        0x08, 0x02,           // cause TLV: element identifier 0x08, length 2
+        0x16, 0x21            // cause value (Normal_Call_Clearing)
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto* rc = tryGet<L3SupServReleaseCompleteMessage>(*msg);
+    ASSERT_TRUE(rc);
+    EXPECT_TRUE(rc->haveFacility());
+    EXPECT_EQ(rc->getMapComponents(), std::string("\x81\x01\x13", 3));
+    EXPECT_EQ(rc->cause(), CCCause::Normal_Call_Clearing);
+    // Re-encoding reproduces the golden vector byte-for-byte (facility IEI
+    // 0x1c, cause IEI 0x08).
+    uint8_t out[32];
+    BitWriter bw(out, sizeof(out) * 8);
+    rc->write(bw);
+    for (size_t i = 0; i < sizeof(data) - 2; ++i) {
+        EXPECT_EQ(out[i], data[2 + i]) << "body byte " << i;
+    }
+    // Builder round-trip preserves both elements.
+    L3SupServReleaseCompleteMessage built = L3SupServReleaseCompleteMessage::builder()
+        .ti(7)
+        .facility(std::string("\x81\x01\x13", 3))
+        .cause(CCCause::Normal_Call_Clearing, CCCauseLocation::Private_Serving_Local)
+        .build();
+    auto parsed = roundtrip(ParsedMessage{SSM{built}});
+    ASSERT_TRUE(parsed);
+    auto* rc2 = tryGet<L3SupServReleaseCompleteMessage>(*parsed);
+    ASSERT_TRUE(rc2);
+    EXPECT_EQ(rc2->getMapComponents(), std::string("\x81\x01\x13", 3));
+    EXPECT_EQ(rc2->cause(), CCCause::Normal_Call_Clearing);
+}
+
 // ── SS Message TI handling ───────────────────────────────────────────
 
 TEST(SSRoundTripTest, TI_DifferentValues) {
