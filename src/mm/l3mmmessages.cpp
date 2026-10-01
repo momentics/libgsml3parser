@@ -42,6 +42,10 @@ void writeLVMI(const L3MobileIdentity& mi, BitWriter& bw) {
     mi.write(bw);
 }
 
+// TLV helpers for elements with an explicit identifier octet. The element
+// identifier octet carries a zero spare bit followed by the seven-bit
+// identifier (TS 24.008); parsers accept either form of the spare bit.
+
 Expected<L3MobileIdentity> parseTLVMI(BitReader& br, unsigned expectedIEI) {
     if (!br.hasMore()) return Expected<L3MobileIdentity>::error(
         ParseError{ParseError::Code::TruncatedInput, "no TLV for MI", br.position()});
@@ -51,18 +55,13 @@ Expected<L3MobileIdentity> parseTLVMI(BitReader& br, unsigned expectedIEI) {
         return Expected<L3MobileIdentity>::error(
             ParseError{ParseError::Code::InvalidIE, "unexpected TLV type", br.position() - 8});
     }
-    bool ext = (r.value() & 0x80) != 0;
-    size_t len = 0;
-    if (ext) {
-        auto l = br.readField(8);
-        if (!l) return Expected<L3MobileIdentity>::error(l.error());
-        len = l.value();
-    }
-    return L3MobileIdentity::parse(br, len);
+    auto l = br.readField(8);
+    if (!l) return Expected<L3MobileIdentity>::error(l.error());
+    return L3MobileIdentity::parse(br, l.value());
 }
 
 void writeTLVMI(const L3MobileIdentity& mi, uint8_t type, BitWriter& bw) {
-    bw.writeField(0x80u | type, 8);
+    bw.writeField(type, 8);
     bw.writeField(static_cast<uint32_t>(mi.lengthV()), 8);
     mi.write(bw);
 }
@@ -76,8 +75,8 @@ Expected<L3LocationAreaIdentity> parseTLVLAI(BitReader& br, unsigned expectedIEI
         return Expected<L3LocationAreaIdentity>::error(
             ParseError{ParseError::Code::InvalidIE, "unexpected TLV type", br.position() - 8});
     }
-    bool ext = (r.value() & 0x80) != 0;
-    if (ext) {
+    // The LAI value part has a fixed size; the length octet is consumed.
+    {
         auto l = br.readField(8);
         if (!l) return Expected<L3LocationAreaIdentity>::error(l.error());
     }
@@ -85,7 +84,7 @@ Expected<L3LocationAreaIdentity> parseTLVLAI(BitReader& br, unsigned expectedIEI
 }
 
 void writeTLVLAI(const L3LocationAreaIdentity& lai, uint8_t type, BitWriter& bw) {
-    bw.writeField(0x80u | type, 8);
+    bw.writeField(type, 8);
     bw.writeField(static_cast<uint32_t>(lai.lengthV()), 8);
     lai.write(bw);
 }
@@ -99,18 +98,13 @@ Expected<L3NetworkName> parseTLVNN(BitReader& br, unsigned expectedIEI) {
         return Expected<L3NetworkName>::error(
             ParseError{ParseError::Code::InvalidIE, "unexpected TLV type", br.position() - 8});
     }
-    bool ext = (r.value() & 0x80) != 0;
-    size_t len = 0;
-    if (ext) {
-        auto l = br.readField(8);
-        if (!l) return Expected<L3NetworkName>::error(l.error());
-        len = l.value();
-    }
-    return L3NetworkName::parse(br, len);
+    auto l = br.readField(8);
+    if (!l) return Expected<L3NetworkName>::error(l.error());
+    return L3NetworkName::parse(br, l.value());
 }
 
 void writeTLVNN(const L3NetworkName& nn, uint8_t type, BitWriter& bw) {
-    bw.writeField(0x80u | type, 8);
+    bw.writeField(type, 8);
     bw.writeField(static_cast<uint32_t>(nn.lengthV()), 8);
     nn.write(bw);
 }
@@ -141,16 +135,14 @@ bool peekTLVType(BitReader& br, unsigned expectedIEI) {
 // ── L3IMSIDetachIndication (MTI=0x01) ──────────────────────────────────
 
 size_t L3IMSIDetachIndication::bodyLength() const {
-    return lvLen(mClassmark.lengthV()) + lvLen(mMobileIdentity.lengthV());
+    return mClassmark.lengthV() + lvLen(mMobileIdentity.lengthV());
 }
 
 Expected<L3IMSIDetachIndication> L3IMSIDetachIndication::parse(BitReader& br) {
     L3IMSIDetachIndication msg;
-    // CM1 is LV-encoded: length byte + value
-    {
-        auto lenR = br.readField(8);
-        if (!lenR) return Expected<L3IMSIDetachIndication>::error(lenR.error());
-    }
+    // IMSI Detach Indication (TS 24.008 section 9.2.15): the body carries
+    // the mobile station classmark 1 as a single value octet, followed by
+    // the mobile identity (length-value).
     {
         auto cmRes = L3MobileStationClassmark1::parse(br);
         if (!cmRes) return Expected<L3IMSIDetachIndication>::error(cmRes.error());
@@ -165,7 +157,6 @@ Expected<L3IMSIDetachIndication> L3IMSIDetachIndication::parse(BitReader& br) {
 }
 
 void L3IMSIDetachIndication::write(BitWriter& bw) const {
-    bw.writeField(static_cast<uint32_t>(mClassmark.lengthV()), 8);
     mClassmark.write(bw);
     writeLVMI(mMobileIdentity, bw);
 }
@@ -517,7 +508,7 @@ void L3LocationUpdatingReject::text(std::ostream& os) const {
 // ── L3LocationUpdatingRequest (MTI=0x08) ───────────────────────────────
 
 size_t L3LocationUpdatingRequest::bodyLength() const {
-    return 1 + mLAI.lengthV() + lvLen(mClassmark.lengthV()) + lvLen(mMobileIdentity.lengthV())
+    return 1 + mLAI.lengthV() + mClassmark.lengthV() + lvLen(mMobileIdentity.lengthV())
            + mAdditionalIes.size();
 }
 
@@ -540,11 +531,7 @@ Expected<L3LocationUpdatingRequest> L3LocationUpdatingRequest::parse(BitReader& 
         if (!laiRes) return Expected<L3LocationUpdatingRequest>::error(laiRes.error());
         msg.mLAI = laiRes.value();
     }
-    // Classmark1 (LV: length octet + 1 byte value)
-    {
-        auto lenR = br.readField(8);
-        if (!lenR) return Expected<L3LocationUpdatingRequest>::error(lenR.error());
-    }
+    // Classmark 1 (V: a single value octet, no length prefix)
     {
         auto cmRes = L3MobileStationClassmark1::parse(br);
         if (!cmRes) return Expected<L3LocationUpdatingRequest>::error(cmRes.error());
@@ -569,7 +556,6 @@ void L3LocationUpdatingRequest::write(BitWriter& bw) const {
     bw.writeField(((mUpdateType & 0x03u) << 6) | (mFollowOnRequest ? 0x10u : 0u) |
                  ((mCKSN & 0x07u) << 1), 8);
     mLAI.write(bw);
-    bw.writeField(static_cast<uint32_t>(mClassmark.lengthV()), 8);
     mClassmark.write(bw);
     writeLVMI(mMobileIdentity, bw);
     detail::writeOpaqueTail(mAdditionalIes, bw);

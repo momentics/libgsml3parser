@@ -68,6 +68,8 @@ private:
     L3MobileStationClassmark1 mClassmark;
     L3MobileIdentity mMobileIdentity;
 public:
+    /// Mobile station classmark 1, carried as a single value octet (TS 24.008).
+    [[nodiscard]] const L3MobileStationClassmark1& classmark() const { return mClassmark; }
     const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3IMSIDetachIndication> parse(BitReader& br);
@@ -196,6 +198,8 @@ public:
     };
 
     static Builder builder();
+    /// Mobile station classmark 1, carried as a single value octet (TS 24.008).
+    [[nodiscard]] const L3MobileStationClassmark1& classmark() const { return mClassmark; }
     const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
     const L3LocationAreaIdentity& lai() const { return mLAI; }
     size_t bodyLength() const;
