@@ -497,6 +497,9 @@ void L3SupServFacilityIE::text(std::ostream& os) const {
 
 // ── L3SupServVersionIndicator ───────────────────────────────────────────
 
+L3SupServVersionIndicator::L3SupServVersionIndicator(unsigned wVersion)
+    : mVersion(wVersion & 0xFF) {}
+
 Expected<L3SupServVersionIndicator> L3SupServVersionIndicator::parse(BitReader& br) {
     auto r = br.readField(8); if (!r) return Expected<L3SupServVersionIndicator>::error(r.error());
     L3SupServVersionIndicator result;
@@ -560,9 +563,11 @@ void L3ConnectedNumber::text(std::ostream& os) const {
 // ── L3SubAddress ───────────────────────────────────────────────────────
 
 size_t L3SubAddress::lengthV() const {
+    // One octet for the item count, then per item one selector/length
+    // octet followed by the sub-address bytes (TS 24.078).
     size_t len = 1;
     for (const auto& item : mItems) {
-        len += 2 + item.len;
+        len += 1 + item.len;
     }
     return len;
 }
@@ -668,37 +673,37 @@ void L3RedirectingNumber::text(std::ostream& os) const {
 }
 
 // ── L3CLIRSuppression ──────────────────────────────────────────────────
-
-L3CLIRSuppression::L3CLIRSuppression(unsigned wValue) : mValue(wValue & 0x07) {}
+// Type T element: the message consumes the identifier octet; the value
+// part is empty.
 
 Expected<L3CLIRSuppression> L3CLIRSuppression::parse(BitReader& br) {
-    auto r = br.readField(8); if (!r) return Expected<L3CLIRSuppression>::error(r.error());
-    return Expected<L3CLIRSuppression>::hold(L3CLIRSuppression(r.value()));
+    (void)br; // The identifier octet is consumed by the enclosing message.
+    return Expected<L3CLIRSuppression>::hold(L3CLIRSuppression{});
 }
 
 void L3CLIRSuppression::write(BitWriter& bw) const {
-    bw.writeField(mValue, 8);
+    (void)bw; // The identifier octet is written by the enclosing message.
 }
 
 void L3CLIRSuppression::text(std::ostream& os) const {
-    os << "CLIRSuppression[" << mValue << "]";
+    os << "CLIRSuppression";
 }
 
 // ── L3CLIRInvocation ───────────────────────────────────────────────────
-
-L3CLIRInvocation::L3CLIRInvocation(unsigned wValue) : mValue(wValue & 0x07) {}
+// Type T element: the message consumes the identifier octet; the value
+// part is empty.
 
 Expected<L3CLIRInvocation> L3CLIRInvocation::parse(BitReader& br) {
-    auto r = br.readField(8); if (!r) return Expected<L3CLIRInvocation>::error(r.error());
-    return Expected<L3CLIRInvocation>::hold(L3CLIRInvocation(r.value()));
+    (void)br; // The identifier octet is consumed by the enclosing message.
+    return Expected<L3CLIRInvocation>::hold(L3CLIRInvocation{});
 }
 
 void L3CLIRInvocation::write(BitWriter& bw) const {
-    bw.writeField(mValue, 8);
+    (void)bw; // The identifier octet is written by the enclosing message.
 }
 
 void L3CLIRInvocation::text(std::ostream& os) const {
-    os << "CLIRInvocation[" << mValue << "]";
+    os << "CLIRInvocation";
 }
 
 // ── L3NetworkCCCapabilities ────────────────────────────────────────────

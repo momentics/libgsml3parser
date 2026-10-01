@@ -70,7 +70,7 @@ struct PDBatch { int pd; const char* hex; int mti; };
 const PDBatch kBatch[] = {
     {GSML3_PD_RR,  "06 0D 00",          0x0d},  // Channel Release
     {GSML3_PD_MM,  "05 21",             0x21},  // CM Service Accept
-    {GSML3_PD_CC,  "E3 25 08 02 16 21", 0x25},  // Disconnect (TI=7)
+    {GSML3_PD_CC,  "E3 25 02 16 21",   0x25},  // Disconnect (TI=7)
     {GSML3_PD_SS,  "0B 3A 00",          0x3a},  // SupServFacilityMessage (empty facility)
     {GSML3_PD_GMM, "08 20 05",          0x20},  // GMM Status (cause=5)
     {GSML3_PD_SM,  "0A 55 05",    0x55},  // SM Status (cause=5)
@@ -1430,9 +1430,9 @@ TEST(CApi, BufferTooSmallErrorCode) {
 // Test: the human-readable dump agrees with the C++ messageText() and is
 // NUL-terminated.
 TEST(CApi, MessageDump) {
-    auto cpp = parseL3Hex("E3 25 08 02 16 21");  // Disconnect, TI=7
+    auto cpp = parseL3Hex("E3 25 02 16 21");  // Disconnect, TI=7
     ASSERT_TRUE(cpp) << cpp.error().message;
-    gsml3_message* m = gsml3_parse_l3_hex("E3 25 08 02 16 21", nullptr);
+    gsml3_message* m = gsml3_parse_l3_hex("E3 25 02 16 21", nullptr);
     ASSERT_NE(m, nullptr);
     char* dump = gsml3_message_dump(m);
     ASSERT_NE(dump, nullptr);

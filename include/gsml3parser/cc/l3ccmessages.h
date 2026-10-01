@@ -215,10 +215,12 @@ public:
         Builder& highLayerCompat(const L3HighLayerCompatibility& v) { m_highLayerCompat = v; m_haveHighLayerCompat = true; return *this; }
         /// Set user-user IE (sets m_haveUserUser flag).
         Builder& userUser(const L3UserUser& v) { m_userUser = v; m_haveUserUser = true; return *this; }
-        /// Set CLIR suppression (sets m_haveCLIRSuppression flag).
-        Builder& clirSuppression(const L3CLIRSuppression& v) { m_clirSuppression = v; m_haveCLIRSuppression = true; return *this; }
-        /// Set CLIR invocation (sets m_haveCLIRInvocation flag).
-        Builder& clirInvocation(const L3CLIRInvocation& v) { m_clirInvocation = v; m_haveCLIRInvocation = true; return *this; }
+        /// Mark the type-T CLIR suppression element present (TS 24.078):
+        /// the message emits only the identifier octet.
+        Builder& clirSuppression() { m_haveCLIRSuppression = true; return *this; }
+        /// Mark the type-T CLIR invocation element present (TS 24.078):
+        /// the message emits only the identifier octet.
+        Builder& clirInvocation() { m_haveCLIRInvocation = true; return *this; }
         /// Set CC capabilities (sets m_haveCCCapabilities flag).
         Builder& ccCapabilities(const L3CCCapabilities& v) { m_ccCapabilities = v; m_haveCCCapabilities = true; return *this; }
         /// Set stream identifier (sets m_haveStreamIdentifier flag).
@@ -627,7 +629,8 @@ public:
 
     [[nodiscard]] static Expected<L3Disconnect> parse(BitReader& br);
     void write(BitWriter& bw) const;
-    size_t bodyLength() const { return 4; }
+    /// Length-value cause: one length octet + two cause value octets.
+    size_t bodyLength() const { return 1 + L3CauseElement::lengthV(); }
     void text(std::ostream& os) const;
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }

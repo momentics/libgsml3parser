@@ -54,7 +54,7 @@ TEST(ThreadingTest, ConcurrentParseWithConfig) {
     std::vector<std::vector<uint8_t>> msgBuffers = {
         {0x06, 0x0D, 0x00},                             // RR ChannelRelease
         {0x05, 0x21},                                    // MM CMServiceAccept
-        {0x03, 0x25, 0x08, 0x02, 0x16, 0x21},          // CC Disconnect
+        {0x03, 0x25, 0x02, 0x16, 0x21},                 // CC Disconnect
         {0x0B, 0x3A},                                    // SS Facility
         {0x08, 0x01, 0x00, 0x04, 0x11, 0x03, 0x01, 0x02, 0x03, 0x04}, // GMM AttachRequest
         {0x0A, 0x41, 0x0F, 0x00},                       // SM ActivatePDPContextRequest
@@ -224,7 +224,7 @@ TEST(ThreadingTest, HeavyConcurrentParse) {
     const std::vector<std::vector<uint8_t>> msgPool = {
         {0x06, 0x0D, 0x00},                             // RR ChannelRelease (valid)
         {0x05, 0x21},                                    // MM CMServiceAccept (valid)
-        {0x03, 0x25, 0x08, 0x02, 0x16, 0x21},          // CC Disconnect (valid)
+        {0x03, 0x25, 0x02, 0x16, 0x21},                 // CC Disconnect (valid)
         {0x0B, 0x3A},                                    // SS Facility (valid)
         {},                                              // empty - expected to fail (TruncatedInput)
         {0x02, 0x01},                                    // invalid PD=0x02 - expected to fail (InvalidPD)
@@ -363,7 +363,7 @@ TEST(ThreadingTest, MultiDomainRoundTripConcurrent) {
     std::vector<std::string> hexPool = {
         "06 0D 00",                          // RR: ChannelRelease
         "05 21",                              // MM: CMServiceAccept
-        "03 25 08 02 16 21",                 // CC: Disconnect
+        "03 25 02 16 21",                    // CC: Disconnect
         "0B E8",                              // SS: Facility
         "08 20 05",                            // GMM: GMMStatus(cause=5)
         "0A 55 05",                      // SM: SMStatus(cause=5)

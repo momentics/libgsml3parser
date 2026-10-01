@@ -162,7 +162,7 @@ TEST(CCRoundTripTest, CallConfirmed) {
 
 // ── Disconnect (GSM 04.08 9.3.7) ─────────────────────────────────────
 // Wire layout per GSM 24.078 (Disconnect).
-// PD=0x03, TI(3)+TIF(1), MTI(6)=100101, NSD(2), Cause TLV
+// PD=0x03, TI(3)+TIF(1), MTI(6)=100101, NSD(2), Cause LV (no identifier)
 
 TEST(CCRoundTripTest, Disconnect_NormalClearing) {
     ParsedMessage msg{CCM{L3Disconnect{CCCause::Normal_Call_Clearing}}};
@@ -187,29 +187,20 @@ TEST(CCRoundTripTest, Disconnect_UserBusy) {
 }
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=100101(Disconnect=0x25), NSD=00
-// Disconnect body per TS 24.078: calledPartyNumberBcd + cause
-// Called Party Number IE: IEI='5E'O, numberingPlan='0000'B (GSM 24.078).
-// [GSM SPEC VERIFIED] GSM 24.008 9.3.7: Disconnect body = BCD-CalledPartyNumber(MANDATORY) + [Cause].
-//   Called-Party-Number is ALWAYS present in Disconnect (mandatory per spec).
-//   Called-Party-Number TLV: IEI=0x5E, length(1), typeOfNumber|numberingPlan(1), BCD digits.
-//   Cause TLV: IEI=0x08, length(1), value(2 octets) per GSM 24.008 10.5.4.11.
+// Disconnect body per TS 24.078: cause length-value element without an identifier.
+// [GSM SPEC VERIFIED] GSM 24.008 9.3.7: the Disconnect value part carries the
+//   cause as a length-value element: first octet = value length (2), followed
+//   by the two cause value octets per GSM 24.008 10.5.4.11.
 // Byte 0: TI=7 (bits 7:5) | TIF(4)=0 | PD=CC (low nibble) = 1110 0011 = 0xE3
 // Byte 1: MT(6)=Disconnect (0x25) in the low bits | NSD(2)=0 = 0x25
-// Called-Party-Number TLV (mandatory per GSM 24.008 9.3.7):
-//   Byte 2: IEI = 0x5E (CalledPartyNumberBcd, GSM 24.008 10.5.4.7)
-//   Byte 3: Length = 6 (1 type/plan octet + 5 BCD digit octets)
-//   Byte 4: spare(4)=0|numberingPlan(3)=1(ISDN/E.164)|typeOfNumber(1)=1(International) = 0x11
-//   Bytes 5-9: BCD digits "1234567890" nibble-swapped: {0x21, 0x43, 0x65, 0x87, 0x98}
-// Cause TLV (conditional per GSM 24.008 9.3.7):
-//   Byte 10: IEI = 0x08 (Cause, GSM 24.008 10.5.4.11)
-//   Byte 11: Length = 2 (2 octets Cause value part)
-//   Byte 12: location(4)=0001 | spare(1)=0 | codingStd(2)=11 | ext(1)=0 = 0x16
-//   Byte 13: causeValue(7)=0010000(Normal_Call_Clearing=16) | ext(1)=1 = 0x21
+// Cause length-value element (no identifier):
+//   Byte 2: Length = 2 (2 octets Cause value part)
+//   Byte 3: location(4)=0001 | spare(1)=0 | codingStd(2)=11 | ext(1)=0 = 0x16
+//   Byte 4: causeValue(7)=0010000(Normal_Call_Clearing=16) | ext(1)=1 = 0x21
 TEST(CCRoundTripTest, Disconnect_Parse) {
     uint8_t data[] = {
         0xE3, 0x25,
-        0x5E, 0x06, 0x11, 0x21, 0x43, 0x65, 0x87, 0x98,
-        0x08, 0x02, 0x16, 0x21
+        0x02, 0x16, 0x21
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -218,6 +209,7 @@ TEST(CCRoundTripTest, Disconnect_Parse) {
     auto* d = tryGet<L3Disconnect>(*msg);
     ASSERT_TRUE(d);
     EXPECT_EQ(d->cause(), CCCause::Normal_Call_Clearing);
+    EXPECT_EQ(d->location(), CCCauseLocation::Private_Serving_Local);
     EXPECT_EQ(d->ti(), 7u);
 }
 

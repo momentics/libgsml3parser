@@ -175,6 +175,8 @@ TEST(CCBuilders, Disconnect_UserBusy) {
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
     EXPECT_EQ((*bytes)[1], 0x25); // MT=Disconnect (six low bits, NSD=0)
+    ASSERT_EQ(bytes.value().size(), 5u); // 2-byte header + 3-octet cause LV
+    EXPECT_EQ((*bytes)[2], 0x02); // Cause value length (length-value form, no identifier)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -227,6 +229,9 @@ TEST(CCBuilders, CCStatus) {
     ParsedMessage pm{CCM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes)[1], L3CCStatus::MTI);
+    ASSERT_EQ(bytes.value().size(), 6u); // 2-byte header + 4-octet body
+    EXPECT_EQ((*bytes)[2], 0x02); // Cause value length (length-value form, no identifier)
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);

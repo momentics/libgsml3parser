@@ -350,6 +350,7 @@ class L3SupServVersionIndicator {
     unsigned mVersion{0};
 public:
     L3SupServVersionIndicator() = default;
+    explicit L3SupServVersionIndicator(unsigned wVersion);
 
     unsigned version() const { return mVersion; }
     static constexpr size_t lengthV() { return 1; }
@@ -422,13 +423,13 @@ public:
 #endif
 
 // ── Redirecting Number (GSM 04.08 10.5.4.13) ──────────────────────────
-// TLV format: IEI=0x97, Length(1) | TypeOctet(1) | Digits... | [Reason(1)]
+// TLV format: IEI=0x74, Length(1) | TypeOctet(1) | Digits... | [Reason(1)]
 
 #ifndef GSML3PARSER_L3REDIRECTING_NUMBER_DEFINED
 #define GSML3PARSER_L3REDIRECTING_NUMBER_DEFINED
 class L3RedirectingNumber {
 public:
-    static constexpr uint8_t IEI = 0x97;
+    static constexpr uint8_t IEI = 0x74;
     enum RedirectReason : uint8_t {
         NoReason = 0,
         UserNotSorted = 1,
@@ -460,21 +461,20 @@ public:
 #endif
 
 // ── CLIR Suppression (GSM 04.08 10.5.4.16) ────────────────────────────
-// TV format: IEI=0xc1, Value(1 octet)
+// Type T information element: the identifier octet is the whole encoding
+// (TS 24.078 section 10.5.x); there is no value part.
 
 #ifndef GSML3PARSER_L3CLIR_SUPPRESSION_DEFINED
 #define GSML3PARSER_L3CLIR_SUPPRESSION_DEFINED
 class L3CLIRSuppression {
 public:
-    static constexpr uint8_t IEI = 0xc1;
-private:
-    unsigned mValue{0};
-public:
-    L3CLIRSuppression() = default;
-    explicit L3CLIRSuppression(unsigned wValue);
+    static constexpr uint8_t IEI = 0xa1;
 
-    unsigned value() const { return mValue; }
-    static constexpr size_t lengthV() { return 1; }
+    L3CLIRSuppression() = default;
+
+    /// Type T element: the value part is empty, the message emits only
+    /// the identifier octet.
+    static constexpr size_t lengthV() { return 0; }
 
     [[nodiscard]] static Expected<L3CLIRSuppression> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -484,21 +484,20 @@ public:
 #endif
 
 // ── CLIR Invocation (GSM 04.08 10.5.4.17) ─────────────────────────────
-// TV format: IEI=0xc2, Value(1 octet)
+// Type T information element: the identifier octet is the whole encoding
+// (TS 24.078 section 10.5.x); there is no value part.
 
 #ifndef GSML3PARSER_L3CLIR_INVOCATION_DEFINED
 #define GSML3PARSER_L3CLIR_INVOCATION_DEFINED
 class L3CLIRInvocation {
 public:
-    static constexpr uint8_t IEI = 0xc2;
-private:
-    unsigned mValue{0};
-public:
-    L3CLIRInvocation() = default;
-    explicit L3CLIRInvocation(unsigned wValue);
+    static constexpr uint8_t IEI = 0xa2;
 
-    unsigned value() const { return mValue; }
-    static constexpr size_t lengthV() { return 1; }
+    L3CLIRInvocation() = default;
+
+    /// Type T element: the value part is empty, the message emits only
+    /// the identifier octet.
+    static constexpr size_t lengthV() { return 0; }
 
     [[nodiscard]] static Expected<L3CLIRInvocation> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -508,13 +507,13 @@ public:
 #endif
 
 // ── Network CC Capabilities (GSM 04.08 10.5.4.15) ─────────────────────
-// TLV format: IEI=0x7a, Length(1) | CapabilityBits(2 octets min)
+// TLV format: IEI=0x2f, Length(1) | CapabilityBits(2 octets min)
 
 #ifndef GSML3PARSER_L3NETWORK_CC_CAPABILITIES_DEFINED
 #define GSML3PARSER_L3NETWORK_CC_CAPABILITIES_DEFINED
 class L3NetworkCCCapabilities {
 public:
-    static constexpr uint8_t IEI = 0x7a;
+    static constexpr uint8_t IEI = 0x2f;
 private:
     std::vector<uint8_t> mCapabilities;
 public:
@@ -528,13 +527,13 @@ public:
 #endif
 
 // ── Low Layer Compatibility (GSM 04.08 10.5.4.14) ─────────────────────
-// TLV format: IEI=0x86, variable length
+// TLV format: IEI=0x7c, variable length
 
 #ifndef GSML3PARSER_L3LOW_LAYER_COMPATIBILITY_DEFINED
 #define GSML3PARSER_L3LOW_LAYER_COMPATIBILITY_DEFINED
 class L3LowLayerCompatibility {
 public:
-    static constexpr uint8_t IEI = 0x86;
+    static constexpr uint8_t IEI = 0x7c;
 private:
     std::vector<uint8_t> mData;
 public:
@@ -548,13 +547,13 @@ public:
 #endif
 
 // ── High Layer Compatibility (GSM 04.08 10.5.4.14) ────────────────────
-// TLV format: IEI=0x87, variable length
+// TLV format: IEI=0x7d, variable length
 
 #ifndef GSML3PARSER_L3HIGH_LAYER_COMPATIBILITY_DEFINED
 #define GSML3PARSER_L3HIGH_LAYER_COMPATIBILITY_DEFINED
 class L3HighLayerCompatibility {
 public:
-    static constexpr uint8_t IEI = 0x87;
+    static constexpr uint8_t IEI = 0x7d;
 private:
     std::vector<uint8_t> mData;
 public:
@@ -568,13 +567,13 @@ public:
 #endif
 
 // ── User-User (GSM 04.08 10.5.4.27) ───────────────────────────────────
-// TLV format: IEI=0x75, variable length
+// TLV format: IEI=0x7e, variable length
 
 #ifndef GSML3PARSER_L3USER_USER_DEFINED
 #define GSML3PARSER_L3USER_USER_DEFINED
 class L3UserUser {
 public:
-    static constexpr uint8_t IEI = 0x75;
+    static constexpr uint8_t IEI = 0x7e;
 private:
     std::vector<uint8_t> mData;
 public:
@@ -614,13 +613,13 @@ public:
 #endif
 
 // ── Stream Identifier (GSM 04.08 10.5.4.29) ───────────────────────────
-// TV format: IEI=0x8e, Value(1 octet): spare(3)|VBS/VGCS(1)|stream ID(4)
+// TLV format: IEI=0x2d, Length(1) | Value(1 octet): spare(3)|VBS/VGCS(1)|stream ID(4)
 
 #ifndef GSML3PARSER_L3STREAM_IDENTIFIER_DEFINED
 #define GSML3PARSER_L3STREAM_IDENTIFIER_DEFINED
 class L3StreamIdentifier {
 public:
-    static constexpr uint8_t IEI = 0x8e;
+    static constexpr uint8_t IEI = 0x2d;
 private:
     unsigned mStreamId{0};
     bool mVBS{false};
@@ -664,13 +663,13 @@ public:
 #endif
 
 // ── CC Capabilities (GSM 04.08 10.5.4.4) ──────────────────────────────
-// TLV format: IEI=0x51, Length(1) | CapabilityBits(1 octet min): ext(1)|cap(7)
+// TLV format: IEI=0x15, Length(1) | CapabilityBits(1 octet min): ext(1)|cap(7)
 
 #ifndef GSML3PARSER_L3CC_CAPABILITIES_DEFINED
 #define GSML3PARSER_L3CC_CAPABILITIES_DEFINED
 class L3CCCapabilities {
 public:
-    static constexpr uint8_t IEI = 0x51;
+    static constexpr uint8_t IEI = 0x15;
 private:
     std::vector<uint8_t> mCapabilities;
 public:

@@ -391,7 +391,7 @@ TEST(ZeroCopyStreamProcessor, AllTwelveDomains) {
     // MM: CMServiceAccept
     appendFrame(ParsedMessage(MMM(L3CMServiceAccept{})));
     // CC: Disconnect (parse from raw bytes known to work)
-    { uint8_t d[] = {0x03, 0x25, 0x08, 0x02, 0x16, 0x21}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p.has_value()); appendFrame(*p); }
+    { uint8_t d[] = {0x03, 0x25, 0x02, 0x16, 0x21}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p.has_value()); appendFrame(*p); }
     // SS: Facility (parse from raw bytes known to work)
     { uint8_t d[] = {0x0B, 0x3A}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p.has_value()); appendFrame(*p); }
     // GMM: AttachComplete

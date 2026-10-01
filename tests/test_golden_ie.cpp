@@ -1851,6 +1851,21 @@ TEST(GoldenIE, SupServVersionIndicator_RoundTrip) {
     ieRoundTrip(orig);
 }
 
+TEST(GoldenIE, SupServVersionIndicator_Value) {
+    // The version indicator value is a single octet (TS 24.078): the
+    // standard supplementary service version is 1.
+    L3SupServVersionIndicator orig(1);
+    EXPECT_EQ(orig.version(), 1u);
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    EXPECT_EQ(writer.position(), 8u);
+    BitReader reader(buf.data(), writer.position());
+    auto parsed = L3SupServVersionIndicator::parse(reader);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(parsed.value().version(), 1u);
+}
+
 // =====================================================================
 // CC IEs: L3BCDDigits utility (GSM 04.08 10.5.4.7)
 // BCD digit packing rules per GSM 24.008 10.5.4.7
@@ -2325,7 +2340,7 @@ TEST(GoldenIE, ConnectedNumber_IEI) {
 // CC IEs: L3SubAddress (GSM 04.08 10.5.4.3)
 // Sub-address IE variants carried in CC Setup/Alerting/Connect messages
 //   (calling party, called party and connected party)
-// TLV format: IEI=0x9a/0x9b, Length(1) | NumItems(1) | SubAddressItem...
+// TLV format: IEI=0x5d(calling party)/0x6d(called party), Length(1) | NumItems(1) | SubAddressItem...
 // =====================================================================
 
 TEST(GoldenIE, SubAddress_Default) {
@@ -2343,7 +2358,7 @@ TEST(GoldenIE, SubAddress_RoundTrip) {
 // CC IEs: L3RedirectingNumber (GSM 04.08 10.5.4.13)
 // Redirecting number IE per GSM 24.008 10.5.4.13, carried in CC Disconnect,
 //   together with the optional redirecting sub-address
-// TLV format: IEI=0x97, Length(1) | TypeOctet(1) | Digits... | [Reason(1)]
+// TLV format: IEI=0x74, Length(1) | TypeOctet(1) | Digits... | [Reason(1)]
 // =====================================================================
 
 TEST(GoldenIE, RedirectingNumber_Default) {
@@ -2357,7 +2372,7 @@ TEST(GoldenIE, RedirectingNumber_Digits) {
 }
 
 TEST(GoldenIE, RedirectingNumber_IEI) {
-    EXPECT_EQ(L3RedirectingNumber::IEI, 0x97);
+    EXPECT_EQ(L3RedirectingNumber::IEI, 0x74);
 }
 
 TEST(GoldenIE, RedirectingNumber_RoundTrip) {
@@ -2373,56 +2388,50 @@ TEST(GoldenIE, RedirectingNumber_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3CLIRSuppression (GSM 04.08 10.5.4.16)
-// CLIR suppression value per GSM 24.008 10.5.4.16
-// TV format: IEI=0xc1, Value(1 octet)
+// CLIR suppression per GSM 24.008 10.5.4.16
+// Type T information element: the identifier octet is the whole encoding;
+//   there is no value part (the enclosing message emits only the IEI).
 // =====================================================================
 
 TEST(GoldenIE, CLIRSuppression_Default) {
     L3CLIRSuppression clir;
-    EXPECT_EQ(clir.value(), 0u);
-    EXPECT_EQ(L3CLIRSuppression::IEI, 0xc1);
-}
-
-TEST(GoldenIE, CLIRSuppression_Value) {
-    L3CLIRSuppression clir(5);
-    EXPECT_EQ(clir.value(), 5u);
+    EXPECT_EQ(clir.lengthV(), 0u);
+    EXPECT_EQ(L3CLIRSuppression::IEI, 0xa1);
 }
 
 TEST(GoldenIE, CLIRSuppression_RoundTrip) {
-    ieRoundTrip(L3CLIRSuppression(7));
+    // Type T: write emits no value octet, parse consumes none.
+    ieRoundTrip(L3CLIRSuppression{});
 }
 
 // =====================================================================
 // CC IEs: L3CLIRInvocation (GSM 04.08 10.5.4.17)
-// CLIR invocation value per GSM 24.008 10.5.4.17
-// TV format: IEI=0xc2, Value(1 octet)
+// CLIR invocation per GSM 24.008 10.5.4.17
+// Type T information element: the identifier octet is the whole encoding;
+//   there is no value part (the enclosing message emits only the IEI).
 // =====================================================================
 
 TEST(GoldenIE, CLIRInvocation_Default) {
     L3CLIRInvocation cliri;
-    EXPECT_EQ(cliri.value(), 0u);
-    EXPECT_EQ(L3CLIRInvocation::IEI, 0xc2);
-}
-
-TEST(GoldenIE, CLIRInvocation_Value) {
-    L3CLIRInvocation cliri(3);
-    EXPECT_EQ(cliri.value(), 3u);
+    EXPECT_EQ(cliri.lengthV(), 0u);
+    EXPECT_EQ(L3CLIRInvocation::IEI, 0xa2);
 }
 
 TEST(GoldenIE, CLIRInvocation_RoundTrip) {
-    ieRoundTrip(L3CLIRInvocation(7));
+    // Type T: write emits no value octet, parse consumes none.
+    ieRoundTrip(L3CLIRInvocation{});
 }
 
 // =====================================================================
 // CC IEs: L3NetworkCCCapabilities (GSM 04.08 10.5.4.15)
 // Network CC capabilities IE carried in CC Call Proceeding (GSM 24.078)
-// TLV format: IEI=0x7a, Length(1) | CapabilityBits(2 octets min)
+// TLV format: IEI=0x2f, Length(1) | CapabilityBits(2 octets min)
 // =====================================================================
 
 TEST(GoldenIE, NetworkCCCapabilities_Default) {
     L3NetworkCCCapabilities caps;
     EXPECT_EQ(caps.lengthV(), 0u);
-    EXPECT_EQ(L3NetworkCCCapabilities::IEI, 0x7a);
+    EXPECT_EQ(L3NetworkCCCapabilities::IEI, 0x2f);
 }
 
 TEST(GoldenIE, NetworkCCCapabilities_RoundTrip) {
@@ -2443,13 +2452,13 @@ TEST(GoldenIE, NetworkCCCapabilities_RoundTrip) {
 // =====================================================================
 // CC IEs: L3LowLayerCompatibility (GSM 04.08 10.5.4.14)
 // Low layer compatibility IE (variable length) per GSM 24.078
-// TLV format: IEI=0x86, variable length
+// TLV format: IEI=0x7c, variable length
 // =====================================================================
 
 TEST(GoldenIE, LowLayerCompatibility_Default) {
     L3LowLayerCompatibility llc;
     EXPECT_EQ(llc.lengthV(), 0u);
-    EXPECT_EQ(L3LowLayerCompatibility::IEI, 0x86);
+    EXPECT_EQ(L3LowLayerCompatibility::IEI, 0x7c);
 }
 
 TEST(GoldenIE, LowLayerCompatibility_RoundTrip) {
@@ -2470,13 +2479,13 @@ TEST(GoldenIE, LowLayerCompatibility_RoundTrip) {
 // =====================================================================
 // CC IEs: L3HighLayerCompatibility (GSM 04.08 10.5.4.14)
 // High layer compatibility IE (variable length) per GSM 24.078
-// TLV format: IEI=0x87, variable length
+// TLV format: IEI=0x7d, variable length
 // =====================================================================
 
 TEST(GoldenIE, HighLayerCompatibility_Default) {
     L3HighLayerCompatibility hlc;
     EXPECT_EQ(hlc.lengthV(), 0u);
-    EXPECT_EQ(L3HighLayerCompatibility::IEI, 0x87);
+    EXPECT_EQ(L3HighLayerCompatibility::IEI, 0x7d);
 }
 
 TEST(GoldenIE, HighLayerCompatibility_RoundTrip) {
@@ -2498,13 +2507,13 @@ TEST(GoldenIE, HighLayerCompatibility_RoundTrip) {
 // CC IEs: L3UserUser (GSM 04.08 10.5.4.27)
 // User-user IE (variable length) carried in CC Setup, Alerting and Connect
 //   (GSM 24.078 10.5.4.27)
-// TLV format: IEI=0x75, variable length
+// TLV format: IEI=0x7e, variable length
 // =====================================================================
 
 TEST(GoldenIE, UserUser_Default) {
     L3UserUser uu;
     EXPECT_EQ(uu.lengthV(), 0u);
-    EXPECT_EQ(L3UserUser::IEI, 0x75);
+    EXPECT_EQ(L3UserUser::IEI, 0x7e);
 }
 
 TEST(GoldenIE, UserUser_RoundTrip) {
@@ -2547,16 +2556,17 @@ TEST(GoldenIE, Priority_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3StreamIdentifier (GSM 04.08 10.5.4.29)
-// Stream identifier IE (TV) carried in CC Setup and emergency Setup
+// Stream identifier IE (TLV) carried in CC Setup and Connect
 //   (GSM 24.078 10.5.4.29)
-// TV format: IEI=0x8e, Value(1 octet): spare(3)|VBS/VGCS(1)|streamID(4)
+// TLV format: IEI=0x2d, Length(1) | Value(1 octet): spare(3)|VBS/VGCS(1)|streamID(4);
+//   the class is value-only and the enclosing message writes the length octet.
 // =====================================================================
 
 TEST(GoldenIE, StreamIdentifier_Default) {
     L3StreamIdentifier si;
     EXPECT_EQ(si.streamId(), 0u);
     EXPECT_FALSE(si.vbs());
-    EXPECT_EQ(L3StreamIdentifier::IEI, 0x8e);
+    EXPECT_EQ(L3StreamIdentifier::IEI, 0x2d);
 }
 
 TEST(GoldenIE, StreamIdentifier_Value) {
@@ -2602,13 +2612,13 @@ TEST(GoldenIE, AllowedActions_RoundTrip) {
 // =====================================================================
 // CC IEs: L3CCCapabilities (GSM 04.08 10.5.4.4)
 // CC capabilities IE carried in CC Setup (GSM 24.078 10.5.4.4)
-// TLV format: IEI=0x51, Length(1) | CapabilityBits(1 octet min): ext(1)|cap(7)
+// TLV format: IEI=0x15, Length(1) | CapabilityBits(1 octet min): ext(1)|cap(7)
 // =====================================================================
 
 TEST(GoldenIE, CCCapabilities_Default) {
     L3CCCapabilities caps;
     EXPECT_EQ(caps.lengthV(), 0u);
-    EXPECT_EQ(L3CCCapabilities::IEI, 0x51);
+    EXPECT_EQ(L3CCCapabilities::IEI, 0x15);
 }
 
 TEST(GoldenIE, CCCapabilities_RoundTrip) {

@@ -58,7 +58,7 @@ inline constexpr size_t kFixedFrameEntries[] = {
     0x05, 0x29, 2,  // MM Abort (no value part, TS 24.008)
     0x05, 0x31, 3,  // MM Status (1-byte body)
     // Call Control (pd 0x03, MT in the six low bits of octet 1)
-    0x03, 0x3D, 6,  // CC Status (4-byte body: cause IE identifier 0x11 +
+    0x03, 0x3D, 6,  // CC Status (4-byte body: cause length octet +
                     // two cause octets + call state, TS 24.078 9.3.19)
     0x03, 0x3E, 3,  // CC Notify (1-byte cause)
     // Broadcast Call Control (pd 0x01, MT in the six low bits of octet 1)

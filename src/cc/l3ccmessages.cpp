@@ -157,23 +157,25 @@ inline Expected<void> ccCommonParse(BitReader& br,
             facility = std::move(f.value());
             haveFacility = true;
         } else if (peek == 0x7f) {
+            // SS version indicator: TLV with a one-octet value part
+            // (TS 24.078 section 10.5.x).
             auto ieiRes = readIEI(br);
             if (!ieiRes) return Expected<void>::error(ieiRes.error());
-            auto lenRes = readStructuredLength(br);
+            auto lenRes = readLength(br);
             if (!lenRes) return Expected<void>::error(lenRes.error());
             size_t innerLen = lenRes.value();
             if (innerLen >= 1) {
-                auto innerIEI = br.readField(8);
-                if (!innerIEI) return Expected<void>::error(innerIEI.error());
-                if (innerIEI.value() == 0x1c) {
-                    auto v = L3SupServVersionIndicator::parse(br);
-                    if (!v) return Expected<void>::error(v.error());
-                    ssVersion = std::move(v.value());
-                    haveSSVersion = true;
-                } else {
-                    auto skipRes = skipBytes(br, innerLen - 1);
-                    if (!skipRes) return Expected<void>::error(skipRes.error());
-                }
+                auto v = L3SupServVersionIndicator::parse(br);
+                if (!v) return Expected<void>::error(v.error());
+                ssVersion = std::move(v.value());
+                haveSSVersion = true;
+                // The value part is one octet; any further length-indicated
+                // bytes are not modelled and are skipped verbatim.
+                auto skipRes = skipBytes(br, innerLen - 1);
+                if (!skipRes) return Expected<void>::error(skipRes.error());
+            } else {
+                auto skipRes = skipBytes(br, innerLen);
+                if (!skipRes) return Expected<void>::error(skipRes.error());
             }
         } else {
             break;
@@ -191,9 +193,10 @@ inline void ccCommonWrite(BitWriter& bw,
         facility.write(bw);
     }
     if (haveSSVersion) {
+        // SS version indicator: TLV with a one-octet value part
+        // (TS 24.078 section 10.5.x).
         bw.writeField(0x7f, 8);
-        bw.writeField(1, 7);
-        bw.writeField(0x1c, 8);
+        bw.writeField(static_cast<uint32_t>(L3SupServVersionIndicator::lengthV()), 8);
         ssVersion.write(bw);
     }
 }
@@ -376,9 +379,13 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             msg.mHaveCallingParty = true;
             continue;
         }
-        case 0x5d: { // Skip TLV
-            auto skipRes = detail::skipTLV(br);
-            if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
+        case 0x5d: case 0x6d: { // SubAddress TLV (calling/called party sub-address)
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
+            auto p = L3SubAddress::parse(br, lenRes.value());
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mSubAddress = std::move(p.value());
+            msg.mHaveSubAddress = true;
             continue;
         }
         case 0x5e: { // CalledParty TLV
@@ -390,13 +397,30 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             msg.mHaveCalledParty = true;
             continue;
         }
-        case 0x6d: case 0x74:
-        case 0x7c: case 0x7d: case 0x7e: { // Skip TLV
+        case 0x74: case 0x75: { // Redirecting party number/sub-address - skip TLV
             auto skipRes = detail::skipTLV(br);
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
-        case 0x75: { // User-User TLV
+        case 0x7c: { // LowLayerCompatibility TLV (eight-bit length octet, TS 24.078)
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
+            auto p = L3LowLayerCompatibility::parse(br, lenRes.value());
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mLowLayerCompat = std::move(p.value());
+            msg.mHaveLowLayerCompat = true;
+            continue;
+        }
+        case 0x7d: { // HighLayerCompatibility TLV (eight-bit length octet, TS 24.078)
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
+            auto p = L3HighLayerCompatibility::parse(br, lenRes.value());
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mHighLayerCompat = std::move(p.value());
+            msg.mHaveHighLayerCompat = true;
+            continue;
+        }
+        case 0x7e: { // User-User TLV
             auto lenRes = detail::readLength(br);
             if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
             auto p = L3UserUser::parse(br, lenRes.value());
@@ -405,31 +429,63 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             msg.mHaveUserUser = true;
             continue;
         }
-        case 0x7f: { // Structured element - may contain SSVersion
-            auto lenRes = detail::readStructuredLength(br);
+        case 0x7f: { // SS version indicator TLV (one-octet value part, TS 24.078)
+            auto lenRes = detail::readLength(br);
             if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
             size_t innerLen = lenRes.value();
             if (innerLen >= 1) {
-                auto innerIEI = br.readField(8);
-                if (!innerIEI) return Expected<L3Setup>::error(innerIEI.error());
-                if (innerIEI.value() == 0x1c) {
-                    auto v = L3SupServVersionIndicator::parse(br);
-                    if (!v) return Expected<L3Setup>::error(v.error());
-                    msg.mSSVersion = std::move(v.value());
-                    msg.mHaveSSVersion = true;
-                } else {
-                    auto skipRes = detail::skipBytes(br, innerLen - 1);
-                    if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
-                }
+                auto v = L3SupServVersionIndicator::parse(br);
+                if (!v) return Expected<L3Setup>::error(v.error());
+                msg.mSSVersion = std::move(v.value());
+                msg.mHaveSSVersion = true;
+                auto skipRes = detail::skipBytes(br, innerLen - 1);
+                if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
+            } else {
+                auto skipRes = detail::skipBytes(br, innerLen);
+                if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             }
             continue;
         }
-        case 0xa1: case 0xa2: { // Skip TV (1 value octet each)
-            auto skipRes = detail::skipTV(br);
-            if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
+        case 0xa1: { // CLIR suppression: type T element, identifier octet only (TS 24.078)
+            auto p = L3CLIRSuppression::parse(br);
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mCLIRSuppression = std::move(p.value());
+            msg.mHaveCLIRSuppression = true;
             continue;
         }
-        case 0x15: case 0x1d: case 0x1b: case 0x2d: case 0x2e:
+        case 0xa2: { // CLIR invocation: type T element, identifier octet only (TS 24.078)
+            auto p = L3CLIRInvocation::parse(br);
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mCLIRInvocation = std::move(p.value());
+            msg.mHaveCLIRInvocation = true;
+            continue;
+        }
+        case 0x15: { // CCApabilities TLV
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
+            auto p = L3CCCapabilities::parse(br, lenRes.value());
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mCCCapabilities = std::move(p.value());
+            msg.mHaveCCCapabilities = true;
+            continue;
+        }
+        case 0x2d: { // StreamIdentifier TLV (one-octet value part, TS 24.078)
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
+            size_t innerLen = lenRes.value();
+            auto p = L3StreamIdentifier::parse(br);
+            if (!p) return Expected<L3Setup>::error(p.error());
+            msg.mStreamIdentifier = std::move(p.value());
+            msg.mHaveStreamIdentifier = true;
+            // The value part is one octet; any further length-indicated
+            // bytes are not modelled and are skipped verbatim.
+            if (innerLen > 1) {
+                auto skipRes = detail::skipBytes(br, innerLen - 1);
+                if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
+            }
+            continue;
+        }
+        case 0x1d: case 0x1b: case 0x2e:
         case 0x19: case 0x2f: case 0x3a: case 0x41: { // Skip TLV
             auto skipRes = detail::skipTLV(br);
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
@@ -449,61 +505,14 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
-        case 0x9a: case 0x9b: { // SubAddress TLV
-            auto lenRes = detail::readLength(br);
-            if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
-            auto p = L3SubAddress::parse(br, lenRes.value());
-            if (!p) return Expected<L3Setup>::error(p.error());
-            msg.mSubAddress = std::move(p.value());
-            msg.mHaveSubAddress = true;
+        case 0x51: case 0x86: case 0x87: case 0x9a: case 0x9b: { // Legacy IEIs - skip TLV (tolerance to foreign frames)
+            auto skipRes = detail::skipTLV(br);
+            if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
-        case 0x86: { // LowLayerCompatibility TLV (structured)
-            auto lenRes = detail::readStructuredLength(br);
-            if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
-            auto p = L3LowLayerCompatibility::parse(br, lenRes.value());
-            if (!p) return Expected<L3Setup>::error(p.error());
-            msg.mLowLayerCompat = std::move(p.value());
-            msg.mHaveLowLayerCompat = true;
-            continue;
-        }
-        case 0x87: { // HighLayerCompatibility TLV (structured)
-            auto lenRes = detail::readStructuredLength(br);
-            if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
-            auto p = L3HighLayerCompatibility::parse(br, lenRes.value());
-            if (!p) return Expected<L3Setup>::error(p.error());
-            msg.mHighLayerCompat = std::move(p.value());
-            msg.mHaveHighLayerCompat = true;
-            continue;
-        }
-        case 0xc1: { // CLIR Suppression TV
-            auto p = L3CLIRSuppression::parse(br);
-            if (!p) return Expected<L3Setup>::error(p.error());
-            msg.mCLIRSuppression = std::move(p.value());
-            msg.mHaveCLIRSuppression = true;
-            continue;
-        }
-        case 0xc2: { // CLIR Invocation TV
-            auto p = L3CLIRInvocation::parse(br);
-            if (!p) return Expected<L3Setup>::error(p.error());
-            msg.mCLIRInvocation = std::move(p.value());
-            msg.mHaveCLIRInvocation = true;
-            continue;
-        }
-        case 0x51: { // CC Capabilities TLV
-            auto lenRes = detail::readLength(br);
-            if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
-            auto p = L3CCCapabilities::parse(br, lenRes.value());
-            if (!p) return Expected<L3Setup>::error(p.error());
-            msg.mCCCapabilities = std::move(p.value());
-            msg.mHaveCCCapabilities = true;
-            continue;
-        }
-        case 0x8e: { // StreamIdentifier TV
-            auto p = L3StreamIdentifier::parse(br);
-            if (!p) return Expected<L3Setup>::error(p.error());
-            msg.mStreamIdentifier = std::move(p.value());
-            msg.mHaveStreamIdentifier = true;
+        case 0x8e: case 0xc1: case 0xc2: { // Legacy TV-form IEs - skip one value octet (tolerance to foreign frames)
+            auto skipRes = detail::skipTV(br);
+            if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
         case 0x80: case 0x81: case 0x82: case 0x83: case 0x84: case 0x85:
@@ -550,52 +559,48 @@ void L3Setup::write(BitWriter& bw) const {
         mSignal.write(bw);
     }
     if (mHaveSubAddress) {
-        bw.writeField(0x9a, 8);
+        bw.writeField(0x5d, 8);
         bw.writeField(static_cast<uint32_t>(mSubAddress.lengthV()), 8);
         mSubAddress.write(bw);
     }
     if (mHaveLowLayerCompat) {
-        bw.writeField(0x86, 8);
-        auto llLen = mLowLayerCompat.lengthV();
-        if (llLen < 128) {
-            bw.writeField(static_cast<uint32_t>(llLen), 7);
-        } else {
-            bw.writeField(1, 7);
-            bw.writeField(static_cast<uint32_t>(llLen), 8);
-        }
+        // Low layer compatibility: unstructured TLV with an eight-bit
+        // length octet (TS 24.078).
+        bw.writeField(0x7c, 8);
+        bw.writeField(static_cast<uint32_t>(mLowLayerCompat.lengthV()), 8);
         mLowLayerCompat.write(bw);
     }
     if (mHaveHighLayerCompat) {
-        bw.writeField(0x87, 8);
-        auto hlLen = mHighLayerCompat.lengthV();
-        if (hlLen < 128) {
-            bw.writeField(static_cast<uint32_t>(hlLen), 7);
-        } else {
-            bw.writeField(1, 7);
-            bw.writeField(static_cast<uint32_t>(hlLen), 8);
-        }
+        // High layer compatibility: unstructured TLV with an eight-bit
+        // length octet (TS 24.078).
+        bw.writeField(0x7d, 8);
+        bw.writeField(static_cast<uint32_t>(mHighLayerCompat.lengthV()), 8);
         mHighLayerCompat.write(bw);
     }
     if (mHaveUserUser) {
-        bw.writeField(0x75, 8);
+        bw.writeField(0x7e, 8);
         bw.writeField(static_cast<uint32_t>(mUserUser.lengthV()), 8);
         mUserUser.write(bw);
     }
     if (mHaveCLIRSuppression) {
-        bw.writeField(0xc1, 8);
-        mCLIRSuppression.write(bw);
+        // CLIR suppression: type T element, the identifier octet is the
+        // whole encoding (TS 24.078).
+        bw.writeField(L3CLIRSuppression::IEI, 8);
     }
     if (mHaveCLIRInvocation) {
-        bw.writeField(0xc2, 8);
-        mCLIRInvocation.write(bw);
+        // CLIR invocation: type T element, the identifier octet is the
+        // whole encoding (TS 24.078).
+        bw.writeField(L3CLIRInvocation::IEI, 8);
     }
     if (mHaveCCCapabilities) {
-        bw.writeField(0x51, 8);
+        bw.writeField(0x15, 8);
         bw.writeField(static_cast<uint32_t>(mCCCapabilities.lengthV()), 8);
         mCCCapabilities.write(bw);
     }
     if (mHaveStreamIdentifier) {
-        bw.writeField(0x8e, 8);
+        // Stream identifier: unstructured TLV (TS 24.078).
+        bw.writeField(L3StreamIdentifier::IEI, 8);
+        bw.writeField(static_cast<uint32_t>(L3StreamIdentifier::lengthV()), 8);
         mStreamIdentifier.write(bw);
     }
     detail::ccCommonWrite(bw, mHaveFacility, mFacility, mHaveSSVersion, mSSVersion);
@@ -613,10 +618,10 @@ size_t L3Setup::bodyLength() const {
     if (mHaveLowLayerCompat) len += 2 + mLowLayerCompat.lengthV();
     if (mHaveHighLayerCompat) len += 2 + mHighLayerCompat.lengthV();
     if (mHaveUserUser) len += 2 + mUserUser.lengthV();
-    if (mHaveCLIRSuppression) len += 1 + L3CLIRSuppression::lengthV();
-    if (mHaveCLIRInvocation) len += 1 + L3CLIRInvocation::lengthV();
+    if (mHaveCLIRSuppression) len += 1; // type T: identifier octet only
+    if (mHaveCLIRInvocation) len += 1; // type T: identifier octet only
     if (mHaveCCCapabilities) len += 2 + mCCCapabilities.lengthV();
-    if (mHaveStreamIdentifier) len += 1 + L3StreamIdentifier::lengthV();
+    if (mHaveStreamIdentifier) len += 2 + L3StreamIdentifier::lengthV();
     len += detail::ccCommonLength(mHaveFacility, mFacility, mHaveSSVersion);
     return len;
 }
@@ -700,7 +705,7 @@ Expected<L3CallProceeding> L3CallProceeding::parse(BitReader& br) {
             msg.mHavePriority = true;
             continue;
         }
-        case 0x7a: { // NetworkCCCapabilities TLV
+        case 0x2f: { // NetworkCCCapabilities TLV
             auto lenRes = detail::readLength(br);
             if (!lenRes) return Expected<L3CallProceeding>::error(lenRes.error());
             auto p = L3NetworkCCCapabilities::parse(br, lenRes.value());
@@ -738,7 +743,7 @@ void L3CallProceeding::write(BitWriter& bw) const {
         mPriority.write(bw);
     }
     if (mHaveNetworkCCCapabilities) {
-        bw.writeField(0x7a, 8);
+        bw.writeField(L3NetworkCCCapabilities::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mNetworkCCCapabilities.lengthV()), 8);
         mNetworkCCCapabilities.write(bw);
     }
@@ -789,10 +794,10 @@ Expected<L3Alerting> L3Alerting::parse(BitReader& br) {
     ccRes = detail::ccCommonParse(br, msg.mHaveFacility, msg.mFacility, msg.mHaveSSVersion, msg.mSSVersion);
     if (!ccRes) return Expected<L3Alerting>::error(ccRes.error());
 
-    // Handle userUser (0x75) after ccCommon
+    // Handle userUser (0x7e) after ccCommon
     while (br.hasMore()) {
         uint8_t peek = static_cast<uint8_t>(br.peekField(8));
-        if (peek == 0x75) {
+        if (peek == 0x7e) {
             auto ieiRes = detail::readIEI(br);
             if (!ieiRes) return Expected<L3Alerting>::error(ieiRes.error());
             auto lenRes = detail::readLength(br);
@@ -817,7 +822,7 @@ void L3Alerting::write(BitWriter& bw) const {
         mProgress.write(bw);
     }
     if (mHaveUserUser) {
-        bw.writeField(0x75, 8);
+        bw.writeField(L3UserUser::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mUserUser.lengthV()), 8);
         mUserUser.write(bw);
     }
@@ -884,7 +889,7 @@ Expected<L3Connect> L3Connect::parse(BitReader& br) {
             msg.mHaveConnectedSubAddress = true;
             continue;
         }
-        case 0x75: { // User-User TLV
+        case 0x7e: { // User-User TLV
             auto lenRes = detail::readLength(br);
             if (!lenRes) return Expected<L3Connect>::error(lenRes.error());
             auto p = L3UserUser::parse(br, lenRes.value());
@@ -893,11 +898,25 @@ Expected<L3Connect> L3Connect::parse(BitReader& br) {
             msg.mHaveUserUser = true;
             continue;
         }
-        case 0x8e: { // StreamIdentifier TV
+        case 0x2d: { // StreamIdentifier TLV (one-octet value part, TS 24.078)
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3Connect>::error(lenRes.error());
+            size_t innerLen = lenRes.value();
             auto p = L3StreamIdentifier::parse(br);
             if (!p) return Expected<L3Connect>::error(p.error());
             msg.mStreamIdentifier = std::move(p.value());
             msg.mHaveStreamIdentifier = true;
+            // The value part is one octet; any further length-indicated
+            // bytes are not modelled and are skipped verbatim.
+            if (innerLen > 1) {
+                auto skipRes = detail::skipBytes(br, innerLen - 1);
+                if (!skipRes) return Expected<L3Connect>::error(skipRes.error());
+            }
+            continue;
+        }
+        case 0x8e: { // Legacy stream identifier TV form - skip one value octet
+            auto skipRes = detail::skipTV(br);
+            if (!skipRes) return Expected<L3Connect>::error(skipRes.error());
             continue;
         }
         default: {
@@ -925,12 +944,14 @@ void L3Connect::write(BitWriter& bw) const {
         mConnectedSubAddress.write(bw);
     }
     if (mHaveUserUser) {
-        bw.writeField(0x75, 8);
+        bw.writeField(L3UserUser::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mUserUser.lengthV()), 8);
         mUserUser.write(bw);
     }
     if (mHaveStreamIdentifier) {
-        bw.writeField(0x8e, 8);
+        // Stream identifier: unstructured TLV (TS 24.078).
+        bw.writeField(L3StreamIdentifier::IEI, 8);
+        bw.writeField(static_cast<uint32_t>(L3StreamIdentifier::lengthV()), 8);
         mStreamIdentifier.write(bw);
     }
     if (mHaveProgress) {
@@ -945,7 +966,7 @@ size_t L3Connect::bodyLength() const {
     if (mHaveConnectedNumber) len += 2 + mConnectedNumber.lengthV();
     if (mHaveConnectedSubAddress) len += 2 + mConnectedSubAddress.lengthV();
     if (mHaveUserUser) len += 2 + mUserUser.lengthV();
-    if (mHaveStreamIdentifier) len += 1 + L3StreamIdentifier::lengthV();
+    if (mHaveStreamIdentifier) len += 2 + L3StreamIdentifier::lengthV();
     if (mHaveProgress) len += 2 + L3ProgressIndicator::lengthV();
     return len;
 }
@@ -1017,7 +1038,7 @@ Expected<L3CallConfirmed> L3CallConfirmed::parse(BitReader& br) {
             if (!skipRes) return Expected<L3CallConfirmed>::error(skipRes.error());
             continue;
         }
-        case 0x75: { // User-User TLV
+        case 0x7e: { // User-User TLV
             auto lenRes = detail::readLength(br);
             if (!lenRes) return Expected<L3CallConfirmed>::error(lenRes.error());
             auto p = L3UserUser::parse(br, lenRes.value());
@@ -1054,7 +1075,7 @@ void L3CallConfirmed::write(BitWriter& bw) const {
         mSupportedCodecs.write(bw);
     }
     if (mHaveUserUser) {
-        bw.writeField(0x75, 8);
+        bw.writeField(L3UserUser::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mUserUser.lengthV()), 8);
         mUserUser.write(bw);
     }
@@ -1085,24 +1106,33 @@ void L3CallConfirmed::text(std::ostream& os) const {
 Expected<L3Disconnect> L3Disconnect::parse(BitReader& br) {
     L3Disconnect msg;
 
-    // Cause TLV: IEI=0x08 followed by a length octet and the 2-octet cause
-    // value (TS 24.078 10.5.4.11).
-    auto ieiRes = detail::readIEI(br);
-    if (!ieiRes) return Expected<L3Disconnect>::error(ieiRes.error());
-    // The TLV cause is read in three steps: IEI (above), length, then value;
-    // the IEI octet was consumed explicitly, so only length + value remain.
+    // The cause is carried as a length-value element without an identifier
+    // (TS 24.078 section 10.5.x): first octet is the value length, followed
+    // by the two cause value octets (TS 24.078 10.5.4.11).
     auto lenRes = detail::readLength(br);
     if (!lenRes) return Expected<L3Disconnect>::error(lenRes.error());
+    size_t causeLen = lenRes.value();
+    if (causeLen < L3CauseElement::lengthV()) {
+        return Expected<L3Disconnect>::error(
+            ParseError{ParseError::Code::TruncatedInput, "Disconnect cause length too short", br.position()});
+    }
     auto p = L3CauseElement::parse(br);
     if (!p) return Expected<L3Disconnect>::error(p.error());
     msg.mCause = p.value().cause();
     msg.mLocation = p.value().location();
+    // Any bytes beyond the two cause octets are not modelled and are
+    // skipped verbatim.
+    if (causeLen > L3CauseElement::lengthV()) {
+        auto skipRes = detail::skipBytes(br, causeLen - L3CauseElement::lengthV());
+        if (!skipRes) return Expected<L3Disconnect>::error(skipRes.error());
+    }
 
     return Expected<L3Disconnect>::hold(std::move(msg));
 }
 
 void L3Disconnect::write(BitWriter& bw) const {
-    bw.writeField(0x08, 8);
+    // The cause is carried as a length-value element without an identifier
+    // (TS 24.078 section 10.5.x): first octet is the value length.
     bw.writeField(static_cast<uint32_t>(L3CauseElement::lengthV()), 8);
     L3CauseElement cause(mCause, mLocation);
     cause.write(bw);
@@ -1276,18 +1306,26 @@ L3CCStatus L3CCStatus::Builder::build() const {
 Expected<L3CCStatus> L3CCStatus::parse(BitReader& br) {
     L3CCStatus msg;
 
-    // Cause is a type-value information element in CC (no length octet,
-    // IEI 0x11); the call state follows as a single value octet
-    // (TS 24.078 10.5.4.11 / 10.5.4.6).
-    auto ieiRes = detail::readIEI(br);
-    if (!ieiRes) return Expected<L3CCStatus>::error(ieiRes.error());
-    if (ieiRes.value() != 0x11) {
+    // The cause is carried as a length-value element without an identifier
+    // (TS 24.078 section 10.5.x): first octet is the value length, followed
+    // by the two cause value octets (TS 24.078 10.5.4.11); the call state
+    // follows as a single value octet (TS 24.078 10.5.4.6).
+    auto lenRes = detail::readLength(br);
+    if (!lenRes) return Expected<L3CCStatus>::error(lenRes.error());
+    size_t causeLen = lenRes.value();
+    if (causeLen < L3CauseElement::lengthV()) {
         return Expected<L3CCStatus>::error(
-            ParseError{ParseError::Code::InvalidIE, "expected Cause IE (0x11)", br.position()});
+            ParseError{ParseError::Code::TruncatedInput, "CC Status cause length too short", br.position()});
     }
-    auto p = L3CauseElement::parse(br); // V = 2 octets, value part only
+    auto p = L3CauseElement::parse(br);
     if (!p) return Expected<L3CCStatus>::error(p.error());
     msg.mCause = p.value().cause();
+    // Any bytes beyond the two cause octets are not modelled and are
+    // skipped verbatim.
+    if (causeLen > L3CauseElement::lengthV()) {
+        auto skipRes = detail::skipBytes(br, causeLen - L3CauseElement::lengthV());
+        if (!skipRes) return Expected<L3CCStatus>::error(skipRes.error());
+    }
 
     // CallState V (no IEI, just value)
     auto cs = L3CallState::parse(br);
@@ -1298,9 +1336,11 @@ Expected<L3CCStatus> L3CCStatus::parse(BitReader& br) {
 }
 
 void L3CCStatus::write(BitWriter& bw) const {
-    bw.writeField(0x11, 8);
+    // The cause is carried as a length-value element without an identifier
+    // (TS 24.078 section 10.5.x): first octet is the value length.
+    bw.writeField(static_cast<uint32_t>(L3CauseElement::lengthV()), 8);
     L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
-    cause.write(bw); // two value octets (no IEI+length form)
+    cause.write(bw); // two value octets (no IEI form)
     L3CallState state(mCallState);
     state.write(bw);
 }

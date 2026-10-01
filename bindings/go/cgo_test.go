@@ -91,7 +91,7 @@ type pdBatch struct {
 var kBatch = []pdBatch{
 	{PDRR, "06 0D 00", 0x0d},          // Channel Release
 	{PDMM, "05 21", 0x21},             // CM Service Accept
-	{PDCC, "E3 25 08 02 16 21", 0x25}, // Disconnect (TI=7)
+	{PDCC, "E3 25 02 16 21", 0x25},   // Disconnect (TI=7)
 	{PDSS, "0B 3A 00", 0x3a},          // SupServFacilityMessage (empty facility)
 	{PDGmm, "08 20 05", 0x20},         // GMM Status (cause=5)
 	{PDSm, "0A 55 A7 01 05", 0x55},    // SM Status (cause=5)

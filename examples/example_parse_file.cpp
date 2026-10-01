@@ -141,7 +141,7 @@ int main(int argc, char* argv[]) {
     std::vector<std::pair<std::string, std::string>> batch{
         {"RR",       "06 0D 00"},                          // Channel Release
         {"MM",       "05 21"},                              // CM Service Accept
-        {"CC",       "E3 25 08 02 16 21"},                  // Disconnect (TI=7)
+        {"CC",       "E3 25 02 16 21"},                     // Disconnect (TI=7)
         {"SS",       "0B 3A"},                              // Facility
         {"GMM",      "08 20 05"},                            // GMM Status (cause=5)
         {"SM",       "0A 55 05"},                            // SM Status (cause=5)

@@ -185,10 +185,10 @@ TEST(GoldenCC, CallConfirmed_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: CC Status (TS 24.078 9.3.19)
-// Value part is exactly four octets: the Cause information element in
-// type-value form (IEI 0x11, no length octet; two value octets per
-// TS 24.078 10.5.4.11), followed by the one-octet call state
-// (TS 24.078 10.5.4.6).
+// Value part is exactly four octets: the cause as a length-value element
+// without an identifier (first octet = value length 2, then two cause
+// value octets per TS 24.078 10.5.4.11), followed by the one-octet call
+// state (TS 24.078 10.5.4.6).
 //   Cause value octet 1: location(4)|spare(1)|codingStandard(2)|ext1(1)
 //   Cause value octet 2: ext3(1)|causeValue(7), ext3=1 for a non-extending cause
 // =====================================================================
@@ -196,11 +196,11 @@ TEST(GoldenCC, CallConfirmed_Parse) {
 TEST(GoldenCC, CCStatus_Parse) {
     // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
     // Byte 1: MT=0x3D(CCStatus) in the six low bits, NSD=0 (TS 24.078)
-    // Byte 2: IEI = 0x11 (Cause, type-value form without a length octet; TS 24.078 10.5.4.11)
+    // Byte 2: cause value length = 2 (length-value form without an identifier; TS 24.078 10.5.4.11)
     // Byte 3: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x16
     // Byte 4: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21 (TS 24.078 10.5.4.11)
     // Byte 5: CallState spare(2)=11|value(6)=0 = 0xC0 (TS 24.078 10.5.4.6)
-    uint8_t data[] = {0xE3, 0x3D, 0x11, 0x16, 0x21, 0xC0};
+    uint8_t data[] = {0xE3, 0x3D, 0x02, 0x16, 0x21, 0xC0};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CCStatus::MTI);
@@ -211,7 +211,7 @@ TEST(GoldenCC, CCStatus_Parse) {
 }
 
 // [GOLDEN] CC Status frame size: the two header octets plus the
-// four-octet value part (IEI 0x11, two cause octets, call state).
+// four-octet value part (cause length octet, two cause octets, call state).
 TEST(GoldenCC, CCStatus_WireShape) {
     EXPECT_EQ(L3CCStatus{}.bodyLength(), 4u);
     auto msg = L3CCStatus::builder().ti(7)
@@ -222,7 +222,7 @@ TEST(GoldenCC, CCStatus_WireShape) {
     ASSERT_EQ(bytes.value().size(), 6u); // 2-byte header + 4-octet body
     EXPECT_EQ((*bytes)[0], 0xE3); // TI=7 | TIF=0 | PD=CC
     EXPECT_EQ((*bytes)[1], 0x3D); // MT=CCStatus, NSD=0
-    EXPECT_EQ((*bytes)[2], 0x11); // Cause IE identifier (type-value form)
+    EXPECT_EQ((*bytes)[2], 0x02); // Cause value length (length-value form, no identifier)
 }
 
 // =====================================================================
@@ -344,38 +344,26 @@ TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: Disconnect with CalledPartyNumber + Cause (GSM 24.008 9.3.7)
+// CC PARSE FROM HEX: Disconnect with Cause (GSM 24.008 9.3.7)
 // Header fields per GSM 24.078:
-//   message type = '100101'B (MTI=0x25), calledPartyNumberBcd + Cause LV
-// Called Party Number IE: IEI='5E'O, numberingPlan='0000'B (GSM 24.078).
-// Spec-verified: Disconnect with BCD-CalledPartyNumber(TLV) + Cause(TLV) per GSM 24.008 9.3.7
-// [GSM SPEC VERIFIED] GSM 24.008 9.3.7: Disconnect body = BCD-CalledPartyNumber(MANDATORY) + [Cause].
-//   Called-Party-Number is ALWAYS present in Disconnect (mandatory per spec).
-//   Called-Party-Number TLV: IEI=0x5E, length(1), typeOfNumber|numberingPlan(1), BCD digits.
-//   BCD encoding per GSM 24.008 Figure 10.5.4.7: digit pairs nibble-swapped (d1|d0).
-//   Cause TLV: IEI=0x08, length(1), value(2 octets). Value per GSM 24.008 10.5.4.11.
+//   message type = '100101'B (MTI=0x25), body = Cause LV
+// Spec-verified: Disconnect body = cause length-value element without an
+//   identifier per GSM 24.008 9.3.7.
+// [GSM SPEC VERIFIED] GSM 24.008 9.3.7: the Disconnect value part carries
+//   the cause as a length-value element: first octet = value length (2),
+//   followed by the two cause value octets per GSM 24.008 10.5.4.11.
 // =====================================================================
 
 TEST(GoldenCC, Disconnect_Parse) {
     // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
     // Byte 1: MT=0x25(Disconnect) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
-    // Called-Party-Number TLV (mandatory per GSM 24.008 9.3.7):
-    // Byte 2: IEI = 0x5E (CalledPartyNumberBcd, GSM 24.008 10.5.4.7)
-    // Byte 3: Length = 6 (1 type/plan octet + 5 BCD digit octets)
-    // Byte 4: spare(4)=0|numberingPlan(3)=1(ISDN/E.164)|typeOfNumber(1)=1(International) = 0b0000_0001 | 0b0001_0000 = 0x11
-    //   [GSM 24.008 Figure 10.5.4.7: typeOfNumber(1 bit): 0=Unknown, 1=International; numberingPlan(3 bits): 1=ISDN/E.164]
-    // Bytes 5-9: BCD digits "1234567890" GSM nibble-swapped: {0x21, 0x43, 0x65, 0x87, 0x98}
-    //   [GSM 24.008 Figure 10.5.4.7: odd-positioned digits in low-order nibble (bits 0-3),
-    //    even-positioned digits in high-order nibble (bits 4-7). Pairs: "12"->0x21, "34"->0x43, etc.]
-    // Cause TLV (conditional per GSM 24.008 9.3.7):
-    // Byte 10: IEI = 0x08 (Cause, GSM 24.008 10.5.4.11)
-    // Byte 11: Length = 2 (2 octets Cause value part)
-    // Byte 12: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11|ext(1)=0 = 0x16
-    // Byte 13: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21 [ITU-T Q.763]
+    // Cause length-value element (no identifier):
+    // Byte 2: Length = 2 (2 octets cause value part)
+    // Byte 3: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11|ext(1)=0 = 0x16
+    // Byte 4: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21 [ITU-T Q.763]
     uint8_t data[] = {
         0xE3, 0x25,
-        0x5E, 0x06, 0x11, 0x21, 0x43, 0x65, 0x87, 0x09,
-        0x08, 0x02, 0x16, 0x21
+        0x02, 0x16, 0x21
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -383,6 +371,7 @@ TEST(GoldenCC, Disconnect_Parse) {
     auto* d = tryGet<L3Disconnect>(*msg);
     ASSERT_TRUE(d);
     EXPECT_EQ(d->cause(), CCCause::Normal_Call_Clearing);
+    EXPECT_EQ(d->location(), CCCauseLocation::Private_Serving_Local);
     EXPECT_EQ(d->ti(), 7u);
 }
 
@@ -944,4 +933,127 @@ TEST(GoldenCC, HeaderLayout_TIAndMt) {
     ASSERT_TRUE(bytes);
     EXPECT_EQ((*bytes)[0], static_cast<uint8_t>((2 << 5) | 0x03));
     EXPECT_EQ((*bytes)[1] & 0x3F, L3Setup::MTI);
+}
+
+// =====================================================================
+// Golden: Release carrying the SS version indicator (TS 24.078)
+// The value part ends with the SS version TLV [0x7F][len=1][version];
+// version 1 is the standard supplementary service version indicator.
+// =====================================================================
+
+TEST(GoldenCC, Release_SSSVersion_TailShape) {
+    auto msg = L3Release::builder().ti(7)
+        .ssVersion(L3SupServVersionIndicator(1)).build();
+    ParsedMessage pm{CCM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    const auto& b = *bytes;
+    // 2-byte header + the 3-octet SS version TLV (no cause).
+    ASSERT_EQ(b.size(), 5u);
+    EXPECT_EQ(b[2], 0x7F); // SS version indicator IEI
+    EXPECT_EQ(b[3], 0x01); // value length = 1
+    EXPECT_EQ(b[4], 0x01); // version = 1 (standard)
+
+    auto parsed = roundtrip(pm);
+    ASSERT_TRUE(parsed);
+    const auto* r = tryGet<L3Release>(*parsed);
+    ASSERT_NE(r, nullptr);
+    EXPECT_TRUE(r->haveSSVersion());
+    EXPECT_EQ(r->ssVersion().version(), 1u);
+}
+
+// =====================================================================
+// Golden: CC Setup identifier set (TS 24.078)
+// With all modelled optional IEs present, the writer emits the identifiers
+// in this order: sub-address 0x5D, low layer compatibility 0x7C, high
+// layer compatibility 0x7D, user-user 0x7E, CLIR suppression 0xA1, CLIR
+// invocation 0xA2, CC capabilities 0x15, stream identifier 0x2D (TLV).
+// The CLIR elements are type T (identifier octet only); bodyLength() must
+// equal the actual wire size of the body.
+// =====================================================================
+
+TEST(GoldenCC, Setup_IeiSetAndBodyLength) {
+    // Build value-only elements from their raw value parts.
+    const uint8_t subAddrValue[] = {0x01, 0x01, 0x99}; // 1 item: ISDN, len=1, data
+    BitReader saReader(subAddrValue, sizeof(subAddrValue) * 8);
+    auto saRes = L3SubAddress::parse(saReader, sizeof(subAddrValue));
+    ASSERT_TRUE(saRes);
+    L3SubAddress sa = saRes.value();
+
+    const uint8_t llcValue[] = {0xAB, 0xCD};
+    BitReader llcReader(llcValue, sizeof(llcValue) * 8);
+    auto llcRes = L3LowLayerCompatibility::parse(llcReader, sizeof(llcValue));
+    ASSERT_TRUE(llcRes);
+    L3LowLayerCompatibility llc = llcRes.value();
+
+    const uint8_t hlcValue[] = {0x12, 0x34};
+    BitReader hlcReader(hlcValue, sizeof(hlcValue) * 8);
+    auto hlcRes = L3HighLayerCompatibility::parse(hlcReader, sizeof(hlcValue));
+    ASSERT_TRUE(hlcRes);
+    L3HighLayerCompatibility hlc = hlcRes.value();
+
+    const uint8_t uuValue[] = {0x01, 0x02, 0x03};
+    BitReader uuReader(uuValue, sizeof(uuValue) * 8);
+    auto uuRes = L3UserUser::parse(uuReader, sizeof(uuValue));
+    ASSERT_TRUE(uuRes);
+    L3UserUser uu = uuRes.value();
+
+    const uint8_t capsValue[] = {0x40};
+    BitReader capsReader(capsValue, sizeof(capsValue) * 8);
+    auto capsRes = L3CCCapabilities::parse(capsReader, sizeof(capsValue));
+    ASSERT_TRUE(capsRes);
+    L3CCCapabilities caps = capsRes.value();
+
+    auto setup = L3Setup::builder().ti(7)
+        .subAddress(sa)
+        .lowLayerCompat(llc)
+        .highLayerCompat(hlc)
+        .userUser(uu)
+        .clirSuppression()
+        .clirInvocation()
+        .ccCapabilities(caps)
+        .streamIdentifier(L3StreamIdentifier(5, true)).build();
+    const size_t bodyLen = setup.bodyLength();
+
+    ParsedMessage pm{CCM{std::move(setup)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    const auto& b = *bytes;
+
+    // Walk the body in write order: IEI octet + (length octet + value part
+    // for TLV elements, nothing for the type-T CLIR markers).
+    struct Ie { uint8_t iei; size_t afterIei; };
+    const Ie ies[8] = {
+        {0x5D, 1 + sa.lengthV()},
+        {0x7C, 1 + llc.lengthV()},
+        {0x7D, 1 + hlc.lengthV()},
+        {0x7E, 1 + uu.lengthV()},
+        {0xA1, 0}, // CLIR suppression: type T
+        {0xA2, 0}, // CLIR invocation: type T
+        {0x15, 1 + caps.lengthV()},
+        {0x2D, 1 + L3StreamIdentifier::lengthV()},
+    };
+    size_t idx = 2; // skip the two header octets
+    for (const auto& ie : ies) {
+        ASSERT_LT(idx, b.size());
+        EXPECT_EQ(b[idx], ie.iei);
+        idx += 1 + ie.afterIei;
+    }
+    EXPECT_EQ(idx, b.size()); // the body is exactly these eight IEs
+    EXPECT_EQ(bodyLen, b.size() - 2u);
+
+    auto parsed = roundtrip(pm);
+    ASSERT_TRUE(parsed);
+    const auto* s = tryGet<L3Setup>(*parsed);
+    ASSERT_NE(s, nullptr);
+    EXPECT_TRUE(s->haveSubAddress());
+    EXPECT_TRUE(s->haveLowLayerCompat());
+    EXPECT_TRUE(s->haveHighLayerCompat());
+    EXPECT_TRUE(s->haveUserUser());
+    EXPECT_TRUE(s->haveCLIRSuppression());
+    EXPECT_TRUE(s->haveCLIRInvocation());
+    EXPECT_TRUE(s->haveCCCapabilities());
+    EXPECT_TRUE(s->haveStreamIdentifier());
+    EXPECT_EQ(s->streamIdentifier().streamId(), 5u);
+    EXPECT_TRUE(s->streamIdentifier().vbs());
 }

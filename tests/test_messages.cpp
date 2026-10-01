@@ -280,7 +280,9 @@ TEST(MessagesTest, CC_Disconnect) {
     L3Disconnect msg(CCCause::Normal_Call_Clearing);
     EXPECT_EQ(msg.mti(), L3Disconnect::MTI);
     EXPECT_EQ(msg.cause(), CCCause::Normal_Call_Clearing);
-    EXPECT_EQ(msg.l2BodyLength(), 4u);
+    // Cause as a length-value element without an identifier: one length
+    // octet + two cause value octets (TS 24.078 9.3.7).
+    EXPECT_EQ(msg.l2BodyLength(), 3u);
 }
 
 TEST(MessagesTest, CC_Release) {

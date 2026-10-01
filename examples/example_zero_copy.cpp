@@ -65,7 +65,7 @@ int main() {
     // Representative messages from multiple PD domains.
     uint8_t rrMsg[] = {0x06, 0x0D, 0x00};   // RR: Channel Release
     uint8_t mmMsg[] = {0x05, 0x21};          // MM: CM Service Accept
-    uint8_t ccMsg[] = {0xE3, 0x25, 0x08, 0x02, 0x16, 0x21}; // CC: Disconnect
+    uint8_t ccMsg[] = {0xE3, 0x25, 0x02, 0x16, 0x21};       // CC: Disconnect
 
     std::vector<std::span<const uint8_t>> msgs{
         std::span{rrMsg}, std::span{mmMsg}, std::span{ccMsg},

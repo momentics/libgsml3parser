@@ -60,7 +60,7 @@ def parse_hex_channel_release():
 K_BATCH = [
     (g.PD_RR,   "06 0D 00",          0x0D),   # Channel Release
     (g.PD_MM,   "05 21",             0x21),   # CM Service Accept
-    (g.PD_CC,   "E3 25 08 02 16 21", 0x25),   # Disconnect (TI=7)
+    (g.PD_CC,   "E3 25 02 16 21",   0x25),   # Disconnect (TI=7)
     (g.PD_SS,   "0B 3A 00",          0x3A),   # SupServFacilityMessage (empty facility)
     (g.PD_GMM,  "08 20 05",          0x20),   # GMM Status (cause=5)
     (g.PD_SM,   "0A 55 A7 01 05",    0x55),   # SM Status (cause=5)
