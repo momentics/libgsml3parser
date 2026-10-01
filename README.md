@@ -9,10 +9,12 @@
 
 A type-safe, **zero-allocation C++20** library with **no external dependencies**, spanning the full GSM
 signalling chain of a software Base Transceiver Station: **236 L3 message classes across 12 PD
-domains** — typed fields for RR/SM/CC/GMM/MM/SMS/SS, opaque-body parsing for BCC/GCC/LS, and
-passthrough for the Extended/Test PDs — plus the complete **LAPDm** (L2) entity and **A-bis RSL**
-interface, per-subscriber state (context, FSMs, timers, transactions), and ten spec-based **protocol
-procedures** — from raw radio bytes up to working MO/MT call flows.
+domains** — typed fields for RR/SM/CC/GMM/MM/SS and the SMS CP/RP/TP layers, best-effort opaque-body
+parsing for the SMS L3 primitives (MTI 0x11–0x1E) and BCC/GCC/LS (no normative reference templates
+exist for these blocks, so bit-level conformance is not claimed), and passthrough for the Extended/Test
+PDs — plus the complete **LAPDm** (L2) entity and **A-bis RSL** interface, per-subscriber state
+(context, FSMs, timers, transactions), and ten spec-based **protocol procedures** — from raw radio bytes
+up to working MO/MT call flows.
 
 ## Why This Library?
 
@@ -36,7 +38,7 @@ BSC over A-bis RSL, with zero third-party dependencies to carry.
 | Hand-roll binary parsers for 200+ message types | `parseL3Hex("060D41")` — one call, typed result |
 | Manual byte construction for responses | Fluent builder: `.addTMSI(0x12345678, SDCCHType).build()` |
 | Scatter/gather FSM logic across handlers | Pre-built `ProcedureOrchestrator` auto-chains Location Update, Auth, Call Setup |
-| Track timers with raw `std::map` + cron jobs | `TimerManager` — fixed 32-slot arrays, zero allocation, T3101–T3395 built in |
+| Track timers with raw `std::map` + cron jobs | `TimerManager` — fixed 32-slot arrays, zero allocation; built-in default durations for the 19 named GSM/GPRS timers (T3101, T3102, T3103, T3106, T3108, T3109, T3111, T3112, T3113, T3310, T3311, T3312, T3314, T3315, T3320, T3321, T3322, T3334, T3395); other timer IDs accept a custom duration |
 | Correlate request/response with custom TI tables | `TransactionManager` — O(1) TI lookup, 0.004 µs per match |
 | Debug hex dumps by eye | `std::format` specializations for protocol enums, `Expected<T>` with bit-position errors |
 
@@ -53,10 +55,13 @@ BSC over A-bis RSL, with zero third-party dependencies to carry.
 Four layers, from raw bits to protocol state:
 
 1. **L3 Parser & Serializer** — hex/bytes ↔ typed `std::variant` objects; compile-time `tryGet<T>()`; a
-   fluent `builder()` for every message type; zero heap on the hot path (`sizeof(ParsedMessage)` = 416 B).
+   fluent `builder()` for every message type; zero heap on the hot path (`sizeof(ParsedMessage)` = 400 B).
 2. **LAPDm Protocol Entity** — GSM 04.06 / TS 44.064 state machine (SABME/UA/DISC), I-frame segmentation
    with k=1 and T200 retransmission, contention resolution, 4 KB-bounded reassembly.
-3. **BTS Stack Modules** — MSContext, TimerManager (T3101–T3395, zero-alloc O(active) tick),
+3. **BTS Stack Modules** — MSContext, TimerManager (fixed 32-slot arrays, zero allocation; built-in
+   default durations for the 19 named GSM/GPRS timers (T3101, T3102, T3103, T3106, T3108, T3109,
+   T3111, T3112, T3113, T3310, T3311, T3312, T3314, T3315, T3320, T3321, T3322, T3334, T3395); other
+   timer IDs accept a custom duration; O(active) tick),
    TransactionManager (O(1) TI index), RR/MM/CC state machines, ChannelPool / ShardedChannelPool,
    SubscriberRegistry — `sizeof(SubscriberSession)` = 2056 B (10K sessions ≈ 20 MB).
 4. **Procedure Framework** — `ProcedureRunner` + `ProcedureOrchestrator` auto-chain ten spec-based
@@ -82,8 +87,10 @@ shadowing): [doc/messages.md](doc/messages.md).
 
 ## Wire Format Conformance
 
-All parse/build paths follow the normative 3GPP TS wire layouts; golden vectors are pinned in the
-test suite. Highlights of the non-obvious encodings:
+All parse/build paths for RR/SM/CC/GMM/MM and the SMS CP/RP/TP layers follow the normative 3GPP TS wire
+layouts; golden vectors are pinned in the test suite. The SMS L3 primitives (MTI 0x11–0x1E) and the
+BCC/GCC/LS blocks have no normative reference templates, so they are parsed best-effort as opaque bodies
+and bit-level conformance is not claimed for them. Highlights of the non-obvious encodings:
 
 **Identities (TS 24.008)** — LAI/RAI pack the PLMN as `[MCC2|MCC1][MNC3/F|MCC3][MNC2|MNC1]` BCD octets
 plus a 16-bit LAC (plus one RAC octet for RAI); `mcc()`/`mnc()` return the digits in natural order.
@@ -109,10 +116,13 @@ tear-down indicator TV `0x09`.
 `[sC(1)|algorithm(3)][cR(1)|spare(3)]`; SI1 carries the cell channel description (ARFCN(10)+BSIC(6),
 two octets) plus RACH control parameters (three octets) and at most one rest octet; the access-class
 bitmap is a 16-bit value written low byte first (AC *i* ↔ bit *i*); a set bit bars the class
-(emergency = class 10); Paging Request Type 1/2/3 carry
-the four-bit page mode between channel-needed and the identities; channel numbers use the five-bit
-type-and-offset codes (`'00001'B` Bm ACCH … `'10000'B` BCCH, `'10001'B` RACH, `'10010'B` PCH+AGCH,
-PDCH/CBCH/VAMOS extensions) with `channelCodeLm/Sdcch4/Sdcch8` helpers.
+(emergency = class 10); Paging Request Type 1/2/3 start with the octet `[pageMode(4)][channelNeeded(4)]`
+(channel needed packed as second|first two-bit fields) followed by the identities — two raw TMSIs plus an
+optional third identity (TLV `0x17`) for Type 2, four raw TMSIs for Type 3 — and Paging Response starts
+with `[spare(4)][CKSN(4)]`; the Immediate Assignment start time (IEI `0x7C`) is two value octets packing
+T1(5)/T3(6)/T2(5); channel numbers use the five-bit type-and-offset codes (`'00001'B` Bm ACCH …
+`'10000'B` BCCH, `'10001'B` RACH, `'10010'B` PCH+AGCH, PDCH/CBCH/VAMOS extensions) with
+`channelCodeLm/Sdcch4/Sdcch8` helpers.
 
 **LAPDm (GSM 04.06 / TS 51.010-1)** — an initial SABME is accepted on SAPI 0 only when it carries
 contention-resolution information; every UA we send mirrors the P/F of the received command; DM while
@@ -187,8 +197,8 @@ Every detail lives in a dedicated guide; this README is the pitch and the index.
 | [doc/messages.md](doc/messages.md) | Complete message catalog: all 236 types with MTIs and directions, CC/GMM/SM IEs, SMS CP/RP/TP layers, dispatch edge cases (TIF=1 short messages, build-only types, parse-slot shadowing) |
 | [doc/boundaries.md](doc/boundaries.md) | What the library intentionally excludes — PHY/SDR, speech codecs, A5 ciphering, OML, SIP/media gateways, PS full stack, configuration, logging — and the exact integration point for each |
 | [examples/](examples/) | 20 runnable demos (see below), incl. full BTS flows, benchmarks, and a 1M-session real-time loop |
-| [bindings/README.md](bindings/README.md) | FFI bindings (Python / Go / Rust): quickstarts, ownership & threading model, callback safety rules, unified test gate |
-| [bindings/python/README.md](bindings/python/README.md) | Python `ctypes` binding over the stable C ABI: layout, prebuilt-library loading, quickstart, queue-model BTS stack, error model, ownership & threading contract |
+| [bindings/README.md](bindings/README.md) | FFI bindings (Python / Go / Rust) over the stable C ABI: unified quickstarts, ownership & threading model, callback safety rules, extension guide, test gate |
+| [bindings/python/README.md](bindings/python/README.md), [bindings/go/README.md](bindings/go/README.md), [bindings/rust/README.md](bindings/rust/README.md) | Per-language binding guides with identical structure: layout, building & linking, quickstart, error model, ownership & callbacks, versioning |
 
 ## Examples
 
@@ -216,15 +226,21 @@ Every detail lives in a dedicated guide; this README is the pitch and the index.
 
 ## FFI and Bindings
 
-- Stable C89 C ABI over the full stack: `include/gsml3parser/gsml3parser_c.h` (handles, error model,
-  validation, threading contract documented in [doc/API.md §63](doc/API.md#63-c-api-gsml3parser_ch)).
-- **FFI bindings** — first-party Python (ctypes, zero third-party deps), Go (cgo with `//export` +
-  `cgo.Handle` callback bridges), and Rust (sys crate + safe wrapper, `Send`, no code generation) over the
-  stable C ABI, each demonstrating the BTS stack with callbacks; unified build/test gate included
-  (`bindings/`, see [bindings/README.md](bindings/README.md)).
-- **Python** — `ctypes` binding in [bindings/python/](bindings/python/) (stdlib-only, full API surface,
-  RAII wrappers + a queue-model BTS stack): see its [README](bindings/python/README.md).
-- [x] FFI bindings for Python (ctypes), Go (cgo), and Rust (safe wrapper) over the C ABI (`bindings/`, unified gate: `scripts/verify_bindings.ps1`).
+The full stack is also reachable through a stable C89 C ABI
+(`include/gsml3parser/gsml3parser_c.h`, contract in [doc/API.md §63](doc/API.md#63-c-api-gsml3parser_ch)).
+Three first-party bindings share one set of semantics — RAII ownership, the borrowed-session rule,
+queue-model callbacks — and carry no third-party runtime dependencies:
+
+| Language | Mechanism | Coverage | Runnable demo |
+|----------|-----------|----------|---------------|
+| Python | `ctypes`, stdlib only | entire C ABI: 236 functions, completeness pinned by test | [bts_simulation.py](bindings/python/examples/bts_simulation.py) |
+| Go | cgo + `cgo.Handle` callback bridges (needs a C toolchain) | v1 surface: 128 functions incl. typed L3 builders | [cmd/gsmexample](bindings/go/cmd/gsmexample/main.go) |
+| Rust | handwritten `sys` crate + safe wrapper — `Send`, no bindgen/codegen | same 128-function v1 surface; extern block checked at compile time | [bts_simulation.rs](bindings/rust/gsml3parser/examples/bts_simulation.rs) |
+
+All three run the same "MO call over SDCCH" scenario against the shared C core, and one unified gate
+(`scripts/verify_bindings.ps1`, CI on Linux + Windows) builds and tests them together. Per-language
+guides (quickstart, building & linking, error model, ownership & callbacks):
+[bindings/README.md](bindings/README.md) plus the `README.md` in each binding directory.
 
 ## Testing & Fuzzing
 

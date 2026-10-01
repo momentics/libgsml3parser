@@ -20,7 +20,7 @@ Struct sizes (all static_assert invariants pass):
   ProtocolDispatcher: 35216 bytes (~35 KB compact table [16][136])
   ChannelPool: 2816 bytes (fixed arrays, no unordered_map)
   ShardedChannelPool<16>: 45192 bytes
-  ParsedMessage: 416 bytes (variant of 12 PD domains, stack-resident)
+  ParsedMessage: 400 bytes (variant of 12 PD domains, stack-resident)
   MSContext: 92 bytes
   SubscriberSession: 2056 bytes (context + 3 FSMs + timers + transactions + procedure runner + response)
   ProcedureStepResult: 32 bytes (<= 32)

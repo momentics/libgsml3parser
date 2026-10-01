@@ -15,9 +15,9 @@ behavioral vectors as `tests/test_c_api.cpp`.
 
 | Language | Location | Runtime deps | v1 surface | Demo |
 |----------|----------|--------------|------------|------|
-| Python | `python/` — package `gsml3parser` | stdlib only (`ctypes`); `pytest` is test-only | the whole C ABI: all 238 functions registered with explicit `argtypes`/`restype`; completeness against the header is pinned by `tests/test_api_surface.py` | `examples/bts_simulation.py` |
-| Go | `go/` — module `github.com/momentics/libgsml3parser/bindings/go` | stdlib only (cgo; needs a C compiler) | core/config/message, A-bis RSL, LAPDm, registry/session, orchestrator/response functions plus the typed L3 builders `BuildCMServiceRequest` and `BuildSetup` — 128 of the header's functions | `cmd/gsmexample/main.go` |
-| Rust | `rust/` — workspace `gsml3parser-sys` (handwritten `extern "C"` + `#[repr(C)]` mirrors, no bindgen/codegen) + safe `gsml3parser` crate | none | the same 128-function v1 surface; the sys crate's extern block is checked for completeness at compile time (`gsml3parser-sys/tests/surface.rs`) | `gsml3parser/examples/bts_simulation.rs` |
+| Python | `python/` — package `gsml3parser` ([README](python/README.md)) | stdlib only (`ctypes`); `pytest` is test-only | the whole C ABI: all 236 functions registered with explicit `argtypes`/`restype`; completeness against the header is pinned by `tests/test_api_surface.py` | `examples/bts_simulation.py` |
+| Go | `go/` — module `github.com/momentics/libgsml3parser/bindings/go` ([README](go/README.md)) | stdlib only (cgo; needs a C compiler) | core/config/message, A-bis RSL, LAPDm, registry/session, orchestrator/response functions plus the typed L3 builders `BuildCMServiceRequest` and `BuildSetup` — 128 of the header's 236 functions | `cmd/gsmexample/main.go` |
+| Rust | `rust/` — workspace `gsml3parser-sys` (handwritten `extern "C"` + `#[repr(C)]` mirrors, no bindgen/codegen) + safe `gsml3parser` crate ([README](rust/README.md)) | none | the same 128-function v1 surface; the sys crate's extern block is checked for completeness at compile time (`gsml3parser-sys/tests/surface.rs`) | `gsml3parser/examples/bts_simulation.rs` |
 
 Every demo runs the unified "MO call over SDCCH" scenario: stack
 initialization (registry + borrowed session + orchestrator + a LAPDm entity

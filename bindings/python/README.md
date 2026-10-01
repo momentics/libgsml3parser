@@ -2,7 +2,7 @@
 
 `ctypes` binding over the stable C ABI of **libgsml3parser**
 (`include/gsml3parser/gsml3parser_c.h`, `GSML3_ABI_VERSION == 1`). Standard
-library only — no third-party runtime dependencies. All 238 functions of the
+library only — no third-party runtime dependencies. All 236 functions of the
 C ABI (S1–S9: core/config/message, A-bis RSL, LAPDm, BTS registry/session,
 orchestrator/response builders, typed getters/builders) are registered with
 explicit `argtypes`/`restype`; completeness against the header is pinned by
@@ -25,7 +25,7 @@ explicit `argtypes`/`restype`; completeness against the header is pinned by
   the product version from the repository-root `VERSION` file and stamps it
   into the package metadata.
 
-## Building and installing
+## Building and linking
 
 The binding wraps a **prebuilt shared library** of the C core; it does not
 compile C++. From the repository root:

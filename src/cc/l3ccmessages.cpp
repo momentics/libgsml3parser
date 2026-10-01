@@ -505,12 +505,12 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
-        case 0x51: case 0x86: case 0x87: case 0x9a: case 0x9b: { // Legacy IEIs - skip TLV (tolerance to foreign frames)
+        case 0x51: case 0x86: case 0x87: case 0x9a: case 0x9b: { // Identifiers not modelled as typed fields in this message: skip the length-value part (TS 24.078)
             auto skipRes = detail::skipTLV(br);
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
-        case 0x8e: case 0xc1: case 0xc2: { // Legacy TV-form IEs - skip one value octet (tolerance to foreign frames)
+        case 0x8e: case 0xc1: case 0xc2: { // Identifiers not modelled in TV form in this message: skip the value octet (TS 24.078)
             auto skipRes = detail::skipTV(br);
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
@@ -914,7 +914,7 @@ Expected<L3Connect> L3Connect::parse(BitReader& br) {
             }
             continue;
         }
-        case 0x8e: { // Legacy stream identifier TV form - skip one value octet
+        case 0x8e: { // Stream identifier carried in TV form: skip the value octet (TS 24.078)
             auto skipRes = detail::skipTV(br);
             if (!skipRes) return Expected<L3Connect>::error(skipRes.error());
             continue;

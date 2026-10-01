@@ -52,7 +52,7 @@ from ._errors import (
 )
 
 # High-level API: RAII wrappers, the queue-model stack, typed value objects,
-# LAPDm decode and ALL stateless S4/S7/S9 builders (238 C functions total are
+# LAPDm decode and ALL stateless S4/S7/S9 builders (236 C functions total are
 # registered with argtypes/restype in gsml3parser._library — enforced by
 # test_api_surface.py against the C header).
 from .stack import (

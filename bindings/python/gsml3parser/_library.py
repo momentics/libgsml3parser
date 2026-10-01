@@ -36,7 +36,7 @@ This module owns every contact point between Python and the C ABI
 
 * **Declarations** — ctypes mirrors of every public C struct and callback
   type, plus ``PROTOTYPES``: ``(restype, argtypes)`` for ALL functions of
-  the C ABI (238 at GSML3_ABI_VERSION 1, ABI
+  the C ABI (236 at GSML3_ABI_VERSION 1, ABI
   inventory). At import time every entry is registered on the loaded
   library; a missing symbol or an unknown token raises immediately — this
   module never exposes a partially typed binding.
@@ -465,7 +465,7 @@ PROTOTYPES = {
     "gsml3_response_build_release":                   ("SZ", ("PB", "SZ", "U8", "I")),
     "gsml3_response_build_release_complete":          ("SZ", ("PB", "SZ", "U8")),
     "gsml3_response_build_setup":                     ("SZ", ("PB", "SZ", "CS", "U8")),  # (called_digits, ti) order
-    # ── S8 typed getters (69): (const gsml3_message*, ...) — Python v1 only ─
+    # ── S8 typed getters (67): (const gsml3_message*, ...) — Python v1 only ─
     # Sentinels: -1/0/None on wrong type. Out-struct variants fill a ctypes
     # mirror; the wrapper layer converts them to plain values.
     "gsml3_msg_channel_release_cause":                ("I",   ("H",)),

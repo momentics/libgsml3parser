@@ -706,7 +706,7 @@ if (result.action == ProcedureStepResult::Action::Failed) {
 
 ## Performance Considerations
 
-- **Zero heap allocation on parse path**: `ParsedMessage` is a stack-allocated variant (416 bytes on x64, bounded < 8192 via `static_assert`)
+- **Zero heap allocation on parse path**: `ParsedMessage` is a stack-allocated variant (400 bytes on x64, bounded < 8192 via `static_assert`)
 - **MSContext 92 bytes**: Fits in L1 cache; millions of contexts fit in L3 cache
 - **ProcedureStepResult ≤ 32 bytes**: Compact result with `ResponseToken` (uint8_t), no heap allocation
 - **ResponseContext ≤ 160 bytes**: Fixed arrays, zero heap; single source of response parameters on the session

@@ -109,7 +109,7 @@ BTS Stack Mode (all modules)
 │   ├── SubscriberSession
 │   │   ├── MSContext (identity, channel, flags)
 │   │   ├── RR/MM/CC StateMachine (protocol FSM)
-│   │   ├── TimerManager (T3101–T3395)
+│   │   ├── TimerManager (19 named GSM/GPRS timers, custom durations for other IDs)
 │   │   └── TransactionManager (request-response correlation)
 │   └── ChannelPool / ShardedChannelPool
 ├── LAPDmEntity (L2 framing + state machine)
@@ -424,7 +424,7 @@ Measured sizes (MSVC, x64; identical across Debug/Release):
 | `CCStateMachine` | 16 bytes | Virtual table pointer + state int |
 | `ProcedureRunner` | 152 bytes | 8 × ProcedureSlot (unique_ptr + flag) + owner/observer words |
 | `ResponseContext` | 128 bytes | Response parameters, fixed arrays (budget ≤ 160 via `static_assert`) |
-| **Total per MS** | **2,056 bytes** (`sizeof(SubscriberSession)`) | Enforced `< 4096` via `static_assert`; plus a transient `ParsedMessage` (416 bytes on x64) on the stack while a message is being processed. The app-owned `ProcedureOrchestrator` adds 72 bytes per subscriber |
+| **Total per MS** | **2,056 bytes** (`sizeof(SubscriberSession)`) | Enforced `< 4096` via `static_assert`; plus a transient `ParsedMessage` (400 bytes on x64) on the stack while a message is being processed. The app-owned `ProcedureOrchestrator` adds 72 bytes per subscriber |
 
 At 10,000 concurrent MS sessions: ~20 MB for sessions (fits comfortably in DRAM; hot per-session data stays cache-resident under normal load).
 
@@ -576,13 +576,13 @@ public:
 
 ### Memory Budget Planning
 
-Per-MS stack footprint is ~2 KB (`sizeof(SubscriberSession)` = 2056 bytes, static_assert < 4096); `sizeof(ParsedMessage)` = 416 bytes on x64. The TMSI and LAPDm-link flat indexes add a small per-entry cost inside shared 64-entry slabs (`stack/flat_map.h`; one slab allocation per 64 sessions, entry addresses stable for the entry's lifetime) — negligible against the 2 KB session footprint.
+Per-MS stack footprint is ~2 KB (`sizeof(SubscriberSession)` = 2056 bytes, static_assert < 4096); `sizeof(ParsedMessage)` = 400 bytes on x64. The TMSI and LAPDm-link flat indexes add a small per-entry cost inside shared 64-entry slabs (`stack/flat_map.h`; one slab allocation per 64 sessions, entry addresses stable for the entry's lifetime) — negligible against the 2 KB session footprint.
 
 | Scale | MS Sessions | Stack Module Memory | ParsedMessage (stack, transient) |
 |-------|------------|-------------------|-------------------------------|
-| Small cell | 100 | ~205 KB | ~42 KB peak |
-| Macro cell | 10,000 | ~20 MB | ~4.2 MB peak |
-| Large deployment | 1,000,000 | ~2 GB | ~416 MB peak (transient) |
+| Small cell | 100 | ~205 KB | ~40 KB peak |
+| Macro cell | 10,000 | ~20 MB | ~4.0 MB peak |
+| Large deployment | 1,000,000 | ~2 GB | ~400 MB peak (transient) |
 
 For large deployments, ParsedMessage is only on-stack during message processing (microseconds), so peak concurrent usage is much lower than the theoretical maximum.
 
