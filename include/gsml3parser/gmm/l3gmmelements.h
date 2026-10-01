@@ -289,12 +289,13 @@ public:
 };
 
 // ── Authentication Parameter RAND (GSM 24.008 10.5.6.7) ───────────────
-// TLV: IEI=0x15 | RAND(16 octets)
+// TV format, IEI=0x21 | RAND(16 octets). The class holds the value only;
+// the message writes and reads the identifier octet (TS 44.068 section 9.5).
 
 class L3AuthRAND {
     std::array<uint8_t, 16> mValue{};
 public:
-    static constexpr uint8_t IEI = 0x15;
+    static constexpr uint8_t IEI = 0x21;
     L3AuthRAND() = default;
 
     bool operator==(const L3AuthRAND&) const = default;
@@ -308,12 +309,13 @@ public:
 };
 
 // ── Authentication Parameter Response (GSM 24.008 10.5.6.8) ───────────
-// TLV: IEI=0x16 | RES(4 octets)
+// TV format, IEI=0x22 | RES(4 octets). The class holds the value only;
+// the message writes and reads the identifier octet (TS 44.068 section 9.5).
 
 class L3AuthRES {
     std::array<uint8_t, 4> mValue{};
 public:
-    static constexpr uint8_t IEI = 0x16;
+    static constexpr uint8_t IEI = 0x22;
     L3AuthRES() = default;
 
     bool operator==(const L3AuthRES&) const = default;
@@ -346,12 +348,12 @@ public:
 };
 
 // ── P-TMSI Signature (GSM 24.008) ─────────────────────────────────────
-// TV: IEI=0x13 | Value(3 octets)
+// TV format, IEI=0x19 | Value(3 octets), TS 44.068 section 9.5.
 
 class L3PTMSISignature {
     std::array<uint8_t, 3> mValue{};
 public:
-    static constexpr uint8_t IEI = 0x13;
+    static constexpr uint8_t IEI = 0x19;
     L3PTMSISignature() = default;
 
     bool operator==(const L3PTMSISignature&) const = default;

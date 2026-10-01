@@ -33,6 +33,7 @@ namespace {
 
 size_t lvLen(size_t vLen) { return 1 + vLen; }
 size_t tlvLen(size_t vLen) { return 2 + vLen; }
+size_t tvLen(size_t vLen) { return 1 + vLen; }
 
 Expected<L3MobileIdentity> parseLVMI(BitReader& br) {
     auto r = br.readField(8);
@@ -199,19 +200,22 @@ size_t L3AttachAccept::bodyLength() const {
     size_t len = 1; // attachResult|forceToStandby|updateTimer|radioPriority
     len += 6;       // routingAreaIdentification (raw)
     if (mHavePTMSI) len += tlvLen(mPTMSI.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3AttachAccept> L3AttachAccept::parse(BitReader& br) {
     L3AttachAccept msg;
 
-    // 24.008 9.4.2: attachResult(3)|spare(1)|forceToStandby(1)|updateTimer(2)|radioPriority(1) = 1 octet
+    // attachResult(3)|spare(1)|forceToStandby(1)|updateTimer(2)|radioPriority(1)
+    // = 1 octet (TS 44.068 section 9.5).
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3AttachAccept>::error(o.error());
-        msg.mAttachResult = static_cast<GMMAttachType>((o.value() >> 5) & 0x07);
-        msg.mForceToStandby = ((o.value() >> 3) & 0x01) != 0;
-        // updateTimer and radioPriority in lower bits
+        msg.mAttachResult = static_cast<GMMAttachType>((o.value() >> 5) & 0x07u);
+        msg.mForceToStandby = ((o.value() >> 3) & 0x01u) != 0;
+        msg.mUpdateTimer = (o.value() >> 1) & 0x03u;
+        msg.mRadioPriority = o.value() & 0x01u;
     }
 
     // routingAreaIdentification (raw, 6 octets)
@@ -221,48 +225,42 @@ Expected<L3AttachAccept> L3AttachAccept::parse(BitReader& br) {
         msg.mRAI = std::move(rai).value();
     }
 
-    // Optional IEs: TLV format
-    while (br.hasMore()) {
-        auto type = br.peekField(8);
-        uint8_t rawType = static_cast<uint8_t>(type);
-        if ((rawType & 0x80) == 0) break; // not extended, stop
-
-        auto fullType = br.readField(8);
-        if (!fullType) return Expected<L3AttachAccept>::error(fullType.error());
-        uint8_t iei = static_cast<uint8_t>(fullType.value());
-        iei &= 0x7F;
-
-        auto len = br.readField(8);
-        if (!len) return Expected<L3AttachAccept>::error(len.error());
-        size_t vLen = len.value();
-
-        // allocatedPTMSI (IEI=0x0c, TLV)
-        if (iei == 0x0c && vLen >= 2) {
-            auto mi = L3MobileIdentity::parse(br, vLen);
-            if (mi) {
-                msg.mHavePTMSI = true;
-                msg.mPTMSI = std::move(mi).value();
-            }
-        } else {
-            // Skip unknown IE
-            if (vLen > 0 && br.remainingBits() >= vLen * 8) {
-                // Advance reader
-            }
+    // Optional P-TMSI (TLV, element identifier 0x18), then any remaining
+    // optional information elements kept opaque and re-emitted verbatim
+    // (TS 44.068 section 9.5).
+    if (br.hasMore()) {
+        uint8_t raw = static_cast<uint8_t>(br.peekField(8));
+        if ((raw & 0x7Fu) == 0x18u) {
+            auto type = br.readField(8);
+            if (!type) return Expected<L3AttachAccept>::error(type.error());
+            auto len = br.readField(8);
+            if (!len) return Expected<L3AttachAccept>::error(len.error());
+            auto mi = L3MobileIdentity::parse(br, len.value());
+            if (!mi) return Expected<L3AttachAccept>::error(mi.error());
+            msg.mHavePTMSI = true;
+            msg.mPTMSI = std::move(mi).value();
         }
+    }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3AttachAccept>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
     }
 
     return Expected<L3AttachAccept>::hold(std::move(msg));
 }
 
 void L3AttachAccept::write(BitWriter& bw) const {
-    bw.writeField(((static_cast<uint8_t>(mAttachResult) & 0x07) << 5) |
-                  ((mForceToStandby ? 1 : 0) << 3), 8);
+    bw.writeField(((static_cast<uint8_t>(mAttachResult) & 0x07u) << 5) |
+                  (mForceToStandby ? 0x08u : 0u) |
+                  ((mUpdateTimer & 0x03u) << 1) | (mRadioPriority & 0x01u), 8);
     mRAI.write(bw);
     if (mHavePTMSI) {
-        bw.writeField(0x8c, 8); // extended IEI for allocatedPTMSI
+        // allocated P-TMSI: element identifier, length, value (TLV).
+        bw.writeField(0x18u, 8);
         bw.writeField(static_cast<uint32_t>(mPTMSI.lengthV()), 8);
         mPTMSI.write(bw);
     }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3AttachAccept::text(std::ostream& os) const {
@@ -283,6 +281,7 @@ L3AttachAccept L3AttachAccept::Builder::build() const {
     msg.mRAI = m_rai;
     msg.mHavePTMSI = m_havePTMSI;
     msg.mPTMSI = m_ptmsi;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -373,12 +372,13 @@ Expected<L3DetachRequest> L3DetachRequest::parse(BitReader& br) {
     msg.mDetachType = (o.value() >> 4) & 0x07u;
     msg.mPowerOff = ((o.value() >> 3) & 0x01u) != 0;
 
-    // Optional IEs: the P-TMSI as a TLV (IEI 0x0c + LV value) and, in the
-    // network-to-MS direction, the GMM cause as a type-value pair (IEI 0x25
-    // + one value octet); any other IE is kept opaque (TS 44.068).
+    // Optional IEs: the P-TMSI as a TLV (element identifier 0x18 + LV value)
+    // and, in the network-to-MS direction, the GMM cause as a type-value pair
+    // (IEI 0x25 + one value octet); any other IE is kept opaque
+    // (TS 44.068 section 9.5).
     while (br.hasMore()) {
         uint8_t raw = static_cast<uint8_t>(br.peekField(8));
-        if ((raw & 0x7Fu) == 0x0Cu) {
+        if ((raw & 0x7Fu) == 0x18u) {
             auto type = br.readField(8);
             if (!type) return Expected<L3DetachRequest>::error(type.error());
             auto len = br.readField(8);
@@ -409,7 +409,8 @@ Expected<L3DetachRequest> L3DetachRequest::parse(BitReader& br) {
 void L3DetachRequest::write(BitWriter& bw) const {
     bw.writeField(((mDetachType & 0x07u) << 4) | (mPowerOff ? 0x08u : 0u), 8);
     if (mHavePTMSI) {
-        bw.writeField(0x0Cu, 8);
+        // allocated P-TMSI: element identifier, length, value (TLV).
+        bw.writeField(0x18u, 8);
         bw.writeField(static_cast<uint32_t>(mPTMSI.lengthV()), 8);
         mPTMSI.write(bw);
     }
@@ -572,18 +573,22 @@ size_t L3RoutingAreaUpdateAccept::bodyLength() const {
     size_t len = 1; // forceToStandby|updateResult|...
     len += 6;       // routingAreaId (raw)
     if (mHavePTMSI) len += tlvLen(mPTMSI.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3RoutingAreaUpdateAccept> L3RoutingAreaUpdateAccept::parse(BitReader& br) {
     L3RoutingAreaUpdateAccept msg;
 
-    // forceToStandby(1)|updateResult(3)|spare(1)|raUpdateTimer(2)|radioPriority(1) = 1 octet
+    // forceToStandby(1)|updateResult(3)|spare(1)|raUpdateTimer(2)|radioPriority(1)
+    // = 1 octet (TS 44.068 section 9.5).
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3RoutingAreaUpdateAccept>::error(o.error());
-        msg.mForceToStandby = ((o.value() >> 7) & 0x01) != 0;
-        msg.mUpdateResult = static_cast<GMMUpdateType>((o.value() >> 4) & 0x07);
+        msg.mForceToStandby = ((o.value() >> 7) & 0x01u) != 0;
+        msg.mUpdateResult = static_cast<GMMUpdateType>((o.value() >> 4) & 0x07u);
+        msg.mRAUpdateTimer = (o.value() >> 2) & 0x03u;
+        msg.mRadioPriority = o.value() & 0x01u;
     }
 
     // routingAreaId (raw, 6 octets)
@@ -593,37 +598,42 @@ Expected<L3RoutingAreaUpdateAccept> L3RoutingAreaUpdateAccept::parse(BitReader& 
         msg.mRAI = std::move(rai).value();
     }
 
-    // Optional IEs
-    while (br.hasMore()) {
-        auto type = br.readField(8);
-        if (!type) return Expected<L3RoutingAreaUpdateAccept>::error(type.error());
-        uint8_t rawType = static_cast<uint8_t>(type.value());
-        uint8_t iei = rawType & 0x7F;
-
-        auto len = br.readField(8);
-        if (!len) return Expected<L3RoutingAreaUpdateAccept>::error(len.error());
-        size_t vLen = len.value();
-
-        if (iei == 0x0c && vLen >= 2) {
-            auto mi = L3MobileIdentity::parse(br, vLen);
-            if (mi) {
-                msg.mHavePTMSI = true;
-                msg.mPTMSI = std::move(mi).value();
-            }
+    // Optional P-TMSI (TLV, element identifier 0x18), then any remaining
+    // optional information elements kept opaque and re-emitted verbatim
+    // (TS 44.068 section 9.5).
+    if (br.hasMore()) {
+        uint8_t raw = static_cast<uint8_t>(br.peekField(8));
+        if ((raw & 0x7Fu) == 0x18u) {
+            auto type = br.readField(8);
+            if (!type) return Expected<L3RoutingAreaUpdateAccept>::error(type.error());
+            auto len = br.readField(8);
+            if (!len) return Expected<L3RoutingAreaUpdateAccept>::error(len.error());
+            auto mi = L3MobileIdentity::parse(br, len.value());
+            if (!mi) return Expected<L3RoutingAreaUpdateAccept>::error(mi.error());
+            msg.mHavePTMSI = true;
+            msg.mPTMSI = std::move(mi).value();
         }
+    }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3RoutingAreaUpdateAccept>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
     }
 
     return Expected<L3RoutingAreaUpdateAccept>::hold(std::move(msg));
 }
 
 void L3RoutingAreaUpdateAccept::write(BitWriter& bw) const {
-    bw.writeField((mForceToStandby ? 0x80 : 0) | ((static_cast<uint8_t>(mUpdateResult) & 0x07) << 4), 8);
+    bw.writeField((mForceToStandby ? 0x80u : 0u) |
+                  ((static_cast<uint8_t>(mUpdateResult) & 0x07u) << 4) |
+                  ((mRAUpdateTimer & 0x03u) << 2) | (mRadioPriority & 0x01u), 8);
     mRAI.write(bw);
     if (mHavePTMSI) {
-        bw.writeField(0x8c, 8);
+        // allocated P-TMSI: element identifier, length, value (TLV).
+        bw.writeField(0x18u, 8);
         bw.writeField(static_cast<uint32_t>(mPTMSI.lengthV()), 8);
         mPTMSI.write(bw);
     }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3RoutingAreaUpdateAccept::text(std::ostream& os) const {
@@ -646,6 +656,7 @@ L3RoutingAreaUpdateAccept L3RoutingAreaUpdateAccept::Builder::build() const {
     msg.mRAI = m_rai;
     msg.mHavePTMSI = m_havePTMSI;
     msg.mPTMSI = m_ptmsi;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -839,17 +850,19 @@ size_t L3P_TMSIReallocationCommand::bodyLength() const {
     size_t len = 1; // PTMSI_Type|forceToStandby
     len += 6;       // routingAreaId (raw)
     if (mHavePTMSI) len += tlvLen(mPTMSI.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3P_TMSIReallocationCommand> L3P_TMSIReallocationCommand::parse(BitReader& br) {
     L3P_TMSIReallocationCommand msg;
 
-    // PTMSI_Type(1)|spare(3)|forceToStandby(1)|spare(4) = 1 octet (actually forceToStandby is separate)
+    // P-TMSI type in bit 7, force to standby in bit 4 (TS 44.068 section 9.5).
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3P_TMSIReallocationCommand>::error(o.error());
-        msg.mPTMSIType = static_cast<GMMPTMSIType>(o.value() & 0x01);
+        msg.mPTMSIType = static_cast<GMMPTMSIType>((o.value() >> 7) & 0x01u);
+        msg.mForceToStandby = ((o.value() >> 4) & 0x01u) != 0;
     }
 
     // routingAreaId (raw, 6 octets)
@@ -859,36 +872,40 @@ Expected<L3P_TMSIReallocationCommand> L3P_TMSIReallocationCommand::parse(BitRead
         msg.mRAI = std::move(rai).value();
     }
 
-    // Optional IEs
-    while (br.hasMore()) {
-        auto type = br.readField(8);
-        if (!type) return Expected<L3P_TMSIReallocationCommand>::error(type.error());
-        uint8_t iei = type.value() & 0x7F;
-
-        auto len = br.readField(8);
-        if (!len) return Expected<L3P_TMSIReallocationCommand>::error(len.error());
-        size_t vLen = len.value();
-
-        if (iei == 0x0c && vLen >= 2) {
-            auto mi = L3MobileIdentity::parse(br, vLen);
-            if (mi) {
-                msg.mHavePTMSI = true;
-                msg.mPTMSI = std::move(mi).value();
-            }
+    // Optional P-TMSI (TLV, element identifier 0x18), then any remaining
+    // optional information elements kept opaque and re-emitted verbatim
+    // (TS 44.068 section 9.5).
+    if (br.hasMore()) {
+        uint8_t raw = static_cast<uint8_t>(br.peekField(8));
+        if ((raw & 0x7Fu) == 0x18u) {
+            auto type = br.readField(8);
+            if (!type) return Expected<L3P_TMSIReallocationCommand>::error(type.error());
+            auto len = br.readField(8);
+            if (!len) return Expected<L3P_TMSIReallocationCommand>::error(len.error());
+            auto mi = L3MobileIdentity::parse(br, len.value());
+            if (!mi) return Expected<L3P_TMSIReallocationCommand>::error(mi.error());
+            msg.mHavePTMSI = true;
+            msg.mPTMSI = std::move(mi).value();
         }
+    }
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3P_TMSIReallocationCommand>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
     }
 
     return Expected<L3P_TMSIReallocationCommand>::hold(std::move(msg));
 }
 
 void L3P_TMSIReallocationCommand::write(BitWriter& bw) const {
-    bw.writeField(static_cast<uint8_t>(mPTMSIType), 8);
+    bw.writeField((static_cast<uint8_t>(mPTMSIType) << 7) | (mForceToStandby ? 0x10u : 0u), 8);
     mRAI.write(bw);
     if (mHavePTMSI) {
-        bw.writeField(0x8c, 8);
+        // allocated P-TMSI: element identifier, length, value (TLV).
+        bw.writeField(0x18u, 8);
         bw.writeField(static_cast<uint32_t>(mPTMSI.lengthV()), 8);
         mPTMSI.write(bw);
     }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3P_TMSIReallocationCommand::text(std::ostream& os) const {
@@ -902,6 +919,7 @@ L3P_TMSIReallocationCommand L3P_TMSIReallocationCommand::Builder::build() const 
     msg.mRAI = m_rai;
     msg.mHavePTMSI = m_havePTMSI;
     msg.mPTMSI = m_ptmsi;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -929,35 +947,44 @@ L3P_TMSIReallocationComplete::Builder L3P_TMSIReallocationComplete::builder() {
     return Builder{};
 }
 
-// ── L3AuthenticationAndCipheringRequest (GSM 24.008 9.4.9) ────────────
+// ── L3AuthenticationAndCipheringRequest (TS 44.068 section 9.5) ───────
 
 size_t L3AuthenticationAndCipheringRequest::bodyLength() const {
-    size_t len = 1; // cipheringAlgorithm|imeisvRequest|forceToStandby|acReferenceNumber
-    len += tlvLen(16); // authenticationParameterRAND
-    return len;
+    // Ciphering algorithm / IMEISV request / force-to-standby octet, the AC
+    // reference number octet, then the TV-formatted RAND (identifier + 16
+    // value octets).
+    return 2 + tvLen(16);
 }
 
 Expected<L3AuthenticationAndCipheringRequest> L3AuthenticationAndCipheringRequest::parse(BitReader& br) {
     L3AuthenticationAndCipheringRequest msg;
 
-    // cipheringAlgorithm(3)|spare(1)|imeisvRequest(1)|forceToStandby(1)|spare(5) = 1 octet
+    // cipheringAlgorithm(3)|spare(1)|imeisvRequest(1)|forceToStandby(1)|spare(2)
+    // = 1 octet (TS 44.068 section 9.5).
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3AuthenticationAndCipheringRequest>::error(o.error());
-        msg.mCipheringAlgorithm = (o.value() >> 5) & 0x07;
-        msg.mImeisvRequest = ((o.value() >> 4) & 0x01) != 0;
-        msg.mForceToStandby = ((o.value() >> 3) & 0x01) != 0;
+        msg.mCipheringAlgorithm = (o.value() >> 5) & 0x07u;
+        msg.mImeisvRequest = ((o.value() >> 3) & 0x01u) != 0;
+        msg.mForceToStandby = ((o.value() >> 2) & 0x01u) != 0;
     }
 
     // acReferenceNumber(4)|spare(4) = 1 octet
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3AuthenticationAndCipheringRequest>::error(o.error());
-        msg.mACReferenceNumber = o.value() & 0x0F;
+        msg.mACReferenceNumber = (o.value() >> 4) & 0x0Fu;
     }
 
-    // authenticationParameterRAND (TLV, IEI=0x15)
+    // authenticationParameterRAND: TV format, the identifier octet is followed
+    // by the sixteen value octets (TS 44.068 section 9.5).
     {
+        auto type = br.readField(8);
+        if (!type) return Expected<L3AuthenticationAndCipheringRequest>::error(type.error());
+        if ((type.value() & 0x7Fu) != L3AuthRAND::IEI) {
+            return Expected<L3AuthenticationAndCipheringRequest>::error(
+                ParseError{ParseError::Code::InvalidIE, "unexpected RAND element identifier"});
+        }
         auto rand = L3AuthRAND::parse(br);
         if (!rand) return Expected<L3AuthenticationAndCipheringRequest>::error(rand.error());
         msg.mRAND = std::move(rand).value();
@@ -967,8 +994,11 @@ Expected<L3AuthenticationAndCipheringRequest> L3AuthenticationAndCipheringReques
 }
 
 void L3AuthenticationAndCipheringRequest::write(BitWriter& bw) const {
-    bw.writeField((mCipheringAlgorithm << 5) | (mImeisvRequest ? 0x10 : 0) | (mForceToStandby ? 0x08 : 0), 8);
-    bw.writeField(mACReferenceNumber, 8);
+    bw.writeField((static_cast<uint8_t>(mCipheringAlgorithm) << 5) | (mImeisvRequest ? 0x08u : 0u) |
+                  (mForceToStandby ? 0x04u : 0u), 8);
+    bw.writeField((static_cast<uint8_t>(mACReferenceNumber) & 0x0Fu) << 4, 8);
+    // authenticationParameterRAND: identifier octet followed by the value (TV).
+    bw.writeField(L3AuthRAND::IEI, 8);
     mRAND.write(bw);
 }
 
@@ -990,29 +1020,33 @@ L3AuthenticationAndCipheringRequest::Builder L3AuthenticationAndCipheringRequest
     return Builder{};
 }
 
-// ── L3AuthenticationAndCipheringResponse (GSM 24.008 9.4.9) ───────────
+// ── L3AuthenticationAndCipheringResponse (TS 44.068 section 9.5) ──────
 
 size_t L3AuthenticationAndCipheringResponse::bodyLength() const {
-    size_t len = 1; // acReferenceNumber|spare
-    len += tlvLen(4); // authenticationParameterResponse
-    return len;
+    // AC reference number octet, then the TV-formatted RES (identifier + four
+    // value octets).
+    return 1 + tvLen(4);
 }
 
 Expected<L3AuthenticationAndCipheringResponse> L3AuthenticationAndCipheringResponse::parse(BitReader& br) {
     L3AuthenticationAndCipheringResponse msg;
 
-    // acReferenceNumber(4)|spare(4) = 1 octet
+    // acReferenceNumber(4)|spare(4) = 1 octet (TS 44.068 section 9.5).
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3AuthenticationAndCipheringResponse>::error(o.error());
-        msg.mACReferenceNumber = o.value() & 0x0F;
+        msg.mACReferenceNumber = (o.value() >> 4) & 0x0Fu;
     }
 
-    // Skip spare(4) and read authenticationParameterResponse (TLV, IEI=0x16)
+    // authenticationParameterResponse: TV format, the identifier octet is
+    // followed by the four value octets.
     {
-        auto spare = br.readField(4);
-        if (!spare) return Expected<L3AuthenticationAndCipheringResponse>::error(spare.error());
-
+        auto type = br.readField(8);
+        if (!type) return Expected<L3AuthenticationAndCipheringResponse>::error(type.error());
+        if ((type.value() & 0x7Fu) != L3AuthRES::IEI) {
+            return Expected<L3AuthenticationAndCipheringResponse>::error(
+                ParseError{ParseError::Code::InvalidIE, "unexpected RES element identifier"});
+        }
         auto res = L3AuthRES::parse(br);
         if (!res) return Expected<L3AuthenticationAndCipheringResponse>::error(res.error());
         msg.mRES = std::move(res).value();
@@ -1022,8 +1056,9 @@ Expected<L3AuthenticationAndCipheringResponse> L3AuthenticationAndCipheringRespo
 }
 
 void L3AuthenticationAndCipheringResponse::write(BitWriter& bw) const {
-    bw.writeField(mACReferenceNumber, 4);
-    bw.writeField(0, 4); // spare
+    bw.writeField((static_cast<uint8_t>(mACReferenceNumber) & 0x0Fu) << 4, 8);
+    // authenticationParameterResponse: identifier octet followed by the value (TV).
+    bw.writeField(L3AuthRES::IEI, 8);
     mRES.write(bw);
 }
 
