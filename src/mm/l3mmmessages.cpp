@@ -240,13 +240,11 @@ Expected<L3CMServiceRequest> L3CMServiceRequest::parse(BitReader& br) {
         msg.mServiceType = L3CMServiceType{static_cast<L3CMServiceType::TypeCode>((o.value() >> 4) & 0x0Fu)};
         msg.mCKSN = (o.value() >> 1) & 0x07u;
     }
-    // Classmark2 (LV: length octet + 3 bytes value)
+    // Classmark2 (LV: length octet + three to seven value octets)
     {
         auto lenR = br.readField(8);
         if (!lenR) return Expected<L3CMServiceRequest>::error(lenR.error());
-    }
-    {
-        auto cmRes = L3MobileStationClassmark2::parse(br);
+        auto cmRes = L3MobileStationClassmark2::parse(br, lenR.value());
         if (!cmRes) return Expected<L3CMServiceRequest>::error(cmRes.error());
         msg.mClassmark = cmRes.value();
     }
@@ -301,13 +299,11 @@ Expected<L3CMReestablishmentRequest> L3CMReestablishmentRequest::parse(BitReader
         auto sp = br.readField(4);
         if (!sp) return Expected<L3CMReestablishmentRequest>::error(sp.error());
     }
-    // Classmark2 (LV: length octet + 3 bytes value)
+    // Classmark2 (LV: length octet + three to seven value octets)
     {
         auto lenR = br.readField(8);
         if (!lenR) return Expected<L3CMReestablishmentRequest>::error(lenR.error());
-    }
-    {
-        auto cmRes = L3MobileStationClassmark2::parse(br);
+        auto cmRes = L3MobileStationClassmark2::parse(br, lenR.value());
         if (!cmRes) return Expected<L3CMReestablishmentRequest>::error(cmRes.error());
         msg.mClassmark = cmRes.value();
     }

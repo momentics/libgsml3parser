@@ -383,7 +383,7 @@ TEST(GoldenRR, PagingRequestType3_Parse) {
 // RR PARSE FROM HEX: Paging Response (3GPP TS 44.018 9.1.25 / GSM 04.08 9.1.25)
 // Frame shape: PD = '0110'B (RR), MTI = '00100111'B (PagingResponse, 0x27).
 // Body per TS 44.018 9.1.25: cipheringKeySequenceNumber, mobileStationClassmark, mobileIdentity
-// Structure: spare(4)|CKSN(4), CM2 LV (length + 3 octets), MI LV
+// Structure: spare(4)|CKSN(4), CM2 LV (length + three to seven value octets), MI LV
 // Spec-verified: PD=6(RR), MTI=0x27(PagingResponse) per 3GPP TS 44.018 Table 10.4.1
 // CKSN: GSM 24.008 10.5.1.2 (3-bit key sequence number, range 0-7)
 // CM2: GSM 24.008 10.5.1.6 (24-bit Classmark 2 capability flags)
@@ -402,7 +402,7 @@ TEST(GoldenRR, PagingResponse_Parse) {
     //   TS 44.018 9.1.25 layout: spare half-octet FIRST (high nibble), CKSN SECOND (low nibble)
     //   GSM 24.008 10.5.1.2: cipheringKeySequenceNumber is 4 bits (keySequence 3 + spare 1)
     //   Vector CKSN value: { '000'B, '0'B } (4 bits)
-    // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets) [GSM 24.008 10.5.1.6]
+    // Byte 3: CM2 LV length = 3 (base form: three value octets) [GSM 24.008 10.5.1.6]
     // Bytes 4-6: CM2 value (24 bits of capability flags)
     // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
     // Byte 8: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4
@@ -440,10 +440,39 @@ TEST(GoldenRR, PagingResponse_CksnLowNibble) {
     EXPECT_EQ((*bytes)[2], 0x05u);
 }
 
+// Golden: Paging Response carrying an extended classmark 2 (TS 44.018
+// 9.1.25): the classmark LV length is five — base three octets plus two
+// extension octets preserved verbatim — followed by the mobile identity LV.
+TEST(GoldenRR, PagingResponse_ExtendedClassmark) {
+    uint8_t data[] = {0x06, 0x27, 0x00,
+                      0x05, 0x20, 0x00, 0x80, 0xAA, 0xBB,
+                      0x05, 0xF4, 0x12, 0x34, 0x56, 0x78};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* p = tryGet<L3PagingResponse>(*msg);
+    ASSERT_NE(p, nullptr);
+    EXPECT_EQ(p->classmark().lengthV(), 5u);
+    EXPECT_EQ(p->classmark().extended()[0], 0xAAu);
+    EXPECT_EQ(p->mobileId().tmsi(), 0x12345678u);
+
+    // Builder round-trip: the frame is re-emitted byte for byte.
+    auto built = L3PagingResponse::builder()
+                     .cksn(0)
+                     .classmark(p->classmark())
+                     .mobileId(L3MobileIdentity(0x12345678u))
+                     .build();
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
+}
+
 // =====================================================================
 // RR PARSE FROM HEX: Classmark Change (3GPP TS 44.018 9.1.11 / GSM 04.08 9.1.11)
 // MTI per TS 44.018 Table 10.4.1: CLASSMARK_CHANGE ('00010110'B = 0x16).
-// Structure: CM2 LV (length + 3 octets Classmark 2)
+// Structure: CM2 LV (length + three to seven value octets Classmark 2)
 // Spec-verified: PD=6(RR), MTI=0x16(ClassmarkChange) per 3GPP TS 44.018 Table 10.4.1
 // [GSM SPEC VERIFIED] GSM 24.008 9.1.11: ClassmarkChange body = CM2-LV only.
 //   Classmark 2 (GSM 24.008 10.5.1.6): LV-encoded, length=3, value=3 octets (24 bits).
@@ -455,7 +484,7 @@ TEST(GoldenRR, PagingResponse_CksnLowNibble) {
 TEST(GoldenRR, ClassmarkChange_Parse) {
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x16 (ClassmarkChange) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: CM2 LV length = 3 (Classmark 2 is 3 octets) [GSM 24.008 10.5.1.6]
+    // Byte 2: CM2 LV length = 3 (base form: three value octets) [GSM 24.008 10.5.1.6]
     // Bytes 3-5: CM2 value (24 bits of capability flags)
     uint8_t data[] = {0x06, 0x16, 0x03, 0x20, 0x00, 0x80};
     auto msg = parseL3(std::span<const uint8_t>(data));

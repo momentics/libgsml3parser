@@ -410,9 +410,11 @@ Expected<L3PagingResponse> L3PagingResponse::parse(BitReader& br) {
     r = br.readField(4); if (!r) return Expected<L3PagingResponse>::error(r.error());
     msg.mCKSN = r.value() & 0x0Fu;
 
+    // Classmark 2: LV with a three-to-seven-octet value (TS 24.008 section
+    // 10.5.1.6); the length octet is consumed and the full value read.
     {
         auto lenR = br.readField(8); if (!lenR) return Expected<L3PagingResponse>::error(lenR.error());
-        auto res = L3MobileStationClassmark2::parse(br);
+        auto res = L3MobileStationClassmark2::parse(br, lenR.value());
         if (!res) return Expected<L3PagingResponse>::error(res.error());
         msg.mClassmark = std::move(res.value());
     }
@@ -430,7 +432,7 @@ void L3PagingResponse::write(BitWriter& bw) const {
     // Symmetric to parse: spare half-octet, then CKSN (TS 44.018 9.1.25).
     bw.writeField(0, 4);
     bw.writeField(mCKSN & 0x0F, 4);
-    bw.writeField(static_cast<uint32_t>(L3MobileStationClassmark2::lengthV()), 8);
+    bw.writeField(static_cast<uint32_t>(mClassmark.lengthV()), 8);
     mClassmark.write(bw);
     bw.writeField(static_cast<uint32_t>(mMobileID.lengthV()), 8);
     mMobileID.write(bw);
@@ -712,9 +714,11 @@ size_t L3ClassmarkChange::bodyLength() const {
 
 Expected<L3ClassmarkChange> L3ClassmarkChange::parse(BitReader& br) {
     L3ClassmarkChange msg;
+    // Classmark 2: LV with a three-to-seven-octet value (TS 24.008 section
+    // 10.5.1.6); the length octet is consumed and the full value read.
     {
         auto lenR = br.readField(8); if (!lenR) return Expected<L3ClassmarkChange>::error(lenR.error());
-        auto res = L3MobileStationClassmark2::parse(br);
+        auto res = L3MobileStationClassmark2::parse(br, lenR.value());
         if (!res) return Expected<L3ClassmarkChange>::error(res.error());
         msg.mClassmark = std::move(res.value());
     }
@@ -739,7 +743,7 @@ Expected<L3ClassmarkChange> L3ClassmarkChange::parse(BitReader& br) {
 }
 
 void L3ClassmarkChange::write(BitWriter& bw) const {
-    bw.writeField(static_cast<uint32_t>(L3MobileStationClassmark2::lengthV()), 8);
+    bw.writeField(static_cast<uint32_t>(mClassmark.lengthV()), 8);
     mClassmark.write(bw);
     if (mHaveAdditionalClassmark) {
         // Additional classmark: TLV with element identifier 0x20.

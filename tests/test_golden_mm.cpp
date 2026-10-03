@@ -324,7 +324,7 @@ TEST(GoldenMM, TMSIReallocationCommand_Parse) {
 // CM Service Request body per GSM 24.008 9.2.9:
 //   cm_ServiceType := int2bit(enum2int(serv_type), 4)
 //   cipheringKeySequenceNumber, mobileStationClassmark2, mobileIdentity
-// Structure: CM_ServiceType(4)|CKSN(3)|spare(1), CM2 LV (3 octets), MI LV
+// Structure: CM_ServiceType(4)|CKSN(3)|spare(1), CM2 LV (three to seven value octets), MI LV
 // Spec-verified: PD=5(MM), MTI=0x24(CMServiceRequest) per GSM 24.008 Table 10.5.3
 // CmServiceType: MobileOriginatedCall = '0001'B (value=1, GSM 24.008 10.5.3.3)
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.9: CMServiceRequest body = CM_ServiceType + CKSN
@@ -340,7 +340,7 @@ TEST(GoldenMM, CMServiceRequest_Parse) {
     // Byte 1: MT=0x24(CMServiceRequest) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.3)
     // Byte 2: CM_ServiceType(4)=1(MobileOriginatedCall)|CKSN(3)=0|spare(1)=0 = 0x10 [GSM 24.008 10.5.3.3]
     //   CmServiceType (GSM 24.008): MobileOriginatedCall = '0001'B
-    // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets, GSM 24.008 10.5.1.6)
+    // Byte 3: CM2 LV length = 3 (base form: three value octets, GSM 24.008 10.5.1.6)
     // Bytes 4-6: CM2 value (24 bits of capability flags)
     // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
     // Byte 8: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4 [GSM 24.008 10.5.1.4]
@@ -491,12 +491,12 @@ TEST(GoldenMM, IdentityResponse_Parse) {
 // MM PARSE FROM HEX: CM Reestablishment Request (GSM 24.008 9.2.4)
 // Field order per GSM 24.008 9.2.4:
 //   cipheringKeySequenceNumber, mobileStationClassmark2, mobileIdentityLV
-// Structure: CKSN(4)|spare(4), CM2 LV (3 octets), MI LV, [LAI LV]
+// Structure: CKSN(4)|spare(4), CM2 LV (three to seven value octets), MI LV, [LAI LV]
 // Spec-verified: PD=5(MM), MTI=0x28(CMReestablishmentRequest) per GSM 24.008 Table 10.5.3
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.4: CMReestablishmentRequest body = CKSN + CM2-LV + MI-LV + [LAI].
 //   CKSN is 1 octet: cipheringKeySequenceNumber(4 bits)|spare(4 bits).
 //   Always present (not conditional), even when value is 0.
-//   CM2 is LV-encoded: length(1) + value(3) = 4 octets.
+//   CM2 is LV-encoded: length(1) + a three-to-seven-octet value (base form here).
 //   MI is LV-encoded: length(1) + type(1) + value(variable) = variable octets.
 // =====================================================================
 
@@ -510,7 +510,7 @@ TEST(GoldenMM, CMReestablishmentRequest_Parse) {
     // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
     // Byte 1: MT=0x28(CMReestablishmentRequest) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.3)
     // Byte 2: CKSN(4)=0|spare(4)=0 = 0x00 [GSM 24.008 10.5.1.2]
-    // Byte 3: CM2 LV length = 3 (Classmark 2 is 3 octets, GSM 24.008 10.5.1.6)
+    // Byte 3: CM2 LV length = 3 (base form: three value octets, GSM 24.008 10.5.1.6)
     // Bytes 4-6: CM2 value (24 bits of capability flags)
     // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
     // Byte 8: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4 [GSM 24.008 10.5.1.4]

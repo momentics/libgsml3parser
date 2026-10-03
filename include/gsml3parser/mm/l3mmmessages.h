@@ -495,6 +495,8 @@ public:
     };
 
     static Builder builder();
+    /// Mobile station classmark 2 (LV, three to seven value octets, TS 24.008).
+    [[nodiscard]] const L3MobileStationClassmark2& classmark() const { return mClassmark; }
     const L3MobileIdentity& mobileId() const { return mMobileIdentity; }
     L3CMServiceType::TypeCode serviceType() const { return mServiceType.type(); }
     /// Ciphering key sequence number (three bits, TS 24.008).
@@ -729,6 +731,8 @@ public:
     };
 
     static Builder builder();
+    /// Mobile station classmark 2 (LV, three to seven value octets, TS 24.008).
+    [[nodiscard]] const L3MobileStationClassmark2& classmark() const { return mClassmark; }
     const L3MobileIdentity& mobileId() const { return mMobileID; }
     unsigned cksn() const { return mCKSN; }
     size_t bodyLength() const;

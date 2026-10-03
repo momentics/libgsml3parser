@@ -291,7 +291,17 @@ void L3MobileStationClassmark1::text(std::ostream& os) const {
 
 // ── L3MobileStationClassmark2 ───────────────────────────────────────────
 
-Expected<L3MobileStationClassmark2> L3MobileStationClassmark2::parse(BitReader& br) {
+L3MobileStationClassmark2::L3MobileStationClassmark2(std::span<const uint8_t> extendedOctets) {
+    mExtended.assign(extendedOctets.begin(), extendedOctets.end());
+}
+
+// Classmark 2 is an LV information element whose value is three to seven
+// octets (TS 24.008 section 10.5.1.6): the base three octets carry the
+// typed capability bits, any further value octets are extension data
+// preserved verbatim for lossless round-trip.
+Expected<L3MobileStationClassmark2> L3MobileStationClassmark2::parse(BitReader& br, size_t length) {
+    if (length < 3u || length > 7u)
+        return Expected<L3MobileStationClassmark2>::error(ParseError{ParseError::Code::InvalidValue, "classmark 2 length out of range"});
     L3MobileStationClassmark2 result;
     auto r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark2>::error(r.error()); // spare
     r = br.readField(2); if (!r) return Expected<L3MobileStationClassmark2>::error(r.error()); result.mRevisionLevel = r.value();
@@ -313,6 +323,12 @@ Expected<L3MobileStationClassmark2> L3MobileStationClassmark2::parse(BitReader& 
     r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark2>::error(r.error()); result.mCMSF = r.value();
     r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark2>::error(r.error()); result.mA5_3 = r.value();
     r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark2>::error(r.error()); result.mA5_2 = r.value();
+    result.mExtended.reserve(length - 3);
+    for (size_t i = 3; i < length; ++i) {
+        auto e = br.readField(8);
+        if (!e) return Expected<L3MobileStationClassmark2>::error(e.error());
+        result.mExtended.push_back(static_cast<uint8_t>(e.value()));
+    }
     return Expected<L3MobileStationClassmark2>::hold(std::move(result));
 }
 
@@ -337,6 +353,8 @@ void L3MobileStationClassmark2::write(BitWriter& bw) const {
     bw.writeField(mCMSF, 1);
     bw.writeField(mA5_3, 1);
     bw.writeField(mA5_2, 1);
+    // Extension octets beyond the base three, re-emitted verbatim.
+    for (uint8_t b : mExtended) bw.writeField(b, 8);
 }
 
 void L3MobileStationClassmark2::text(std::ostream& os) const {

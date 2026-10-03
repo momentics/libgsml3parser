@@ -123,8 +123,8 @@ No normative reference templates exist for this block: bodies are kept as opaque
 | `L3CMServiceAccept` | 0x21 | DL | CM service accepted |
 | `L3CMServiceReject` | 0x22 | DL | CM service rejected |
 | `L3CMServiceAbort` | 0x23 | DL | CM service aborted |
-| `L3CMServiceRequest` | 0x24 | UL | CM service type + CKSN (one octet), classmark2, mobile identity |
-| `L3CMReestablishmentRequest` | 0x28 | UL | CM re-establishment request |
+| `L3CMServiceRequest` | 0x24 | UL | CM service type + CKSN (one octet), classmark2 (LV, three to seven value octets), mobile identity |
+| `L3CMReestablishmentRequest` | 0x28 | UL | CKSN (one octet), classmark2 (LV, three to seven value octets), mobile identity [+ LAI (TLV 0x13)] |
 | `L3MMAbort` | 0x29 | Bidir | MM abort (no value part, TS 24.008) |
 | `L3MMStatus` | 0x31 | Bidir | MM status report |
 | `L3MMInformation` | 0x32 | DL | Network information broadcast |
@@ -142,7 +142,7 @@ No normative reference templates exist for this block: bodies are kept as opaque
 | `L3PagingRequestType1` | 0x21 | DL | First body octet [channelNeeded(4)\|pageMode(4)] (channel needed packed second\|first), mobile identity (LV) [+ optional second identity (TLV 0x17)] |
 | `L3PagingRequestType2` | 0x22 | DL | First body octet [channelNeeded(4)\|pageMode(4)], two raw TMSIs (8 octets) [+ optional third identity (TLV 0x17)] |
 | `L3PagingRequestType3` | 0x24 | DL | First body octet [channelNeeded(4)\|pageMode(4)], four raw TMSIs (16 octets) |
-| `L3PagingResponse` | 0x27 | UL | First body octet [spare(4)\|CKSN(4)], classmark2 (V, three octets), mobile identity (LV) |
+| `L3PagingResponse` | 0x27 | UL | First body octet [spare(4)\|CKSN(4)], classmark2 (LV, three to seven value octets), mobile identity (LV) |
 
 ### System Information (BCCH/SACCH)
 
@@ -201,7 +201,7 @@ No normative reference templates exist for this block: bodies are kept as opaque
 | `L3HandoverComplete` | 0x2C | UL | Cause |
 | `L3HandoverFailure` | 0x28 | UL | Cause |
 | `L3RRStatus` | 0x12 | UL | Cause |
-| `L3ClassmarkChange` | 0x16 | UL | Classmark2/3 |
+| `L3ClassmarkChange` | 0x16 | UL | classmark2 (LV, three to seven value octets) [+ classmark3 (TLV 0x20)] |
 | `L3ClassmarkEnquiry` | 0x13 | DL | Empty body |
 | `L3MeasurementReport` | 0x15 | UL | RxLev/RxQual + neighbors |
 | `L3ExtendedMeasurementReport` | 0x36 | UL | Extended measurement results |

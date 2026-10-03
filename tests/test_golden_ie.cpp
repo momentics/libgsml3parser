@@ -476,7 +476,9 @@ TEST(GoldenIE, Classmark1_Zero) {
 
 // =====================================================================
 // Common IEs: L3MobileStationClassmark2 (GSM 04.08 10.5.1.6)
-// Three-octet value part per GSM 24.008 10.5.1.6 (Classmark 2, incl. EGPRS extensions)
+// LV value of three to seven octets per TS 24.008 section 10.5.1.6
+// (Classmark 2, incl. EGPRS extensions); the base three value octets are
+// typed, any further value octets are preserved verbatim.
 // 24 bits: revision(1)|spare(1)|ES_IND(1)|A5_1(1)|A5_3(1)|A5_2(1)|
 //   RF_Power(2)|PS(1)|SS(1)|SM(1)|VBS(1)|VGCS(1)|FC(1)|CM3(1)|
 //   LCS(1)|SoLSA(1)|CMSF(1)|spare(1)|PS_class(8)
@@ -489,7 +491,8 @@ TEST(GoldenIE, Classmark2_Default) {
 
 TEST(GoldenIE, Classmark2_RoundTrip) {
     L3MobileStationClassmark2 orig;
-    ieRoundTrip(orig);
+    // Classmark 2 parses as an LV: the length octet precedes the value.
+    ieRoundTripLen(orig);
 }
 
 TEST(GoldenIE, Classmark2_PowerClass) {
@@ -522,7 +525,7 @@ TEST(GoldenIE, Classmark2_AllBitsSet) {
     // = {0xFF, 0xFF, 0xFF}.
     uint8_t raw[] = {0xFF, 0xFF, 0xFF};
     BitReader reader(raw, sizeof(raw) * 8);
-    auto parsed = L3MobileStationClassmark2::parse(reader);
+    auto parsed = L3MobileStationClassmark2::parse(reader, 3);
     ASSERT_TRUE(parsed);
     const auto& cm2 = parsed.value();
     EXPECT_EQ(cm2.lengthV(), 3u);
@@ -548,7 +551,7 @@ TEST(GoldenIE, Classmark2_AllBitsSet) {
 
     // The written value parses back with every capability bit still set.
     BitReader reread(buf.data(), 24);
-    auto reparsedIE = L3MobileStationClassmark2::parse(reread);
+    auto reparsedIE = L3MobileStationClassmark2::parse(reread, 3);
     ASSERT_TRUE(reparsedIE);
     EXPECT_EQ(reparsedIE.value(), cm2);
 
@@ -568,6 +571,37 @@ TEST(GoldenIE, Classmark2_AllBitsSet) {
     ASSERT_NE(reparsed, nullptr);
     EXPECT_EQ(reparsed->classmark(), cm2);
     EXPECT_EQ(reparsed->cksn(), 5u);
+}
+
+// Golden: Classmark 2 as an LV information element with a five-octet value
+// (TS 24.008 section 10.5.1.6): the base three octets carry the typed
+// capability bits; octets four and five are extension data preserved
+// verbatim.
+TEST(GoldenIE, Classmark2_ExtendedValue) {
+    uint8_t raw[] = {0x20, 0x00, 0x80, 0xAA, 0xBB};
+    BitReader reader(raw, sizeof(raw) * 8);
+    auto parsed = L3MobileStationClassmark2::parse(reader, 5);
+    ASSERT_TRUE(parsed);
+    const auto& cm2 = parsed.value();
+    EXPECT_EQ(cm2.lengthV(), 5u);
+    EXPECT_EQ(cm2.revisionLevel(), 1u);   // base octet 0x20
+    EXPECT_EQ(cm2.cm3(), 1u);             // base octet 0x80
+    ASSERT_EQ(cm2.extended().size(), 2u);
+    EXPECT_EQ(cm2.extended()[0], 0xAAu);
+    EXPECT_EQ(cm2.extended()[1], 0xBBu);
+
+    // write() re-emits the exact five value octets.
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    cm2.write(writer);
+    for (size_t i = 0; i < 5; ++i)
+        EXPECT_EQ(buf[i], raw[i]) << "byte " << i;
+
+    // Out-of-range LV lengths are rejected (three to seven value octets).
+    BitReader shortReader(raw, 24);
+    EXPECT_FALSE(L3MobileStationClassmark2::parse(shortReader, 2));
+    BitReader longReader(raw, 64);
+    EXPECT_FALSE(L3MobileStationClassmark2::parse(longReader, 8));
 }
 
 // =====================================================================

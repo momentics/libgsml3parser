@@ -607,7 +607,7 @@ TEST(RoundTripTest, HandoverAccess) {
 // TS 44.018: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06; MTI=0x16(ClassmarkChange)
 // Byte 0: TI(7:5)=0 | TIF(4)=0 | PD(3:0)=0110 = 0x06 (TS 24.008 L3 header)
 // Byte 1: MTI = 0x16
-// Byte 2: CM2 length = 3 (L3MobileStationClassmark2 is 24 bits = 3 bytes)
+// Byte 2: CM2 length = 3 (base form: three value octets, TS 24.008 10.5.1.6)
 // Bytes 3-5: CM2 value
 TEST(RoundTripTest, ClassmarkChange) {
     uint8_t data[] = {

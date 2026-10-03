@@ -1870,7 +1870,7 @@ RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for 
 | `L3PagingRequestType1` | 0x21 | DL | First octet [channelNeeded(4)\|pageMode(4)] (channel needed packed second\|first), MobileIdentity (LV) [+ optional second ID (TLV 0x17)] |
 | `L3PagingRequestType2` | 0x22 | DL | First octet [channelNeeded(4)\|pageMode(4)], two raw TMSIs (8 bytes) [+ optional third identity (TLV 0x17)] |
 | `L3PagingRequestType3` | 0x24 | DL | First octet [channelNeeded(4)\|pageMode(4)], four raw TMSIs (16 bytes) |
-| `L3PagingResponse` | 0x27 | UL | First octet [spare(4)\|CKSN(4)], Classmark2 (V), MobileIdentity (LV) |
+| `L3PagingResponse` | 0x27 | UL | First octet [spare(4)\|CKSN(4)], Classmark2 (LV, three to seven value octets), MobileIdentity (LV) |
 
 ### System Information Messages
 
@@ -1911,7 +1911,7 @@ RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for 
 | `L3HandoverComplete` | 0x2C | UL | Cause |
 | `L3HandoverFailure` | 0x28 | UL | Cause |
 | `L3RRStatus` | 0x12 | UL | Cause |
-| `L3ClassmarkChange` | 0x16 | UL | Classmark2/3 |
+| `L3ClassmarkChange` | 0x16 | UL | Classmark2 (LV, three to seven value octets) [+ Classmark3 (TLV 0x20)] |
 | `L3ClassmarkEnquiry` | 0x13 | DL | Empty body |
 | `L3MeasurementReport` | 0x15 | UL | RxLev/RxQual + neighbors |
 | `L3CipheringModeCommand` | 0x35 | DL | One octet: ciphering setting + response |

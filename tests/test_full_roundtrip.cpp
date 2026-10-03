@@ -779,3 +779,72 @@ TEST(FullRoundTrip, Extended_Domain) {
 TEST(FullRoundTrip, TestProc_Domain) {
     expectWriteOnly(ParsedMessage{TESTPROC{L3TestProcedureMessage{}}}, "L3TestProcedureMessage");
 }
+
+// An extended classmark 2 (five value octets) round-trips losslessly in
+// every carrier message: CM Service Request, CM Reestablishment Request,
+// Paging Response and Classmark Change (TS 24.008 section 10.5.1.6).
+TEST(FullRoundTrip, ExtendedClassmark2_Carriers) {
+    const uint8_t extBytes[] = {0xAA, 0xBB};
+    L3MobileStationClassmark2 cm2{std::span<const uint8_t>(extBytes)};
+
+    // The parsed classmark must equal the original, including the verbatim
+    // extension octets beyond the base three value octets.
+    const auto expectExtended = [&](const L3MobileStationClassmark2& parsedCm) {
+        EXPECT_EQ(parsedCm, cm2);
+        ASSERT_EQ(parsedCm.extended().size(), 2u);
+        EXPECT_EQ(parsedCm.extended()[0], 0xAAu);
+        EXPECT_EQ(parsedCm.extended()[1], 0xBBu);
+    };
+
+    // CM Service Request (TS 24.008).
+    auto cmSr = L3CMServiceRequest::builder()
+                    .classmark(cm2)
+                    .mobileIdentity(L3MobileIdentity(0x12345678u))
+                    .build();
+    auto cmSrBytes = writeL3Bytes(ParsedMessage{MMM{cmSr}});
+    ASSERT_TRUE(cmSrBytes);
+    auto cmSrParsed = parseL3(*cmSrBytes);
+    ASSERT_TRUE(cmSrParsed);
+    const auto* cmSrMsg = tryGet<L3CMServiceRequest>(*cmSrParsed);
+    ASSERT_NE(cmSrMsg, nullptr);
+    expectExtended(cmSrMsg->classmark());
+
+    // CM Reestablishment Request (TS 24.008).
+    auto cmReest = L3CMReestablishmentRequest::builder()
+                       .classmark(cm2)
+                       .mobileId(L3MobileIdentity(0x12345678u))
+                       .build();
+    auto cmReestBytes = writeL3Bytes(ParsedMessage{MMM{cmReest}});
+    ASSERT_TRUE(cmReestBytes);
+    auto cmReestParsed = parseL3(*cmReestBytes);
+    ASSERT_TRUE(cmReestParsed);
+    const auto* cmReestMsg = tryGet<L3CMReestablishmentRequest>(*cmReestParsed);
+    ASSERT_NE(cmReestMsg, nullptr);
+    expectExtended(cmReestMsg->classmark());
+
+    // Paging Response (TS 44.018 9.1.25).
+    auto pagingResp = L3PagingResponse::builder()
+                          .cksn(0)
+                          .classmark(cm2)
+                          .mobileId(L3MobileIdentity(0x12345678u))
+                          .build();
+    auto pagingRespBytes = writeL3Bytes(ParsedMessage{RRM{pagingResp}});
+    ASSERT_TRUE(pagingRespBytes);
+    auto pagingRespParsed = parseL3(*pagingRespBytes);
+    ASSERT_TRUE(pagingRespParsed);
+    const auto* pagingRespMsg = tryGet<L3PagingResponse>(*pagingRespParsed);
+    ASSERT_NE(pagingRespMsg, nullptr);
+    expectExtended(pagingRespMsg->classmark());
+
+    // Classmark Change (TS 44.018 9.1.11).
+    auto cmChange = L3ClassmarkChange::builder()
+                        .classmark(cm2)
+                        .build();
+    auto cmChangeBytes = writeL3Bytes(ParsedMessage{RRM{cmChange}});
+    ASSERT_TRUE(cmChangeBytes);
+    auto cmChangeParsed = parseL3(*cmChangeBytes);
+    ASSERT_TRUE(cmChangeParsed);
+    const auto* cmChangeMsg = tryGet<L3ClassmarkChange>(*cmChangeParsed);
+    ASSERT_NE(cmChangeMsg, nullptr);
+    expectExtended(cmChangeMsg->classmark());
+}

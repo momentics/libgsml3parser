@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstring>
 #include <ostream>
+#include <span>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -148,8 +149,11 @@ public:
     unsigned rfPowerCapability() const { return mRFPowerCapability; }
 };
 
-// ── Mobile Station Classmark 2 (GSM 04.08 10.5.1.6) ───────────────────
+// ── Mobile Station Classmark 2 (TS 24.008 section 10.5.1.6) ────────────
 
+/// Mobile Station Classmark 2 (TS 24.008 section 10.5.1.6): an LV information
+/// element; the base three value octets carry typed capability bits and
+/// optional further value octets are preserved verbatim.
 class L3MobileStationClassmark2 {
     unsigned mRevisionLevel{};
     unsigned mES_IND{};
@@ -167,14 +171,29 @@ class L3MobileStationClassmark2 {
     unsigned mLCSVACapability{};
     unsigned mSoLSA{};
     unsigned mCMSF{};
+    /// Value octets beyond the base three (extended classmark), zero to four
+    /// bytes; empty for the base form. Preserved verbatim for lossless
+    /// round-trip.
+    std::vector<uint8_t> mExtended;
 public:
     L3MobileStationClassmark2() = default;
-    static constexpr size_t lengthV() { return 3; }
 
-    [[nodiscard]] static Expected<L3MobileStationClassmark2> parse(BitReader& br);
+    /// Construct with extension octets beyond the base three value octets
+    /// (at most four); base capability fields stay default.
+    explicit L3MobileStationClassmark2(std::span<const uint8_t> extendedOctets);
+
+    /// Total value length in octets: the base three plus any extension
+    /// octets (TS 24.008 section 10.5.1.6, LV information element).
+    [[nodiscard]] size_t lengthV() const { return 3 + mExtended.size(); }
+
+    [[nodiscard]] static Expected<L3MobileStationClassmark2> parse(BitReader& br, size_t length);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
     bool operator==(const L3MobileStationClassmark2&) const = default;
+
+    /// Extension octets beyond the base three value octets (empty for the
+    /// base form), preserved verbatim for lossless round-trip.
+    [[nodiscard]] const std::vector<uint8_t>& extended() const { return mExtended; }
 
     int getA5Bits() const;
     int powerClass() const { return mRFPowerCapability + 1; }
