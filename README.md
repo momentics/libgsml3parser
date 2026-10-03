@@ -79,7 +79,7 @@ auto paging = L3PagingRequestType2::builder()
 
 ## Supported Messages Summary
 
-All 12 protocol domains — RR 99 · SM 29 · CC 24 · GMM 23 · MM 19 · SMS 19 · BCC 8 · GCC 8 · SS 3 · LS 2 ·
+All 12 protocol domains — RR 98 · SM 29 · CC 24 · GMM 23 · MM 19 · SMS 19 · BCC 8 · GCC 8 · SS 3 · LS 2 ·
 Extended + Test PDs 2: **236 message types** in total, with Information Elements and enums defined per domain.
 
 Full catalog (MTIs, directions, IEs, dispatch edge cases such as TIF=1 short messages and parse-slot

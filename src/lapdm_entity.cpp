@@ -40,6 +40,10 @@ LAPDmChannelProfile LAPDmChannelProfile::FACCH() noexcept {
     return {20, 34, 900};
 }
 
+LAPDmChannelProfile LAPDmChannelProfile::FACCH_LM() noexcept {
+    return {20, 29, 900};
+}
+
 // ── LAPDmState stream operator ────────────────────────────────────────
 
 std::ostream& operator<<(std::ostream& os, LAPDmState state) {

@@ -155,7 +155,8 @@ TEST(RSLP_parse_DCHAN_ChanActiv, ParsesIEs) {
 }
 
 // Test: Parse DCHAN ENCR_CMD and extract L3 payload + encryption info.
-// Importance: Encryption command carries both ciphering parameters and L3 CipheringModeCommand.
+// Importance: Encryption command carries both ciphering parameters and an
+// opaque L3 payload (not parsed at the RSL layer).
 TEST(RSLP_parse_DCHAN_EncrCmd, ExtractsL3AndEncrInfo) {
     // Build ENCR_CMD with EncrInfo IE and L3Info IE (TL16V).
     std::vector<uint8_t> buf;
@@ -172,7 +173,7 @@ TEST(RSLP_parse_DCHAN_EncrCmd, ExtractsL3AndEncrInfo) {
     buf.push_back(static_cast<uint8_t>(RSL_IE::L3Info)); // type
     buf.push_back(0x00);                                 // len high
     buf.push_back(0x04);                                 // len low
-    buf.insert(buf.end(), {0x06, 0x22, 0x01, 0x00});     // CipheringModeCommand L3 (PD=RR)
+    buf.insert(buf.end(), {0x06, 0x22, 0x01, 0x00}); // opaque four-octet L3 payload (PD=RR, MTI 0x22 = Paging Request Type 2); not parsed at the RSL layer
 
     auto result = RSLParser::parse(buf);
     ASSERT_TRUE(result.has_value());
@@ -190,10 +191,11 @@ TEST(RSLP_parse_DCHAN_EncrCmd, ExtractsL3AndEncrInfo) {
 // Test: Parse CCHAN PAGING_CMD and extract IEs.
 // Importance: Paging is the primary mechanism for network-initiated MS contact.
 TEST(RSLP_parse_CCHAN_PagingCmd, ParsesIEs) {
-    // MSIdentity IE: type=0x0C, len=3, value=TMSI bytes
+    // MSIdentity IE: type=0x0C, len=5, value = a TMSI mobile identity
+    // (type octet 0xF4 plus the four TMSI octets)
     std::vector<uint8_t> ies = {
-        0x0C, 0x03, 0x12, 0x34, 0x56, // MSIdentity (LV)
-        0x0E, 0x01,                   // PagingGroup (TV)
+        0x0C, 0x05, 0xF4, 0x12, 0x34, 0x56, 0x78, // MSIdentity (LV)
+        0x0E, 0x01,                               // PagingGroup (TV)
     };
     auto buf = makeCChanPaging(0x00, ies);
     auto result = RSLParser::parse(buf);
@@ -204,7 +206,7 @@ TEST(RSLP_parse_CCHAN_PagingCmd, ParsesIEs) {
 
     auto* idIE = RSLParser::findIE(msg, RSL_IE::MSIdentity);
     ASSERT_NE(idIE, nullptr);
-    EXPECT_EQ(idIE->len, 3u);
+    EXPECT_EQ(idIE->len, 5u);
 }
 
 // Golden: CCCH Load Indication (RACH) per TS 48.058 section 9.3.18 — the

@@ -133,12 +133,9 @@ TEST(FullRoundTrip, RR_Domain) {
     expectRoundTrip(ParsedMessage{RRM{L3GPRSSuspensionRequest{}}},
         L3PD::RadioResource, L3GPRSSuspensionRequest::MTI, "L3GPRSSuspensionRequest");
 
-    // Application and sync
+    // Application Information
     expectRoundTrip(ParsedMessage{RRM{L3ApplicationInformation{{0xAB}}}},
         L3PD::RadioResource, L3ApplicationInformation::MTI, "L3ApplicationInformation");
-
-    expectRoundTrip(ParsedMessage{RRM{L3SynchronizationChannelInformation{}}},
-        L3PD::RadioResource, L3SynchronizationChannelInformation::MTI, "L3SynchronizationChannelInformation");
 
     // Short messages (RACH/HO access)
     expectRoundTrip(ParsedMessage{RRM{L3ChannelRequest{0x42}}},

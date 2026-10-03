@@ -51,10 +51,10 @@ namespace gsml3parser {
 // is 0x182 (Handover Access). RR short-message codes occupy dispatcher
 // slots from kRRTifShortBase (the TIF-set header form); codes not
 // assigned by TS 44.018 Table 10.4.2 leave their slot empty and fail as
-// unknown messages. The length-framed synthetic messages (Synchronization
-// Channel Information, Channel Request, Handover Access) carry no standard
-// L3 header, are disambiguated by frame length in parseL3(), and live
-// above the short range (0x180..0x182), so they get no slot.
+// unknown messages. The length-framed synthetic messages (Channel Request,
+// Handover Access) carry no standard L3 header, are disambiguated by frame
+// length in parseL3(), and live above the short range (0x181..0x182), so
+// they get no slot.
 
 namespace detail {
 
@@ -65,7 +65,7 @@ static_assert(kMaxMtiSlots >= 0x183);
 
 // Length-framed messages carry no standard L3 header; every other
 // short-message code (TIF set) is written with the standard header.
-constexpr bool isNoHeaderShort(int mti) { return mti >= 0x180; }
+constexpr bool isNoHeaderShort(int mti) { return mti >= 0x181; }
 
 template<typename Variant>
 using ParseFn = Expected<Variant>(*)(BitReader&, int, unsigned);
@@ -99,7 +99,7 @@ constexpr void fillParseTableEntry(std::array<ParseFn<Variant>, kMaxMtiSlots>& t
             table[static_cast<size_t>(T::MTI)] = &parseInto<Variant, T>;
         }
     }
-    // Length-framed synthetic codes (>= 0x180): no slot — see the section
+    // Length-framed synthetic codes (>= 0x181): no slot — see the section
     // comment.
 }
 
@@ -251,9 +251,9 @@ Expected<TESTPROC> parseL3TestProc(BitReader& reader, uint8_t mti) {
 }
 
 /// Parse the body of a standard-header message: the 12-domain switch.
-/// Shared by the main parseL3 path and by the 4/7-byte short-message
+/// Shared by the main parseL3 path and by the four-byte short-message
 /// disambiguation (which additionally requires exact frame consumption
-/// .
+/// ).
 [[nodiscard]] Expected<ParsedMessage> parseStandardBody(const L3Header& hdr, BitReader& reader) {
     switch (hdr.pd) {
         case L3PD::RadioResource: {
@@ -321,9 +321,8 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
     /// so they are disambiguated by total frame length:
     ///   - 1 byte  -> ChannelRequest (TS 44.018 9.1.8)
     ///   - 4 bytes -> HandoverAccess (GSM 04.08 9.1.38)
-    ///   - 7 bytes -> SynchronizationChannelInformation (GSM 04.08 9.1.39)
     ///
-    /// Disambiguation for 4/7-byte frames: the standard-header
+    /// Disambiguation for one- and four-octet frames: the standard-header
     /// parse wins only when it consumes the frame EXACTLY
     /// (remainingBits() == 0). A standard parse that leaves trailing bytes
     /// means the frame is a short message whose first octet merely looks
@@ -341,37 +340,29 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
         return std::move(res).map([](L3ChannelRequest v){ return ParsedMessage(RRM(std::move(v))); });
     }
 
-    // For 4-byte and 7-byte data: handle short messages (no standard L3 header).
-    // HandoverAccess is 4 bytes, SynchronizationChannelInformation is 7 bytes.
-    // These are RR short messages but their first octet is not an L3 header,
-    // so its low nibble may equal any PD value (including BCC=0x01, GCC=0x00).
-    if (data.size() == 4 || data.size() == 7) {
+    // For 4-byte data: handle the short message (no standard L3 header).
+    // HandoverAccess is 4 bytes. It is an RR short message but its first
+    // octet is not an L3 header, so its low nibble may equal any PD value
+    // (including BCC=0x01, GCC=0x00).
+    if (data.size() == 4) {
         uint8_t pdNibble = data[0] & 0x0F;   // PD occupies the low nibble of octet 0 (TS 24.008 L3 header).
 
         // BCC/GCC PD: short messages win. BCC Setup (MTI 0x00) and
         // BCC Proceeding (MTI 0x01) have opaque bodies that consume the
         // whole frame, so a standard parse would always "succeed exactly"
-        // and swallow genuine HandoverAccess/SynchronizationChannelInformation
-        // frames.
+        // and swallow genuine HandoverAccess frames.
         if (pdNibble == static_cast<uint8_t>(L3PD::BroadcastCallControl) ||
             pdNibble == static_cast<uint8_t>(L3PD::GroupCallControl)) {
-            if (data.size() == 4) {
-                BitReader reader(data.data(), 32);
-                auto res = L3HandoverAccess::parse(reader);
-                if (res) return res.map([](L3HandoverAccess v){ return ParsedMessage(RRM(std::move(v))); });
-            }
-            if (data.size() == 7) {
-                BitReader reader(data.data(), 56);
-                auto res = L3SynchronizationChannelInformation::parse(reader);
-                if (res) return res.map([](L3SynchronizationChannelInformation v){ return ParsedMessage(RRM(std::move(v))); });
-            }
+            BitReader reader(data.data(), 32);
+            auto res = L3HandoverAccess::parse(reader);
+            if (res) return res.map([](L3HandoverAccess v){ return ParsedMessage(RRM(std::move(v))); });
         } else {
             // Other PDs: the standard parse wins only on EXACT
             // consumption. A standard parse that leaves trailing bytes
             // means the frame is a short message whose first octet merely
             // looks like a plausible header. Frames whose first octet holds
             // a reserved low-nibble PD fail the header check here and fall
-            // through to the short-message parses below.
+            // through to the short-message parse below.
             auto hdrResult = parseL3Header(data);
             if (hdrResult) {
                 size_t bodyBits = (data.size() - 2) * 8;
@@ -382,31 +373,21 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
                 }
             }
 
-            // Short messages: HandoverAccess (4 bytes) / Synchronization
-            // Channel Information (7 bytes). Their first octet is not an
-            // L3 header, so they are tried for ANY first-octet value,
+            // Short message: HandoverAccess (4 bytes). Its first octet is
+            // not an L3 header, so it is tried for ANY first-octet value,
             // including reserved PD nibbles (rejected by parseL3Header).
-            // Both parsers consume the whole frame, so success is
+            // The parser consumes the whole frame, so success is
             // unambiguous.
-            if (data.size() == 4) {
-                BitReader reader(data.data(), 32);
-                auto res = L3HandoverAccess::parse(reader);
-                if (res) return res.map([](L3HandoverAccess v){ return ParsedMessage(RRM(std::move(v))); });
-            }
-            if (data.size() == 7) {
-                BitReader reader(data.data(), 56);
-                auto res = L3SynchronizationChannelInformation::parse(reader);
-                if (res) return res.map([](L3SynchronizationChannelInformation v){ return ParsedMessage(RRM(std::move(v))); });
-            }
+            BitReader reader(data.data(), 32);
+            auto res = L3HandoverAccess::parse(reader);
+            if (res) return res.map([](L3HandoverAccess v){ return ParsedMessage(RRM(std::move(v))); });
         }
-        // Defensive fall-through: a 4/7-byte frame whose short parse
-        // unexpectedly failed (impossible today: both short parsers always
-        // succeed on full-length input) reaches the standard parse below,
-        // which returns a proper error.
-        // Note: L3HandoverAccess::parse fails on
-        // non-zero reserved bits — such a 4-byte frame falls through to
-        // the standard parse below and produces a proper error instead of
-        // a spurious HandoverAccess.
+        // Defensive fall-through: a four-byte frame whose short parse
+        // unexpectedly failed reaches the standard parse below, which
+        // returns a proper error. Note: L3HandoverAccess::parse fails on
+        // non-zero reserved bits — such a frame falls through to the
+        // standard parse below and produces a proper error instead of a
+        // spurious HandoverAccess.
     }
 
     // Standard L3 header parsing.
@@ -524,7 +505,7 @@ Expected<size_t> writeL3Body(const ConcreteMsg& msg, uint8_t* out, size_t maxlen
 
 /// Exact wire length of a message: 2-byte header + body for standard
 /// messages and TIF-set short messages, body only for the length-framed
-/// synthetic codes (>= 0x180). Used to size the output container exactly.
+/// synthetic codes (>= 0x181). Used to size the output container exactly.
 template<typename ConcreteMsg>
 constexpr size_t wireLength(const ConcreteMsg& msg) noexcept {
     if constexpr (isNoHeaderShort(ConcreteMsg::MTI)) return msg.bodyLength();

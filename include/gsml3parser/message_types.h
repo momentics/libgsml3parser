@@ -65,7 +65,6 @@ using RRM = std::variant<
     L3ChannelModeModifyAcknowledge,
     L3GPRSSuspensionRequest,
     L3ApplicationInformation,
-    L3SynchronizationChannelInformation,
     L3ChannelRequest,
     L3HandoverAccess,
     L3SystemInformationType1,

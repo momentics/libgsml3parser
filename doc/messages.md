@@ -2,7 +2,7 @@
 
 Complete catalog of all L3 message types, Information Elements, and enums implemented in libgsml3parser.
 
-**Total: 236 message types across 12 protocol domains.**
+**Total: 235 message types across 12 protocol domains.**
 
 For a summary table see [README.md](../README.md#supported-messages-summary).
 
@@ -12,7 +12,7 @@ Dispatch notes:
 - GMM/SMS/SM/LS use the raw 8-bit second octet.
 - RR normally uses the raw second octet; with TIF=1 (short messages) the five-bit code in the low bits of octet 1 maps to `mti = kRRTifShortBase | (byte1 & 0x1F)` — internal MTIs ≥ 0x100 are listed with their dispatch value. Unallocated short codes are rejected as InvalidMTI.
 - SMS: the CP-layer classes win the parse slots for MTI 0x12 (`L3CPStatus`) and 0x13 (`L3CPSMT`); `L3SMSProvidedReplyExpected` (0x12) and `L3SMSSubmitRep` (0x13) remain constructible/writable but are not produced by `parseL3`.
-- The synthetic no-header RR messages are routed by frame length, not by an L3 header; their internal MTIs sit above the TIF short range so a wire short frame can never be misclassified as one of them: SynchronizationChannelInformation (0x180, 7 bytes), ChannelRequest (0x181, 1 byte), HandoverAccess (0x182, 4 bytes).
+- The synthetic no-header RR messages are routed by frame length, not by an L3 header; their internal MTIs sit above the TIF short range so a wire short frame can never be misclassified as one of them: ChannelRequest (0x181, 1 byte), HandoverAccess (0x182, 4 bytes).
 
 ---
 
@@ -133,7 +133,7 @@ No normative reference templates exist for this block: bodies are kept as opaque
 | `L3TMSIReallocationCommand` | 0x1A | DL | New TMSI assignment |
 | `L3TMSIReallocationComplete` | 0x1B | UL | TMSI reallocation complete |
 
-## Radio Resource (PD=0x06) — 99 message types
+## Radio Resource (PD=0x06) — 98 message types
 
 ### Paging
 
@@ -225,7 +225,6 @@ No normative reference templates exist for this block: bodies are kept as opaque
 |---------|-----|------|-------------|
 | `L3ChannelRequest` | 0x181 | 1 byte | RACH access: single-octet request reference (RA) |
 | `L3HandoverAccess` | 0x182 | 4 bytes | 27-bit payload + five reserved bits (TS 44.018); the payload is kept as an opaque value |
-| `L3SynchronizationChannelInformation` | 0x180 | 7 bytes | Cell identity + location area identity (TS 44.018 9.1.30) |
 
 ### VGCS/VBS and Notification
 

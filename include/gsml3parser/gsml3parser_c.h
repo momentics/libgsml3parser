@@ -424,6 +424,7 @@ typedef struct gsml3_lapdm_entity gsml3_lapdm_entity;
 
 /* profile: 0 = SDCCH (N201=20, N200=23, T200=900ms), 1 = SACCH
  * (N201=18, N200=5, T200=3600ms), 2 = FACCH (N201=20, N200=34,
+ * T200=900ms), 3 = FACCH on TCH/H (Lm) (N201=20, N200=29,
  * T200=900ms). Callbacks may be NULL. Invalid profile returns NULL. */
 GSML3_C_API gsml3_lapdm_entity* gsml3_lapdm_entity_new(int profile,
     gsml3_lapdm_l3_cb l3_cb, gsml3_lapdm_l1_cb l1_cb, void* user);

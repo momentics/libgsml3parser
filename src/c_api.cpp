@@ -937,8 +937,9 @@ GSML3_C_API gsml3_lapdm_entity* gsml3_lapdm_entity_new(int profile,
             case 0:  p = LAPDmChannelProfile::SDCCH(); break;
             case 1:  p = LAPDmChannelProfile::SACCH(); break;
             case 2:  p = LAPDmChannelProfile::FACCH(); break;
+            case 3:  p = LAPDmChannelProfile::FACCH_LM(); break;
             default:
-                setError(GSML3_ERR_INVALID_ARG, "invalid LAPDm profile (0=SDCCH, 1=SACCH, 2=FACCH)");
+                setError(GSML3_ERR_INVALID_ARG, "invalid LAPDm profile (0=SDCCH, 1=SACCH, 2=FACCH, 3=FACCH_LM)");
                 return nullptr;
         }
         auto* e = new (std::nothrow) gsml3_lapdm_entity(p);

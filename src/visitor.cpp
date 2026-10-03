@@ -53,7 +53,6 @@ struct NameVisitor {
     std::string_view operator()(const L3ChannelModeModifyAcknowledge&) const { return "ChannelModeModifyAcknowledge"; }
     std::string_view operator()(const L3GPRSSuspensionRequest&) const { return "GPRSSuspensionRequest"; }
     std::string_view operator()(const L3ApplicationInformation&) const { return "ApplicationInformation"; }
-    std::string_view operator()(const L3SynchronizationChannelInformation&) const { return "SynchronizationChannelInformation"; }
     std::string_view operator()(const L3ChannelRequest&) const { return "ChannelRequest"; }
     std::string_view operator()(const L3HandoverAccess&) const { return "HandoverAccess"; }
     std::string_view operator()(const L3SystemInformationType1&) const { return "SystemInformationType1"; }
@@ -342,7 +341,6 @@ struct MTIVisitor {
     int operator()(const L3ChannelModeModifyAcknowledge&) const { return L3ChannelModeModifyAcknowledge::MTI; }
     int operator()(const L3GPRSSuspensionRequest&) const { return L3GPRSSuspensionRequest::MTI; }
     int operator()(const L3ApplicationInformation&) const { return L3ApplicationInformation::MTI; }
-    int operator()(const L3SynchronizationChannelInformation&) const { return L3SynchronizationChannelInformation::MTI; }
     int operator()(const L3ChannelRequest&) const { return L3ChannelRequest::MTI; }
     int operator()(const L3HandoverAccess&) const { return L3HandoverAccess::MTI; }
     int operator()(const L3SystemInformationType1&) const { return L3SystemInformationType1::MTI; }

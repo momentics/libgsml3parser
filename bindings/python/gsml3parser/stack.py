@@ -2065,13 +2065,14 @@ class LapdmEntity:
     callbacks.
 
     profile: 0 = SDCCH (N201=20, T200=900 ms), 1 = SACCH (N201=18,
-    T200=3600 ms), 2 = FACCH (N201=20, T200=900 ms); invalid values are
-    rejected HERE before FFI and by C (NULL result) as backstop.
+    T200=3600 ms), 2 = FACCH (N201=20, T200=900 ms), 3 = FACCH_LM
+    (N201=20, T200=900 ms); invalid values are rejected HERE before FFI and
+    by C (NULL result) as backstop.
     """
 
     def __init__(self, profile: int = 0, l3_cb=None, l1_cb=None, user=None) -> None:
-        if isinstance(profile, bool) or not isinstance(profile, int) or not 0 <= profile <= 2:
-            raise ValueError(f"profile must be 0 (SDCCH), 1 (SACCH) or 2 (FACCH); got {profile!r}")
+        if isinstance(profile, bool) or not isinstance(profile, int) or not 0 <= profile <= 3:
+            raise ValueError(f"profile must be 0 (SDCCH), 1 (SACCH), 2 (FACCH) or 3 (FACCH_LM); got {profile!r}")
         self._c_bridges = {}  # CFUNCTYPE objects WE created — the caller-side anchor
         l3fn, l1fn = self._wrap_callbacks(l3_cb, l1_cb)
         h = lib.gsml3_lapdm_entity_new(profile, l3fn, l1fn, _as_user(user))
@@ -2092,8 +2093,8 @@ class LapdmEntity:
             raise TypeError("_with_bridges l3_cb must be a prebuilt L3CB ctypes callback")
         if not isinstance(l1_cb, L1CB):
             raise TypeError("_with_bridges l1_cb must be a prebuilt L1CB ctypes callback")
-        if isinstance(profile, bool) or not isinstance(profile, int) or not 0 <= profile <= 2:
-            raise ValueError(f"profile must be 0 (SDCCH), 1 (SACCH) or 2 (FACCH); got {profile!r}")
+        if isinstance(profile, bool) or not isinstance(profile, int) or not 0 <= profile <= 3:
+            raise ValueError(f"profile must be 0 (SDCCH), 1 (SACCH), 2 (FACCH) or 3 (FACCH_LM); got {profile!r}")
         obj = cls.__new__(cls)
         obj._c_bridges = {}  # intentionally empty: the stack anchors the callbacks
         h = lib.gsml3_lapdm_entity_new(profile, l3_cb, l1_cb, _as_user(user))

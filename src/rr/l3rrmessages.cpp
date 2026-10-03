@@ -92,7 +92,6 @@ const char* rrMessageName(int mti) {
         case L3MeasurementReport::MTI:       return "MeasurementReport";
         case L3GPRSSuspensionRequest::MTI:   return "GPRSSuspensionRequest";
         case L3ApplicationInformation::MTI:  return "ApplicationInformation";
-        case L3SynchronizationChannelInformation::MTI: return "SynchronizationChannelInformation";
         case L3ChannelRequest::MTI:          return "ChannelRequest";
         case L3HandoverAccess::MTI:          return "HandoverAccess";
         case L3ConfigurationChangeCommand::MTI: return "ConfigurationChangeCommand";
@@ -2384,27 +2383,6 @@ void L3HandoverCommand::text(std::ostream& os) const {
     mHandoverReference.text(os);
     os << " SyncInd=";
     mSynchronizationIndication.text(os);
-}
-
-// ── L3SynchronizationChannelInformation ────────────────────────────────
-
-Expected<L3SynchronizationChannelInformation> L3SynchronizationChannelInformation::parse(BitReader& br) {
-    L3SynchronizationChannelInformation msg;
-    { auto res = L3CellIdentity::parse(br); if (!res) return Expected<L3SynchronizationChannelInformation>::error(res.error()); msg.mCellIdentity = std::move(res.value()); }
-    { auto res = L3LocationAreaIdentity::parse(br); if (!res) return Expected<L3SynchronizationChannelInformation>::error(res.error()); msg.mLocationAreaIdentity = std::move(res.value()); }
-    return Expected<L3SynchronizationChannelInformation>::hold(std::move(msg));
-}
-
-void L3SynchronizationChannelInformation::write(BitWriter& bw) const {
-    mCellIdentity.write(bw);
-    mLocationAreaIdentity.write(bw);
-}
-
-void L3SynchronizationChannelInformation::text(std::ostream& os) const {
-    os << "SynchronizationChannelInformation: ";
-    mCellIdentity.text(os);
-    os << " ";
-    mLocationAreaIdentity.text(os);
 }
 
 // ── L3ChannelRequest ───────────────────────────────────────────────────

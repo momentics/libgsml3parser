@@ -556,17 +556,6 @@ TEST(RoundTripTest, ApplicationInformation) {
     checkHeader(*parsed, L3PD::RadioResource, L3ApplicationInformation::MTI);
 }
 
-// Synchronization Channel Information (GSM 04.08 9.1.30)
-// SynchronizationChannelInformation uses MTI=0x180 (internal length-framed code),
-// not a standard 8-bit RR messageType; it carries no L3 header.
-// These are sent on SCH and use a different encoding path.
-TEST(RoundTripTest, SynchronizationChannelInformation) {
-    ParsedMessage msg{RRM{L3SynchronizationChannelInformation{}}};
-    auto parsed = roundtrip(msg);
-    ASSERT_TRUE(parsed);
-    checkHeader(*parsed, L3PD::RadioResource, L3SynchronizationChannelInformation::MTI);
-}
-
 // Channel Request (GSM 04.08 9.1.13)
 // ChannelRequest uses MTI=0x181 (internal length-framed code).
 // Sent on the RACH as a single octet without an L3 header.

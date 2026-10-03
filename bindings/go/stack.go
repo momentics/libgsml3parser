@@ -133,8 +133,8 @@ func NewGsmL3Stack(o StackOptions) (*GsmL3Stack, error) {
 	if o.SAPI < 0 || o.SAPI > 15 {
 		return nil, invalidArg("stack.New", fmt.Sprintf("sapi must be in 0..15; got %d", o.SAPI))
 	}
-	if o.Profile < 0 || o.Profile > 2 {
-		return nil, invalidArg("stack.New", fmt.Sprintf("profile must be 0 (SDCCH), 1 (SACCH) or 2 (FACCH); got %d", o.Profile))
+	if o.Profile < 0 || o.Profile > 3 {
+		return nil, invalidArg("stack.New", fmt.Sprintf("profile must be 0 (SDCCH), 1 (SACCH), 2 (FACCH) or 3 (FACCH_LM); got %d", o.Profile))
 	}
 	if !shardCountAllowed(o.ShardCount) {
 		return nil, invalidArg("stack.New", fmt.Sprintf("shard count must be one of 0,4,8,16,32; got %d", o.ShardCount))

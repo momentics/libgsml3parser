@@ -68,8 +68,13 @@ struct LAPDmChannelProfile {
     /// SACCH defaults for a software BTS: N201=18, N200=5, T200=3600ms.
     [[nodiscard]] static LAPDmChannelProfile SACCH() noexcept;
 
-    /// FACCH defaults for a software BTS: N201=20, N200=34, T200=900ms.
+    /// FACCH profile on TCH/F and TCH/H ACCH channels (Bm): N201=20,
+    /// N200=34, T200=900 ms (GSM 04.06 section 5.8.2.1).
     [[nodiscard]] static LAPDmChannelProfile FACCH() noexcept;
+
+    /// FACCH profile on TCH/H half-slot channels (Lm): N201=20, N200=29,
+    /// T200=900 ms (GSM 04.06 section 5.8.2.1).
+    [[nodiscard]] static LAPDmChannelProfile FACCH_LM() noexcept;
 };
 
 /// LAPDmEntity -- full LAPDm protocol state machine.

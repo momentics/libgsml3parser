@@ -130,7 +130,7 @@ func gsml3parserL1Bridge(frame *C.uint8_t, frameLen C.size_t, user unsafe.Pointe
 // ── LapdmEntity (S5: 16 functions incl. the bridged entity_new) ────────────
 
 // LapdmEntity is one LAPDm link FSM (GSM 04.06) owned by this binding:
-// profile 0 = SDCCH, 1 = SACCH, 2 = FACCH (N200/N201/T200 per the C header).
+// profile 0 = SDCCH, 1 = SACCH, 2 = FACCH, 3 = FACCH_LM (N200/N201/T200 per the C header).
 // It OWNS its bridge context: a cgo.Handle registered BEFORE the entity is
 // created, passed to C as `user`, and deleted AFTER entity_free in Close().
 // The event queues (l3q/txq) live ONLY here — GsmL3Stack does not duplicate
@@ -152,8 +152,8 @@ type LapdmEntity struct {
 // callback can ever observe a missing token; if C rejects the profile the
 // handle is deleted and no dangling context remains.
 func newLapdmEntity(profile int, owner *GsmL3Stack) (*LapdmEntity, error) {
-	if profile < 0 || profile > 2 {
-		return nil, invalidArg("lapdm.New", "profile must be 0 (SDCCH), 1 (SACCH) or 2 (FACCH)") // pre-FFI fast path; C re-checks as backstop
+	if profile < 0 || profile > 3 {
+		return nil, invalidArg("lapdm.New", "profile must be 0 (SDCCH), 1 (SACCH), 2 (FACCH) or 3 (FACCH_LM)") // pre-FFI fast path; C re-checks as backstop
 	}
 	e := &LapdmEntity{}
 	value := interface{}(e) // standalone: the entity itself is the sink

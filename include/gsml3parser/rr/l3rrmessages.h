@@ -1916,53 +1916,6 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── Synchronization Channel Information (GSM 04.08 9.1.30) ────────────
-// Length-framed short message (TS 44.018): the internal MTI lies above the
-// TIF-set RR short-message range, so a wire short frame can never be
-// misclassified as this message; the frame is identified by its length
-// (7 bytes), not by an L3 header.
-
-class L3SynchronizationChannelInformation {
-    L3CellIdentity mCellIdentity;
-    L3LocationAreaIdentity mLocationAreaIdentity;
-
-    friend struct Builder;
-public:
-    static constexpr int MTI = 0x180;
-
-    L3SynchronizationChannelInformation() = default;
-
-    const L3CellIdentity& cellIdentity() const { return mCellIdentity; }
-    const L3LocationAreaIdentity& locationAreaIdentity() const { return mLocationAreaIdentity; }
-
-    size_t bodyLength() const { return 7; }
-    [[nodiscard]] int mti() const { return MTI; }
-    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 7; }
-    [[nodiscard]] static Expected<L3SynchronizationChannelInformation> parse(BitReader& br);
-    void write(BitWriter& bw) const;
-    void text(std::ostream& os) const;
-
-    struct Builder {
-        L3CellIdentity mCellIdentity;
-        L3LocationAreaIdentity mLocationAreaIdentity;
-
-        /// Set cell identity.
-        Builder& cellIdentity(L3CellIdentity v) { mCellIdentity = v; return *this; }
-        /// Set location area identity.
-        Builder& locationAreaIdentity(L3LocationAreaIdentity v) { mLocationAreaIdentity = v; return *this; }
-        /// Build the final message.
-        [[nodiscard]] L3SynchronizationChannelInformation build() const {
-            L3SynchronizationChannelInformation msg;
-            msg.mCellIdentity = mCellIdentity;
-            msg.mLocationAreaIdentity = mLocationAreaIdentity;
-            return msg;
-        }
-    };
-
-    static Builder builder() { return Builder{}; }
-};
-
 // ── Channel Request (GSM 04.08 9.1.13) ────────────────────────────────
 // Length-framed short message (TS 44.018): the internal MTI lies above the
 // TIF-set RR short-message range, so a wire short frame can never be

@@ -128,16 +128,17 @@ pub struct LapdmEntity {
 unsafe impl Send for LapdmEntity {}
 
 impl LapdmEntity {
-    /// Create an entity with profile 0 = SDCCH / 1 = SACCH / 2 = FACCH and
-    /// register this binding's trampolines as its L3/L1 callbacks (the token is
-    /// the fresh `Box::into_raw(Box::new(Arc::new(TrampolineState)))`). The
-    /// profile is validated before FFI (NULL-policy). If creation fails, the
-    /// context is reclaimed immediately — nothing leaks on either side.
+    /// Create an entity with profile 0 = SDCCH / 1 = SACCH / 2 = FACCH /
+    /// 3 = FACCH_LM and register this binding's trampolines as its L3/L1
+    /// callbacks (the token is the fresh `Box::into_raw(Box::new(Arc::new(
+    /// TrampolineState)))`). The profile is validated before FFI
+    /// (NULL-policy). If creation fails, the context is reclaimed immediately
+    /// — nothing leaks on either side.
     pub fn new(profile: i32) -> Result<Self, GsmL3Error> {
-        if !(0..=2).contains(&profile) {
+        if !(0..=3).contains(&profile) {
             return Err(error::invalid_arg(
                 "LapdmEntity::new",
-                "profile must be 0 (SDCCH), 1 (SACCH) or 2 (FACCH)",
+                "profile must be 0 (SDCCH), 1 (SACCH), 2 (FACCH) or 3 (FACCH_LM)",
             ));
         }
         // Token layout: C's `void* user` is

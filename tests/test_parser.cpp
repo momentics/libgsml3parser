@@ -535,8 +535,8 @@ TEST(ParserTest, ShortMessage_ExactCCMessageWins) {
     EXPECT_EQ(messageMTI(*res), L3Facility::MTI);
 }
 
-// Test: a genuine 7-byte CC message (Facility, 5-byte body) parses as CC,
-// not as SynchronizationChannelInformation.
+// Test: a genuine 7-byte CC message (Facility, 5-byte body) parses through
+// the standard parse path.
 TEST(ParserTest, ShortMessage_ExactCCMessageWins_7Bytes) {
     auto fac = L3Facility::builder().ti(1).facilityBody({0x27, 0x01, 0x02, 0x03, 0x04}).build();
     ParsedMessage pm{CCM{std::move(fac)}};
@@ -547,6 +547,24 @@ TEST(ParserTest, ShortMessage_ExactCCMessageWins_7Bytes) {
     auto res = parseL3(std::span<const uint8_t>(vec.data(), vec.size()));
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::CallControl);
+}
+
+// A seven-octet frame with an RR header nibble is not a no-header short
+// message: the standard parse applies, and a truncated Paging Response
+// body reports an error instead of being misrouted.
+TEST(ParserTest, SevenByteRRFrame_FailsStandardParse) {
+    uint8_t data[] = {0x06, 0x27, 0x00, 0x03, 0x20, 0x00, 0x80};
+    EXPECT_FALSE(parseL3(std::span<const uint8_t>(data)));
+}
+
+// A seven-octet GCC frame goes through the standard parse: the no-header
+// short-message routing covers only one- and four-octet frames, so a
+// BCC/GCC first octet is not shadowed by any length-routed fallback.
+TEST(ParserTest, SevenByteGccFrame_StandardParse) {
+    uint8_t data[] = {0x00, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55}; // PD=0 (GCC), MTI 0x00 (Setup) + opaque body
+    auto res = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::GroupCallControl);
 }
 
 // Test: 4-byte frames whose low nibble of octet 0 is a reserved PD

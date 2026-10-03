@@ -1312,6 +1312,13 @@ TEST(LAPDmChannelProfileTest, FACCH_Parameters) {
     EXPECT_EQ(profile.t200Ms, 900u); // 900ms T200
 }
 
+TEST(LAPDmChannelProfileTest, FACCH_LM_Parameters) {
+    auto profile = LAPDmChannelProfile::FACCH_LM();
+    EXPECT_EQ(profile.n201, 20u);
+    EXPECT_EQ(profile.n200, 29u);
+    EXPECT_EQ(profile.t200Ms, 900u); // 900ms T200
+}
+
 // SACCH profile enforces N200=5 retransmission limit.
 TEST(LAPDmEntityTest, SACCH_Profile_N200_Limit) {
     MockLAPDmEntity mock(LAPDmChannelProfile::SACCH());

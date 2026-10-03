@@ -315,10 +315,10 @@ impl GsmL3Stack {
                 &format!("sapi must be in 0..=15 (got {sapi})"),
             ));
         }
-        if !(0..=2).contains(&profile) {
+        if !(0..=3).contains(&profile) {
             return Err(error::invalid_arg(
                 "GsmL3Stack::new",
-                "profile must be 0 (SDCCH), 1 (SACCH) or 2 (FACCH)",
+                "profile must be 0 (SDCCH), 1 (SACCH), 2 (FACCH) or 3 (FACCH_LM)",
             ));
         }
 

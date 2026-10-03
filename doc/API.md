@@ -431,7 +431,7 @@ Returns `TruncatedInput` error if fewer than 2 bytes provided. Returns `InvalidP
 Each protocol domain has a `std::variant` type that holds all message types for that domain:
 
 ```cpp
-using RRM      = std::variant< /* 99 RR types */ >;
+using RRM      = std::variant< /* 98 RR types */ >;
 using MMM      = std::variant< /* 19 MM types */ >;
 using CCM      = std::variant< /* 24 CC types */ >;
 using SSM      = std::variant< /* 3 SS types */ >;
@@ -493,7 +493,7 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
 
 Returns `Expected<ParsedMessage>` - the parsed variant on success, or `ParseError` on failure.
 
-Handles short messages automatically: 1-byte Channel Request, 4-byte Handover Access, 7-byte Synchronization Channel Information.
+Handles short messages automatically: 1-byte Channel Request and 4-byte Handover Access.
 
 ### parseL3Hex()
 
@@ -1207,6 +1207,7 @@ struct LAPDmChannelProfile {
     static LAPDmChannelProfile SDCCH(); // n201=20, n200=23, t200=900ms
     static LAPDmChannelProfile SACCH(); // n201=18, n200=5,  t200=3600ms
     static LAPDmChannelProfile FACCH(); // n201=20, n200=34, t200=900ms
+    static LAPDmChannelProfile FACCH_LM(); // n201=20, n200=29, t200=900ms
 };
 ```
 
@@ -1215,6 +1216,7 @@ struct LAPDmChannelProfile {
 | SDCCH   | 20            | 23             | 900       | 20.7s       |
 | SACCH   | 18            | 5              | 3600      | 18.0s       |
 | FACCH   | 20            | 34             | 900       | 30.6s       |
+| FACCH_LM | 20           | 29             | 900       | 26.1s       |
 
 #### Callback Types
 
@@ -1433,7 +1435,7 @@ Builder patterns are implemented for all message types across all 12 protocol do
 
 | Domain | Messages with Builder |
 |--------|----------------------|
-| **RR** | All 99 types (Paging, System Information SI1–SI23 + Type 2quater, Handover, Assignment, Ciphering, DTM/Packet, etc.) |
+| **RR** | All 98 types (Paging, System Information SI1–SI23 + Type 2quater, Handover, Assignment, Ciphering, DTM/Packet, etc.) |
 | **MM** | All 19 types (Location Updating, Authentication, Identity, CM Service, MM Abort, TMSI Reallocation) |
 | **CC** | All 24 types (Setup, Notify, Unit Data, Connect, Disconnect, Release, DTMF, Hold, Facility, Progress, etc.) |
 | **GMM** | All 23 types (Attach, Detach, RA Update, Service Request, P-TMSI Reallocation, Auth+Ciphering, GMM Identity, etc.) |
@@ -1844,7 +1846,7 @@ Cell parameters and handover reference for handover procedures.
 
 ## 21. Radio Resource Messages
 
-**File:** `gsml3parser/rr/l3rrmessages.h` - 99 message types in the `RRM` variant (PD=0x06).
+**File:** `gsml3parser/rr/l3rrmessages.h` - 98 message types in the `RRM` variant (PD=0x06).
 
 Each message is a plain struct with:
 - `static Expected<Self> parse(BitReader&)`
@@ -1853,7 +1855,7 @@ Each message is a plain struct with:
 - `text(std::ostream&) const` -> human-readable output
 - `static Builder builder()` + `build()` -> fluent construction (see §15)
 
-RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for TI=0 — and their five-bit codes map to dispatch MTIs from `kRRTifShortBase` (`kRRTifShortBase + code`); codes not assigned by TS 44.018 Table 10.4.2 (code 3 and codes 14–31) map to empty dispatcher slots and are rejected as InvalidMTI. The three length-framed messages with no header (`L3SynchronizationChannelInformation` 7 B, `L3ChannelRequest` 1 B, `L3HandoverAccess` 4 B) use internal MTIs above that range (0x180, 0x181, 0x182) so a wire short frame can never be misclassified as one of them; they are recognized by frame length on RACH/SCH.
+RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for TI=0 — and their five-bit codes map to dispatch MTIs from `kRRTifShortBase` (`kRRTifShortBase + code`); codes not assigned by TS 44.018 Table 10.4.2 (code 3 and codes 14–31) map to empty dispatcher slots and are rejected as InvalidMTI. The two length-framed messages with no header (`L3ChannelRequest` 1 B, `L3HandoverAccess` 4 B) use internal MTIs above that range (0x181, 0x182) so a wire short frame can never be misclassified as one of them; they are recognized by frame length on RACH.
 
 ### Short Messages (no standard L3 header)
 
@@ -1861,7 +1863,6 @@ RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for 
 |---------|------|-------------|
 | `L3ChannelRequest` | 1 byte | RACH access: single-octet request reference (RA) |
 | `L3HandoverAccess` | 4 bytes | 27-bit payload + five reserved bits (TS 44.018); the payload is kept as an opaque value |
-| `L3SynchronizationChannelInformation` | 7 bytes | Cell identity + location area identity (TS 44.018 9.1.30) |
 
 ### Paging Messages
 

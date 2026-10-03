@@ -44,11 +44,10 @@ struct L3Header {
 
 /** Base of the internal MTI range for RR short messages carried with TIF set:
  *  the five-bit wire code is remapped to kRRTifShortBase | code. Codes not
- *  assigned by TS 44.018 Table 10.4.2 map to empty dispatcher slots. The three
- *  header-less, length-framed RR messages (Synchronization Channel Information,
- *  Channel Request, Handover Access) use internal MTIs above that range
- *  (0x180, 0x181, 0x182) so a wire short frame can never be misclassified as
- *  one of them. */
+ *  assigned by TS 44.018 Table 10.4.2 map to empty dispatcher slots. The two
+ *  header-less, length-framed RR messages (Channel Request, Handover Access)
+ *  use internal MTIs above that range (0x181, 0x182) so a wire short frame can
+ *  never be misclassified as one of them. */
 inline constexpr int kRRTifShortBase = 0x100;
 
 /** Parse a 2-byte L3 header from the first two bytes of @p data. */

@@ -731,29 +731,6 @@ TEST(GoldenRR, ApplicationInformation_Parse) {
 }
 
 // =====================================================================
-// RR PARSE FROM HEX: Synchronization Channel Information (GSM 04.08 9.1.30 / 3GPP TS 44.018 9.1.30)
-// Length-framed short message (no standard L3 header), per GSM 04.08 9.1.30
-// Structure: CI(16 bits) + LAI(40 bits: MCC/MNC BCD 24 + LAC 16) = 7 bytes total
-// [GOLDEN VERIFIED] SCH is a short message transmitted on BCCH without PD/MTI header.
-//   Uses internal MTI=0x180 (length-framed; no standard L3 header). Per GSM 04.08 9.1.30, SCH carries
-//   Cell Identity and Location Area Identity for cell selection/reselection.
-//   LAI MCC/MNC nibble-swapped BCD encoding per GSM 24.008 10.5.1.7.
-// =====================================================================
-
-TEST(GoldenRR, SynchronizationChannelInformation_Parse) {
-    // [GOLDEN VERIFIED] SCH is a short message on BCCH without PD/MTI header.
-    // Internal MTI=0x180 (length-framed; no standard L3 header). GSM 04.08 9.1.30: CI(16 bits) + LAI(40 bits).
-    // Byte 0-1: CellIdentity = 0x1234 (16 bits MSB-first)
-    // Byte 2-4: MCC/MNC BCD nibble-swapped for MCC=250, MNC=01 -> {0x52, 0xF0, 0x10}
-    //   [GSM 24.008 Figure 10.5.1.3: same encoding as LAI in MM messages]
-    // Byte 5-6: LAC = 0x0001 (16 bits MSB-first)
-    uint8_t data[] = {0x12, 0x34, 0x52, 0xF0, 0x10, 0x00, 0x01};
-    auto msg = parseL3(std::span<const uint8_t>(data));
-    ASSERT_TRUE(msg);
-    EXPECT_EQ(messageMTI(*msg), L3SynchronizationChannelInformation::MTI);
-}
-
-// =====================================================================
 // RR PARSE FROM HEX: Channel Request (GSM 04.08 9.1.13 / 3GPP TS 44.018 9.1.13)
 // Length-framed short message sent on RACH (no standard L3 header), per GSM 04.08 9.1.13
 // Structure: RequestReference(8 bits = RA bitmask), sent on RACH without PD/MTI header
@@ -2397,7 +2374,7 @@ TEST(GoldenRR, ShortMessageTif_ReservedCodeRejected) {
 // Golden: the unallocated short code 14 (TS 44.018 Table 10.4.2 leaves it
 // empty) must decode to an unknown/error message, never to one of the
 // header-less length-framed messages, whose internal MTIs live above the
-// TIF short range (0x180..0x182). A one-octet Channel Request still parses
+// TIF short range (0x181..0x182). A one-octet Channel Request still parses
 // by frame length.
 TEST(GoldenRR, ShortMessageTif_Code14Rejected) {
     // TIF=1 frame with five-bit code 14.
