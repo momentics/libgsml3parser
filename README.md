@@ -8,7 +8,7 @@
 [![Version](https://img.shields.io/badge/Version-0.19.0-blue.svg)](https://github.com/momentics/libgsml3parser/releases)
 
 A type-safe, **zero-allocation C++20** library with **no external dependencies**, spanning the full GSM
-signalling chain of a software Base Transceiver Station: **236 L3 message classes across 12 PD
+signalling chain of a software Base Transceiver Station: **235 L3 message classes across 12 PD
 domains** — typed fields for RR/SM/CC/GMM/MM/SS and the SMS CP/RP/TP layers, best-effort opaque-body
 parsing for the SMS L3 primitives (MTI 0x11–0x1E) and BCC/GCC/LS (no normative reference templates
 exist for these blocks, so bit-level conformance is not claimed), and passthrough for the Extended/Test
@@ -80,7 +80,7 @@ auto paging = L3PagingRequestType2::builder()
 ## Supported Messages Summary
 
 All 12 protocol domains — RR 98 · SM 29 · CC 24 · GMM 23 · MM 19 · SMS 19 · BCC 8 · GCC 8 · SS 3 · LS 2 ·
-Extended + Test PDs 2: **236 message types** in total, with Information Elements and enums defined per domain.
+Extended + Test PDs 2: **235 message types** in total, with Information Elements and enums defined per domain.
 
 Full catalog (MTIs, directions, IEs, dispatch edge cases such as TIF=1 short messages and parse-slot
 shadowing): [doc/messages.md](doc/messages.md).
@@ -186,7 +186,7 @@ results are attributed to the machine that produced them; a full annotated run:
 |--------|---------------------|------------------|----------------|
 | **Language** | C | C++ (manual memory) | C++20 |
 | **Type safety** | enum + manual cast | custom structs | `std::variant` + `tryGet<T>()` — compile-time, no RTTI |
-| **Message types** | hand-coded per message | partial coverage | 236 typed messages, all 12 PD domains |
+| **Message types** | hand-coded per message | partial coverage | 235 typed messages, all 12 PD domains |
 | **Builder API** | none (manual struct) | partial | fluent builder for every type |
 | **FSM + timers + correlation** | implicit in handlers | custom | built-in stack modules + procedure framework |
 | **LAPDm / A-bis RSL** | separate library | custom | full LAPDm entity + RSL parse/build included |
@@ -201,7 +201,7 @@ Every detail lives in a dedicated guide; this README is the pitch and the index.
 | [doc/API.md](doc/API.md) | Full API reference (64 numbered sections): core types, bit I/O, streaming, parser/serializer, builders and IEs/enums of all 12 domains, LAPDm, dispatcher, arena, every stack module, RSL, all procedures, C ABI, FFI bindings + spec conformance notes |
 | [doc/bts_integration.md](doc/bts_integration.md) | **Primary guide for BTS developers**: step-by-step event loop with `ProcedureOrchestrator`, full worked procedure chains (Location Update, Call Setup MO, Paging), AuC/VLR/BSC typed-data integration, LAPDm link management, L3 timer reference table, SI broadcast, production error handling |
 | [doc/bts_architecture.md](doc/bts_architecture.md) | Two usage modes (L3 Parser vs BTS Stack), component & data-flow diagrams, PHY/SDR integration points, thread-safety matrix, per-MS memory footprint, allocation-free hot paths, scaling guidelines to millions of sessions |
-| [doc/messages.md](doc/messages.md) | Complete message catalog: all 236 types with MTIs and directions, CC/GMM/SM IEs, SMS CP/RP/TP layers, dispatch edge cases (TIF=1 short messages, build-only types, parse-slot shadowing) |
+| [doc/messages.md](doc/messages.md) | Complete message catalog: all 235 types with MTIs and directions, CC/GMM/SM IEs, SMS CP/RP/TP layers, dispatch edge cases (TIF=1 short messages, build-only types, parse-slot shadowing) |
 | [doc/boundaries.md](doc/boundaries.md) | What the library intentionally excludes — PHY/SDR, speech codecs, A5 ciphering, OML, SIP/media gateways, PS full stack, configuration, logging — and the exact integration point for each |
 | [examples/](examples/) | 20 runnable demos (see below), incl. full BTS flows, benchmarks, and a 1M-session real-time loop |
 | [bindings/README.md](bindings/README.md) | FFI bindings (Python / Go / Rust) over the stable C ABI: unified quickstarts, ownership & threading model, callback safety rules, extension guide, test gate |

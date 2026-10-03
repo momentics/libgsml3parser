@@ -8,7 +8,7 @@ The following capabilities are part of libgsml3parser and maintained by this pro
 
 | Domain | Components | Specification |
 |--------|-----------|---------------|
-| **L3 Parsing / Serialization** | `parseL3()`/`parseL3Hex()`, `writeL3()`/`writeL3Bytes()`/`writeL3Hex()`, fluent Builder API (236 message types, all 12 PD domains) | TS 24.008 / GSM 04.08 |
+| **L3 Parsing / Serialization** | `parseL3()`/`parseL3Hex()`, `writeL3()`/`writeL3Bytes()`/`writeL3Hex()`, fluent Builder API (235 message types, all 12 PD domains) | TS 24.008 / GSM 04.08 |
 | **LAPDm Protocol** | `lapdm::LAPDmFrame` decode/encode + factories (`makeUIFrame`, `makeSABMEFrame`, ...), `LAPDmEntity` full state machine (SABME/UA/DISC, UI, I-frame segmentation k=1 with T200 retransmission, 4 KB-bounded reassembly, contention resolution) | GSM 04.06 / TS 45.006 |
 | **Protocol Procedures (FSM)** | `ProcedureOrchestrator` (auto-chains), `ProcedureRunner`, 10 concrete procedures (LocationUpdate, Authentication, CallSetupMO/MT, ChannelAssignment, CipheringMode, Paging, Handover, CallRelease, IMSIDetach) | TS 24.008 §§ 4.4, 6.1; TS 04.08 § 9.1 |
 | **Protocol State Machines** | `RRStateMachine`, `MMStateMachine`, `CCStateMachine` skeletons with `SMResult` transitions | TS 24.008 protocol state model |
@@ -129,7 +129,7 @@ std::string line = std::format("chain {} action={} token={} final={}",
 
 | Domain | In Library? | Integration |
 |--------|------------|-------------|
-| L3 parse / serialize | Yes | Core API (236 message types, 12 PD domains) |
+| L3 parse / serialize | Yes | Core API (235 message types, 12 PD domains) |
 | LAPDm framing | Yes | `LAPDmEntity` + `lapdm::` frame API |
 | Signal procedures (FSM) | Yes | `ProcedureOrchestrator` / `ProcedureRunner` |
 | Subscriber state | Yes | `SubscriberSession` (+ sharded) registry |

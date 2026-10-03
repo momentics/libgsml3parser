@@ -250,7 +250,7 @@ GSML3_C_API size_t gsml3_message_write(const gsml3_message* msg,
  * free with gsml3_free(). NULL on error. */
 GSML3_C_API char* gsml3_message_hex(const gsml3_message* msg);
 /* Human-readable dump: message name on the first line followed by the
- * information-element text of every field (all 236 message types).
+ * information-element text of every field (all 235 message types).
  * Allocated by the library; free with gsml3_free(). NULL when msg is NULL. */
 GSML3_C_API char* gsml3_message_dump(const gsml3_message* msg);
 
@@ -818,7 +818,7 @@ GSML3_C_API size_t gsml3_response_build_setup(uint8_t* out, size_t maxlen,
 
 /* ── Typed access: curated message fields / builders ─────────────────── */
 /*
- * The general layer (gsml3_parse_l3* / gsml3_message_*) covers all 236
+ * The general layer (gsml3_parse_l3* / gsml3_message_*) covers all 235
  * message types; this section adds typed field access and builders for
  * the ~44 key messages used by BTS procedure chains, the examples and
  * the quickstart. Getters return sentinel values (-1 / 0 / NULL) when

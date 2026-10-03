@@ -117,7 +117,7 @@ BTS Stack Mode (all modules)
     ├── parseL3() / writeL3Bytes()
     ├── BitReader / BitWriter
     ├── ProtocolDispatcher + FlatHandler
-    ├── Builder API (236 message types across all 12 PD domains)
+    ├── Builder API (235 message types across all 12 PD domains)
     └── ByteSource / L3Framer / StreamProcessor
 ```
 

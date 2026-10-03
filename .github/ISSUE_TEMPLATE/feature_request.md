@@ -28,4 +28,4 @@ Any other approaches you evaluated.
 
 ## Additional Context
 
-References to existing implementations (osmo-bts, srsRAN), pcap captures, or test vectors.
+References to existing implementations, pcap captures, or test vectors.
