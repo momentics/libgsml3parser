@@ -271,9 +271,12 @@ enum class RSLEIEncoding : uint8_t { TV, LV, TL16V };
 
 /// Encoding class of an RSL IE type code (TS 48.058 9.3). The class is fixed
 /// per IE: TV IEs have a constant value size, LV/TL16V IEs carry their value
-/// length explicitly. Only the L3 Information IE (0x0B) uses the 16-bit
-/// length form; the Full BCCH Information IE (0x27) is an ordinary LV IE.
-/// Unknown type codes are decoded as LV (variable), which keeps malformed or
+/// length explicitly. The RACH Load IE (0x12) and the ip.access vendor
+/// extension IEs with a defined value size are TV; only the L3 Information
+/// IE (0x0B) uses the 16-bit length form; the Full BCCH Information IE (0x27)
+/// is an ordinary LV IE. The ip.access codes without a defined size (0xE0,
+/// 0xE1, 0xE2, 0xF7, 0xFA, 0xFB, 0xFD, 0xFE), all other defined IEs and
+/// unknown type codes are decoded as LV (variable), which keeps malformed or
 /// vendor frames parseable without desynchronizing the IE list.
 [[nodiscard]] constexpr RSLEIEncoding rslIeEncoding(uint8_t iei) noexcept {
     switch (iei) {
@@ -289,6 +292,7 @@ enum class RSLEIEncoding : uint8_t { TV, LV, TL16V };
         case 0x0E: // PagingGroup (1)
         case 0x0F: // PagingLoad (2)
         case 0x11: // AccessDelay (1)
+        case 0x12: // RachLoad (6)
         case 0x13: // ReqReference (3)
         case 0x14: // ReleaseMode (1)
         case 0x17: // StartngTime (2)
@@ -302,13 +306,26 @@ enum class RSLEIEncoding : uint8_t { TV, LV, TL16V };
         case 0x2D: // CbchLoadInfo (1)
         case 0x2E: // SmscbChanIndicator (1)
         case 0x37: // MrControl (1)
+        // ip.access vendor extension IEs with a defined value size.
+        case 0xF0: // IpacRemoteIp (4)
+        case 0xF1: // IpacRemotePort (2)
+        case 0xF2: // IpacRtpPayload (1)
+        case 0xF3: // IpacLocalPort (2)
+        case 0xF4: // IpacSpeechMode (1)
+        case 0xF5: // IpacLocalIp (4)
+        case 0xF6: // IpacConnStat (28)
+        case 0xF8: // IpacConnId (2)
+        case 0xF9: // IpacRtpCsdFmt (1)
+        case 0xFC: // IpacRtpPayload2 (1)
             return RSLEIEncoding::TV;
 
         // TL16V: 16-bit big-endian length for large payloads.
         case 0x0B: // L3Info (the only TL16V IE)
             return RSLEIEncoding::TL16V;
 
-        // LV (8-bit length): FullBCCHInfo, all other defined IEs and unknown codes.
+        // LV (8-bit length): FullBCCHInfo, the ip.access codes without a
+        // defined size (0xE0, 0xE1, 0xE2, 0xF7, 0xFA, 0xFB, 0xFD, 0xFE), all
+        // other defined IEs and unknown codes.
         default:
             return RSLEIEncoding::LV;
     }
@@ -321,6 +338,9 @@ enum class RSLEIEncoding : uint8_t { TV, LV, TL16V };
         case 0x0A: // L1Info
         case 0x0F: // PagingLoad
         case 0x17: // StartngTime
+        case 0xF1: // IpacRemotePort (vendor extension)
+        case 0xF3: // IpacLocalPort (vendor extension)
+        case 0xF8: // IpacConnId (vendor extension)
             return 2;
         case 0x13: // ReqReference
             return 3;
@@ -343,7 +363,18 @@ enum class RSLEIEncoding : uint8_t { TV, LV, TL16V };
         case 0x2D: // CbchLoadInfo
         case 0x2E: // SmscbChanIndicator
         case 0x37: // MrControl
+        case 0xF2: // IpacRtpPayload (vendor extension)
+        case 0xF4: // IpacSpeechMode (vendor extension)
+        case 0xF9: // IpacRtpCsdFmt (vendor extension)
+        case 0xFC: // IpacRtpPayload2 (vendor extension)
             return 1;
+        case 0xF0: // IpacRemoteIp (vendor extension)
+        case 0xF5: // IpacLocalIp (vendor extension)
+            return 4;
+        case 0x12: // RachLoad
+            return 6;
+        case 0xF6: // IpacConnStat (vendor extension)
+            return 28;
         default:
             return 0;
     }
@@ -470,13 +501,17 @@ struct RSLChannelNumber {
     }
 };
 
-/// Activation types for CHAN_ACTIV messages.
+/// Three-bit activation type of the Activation Type IE (TS 48.058 section
+/// 9.3.3); the IE value octet packs reactivation(1), reserved(4) and this
+/// three-bit code in the low bits.
 enum class RSLActivationType : uint8_t {
-    IntraImmediateAssignment = 0x01,
-    IntraSDCCH4              = 0x02,
-    IntraSDCCH8              = 0x03,
-    InterAsyncHandover       = 0x04,
-    InterSyncHandover        = 0x05
+    ReleaseToImmediateAssignment = 0x00, ///< '000'B
+    NormalAssignment             = 0x01, ///< '001'B
+    AsynchronousHandover         = 0x02, ///< '010'B
+    SynchronousHandover          = 0x03, ///< '011'B
+    AdditionalAssignment         = 0x04, ///< '100'B
+    MslotConfiguration           = 0x05, ///< '101'B
+    OsMoPdch                     = 0x07  ///< '111'B (vendor extension)
 };
 
 /// Channel Mode IE value part (TS 48.058 section 9.3.6): exactly four octets —
@@ -504,12 +539,14 @@ struct RSLChannelMode {
 };
 static_assert(sizeof(RSLChannelMode) == 4, "RSLChannelMode must be exactly 4 bytes");
 
-/// Encryption information carried in ENCR_CMD or CHAN_ACTIV.
-/// Specifies the ciphering algorithm (A5/0, A5/1, etc.) and provides a view
-/// into the ciphering key Kc buffer (typically 8 bytes for A5/1).
+/// Encryption information carried in ENCR_CMD or CHAN_ACTIV. The algorithm
+/// identifier is the one-octet value of the Encryption Info IE (TS 48.058
+/// section 9.3.x): 1 = A5/0, 2 = A5/1, 3 = A5/2, 4 = A5/3, 5 = A5/4,
+/// 6 = A5/5, 7 = A5/6, 8 = A5/7. The key span holds the ciphering key Kc
+/// (typically eight octets for A5/1).
 struct RSLEncryptionInfo {
-    uint8_t algorithmId{0};  ///< 0=A5/0, 1=A5/1, 2=A5/2, 3=A5/3
-    std::span<const uint8_t> key;  ///< Ciphering key Kc (8 bytes for A5/1)
+    uint8_t algorithmId{0};
+    std::span<const uint8_t> key;
 };
 
 /// Return human-readable name for the RSL discriminator.

@@ -3978,20 +3978,24 @@ fixed encoding class via `rslIeEncoding()`:
 - **TV** (type + fixed value, no length octet; value sizes in parentheses):
   ChanNr 0x01 (2), LinkIdent 0x02 (1), ActType 0x03 (1), BSPower 0x04 (1),
   FrameNumber 0x08 (2), HandoRef 0x09 (1), L1Info 0x0A (2), MSPower 0x0D (1), PagingGroup 0x0E (1),
-  PagingLoad 0x0F (2), AccessDelay 0x11 (1), ReqReference 0x13 (3), ReleaseMode 0x14 (1),
+  PagingLoad 0x0F (2), AccessDelay 0x11 (1), RachLoad 0x12 (6), ReqReference 0x13 (3), ReleaseMode 0x14 (1),
   StartngTime 0x17 (2), TimingAdvance 0x18 (1), MeasResNr 0x1B (1), MsgId 0x1C (1),
   SysInfoType 0x1E (1), MSTimingOffset 0x25 (1), ChanNeeded 0x28 (1), CbCmdType 0x29 (1),
-  CbchLoadInfo 0x2D (1);
+  CbchLoadInfo 0x2D (1), and the ip.access vendor extensions with a defined value size —
+  Remote/Local IP 0xF0/0xF5 (4), Remote/Local port and Connection ID 0xF1/0xF3/0xF8 (2),
+  RTP payload types, speech mode and RTP CSD format 0xF2/0xF4/0xF9/0xFC (1) and
+  connection statistics 0xF6 (28);
 - **TL16V** (type + 16-bit big-endian length + value, for payloads above 255 bytes):
   `L3Info` 0x0B only — the L3 payload carrier for RLL DATA_*/UNIT_DATA_* and CCHAN paging/SMS commands;
 - **LV** (type + 8-bit length + value): all remaining codes — in particular ChanIdent 0x05,
-  ChanMode 0x06 (four value octets), EncrInfo 0x07, MSIdentity 0x0C, PyhsContext 0x10, RachLoad 0x12,
+  ChanMode 0x06 (four value octets), EncrInfo 0x07, MSIdentity 0x0C, PyhsContext 0x10,
   ResourceInfo 0x15, RlmCause 0x16, UplinkMeas 0x19 (three value octets, optional vendor supplementary
   bytes appended raw), Cause 0x1A, MSPowerParam 0x1F, BSPowerParam 0x20, PreprocParam 0x21,
   PreprocMeas 0x22, ImmAssInfo 0x23, SmscbInfo 0x24, ErrMsg 0x26, FullBCCHInfo 0x27,
   SmscbMsg 0x2A, FullImmAssInfo 0x2B, SacchInfo 0x2C, the group-call/NCH EMLPP UIC main-channel MR
-  codec RTD TFO and LLP APDU codes 0x2E–0x3C — plus the vendor extensions 0x60–0x63 (Osmo) and the
-  ip.access IPAccess group 0xE0–0xFD, and unknown codes (decoding them as LV keeps malformed frames
+  codec RTD TFO and LLP APDU codes 0x2E–0x3C — plus the vendor extensions 0x60–0x63 (Osmo), the
+  ip.access codes without a defined value size — 0xE0, 0xE1, 0xE2, 0xF7, 0xFA, 0xFB, 0xFD and 0xFE
+  of the IPAccess group 0xE0–0xFE — and unknown codes (decoding them as LV keeps malformed frames
   parseable without desynchronizing the IE list).
 
 `RSLErrorCause` (TS 48.058 section 9.3.26) carries NACK/failure reasons; the code space contains
@@ -4033,7 +4037,7 @@ and is not part of this enum.
   octets packing t1p(5)|t3(6)|t2(5). The builder takes an absolute TDMA frame number (0..42431) and
   encodes `t1p = (fn/1326) % 32`, `t3 = fn % 51`, `t2 = fn % 26`; the inverse composition back to an
   absolute frame number is not unique, so the parser returns the three fields as-is.
-- **`RSLEncryptionInfo`** - algorithmId + key span for A5 ciphering.
+- **`RSLEncryptionInfo`** - algorithmId + key span for A5 ciphering (algorithm identifier: 1=A5/0 … 8=A5/7).
 
 ### Helper Functions
 

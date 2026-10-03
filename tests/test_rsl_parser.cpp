@@ -163,10 +163,10 @@ TEST(RSLP_parse_DCHAN_EncrCmd, ExtractsL3AndEncrInfo) {
     buf.push_back(static_cast<uint8_t>(RSLDChanMessageType::EncrCmd));
     buf.push_back(static_cast<uint8_t>(RSL_IE::ChanNr)); // Channel Number TV IE
     buf.push_back(0x7c);                                // chanNr
-    // EncrInfo IE: type=0x07, len=9, algo=1 (A5/1), key=8 bytes
+    // EncrInfo IE: type=0x07, len=9, algo=1 (A5/0), key=8 bytes
     buf.push_back(static_cast<uint8_t>(RSL_IE::EncrInfo)); // type
     buf.push_back(0x09);                                   // len
-    buf.push_back(0x01);                                   // algo A5/1
+    buf.push_back(0x01);                                   // algo A5/0
     buf.insert(buf.end(), {0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x11, 0x22}); // key
     // L3Info IE (TL16V): type=0x0B, len_hi=0, len_lo=4, value=4 bytes
     buf.push_back(static_cast<uint8_t>(RSL_IE::L3Info)); // type
@@ -205,6 +205,61 @@ TEST(RSLP_parse_CCHAN_PagingCmd, ParsesIEs) {
     auto* idIE = RSLParser::findIE(msg, RSL_IE::MSIdentity);
     ASSERT_NE(idIE, nullptr);
     EXPECT_EQ(idIE->len, 3u);
+}
+
+// Golden: CCCH Load Indication (RACH) per TS 48.058 section 9.3.18 — the
+// RACH Load IE is TV-encoded with its fixed six value octets (total, busy
+// and access counters as big-endian u16 each), so no length octet appears
+// between the type and the counters.
+TEST(RSLP_parse_CCHAN_CcchLoadInd, RachLoadTv) {
+    std::vector<uint8_t> buf = {
+        rslFirstOctet(RSLDiscriminator::CommonChannel, /*transparent=*/false),
+        static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd),
+        0x01, 0x00,                                  // ChanNr TV(2)
+        0x0F, 0x00, 0x32,                            // Paging Load TV(2) = 50
+        0x12, 0x00, 0x64, 0x00, 0x1E, 0x00, 0x50,    // RACH Load TV(6): 100/30/80
+    };
+    auto result = RSLParser::parse(buf);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ((*result).ieCount, 3u);
+    auto* rl = RSLParser::findIE(*result, RSL_IE::RachLoad);
+    ASSERT_NE(rl, nullptr);
+    EXPECT_EQ(rl->len, 6u);
+    EXPECT_EQ((rl->val[0] << 8) | rl->val[1], 100u);
+    EXPECT_EQ((rl->val[2] << 8) | rl->val[3], 30u);
+    EXPECT_EQ((rl->val[4] << 8) | rl->val[5], 80u);
+}
+
+// Golden: an RSL frame of the ip.access group carrying the connection
+// identifier and connection statistics IEs, both TV-encoded with their
+// fixed value sizes (two and twenty-eight octets); the IE list stays
+// synchronized, so a following LV Cause IE is located at the correct offset.
+TEST(RSLP_parse_IPA, TvSizesKeepIeListSynchronized) {
+    std::vector<uint8_t> buf;
+    buf.push_back(rslFirstOctet(RSLDiscriminator::IPAccess, /*transparent=*/false));
+    buf.push_back(0x81); // an ip.access message type (stored verbatim)
+    buf.insert(buf.end(), {0x01, 0x7C});             // ChanNr TV(2)
+    buf.insert(buf.end(), {0xF8, 0x00, 0x2A});       // IpacConnId TV(2) = 42
+    buf.push_back(static_cast<uint8_t>(RSL_IE::IpacConnStat));
+    for (uint8_t i = 0; i < 28; ++i) buf.push_back(i); // IpacConnStat TV(28)
+    buf.insert(buf.end(), {0x1A, 0x01, 0x2F});       // Cause LV: ResUnavail
+
+    auto result = RSLParser::parse(buf);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ((*result).ieCount, 4u);
+    auto* cid = RSLParser::findIE(*result, RSL_IE::IpacConnId);
+    ASSERT_NE(cid, nullptr);
+    EXPECT_EQ(cid->len, 2u);
+    EXPECT_EQ((cid->val[0] << 8) | cid->val[1], 42u);
+    auto* stat = RSLParser::findIE(*result, RSL_IE::IpacConnStat);
+    ASSERT_NE(stat, nullptr);
+    EXPECT_EQ(stat->len, 28u);
+    EXPECT_EQ(stat->val[0], 0x00u);
+    EXPECT_EQ(stat->val[27], 0x1Bu);
+    auto* cause = RSLParser::findIE(*result, RSL_IE::Cause);
+    ASSERT_NE(cause, nullptr); // LV after the 28-octet TV: no desync
+    EXPECT_EQ(cause->len, 1u);
+    EXPECT_EQ(cause->val[0], 0x2Fu);
 }
 
 // Test: Parse CCHAN BCCH_INFO and extract L3 payload.
@@ -431,7 +486,7 @@ TEST(RSLP_getEncryptionInfo_Valid, ReturnsInfo) {
     ASSERT_TRUE(result.has_value());
     auto info = RSLParser::getEncryptionInfo(*result);
     ASSERT_TRUE(info.has_value());
-    EXPECT_EQ(info->algorithmId, 1u); // A5/1
+    EXPECT_EQ(info->algorithmId, 1u); // A5/0
     EXPECT_EQ(info->key.size(), 8u);
     EXPECT_EQ(info->key[0], 0xde);
 }

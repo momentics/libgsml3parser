@@ -211,15 +211,26 @@ TEST(RSLB_buildMeasRes_FieldMasking, TruncatedToWidth) {
     EXPECT_EQ(meas->rxqSub, 7u);
 }
 
-// Test: Build CCCH_LOAD_IND and parse back.
+// Test: Build CCCH_LOAD_IND and parse back. The RACH Load IE is TV-encoded
+// with its fixed six value octets (TS 48.058 section 9.3.18), so the frame is
+// exactly fourteen octets long.
 TEST(RSLB_buildCCCHLoadInd_Loads, ParsesBack) {
     auto result = RSLBuilder::buildCCCHLoadInd(0x00, 50, 100, 30, 80);
     ASSERT_TRUE(result.has_value());
+    ASSERT_EQ((*result).size(), 14u); // header(4) + PagingLoad TV(3) + RachLoad TV(7)
     auto parsed = RSLParser::parse(*result);
     ASSERT_TRUE(parsed.has_value());
     EXPECT_EQ((*parsed).discriminator, RSLDiscriminator::CommonChannel);
     EXPECT_EQ((*parsed).msgType, static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd));
     EXPECT_EQ((*parsed).chanNr, 0x00);
+    auto* pl = RSLParser::findIE(*parsed, RSL_IE::PagingLoad);
+    ASSERT_NE(pl, nullptr); EXPECT_EQ(pl->len, 2u);
+    EXPECT_EQ((pl->val[0] << 8) | pl->val[1], 50u);
+    auto* rl = RSLParser::findIE(*parsed, RSL_IE::RachLoad);
+    ASSERT_NE(rl, nullptr); EXPECT_EQ(rl->len, 6u); // TV: no length octet on the wire
+    EXPECT_EQ((rl->val[0] << 8) | rl->val[1], 100u);
+    EXPECT_EQ((rl->val[2] << 8) | rl->val[3], 30u);
+    EXPECT_EQ((rl->val[4] << 8) | rl->val[5], 80u);
 }
 
 // Test: Build CHAN_RQD with request reference and parse back.

@@ -118,7 +118,7 @@ int main()
             0x21,                               // msgType: CHAN_ACTIV (global)
             // Channel Number TV IE: SDCCH/4 sub-channel 3, TS 0 -> (4+3)<<3|0 = 0x78
             static_cast<uint8_t>(RSL_IE::ChanNr), 0x78,
-            // ActType IE (TV): type=0x03, value=2 (IntraSDCCH4)
+            // ActType IE (TV): type=0x03, value=2 (AsynchronousHandover, TS 48.058 9.3.3)
             0x03, 0x02,
             // ChanMode IE (LV): type=0x06, len=4 — SDCCH signalling, DTX off
             // (TS 48.058 9.3.6: dtx, speed indicator, channel rate type, union octet)

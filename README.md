@@ -138,9 +138,16 @@ canonical section 9.3.26 values (`RadioLinkFail=0x01`, `ResUnavail=0x2F`, `Proto
 three value octets — `[RFU|DTX_d|rxlev_full(6)]`, `[res(2)|rxlev_sub(6)]`, `[res(2)|rxq_full(3)|rxq_sub(3)]`
 — with any vendor supplementary bytes preserved verbatim. The Frame Number IE (0x08) packs t1p(5),
 t3(6) and t2(5) derived from an absolute TDMA frame number (`t1p=(fn/1326)%32`, `t3=fn%51`,
-`t2=fn%26`). The IE catalog covers the full section 9 set (0x01–0x3C; 0x1D is not allocated) plus
-vendor extensions 0x60–0x63 and the IPAccess group, encoded as TV with fixed sizes, TL16V for
-`L3Info` (0x0B) only, and LV for everything else — including Full BCCH Info (0x27).
+`t2=fn%26`). The RACH Load IE (0x12) is TV-encoded with its fixed six value
+octets (total/busy/access counters, big-endian u16 each). The IE catalog
+covers the full section 9 set (0x01–0x3C; 0x1D is not allocated) plus vendor
+extensions 0x60–0x63 (Osmo) and the ip.access group 0xE0–0xFE, in which the
+IEs with a defined value size — Remote/Local IP (four octets), Remote/Local
+port and Connection ID (two octets), RTP payload type(s), speech mode and RTP
+CSD format (one octet) and connection statistics (twenty-eight octets) — are
+TV-encoded and the remaining codes have no defined size and decode as LV;
+TL16V for `L3Info` (0x0B) only, and LV for everything else — including Full
+BCCH Info (0x27).
 
 ## Quick Start
 

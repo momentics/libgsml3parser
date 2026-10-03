@@ -190,14 +190,27 @@ TEST(RSLT_IeEncoding_Classes, Correct) {
     }
     EXPECT_EQ(rslIeTvValueSize(0x13u), 3u); // ReqReference: three octets
 
-    // LV IEs (defined and undefined codes alike).
-    for (uint8_t iei : {0x05u, 0x06u, 0x07u, 0x0Cu, 0x10u, 0x12u, 0x15u, 0x16u,
+    // LV IEs (defined and undefined codes alike), including the ip.access
+    // vendor extension codes without a defined value size.
+    for (uint8_t iei : {0x05u, 0x06u, 0x07u, 0x0Cu, 0x10u, 0x15u, 0x16u,
                         0x19u, 0x1Au, 0x1Fu, 0x20u, 0x21u, 0x22u, 0x23u, 0x24u,
                         0x26u, 0x27u, 0x2Au, 0x2Bu, 0x2Cu, 0x2Fu, 0x30u, 0x31u,
                         0x32u, 0x33u, 0x34u, 0x35u, 0x36u, 0x38u, 0x39u, 0x3Au,
-                        0x3Bu, 0x3Cu, 0x60u, 0x61u, 0x62u, 0x63u}) {
+                        0x3Bu, 0x3Cu, 0x60u, 0x61u, 0x62u, 0x63u,
+                        0xE0u, 0xE1u, 0xE2u, 0xF7u, 0xFAu, 0xFBu, 0xFDu, 0xFEu}) {
         EXPECT_EQ(rslIeEncoding(iei), RSLEIEncoding::LV) << "iei=" << iei;
     }
+
+    // RACH Load: TV with the fixed six value octets.
+    EXPECT_EQ(rslIeEncoding(0x12u), RSLEIEncoding::TV);
+    EXPECT_EQ(rslIeTvValueSize(0x12u), 6u);
+    // ip.access vendor extension IEs with a defined value size are TV.
+    for (uint8_t iei : {0xF0u, 0xF5u}) EXPECT_EQ(rslIeTvValueSize(iei), 4u) << "iei=" << iei;
+    for (uint8_t iei : {0xF1u, 0xF3u, 0xF8u}) EXPECT_EQ(rslIeTvValueSize(iei), 2u) << "iei=" << iei;
+    for (uint8_t iei : {0xF2u, 0xF4u, 0xF9u, 0xFCu}) EXPECT_EQ(rslIeTvValueSize(iei), 1u) << "iei=" << iei;
+    EXPECT_EQ(rslIeTvValueSize(0xF6u), 28u); // IpacConnStat: seven u32 counters
+    for (uint8_t iei : {0xF0u, 0xF1u, 0xF2u, 0xF3u, 0xF4u, 0xF5u, 0xF6u, 0xF8u, 0xF9u, 0xFCu})
+        EXPECT_EQ(rslIeEncoding(iei), RSLEIEncoding::TV) << "iei=" << iei;
 }
 
 // Test: every RSL_IE catalog member has a non-empty name and a defined

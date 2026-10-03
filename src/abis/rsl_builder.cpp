@@ -379,8 +379,8 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildCCCHLoadInd(
     uint8_t chanNr, uint16_t pagingLoad, uint16_t rachTotal,
     uint16_t rachBusy, uint16_t rachAccess)
 {
-    // Header(4) + PagingLoad TV(3) + RachLoad LV(8) = 15 bytes.
-    return buildVector({15},
+    // Header(4) + PagingLoad TV(3) + RachLoad TV(7) = 14 bytes.
+    return buildVector({14},
         [&](std::span<uint8_t> out) {
             int n = buildCChanMsg(out, static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd), chanNr);
             if (n < 0) return -1;
@@ -388,13 +388,13 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildCCCHLoadInd(
             // Paging Load IE: TV with a two-octet value (big-endian).
             uint8_t pl[2]; pl[0] = static_cast<uint8_t>((pagingLoad >> 8) & 0xff); pl[1] = static_cast<uint8_t>(pagingLoad & 0xff);
             off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::PagingLoad), pl, 2);
-            // RACH Load IE: LV with a six-octet value — slot, busy and access
-            // counters as big-endian u16 each (TS 48.058 9.3.18).
+            // RACH Load IE: TV with the fixed six value octets — total, busy and access
+            // counters as big-endian u16 each (TS 48.058 section 9.3.18).
             uint8_t rl[6];
             rl[0] = static_cast<uint8_t>((rachTotal >> 8) & 0xff); rl[1] = static_cast<uint8_t>(rachTotal & 0xff);
             rl[2] = static_cast<uint8_t>((rachBusy >> 8) & 0xff);  rl[3] = static_cast<uint8_t>(rachBusy & 0xff);
             rl[4] = static_cast<uint8_t>((rachAccess >> 8) & 0xff);rl[5] = static_cast<uint8_t>(rachAccess & 0xff);
-            off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::RachLoad), rl, 6);
+            off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::RachLoad), rl, 6);
             return static_cast<int>(off);
         });
 }
@@ -411,7 +411,7 @@ int RSLBuilder::buildCCCHLoadInd(std::span<uint8_t> out, uint8_t chanNr, uint16_
     rl[0] = static_cast<uint8_t>((rachTotal >> 8) & 0xff); rl[1] = static_cast<uint8_t>(rachTotal & 0xff);
     rl[2] = static_cast<uint8_t>((rachBusy >> 8) & 0xff);  rl[3] = static_cast<uint8_t>(rachBusy & 0xff);
     rl[4] = static_cast<uint8_t>((rachAccess >> 8) & 0xff);rl[5] = static_cast<uint8_t>(rachAccess & 0xff);
-    off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::RachLoad), rl, 6);
+    off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::RachLoad), rl, 6);
     return static_cast<int>(off);
 }
 
