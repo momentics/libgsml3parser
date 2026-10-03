@@ -139,9 +139,9 @@ No normative reference templates exist for this block: bodies are kept as opaque
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3PagingRequestType1` | 0x21 | DL | First body octet [pageMode(4)\|channelNeeded(4)] (channel needed packed second\|first), mobile identity (LV) [+ optional second identity (TLV 0x17)] |
-| `L3PagingRequestType2` | 0x22 | DL | First body octet [pageMode(4)\|channelNeeded(4)], two raw TMSIs (8 octets) [+ optional third identity (TLV 0x17)] |
-| `L3PagingRequestType3` | 0x24 | DL | First body octet [pageMode(4)\|channelNeeded(4)], four raw TMSIs (16 octets) |
+| `L3PagingRequestType1` | 0x21 | DL | First body octet [channelNeeded(4)\|pageMode(4)] (channel needed packed second\|first), mobile identity (LV) [+ optional second identity (TLV 0x17)] |
+| `L3PagingRequestType2` | 0x22 | DL | First body octet [channelNeeded(4)\|pageMode(4)], two raw TMSIs (8 octets) [+ optional third identity (TLV 0x17)] |
+| `L3PagingRequestType3` | 0x24 | DL | First body octet [channelNeeded(4)\|pageMode(4)], four raw TMSIs (16 octets) |
 | `L3PagingResponse` | 0x27 | UL | First body octet [spare(4)\|CKSN(4)], classmark2 (V, three octets), mobile identity (LV) |
 
 ### System Information (BCCH/SACCH)

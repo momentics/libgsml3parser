@@ -116,7 +116,7 @@ tear-down indicator TV `0x09`.
 `[sC(1)|algorithm(3)][cR(1)|spare(3)]`; SI1 carries the cell channel description (ARFCN(10)+BSIC(6),
 two octets) plus RACH control parameters (three octets) and at most one rest octet; the access-class
 bitmap is a 16-bit value written low byte first (AC *i* ↔ bit *i*); a set bit bars the class
-(emergency = class 10); Paging Request Type 1/2/3 start with the octet `[pageMode(4)][channelNeeded(4)]`
+(emergency = class 10); Paging Request Type 1/2/3 start with the octet `[channelNeeded(4)][pageMode(4)]`
 (channel needed packed as second|first two-bit fields) followed by the identities — two raw TMSIs plus an
 optional third identity (TLV `0x17`) for Type 2, four raw TMSIs for Type 3 — and Paging Response starts
 with `[spare(4)][CKSN(4)]`; the Immediate Assignment start time (IEI `0x7C`) is two value octets packing

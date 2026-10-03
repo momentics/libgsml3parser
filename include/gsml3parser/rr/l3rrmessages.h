@@ -44,8 +44,8 @@ const char* rrMessageName(int mti);
 // ── Paging Request Type 1 (GSM 04.08 9.1.22) ──────────────────────────
 
 // Paging Request Type 1 (TS 44.018 section 9.1.22): the first body octet
-// packs the page mode (four bits) followed by the channel needed (second,
-// then first two-bit field); the body carries up to two mobile identities
+// packs the channel needed (second, then first two-bit field) followed by
+// the page mode (four bits); the body carries up to two mobile identities
 // (LV, the second as a TLV).
 class L3PagingRequestType1 {
     // Up to 2 paged mobiles (GSM 04.08 9.1.22) stored inline so the message is
@@ -66,9 +66,9 @@ public:
         L3PageMode mPageMode{};
     public:
         Builder& addMobileId(const L3MobileIdentity& id, ChannelType type);
-        /// Set the page mode (upper four bits of the first body octet).
+        /// Set the page mode (low four bits of the first body octet).
         Builder& pageMode(L3PageMode v) { mPageMode = v; return *this; }
-        /// Set the page mode from its two-bit value (0..3, see L3PageMode::Value).
+        /// Set the page mode from its four-bit value (0..3, see L3PageMode::Value).
         Builder& pageMode(unsigned v) { mPageMode = L3PageMode(v); return *this; }
         L3PagingRequestType1 build();
     };
@@ -91,8 +91,8 @@ public:
 // ── Paging Request Type 2 (GSM 04.08 9.1.23) ──────────────────────────
 
 // Paging Request Type 2 (TS 44.018 section 9.1.23): the first body octet
-// packs the page mode (four bits) followed by the channel needed (second,
-// then first two-bit field); the body carries two raw TMSIs (each four
+// packs the channel needed (second, then first two-bit field) followed by
+// the page mode (four bits); the body carries two raw TMSIs (each four
 // octets), optionally a third mobile identity TLV.
 class L3PagingRequestType2 {
     // Exactly 2 paged TMSIs (GSM 04.08 9.1.23) stored inline for zero-heap
@@ -118,9 +118,9 @@ public:
         bool mHaveThirdIdentity{false};
     public:
         Builder& addTMSI(uint32_t tmsi, ChannelType type);
-        /// Set the page mode (upper four bits of the first body octet).
+        /// Set the page mode (low four bits of the first body octet).
         Builder& pageMode(L3PageMode v) { mPageMode = v; return *this; }
-        /// Set the page mode from its two-bit value (0..3, see L3PageMode::Value).
+        /// Set the page mode from its four-bit value (0..3, see L3PageMode::Value).
         Builder& pageMode(unsigned v) { mPageMode = L3PageMode(v); return *this; }
         /// Set the optional third mobile identity (emitted as a TLV, element
         /// identifier 0x17).
@@ -148,8 +148,8 @@ public:
 // ── Paging Request Type 3 (GSM 04.08 9.1.24) ──────────────────────────
 
 // Paging Request Type 3 (TS 44.018 section 9.1.24): the first body octet
-// packs the page mode (four bits) followed by the channel needed (second,
-// then first two-bit field); the body carries four raw TMSIs (each four
+// packs the channel needed (second, then first two-bit field) followed by
+// the page mode (four bits); the body carries four raw TMSIs (each four
 // octets).
 class L3PagingRequestType3 {
     // Exactly 4 paged TMSIs (GSM 04.08 9.1.24) stored inline for zero-heap
@@ -169,9 +169,9 @@ public:
         L3PageMode mPageMode{};
     public:
         Builder& addTMSI(uint32_t tmsi, ChannelType type);
-        /// Set the page mode (upper four bits of the first body octet).
+        /// Set the page mode (low four bits of the first body octet).
         Builder& pageMode(L3PageMode v) { mPageMode = v; return *this; }
-        /// Set the page mode from its two-bit value (0..3, see L3PageMode::Value).
+        /// Set the page mode from its four-bit value (0..3, see L3PageMode::Value).
         Builder& pageMode(unsigned v) { mPageMode = L3PageMode(v); return *this; }
         L3PagingRequestType3 build();
     };

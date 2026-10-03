@@ -644,8 +644,9 @@ public:
 class L3PageMode {
     uint8_t mPageMode{};
 public:
-    /// Page mode values (TS 44.018): a four-bit field whose low two bits
-    /// carry the mode, the upper two bits spare.
+    /// Page mode values (TS 44.018 section 10.5.2.26): a four-bit field;
+    /// assigned values 0..3, see `Value`; values above three are not
+    /// assigned and are rejected on parse.
     enum Value : uint8_t {
         Normal = 0,
         Extended = 1,
@@ -654,10 +655,10 @@ public:
     };
 
     L3PageMode() = default;
-    explicit L3PageMode(unsigned mode) : mPageMode(static_cast<uint8_t>(mode & 0x03u)) {}
+    explicit L3PageMode(unsigned mode) : mPageMode(static_cast<uint8_t>(mode & 0x0Fu)) {}
 
     uint8_t pageMode() const { return mPageMode; }
-    static constexpr size_t lengthV() { return 0; } // 4 bits: two spare + two mode
+    static constexpr size_t lengthV() { return 0; } // four-bit field (sub-octet)
 
     [[nodiscard]] static Expected<L3PageMode> parse(BitReader& br);
     void write(BitWriter& bw) const;

@@ -935,15 +935,18 @@ void L3NCCPermitted::text(std::ostream& os) const {
 
 // ── L3PageMode ─────────────────────────────────────────────────────────
 
+// Page mode (TS 44.018 section 10.5.2.26): a four-bit field; the
+// assigned codes are 0..3, any other value is rejected.
 Expected<L3PageMode> L3PageMode::parse(BitReader& br) {
-    auto r = br.readField(2); if (!r) return Expected<L3PageMode>::error(r.error()); // spare
-    r = br.readField(2); if (!r) return Expected<L3PageMode>::error(r.error()); uint8_t mode = static_cast<uint8_t>(r.value());
-    return Expected<L3PageMode>::hold(L3PageMode(mode));
+    auto r = br.readField(4);
+    if (!r) return Expected<L3PageMode>::error(r.error());
+    if (r.value() > 3u)
+        return Expected<L3PageMode>::error(ParseError{ParseError::Code::InvalidValue, "unassigned page mode value"});
+    return Expected<L3PageMode>::hold(L3PageMode(r.value()));
 }
 
 void L3PageMode::write(BitWriter& bw) const {
-    bw.writeField(0, 2);
-    bw.writeField(mPageMode, 2);
+    bw.writeField(mPageMode & 0x0Fu, 4);
 }
 
 void L3PageMode::text(std::ostream& os) const {

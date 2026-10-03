@@ -1867,9 +1867,9 @@ RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for 
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3PagingRequestType1` | 0x21 | DL | First octet [pageMode(4)\|channelNeeded(4)], MobileIdentity (LV) [+ optional second ID (TLV 0x17)] |
-| `L3PagingRequestType2` | 0x22 | DL | First octet [pageMode(4)\|channelNeeded(4)], two raw TMSIs (8 bytes) [+ optional third identity (TLV 0x17)] |
-| `L3PagingRequestType3` | 0x24 | DL | First octet [pageMode(4)\|channelNeeded(4)], four raw TMSIs (16 bytes) |
+| `L3PagingRequestType1` | 0x21 | DL | First octet [channelNeeded(4)\|pageMode(4)] (channel needed packed second\|first), MobileIdentity (LV) [+ optional second ID (TLV 0x17)] |
+| `L3PagingRequestType2` | 0x22 | DL | First octet [channelNeeded(4)\|pageMode(4)], two raw TMSIs (8 bytes) [+ optional third identity (TLV 0x17)] |
+| `L3PagingRequestType3` | 0x24 | DL | First octet [channelNeeded(4)\|pageMode(4)], four raw TMSIs (16 bytes) |
 | `L3PagingResponse` | 0x27 | UL | First octet [spare(4)\|CKSN(4)], Classmark2 (V), MobileIdentity (LV) |
 
 ### System Information Messages

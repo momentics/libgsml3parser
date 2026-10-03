@@ -185,13 +185,13 @@ size_t L3PagingRequestType1::bodyLength() const {
 
 Expected<L3PagingRequestType1> L3PagingRequestType1::parse(BitReader& br) {
     L3PagingRequestType1 msg;
-    // First body octet: page mode (four bits), then the channel needed —
-    // second(2)|first(2) two-bit fields (TS 44.018 section 9.1.22).
-    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType1>::error(res.error()); msg.mPageMode = std::move(res.value()); }
+    // First body octet: channel needed second(2)|first(2), then the page mode
+    // (four bits) (TS 44.018 section 9.1.22).
     auto r = br.readField(2); if (!r) return Expected<L3PagingRequestType1>::error(r.error());
     msg.mChannelsNeeded[1] = channelNeededType(r.value());
     r = br.readField(2); if (!r) return Expected<L3PagingRequestType1>::error(r.error());
     msg.mChannelsNeeded[0] = channelNeededType(r.value());
+    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType1>::error(res.error()); msg.mPageMode = std::move(res.value()); }
 
     {
         auto lenR = br.readField(8); if (!lenR) return Expected<L3PagingRequestType1>::error(lenR.error());
@@ -223,11 +223,11 @@ Expected<L3PagingRequestType1> L3PagingRequestType1::parse(BitReader& br) {
 
 void L3PagingRequestType1::write(BitWriter& bw) const {
     size_t sz = mMobileIdCount;
-    // Symmetric to parse: page mode first, then channel needed
-    // second(2)|first(2) (TS 44.018 section 9.1.22).
-    mPageMode.write(bw);
+    // Symmetric to parse: channel needed second(2)|first(2), then page mode
+    // (TS 44.018 section 9.1.22).
     bw.writeField(channelNeededCode(mChannelsNeeded[1]), 2);
     bw.writeField(channelNeededCode(mChannelsNeeded[0]), 2);
+    mPageMode.write(bw);
     bw.writeField(static_cast<uint32_t>(mMobileIDs[0].lengthV()), 8);
     mMobileIDs[0].write(bw);
     if (sz > 1) {
@@ -276,13 +276,13 @@ size_t L3PagingRequestType2::bodyLength() const {
 
 Expected<L3PagingRequestType2> L3PagingRequestType2::parse(BitReader& br) {
     L3PagingRequestType2 msg;
-    // First body octet: page mode (four bits), then the channel needed —
-    // second(2)|first(2) two-bit fields (TS 44.018 section 9.1.23).
-    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType2>::error(res.error()); msg.mPageMode = std::move(res.value()); }
+    // First body octet: channel needed second(2)|first(2), then the page mode
+    // (four bits) (TS 44.018 section 9.1.23).
     auto r = br.readField(2); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
     msg.mChannelsNeeded[1] = channelNeededType(r.value());
     r = br.readField(2); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
     msg.mChannelsNeeded[0] = channelNeededType(r.value());
+    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType2>::error(res.error()); msg.mPageMode = std::move(res.value()); }
 
     for (size_t i = 0; i < msg.mTMSIs.size(); ++i) {
         r = br.readField(32); if (!r) return Expected<L3PagingRequestType2>::error(r.error());
@@ -307,11 +307,11 @@ Expected<L3PagingRequestType2> L3PagingRequestType2::parse(BitReader& br) {
 }
 
 void L3PagingRequestType2::write(BitWriter& bw) const {
-    // Symmetric to parse: page mode first, then channel needed
-    // second(2)|first(2) (TS 44.018 section 9.1.23).
-    mPageMode.write(bw);
+    // Symmetric to parse: channel needed second(2)|first(2), then page mode
+    // (TS 44.018 section 9.1.23).
     bw.writeField(channelNeededCode(mChannelsNeeded[1]), 2);
     bw.writeField(channelNeededCode(mChannelsNeeded[0]), 2);
+    mPageMode.write(bw);
     for (const auto& tmsi : mTMSIs) {
         bw.writeField(tmsi, 32);
     }
@@ -362,13 +362,13 @@ size_t L3PagingRequestType3::bodyLength() const {
 
 Expected<L3PagingRequestType3> L3PagingRequestType3::parse(BitReader& br) {
     L3PagingRequestType3 msg;
-    // First body octet: page mode (four bits), then the channel needed —
-    // second(2)|first(2) two-bit fields (TS 44.018 section 9.1.24).
-    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType3>::error(res.error()); msg.mPageMode = std::move(res.value()); }
+    // First body octet: channel needed second(2)|first(2), then the page mode
+    // (four bits) (TS 44.018 section 9.1.24).
     auto r = br.readField(2); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
     msg.mChannelsNeeded[1] = channelNeededType(r.value());
     r = br.readField(2); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
     msg.mChannelsNeeded[0] = channelNeededType(r.value());
+    { auto res = L3PageMode::parse(br); if (!res) return Expected<L3PagingRequestType3>::error(res.error()); msg.mPageMode = std::move(res.value()); }
 
     for (size_t i = 0; i < msg.mTMSIs.size(); ++i) {
         r = br.readField(32); if (!r) return Expected<L3PagingRequestType3>::error(r.error());
@@ -379,11 +379,11 @@ Expected<L3PagingRequestType3> L3PagingRequestType3::parse(BitReader& br) {
 }
 
 void L3PagingRequestType3::write(BitWriter& bw) const {
-    // Symmetric to parse: page mode first, then channel needed
-    // second(2)|first(2) (TS 44.018 section 9.1.24).
-    mPageMode.write(bw);
+    // Symmetric to parse: channel needed second(2)|first(2), then page mode
+    // (TS 44.018 section 9.1.24).
     bw.writeField(channelNeededCode(mChannelsNeeded[1]), 2);
     bw.writeField(channelNeededCode(mChannelsNeeded[0]), 2);
+    mPageMode.write(bw);
     for (const auto& tmsi : mTMSIs) {
         bw.writeField(tmsi, 32);
     }
@@ -2162,7 +2162,11 @@ Expected<L3ImmediateAssignmentReject> L3ImmediateAssignmentReject::parse(BitRead
     L3ImmediateAssignmentReject msg;
     auto r = br.readField(4); if (!r) return Expected<L3ImmediateAssignmentReject>::error(r.error());
     msg.mFeatureIndicator = r.value();
+    // Page mode (TS 44.018 section 9.1.20): a four-bit field; the assigned
+    // codes are 0..3, any other value is rejected.
     r = br.readField(4); if (!r) return Expected<L3ImmediateAssignmentReject>::error(r.error());
+    if (r.value() > 3u)
+        return Expected<L3ImmediateAssignmentReject>::error(ParseError{ParseError::Code::InvalidValue, "unassigned page mode value"});
     msg.mPageMode = r.value();
 
     for (int i = 0; i < 4; ++i) {

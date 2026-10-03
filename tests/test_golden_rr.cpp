@@ -149,12 +149,12 @@ TEST(GoldenRR, MessageTypeValues) {
 // =====================================================================
 // RR PARSE FROM HEX: Paging Request Type 1 (3GPP TS 44.018 9.1.22 / GSM 04.08 9.1.22)
 // Frame shape: PD = '0110'B (RR), MTI = '00100001'B (PagingRequestType1, 0x21).
-// Body per TS 44.018 9.1.22: PageMode(4 bits) page_mode, ChannelNeeded(4 bits) chan_needed,
+// Body per TS 44.018 9.1.22: ChannelNeeded(4 bits) chan_needed, PageMode(4 bits) page_mode,
 //   MobileIdentityLV mi1
 // Spec-verified: PD=6(RR), MTI=0x21(PagingRequestType1) per 3GPP TS 44.018 Table 10.4.1
-// [GSM SPEC VERIFIED] PagingRequestType1 body = PageMode(4 bits) + ChannelNeeded12(4 bits)
-//   + MobileIdentityLV(variable). The first octet packs the page mode (high nibble)
-//   followed by channel needed second|first in the low half-octet;
+// [GSM SPEC VERIFIED] PagingRequestType1 body = ChannelNeeded12(4 bits) + PageMode(4 bits)
+//   + MobileIdentityLV(variable). The first octet packs the channel needed
+//   (second|first two-bit fields) followed by the page mode (four bits);
 //   ChannelNeeded12 encodes two ChannelNeeded values:
 //   second(2)|first(2) (TS 23.003 channel types):
 //   ANY(0), SDCCH(1), TCH_F(2), TCH_H(3).
@@ -164,15 +164,15 @@ TEST(GoldenRR, MessageTypeValues) {
 TEST(GoldenRR, PagingRequestType1_Parse) {
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x21 (PagingRequestType1) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: PageMode(4)|ChannelNeeded12(4) = 0x10
-    //   PageMode: EXTENDED(1) (TS 44.018 9.1.22) -> high nibble = 0x1
-    //   ChannelNeeded12 (TS 23.003): second=00(ANY), first=00(ANY) -> low nibble = 0b0000 = 0x0
-    //   Combined: 0x10, per the TS 44.018 9.1.22 body layout.
+    // Byte 2: ChannelNeeded12(4)|PageMode(4) = 0x01
+    //   ChannelNeeded12 (TS 23.003): second=00(ANY), first=00(ANY) -> high nibble = 0b0000 = 0x0
+    //   PageMode: EXTENDED(1) (TS 44.018 9.1.22) -> low nibble = 0x1
+    //   Combined: 0x01, per the TS 44.018 9.1.22 body layout.
     // Byte 3: MI LV length = 5 (1 type octet + 4 TMSI octets) [GSM 24.008 10.5.1.4]
     // Byte 4: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4 [GSM 24.008 10.5.1.4]
     // Bytes 5-8: TMSI = 0x12345678 (4 octets, MSB first)
     uint8_t data[] = {
-        0x06, 0x21, 0x10, 0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
+        0x06, 0x21, 0x01, 0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -183,13 +183,13 @@ TEST(GoldenRR, PagingRequestType1_Parse) {
 // =====================================================================
 // RR PARSE FROM HEX: Paging Request Type 2 (3GPP TS 44.018 9.1.23 / GSM 04.08 9.1.23)
 // Frame shape: PD = '0110'B (RR), MTI = '00100010'B (PagingRequestType2, 0x22).
-// Body per TS 44.018 9.1.23: PageMode(4 bits) page_mode, ChannelNeeded(4 bits) chan_needed,
+// Body per TS 44.018 9.1.23: ChannelNeeded(4 bits) chan_needed, PageMode(4 bits) page_mode,
 //   TMSI mi1 (4 raw octets), TMSI mi2 (4 raw octets)
 // Spec-verified: PD=6(RR), MTI=0x22(PagingRequestType2) per 3GPP TS 44.018 Table 10.4.1
-// [GSM SPEC VERIFIED] PagingRequestType2 body = PageMode(4 bits) + ChannelNeeded12(4 bits)
+// [GSM SPEC VERIFIED] PagingRequestType2 body = ChannelNeeded12(4 bits) + PageMode(4 bits)
 //   + TMSI mi1(4 octets RAW) + TMSI mi2(4 octets RAW).
-//   The first octet packs the page mode (high nibble) followed by channel needed
-//   second|first in the low half-octet.
+//   The first body octet packs the channel needed (second|first two-bit fields)
+//   followed by the page mode (four bits).
 //   IMPORTANT: TMSI values are raw 4-octet integers,
 //   NOT length-prefixed MobileIdentityLV! This differs from PagingRequestType1 which uses
 //   MobileIdentityLV (length + type octet + value).
@@ -197,17 +197,17 @@ TEST(GoldenRR, PagingRequestType1_Parse) {
 
 TEST(GoldenRR, PagingRequestType2_Parse) {
     // GSM 24.008 9.1.23: PagingRequestType2 structure:
-    //   PageMode(4 bits)|ChannelNeeded(4 bits) + TMSI mi1(4 octets) + TMSI mi2(4 octets) + [optional MobileIdentityTLV]
+    //   ChannelNeeded(4 bits)|PageMode(4 bits) + TMSI mi1(4 octets) + TMSI mi2(4 octets) + [optional MobileIdentityTLV]
     // The two mobile identities are raw 4-byte TMSI values - NOT length-prefixed!
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x22 (PagingRequestType2) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: PageMode(4)=1(Extended)|ChannelNeeded12(4)=0 = 0x10
-    //   PageMode (TS 44.018 9.1.23): EXTENDED(1) -> high nibble = 0x1
-    //   ChannelNeeded12 (TS 23.003): second(2)=00(ANY)|first(2)=00(ANY) -> low nibble = 0b0000 = 0x0
+    // Byte 2: ChannelNeeded12(4)=0|PageMode(4)=1(Extended) = 0x01
+    //   ChannelNeeded12 (TS 23.003): second(2)=00(ANY)|first(2)=00(ANY) -> high nibble = 0b0000 = 0x0
+    //   PageMode (TS 44.018 9.1.23): EXTENDED(1) -> low nibble = 0x1
     // Bytes 3-6: GsmTmsi mi1 = 0x12345678 (raw 4 octets, MSB first, no length prefix)
     // Bytes 7-10: GsmTmsi mi2 = 0xDEADBEEF (raw 4 octets, MSB first, no length prefix)
     uint8_t data[] = {
-        0x06, 0x22, 0x10,
+        0x06, 0x22, 0x01,
         0x12, 0x34, 0x56, 0x78,
         0xDE, 0xAD, 0xBE, 0xEF
     };
@@ -219,12 +219,12 @@ TEST(GoldenRR, PagingRequestType2_Parse) {
 // =====================================================================
 // Golden: Paging Request Type 2 (TS 44.018): page mode REORGANIZATION
 // ('0010'), channel needed second=ANY, first=SDCCH ('00''01'), then two
-// raw TMSIs. The first body octet packs the page mode in the high
-// half-octet and the channel needed (second|first) in the low half-octet.
+// raw TMSIs. The first body octet packs the channel needed
+// (second|first two-bit fields) followed by the page mode (four bits).
 // =====================================================================
 
 TEST(GoldenRR, PagingRequestType2_RefVector) {
-    uint8_t data[] = {0x06, 0x22, 0x21,
+    uint8_t data[] = {0x06, 0x22, 0x12,
                       0x12, 0x34, 0x56, 0x78,
                       0x9A, 0xBC, 0xDE, 0xF0};
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -238,8 +238,8 @@ TEST(GoldenRR, PagingRequestType2_RefVector) {
     EXPECT_EQ(p->tmsis()[0], 0x12345678u);
     EXPECT_EQ(p->tmsis()[1], 0x9ABCDEF0u);
 
-    // Builder: Reorganization page mode lands in the high nibble of the
-    // first body octet (second=ANY, first=TCH/F -> 0b0010).
+    // Builder: the first body octet packs channel needed second=ANY|first=TCH/F
+    // (0b0010) followed by the Reorganization page mode ('0010') -> 0x22.
     auto built = L3PagingRequestType2::builder()
                       .addTMSI(0x12345678u, ChannelType::TCHFType)
                       .addTMSI(0x9ABCDEF0u, ChannelType::AnyDCCHType)
@@ -248,7 +248,7 @@ TEST(GoldenRR, PagingRequestType2_RefVector) {
     ParsedMessage pm{RRM{std::move(built)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[2], 0x22u);   // page mode '0010' | chan second 00 | first 10
+    EXPECT_EQ((*bytes)[2], 0x22u);   // chan second 00 | first 10 | page mode '0010'
     auto parsed = roundtrip(pm);
     ASSERT_TRUE(parsed);
     const auto* reparsed = tryGet<L3PagingRequestType2>(*parsed);
@@ -260,7 +260,7 @@ TEST(GoldenRR, PagingRequestType2_RefVector) {
 TEST(GoldenRR, PagingRequestType2_ThirdIdentity) {
     // Golden: Paging Request Type 2 with the optional third mobile identity
     // (TLV, element identifier 0x17) after the two raw TMSIs (TS 44.018).
-    uint8_t data[] = {0x06, 0x22, 0x01,
+    uint8_t data[] = {0x06, 0x22, 0x10,
                       0x12, 0x34, 0x56, 0x78,
                       0xDE, 0xAD, 0xBE, 0xEF,
                       0x17, 0x05, 0xF4, 0x9A, 0xBC, 0xDE, 0xF1};
@@ -270,8 +270,8 @@ TEST(GoldenRR, PagingRequestType2_ThirdIdentity) {
     ASSERT_NE(p, nullptr);
     EXPECT_TRUE(p->hasThirdIdentity());
     EXPECT_EQ(p->thirdIdentity().tmsi(), 0x9ABCDEF1u);
-    // The first body octet: page mode NORMAL(0), channel needed
-    // second=ANY|first=SDCCH.
+    // The first body octet: channel needed second=ANY|first=SDCCH,
+    // page mode NORMAL(0).
     EXPECT_EQ(static_cast<unsigned>(p->pageMode()), 0u);
     EXPECT_EQ(p->channelsNeeded()[0], ChannelType::SDCCHType);
     EXPECT_EQ(p->channelsNeeded()[1], ChannelType::AnyDCCHType);
@@ -300,8 +300,8 @@ TEST(GoldenRR, PagingRequestType2_ThirdIdentity) {
 }
 
 TEST(GoldenRR, PagingRequestType1_PageMode) {
-    // Type 1: page mode SAME_AS_BEFORE (0b0011), channel needed
-    // second=ANY|first=TCH/F (0b0010), then the two mobile identities.
+    // Type 1: channel needed second=ANY|first=TCH/F (0b0010), page mode
+    // SAME_AS_BEFORE (0b0011), then the two mobile identities.
     auto built = L3PagingRequestType1::builder()
                       .addMobileId(L3MobileIdentity(0x12345678u), ChannelType::TCHFType)
                       .addMobileId(L3MobileIdentity(0x9ABCDEF0u), ChannelType::AnyDCCHType)
@@ -311,8 +311,8 @@ TEST(GoldenRR, PagingRequestType1_PageMode) {
     ParsedMessage pm{RRM{std::move(built)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    // Byte 2: page mode(4)=0011 | second(2)=00 | first(2)=10 -> 0x32.
-    EXPECT_EQ((*bytes)[2], 0x32u);
+    // Byte 2: second(2)=00 | first(2)=10 | page mode(4)=0011 -> 0x23.
+    EXPECT_EQ((*bytes)[2], 0x23u);
 
     auto parsed = roundtrip(pm);
     ASSERT_TRUE(parsed);
@@ -329,8 +329,8 @@ TEST(GoldenRR, PagingRequestType3_PageMode) {
     ParsedMessage pm{RRM{std::move(built)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    // Byte 2: page mode(4)=0001 | second(2)=00 (ANY, default) |
-    // first(2)=01 (SDCCH) -> 0x11.
+    // Byte 2: second(2)=00 (ANY, default) | first(2)=01 (SDCCH) |
+    // page mode(4)=0001 -> 0x11.
     EXPECT_EQ((*bytes)[2], 0x11u);
 
     auto parsed = roundtrip(pm);
@@ -343,12 +343,12 @@ TEST(GoldenRR, PagingRequestType3_PageMode) {
 // =====================================================================
 // RR PARSE FROM HEX: Paging Request Type 3 (3GPP TS 44.018 9.1.24 / GSM 04.08 9.1.24)
 // Frame shape: PD = '0110'B (RR), MTI = '00100100'B (PagingRequestType3, 0x24).
-// Body per TS 44.018 9.1.24: PageMode(4 bits) page_mode, ChannelNeeded(4 bits) chan_needed,
+// Body per TS 44.018 9.1.24: ChannelNeeded(4 bits) chan_needed, PageMode(4 bits) page_mode,
 //   mi - a fixed record of exactly 4 raw TMSI values (4 x 4 octets)
 // Spec-verified: PD=6(RR), MTI=0x24(PagingRequestType3) per 3GPP TS 44.018 Table 10.4.1
-// [GSM SPEC VERIFIED] PagingRequestType3 body = PageMode(4 bits) + ChannelNeeded12(4 bits)
-//   + GsmTmsi4 mi(16 octets RAW). The first octet packs the page mode (high nibble)
-//   followed by channel needed second|first in the low half-octet.
+// [GSM SPEC VERIFIED] PagingRequestType3 body = ChannelNeeded12(4 bits) + PageMode(4 bits)
+//   + GsmTmsi4 mi(16 octets RAW). The first body octet packs the channel needed
+//   (second|first two-bit fields) followed by the page mode (four bits).
 //   GsmTmsi4 is a fixed record of exactly 4 TMSI values,
 //   each 4 octets (32 bits), MSB-first. Total body = 1 + 16 = 17 octets minimum.
 //   IMPORTANT: All TMSI values are raw integers, NOT length-prefixed MobileIdentityLV!
@@ -356,19 +356,19 @@ TEST(GoldenRR, PagingRequestType3_PageMode) {
 
 TEST(GoldenRR, PagingRequestType3_Parse) {
     // GSM 24.008 9.1.24: PagingRequestType3 structure:
-    //   PageMode(4 bits)|ChannelNeeded(4 bits) + mi (4x raw 4-octet TMSIs) + [optional RestOctets]
+    //   ChannelNeeded(4 bits)|PageMode(4 bits) + mi (4x raw 4-octet TMSIs) + [optional RestOctets]
     // mi is a fixed record of 4 TMSI values -> 4 raw 4-octet integers, NOT length-prefixed!
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x24 (PagingRequestType3) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: PageMode(4)=1(Extended)|ChannelNeeded12(4)=0 = 0x10
-    //   PageMode (TS 44.018 9.1.24): EXTENDED(1) -> high nibble = 0x1
-    //   ChannelNeeded12 (TS 23.003): second(2)=00(ANY)|first(2)=00(ANY) -> low nibble = 0b0000 = 0x0
+    // Byte 2: ChannelNeeded12(4)=0|PageMode(4)=1(Extended) = 0x01
+    //   ChannelNeeded12 (TS 23.003): second(2)=00(ANY)|first(2)=00(ANY) -> high nibble = 0b0000 = 0x0
+    //   PageMode (TS 44.018 9.1.24): EXTENDED(1) -> low nibble = 0x1
     // Bytes 3-6: GsmTmsi mi[0] = 0x12345678 (raw 4 octets, MSB first, no length prefix)
     // Bytes 7-10: GsmTmsi mi[1] = 0xDEADBEEF (raw 4 octets, MSB first, no length prefix)
     // Bytes 11-14: GsmTmsi mi[2] = 0xABCDEF01 (raw 4 octets, MSB first, no length prefix)
     // Bytes 15-18: GsmTmsi mi[3] = 0x11223344 (raw 4 octets, MSB first, no length prefix)
     uint8_t data[] = {
-        0x06, 0x24, 0x10,
+        0x06, 0x24, 0x01,
         0x12, 0x34, 0x56, 0x78,
         0xDE, 0xAD, 0xBE, 0xEF,
         0xAB, 0xCD, 0xEF, 0x01,

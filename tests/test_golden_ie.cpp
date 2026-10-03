@@ -1061,8 +1061,8 @@ TEST(GoldenIE, NCCPermitted_Custom) {
 
 // =====================================================================
 // Common IEs: L3PageMode (GSM 04.08 10.5.2.26)
-// Page mode values per TS 44.018
-// 4-bit field (two spare bits + two mode bits): Normal(0), Extended(1),
+// Page mode values per TS 44.018 section 10.5.2.26
+// 4-bit field, assigned codes 0..3: Normal(0), Extended(1),
 // Reorganization(2), SameAsBefore(3)
 // =====================================================================
 
