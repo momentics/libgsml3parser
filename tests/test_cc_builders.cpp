@@ -388,51 +388,7 @@ TEST(CCBuilders, Notify_WithCause) {
     EXPECT_EQ(notify->cause(), CCCause::Normal_Call_Clearing);
 }
 
-// TS 24.008 9.3.16: Unit Data with user data
-TEST(CCBuilders, UnitData_WithData) {
-    auto msg = L3UnitData::builder()
-        .userData(std::vector<uint8_t>{0xDE, 0xAD, 0xBE, 0xEF})
-        .build();
-    ParsedMessage pm{CCM{std::move(msg)}};
-    auto bytes = writeL3Bytes(pm);
-    ASSERT_TRUE(bytes);
-
-    auto reparsed = roundtrip(pm);
-    ASSERT_TRUE(reparsed);
-    auto* ud = tryGet<L3UnitData>(*reparsed);
-    ASSERT_TRUE(ud);
-    EXPECT_EQ(ud->userData().size(), 4u);
-}
-
-// TS 24.008 9.3.16a: Unit Data Acknowledge
-TEST(CCBuilders, UnitDataAck) {
-    auto msg = L3UnitDataAck::builder().build();
-    ParsedMessage pm{CCM{std::move(msg)}};
-    auto bytes = writeL3Bytes(pm);
-    ASSERT_TRUE(bytes);
-
-    auto reparsed = roundtrip(pm);
-    ASSERT_TRUE(reparsed);
-    EXPECT_EQ(messageMTI(*reparsed), L3UnitDataAck::MTI);
-}
-
-// TS 24.008 9.3.16b: Error Indication
-TEST(CCBuilders, ErrorIndication) {
-    auto msg = L3ErrorIndication::builder()
-        .cause(CCCause::Invalid_Mandatory_Information)
-        .build();
-    ParsedMessage pm{CCM{std::move(msg)}};
-    auto bytes = writeL3Bytes(pm);
-    ASSERT_TRUE(bytes);
-
-    auto reparsed = roundtrip(pm);
-    ASSERT_TRUE(reparsed);
-    auto* ei = tryGet<L3ErrorIndication>(*reparsed);
-    ASSERT_TRUE(ei);
-    EXPECT_EQ(ei->cause(), CCCause::Invalid_Mandatory_Information);
-}
-
-// Verify all 25 CC message types have builder() method
+// Verify all 21 CC message types have builder() method
 TEST(CCBuilders, AllTypesHaveBuilder) {
     // Each call verifies the builder compiles and returns a valid Builder.
     (void)L3Setup::builder();
@@ -456,9 +412,6 @@ TEST(CCBuilders, AllTypesHaveBuilder) {
     (void)L3Progress::builder();
     (void)L3Facility::builder();
     (void)L3CCNotify::builder();
-    (void)L3UnitData::builder();
-    (void)L3UnitDataAck::builder();
-    (void)L3ErrorIndication::builder();
 }
 
 // TI round-trip for various CC messages

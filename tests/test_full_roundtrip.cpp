@@ -461,15 +461,6 @@ TEST(FullRoundTrip, CC_Domain) {
 
     expectRoundTrip(ParsedMessage{CCM{L3CCNotify::builder().cause(CCCause::Normal_Call_Clearing).build()}},
         L3PD::CallControl, L3CCNotify::MTI, "Notify");
-
-    expectRoundTrip(ParsedMessage{CCM{L3UnitData{}}},
-        L3PD::CallControl, L3UnitData::MTI, "L3UnitData");
-
-    expectRoundTrip(ParsedMessage{CCM{L3UnitDataAck{}}},
-        L3PD::CallControl, L3UnitDataAck::MTI, "L3UnitDataAck");
-
-    expectRoundTrip(ParsedMessage{CCM{L3ErrorIndication::builder().cause(CCCause::Normal_Call_Clearing).build()}},
-        L3PD::CallControl, L3ErrorIndication::MTI, "L3ErrorIndication");
 }
 
 // Supplementary Service domain
@@ -605,21 +596,6 @@ TEST(FullRoundTrip, SM_Domain) {
 
     expectRoundTrip(ParsedMessage{SM{L3ActivateSecondaryPDPContextReject{}}},
         L3PD::GPRSSessionManagement, L3ActivateSecondaryPDPContextReject::MTI, "L3ActivateSecondaryPDPContextReject");
-
-    expectRoundTrip(ParsedMessage{SM{L3ActivateAAPDPContextRequest{}}},
-        L3PD::GPRSSessionManagement, L3ActivateAAPDPContextRequest::MTI, "L3ActivateAAPDPContextRequest");
-
-    expectRoundTrip(ParsedMessage{SM{L3ActivateAAPDPContextAccept{}}},
-        L3PD::GPRSSessionManagement, L3ActivateAAPDPContextAccept::MTI, "L3ActivateAAPDPContextAccept");
-
-    expectRoundTrip(ParsedMessage{SM{L3ActivateAAPDPContextReject{}}},
-        L3PD::GPRSSessionManagement, L3ActivateAAPDPContextReject::MTI, "L3ActivateAAPDPContextReject");
-
-    expectRoundTrip(ParsedMessage{SM{L3DeactivateAAPDPContextRequest{}}},
-        L3PD::GPRSSessionManagement, L3DeactivateAAPDPContextRequest::MTI, "L3DeactivateAAPDPContextRequest");
-
-    expectRoundTrip(ParsedMessage{SM{L3DeactivateAAPDPContextAccept{}}},
-        L3PD::GPRSSessionManagement, L3DeactivateAAPDPContextAccept::MTI, "L3DeactivateAAPDPContextAccept");
 
     expectRoundTrip(ParsedMessage{SM{L3ActivateMBMSContextRequest{}}},
         L3PD::GPRSSessionManagement, L3ActivateMBMSContextRequest::MTI, "L3ActivateMBMSContextRequest");

@@ -48,7 +48,7 @@ No normative reference templates exist for this block: bodies are kept as opaque
 | `L3BCCReleaseComplete` | 0x0a | Bidir | Broadcast call release complete |
 | `L3BCCConnectAcknowledge` | 0x09 | Bidir | Connect acknowledged |
 
-## Call Control (PD=0x03) — 24 message types, 27 IE types
+## Call Control (PD=0x03) — 21 message types, 27 IE types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -63,9 +63,6 @@ No normative reference templates exist for this block: bodies are kept as opaque
 | `L3Hold` | 0x18 | UL | Hold request |
 | `L3HoldReject` | 0x1a | DL | Hold rejected |
 | `L3Disconnect` | 0x25 | UL | Disconnect request |
-| `L3UnitData` | 0x27 | UL | Unit data ([BearerCapability] + user data, TS 24.008 9.3.16) |
-| `L3UnitDataAck` | 0x28 | DL | Unit data acknowledgement (9.3.16a) |
-| `L3ErrorIndication` | 0x2b | UL | Error indication with CC cause (9.3.16b) |
 | `L3ReleaseComplete` | 0x2a | Bidir | Release complete |
 | `L3Release` | 0x2d | Bidir | Release request |
 | `L3StopDTMF` | 0x31 | UL | Stop DTMF tones |
@@ -395,7 +392,7 @@ best-effort interpretation, and bit-level conformance is not claimed.
 | `L3SMSNotification` | 0x1D | Bidir | [TP-PID], TP-DCS, [TP-Ud] |
 | `L3SMSShortCodeInfo` | 0x1E | Bidir | ShortCodeType, [ShortCode] |
 
-## GPRS Session Management (PD=0x0a) — 29 message types
+## GPRS Session Management (PD=0x0a) — 24 message types
 
 ### Primary PDP Context
 
@@ -432,16 +429,6 @@ best-effort interpretation, and bit-level conformance is not claimed.
 | `L3ActivateSecondaryPDPContextRequest` | 0x4D | DL | Network requests secondary PDP activation |
 | `L3ActivateSecondaryPDPContextAccept` | 0x4E | UL | MS accepts secondary PDP activation |
 | `L3ActivateSecondaryPDPContextReject` | 0x4F | UL | MS rejects secondary PDP activation |
-
-### Always Active (AA) PDP Context
-
-| Message | MTI | Direction | Description |
-|---------|-----|-----------|-------------|
-| `L3ActivateAAPDPContextRequest` | 0x50 | DL | Network requests AA PDP activation |
-| `L3ActivateAAPDPContextAccept` | 0x51 | UL | MS accepts AA PDP activation |
-| `L3ActivateAAPDPContextReject` | 0x52 | UL | MS rejects AA PDP activation |
-| `L3DeactivateAAPDPContextRequest` | 0x53 | DL | Network requests AA PDP deactivation |
-| `L3DeactivateAAPDPContextAccept` | 0x54 | UL | MS accepts AA PDP deactivation |
 
 ### MBMS Context
 

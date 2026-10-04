@@ -414,13 +414,7 @@ TEST(Visitor, tryGet_SM_RequestPDPActivation) {
 TEST(Visitor, tryGet_SM_ActivateSecondaryPDP) {
     SM sm{L3ActivateSecondaryPDPContextRequest{}};
     EXPECT_NE(tryGet<L3ActivateSecondaryPDPContextRequest>(sm), nullptr);
-    EXPECT_EQ(tryGet<L3ActivateAAPDPContextRequest>(sm), nullptr);
-}
-
-TEST(Visitor, tryGet_SM_ActivateAAPDP) {
-    SM sm{L3ActivateAAPDPContextAccept{}};
-    EXPECT_NE(tryGet<L3ActivateAAPDPContextAccept>(sm), nullptr);
-    EXPECT_EQ(tryGet<L3DeactivateAAPDPContextAccept>(sm), nullptr);
+    EXPECT_EQ(tryGet<L3SMNotification>(sm), nullptr);
 }
 
 TEST(Visitor, tryGet_SM_ActivateMBMS) {
@@ -593,16 +587,6 @@ TEST(Visitor, messageName_SM_RequestPDPActivation) {
 TEST(Visitor, messageName_SM_ActivateSecondaryPDP) {
     ParsedMessage msg{SM{L3ActivateSecondaryPDPContextRequest{}}};
     EXPECT_EQ(messageName(msg), "ActivateSecondaryPDPContextRequest");
-}
-
-TEST(Visitor, messageName_SM_ActivateAAPDP) {
-    ParsedMessage msg{SM{L3ActivateAAPDPContextRequest{}}};
-    EXPECT_EQ(messageName(msg), "ActivateAAPDPContextRequest");
-}
-
-TEST(Visitor, messageName_SM_DeactivateAAPDP) {
-    ParsedMessage msg{SM{L3DeactivateAAPDPContextAccept{}}};
-    EXPECT_EQ(messageName(msg), "DeactivateAAPDPContextAccept");
 }
 
 TEST(Visitor, messageName_SM_ActivateMBMS) {
@@ -827,8 +811,6 @@ TEST(Visitor, smMessageName_CoversAll) {
     EXPECT_STREQ(smMessageName(L3SMStatus::MTI), "SMStatus");
     EXPECT_STREQ(smMessageName(L3RequestPDPContextActivation::MTI), "RequestPDPContextActivation");
     EXPECT_STREQ(smMessageName(L3ActivateSecondaryPDPContextRequest::MTI), "ActivateSecondaryPDPContextRequest");
-    EXPECT_STREQ(smMessageName(L3ActivateAAPDPContextRequest::MTI), "ActivateAAPDPContextRequest");
-    EXPECT_STREQ(smMessageName(L3DeactivateAAPDPContextAccept::MTI), "DeactivateAAPDPContextAccept");
     EXPECT_STREQ(smMessageName(L3ActivateMBMSContextRequest::MTI), "ActivateMBMSContextRequest");
     EXPECT_STREQ(smMessageName(L3RequestMBMSContextActivation::MTI), "RequestMBMSContextActivation");
     EXPECT_STREQ(smMessageName(L3RequestSecondaryPDPContextActivation::MTI), "RequestSecondaryPDPContextActivation");

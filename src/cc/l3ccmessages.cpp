@@ -1514,9 +1514,6 @@ const char* ccMessageName(int mti) {
         case L3Progress::MTI:                  return "Progress";
         case L3Facility::MTI:                  return "Facility";
         case L3CCNotify::MTI:                  return "Notify";
-        case L3UnitData::MTI:                  return "UnitData";
-        case L3UnitDataAck::MTI:               return "UnitDataAck";
-        case L3ErrorIndication::MTI:           return "ErrorIndication";
         default:                               return "Unknown_CC";
     }
 }
@@ -1570,110 +1567,6 @@ void L3CCNotify::write(BitWriter& bw) const {
 
 void L3CCNotify::text(std::ostream& os) const {
     os << "Notify: TI=" << mTI << " cause=" << CCCause2Str(mCause);
-}
-
-// ── L3UnitData (MTI=0x27, TS 24.008 §9.3.16) ───────────────────────────
-
-size_t L3UnitData::bodyLength() const {
-    size_t len = 0;
-    if (mHaveBearerCapability) len += 2 + mBearerCapability.lengthV();
-    if (!mUserData.empty()) len += 2 + mUserData.size();
-    return len;
-}
-
-Expected<L3UnitData> L3UnitData::parse(BitReader& br) {
-    L3UnitData msg;
-    while (br.hasMore()) {
-        auto ieiRes = detail::readIEI(br);
-        if (!ieiRes) return Expected<L3UnitData>::error(ieiRes.error());
-        uint8_t iei = ieiRes.value();
-        switch (iei) {
-        case 0x04: {
-            auto lenRes = detail::readLength(br);
-            if (!lenRes) return Expected<L3UnitData>::error(lenRes.error());
-            auto p = L3BearerCapability::parse(br);
-            if (!p) return Expected<L3UnitData>::error(p.error());
-            msg.mBearerCapability = std::move(p.value());
-            msg.mHaveBearerCapability = true;
-            continue;
-        }
-        case 0x17: {
-            auto lenRes = detail::readLength(br);
-            if (!lenRes) return Expected<L3UnitData>::error(lenRes.error());
-            size_t udLen = lenRes.value();
-            msg.mUserData.resize(udLen);
-            for (size_t i = 0; i < udLen; ++i) {
-                auto b = br.readField(8);
-                if (!b) return Expected<L3UnitData>::error(b.error());
-                msg.mUserData[i] = static_cast<uint8_t>(b.value());
-            }
-            continue;
-        }
-        default: {
-            auto skipRes = detail::skipTLV(br);
-            if (!skipRes) return Expected<L3UnitData>::error(skipRes.error());
-            continue;
-        }
-        }
-    }
-    return Expected<L3UnitData>::hold(std::move(msg));
-}
-
-void L3UnitData::write(BitWriter& bw) const {
-    if (mHaveBearerCapability) {
-        bw.writeField(0x04, 8);
-        bw.writeField(static_cast<uint32_t>(mBearerCapability.lengthV()), 8);
-        mBearerCapability.write(bw);
-    }
-    if (!mUserData.empty()) {
-        bw.writeField(0x17, 8);
-        bw.writeField(static_cast<uint32_t>(mUserData.size()), 8);
-        for (uint8_t b : mUserData) {
-            bw.writeField(b, 8);
-        }
-    }
-}
-
-void L3UnitData::text(std::ostream& os) const {
-    os << "UnitData: TI=" << mTI;
-    if (mHaveBearerCapability) { os << " BearerCapability=("; mBearerCapability.text(os); os << ")"; }
-    if (!mUserData.empty()) {
-        os << " UserData(";
-        for (uint8_t b : mUserData) {
-            os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b);
-        }
-        os << ")";
-    }
-}
-
-// ── L3UnitDataAck (MTI=0x28, TS 24.008 §9.3.16a) ───────────────────────
-
-Expected<L3UnitDataAck> L3UnitDataAck::parse(BitReader&) {
-    return Expected<L3UnitDataAck>::hold(L3UnitDataAck());
-}
-
-void L3UnitDataAck::write(BitWriter&) const {}
-
-void L3UnitDataAck::text(std::ostream& os) const {
-    os << "UnitDataAck: TI=" << mTI;
-}
-
-// ── L3ErrorIndication (MTI=0x2b, TS 24.008 §9.3.16b) ───────────────────
-
-Expected<L3ErrorIndication> L3ErrorIndication::parse(BitReader& br) {
-    L3ErrorIndication msg;
-    auto r = br.readField(8);
-    if (!r) return Expected<L3ErrorIndication>::error(r.error());
-    msg.mCause = static_cast<CCCause>(r.value());
-    return Expected<L3ErrorIndication>::hold(std::move(msg));
-}
-
-void L3ErrorIndication::write(BitWriter& bw) const {
-    bw.writeField(static_cast<uint32_t>(mCause), 8);
-}
-
-void L3ErrorIndication::text(std::ostream& os) const {
-    os << "ErrorIndication: TI=" << mTI << " cause=" << CCCause2Str(mCause);
 }
 
 // ── Builder implementations for new CC message types ────────────────────
@@ -1937,45 +1830,6 @@ L3CCNotify::Builder L3CCNotify::builder() {
 
 L3CCNotify L3CCNotify::Builder::build() const {
     L3CCNotify msg;
-    msg.mTI = m_ti;
-    msg.mCause = m_cause;
-    return msg;
-}
-
-// L3UnitData
-L3UnitData::Builder L3UnitData::builder() {
-    return Builder{};
-}
-
-L3UnitData L3UnitData::Builder::build() const {
-    L3UnitData msg;
-    msg.mTI = m_ti;
-    if (m_haveBearerCapability) {
-        msg.mHaveBearerCapability = true;
-        msg.mBearerCapability = m_bearerCapability;
-    }
-    msg.mUserData = m_userData;
-    return msg;
-}
-
-// L3UnitDataAck
-L3UnitDataAck::Builder L3UnitDataAck::builder() {
-    return Builder{};
-}
-
-L3UnitDataAck L3UnitDataAck::Builder::build() const {
-    L3UnitDataAck msg;
-    msg.mTI = m_ti;
-    return msg;
-}
-
-// L3ErrorIndication
-L3ErrorIndication::Builder L3ErrorIndication::builder() {
-    return Builder{};
-}
-
-L3ErrorIndication L3ErrorIndication::Builder::build() const {
-    L3ErrorIndication msg;
     msg.mTI = m_ti;
     msg.mCause = m_cause;
     return msg;

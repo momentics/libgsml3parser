@@ -433,10 +433,10 @@ Each protocol domain has a `std::variant` type that holds all message types for 
 ```cpp
 using RRM      = std::variant< /* 98 RR types */ >;
 using MMM      = std::variant< /* 21 MM types */ >;
-using CCM      = std::variant< /* 24 CC types */ >;
+using CCM      = std::variant< /* 21 CC types */ >;
 using SSM      = std::variant< /* 3 SS types */ >;
 using GMM      = std::variant< /* 23 GMM types */ >;
-using SM       = std::variant< /* 29 SM types */ >;
+using SM       = std::variant< /* 24 SM types */ >;
 using SMS      = std::variant< /* 19 SMS types (5 CP + 14 L3) */ >;
 using BCCM     = std::variant< /* 8 BCC types */ >;
 using GCCM     = std::variant< /* 8 GCC types */ >;
@@ -1437,9 +1437,9 @@ Builder patterns are implemented for all message types across all 12 protocol do
 |--------|----------------------|
 | **RR** | All 98 types (Paging, System Information SI1–SI23 + Type 2quater, Handover, Assignment, Ciphering, DTM/Packet, etc.) |
 | **MM** | All 21 types (Location Updating, Authentication, Identity, CM Service, MM Abort, TMSI Reallocation) |
-| **CC** | All 24 types (Setup, Notify, Unit Data, Connect, Disconnect, Release, DTMF, Hold, Facility, Progress, etc.) |
+| **CC** | All 21 types (Setup, Notify, Connect, Disconnect, Release, DTMF, Hold, Facility, Progress, etc.) |
 | **GMM** | All 23 types (Attach, Detach, RA Update, Service Request, P-TMSI Reallocation, Auth+Ciphering, GMM Identity, etc.) |
-| **SM** | All 29 types (Activate/Deactivate/Modify PDP Context, Secondary/AA/MBMS contexts, Notification) |
+| **SM** | All 24 types (Activate/Deactivate/Modify PDP Context, Secondary/MBMS contexts, Notification) |
 | **SMS** | 19 L3 messages in the variant (5 CP + 14 SMS L3) plus the RP payload classes (RPData/RPAck/RPError/RPSMMA) and TP PDUs (Deliver/Submit/StatusReport/Command) |
 | **BCC** | All 8 types |
 | **GCC** | All 8 types |
@@ -2083,7 +2083,7 @@ Table 10.4.2 — code 3 and codes 14–31 — have no class).
 
 ## 23. Call Control Messages
 
-**File:** `gsml3parser/cc/l3ccmessages.h` - 24 message types in the `CCM` variant (PD=0x03, dialog protocol — header carries TI).
+**File:** `gsml3parser/cc/l3ccmessages.h` - 21 message types in the `CCM` variant (PD=0x03, dialog protocol — header carries TI).
 
 ### CC Information Elements
 
@@ -2140,9 +2140,6 @@ Table 10.4.2 — code 3 and codes 14–31 — have no class).
 | `L3CCNotify` | 0x3e | MT | Notify: single cause octet (TS 24.078) |
 | `L3CallConfirmed` | 0x08 | DL | [+ BearerCapability, SupportedCodecs, Cause, UserUser] |
 | `L3Disconnect` | 0x25 | UL | Cause as a length-value element without an identifier (first body octet = value length, two value octets: CCCause + CCCauseLocation) |
-| `L3UnitData` | 0x27 | UL | Unit data: [+ BearerCapability] + user data (9.3.16) |
-| `L3UnitDataAck` | 0x28 | DL | Unit data acknowledgement, no body (9.3.16a) |
-| `L3ErrorIndication` | 0x2b | UL | CC cause (CCCause) (9.3.16b) |
 | `L3Release` | 0x2d | DL/UL | [+ Cause, Facility, SSVersion] |
 | `L3ReleaseComplete` | 0x2a | DL/UL | [+ Cause, Facility, SSVersion] |
 | `L3StartDTMF` | 0x35 | UL | KeypadFacility digit |
@@ -2173,9 +2170,6 @@ MTI values are the 6-bit messageType field (GSM 04.08 Table 10.3). In the L3 hea
 | 0x18 | Hold | TS 24.008 9.3.23 |
 | 0x1a | Hold Reject | TS 24.008 9.3.24 |
 | 0x25 | Disconnect | TS 24.008 9.3.7 |
-| 0x27 | Unit Data | TS 24.008 9.3.16 |
-| 0x28 | Unit Data Acknowledge | TS 24.008 9.3.16a |
-| 0x2b | Error Indication | TS 24.008 9.3.16b |
 | 0x2a | Release Complete | TS 24.008 9.3.19 |
 | 0x2d | Release | TS 24.008 9.3.19 |
 | 0x31 | Stop DTMF | TS 24.008 9.3.25 |
@@ -2425,7 +2419,7 @@ if (ussd) {
 
 ## 26. GPRS Session Management Messages
 
-**File:** `gsml3parser/sm/l3smmessages.h` - 29 message types in the `SM` variant.
+**File:** `gsml3parser/sm/l3smmessages.h` - 24 message types in the `SM` variant.
 **Spec:** 3GPP TS 24.008 sections 9.5, Table 10.4a.
 **PD:** `0x0a` (GPRSSessionManagement).
 
@@ -2493,16 +2487,6 @@ The request type (TS 44.068 section 10.5.6.17) is carried in one octet: the high
 | `L3ActivateSecondaryPDPContextRequest` | 0x4D | DL | PDP handle, [PDP address], APN, QoS, [PCO] |
 | `L3ActivateSecondaryPDPContextAccept` | 0x4E | UL | PDP handle, [PDP address], QoS, [PCO] |
 | `L3ActivateSecondaryPDPContextReject` | 0x4F | UL | PDP handle, SM cause |
-
-### SM Messages - Always Active (AA) PDP Context
-
-| Message | MTI | Direction | Description |
-|---------|-----|-----------|-------------|
-| `L3ActivateAAPDPContextRequest` | 0x50 | DL | PDP handle, [PDP address], APN, QoS, [PCO] |
-| `L3ActivateAAPDPContextAccept` | 0x51 | UL | PDP handle, [PDP address], QoS, [PCO] |
-| `L3ActivateAAPDPContextReject` | 0x52 | UL | PDP handle, SM cause |
-| `L3DeactivateAAPDPContextRequest` | 0x53 | DL | PDP handle |
-| `L3DeactivateAAPDPContextAccept` | 0x54 | UL | PDP handle |
 
 ### SM Messages - MBMS Context
 

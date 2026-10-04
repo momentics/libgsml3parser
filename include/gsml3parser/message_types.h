@@ -184,10 +184,7 @@ using CCM = std::variant<
     L3CCStatus,
     L3Progress,
     L3Facility,
-    L3CCNotify,
-    L3UnitData,
-    L3UnitDataAck,
-    L3ErrorIndication
+    L3CCNotify
 >;
 
 using SSM = std::variant<
@@ -239,11 +236,6 @@ using SM = std::variant<
     L3ActivateSecondaryPDPContextRequest,
     L3ActivateSecondaryPDPContextAccept,
     L3ActivateSecondaryPDPContextReject,
-    L3ActivateAAPDPContextRequest,
-    L3ActivateAAPDPContextAccept,
-    L3ActivateAAPDPContextReject,
-    L3DeactivateAAPDPContextRequest,
-    L3DeactivateAAPDPContextAccept,
     L3ActivateMBMSContextRequest,
     L3ActivateMBMSContextAccept,
     L3ActivateMBMSContextReject,

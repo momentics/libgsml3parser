@@ -85,11 +85,6 @@ TEST(GoldenSMTest, MessageTypeValues) {
     EXPECT_EQ(L3ActivateSecondaryPDPContextRequest::MTI, 0x4D);
     EXPECT_EQ(L3ActivateSecondaryPDPContextAccept::MTI, 0x4E);
     EXPECT_EQ(L3ActivateSecondaryPDPContextReject::MTI, 0x4F);
-    EXPECT_EQ(L3ActivateAAPDPContextRequest::MTI, 0x50);
-    EXPECT_EQ(L3ActivateAAPDPContextAccept::MTI, 0x51);
-    EXPECT_EQ(L3ActivateAAPDPContextReject::MTI, 0x52);
-    EXPECT_EQ(L3DeactivateAAPDPContextRequest::MTI, 0x53);
-    EXPECT_EQ(L3DeactivateAAPDPContextAccept::MTI, 0x54);
     EXPECT_EQ(L3ActivateMBMSContextRequest::MTI, 0x56);
     EXPECT_EQ(L3ActivateMBMSContextAccept::MTI, 0x57);
     EXPECT_EQ(L3ActivateMBMSContextReject::MTI, 0x58);
@@ -626,57 +621,6 @@ TEST(GoldenSMTest, ActivateSecondaryPDPContextReject) {
     EXPECT_EQ(static_cast<uint8_t>(msg->cause()), 0x14u);
 }
 
-// TS 44.068 9.5: ActivateAAPDPContextRequest
-TEST(GoldenSMTest, ActivateAAPDPContextRequest) {
-    std::string hex = "0a 50 40 01 00 02 0121 28 04 6970 6e74";
-    auto res = parseL3Hex(hex);
-    ASSERT_TRUE(res);
-    auto* msg = tryGet<L3ActivateAAPDPContextRequest>(res.value());
-    ASSERT_NE(msg, nullptr);
-    EXPECT_EQ(msg->pdpHandle(), 4u);
-    EXPECT_EQ(msg->apn().value(), "ipnt");
-}
-
-// TS 44.068 9.5: ActivateAAPDPContextAccept
-TEST(GoldenSMTest, ActivateAAPDPContextAccept) {
-    std::string hex = "0a 51 70 01 00";
-    auto res = parseL3Hex(hex);
-    ASSERT_TRUE(res);
-    auto* msg = tryGet<L3ActivateAAPDPContextAccept>(res.value());
-    ASSERT_NE(msg, nullptr);
-    EXPECT_EQ(msg->pdpHandle(), 7u);
-}
-
-// TS 44.068 9.5: ActivateAAPDPContextReject
-TEST(GoldenSMTest, ActivateAAPDPContextReject) {
-    std::string hex = "0a 52 13";
-    auto res = parseL3Hex(hex);
-    ASSERT_TRUE(res);
-    auto* msg = tryGet<L3ActivateAAPDPContextReject>(res.value());
-    ASSERT_NE(msg, nullptr);
-    EXPECT_EQ(msg->cause(), SMCause::Unsupported_PDP_Address_Type);
-}
-
-// GSM 24.008 9.5.17: DeactivateAAPDPContextRequest
-TEST(GoldenSMTest, DeactivateAAPDPContextRequest) {
-    std::string hex = "0a 53 a0";
-    auto res = parseL3Hex(hex);
-    ASSERT_TRUE(res);
-    auto* msg = tryGet<L3DeactivateAAPDPContextRequest>(res.value());
-    ASSERT_NE(msg, nullptr);
-    EXPECT_EQ(msg->pdpHandle(), 10u);
-}
-
-// GSM 24.008 9.5.17: DeactivateAAPDPContextAccept
-TEST(GoldenSMTest, DeactivateAAPDPContextAccept) {
-    std::string hex = "0a 54 b0";
-    auto res = parseL3Hex(hex);
-    ASSERT_TRUE(res);
-    auto* msg = tryGet<L3DeactivateAAPDPContextAccept>(res.value());
-    ASSERT_NE(msg, nullptr);
-    EXPECT_EQ(msg->pdpHandle(), 11u);
-}
-
 // TS 44.068 9.5: ActivateMBMSContextRequest with QoS and opaque TMGI TLV
 // 0a 56 = header
 // 01 00 = QoS LV: requested, no elements
@@ -839,52 +783,6 @@ TEST(RoundTripTest, ActivateSecondaryPDPContextReject_RT) {
     auto* m = tryGet<L3ActivateSecondaryPDPContextReject>(rt.value());
     ASSERT_NE(m, nullptr);
     EXPECT_EQ(static_cast<uint8_t>(m->cause()), 0x14u);
-}
-
-TEST(RoundTripTest, ActivateAAPDPContextRequest_RT) {
-    auto res = parseL3Hex("0a 50 40 01 00 02 0121 28 04 6970 6e74");
-    ASSERT_TRUE(res);
-    auto rt = roundtrip(res.value());
-    ASSERT_TRUE(rt);
-    auto* m = tryGet<L3ActivateAAPDPContextRequest>(rt.value());
-    ASSERT_NE(m, nullptr);
-}
-
-TEST(RoundTripTest, ActivateAAPDPContextAccept_RT) {
-    auto res = parseL3Hex("0a 51 70 01 00");
-    ASSERT_TRUE(res);
-    auto rt = roundtrip(res.value());
-    ASSERT_TRUE(rt);
-    auto* m = tryGet<L3ActivateAAPDPContextAccept>(rt.value());
-    ASSERT_NE(m, nullptr);
-}
-
-TEST(RoundTripTest, ActivateAAPDPContextReject_RT) {
-    auto res = parseL3Hex("0a 52 13");
-    ASSERT_TRUE(res);
-    auto rt = roundtrip(res.value());
-    ASSERT_TRUE(rt);
-    auto* m = tryGet<L3ActivateAAPDPContextReject>(rt.value());
-    ASSERT_NE(m, nullptr);
-    EXPECT_EQ(m->cause(), SMCause::Unsupported_PDP_Address_Type);
-}
-
-TEST(RoundTripTest, DeactivateAAPDPContextRequest_RT) {
-    auto res = parseL3Hex("0a 53 a0");
-    ASSERT_TRUE(res);
-    auto rt = roundtrip(res.value());
-    ASSERT_TRUE(rt);
-    auto* m = tryGet<L3DeactivateAAPDPContextRequest>(rt.value());
-    ASSERT_NE(m, nullptr);
-}
-
-TEST(RoundTripTest, DeactivateAAPDPContextAccept_RT) {
-    auto res = parseL3Hex("0a 54 b0");
-    ASSERT_TRUE(res);
-    auto rt = roundtrip(res.value());
-    ASSERT_TRUE(rt);
-    auto* m = tryGet<L3DeactivateAAPDPContextAccept>(rt.value());
-    ASSERT_NE(m, nullptr);
 }
 
 TEST(RoundTripTest, ActivateMBMSContextRequest_RT) {
@@ -1158,11 +1056,6 @@ TEST(SMVisitorTest, MessageNames) {
         {"0a 4d 20 01 00 02 0121 28 03 6970 6e", "ActivateSecondaryPDPContextRequest"},
         {"0a 4e 10 01 00", "ActivateSecondaryPDPContextAccept"},
         {"0a 4f 14", "ActivateSecondaryPDPContextReject"},
-        {"0a 50 40 01 00 02 0121 28 04 6970 6e74", "ActivateAAPDPContextRequest"},
-        {"0a 51 70 01 00", "ActivateAAPDPContextAccept"},
-        {"0a 52 13", "ActivateAAPDPContextReject"},
-        {"0a 53 a0", "DeactivateAAPDPContextRequest"},
-        {"0a 54 b0", "DeactivateAAPDPContextAccept"},
         {"0a 56 01 00 c2 06 45f7 1012 3405", "ActivateMBMSContextRequest"},
         {"0a 57 c0 01 00", "ActivateMBMSContextAccept"},
         {"0a 58 13", "ActivateMBMSContextReject"},
@@ -1199,11 +1092,6 @@ TEST(SMVisitorTest, MessageMTIValues) {
         {"0a 4d 20 01 00 02 0121 28 03 6970 6e", 0x4D},
         {"0a 4e 10 01 00", 0x4E},
         {"0a 4f 14", 0x4F},
-        {"0a 50 40 01 00 02 0121 28 04 6970 6e74", 0x50},
-        {"0a 51 70 01 00", 0x51},
-        {"0a 52 13", 0x52},
-        {"0a 53 a0", 0x53},
-        {"0a 54 b0", 0x54},
         {"0a 56 01 00 c2 06 45f7 1012 3405", 0x56},
         {"0a 57 c0 01 00", 0x57},
         {"0a 58 13", 0x58},

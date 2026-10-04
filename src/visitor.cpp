@@ -171,9 +171,6 @@ struct NameVisitor {
     std::string_view operator()(const L3Progress&) const { return "Progress"; }
     std::string_view operator()(const L3Facility&) const { return "Facility"; }
     std::string_view operator()(const L3CCNotify&) const { return "Notify"; }
-    std::string_view operator()(const L3UnitData&) const { return "UnitData"; }
-    std::string_view operator()(const L3UnitDataAck&) const { return "UnitDataAck"; }
-    std::string_view operator()(const L3ErrorIndication&) const { return "ErrorIndication"; }
 
     // SS names
     std::string_view operator()(const L3SupServFacilityMessage&) const { return "SupServFacilityMessage"; }
@@ -222,11 +219,6 @@ struct NameVisitor {
     std::string_view operator()(const L3ActivateSecondaryPDPContextRequest&) const { return "ActivateSecondaryPDPContextRequest"; }
     std::string_view operator()(const L3ActivateSecondaryPDPContextAccept&) const { return "ActivateSecondaryPDPContextAccept"; }
     std::string_view operator()(const L3ActivateSecondaryPDPContextReject&) const { return "ActivateSecondaryPDPContextReject"; }
-    std::string_view operator()(const L3ActivateAAPDPContextRequest&) const { return "ActivateAAPDPContextRequest"; }
-    std::string_view operator()(const L3ActivateAAPDPContextAccept&) const { return "ActivateAAPDPContextAccept"; }
-    std::string_view operator()(const L3ActivateAAPDPContextReject&) const { return "ActivateAAPDPContextReject"; }
-    std::string_view operator()(const L3DeactivateAAPDPContextRequest&) const { return "DeactivateAAPDPContextRequest"; }
-    std::string_view operator()(const L3DeactivateAAPDPContextAccept&) const { return "DeactivateAAPDPContextAccept"; }
     std::string_view operator()(const L3ActivateMBMSContextRequest&) const { return "ActivateMBMSContextRequest"; }
     std::string_view operator()(const L3ActivateMBMSContextAccept&) const { return "ActivateMBMSContextAccept"; }
     std::string_view operator()(const L3ActivateMBMSContextReject&) const { return "ActivateMBMSContextReject"; }
@@ -459,9 +451,6 @@ struct MTIVisitor {
     int operator()(const L3Progress&) const { return L3Progress::MTI; }
     int operator()(const L3Facility&) const { return L3Facility::MTI; }
     int operator()(const L3CCNotify&) const { return L3CCNotify::MTI; }
-    int operator()(const L3UnitData&) const { return L3UnitData::MTI; }
-    int operator()(const L3UnitDataAck&) const { return L3UnitDataAck::MTI; }
-    int operator()(const L3ErrorIndication&) const { return L3ErrorIndication::MTI; }
 
     int operator()(const L3SupServFacilityMessage&) const { return L3SupServFacilityMessage::MTI; }
     int operator()(const L3SupServRegisterMessage&) const { return L3SupServRegisterMessage::MTI; }
@@ -509,11 +498,6 @@ struct MTIVisitor {
     int operator()(const L3ActivateSecondaryPDPContextRequest&) const { return L3ActivateSecondaryPDPContextRequest::MTI; }
     int operator()(const L3ActivateSecondaryPDPContextAccept&) const { return L3ActivateSecondaryPDPContextAccept::MTI; }
     int operator()(const L3ActivateSecondaryPDPContextReject&) const { return L3ActivateSecondaryPDPContextReject::MTI; }
-    int operator()(const L3ActivateAAPDPContextRequest&) const { return L3ActivateAAPDPContextRequest::MTI; }
-    int operator()(const L3ActivateAAPDPContextAccept&) const { return L3ActivateAAPDPContextAccept::MTI; }
-    int operator()(const L3ActivateAAPDPContextReject&) const { return L3ActivateAAPDPContextReject::MTI; }
-    int operator()(const L3DeactivateAAPDPContextRequest&) const { return L3DeactivateAAPDPContextRequest::MTI; }
-    int operator()(const L3DeactivateAAPDPContextAccept&) const { return L3DeactivateAAPDPContextAccept::MTI; }
     int operator()(const L3ActivateMBMSContextRequest&) const { return L3ActivateMBMSContextRequest::MTI; }
     int operator()(const L3ActivateMBMSContextAccept&) const { return L3ActivateMBMSContextAccept::MTI; }
     int operator()(const L3ActivateMBMSContextReject&) const { return L3ActivateMBMSContextReject::MTI; }
@@ -612,9 +596,6 @@ struct TIVisitor {
     uint8_t operator()(const L3Progress& v) const { return static_cast<uint8_t>(v.ti()); }
     uint8_t operator()(const L3Facility& v) const { return static_cast<uint8_t>(v.ti()); }
     uint8_t operator()(const L3CCNotify& v) const { return static_cast<uint8_t>(v.ti()); }
-    uint8_t operator()(const L3UnitData& v) const { return static_cast<uint8_t>(v.ti()); }
-    uint8_t operator()(const L3UnitDataAck& v) const { return static_cast<uint8_t>(v.ti()); }
-    uint8_t operator()(const L3ErrorIndication& v) const { return static_cast<uint8_t>(v.ti()); }
 
     uint8_t operator()(const L3SupServFacilityMessage& v) const { return static_cast<uint8_t>(v.ti()); }
     uint8_t operator()(const L3SupServRegisterMessage& v) const { return static_cast<uint8_t>(v.ti()); }
