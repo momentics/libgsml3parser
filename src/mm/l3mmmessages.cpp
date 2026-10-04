@@ -231,14 +231,14 @@ size_t L3CMServiceRequest::bodyLength() const {
 
 Expected<L3CMServiceRequest> L3CMServiceRequest::parse(BitReader& br) {
     L3CMServiceRequest msg;
-    // CM Service Request (TS 24.008 section 9.1.3.x): the first half-octet
-    // is the CM service type, the second carries the ciphering key sequence
-    // number (three bits) with one reserved bit.
+    // CM Service Request: per TS 24.008 9.2.11 the CM service type (four
+    // bits) occupies the low half-octet and the CKSN (three bits plus one
+    // reserved) the high half-octet.
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3CMServiceRequest>::error(o.error());
-        msg.mServiceType = L3CMServiceType{static_cast<L3CMServiceType::TypeCode>((o.value() >> 4) & 0x0Fu)};
-        msg.mCKSN = (o.value() >> 1) & 0x07u;
+        msg.mCKSN = (o.value() >> 4) & 0x07u;
+        msg.mServiceType = L3CMServiceType{static_cast<L3CMServiceType::TypeCode>(o.value() & 0x0Fu)};
     }
     // Classmark2 (LV: length octet + three to seven value octets)
     {
@@ -264,8 +264,8 @@ Expected<L3CMServiceRequest> L3CMServiceRequest::parse(BitReader& br) {
 }
 
 void L3CMServiceRequest::write(BitWriter& bw) const {
-    bw.writeField(((static_cast<unsigned>(mServiceType.type()) & 0x0Fu) << 4) |
-                 ((mCKSN & 0x07u) << 1), 8);
+    bw.writeField(((mCKSN & 0x07u) << 4) |
+                 (static_cast<unsigned>(mServiceType.type()) & 0x0Fu), 8);
     bw.writeField(static_cast<uint32_t>(mClassmark.lengthV()), 8);
     mClassmark.write(bw);
     writeLVMI(mMobileIdentity, bw);
@@ -289,15 +289,13 @@ size_t L3CMReestablishmentRequest::bodyLength() const {
 
 Expected<L3CMReestablishmentRequest> L3CMReestablishmentRequest::parse(BitReader& br) {
     L3CMReestablishmentRequest msg;
-    // CKSN(4)|spare(4)
+    // CM Re-establishment Request: per TS 24.008 9.2.5 the CKSN (three bits
+    // plus one spare) occupies the low half-octet; the high half-octet is
+    // spare.
     {
-        auto ck = br.readField(4);
-        if (!ck) return Expected<L3CMReestablishmentRequest>::error(ck.error());
-        msg.mCKSN = ck.value();
-    }
-    {
-        auto sp = br.readField(4);
-        if (!sp) return Expected<L3CMReestablishmentRequest>::error(sp.error());
+        auto o = br.readField(8);
+        if (!o) return Expected<L3CMReestablishmentRequest>::error(o.error());
+        msg.mCKSN = o.value() & 0x07u;
     }
     // Classmark2 (LV: length octet + three to seven value octets)
     {
@@ -324,8 +322,7 @@ Expected<L3CMReestablishmentRequest> L3CMReestablishmentRequest::parse(BitReader
 }
 
 void L3CMReestablishmentRequest::write(BitWriter& bw) const {
-    bw.writeField(mCKSN & 0x0F, 4);
-    bw.writeField(0, 4);
+    bw.writeField(mCKSN & 0x07u, 8);
     bw.writeField(static_cast<uint32_t>(mClassmark.lengthV()), 8);
     mClassmark.write(bw);
     writeLVMI(mMobileID, bw);
@@ -510,16 +507,17 @@ size_t L3LocationUpdatingRequest::bodyLength() const {
 
 Expected<L3LocationUpdatingRequest> L3LocationUpdatingRequest::parse(BitReader& br) {
     L3LocationUpdatingRequest msg;
-    // Location Updating Request (TS 24.008 section 9.1.3.x): the first
-    // half-octet packs the updating type (two bits), one spare bit and the
-    // follow-on request indicator; the second half-octet carries the
-    // ciphering key sequence number (three bits) plus one reserved bit.
+    // Location Updating Request, first body octet per TS 24.008 9.2.15: the
+    // high half-octet carries the ciphering key sequence number (three bits,
+    // one reserved bit); the low half-octet carries the follow-on request
+    // indicator, one spare bit and the two-bit location updating type (TS
+    // 24.008 10.5.3.5).
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3LocationUpdatingRequest>::error(o.error());
-        msg.mUpdateType = (o.value() >> 6) & 0x03u;
-        msg.mFollowOnRequest = ((o.value() >> 4) & 0x01u) != 0;
-        msg.mCKSN = (o.value() >> 1) & 0x07u;
+        msg.mCKSN = (o.value() >> 4) & 0x07u;
+        msg.mFollowOnRequest = ((o.value() >> 3) & 0x01u) != 0;
+        msg.mUpdateType = o.value() & 0x03u;
     }
     // LAI (raw V, 5 bytes mandatory, NOT LV-prefixed)
     {
@@ -549,8 +547,8 @@ Expected<L3LocationUpdatingRequest> L3LocationUpdatingRequest::parse(BitReader& 
 }
 
 void L3LocationUpdatingRequest::write(BitWriter& bw) const {
-    bw.writeField(((mUpdateType & 0x03u) << 6) | (mFollowOnRequest ? 0x10u : 0u) |
-                 ((mCKSN & 0x07u) << 1), 8);
+    bw.writeField(((mCKSN & 0x07u) << 4) | (mFollowOnRequest ? 0x08u : 0u) |
+                 (mUpdateType & 0x03u), 8);
     mLAI.write(bw);
     mClassmark.write(bw);
     writeLVMI(mMobileIdentity, bw);
@@ -660,14 +658,14 @@ void L3MMStatus::text(std::ostream& os) const {
 
 Expected<L3AuthenticationRequest> L3AuthenticationRequest::parse(BitReader& br) {
     L3AuthenticationRequest msg;
-    // Authentication Request (TS 24.008 section 9.1.3.x): the first octet
-    // carries the ciphering key sequence number (three bits) in its high
-    // half-octet, followed by five spare bits, then the 16-octet RAND; any
-    // further optional authentication parameters are kept opaque.
+    // Authentication Request: per TS 24.008 9.2.3 the first body octet
+    // carries the CKSN (three bits, one spare) in the low half-octet; the
+    // high half-octet is spare. The octet is followed by the 16-octet RAND;
+    // any further optional authentication parameters are kept opaque.
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3AuthenticationRequest>::error(o.error());
-        msg.mCKSN = (o.value() >> 5) & 0x07u;
+        msg.mCKSN = o.value() & 0x07u;
     }
     for (size_t i = 0; i < 16; ++i) {
         auto rb = br.readField(8);
@@ -682,7 +680,7 @@ Expected<L3AuthenticationRequest> L3AuthenticationRequest::parse(BitReader& br) 
 }
 
 void L3AuthenticationRequest::write(BitWriter& bw) const {
-    bw.writeField((mCKSN & 0x07u) << 5, 8);
+    bw.writeField(mCKSN & 0x07u, 8);
     for (const auto& b : mRAND) {
         bw.writeField(b, 8);
     }

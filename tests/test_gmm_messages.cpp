@@ -504,8 +504,8 @@ TEST(GoldenGMMTest, DetachRequest_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Attach Request (TS 44.068 section 9.5) - golden parse
-// Attach Request golden parse vector (TS 44.068): MS network capability
+// GMM Attach Request (TS 24.068 section 9.5) - golden parse
+// Attach Request golden parse vector (TS 24.068): MS network capability
 // (LV), attach type + GMM CKSN in one octet, DRX parameter (two value
 // octets without an identifier), mobile identity (LV), old routing area
 // identity (six value octets), MS radio access capability (LV, mandatory).
@@ -516,7 +516,7 @@ TEST(GoldenGMMTest, DetachRequest_GoldenParse) {
 //   0x01 = MTI(8)=0x01(AttachRequest), raw encoding
 //   0x02 = msNetworkCapability LV length = 2
 //   0x01 0x02 = msNetworkCapability value
-//   0x24 = attachType(3)='001'(GPRS attach)|forL3(1)=0 | gprsCKSN(3)=2|spare(1)=0
+//   0x21 = low: forL3(1)=0|attachType(3)='001'(GPRS attach); high: spare(1)=0|gprsCKSN(3)=2 (TS 24.068 section 9.5)
 //   0xFF 0x00 = DRX parameter value octets: splitPGCycleCode=0xFF, rest zero
 //   0x05 = mobileIdentity LV length = 5
 //   0xF4 = first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) (TS 24.008 9.1.3.x)
@@ -534,7 +534,7 @@ TEST(GoldenGMMTest, AttachRequest_GoldenParse) {
     uint8_t data[] = {
         0x08, 0x01,                              // header: PD=GMM, MTI=AttachRequest
         0x02, 0x01, 0x02,                        // msNetworkCapability LV (len=2)
-        0x24,                                     // attachType GPRS|forL3=0 | CKSN=2|spare=0
+        0x21,                                     // low: forL3=0|attachType GPRS | high: CKSN=2|spare=0
         0xFF, 0x00,                              // DRX parameter (two value octets, no identifier)
         0x05, 0xF4, 0x12, 0x34, 0x56, 0x78,      // mobileIdentity LV: TMSI=0x12345678
         0x09, 0xF1, 0x07, 0x00, 0x01, 0x5A,      // oldRAI: MCC=901, MNC=70, LAC=0x0001, RAC=0x5A
@@ -581,15 +581,15 @@ TEST(GoldenGMMTest, AttachRequest_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Routing Area Update Request (TS 44.068 section 9.5) - golden parse
-// Routing Area Update Request golden parse vector (TS 44.068): update
-// type + forL3 in the high half-octet and the GMM CKSN in bits 3:1 of
-// the first body octet, old routing area identity (six value octets),
-// MS radio access capability (LV, mandatory on the wire).
+// GMM Routing Area Update Request (TS 24.068 section 9.5) - golden parse
+// Routing Area Update Request golden parse vector (TS 24.068 section 9.5):
+// the GMM CKSN in the high half-octet, update type + forL3 in the low one,
+// old routing area identity (six value octets), MS radio access capability
+// (LV, mandatory on the wire).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x08 = MTI(8)=0x08(RoutingAreaUpdateRequest), raw encoding
-//   0x14 = updateType(3)='000'(RA updated)|forL3(1)=1 | gprsCKSN(3)=2|spare(1)=0
+//   0x28 = low: forL3(1)=1|updateType(3)='000'(RA updated); high: spare(1)=0|gprsCKSN(3)=2 (TS 24.068 section 9.5)
 //   09 F1 07 = MCC/MNC BCD: MCC=901, MNC=70 (TS 24.008 10.5.1.3 packing)
 //   0x00 0x01 = LAC = 0x0001
 //   0x5A = RAC = 0x5A
@@ -601,7 +601,7 @@ TEST(GoldenGMMTest, RAUpdateRequest_GoldenParse) {
     // Body: firstOctet(1) + oldRAI(6) + msRACap LV(3) = 10 bytes
     uint8_t data[] = {
         0x08, 0x08,                              // header: PD=GMM, MTI=RAUpdateRequest
-        0x14,                                     // updateType RA updated|forL3=1 | CKSN=2|spare=0
+        0x28,                                     // low: forL3=1|updateType RA updated | high: CKSN=2|spare=0
         0x09, 0xF1, 0x07, 0x00, 0x01, 0x5A,      // RAI: MCC=901, MNC=70, LAC=0x0001, RAC=0x5A
         0x02, 0xAA, 0xBB                         // msRACap LV (len=2)
     };

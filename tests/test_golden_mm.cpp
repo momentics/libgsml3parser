@@ -42,16 +42,19 @@
 //     Location Updating Accept/Request, Authentication Request/Response)
 //   - MM header byte layout verified: PD=5('0101'B) in the low nibble of octet 0,
 //     TI/TIF in the high nibble; MT(6 bits) in the low bits of octet 1 - matches GSM 24.008 Table 11.2
-//   - LocationUpdatingRequest: first octet [lu(2)|spare(1)|fop(1)][CKSN(3)|spare(1)],
-//     LAI is RAW (not LV!), then CM1-V (single value octet), then MI-LV
+//   - LocationUpdatingRequest: first octet [CKSN(3)|spare(1)] high |
+//     [FOR|spare|LU(2)] low (TS 24.008 9.2.15/10.5.3.5); LAI is RAW (not LV!),
+//     then CM1-V (single value octet), then MI-LV
 //   - LocationUpdatingAccept: LAI is RAW (not LV!), then optional MI + FOP
 //   - TMSIReallocationCommand: LAI RAW + MI-LV + FollowOnProceed(4 bits)
-//   - CMServiceRequest: first octet CM_ServiceType(4)|CKSN(3)|spare(1), CM2-LV, MI-LV
+//   - CMServiceRequest: first octet [CKSN(3)|spare(1)] high |
+//     CM_ServiceType(4) low (TS 24.008 9.2.11), CM2-LV, MI-LV
 //   - CMServiceReject: reject_cause(8 bits) per GSM 24.008 10.5.3.6
 //   - IMSIDetachIndication: CM1-V (single value octet) + MI-LV
 //   - MMStatus: cause(8 bits) per GSM 24.008 10.5.3.6
 //   - IdentityResponse: MI-LV only
-//   - CMReestablishmentRequest: CKSN(4)|spare(4), CM2-LV, MI-LV
+//   - CMReestablishmentRequest: CKSN(3)|spare(1) in the LOW half-octet,
+//     spare high half-octet (TS 24.008 9.2.5), CM2-LV, MI-LV
 //   - LAI encoding verified: MCC=250, MNC=01 -> BCD {0x52, 0xF0, 0x10} per
 //     TS 24.008 10.5.1.3 ([MCC2|MCC1][MNC3/F|MCC3][MNC2|MNC1])
 //     (same packing for MCC=262, MNC=42 -> {0x62, 0xF2, 0x24})
@@ -120,11 +123,14 @@ TEST(GoldenMM, MessageTypeValues) {
 //   discriminator := '0101'B (PD=5=MM), messageType := overwritten
 //   locationUpdatingType := lu_type, cipheringKeySequenceNumber
 //   mobileStationClassmark1 := ts_CM1, mobileIdentityLV := mi_lv
-// Structure: LU_Type(2)|spare(1)|FOP(1)|CKSN(3)|spare(1), LAI RAW(5 octets), CM1 V, MI LV
+// Structure: [CKSN(3)|spare(1)] high | [FOP(1)|spare(1)|LU_Type(2)] low (TS 24.008 9.2.15/10.5.3.5),
+//   LAI RAW(5 octets), CM1 V, MI LV
 // Spec-verified: PD=5(MM), MTI=0x08(LocationUpdatingRequest) per GSM 24.008 Table 10.5.3
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.15 body field order (MANDATORY):
 //   1) locationUpdatingType(2)|spare(1)|followOnRequestIndicator(1) +
-//      cipheringKeySequenceNumber(3)|spare(1) = 1 octet
+//      cipheringKeySequenceNumber(3)|spare(1) = 1 octet; the first half-octet
+//      IE of the sequence occupies the LOW nibble (TS 24.008 9.1):
+//      [CKSN(3)|spare(1)] high | [FOP|spare|LU(2)] low (TS 24.008 10.5.3.5)
 //   2) locationAreaIdentification = MCC/MNC BCD(3) + LAC(2) = 5 octets RAW (NOT LV!)
 //   3) mobileStationClassmark1 = V format (one value octet, no length)
 //   4) mobileIdentity = LV format (length + type octet + value)
@@ -133,14 +139,15 @@ TEST(GoldenMM, MessageTypeValues) {
 TEST(GoldenMM, LocationUpdatingRequest_Parse) {
     // GSM 24.008 9.2.15: LocationUpdatingRequest body field order (MANDATORY):
     //   1) locationUpdatingType(2)|spare(1)|followOnRequestIndicator(1) +
-    //      cipheringKeySequenceNumber(3)|spare(1) = 1 octet
+    //      cipheringKeySequenceNumber(3)|spare(1) = 1 octet, with CKSN in the
+    //      high half-octet and LUT/FOR in the low one (TS 24.008 9.2.15/10.5.3.5)
     //   2) locationAreaIdentification = MCC/MNC BCD(3 octets) + LAC(2 octets) = 5 octets RAW (NOT LV!)
     //   3) mobileStationClassmark1 = V format (one value octet, no length)
     //   4) mobileIdentity = LV format (length + type octet + value)
     // Field order per GSM 24.008 9.2.15: locationAreaIdentification is raw LAI, then CM1 V, then MI LV
     // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
     // Byte 1: MT=0x08(LocationUpdatingRequest) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.3)
-    // Byte 2: LU_Type(2)=00(Normal)|spare(1)=0|FOP(1)=0|CKSN(3)=0|spare(1)=0 = 0x00 [GSM 24.008 9.2.15]
+    // Byte 2: CKSN(3)=0|spare(1)=0 high | FOP(1)=0|spare(1)=0|LU_Type(2)=00(Normal) low = 0x00 [GSM 24.008 9.2.15]
     // Bytes 3-7: LAI (mandatory per GSM 24.008 9.2.15, RAW not LV): MCC=250, MNC=01, LAC=0x172A
     //   [MCC/MNC is carried as nibble-swapped BCD per GSM 23.003]
     //   MCC=250, MNC=01 -> '250F01'H nibble-swapped = {0x52, 0xF0, 0x10}, LAC = {0x17,  0x2A}
@@ -163,14 +170,15 @@ TEST(GoldenMM, LocationUpdatingRequest_Parse) {
     EXPECT_EQ(lur->classmark(), L3MobileStationClassmark1{});
 }
 
-// Golden: Location Updating Request first body octet (TS 24.008): updating
-// type = IMSI Attach ('10'B) in bits 7:6, follow-on request indicator set in
-// bit 4, CKSN=3 in bits 3:1 with the reserved bit clear.
-// octet = (2 << 6) | (1 << 4) | (3 << 1) = 0x96.
+// Golden: Location Updating Request first body octet (TS 24.008 9.2.15):
+// CKSN=3 with the reserved bit clear in the high half-octet, follow-on
+// request indicator set and updating type = IMSI Attach ('10'B) in the low
+// half-octet (TS 24.008 10.5.3.5).
+// octet = (3 << 4) | (1 << 3) | 2 = 0x3A.
 TEST(GoldenMM, LocationUpdatingRequest_FirstOctet_Golden) {
     // CM1 is a single value octet (V format, no length prefix).
     uint8_t data[] = {
-        0x05, 0x08, 0x96,
+        0x05, 0x08, 0x3A,
         0x52, 0xF0, 0x10, 0x17, 0x2A,
         0x00,
         0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
@@ -195,7 +203,7 @@ TEST(GoldenMM, LocationUpdatingRequest_FirstOctet_Golden) {
     ParsedMessage pm{MMM{built}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[2], 0x96);
+    EXPECT_EQ((*bytes)[2], 0x3A);
 
     // Round-trip: parse and compare field values.
     auto reparsed = roundtrip(pm);
@@ -205,20 +213,37 @@ TEST(GoldenMM, LocationUpdatingRequest_FirstOctet_Golden) {
     EXPECT_EQ(rl->getLocationUpdatingType(), LocationUpdateType::IMSIAttach);
     EXPECT_TRUE(rl->followOnRequest());
     EXPECT_EQ(rl->cksn(), 3u);
+
+    // Wire cross-check: a captured LUR frame carries first body octet 0x70,
+    // i.e. CKSN=7 in the high half-octet and LU=Normal with FOP clear in the
+    // low one (TS 24.008 9.2.15/10.5.3.5).
+    uint8_t wire[] = {
+        0x05, 0x08, 0x70,
+        0x52, 0xF0, 0x10, 0x17, 0x2A,
+        0x00,
+        0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
+    };
+    auto wireMsg = parseL3(std::span<const uint8_t>(wire));
+    ASSERT_TRUE(wireMsg);
+    const auto* wl = tryGet<L3LocationUpdatingRequest>(*wireMsg);
+    ASSERT_NE(wl, nullptr);
+    EXPECT_EQ(wl->cksn(), 7u);
+    EXPECT_FALSE(wl->followOnRequest());
+    EXPECT_EQ(wl->getLocationUpdatingType(), LocationUpdateType::Normal);
 }
 
-// Golden: Authentication Request first body octet (TS 24.008): the ciphering
-// key sequence number (three bits) occupies bits 7:5 with five spare bits.
-// CKSN=5 -> octet = (5 << 5) = 0xA0.
+// Golden: Authentication Request first body octet (TS 24.008 9.2.3): the
+// ciphering key sequence number (three bits plus one spare) occupies the low
+// half-octet, the high half-octet is spare. CKSN=5 -> octet = 5 = 0x05.
 TEST(GoldenMM, AuthenticationRequest_FirstOctet_Golden) {
     uint8_t rand[16] = {1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16};
-    uint8_t data[] = {0x05, 0x12, 0xA0};
+    uint8_t data[] = {0x05, 0x12, 0x05};
     // A truncated body (RAND missing) must report truncation.
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_FALSE(msg);
 
     uint8_t frame[] = {
-        0x05, 0x12, 0xA0,
+        0x05, 0x12, 0x05,
         1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
     };
     auto full = parseL3(std::span<const uint8_t>(frame));
@@ -234,7 +259,7 @@ TEST(GoldenMM, AuthenticationRequest_FirstOctet_Golden) {
         EXPECT_TRUE(randMatches);
     }
 
-    // Builder path: CKSN=5 must land in the high half-octet (bits 7:5).
+    // Builder path: CKSN=5 must land in the low half-octet, high spare.
     auto built = L3AuthenticationRequest::builder()
         .cksn(5)
         .rand(std::span<const uint8_t>(rand))
@@ -242,7 +267,7 @@ TEST(GoldenMM, AuthenticationRequest_FirstOctet_Golden) {
     ParsedMessage pm{MMM{built}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[2], 0xA0);
+    EXPECT_EQ((*bytes)[2], 0x05);
 
     // Round-trip with CKSN and RAND assertions.
     auto reparsed = roundtrip(pm);
@@ -324,13 +349,14 @@ TEST(GoldenMM, TMSIReallocationCommand_Parse) {
 // CM Service Request body per GSM 24.008 9.2.9:
 //   cm_ServiceType := int2bit(enum2int(serv_type), 4)
 //   cipheringKeySequenceNumber, mobileStationClassmark2, mobileIdentity
-// Structure: CM_ServiceType(4)|CKSN(3)|spare(1), CM2 LV (three to seven value octets), MI LV
+// Structure: [CKSN(3)|spare(1)] high | CM_ServiceType(4) low (TS 24.008 9.2.11),
+//   CM2 LV (three to seven value octets), MI LV
 // Spec-verified: PD=5(MM), MTI=0x24(CMServiceRequest) per GSM 24.008 Table 10.5.3
 // CmServiceType: MobileOriginatedCall = '0001'B (value=1, GSM 24.008 10.5.3.3)
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.9: CMServiceRequest body = CM_ServiceType + CKSN
 //   + CM2-LV + MI-LV. The first octet packs the CM service type (four bits,
-//   high half-octet) and the ciphering key sequence number (three bits in
-//   bits 3:1 with one reserved bit, low half-octet). CM_ServiceType values:
+//   low half-octet) and the ciphering key sequence number (three bits with
+//   one reserved bit, high half-octet). CM_ServiceType values:
 //   1=MobileOriginatedCall, 2=EmergencyCall, 4=ShortMessage, 8=SupplementaryService.
 //   CmServiceType (GSM 24.008): MobileOriginatedCall='0001'B(=1).
 // =====================================================================
@@ -338,7 +364,7 @@ TEST(GoldenMM, TMSIReallocationCommand_Parse) {
 TEST(GoldenMM, CMServiceRequest_Parse) {
     // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
     // Byte 1: MT=0x24(CMServiceRequest) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.3)
-    // Byte 2: CM_ServiceType(4)=1(MobileOriginatedCall)|CKSN(3)=0|spare(1)=0 = 0x10 [GSM 24.008 10.5.3.3]
+    // Byte 2: CKSN(3)=0|spare(1)=0 high | CM_ServiceType(4)=1(MobileOriginatedCall) low = 0x01 [GSM 24.008 10.5.3.3]
     //   CmServiceType (GSM 24.008): MobileOriginatedCall = '0001'B
     // Byte 3: CM2 LV length = 3 (base form: three value octets, GSM 24.008 10.5.1.6)
     // Bytes 4-6: CM2 value (24 bits of capability flags)
@@ -346,7 +372,7 @@ TEST(GoldenMM, CMServiceRequest_Parse) {
     // Byte 8: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4 [GSM 24.008 10.5.1.4]
     // Bytes 9-12: TMSI = 0x12345678
     uint8_t data[] = {
-        0x05, 0x24, 0x10,
+        0x05, 0x24, 0x01,
         0x03, 0x20, 0x00, 0x80,
         0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
     };
@@ -355,13 +381,13 @@ TEST(GoldenMM, CMServiceRequest_Parse) {
     EXPECT_EQ(messageMTI(*msg), L3CMServiceRequest::MTI);
 }
 
-// Golden: CM Service Request first body octet (TS 24.008): the CM service
-// type occupies the high half-octet (service type 1 = MobileOriginatedCall),
-// CKSN=5 in bits 3:1, reserved bit 0.
-// octet = (1 << 4) | (5 << 1) = 0x1A.
+// Golden: CM Service Request first body octet (TS 24.008 9.2.11): the CM
+// service type (service type 1 = MobileOriginatedCall) occupies the low
+// half-octet, CKSN=5 with reserved bit 0 in the high one.
+// octet = (5 << 4) | 1 = 0x51.
 TEST(GoldenMM, CMServiceRequest_FirstOctet_Golden) {
     uint8_t data[] = {
-        0x05, 0x24, 0x1A,
+        0x05, 0x24, 0x51,
         0x03, 0x20, 0x00, 0x80,
         0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
     };
@@ -382,7 +408,7 @@ TEST(GoldenMM, CMServiceRequest_FirstOctet_Golden) {
     ParsedMessage pm{MMM{built}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes)[2], 0x1A);
+    EXPECT_EQ((*bytes)[2], 0x51);
 
     // Round-trip: parse and compare field values.
     auto reparsed = roundtrip(pm);
@@ -491,25 +517,27 @@ TEST(GoldenMM, IdentityResponse_Parse) {
 // MM PARSE FROM HEX: CM Reestablishment Request (GSM 24.008 9.2.4)
 // Field order per GSM 24.008 9.2.4:
 //   cipheringKeySequenceNumber, mobileStationClassmark2, mobileIdentityLV
-// Structure: CKSN(4)|spare(4), CM2 LV (three to seven value octets), MI LV, [LAI LV]
+// Structure: spare high | CKSN(3)|spare(1) in the LOW half-octet (TS 24.008 9.2.5),
+//   CM2 LV (three to seven value octets), MI LV, [LAI LV]
 // Spec-verified: PD=5(MM), MTI=0x28(CMReestablishmentRequest) per GSM 24.008 Table 10.5.3
 // [GSM SPEC VERIFIED] GSM 24.008 9.2.4: CMReestablishmentRequest body = CKSN + CM2-LV + MI-LV + [LAI].
-//   CKSN is 1 octet: cipheringKeySequenceNumber(4 bits)|spare(4 bits).
-//   Always present (not conditional), even when value is 0.
+//   The first octet carries CKSN(3)|spare(1) in the LOW half-octet, spare
+//   high half-octet (TS 24.008 9.2.5). Always present (not conditional),
+//   even when value is 0.
 //   CM2 is LV-encoded: length(1) + a three-to-seven-octet value (base form here).
 //   MI is LV-encoded: length(1) + type(1) + value(variable) = variable octets.
 // =====================================================================
 
 TEST(GoldenMM, CMReestablishmentRequest_Parse) {
     // GSM 24.008 9.2.4: CMReestablishmentRequest body field order (MANDATORY):
-    //   1) cipheringKeySequenceNumber(4)|spare(4) = 1 octet [GSM 24.008 10.5.1.2]
+    //   1) CKSN(3)|spare(1) in the LOW half-octet, spare high (TS 24.008 9.2.5) = 1 octet [GSM 24.008 10.5.1.2]
     //   2) mobileStationClassmark2 = LV format (length + value, GSM 24.008 10.5.1.6)
     //   3) mobileIdentityLV = LV format (length + type octet + value, GSM 24.008 10.5.1.4)
     // Field order per GSM 24.008 9.2.4:
     //   cipheringKeySequenceNumber, mobileStationClassmark2, mobileIdentityLV
     // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
     // Byte 1: MT=0x28(CMReestablishmentRequest) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.3)
-    // Byte 2: CKSN(4)=0|spare(4)=0 = 0x00 [GSM 24.008 10.5.1.2]
+    // Byte 2: spare(4)=0 high | CKSN(3)=0|spare(1)=0 low = 0x00 (TS 24.008 9.2.5)
     // Byte 3: CM2 LV length = 3 (base form: three value octets, GSM 24.008 10.5.1.6)
     // Bytes 4-6: CM2 value (24 bits of capability flags)
     // Byte 7: MI LV length = 5 [GSM 24.008 10.5.1.4]
@@ -524,6 +552,41 @@ TEST(GoldenMM, CMReestablishmentRequest_Parse) {
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CMReestablishmentRequest::MTI);
+}
+
+// Golden: CM Reestablishment Request first body octet (TS 24.008 9.2.5): the
+// ciphering key sequence number (three bits plus one spare) occupies the low
+// half-octet, the high half-octet is spare. CKSN=5 -> octet = 5 = 0x05.
+TEST(GoldenMM, CMReestablishmentRequest_FirstOctet_Golden) {
+    // Byte 2: CKSN=5 in the low half-octet, spare high (TS 24.008 9.2.5).
+    uint8_t data[] = {
+        0x05, 0x28, 0x05,
+        0x03, 0x20, 0x00, 0x80,
+        0x05, 0xF4, 0x12, 0x34, 0x56, 0x78
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* reest = tryGet<L3CMReestablishmentRequest>(*msg);
+    ASSERT_NE(reest, nullptr);
+    EXPECT_EQ(reest->cksn(), 5u);
+
+    // Builder path: CKSN=5 must land in the low half-octet, high spare.
+    auto built = L3CMReestablishmentRequest::builder()
+        .cksn(5)
+        .classmark(L3MobileStationClassmark2{})
+        .mobileId(L3MobileIdentity(0x12345678))
+        .build();
+    ParsedMessage pm{MMM{built}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes)[2], 0x05);
+
+    // Round-trip: parse and compare field values.
+    auto reparsed = roundtrip(pm);
+    ASSERT_TRUE(reparsed);
+    const auto* rr = tryGet<L3CMReestablishmentRequest>(*reparsed);
+    ASSERT_NE(rr, nullptr);
+    EXPECT_EQ(rr->cksn(), 5u);
 }
 
 // =====================================================================

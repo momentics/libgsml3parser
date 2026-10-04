@@ -142,7 +142,8 @@ TEST(MMRoundTripTest, LocationUpdatingReject_Parse) {
 
 // ── Authentication Request (GSM 04.08 9.2.2) ─────────────────────────
 // Wire layout per GSM 24.008 (Authentication Request).
-// Structure: PD=0x05, MTI=0x12, first octet CKSN(3)|spare bits, RAND(128 bits)
+// Structure: PD=0x05, MTI=0x12, first octet CKSN(3) in the low half-octet,
+// spare high (TS 24.008 9.2.3), RAND(128 bits)
 
 TEST(MMRoundTripTest, AuthenticationRequest) {
     std::vector<uint8_t> rand(16);
@@ -157,7 +158,7 @@ TEST(MMRoundTripTest, AuthenticationRequest) {
 // Authentication Request MTI = 0x12 (TS 24.008).
 // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
 // Byte 1: MT=0x12 in the six low bits, NSD=0
-// Byte 2: CKSN(3)=0 in bits 7:5 + five spare bits = 0x00
+// Byte 2: CKSN(3)=0 in the low half-octet, spare high (TS 24.008 9.2.3) = 0x00
 // Bytes 3-18: RAND (16 bytes, GSM 04.08 10.5.3.1)
 TEST(MMRoundTripTest, AuthenticationRequest_Parse) {
     uint8_t data[] = {
@@ -282,7 +283,8 @@ TEST(MMRoundTripTest, MMStatus) {
 
 // ── CM Service Request (GSM 04.08 9.2.9) ────────────────────────────
 // Wire layout per GSM 24.008 (CM Service Request).
-// Structure: PD=0x05, MTI=0x24, first octet CM_ServiceType(4)|CKSN(3)|spare(1), CM2 LV, MI LV
+// Structure: PD=0x05, MTI=0x24, first octet CKSN(3) in the high half-octet |
+// CM_ServiceType(4) low (TS 24.008 9.2.11), CM2 LV, MI LV
 
 TEST(MMRoundTripTest, CMServiceRequest) {
     ParsedMessage msg(MMM(L3CMServiceRequest{}));

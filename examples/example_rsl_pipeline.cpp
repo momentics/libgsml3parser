@@ -58,9 +58,9 @@ int main()
             // L3Info IE (type 0x0B, TL16V): length 3
             0x0B, 0x00, 0x03,
             // L3 payload: CM Service Request (PD=MM low nibble, MT=0x24; first
-            // body octet = service type in the high half-octet (1 = MO call) and
-            // CKSN=0 in bits 3:1)
-            0x05, 0x24, 0x10
+            // body octet = CKSN(3)|spare(1) in the high half-octet (CKSN=0) and
+            // service type (1 = MO call) in the low one, TS 24.008 9.2.11)
+            0x05, 0x24, 0x01
         };
 
         printHex("  Raw RSL", rawRSL);

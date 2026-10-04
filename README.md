@@ -98,13 +98,17 @@ The mobile identity value starts with `[first digit(4)|odd-count(1)|type(3)]` an
 as `[next digit or F fill|current digit]`; a TMSI starts with the spare 'F' nibble, a zero bit and
 type '100'B (first octet `0xF4`).
 
-**MM (TS 24.008)** — CM Service Request body starts with one octet: CM service type in the high
-half-octet, CKSN(3)|reserved(1) in the low; Location Updating Request starts with
-`[luType(2)|spare(1)|FOP(1)]` + `[CKSN(3)|reserved(1)]`. Optional IEs after the mandatory part are
-preserved opaquely and re-emitted verbatim.
+**MM (TS 24.008)** — in a sequence of half-octet information elements the
+first element occupies the low half-octet (bits 1-4). CM Service Request body
+starts with one octet: CM service type (four bits) in the low half-octet and
+CKSN(3)|reserved(1) in the high; Location Updating Request starts with
+`[spare(1)|CKSN(3)]` + `[FOR(1)|spare(1)|LUtype(2)]`; Authentication Request and
+CM Re-establishment Request carry the CKSN (three bits plus one spare) in the
+low half-octet with the high half-octet spare. Optional IEs after the mandatory
+part are preserved opaquely and re-emitted verbatim.
 
-**GMM / SM (TS 24.008)** — Attach/RAU Request pack update/attach type, forL3 and the GPRS CKSN in a
-single octet; the DRX parameter is two value octets without an identifier and the MS radio access
+**GMM / SM (TS 24.008)** — Attach/RAU Request pack the type (three bits plus the forL3 indicator) in the low half-octet
+and the GPRS CKSN (three bits plus one reserved) in the high half-octet; the DRX parameter is two value octets without an identifier and the MS radio access
 capability is a mandatory LV. Reject/failure/status messages start with a single bare cause value
 octet. SM ACTIVATE PDP CONTEXT REQUEST carries the NSAPI and the negotiated LLC SAPI as two
 octets ([NSAPI(4)|spare(4)][LLC SAPI(4)|spare(4)]), requested QoS and requested PDP address as

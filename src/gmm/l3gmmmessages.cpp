@@ -54,7 +54,7 @@ size_t L3AttachRequest::bodyLength() const {
     size_t len = 0;
     // msNetworkCapability: LV format (length + value)
     len += lvLen(mMsNetworkCapability.lengthV());
-    // attachType(3)|forL3(1) | gprsCKSN(3)|spare(1) = 1 octet
+    // gprsCKSN(3)|spare(1) high, attachType(3)|forL3(1) low = 1 octet
     len += 1;
     // drxParam: V format (two value octets, no identifier)
     len += L3DRXParameter::lengthV();
@@ -85,14 +85,15 @@ Expected<L3AttachRequest> L3AttachRequest::parse(BitReader& br) {
         msg.mMsNetworkCapability = std::move(cap).value();
     }
 
-    // attachType(3)|forL3(1) in the high half-octet, gprsCKSN(3)|spare(1)
-    // in the low one.
+    // per TS 24.068 section 9.5 the attach type (three bits plus the forL3
+    // indicator) occupies the low half-octet and the GMM CKSN (three bits
+    // plus one reserved) the high half-octet.
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3AttachRequest>::error(o.error());
-        msg.mAttachType = static_cast<GMMAttachType>((o.value() >> 5) & 0x07u);
-        msg.mForL3 = ((o.value() >> 4) & 0x01u) != 0;
-        msg.mCKSN = static_cast<uint8_t>((o.value() >> 1) & 0x07u);
+        msg.mCKSN = static_cast<uint8_t>((o.value() >> 4) & 0x07u);
+        msg.mForL3 = ((o.value() >> 3) & 0x01u) != 0;
+        msg.mAttachType = static_cast<GMMAttachType>(o.value() & 0x07u);
     }
 
     // drxParam: exactly two value octets, no identifier.
@@ -146,9 +147,9 @@ void L3AttachRequest::write(BitWriter& bw) const {
     bw.writeField(static_cast<uint32_t>(mMsNetworkCapability.lengthV()), 8);
     mMsNetworkCapability.write(bw);
 
-    // attachType(3)|forL3(1) | gprsCKSN(3)|spare(1)
-    bw.writeField(((static_cast<uint8_t>(mAttachType) & 0x07u) << 5) |
-                  ((mForL3 ? 1u : 0u) << 4) | ((mCKSN & 0x07u) << 1), 8);
+    // gprsCKSN(3)|spare(1) high, attachType(3)|forL3(1) low (TS 24.068 section 9.5)
+    bw.writeField(((mCKSN & 0x07u) << 4) | (mForL3 ? 0x08u : 0u) |
+                  (static_cast<uint8_t>(mAttachType) & 0x07u), 8);
 
     // drxParam: two value octets, no identifier
     mDRXParam.write(bw);
@@ -478,7 +479,7 @@ L3DetachAccept::Builder L3DetachAccept::builder() {
 // ── L3RoutingAreaUpdateRequest (TS 44.068 section 9.5) ────────────────
 
 size_t L3RoutingAreaUpdateRequest::bodyLength() const {
-    size_t len = 1; // updateType(3)|forL3(1) | gprsCKSN(3)|spare(1)
+    size_t len = 1; // gprsCKSN(3)|spare(1) high, updateType(3)|forL3(1) low
     len += L3RoutingAreaIdentification::lengthV(); // oldRoutingAreaID (six value octets)
     len += lvLen(mMsRACap.size());                 // msRACap LV (mandatory on the wire)
     len += mAdditionalIes.size();                  // opaque optional IEs
@@ -488,16 +489,16 @@ size_t L3RoutingAreaUpdateRequest::bodyLength() const {
 Expected<L3RoutingAreaUpdateRequest> L3RoutingAreaUpdateRequest::parse(BitReader& br) {
     L3RoutingAreaUpdateRequest msg;
 
-    // GMM ROUTING AREA UPDATE REQUEST (TS 44.068): update type + forL3 in
-    // the high half-octet and the GMM CKSN in bits 3:1 of the first octet,
+    // GMM ROUTING AREA UPDATE REQUEST (TS 24.068 section 9.5): update type
+    // + forL3 in the low half-octet and the GMM CKSN in the high one,
     // old routing area identity (six value octets), MS radio access
     // capabilities (LV, mandatory); any further optional IEs are kept opaque.
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3RoutingAreaUpdateRequest>::error(o.error());
-        msg.mUpdateType = static_cast<GMMUpdateType>((o.value() >> 5) & 0x07u);
-        msg.mForL3 = ((o.value() >> 4) & 0x01u) != 0;
-        msg.mCKSN = static_cast<uint8_t>((o.value() >> 1) & 0x07u);
+        msg.mCKSN = static_cast<uint8_t>((o.value() >> 4) & 0x07u);
+        msg.mForL3 = ((o.value() >> 3) & 0x01u) != 0;
+        msg.mUpdateType = static_cast<GMMUpdateType>(o.value() & 0x07u);
     }
 
     // oldRoutingAreaID (fixed six value octets)
@@ -533,8 +534,9 @@ Expected<L3RoutingAreaUpdateRequest> L3RoutingAreaUpdateRequest::parse(BitReader
 }
 
 void L3RoutingAreaUpdateRequest::write(BitWriter& bw) const {
-    bw.writeField(((static_cast<uint8_t>(mUpdateType) & 0x07u) << 5) |
-                  ((mForL3 ? 1u : 0u) << 4) | ((mCKSN & 0x07u) << 1), 8);
+    // gprsCKSN(3)|spare(1) high, updateType(3)|forL3(1) low (TS 24.068 section 9.5)
+    bw.writeField(((mCKSN & 0x07u) << 4) | (mForL3 ? 0x08u : 0u) |
+                  (static_cast<uint8_t>(mUpdateType) & 0x07u), 8);
     mOldRAI.write(bw);
     bw.writeField(static_cast<uint32_t>(mMsRACap.size()), 8);
     if (!mMsRACap.empty()) bw.writeBytes(mMsRACap.data(), mMsRACap.size());
