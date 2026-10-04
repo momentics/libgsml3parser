@@ -384,9 +384,10 @@ TEST(CApiRsl, Builders_AgreeWithCpp) {
     }
     {
         // Uplink measurements (TS 48.058 9.3.25): six-bit RX levels, three-bit
-        // RX qualities, DTX downlink clear, L1 information octet omitted.
-        auto cpp = RSLBuilder::buildMeasRes(0x78, 5, 40, 35, 5, 6, false, 0).value();
-        size_t n = gsml3_rsl_build_meas_res(out, sizeof(out), 0x78, 5, 40, 35, 5, 6, 0, 0);
+        // RX qualities, DTX downlink clear, BS power level 12 (section 9.3.4),
+        // L1 information octet omitted.
+        auto cpp = RSLBuilder::buildMeasRes(0x78, 5, 40, 35, 5, 6, false, 12, 0).value();
+        size_t n = gsml3_rsl_build_meas_res(out, sizeof(out), 0x78, 5, 40, 35, 5, 6, 0, 12, 0);
         ASSERT_EQ(n, cpp.size());
         EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
     }

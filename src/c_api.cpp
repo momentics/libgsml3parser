@@ -235,6 +235,7 @@ inline constexpr int t2Hi       = 31;    // request-reference T2 timing (5 bits)
 inline constexpr int t3Hi       = 63;    // request-reference T3 timing (6 bits)
 inline constexpr int rxlevHi    = 63;    // uplink measurement RX level (6 bits, TS 48.058 9.3.25)
 inline constexpr int rxqHi      = 7;     // uplink measurement RX quality (3 bits, TS 48.058 9.3.25)
+inline constexpr int bsPowerHi  = 31;    // MEAS_RES BS power level (5 bits, TS 48.058 9.3.4)
 } // namespace fields
 
 // Channel description fields exactly as emitted by
@@ -755,7 +756,7 @@ GSML3_C_API size_t gsml3_rsl_build_conn_fail(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_rsl_build_meas_res(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t meas_nr,
     uint8_t rxlev_full, uint8_t rxlev_sub, uint8_t rxq_full, uint8_t rxq_sub,
-    int dtx_downlink, uint8_t l1_info) {
+    int dtx_downlink, uint8_t bs_power, uint8_t l1_info) {
     try {
         clearLastError();
         if (!out || maxlen == 0) { setError(GSML3_ERR_INVALID_ARG, "NULL output buffer"); return 0; }
@@ -768,9 +769,11 @@ GSML3_C_API size_t gsml3_rsl_build_meas_res(uint8_t* out, size_t maxlen,
         }
         if (!checkEnumValue(dtx_downlink, 0, 1, "dtx_downlink"))
             return 0;
+        if (!checkEnumValue(bs_power, 0, fields::bsPowerHi, "bs_power"))
+            return 0;
         int n = RSLBuilder::buildMeasRes({out, maxlen}, chan_nr, meas_nr,
                                          rxlev_full, rxlev_sub, rxq_full, rxq_sub,
-                                         dtx_downlink != 0, l1_info);
+                                         dtx_downlink != 0, bs_power, l1_info);
         if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {

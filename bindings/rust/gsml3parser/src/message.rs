@@ -639,7 +639,8 @@ pub fn rsl_build_conn_fail(out: &mut [u8], chan_nr: u8, cause: i32) -> Result<us
 
 /// RSL MEASUREMENT RESULT (TS 48.058 section 9.3.25): uplink RX levels are
 /// six-bit fields, RX qualities three-bit fields (excess high bits are
-/// discarded on the C side), `dtx_downlink` is the DTX indicator bit and
+/// discarded on the C side), `dtx_downlink` is the DTX indicator bit,
+/// `bs_power` is the always-present BS power level (section 9.3.4) and
 /// `l1_info` is the optional L1 information octet (section 9.3.10; zero omits
 /// the IE). Field widths are range-checked in C. The argument count mirrors
 /// the flat C ABI signature of the measurement report builder.
@@ -653,6 +654,7 @@ pub fn rsl_build_meas_res(
     rxq_full: u8,
     rxq_sub: u8,
     dtx_downlink: bool,
+    bs_power: u8,
     l1_info: u8,
 ) -> Result<usize, GsmL3Error> {
     // SAFETY: valid out slice for this call.
@@ -667,6 +669,7 @@ pub fn rsl_build_meas_res(
             rxq_full,
             rxq_sub,
             if dtx_downlink { 1 } else { 0 },
+            bs_power,
             l1_info,
         )
     };

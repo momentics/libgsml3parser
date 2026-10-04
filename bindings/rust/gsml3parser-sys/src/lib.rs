@@ -564,6 +564,7 @@ extern "C" {
         rxq_full: u8,
         rxq_sub: u8,
         dtx_downlink: c_int,
+        bs_power: c_uchar,
         l1_info: u8,
     ) -> usize;
     pub fn gsml3_rsl_build_hando_det(

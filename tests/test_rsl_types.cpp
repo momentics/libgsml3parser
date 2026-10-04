@@ -57,6 +57,41 @@ TEST(RSLT_ChannelNumber_IsDedicated, Correct) {
     EXPECT_TRUE(RSLChannelNumber::isDedicated(RSLChannelNumber::encode(RSLChannelNumber::BmAcch, 7))); // TCH/F ACCH
 }
 
+// Golden: the TCH/H sub-slot channel codes pack as a four-bit tag plus one
+// sub-channel bit (TS 48.058 9.3.1): the Lm codes '0001s'B are 2..3 and the
+// VAMOS Lm codes '1111s'B are 30..31; encode/decode round-trips preserve both
+// the five-bit code and the timeslot, and the VAMOS sub-slot stays a dedicated
+// channel.
+TEST(RSLT_ChannelNumber_VamosLm, Codes) {
+    EXPECT_EQ(static_cast<uint8_t>(RSLChannelNumber::Lm), 0x02u);
+    EXPECT_EQ(static_cast<uint8_t>(RSLChannelNumber::VamosLm), 0x1Eu);
+
+    const uint8_t lmCodes[2] = {RSLChannelNumber::Lm, RSLChannelNumber::Lm + 1};            // 2, 3
+    const uint8_t vamosCodes[2] = {RSLChannelNumber::VamosLm, RSLChannelNumber::VamosLm + 1}; // 30, 31
+    for (uint8_t code : lmCodes) {
+        for (uint8_t ts = 0; ts < 8; ++ts) {
+            const uint8_t encoded = RSLChannelNumber::encode(code, ts);
+            EXPECT_EQ(RSLChannelNumber::getCBits(encoded), code)
+                << "code=" << static_cast<int>(code) << " ts=" << static_cast<int>(ts);
+            EXPECT_EQ(RSLChannelNumber::getTimeslot(encoded), ts)
+                << "code=" << static_cast<int>(code) << " ts=" << static_cast<int>(ts);
+        }
+    }
+    for (uint8_t sub = 0; sub < 2; ++sub) {
+        const uint8_t code = vamosCodes[sub];
+        EXPECT_EQ(code, static_cast<uint8_t>(30u + sub)); // '11110'B and '11111'B
+        for (uint8_t ts = 0; ts < 8; ++ts) {
+            const uint8_t encoded = RSLChannelNumber::encode(code, ts);
+            EXPECT_EQ(RSLChannelNumber::getCBits(encoded), code)
+                << "code=" << static_cast<int>(code) << " ts=" << static_cast<int>(ts);
+            EXPECT_EQ(RSLChannelNumber::getTimeslot(encoded), ts)
+                << "code=" << static_cast<int>(code) << " ts=" << static_cast<int>(ts);
+            EXPECT_TRUE(RSLChannelNumber::isDedicated(encoded))
+                << "code=" << static_cast<int>(code) << " ts=" << static_cast<int>(ts);
+        }
+    }
+}
+
 // Test: ChannelMode isSignalling/isSpeech/isData return correct values.
 // Importance: BTS must know channel type to select appropriate processing path.
 TEST(RSLT_ChannelMode_SpeechData, Correct) {

@@ -126,17 +126,18 @@ TEST(RSLB_buildChanActivNack_Cause, ParsesBack) {
 
 // Golden: MEAS_RES uplink measurements (TS 48.058 9.3.25) — RX level
 // full=40, sub=35; RX quality full=5, sub=6; DTX downlink clear encode to the
-// three value octets {0x28, 0x23, 0x2E}. The IE sequence MeasResNr + UplinkMeas
-// is the canonical seven-octet vector.
+// three value octets {0x28, 0x23, 0x2E}; BS power 10 is the value octet of
+// the always-present BS Power IE (section 9.3.4). The IE sequence
+// MeasResNr + UplinkMeas + BSPower is the canonical nine-octet vector.
 TEST(RSLB_buildMeasRes_UplinkMeas, RefVector) {
-    auto result = RSLBuilder::buildMeasRes(0x7c, 5, 40, 35, 5, 6, false, 0);
+    auto result = RSLBuilder::buildMeasRes(0x7c, 5, 40, 35, 5, 6, false, 10, 0);
     ASSERT_TRUE(result.has_value());
     auto parsed = RSLParser::parse(*result);
     ASSERT_TRUE(parsed.has_value());
     EXPECT_EQ((*parsed).msgType, static_cast<uint8_t>(RSLDChanMessageType::MeasRes));
 
-    // Seven-octet IE vector: MeasResNr TV (2) + UplinkMeas LV (5).
-    const uint8_t expectedIes[7] = {0x1B, 0x05, 0x19, 0x03, 0x28, 0x23, 0x2E};
+    // Nine-octet IE vector: MeasResNr TV (2) + UplinkMeas LV (5) + BSPower TV (2).
+    const uint8_t expectedIes[9] = {0x1B, 0x05, 0x19, 0x03, 0x28, 0x23, 0x2E, 0x04, 0x0A};
     ASSERT_GE((*result).size(), 4u + sizeof(expectedIes));
     EXPECT_EQ(0, std::memcmp((*result).data() + 4, expectedIes, sizeof(expectedIes)));
 
@@ -152,6 +153,12 @@ TEST(RSLB_buildMeasRes_UplinkMeas, RefVector) {
     EXPECT_EQ(uplinkIE->val[1], 0x23u);
     EXPECT_EQ(uplinkIE->val[2], 0x2Eu);
 
+    // BS Power IE: always present between Uplink Measurements and L1 Info.
+    auto* bsPowerIE = RSLParser::findIE(*parsed, RSL_IE::BSPower);
+    ASSERT_NE(bsPowerIE, nullptr);
+    EXPECT_EQ(bsPowerIE->len, 1u);
+    EXPECT_EQ(bsPowerIE->val[0], 10u);
+
     auto meas = RSLParser::getUplinkMeas(*parsed);
     ASSERT_TRUE(meas.has_value());
     EXPECT_FALSE(meas->dtxDownlink);
@@ -164,10 +171,11 @@ TEST(RSLB_buildMeasRes_UplinkMeas, RefVector) {
     EXPECT_EQ(RSLParser::findIE(*parsed, RSL_IE::L1Info), nullptr);
 }
 
-// Test: Build MEAS_RES with the DTX downlink indicator set and a non-zero L1
-// information octet (TS 48.058 9.3.25/9.3.10) and parse back.
+// Test: Build MEAS_RES with the DTX downlink indicator set, a BS power level
+// and a non-zero L1 information octet (TS 48.058 9.3.25/9.3.4/9.3.10) and
+// parse back.
 TEST(RSLB_buildMeasRes_DtxAndL1Info, ParsesBack) {
-    auto result = RSLBuilder::buildMeasRes(0x7c, 5, 40, 35, 5, 6, true, 0x1A);
+    auto result = RSLBuilder::buildMeasRes(0x7c, 5, 40, 35, 5, 6, true, 25, 0x1A);
     ASSERT_TRUE(result.has_value());
     auto parsed = RSLParser::parse(*result);
     ASSERT_TRUE(parsed.has_value());
@@ -182,6 +190,12 @@ TEST(RSLB_buildMeasRes_DtxAndL1Info, ParsesBack) {
     EXPECT_TRUE(meas->dtxDownlink);
     EXPECT_EQ(meas->rxlevFull, 40u);
 
+    // BS Power IE: always present (TS 48.058 section 9.3.4).
+    auto* bsIE = RSLParser::findIE(*parsed, RSL_IE::BSPower);
+    ASSERT_NE(bsIE, nullptr);
+    EXPECT_EQ(bsIE->len, 1u);
+    EXPECT_EQ(bsIE->val[0], 25u);
+
     auto* l1IE = RSLParser::findIE(*parsed, RSL_IE::L1Info);
     ASSERT_NE(l1IE, nullptr);
     EXPECT_EQ(l1IE->len, 2u);
@@ -192,7 +206,7 @@ TEST(RSLB_buildMeasRes_DtxAndL1Info, ParsesBack) {
 // Test: excess high bits of the measurement fields are discarded on encode
 // (RX level is six-bit, RX quality three-bit, TS 48.058 9.3.25).
 TEST(RSLB_buildMeasRes_FieldMasking, TruncatedToWidth) {
-    auto result = RSLBuilder::buildMeasRes(0x7c, 1, 0xFF, 0xFF, 0xFF, 0xFF, false, 0);
+    auto result = RSLBuilder::buildMeasRes(0x7c, 1, 0xFF, 0xFF, 0xFF, 0xFF, false, 31, 0);
     ASSERT_TRUE(result.has_value());
     auto parsed = RSLParser::parse(*result);
     ASSERT_TRUE(parsed.has_value());
@@ -209,6 +223,11 @@ TEST(RSLB_buildMeasRes_FieldMasking, TruncatedToWidth) {
     EXPECT_EQ(meas->rxlevSub, 63u);
     EXPECT_EQ(meas->rxqFull, 7u);
     EXPECT_EQ(meas->rxqSub, 7u);
+
+    // BS power level is five-bit (0-31): the maximum passes through intact.
+    auto* bsIE = RSLParser::findIE(*parsed, RSL_IE::BSPower);
+    ASSERT_NE(bsIE, nullptr);
+    EXPECT_EQ(bsIE->val[0], 31u);
 }
 
 // Test: Build CCCH_LOAD_IND and parse back. The RACH Load IE is TV-encoded

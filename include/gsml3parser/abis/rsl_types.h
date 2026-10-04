@@ -452,8 +452,8 @@ enum class RSLErrorCause : uint8_t {
 /// RSL Channel Number IE value coding (TS 48.058 9.3.1): a five-bit channel
 /// code in the high bits and a three-bit timeslot number in the low bits,
 /// i.e. value = (code << 3) | tn. Sub-channelized types use the code base
-/// plus the sub-channel index: Lm codes 2..3 ('0001's'B), SDCCH/4 codes
-/// 4..7 ('001'ss'B), SDCCH/8 codes 8..15 ('01sss'B).
+/// plus the sub-channel index: Lm codes 2..3 ('0001s'B) and VAMOS Lm codes
+/// 30..31 ('1111s'B), SDCCH/4 codes 4..7, SDCCH/8 codes 8..15.
 struct RSLChannelNumber {
     // Channel codes (the five most significant bits of the IE value).
     static constexpr uint8_t Invalid = 0x00; ///< '00000'B — invalid
@@ -468,6 +468,7 @@ struct RSLChannelNumber {
     static constexpr uint8_t Cbch4   = 0x19; ///< '11001'B — CBCH/4 (vendor extension)
     static constexpr uint8_t Cbch8   = 0x1A; ///< '11010'B — CBCH/8 (vendor extension)
     static constexpr uint8_t VamosBm = 0x1D; ///< '11101'B — VAMOS TCH/F ACCH (vendor extension)
+    static constexpr uint8_t VamosLm = 0x1E; ///< '1111s'B — VAMOS TCH/H sub-slot (vendor extension), add 0/1
 
     /// Encode a channel number from the five-bit code and timeslot.
     /// @param code Channel type code (0-31, see constants above)

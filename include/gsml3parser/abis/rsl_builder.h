@@ -174,6 +174,8 @@ public:
     /// @param rxqFull RX quality on full rate (0-7).
     /// @param rxqSub RX quality on sub rate (0-7).
     /// @param dtxDownlink Downlink DTX indicator bit (dtx_d).
+    /// @param bsPower BS power level (0-31), the value octet of the
+    ///        always-present BS Power IE (TS 48.058 section 9.3.4).
     /// @param l1Info Value octet of the optional L1 Information IE (MS power
     ///        level and FPC bit, TS 48.058 section 9.3.10); zero omits the IE,
     ///        a non-zero value emits it with a zero actual-timing-advance
@@ -182,13 +184,13 @@ public:
     [[nodiscard]] static Expected<std::vector<uint8_t>> buildMeasRes(
         uint8_t chanNr, uint8_t measNr,
         uint8_t rxlevFull, uint8_t rxlevSub, uint8_t rxqFull, uint8_t rxqSub,
-        bool dtxDownlink, uint8_t l1Info);
+        bool dtxDownlink, uint8_t bsPower, uint8_t l1Info);
 
     /// Build MEAS_RES into pre-allocated buffer (zero heap alloc).
     [[nodiscard]] static int buildMeasRes(std::span<uint8_t> out,
         uint8_t chanNr, uint8_t measNr,
         uint8_t rxlevFull, uint8_t rxlevSub, uint8_t rxqFull, uint8_t rxqSub,
-        bool dtxDownlink, uint8_t l1Info);
+        bool dtxDownlink, uint8_t bsPower, uint8_t l1Info);
 
     /// Build HANDO_DET message (handover detection report).
     /// @param chanNr Source channel number.

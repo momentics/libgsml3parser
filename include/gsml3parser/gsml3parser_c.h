@@ -314,12 +314,13 @@ GSML3_C_API size_t gsml3_rsl_build_rf_chan_rel_ack(uint8_t* out, size_t maxlen,
 GSML3_C_API size_t gsml3_rsl_build_conn_fail(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, int cause);
 /* Uplink measurements: six-bit RX levels, three-bit RX qualities (TS 48.058
- * section 9.3.25), the downlink DTX indicator bit (0/1) and the optional L1
- * information octet (section 9.3.10; 0 omits the L1 Information IE). */
+ * section 9.3.25), the downlink DTX indicator bit (0/1), the always-present
+ * BS power level (0-31, section 9.3.4) and the optional L1 information octet
+ * (section 9.3.10; 0 omits the L1 Information IE). */
 GSML3_C_API size_t gsml3_rsl_build_meas_res(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t meas_nr,
     uint8_t rxlev_full, uint8_t rxlev_sub, uint8_t rxq_full, uint8_t rxq_sub,
-    int dtx_downlink, uint8_t l1_info);
+    int dtx_downlink, uint8_t bs_power, uint8_t l1_info);
 GSML3_C_API size_t gsml3_rsl_build_hando_det(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t access_delay);
 GSML3_C_API size_t gsml3_rsl_build_ccch_load_ind(uint8_t* out, size_t maxlen,

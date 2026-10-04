@@ -311,9 +311,9 @@ void writeUplinkMeasValue(uint8_t* uplinkData, uint8_t rxlevFull, uint8_t rxlevS
 Expected<std::vector<uint8_t>> RSLBuilder::buildMeasRes(
     uint8_t chanNr, uint8_t measNr,
     uint8_t rxlevFull, uint8_t rxlevSub, uint8_t rxqFull, uint8_t rxqSub,
-    bool dtxDownlink, uint8_t l1Info)
+    bool dtxDownlink, uint8_t bsPower, uint8_t l1Info)
 {
-    const size_t estSize = RSL_HEADER_SIZE + 2 + 2 + 3 + (l1Info ? 3 : 0);
+    const size_t estSize = RSL_HEADER_SIZE + 2 + 2 + 3 + 2 + (l1Info ? 3 : 0);
     return buildVector({estSize},
         [&](std::span<uint8_t> out) {
             int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::MeasRes), chanNr);
@@ -325,6 +325,10 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildMeasRes(
             uint8_t uplinkData[3];
             writeUplinkMeasValue(uplinkData, rxlevFull, rxlevSub, rxqFull, rxqSub, dtxDownlink);
             off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::UplinkMeas), uplinkData, 3);
+            // BS Power IE (TV, 1 octet): always present in MEASUREMENT RESULT,
+            // between the Uplink Measurements and the L1 Information IEs
+            // (TS 48.058 section 9.3.4).
+            off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::BSPower), &bsPower, 1);
             // Optional L1Info IE (TV, fixed two octets per TS 48.058 9.3.10).
             if (l1Info != 0) {
                 uint8_t l1Bytes[2] = {l1Info, 0x00};
@@ -336,7 +340,7 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildMeasRes(
 
 int RSLBuilder::buildMeasRes(std::span<uint8_t> out, uint8_t chanNr, uint8_t measNr,
     uint8_t rxlevFull, uint8_t rxlevSub, uint8_t rxqFull, uint8_t rxqSub,
-    bool dtxDownlink, uint8_t l1Info)
+    bool dtxDownlink, uint8_t bsPower, uint8_t l1Info)
 {
     int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::MeasRes), chanNr);
     if (n < 0) return -1;
@@ -345,6 +349,8 @@ int RSLBuilder::buildMeasRes(std::span<uint8_t> out, uint8_t chanNr, uint8_t mea
     uint8_t uplinkData[3];
     writeUplinkMeasValue(uplinkData, rxlevFull, rxlevSub, rxqFull, rxqSub, dtxDownlink);
     off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::UplinkMeas), uplinkData, 3);
+    // BS Power IE (TV, 1 octet): always present (TS 48.058 section 9.3.4).
+    off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::BSPower), &bsPower, 1);
     if (l1Info != 0) {
         uint8_t l1Bytes[2] = {l1Info, 0x00};
         off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::L1Info), l1Bytes, 2);

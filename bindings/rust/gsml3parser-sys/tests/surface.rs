@@ -163,6 +163,7 @@ fn _use_all_134() {
         u8,
         u8,
         c_int,
+        c_uchar,
         u8,
     ) -> usize = gsml3parser_sys::gsml3_rsl_build_meas_res;
     let _: unsafe extern "C" fn(

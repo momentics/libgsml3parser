@@ -164,8 +164,9 @@ int main()
     std::cout << "\n[4] BTS->BSC: DCHAN MEAS_RES with uplink measurements\n";
     {
         // Uplink measurements (TS 48.058 9.3.25): six-bit RX levels, three-bit
-        // RX qualities, DTX downlink clear, no L1 information octet.
-        auto measFrame = RSLBuilder::buildMeasRes(0x7c, 1, 40, 35, 5, 6, false, 0);
+        // RX qualities, DTX downlink clear, BS power level 10 (section 9.3.4),
+        // no L1 information octet.
+        auto measFrame = RSLBuilder::buildMeasRes(0x7c, 1, 40, 35, 5, 6, false, 10, 0);
         if (!measFrame) {
             std::cerr << "  ERROR: Failed to build MEAS_RES\n";
             return 1;

@@ -364,8 +364,9 @@ PROTOTYPES = {
     "gsml3_rsl_build_rf_chan_rel_ack": ("SZ", ("PB", "SZ", "U8")),
     "gsml3_rsl_build_conn_fail":       ("SZ", ("PB", "SZ", "U8", "I")),  # cause range-checked
     # Uplink measurements (TS 48.058 9.3.25): six-bit RX levels, three-bit
-    # RX qualities, DTX downlink flag (C int), optional L1 information octet.
-    "gsml3_rsl_build_meas_res":        ("SZ", ("PB", "SZ", "U8", "U8", "U8", "U8", "U8", "U8", "I", "U8")),
+    # RX qualities, DTX downlink flag (C int), always-present BS power level
+    # (section 9.3.4), optional L1 information octet.
+    "gsml3_rsl_build_meas_res":        ("SZ", ("PB", "SZ", "U8", "U8", "U8", "U8", "U8", "U8", "I", "U8", "U8")),
     "gsml3_rsl_build_hando_det":       ("SZ", ("PB", "SZ", "U8", "U8")),
     "gsml3_rsl_build_ccch_load_ind":   ("SZ", ("PB", "SZ", "U8", "U16", "U16", "U16", "U16")),
     "gsml3_rsl_build_chan_rqd":        ("SZ", ("PB", "SZ", "U8", "U8", "U8", "U8", "U8", "U8")),
