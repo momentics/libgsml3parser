@@ -940,18 +940,6 @@ class Message:
         self._check()
         return int(lib.gsml3_msg_cp_status_message_ref(self._h))
 
-    def sms_deliver_tp_mti(self) -> int:
-        self._check()
-        return int(lib.gsml3_msg_sms_deliver_tp_mti(self._h))
-
-    def sms_deliver_tp_mr(self) -> int:
-        self._check()
-        return int(lib.gsml3_msg_sms_deliver_tp_mr(self._h))
-
-    def sms_deliver_has_tp_ud(self) -> int:
-        self._check()
-        return int(lib.gsml3_msg_sms_deliver_has_tp_ud(self._h))
-
     # *S8 body getters (SZ-returning): one shared implementation. C cannot
     # distinguish "IE absent" from "IE present but empty" (both 0, no error) —
     # both surface as b""; real errors (buffer too small, unexpected) raise.*
@@ -968,10 +956,6 @@ class Message:
     def cp_smt_rpdu(self) -> bytes:
         """CP-SM-Send RPDU body; b\"\" when absent or empty."""
         return _message_body_get(self, "gsml3_msg_cp_smt_rpdu")
-
-    def sms_deliver_tp_ud(self) -> bytes:
-        """SMS-DELIVER TP-UD (user data); b\"\" when absent or empty."""
-        return _message_body_get(self, "gsml3_msg_sms_deliver_tp_ud")
 
     def sup_serv_facility_data(self) -> bytes:
         """Supplementary-service facility body; the SS vector of the test
@@ -2075,11 +2059,6 @@ def build_cp_status(tp_oi: int, mti_value: int, has_ref: bool = False, ref: int 
 def build_cp_smt(rpdu) -> bytes:
     b = _byteslike(rpdu, "rpdu")
     return _builder("gsml3_build_cp_smt", (b, len(b)))
-
-
-def build_sms_deliver(tp_mti: int, tp_mr: int, ud) -> bytes:
-    b = _byteslike(ud, "ud")
-    return _builder("gsml3_build_sms_deliver", (_as_u8(tp_mti, "tp_mti"), _as_u8(tp_mr, "tp_mr"), b, len(b)))
 
 
 def build_sup_serv_facility(ti: int, data) -> bytes:

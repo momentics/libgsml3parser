@@ -11,7 +11,7 @@ Dispatch notes:
 - MM/CC/SS/BCC/GCC headers use the six low bits of octet 1 as the messageType: `mti = byte1 & 0x3F` (the two high bits carry the NSD and are informational).
 - GMM/SMS/SM/LS use the raw 8-bit second octet.
 - RR normally uses the raw second octet; with TIF=1 (short messages) the five-bit code in the low bits of octet 1 maps to `mti = kRRTifShortBase | (byte1 & 0x1F)` — internal MTIs ≥ 0x100 are listed with their dispatch value. Unallocated short codes are rejected as InvalidMTI.
-- SMS: the CP-layer classes win the parse slots for MTI 0x12 (`L3CPStatus`) and 0x13 (`L3CPSMT`); `L3SMSProvidedReplyExpected` (0x12) and `L3SMSSubmitRep` (0x13) remain constructible/writable but are not produced by `parseL3`.
+- SMS: only the CP-layer messages are defined for the SMS protocol discriminator (TS 24.011); MTI 0x12 dispatches to `L3CPStatus` and MTI 0x13 to `L3CPSMT`.
 - The synthetic no-header RR messages are routed by frame length, not by an L3 header; their internal MTIs sit above the TIF short range so a wire short frame can never be misclassified as one of them: ChannelRequest (0x181, 1 byte), HandoverAccess (0x182, 4 bytes).
 
 ---
@@ -329,9 +329,9 @@ InvalidMTI.
 
 Enums: `GMMCause`, `GMMAttachType`, `GMMUpdateType`, `GMMDetachTypeMO`, `GMMDetachTypeMT`, `GMMPTMSIType`.
 
-## SMS (PD=0x09) — 19 L3 messages in the `SMS` variant, plus 4 TP types and 4 RP types
+## SMS (PD=0x09) — 5 L3 messages in the `SMS` variant, plus 4 TP types and 4 RP types
 
-The variant holds 5 CP-layer + 14 L3-layer messages. The RP/TP classes below parse payloads inside CP-DATA/CP-SMT frames (not standalone PD=0x09 dispatch).
+The variant holds 5 CP-layer messages. The CP-layer messages follow TS 24.011; no other L3 message types are defined for the SMS protocol discriminator. The RP/TP classes below parse payloads inside CP-DATA/CP-SMT frames (not standalone PD=0x09 dispatch).
 
 ### Control Part (CP) Messages
 
@@ -369,28 +369,6 @@ The variant holds 5 CP-layer + 14 L3-layer messages. The RP/TP classes below par
 | `TPSCTimeStamp` | Service centre time stamp (7 octets) |
 | `TPDCS` | Data coding scheme (Default, 8-bit, UCS2) |
 | `TPPID` | Protocol identifier (GSM, X121, Telex, etc.) |
-
-### SMS L3 Messages (14 types, TS 24.008 9.6)
-
-No normative reference templates exist for this block (MTI 0x11–0x1E): the fields below are a
-best-effort interpretation, and bit-level conformance is not claimed.
-
-| Message | MTI | Direction | Description |
-|---------|-----|-----------|-------------|
-| `L3SMSStatusReport` | 0x11 | Bidir | TP-MR, RP-Disp, [TP-DA], [TP-OA], [SCTS], [MT-StartTime], TP-ST |
-| `L3SMSProvidedReplyExpected` | 0x12 | DL | [TP-PID], TP-DCS, [TP-Ud] — shadowed by L3CPStatus in parse dispatch |
-| `L3SMSSubmitRep` | 0x13 | DL | [TP-PID], TP-DCS, [TP-Ud] — shadowed by L3CPSMT in parse dispatch |
-| `L3SMSDeliver` | 0x14 | DL | TP-MTI, TP-MR, [TP-OA], TP-PID, TP-DCS, SCTS, [TP-Ud] |
-| `L3SMSDeliverRep` | 0x15 | UL | TP-MTI, TP-MR, [TP-DA], TP-PID, TP-DCS, [TP-Ud] |
-| `L3SMSStatusReportAck` | 0x16 | UL | TP-MR |
-| `L3SMSStatusReportReject` | 0x17 | DL | TP-MR, SM-Cause |
-| `L3SMSTSReject` | 0x18 | DL | SM-Cause |
-| `L3SMSSubmitDeferred` | 0x19 | DL | [TP-PID], TP-DCS, [TP-Ud] |
-| `L3SMSSubmitReject` | 0x1A | DL | SM-Cause |
-| `L3SMSSFProvidedRep` | 0x1B | UL | [TP-PID], TP-DCS, [TP-Ud] |
-| `L3SMSSFProvidedRepAck` | 0x1C | DL | Empty body |
-| `L3SMSNotification` | 0x1D | Bidir | [TP-PID], TP-DCS, [TP-Ud] |
-| `L3SMSShortCodeInfo` | 0x1E | Bidir | ShortCodeType, [ShortCode] |
 
 ## GPRS Session Management (PD=0x0a) — 24 message types
 

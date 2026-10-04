@@ -34,40 +34,39 @@
 28. [Broadcast Call Control Messages](#28-broadcast-call-control-messages)
 29. [Group Call Control Messages](#29-group-call-control-messages)
 30. [Location Services Messages](#30-location-services-messages)
-31. [SMS L3 Messages](#31-sms-l3-messages)
-32. [Extended PD Messages](#32-extended-pd-messages)
-33. [Test Procedure PD Messages](#33-test-procedure-pd-messages)
-34. [MSContext - Per-Subscriber State](#34-mscontext-per-subscriber-state)
-35. [Timer Framework](#35-timer-framework)
-36. [Transaction Framework](#36-transaction-framework)
-37. [Protocol State Machines](#37-protocol-state-machines)
-38. [Channel Pool - Logical Channel Management](#38-channel-pool-logical-channel-management)
-39. [FlatHandler - Zero-Overhead Callbacks](#39-flathandler-zero-overhead-callbacks)
-40. [ShardedChannelPool - Thread-Safe Channel Pool](#40-shardedchannelpool-thread-safe-channel-pool)
-41. [InlineFramer - Zero-Copy Frame Extraction](#41-inlineframer-zero-copy-frame-extraction)
-42. [ZeroCopyStreamProcessor - Zero-Copy Stream Parsing](#42-zerocopystreamparser-zero-copy-stream-parsing)
-43. [Subscriber Registry - Subscriber Session Management](#43-subscriber-registry-subscriber-session-management)
-44. [RSL Types - A-bis RSL Type Definitions](#44-rsl-types-abis-rsl-type-definitions)
-45. [RSL Parser - A-bis RSL Message Parsing](#45-rsl-parser-abis-rsl-message-parsing)
-46. [RSL Builder - A-bis RSL Message Construction](#46-rsl-builder-abis-rsl-message-construction)
-47. [Procedure Framework - Protocol Procedure Base Class](#47-procedure-framework-protocol-procedure-base-class)
-48. [Procedure Runner - Concurrent Procedure Manager](#48-procedure-runner-concurrent-procedure-manager)
-49. [Typed External Data - Strongly-Typed External Data Structures](#49-typed-external-data-strongly-typed-external-data-structures)
-50. [ProcedureStateMixin - CRTP Mixin for Common Procedure Code](#50-procedurestatemixin-crtp-mixin-for-common-procedure-code)
-51. [Procedure Orchestrator - Chained Protocol Procedures](#51-procedure-orchestrator-chained-protocol-procedures)
-52. [Location Update Procedure](#52-location-update-procedure)
-53. [Authentication Procedure](#53-authentication-procedure)
-54. [Call Setup MO Procedure](#54-call-setup-mo-procedure)
-55. [Call Setup MT Procedure](#55-call-setup-mt-procedure)
-56. [Channel Assignment Procedure](#56-channel-assignment-procedure)
-57. [Ciphering Mode Procedure](#57-ciphering-mode-procedure)
-58. [Paging Procedure](#58-paging-procedure)
-59. [Handover Procedure](#59-handover-procedure)
-60. [Call Release Procedure](#60-call-release-procedure)
-61. [IMSI Detach Procedure](#61-imsi-detach-procedure)
-62. [Performance Optimizations Summary](#62-performance-optimizations-summary)
-63. [C API (gsml3parser_c.h)](#63-c-api-gsml3parser_ch)
-64. [FFI Bindings (Python / Go / Rust)](#64-ffi-bindings-python--go--rust)
+31. [Extended PD Messages](#31-extended-pd-messages)
+32. [Test Procedure PD Messages](#32-test-procedure-pd-messages)
+33. [MSContext - Per-Subscriber State](#33-mscontext-per-subscriber-state)
+34. [Timer Framework](#34-timer-framework)
+35. [Transaction Framework](#35-transaction-framework)
+36. [Protocol State Machines](#36-protocol-state-machines)
+37. [Channel Pool - Logical Channel Management](#37-channel-pool-logical-channel-management)
+38. [FlatHandler - Zero-Overhead Callbacks](#38-flathandler-zero-overhead-callbacks)
+39. [ShardedChannelPool - Thread-Safe Channel Pool](#39-shardedchannelpool-thread-safe-channel-pool)
+40. [InlineFramer - Zero-Copy Frame Extraction](#40-inlineframer-zero-copy-frame-extraction)
+41. [ZeroCopyStreamProcessor - Zero-Copy Stream Parsing](#41-zerocopystreamparser-zero-copy-stream-parsing)
+42. [Subscriber Registry - Subscriber Session Management](#42-subscriber-registry-subscriber-session-management)
+43. [RSL Types - A-bis RSL Type Definitions](#43-rsl-types-abis-rsl-type-definitions)
+44. [RSL Parser - A-bis RSL Message Parsing](#44-rsl-parser-abis-rsl-message-parsing)
+45. [RSL Builder - A-bis RSL Message Construction](#45-rsl-builder-abis-rsl-message-construction)
+46. [Procedure Framework - Protocol Procedure Base Class](#46-procedure-framework-protocol-procedure-base-class)
+47. [Procedure Runner - Concurrent Procedure Manager](#47-procedure-runner-concurrent-procedure-manager)
+48. [Typed External Data - Strongly-Typed External Data Structures](#48-typed-external-data-strongly-typed-external-data-structures)
+49. [ProcedureStateMixin - CRTP Mixin for Common Procedure Code](#49-procedurestatemixin-crtp-mixin-for-common-procedure-code)
+50. [Procedure Orchestrator - Chained Protocol Procedures](#50-procedure-orchestrator-chained-protocol-procedures)
+51. [Location Update Procedure](#51-location-update-procedure)
+52. [Authentication Procedure](#52-authentication-procedure)
+53. [Call Setup MO Procedure](#53-call-setup-mo-procedure)
+54. [Call Setup MT Procedure](#54-call-setup-mt-procedure)
+55. [Channel Assignment Procedure](#55-channel-assignment-procedure)
+56. [Ciphering Mode Procedure](#56-ciphering-mode-procedure)
+57. [Paging Procedure](#57-paging-procedure)
+58. [Handover Procedure](#58-handover-procedure)
+59. [Call Release Procedure](#59-call-release-procedure)
+60. [IMSI Detach Procedure](#60-imsi-detach-procedure)
+61. [Performance Optimizations Summary](#61-performance-optimizations-summary)
+62. [C API (gsml3parser_c.h)](#62-c-api-gsml3parser_ch)
+63. [FFI Bindings (Python / Go / Rust)](#63-ffi-bindings-python--go--rust)
 
 ---
 
@@ -437,7 +436,7 @@ using CCM      = std::variant< /* 21 CC types */ >;
 using SSM      = std::variant< /* 3 SS types */ >;
 using GMM      = std::variant< /* 23 GMM types */ >;
 using SM       = std::variant< /* 24 SM types */ >;
-using SMS      = std::variant< /* 19 SMS types (5 CP + 14 L3) */ >;
+using SMS      = std::variant< /* 5 SMS CP types */ >;
 using BCCM     = std::variant< /* 8 BCC types */ >;
 using GCCM     = std::variant< /* 8 GCC types */ >;
 using LSM      = std::variant< /* 2 LS types */ >;
@@ -1440,7 +1439,7 @@ Builder patterns are implemented for all message types across all 12 protocol do
 | **CC** | All 21 types (Setup, Notify, Connect, Disconnect, Release, DTMF, Hold, Facility, Progress, etc.) |
 | **GMM** | All 23 types (Attach, Detach, RA Update, Service Request, P-TMSI Reallocation, Auth+Ciphering, GMM Identity, etc.) |
 | **SM** | All 24 types (Activate/Deactivate/Modify PDP Context, Secondary/MBMS contexts, Notification) |
-| **SMS** | 19 L3 messages in the variant (5 CP + 14 SMS L3) plus the RP payload classes (RPData/RPAck/RPError/RPSMMA) and TP PDUs (Deliver/Submit/StatusReport/Command) |
+| **SMS** | 5 CP-layer L3 messages in the variant (CP-DATA/CP-ACK/CP-ERROR/CP-STATUS/CP-SUBMIT) plus the RP payload classes (RPData/RPAck/RPError/RPSMMA) and TP PDUs (Deliver/Submit/StatusReport/Command) |
 | **BCC** | All 8 types |
 | **GCC** | All 8 types |
 | **LS** | Both types |
@@ -2510,11 +2509,11 @@ The request type (TS 44.068 section 10.5.6.17) is carried in one octet: the high
 
 ## 27. SMS Messages
 
-**File:** `gsml3parser/sms/l3smsmessages.h` - 5 CP messages; `gsml3parser/sms/l3smsl3messages.h` - 14 L3 messages; total 19 in the `SMS` variant.
-**Spec:** 3GPP TS 24.011 sections 7-8, 3GPP TS 23.040 (CP/RP/TP layers); 3GPP TS 24.008 sections 9.6, Table 10.6a (SMS L3 primitives).
+**File:** `gsml3parser/sms/l3smsmessages.h` - 5 CP messages in the `SMS` variant; `gsml3parser/sms/l3smselements.h` - RP and TP types.
+**Spec:** 3GPP TS 24.011 sections 7-8, 3GPP TS 23.040 (CP/RP/TP layers); 3GPP TS 24.008 Table 10.6a (SMS control part).
 **PD:** `0x09` (SMS).
 
-The SMS layer uses a three-level encapsulation: L3 header -> CP message -> RP message -> TP PDU. Additionally, the SMS L3 messages (MTI=0x11–0x1E) provide TE-to-MS SMS primitives for status reporting, deliver/reply, and notification flows.
+The SMS layer uses a three-level encapsulation: L3 header -> CP message -> RP message -> TP PDU. Only CP-DATA/CP-ACK/CP-ERROR/CP-STATUS/CP-SUBMIT are defined for the SMS PD (TS 24.011); other MTI values are not assigned.
 
 ### CP Cause Codes
 
@@ -2652,64 +2651,7 @@ Location Services messages carry mobile location service parameters between the 
 
 ---
 
-## 31. SMS L3 Messages
-
-**File:** `gsml3parser/sms/l3smsl3messages.h` - 14 message types, part of the `SMS` variant.
-**Spec:** 3GPP TS 24.008 sections 9.6.1–9.6.14, Table 10.6a.
-**PD:** `0x09` (SMS).
-
-These are L3-level SMS primitives used for SMS-on-CS fallback, status reporting, and network-initiated SMS delivery. They share the PD with CP-layer messages but operate in a different context. MTI 0x12 and 0x13 overlap with CP-STATUS and CP-SMT; the parser resolves overlaps by preferring CP messages. No normative reference templates exist for this block (MTI 0x11–0x1E), so parsing is best-effort and bit-level conformance is not claimed.
-
-### SMS L3 Enums
-
-| Enum | Values | Description |
-|------|--------|-------------|
-| `TPStatus` | 5 values | Delivered, DeliveryAttempted, ErasedAtMS, DeliveryNotPossible, Decrypted |
-| `RPDisposalType` | 4 values | NoFurtherAction, DisplayToUser, StoreInSIM, DeleteFromMS |
-| `SMSCause` | 8 codes | SMS-specific cause values (NoCause, SMSSystemFailure, etc.) |
-
-### SMS L3 Messages - Status Report Flow
-
-| Message | MTI | Direction | Description |
-|---------|-----|-----------|-------------|
-| `L3SMSStatusReport` | 0x11 | Bidir | TP-MR, RP-Disp, [TP-DA], [TP-OA], [SCTS], [MT-StartTime], TP-ST |
-| `L3SMSProvidedReplyExpected` | 0x12 | DL | [TP-PID], TP-DCS, [TP-Ud] |
-| `L3SMSSubmitRep` | 0x13 | DL | [TP-PID], TP-DCS, [TP-Ud] |
-
-### SMS L3 Messages - Deliver Flow
-
-| Message | MTI | Direction | Description |
-|---------|-----|-----------|-------------|
-| `L3SMSDeliver` | 0x14 | DL | TP-MTI, TP-MR, [TP-OA], TP-PID, TP-DCS, SCTS, [TP-Ud] |
-| `L3SMSDeliverRep` | 0x15 | UL | TP-MTI, TP-MR, [TP-DA], TP-PID, TP-DCS, [TP-Ud] |
-
-### SMS L3 Messages - Status Ack/Reject
-
-| Message | MTI | Direction | Description |
-|---------|-----|-----------|-------------|
-| `L3SMSStatusReportAck` | 0x16 | UL | TP-MR |
-| `L3SMSStatusReportReject` | 0x17 | DL | TP-MR, SM-Cause |
-| `L3SMSTSReject` | 0x18 | DL | SM-Cause |
-
-### SMS L3 Messages - Submit Control
-
-| Message | MTI | Direction | Description |
-|---------|-----|-----------|-------------|
-| `L3SMSSubmitDeferred` | 0x19 | DL | [TP-PID], TP-DCS, [TP-Ud] |
-| `L3SMSSubmitReject` | 0x1A | DL | SM-Cause |
-
-### SMS L3 Messages - Service Centre & Notification
-
-| Message | MTI | Direction | Description |
-|---------|-----|-----------|-------------|
-| `L3SMSSFProvidedRep` | 0x1B | UL | [TP-PID], TP-DCS, [TP-Ud] |
-| `L3SMSSFProvidedRepAck` | 0x1C | DL | Empty body |
-| `L3SMSNotification` | 0x1D | Bidir | [TP-PID], TP-DCS, [TP-Ud] |
-| `L3SMSShortCodeInfo` | 0x1E | Bidir | ShortCodeType, [ShortCode] |
-
----
-
-## 32. Extended PD Messages
+## 31. Extended PD Messages
 
 **File:** `gsml3parser/extended/l3extendedmessages.h` - 1 placeholder type in the `EXTENDED` variant.
 **Spec:** GSM 04.08 §10.2.
@@ -2728,7 +2670,7 @@ The Extended PD provides infrastructure for future extended protocol discriminat
 
 ---
 
-## 33. Test Procedure PD Messages
+## 32. Test Procedure PD Messages
 
 **File:** `gsml3parser/testproc/l3testproceduremessages.h` - 1 placeholder type in the `TESTPROC` variant.
 **Spec:** GSM 04.08 §10.2.
@@ -2747,7 +2689,7 @@ The Test Procedure PD provides infrastructure for test procedure messages used i
 
 ---
 
-## 34. MSContext - Per-Subscriber State
+## 33. MSContext - Per-Subscriber State
 
 MSContext aggregates all state associated with a single mobile station: identity (TMSI/IMSI), channel assignment, classmark, location area, and protocol-layer flags (ciphering, registration, authentication). This is the primary object through which a BTS tracks each subscriber.
 
@@ -2830,7 +2772,7 @@ ctx.setRegistered(true);
 
 ---
 
-## 35. Timer Framework
+## 34. Timer Framework
 
 The timer framework provides GSM Layer 3 protocol timers as defined in 3GPP TS 24.008 and TS 44.018. It includes timer identifiers, a single-timer class, and a manager that tracks up to 32 concurrent timers per MS using fixed-size arrays (zero heap allocation).
 
@@ -2947,7 +2889,7 @@ if (tm.isRunning(L3TimerId::T3101)) {
 
 ---
 
-## 36. Transaction Framework
+## 35. Transaction Framework
 
 The transaction framework provides request-response correlation for L3 messaging. It tracks outgoing requests and matches incoming responses using either TI (Transaction Identifier) for CC/SS protocols or PD+MTI for other protocol discriminators.
 
@@ -3077,7 +3019,7 @@ tm.cleanup();
 
 ---
 
-## 37. Protocol State Machines
+## 36. Protocol State Machines
 
 **File:** `gsml3parser/stack/state_machine.h` - FSM base class and RR/MM/CC skeleton implementations.
 **Spec:** 3GPP TS 24.008 Chapters 4-6 (RR, MM, CC procedures).
@@ -3256,7 +3198,7 @@ protected:
 
 ---
 
-## 38. Channel Pool - Logical Channel Management
+## 37. Channel Pool - Logical Channel Management
 
 **File:** `gsml3parser/stack/channel_pool.h`
 
@@ -3397,7 +3339,7 @@ pool.release(*ch);
 
 ---
 
-## 39. FlatHandler - Zero-Overhead Callbacks
+## 38. FlatHandler - Zero-Overhead Callbacks
 
 **File:** `gsml3parser/flat_handler.h`
 
@@ -3503,7 +3445,7 @@ h2(parsedMsg);
 
 ---
 
-## 40. ShardedChannelPool - Thread-Safe Channel Pool
+## 39. ShardedChannelPool - Thread-Safe Channel Pool
 
 **File:** `gsml3parser/stack/sharded_channel_pool.h`
 
@@ -3603,7 +3545,7 @@ for (auto& t : workers) t.join();
 
 ---
 
-## 41. InlineFramer - Zero-Copy Frame Extraction
+## 40. InlineFramer - Zero-Copy Frame Extraction
 
 **File:** `gsml3parser/bitstream/inline_framer.h` (header-only)
 
@@ -3665,7 +3607,7 @@ NOT thread-safe. One instance per buffer, single-threaded use. Safe for concurre
 
 ---
 
-## 42. ZeroCopyStreamProcessor - Zero-Copy Stream Parsing
+## 41. ZeroCopyStreamProcessor - Zero-Copy Stream Parsing
 
 **File:** `gsml3parser/bitstream/zero_copy_processor.h` (header-only)
 
@@ -3733,7 +3675,7 @@ NOT thread-safe. Safe for concurrent use when each thread has its own instance o
 
 ---
 
-## 43. Subscriber Registry - Subscriber Session Management
+## 42. Subscriber Registry - Subscriber Session Management
 
 **File:** `gsml3parser/stack/subscriber_registry.h`
 
@@ -3859,7 +3801,7 @@ registry.remove(session);
 
 ---
 
-## 44. RSL Types - A-bis RSL Type Definitions
+## 43. RSL Types - A-bis RSL Type Definitions
 
 **Header:** `include/gsml3parser/abis/rsl_types.h`
 **Source:** `src/abis/rsl_types.cpp`
@@ -4038,7 +3980,7 @@ and is not part of this enum.
 
 ---
 
-## 45. RSL Parser - A-bis RSL Message Parsing
+## 44. RSL Parser - A-bis RSL Message Parsing
 
 **Header:** `include/gsml3parser/abis/rsl_parser.h`
 **Source:** `src/abis/rsl_parser.cpp`
@@ -4093,7 +4035,7 @@ Extract encryption parameters from ENCR_CMD. Returns `optional<RSLEncryptionInfo
 
 ---
 
-## 46. RSL Builder - A-bis RSL Message Construction
+## 45. RSL Builder - A-bis RSL Message Construction
 
 **Header:** `include/gsml3parser/abis/rsl_builder.h`
 **Source:** `src/abis/rsl_builder.cpp`
@@ -4136,7 +4078,7 @@ Every method has a `static int buildXxx(std::span<uint8_t> out, ...)` overload t
 
 ---
 
-## 47. Procedure Framework - Protocol Procedure Base Class
+## 46. Procedure Framework - Protocol Procedure Base Class
 
 **File:** `gsml3parser/stack/procedure.h`
 **Namespace:** `gsml3parser`
@@ -4293,7 +4235,7 @@ if (result.action == ProcedureStepResult::Action::Completed) {
 
 ---
 
-## 48. Procedure Runner - Concurrent Procedure Manager
+## 47. Procedure Runner - Concurrent Procedure Manager
 
 **File:** `gsml3parser/stack/procedure_runner.h`
 **Namespace:** `gsml3parser`
@@ -4406,7 +4348,7 @@ size_t failed = runner.tickAll(std::chrono::milliseconds(100));
 
 ---
 
-## 49. Typed External Data - Strongly-Typed External Data Structures
+## 48. Typed External Data - Strongly-Typed External Data Structures
 
 **File:** `gsml3parser/stack/typed_external_data.h`
 **Namespace:** `gsml3parser`
@@ -4513,7 +4455,7 @@ auto result2 = orchestrator.feedExternalTyped(vlr);
 
 ---
 
-## 50. ProcedureStateMixin - CRTP Mixin for Common Procedure Code
+## 49. ProcedureStateMixin - CRTP Mixin for Common Procedure Code
 
 **File:** `gsml3parser/stack/procedure_state_mixin.h` (header-only template)
 **Namespace:** `gsml3parser`
@@ -4585,7 +4527,7 @@ private:
 
 ---
 
-## 51. Procedure Orchestrator - Chained Protocol Procedures
+## 50. Procedure Orchestrator - Chained Protocol Procedures
 
 **File:** `gsml3parser/stack/procedure_orchestrator.h` / `gsml3parser/stack/procedure_orchestrator.cpp`
 **Namespace:** `gsml3parser`
@@ -4642,7 +4584,7 @@ Auto-chains currently triggered by the detector:
 | Chain (trigger) | Phases | Terminal event |
 |-----------------|--------|----------------|
 | Location Update (CMServiceRequest, LU service type) | CMServiceAccept -> Authentication *or* IdentityVerification (TMSI absent) -> CipheringMode (CipheringParameters) -> LocationUpdate (VLRDecision; T3103 5 s) | VLR accept/reject (`LocationUpdatingAccept` / `LocationUpdatingReject`), or T3103/identity timeouts |
-| Call Setup MO (CMServiceRequest, MO call service type) | CMServiceAccept -> `CallSetupMOPercedure` (§54) | procedure Completed (`"call_active"`), Failed, or T3101 timeout |
+| Call Setup MO (CMServiceRequest, MO call service type) | CMServiceAccept -> `CallSetupMOPercedure` (§53) | procedure Completed (`"call_active"`), Failed, or T3101 timeout |
 | IMSI Detach (IMSI Detach Indication) | inline single phase: sends CM Service Accept | completed (`"imsi_detach_accept"`); MM FSM -> DEREGISTERED |
 | Call Release (CC Disconnect) | inline single phase: records TI + cause, sends CC Release | completed (`"release_sent"`); CC FSM -> RELEASE |
 
@@ -4682,7 +4624,7 @@ if (result.action == ProcedureStepResult::Action::WaitingExternal) {
 
 ---
 
-## 52. Location Update Procedure
+## 51. Location Update Procedure
 
 **File:** `gsml3parser/stack/procedures/location_update.h`
 **Spec:** 3GPP TS 24.008 4.4.1
@@ -4727,7 +4669,7 @@ SRES verification is big-endian: `expectedSres[0]` is the MSB, matching the TS 2
 
 ---
 
-## 53. Authentication Procedure
+## 52. Authentication Procedure
 
 **File:** `gsml3parser/stack/procedures/authentication.h`
 **Spec:** 3GPP TS 24.008 4.4.2
@@ -4759,7 +4701,7 @@ Standalone authentication exchange: receives RAND+SRES from AuC via `feedExterna
 
 ---
 
-## 54. Call Setup MO Procedure
+## 53. Call Setup MO Procedure
 
 **File:** `gsml3parser/stack/procedures/call_setup_mo.h`
 **Spec:** 3GPP TS 24.008 6.1
@@ -4796,7 +4738,7 @@ Each row emits the listed response token while processing the listed state (the 
 
 ---
 
-## 55. Call Setup MT Procedure
+## 54. Call Setup MT Procedure
 
 **File:** `gsml3parser/stack/procedures/call_setup_mt.h`
 **Spec:** 3GPP TS 24.008 6.1
@@ -4842,7 +4784,7 @@ Started by any `feedExternalTyped(...)` call while in `INIT` — it does not ins
 
 ---
 
-## 56. Channel Assignment Procedure
+## 55. Channel Assignment Procedure
 
 **File:** `gsml3parser/stack/procedures/channel_assignment.h`
 **Spec:** 3GPP TS 04.08 9.1.2 / 9.1.35
@@ -4873,7 +4815,7 @@ Channel assignment: receives ChannelRequest or PagingResponse, sends ImmediateAs
 
 ---
 
-## 57. Ciphering Mode Procedure
+## 56. Ciphering Mode Procedure
 
 **File:** `gsml3parser/stack/procedures/ciphering_mode.h`
 **Spec:** 3GPP TS 24.008 4.4.3 / TS 04.08 9.1.37
@@ -4902,7 +4844,7 @@ Short procedure to activate ciphering: receives algorithm and key via `feedExter
 
 ---
 
-## 58. Paging Procedure
+## 57. Paging Procedure
 
 **File:** `gsml3parser/stack/procedures/paging.h`
 **Spec:** 3GPP TS 04.08 9.1.25
@@ -4937,7 +4879,7 @@ Network-initiated paging of MS with up to 3 attempts (Type1, then Type2, then Ty
 
 ---
 
-## 59. Handover Procedure
+## 58. Handover Procedure
 
 **File:** `gsml3parser/stack/procedures/handover.h`
 **Spec:** 3GPP TS 04.08 9.1.40
@@ -4962,7 +4904,7 @@ Handover: receives target channel via `feedExternalTyped(HandoverTarget, session
 
 ---
 
-## 60. Call Release Procedure
+## 59. Call Release Procedure
 
 **File:** `gsml3parser/stack/procedures/call_release.h` / `call_release.cpp`
 **Spec:** 3GPP TS 24.008 6.1
@@ -4993,12 +4935,12 @@ Call release procedure for terminating an active call: BTS sends the CC clear co
 
 ---
 
-## 61. IMSI Detach Procedure
+## 60. IMSI Detach Procedure
 
 **File:** `gsml3parser/stack/procedures/imsi_detach.h` / `imsi_detach.cpp`
 **Spec:** 3GPP TS 24.008 4.4.6
 
-Standalone IMSI detach procedure (for use via `ProcedureRunner`; the orchestrator instead runs an inline one-step detach on MM IMSIDetachIndication, see §51): on the MS's IMSI Detach Indication the BTS sends CM Service Accept and waits for any follow-up MM message; a T3112 expiry fails the procedure.
+Standalone IMSI detach procedure (for use via `ProcedureRunner`; the orchestrator instead runs an inline one-step detach on MM IMSIDetachIndication, see §50): on the MS's IMSI Detach Indication the BTS sends CM Service Accept and waits for any follow-up MM message; a T3112 expiry fails the procedure.
 
 ### State Machine
 
@@ -5017,7 +4959,7 @@ Standalone IMSI detach procedure (for use via `ProcedureRunner`; the orchestrato
 
 ---
 
-## 62. Performance Optimizations Summary
+## 61. Performance Optimizations Summary
 
 The following optimizations have been applied to achieve high-throughput, low-latency L3 parsing at scale:
 
@@ -5055,7 +4997,7 @@ Ring buffer index wrap-around uses `idx & mMask` (1 CPU cycle) instead of `idx %
 
 ---
 
-## 63. C API (gsml3parser_c.h)
+## 62. C API (gsml3parser_c.h)
 
 A stable C ABI over the C++20 library for FFI consumers (C, Python
 ctypes/cffi, Rust, Go). One C89-clean header
@@ -5071,7 +5013,7 @@ ctypes/cffi, Rust, Go). One C89-clean header
 | LAPDm | `gsml3_lapdm_frame_decode` (zero-copy) + `gsml3_lapdm_entity` (full FSM, fn+user callbacks) |
 | BTS stack | `gsml3_registry` (plain + sharded {4,8,16,32}), borrowed `gsml3_session` (`assigned_tmsi`, timers, transactions), O(active) ticks, channel assignment/release with link index |
 | Orchestrator | `gsml3_orchestrator_feed/feedExternal*/tick/build_response/required_size/take_retransmit/cancel_all/chain_phase` + 21 `gsml3_response_build_*` + `gsml3_response_required_size` |
-| Typed access | Curated message set: 67 `gsml3_msg_*` typed getters + 43 `gsml3_build_*` typed L3 builders (RR/MM/CC/SMS/SS), plus 21 stateless `gsml3_response_build*` factories |
+| Typed access | Curated message set: 67 `gsml3_msg_*` typed getters + 44 `gsml3_build_*` typed L3 builders (RR/MM/CC/SMS/SS), plus 21 stateless `gsml3_response_build*` factories |
 | Error model | `gsml3_last_error()` / `gsml3_last_error_code()`, `gsml3_abi_version()`, `enum gsml3_error` incl. `GSML3_ERR_BUFFER_TOO_SMALL` / `GSML3_ERR_UNSUPPORTED` / `GSML3_ERR_DUPLICATE` / `GSML3_ERR_INTERNAL` |
 
 ### ABI rules
@@ -5189,14 +5131,14 @@ interface of the shared library.
 
 ---
 
-## 64. FFI Bindings (Python / Go / Rust)
+## 63. FFI Bindings (Python / Go / Rust)
 
-The C ABI (§63) is consumed through three first-party bindings in `bindings/`,
+The C ABI (§62) is consumed through three first-party bindings in `bindings/`,
 all of which are stdlib/zero-dependency and cover the same behavioral surface:
 the Python binding registers `argtypes`/`restype` for every function in
 `gsml3parser_c.h` (enforced by `test_api_surface.py`); the Go and Rust v1
 surface covers the core/config/message, A-bis RSL, LAPDm, registry/session and
-orchestrator/response functions of §63 plus the typed L3 builders
+orchestrator/response functions of §62 plus the typed L3 builders
 `gsml3_build_cm_service_request` and `gsml3_build_setup` (the curated
 `gsml3_msg_*` typed getters stay in the Python binding).
 
@@ -5274,7 +5216,7 @@ The library implements encodings defined by:
 | Standard | Scope | Coverage |
 |----------|-------|----------|
 | **GSM 04.06 / 3GPP TS 44.064** | LAPDm protocol for Um interface (format B on dedicated channels) | `LAPDmFrame` zero-copy decode, `LAPDmEntity` full state machine (SABME/UA/DISC), I-frame segmentation/reassembly, T200 retransmission, contention resolution |
-| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | RR (99), MM (21), CC (24), GMM (23), SM (29), SMS (19 = 5 CP + 14 L3) message parsing and generation; SS (3), Extended and Test-Procedure PD catch-alls |
+| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | RR (99), MM (21), CC (24), GMM (23), SM (29), SMS (5 CP-layer messages) message parsing and generation; SS (3), Extended and Test-Procedure PD catch-alls |
 | **GSM 04.07 / 3GPP TS 24.007** | Information element encoding rules | V, TV, TLV, LV formats; H/L rest octet padding (0x2B); bit ordering |
 | **GSM 04.80 / 3GPP TS 24.080** | Supplementary services on mobile | Facility, Register, Release Complete messages; SSOpCode/SSErrorCode enums; L3FacilityOpCode TCAP parser; L3USSDData IE |
 | **GSM 02.90 / 3GPP TS 23.038** | USSD alphabet and encoding | GSM 7-bit default/extended alphabet, UCS2, DCS handling in L3USSDData |

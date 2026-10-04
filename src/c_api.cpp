@@ -63,7 +63,6 @@
 #include "gsml3parser/cc/l3ccmessages.h"
 #include "gsml3parser/ss/l3ssmessages.h"
 #include "gsml3parser/sms/l3smsmessages.h"
-#include "gsml3parser/sms/l3smsl3messages.h"
 
 namespace {
 
@@ -3016,50 +3015,6 @@ GSML3_C_API size_t gsml3_msg_cp_smt_rpdu(const gsml3_message* msg,
     }
 }
 
-GSML3_C_API int gsml3_msg_sms_deliver_tp_mti(const gsml3_message* msg) {
-    try {
-        return typedGetInt<L3SMSDeliver>(msg, [](auto& m){ return (int)m.tpMti(); });
-    } catch (...) {
-        setLastErrorUnexpected("unexpected exception in gsml3_msg_sms_deliver_tp_mti");
-        return -1;
-    }
-}
-
-GSML3_C_API int gsml3_msg_sms_deliver_tp_mr(const gsml3_message* msg) {
-    try {
-        return typedGetInt<L3SMSDeliver>(msg, [](auto& m){ return (int)m.tpMr(); });
-    } catch (...) {
-        setLastErrorUnexpected("unexpected exception in gsml3_msg_sms_deliver_tp_mr");
-        return -1;
-    }
-}
-
-GSML3_C_API int gsml3_msg_sms_deliver_has_tp_ud(const gsml3_message* msg) {
-    try {
-        return typedGetInt<L3SMSDeliver>(msg, [](auto& m){ return m.hasTpUd() ? 1 : 0; });
-    } catch (...) {
-        setLastErrorUnexpected("unexpected exception in gsml3_msg_sms_deliver_has_tp_ud");
-        return -1;
-    }
-}
-
-GSML3_C_API size_t gsml3_msg_sms_deliver_tp_ud(const gsml3_message* msg,
-                                                uint8_t* out, size_t maxlen) {
-    clearLastError();
-    try {
-        if (!msg || !out) return 0;
-        auto* m = tryGet<L3SMSDeliver>(msg->msg);
-        if (!m) return 0;
-        const auto& b = m->tpUd();
-        if (b.size() > maxlen) { setBufferTooSmallError(); return 0; }
-        if (!b.empty()) std::memcpy(out, b.data(), b.size());
-        return b.size();
-    } catch (...) {
-        setLastErrorUnexpected("unexpected exception in gsml3_msg_sms_deliver_tp_ud");
-        return 0;
-    }
-}
-
 // ── SS getters ─────────────────────────────────────────────────────────
 
 GSML3_C_API int gsml3_msg_sup_serv_facility_ti(const gsml3_message* msg) {
@@ -3794,30 +3749,6 @@ GSML3_C_API size_t gsml3_build_cp_smt(uint8_t* out, size_t maxlen,
         });
     } catch (...) {
         setLastErrorUnexpected("unexpected exception in gsml3_build_cp_smt");
-        return 0;
-    }
-}
-
-GSML3_C_API size_t gsml3_build_sms_deliver(uint8_t* out, size_t maxlen,
-    uint8_t tp_mti, uint8_t tp_mr, const uint8_t* ud, size_t ud_len) {
-    try {
-        if (ud_len != 0 && !ud) {
-            clearLastError();
-            setError(GSML3_ERR_INVALID_ARG, "NULL payload with non-zero length");
-            return 0;
-        }
-        std::vector<uint8_t> user_data;
-        if (ud_len != 0) user_data.assign(ud, ud + ud_len);
-        return typedBuild<SMS>(out, maxlen, [&]{
-            return SMS{L3SMSDeliver::builder()
-                           .tpMti(tp_mti)
-                           .tpMr(tp_mr)
-                           .haveTpUd(ud_len != 0)
-                           .tpUd(std::move(user_data))
-                           .build()};
-        });
-    } catch (...) {
-        setLastErrorUnexpected("unexpected exception in gsml3_build_sms_deliver");
         return 0;
     }
 }

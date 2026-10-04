@@ -29,7 +29,6 @@
 #include "gsml3parser/ss/l3ssmessages.h"
 #include "gsml3parser/gmm/l3gmmmessages.h"
 #include "gsml3parser/sms/l3smsmessages.h"
-#include "gsml3parser/sms/l3smsl3messages.h"
 #include "gsml3parser/sm/l3smmessages.h"
 #include "gsml3parser/bcc/l3bccmessages.h"
 #include "gsml3parser/gcc/l3gccmessages.h"
@@ -217,10 +216,9 @@ Expected<SM> parseL3SM(BitReader& reader, int mti) {
     return parseFromTable(kSMParseTable, reader, mti, 0, "SM");
 }
 
-// SMS messages (24.008 Table 10.6a, 24.011 sections 7-8)
-// Note: MTI 0x12 and 0x13 overlap between CP-layer and L3-layer messages.
-// CP-STATUS(0x12) vs SMSProvidedReplyExpected(0x12), CP-SMT(0x13) vs SMSSubmitRep(0x13).
-// For backward compatibility, overlapping MTIs dispatch to CP messages.
+// SMS messages (TS 24.011 sections 7-8): only the CP-layer messages are
+// defined for the SMS protocol discriminator — CP-DATA (0x01), CP-ACK (0x04),
+// CP-ERROR (0x10), CP-STATUS (0x12) and CP-SUBMIT (0x13).
 Expected<SMS> parseL3SMS(BitReader& reader, int mti) {
     return parseFromTable(kSMSParseTable, reader, mti, 0, "SMS");
 }

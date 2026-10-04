@@ -542,14 +542,10 @@ PROTOTYPES = {
     "gsml3_msg_cp_status_has_message_ref":            ("I",  ("H",)),
     "gsml3_msg_cp_status_message_ref":                ("I",  ("H",)),
     "gsml3_msg_cp_smt_rpdu":                          ("SZ", ("H", "PB", "SZ")),
-    "gsml3_msg_sms_deliver_tp_mti":                   ("I",  ("H",)),
-    "gsml3_msg_sms_deliver_tp_mr":                    ("I",  ("H",)),
-    "gsml3_msg_sms_deliver_has_tp_ud":                ("I",  ("H",)),
-    "gsml3_msg_sms_deliver_tp_ud":                    ("SZ", ("H", "PB", "SZ")),
     # SS getters
     "gsml3_msg_sup_serv_facility_ti":                 ("I",  ("H",)),
     "gsml3_msg_sup_serv_facility_data":               ("SZ", ("H", "PB", "SZ")),
-    # ── S9 typed builders (43): zero-alloc into the caller's buffer ──────
+    # ── S9 typed builders (44): zero-alloc into the caller's buffer ──────
     # cause/type params are range-checked in C (INVALID_ARG, no frame built);
     # NOTE the S9 LAI numeric form: mcc/mnc are plain `int` here (244 / 5),
     # unlike the string forms of the S7 response builders.
@@ -598,7 +594,6 @@ PROTOTYPES = {
     "gsml3_build_cp_data":                         ("SZ", ("PB", "SZ", "B", "SZ")),
     "gsml3_build_cp_status":                       ("SZ", ("PB", "SZ", "U8", "U8", "I", "U8")),
     "gsml3_build_cp_smt":                          ("SZ", ("PB", "SZ", "B", "SZ")),
-    "gsml3_build_sms_deliver":                     ("SZ", ("PB", "SZ", "U8", "U8", "B", "SZ")),
     "gsml3_build_sup_serv_facility":               ("SZ", ("PB", "SZ", "U8", "B", "SZ")),
 }
 

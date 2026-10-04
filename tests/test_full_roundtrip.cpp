@@ -638,47 +638,6 @@ TEST(FullRoundTrip, SMS_Domain) {
 
     expectRoundTrip(ParsedMessage{SMS{L3CPSMT{}}},
         L3PD::SMS, L3CPSMT::MTI, "L3CPSMT");
-
-    expectRoundTrip(ParsedMessage{SMS{L3SMSStatusReport{}}},
-        L3PD::SMS, L3SMSStatusReport::MTI, "L3SMSStatusReport");
-
-    expectWriteOnly(ParsedMessage{SMS{L3SMSProvidedReplyExpected{}}}, "L3SMSProvidedReplyExpected");
-
-    expectRoundTrip(ParsedMessage{SMS{L3SMSSubmitRep{}}},
-        L3PD::SMS, L3SMSSubmitRep::MTI, "L3SMSSubmitRep");
-
-    expectRoundTrip(ParsedMessage{SMS{L3SMSDeliver{}}},
-        L3PD::SMS, L3SMSDeliver::MTI, "L3SMSDeliver");
-
-    expectRoundTrip(ParsedMessage{SMS{L3SMSDeliverRep{}}},
-        L3PD::SMS, L3SMSDeliverRep::MTI, "L3SMSDeliverRep");
-
-    expectRoundTrip(ParsedMessage{SMS{L3SMSStatusReportAck{}}},
-        L3PD::SMS, L3SMSStatusReportAck::MTI, "L3SMSStatusReportAck");
-
-    expectRoundTrip(ParsedMessage{SMS{L3SMSStatusReportReject{}}},
-        L3PD::SMS, L3SMSStatusReportReject::MTI, "L3SMSStatusReportReject");
-
-    expectRoundTrip(ParsedMessage{SMS{L3SMSTSReject{}}},
-        L3PD::SMS, L3SMSTSReject::MTI, "L3SMSTSReject");
-
-    expectRoundTrip(ParsedMessage{SMS{L3SMSSubmitDeferred{}}},
-        L3PD::SMS, L3SMSSubmitDeferred::MTI, "L3SMSSubmitDeferred");
-
-    expectRoundTrip(ParsedMessage{SMS{L3SMSSubmitReject{}}},
-        L3PD::SMS, L3SMSSubmitReject::MTI, "L3SMSSubmitReject");
-
-    expectRoundTrip(ParsedMessage{SMS{L3SMSSFProvidedRep{}}},
-        L3PD::SMS, L3SMSSFProvidedRep::MTI, "L3SMSSFProvidedRep");
-
-    expectRoundTrip(ParsedMessage{SMS{L3SMSSFProvidedRepAck{}}},
-        L3PD::SMS, L3SMSSFProvidedRepAck::MTI, "L3SMSSFProvidedRepAck");
-
-    expectRoundTrip(ParsedMessage{SMS{L3SMSNotification{}}},
-        L3PD::SMS, L3SMSNotification::MTI, "L3SMSNotification");
-
-    expectRoundTrip(ParsedMessage{SMS{L3SMSShortCodeInfo{}}},
-        L3PD::SMS, L3SMSShortCodeInfo::MTI, "L3SMSShortCodeInfo");
 }
 
 // BCC domain (Bearer Independent Call Control)

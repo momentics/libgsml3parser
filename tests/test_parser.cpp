@@ -45,7 +45,6 @@
 #include <gsml3parser/cc/l3ccmessages.h>
 #include <gsml3parser/ss/l3ssmessages.h>
 #include <gsml3parser/sm/l3smmessages.h>
-#include <gsml3parser/sms/l3smsl3messages.h>
 #include <gsml3parser/sms/l3smsmessages.h>
 #include <gsml3parser/ls/l3lsmessages.h>
 #include <gsml3parser/extended/l3extendedmessages.h>

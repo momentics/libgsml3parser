@@ -9,12 +9,11 @@
 
 A type-safe, **zero-allocation C++20** library with **no external dependencies**, spanning the full GSM
 signalling chain of a software Base Transceiver Station: **235 L3 message classes across 12 PD
-domains** — typed fields for RR/SM/CC/GMM/MM/SS and the SMS CP/RP/TP layers, best-effort opaque-body
-parsing for the SMS L3 primitives (MTI 0x11–0x1E) and BCC/GCC/LS (no normative reference templates
-exist for these blocks, so bit-level conformance is not claimed), and passthrough for the Extended/Test
-PDs — plus the complete **LAPDm** (L2) entity and **A-bis RSL** interface, per-subscriber state
-(context, FSMs, timers, transactions), and ten spec-based **protocol procedures** — from raw radio bytes
-up to working MO/MT call flows.
+domains** — typed fields for RR/SM/CC/GMM/MM/SS and the SMS CP/RP/TP layers; the BCC/GCC/LS blocks have
+no normative reference templates, so they are parsed best-effort as opaque bodies and bit-level
+conformance is not claimed for them — plus passthrough for the Extended/Test PDs, the complete **LAPDm**
+(L2) entity and **A-bis RSL** interface, per-subscriber state (context, FSMs, timers, transactions),
+and ten spec-based **protocol procedures** — from raw radio bytes up to working MO/MT call flows.
 
 ## Why This Library?
 
@@ -82,15 +81,15 @@ auto paging = L3PagingRequestType2::builder()
 All 12 protocol domains — RR 98 · SM 29 · CC 24 · GMM 23 · MM 19 · SMS 19 · BCC 8 · GCC 8 · SS 3 · LS 2 ·
 Extended + Test PDs 2: **235 message types** in total, with Information Elements and enums defined per domain.
 
-Full catalog (MTIs, directions, IEs, dispatch edge cases such as TIF=1 short messages and parse-slot
-shadowing): [doc/messages.md](doc/messages.md).
+Full catalog (MTIs, directions, IEs, dispatch edge cases such as TIF=1 short messages and build-only
+types): [doc/messages.md](doc/messages.md).
 
 ## Wire Format Conformance
 
 All parse/build paths for RR/SM/CC/GMM/MM and the SMS CP/RP/TP layers follow the normative 3GPP TS wire
-layouts; golden vectors are pinned in the test suite. The SMS L3 primitives (MTI 0x11–0x1E) and the
-BCC/GCC/LS blocks have no normative reference templates, so they are parsed best-effort as opaque bodies
-and bit-level conformance is not claimed for them. Highlights of the non-obvious encodings:
+layouts; golden vectors are pinned in the test suite. The BCC/GCC/LS blocks have no normative reference
+templates, so they are parsed best-effort as opaque bodies and bit-level conformance is not claimed for
+them. Highlights of the non-obvious encodings:
 
 **Identities (TS 24.008)** — LAI/RAI pack the PLMN as `[MCC2|MCC1][MNC3/F|MCC3][MNC2|MNC1]` BCD octets
 plus a 16-bit LAC (plus one RAC octet for RAI); `mcc()`/`mnc()` return the digits in natural order.
@@ -202,10 +201,10 @@ Every detail lives in a dedicated guide; this README is the pitch and the index.
 
 | Document | What It Covers |
 |----------|----------------|
-| [doc/API.md](doc/API.md) | Full API reference (64 numbered sections): core types, bit I/O, streaming, parser/serializer, builders and IEs/enums of all 12 domains, LAPDm, dispatcher, arena, every stack module, RSL, all procedures, C ABI, FFI bindings + spec conformance notes |
+| [doc/API.md](doc/API.md) | Full API reference (63 numbered sections): core types, bit I/O, streaming, parser/serializer, builders and IEs/enums of all 12 domains, LAPDm, dispatcher, arena, every stack module, RSL, all procedures, C ABI, FFI bindings + spec conformance notes |
 | [doc/bts_integration.md](doc/bts_integration.md) | **Primary guide for BTS developers**: step-by-step event loop with `ProcedureOrchestrator`, full worked procedure chains (Location Update, Call Setup MO, Paging), AuC/VLR/BSC typed-data integration, LAPDm link management, L3 timer reference table, SI broadcast, production error handling |
 | [doc/bts_architecture.md](doc/bts_architecture.md) | Two usage modes (L3 Parser vs BTS Stack), component & data-flow diagrams, PHY/SDR integration points, thread-safety matrix, per-MS memory footprint, allocation-free hot paths, scaling guidelines to millions of sessions |
-| [doc/messages.md](doc/messages.md) | Complete message catalog: all 235 types with MTIs and directions, CC/GMM/SM IEs, SMS CP/RP/TP layers, dispatch edge cases (TIF=1 short messages, build-only types, parse-slot shadowing) |
+| [doc/messages.md](doc/messages.md) | Complete message catalog: all 235 types with MTIs and directions, CC/GMM/SM IEs, SMS CP/RP/TP layers, dispatch edge cases (TIF=1 short messages, build-only types) |
 | [doc/boundaries.md](doc/boundaries.md) | What the library intentionally excludes — PHY/SDR, speech codecs, A5 ciphering, OML, SIP/media gateways, PS full stack, configuration, logging — and the exact integration point for each |
 | [examples/](examples/) | 20 runnable demos (see below), incl. full BTS flows, benchmarks, and a 1M-session real-time loop |
 | [bindings/README.md](bindings/README.md) | FFI bindings (Python / Go / Rust) over the stable C ABI: unified quickstarts, ownership & threading model, callback safety rules, extension guide, test gate |

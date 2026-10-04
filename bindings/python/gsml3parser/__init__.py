@@ -115,7 +115,7 @@ from .stack import (
     build_setup, build_call_proceeding, build_alerting, build_connect,
     build_connect_acknowledge, build_disconnect, build_release,
     build_release_complete, build_facility, build_cp_data, build_cp_status,
-    build_cp_smt, build_sms_deliver, build_sup_serv_facility,
+    build_cp_smt, build_sup_serv_facility,
 )
 
 # MS/peer-side LAPDm mini-codec (simulation & tests only; production send goes
@@ -205,7 +205,7 @@ __all__ = [
     "build_setup", "build_call_proceeding", "build_alerting", "build_connect",
     "build_connect_acknowledge", "build_disconnect", "build_release",
     "build_release_complete", "build_facility", "build_cp_data", "build_cp_status",
-    "build_cp_smt", "build_sms_deliver", "build_sup_serv_facility",
+    "build_cp_smt", "build_sup_serv_facility",
     # modules / seams
     "lapdm_mini", "lib", "PROTOTYPES", "EXPECTED_ABI", "CALL_COUNTS",
 ]

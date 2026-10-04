@@ -54,7 +54,7 @@ def test_prototypes_cover_the_whole_c_abi():
     from gsml3parser import _library
     decl = _declared_functions()
     proto = set(_library.PROTOTYPES)
-    assert len(decl) == 242, f"header inventory drifted: expected 242 GSML3_C_API functions, found {len(decl)}"
+    assert len(decl) == 237, f"header inventory drifted: expected 237 GSML3_C_API functions, found {len(decl)}"
     missing = decl - proto
     assert not missing, f"missing prototypes: {sorted(missing)}"
     stale = proto - decl

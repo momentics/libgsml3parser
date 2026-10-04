@@ -53,7 +53,6 @@
 #include <gsml3parser/stack/response_builder.h>
 #include <gsml3parser/ss/l3ssmessages.h>
 #include <gsml3parser/sms/l3smsmessages.h>
-#include <gsml3parser/sms/l3smsl3messages.h>
 
 using namespace gsml3parser;
 

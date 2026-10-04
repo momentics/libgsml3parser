@@ -967,11 +967,6 @@ GSML3_C_API int gsml3_msg_cp_status_has_message_ref(const gsml3_message* msg);
 GSML3_C_API int gsml3_msg_cp_status_message_ref(const gsml3_message* msg);
 GSML3_C_API size_t gsml3_msg_cp_smt_rpdu(const gsml3_message* msg,
                                           uint8_t* out, size_t maxlen);
-GSML3_C_API int gsml3_msg_sms_deliver_tp_mti(const gsml3_message* msg);
-GSML3_C_API int gsml3_msg_sms_deliver_tp_mr(const gsml3_message* msg);
-GSML3_C_API int gsml3_msg_sms_deliver_has_tp_ud(const gsml3_message* msg);
-GSML3_C_API size_t gsml3_msg_sms_deliver_tp_ud(const gsml3_message* msg,
-                                                uint8_t* out, size_t maxlen);
 
 /* ── SS getters ──────────────────────────────────────────────────────── */
 GSML3_C_API int gsml3_msg_sup_serv_facility_ti(const gsml3_message* msg);
@@ -1077,8 +1072,6 @@ GSML3_C_API size_t gsml3_build_cp_status(uint8_t* out, size_t maxlen,
     uint8_t tp_oi, uint8_t mti_value, int has_ref, uint8_t ref);
 GSML3_C_API size_t gsml3_build_cp_smt(uint8_t* out, size_t maxlen,
                                        const uint8_t* rpdu, size_t rpdu_len);
-GSML3_C_API size_t gsml3_build_sms_deliver(uint8_t* out, size_t maxlen,
-    uint8_t tp_mti, uint8_t tp_mr, const uint8_t* ud, size_t ud_len);
 GSML3_C_API size_t gsml3_build_sup_serv_facility(uint8_t* out, size_t maxlen,
     uint8_t ti, const uint8_t* data, size_t len);
 

@@ -621,7 +621,7 @@ Each MS can have up to 16 concurrent pending transactions (`TransactionManager::
 
 | Document | Topic |
 |----------|-------|
-| [doc/API.md](API.md) | Full API reference (64 numbered sections) |
+| [doc/API.md](API.md) | Full API reference (63 numbered sections) |
 | [doc/bts_integration.md](bts_integration.md) | Step-by-step integration guide for ProcedureOrchestrator-based BTS |
 | [README.md](../README.md) | Library overview and quick start |
 | 3GPP TS 24.008 | Mobile radio interface L3 specification |
