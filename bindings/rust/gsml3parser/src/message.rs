@@ -246,6 +246,69 @@ impl Message {
         Ok(unsafe { s::gsml3_message_ti(p.as_ptr() as *const _) })
     }
 
+    /// MM Authentication Failure (TS 24.008 9.2.3a): the bare reject cause
+    /// octet value; `-1` when the message is not an Authentication Failure
+    /// (documented sentinel).
+    pub fn authentication_failure_cause(&self) -> Result<i32, GsmL3Error> {
+        let p = match self.p {
+            Some(p) => p,
+            None => return Err(error::closed("Message::authentication_failure_cause")),
+        };
+        // SAFETY: p live; the getter reports -1 on a type mismatch.
+        Ok(unsafe { s::gsml3_msg_authentication_failure_cause(p.as_ptr() as *const _) })
+    }
+
+    /// MM Authentication Failure (TS 24.008 10.5.3.6): the 16-octet AUTS of
+    /// the IEI 0x22 authentication failure parameter TLV in wire order;
+    /// `None` when the message is not an Authentication Failure or the
+    /// parameter is absent.
+    pub fn authentication_failure_auts(&self) -> Result<Option<Vec<u8>>, GsmL3Error> {
+        let p = match self.p {
+            Some(p) => p,
+            None => return Err(error::closed("Message::authentication_failure_auts")),
+        };
+        let mut buf = [0u8; 16];
+        // SAFETY: buf valid for this single call; the C side is bounded by
+        // maxlen, and 0 means "TLV absent / wrong type", not an error.
+        let n = unsafe {
+            s::gsml3_msg_authentication_failure_auts(p.as_ptr() as *const _, buf.as_mut_ptr(), buf.len())
+        };
+        if n == 0 {
+            return Ok(None);
+        }
+        if (n as usize) > buf.len() {
+            return Err(error::last_error(
+                "Message::authentication_failure_auts",
+                s::GSML3_ERR_INTERNAL,
+            ));
+        }
+        Ok(Some(buf[..n as usize].to_vec()))
+    }
+
+    /// MM CM Service Prompt (TS 24.008 10.5.1.10a): the protocol
+    /// discriminator of the requested CM protocol (four bits); `-1` when the
+    /// message is not a CM Service Prompt (documented sentinel).
+    pub fn cm_service_prompt_pd(&self) -> Result<i32, GsmL3Error> {
+        let p = match self.p {
+            Some(p) => p,
+            None => return Err(error::closed("Message::cm_service_prompt_pd")),
+        };
+        // SAFETY: p live; the getter reports -1 on a type mismatch.
+        Ok(unsafe { s::gsml3_msg_cm_service_prompt_pd(p.as_ptr() as *const _) })
+    }
+
+    /// MM CM Service Prompt (TS 24.008 10.5.1.10a): the SAPI of the requested
+    /// CM protocol ('00'=0, '11'=3); `-1` when the message is not a CM
+    /// Service Prompt (documented sentinel).
+    pub fn cm_service_prompt_sapi(&self) -> Result<i32, GsmL3Error> {
+        let p = match self.p {
+            Some(p) => p,
+            None => return Err(error::closed("Message::cm_service_prompt_sapi")),
+        };
+        // SAFETY: p live; the getter reports -1 on a type mismatch.
+        Ok(unsafe { s::gsml3_msg_cm_service_prompt_sapi(p.as_ptr() as *const _) })
+    }
+
     /// Exact wire size of the serialized message (zero allocation); a buffer
     /// of this size is guaranteed to be accepted by [`Message::write_to`].
     pub fn size(&self) -> Result<usize, GsmL3Error> {
@@ -703,6 +766,48 @@ pub fn build_setup(ti: u8, called_digits: &str) -> Result<Vec<u8>, GsmL3Error> {
     let n = unsafe { s::gsml3_build_setup(buf.as_mut_ptr(), buf.len(), ti, c_digits.as_ptr()) };
     if n == 0 {
         return Err(error::last_error("build_setup", 0));
+    }
+    Ok(buf[..n].to_vec())
+}
+
+/// Build an MM AUTHENTICATION FAILURE (TS 24.008 9.2.3a) with the C typed
+/// builder: a bare reject cause octet plus, when `auts` is `Some`, the IEI
+/// 0x22 authentication failure parameter TLV carrying the 16-octet AUTS (TS
+/// 24.008 10.5.3.6). Out-of-domain values fail in C with INVALID_ARG; a
+/// non-16-octet AUTS slice is rejected before the FFI boundary.
+pub fn build_authentication_failure(cause: i32, auts: Option<&[u8]>) -> Result<Vec<u8>, GsmL3Error> {
+    let auts_ptr: *const u8 = match auts {
+        Some(a) if a.len() == 16 => a.as_ptr(),
+        Some(_) => {
+            return Err(error::invalid_arg(
+                "build_authentication_failure",
+                "auts must be exactly 16 octets when present (TS 24.008 10.5.3.6)",
+            ));
+        }
+        None => ptr::null(),
+    };
+    let mut buf = [0u8; BUILDER_BUF_LEN];
+    // SAFETY: buf valid for the call; auts_ptr is null or borrows a live
+    // 16-octet slice held by the caller for this whole function.
+    let n = unsafe {
+        s::gsml3_build_authentication_failure(buf.as_mut_ptr(), buf.len(), cause, auts_ptr)
+    };
+    if n == 0 {
+        return Err(error::last_error("build_authentication_failure", 0));
+    }
+    Ok(buf[..n].to_vec())
+}
+
+/// Build an MM CM SERVICE PROMPT (TS 24.008 9.2.5a) with the C typed
+/// builder: a single octet spare(2)|SAPI(2)|PD(4) of the requested CM
+/// protocol (TS 24.008 10.5.1.10a). `pd` is 0..15 and `sapi` is 0 or 3;
+/// out-of-domain values fail in C with INVALID_ARG.
+pub fn build_cm_service_prompt(pd: u8, sapi: u8) -> Result<Vec<u8>, GsmL3Error> {
+    let mut buf = [0u8; BUILDER_BUF_LEN];
+    // SAFETY: buf valid for the call; domain checks are performed in C.
+    let n = unsafe { s::gsml3_build_cm_service_prompt(buf.as_mut_ptr(), buf.len(), pd as i32, sapi as i32) };
+    if n == 0 {
+        return Err(error::last_error("build_cm_service_prompt", 0));
     }
     Ok(buf[..n].to_vec())
 }

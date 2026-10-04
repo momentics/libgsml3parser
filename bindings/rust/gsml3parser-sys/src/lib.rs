@@ -28,11 +28,12 @@
 //!
 //! Surface (v1): sections S1–S7 of the header plus the two typed builders
 //! needed by the demo chain — `gsml3_build_cm_service_request` and
-//! `gsml3_build_setup` (128 functions total). The curated
-//! S8 typed getters are intentionally not declared here.
+//! `gsml3_build_setup` — plus the MM Authentication Failure / CM Service
+//! Prompt pair (two typed builders, four typed getters; 134 functions total).
+//! The remaining S8 typed getters are intentionally not declared here.
 //!
 //! Completeness is enforced at compile time by `tests/surface.rs`, which
-//! references every one of the 128 names with its full signature — a missing
+//! references every one of the 134 names with its full signature — a missing
 //! declaration or a drifted type is a compile error of that test. At runtime,
 //! check `ABI_VERSION` against [`gsml3_abi_version`] when linking a prebuilt
 //! binary of a possibly different build (the header documents that public
@@ -960,4 +961,39 @@ extern "C" {
         ti: c_uchar,
         called_digits: *const c_char,
     ) -> usize;
+
+    // ── MM Authentication Failure / CM Service Prompt (6) ────────────────
+    /// Build an MM AUTHENTICATION FAILURE (TS 24.008 9.2.3a). `cause`:
+    /// MMRejectCause value; `auts`: NULL = no IEI 0x22 TLV, otherwise a
+    /// pointer to exactly 16 octets (TS 24.008 10.5.3.6).
+    pub fn gsml3_build_authentication_failure(
+        out: *mut c_uchar,
+        maxlen: usize,
+        cause: c_int,
+        auts: *const c_uchar,
+    ) -> usize;
+    /// MM Authentication Failure: the reject cause octet value; -1 when the
+    /// message is not an Authentication Failure.
+    pub fn gsml3_msg_authentication_failure_cause(msg: *const gsml3_message) -> c_int;
+    /// MM Authentication Failure: copies the 16-octet AUTS of the IEI 0x22
+    /// TLV into `out`; 0 when the TLV is absent or the type differs.
+    pub fn gsml3_msg_authentication_failure_auts(
+        msg: *const gsml3_message,
+        out: *mut c_uchar,
+        maxlen: usize,
+    ) -> usize;
+    /// Build an MM CM SERVICE PROMPT (TS 24.008 9.2.5a): `pd` is 0..15 and
+    /// `sapi` is 0 or 3 (spare(2)|SAPI(2)|PD(4), TS 24.008 10.5.1.10a).
+    pub fn gsml3_build_cm_service_prompt(
+        out: *mut c_uchar,
+        maxlen: usize,
+        pd: c_int,
+        sapi: c_int,
+    ) -> usize;
+    /// MM CM Service Prompt: the protocol discriminator of the requested CM
+    /// protocol (four bits); -1 when the type differs.
+    pub fn gsml3_msg_cm_service_prompt_pd(msg: *const gsml3_message) -> c_int;
+    /// MM CM Service Prompt: the SAPI of the requested CM protocol ('00'=0,
+    /// '11'=3); -1 when the type differs.
+    pub fn gsml3_msg_cm_service_prompt_sapi(msg: *const gsml3_message) -> c_int;
 }

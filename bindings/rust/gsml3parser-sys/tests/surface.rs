@@ -20,13 +20,15 @@
 // SOFTWARE.
 
 //! Compile-time completeness check for the curated v1 FFI surface:
-//! every one of the 128 functions (S1–S7 + `gsml3_build_cm_service_request` +
-//! `gsml3_build_setup`) must be declared in the extern block of this crate with
-//! the exact C ABI signature. Each assignment below names the function item and
-//! ascribes its FULL pointer type, so a missing name, a renamed function, or a
-//! single drifted argument/return type is a compile error — no bindgen, no code
-//! generation, no runtime enumeration needed. The runtime counterpart is
-//! `abi_version_matches_header` in the safe crate's integration tests.
+//! every one of the 134 functions (S1–S7 + `gsml3_build_cm_service_request` +
+//! `gsml3_build_setup` + the MM Authentication Failure / CM Service Prompt
+//! builders and getters) must be declared in the extern block of this crate
+//! with the exact C ABI signature. Each assignment below names the function
+//! item and ascribes its FULL pointer type, so a missing name, a renamed
+//! function, or a single drifted argument/return type is a compile error — no
+//! bindgen, no code generation, no runtime enumeration needed. The runtime
+//! counterpart is `abi_version_matches_header` in the safe crate's
+//! integration tests.
 
 use std::os::raw::{c_char, c_int, c_uchar, c_void};
 
@@ -35,9 +37,9 @@ use gsml3parser_sys::{
     gsml3_registry, gsml3_rsl, gsml3_session, gsml3_step_result, gsml3_timer_expiry, lapdm_l1_cb, lapdm_l3_cb,
 };
 
-/// All 128 names, each with its full `extern "C"` function-pointer type: the
+/// All 134 names, each with its full `extern "C"` function-pointer type: the
 /// compiler checks existence AND exact signature of every v1-surface function.
-fn _use_all_128() {
+fn _use_all_134() {
     // ── S1 Core (5) ────────────────────────────────────────────────────────
     let _: unsafe extern "C" fn() -> *const c_char = gsml3parser_sys::gsml3_version;
     let _: unsafe extern "C" fn() -> u32 = gsml3parser_sys::gsml3_abi_version;
@@ -517,14 +519,35 @@ fn _use_all_128() {
         c_uchar,
         *const c_char,
     ) -> usize = gsml3parser_sys::gsml3_build_setup;
+
+    // ── MM Authentication Failure / CM Service Prompt (6) ────────────────
+    let _: unsafe extern "C" fn(
+        *mut c_uchar,
+        usize,
+        c_int,
+        *const c_uchar,
+    ) -> usize = gsml3parser_sys::gsml3_build_authentication_failure;
+    let _: unsafe extern "C" fn(*const gsml3_message) -> c_int =
+        gsml3parser_sys::gsml3_msg_authentication_failure_cause;
+    let _: unsafe extern "C" fn(
+        *const gsml3_message,
+        *mut c_uchar,
+        usize,
+    ) -> usize = gsml3parser_sys::gsml3_msg_authentication_failure_auts;
+    let _: unsafe extern "C" fn(*mut c_uchar, usize, c_int, c_int) -> usize =
+        gsml3parser_sys::gsml3_build_cm_service_prompt;
+    let _: unsafe extern "C" fn(*const gsml3_message) -> c_int =
+        gsml3parser_sys::gsml3_msg_cm_service_prompt_pd;
+    let _: unsafe extern "C" fn(*const gsml3_message) -> c_int =
+        gsml3parser_sys::gsml3_msg_cm_service_prompt_sapi;
 }
 
-/// The surface check itself. Running `_use_all_128()` has no runtime effect —
-/// the guarantee is at COMPILE time: if any of the 128 declarations in this
+/// The surface check itself. Running `_use_all_134()` has no runtime effect —
+/// the guarantee is at COMPILE time: if any of the 134 declarations in this
 /// crate's extern block is missing or its type has drifted from the C header,
 /// this test binary fails to build. (Runtime counterpart:
 /// `abi_version_matches_header` in the safe crate.)
 #[test]
 fn test_abi_surface() {
-    _use_all_128();
+    _use_all_134();
 }

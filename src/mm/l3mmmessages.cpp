@@ -279,6 +279,28 @@ void L3CMServiceRequest::text(std::ostream& os) const {
     mMobileIdentity.text(os);
 }
 
+// ── L3CMServicePrompt (MTI=0x25, TS 24.008 9.2.5a) ─────────────────────
+
+Expected<L3CMServicePrompt> L3CMServicePrompt::parse(BitReader& br) {
+    // CM Service Prompt (TS 24.008 9.2.5a, Table 9.2.7): one octet carrying
+    // the PD and SAPI of the requested CM protocol, spare(2)|SAPI(2)|PD(4)
+    // (TS 24.008 10.5.1.10a, Figure 10.5.10).
+    auto o = br.readField(8);
+    if (!o) return Expected<L3CMServicePrompt>::error(o.error());
+    L3CMServicePrompt msg;
+    msg.mSAPI = (o.value() >> 5) & 0x03u;
+    msg.mPD = o.value() & 0x0Fu;
+    return Expected<L3CMServicePrompt>::hold(msg);
+}
+
+void L3CMServicePrompt::write(BitWriter& bw) const {
+    bw.writeField(((mSAPI & 0x03u) << 5) | (mPD & 0x0Fu), 8);
+}
+
+void L3CMServicePrompt::text(std::ostream& os) const {
+    os << "CMServicePrompt: PD=" << mPD << " SAPI=" << mSAPI;
+}
+
 // ── L3CMReestablishmentRequest (MTI=0x28) ──────────────────────────────
 
 size_t L3CMReestablishmentRequest::bodyLength() const {
@@ -723,6 +745,75 @@ void L3AuthenticationReject::text(std::ostream& os) const {
     os << "AuthenticationReject";
 }
 
+// ── L3AuthenticationFailure (MTI=0x1C, TS 24.008 9.2.3a) ───────────────
+
+size_t L3AuthenticationFailure::bodyLength() const {
+    size_t len = 1; // bare reject cause octet
+    if (mHaveAUTS) len += tlvLen(16);
+    return len + mAdditionalIes.size();
+}
+
+Expected<L3AuthenticationFailure> L3AuthenticationFailure::parse(BitReader& br) {
+    L3AuthenticationFailure msg;
+    // Authentication Failure (TS 24.008 9.2.3a, Table 9.2.4a): the reject
+    // cause is a bare value octet (TS 24.008 10.5.3.6).
+    {
+        auto ca = br.readField(8);
+        if (!ca) return Expected<L3AuthenticationFailure>::error(ca.error());
+        msg.mCause = static_cast<MMRejectCause>(ca.value());
+    }
+    // Optional authentication failure parameter (TLV, IEI 0x22): present
+    // only for the "Synch failure" cause; the value part is the 16-octet
+    // AUTS (TS 24.008 10.5.3.6).
+    if (peekTLVType(br, 0x22)) {
+        {
+            auto t = br.readField(8);
+            if (!t) return Expected<L3AuthenticationFailure>::error(t.error());
+        }
+        auto len = br.readField(8);
+        if (!len) return Expected<L3AuthenticationFailure>::error(len.error());
+        if (len.value() != 16) {
+            return Expected<L3AuthenticationFailure>::error(ParseError{
+                ParseError::Code::InvalidValue,
+                "authentication failure parameter length must be 16", br.position()});
+        }
+        for (size_t i = 0; i < 16; ++i) {
+            auto b = br.readField(8);
+            if (!b) return Expected<L3AuthenticationFailure>::error(b.error());
+            msg.mAUTS[i] = static_cast<uint8_t>(b.value());
+        }
+        msg.mHaveAUTS = true;
+    }
+    // Further optional IEs are kept opaque and re-emitted verbatim.
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3AuthenticationFailure>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
+    }
+    return Expected<L3AuthenticationFailure>::hold(msg);
+}
+
+void L3AuthenticationFailure::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mCause), 8);
+    if (mHaveAUTS) {
+        bw.writeField(0x22, 8);
+        bw.writeField(0x10, 8);
+        for (const auto& b : mAUTS) {
+            bw.writeField(b, 8);
+        }
+    }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
+}
+
+void L3AuthenticationFailure::text(std::ostream& os) const {
+    os << "AuthenticationFailure: cause=" << MMRejectCause2Str(mCause);
+    if (mHaveAUTS) {
+        os << " AUTS=";
+        for (const auto& b : mAUTS) {
+            os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(b);
+        }
+    }
+}
+
 // ── Builder implementations ───────────────────────────────────────────
 
 // L3CMServiceAccept Builder
@@ -758,6 +849,29 @@ L3AuthenticationReject L3AuthenticationReject::Builder::build() const {
 }
 
 L3AuthenticationReject::Builder L3AuthenticationReject::builder() {
+    return Builder{};
+}
+
+// L3AuthenticationFailure Builder
+L3AuthenticationFailure L3AuthenticationFailure::Builder::build() const {
+    L3AuthenticationFailure msg;
+    msg.mCause = m_cause;
+    msg.mAUTS = m_auts;
+    msg.mHaveAUTS = m_haveAUTS;
+    msg.mAdditionalIes = m_additionalIes;
+    return msg;
+}
+
+L3AuthenticationFailure::Builder L3AuthenticationFailure::builder() {
+    return Builder{};
+}
+
+// L3CMServicePrompt Builder
+L3CMServicePrompt L3CMServicePrompt::Builder::build() const {
+    return L3CMServicePrompt{m_pd, m_sapi};
+}
+
+L3CMServicePrompt::Builder L3CMServicePrompt::builder() {
     return Builder{};
 }
 

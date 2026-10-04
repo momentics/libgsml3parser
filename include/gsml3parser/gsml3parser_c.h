@@ -892,7 +892,13 @@ GSML3_C_API int gsml3_msg_physical_information_ta(const gsml3_message* msg);
 /* L3CMServiceType::TypeCode value. */
 GSML3_C_API int gsml3_msg_cm_service_request_service_type(const gsml3_message* msg);
 GSML3_C_API int gsml3_msg_cm_service_request_identity(const gsml3_message* msg,
-                                                       gsml3_mobile_identity* id);
+                                                        gsml3_mobile_identity* id);
+/* Protocol discriminator of the requested CM protocol (four bits,
+ * TS 24.008 10.5.1.10a); -1 when the message is not CM Service Prompt. */
+GSML3_C_API int gsml3_msg_cm_service_prompt_pd(const gsml3_message* msg);
+/* SAPI of the requested CM protocol (two bits: '00'=SAPI 0, '11'=SAPI 3,
+ * TS 24.008 10.5.1.10a); -1 when the message is not CM Service Prompt. */
+GSML3_C_API int gsml3_msg_cm_service_prompt_sapi(const gsml3_message* msg);
 GSML3_C_API int gsml3_msg_cm_service_reject_cause(const gsml3_message* msg);
 /* -1: CM Service Abort carries no value part (TS 24.008 9.2.7), so no
  * cause octet is present on the wire. */
@@ -918,6 +924,12 @@ GSML3_C_API int gsml3_msg_authentication_request_rand(const gsml3_message* msg,
                                                        uint8_t rand[16]);
 /* 32-bit SRES; 0 when the message is not AuthenticationResponse. */
 GSML3_C_API uint32_t gsml3_msg_authentication_response_sres(const gsml3_message* msg);
+/* MMRejectCause value of the bare reject cause octet (TS 24.008 9.2.3a). */
+GSML3_C_API int gsml3_msg_authentication_failure_cause(const gsml3_message* msg);
+/* Copies the 16-octet AUTS from the IEI 0x22 TLV (wire order); 0 when the
+ * TLV is absent or the message is not Authentication Failure. */
+GSML3_C_API size_t gsml3_msg_authentication_failure_auts(const gsml3_message* msg,
+                                                         uint8_t* out, size_t maxlen);
 GSML3_C_API int gsml3_msg_tmsi_reallocation_command_lai(const gsml3_message* msg,
                                                          gsml3_lai* lai);
 GSML3_C_API uint32_t gsml3_msg_tmsi_reallocation_command_tmsi(const gsml3_message* msg);
@@ -1012,7 +1024,10 @@ GSML3_C_API size_t gsml3_build_cm_service_accept(uint8_t* out, size_t maxlen);
 GSML3_C_API size_t gsml3_build_cm_service_reject(uint8_t* out, size_t maxlen,
                                                   int mm_cause);
 GSML3_C_API size_t gsml3_build_cm_service_abort(uint8_t* out, size_t maxlen,
-                                                 int abort_cause);
+                                                  int abort_cause);
+/* pd: 0..15; sapi: 0 or 3 (TS 24.008 9.2.5a/10.5.1.10a). */
+GSML3_C_API size_t gsml3_build_cm_service_prompt(uint8_t* out, size_t maxlen,
+                                                  int pd, int sapi);
 GSML3_C_API size_t gsml3_build_identity_request(uint8_t* out, size_t maxlen,
                                                  int id_type);
 GSML3_C_API size_t gsml3_build_identity_response(uint8_t* out, size_t maxlen,
@@ -1029,7 +1044,11 @@ GSML3_C_API size_t gsml3_build_authentication_request(uint8_t* out, size_t maxle
                                                        uint8_t cksn,
                                                        const uint8_t rand[16]);
 GSML3_C_API size_t gsml3_build_authentication_response(uint8_t* out, size_t maxlen,
-                                                        uint32_t sres);
+                                                         uint32_t sres);
+/* cause: MMRejectCause value; auts: NULL = no IEI 0x22 TLV, otherwise a
+ * pointer to exactly 16 octets (TS 24.008 9.2.3a/10.5.3.6). */
+GSML3_C_API size_t gsml3_build_authentication_failure(uint8_t* out, size_t maxlen,
+                                                       int cause, const uint8_t* auts);
 GSML3_C_API size_t gsml3_build_tmsi_reallocation_command(uint8_t* out,
     size_t maxlen, int mcc, int mnc, uint16_t lac, uint32_t tmsi);
 GSML3_C_API size_t gsml3_build_tmsi_reallocation_complete(uint8_t* out,

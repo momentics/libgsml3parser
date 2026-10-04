@@ -432,7 +432,7 @@ Each protocol domain has a `std::variant` type that holds all message types for 
 
 ```cpp
 using RRM      = std::variant< /* 98 RR types */ >;
-using MMM      = std::variant< /* 19 MM types */ >;
+using MMM      = std::variant< /* 21 MM types */ >;
 using CCM      = std::variant< /* 24 CC types */ >;
 using SSM      = std::variant< /* 3 SS types */ >;
 using GMM      = std::variant< /* 23 GMM types */ >;
@@ -1436,7 +1436,7 @@ Builder patterns are implemented for all message types across all 12 protocol do
 | Domain | Messages with Builder |
 |--------|----------------------|
 | **RR** | All 98 types (Paging, System Information SI1–SI23 + Type 2quater, Handover, Assignment, Ciphering, DTM/Packet, etc.) |
-| **MM** | All 19 types (Location Updating, Authentication, Identity, CM Service, MM Abort, TMSI Reallocation) |
+| **MM** | All 21 types (Location Updating, Authentication, Identity, CM Service, MM Abort, TMSI Reallocation) |
 | **CC** | All 24 types (Setup, Notify, Unit Data, Connect, Disconnect, Release, DTMF, Hold, Facility, Progress, etc.) |
 | **GMM** | All 23 types (Attach, Detach, RA Update, Service Request, P-TMSI Reallocation, Auth+Ciphering, GMM Identity, etc.) |
 | **SM** | All 29 types (Activate/Deactivate/Modify PDP Context, Secondary/AA/MBMS contexts, Notification) |
@@ -2038,7 +2038,7 @@ Table 10.4.2 — code 3 and codes 14–31 — have no class).
 
 ## 22. Mobility Management Messages
 
-**File:** `gsml3parser/mm/l3mmmessages.h` - 19 message types in the `MMM` variant (PD=0x05).
+**File:** `gsml3parser/mm/l3mmmessages.h` - 21 message types in the `MMM` variant (PD=0x05).
 
 ### MM Information Elements
 
@@ -2076,6 +2076,8 @@ Table 10.4.2 — code 3 and codes 14–31 — have no class).
 | `L3AuthenticationRequest` | 0x12 | DL | CKSN (high half-octet of the first octet, three bits) + RAND (16 octets); optional authentication parameters kept opaque |
 | `L3AuthenticationResponse` | 0x14 | UL | SRES (32-bit) |
 | `L3AuthenticationReject` | 0x11 | DL | Empty body |
+| `L3AuthenticationFailure` | 0x1C | UL | Reject cause (bare octet) + optional IEI 0x22 TLV with the 16-octet AUTS (TS 24.008 9.2.3a/10.5.3.6) |
+| `L3CMServicePrompt` | 0x25 | DL | One octet spare(2)|SAPI(2)|PD(4) of the requested CM protocol (TS 24.008 9.2.5a/10.5.1.10a) |
 
 ---
 
@@ -5288,7 +5290,7 @@ The library implements encodings defined by:
 | Standard | Scope | Coverage |
 |----------|-------|----------|
 | **GSM 04.06 / 3GPP TS 44.064** | LAPDm protocol for Um interface (format B on dedicated channels) | `LAPDmFrame` zero-copy decode, `LAPDmEntity` full state machine (SABME/UA/DISC), I-frame segmentation/reassembly, T200 retransmission, contention resolution |
-| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | RR (99), MM (19), CC (24), GMM (23), SM (29), SMS (19 = 5 CP + 14 L3) message parsing and generation; SS (3), Extended and Test-Procedure PD catch-alls |
+| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | RR (99), MM (21), CC (24), GMM (23), SM (29), SMS (19 = 5 CP + 14 L3) message parsing and generation; SS (3), Extended and Test-Procedure PD catch-alls |
 | **GSM 04.07 / 3GPP TS 24.007** | Information element encoding rules | V, TV, TLV, LV formats; H/L rest octet padding (0x2B); bit ordering |
 | **GSM 04.80 / 3GPP TS 24.080** | Supplementary services on mobile | Facility, Register, Release Complete messages; SSOpCode/SSErrorCode enums; L3FacilityOpCode TCAP parser; L3USSDData IE |
 | **GSM 02.90 / 3GPP TS 23.038** | USSD alphabet and encoding | GSM 7-bit default/extended alphabet, UCS2, DCS handling in L3USSDData |

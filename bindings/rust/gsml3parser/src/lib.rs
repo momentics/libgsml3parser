@@ -24,8 +24,9 @@
 //! entity with safe callback delivery, and the BTS stack layer (registry /
 //! borrowed session / orchestrator). The v1 surface covers
 //! sections S1–S7 of the C header plus the two typed builders
-//! `gsml3_build_cm_service_request` / `gsml3_build_setup`. Zero runtime
-//! dependencies — `std` only.
+//! `gsml3_build_cm_service_request` / `gsml3_build_setup` and the MM
+//! Authentication Failure / CM Service Prompt pair (two typed builders, four
+//! typed getters). Zero runtime dependencies — `std` only.
 //!
 //! ## Ownership
 //!
@@ -81,14 +82,18 @@ pub mod message;
 pub mod registry;
 pub mod stack;
 
-/// The raw FFI layer: `#[repr(C)]` structures, callback types and the 128
+/// The raw FFI layer: `#[repr(C)]` structures, callback types and the 134
 /// `extern "C"` declarations of the v1 surface (S1–S7 + two curated S9
-/// builders). Exposed for advanced/test use — prefer the safe API.
+/// builders + the MM Authentication Failure / CM Service Prompt pair).
+/// Exposed for advanced/test use — prefer the safe API.
 pub use gsml3parser_sys as sys;
 
 pub use error::{ErrorKind, GsmL3Error};
 pub use lapdm::{decode_frame, FrameInfo, LapdmEntity, TrampolineState};
-pub use message::{build_cm_service_request, build_setup, Config, Message, RslFrame};
+pub use message::{
+    build_authentication_failure, build_cm_service_prompt, build_cm_service_request, build_setup,
+    Config, Message, RslFrame,
+};
 pub use registry::{Registry, Session};
 pub use stack::{GsmL3Stack, L3Event, StepResult};
 

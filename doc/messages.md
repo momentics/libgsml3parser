@@ -109,7 +109,7 @@ No normative reference templates exist for this block: bodies are kept as opaque
 | `L3SupServFacilityIE` | TLV | Supplementary service facility data |
 | `L3SupServVersionIndicator` | V | SS version indicator |
 
-## Mobility Management (PD=0x05) — 19 message types
+## Mobility Management (PD=0x05) — 21 message types
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
@@ -120,10 +120,12 @@ No normative reference templates exist for this block: bodies are kept as opaque
 | `L3AuthenticationReject` | 0x11 | DL | Authentication rejected |
 | `L3AuthenticationRequest` | 0x12 | DL | CKSN (high half-octet) + RAND (16 octets); optional parameters kept opaque |
 | `L3AuthenticationResponse` | 0x14 | UL | Authentication response (SRES) |
+| `L3AuthenticationFailure` | 0x1C | UL | Reject cause + opt. AUTS TLV 0x22 (TS 24.008 9.2.3a) |
 | `L3CMServiceAccept` | 0x21 | DL | CM service accepted |
 | `L3CMServiceReject` | 0x22 | DL | CM service rejected |
 | `L3CMServiceAbort` | 0x23 | DL | CM service aborted |
 | `L3CMServiceRequest` | 0x24 | UL | CM service type + CKSN (one octet), classmark2 (LV, three to seven value octets), mobile identity |
+| `L3CMServicePrompt` | 0x25 | DL | PD/SAPI octet of the requested CM protocol (TS 24.008 9.2.5a) |
 | `L3CMReestablishmentRequest` | 0x28 | UL | CKSN (one octet), classmark2 (LV, three to seven value octets), mobile identity [+ LAI (TLV 0x13)] |
 | `L3MMAbort` | 0x29 | Bidir | MM abort (no value part, TS 24.008) |
 | `L3MMStatus` | 0x31 | Bidir | MM status report |

@@ -158,6 +158,8 @@ using MMM = std::variant<
     L3AuthenticationRequest,
     L3AuthenticationResponse,
     L3AuthenticationReject,
+    L3AuthenticationFailure,
+    L3CMServicePrompt,
     L3MMAbort
 >;
 

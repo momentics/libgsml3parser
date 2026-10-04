@@ -2521,6 +2521,24 @@ GSML3_C_API int gsml3_msg_cm_service_request_identity(const gsml3_message* msg,
     }
 }
 
+GSML3_C_API int gsml3_msg_cm_service_prompt_pd(const gsml3_message* msg) {
+    try {
+        return typedGetInt<L3CMServicePrompt>(msg, [](auto& m){ return (int)m.protocolDiscriminator(); });
+    } catch (...) {
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_cm_service_prompt_pd");
+        return -1;
+    }
+}
+
+GSML3_C_API int gsml3_msg_cm_service_prompt_sapi(const gsml3_message* msg) {
+    try {
+        return typedGetInt<L3CMServicePrompt>(msg, [](auto& m){ return (int)m.sapi(); });
+    } catch (...) {
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_cm_service_prompt_sapi");
+        return -1;
+    }
+}
+
 GSML3_C_API int gsml3_msg_cm_service_reject_cause(const gsml3_message* msg) {
     try {
         return typedGetInt<L3CMServiceReject>(msg, [](auto& m){ return (int)m.cause(); });
@@ -2682,6 +2700,32 @@ GSML3_C_API uint32_t gsml3_msg_authentication_response_sres(const gsml3_message*
         return 0;
     } catch (...) {
         setLastErrorUnexpected("unexpected exception in gsml3_msg_authentication_response_sres");
+        return 0;
+    }
+}
+
+GSML3_C_API int gsml3_msg_authentication_failure_cause(const gsml3_message* msg) {
+    try {
+        return typedGetInt<L3AuthenticationFailure>(msg, [](auto& m){ return (int)m.cause(); });
+    } catch (...) {
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_authentication_failure_cause");
+        return -1;
+    }
+}
+
+GSML3_C_API size_t gsml3_msg_authentication_failure_auts(const gsml3_message* msg,
+                                                          uint8_t* out, size_t maxlen) {
+    clearLastError();
+    try {
+        if (!msg || !out) return 0;
+        auto* m = tryGet<L3AuthenticationFailure>(msg->msg);
+        if (!m || !m->hasAUTS()) return 0;
+        const auto a = m->auts(); // span over a fixed std::array<uint8_t,16>
+        if (a.size() > maxlen) { setBufferTooSmallError(); return 0; }
+        std::memcpy(out, a.data(), a.size());
+        return a.size();
+    } catch (...) {
+        setLastErrorUnexpected("unexpected exception in gsml3_msg_authentication_failure_auts");
         return 0;
     }
 }
@@ -3357,6 +3401,30 @@ GSML3_C_API size_t gsml3_build_cm_service_abort(uint8_t* out, size_t maxlen,
     }
 }
 
+GSML3_C_API size_t gsml3_build_cm_service_prompt(uint8_t* out, size_t maxlen,
+                                                  int pd, int sapi) {
+    try {
+        if (!checkEnumValue(pd, 0, 15, "pd")) return 0;
+        // SAPI is a two-bit field with only '00' (SAPI 0) and '11' (SAPI 3)
+        // assigned (TS 24.008 10.5.1.10a).
+        if (sapi != 0 && sapi != 3) {
+            char msg[96];
+            std::snprintf(msg, sizeof(msg), "invalid SAPI value %d (expected 0 or 3)", sapi);
+            setError(GSML3_ERR_INVALID_ARG, msg);
+            return 0;
+        }
+        return typedBuild<MMM>(out, maxlen, [&]{
+            return MMM{L3CMServicePrompt::builder()
+                           .pd(static_cast<unsigned>(pd))
+                           .sapi(static_cast<unsigned>(sapi))
+                           .build()};
+        });
+    } catch (...) {
+        setLastErrorUnexpected("unexpected exception in gsml3_build_cm_service_prompt");
+        return 0;
+    }
+}
+
 GSML3_C_API size_t gsml3_build_identity_request(uint8_t* out, size_t maxlen,
                                                   int id_type) {
     try {
@@ -3464,13 +3532,32 @@ GSML3_C_API size_t gsml3_build_authentication_request(uint8_t* out, size_t maxle
 }
 
 GSML3_C_API size_t gsml3_build_authentication_response(uint8_t* out, size_t maxlen,
-                                                        uint32_t sres) {
+                                                         uint32_t sres) {
     try {
         return typedBuild<MMM>(out, maxlen, [&]{
             return MMM{L3AuthenticationResponse::builder().sres(sres).build()};
         });
     } catch (...) {
         setLastErrorUnexpected("unexpected exception in gsml3_build_authentication_response");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_build_authentication_failure(uint8_t* out, size_t maxlen,
+                                                       int cause, const uint8_t* auts) {
+    try {
+        if (!checkEnumValue(cause, ranges::mmCauseLo, ranges::mmCauseHi, "cause"))
+            return 0;
+        return typedBuild<MMM>(out, maxlen, [&]{
+            auto b = L3AuthenticationFailure::builder()
+                         .cause(static_cast<MMRejectCause>(cause));
+            if (auts) {
+                b.auts(std::span<const uint8_t>(auts, 16));
+            }
+            return MMM{b.build()};
+        });
+    } catch (...) {
+        setLastErrorUnexpected("unexpected exception in gsml3_build_authentication_failure");
         return 0;
     }
 }

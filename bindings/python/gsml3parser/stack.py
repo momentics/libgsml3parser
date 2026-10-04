@@ -720,6 +720,18 @@ class Message:
             return None
         return _identity_from(idc)
 
+    def cm_service_prompt_pd(self) -> int:
+        """Protocol discriminator of the requested CM protocol (TS 24.008
+        10.5.1.10a); -1 sentinel on wrong type."""
+        self._check()
+        return int(lib.gsml3_msg_cm_service_prompt_pd(self._h))
+
+    def cm_service_prompt_sapi(self) -> int:
+        """SAPI of the requested CM protocol ('00'=0, '11'=3, TS 24.008
+        10.5.1.10a); -1 sentinel on wrong type."""
+        self._check()
+        return int(lib.gsml3_msg_cm_service_prompt_sapi(self._h))
+
     def cm_service_reject_cause(self) -> int:
         """MMRejectCause; -1 sentinel on wrong type."""
         self._check()
@@ -802,6 +814,23 @@ class Message:
         """32-bit SRES; 0 when not AuthenticationResponse."""
         self._check()
         return int(lib.gsml3_msg_authentication_response_sres(self._h))
+
+    def authentication_failure_cause(self) -> int:
+        """MMRejectCause value of the bare cause octet (TS 24.008 9.2.3a);
+        -1 sentinel on wrong type."""
+        self._check()
+        return int(lib.gsml3_msg_authentication_failure_cause(self._h))
+
+    def authentication_failure_auts(self) -> bytes | None:
+        """The 16-octet AUTS from the IEI 0x22 TLV in wire order (TS 24.008
+        10.5.3.6); None when the message is not Authentication Failure or
+        the parameter is absent."""
+        self._check()
+        buf = (ctypes.c_ubyte * 16)()
+        n = int(lib.gsml3_msg_authentication_failure_auts(self._h, buf, len(buf)))
+        if n == 0:
+            return None
+        return bytes(buf.raw[:n])
 
     def tmsi_reallocation_command_lai(self) -> Lai | None:
         self._check()
@@ -1908,6 +1937,15 @@ def build_cm_service_abort(abort_cause: int) -> bytes:
     return _builder("gsml3_build_cm_service_abort", (abort_cause,))
 
 
+def build_cm_service_prompt(pd: int, sapi: int) -> bytes:
+    """pd: protocol discriminator of the requested CM protocol (0..15);
+    sapi: 0 or 3 (TS 24.008 9.2.5a/10.5.1.10a)."""
+    _as_int(pd, "pd", lo=0, hi=15)
+    if sapi not in (0, 3):
+        raise ValueError(f"sapi must be 0 or 3 (TS 24.008 10.5.1.10a), got {sapi!r}")
+    return _builder("gsml3_build_cm_service_prompt", (pd, sapi))
+
+
 def build_identity_request(id_type: int) -> bytes:
     return _builder("gsml3_build_identity_request", (_as_int(id_type, "id_type", lo=0),))
 
@@ -1955,6 +1993,15 @@ def build_authentication_response(sres: int) -> bytes:
     """32-bit SRES (big-endian on the wire)."""
     return _builder("gsml3_build_authentication_response",
                     (_as_int(sres, "sres", lo=0, hi=0xFFFFFFFF),))
+
+
+def build_authentication_failure(cause: int, auts=None) -> bytes:
+    """cause: MMRejectCause value (TS 24.008 9.2.3a); auts: the 16-octet AUTS
+    in wire order or None (no IEI 0x22 authentication failure parameter)."""
+    a = None if auts is None else _byteslike(auts, "auts")
+    if a is not None and len(a) != 16:
+        raise ValueError(f"auts must be exactly 16 octets, got {len(a)}")
+    return _builder("gsml3_build_authentication_failure", (cause, a))
 
 
 def build_tmsi_reallocation_command(mcc: int, mnc: int, lac: int, tmsi: int) -> bytes:

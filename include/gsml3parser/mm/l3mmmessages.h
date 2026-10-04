@@ -243,6 +243,71 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
+// ── Authentication Failure (TS 24.008 9.2.3a) ─────────────────────────
+// MM Authentication Failure (TS 24.008 section 9.2.3a): a bare
+// reject cause octet plus, only for the "Synch failure" cause, the optional
+// IEI 0x22 authentication failure parameter TLV carrying the 16-octet AUTS.
+
+class L3AuthenticationFailure {
+private:
+    MMRejectCause mCause{MMRejectCause::Zero};
+    // Fixed 128-bit AUTS (TS 24.008 10.5.3.6) stored inline so the message is
+    // trivially copyable and constructible with zero heap allocation.
+    std::array<uint8_t, 16> mAUTS{};
+    bool mHaveAUTS{false};
+    std::vector<uint8_t> mAdditionalIes;
+
+    friend struct Builder;
+public:
+    static constexpr int MTI = 0x1C;
+    L3AuthenticationFailure() = default;
+    explicit L3AuthenticationFailure(MMRejectCause cause) : mCause(cause) {}
+
+    /// Reject cause (TS 24.008 10.5.3.6).
+    MMRejectCause cause() const { return mCause; }
+    /// True when the IEI 0x22 authentication failure parameter is present.
+    [[nodiscard]] bool hasAUTS() const { return mHaveAUTS; }
+    /// The 16-octet AUTS (wire order) as a zero-copy span.
+    [[nodiscard]] std::span<const uint8_t> auts() const { return mAUTS; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
+
+    struct Builder {
+        MMRejectCause m_cause{MMRejectCause::Zero};
+        std::array<uint8_t, 16> m_auts{};
+        bool m_haveAUTS{false};
+        std::vector<uint8_t> m_additionalIes;
+
+        /// Set the reject cause.
+        Builder& cause(MMRejectCause v) { m_cause = v; return *this; }
+        /// Set the 16-octet AUTS (TS 24.008 10.5.3.6); the span must be
+        /// exactly 16 octets, otherwise no parameter is attached.
+        Builder& auts(std::span<const uint8_t> v) {
+            if (v.size() == m_auts.size()) {
+                for (size_t i = 0; i < m_auts.size(); ++i) m_auts[i] = v[i];
+                m_haveAUTS = true;
+            }
+            return *this;
+        }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
+        /// Build the final message.
+        [[nodiscard]] L3AuthenticationFailure build() const;
+    };
+
+    static Builder builder();
+    size_t bodyLength() const;
+    [[nodiscard]] static Expected<L3AuthenticationFailure> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+};
+
 // ── Authentication Request (GSM 04.08 9.2.2) ──────────────────────────
 // Unrecognized optional information elements are kept as an opaque
 // sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
@@ -505,6 +570,50 @@ public:
     [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3CMServiceRequest> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::MobilityManagement; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+};
+
+// ── CM Service Prompt (TS 24.008 9.2.5a) ──────────────────────────────
+// MM CM Service Prompt (TS 24.008 section 9.2.5a): a single octet carrying
+// the PD and SAPI of the requested CM protocol (spare(2)|SAPI(2)|PD(4),
+// TS 24.008 10.5.1.10a).
+
+class L3CMServicePrompt {
+private:
+    unsigned mPD{0};
+    unsigned mSAPI{0};
+
+    friend struct Builder;
+public:
+    static constexpr int MTI = 0x25;
+    L3CMServicePrompt() = default;
+    L3CMServicePrompt(unsigned pd, unsigned sapi) : mPD(pd & 0x0Fu), mSAPI(sapi & 0x03u) {}
+
+    /// Protocol discriminator of the requested CM protocol (four bits,
+    /// TS 24.008 10.5.1.10a).
+    [[nodiscard]] unsigned protocolDiscriminator() const { return mPD; }
+    /// Service access point identifier (two bits: '00'=SAPI 0, '11'=SAPI 3).
+    [[nodiscard]] unsigned sapi() const { return mSAPI; }
+
+    struct Builder {
+        unsigned m_pd{0};
+        unsigned m_sapi{0};
+
+        /// Set the protocol discriminator (four-bit wire value, 0..15).
+        Builder& pd(unsigned v) { m_pd = v; return *this; }
+        /// Set the SAPI ('00'=SAPI 0, '11'=SAPI 3; TS 24.008 10.5.1.10a).
+        Builder& sapi(unsigned v) { m_sapi = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3CMServicePrompt build() const;
+    };
+
+    static Builder builder();
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3CMServicePrompt> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
     [[nodiscard]] int mti() const { return MTI; }

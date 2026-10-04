@@ -1284,6 +1284,41 @@ TEST(CApiTyped, Builders_RoundTrip) {
         gsml3_message_free(m);
     }
     {
+        const uint8_t auts[16] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+                                  0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00};
+        size_t n = gsml3_build_authentication_failure(buf, sizeof(buf), 0x15 /* Synch failure */, auts);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_STREQ(gsml3_message_name(m), "AuthenticationFailure");
+        EXPECT_EQ(gsml3_msg_authentication_failure_cause(m), 0x15);
+        uint8_t got[16] = {};
+        EXPECT_EQ(gsml3_msg_authentication_failure_auts(m, got, sizeof(got)), 16u);
+        EXPECT_EQ(0, std::memcmp(got, auts, 16));
+        gsml3_message_free(m);
+    }
+    {
+        // NULL auts: no IEI 0x22 TLV on the wire, the getter reports absence.
+        size_t n = gsml3_build_authentication_failure(buf, sizeof(buf), 0x17 /* GSM auth unacceptable */, nullptr);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_EQ(gsml3_msg_authentication_failure_cause(m), 0x17);
+        uint8_t got[16] = {};
+        EXPECT_EQ(gsml3_msg_authentication_failure_auts(m, got, sizeof(got)), 0u);
+        gsml3_message_free(m);
+    }
+    {
+        size_t n = gsml3_build_cm_service_prompt(buf, sizeof(buf), 5, 0);
+        ASSERT_GT(n, 0u);
+        gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
+        ASSERT_NE(m, nullptr);
+        EXPECT_STREQ(gsml3_message_name(m), "CMServicePrompt");
+        EXPECT_EQ(gsml3_msg_cm_service_prompt_pd(m), 5);
+        EXPECT_EQ(gsml3_msg_cm_service_prompt_sapi(m), 0);
+        gsml3_message_free(m);
+    }
+    {
         size_t n = gsml3_build_location_updating_request(buf, sizeof(buf), 0, GSML3_ID_TMSI, 0x12345678, nullptr, 244, 5, 0x1234);
         ASSERT_GT(n, 0u);
         gsml3_message* m = gsml3_parse_l3(buf, n, nullptr);
@@ -1348,6 +1383,11 @@ TEST(CApiTyped, WrongType_Sentinels) {
     EXPECT_EQ(gsml3_msg_setup_ti(m), -1);
     EXPECT_EQ(gsml3_msg_disconnect_cause(m), -1);
     EXPECT_EQ(gsml3_msg_cm_service_reject_cause(m), -1);
+    EXPECT_EQ(gsml3_msg_authentication_failure_cause(m), -1);
+    uint8_t abuf[16];
+    EXPECT_EQ(gsml3_msg_authentication_failure_auts(m, abuf, sizeof(abuf)), 0u);
+    EXPECT_EQ(gsml3_msg_cm_service_prompt_pd(m), -1);
+    EXPECT_EQ(gsml3_msg_cm_service_prompt_sapi(m), -1);
     EXPECT_EQ(gsml3_msg_paging_request_type2_tmsi(m, 0), 0u);
     EXPECT_EQ(gsml3_msg_setup_called_number(m), nullptr);
     uint8_t buf[8];
@@ -1460,6 +1500,13 @@ TEST(CApi, InputValidation) {
     // CM abort cause 0 is not in the domain (the spec starts at 0x01).
     expectInvalid(gsml3_build_cm_service_abort(buf, sizeof(buf), 0));
     EXPECT_GT(gsml3_build_cm_service_abort(buf, sizeof(buf), 0x02), 0u);
+    // Authentication Failure: the cause must stay inside the MMRejectCause domain.
+    expectInvalid(gsml3_build_authentication_failure(buf, sizeof(buf), 0x70, nullptr));
+    EXPECT_GT(gsml3_build_authentication_failure(buf, sizeof(buf), 0x15, nullptr), 0u);
+    // CM Service Prompt: PD is four bits, SAPI only '00' (0) or '11' (3).
+    expectInvalid(gsml3_build_cm_service_prompt(buf, sizeof(buf), 16, 0));
+    expectInvalid(gsml3_build_cm_service_prompt(buf, sizeof(buf), 5, 2));
+    EXPECT_GT(gsml3_build_cm_service_prompt(buf, sizeof(buf), 15, 3), 0u);
 
     // Identity digit strings: digits only, at most 15.
     expectInvalid(gsml3_build_paging_response(buf, sizeof(buf), GSML3_ID_IMSI, 0,

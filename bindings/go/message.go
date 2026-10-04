@@ -262,6 +262,53 @@ func (m *Message) Ti() int {
 	return int(C.gsml3_message_ti(m.p))
 }
 
+// AuthenticationFailureCause returns the MMRejectCause value of the bare
+// reject cause octet (TS 24.008 9.2.3a), or -1 for a closed handle or a
+// message that is not an Authentication Failure (the documented sentinel).
+func (m *Message) AuthenticationFailureCause() int {
+	if m == nil || m.p == nil {
+		return -1
+	}
+	return int(C.gsml3_msg_authentication_failure_cause(m.p))
+}
+
+// AuthenticationFailureAUTS returns the 16-octet AUTS of the IEI 0x22
+// authentication failure parameter TLV in wire order (TS 24.008 10.5.3.6), or
+// nil for a closed handle, a wrong message type, or an absent parameter.
+func (m *Message) AuthenticationFailureAUTS() []byte {
+	if m == nil || m.p == nil {
+		return nil
+	}
+	buf := make([]byte, 16)
+	n := C.gsml3_msg_authentication_failure_auts(m.p, bytePtr(buf), C.size_t(len(buf)))
+	if int64(n) <= 0 {
+		return nil
+	}
+	out := make([]byte, int(n))
+	copy(out, buf[:int(n)])
+	return out
+}
+
+// CMServicePromptPD returns the protocol discriminator of the requested CM
+// protocol (four bits, TS 24.008 10.5.1.10a), or -1 for a closed handle or a
+// message that is not a CM Service Prompt (the documented sentinel).
+func (m *Message) CMServicePromptPD() int {
+	if m == nil || m.p == nil {
+		return -1
+	}
+	return int(C.gsml3_msg_cm_service_prompt_pd(m.p))
+}
+
+// CMServicePromptSAPI returns the SAPI of the requested CM protocol ('00'=0,
+// '11'=3, TS 24.008 10.5.1.10a), or -1 for a closed handle or a message that
+// is not a CM Service Prompt (the documented sentinel).
+func (m *Message) CMServicePromptSAPI() int {
+	if m == nil || m.p == nil {
+		return -1
+	}
+	return int(C.gsml3_msg_cm_service_prompt_sapi(m.p))
+}
+
 // Size returns the exact wire size of the serialized message (zero-alloc C
 // call); a buffer of exactly this size is guaranteed to be accepted by Write.
 func (m *Message) Size() (int, error) {
@@ -590,5 +637,37 @@ func RslBuildChanRqd(chanNr byte, ra, t1p, t2, t3, accessDelay byte) ([]byte, er
 func RslBuildDeleteInd(chanNr byte, info []byte) ([]byte, error) {
 	return serializeInto("rsl.BuildDeleteInd", func(out *C.uint8_t, maxLen C.size_t) C.size_t {
 		return C.gsml3_rsl_build_delete_ind(out, maxLen, C.uint8_t(chanNr), bytePtr(info), C.size_t(len(info)))
+	})
+}
+
+// ── MM typed builders (2): fixed caller buffer, domains range-checked ─────
+
+// BuildAuthenticationFailure builds an MM AUTHENTICATION FAILURE message
+// (TS 24.008 9.2.3a): a bare reject cause octet plus, when auts is present,
+// the IEI 0x22 authentication failure parameter TLV carrying the 16-octet
+// AUTS (TS 24.008 10.5.3.6). cause is range-checked in C; a non-empty auts
+// must be exactly 16 octets and is rejected before the FFI boundary.
+func BuildAuthenticationFailure(cause int, auts []byte) ([]byte, error) {
+	if len(auts) != 0 && len(auts) != 16 {
+		return nil, invalidArg("mm.BuildAuthenticationFailure", "auts must be exactly 16 octets when present")
+	}
+	return serializeInto("mm.BuildAuthenticationFailure", func(out *C.uint8_t, maxLen C.size_t) C.size_t {
+		return C.gsml3_build_authentication_failure(out, maxLen, C.int(cause), bytePtr(auts))
+	})
+}
+
+// BuildCMServicePrompt builds an MM CM SERVICE PROMPT message (TS 24.008
+// 9.2.5a): a single octet spare(2)|SAPI(2)|PD(4) of the requested CM
+// protocol (TS 24.008 10.5.1.10a). pd must be 0..15 and sapi 0 or 3;
+// out-of-domain values are rejected before the FFI boundary.
+func BuildCMServicePrompt(pd int, sapi int) ([]byte, error) {
+	if pd < 0 || pd > 15 {
+		return nil, invalidArg("mm.BuildCMServicePrompt", "pd must be 0..15")
+	}
+	if sapi != 0 && sapi != 3 {
+		return nil, invalidArg("mm.BuildCMServicePrompt", "sapi must be 0 or 3 (TS 24.008 10.5.1.10a)")
+	}
+	return serializeInto("mm.BuildCMServicePrompt", func(out *C.uint8_t, maxLen C.size_t) C.size_t {
+		return C.gsml3_build_cm_service_prompt(out, maxLen, C.int(pd), C.int(sapi))
 	})
 }

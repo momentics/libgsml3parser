@@ -33,8 +33,8 @@
 // Mobile Identity type octets verified against GSM 24.008 10.5.1.4.
 // Parse test hex data cross-checked against the GSM 24.008 message definitions:
 //   Location Updating Request / Accept, TMSI Reallocation Command,
-//   CM Service Request / Reject, IMSI Detach Indication, MM Status,
-//   Identity Response, CM Reestablishment Request.
+//   CM Service Request / Reject / Prompt, IMSI Detach Indication, MM Status,
+//   Identity Response, CM Reestablishment Request, Authentication Failure.
 //
 // [GOLDEN VERIFICATION]
 // All byte-level parse test data cross-checked against 3GPP TS 24.008:
@@ -55,6 +55,10 @@
 //   - IdentityResponse: MI-LV only
 //   - CMReestablishmentRequest: CKSN(3)|spare(1) in the LOW half-octet,
 //     spare high half-octet (TS 24.008 9.2.5), CM2-LV, MI-LV
+//   - AuthenticationFailure: bare reject cause octet + optional IEI 0x22 TLV
+//     with length 0x10 and the 16-octet AUTS (TS 24.008 9.2.3a/10.5.3.6)
+//   - CMServicePrompt: one octet spare(2)|SAPI(2)|PD(4) of the requested CM
+//     protocol, SAPI '00'=0 / '11'=3 (TS 24.008 9.2.5a/10.5.1.10a)
 //   - LAI encoding verified: MCC=250, MNC=01 -> BCD {0x52, 0xF0, 0x10} per
 //     TS 24.008 10.5.1.3 ([MCC2|MCC1][MNC3/F|MCC3][MNC2|MNC1])
 //     (same packing for MCC=262, MNC=42 -> {0x62, 0xF2, 0x24})
@@ -88,6 +92,8 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 //   Location Updating Request: '001000'B     -> LocationUpdatingRequest = 0x08
 //   Authentication Request: '010010'B -> AuthenticationRequest = 0x12
 //   Authentication Response: '010100'B -> AuthenticationResponse = 0x14
+//   Authentication Failure: '011100'B -> AuthenticationFailure = 0x1C (GSM 24.008 Table 10.2)
+//   CM Service Prompt: '100101'B -> CMServicePrompt = 0x25 (GSM 24.008 Table 10.2)
 // GSM 24.008 Table 10.5.3 specifies all MM MTI values (6-bit field)
 // [GSM SPEC VERIFIED] MM messages carry the 6-bit MTI in the low bits of octet 1
 //   (NSD not exposed, written zero). PD discriminator for MM is 5 ('0101'B), placed
@@ -104,6 +110,7 @@ TEST(GoldenMM, MessageTypeValues) {
     EXPECT_EQ(L3AuthenticationRequest::MTI, 0x12);     // '010010'B - GSM 24.008 9.2.1
     EXPECT_EQ(L3AuthenticationResponse::MTI, 0x14);    // '010100'B - GSM 24.008 9.2.1
     EXPECT_EQ(L3AuthenticationReject::MTI, 0x11);      // '010001'B - GSM 24.008 9.2.1
+    EXPECT_EQ(L3AuthenticationFailure::MTI, 0x1C);     // '011100'B - GSM 24.008 Table 10.2 (9.2.3a)
     EXPECT_EQ(L3IdentityRequest::MTI, 0x18);           // '011000'B - GSM 24.008 9.2.10
     EXPECT_EQ(L3IdentityResponse::MTI, 0x19);          // '011001'B - GSM 24.008 9.2.11
     EXPECT_EQ(L3TMSIReallocationCommand::MTI, 0x1a);   // '011010'B - GSM 24.008 9.2.17
@@ -112,6 +119,7 @@ TEST(GoldenMM, MessageTypeValues) {
     EXPECT_EQ(L3CMServiceReject::MTI, 0x22);           // '100010'B - GSM 24.008 9.2.6
     EXPECT_EQ(L3CMServiceAbort::MTI, 0x23);            // '100011'B - GSM 24.008 9.2.7
     EXPECT_EQ(L3CMServiceRequest::MTI, 0x24);          // '100100'B - GSM 24.008 9.2.9
+    EXPECT_EQ(L3CMServicePrompt::MTI, 0x25);           // '100101'B - GSM 24.008 Table 10.2 (9.2.5a)
     EXPECT_EQ(L3CMReestablishmentRequest::MTI, 0x28);  // '101000'B - GSM 24.008 9.2.4
     EXPECT_EQ(L3MMInformation::MTI, 0x32);             // '110010'B - GSM 24.008 9.2.15
     EXPECT_EQ(L3MMStatus::MTI, 0x31);                  // '110001'B - GSM 24.008 9.2.15
@@ -590,6 +598,87 @@ TEST(GoldenMM, CMReestablishmentRequest_FirstOctet_Golden) {
 }
 
 // =====================================================================
+// MM PARSE FROM HEX: Authentication Failure (TS 24.008 9.2.3a)
+// Authentication Failure body per TS 24.008 9.2.3a, Table 9.2.4a:
+//   reject cause (bare V octet, TS 24.008 10.5.3.6) + optional
+//   authentication failure parameter TLV (IEI 0x22, length 0x10) carrying
+//   the 16-octet AUTS — present only for the "Synch failure" cause.
+// Spec-verified: PD=5(MM), MTI=0x1C(AuthenticationFailure) per GSM 24.008 Table 10.2
+// [GSM SPEC VERIFIED] TS 24.008 9.2.3a: AuthenticationFailure body =
+//   cause(1 octet, M) + [IEI 0x22 TLV with the 16-octet AUTS, O].
+// =====================================================================
+
+TEST(GoldenMM, AuthenticationFailure_Parse) {
+    // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
+    // Byte 1: MT=0x1C(AuthenticationFailure) in the six low bits, NSD=0 (GSM 24.008 Table 10.2)
+    // Byte 2: reject cause = 0x15 (Synch failure) [TS 24.008 10.5.3.6]
+    // Byte 3: IEI = 0x22 (authentication failure parameter TLV) [TS 24.008 9.2.3a]
+    // Byte 4: length = 0x10 (16 octets, the AUTS)
+    // Bytes 5-20: AUTS = {0x11, 0x22, ..., 0xFF, 0x00}
+    uint8_t data[] = {
+        0x05, 0x1C, 0x15,
+        0x22, 0x10,
+        0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+        0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3AuthenticationFailure::MTI);
+    const auto* af = tryGet<L3AuthenticationFailure>(*msg);
+    ASSERT_NE(af, nullptr);
+    EXPECT_EQ(af->cause(), MMRejectCause::Synch_Failure);
+    EXPECT_TRUE(af->hasAUTS());
+    uint8_t auts[16] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+                        0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00};
+    bool autsMatches = true;
+    for (size_t i = 0; i < 16; ++i) {
+        if (af->auts()[i] != auts[i]) autsMatches = false;
+    }
+    EXPECT_TRUE(autsMatches);
+
+    // Without the TLV the body is the single cause octet: 0x17 =
+    // GSM_Authentication_Unacceptable (TS 24.008 10.5.3.6).
+    uint8_t noTlv[] = {0x05, 0x1C, 0x17};
+    auto plain = parseL3(std::span<const uint8_t>(noTlv));
+    ASSERT_TRUE(plain);
+    const auto* pa = tryGet<L3AuthenticationFailure>(*plain);
+    ASSERT_NE(pa, nullptr);
+    EXPECT_EQ(pa->cause(), MMRejectCause::GSM_Authentication_Unacceptable);
+    EXPECT_FALSE(pa->hasAUTS());
+}
+
+// =====================================================================
+// MM PARSE FROM HEX: CM Service Prompt (TS 24.008 9.2.5a)
+// CM Service Prompt body per TS 24.008 9.2.5a, Table 9.2.7: exactly one
+// octet "PD and SAPI of CM protocol", spare(2)|SAPI(2)|PD(4) (TS 24.008
+// 10.5.1.10a, Figure 10.5.10); SAPI '00'=SAPI 0, '11'=SAPI 3.
+// Spec-verified: PD=5(MM), MTI=0x25(CMServicePrompt) per GSM 24.008 Table 10.2
+// =====================================================================
+
+TEST(GoldenMM, CMServicePrompt_Parse) {
+    // Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
+    // Byte 1: MT=0x25(CMServicePrompt) in the six low bits, NSD=0 (GSM 24.008 Table 10.2)
+    // Byte 2: spare(2)=00|SAPI(2)=00(SAPI 0)|PD(4)=0101(5) = 0x05 [TS 24.008 10.5.1.10a]
+    uint8_t data[] = {0x05, 0x25, 0x05};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3CMServicePrompt::MTI);
+    const auto* prompt = tryGet<L3CMServicePrompt>(*msg);
+    ASSERT_NE(prompt, nullptr);
+    EXPECT_EQ(prompt->protocolDiscriminator(), 5u);
+    EXPECT_EQ(prompt->sapi(), 0u);
+
+    // SAPI 3 form: spare(2)=00|SAPI(2)=11|PD(4)=0000(0) = 0x60.
+    uint8_t sapi3[] = {0x05, 0x25, 0x60};
+    auto m3 = parseL3(std::span<const uint8_t>(sapi3));
+    ASSERT_TRUE(m3);
+    const auto* p3 = tryGet<L3CMServicePrompt>(*m3);
+    ASSERT_NE(p3, nullptr);
+    EXPECT_EQ(p3->protocolDiscriminator(), 0u);
+    EXPECT_EQ(p3->sapi(), 3u);
+}
+
+// =====================================================================
 // MM ROUNDTrip: All messages
 // =====================================================================
 
@@ -755,6 +844,50 @@ TEST(GoldenMM, AuthenticationReject_RoundTrip) {
     EXPECT_EQ(messageMTI(*parsed), L3AuthenticationReject::MTI);
 }
 
+TEST(GoldenMM, AuthenticationFailure_RoundTrip) {
+    // Bare cause octet only (no IEI 0x22 TLV): the frame is header + 1 byte.
+    ParsedMessage msg{MMM{L3AuthenticationFailure{MMRejectCause::GSM_Authentication_Unacceptable}}};
+    auto bytes = writeL3Bytes(msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), 3u);
+    EXPECT_EQ((*bytes)[2], 0x17);
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(messageMTI(*parsed), L3AuthenticationFailure::MTI);
+    const auto* af = tryGet<L3AuthenticationFailure>(*parsed);
+    ASSERT_NE(af, nullptr);
+    EXPECT_FALSE(af->hasAUTS());
+}
+
+// Golden: Authentication Failure with the IEI 0x22 authentication failure
+// parameter TLV (16-octet AUTS) round-trips byte-for-byte (TS 24.008 9.2.3a).
+TEST(GoldenMM, AuthenticationFailure_WithAUTS_RoundTrip) {
+    uint8_t auts[16] = {0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88,
+                        0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00};
+    ParsedMessage msg(MMM(L3AuthenticationFailure::builder()
+        .cause(MMRejectCause::Synch_Failure)
+        .auts(std::span<const uint8_t>(auts))
+        .build()));
+    auto bytes = writeL3Bytes(msg);
+    ASSERT_TRUE(bytes);
+    // Wire shape: header + cause + IEI 0x22 + length 0x10 + 16 AUTS octets.
+    ASSERT_EQ(bytes.value().size(), 21u);
+    EXPECT_EQ((*bytes)[2], 0x15);
+    EXPECT_EQ((*bytes)[3], 0x22);
+    EXPECT_EQ((*bytes)[4], 0x10);
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    const auto* af = tryGet<L3AuthenticationFailure>(*parsed);
+    ASSERT_NE(af, nullptr);
+    EXPECT_EQ(af->cause(), MMRejectCause::Synch_Failure);
+    EXPECT_TRUE(af->hasAUTS());
+    bool autsMatches = true;
+    for (size_t i = 0; i < 16; ++i) {
+        if (af->auts()[i] != auts[i]) autsMatches = false;
+    }
+    EXPECT_TRUE(autsMatches);
+}
+
 TEST(GoldenMM, IdentityRequest_IMSI_RoundTrip) {
     // [GOLDEN VERIFIED] IdentityRequest with MobileIDType::IMSI -> type octet has identityType=001(IMSI)
     // GSM 24.008 10.5.3.7: identityType(3 bits): 001=IMSI, 010=IMEI, 100=TMSI
@@ -808,6 +941,31 @@ TEST(GoldenMM, CMServiceRequest_RoundTrip) {
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3CMServiceRequest::MTI);
+}
+
+// Golden: CM Service Prompt carries exactly one body octet —
+// spare(2)|SAPI(2)|PD(4) (TS 24.008 9.2.5a/10.5.1.10a). PD=5, SAPI=3 gives
+// (3 << 5) | 5 = 0x65 on the wire; PD=15, SAPI=0 gives 0x0F.
+TEST(GoldenMM, CMServicePrompt_RoundTrip) {
+    ParsedMessage msg(MMM(L3CMServicePrompt::builder().pd(5).sapi(3).build()));
+    auto bytes = writeL3Bytes(msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), 3u);
+    EXPECT_EQ((*bytes)[2], 0x65);
+    auto parsed = roundtrip(msg);
+    ASSERT_TRUE(parsed);
+    const auto* prompt = tryGet<L3CMServicePrompt>(*parsed);
+    ASSERT_NE(prompt, nullptr);
+    EXPECT_EQ(prompt->protocolDiscriminator(), 5u);
+    EXPECT_EQ(prompt->sapi(), 3u);
+
+    ParsedMessage msg2(MMM(L3CMServicePrompt::builder().pd(15).sapi(0).build()));
+    auto parsed2 = roundtrip(msg2);
+    ASSERT_TRUE(parsed2);
+    const auto* prompt2 = tryGet<L3CMServicePrompt>(*parsed2);
+    ASSERT_NE(prompt2, nullptr);
+    EXPECT_EQ(prompt2->protocolDiscriminator(), 15u);
+    EXPECT_EQ(prompt2->sapi(), 0u);
 }
 
 TEST(GoldenMM, CMReestablishmentRequest_RoundTrip) {

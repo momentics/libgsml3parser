@@ -145,6 +145,8 @@ struct NameVisitor {
     std::string_view operator()(const L3AuthenticationRequest&) const { return "AuthenticationRequest"; }
     std::string_view operator()(const L3AuthenticationResponse&) const { return "AuthenticationResponse"; }
     std::string_view operator()(const L3AuthenticationReject&) const { return "AuthenticationReject"; }
+    std::string_view operator()(const L3AuthenticationFailure&) const { return "AuthenticationFailure"; }
+    std::string_view operator()(const L3CMServicePrompt&) const { return "CMServicePrompt"; }
     std::string_view operator()(const L3MMAbort&) const { return "MMAbort"; }
 
     // CC names
@@ -432,6 +434,8 @@ struct MTIVisitor {
     int operator()(const L3AuthenticationRequest&) const { return L3AuthenticationRequest::MTI; }
     int operator()(const L3AuthenticationResponse&) const { return L3AuthenticationResponse::MTI; }
     int operator()(const L3AuthenticationReject&) const { return L3AuthenticationReject::MTI; }
+    int operator()(const L3AuthenticationFailure&) const { return L3AuthenticationFailure::MTI; }
+    int operator()(const L3CMServicePrompt&) const { return L3CMServicePrompt::MTI; }
     int operator()(const L3MMAbort&) const { return L3MMAbort::MTI; }
 
     int operator()(const L3Setup&) const { return L3Setup::MTI; }

@@ -491,6 +491,9 @@ PROTOTYPES = {
     # MM getters
     "gsml3_msg_cm_service_request_service_type":      ("I",   ("H",)),  # L3CMServiceType::TypeCode
     "gsml3_msg_cm_service_request_identity":          ("I",   ("H", "PID")),
+    # -1 sentinel when the message is not CM Service Prompt.
+    "gsml3_msg_cm_service_prompt_pd":                 ("I",   ("H",)),
+    "gsml3_msg_cm_service_prompt_sapi":               ("I",   ("H",)),
     "gsml3_msg_cm_service_reject_cause":              ("I",   ("H",)),
     "gsml3_msg_cm_service_abort_cause":               ("I",   ("H",)),
     "gsml3_msg_identity_request_type":                ("I",   ("H",)),  # MobileIDType
@@ -505,6 +508,11 @@ PROTOTYPES = {
     # Copies the 16-octet RAND (wire order) into rand[16]; 0 on wrong type.
     "gsml3_msg_authentication_request_rand":          ("I", ("H", "PB")),
     "gsml3_msg_authentication_response_sres":         ("U32", ("H",)),
+    # -1 sentinel when the message is not Authentication Failure.
+    "gsml3_msg_authentication_failure_cause":         ("I",   ("H",)),
+    # Copies the 16-octet AUTS from the IEI 0x22 TLV; 0 when the TLV is
+    # absent or the message is not Authentication Failure.
+    "gsml3_msg_authentication_failure_auts":          ("SZ",  ("H", "PB", "SZ")),
     "gsml3_msg_tmsi_reallocation_command_lai":        ("I",   ("H", "PLAI")),
     "gsml3_msg_tmsi_reallocation_command_tmsi":       ("U32", ("H",)),
     "gsml3_msg_imsi_detach_indication_identity":      ("I",   ("H", "PID")),
@@ -564,6 +572,7 @@ PROTOTYPES = {
     "gsml3_build_cm_service_accept":               ("SZ", ("PB", "SZ")),
     "gsml3_build_cm_service_reject":               ("SZ", ("PB", "SZ", "I")),
     "gsml3_build_cm_service_abort":                ("SZ", ("PB", "SZ", "I")),
+    "gsml3_build_cm_service_prompt":               ("SZ", ("PB", "SZ", "I", "I")),  # pd 0..15, sapi 0|3
     "gsml3_build_identity_request":                ("SZ", ("PB", "SZ", "I")),
     "gsml3_build_identity_response":               ("SZ", ("PB", "SZ", "I", "U32", "CS")),
     # LAI numeric form: mcc/mnc are int (244 / 5), lac uint16.
@@ -572,6 +581,8 @@ PROTOTYPES = {
     "gsml3_build_location_updating_reject":        ("SZ", ("PB", "SZ", "I")),
     "gsml3_build_authentication_request":          ("SZ", ("PB", "SZ", "U8", "B")),  # cksn, rand[16] wire order
     "gsml3_build_authentication_response":         ("SZ", ("PB", "SZ", "U32")),  # sres big-endian
+    # cause (MMRejectCause), auts[16] wire order or None (no IEI 0x22 TLV)
+    "gsml3_build_authentication_failure":          ("SZ", ("PB", "SZ", "I", "B")),
     "gsml3_build_tmsi_reallocation_command":       ("SZ", ("PB", "SZ", "I", "I", "U16", "U32")),
     "gsml3_build_tmsi_reallocation_complete":      ("SZ", ("PB", "SZ")),
     "gsml3_build_imsi_detach_indication":          ("SZ", ("PB", "SZ", "I", "U32", "CS")),
