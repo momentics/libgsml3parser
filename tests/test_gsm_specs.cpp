@@ -244,22 +244,22 @@ TEST(GSMSpecTest, SI2bis_RestOctets) {
     // SI2bis record layout (GSM 44.018):
     //   extd_bcch_freq_list(16) + rach_control(3) + rest_octets(0..1)
     // SI2bis has NO ncc_permitted - only 19 bytes fixed.
-    // fullBodyLength = 19 fixed + 1 max rest = 20 bytes.
-    // Library l2BodyLength returns 20 (includes phantom ncc_permitted),
-    // but reference fixed body is 19 bytes.
+    // The rest octets are opaque and carried verbatim, so the body length
+    // grows with each present rest octet (none by default).
     L3SystemInformationType2bis msg;
     EXPECT_EQ(msg.l2BodyLength(), 19u);
-    EXPECT_EQ(msg.fullBodyLength(), 20u);
+    EXPECT_EQ(msg.fullBodyLength(), 19u);
 }
 
 TEST(GSMSpecTest, SI2ter_RestOctets) {
     // SI2ter record layout (GSM 44.018):
     //   extd_bcch_freq_list(16) + rest_octets(0..4)
     // SI2ter has NO RachControlParameters and NO NCCPermitted - only 16 bytes fixed.
-    // fullBodyLength = 16 fixed + 4 max rest = 20 bytes.
+    // The rest octets are opaque and carried verbatim, so the body length
+    // grows with each present rest octet (none by default).
     L3SystemInformationType2ter msg;
     EXPECT_EQ(msg.l2BodyLength(), 16u);
-    EXPECT_EQ(msg.fullBodyLength(), 20u);
+    EXPECT_EQ(msg.fullBodyLength(), 16u);
 }
 
 // ── L/H Presence Bits (GSM 04.07 11.2.1.1.4) ──────────────────────────

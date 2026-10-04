@@ -1649,21 +1649,34 @@ TEST(GoldenIE, CellSelection_Default) {
 
 // =====================================================================
 // Common IEs: L3SI3RestOctets (GSM 04.08 10.5.2.34)
-// Optional GPRS fields carried in the SI3 rest octets (TS 44.018 9.1.35)
+// The SI3 rest octets record (TS 44.018 9.1.35): selection parameters,
+// power offset, scheduling-if/where, GPRS indicator and the CSN.1
+// indicators; by default every group is absent.
 // =====================================================================
 
 TEST(GoldenIE, SI3RestOctets_Default) {
     L3SI3RestOctets orig;
-    EXPECT_FALSE(orig.hasSI3RestOctets());
+    EXPECT_FALSE(orig.selPresent());
+    EXPECT_FALSE(orig.powerOffsetPresent());
+    EXPECT_FALSE(orig.schedWherePresent());
     EXPECT_FALSE(orig.hasGPRS());
 }
 
 // =====================================================================
 // Common IEs: L3SIType4RestOctets
+// The SI4 rest octets record (TS 44.018 9.1.36, 10.5.2.35): selection
+// parameters, power offset and GPRS indicator plus the S-part presence
+// bit; by default every group is absent and no S tail is present.
 // =====================================================================
 
 TEST(GoldenIE, SI4RestOctets_Default) {
     L3SIType4RestOctets orig;
+    EXPECT_FALSE(orig.selPresent());
+    EXPECT_FALSE(orig.powerOffsetPresent());
+    EXPECT_FALSE(orig.hasGPRS());
+    EXPECT_FALSE(orig.restSPresent());
+    // The all-absent O-part record (four presence bits) occupies one octet.
+    EXPECT_EQ(orig.lengthV(), 1u);
 }
 
 // =====================================================================
@@ -2344,30 +2357,34 @@ TEST(GoldenIE, SI2_BodyLength) {
 
 // =====================================================================
 // SI2bis body length (GSM 24.008 9.1.33 / 3GPP TS 44.018 9.1.33)
-// Fixed-length SI2bis body per TS 44.018 9.1.33
-// Structure: extd_bcch_freq_list(16 octets) + rach_control(3 octets) = 19 octets
-// Spec-verified: GSM 24.008 9.1.33 System Information Type 2bis fixed body length
+// SI2bis body per TS 44.018 9.1.33
+// Structure: extd_bcch_freq_list(16 octets) + rach_control(3 octets)
+//   + rest_octets(0..1 octet, opaque) — the body length grows with each
+//   present rest octet (19 octets by default).
+// Spec-verified: GSM 24.008 9.1.33 System Information Type 2bis body length
 // =====================================================================
 
 TEST(GoldenIE, SI2bis_BodyLength) {
-    // Spec-verified: SI2bis body = Extended BCCH freq list(16) + RACH control params(3) = 19 octets
+    // Spec-verified: SI2bis body = Extended BCCH freq list(16) + RACH control params(3) + rest octets(0..1) = 19 octets by default
     L3SystemInformationType2bis msg;
     EXPECT_EQ(msg.l2BodyLength(), 19u);
-    EXPECT_EQ(msg.fullBodyLength(), 20u);
+    EXPECT_EQ(msg.fullBodyLength(), 19u);
 }
 
 // =====================================================================
 // SI2ter body length (GSM 24.008 9.1.34 / 3GPP TS 44.018 9.1.34)
-// Fixed-length SI2ter body per TS 44.018 9.1.34
-// Structure: extd_bcch_freq_list(16 octets) = 16 octets
-// Spec-verified: GSM 24.008 9.1.34 System Information Type 2ter fixed body length
+// SI2ter body per TS 44.018 9.1.34
+// Structure: extd_bcch_freq_list(16 octets) + rest_octets(0..4 octets,
+//   opaque) — the body length grows with each present rest octet
+//   (16 octets by default).
+// Spec-verified: GSM 24.008 9.1.34 System Information Type 2ter body length
 // =====================================================================
 
 TEST(GoldenIE, SI2ter_BodyLength) {
-    // Spec-verified: SI2ter body = Extended BCCH freq list(16) = 16 octets
+    // Spec-verified: SI2ter body = Extended BCCH freq list(16) + rest octets(0..4) = 16 octets by default
     L3SystemInformationType2ter msg;
     EXPECT_EQ(msg.l2BodyLength(), 16u);
-    EXPECT_EQ(msg.fullBodyLength(), 20u);
+    EXPECT_EQ(msg.fullBodyLength(), 16u);
 }
 
 // =====================================================================

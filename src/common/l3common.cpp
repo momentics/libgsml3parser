@@ -1429,75 +1429,242 @@ void L3CellSelection::text(std::ostream& os) const {
 // (virtual parse factory removed — dead code)
 
 // ── L3SI3RestOctets ────────────────────────────────────────────────────
+// SI3 Rest Octets bit layout (TS 44.018 section 10.5.2.34), MSB-first in
+// the bit stream; each optional group is its presence bit followed by the
+// value bits:
+//   sel_pres(1) [cbq(1)|cell_reselect_offset(6)|temporary_offset(3)|penalty_time(5)]
+//   pwr_pres(1) [power_offset(2)]
+//   si_2ter_ind(1)  early_cm_ind(1)
+//   sched_pres(1) [where(3)]
+//   gprs_pres(1) [ra_colour(3)|si13_pos(1)]
+//   umts_early_cm_ind(1)
+//   si2quater_pres(1) [si2quater_ind(1)]
+//   iu_mode_ind(1)             — only when gprs_pres = 0
+//   si21_pres(1) [si21_pos(1)] — only when sched_pres = 0
+
+Expected<L3SI3RestOctets> L3SI3RestOctets::parse(BitReader& br) {
+    // The record starts directly with the selection-parameter presence bit
+    // (TS 44.018 section 10.5.2.34), so a frame without rest octets — or a
+    // truncated one — parses to the all-absent default: reads stop at end
+    // of input instead of failing.
+    L3SI3RestOctets result;
+    auto readField = [&br](unsigned nbits, unsigned& out) -> bool {
+        if (br.remainingBits() < nbits) return false;
+        auto r = br.readField(nbits);
+        if (!r) return false;
+        out = r.value();
+        return true;
+    };
+    unsigned v{};
+    if (readField(1, v) && v) {                       // sel_pres
+        result.mSelPresent = true;                    // [cbq|cro(6)|to(3)|pt(5)]
+        if (readField(1, v)) result.mCBQ = (v != 0);
+        if (readField(6, v)) result.mCRO = v;
+        if (readField(3, v)) result.mTO = v;
+        if (readField(5, v)) result.mPT = v;
+    }
+    if (readField(1, v) && v) {                       // pwr_pres
+        result.mPwrOffsetPresent = true;              // [power_offset(2)]
+        if (readField(2, v)) result.mPowerOffset = v;
+    }
+    if (readField(1, v)) result.mSi2terInd = (v != 0);
+    if (readField(1, v)) result.mEarlyCmInd = (v != 0);
+    if (readField(1, v) && v) {                       // sched_pres
+        result.mSchedWherePresent = true;             // [where(3)]
+        if (readField(3, v)) result.mWhere = v;
+    }
+    if (readField(1, v) && v) {                       // gprs_pres
+        result.mHaveGPRS = true;                      // [ra_colour(3)|si13_pos(1)]
+        if (readField(3, v)) result.mRA_COLOUR = v;
+        if (readField(1, v)) result.mSi13Position = (v != 0);
+    }
+    if (readField(1, v)) result.mUmtsEarlyCmInd = (v != 0);
+    if (readField(1, v) && v) {                       // si2quater_pres
+        result.mSi2quaterPresent = true;              // [si2quater_ind(1)]
+        if (readField(1, v)) result.mSi2quaterInd = (v != 0);
+    }
+    if (!result.mHaveGPRS) {                          // iu_mode_ind — only when gprs_pres = 0
+        if (readField(1, v)) {
+            result.mIuModePresent = true;
+            result.mIuModeInd = (v != 0);
+        }
+    }
+    if (!result.mSchedWherePresent) {                 // si21 group — only when sched_pres = 0
+        if (readField(1, v)) {
+            result.mSi21Present = (v != 0);
+            if (v) {
+                unsigned p{};
+                if (readField(1, p)) result.mSi21Pos = p;
+            }
+        }
+    }
+    return Expected<L3SI3RestOctets>::hold(std::move(result));
+}
 
 size_t L3SI3RestOctets::lengthV() const {
-    if (!mHaveSI3RestOctets) return 0;
-    int bits = 1;
-    if (mHaveSelectionParameters) bits += 1 + 1 + 6 + 3 + 5;
-    else bits += 1;
-    bits += 4;
-    if (mHaveGPRS) bits += 1 + 3 + 1;
-    else bits += 1;
+    size_t bits = 1;                                  // sel_pres
+    if (mSelPresent) bits += 1 + 6 + 3 + 5;           // cbq|cro|to|pt
+    bits += 1;                                        // pwr_pres
+    if (mPwrOffsetPresent) bits += 2;                 // power_offset
+    bits += 1 + 1;                                    // si_2ter_ind, early_cm_ind
+    bits += 1;                                        // sched_pres
+    if (mSchedWherePresent) bits += 3;                // where
+    bits += 1;                                        // gprs_pres
+    if (mHaveGPRS) bits += 3 + 1;                     // ra_colour, si13_pos
+    bits += 1;                                        // umts_early_cm_ind
+    bits += 1;                                        // si2quater_pres
+    if (mSi2quaterPresent) bits += 1;                 // si2quater_ind
+    if (!mHaveGPRS) bits += 1;                        // iu_mode_ind
+    if (!mSchedWherePresent) {                        // si21 group
+        bits += 1;                                    // si21_pres
+        if (mSi21Present) bits += 1;                  // si21_pos
+    }
     return (bits + 7) / 8;
 }
 
 void L3SI3RestOctets::write(BitWriter& bw) const {
-    bw.writeField(mHaveSI3RestOctets ? 1 : 0, 1);
-    if (!mHaveSI3RestOctets) return;
-    if (mHaveSelectionParameters) {
-        bw.writeField(1, 1);
-        bw.writeField(mCBQ ? 1 : 0, 1);
-        bw.writeField(mCELL_RESELECT_OFFSET, 6);
-        bw.writeField(mTEMPORARY_OFFSET, 3);
-        bw.writeField(mPENALTY_TIME, 5);
-    } else {
-        bw.writeField(0, 1);
+    bw.writeField(mSelPresent ? 1u : 0u, 1);
+    if (mSelPresent) {
+        bw.writeField(mCBQ ? 1u : 0u, 1);
+        bw.writeField(mCRO & 0x3Fu, 6);
+        bw.writeField(mTO & 0x07u, 3);
+        bw.writeField(mPT & 0x1Fu, 5);
     }
-    bw.writeField(0, 4);
+    bw.writeField(mPwrOffsetPresent ? 1u : 0u, 1);
+    if (mPwrOffsetPresent) bw.writeField(mPowerOffset & 0x03u, 2);
+    bw.writeField(mSi2terInd ? 1u : 0u, 1);
+    bw.writeField(mEarlyCmInd ? 1u : 0u, 1);
+    bw.writeField(mSchedWherePresent ? 1u : 0u, 1);
+    if (mSchedWherePresent) bw.writeField(mWhere & 0x07u, 3);
+    bw.writeField(mHaveGPRS ? 1u : 0u, 1);
     if (mHaveGPRS) {
-        bw.writeField(1, 1);
-        bw.writeField(mRA_COLOUR, 3);
-        bw.writeField(0, 1);
-    } else {
-        bw.writeField(0, 1);
+        bw.writeField(mRA_COLOUR & 0x07u, 3);
+        bw.writeField(mSi13Position ? 1u : 0u, 1);
     }
+    bw.writeField(mUmtsEarlyCmInd ? 1u : 0u, 1);
+    bw.writeField(mSi2quaterPresent ? 1u : 0u, 1);
+    if (mSi2quaterPresent) bw.writeField(mSi2quaterInd ? 1u : 0u, 1);
+    if (!mHaveGPRS) bw.writeField(mIuModeInd ? 1u : 0u, 1);
+    if (!mSchedWherePresent) {
+        bw.writeField(mSi21Present ? 1u : 0u, 1);
+        if (mSi21Present) bw.writeField(mSi21Pos & 0x01u, 1);
+    }
+    bw.alignToOctet();   // sub-octet padding is zero-filled (TS 44.018 10.5.2.34)
 }
 
 void L3SI3RestOctets::text(std::ostream& os) const {
     os << "SI3RestOctets";
-    if (mHaveSelectionParameters) {
-        os << " CBQ=" << mCBQ << " CRO=" << mCELL_RESELECT_OFFSET
-           << " TO=" << mTEMPORARY_OFFSET << " PT=" << mPENALTY_TIME;
+    if (mSelPresent) {
+        os << " CBQ=" << mCBQ << " CRO=" << mCRO
+           << " TO=" << mTO << " PT=" << mPT;
     }
-    if (mHaveGPRS) os << " GPRS RA_COLOUR=" << mRA_COLOUR;
+    if (mPwrOffsetPresent) os << " PwrOff=" << mPowerOffset;
+    if (mSi2terInd) os << " SI2terInd";
+    if (mEarlyCmInd) os << " EarlyCMInd";
+    if (mSchedWherePresent) os << " SchedWhere=" << mWhere;
+    if (mHaveGPRS) os << " GPRS RA_COLOUR=" << mRA_COLOUR << " SI13Pos=" << mSi13Position;
+    if (mUmtsEarlyCmInd) os << " UmtsEarlyCMInd";
+    if (mSi2quaterPresent) os << " SI2quaterInd=" << mSi2quaterInd;
+    if (!mHaveGPRS && mIuModeInd) os << " IuModeInd";
+    if (!mSchedWherePresent && mSi21Present) os << " SI21Pos=" << mSi21Pos;
 }
 
 // ── L3SIType4RestOctets ────────────────────────────────────────────────
+// SI4 Rest Octets bit layout (TS 44.018 section 10.5.2.35), MSB-first in
+// the bit stream:
+//   sel_pres(1) [cbq(1)|cell_reselect_offset(6)|temporary_offset(3)|penalty_time(5)]
+//   pwr_pres(1) [power_offset(2)]
+//   gprs_pres(1) [ra_colour(3)|si13_pos(1)]
+//   s_presence(1) — when set, all remaining octets of the frame are the
+//                    opaque "Rest Octets S" and are preserved verbatim
+
+Expected<L3SIType4RestOctets> L3SIType4RestOctets::parse(BitReader& br) {
+    // Reads stop at end of input instead of failing on truncated frames;
+    // when the S-part presence bit is set, all remaining whole octets of
+    // the frame are captured as opaque data (TS 44.018 section 10.5.2.35).
+    L3SIType4RestOctets result;
+    auto readField = [&br](unsigned nbits, unsigned& out) -> bool {
+        if (br.remainingBits() < nbits) return false;
+        auto r = br.readField(nbits);
+        if (!r) return false;
+        out = r.value();
+        return true;
+    };
+    unsigned v{};
+    if (readField(1, v) && v) {                       // sel_pres
+        result.mSelPresent = true;                    // [cbq|cro(6)|to(3)|pt(5)]
+        if (readField(1, v)) result.mCBQ = (v != 0);
+        if (readField(6, v)) result.mCRO = v;
+        if (readField(3, v)) result.mTO = v;
+        if (readField(5, v)) result.mPT = v;
+    }
+    if (readField(1, v) && v) {                       // pwr_pres
+        result.mPwrOffsetPresent = true;              // [power_offset(2)]
+        if (readField(2, v)) result.mPowerOffset = v;
+    }
+    if (readField(1, v) && v) {                       // gprs_pres
+        result.mHaveGPRS = true;                      // [ra_colour(3)|si13_pos(1)]
+        if (readField(3, v)) result.mRA_COLOUR = v;
+        if (readField(1, v)) result.mSi13Position = (v != 0);
+    }
+    if (readField(1, v) && v) {                       // s_presence
+        result.mRestSPresent = true;
+        br.alignToOctet();                            // drop sub-octet padding
+        const size_t bytes = br.remainingBits() / 8;
+        if (bytes > 0) {
+            std::vector<uint8_t> tail(bytes);
+            auto r = br.readBytes(tail.data(), bytes);
+            if (!r) return Expected<L3SIType4RestOctets>::error(r.error());
+            result.mRestS = std::move(tail);
+        }
+    }
+    return Expected<L3SIType4RestOctets>::hold(std::move(result));
+}
 
 size_t L3SIType4RestOctets::lengthV() const {
-    // The rest octet is always present (GSM 04.08 9.1.35): without GPRS it
-    // still occupies 1 byte (5 used bits + padding), with GPRS 9 bits -> 2 bytes.
-    if (!mHaveGPRS) return 1;
-    int bits = 1 + 1 + 1 + 3 + 1 + 2;
-    return (bits + 7) / 8;
+    size_t bits = 1;                                  // sel_pres
+    if (mSelPresent) bits += 1 + 6 + 3 + 5;           // cbq|cro|to|pt
+    bits += 1;                                        // pwr_pres
+    if (mPwrOffsetPresent) bits += 2;                 // power_offset
+    bits += 1;                                        // gprs_pres
+    if (mHaveGPRS) bits += 3 + 1;                     // ra_colour, si13_pos
+    bits += 1;                                        // s_presence
+    size_t len = (bits + 7) / 8;                      // O part, octet-aligned
+    if (mRestSPresent) len += mRestS.size();          // opaque S tail
+    return len;
 }
 
 void L3SIType4RestOctets::write(BitWriter& bw) const {
-    bw.writeField(0, 1);
-    bw.writeField(0, 1);
-    if (mHaveGPRS) {
-        bw.writeField(1, 1);
-        bw.writeField(mRA_COLOUR, 3);
-        bw.writeField(0, 1);
-    } else {
-        bw.writeField(0, 1);
+    bw.writeField(mSelPresent ? 1u : 0u, 1);
+    if (mSelPresent) {
+        bw.writeField(mCBQ ? 1u : 0u, 1);
+        bw.writeField(mCRO & 0x3Fu, 6);
+        bw.writeField(mTO & 0x07u, 3);
+        bw.writeField(mPT & 0x1Fu, 5);
     }
-    bw.writeField(0, 2);
+    bw.writeField(mPwrOffsetPresent ? 1u : 0u, 1);
+    if (mPwrOffsetPresent) bw.writeField(mPowerOffset & 0x03u, 2);
+    bw.writeField(mHaveGPRS ? 1u : 0u, 1);
+    if (mHaveGPRS) {
+        bw.writeField(mRA_COLOUR & 0x07u, 3);
+        bw.writeField(mSi13Position ? 1u : 0u, 1);
+    }
+    bw.writeField(mRestSPresent ? 1u : 0u, 1);
+    if (mRestSPresent) {
+        bw.alignToOctet();   // zero-fill to the octet boundary before the S tail
+        bw.writeBytes(mRestS.data(), mRestS.size());
+    }
 }
 
 void L3SIType4RestOctets::text(std::ostream& os) const {
     os << "SI4RestOctets";
-    if (mHaveGPRS) os << " GPRS RA_COLOUR=" << mRA_COLOUR;
+    if (mSelPresent) {
+        os << " CBQ=" << mCBQ << " CRO=" << mCRO
+           << " TO=" << mTO << " PT=" << mPT;
+    }
+    if (mPwrOffsetPresent) os << " PwrOff=" << mPowerOffset;
+    if (mHaveGPRS) os << " GPRS RA_COLOUR=" << mRA_COLOUR << " SI13Pos=" << mSi13Position;
+    if (mRestSPresent) os << " RestS[" << mRestS.size() << " octets]";
 }
 
 // ── L3IARestOctets ─────────────────────────────────────────────────────

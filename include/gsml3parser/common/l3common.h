@@ -1073,41 +1073,110 @@ public:
 
 // ── SI3 Rest Octets (GSM 04.08 10.5.2.34) ─────────────────────────────
 
+// SI3 Rest Octets (TS 44.018 section 10.5.2.34, carried by System
+// Information Type 3 per TS 44.018 section 9.1.35): a bit-packed record
+// that starts directly with the selection-parameter presence bit — there
+// is no outer presence bit. Each optional group is its presence bit
+// followed by the value bits; the Iu-mode indicator appears only when the
+// GPRS indicator is absent, and the SI21 group only when the
+// scheduling-if/where information is absent. Sub-octet padding is
+// discarded on parse and zero-filled on write.
 class L3SystemInformationType3;
 
 class L3SI3RestOctets : public L3RestOctets {
-    bool mHaveSI3RestOctets{};
-    bool mHaveSelectionParameters{};
-    unsigned mCBQ{};
-    unsigned mCELL_RESELECT_OFFSET{};
-    unsigned mTEMPORARY_OFFSET{};
-    unsigned mPENALTY_TIME{};
-    unsigned mRA_COLOUR{};
+    bool mSelPresent{};
+    bool mCBQ{};
+    unsigned mCRO{};
+    unsigned mTO{};
+    unsigned mPT{};
+    bool mPwrOffsetPresent{};
+    unsigned mPowerOffset{};      // 2 bits
+    bool mSi2terInd{};
+    bool mEarlyCmInd{};
+    bool mSchedWherePresent{};
+    unsigned mWhere{};            // 3 bits
     bool mHaveGPRS{};
+    unsigned mRA_COLOUR{};        // 3 bits
+    bool mSi13Position{};
+    bool mUmtsEarlyCmInd{};
+    bool mSi2quaterPresent{};
+    bool mSi2quaterInd{};
+    bool mIuModePresent{};        // only if !mHaveGPRS
+    bool mIuModeInd{};            // only if !mHaveGPRS
+    bool mSi21Present{};          // only if !mSchedWherePresent
+    unsigned mSi21Pos{};          // 1 bit, only if mSi21Present && !mSchedWherePresent
 public:
     friend class L3SystemInformationType3;
     L3SI3RestOctets() = default;
 
-    bool hasSI3RestOctets() const { return mHaveSI3RestOctets; }
+    bool selPresent() const { return mSelPresent; }
+    bool cbq() const { return mCBQ; }
+    unsigned cellReselectOffset() const { return mCRO; }
+    unsigned temporaryOffset() const { return mTO; }
+    unsigned penaltyTime() const { return mPT; }
+    bool powerOffsetPresent() const { return mPwrOffsetPresent; }
+    unsigned powerOffset() const { return mPowerOffset; }
+    bool si2terInd() const { return mSi2terInd; }
+    bool earlyCmInd() const { return mEarlyCmInd; }
+    bool schedWherePresent() const { return mSchedWherePresent; }
+    unsigned schedWhere() const { return mWhere; }
     bool hasGPRS() const { return mHaveGPRS; }
-    size_t lengthV() const override;
+    unsigned raColour() const { return mRA_COLOUR; }
+    bool si13Position() const { return mSi13Position; }
+    bool umtsEarlyCmInd() const { return mUmtsEarlyCmInd; }
+    bool si2quaterPresent() const { return mSi2quaterPresent; }
+    bool si2quaterInd() const { return mSi2quaterInd; }
+    bool iuModeInd() const { return mIuModeInd; }
+    bool si21Present() const { return mSi21Present; }
+    unsigned si21Pos() const { return mSi21Pos; }
 
-    void write(BitWriter& bw) const override;
+    [[nodiscard]] static Expected<L3SI3RestOctets> parse(BitReader& br);
+    size_t lengthV() const override;   // ceil(used bits / 8)
+    void write(BitWriter& bw) const override;  // zero-padded to an octet boundary
     void text(std::ostream& os) const;
 };
 
-// ── SI4 Rest Octets ────────────────────────────────────────────────────
+// ── SI4 Rest Octets (GSM 04.08 10.5.2.35) ─────────────────────────────
 
+// SI4 Rest Octets (TS 44.018 section 10.5.2.35, carried by System
+// Information Type 4 per TS 44.018 section 9.1.36): the O-part record
+// (selection parameters, power offset, GPRS indicator) plus the S-part
+// presence bit; when the S part is present, all remaining octets of the
+// frame are opaque "Rest Octets S" and are preserved verbatim.
 class L3SystemInformationType4;
 
 class L3SIType4RestOctets : public L3RestOctets {
-    unsigned mRA_COLOUR{};
+    bool mSelPresent{};
+    bool mCBQ{};
+    unsigned mCRO{};
+    unsigned mTO{};
+    unsigned mPT{};
+    bool mPwrOffsetPresent{};
+    unsigned mPowerOffset{};      // 2 bits
     bool mHaveGPRS{};
+    unsigned mRA_COLOUR{};        // 3 bits
+    bool mSi13Position{};
+    bool mRestSPresent{};
+    std::vector<uint8_t> mRestS;  // opaque "Rest Octets S", empty by default
 public:
     friend class L3SystemInformationType4;
     L3SIType4RestOctets() = default;
 
-    size_t lengthV() const override;
+    bool selPresent() const { return mSelPresent; }
+    bool cbq() const { return mCBQ; }
+    unsigned cellReselectOffset() const { return mCRO; }
+    unsigned temporaryOffset() const { return mTO; }
+    unsigned penaltyTime() const { return mPT; }
+    bool powerOffsetPresent() const { return mPwrOffsetPresent; }
+    unsigned powerOffset() const { return mPowerOffset; }
+    bool hasGPRS() const { return mHaveGPRS; }
+    unsigned raColour() const { return mRA_COLOUR; }
+    bool si13Position() const { return mSi13Position; }
+    bool restSPresent() const { return mRestSPresent; }
+    const std::vector<uint8_t>& restS() const { return mRestS; }
+
+    [[nodiscard]] static Expected<L3SIType4RestOctets> parse(BitReader& br);
+    size_t lengthV() const override;  // ceil(record bits / 8) + mRestS.size()
     void write(BitWriter& bw) const override;
     void text(std::ostream& os) const;
 };

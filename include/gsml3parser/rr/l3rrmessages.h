@@ -976,6 +976,7 @@ public:
 class L3SystemInformationType2bis {
     L3BCCHFrequencyList mBCCHFrequencyList;
     L3RACHControlParameters mRACHControlParameters;
+    std::vector<uint8_t> mRestOctets;  // opaque rest octets (TS 44.018 9.1.33: 0..1)
 
     friend struct Builder;
 public:
@@ -985,13 +986,14 @@ public:
 
     const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
     const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
+    const std::vector<uint8_t>& restOctets() const { return mRestOctets; }
 
-    size_t bodyLength() const { return 19; }
+    size_t bodyLength() const { return 16 + 3 + mRestOctets.size(); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 19; }
-    [[nodiscard]] size_t fullBodyLength() const { return 20; }
-    size_t restOctetsLength() const { return 1; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] size_t fullBodyLength() const { return bodyLength(); }
+    size_t restOctetsLength() const { return mRestOctets.size(); }
     [[nodiscard]] static Expected<L3SystemInformationType2bis> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -999,11 +1001,14 @@ public:
     struct Builder {
         L3BCCHFrequencyList mBCCHFrequencyList{};
         L3RACHControlParameters mRACHControlParameters{};
+        std::vector<uint8_t> mRestOctets{};
 
         /// Set BCCH frequency list.
         Builder& bcchFrequencyList(L3BCCHFrequencyList v) { mBCCHFrequencyList = v; return *this; }
         /// Set RACH control parameters.
         Builder& rachControlParameters(L3RACHControlParameters v) { mRACHControlParameters = v; return *this; }
+        /// Set the opaque rest octets (TS 44.018 section 9.1.33: up to one octet).
+        Builder& restOctets(std::span<const uint8_t> v) { mRestOctets.assign(v.begin(), v.end()); return *this; }
         /// Build the final message.
         [[nodiscard]] L3SystemInformationType2bis build() const;
     };
@@ -1015,6 +1020,7 @@ public:
 
 class L3SystemInformationType2ter {
     L3BCCHFrequencyList mBCCHFrequencyList;
+    std::vector<uint8_t> mRestOctets;  // opaque rest octets (TS 44.018 9.1.34: 0..4)
 
     friend struct Builder;
 public:
@@ -1023,22 +1029,26 @@ public:
     L3SystemInformationType2ter() = default;
 
     const L3BCCHFrequencyList& bcchFrequencyList() const { return mBCCHFrequencyList; }
+    const std::vector<uint8_t>& restOctets() const { return mRestOctets; }
 
-    size_t bodyLength() const { return 16; }
+    size_t bodyLength() const { return 16 + mRestOctets.size(); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 16; }
-    [[nodiscard]] size_t fullBodyLength() const { return 20; }
-    size_t restOctetsLength() const { return 4; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] size_t fullBodyLength() const { return bodyLength(); }
+    size_t restOctetsLength() const { return mRestOctets.size(); }
     [[nodiscard]] static Expected<L3SystemInformationType2ter> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
 
     struct Builder {
         L3BCCHFrequencyList mBCCHFrequencyList{};
+        std::vector<uint8_t> mRestOctets{};
 
         /// Set BCCH frequency list.
         Builder& bcchFrequencyList(L3BCCHFrequencyList v) { mBCCHFrequencyList = v; return *this; }
+        /// Set the opaque rest octets (TS 44.018 section 9.1.34: up to four octets).
+        Builder& restOctets(std::span<const uint8_t> v) { mRestOctets.assign(v.begin(), v.end()); return *this; }
         /// Build the final message.
         [[nodiscard]] L3SystemInformationType2ter build() const;
     };
@@ -1071,10 +1081,13 @@ public:
 
     L3SystemInformationType3() = default;
 
-    size_t bodyLength() const { return 17; }
+    // Fixed part: cell identity(2) + LAI(5) + control channel description(3)
+    // + cell options BCCH(1) + cell selection parameters(2) + RACH control
+    // parameters(3); the rest octets are mandatory (TS 44.018 9.1.35).
+    size_t bodyLength() const { return 16 + mRestOctets.lengthV(); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 17; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     size_t restOctetsLength() const { return mRestOctets.lengthV(); }
     [[nodiscard]] static Expected<L3SystemInformationType3> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -1118,6 +1131,8 @@ class L3SystemInformationType4 {
     L3RACHControlParameters mRACHControlParameters;
     bool mHaveCBCH{false};
     L3ChannelDescription mCBCHChannelDescription;
+    bool mHaveCbchMobileAlloc{false};
+    L3MobileAllocation mCbchMobileAlloc;
     L3SIType4RestOctets mRestOctets;
 
     friend struct Builder;
@@ -1131,6 +1146,8 @@ public:
     const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
     bool hasCBCH() const { return mHaveCBCH; }
     const L3ChannelDescription& cbchChannelDescription() const { return mCBCHChannelDescription; }
+    bool hasCbchMobileAlloc() const { return mHaveCbchMobileAlloc; }
+    const L3MobileAllocation& cbchMobileAlloc() const { return mCbchMobileAlloc; }
     const L3SIType4RestOctets& restOctets() const { return mRestOctets; }
 
     size_t bodyLength() const;
@@ -1148,6 +1165,8 @@ public:
         L3RACHControlParameters mRACHControlParameters{};
         bool mHaveCBCH{false};
         L3ChannelDescription mCBCHChannelDescription{};
+        bool mHaveCbchMobileAlloc{false};
+        L3MobileAllocation mCbchMobileAlloc{};
         L3SIType4RestOctets mRestOctets{};
 
         /// Set location area identity.
@@ -1158,6 +1177,9 @@ public:
         Builder& rachControlParameters(L3RACHControlParameters v) { mRACHControlParameters = v; return *this; }
         /// Set CBCH channel description (sets mHaveCBCH flag).
         Builder& cbchChannelDescription(L3ChannelDescription v) { mCBCHChannelDescription = v; mHaveCBCH = true; return *this; }
+        /// Set the CBCH mobile allocation (TLV 0x72, TS 44.018 section
+        /// 10.5.2.21); it follows the CBCH channel description on the wire.
+        Builder& cbchMobileAlloc(L3MobileAllocation v) { mCbchMobileAlloc = v; mHaveCbchMobileAlloc = true; return *this; }
         /// Set rest octets.
         Builder& restOctets(L3SIType4RestOctets v) { mRestOctets = v; return *this; }
         /// Build the final message.

@@ -470,37 +470,51 @@ TEST(RRBuilders, SystemInformationType2_Full) {
 
 // GSM 04.08 9.1.33: System Information Type 2bis
 TEST(RRBuilders, SystemInformationType2bis_Full) {
+    uint8_t rest[] = {0x2B};
     auto si2bis = L3SystemInformationType2bis::builder()
         .bcchFrequencyList(L3BCCHFrequencyList())
         .rachControlParameters(L3RACHControlParameters())
+        .restOctets(rest)
         .build();
     ParsedMessage pm{RRM{std::move(si2bis)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
     EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x02);
+    // Dynamic body length (TS 44.018 9.1.33): 16 + 3 fixed octets + the
+    // one opaque rest octet set on the builder.
+    EXPECT_EQ((*bytes).size(), 2u + 20u);
 
     auto reparsed = parseL3(*bytes);
     ASSERT_TRUE(reparsed);
     auto* parsed = tryGet<L3SystemInformationType2bis>(*reparsed);
     ASSERT_TRUE(parsed);
+    ASSERT_EQ(parsed->restOctets().size(), 1u);
+    EXPECT_EQ(parsed->restOctets()[0], 0x2B);
 }
 
 // GSM 04.08 9.1.34: System Information Type 2ter
 TEST(RRBuilders, SystemInformationType2ter_Full) {
+    uint8_t rest[] = {0x2B, 0x2B, 0x2B, 0x2B};
     auto si2ter = L3SystemInformationType2ter::builder()
         .bcchFrequencyList(L3BCCHFrequencyList())
+        .restOctets(rest)
         .build();
     ParsedMessage pm{RRM{std::move(si2ter)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
     EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x03);
+    // Dynamic body length (TS 44.018 9.1.34): the 16 fixed octets plus the
+    // four opaque rest octets set on the builder.
+    EXPECT_EQ((*bytes).size(), 2u + 20u);
 
     auto reparsed = parseL3(*bytes);
     ASSERT_TRUE(reparsed);
     auto* parsed = tryGet<L3SystemInformationType2ter>(*reparsed);
     ASSERT_TRUE(parsed);
+    ASSERT_EQ(parsed->restOctets().size(), 4u);
+    for (size_t i = 0; i < 4; ++i) EXPECT_EQ(parsed->restOctets()[i], rest[i]);
 }
 
 // GSM 04.08 9.1.35: System Information Type 3
@@ -528,21 +542,31 @@ TEST(RRBuilders, SystemInformationType3_FullCell) {
 
 // GSM 04.08 9.1.36: System Information Type 4
 TEST(RRBuilders, SystemInformationType4_Full) {
+    std::vector<uint8_t> ma = {0xA5, 0x5A};
     auto si4 = L3SystemInformationType4::builder()
         .locationAreaIdentity(L3LocationAreaIdentity("250", "01", 0x5678))
         .cellSelectionParameters(L3CellSelectionParameters{})
         .rachControlParameters(L3RACHControlParameters{})
+        .cbchChannelDescription(L3ChannelDescription(TDMA_Bm_ACCH, 1, 7, 100))
+        .cbchMobileAlloc(L3MobileAllocation(ma))
         .build();
     ParsedMessage pm{RRM{std::move(si4)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
     EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x1c);
+    // Dynamic body length (TS 44.018 9.1.36): LAI(5) + CellSelPar(2) +
+    // RachCtrl(3) + CBCH channel description TV(4) + MA TLV(4) + rest(1).
+    EXPECT_EQ((*bytes).size(), 2u + 19u);
 
     auto reparsed = parseL3(*bytes);
     ASSERT_TRUE(reparsed);
     auto* parsed = tryGet<L3SystemInformationType4>(*reparsed);
     ASSERT_TRUE(parsed);
+    EXPECT_TRUE(parsed->hasCBCH());
+    EXPECT_EQ(parsed->cbchChannelDescription().arfcn(), 100u);
+    EXPECT_TRUE(parsed->hasCbchMobileAlloc());
+    EXPECT_EQ(parsed->cbchMobileAlloc().data(), ma);
 }
 
 // GSM 04.08 9.1.37: System Information Type 5

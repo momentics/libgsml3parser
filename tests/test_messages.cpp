@@ -195,8 +195,16 @@ TEST(MessagesTest, RR_SystemInformationType2bis) {
     L3SystemInformationType2bis msg;
     EXPECT_EQ(msg.mti(), L3SystemInformationType2bis::MTI);
     // SI2bis body layout (TS 44.018):
-    //   extd_bcch_freq_list(16) + rach_control(3) = 19 bytes (no ncc_permitted)
+    //   extd_bcch_freq_list(16) + rach_control(3) = 19 bytes (no ncc_permitted),
+    //   plus up to one opaque rest octet (dynamic body length).
     EXPECT_EQ(msg.l2BodyLength(), 19u);
+    uint8_t rest[] = {0x2B};
+    auto withRest = L3SystemInformationType2bis::builder()
+        .bcchFrequencyList(L3BCCHFrequencyList())
+        .rachControlParameters(L3RACHControlParameters())
+        .restOctets(rest)
+        .build();
+    EXPECT_EQ(withRest.l2BodyLength(), 20u);
 }
 
 TEST(MessagesTest, RR_SystemInformationType2ter) {
@@ -212,6 +220,17 @@ TEST(MessagesTest, RR_SystemInformationType4) {
     EXPECT_EQ(msg.mti(), L3SystemInformationType4::MTI);
     // SI4 body layout (TS 44.018): LAI(5) + CellSelPar(2) + RachCtrl(3) + RestOctets(1) = 11 bytes
     EXPECT_EQ(msg.l2BodyLength(), 11u);
+    // Dynamic growth with the optional CBCH IEs: channel description TV(4)
+    // + mobile allocation TLV (2 + len octets, TS 44.018 10.5.2.21).
+    std::vector<uint8_t> ma = {0xA5, 0x5A};
+    auto withCbch = L3SystemInformationType4::builder()
+        .locationAreaIdentity(L3LocationAreaIdentity("250", "01", 0x5678))
+        .cellSelectionParameters(L3CellSelectionParameters{})
+        .rachControlParameters(L3RACHControlParameters{})
+        .cbchChannelDescription(L3ChannelDescription(TDMA_Bm_ACCH, 1, 7, 100))
+        .cbchMobileAlloc(L3MobileAllocation(ma))
+        .build();
+    EXPECT_EQ(withCbch.l2BodyLength(), 11u + 4u + 4u);
 }
 
 TEST(MessagesTest, RR_SystemInformationType5) {

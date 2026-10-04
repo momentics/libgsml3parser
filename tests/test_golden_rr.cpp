@@ -2037,6 +2037,251 @@ TEST(GoldenRR, SystemInformationType23_RoundTrip) {
 }
 
 // =====================================================================
+// RR: System Information Type 3 Rest Octets (3GPP TS 44.018 9.1.35,
+// 10.5.2.34). The record is bit-packed MSB-first and starts directly
+// with the selection-parameter presence bit (no outer presence bit):
+//   sel_pres(1) [cbq(1)|cro(6)|to(3)|pt(5)]
+//   pwr_pres(1) [power_offset(2)]
+//   si_2ter_ind(1)  early_cm_ind(1)
+//   sched_pres(1) [where(3)]
+//   gprs_pres(1) [ra_colour(3)|si13_pos(1)]
+//   umts_early_cm_ind(1)
+//   si2quater_pres(1) [si2quater_ind(1)]
+//   iu_mode_ind(1)             — only when gprs_pres = 0
+//   si21_pres(1) [si21_pos(1)] — only when sched_pres = 0
+// =====================================================================
+
+TEST(GoldenRR, SystemInformationType3_RestOctets_FullRecord) {
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x1B ('00011011'B, TS 44.018 Table 10.4.1).
+    // Body: CI(2)=0x1234 + LAI(5) MCC=250/MNC=01/LAC=0x5678
+    //   {52 F0 10 56 78} + ControlChannelDescription(3)
+    //   (msc_r99=0,att=1,bs_ag_blks_res=2,ccch_conf=1,si22ind=0,cbq3=0,
+    //    bs_pa_mfrms=4,t3212=10 -> 51 04 0A) + CellOptionsBCCH(1)=00
+    //   + CellSelectionParameters(2)=0000 + RACHControlParameters(3)=000000.
+    // Rest octets (TS 44.018 10.5.2.34) with every group present except
+    // umts-early-CM and SI2quater: sel_pres=1,cbq=1,cro=5,to=3,pt=9 |
+    // pwr_pres=1,power_offset=2 | si2ter_ind=0,early_cm_ind=1 |
+    // sched_pres=1,where=5 | gprs_pres=1,ra_colour=2,si13_pos=1:
+    //   byte 1: 1|1|000101          = 0xC5
+    //   byte 2: 011|01001           = 0x69
+    //   byte 3: 1|10|0|1|1|10       = 0xCE (where=5 ends in the last bit)
+    //   byte 4: 1|010|1|0|0         = 0xD4
+    uint8_t data[] = {
+        0x06, 0x1B,
+        0x12, 0x34,
+        0x52, 0xF0, 0x10, 0x56, 0x78,
+        0x51, 0x04, 0x0A,
+        0x00,
+        0x00, 0x00,
+        0x00, 0x00, 0x00,
+        0xC5, 0x69, 0xCE, 0xD4
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3SystemInformationType3::MTI);
+    auto* si3 = tryGet<L3SystemInformationType3>(*msg);
+    ASSERT_TRUE(si3);
+    const auto& rest = si3->restOctets();
+    EXPECT_TRUE(rest.selPresent());
+    EXPECT_TRUE(rest.cbq());
+    EXPECT_EQ(rest.cellReselectOffset(), 5u);
+    EXPECT_EQ(rest.temporaryOffset(), 3u);
+    EXPECT_EQ(rest.penaltyTime(), 9u);
+    EXPECT_TRUE(rest.powerOffsetPresent());
+    EXPECT_EQ(rest.powerOffset(), 2u);
+    EXPECT_FALSE(rest.si2terInd());
+    EXPECT_TRUE(rest.earlyCmInd());
+    EXPECT_TRUE(rest.schedWherePresent());
+    EXPECT_EQ(rest.schedWhere(), 5u);
+    EXPECT_TRUE(rest.hasGPRS());
+    EXPECT_EQ(rest.raColour(), 2u);
+    EXPECT_TRUE(rest.si13Position());
+    EXPECT_FALSE(rest.umtsEarlyCmInd());
+    EXPECT_FALSE(rest.si2quaterPresent());
+    // Byte-for-byte round-trip of the whole frame.
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) EXPECT_EQ((*bytes)[i], data[i]);
+}
+
+TEST(GoldenRR, SystemInformationType3_RestOctets_ConditionalFields) {
+    // [GOLDEN VERIFIED] Same fixed part as the full-record vector above.
+    // Rest octets with the conditional groups exercised: sel absent,
+    // pwr present (offset=1), si2ter_ind=1, sched absent (so the SI21
+    // group appears), gprs absent (so iu_mode_ind appears):
+    //   byte 1: sel_pres=0 | pwr_pres=1,power_offset=01 | si2ter=1
+    //           | early_cm=0 | sched_pres=0 | gprs_pres=0 = 0x58
+    //   byte 2: umts_early_cm=1 | si2quater_pres=1,ind=1 | iu_mode_ind=1
+    //           | si21_pres=1,si21_pos=1 | pad(2)        = 0xFC
+    uint8_t data[] = {
+        0x06, 0x1B,
+        0x12, 0x34,
+        0x52, 0xF0, 0x10, 0x56, 0x78,
+        0x51, 0x04, 0x0A,
+        0x00,
+        0x00, 0x00,
+        0x00, 0x00, 0x00,
+        0x58, 0xFC
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3SystemInformationType3::MTI);
+    auto* si3 = tryGet<L3SystemInformationType3>(*msg);
+    ASSERT_TRUE(si3);
+    const auto& rest = si3->restOctets();
+    EXPECT_FALSE(rest.selPresent());
+    EXPECT_TRUE(rest.powerOffsetPresent());
+    EXPECT_EQ(rest.powerOffset(), 1u);
+    EXPECT_TRUE(rest.si2terInd());
+    EXPECT_FALSE(rest.earlyCmInd());
+    EXPECT_FALSE(rest.schedWherePresent());
+    EXPECT_FALSE(rest.hasGPRS());
+    EXPECT_TRUE(rest.umtsEarlyCmInd());
+    EXPECT_TRUE(rest.si2quaterPresent());
+    EXPECT_TRUE(rest.si2quaterInd());
+    EXPECT_TRUE(rest.iuModeInd());        // present because gprs_pres = 0
+    EXPECT_TRUE(rest.si21Present());      // present because sched_pres = 0
+    EXPECT_EQ(rest.si21Pos(), 1u);
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) EXPECT_EQ((*bytes)[i], data[i]);
+}
+
+// =====================================================================
+// RR: System Information Type 4 (3GPP TS 44.018 9.1.36): the optional
+// CBCH channel description (TV, IEI 0x64) and the CBCH mobile allocation
+// (TLV, IEI 0x72 with an octet length, TS 44.018 10.5.2.21) precede the
+// rest octets (TS 44.018 10.5.2.35: sel/pwr/gprs groups + S-part).
+// =====================================================================
+
+TEST(GoldenRR, SystemInformationType4_CbchMobileAlloc_Parse) {
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x1C ('00011100'B, TS 44.018 Table 10.4.1).
+    // Body: LAI(5) MCC=250/MNC=01/LAC=0xABCD {52 F0 10 AB CD}
+    //   + CellSelectionParameters(2)=0000 + RACHControlParameters(3)=000000
+    //   + CBCH channel description TV: IEI 0x64 + 3 octets
+    //     (typeAndOffset=1(TDMA_Bm_ACCH), TN=1, TSC=7, ARFCN=100 -> 09 E0 64)
+    //   + CBCH mobile allocation TLV: IEI 0x72, len(8)=2, MA {A5 5A}
+    //   + rest octets (TS 44.018 10.5.2.35): gprs_pres=1,ra_colour=001,
+    //     si13_pos=0,s_presence=0 -> 0010 0100 = 0x24
+    uint8_t data[] = {
+        0x06, 0x1C,
+        0x52, 0xF0, 0x10, 0xAB, 0xCD,
+        0x00, 0x00,
+        0x00, 0x00, 0x00,
+        0x64, 0x09, 0xE0, 0x64,
+        0x72, 0x02, 0xA5, 0x5A,
+        0x24
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3SystemInformationType4::MTI);
+    auto* si4 = tryGet<L3SystemInformationType4>(*msg);
+    ASSERT_TRUE(si4);
+    EXPECT_TRUE(si4->hasCBCH());
+    EXPECT_EQ(si4->cbchChannelDescription().arfcn(), 100u);
+    EXPECT_EQ(si4->cbchChannelDescription().tn(), 1u);
+    EXPECT_EQ(si4->cbchChannelDescription().tsc(), 7u);
+    EXPECT_TRUE(si4->hasCbchMobileAlloc());
+    EXPECT_EQ(si4->cbchMobileAlloc().lengthV(), 2u);
+    EXPECT_EQ(si4->cbchMobileAlloc().data(), (std::vector<uint8_t>{0xA5, 0x5A}));
+    EXPECT_TRUE(si4->restOctets().hasGPRS());
+    EXPECT_EQ(si4->restOctets().raColour(), 1u);
+    EXPECT_FALSE(si4->restOctets().si13Position());
+    EXPECT_FALSE(si4->restOctets().restSPresent());
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) EXPECT_EQ((*bytes)[i], data[i]);
+}
+
+TEST(GoldenRR, SystemInformationType4_RestOctets_SPresent_TailPreserved) {
+    // [GOLDEN VERIFIED] Same fixed part as the CBCH vector above (no CBCH
+    // IEs). Rest octets with s_presence=1 and an opaque S tail {0x2B}:
+    //   record: sel_pres=0 | pwr_pres=0 | gprs_pres=1,ra_colour=001,
+    //           si13_pos=0 | s_presence=1 = 0010 0101 = 0x25
+    //   S tail (TS 44.018 10.5.2.35) is preserved byte-for-byte.
+    uint8_t data[] = {
+        0x06, 0x1C,
+        0x52, 0xF0, 0x10, 0xAB, 0xCD,
+        0x00, 0x00,
+        0x00, 0x00, 0x00,
+        0x25, 0x2B
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3SystemInformationType4::MTI);
+    auto* si4 = tryGet<L3SystemInformationType4>(*msg);
+    ASSERT_TRUE(si4);
+    EXPECT_FALSE(si4->hasCBCH());
+    EXPECT_FALSE(si4->hasCbchMobileAlloc());
+    EXPECT_TRUE(si4->restOctets().hasGPRS());
+    EXPECT_EQ(si4->restOctets().raColour(), 1u);
+    EXPECT_TRUE(si4->restOctets().restSPresent());
+    EXPECT_EQ(si4->restOctets().restS(), (std::vector<uint8_t>{0x2B}));
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) EXPECT_EQ((*bytes)[i], data[i]);
+}
+
+// =====================================================================
+// RR: System Information Type 2bis/2ter (3GPP TS 44.018 9.1.33/9.1.34):
+// the rest octets are an opaque tail of up to one (SI2bis) or four
+// (SI2ter) octets, preserved and re-emitted byte-for-byte.
+// =====================================================================
+
+TEST(GoldenRR, SystemInformationType2bis_RestOctets_Parse) {
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x02 ('00000010'B, TS 44.018 Table 10.4.1).
+    // Body: extended BCCH frequency list(16)=all zero + RACH control
+    // parameters(3)=all zero + one opaque rest octet 0x2B.
+    uint8_t data[] = {
+        0x06, 0x02,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00,
+        0x00,
+        0x2B
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3SystemInformationType2bis::MTI);
+    auto* si2bis = tryGet<L3SystemInformationType2bis>(*msg);
+    ASSERT_TRUE(si2bis);
+    EXPECT_EQ(si2bis->restOctets(), (std::vector<uint8_t>{0x2B}));
+    EXPECT_EQ(si2bis->bodyLength(), 20u);   // 16 + 3 + 1
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) EXPECT_EQ((*bytes)[i], data[i]);
+}
+
+TEST(GoldenRR, SystemInformationType2ter_RestOctets_Parse) {
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x03 ('00000011'B, TS 44.018 Table 10.4.1).
+    // Body: extended BCCH frequency list(16)=all zero + four opaque rest
+    // octets (the maximum for SI2ter, TS 44.018 9.1.34).
+    uint8_t data[] = {
+        0x06, 0x03,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
+        0x00,
+        0x2B, 0x2B, 0x2B, 0x2B
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3SystemInformationType2ter::MTI);
+    auto* si2ter = tryGet<L3SystemInformationType2ter>(*msg);
+    ASSERT_TRUE(si2ter);
+    EXPECT_EQ(si2ter->restOctets(), (std::vector<uint8_t>{0x2B, 0x2B, 0x2B, 0x2B}));
+    EXPECT_EQ(si2ter->bodyLength(), 20u);   // 16 + 4
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) EXPECT_EQ((*bytes)[i], data[i]);
+}
+
+// =====================================================================
 // RR: Short messages (TIF set, five-bit code in octet 1) - round-trip
 // tests. The wire form is the standard 2-octet L3 header with TIF=1 and
 // PD=RR (octet 0 = 0x16 for TI=0), the five-bit message code in the low

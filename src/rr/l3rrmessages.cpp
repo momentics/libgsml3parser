@@ -1240,12 +1240,21 @@ Expected<L3SystemInformationType2bis> L3SystemInformationType2bis::parse(BitRead
         if (!res) return Expected<L3SystemInformationType2bis>::error(res.error());
         msg.mRACHControlParameters = std::move(res.value());
     }
+    // Opaque rest octets (TS 44.018 section 9.1.33: up to one octet): all
+    // whole octets remaining in the frame are preserved verbatim.
+    const size_t bytes = br.remainingBits() / 8;
+    if (bytes > 0) {
+        msg.mRestOctets.resize(bytes);
+        auto r = br.readBytes(msg.mRestOctets.data(), bytes);
+        if (!r) return Expected<L3SystemInformationType2bis>::error(r.error());
+    }
     return Expected<L3SystemInformationType2bis>::hold(std::move(msg));
 }
 
 void L3SystemInformationType2bis::write(BitWriter& bw) const {
     mBCCHFrequencyList.write(bw);
     mRACHControlParameters.write(bw);
+    bw.writeBytes(mRestOctets.data(), mRestOctets.size());
 }
 
 void L3SystemInformationType2bis::text(std::ostream& os) const {
@@ -1253,6 +1262,14 @@ void L3SystemInformationType2bis::text(std::ostream& os) const {
     mBCCHFrequencyList.text(os);
     os << " ";
     mRACHControlParameters.text(os);
+    if (!mRestOctets.empty()) {
+        os << " RestOctets[";
+        for (size_t i = 0; i < mRestOctets.size(); ++i) {
+            if (i) os << ",";
+            os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mRestOctets[i]);
+        }
+        os << "]" << std::dec << std::setfill(' ');
+    }
 }
 
 // ── L3SystemInformationType2bis Builder ────────────────────────────────
@@ -1261,6 +1278,7 @@ L3SystemInformationType2bis L3SystemInformationType2bis::Builder::build() const 
     L3SystemInformationType2bis msg;
     msg.mBCCHFrequencyList = mBCCHFrequencyList;
     msg.mRACHControlParameters = mRACHControlParameters;
+    msg.mRestOctets = mRestOctets;
     return msg;
 }
 
@@ -1277,16 +1295,33 @@ Expected<L3SystemInformationType2ter> L3SystemInformationType2ter::parse(BitRead
         if (!res) return Expected<L3SystemInformationType2ter>::error(res.error());
         msg.mBCCHFrequencyList = std::move(res.value());
     }
+    // Opaque rest octets (TS 44.018 section 9.1.34: up to four octets): all
+    // whole octets remaining in the frame are preserved verbatim.
+    const size_t bytes = br.remainingBits() / 8;
+    if (bytes > 0) {
+        msg.mRestOctets.resize(bytes);
+        auto r = br.readBytes(msg.mRestOctets.data(), bytes);
+        if (!r) return Expected<L3SystemInformationType2ter>::error(r.error());
+    }
     return Expected<L3SystemInformationType2ter>::hold(std::move(msg));
 }
 
 void L3SystemInformationType2ter::write(BitWriter& bw) const {
     mBCCHFrequencyList.write(bw);
+    bw.writeBytes(mRestOctets.data(), mRestOctets.size());
 }
 
 void L3SystemInformationType2ter::text(std::ostream& os) const {
     os << "SystemInformationType2ter: ";
     mBCCHFrequencyList.text(os);
+    if (!mRestOctets.empty()) {
+        os << " RestOctets[";
+        for (size_t i = 0; i < mRestOctets.size(); ++i) {
+            if (i) os << ",";
+            os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mRestOctets[i]);
+        }
+        os << "]" << std::dec << std::setfill(' ');
+    }
 }
 
 // ── L3SystemInformationType2ter Builder ────────────────────────────────
@@ -1294,6 +1329,7 @@ void L3SystemInformationType2ter::text(std::ostream& os) const {
 L3SystemInformationType2ter L3SystemInformationType2ter::Builder::build() const {
     L3SystemInformationType2ter msg;
     msg.mBCCHFrequencyList = mBCCHFrequencyList;
+    msg.mRestOctets = mRestOctets;
     return msg;
 }
 
@@ -1312,27 +1348,11 @@ Expected<L3SystemInformationType3> L3SystemInformationType3::parse(BitReader& br
     { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType3>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
     { auto res = L3RACHControlParameters::parse(br); if (!res) return Expected<L3SystemInformationType3>::error(res.error()); msg.mRACHControlParameters = std::move(res.value()); }
     {
-        L3SI3RestOctets rest;
-        auto r = br.readField(1); if (!r) return Expected<L3SystemInformationType3>::error(r.error());
-        if (r.value() != 0) {
-            rest.mHaveSI3RestOctets = true;
-            r = br.readField(1); if (!r) return Expected<L3SystemInformationType3>::error(r.error());
-            if (r.value()) {
-                rest.mHaveSelectionParameters = true;
-                r = br.readField(1); if (!r) return Expected<L3SystemInformationType3>::error(r.error()); rest.mCBQ = r.value();
-                r = br.readField(6); if (!r) return Expected<L3SystemInformationType3>::error(r.error()); rest.mCELL_RESELECT_OFFSET = r.value();
-                r = br.readField(3); if (!r) return Expected<L3SystemInformationType3>::error(r.error()); rest.mTEMPORARY_OFFSET = r.value();
-                r = br.readField(5); if (!r) return Expected<L3SystemInformationType3>::error(r.error()); rest.mPENALTY_TIME = r.value();
-            }
-            r = br.readField(4); if (!r) return Expected<L3SystemInformationType3>::error(r.error());
-            r = br.readField(1); if (!r) return Expected<L3SystemInformationType3>::error(r.error());
-            if (r.value()) {
-                rest.mHaveGPRS = true;
-                r = br.readField(3); if (!r) return Expected<L3SystemInformationType3>::error(r.error()); rest.mRA_COLOUR = r.value();
-                r = br.readField(1); if (!r) return Expected<L3SystemInformationType3>::error(r.error());
-            }
-        }
-        msg.mRestOctets = std::move(rest);
+        // Rest Octets (TS 44.018 section 9.1.35): a mandatory bit-packed
+        // record starting directly with the selection-parameter presence bit.
+        auto res = L3SI3RestOctets::parse(br);
+        if (!res) return Expected<L3SystemInformationType3>::error(res.error());
+        msg.mRestOctets = std::move(res.value());
     }
     return Expected<L3SystemInformationType3>::hold(std::move(msg));
 }
@@ -1386,6 +1406,7 @@ L3SystemInformationType3::Builder L3SystemInformationType3::builder() {
 size_t L3SystemInformationType4::bodyLength() const {
     size_t len = mLAI.lengthV() + mCellSelectionParameters.lengthV() + mRACHControlParameters.lengthV();
     if (mHaveCBCH) len += 1 + mCBCHChannelDescription.lengthV();
+    if (mHaveCbchMobileAlloc) len += 2 + mCbchMobileAlloc.lengthV();
     len += mRestOctets.lengthV();
     return len;
 }
@@ -1400,27 +1421,34 @@ Expected<L3SystemInformationType4> L3SystemInformationType4::parse(BitReader& br
     { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType4>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
     { auto res = L3RACHControlParameters::parse(br); if (!res) return Expected<L3SystemInformationType4>::error(res.error()); msg.mRACHControlParameters = std::move(res.value()); }
 
+    bool haveCbchDesc = false;
     if (br.hasMore()) {
         unsigned peek = br.peekField(8);
         if (peek == 0x64) {
             { auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType4>::error(_.error()); }
             msg.mHaveCBCH = true;
+            haveCbchDesc = true;
             auto res = L3ChannelDescription::parse(br);
             if (!res) return Expected<L3SystemInformationType4>::error(res.error());
             msg.mCBCHChannelDescription = std::move(res.value());
         }
     }
+    // CBCH Mobile Allocation (TLV 0x72, TS 44.018 section 10.5.2.21): it
+    // appears only after the CBCH channel description; a 0x72 octet without
+    // the preceding 0x64 is not expected and is left to the rest octets.
+    if (haveCbchDesc && br.hasMore() && br.peekField(8) == 0x72) {
+        auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType4>::error(_.error());
+        auto lenRes = br.readField(8); if (!lenRes) return Expected<L3SystemInformationType4>::error(lenRes.error());
+        auto res = L3MobileAllocation::parse(br, static_cast<size_t>(lenRes.value()));
+        if (!res) return Expected<L3SystemInformationType4>::error(res.error());
+        msg.mHaveCbchMobileAlloc = true;
+        msg.mCbchMobileAlloc = std::move(res.value());
+    }
 
     {
-        L3SIType4RestOctets rest;
-        auto r = br.readField(2); if (!r) return Expected<L3SystemInformationType4>::error(r.error());
-        r = br.readField(1); if (!r) return Expected<L3SystemInformationType4>::error(r.error());
-        if (r.value()) {
-            rest.mHaveGPRS = true;
-            r = br.readField(3); if (!r) return Expected<L3SystemInformationType4>::error(r.error()); rest.mRA_COLOUR = r.value();
-            r = br.readField(1); if (!r) return Expected<L3SystemInformationType4>::error(r.error());
-        }
-        msg.mRestOctets = std::move(rest);
+        auto res = L3SIType4RestOctets::parse(br);
+        if (!res) return Expected<L3SystemInformationType4>::error(res.error());
+        msg.mRestOctets = std::move(res.value());
     }
 
     return Expected<L3SystemInformationType4>::hold(std::move(msg));
@@ -1434,6 +1462,12 @@ void L3SystemInformationType4::write(BitWriter& bw) const {
         bw.writeField(0x64, 8);
         mCBCHChannelDescription.write(bw);
     }
+    if (mHaveCbchMobileAlloc) {
+        // TLV: IEI 0x72, length in octets (TS 44.018 section 10.5.2.21).
+        bw.writeField(0x72, 8);
+        bw.writeField(static_cast<unsigned>(mCbchMobileAlloc.lengthV()) & 0xFFu, 8);
+        mCbchMobileAlloc.write(bw);
+    }
     mRestOctets.write(bw);
 }
 
@@ -1444,6 +1478,15 @@ void L3SystemInformationType4::text(std::ostream& os) const {
     mCellSelectionParameters.text(os);
     os << " ";
     mRACHControlParameters.text(os);
+    if (mHaveCBCH) {
+        os << " ";
+        mCBCHChannelDescription.text(os);
+    }
+    if (mHaveCbchMobileAlloc) {
+        os << " ";
+        mCbchMobileAlloc.text(os);
+    }
+    mRestOctets.text(os);
 }
 
 // ── L3SystemInformationType4 Builder ───────────────────────────────────
@@ -1455,6 +1498,8 @@ L3SystemInformationType4 L3SystemInformationType4::Builder::build() const {
     msg.mRACHControlParameters = mRACHControlParameters;
     msg.mHaveCBCH = mHaveCBCH;
     msg.mCBCHChannelDescription = mCBCHChannelDescription;
+    msg.mHaveCbchMobileAlloc = mHaveCbchMobileAlloc;
+    msg.mCbchMobileAlloc = mCbchMobileAlloc;
     msg.mRestOctets = mRestOctets;
     return msg;
 }
