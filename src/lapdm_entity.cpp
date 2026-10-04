@@ -166,6 +166,7 @@ Expected<void> LAPDmEntity::sendDISC() {
 
 void LAPDmEntity::hardRelease() noexcept {
     clearCounters();
+    mEstablishmentInProgress = false;
     transitionTo(LAPDmState::LinkReleased);
 }
 
@@ -179,10 +180,12 @@ bool LAPDmEntity::tickT200(std::chrono::milliseconds elapsed) {
         return false;
     }
 
-    // Timer expired.
+    // Timer expired. The retransmission budget is N200+1 frames after the
+    // original transmission; when the counter exceeds N200 the link is
+    // abnormally released (GSM 04.06 section 5.4.1.3).
     mT200Active = false;
 
-    if (mRC < mProfile.n200) {
+    if (mRC <= mProfile.n200) {
         // Retransmit the outstanding frame, rebuilt with P/F set and the
         // current V(R) in N(R) for an I-frame (see retransmitPending()).
         retransmitPending();
@@ -194,7 +197,7 @@ bool LAPDmEntity::tickT200(std::chrono::milliseconds elapsed) {
         return true;
     }
 
-    // Exceeded max retransmissions — abnormal release.
+    // Exceeded the retransmission budget — abnormal release.
     abnormalRelease();
     return true;
 }
@@ -293,6 +296,7 @@ void LAPDmEntity::transitionTo(LAPDmState newState) noexcept {
 
 void LAPDmEntity::abnormalRelease() noexcept {
     clearCounters();
+    mEstablishmentInProgress = false;
     transitionTo(LAPDmState::LinkReleased);
     deliverL3(Primitive::MDL_ERROR_INDICATION, {});
 }
@@ -428,8 +432,11 @@ void LAPDmEntity::receiveUFrame(const lapdm::LAPDmFrame& frame) {
 }
 
 void LAPDmEntity::handleSABME(const lapdm::LAPDmFrame& frame) {
-    // An initial SABME command is accepted regardless of the P/F bit; the
-    // response UA mirrors the received P/F value (GSM 04.06 section 5.4.1).
+    // A SABME command with the P/F bit cleared is ignored (GSM 04.06 section
+    // 5.4.1.2); for an accepted command the response UA mirrors the received
+    // P/F value (GSM 04.06 section 5.4.1).
+
+    if (!frame.pf) return;
 
     switch (mState) {
         case LAPDmState::LinkReleased: {
@@ -439,6 +446,10 @@ void LAPDmEntity::handleSABME(const lapdm::LAPDmFrame& frame) {
             if (mSapi != SAPI::SAPI0) return;
             if (!frame.hasInfo()) return;
             clearCounters();
+            // The initial SABME is accepted: the establishment is in progress
+            // until an I/S frame or DISC command arrives (GSM 04.06 section
+            // 5.4.1.4).
+            mEstablishmentInProgress = true;
             // Contention resolution (GSM 04.06 5.4.1.4): echo the payload and
             // answer with a UA whose F bit mirrors the command.
             mContentionChecksum = computeChecksum(frame.info);
@@ -453,11 +464,22 @@ void LAPDmEntity::handleSABME(const lapdm::LAPDmFrame& frame) {
             break;
         }
         case LAPDmState::AwaitingRelease: {
-            // Refuse re-establishment during release.
-            sendDM(true);
+            // Refuse re-establishment during release (DM, F mirrors the
+            // command).
+            sendDM(frame.pf);
             break;
         }
         case LAPDmState::LinkEstablished: {
+            // Guards the establishment latency window (GSM 04.06 section
+            // 5.4.2.1): a late SABME carrying contention-resolution
+            // information is answered with an echoing UA instead of an
+            // abnormal release; without info a plain UA suffices. The state
+            // is not changed.
+            if (mEstablishmentInProgress) {
+                if (frame.hasInfo()) sendUAWithEcho(frame.info, frame.pf);
+                else sendUA(frame.pf);
+                break;
+            }
             if (frame.hasInfo()) {
                 // Unexpected SABME with payload — abnormal release.
                 abnormalRelease();
@@ -483,10 +505,12 @@ void LAPDmEntity::handleSABME(const lapdm::LAPDmFrame& frame) {
     }
 }
 
-void LAPDmEntity::handleUA(const lapdm::LAPDmFrame&) {
-    // A UA response is accepted regardless of its P/F bit: our command was
-    // sent with P/F set, so a cleared final bit still confirms the link
-    // (lenient acceptance for interoperability, GSM 04.06 section 5.4.1).
+void LAPDmEntity::handleUA(const lapdm::LAPDmFrame& frame) {
+    // A UA response with F cleared is ignored (GSM 04.06 section 5.4.1.2);
+    // our command was sent with P/F set, so only a final response confirms
+    // the link.
+
+    if (!frame.pf) return;
 
     switch (mState) {
         case LAPDmState::AwaitingEstablish: {
@@ -507,20 +531,20 @@ void LAPDmEntity::handleUA(const lapdm::LAPDmFrame&) {
     }
 }
 
-void LAPDmEntity::handleDM(const lapdm::LAPDmFrame&) {
-    // A DM response is accepted regardless of its P/F bit (lenient acceptance
-    // for interoperability, GSM 04.06 section 5.4).
+void LAPDmEntity::handleDM(const lapdm::LAPDmFrame& frame) {
+    // A received DM with the F bit cleared is ignored (GSM 04.06 section
+    // 5.4.6.3).
+
+    if (!frame.pf) return;
 
     switch (mState) {
         case LAPDmState::AwaitingEstablish: {
-            // DM while awaiting establishment cancels T200 and the
-            // retransmission loop; no further SABME is sent (GSM 04.06
-            // section 5.4).
-            mT200Active = false;
-            mRC = 0;
-            mPending = PendingKind::None;
-            mPendingInfo.clear();
-            transitionTo(LAPDmState::LinkReleased);
+            // An unsolicited DM during establishment does not release the
+            // link: T200 is restarted and a RELEASE_INDICATION is passed up
+            // (GSM 04.06 section 5.4.1.2); SABME retransmissions on T200
+            // expiry continue.
+            mT200Active = true;
+            mT200RemainingMs = mProfile.t200Ms;
             deliverL3(Primitive::L3_RELEASE_INDICATION, {});
             break;
         }
@@ -546,13 +570,15 @@ void LAPDmEntity::handleDM(const lapdm::LAPDmFrame&) {
 
 void LAPDmEntity::handleDISC(const lapdm::LAPDmFrame& frame) {
     // A DISC command is accepted regardless of its P/F bit (lenient acceptance
-    // for interoperability, GSM 04.06 section 5.4); every UA response mirrors
-    // the received P/F value.
+    // for interoperability, GSM 04.06 section 5.4); every UA and DM response
+    // mirrors the received P/F value.
+
+    mEstablishmentInProgress = false;
 
     switch (mState) {
         case LAPDmState::LinkReleased: {
-            // No link to release — respond with DM.
-            sendDM(true);
+            // No link to release — respond with DM (F mirrors the command).
+            sendDM(frame.pf);
             break;
         }
         case LAPDmState::AwaitingEstablish: {
@@ -598,6 +624,10 @@ void LAPDmEntity::handleUI(const lapdm::LAPDmFrame& frame) {
 // ── I-frame handler (GSM 04.06 5.5) ──────────────────────────────────
 
 void LAPDmEntity::receiveIFrame(const lapdm::LAPDmFrame& frame) {
+    // The first received I-frame completes the establishment latency window
+    // (GSM 04.06 section 5.4.1.4).
+    mEstablishmentInProgress = false;
+
     // I-frames only valid in established states.
     if (mState == LAPDmState::ContentionResolution) {
         transitionTo(LAPDmState::LinkEstablished);
@@ -646,6 +676,10 @@ void LAPDmEntity::receiveIFrame(const lapdm::LAPDmFrame& frame) {
 // ── S-frame handler (GSM 04.06 5.3) ──────────────────────────────────
 
 void LAPDmEntity::receiveSFrame(const lapdm::LAPDmFrame& frame) {
+    // The first received S-frame completes the establishment latency window
+    // (GSM 04.06 section 5.4.1.4).
+    mEstablishmentInProgress = false;
+
     if (mState == LAPDmState::ContentionResolution) {
         transitionTo(LAPDmState::LinkEstablished);
     }

@@ -636,6 +636,33 @@ TEST(LAPDmEntityTest, DISC_FromPeer) {
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
 }
 
+// A DISC received in LinkReleased is answered with a DM whose F bit mirrors
+// the P/F of the received command (GSM 04.06 section 5.4.5).
+TEST(LAPDmEntityTest, DISC_InLinkReleased_DM_MirrorsPoll) {
+    MockLAPDmEntity mock;
+    mock.entity.open(SAPI::SAPI0, true);
+
+    // DISC with P/F set (command control 0x53): the DM response carries F set.
+    auto discPf1 = encodeFrame(makeDISCFrame(SAPI::SAPI0, false));
+    mock.entity.receiveFrame(discPf1);
+
+    EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased); // no state change
+    ASSERT_EQ(mock.l1Sent.size(), 1u);
+    auto dm = LAPDmFrame::decode(mock.l1Sent.back());
+    ASSERT_TRUE(dm);
+    EXPECT_EQ((*dm).uType, LAPDmUFrameType::DM);
+    EXPECT_TRUE((*dm).pf);
+
+    // DISC with P/F clear (0x43): the DM response carries F clear.
+    uint8_t wirePf0[] = {0x03, 0x43, 0x01};
+    mock.entity.receiveFrame(std::span(wirePf0));
+
+    auto dm0 = LAPDmFrame::decode(mock.l1Sent.back());
+    ASSERT_TRUE(dm0);
+    EXPECT_EQ((*dm0).uType, LAPDmUFrameType::DM);
+    EXPECT_FALSE((*dm0).pf);
+}
+
 // hardRelease() transitions immediately to LinkReleased.
 TEST(LAPDmEntityTest, HardRelease) {
     MockLAPDmEntity mock;
@@ -680,8 +707,8 @@ TEST(LAPDmEntityTest, ReEstablishment_InLinkEstablished) {
     ASSERT_TRUE(result);
     EXPECT_TRUE(mock.entity.hasOutstandingFrame());
 
-    // Peer sends SABM again (re-establishment) -- no payload
-    uint8_t bareSabme[] = {0x03, 0x2F, 0x01};
+    // Peer sends SABME again with P/F set (re-establishment) -- no payload
+    uint8_t bareSabme[] = {0x03, 0x3F, 0x01};
     mock.entity.receiveFrame(std::span(bareSabme));
 
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkEstablished); // Stays established
@@ -1039,8 +1066,9 @@ TEST(LAPDmEntityTest, SendData_AbnormalRelease_ClearsTxQueue) {
     std::vector<uint8_t> big(50, 0xAB);
     ASSERT_TRUE(mock.entity.sendData(std::span<const uint8_t>(big.data(), big.size())));
 
-    // Force abnormal release: tick T200 past N200 (SDCCH N200=23).
-    for (int i = 0; i < 24; ++i) {
+    // Force abnormal release: tick T200 past the N200+1 retransmission budget
+    // (SDCCH N200=23 — 24 retransmissions, the 25th expiry releases).
+    for (int i = 0; i < 25; ++i) {
         mock.entity.tickT200(std::chrono::milliseconds(900));
     }
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
@@ -1126,12 +1154,19 @@ TEST(LAPDmEntityTest, T200_AbnormalRelease_AfterN200) {
     std::fill(std::begin(data), std::end(data), 0xAB);
     (void)mock.entity.sendData(std::span(data));
 
-    // Tick T200 more than N200 times (SACCH has N200=5)
+    // The retransmission budget is N200+1 frames (SACCH has N200=5): the first
+    // six expiries retransmit, the seventh releases.
     for (unsigned i = 0; i <= 5; i++) {
         mock.entity.tickT200(std::chrono::milliseconds(4000)); // > T200=3600ms
     }
 
-    // Should have transitioned to LinkReleased and called L3 callback with error
+    // After N200+1 retransmissions the link is still up (I-frame pending).
+    EXPECT_EQ(mock.entity.retransmissions(), 6u);
+    EXPECT_TRUE(mock.entity.isEstablished());
+
+    // The expiry that exceeds the budget transitions to LinkReleased and
+    // calls the L3 callback with an error.
+    mock.entity.tickT200(std::chrono::milliseconds(4000));
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
     bool gotError = false;
     for (auto& [prim, _] : mock.l3Received) {
@@ -1151,11 +1186,17 @@ TEST(LAPDmEntityTest, SABME_T200_Expiry_AbnormalRelease) {
     (void)mock.entity.sendSABME();
     EXPECT_EQ(mock.entity.state(), LAPDmState::AwaitingEstablish);
 
-    // Use SDCCH profile (N200=23, T200=900ms). Tick past limit.
+    // Use SDCCH profile (N200=23, T200=900ms). The budget is N200+1 = 24
+    // retransmissions; the 25th expiry releases.
     for (unsigned i = 0; i <= 23; i++) {
         mock.entity.tickT200(std::chrono::milliseconds(1000));
     }
 
+    EXPECT_EQ(mock.entity.retransmissions(), 24u);
+    EXPECT_EQ(mock.entity.state(), LAPDmState::AwaitingEstablish);
+
+    // The expiry that exceeds the budget triggers the abnormal release.
+    mock.entity.tickT200(std::chrono::milliseconds(1000));
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
 }
 
@@ -1330,12 +1371,13 @@ TEST(LAPDmEntityTest, SACCH_Profile_N200_Limit) {
     std::fill(std::begin(data), std::end(data), 0xAB);
     (void)mock.entity.sendData(std::span(data));
 
-    // 5 retransmissions (N200=5) + 1 final expiry -> abnormal release
-    for (unsigned i = 0; i <= 5; i++) {
+    // N200+1 = 6 retransmissions (N200=5) + the final expiry -> abnormal
+    // release
+    for (unsigned i = 0; i <= 6; i++) {
         mock.entity.tickT200(std::chrono::milliseconds(4000));
     }
 
-    EXPECT_EQ(mock.entity.retransmissions(), 5u); // Exactly N200 retransmissions
+    EXPECT_EQ(mock.entity.retransmissions(), 6u); // Exactly N200+1 retransmissions
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
 }
 
@@ -1479,9 +1521,11 @@ TEST(LAPDmEntityTest, REJ_RetransmitsOutstandingFrame) {
 
 // ── Establishment and Timer Recovery Behaviour (GSM 04.06 / TS 51.010-1) ──
 
-// An initial SABME command with P/F clear must be accepted on SAPI 0 and
-// answered by a UA whose F bit mirrors the command (GSM 04.06 section 5.4).
-TEST(LAPDmEntityTest, InitialSabme_PF0_Accepted_UAMirrorsFinal) {
+// An initial SABME command with P/F clear is ignored: no state change, no
+// response, no L3 callback (GSM 04.06 section 5.4.1.2). A SABME with P/F set
+// on SAPI 0 carrying contention information is accepted and answered by a UA
+// whose F bit mirrors the command (GSM 04.06 section 5.4.1).
+TEST(LAPDmEntityTest, InitialSabme_PF0_Ignored) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true); // BTS side
 
@@ -1490,29 +1534,26 @@ TEST(LAPDmEntityTest, InitialSabme_PF0_Accepted_UAMirrorsFinal) {
     uint8_t wire[] = {0x03, 0x2F, 0x09, 0x06, 0x27};
     mock.entity.receiveFrame(std::span(wire));
 
+    EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased); // no state change
+    EXPECT_EQ(mock.l1Sent.size(), 0u);                        // no response
+    EXPECT_EQ(mock.l3Received.size(), 0u);                    // no L3 callback
+
+    // The same SABME with P/F set (control 0x3F) is accepted: the UA echoes
+    // the payload and mirrors the set F bit.
+    uint8_t wirePf[] = {0x03, 0x3F, 0x09, 0x06, 0x27};
+    mock.entity.receiveFrame(std::span(wirePf));
+
     EXPECT_EQ(mock.entity.state(), LAPDmState::ContentionResolution);
     ASSERT_EQ(mock.l3Received.size(), 1u);
     EXPECT_EQ(mock.l3Received[0].first, Primitive::L3_ESTABLISH_INDICATION);
 
-    // The UA echoes the payload and mirrors the cleared F bit.
     auto ua = LAPDmFrame::decode(mock.l1Sent.back());
     ASSERT_TRUE(ua);
     EXPECT_EQ((*ua).uType, LAPDmUFrameType::UA);
-    EXPECT_FALSE((*ua).pf);
+    EXPECT_TRUE((*ua).pf);
     ASSERT_EQ((*ua).info.size(), 2u);
     EXPECT_EQ((*ua).info[0], 0x06u);
     EXPECT_EQ((*ua).info[1], 0x27u);
-
-    // A SABME carrying the same contention information with P/F set is
-    // answered by a UA with F set and completes contention resolution.
-    uint8_t wirePf[] = {0x03, 0x3F, 0x09, 0x06, 0x27};
-    mock.entity.receiveFrame(std::span(wirePf));
-
-    EXPECT_EQ(mock.entity.state(), LAPDmState::LinkEstablished);
-    auto ua2 = LAPDmFrame::decode(mock.l1Sent.back());
-    ASSERT_TRUE(ua2);
-    EXPECT_EQ((*ua2).uType, LAPDmUFrameType::UA);
-    EXPECT_TRUE((*ua2).pf);
 }
 
 // An initial SABME on SAPI 0 without information is dropped silently: no
@@ -1521,7 +1562,7 @@ TEST(LAPDmEntityTest, InitialSabme_NoPayload_DroppedSilently) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI0, true);
 
-    uint8_t wire[] = {0x03, 0x2F, 0x01}; // SABME (P/F clear), L=0
+    uint8_t wire[] = {0x03, 0x3F, 0x01}; // SABME (P/F set), L=0
     mock.entity.receiveFrame(std::span(wire));
 
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
@@ -1529,9 +1570,10 @@ TEST(LAPDmEntityTest, InitialSabme_NoPayload_DroppedSilently) {
     EXPECT_EQ(mock.l3Received.size(), 0u);
 }
 
-// A UA response is accepted with any F bit value while awaiting
-// establishment (lenient acceptance, GSM 04.06 section 5.4.1).
-TEST(LAPDmEntityTest, UA_Accepted_WithFinalClear) {
+// A UA response with the F bit cleared is ignored while awaiting
+// establishment: the state is unchanged and T200 keeps running; only a final
+// UA confirms the link (GSM 04.06 section 5.4.1.2).
+TEST(LAPDmEntityTest, UA_FinalClear_Ignored) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI3, true);
 
@@ -1542,14 +1584,28 @@ TEST(LAPDmEntityTest, UA_Accepted_WithFinalClear) {
     uint8_t wire[] = {0x0D, 0x63, 0x01};
     mock.entity.receiveFrame(std::span(wire));
 
+    EXPECT_EQ(mock.entity.state(), LAPDmState::AwaitingEstablish); // unchanged
+    EXPECT_EQ(mock.l3Received.size(), 0u);                         // no confirm
+
+    // T200 is still active: the next full expiry retransmits the SABME.
+    ASSERT_TRUE(mock.entity.tickT200(std::chrono::milliseconds(1000)));
+    EXPECT_EQ(mock.entity.retransmissions(), 1u);
+    auto rt = LAPDmFrame::decode(mock.l1Sent.back());
+    ASSERT_TRUE(rt);
+    EXPECT_EQ((*rt).uType, LAPDmUFrameType::SABME);
+
+    // A UA with the F bit set confirms the link (control).
+    auto ua = encodeFrame(makeUAFrame(SAPI::SAPI3, true, std::span<const uint8_t>{}));
+    mock.entity.receiveFrame(ua);
+
     EXPECT_EQ(mock.entity.state(), LAPDmState::LinkEstablished);
     EXPECT_EQ(mock.l3Received.back().first, Primitive::L3_ESTABLISH_CONFIRM);
 }
 
-// DM while awaiting establishment cancels T200: after N200 ticks no further
-// SABME is emitted and a release indication is delivered once (GSM 04.06
-// section 5.4; TS 51.010-1 section 25).
-TEST(LAPDmEntityTest, DM_WhileAwaitingEstablish_CancelsT200) {
+// A DM response while awaiting establishment does not release the link: T200
+// is restarted, a RELEASE_INDICATION is delivered to L3, and SABME
+// retransmissions continue on T200 expiry (GSM 04.06 section 5.4.1.2).
+TEST(LAPDmEntityTest, DM_WhileAwaitingEstablish_RestartsT200) {
     MockLAPDmEntity mock;
     mock.entity.open(SAPI::SAPI3, true);
 
@@ -1560,19 +1616,40 @@ TEST(LAPDmEntityTest, DM_WhileAwaitingEstablish_CancelsT200) {
     auto dm = encodeFrame(makeDMFrame(SAPI::SAPI3, true));
     mock.entity.receiveFrame(dm);
 
-    EXPECT_EQ(mock.entity.state(), LAPDmState::LinkReleased);
+    // The link is not released and the release indication goes up to L3.
+    EXPECT_EQ(mock.entity.state(), LAPDmState::AwaitingEstablish);
     size_t relInd = 0;
     for (auto& [prim, _] : mock.l3Received) {
         if (prim == Primitive::L3_RELEASE_INDICATION) ++relInd;
     }
     EXPECT_EQ(relInd, 1u);
 
-    // T200 is cancelled: full expiries emit no further frames.
-    for (unsigned i = 0; i < 24; ++i) {
-        mock.entity.tickT200(std::chrono::milliseconds(1000));
-    }
-    EXPECT_EQ(mock.l1Sent.size(), 1u); // no SABME retransmission
-    EXPECT_EQ(mock.entity.retransmissions(), 0u);
+    // T200 was restarted: the next full expiry retransmits the SABME.
+    ASSERT_TRUE(mock.entity.tickT200(std::chrono::milliseconds(1000)));
+    EXPECT_EQ(mock.l1Sent.size(), 2u);
+    EXPECT_EQ(mock.entity.retransmissions(), 1u);
+    auto rt = LAPDmFrame::decode(mock.l1Sent.back());
+    ASSERT_TRUE(rt);
+    EXPECT_EQ((*rt).uType, LAPDmUFrameType::SABME);
+
+    // Sub-case: a DM with the F bit cleared is ignored (GSM 04.06 section
+    // 5.4.6.3) — state and T200 are unchanged.
+    MockLAPDmEntity pf0Mock;
+    pf0Mock.entity.open(SAPI::SAPI3, true);
+
+    ASSERT_TRUE(pf0Mock.entity.sendSABME());
+    ASSERT_EQ(pf0Mock.l1Sent.size(), 1u);
+
+    auto dmPf0 = encodeFrame(makeDMFrame(SAPI::SAPI3, false));
+    pf0Mock.entity.receiveFrame(dmPf0);
+
+    EXPECT_EQ(pf0Mock.entity.state(), LAPDmState::AwaitingEstablish); // unchanged
+    EXPECT_EQ(pf0Mock.l1Sent.size(), 1u);                             // no reaction
+    EXPECT_EQ(pf0Mock.l3Received.size(), 0u);                         // no indication
+
+    // T200 kept running from the original SABME: it expires and retransmits.
+    ASSERT_TRUE(pf0Mock.entity.tickT200(std::chrono::milliseconds(1000)));
+    EXPECT_EQ(pf0Mock.l1Sent.size(), 2u);
 }
 
 // An unacknowledged I-frame is retransmitted with P/F set and the current

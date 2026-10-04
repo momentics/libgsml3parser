@@ -127,10 +127,14 @@ T1(5)/T3(6)/T2(5); channel numbers use the five-bit type-and-offset codes (`'000
 `'10000'B` BCCH, `'10001'B` RACH, `'10010'B` PCH+AGCH, PDCH/CBCH/VAMOS extensions) with
 `channelCodeLm/Sdcch4/Sdcch8` helpers.
 
-**LAPDm (GSM 04.06 / TS 51.010-1)** — an initial SABME is accepted on SAPI 0 only when it carries
-contention-resolution information; every UA we send mirrors the P/F of the received command; DM while
-awaiting establishment cancels T200 and releases the link; a T200-expired I-frame is retransmitted
-with P/F set and the current V(R) in N(R).
+**LAPDm (GSM 04.06 / TS 51.010-1)** — a SABME command with the P/F bit
+cleared is ignored; an initial SABME is accepted on SAPI 0 only when it
+carries contention-resolution information; every UA and DM we send mirrors
+the P/F of the received command; a UA or DM response with F cleared is
+ignored; a DM while awaiting establishment restarts T200 without releasing
+the link; the retransmission budget allows N200+1 frames before abnormal
+release; a T200-expired I-frame is retransmitted with P/F set and the
+current V(R) in N(R).
 
 **A-bis RSL (TS 48.058)** — the Channel Mode IE (0x06) value is exactly four octets:
 [reserved(6)|DTX_d(1)|DTX_u(1)], speed indicator (`Speech=0x01`, `Data=0x02`, `Signalling=0x03`),

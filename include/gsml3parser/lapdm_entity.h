@@ -171,7 +171,10 @@ public:
     void hardRelease() noexcept;
 
     /// Tick the T200 timer by the given elapsed duration.
-    /// If the timer expires, triggers retransmission (if RC < N200) or abnormal release.
+    /// If the timer expires, the outstanding frame is retransmitted while the
+    /// retransmission counter RC is at most N200 (the budget allows N200+1
+    /// frames after the original transmission); when RC exceeds N200 the link
+    /// is abnormally released (GSM 04.06 section 5.4.1.3).
     /// @param elapsed Time elapsed since last tick.
     /// @return true if a retransmission or abnormal release occurred.
     bool tickT200(std::chrono::milliseconds elapsed);
@@ -210,6 +213,13 @@ private:
     LAPDmState mState{LAPDmState::Unused};
     SAPI mSapi{SAPI::SAPI0};
     bool mCommandBit{true};
+
+    /// Establishment-in-progress flag (GSM 04.06 section 5.4.1.4): set when
+    /// an initial SABME is accepted in LinkReleased, cleared by the first
+    /// received I/S frame or DISC command and on any release. While it is set,
+    /// a late SABME in LinkEstablished is answered with an echoing UA instead
+    /// of triggering an abnormal release (establishment latency window).
+    bool mEstablishmentInProgress{false};
 
     // Sequence counters (mod 8) — packed uint8_t for cache efficiency
     uint8_t mVS{0}; // Send state: NS+1 of last sent I-frame
