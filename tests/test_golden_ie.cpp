@@ -1479,16 +1479,6 @@ TEST(GoldenIE, BCCHFrequencyList_WithARFCNs) {
 }
 
 // =====================================================================
-// Common IEs: L3NeighborCellsDescription (GSM 04.08 10.5.2.22)
-// =====================================================================
-
-TEST(GoldenIE, NeighborCellsDescription_Default) {
-    L3NeighborCellsDescription orig;
-    EXPECT_EQ(orig.lengthV(), 16u);
-    ieRoundTrip(orig);
-}
-
-// =====================================================================
 // Common IEs: L3MeasurementResults (GSM 04.08 10.5.2.20)
 // Field layout per GSM 24.008 10.5.2.20
 // 128 bits: ba_used(1) + dtx_used(1) + rxlev_full(6) + 3g_ba(1) +
@@ -1622,17 +1612,6 @@ TEST(GoldenIE, MobileAllocation_WithData) {
     std::vector<uint8_t> data = {0xFF, 0x00, 0xFF};
     L3MobileAllocation orig(data);
     EXPECT_EQ(orig.lengthV(), 3u);
-}
-
-// =====================================================================
-// Common IEs: L3CellOptions (GSM 04.08 10.5.2.6)
-// =====================================================================
-
-TEST(GoldenIE, CellOptions_Default) {
-    L3CellOptions orig;
-    EXPECT_EQ(orig.revisionLevel(), 0u);
-    EXPECT_FALSE(orig.cbch());
-    EXPECT_FALSE(orig.enhancedRach());
 }
 
 // =====================================================================

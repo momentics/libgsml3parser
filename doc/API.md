@@ -1833,9 +1833,10 @@ flag) in the low half-octet (TS 44.018).
 
 AMR codec set and mode set negotiation.
 
-### L3NeighborCellsDescription, L3ControlChannelDescription
+### L3ControlChannelDescription
 
-Lists of neighbor cells and control channel descriptions.
+Control channel description IE (TS 44.018 section 10.5.2.11): MSC R99, ATT, BS AG
+BLKS RES, CCCH CONF, SI22 indicator, CBQ3, BS PA MFRMS and T3212.
 
 ### L3CellDescription, L3HandoverReference
 
@@ -5008,7 +5009,7 @@ ctypes/cffi, Rust, Go). One C89-clean header
 
 | Layer | C API |
 |-------|-------|
-| Core L3 | `gsml3_parse_l3` / `gsml3_parse_l3_hex` / `gsml3_parse_l3_into` (all 235 message types), `gsml3_message_name/pd/mti/ti/size/dump`, `gsml3_message_write/hex`, `gsml3_config` |
+| Core L3 | `gsml3_parse_l3` / `gsml3_parse_l3_hex` / `gsml3_parse_l3_into` (all 215 message types), `gsml3_message_name/pd/mti/ti/size/dump`, `gsml3_message_write/hex`, `gsml3_config` |
 | A-bis RSL | `gsml3_rsl_parse` + accessors (IE/L3 views into the handle's copy) + 13 `gsml3_rsl_build_*` |
 | LAPDm | `gsml3_lapdm_frame_decode` (zero-copy) + `gsml3_lapdm_entity` (full FSM, fn+user callbacks) |
 | BTS stack | `gsml3_registry` (plain + sharded {4,8,16,32}), borrowed `gsml3_session` (`assigned_tmsi`, timers, transactions), O(active) ticks, channel assignment/release with link index |

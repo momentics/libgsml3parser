@@ -573,7 +573,7 @@ class Message:
 
     def dump(self) -> str:
         """Human-readable dump: message name first, then the information-
-        element text of every field (all 235 message types). Copy-then-free."""
+        element text of every field (all 215 message types). Copy-then-free."""
         self._check()
         return _alloc_string(lib.gsml3_message_dump(self._h), "message_dump")
 

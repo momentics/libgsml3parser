@@ -56,7 +56,7 @@
 //     per the Channel Description IE (GSM 44.018), H=0 and H=1 variants
 //   - RACHControlParameters_RefValues {0xE5, 0x04, 0x00}: max_retrans=3, tx_integer=9, cell_bar=0, re=1, ACC=0x0400
 //     default RACH control values for a software BTS (GSM 44.018 SI3)
-//   - CellSelectionParameters_RefValues {0x47, 0x40}: hyst=2, txpwr=7, acs=0, neci=1, rxlev_min=0
+//   - CellSelectionParameters_RefValues {0x47,0x40}: hyst=2 (bits 8-6), txpwr=7 (bits 5-1), acs=0 (bit 8 of octet 2), neci=1 (bit 7), rxlev_min=0 (bits 6-1)
 //     default cell selection values for a software BTS (GSM 44.018 SI3)
 //   - ControlChannelDescription_RefValues {0xC9, 0x00, 0x01}: msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1, t3212=1
 //     default control channel description values for a software BTS (GSM 44.018 SI3)

@@ -2,7 +2,7 @@
 
 Complete catalog of all L3 message types, Information Elements, and enums implemented in libgsml3parser.
 
-**Total: 235 message types across 12 protocol domains.**
+**Total: 215 message types across 12 protocol domains.**
 
 For a summary table see [README.md](../README.md#supported-messages-summary).
 
@@ -174,6 +174,8 @@ No normative reference templates exist for this block: bodies are kept as opaque
 | `L3SystemInformationType21` | 0x46 | Empty body |
 | `L3SystemInformationType22` | 0x47 | Empty body |
 | `L3SystemInformationType23` | 0x4f | Empty body |
+
+*The Neighbour Cell Description lists of SI5bis/SI5ter are handled as the 16-octet BCCH frequency list form; the bit placement of BA-ind/EXT-ind is not fixed by the reference templates and no structured NCD interpretation is provided.*
 
 ### SACCH Short-Form System Information (TIF=1)
 

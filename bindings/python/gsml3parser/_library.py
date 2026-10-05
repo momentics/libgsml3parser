@@ -36,7 +36,7 @@ This module owns every contact point between Python and the C ABI
 
 * **Declarations** — ctypes mirrors of every public C struct and callback
   type, plus ``PROTOTYPES``: ``(restype, argtypes)`` for ALL functions of
-  the C ABI (236 at GSML3_ABI_VERSION 1, ABI
+  the C ABI (237 at GSML3_ABI_VERSION 1, ABI
   inventory). At import time every entry is registered on the loaded
   library; a missing symbol or an unknown token raises immediately — this
   module never exposes a partially typed binding.

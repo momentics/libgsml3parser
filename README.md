@@ -8,7 +8,7 @@
 [![Version](https://img.shields.io/badge/Version-0.19.0-blue.svg)](https://github.com/momentics/libgsml3parser/releases)
 
 A type-safe, **zero-allocation C++20** library with **no external dependencies**, spanning the full GSM
-signalling chain of a software Base Transceiver Station: **235 L3 message classes across 12 PD
+signalling chain of a software Base Transceiver Station: **215 L3 message classes across 12 PD
 domains** — typed fields for RR/SM/CC/GMM/MM/SS and the SMS CP/RP/TP layers; the BCC/GCC/LS blocks have
 no normative reference templates, so they are parsed best-effort as opaque bodies and bit-level
 conformance is not claimed for them — plus passthrough for the Extended/Test PDs, the complete **LAPDm**
@@ -78,8 +78,8 @@ auto paging = L3PagingRequestType2::builder()
 
 ## Supported Messages Summary
 
-All 12 protocol domains — RR 98 · SM 29 · CC 24 · GMM 23 · MM 19 · SMS 19 · BCC 8 · GCC 8 · SS 3 · LS 2 ·
-Extended + Test PDs 2: **235 message types** in total, with Information Elements and enums defined per domain.
+All 12 protocol domains — RR 98 · SM 24 · CC 21 · GMM 23 · MM 21 · SMS 5 · BCC 8 · GCC 8 · SS 3 · LS 2 ·
+Extended + Test PDs 2: **215 message types** in total, with Information Elements and enums defined per domain.
 
 Full catalog (MTIs, directions, IEs, dispatch edge cases such as TIF=1 short messages and build-only
 types): [doc/messages.md](doc/messages.md).
@@ -103,7 +103,10 @@ starts with one octet: CM service type (four bits) in the low half-octet and
 CKSN(3)|reserved(1) in the high; Location Updating Request starts with
 `[spare(1)|CKSN(3)]` + `[FOR(1)|spare(1)|LUtype(2)]`; Authentication Request and
 CM Re-establishment Request carry the CKSN (three bits plus one spare) in the
-low half-octet with the high half-octet spare. Optional IEs after the mandatory
+low half-octet with the high half-octet spare. Authentication Failure (0x1C) is
+a bare reject-cause octet plus, for the "Synch failure" cause, the optional AUTS
+TLV 0x22; CM Service Prompt (0x25) is one `spare(2)|SAPI(2)|PD(4)` octet — both
+present per TS 24.008 Table 10.2. Optional IEs after the mandatory
 part are preserved opaquely and re-emitted verbatim.
 
 **GMM / SM (TS 24.008)** — Attach/RAU Request pack the type (three bits plus the forL3 indicator) in the low half-octet
@@ -113,7 +116,11 @@ octet. SM ACTIVATE PDP CONTEXT REQUEST carries the NSAPI and the negotiated LLC 
 octets ([NSAPI(4)|spare(4)][LLC SAPI(4)|spare(4)]), requested QoS and requested PDP address as
 positional LVs, the APN as TLV `0x28`, PCO as TLV `0x27` and an optional request type
 `0xAx`; DEACTIVATE PDP CONTEXT REQUEST starts with the SM cause octet followed by an optional
-tear-down indicator TV `0x09`.
+tear-down indicator TV `0x09`. SM MTI 0x50-0x54 are reserved and not assigned to message
+classes (TS 24.068 Table 10.4a).
+
+**CC / SMS** — CC message types per TS 24.008 Table 10.3 (no unit-data messages); the SMS PD
+carries CP-DATA/CP-ACK/CP-ERROR plus CP-STATUS/CP-SUBMIT (TS 24.011).
 
 **RR (TS 44.018)** — Ciphering Mode Command is exactly one body octet
 `[sC(1)|algorithm(3)][cR(1)|spare(3)]`; SI1 carries the cell channel description (ARFCN(10)+BSIC(6),
@@ -125,7 +132,10 @@ optional third identity (TLV `0x17`) for Type 2, four raw TMSIs for Type 3 — a
 with `[spare(4)][CKSN(4)]`; the Immediate Assignment start time (IEI `0x7C`) is two value octets packing
 T1(5)/T3(6)/T2(5); channel numbers use the five-bit type-and-offset codes (`'00001'B` Bm ACCH …
 `'10000'B` BCCH, `'10001'B` RACH, `'10010'B` PCH+AGCH, PDCH/CBCH/VAMOS extensions) with
-`channelCodeLm/Sdcch4/Sdcch8` helpers.
+`channelCodeLm/Sdcch4/Sdcch8` helpers. SI3/SI4 rest octets carry the selection parameters, power
+offset, scheduling-if/where, GPRS indicator, UMTS early-CM and SI2quater indicators; SI4
+optionally carries the CBCH mobile allocation (TLV 0x72) after the CBCH channel description
+(TV 0x64); SI2bis/SI2ter accept their rest octets as an opaque tail.
 
 **LAPDm (GSM 04.06 / TS 51.010-1)** — a SABME command with the P/F bit
 cleared is ignored; an initial SABME is accepted on SAPI 0 only when it
@@ -154,7 +164,9 @@ port and Connection ID (two octets), RTP payload type(s), speech mode and RTP
 CSD format (one octet) and connection statistics (twenty-eight octets) — are
 TV-encoded and the remaining codes have no defined size and decode as LV;
 TL16V for `L3Info` (0x0B) only, and LV for everything else — including Full
-BCCH Info (0x27).
+BCCH Info (0x27). The channel number codes include the VAMOS Lm sub-slot extensions
+(30/31); MEASUREMENT RESULT carries the always-present BS_POWER TV IE between Uplink
+Measurements and L1 Information.
 
 ## Quick Start
 
@@ -193,7 +205,7 @@ results are attributed to the machine that produced them; a full annotated run:
 |--------|---------------------|------------------|----------------|
 | **Language** | C | C++ (manual memory) | C++20 |
 | **Type safety** | enum + manual cast | custom structs | `std::variant` + `tryGet<T>()` — compile-time, no RTTI |
-| **Message types** | hand-coded per message | partial coverage | 235 typed messages, all 12 PD domains |
+| **Message types** | hand-coded per message | partial coverage | 215 typed messages, all 12 PD domains |
 | **Builder API** | none (manual struct) | partial | fluent builder for every type |
 | **FSM + timers + correlation** | implicit in handlers | custom | built-in stack modules + procedure framework |
 | **LAPDm / A-bis RSL** | separate library | custom | full LAPDm entity + RSL parse/build included |
@@ -208,7 +220,7 @@ Every detail lives in a dedicated guide; this README is the pitch and the index.
 | [doc/API.md](doc/API.md) | Full API reference (63 numbered sections): core types, bit I/O, streaming, parser/serializer, builders and IEs/enums of all 12 domains, LAPDm, dispatcher, arena, every stack module, RSL, all procedures, C ABI, FFI bindings + spec conformance notes |
 | [doc/bts_integration.md](doc/bts_integration.md) | **Primary guide for BTS developers**: step-by-step event loop with `ProcedureOrchestrator`, full worked procedure chains (Location Update, Call Setup MO, Paging), AuC/VLR/BSC typed-data integration, LAPDm link management, L3 timer reference table, SI broadcast, production error handling |
 | [doc/bts_architecture.md](doc/bts_architecture.md) | Two usage modes (L3 Parser vs BTS Stack), component & data-flow diagrams, PHY/SDR integration points, thread-safety matrix, per-MS memory footprint, allocation-free hot paths, scaling guidelines to millions of sessions |
-| [doc/messages.md](doc/messages.md) | Complete message catalog: all 235 types with MTIs and directions, CC/GMM/SM IEs, SMS CP/RP/TP layers, dispatch edge cases (TIF=1 short messages, build-only types) |
+| [doc/messages.md](doc/messages.md) | Complete message catalog: all 215 types with MTIs and directions, CC/GMM/SM IEs, SMS CP/RP/TP layers, dispatch edge cases (TIF=1 short messages, build-only types) |
 | [doc/boundaries.md](doc/boundaries.md) | What the library intentionally excludes — PHY/SDR, speech codecs, A5 ciphering, OML, SIP/media gateways, PS full stack, configuration, logging — and the exact integration point for each |
 | [examples/](examples/) | 20 runnable demos (see below), incl. full BTS flows, benchmarks, and a 1M-session real-time loop |
 | [bindings/README.md](bindings/README.md) | FFI bindings (Python / Go / Rust) over the stable C ABI: unified quickstarts, ownership & threading model, callback safety rules, extension guide, test gate |
@@ -247,9 +259,9 @@ queue-model callbacks — and carry no third-party runtime dependencies:
 
 | Language | Mechanism | Coverage | Runnable demo |
 |----------|-----------|----------|---------------|
-| Python | `ctypes`, stdlib only | entire C ABI: 236 functions, completeness pinned by test | [bts_simulation.py](bindings/python/examples/bts_simulation.py) |
-| Go | cgo + `cgo.Handle` callback bridges (needs a C toolchain) | v1 surface: 128 functions incl. typed L3 builders | [cmd/gsmexample](bindings/go/cmd/gsmexample/main.go) |
-| Rust | handwritten `sys` crate + safe wrapper — `Send`, no bindgen/codegen | same 128-function v1 surface; extern block checked at compile time | [bts_simulation.rs](bindings/rust/gsml3parser/examples/bts_simulation.rs) |
+| Python | `ctypes`, stdlib only | entire C ABI: 237 functions, completeness pinned by test | [bts_simulation.py](bindings/python/examples/bts_simulation.py) |
+| Go | cgo + `cgo.Handle` callback bridges (needs a C toolchain) | v1 surface: 134 functions incl. typed L3 builders | [cmd/gsmexample](bindings/go/cmd/gsmexample/main.go) |
+| Rust | handwritten `sys` crate + safe wrapper — `Send`, no bindgen/codegen | same 134-function v1 surface; extern block checked at compile time | [bts_simulation.rs](bindings/rust/gsml3parser/examples/bts_simulation.rs) |
 
 All three run the same "MO call over SDCCH" scenario against the shared C core, and one unified gate
 (`scripts/verify_bindings.ps1`, CI on Linux + Windows) builds and tests them together. Per-language

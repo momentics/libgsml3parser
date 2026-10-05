@@ -316,28 +316,6 @@ private:
     bool contains(unsigned arfcn) const;
 };
 
-// ── Neighbor Cells Description (GSM 04.08 10.5.2.22) ──────────────────
-
-class L3NeighborCellsDescription {
-    std::vector<unsigned> mNeighbors;
-public:
-    L3NeighborCellsDescription() = default;
-    explicit L3NeighborCellsDescription(const std::vector<unsigned>& neighbors) : mNeighbors(neighbors) {}
-
-    void neighbors(const std::vector<unsigned>& n) { mNeighbors = n; }
-    const std::vector<unsigned>& neighbors() const { return mNeighbors; }
-    static constexpr size_t lengthV() { return 16; }
-
-    [[nodiscard]] static Expected<L3NeighborCellsDescription> parse(BitReader& br);
-    void write(BitWriter& bw) const;
-    void text(std::ostream& os) const;
-    bool operator==(const L3NeighborCellsDescription&) const = default;
-
-private:
-    unsigned base() const;
-    bool contains(unsigned arfcn) const;
-};
-
 // ── Control Channel Description (GSM 04.08 10.5.2.11) ─────────────────
 
 class L3ControlChannelDescription {
@@ -1009,28 +987,6 @@ public:
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
     bool operator==(const L3DedicatedModeOrTBF&) const = default;
-};
-
-// ── Cell Options (GSM 04.08 10.5.2.6) ─────────────────────────────────
-
-class L3CellOptions {
-    unsigned mRevisionLevel{};
-    unsigned mCBCH{};
-    unsigned mEnhancedRACH{};
-    unsigned mCellReselectionPriority{};
-    std::vector<uint8_t> mRawData;
-public:
-    L3CellOptions() = default;
-
-    unsigned revisionLevel() const { return mRevisionLevel; }
-    bool cbch() const { return mCBCH; }
-    bool enhancedRach() const { return mEnhancedRACH; }
-    unsigned cellReselectionPriority() const { return mCellReselectionPriority; }
-    size_t lengthV() const;
-
-    [[nodiscard]] static Expected<L3CellOptions> parse(BitReader& br);
-    void write(BitWriter& bw) const;
-    void text(std::ostream& os) const;
 };
 
 // ── Cell Selection ─────────────────────────────────────────────────────

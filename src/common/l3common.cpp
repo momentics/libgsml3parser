@@ -532,42 +532,6 @@ void L3BCCHFrequencyList::text(std::ostream& os) const {
     os << "]";
 }
 
-// ── L3NeighborCellsDescription ─────────────────────────────────────────
-
-unsigned L3NeighborCellsDescription::base() const {
-    if (mNeighbors.empty()) return 0;
-    unsigned retVal = mNeighbors[0];
-    for (unsigned a : mNeighbors) if (a < retVal) retVal = a;
-    return retVal;
-}
-
-bool L3NeighborCellsDescription::contains(unsigned arfcn) const {
-    return std::find(mNeighbors.begin(), mNeighbors.end(), arfcn) != mNeighbors.end();
-}
-
-Expected<L3NeighborCellsDescription> L3NeighborCellsDescription::parse(BitReader& br) {
-    auto r = br.readField(8); if (!r) return Expected<L3NeighborCellsDescription>::error(r.error()); // skip header byte (3 bits + 5 spare)
-    std::vector<uint8_t> raw(16);
-    auto rb = br.readBytes(raw.data(), 16); if (!rb) return Expected<L3NeighborCellsDescription>::error(rb.error());
-    return Expected<L3NeighborCellsDescription>::hold(L3NeighborCellsDescription(frequencyListFromRaw(raw)));
-}
-
-void L3NeighborCellsDescription::write(BitWriter& bw) const {
-    bw.writeField(0, 3); // BA-IND, EXT-IND, Spare
-    bw.writeField(0, 5); // padding to byte boundary
-    std::vector<uint8_t> raw = frequencyListToRaw(mNeighbors);
-    bw.writeBytes(raw.data(), raw.size());
-}
-
-void L3NeighborCellsDescription::text(std::ostream& os) const {
-    os << "NeighborCells[";
-    for (size_t i = 0; i < mNeighbors.size(); ++i) {
-        if (i) os << ",";
-        os << mNeighbors[i];
-    }
-    os << "]";
-}
-
 // ── L3CellChannelDescription ───────────────────────────────────────────
 
 // Sixteen bits: [ARFCN(10)][BSIC(6) = NCC(3)|BCC(3)] (TS 44.018 section
@@ -1344,42 +1308,6 @@ Expected<L3FollowOnProceed> L3FollowOnProceed::parse(BitReader& br) {
 
 void L3FollowOnProceed::write(BitWriter& bw) const {
     bw.writeField(0xA1, 8);
-}
-
-// ── L3CellOptions ──────────────────────────────────────────────────────
-
-size_t L3CellOptions::lengthV() const {
-    return mRawData.size();
-}
-
-Expected<L3CellOptions> L3CellOptions::parse(BitReader& br) {
-    // CellOptions is variable-length; typically parsed as TLV.
-    // We read remaining bits in the current context.
-    L3CellOptions result;
-    size_t remainingBytes = br.remainingBits() / 8;
-    if (remainingBytes == 0 || remainingBytes > 255) remainingBytes = 16;
-    std::vector<uint8_t> data(remainingBytes);
-    auto r = br.readBytes(data.data(), remainingBytes);
-    if (!r) return Expected<L3CellOptions>::error(r.error());
-    result.mRawData = std::move(data);
-    if (result.mRawData.size() >= 1) {
-        result.mRevisionLevel = (result.mRawData[0] >> 6) & 3;
-        result.mCBCH = (result.mRawData[0] >> 5) & 1;
-        result.mEnhancedRACH = (result.mRawData[0] >> 4) & 1;
-    }
-    if (result.mRawData.size() >= 2) {
-        result.mCellReselectionPriority = result.mRawData[1] & 0x07;
-    }
-    return Expected<L3CellOptions>::hold(std::move(result));
-}
-
-void L3CellOptions::write(BitWriter& bw) const {
-    bw.writeBytes(mRawData.data(), mRawData.size());
-}
-
-void L3CellOptions::text(std::ostream& os) const {
-    os << "CellOptions[Rev=" << mRevisionLevel << " CBCH=" << mCBCH
-       << " E-RACH=" << mEnhancedRACH << " CRO=" << mCellReselectionPriority << "]";
 }
 
 // ── L3CellSelection ────────────────────────────────────────────────────
