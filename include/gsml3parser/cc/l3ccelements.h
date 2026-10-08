@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstring>
 #include <ostream>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -791,39 +792,75 @@ enum class SSErrorCode : uint8_t {
 #endif
 
 // ── SS Facility OpCode IE (TCAP component parser) ─────────────────────
-// Parses the TCAP-level op_code from SS Facility data.
-// TCAP component tags: Invoke=0x81, ReturnResult=0x82, ReturnError=0x83, Reject=0x84
+// SS-Data container per TS 24.078 (GSM 04.80, TCAP components per ITU-T
+// X.690): a single component of the form
+//   [component tag(1)][component length(1)][component body]
+// Component tags: Invoke=0xA1, ReturnResult=0xA2, ReturnError=0xA3,
+// Reject=0xA4. The invoke component body is
+//   [INTEGER 02 01 <invokeId>][INTEGER 02 01 <operationCode>]
+//   [SEQUENCE 30 <len> { parameters }]
+// where the parameters are a sequence of [OCTET STRING 04 <len> <data…>]
+// elements (the operation arguments, e.g. the SS-Code octets of the
+// GSM 04.80 section 4.5 operations). The body is stored raw, so any
+// component form re-emits losslessly; length octets follow the single-
+// octet form used throughout the L3 facility IE.
 
 #ifndef GSML3PARSER_L3FACILITY_OPCODE_DEFINED
 #define GSML3PARSER_L3FACILITY_OPCODE_DEFINED
 class L3FacilityOpCode {
 public:
-    enum ComponentType : uint8_t {
-        Invoke = 0x81,
-        ReturnResult = 0x82,
-        ReturnError = 0x83,
-        Reject = 0x84
+    // TCAP component tags (TS 24.078).
+    enum SSComponent : uint8_t {
+        Invoke = 0xA1,
+        ReturnResult = 0xA2,
+        ReturnError = 0xA3,
+        Reject = 0xA4
     };
 
 private:
-    ComponentType mComponent{ComponentType::Invoke};
-    int8_t mInvokeId{0};
-    SSOpCode mOpCode{SSOpCode::RegisterSS};
-    SSErrorCode mErrorCode{SSErrorCode::UnknownSubscriber};
-    bool mHasErrorCode{false};
-    std::vector<uint8_t> mParameters;
+    // Best-effort decoded view of the component body; the raw body is
+    // authoritative for re-encoding.
+    struct BodyView {
+        int8_t invokeId{0};
+        SSOpCode opCode{SSOpCode::RegisterSS};
+        std::span<const uint8_t> params{};
+        SSErrorCode errorCode{SSErrorCode::UnknownSubscriber};
+        bool hasErrorCode{false};
+    };
+    [[nodiscard]] BodyView view() const noexcept;
+
+    SSComponent mComponent{SSComponent::Invoke};
+    // Component body (BER-encoded) without the tag and length octets.
+    std::vector<uint8_t> mBody;
 
 public:
     L3FacilityOpCode() = default;
-    L3FacilityOpCode(ComponentType comp, int8_t invokeId, SSOpCode op, std::vector<uint8_t> params);
-    L3FacilityOpCode(ComponentType comp, int8_t invokeId, SSErrorCode err);
 
-    ComponentType component() const { return mComponent; }
-    int8_t invokeId() const { return mInvokeId; }
-    SSOpCode opCode() const { return mOpCode; }
-    bool hasErrorCode() const { return mHasErrorCode; }
-    SSErrorCode errorCode() const { return mErrorCode; }
-    const std::vector<uint8_t>& parameters() const { return mParameters; }
+    // Invoke component: body [02 01 <id>][02 01 <op>][30 <len> {params}].
+    static L3FacilityOpCode invoke(int8_t invokeId, SSOpCode op, std::span<const uint8_t> params) noexcept;
+    // Return-result component: body [02 01 <id>] plus an optional raw BER
+    // operation result.
+    static L3FacilityOpCode returnResult(int8_t invokeId, std::span<const uint8_t> result = {}) noexcept;
+    // Return-error component: body [02 01 <id>][general data 2C 01 <error>].
+    static L3FacilityOpCode returnError(int8_t invokeId, SSErrorCode err) noexcept;
+    // Reject component: body [general data 2C 01 <error>] (no invoke ID).
+    static L3FacilityOpCode reject(SSErrorCode err) noexcept;
+    // Lossless form: raw component body without the tag and length octets.
+    L3FacilityOpCode(SSComponent comp, std::span<const uint8_t> body) noexcept;
+
+    [[nodiscard]] SSComponent component() const noexcept { return mComponent; }
+    // Invoke ID parsed from the body (0 when absent).
+    [[nodiscard]] int8_t invokeId() const noexcept { return view().invokeId; }
+    // Operation code of an invoke component.
+    [[nodiscard]] SSOpCode operationCode() const noexcept { return view().opCode; }
+    // Raw BER parameters following the [30 <len>] sequence header (empty
+    // when absent).
+    [[nodiscard]] std::span<const uint8_t> params() const noexcept { return view().params; }
+    [[nodiscard]] bool hasErrorCode() const noexcept { return view().hasErrorCode; }
+    // SS error code of a return-error or reject component.
+    [[nodiscard]] SSErrorCode errorCode() const noexcept { return view().errorCode; }
+    // Component body without the tag and length octets.
+    [[nodiscard]] const std::vector<uint8_t>& body() const noexcept { return mBody; }
 
     [[nodiscard]] static Expected<L3FacilityOpCode> parse(const std::string& facilityData);
     void write(BitWriter& bw) const;

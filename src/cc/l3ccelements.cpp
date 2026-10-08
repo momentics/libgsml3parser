@@ -1095,93 +1095,131 @@ std::string_view ssErrorCodeName(SSErrorCode code) {
 
 // ── L3FacilityOpCode ───────────────────────────────────────────────────
 
-L3FacilityOpCode::L3FacilityOpCode(ComponentType comp, int8_t invokeId, SSOpCode op, std::vector<uint8_t> params)
-    : mComponent(comp), mInvokeId(invokeId), mOpCode(op), mParameters(std::move(params)) {}
+L3FacilityOpCode::L3FacilityOpCode(SSComponent comp, std::span<const uint8_t> body) noexcept
+    : mComponent(comp), mBody(body.begin(), body.end()) {}
 
-L3FacilityOpCode::L3FacilityOpCode(ComponentType comp, int8_t invokeId, SSErrorCode err)
-    : mComponent(comp), mInvokeId(invokeId), mErrorCode(err), mHasErrorCode(true) {}
+L3FacilityOpCode L3FacilityOpCode::invoke(int8_t invokeId, SSOpCode op,
+                                          std::span<const uint8_t> params) noexcept {
+    // [INTEGER 02 01 <invokeId>][INTEGER 02 01 <operationCode>]
+    // [SEQUENCE 30 <len> { parameters }] (TS 24.078).
+    std::vector<uint8_t> body;
+    body.reserve(7 + params.size());
+    body.push_back(0x02);
+    body.push_back(0x01);
+    body.push_back(static_cast<uint8_t>(invokeId));
+    body.push_back(0x02);
+    body.push_back(0x01);
+    body.push_back(static_cast<uint8_t>(op));
+    body.push_back(0x30);
+    body.push_back(static_cast<uint8_t>(params.size()));
+    body.insert(body.end(), params.begin(), params.end());
+    return L3FacilityOpCode(SSComponent::Invoke, std::span<const uint8_t>(body.data(), body.size()));
+}
+
+L3FacilityOpCode L3FacilityOpCode::returnResult(int8_t invokeId,
+                                                std::span<const uint8_t> result) noexcept {
+    // [INTEGER 02 01 <invokeId>] plus the optional raw BER operation result.
+    std::vector<uint8_t> body;
+    body.reserve(3 + result.size());
+    body.push_back(0x02);
+    body.push_back(0x01);
+    body.push_back(static_cast<uint8_t>(invokeId));
+    body.insert(body.end(), result.begin(), result.end());
+    return L3FacilityOpCode(SSComponent::ReturnResult, std::span<const uint8_t>(body.data(), body.size()));
+}
+
+L3FacilityOpCode L3FacilityOpCode::returnError(int8_t invokeId, SSErrorCode err) noexcept {
+    // [INTEGER 02 01 <invokeId>][general data 2C 01 <SS error code>].
+    const std::vector<uint8_t> body = {0x02, 0x01, static_cast<uint8_t>(invokeId),
+                                       0x2C, 0x01, static_cast<uint8_t>(err)};
+    return L3FacilityOpCode(SSComponent::ReturnError, std::span<const uint8_t>(body.data(), body.size()));
+}
+
+L3FacilityOpCode L3FacilityOpCode::reject(SSErrorCode err) noexcept {
+    // [general data 2C 01 <SS error code>]; a reject carries no invoke ID.
+    const std::vector<uint8_t> body = {0x2C, 0x01, static_cast<uint8_t>(err)};
+    return L3FacilityOpCode(SSComponent::Reject, std::span<const uint8_t>(body.data(), body.size()));
+}
+
+L3FacilityOpCode::BodyView L3FacilityOpCode::view() const noexcept {
+    BodyView v;
+    const auto& b = mBody;
+    size_t pos = 0;
+    // INTEGER invoke ID: 02 01 <id>.
+    if (b.size() >= pos + 3 && b[pos] == 0x02 && b[pos + 1] == 0x01) {
+        v.invokeId = static_cast<int8_t>(b[pos + 2]);
+        pos += 3;
+    }
+    // Optional linked ID: 80 01 <id>.
+    if (b.size() >= pos + 3 && b[pos] == 0x80 && b[pos + 1] == 0x01) {
+        pos += 3;
+    }
+    // INTEGER operation code: 02 01 <op>.
+    if (b.size() >= pos + 3 && b[pos] == 0x02 && b[pos + 1] == 0x01) {
+        v.opCode = static_cast<SSOpCode>(b[pos + 2]);
+        pos += 3;
+    }
+    // SEQUENCE parameter list: 30 <len> { 04 <len> <data…> }.
+    if (b.size() >= pos + 2 && b[pos] == 0x30) {
+        const size_t len = b[pos + 1];
+        if (pos + 2 + len <= b.size()) {
+            v.params = std::span<const uint8_t>(b.data() + pos + 2, len);
+        }
+    }
+    // SS error code in general data: 2C 01 <error> (return-error/reject).
+    if (mComponent != SSComponent::Invoke) {
+        for (size_t i = 0; i + 3 <= b.size(); ++i) {
+            if (b[i] == 0x2C && b[i + 1] == 0x01) {
+                v.errorCode = static_cast<SSErrorCode>(b[i + 2]);
+                v.hasErrorCode = true;
+                break;
+            }
+        }
+    }
+    return v;
+}
 
 size_t L3FacilityOpCode::lengthV() const {
-    return 1 + 1 + (mParameters.empty() ? 0 : 1 + mParameters.size());
+    // Component tag + length octet + body.
+    return 2 + mBody.size();
 }
 
 Expected<L3FacilityOpCode> L3FacilityOpCode::parse(const std::string& facilityData) {
     if (facilityData.size() < 2) {
         return Expected<L3FacilityOpCode>::error(
-            ParseError{ParseError::Code::TruncatedInput, "SS Facility data too short for op_code"});
+            ParseError{ParseError::Code::TruncatedInput, "SS Facility data too short for the component header"});
     }
 
-    L3FacilityOpCode result;
-    size_t pos = 0;
+    const auto* p = reinterpret_cast<const uint8_t*>(facilityData.data());
+    const uint8_t tag = p[0];
 
-    result.mComponent = static_cast<ComponentType>(static_cast<uint8_t>(facilityData[pos++]));
-
-    if (result.mComponent != Invoke && result.mComponent != ReturnResult &&
-        result.mComponent != ReturnError && result.mComponent != Reject) {
+    if (tag != Invoke && tag != ReturnResult && tag != ReturnError && tag != Reject) {
         return Expected<L3FacilityOpCode>::error(
             ParseError{ParseError::Code::InvalidValue, "Unknown TCAP component tag in SS Facility"});
     }
 
-    if (facilityData.size() < pos + 1) {
+    // The component length octet must fit the remaining data (TS 24.078).
+    const size_t len = p[1];
+    if (facilityData.size() < 2 + len) {
         return Expected<L3FacilityOpCode>::error(
-            ParseError{ParseError::Code::TruncatedInput, "SS Facility data truncated at invoke ID"});
-    }
-    result.mInvokeId = static_cast<int8_t>(static_cast<uint8_t>(facilityData[pos++]));
-
-    if (result.mComponent == Invoke) {
-        if (facilityData.size() < pos + 1) {
-            return Expected<L3FacilityOpCode>::error(
-                ParseError{ParseError::Code::TruncatedInput, "SS Facility data truncated at op_code"});
-        }
-        result.mOpCode = static_cast<SSOpCode>(static_cast<uint8_t>(facilityData[pos++]));
-
-        if (pos < facilityData.size()) {
-            result.mParameters.assign(facilityData.begin() + pos, facilityData.end());
-        }
-    } else if (result.mComponent == ReturnError) {
-        if (facilityData.size() < pos + 1) {
-            return Expected<L3FacilityOpCode>::error(
-                ParseError{ParseError::Code::TruncatedInput, "SS Facility data truncated at error code"});
-        }
-        result.mErrorCode = static_cast<SSErrorCode>(static_cast<uint8_t>(facilityData[pos++]));
-        result.mHasErrorCode = true;
-
-        if (pos < facilityData.size()) {
-            result.mParameters.assign(facilityData.begin() + pos, facilityData.end());
-        }
-    } else if (result.mComponent == ReturnResult) {
-        if (pos < facilityData.size()) {
-            result.mParameters.assign(facilityData.begin() + pos, facilityData.end());
-        }
+            ParseError{ParseError::Code::TruncatedInput, "SS Facility component length exceeds the data"});
     }
 
-    return Expected<L3FacilityOpCode>::hold(std::move(result));
+    return Expected<L3FacilityOpCode>::hold(
+        L3FacilityOpCode(static_cast<SSComponent>(tag), std::span<const uint8_t>(p + 2, len)));
 }
 
 void L3FacilityOpCode::write(BitWriter& bw) const {
+    // [component tag(1)][component length(1)][component body] (TS 24.078).
     bw.writeField(static_cast<uint32_t>(mComponent), 8);
-    bw.writeField(mInvokeId & 0xFF, 8);
-
-    if (mComponent == Invoke) {
-        bw.writeField(static_cast<uint32_t>(mOpCode), 8);
-        for (const auto& b : mParameters) {
-            bw.writeField(b, 8);
-        }
-    } else if (mComponent == ReturnError) {
-        if (mHasErrorCode) {
-            bw.writeField(static_cast<uint32_t>(mErrorCode), 8);
-        }
-        for (const auto& b : mParameters) {
-            bw.writeField(b, 8);
-        }
-    } else if (mComponent == ReturnResult) {
-        for (const auto& b : mParameters) {
-            bw.writeField(b, 8);
-        }
+    bw.writeField(static_cast<uint32_t>(mBody.size()), 8);
+    if (!mBody.empty()) {
+        bw.writeBytes(mBody.data(), mBody.size());
     }
 }
 
 void L3FacilityOpCode::text(std::ostream& os) const {
+    const BodyView v = view();
     os << "SSFacility[";
     switch (mComponent) {
         case Invoke: os << "INVOKE"; break;
@@ -1189,17 +1227,20 @@ void L3FacilityOpCode::text(std::ostream& os) const {
         case ReturnError: os << "RETURN-ERROR"; break;
         case Reject: os << "REJECT"; break;
     }
-    os << " id=" << static_cast<int>(mInvokeId);
-    if (mComponent == Invoke) {
-        os << " op=" << ssOpCodeName(mOpCode);
-    } else if (mComponent == ReturnError && mHasErrorCode) {
-        os << " err=" << ssErrorCodeName(mErrorCode);
+    if (mComponent != SSComponent::Reject) {
+        os << " id=" << static_cast<int>(v.invokeId);
     }
-    if (!mParameters.empty()) {
+    if (mComponent == SSComponent::Invoke) {
+        os << " op=" << ssOpCodeName(v.opCode);
+    }
+    if (v.hasErrorCode) {
+        os << " err=" << ssErrorCodeName(v.errorCode);
+    }
+    if (!v.params.empty()) {
         os << " params=[";
-        for (size_t i = 0; i < mParameters.size(); ++i) {
+        for (size_t i = 0; i < v.params.size(); ++i) {
             if (i > 0) os << " ";
-            os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(mParameters[i]);
+            os << std::hex << std::setw(2) << std::setfill('0') << static_cast<int>(v.params[i]);
         }
         os << "]";
     }

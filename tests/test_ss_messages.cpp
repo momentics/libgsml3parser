@@ -59,10 +59,18 @@ TEST(SSRoundTripTest, Facility_Empty) {
 }
 
 TEST(SSRoundTripTest, Facility_WithData) {
-    ParsedMessage msg{SSM{L3SupServFacilityMessage{std::string("\x81\x01\x13", 3)}}};
+    // TCAP invoke component (TS 24.078): tag A1, body length 0x08,
+    // [02 01 invokeId=1][02 01 operationCode=0x13 ProcessUSSData][30 00].
+    ParsedMessage msg{SSM{L3SupServFacilityMessage{std::string("\xA1\x08\x02\x01\x01\x02\x01\x13\x30\x00", 10)}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3SupServFacilityMessage::MTI);
+    auto* fac = tryGet<L3SupServFacilityMessage>(*parsed);
+    ASSERT_TRUE(fac);
+    auto fc = L3FacilityOpCode::parse(fac->getMapComponents());
+    ASSERT_TRUE(fc);
+    EXPECT_EQ((*fc).component(), L3FacilityOpCode::Invoke);
+    EXPECT_EQ((*fc).operationCode(), SSOpCode::ProcessUSSData);
 }
 
 // GSM 04.08 10.2: PD=0x0B(NonCallSS), TIO=7, TIF=0, messageType=111010(Facility=0x3A), NSD=00
@@ -92,13 +100,52 @@ TEST(SSRoundTripTest, Register_Empty) {
 }
 
 TEST(SSRoundTripTest, Register_WithData) {
-    // Register with TI=5 and 3-byte Facility data (TCAP INVOKE: opcode 0x81, length 1, value 0x0A)
-    L3SupServRegisterMessage reg(std::string("\x81\x01\x0A", 3));
+    // Register with TI=5 and a TCAP invoke component in the Facility IE
+    // (TS 24.078): tag A1, [02 01 invokeId=1][02 01 opCode=0x0A register-SS][30 00].
+    L3SupServRegisterMessage reg(std::string("\xA1\x08\x02\x01\x01\x02\x01\x0A\x30\x00", 10));
     reg.ti(5);
     ParsedMessage msg{SSM{reg}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3SupServRegisterMessage::MTI);
+}
+
+// Golden: SS REGISTER with a TCAP activate-SS invoke in the facility IE
+// (TS 24.078): facility TLV [0x1C 0x0D] carrying the component
+// [A1 0B][02 01 <invokeId>][02 01 <opCode=0x0C>][30 03 {04 01 <SS-Code>}]
+// followed by the SS version indicator TLV.
+TEST(SSRoundTripTest, Register_Golden) {
+    uint8_t data[] = {
+        0xEB,                 // PD=11(NonCallSS), TI=7, TIF=0
+        0x3B,                 // MTI=Register
+        0x1C, 0x0D,           // facility TLV: element identifier 0x1c, length 13
+        0xA1, 0x0B,           // TCAP invoke component (TS 24.078): tag A1, body length 11
+        0x02, 0x01, 0x01,     // INTEGER invokeId = 1
+        0x02, 0x01, 0x0C,     // INTEGER operationCode = 0x0C (activate-SS)
+        0x30, 0x03,           // SEQUENCE parameter list, length 3
+        0x04, 0x01, 0x91,     // OCTET STRING SS-Code 0x91
+        0x7F, 0x01, 0x00      // SS version indicator TLV: IEI 0x7f, length 1, value 0
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messagePD(*msg), L3PD::NonCallSS);
+    EXPECT_EQ(messageMTI(*msg), L3SupServRegisterMessage::MTI);
+    auto* reg = tryGet<L3SupServRegisterMessage>(*msg);
+    ASSERT_TRUE(reg);
+    auto fc = L3FacilityOpCode::parse(reg->getMapComponents());
+    ASSERT_TRUE(fc);
+    EXPECT_EQ((*fc).component(), L3FacilityOpCode::Invoke);
+    EXPECT_EQ((*fc).invokeId(), 1);
+    EXPECT_EQ((*fc).operationCode(), SSOpCode::ActivateSS);
+    ASSERT_EQ((*fc).params().size(), 3u);
+    EXPECT_EQ((*fc).params()[2], 0x91);
+    // Re-encoding reproduces the golden vector byte-for-byte.
+    uint8_t out[32];
+    BitWriter bw(out, sizeof(out) * 8);
+    reg->write(bw);
+    for (size_t i = 0; i < sizeof(data) - 2; ++i) {
+        EXPECT_EQ(out[i], data[2 + i]) << "body byte " << i;
+    }
 }
 
 // ── Release Complete (GSM 04.80 2.5) ─────────────────────────────────
@@ -172,8 +219,11 @@ TEST(SSRoundTripTest, ReleaseComplete_FacilityCause_Golden) {
     uint8_t data[] = {
         0xEB,                 // PD=11(NonCallSS), TI=7, TIF=0
         0x2A,                 // MTI=Release Complete
-        0x1C, 0x03,           // facility TLV: element identifier 0x1c, length 3
-        0x81, 0x01, 0x13,     // TCAP INVOKE: tag=0x81, invoke_id=1, op_code=0x13
+        0x1C, 0x0A,           // facility TLV: element identifier 0x1c, length 10
+        0xA1, 0x08,           // TCAP invoke component (TS 24.078): tag A1, body length 8
+        0x02, 0x01, 0x01,     // INTEGER invokeId = 1
+        0x02, 0x01, 0x13,     // INTEGER operationCode = 0x13 (ProcessUSSData)
+        0x30, 0x00,           // SEQUENCE parameter list, empty
         0x08, 0x02,           // cause TLV: element identifier 0x08, length 2
         0x61,                 // [ext=0|std=11|spare=0|loc(4)=Private_Serving_Local]
         0x90                  // [ext=1|cause(7)=Normal_Call_Clearing] (TS 24.008 10.5.1.2)
@@ -183,7 +233,12 @@ TEST(SSRoundTripTest, ReleaseComplete_FacilityCause_Golden) {
     auto* rc = tryGet<L3SupServReleaseCompleteMessage>(*msg);
     ASSERT_TRUE(rc);
     EXPECT_TRUE(rc->haveFacility());
-    EXPECT_EQ(rc->getMapComponents(), std::string("\x81\x01\x13", 3));
+    EXPECT_EQ(rc->getMapComponents(), std::string("\xA1\x08\x02\x01\x01\x02\x01\x13\x30\x00", 10));
+    auto fc = L3FacilityOpCode::parse(rc->getMapComponents());
+    ASSERT_TRUE(fc);
+    EXPECT_EQ((*fc).component(), L3FacilityOpCode::Invoke);
+    EXPECT_EQ((*fc).invokeId(), 1);
+    EXPECT_EQ((*fc).operationCode(), SSOpCode::ProcessUSSData);
     EXPECT_EQ(rc->cause(), CCCause::Normal_Call_Clearing);
     // Re-encoding reproduces the golden vector byte-for-byte (facility IEI
     // 0x1c, cause IEI 0x08).
@@ -196,14 +251,14 @@ TEST(SSRoundTripTest, ReleaseComplete_FacilityCause_Golden) {
     // Builder round-trip preserves both elements.
     L3SupServReleaseCompleteMessage built = L3SupServReleaseCompleteMessage::builder()
         .ti(7)
-        .facility(std::string("\x81\x01\x13", 3))
+        .facility(std::string("\xA1\x08\x02\x01\x01\x02\x01\x13\x30\x00", 10))
         .cause(CCCause::Normal_Call_Clearing, CCCauseLocation::Private_Serving_Local)
         .build();
     auto parsed = roundtrip(ParsedMessage{SSM{built}});
     ASSERT_TRUE(parsed);
     auto* rc2 = tryGet<L3SupServReleaseCompleteMessage>(*parsed);
     ASSERT_TRUE(rc2);
-    EXPECT_EQ(rc2->getMapComponents(), std::string("\x81\x01\x13", 3));
+    EXPECT_EQ(rc2->getMapComponents(), std::string("\xA1\x08\x02\x01\x01\x02\x01\x13\x30\x00", 10));
     EXPECT_EQ(rc2->cause(), CCCause::Normal_Call_Clearing);
 }
 
@@ -227,9 +282,9 @@ TEST(SSRoundTripTest, TI_DifferentValues) {
 
 TEST(SSRoundTripTest, SSOpcodes_Exist) {
     // These are TCAP opcodes defined in GSM TS 04.80 section 4.5.
-    // Our library doesn't parse TCAP internally, but the Facility IE carries raw data
-    // Verify that the facility data can carry arbitrary TCAP content
-    ParsedMessage msg{SSM{L3SupServFacilityMessage{std::string("\x81\x03\x3B\x01\x00", 5)}}};
+    // The Facility IE carries the TCAP component container (TS 24.078);
+    // verify that arbitrary component body content passes through intact.
+    ParsedMessage msg{SSM{L3SupServFacilityMessage{std::string("\xA1\x0A\x02\x01\x03\x02\x01\x3B\x30\x02\x01\x00", 12)}}};
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
 }
@@ -305,35 +360,55 @@ TEST(SSErrorCodeTest, NameMapping) {
 }
 
 // ── L3FacilityOpCode IE tests ─────────────────────────────────────────
-// Parses TCAP component from SS Facility data.
-// TCAP tags: Invoke=0x81, ReturnResult=0x82, ReturnError=0x83, Reject=0x84
+// Parses a TCAP component from SS Facility data (TS 24.078): the container
+// is [component tag(1)][component length(1)][component body].
+// Component tags: Invoke=0xA1, ReturnResult=0xA2, ReturnError=0xA3, Reject=0xA4
 
 TEST(FacilityOpCodeTest, ParseInvokeUSSRequest) {
-    // TCAP INVOKE: tag=0x81, invoke_id=0x01, op_code=0x3C(USSRequest)
-    std::string data("\x81\x01\x3C", 3);
+    // TCAP INVOKE: tag=A1, [02 01 invokeId=1][02 01 opCode=0x3C USSRequest][30 00]
+    std::string data("\xA1\x08\x02\x01\x01\x02\x01\x3C\x30\x00", 10);
     auto res = L3FacilityOpCode::parse(data);
     ASSERT_TRUE(res);
     EXPECT_EQ((*res).component(), L3FacilityOpCode::Invoke);
     EXPECT_EQ((*res).invokeId(), 1);
-    EXPECT_EQ((*res).opCode(), SSOpCode::USSRequest);
+    EXPECT_EQ((*res).operationCode(), SSOpCode::USSRequest);
     EXPECT_FALSE((*res).hasErrorCode());
 }
 
 TEST(FacilityOpCodeTest, ParseInvokeProcessUSSData) {
-    // TCAP INVOKE: tag=0x81, invoke_id=0x03, op_code=0x13(ProcessUSSData), params=[0x0F]
-    std::string data("\x81\x03\x13\x0F", 4);
+    // TCAP INVOKE: tag=A1, invoke_id=0x03, op_code=0x13(ProcessUSSData),
+    // parameter list = one OCTET STRING element (04 01 0F).
+    std::string data("\xA1\x0B\x02\x01\x03\x02\x01\x13\x30\x03\x04\x01\x0F", 13);
     auto res = L3FacilityOpCode::parse(data);
     ASSERT_TRUE(res);
     EXPECT_EQ((*res).component(), L3FacilityOpCode::Invoke);
     EXPECT_EQ((*res).invokeId(), 3);
-    EXPECT_EQ((*res).opCode(), SSOpCode::ProcessUSSData);
-    EXPECT_EQ((*res).parameters().size(), 1u);
-    EXPECT_EQ((*res).parameters()[0], 0x0F);
+    EXPECT_EQ((*res).operationCode(), SSOpCode::ProcessUSSData);
+    ASSERT_EQ((*res).params().size(), 3u);
+    EXPECT_EQ((*res).params()[0], 0x04);
+    EXPECT_EQ((*res).params()[1], 0x01);
+    EXPECT_EQ((*res).params()[2], 0x0F);
+}
+
+TEST(FacilityOpCodeTest, ParseActivateInvoke_Golden) {
+    // Golden SS activate-SS invoke (TS 24.078): tag A1, body length 0x0B,
+    // [INTEGER invokeId=1][INTEGER operationCode=0x0C][SEQUENCE 03 {
+    // OCTET STRING 01 <SS-Code 0x91> }].
+    std::string data("\xA1\x0B\x02\x01\x01\x02\x01\x0C\x30\x03\x04\x01\x91", 13);
+    auto res = L3FacilityOpCode::parse(data);
+    ASSERT_TRUE(res);
+    EXPECT_EQ((*res).component(), L3FacilityOpCode::Invoke);
+    EXPECT_EQ((*res).invokeId(), 1);
+    EXPECT_EQ((*res).operationCode(), SSOpCode::ActivateSS);
+    ASSERT_EQ((*res).params().size(), 3u);
+    EXPECT_EQ((*res).params()[0], 0x04);
+    EXPECT_EQ((*res).params()[1], 0x01);
+    EXPECT_EQ((*res).params()[2], 0x91);
 }
 
 TEST(FacilityOpCodeTest, ParseReturnError) {
-    // TCAP RETURN-ERROR: tag=0x83, invoke_id=0x05, error_code=0x48(USSDBusy)
-    std::string data("\x83\x05\x48", 3);
+    // TCAP RETURN-ERROR: tag=A3, [02 01 invokeId=5][general data 2C 01 error=0x48 USSDBusy]
+    std::string data("\xA3\x06\x02\x01\x05\x2C\x01\x48", 8);
     auto res = L3FacilityOpCode::parse(data);
     ASSERT_TRUE(res);
     EXPECT_EQ((*res).component(), L3FacilityOpCode::ReturnError);
@@ -343,28 +418,35 @@ TEST(FacilityOpCodeTest, ParseReturnError) {
 }
 
 TEST(FacilityOpCodeTest, ParseReturnResult) {
-    // TCAP RETURN-RESULT: tag=0x82, invoke_id=0x07, params=[0x13, 0x0F]
-    std::string data("\x82\x07\x13\x0F", 4);
+    // TCAP RETURN-RESULT: tag=A2, [02 01 invokeId=7] with no result data.
+    std::string data("\xA2\x03\x02\x01\x07", 5);
     auto res = L3FacilityOpCode::parse(data);
     ASSERT_TRUE(res);
     EXPECT_EQ((*res).component(), L3FacilityOpCode::ReturnResult);
     EXPECT_EQ((*res).invokeId(), 7);
-    EXPECT_EQ((*res).parameters().size(), 2u);
 }
 
 TEST(FacilityOpCodeTest, ParseReject) {
-    // TCAP REJECT: tag=0x84, invoke_id=0x09
-    std::string data("\x84\x09", 2);
+    // TCAP REJECT: tag=A4, [general data 2C 01 error=0x0B TeleserviceNotProvisioned];
+    // a reject carries no invoke ID.
+    std::string data("\xA4\x03\x2C\x01\x0B", 5);
     auto res = L3FacilityOpCode::parse(data);
     ASSERT_TRUE(res);
     EXPECT_EQ((*res).component(), L3FacilityOpCode::Reject);
-    EXPECT_EQ((*res).invokeId(), 9);
+    EXPECT_EQ((*res).invokeId(), 0);
+    EXPECT_TRUE((*res).hasErrorCode());
+    EXPECT_EQ((*res).errorCode(), SSErrorCode::TeleserviceNotProvisioned);
 }
 
 TEST(FacilityOpCodeTest, ParseTooShort) {
-    std::string data("\x81", 1);
+    // Tag without a length octet.
+    std::string data("\xA1", 1);
     auto res = L3FacilityOpCode::parse(data);
     ASSERT_FALSE(res);
+
+    // Component length octet exceeds the remaining body bytes.
+    std::string overlong("\xA1\x0A\x02\x01", 4);
+    EXPECT_FALSE(L3FacilityOpCode::parse(overlong));
 }
 
 TEST(FacilityOpCodeTest, ParseInvalidTag) {
@@ -374,9 +456,11 @@ TEST(FacilityOpCodeTest, ParseInvalidTag) {
 }
 
 TEST(FacilityOpCodeTest, RoundTripInvoke) {
-    // Construct Invoke with op_code=ProcessUSSReq and parameters
-    L3FacilityOpCode orig(L3FacilityOpCode::Invoke, 0x03, SSOpCode::ProcessUSSReq,
-                          std::vector<uint8_t>{0x0F, 0xAA, 0x18});
+    // Construct Invoke with op_code=ProcessUSSReq and a parameter list of
+    // two OCTET STRING elements: 04 01 0F and 04 02 AA 18.
+    const std::vector<uint8_t> params = {0x04, 0x01, 0x0F, 0x04, 0x02, 0xAA, 0x18};
+    L3FacilityOpCode orig = L3FacilityOpCode::invoke(0x03, SSOpCode::ProcessUSSReq,
+                                                     std::span<const uint8_t>(params));
 
     uint8_t buf[64];
     BitWriter bw(buf, 64 * 8);
@@ -387,19 +471,38 @@ TEST(FacilityOpCodeTest, RoundTripInvoke) {
     ASSERT_TRUE(res);
     EXPECT_EQ((*res).component(), L3FacilityOpCode::Invoke);
     EXPECT_EQ((*res).invokeId(), 0x03);
-    EXPECT_EQ((*res).opCode(), SSOpCode::ProcessUSSReq);
-    EXPECT_EQ((*res).parameters().size(), 3u);
-    EXPECT_EQ((*res).parameters()[0], 0x0F);
+    EXPECT_EQ((*res).operationCode(), SSOpCode::ProcessUSSReq);
+    ASSERT_EQ((*res).params().size(), params.size());
+    for (size_t i = 0; i < params.size(); ++i) {
+        EXPECT_EQ((*res).params()[i], params[i]);
+    }
+}
+
+TEST(FacilityOpCodeTest, RoundTripReturnResultWithRawResult) {
+    // A non-empty return-result keeps the raw BER result bytes verbatim.
+    const std::vector<uint8_t> result = {0x13, 0x0F};
+    L3FacilityOpCode orig = L3FacilityOpCode::returnResult(7, std::span<const uint8_t>(result));
+
+    uint8_t buf[64];
+    BitWriter bw(buf, 64 * 8);
+    orig.write(bw);
+
+    std::string data(reinterpret_cast<char*>(buf), orig.lengthV());
+    auto res = L3FacilityOpCode::parse(data);
+    ASSERT_TRUE(res);
+    EXPECT_EQ((*res).component(), L3FacilityOpCode::ReturnResult);
+    EXPECT_EQ((*res).invokeId(), 7);
+    EXPECT_EQ((*res).body().size(), result.size() + 3u);
 }
 
 TEST(FacilityOpCodeTest, TextOutput) {
-    L3FacilityOpCode fc(L3FacilityOpCode::Invoke, 1, SSOpCode::RegisterSS, {});
+    L3FacilityOpCode fc = L3FacilityOpCode::invoke(1, SSOpCode::RegisterSS, {});
     std::ostringstream os;
     fc.text(os);
     EXPECT_NE(os.str().find("INVOKE"), std::string::npos);
     EXPECT_NE(os.str().find("RegisterSS"), std::string::npos);
 
-    L3FacilityOpCode fe(L3FacilityOpCode::ReturnError, 2, SSErrorCode::USSDBusy);
+    L3FacilityOpCode fe = L3FacilityOpCode::returnError(2, SSErrorCode::USSDBusy);
     os.str("");
     fe.text(os);
     EXPECT_NE(os.str().find("RETURN-ERROR"), std::string::npos);

@@ -2243,49 +2243,69 @@ std::string_view ssErrorCodeName(SSErrorCode code);
 
 ### L3FacilityOpCode - TCAP Component Parser
 
-Parses the TCAP-level component from raw SS Facility data. Supports all four TCAP component types:
+Parses the TCAP component from raw SS Facility data (TS 24.078; GSM 04.80,
+TCAP components per ITU-T X.690). The facility body is a single component
+container:
+
+```
+[component tag(1)][component length(1)][component body]
+```
+
+with tags Invoke=0xA1, ReturnResult=0xA2, ReturnError=0xA3, Reject=0xA4. The
+invoke component body is `[02 01 <invokeId>][02 01 <operationCode>][30 <len> {
+parameters }]`, where the parameters are a sequence of `[04 <len> <data…>]`
+octet-string elements (the operation arguments). The body is stored raw, so
+any component form re-emits losslessly:
 
 ```cpp
 class L3FacilityOpCode {
 public:
-    enum ComponentType : uint8_t {
-        Invoke = 0x81,    ReturnResult = 0x82,
-        ReturnError = 0x83, Reject = 0x84
+    enum SSComponent : uint8_t {
+        Invoke = 0xA1,    ReturnResult = 0xA2,
+        ReturnError = 0xA3, Reject = 0xA4
     };
 
     static Expected<L3FacilityOpCode> parse(const std::string& facilityData);
 
-    ComponentType component() const;
+    // Component builders (the length octets are computed automatically).
+    static L3FacilityOpCode invoke(int8_t invokeId, SSOpCode op, std::span<const uint8_t> params);
+    static L3FacilityOpCode returnResult(int8_t invokeId, std::span<const uint8_t> result = {});
+    static L3FacilityOpCode returnError(int8_t invokeId, SSErrorCode err);
+    static L3FacilityOpCode reject(SSErrorCode err);
+
+    SSComponent component() const;
     int8_t invokeId() const;
-    SSOpCode opCode() const;           // Invoke only
+    SSOpCode operationCode() const;          // Invoke components
+    std::span<const uint8_t> params() const; // raw BER bytes after [30 <len>]
     bool hasErrorCode() const;
-    SSErrorCode errorCode() const;     // ReturnError only
-    const std::vector<uint8_t>& parameters() const;
+    SSErrorCode errorCode() const;           // ReturnError/Reject components
+    const std::vector<uint8_t>& body() const;
     void write(BitWriter& bw) const;
-    size_t lengthV() const;
+    size_t lengthV() const;                  // 2 + body size
     void text(std::ostream& os) const;
 };
 ```
 
 | Method | Description |
 |--------|-------------|
-| `parse(facilityData)` | Parse TCAP component from raw Facility IE data |
+| `parse(facilityData)` | Parse the TCAP component container from raw Facility IE data (tag and length are validated against the data) |
 | `component()` | Returns Invoke/ReturnResult/ReturnError/Reject |
-| `invokeId()` | TCAP invoke identifier (-128..127) |
-| `opCode()` | SS operation code (Invoke components) |
-| `errorCode()` | SS error code (ReturnError components) |
-| `parameters()` | Remaining parameter bytes |
+| `invokeId()` | TCAP invoke identifier parsed from the body (0 when absent) |
+| `operationCode()` | SS operation code of an invoke component |
+| `params()` | Raw BER parameters following the `[30 <len>]` sequence header |
+| `errorCode()` | SS error code of a return-error or reject component |
+| `body()` | Component body without the tag and length octets |
 
 **Usage:**
 
 ```cpp
-// Parse Facility message to extract TCAP op_code
-auto msg = parseL3Hex("be e8 03 81 01 3c");
+// Parse a Facility message to extract the TCAP operation code.
+auto msg = parseL3Hex("eb 3a 0a a1 08 02 01 01 02 01 3c 30 00");
 if (msg) {
     if (auto* fac = tryGet<L3SupServFacilityMessage>(*msg)) {
         auto fc = L3FacilityOpCode::parse(fac->getMapComponents());
         if (fc) {
-            // fc->component() == Invoke, fc->opCode() == USSRequest
+            // fc->component() == Invoke, fc->operationCode() == USSRequest
         }
     }
 }
