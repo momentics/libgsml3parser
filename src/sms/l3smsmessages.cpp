@@ -192,17 +192,22 @@ void L3CPSMT::text(std::ostream& os) const {
 
 // ── L3RPData (24.011 7.3.1) ───────────────────────────────────────────
 // Header: Spare(5)|RP-MTI(3) | RP-Message-Reference(1)
-// Body: [RP-Originator-Address(LV)] | [RP-Destination-Address(LV)] | RP-User-Data(LV)
+// Body: RP-Originator-SM-SC-Address(LV) | RP-Destination-SM-SC-Address(LV)
+//       | RP-User-Data(LV). Both SMSC addresses are always present; an
+//       empty address is a single zero length octet (TS 24.011 section 7.3.1).
+
+namespace {
+
+size_t rpAddressWireLength(const std::optional<L3TPAddress>& addr) {
+    return addr ? addr->totalLength() : 1;  // empty address = one zero octet
+}
+
+} // namespace
 
 size_t L3RPData::bodyLength() const {
     size_t len = 2; // header: spare+mti + message-ref
-
-    if (mOriginatorAddress) {
-        len += mOriginatorAddress->totalLength();
-    }
-    if (mDestinationAddress) {
-        len += mDestinationAddress->totalLength();
-    }
+    len += rpAddressWireLength(mOriginatorAddress);   // always present LV
+    len += rpAddressWireLength(mDestinationAddress);  // always present LV
     len += 1 + mUserData.size(); // RP-User-Data: length byte + data
 
     return len;
@@ -219,50 +224,29 @@ Expected<L3RPData> L3RPData::parse(BitReader& br) {
     if (!ref) return Expected<L3RPData>::error(ref.error());
     msg.mMessageRef = static_cast<uint8_t>(ref.value());
 
-    // Read remaining body as LV elements.
-    // Collect all remaining bytes into a buffer, then parse LV elements.
-    std::vector<uint8_t> bodyBytes;
-    while (br.hasMore()) {
-        auto b = br.readField(8);
-        if (!b) return Expected<L3RPData>::error(b.error());
-        bodyBytes.push_back(static_cast<uint8_t>(b.value()));
-    }
-
-    // Parse LV elements from bodyBytes
-    size_t pos = 0;
-    std::vector<std::pair<size_t, size_t>> lvElements;
-
-    while (pos < bodyBytes.size()) {
-        uint8_t lenByte = bodyBytes[pos];
-        if (pos + 1 + lenByte > bodyBytes.size()) break;
-        lvElements.push_back({pos, static_cast<size_t>(1 + lenByte)});
-        pos += 1 + lenByte;
-    }
-
-    // Assign LV elements: originator, destination, user-data
-    if (lvElements.size() >= 3) {
-        BitReader addrBr(&bodyBytes[lvElements[0].first], lvElements[0].second * 8);
-        auto oaResult = L3TPAddress::parse(addrBr);
-        if (!oaResult) return Expected<L3RPData>::error(oaResult.error());
+    // Both SMSC addresses are always present as LV elements; an empty
+    // address is a single zero length octet (TS 24.011 section 7.3.1).
+    auto oaResult = L3TPAddress::parse(br);
+    if (!oaResult) return Expected<L3RPData>::error(oaResult.error());
+    if (oaResult.value().lengthV() > 0) {
         msg.mOriginatorAddress = std::move(oaResult.value());
+    }
 
-        BitReader dstBr(&bodyBytes[lvElements[1].first], lvElements[1].second * 8);
-        auto daResult = L3TPAddress::parse(dstBr);
-        if (!daResult) return Expected<L3RPData>::error(daResult.error());
+    // RP-Destination-SM-SC-Address: always present as an LV element; an
+    // empty address is a single zero length octet (TS 24.011 section 7.3.1).
+    auto daResult = L3TPAddress::parse(br);
+    if (!daResult) return Expected<L3RPData>::error(daResult.error());
+    if (daResult.value().lengthV() > 0) {
         msg.mDestinationAddress = std::move(daResult.value());
+    }
 
-        size_t udStart = lvElements.back().first + 1;
-        msg.mUserData.assign(bodyBytes.begin() + udStart, bodyBytes.begin() + udStart + bodyBytes[udStart - 1]);
-    } else if (lvElements.size() == 2) {
-        BitReader addrBr(&bodyBytes[lvElements[0].first], lvElements[0].second * 8);
-        auto oaResult = L3TPAddress::parse(addrBr);
-        if (oaResult) msg.mOriginatorAddress = std::move(oaResult.value());
-
-        size_t udStart = lvElements.back().first + 1;
-        msg.mUserData.assign(bodyBytes.begin() + udStart, bodyBytes.begin() + udStart + bodyBytes[udStart - 1]);
-    } else if (lvElements.size() >= 1) {
-        size_t udStart = lvElements.back().first + 1;
-        msg.mUserData.assign(bodyBytes.begin() + udStart, bodyBytes.begin() + udStart + bodyBytes[udStart - 1]);
+    // RP-User-Data: length byte + data.
+    auto udLen = br.readField(8);
+    if (!udLen) return Expected<L3RPData>::error(udLen.error());
+    for (size_t i = 0; i < udLen.value() && br.hasMore(); ++i) {
+        auto octet = br.readField(8);
+        if (!octet) return Expected<L3RPData>::error(octet.error());
+        msg.mUserData.push_back(static_cast<uint8_t>(octet.value()));
     }
 
     return Expected<L3RPData>::hold(std::move(msg));
@@ -272,11 +256,17 @@ void L3RPData::write(BitWriter& bw) const {
     bw.writeField(mRpMti & 0x07, 8);
     bw.writeField(mMessageRef, 8);
 
+    // Both SMSC addresses are always written as LV elements; an empty
+    // address is a single zero length octet (TS 24.011 section 7.3.1).
     if (mOriginatorAddress) {
         mOriginatorAddress->write(bw);
+    } else {
+        bw.writeField(0, 8);
     }
     if (mDestinationAddress) {
         mDestinationAddress->write(bw);
+    } else {
+        bw.writeField(0, 8);
     }
 
     bw.writeField(static_cast<uint32_t>(mUserData.size()), 8);

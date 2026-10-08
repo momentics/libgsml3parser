@@ -198,13 +198,20 @@ TEST(L3HeaderTest, SMHeader) {
 // ── SMS header (PD=0x09) ───────────────────────────────────────────────
 
 TEST(L3HeaderTest, SMSHeader) {
-    // PD=0x09(SMS) in the low nibble of octet 0, MTI=0x01(CPData), raw byte extraction
+    // PD=0x09(SMS) in the low nibble of octet 0, MTI=0x01(CPData): the CP
+    // message type is the low five bits of byte 1 (TS 24.011 section 8.2).
     std::array<uint8_t, 2> data{0x09, 0x01};
     auto res = parseL3Header(data);
     ASSERT_TRUE(res);
     L3Header hdr = res.value();
     EXPECT_EQ(hdr.pd, L3PD::SMS);
     EXPECT_EQ(hdr.mti, 0x01);
+
+    // Spare high bits set in the CP-MTI octet are masked away.
+    data[1] = 0x21;
+    res = parseL3Header(data);
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res.value().mti, 0x01);
 }
 
 // Test: reserved PD values (0x02, 0x04, 0x07, 0x0d) are rejected with

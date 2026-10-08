@@ -23,12 +23,20 @@
 // Spec: 3GPP TS 23.040 sections 7.2, 9.2
 // TPDU field encodings per 3GPP TS 23.040 (SMS-TP layer).
 //
-// Bit layout (per TS 23.040):
-//   TP-Header-Octet: TP-MTI(2) | direction-specific fields(6)
-//   TP-DA/TP-OA: length(1) | TON_NPI(1) | BCD-digits(variable)
+// Bit layout (per TS 23.040 section 9.1.2; positions are octet-value bits,
+// bit0 = least significant):
+//   TP-DU header octet: TP-MTI(2)=bits0-1 | MMS/RD(1)=bit2 | VPF(2)=bits3-4
+//     | SRI/SRR(1)=bit5 | UDHI(1)=bit6 | RP(1)=bit7
+//     (TP-MTI: 0 = SMS-Deliver, 1 = SMS-Submit, 2 = SMS-Status Report in the
+//     network-to-mobile direction / SMS-Command in the mobile-to-network
+//     direction, 3 = reserved)
+//   TP-DA/TP-OA: length(1) = number of digits | TON_NPI(1)
+//     | BCD-digits(ceil(length/2), first digit in the low nibble of the
+//     first octet, high nibble 'F'-filled when the digit count is odd)
 //   TP-PID: 1 octet
 //   TP-DCS: 1 octet
-//   TP-UD: length(1) | user-data(variable, up to 140 octets)
+//   TP-UD: length(1) = number of septets for the GSM 7-bit alphabet, octets
+//     otherwise | user-data(variable)
 
 #pragma once
 
@@ -148,33 +156,42 @@ struct TPSCTimeStamp {
     void text(std::ostream& os) const;
 };
 
-// ── TP Address (GSM 03.40 9.1.2.4) - used for TP-DA and TP-OA ─────────
-// LV format: Length(1) | TON_NPI(1) | BCD-digits(variable)
-// Length = number of following octets (TON_NPI + digits), excluding length byte itself
+// ── TP Address (TS 23.040 section 9.1.2.4) - used for TP-DA and TP-OA ──
+// LV format: Length(1) | TON_NPI(1) | BCD-digits(variable). The length
+// field counts the number of digits, not octets (TS 23.040 section
+// 9.1.2.4); an empty address (no digits) is a single zero length octet.
 
 class L3TPAddress {
     TypeOfNumber mTon{TypeOfNumber::International};
     NumberingPlan mNpi{NumberingPlan::E164};
+    // Individual decimal digit values (0..9), first digit first.
     std::vector<uint8_t> mDigits;
+    // Value of the address length octet: the number of digits.
     uint8_t mLength{0};
 
 public:
     L3TPAddress() = default;
-    L3TPAddress(TypeOfNumber ton, NumberingPlan npi, std::vector<uint8_t> digits);
+    explicit L3TPAddress(TypeOfNumber ton, NumberingPlan npi, std::vector<uint8_t> digits);
 
     TypeOfNumber ton() const { return mTon; }
     NumberingPlan npi() const { return mNpi; }
+    /// Individual decimal digit values (0..9), first digit first.
     const std::vector<uint8_t>& digits() const { return mDigits; }
+    /// The address length octet value: the number of digits, not octets
+    /// (TS 23.040 section 9.1.2.4).
     uint8_t lengthV() const { return mLength; }
-    size_t totalLength() const { return 1 + mLength; }
+    /// Total wire size in octets: length octet plus TON/NPI and BCD digit
+    /// octets (the latter only for non-empty addresses).
+    size_t totalLength() const { return mLength == 0 ? 1 : 2 + (mLength + 1) / 2; }
 
     [[nodiscard]] static Expected<L3TPAddress> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
 };
 
-// ── TP Deliver (GSM 03.40 9.2.2.1) ────────────────────────────────────
-// TP-MTI='00'B: mms(1)|lp(1)|spare(1)|sri(1)|udhi(1)|rp(1) | TP-OA | TP-PID | TP-DCS
+// ── TP Deliver (TS 23.040 section 9.2.2.1) ────────────────────────────
+// Header octet: TP-MTI='00'B | MMS(1) bit2 | SRI(1) bit5 | UDHI(1) bit6
+//   | RP(1) bit7 (TS 23.040 section 9.1.2), then TP-OA | TP-PID | TP-DCS
 //   | [TP-SCTS] | TP-UDL | TP-UD
 
 class L3TPDeliver {
@@ -186,6 +203,8 @@ class L3TPDeliver {
     TPPID mPid{TPPID::Default};
     TPDCS mDcs{TPDCS::Default_Alphabet};
     std::optional<TPSCTimeStamp> mScts;
+    // TP-User-Data-Length: number of septets (characters) for the GSM 7-bit
+    // alphabet, octets otherwise (TS 23.040 section 9.2.3.16).
     uint8_t mUdl{0};
     std::vector<uint8_t> mUserData;
 
@@ -200,7 +219,10 @@ public:
     TPPID pid() const { return mPid; }
     TPDCS dcs() const { return mDcs; }
     const std::optional<TPSCTimeStamp>& scts() const { return mScts; }
-    uint8_t udl() const { return mUdl; }
+    /// TP-User-Data-Length: the number of characters (septets) for GSM 7-bit
+    /// user data, or the number of octets for 8-bit/UCS2 user data
+    /// (TS 23.040 section 9.2.3.16).
+    uint8_t userDataLength() const { return mUdl; }
     const std::vector<uint8_t>& userData() const { return mUserData; }
 
     size_t bodyLength() const;
@@ -209,9 +231,10 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── TP Submit (GSM 03.40 9.2.2.2) ─────────────────────────────────────
-// TP-MTI='01'B: rd(1)|vpf(2)|srr(1)|udhi(1)|rp(1) | TP-MR | TP-DA | TP-PID | TP-DCS
-//   | [TP-VP] | TP-UDL | TP-UD
+// ── TP Submit (TS 23.040 section 9.2.2.2) ─────────────────────────────
+// Header octet: TP-MTI='01'B | RD(1) bit2 | VPF(2) bits3-4 | SRR(1) bit5
+//   | UDHI(1) bit6 | RP(1) bit7 (TS 23.040 section 9.1.2), then TP-MR
+//   | TP-DA | TP-PID | TP-DCS | [TP-VP] | TP-UDL | TP-UD
 // The validity period octets are present when the VPF bits in the header
 // select a non-zero encoding (one, seven or ten octets) and are preserved
 // verbatim (TS 23.040 section 9.2.2.2).
@@ -227,6 +250,9 @@ class L3TPSubmit {
     TPPID mPid{TPPID::Default};
     TPDCS mDcs{TPDCS::Default_Alphabet};
     std::vector<uint8_t> mValidityPeriod;
+    // TP-User-Data-Length: number of septets (characters) for the GSM 7-bit
+    // alphabet, octets otherwise (TS 23.040 section 9.2.3.16).
+    uint8_t mUdl{0};
     std::vector<uint8_t> mUserData;
 
     friend struct Builder;
@@ -245,6 +271,10 @@ public:
     TPDCS dcs() const { return mDcs; }
     /// Validity period octets, empty when the VPF bits select no encoding.
     [[nodiscard]] std::span<const uint8_t> validityPeriod() const { return mValidityPeriod; }
+    /// TP-User-Data-Length: the number of characters (septets) for GSM 7-bit
+    /// user data, or the number of octets for 8-bit/UCS2 user data
+    /// (TS 23.040 section 9.2.3.16).
+    uint8_t userDataLength() const { return mUdl; }
     const std::vector<uint8_t>& userData() const { return mUserData; }
 
     size_t bodyLength() const;
@@ -263,6 +293,7 @@ public:
         TPPID mPid{TPPID::Default};
         TPDCS mDcs{TPDCS::Default_Alphabet};
         std::vector<uint8_t> mValidityPeriod;
+        uint8_t mUdl{0};
         std::vector<uint8_t> mUserData;
 
         /// Set the re-sent (RD) flag.
@@ -291,11 +322,16 @@ public:
             mValidityPeriod.assign(v.begin(), v.end());
             return *this;
         }
-        /// Set the user data.
+        /// Set the user data (packed septets for the GSM 7-bit alphabet,
+        /// octets otherwise).
         Builder& userData(std::span<const uint8_t> v) {
             mUserData.assign(v.begin(), v.end());
             return *this;
         }
+        /// Set TP-User-Data-Length: the number of characters (septets) for
+        /// GSM 7-bit user data, or the number of octets for 8-bit/UCS2 user
+        /// data (TS 23.040 section 9.2.3.16).
+        Builder& userDataLength(uint8_t v) { mUdl = v; return *this; }
 
         /// Build the final message.
         [[nodiscard]] L3TPSubmit build() const {
@@ -310,6 +346,7 @@ public:
             msg.mPid = mPid;
             msg.mDcs = mDcs;
             msg.mValidityPeriod = mValidityPeriod;
+            msg.mUdl = mUdl;
             msg.mUserData = mUserData;
             return msg;
         }
@@ -318,8 +355,9 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── TP Status Report (GSM 03.40 9.2.2.3) ──────────────────────────────
-// TP-MTI='10'B: spare(6) | TP-MR | TP-DA | TP-PID | TP-DCS | TP-SCTS | TP-STS
+// ── TP Status Report (TS 23.040 section 9.2.2.3) ──────────────────────
+// Header octet: TP-MTI='10'B with the remaining bits zero, then TP-MR
+//   | TP-DA | TP-PID | TP-DCS | TP-SCTS | TP-STS
 
 class L3TPStatusReport {
     uint8_t mMr{0};
@@ -345,8 +383,11 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── TP Command (GSM 03.40 9.2.2.5) ────────────────────────────────────
-// TP-MTI='11'B: spare(6) | TP-MR | TP-PID | TP-DCS | TP-CMD | [TP-DA]
+// ── TP Command (TS 23.040 section 9.2.2.5) ────────────────────────────
+// Header octet: TP-MTI='10'B with the remaining bits zero, then TP-MR
+//   | TP-PID | TP-DCS | TP-CMD | [TP-DA]. The status-report/command code
+// is shared by both directions of the transport layer; the semantics are
+// determined by the frame direction (TS 23.040 section 9.1.2).
 
 class L3TPCommand {
     uint8_t mMr{0};
@@ -356,7 +397,7 @@ class L3TPCommand {
     std::optional<L3TPAddress> mAddress;
 
 public:
-    static constexpr int TP_MTI = 0x03;
+    static constexpr int TP_MTI = 0x02;
 
     uint8_t messageReference() const { return mMr; }
     TPPID pid() const { return mPid; }

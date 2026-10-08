@@ -26,7 +26,8 @@
 //
 // L3 header (per 24.008 10.5.1):
 //   Byte 0: TI(3) | TIF(1) | PD(4)=0x09(SMS)
-//   Byte 1: CP-MTI(8 bits, raw - no NSD field)
+//   Byte 1: CP-MTI in the low five bits; the three high bits are spare
+//     (TS 24.011 section 8.2) - no NSD field
 //   Body: CP message body (contains RPDU which may contain TPDU)
 //
 // CP-MTI values (Table 10.6a):
@@ -269,7 +270,9 @@ public:
 // ── RP-DATA (GSM 24.011 7.3.1) ────────────────────────────────────────
 // RP-MTI: MO='000'B(0), MT='001'B(1)
 // Header: Spare(5)|RP-MTI(3) | RP-Message-Reference(1)
-// Body: [RP-Originator-Address(LV)] | [RP-Destination-Address(LV)] | RP-User-Data(LV)
+// Body: RP-Originator-SM-SC-Address(LV) | RP-Destination-SM-SC-Address(LV)
+//       | RP-User-Data(LV). Both SMSC addresses are always present; an
+//       empty address is a single zero length octet.
 
 class L3RPData {
     uint8_t mRpMti{0};

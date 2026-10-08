@@ -36,9 +36,14 @@
 // [GOLDEN VERIFICATION]
 // All byte-level parse test data cross-checked against 3GPP TS 24.011 / TS 23.040:
 //   - CP-MTI values per the CP message type table (TS 24.008 Table 10.6a)
-//   - SMS header encoding: PD=9 in the low nibble of byte 0, raw CP-MTI in byte 1 (no shift)
+//   - SMS header encoding: PD=9 in the low nibble of byte 0, CP-MTI in the
+//     low five bits of byte 1 (the three high bits are spare, TS 24.011 8.2)
 //   - RP-MTI encoding: Spare(5)=0 | RP-MTI(3) in first RP octet
-//   - TP-MTI encoding: TP-MTI(2) in high bits of first TP octet
+//   - TP-DU header octet (TS 23.040 section 9.1.2, bit positions in the octet
+//     value): MTI(2)=bits0-1, MMS/RD(1)=bit2, VPF(2)=bits3-4, SRI/SRR(1)=bit5,
+//     UDHI(1)=bit6, RP(1)=bit7
+//   - TP address length = number of digits (TS 23.040 section 9.1.2.4)
+//   - TP-UDL = septets for the GSM 7-bit alphabet (TS 23.040 section 9.2.3.16)
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -58,8 +63,9 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 // =====================================================================
 // SMS CP MESSAGE TYPE VALUES (GSM 24.008 Table 10.6a)
 // CP-MTI values per GSM 24.008 Table 10.6a.
-// [GSM SPEC VERIFIED] SMS messages use 8-bit raw CP-MTI in byte 1,
-//   unlike MM/CC/SS/BCC/GCC which take the MTI in the six low bits of byte 1.
+// [GSM SPEC VERIFIED] SMS messages take the CP-MTI in the five low bits of
+//   byte 1 (the three high bits are spare, TS 24.011 section 8.2), unlike
+//   MM/CC/SS/BCC/GCC which take the MTI in the six low bits of byte 1.
 // =====================================================================
 
 TEST(GoldenSMSTest, MessageTypeValues) {
@@ -468,75 +474,103 @@ TEST(GoldenSMSTest, RPSMMA_RoundTrip) {
 }
 
 // =====================================================================
-// SMS TP Deliver (GSM 23.040 9.2.2.1) - parse minimal TPDU
-// TP-Deliver TPDU layout (GSM 23.040).
+// SMS TP Deliver (TS 23.040 9.2.2.1) - parse minimal TPDU
+// TP-Deliver TPDU layout (TS 23.040).
 // Hex breakdown (TPDU within RP-User-Data):
-//   0x00 = TP-MTI(2)=00(Deliver) | mms(1)=0 | lp(1)=0 | spare(1)=0 | sri(1)=0 | udhi(1)=0 | rp(1)=0
-//   0x07 = TP-OA Length = 7 (TON_NPI + 6 BCD digit bytes = phone number)
+//   0x00 = TP-MTI(2)=00(Deliver) | MMS=0 | SRI=0 | UDHI=0 | RP=0
+//          (bit positions: MTI bits0-1, MMS bit2, SRI bit5, UDHI bit6, RP bit7)
+//   0x08 = TP-OA Length = 8 (number of DIGITS, not octets)
 //   0x91 = TON=International(1) | NPI=E164(1) -> 0b1001_0001 = 0x91
-//   0x23 = spare(4) | digit2(4)=3 (nibble-swapped BCD for phone 12...)
-//   0x45 = digit3(4)=5 | digit4(4)=4
-//   0x67 = digit5(4)=7 | digit6(4)=6
-//   0x89 = digit7(4)=9 | digit8(4)=8
+//   0x23 = BCD digit pair: first digit 3 (low nibble), second digit 2
+//   0x45, 0x67, 0x89 = ...digits 5,4 / 7,6 / 9,8
 //   0x00 = TP-PID = Default
-//   0x00 = TP-DCS = Default_Alphabet
+//   0x04 = TP-DCS = Default_8bit (user data is plain octets)
 //   [7 octets TP-SCTS omitted for brevity, using zeros]
-//   0x05 = TP-UDL = 5 bytes of user data
+//   0x05 = TP-UDL = 5 (octets for the 8-bit alphabet)
 //   0x48 0x65 0x6C 0x6C 0x6F = "Hello" (user data)
 // =====================================================================
 
 TEST(GoldenSMSTest, TPDeliver_Parse) {
     uint8_t data[] = {
         0x00,                     // header: TP-MTI=00, all flags=0
-        0x05, 0x91, 0x23, 0x45,   // TP-OA: length=5 (TON_NPI + 4 digit bytes follow)
-        0x67, 0x89,               // ...digits
+        0x08, 0x91, 0x23, 0x45,   // TP-OA: length=8 digits (TON_NPI + 4 BCD bytes follow)
+        0x67, 0x89,               // ...digits 32547698
         0x00,                     // TP-PID = Default
-        0x00,                     // TP-DCS = Default_Alphabet
+        0x04,                     // TP-DCS = Default_8bit
         0x00, 0x00, 0x00, 0x00,   // TP-SCTS (7 octets, zeros)
         0x00, 0x00, 0x00,
-        0x05,                     // TP-UDL = 5
+        0x05,                     // TP-UDL = 5 octets
         0x48, 0x65, 0x6C, 0x6C, 0x6F // "Hello"
     };
     BitReader br(data, sizeof(data) * 8);
     auto deliver = L3TPDeliver::parse(br);
     ASSERT_TRUE(deliver);
-    EXPECT_EQ(deliver.value().udl(), 5u);
+    EXPECT_FALSE(deliver.value().mms());
+    EXPECT_FALSE(deliver.value().sri());
+    EXPECT_FALSE(deliver.value().udhi());
+    EXPECT_FALSE(deliver.value().rp());
+    EXPECT_EQ(deliver.value().originatingAddress().lengthV(), 8u);
+    EXPECT_EQ(deliver.value().originatingAddress().digits(),
+              (std::vector<uint8_t>{3, 2, 5, 4, 7, 6, 9, 8}));
+    EXPECT_EQ(deliver.value().userDataLength(), 5u);
     EXPECT_EQ(deliver.value().userData().size(), 5u);
     EXPECT_EQ(deliver.value().userData()[0], 0x48); // 'H'
 }
 
 // =====================================================================
-// SMS TP Submit (GSM 23.040 9.2.2.2) - parse minimal TPDU
-// TP-Submit TPDU layout (GSM 23.040).
+// SMS TP Submit (TS 23.040 9.2.2.2) - parse minimal TPDU
+// TP-Submit TPDU layout (TS 23.040).
 // Hex breakdown (TPDU within RP-User-Data):
-//   0x61 = TP-MTI(2)=01(Submit) | rd(1)=1 | vpf(2)=00 | srr(1)=0 | udhi(1)=0 | rp(1)=0
+//   0x65 = TP-MTI(2)=01(Submit) | RD=1(bit2) | VPF=00 | SRR=1(bit5) | UDHI=1(bit6) | RP=0(bit7)
 //   0x03 = TP-MR = 3 (message reference)
-//   0x07 = TP-DA Length = 7
+//   0x0A = TP-DA Length = 10 (number of DIGITS, not octets)
 //   0x91 = TON=International(1) | NPI=E164(1)
-//   0x23 = digit bytes...
-//   0x45, 0x67, 0x89
+//   0x21 0x43 0x65 0x87 0x09 = BCD digits 1234567890 (first digit in the low nibble)
 //   0x00 = TP-PID = Default
-//   0x00 = TP-DCS = Default_Alphabet
-//   0x05 = TP-UDL = 5
-//   0x48 0x65 0x6C 0x6C 0x6F = "Hello" (user data)
+//   0x00 = TP-DCS = Default_Alphabet (GSM 7-bit)
+//   0x0A = TP-UDL = 10 septets for the GSM 7-bit alphabet (TS 23.040 section 9.2.3.16)
+//   9 octets of packed septets: ceil(10*7/8) = 9 bytes
 // =====================================================================
 
 TEST(GoldenSMSTest, TPSubmit_Parse) {
     uint8_t data[] = {
-        0x61,                     // header: TP-MTI=01, rd=1, vpf=00, srr=0, udhi=0, rp=0
+        0x65,                     // header: TP-MTI=01, RD=1, SRR=1, UDHI=1 (TS 23.040 section 9.1.2)
         0x03,                     // TP-MR = 3
-        0x05, 0x91, 0x23, 0x45,   // TP-DA: length=5 (TON_NPI + 4 digit bytes follow)
-        0x67, 0x89,               // ...digits
+        0x0A, 0x91, 0x21, 0x43,   // TP-DA: length=10 digits (TON_NPI + 5 BCD bytes follow)
+        0x65, 0x87, 0x09,         // ...digits 1234567890
         0x00,                     // TP-PID = Default
-        0x00,                     // TP-DCS = Default_Alphabet
-        0x05,                     // TP-UDL = 5
-        0x48, 0x65, 0x6C, 0x6C, 0x6F // "Hello"
+        0x00,                     // TP-DCS = Default_Alphabet (GSM 7-bit)
+        0x0A,                     // TP-UDL = 10 septets
+        0x06, 0x10, 0x28,         // packed septets (first three bytes)
+        0x3B, 0x4F, 0x63, 0x77,   // ...
+        0x8B, 0x9F                // ...last two of nine
     };
     BitReader br(data, sizeof(data) * 8);
     auto submit = L3TPSubmit::parse(br);
     ASSERT_TRUE(submit);
+    EXPECT_TRUE(submit.value().rd());
+    EXPECT_EQ(submit.value().vpf(), 0u);
+    EXPECT_TRUE(submit.value().srr());
+    EXPECT_TRUE(submit.value().udhi());
+    EXPECT_FALSE(submit.value().rp());
     EXPECT_EQ(submit.value().messageReference(), 3u);
-    EXPECT_EQ(submit.value().userData().size(), 5u);
+    // The address length octet counts digits: 10 digits in 5 BCD octets.
+    EXPECT_EQ(submit.value().destinationAddress().lengthV(), 10u);
+    EXPECT_EQ(submit.value().destinationAddress().digits(),
+              (std::vector<uint8_t>{1, 2, 3, 4, 5, 6, 7, 8, 9, 0}));
+    // UDL counts septets for the GSM 7-bit alphabet; ten septets pack
+    // into ceil(10*7/8) = 9 octets.
+    EXPECT_EQ(submit.value().userDataLength(), 10u);
+    EXPECT_EQ(submit.value().userData().size(), 9u);
+    // Round-trip: re-encoding reproduces the vector byte-for-byte, in
+    // particular the 0x65 first octet (TS 23.040 section 9.1.2).
+    uint8_t out[32];
+    BitWriter bw(out, sizeof(out) * 8);
+    submit.value().write(bw);
+    EXPECT_EQ(submit.value().bodyLength(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ(out[i], data[i]) << "byte " << i;
+    }
 }
 
 // =====================================================================
@@ -549,14 +583,14 @@ TEST(GoldenSMSTest, TPSubmit_Parse) {
 
 TEST(GoldenSMSTest, TPSubmit_VP_RoundTrip) {
     uint8_t data[] = {
-        0x68,                     // header: MTI=01, rd=1, vpf=01, srr=0, udhi=0, rp=0
+        0x0D,                     // header: MTI=01, RD=1(bit2), VPF=01(bits3-4) (TS 23.040 section 9.1.2)
         0x03,                     // TP-MR = 3
-        0x05, 0x91, 0x23, 0x45,   // TP-DA: length=5 (TON_NPI + 4 digit bytes follow)
-        0x67, 0x89,               // ...digits
+        0x0A, 0x91, 0x21, 0x43,   // TP-DA: length=10 digits (TON_NPI + 5 BCD bytes follow)
+        0x65, 0x87, 0x09,         // ...digits 1234567890
         0x00,                     // TP-PID = Default
-        0x00,                     // TP-DCS = Default_Alphabet
+        0x04,                     // TP-DCS = Default_8bit (user data is plain octets)
         0x0A,                     // TP-VP (relative): one octet
-        0x05,                     // TP-UDL = 5
+        0x05,                     // TP-UDL = 5 octets
         0x48, 0x65, 0x6C, 0x6C, 0x6F // "Hello"
     };
     BitReader br(data, sizeof(data) * 8);
@@ -580,8 +614,10 @@ TEST(GoldenSMSTest, TPSubmit_VP_RoundTrip) {
         .vpf(1)
         .messageReference(3)
         .destinationAddress(submit.value().destinationAddress())
-        .validityPeriod(std::span<const uint8_t>(data + 10, 1))
-        .userData(std::span<const uint8_t>(data + 12, 5))
+        .dcs(TPDCS::Default_8bit)
+        .validityPeriod(std::span<const uint8_t>(data + 11, 1))
+        .userDataLength(5)
+        .userData(std::span<const uint8_t>(data + 13, 5))
         .build();
     EXPECT_EQ(built.bodyLength(), sizeof(data));
     uint8_t out2[64];
@@ -595,15 +631,15 @@ TEST(GoldenSMSTest, TPSubmit_VP_RoundTrip) {
 TEST(GoldenSMSTest, TPSubmit_VPEnhanced_RoundTrip) {
     // VPF=3 (enhanced validity period): ten octets between TP-DCS and TP-UDL.
     uint8_t data[] = {
-        0x78,                     // header: MTI=01, rd=1, vpf=11, srr=0, udhi=0, rp=0
+        0x1D,                     // header: MTI=01, RD=1(bit2), VPF=11(bits3-4) (TS 23.040 section 9.1.2)
         0x07,                     // TP-MR = 7
-        0x05, 0x91, 0x23, 0x45,   // TP-DA: length=5 (TON_NPI + 4 digit bytes follow)
-        0x67, 0x89,               // ...digits
+        0x0A, 0x91, 0x21, 0x43,   // TP-DA: length=10 digits (TON_NPI + 5 BCD bytes follow)
+        0x65, 0x87, 0x09,         // ...digits 1234567890
         0x00,                     // TP-PID = Default
-        0x00,                     // TP-DCS = Default_Alphabet
+        0x04,                     // TP-DCS = Default_8bit (user data is plain octets)
         0x01, 0x02, 0x03, 0x04, 0x05, // TP-VP (enhanced): first five octets
         0x06, 0x07, 0x08, 0x09, 0x0A, // ...last five octets
-        0x02,                     // TP-UDL = 2
+        0x02,                     // TP-UDL = 2 octets
         0x48, 0x69                // "Hi"
     };
     BitReader br(data, sizeof(data) * 8);
@@ -637,27 +673,31 @@ TEST(GoldenSMSTest, FullSMSWrapper_MO) {
     // CP Body: Length + RPDU
     //   RP header: Spare(5)=0 | RP-MTI(3)=0 (RP-DATA MO)
     //   RP Message-Ref: 1
+    //   RP Originator-SM-SC-Address: empty LV (single zero octet, TS 24.011 7.3.1)
+    //   RP Destination-SM-SC-Address: empty LV (single zero octet)
     //   RP User-Data: TP-Submit TPDU
 
     // Build TP-Submit first
     std::vector<uint8_t> tpdu;
-    tpdu.push_back(0x61); // TP-Submit header
+    tpdu.push_back(0x05); // TP-Submit header: MTI=01, RD=1(bit2) (TS 23.040 section 9.1.2)
     tpdu.push_back(0x03); // TP-MR
-    tpdu.push_back(0x07); // TP-DA length
-    tpdu.push_back(0x91); // TON/NPI
+    tpdu.push_back(0x08); // TP-DA length = 8 digits
+    tpdu.push_back(0x91); // TON/NPI: International/E.164
     tpdu.push_back(0x23);
     tpdu.push_back(0x45);
     tpdu.push_back(0x67);
-    tpdu.push_back(0x89);
+    tpdu.push_back(0x89); // digits 32547698 (first digit in the low nibble)
     tpdu.push_back(0x00); // TP-PID
-    tpdu.push_back(0x00); // TP-DCS
-    tpdu.push_back(0x05); // TP-UDL
+    tpdu.push_back(0x04); // TP-DCS: Default_8bit (user data is plain octets)
+    tpdu.push_back(0x05); // TP-UDL = 5 octets
     tpdu.insert(tpdu.end(), {0x48, 0x65, 0x6C, 0x6C, 0x6F}); // "Hello"
 
-    // Build RP-DATA: header + message-ref + user-data-length + TPDU
+    // Build RP-DATA: header + message-ref + both (empty) SMSC LVs + user data
     std::vector<uint8_t> rpdu;
     rpdu.push_back(0x00); // RP header: Spare(5)=0 | RP-MTI(3)=0 (RP-DATA MO)
     rpdu.push_back(0x01); // RP-Message-Reference = 1
+    rpdu.push_back(0x00); // RP-Originator-SM-SC-Address: empty LV
+    rpdu.push_back(0x00); // RP-Destination-SM-SC-Address: empty LV
     rpdu.push_back(static_cast<uint8_t>(tpdu.size())); // RP-User-Data length
     rpdu.insert(rpdu.end(), tpdu.begin(), tpdu.end());
 
@@ -686,6 +726,15 @@ TEST(GoldenSMSTest, FullSMSWrapper_MO) {
     EXPECT_EQ(rpData.value().rpMti(), L3RPData::RP_MTI_MO);
     EXPECT_TRUE(rpData.value().isMo());
     EXPECT_EQ(rpData.value().messageRef(), 1u);
+    // Both SMSC addresses are present on the wire; empty LVs parse back to
+    // "not set".
+    EXPECT_FALSE(rpData.value().originatorAddress().has_value());
+    EXPECT_FALSE(rpData.value().destinationAddress().has_value());
+    // The user data carries the TP-Submit TPDU verbatim.
+    ASSERT_EQ(rpData.value().userData().size(), tpdu.size());
+    for (size_t i = 0; i < tpdu.size(); ++i) {
+        EXPECT_EQ(rpData.value().userData()[i], tpdu[i]) << "tpdu byte " << i;
+    }
 }
 
 // =====================================================================
@@ -697,19 +746,21 @@ TEST(GoldenSMSTest, FullSMSWrapper_MO) {
 TEST(GoldenSMSTest, FullSMSWrapper_MT) {
     // Construct a full MT SMS: CP-DATA containing RP-DATA containing TP-Deliver
     std::vector<uint8_t> tpdu;
-    tpdu.push_back(0x00); // TP-Deliver header
-    tpdu.push_back(0x07); // TP-OA length
-    tpdu.insert(tpdu.end(), {0x91, 0x23, 0x45, 0x67, 0x89}); // OA
+    tpdu.push_back(0x00); // TP-Deliver header (MTI=00, no flags)
+    tpdu.push_back(0x08); // TP-OA length = 8 digits
+    tpdu.insert(tpdu.end(), {0x91, 0x23, 0x45, 0x67, 0x89}); // OA: 32547698
     tpdu.push_back(0x00); // TP-PID
-    tpdu.push_back(0x00); // TP-DCS
+    tpdu.push_back(0x04); // TP-DCS: Default_8bit (user data is plain octets)
     tpdu.insert(tpdu.end(), {0,0,0,0,0,0,0}); // TP-SCTS (7 zero octets)
-    tpdu.push_back(0x05); // TP-UDL
+    tpdu.push_back(0x05); // TP-UDL = 5 octets
     tpdu.insert(tpdu.end(), {0x48, 0x65, 0x6C, 0x6C, 0x6F}); // "Hello"
 
-    // Build RP-DATA MT: header + message-ref + user-data-length + TPDU
+    // Build RP-DATA MT: header + message-ref + both (empty) SMSC LVs + user data
     std::vector<uint8_t> rpdu;
     rpdu.push_back(0x01); // RP header: Spare(5)=0 | RP-MTI(3)=1 (RP-DATA MT)
     rpdu.push_back(0x02); // RP-Message-Reference = 2
+    rpdu.push_back(0x00); // RP-Originator-SM-SC-Address: empty LV
+    rpdu.push_back(0x00); // RP-Destination-SM-SC-Address: empty LV
     rpdu.push_back(static_cast<uint8_t>(tpdu.size()));
     rpdu.insert(rpdu.end(), tpdu.begin(), tpdu.end());
 
@@ -734,6 +785,15 @@ TEST(GoldenSMSTest, FullSMSWrapper_MT) {
     ASSERT_TRUE(rpData);
     EXPECT_EQ(rpData.value().rpMti(), L3RPData::RP_MTI_MT);
     EXPECT_FALSE(rpData.value().isMo());
+    EXPECT_FALSE(rpData.value().originatorAddress().has_value());
+    EXPECT_FALSE(rpData.value().destinationAddress().has_value());
+    ASSERT_EQ(rpData.value().userData().size(), tpdu.size());
+    // Parse the TP-Deliver from the user data.
+    BitReader tpBr(rpData.value().userData().data(), rpData.value().userData().size() * 8);
+    auto deliver = L3TPDeliver::parse(tpBr);
+    ASSERT_TRUE(deliver);
+    EXPECT_EQ(deliver.value().originatingAddress().lengthV(), 8u);
+    EXPECT_EQ(deliver.value().userDataLength(), 5u);
 }
 
 // =====================================================================
@@ -862,16 +922,16 @@ TEST(GoldenSMSTest, DCS_DecodeAllOctets) {
 }
 
 // =====================================================================
-// SMS TP Status Report (GSM 23.040 9.2.2.3) - minimal parse
+// SMS TP Status Report (TS 23.040 9.2.2.3) - minimal parse
 // Reference: 3GPP TS 23.040 section 9.2.2.3
 // =====================================================================
 
 TEST(GoldenSMSTest, TPStatusReport_Parse) {
     uint8_t data[] = {
-        0x80,                     // header: TP-MTI=10, spare=0
+        0x02,                     // header: TP-MTI='10'B, remaining bits zero (TS 23.040 section 9.1.2)
         0x05,                     // TP-MR = 5
-        0x05, 0x91, 0x23, 0x45,   // TP-DA: length=5 (TON_NPI + 4 digit bytes)
-        0x67, 0x89,               // ...digits
+        0x08, 0x91, 0x23, 0x45,   // TP-DA: length=8 digits (TON_NPI + 4 BCD bytes)
+        0x67, 0x89,               // ...digits 32547698
         0x00,                     // TP-PID
         0x00,                     // TP-DCS
         0x00, 0x00, 0x00, 0x00,   // TP-SCTS (7 octets)
@@ -882,17 +942,25 @@ TEST(GoldenSMSTest, TPStatusReport_Parse) {
     auto sr = L3TPStatusReport::parse(br);
     ASSERT_TRUE(sr);
     EXPECT_EQ(sr.value().messageReference(), 5u);
+    EXPECT_EQ(sr.value().destinationAddress().lengthV(), 8u);
     EXPECT_EQ(sr.value().sts(), 1u);
+    // Round-trip: the first octet stays TP-MTI='10'B with zeroed flags.
+    uint8_t out[32];
+    BitWriter bw(out, sizeof(out) * 8);
+    sr.value().write(bw);
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ(out[i], data[i]) << "byte " << i;
+    }
 }
 
 // =====================================================================
-// SMS TP Command (GSM 23.040 9.2.2.5) - minimal parse
+// SMS TP Command (TS 23.040 9.2.2.5) - minimal parse
 // Reference: 3GPP TS 23.040 section 9.2.2.5
 // =====================================================================
 
 TEST(GoldenSMSTest, TPCommand_Parse) {
     uint8_t data[] = {
-        0xC0,                     // header: TP-MTI=11, spare=0
+        0x02,                     // header: TP-MTI='10'B, remaining bits zero (TS 23.040 section 9.1.2)
         0x0A,                     // TP-MR = 10
         0x00,                     // TP-PID
         0x00,                     // TP-DCS
@@ -903,21 +971,151 @@ TEST(GoldenSMSTest, TPCommand_Parse) {
     ASSERT_TRUE(cmd);
     EXPECT_EQ(cmd.value().messageReference(), 10u);
     EXPECT_EQ(cmd.value().cmd(), 3u);
+    // Round-trip: the first octet stays TP-MTI='10'B with zeroed flags.
+    uint8_t out[32];
+    BitWriter bw(out, sizeof(out) * 8);
+    cmd.value().write(bw);
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ(out[i], data[i]) << "byte " << i;
+    }
 }
 
 // =====================================================================
-// SMS TP Address (GSM 23.040 9.1.2.4) - parse LV format
-// TP-DA / TP-OA address layout per GSM 23.040.
+// SMS TP Address (TS 23.040 9.1.2.4) - parse LV format
+// TP-DA / TP-OA address layout per TS 23.040: the length field counts the
+// number of digits, not octets.
 // =====================================================================
 
 TEST(GoldenSMSTest, TPAddress_Parse) {
-    // Length=5 (TON_NPI + 4 digit bytes), TON=International(1), NPI=E164(1), digits BCD-swapped
-    uint8_t data[] = {0x05, 0x91, 0x23, 0x45, 0x67, 0x89};
+    // Length=10 digits, TON=International(1), NPI=E164(1), BCD 1234567890
+    uint8_t data[] = {0x0A, 0x91, 0x21, 0x43, 0x65, 0x87, 0x09};
     BitReader br(data, sizeof(data) * 8);
     auto addr = L3TPAddress::parse(br);
     ASSERT_TRUE(addr);
     EXPECT_EQ(addr.value().ton(), TypeOfNumber::International);
     EXPECT_EQ(addr.value().npi(), NumberingPlan::E164);
+    EXPECT_EQ(addr.value().lengthV(), 10u);
+    EXPECT_EQ(addr.value().digits(),
+              (std::vector<uint8_t>{1, 2, 3, 4, 5, 6, 7, 8, 9, 0}));
+    // Odd digit count: the last high nibble is 'F'-filled and not a digit.
+    uint8_t odd[] = {0x05, 0xA1, 0x21, 0x43, 0xF6};
+    BitReader oddBr(odd, sizeof(odd) * 8);
+    auto oddAddr = L3TPAddress::parse(oddBr);
+    ASSERT_TRUE(oddAddr);
+    EXPECT_EQ(oddAddr.value().lengthV(), 5u);
+    EXPECT_EQ(oddAddr.value().digits(), (std::vector<uint8_t>{1, 2, 3, 4, 6}));
+    // Round-trip: re-encoding reproduces the vector byte-for-byte.
+    uint8_t out[16];
+    BitWriter bw(out, sizeof(out) * 8);
+    oddAddr.value().write(bw);
+    for (size_t i = 0; i < sizeof(odd); ++i) {
+        EXPECT_EQ(out[i], odd[i]) << "byte " << i;
+    }
+}
+
+// =====================================================================
+// SMS TP-MTI values (TS 23.040 section 9.1.2)
+// Status Report (network to mobile) and Command (mobile to network) share
+// the '10'B code; '11'B is reserved. The semantics are determined by the
+// frame direction.
+// =====================================================================
+
+TEST(GoldenSMSTest, TPMTIValues) {
+    EXPECT_EQ(L3TPDeliver::TP_MTI, 0);
+    EXPECT_EQ(L3TPSubmit::TP_MTI, 1);
+    EXPECT_EQ(L3TPStatusReport::TP_MTI, 2);
+    EXPECT_EQ(L3TPCommand::TP_MTI, 2);
+}
+
+// =====================================================================
+// SMS TP Deliver header octet flags (TS 23.040 section 9.1.2)
+// (DELIVER, MMS=1, UDHI=1, RP=1): bit7(RP)|bit6(UDHI)|bit2(MMS) = 0xC4.
+// Parse the first octet from the vector and verify that re-encoding
+// reproduces it byte-for-byte.
+// =====================================================================
+
+TEST(GoldenSMSTest, TPDeliver_FirstOctetFlags) {
+    uint8_t data[] = {
+        0xC4,                     // header: MTI=00, MMS=1(bit2), UDHI=1(bit6), RP=1(bit7)
+        0x08, 0x91, 0x23, 0x45,   // TP-OA: length=8 digits (TON_NPI + 4 BCD bytes follow)
+        0x67, 0x89,               // ...digits 32547698
+        0x00,                     // TP-PID = Default
+        0x04,                     // TP-DCS = Default_8bit
+        0x00, 0x00, 0x00, 0x00,   // TP-SCTS (7 octets, zeros)
+        0x00, 0x00, 0x00,
+        0x05,                     // TP-UDL = 5 octets
+        0x48, 0x65, 0x6C, 0x6C, 0x6F // "Hello"
+    };
+    BitReader br(data, sizeof(data) * 8);
+    auto deliver = L3TPDeliver::parse(br);
+    ASSERT_TRUE(deliver);
+    EXPECT_TRUE(deliver.value().mms());
+    EXPECT_FALSE(deliver.value().sri());
+    EXPECT_TRUE(deliver.value().udhi());
+    EXPECT_TRUE(deliver.value().rp());
+    uint8_t out[32];
+    BitWriter bw(out, sizeof(out) * 8);
+    deliver.value().write(bw);
+    EXPECT_EQ(out[0], 0xC4); // recomputed first octet per TS 23.040 section 9.1.2
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ(out[i], data[i]) << "byte " << i;
+    }
+}
+
+// =====================================================================
+// SMS TP Deliver with GSM 7-bit user data, UDL not a multiple of 8
+// (TS 23.040 section 9.2.3.16): ten septets pack into ceil(10*7/8) = 9
+// octets, so the consumed user-data size differs from the UDL value.
+// =====================================================================
+
+TEST(GoldenSMSTest, TPDeliver_SeptetPacking) {
+    uint8_t data[] = {
+        0x00,                     // header: MTI=00, no flags
+        0x0A, 0x91, 0x21, 0x43,   // TP-OA: length=10 digits (TON_NPI + 5 BCD bytes follow)
+        0x65, 0x87, 0x09,         // ...digits 1234567890
+        0x00,                     // TP-PID = Default
+        0x00,                     // TP-DCS = Default_Alphabet (GSM 7-bit)
+        0x00, 0x00, 0x00, 0x00,   // TP-SCTS (7 octets, zeros)
+        0x00, 0x00, 0x00,
+        0x0A,                     // TP-UDL = 10 septets (ULDL % 8 != 0)
+        0x06, 0x10, 0x28,         // packed septets (first three bytes)
+        0x3B, 0x4F, 0x63, 0x77,   // ...
+        0x8B, 0x9F                // ...last two of nine
+    };
+    BitReader br(data, sizeof(data) * 8);
+    auto deliver = L3TPDeliver::parse(br);
+    ASSERT_TRUE(deliver);
+    EXPECT_EQ(deliver.value().userDataLength(), 10u);
+    // Ten septets consume exactly nine octets of user data.
+    EXPECT_EQ(deliver.value().userData().size(), 9u);
+    uint8_t out[32];
+    BitWriter bw(out, sizeof(out) * 8);
+    deliver.value().write(bw);
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ(out[i], data[i]) << "byte " << i;
+    }
+}
+
+// =====================================================================
+// SMS CP dispatch: the message type is masked to its low five bits, so a
+// CP-DATA octet with spare high bits set still dispatches to CP-DATA
+// (TS 24.011 section 8.2).
+// =====================================================================
+
+TEST(GoldenSMSTest, CPDispatch_MTIMasked) {
+    // CP-DATA whose MTI octet carries the three spare high bits:
+    // 0x21 = 0x01 | spare(3)<<5. Body: RPDU length 2 + two RP octets.
+    uint8_t data[] = {0x09, 0x21, 0x02, 0x00, 0x01};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3CPData::MTI);
+    EXPECT_EQ(messagePD(*msg), L3PD::SMS);
+    EXPECT_NE(tryGet<L3CPData>(*msg), nullptr);
+
+    // parseL3Header exposes the masked MTI directly.
+    auto hdr = parseL3Header(std::span<const uint8_t>(data, 2));
+    ASSERT_TRUE(hdr);
+    EXPECT_EQ(hdr.value().mti, 0x01);
 }
 
 // =====================================================================
@@ -929,10 +1127,11 @@ TEST(GoldenSMSTest, TPAddress_Parse) {
 TEST(GoldenSMSTest, FullCPData_RoundTrip) {
     // Build the same message as in FullSMSWrapper_MO but via construction
     std::vector<uint8_t> tpdu = {
-        0x61, 0x03, 0x07, 0x91, 0x23, 0x45, 0x67, 0x89,
-        0x00, 0x00, 0x05, 0x48, 0x65, 0x6C, 0x6C, 0x6F
+        0x05, 0x03, 0x08, 0x91, 0x23, 0x45, 0x67, 0x89,
+        0x00, 0x04, 0x05, 0x48, 0x65, 0x6C, 0x6C, 0x6F
     };
-    std::vector<uint8_t> rpdu = {0x00, 0x01};
+    // RP-DATA: header + message-ref + both (empty) SMSC LVs + user data.
+    std::vector<uint8_t> rpdu = {0x00, 0x01, 0x00, 0x00};
     rpdu.push_back(static_cast<uint8_t>(tpdu.size()));
     rpdu.insert(rpdu.end(), tpdu.begin(), tpdu.end());
 

@@ -24,10 +24,45 @@
 // Wire encodings per 3GPP TS 23.040 (TPDU field set).
 
 #include "gsml3parser/sms/l3smselements.h"
+#include <algorithm>
 #include <sstream>
 #include <iomanip>
 
 namespace gsml3parser {
+
+namespace {
+
+// TP-DU first octet (TS 23.040 section 9.1.2): bits are positions in the
+// octet value; written MSB-first by BitWriter, hence reverse call order.
+constexpr uint8_t tpduFirstOctet(unsigned mti, unsigned bit2 /*MMS/RD*/,
+                                 unsigned vpf, unsigned sri,
+                                 unsigned udhi, unsigned rp) noexcept {
+    return static_cast<uint8_t>((rp << 7) | (udhi << 6) | (sri << 5) |
+                                ((vpf & 0x3u) << 3) | ((bit2 & 0x1u) << 2) |
+                                (mti & 0x3u));
+}
+
+// Extract the flag fields of a TP-DU first octet (TS 23.040 section 9.1.2),
+// symmetric to tpduFirstOctet().
+constexpr unsigned tpduMti(unsigned octet) noexcept { return octet & 0x3u; }
+constexpr unsigned tpduBit2(unsigned octet) noexcept { return (octet >> 2) & 0x1u; }
+constexpr unsigned tpduVpf(unsigned octet) noexcept { return (octet >> 3) & 0x3u; }
+constexpr unsigned tpduSri(unsigned octet) noexcept { return (octet >> 5) & 0x1u; }
+constexpr unsigned tpduUdhi(unsigned octet) noexcept { return (octet >> 6) & 0x1u; }
+constexpr unsigned tpduRp(unsigned octet) noexcept { return (octet >> 7) & 0x1u; }
+
+// Number of user-data octets for a TP-User-Data-Length value, per the data
+// coding scheme alphabet (TS 23.040 section 9.2.3.16): septet packing for
+// the GSM 7-bit default alphabet, plain octets otherwise.
+constexpr size_t tpudOctets(uint8_t udl, uint8_t dcs) noexcept {
+    const auto alphabet = decodeSmsDcs(dcs).alphabet;
+    if (alphabet == SmsDcsAlphabet::Gsm7Bit) {
+        return (static_cast<size_t>(udl) * 7 + 7) / 8;  // ceil(udl*7/8)
+    }
+    return udl;
+}
+
+} // namespace
 
 // ── Enum string converters ─────────────────────────────────────────────
 
@@ -125,8 +160,9 @@ void TPSCTimeStamp::text(std::ostream& os) const {
 
 L3TPAddress::L3TPAddress(TypeOfNumber ton, NumberingPlan npi, std::vector<uint8_t> digits)
     : mTon(ton), mNpi(npi), mDigits(std::move(digits)) {
-    size_t digitBytes = (mDigits.size() + 1) / 2 * 2;
-    mLength = static_cast<uint8_t>(1 + digitBytes);
+    // The length field counts the number of digits, not octets (TS 23.040
+    // section 9.1.2.4).
+    mLength = static_cast<uint8_t>(mDigits.size());
 }
 
 Expected<L3TPAddress> L3TPAddress::parse(BitReader& br) {
@@ -134,9 +170,10 @@ Expected<L3TPAddress> L3TPAddress::parse(BitReader& br) {
 
     auto len = br.readField(8);
     if (!len) return Expected<L3TPAddress>::error(len.error());
+    // The length octet is the number of digits (TS 23.040 section 9.1.2.4).
     addr.mLength = static_cast<uint8_t>(len.value());
 
-    if (addr.mLength < 1) {
+    if (addr.mLength == 0) {
         return Expected<L3TPAddress>::hold(std::move(addr));
     }
 
@@ -146,34 +183,47 @@ Expected<L3TPAddress> L3TPAddress::parse(BitReader& br) {
     addr.mTon = static_cast<TypeOfNumber>((rawTonNpi >> 4) & 0x07);
     addr.mNpi = static_cast<NumberingPlan>(rawTonNpi & 0x0F);
 
-    size_t digitBytes = addr.mLength - 1;
+    // BCD digit octets: the first digit is in the low nibble of the first
+    // octet, and the high nibble of the last octet is 'F'-filled when the
+    // digit count is odd (TS 23.040 section 9.1.2.4).
+    const size_t digitBytes = (addr.mLength + 1) / 2;
     for (size_t i = 0; i < digitBytes; ++i) {
         auto d = br.readField(8);
         if (!d) return Expected<L3TPAddress>::error(d.error());
-        addr.mDigits.push_back(static_cast<uint8_t>(d.value()));
+        const uint8_t byte = static_cast<uint8_t>(d.value());
+        addr.mDigits.push_back(static_cast<uint8_t>(byte & 0x0F));
+        if (2 * i + 1 < addr.mLength) {
+            addr.mDigits.push_back(static_cast<uint8_t>((byte >> 4) & 0x0F));
+        }
     }
 
     return Expected<L3TPAddress>::hold(std::move(addr));
 }
 
 void L3TPAddress::write(BitWriter& bw) const {
+    // The length field counts the number of digits, not octets (TS 23.040
+    // section 9.1.2.4).
     bw.writeField(mLength, 8);
-    if (mLength >= 1) {
+    if (mLength > 0) {
         // TON/NPI octet: the most significant bit is a spare set to one,
         // followed by the type of number (three bits) and the numbering
         // plan identification (four bits) (TS 23.040 section 9.1.2.4).
         bw.writeField(0x80 | ((static_cast<uint8_t>(mTon) & 0x07) << 4) | (static_cast<uint8_t>(mNpi) & 0x0F), 8);
-        for (uint8_t d : mDigits) {
-            bw.writeField(d, 8);
+        // BCD digit octets: the first digit is in the low nibble of the
+        // first octet; an odd trailing digit is high-nibble 'F'-filled.
+        for (size_t i = 0; i < mDigits.size(); i += 2) {
+            const uint8_t lo = static_cast<uint8_t>(mDigits[i] & 0x0F);
+            const uint8_t hi = (i + 1 < mDigits.size())
+                ? static_cast<uint8_t>(mDigits[i + 1] & 0x0F) : 0x0F;
+            bw.writeField(static_cast<uint32_t>((hi << 4) | lo), 8);
         }
     }
 }
 
 void L3TPAddress::text(std::ostream& os) const {
     os << "TP-Addr(ton=" << mTon << ",npi=" << mNpi << ",digits=[";
-    for (size_t i = 0; i < mDigits.size(); ++i) {
-        if (i > 0) os << ",";
-        os << "0x" << std::hex << static_cast<int>(mDigits[i]);
+    for (uint8_t d : mDigits) {
+        os << static_cast<int>(d);
     }
     os << "])";
 }
@@ -196,11 +246,17 @@ Expected<L3TPDeliver> L3TPDeliver::parse(BitReader& br) {
 
     auto hdr = br.readField(8);
     if (!hdr) return Expected<L3TPDeliver>::error(hdr.error());
-    uint8_t rawHdr = static_cast<uint8_t>(hdr.value());
-    msg.mMms = (rawHdr & 0x20) != 0;
-    msg.mSri = (rawHdr & 0x04) != 0;
-    msg.mUdhi = (rawHdr & 0x02) != 0;
-    msg.mRp = (rawHdr & 0x01) != 0;
+    const uint8_t rawHdr = static_cast<uint8_t>(hdr.value());
+    if (tpduMti(rawHdr) != static_cast<unsigned>(TP_MTI)) {
+        return Expected<L3TPDeliver>::error(
+            ParseError{ParseError::Code::InvalidValue, "unexpected TP-MTI in SMS-Deliver header"});
+    }
+    msg.mRp = tpduRp(rawHdr) != 0;
+    msg.mUdhi = tpduUdhi(rawHdr) != 0;
+    msg.mSri = tpduSri(rawHdr) != 0;
+    // The VPF bit pair carries no validity period in SMS-Deliver (TS 23.040
+    // section 9.1.2); only the MMS flag at bit2 is stored.
+    msg.mMms = tpduBit2(rawHdr) != 0;
 
     // TP-OA: Originating Address (LV format: length byte + TON_NPI + digits)
     auto oaResult = L3TPAddress::parse(br);
@@ -222,13 +278,16 @@ Expected<L3TPDeliver> L3TPDeliver::parse(BitReader& br) {
     if (!sctsResult) return Expected<L3TPDeliver>::error(sctsResult.error());
     msg.mScts = std::move(sctsResult.value());
 
-    // TP-UDL
+    // TP-UDL: septets for the GSM 7-bit alphabet, octets otherwise
+    // (TS 23.040 section 9.2.3.16).
     auto udl = br.readField(8);
     if (!udl) return Expected<L3TPDeliver>::error(udl.error());
     msg.mUdl = static_cast<uint8_t>(udl.value());
 
-    // TP-UD: user data (mUdl octets)
-    for (size_t i = 0; i < msg.mUdl; ++i) {
+    // TP-UD: user data, packed septets for the GSM 7-bit alphabet.
+    const size_t udOctets = std::min(tpudOctets(msg.mUdl, static_cast<uint8_t>(msg.mDcs)),
+                                     br.remainingBits() / 8);
+    for (size_t i = 0; i < udOctets; ++i) {
         auto ud = br.readField(8);
         if (!ud) return Expected<L3TPDeliver>::error(ud.error());
         msg.mUserData.push_back(static_cast<uint8_t>(ud.value()));
@@ -238,17 +297,15 @@ Expected<L3TPDeliver> L3TPDeliver::parse(BitReader& br) {
 }
 
 void L3TPDeliver::write(BitWriter& bw) const {
-    uint8_t hdr = 0x00;
-    if (mMms) hdr |= 0x20;
-    if (mSri) hdr |= 0x04;
-    if (mUdhi) hdr |= 0x02;
-    if (mRp) hdr |= 0x01;
-    bw.writeField(hdr, 8);
+    bw.writeField(tpduFirstOctet(TP_MTI, mMms ? 1u : 0u, 0u, mSri ? 1u : 0u,
+                                 mUdhi ? 1u : 0u, mRp ? 1u : 0u), 8);
 
     mOriginatingAddress.write(bw);
     bw.writeField(static_cast<uint8_t>(mPid), 8);
     bw.writeField(static_cast<uint8_t>(mDcs), 8);
     if (mScts) mScts->write(bw);
+    // TP-UDL: septets for the GSM 7-bit alphabet, octets otherwise
+    // (TS 23.040 section 9.2.3.16).
     bw.writeField(mUdl, 8);
 
     for (uint8_t b : mUserData) {
@@ -287,12 +344,16 @@ Expected<L3TPSubmit> L3TPSubmit::parse(BitReader& br) {
 
     auto hdr = br.readField(8);
     if (!hdr) return Expected<L3TPSubmit>::error(hdr.error());
-    uint8_t rawHdr = static_cast<uint8_t>(hdr.value());
-    msg.mRd = (rawHdr & 0x20) != 0;
-    msg.mVpf = (rawHdr >> 3) & 0x03;
-    msg.mSrr = (rawHdr & 0x04) != 0;
-    msg.mUdhi = (rawHdr & 0x02) != 0;
-    msg.mRp = (rawHdr & 0x01) != 0;
+    const uint8_t rawHdr = static_cast<uint8_t>(hdr.value());
+    if (tpduMti(rawHdr) != static_cast<unsigned>(TP_MTI)) {
+        return Expected<L3TPSubmit>::error(
+            ParseError{ParseError::Code::InvalidValue, "unexpected TP-MTI in SMS-Submit header"});
+    }
+    msg.mRp = tpduRp(rawHdr) != 0;
+    msg.mUdhi = tpduUdhi(rawHdr) != 0;
+    msg.mSrr = tpduSri(rawHdr) != 0;
+    msg.mVpf = static_cast<uint8_t>(tpduVpf(rawHdr));
+    msg.mRd = tpduBit2(rawHdr) != 0;
 
     // TP-MR: Message Reference
     auto mr = br.readField(8);
@@ -336,13 +397,16 @@ Expected<L3TPSubmit> L3TPSubmit::parse(BitReader& br) {
         }
     }
 
-    // TP-UDL
+    // TP-UDL: septets for the GSM 7-bit alphabet, octets otherwise
+    // (TS 23.040 section 9.2.3.16).
     auto udl = br.readField(8);
     if (!udl) return Expected<L3TPSubmit>::error(udl.error());
-    size_t udLen = udl.value();
+    msg.mUdl = static_cast<uint8_t>(udl.value());
 
-    // TP-UD: user data
-    for (size_t i = 0; i < udLen; ++i) {
+    // TP-UD: user data, packed septets for the GSM 7-bit alphabet.
+    const size_t udOctets = std::min(tpudOctets(msg.mUdl, static_cast<uint8_t>(msg.mDcs)),
+                                     br.remainingBits() / 8);
+    for (size_t i = 0; i < udOctets; ++i) {
         auto ud = br.readField(8);
         if (!ud) return Expected<L3TPSubmit>::error(ud.error());
         msg.mUserData.push_back(static_cast<uint8_t>(ud.value()));
@@ -352,13 +416,8 @@ Expected<L3TPSubmit> L3TPSubmit::parse(BitReader& br) {
 }
 
 void L3TPSubmit::write(BitWriter& bw) const {
-    uint8_t hdr = 0x40; // base MTI=01
-    if (mRd) hdr |= 0x20;
-    hdr |= (mVpf & 0x03) << 3;
-    if (mSrr) hdr |= 0x04;
-    if (mUdhi) hdr |= 0x02;
-    if (mRp) hdr |= 0x01;
-    bw.writeField(hdr, 8);
+    bw.writeField(tpduFirstOctet(TP_MTI, mRd ? 1u : 0u, mVpf, mSrr ? 1u : 0u,
+                                 mUdhi ? 1u : 0u, mRp ? 1u : 0u), 8);
 
     bw.writeField(mMr, 8);
     mDestinationAddress.write(bw);
@@ -367,7 +426,9 @@ void L3TPSubmit::write(BitWriter& bw) const {
     for (uint8_t b : mValidityPeriod) {
         bw.writeField(b, 8);
     }
-    bw.writeField(static_cast<uint32_t>(mUserData.size()), 8);
+    // TP-UDL: septets for the GSM 7-bit alphabet, octets otherwise
+    // (TS 23.040 section 9.2.3.16).
+    bw.writeField(mUdl, 8);
 
     for (uint8_t b : mUserData) {
         bw.writeField(b, 8);
@@ -379,7 +440,7 @@ void L3TPSubmit::text(std::ostream& os) const {
     mDestinationAddress.text(os);
     os << ",pid=" << static_cast<int>(mPid) << ",dcs=" << static_cast<int>(mDcs);
     if (!mValidityPeriod.empty()) os << ",vp=" << mValidityPeriod.size();
-    os << ",udl=" << mUserData.size() << ")";
+    os << ",udl=" << static_cast<int>(mUdl) << ")";
 }
 
 // ── L3TPStatusReport (23.040 9.2.2.3) ─────────────────────────────────
@@ -400,6 +461,12 @@ Expected<L3TPStatusReport> L3TPStatusReport::parse(BitReader& br) {
 
     auto hdr = br.readField(8);
     if (!hdr) return Expected<L3TPStatusReport>::error(hdr.error());
+    // Header octet: TP-MTI='10'B (TS 23.040 section 9.1.2). This message
+    // type stores no header flag fields; the other bits are informational.
+    if (tpduMti(static_cast<uint8_t>(hdr.value())) != static_cast<unsigned>(TP_MTI)) {
+        return Expected<L3TPStatusReport>::error(
+            ParseError{ParseError::Code::InvalidValue, "unexpected TP-MTI in SMS-Status Report header"});
+    }
 
     // TP-MR
     auto mr = br.readField(8);
@@ -435,7 +502,9 @@ Expected<L3TPStatusReport> L3TPStatusReport::parse(BitReader& br) {
 }
 
 void L3TPStatusReport::write(BitWriter& bw) const {
-    bw.writeField(0x80, 8);
+    // Header octet: TP-MTI='10'B with the remaining bits zero (TS 23.040
+    // section 9.1.2).
+    bw.writeField(tpduFirstOctet(TP_MTI, 0u, 0u, 0u, 0u, 0u), 8);
     bw.writeField(mMr, 8);
     mDestinationAddress.write(bw);
     bw.writeField(static_cast<uint8_t>(mPid), 8);
@@ -467,6 +536,12 @@ Expected<L3TPCommand> L3TPCommand::parse(BitReader& br) {
 
     auto hdr = br.readField(8);
     if (!hdr) return Expected<L3TPCommand>::error(hdr.error());
+    // Header octet: TP-MTI='10'B (TS 23.040 section 9.1.2). This message
+    // type stores no header flag fields; the other bits are informational.
+    if (tpduMti(static_cast<uint8_t>(hdr.value())) != static_cast<unsigned>(TP_MTI)) {
+        return Expected<L3TPCommand>::error(
+            ParseError{ParseError::Code::InvalidValue, "unexpected TP-MTI in SMS-Command header"});
+    }
 
     // TP-MR
     auto mr = br.readField(8);
@@ -492,7 +567,9 @@ Expected<L3TPCommand> L3TPCommand::parse(BitReader& br) {
 }
 
 void L3TPCommand::write(BitWriter& bw) const {
-    bw.writeField(0xC0, 8);
+    // Header octet: TP-MTI='10'B with the remaining bits zero (TS 23.040
+    // section 9.1.2).
+    bw.writeField(tpduFirstOctet(TP_MTI, 0u, 0u, 0u, 0u, 0u), 8);
     bw.writeField(mMr, 8);
     bw.writeField(static_cast<uint8_t>(mPid), 8);
     bw.writeField(static_cast<uint8_t>(mDcs), 8);

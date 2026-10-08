@@ -59,8 +59,13 @@ Expected<L3Header> parseL3Header(std::span<const uint8_t> data) {
         // reserved field (TS 44.018 Table 9.x short messages). The high
         // three bits are reserved and are masked away.
         hdr.mti = kRRTifShortBase | (byte1 & 0x1F);
+    } else if (hdr.pd == L3PD::SMS) {
+        // SMS control part: the message type is the low five bits of the
+        // octet; the three high bits are spare and are masked away
+        // (TS 24.011 section 8.2).
+        hdr.mti = byte1 & 0x1F;
     } else {
-        // RR normal, GMM, SM, SMS, LCS and the extended/test PDs carry the
+        // RR normal, GMM, SM, LCS and the extended/test PDs carry the
         // message type as a full octet.
         hdr.mti = byte1;
     }
