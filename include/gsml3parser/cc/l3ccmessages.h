@@ -48,10 +48,7 @@ enum class CCMessageType : uint8_t {
     Hold               = 0x18,
     HoldReject         = 0x1a,
     Disconnect         = 0x25,
-    UnitData           = 0x27,
-    UnitDataAck        = 0x28,
     ReleaseComplete    = 0x2a,
-    ErrorIndication    = 0x2b,
     Release            = 0x2d,
     StartDTMF          = 0x35,
     StopDTMF           = 0x31,
@@ -76,7 +73,9 @@ class L3Setup {
     L3CallingPartyBCDNumber mCallingParty;
     bool mHaveSignal{false};
     L3Signal mSignal;
-    bool mHaveBearerCapability{false};
+    // Bearer capability is a mandatory IE of SETUP (TS 24.008 section 9.1);
+    // the default is circuit-switched voice, full rate.
+    bool mHaveBearerCapability{true};
     L3BearerCapability mBearerCapability;
     bool mHaveSupportedCodecs{false};
     L3SupportedCodecList mSupportedCodecs;
@@ -215,10 +214,10 @@ public:
         Builder& highLayerCompat(const L3HighLayerCompatibility& v) { m_highLayerCompat = v; m_haveHighLayerCompat = true; return *this; }
         /// Set user-user IE (sets m_haveUserUser flag).
         Builder& userUser(const L3UserUser& v) { m_userUser = v; m_haveUserUser = true; return *this; }
-        /// Mark the type-T CLIR suppression element present (TS 24.078):
+        /// Mark the type-T CLIR suppression element present (TS 24.008):
         /// the message emits only the identifier octet.
         Builder& clirSuppression() { m_haveCLIRSuppression = true; return *this; }
-        /// Mark the type-T CLIR invocation element present (TS 24.078):
+        /// Mark the type-T CLIR invocation element present (TS 24.008):
         /// the message emits only the identifier octet.
         Builder& clirInvocation() { m_haveCLIRInvocation = true; return *this; }
         /// Set CC capabilities (sets m_haveCCCapabilities flag).
@@ -757,10 +756,11 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// ── CC Status (TS 24.078 9.3.19) ──────────────────────────────────────
-// Value part (four octets): Cause IE in type-value form (IEI 0x11, no
-// length octet; two value octets per TS 24.078 10.5.4.11), followed by
-// the one-octet call state (TS 24.078 10.5.4.6).
+// ── CC Status (TS 24.008 9.3.19) ──────────────────────────────────────
+// Value part (four octets): the cause as a length-value element without
+// an identifier (one length octet plus the two cause value octets per TS
+// 24.008 section 10.5.1.2), followed by the one-octet call state (TS
+// 24.008 10.5.4.6).
 
 class L3CCStatus {
     unsigned mTI{7};
@@ -1051,6 +1051,8 @@ class L3Progress {
     L3ProgressIndicator mProgress;
     friend struct Builder;
 public:
+    // The body is the progress indicator in length-value form: a length
+    // octet (2) followed by the two value octets [0xE0|location][0x80|progress].
     static constexpr int MTI = 0x03;
 
     L3Progress() = default;
@@ -1073,9 +1075,9 @@ public:
     };
     static Builder builder();
 
-    [[nodiscard]] static Expected<L3Progress> parse(BitReader&);
-    void write(BitWriter&) const;
-    size_t bodyLength() const { return 0; }
+    [[nodiscard]] static Expected<L3Progress> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    size_t bodyLength() const { return 1 + L3ProgressIndicator::lengthV(); }
     void text(std::ostream& os) const;
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::CallControl; }
@@ -1118,7 +1120,7 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// CC Notify - 3GPP TS 24.078
+// CC Notify - 3GPP TS 24.008
 // Direction: MT
 // Carries: TI, cause (single value octet)
 class L3CCNotify {

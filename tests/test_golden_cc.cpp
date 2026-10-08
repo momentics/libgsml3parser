@@ -20,26 +20,27 @@
 // SOFTWARE.
 
 // Comprehensive GSM Layer 3 Golden Tests (Part 3: CC).
-// CC message encodings per 3GPP TS 24.078.
+// CC message encodings per 3GPP TS 24.008.
 // Spec: 3GPP TS 24.008 sections 9.3, 10.5.4.
 //
 // [GOLDEN DATA VERIFICATION]
 // All CC message type identifiers verified against GSM 24.008 Table 10.5.4.
-// All Cause values verified against GSM 24.008 Table 10.5.4.11 / ITU-T Q.763.
-// All Cause location values verified against GSM 24.008 10.5.4.11 octet 3 encoding.
+// All Cause values verified against GSM 24.008 / ITU-T Q.763.
+// All Cause location values verified against the cause value part encoding
+// (GSM 24.008 section 10.5.1.2) octet 3 layout.
 // All BSS Cause values verified against GSM 48.008 Table 3.2.
-// Parse test hex data cross-checked against the CC message definitions (GSM 24.078).
-// StartDTMF keypadFacility is IA5-encoded per GSM 24.078 10.5.4.17.
+// Parse test hex data cross-checked against the CC message definitions (GSM 24.008).
+// StartDTMF keypadFacility is IA5-encoded per GSM 24.008 10.5.4.17.
 //
 // [GOLDEN VERIFICATION]
 // All byte-level parse test data cross-checked against the normative specifications:
 //   - CC MTI values per the CC message type table (GSM 24.008 Table 10.5.4):
 //     Setup, CallProceeding, Alerting, Connect, CallConfirmed, EmergencySetup,
 //     ConnectAcknowledge, Disconnect, Release, ReleaseComplete, StartDTMF
-//   - Cause TLV encoding per GSM 24.078 10.5.4.11:
-//     IEI=0x08, oct3=[location(4)|spare(1)|codingStandard(2)|ext1(1)],
-//     oct4=[causeValue(7)|ext3(1)=1]
-//   - Cause LV encoding per GSM 24.078 10.5.4.11:
+//   - Cause TLV encoding per GSM 24.008 section 10.5.1.2:
+//     IEI=0x08, oct3=[ext(1)=0|codingStandard(2)=11|spare(1)=0|location(4)]
+//     = 0x60|location, oct4=[extensionIndicator(1)=1|causeValue(7)] = 0x80|cause
+//   - Cause LV encoding per GSM 24.008 section 10.5.1.2:
 //     No IEI, length(1) + oct3 + oct4
 //   - CC header byte layout verified: PD=3('0011'B) in the low nibble of octet 0,
 //     TI(3 bits)|TIF(1 bit) in the high nibble; MT(6 bits) in the low bits of octet 1 - matches GSM 24.008 Table 11.2
@@ -49,7 +50,7 @@
 //     0=User, 1=Private_Serving_Local, 2=Public_Serving_Local, 3=Transit, 7=International, etc.
 //   - BSS Cause values verified against GSM 48.008 Table 3.2:
 //     1=Radio_Interface_Failure, 2=Uplink_Quality, 32=Equipment_Failure, 64=Ciphering_Algorithm_Not_Supported, etc.
-//   - StartDTMF keypadFacility IEI=0x2C per GSM 24.078
+//   - StartDTMF keypadFacility IEI=0x2C per GSM 24.008
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -112,7 +113,7 @@ TEST(GoldenCC, MessageTypeValues) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Call Proceeding (GSM 24.008 9.3.3)
-// Header fields per GSM 24.078:
+// Header fields per GSM 24.008:
 //   PD = '0011'B (CC), message type = '000010'B (MTI=0x02)
 // Spec-verified: minimal CallProceeding, no optional IEs present
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.3: CallProceeding body has no mandatory or optional IEs.
@@ -130,7 +131,7 @@ TEST(GoldenCC, CallProceeding_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Connect (GSM 24.008 9.3.5)
-// Header fields per GSM 24.078:
+// Header fields per GSM 24.008:
 //   message type = '000111'B (MTI=0x07)
 // Spec-verified: minimal Connect, no optional IEs
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.5: Connect body has no mandatory or optional IEs.
@@ -149,7 +150,7 @@ TEST(GoldenCC, Connect_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Connect Acknowledge (GSM 24.008 9.3.6)
-// Header fields per GSM 24.078:
+// Header fields per GSM 24.008:
 //   message type = '001111'B (MTI=0x0F)
 // Spec-verified: minimal ConnectAcknowledge, no body octets
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.6: ConnectAcknowledge body has no mandatory or optional IEs.
@@ -167,7 +168,7 @@ TEST(GoldenCC, ConnectAcknowledge_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Call Confirmed (GSM 24.008 9.3.2)
-// Header fields per GSM 24.078:
+// Header fields per GSM 24.008:
 //   message type = '001000'B (MTI=0x08)
 // Spec-verified: minimal CallConfirmed, no optional IEs
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.2: CallConfirmed body has no mandatory or optional IEs.
@@ -184,23 +185,23 @@ TEST(GoldenCC, CallConfirmed_Parse) {
 }
 
 // =====================================================================
-// CC PARSE FROM HEX: CC Status (TS 24.078 9.3.19)
+// CC PARSE FROM HEX: CC Status (TS 24.008 9.3.19)
 // Value part is exactly four octets: the cause as a length-value element
 // without an identifier (first octet = value length 2, then two cause
-// value octets per TS 24.078 10.5.4.11), followed by the one-octet call
-// state (TS 24.078 10.5.4.6).
-//   Cause value octet 1: location(4)|spare(1)|codingStandard(2)|ext1(1)
-//   Cause value octet 2: ext3(1)|causeValue(7), ext3=1 for a non-extending cause
+// value octets per TS 24.008 section 10.5.1.2), followed by the one-octet call
+// state (TS 24.008 10.5.4.6).
+//   Cause value octet 1: ext(1)=0|codingStandard(2)=11|spare(1)=0|location(4)
+//   Cause value octet 2: extensionIndicator(1)=1|causeValue(7)
 // =====================================================================
 
 TEST(GoldenCC, CCStatus_Parse) {
     // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
-    // Byte 1: MT=0x3D(CCStatus) in the six low bits, NSD=0 (TS 24.078)
-    // Byte 2: cause value length = 2 (length-value form without an identifier; TS 24.078 10.5.4.11)
-    // Byte 3: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x16
-    // Byte 4: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21 (TS 24.078 10.5.4.11)
-    // Byte 5: CallState spare(2)=11|value(6)=0 = 0xC0 (TS 24.078 10.5.4.6)
-    uint8_t data[] = {0xE3, 0x3D, 0x02, 0x16, 0x21, 0xC0};
+    // Byte 1: MT=0x3D(CCStatus) in the six low bits, NSD=0 (TS 24.008)
+    // Byte 2: cause value length = 2 (length-value form without an identifier; TS 24.008 section 10.5.1.2)
+    // Byte 3: ext(1)=0|codingStd(2)=11(ITU-T|3GPP)|spare(1)=0|location(4)=1(Private_Serving_Local) = 0x61
+    // Byte 4: extensionIndicator(1)=1|causeValue(7)=16(Normal_Call_Clearing) = 0x90 (TS 24.008 section 10.5.1.2)
+    // Byte 5: CallState spare(2)=11|value(6)=0 = 0xC0 (TS 24.008 10.5.4.6)
+    uint8_t data[] = {0xE3, 0x3D, 0x02, 0x61, 0x90, 0xC0};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CCStatus::MTI);
@@ -227,7 +228,7 @@ TEST(GoldenCC, CCStatus_WireShape) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Emergency Setup (GSM 24.008 9.3.8)
-// Header fields per GSM 24.078:
+// Header fields per GSM 24.008:
 //   message type = '001110'B (MTI=0x0E)
 // Spec-verified: minimal EmergencySetup, no optional IEs
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.8: EmergencySetup body has no mandatory or optional IEs.
@@ -262,23 +263,30 @@ TEST(GoldenCC, Hold_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Progress (GSM 24.008 9.3.17)
-// Spec-verified: minimal Progress message, no optional IEs
-// [GSM SPEC VERIFIED] GSM 24.008 9.3.17: Progress body has no mandatory or optional IEs.
-//   The message consists only of the 2-octet L3 header (discriminator + MTI).
+// [GSM SPEC VERIFIED] GSM 24.008 9.3.17: the Progress body is the progress
+//   indicator in length-value form: a length octet (2) followed by the two
+//   value octets [0xE0|location][0x80|progress].
 // =====================================================================
 
 TEST(GoldenCC, Progress_Parse) {
     // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
     // Byte 1: MT=0x03(Progress) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
-    uint8_t data[] = {0xE3, 0x03};
+    // Byte 2: progress indicator value length = 2 (LV form, no identifier)
+    // Byte 3: 0xE0|location(4)=1(PrivateServingLocal) = 0xE1
+    // Byte 4: extensionIndicator(1)=1|progress(7)=8(InBandAvailable) = 0x88
+    uint8_t data[] = {0xE3, 0x03, 0x02, 0xE1, 0x88};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3Progress::MTI);
+    const auto* progress = tryGet<L3Progress>(*msg);
+    ASSERT_NE(progress, nullptr);
+    EXPECT_EQ(progress->progress().location(), L3ProgressIndicator::PrivateServingLocal);
+    EXPECT_EQ(progress->progress().progress(), L3ProgressIndicator::InBandAvailable);
 }
 
 // =====================================================================
 // CC PARSE FROM HEX: Start DTMF (GSM 24.008 9.3.24 / GSM 04.08 9.3.24)
-// Header fields per GSM 24.078:
+// Header fields per GSM 24.008:
 //   message type = '110101'B (0x35 = StartDTMF, GSM 24.008 Table 10.5.4)
 //   keypadFacility elementIdentifier = '2C'O
 // Spec-verified: PD=3(CC), TI=7, TIF=0(ORIG), MT=0x35 in the six low bits of byte 1 (NSD=0)
@@ -321,23 +329,23 @@ TEST(GoldenCC, StopDTMF_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Release Complete with Cause (GSM 24.008 9.3.19)
-// Header fields per GSM 24.078:
+// Header fields per GSM 24.008:
 //   message type = '101010'B (MTI=0x2A), cause optional (omitted by default)
-// Cause in ReleaseComplete: LV format, no IEI (GSM 24.078 10.5.4.11).
-// Spec-verified: ReleaseComplete with Cause LV per GSM 24.008 10.5.4.11
+// Cause in ReleaseComplete: LV format, no IEI (GSM 24.008 section 10.5.1.2).
+// Spec-verified: ReleaseComplete with Cause LV per GSM 24.008 section 10.5.1.2
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.19: ReleaseComplete body = [Cause].
 //   Cause is optional. When present, uses LV format (no IEI): length(1) + value(2).
-//   Value octet 1: location(4)|spare(1)|codingStandard(2)|ext1(1).
-//   Value octet 2: ext3(1)|causeValue(7). codingStandard=11 for ITU-T/3GPP.
+//   Value octet 1: ext(1)=0|codingStandard(2)=11|spare(1)=0|location(4).
+//   Value octet 2: extensionIndicator(1)=1|causeValue(7). codingStandard=11 for ITU-T/3GPP.
 // =====================================================================
 
 TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
     // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
     // Byte 1: MT=0x2A(ReleaseComplete) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
     // Byte 2: Length = 2 (2 octets Cause value part, LV format, no IEI)
-    // Byte 3: location(4)=3(Transit)|spare(1)=0|codingStd(2)=11(ITU-T|3GPP)|ext(1)=0 = 0x36
-    // Byte 4: ext(1)=1|causeValue(7)=16(Normal_Call_Clearing) = 0b1_0010000 = 0x21 [GSM 24.008 10.5.4.11]
-    uint8_t data[] = {0xE3, 0x2A, 0x02, 0x36, 0x21};
+    // Byte 3: ext(1)=0|codingStd(2)=11(ITU-T|3GPP)|spare(1)=0|location(4)=3(Transit) = 0x63
+    // Byte 4: extensionIndicator(1)=1|causeValue(7)=16(Normal_Call_Clearing) = 0x90 [GSM 24.008 section 10.5.1.2]
+    uint8_t data[] = {0xE3, 0x2A, 0x02, 0x63, 0x90};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ReleaseComplete::MTI);
@@ -345,13 +353,13 @@ TEST(GoldenCC, ReleaseComplete_WithCause_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Disconnect with Cause (GSM 24.008 9.3.7)
-// Header fields per GSM 24.078:
+// Header fields per GSM 24.008:
 //   message type = '100101'B (MTI=0x25), body = Cause LV
 // Spec-verified: Disconnect body = cause length-value element without an
 //   identifier per GSM 24.008 9.3.7.
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.7: the Disconnect value part carries
 //   the cause as a length-value element: first octet = value length (2),
-//   followed by the two cause value octets per GSM 24.008 10.5.4.11.
+//   followed by the two cause value octets per GSM 24.008 section 10.5.1.2.
 // =====================================================================
 
 TEST(GoldenCC, Disconnect_Parse) {
@@ -359,11 +367,11 @@ TEST(GoldenCC, Disconnect_Parse) {
     // Byte 1: MT=0x25(Disconnect) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
     // Cause length-value element (no identifier):
     // Byte 2: Length = 2 (2 octets cause value part)
-    // Byte 3: location(4)=1(Private_Serving_Local)|spare(1)=0|codingStd(2)=11|ext(1)=0 = 0x16
-    // Byte 4: causeValue(7)=16(Normal_Call_Clearing)|ext(1)=1 = 0x21 [ITU-T Q.763]
+    // Byte 3: ext(1)=0|codingStd(2)=11|spare(1)=0|location(4)=1(Private_Serving_Local) = 0x61
+    // Byte 4: extensionIndicator(1)=1|causeValue(7)=16(Normal_Call_Clearing) = 0x90 [ITU-T Q.763]
     uint8_t data[] = {
         0xE3, 0x25,
-        0x02, 0x16, 0x21
+        0x02, 0x61, 0x90
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -377,7 +385,7 @@ TEST(GoldenCC, Disconnect_Parse) {
 
 // =====================================================================
 // CC PARSE FROM HEX: Release (GSM 24.008 9.3.19)
-// Header fields per GSM 24.078:
+// Header fields per GSM 24.008:
 //   message type = '101101'B (MTI=0x2D), TIF = REPL (TS 24.007 Table 11.3)
 // Spec-verified: Release with TIF=1(REPL), no optional IEs
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.19: Release body = [Cause].
@@ -411,7 +419,8 @@ TEST(GoldenCC, Setup_NoDigits_RoundTrip) {
 
 TEST(GoldenCC, Setup_WithDigits_RoundTrip) {
     // [GOLDEN VERIFIED] Setup with Called-Party-Number BCD "1234567890"
-    // GSM 24.008 10.5.4.7: nibble-swapped BCD, typeOfNumber=Unknown, numberingPlan=Unknown
+    // GSM 24.008 10.5.4.7: nibble-swapped BCD, typeOfNumber=National (no
+    // leading '+'), numberingPlan=E.164 -> TON/NPI octet 0xA1
     L3CalledPartyBCDNumber called("1234567890");
     ParsedMessage msg(CCM(L3Setup::builder().calledParty(called).build()));
     auto parsed = roundtrip(msg);
@@ -420,6 +429,110 @@ TEST(GoldenCC, Setup_WithDigits_RoundTrip) {
     ASSERT_TRUE(s);
     EXPECT_TRUE(s->haveCalledParty());
     EXPECT_STREQ(s->digits(), "1234567890");
+}
+
+// [GOLDEN] Setup wire layout (TS 24.008 9.3.10 / 10.5): the mandatory bearer
+// capability IE comes first, then the calling party BCD number (0x5C)
+// precedes the called party BCD number (0x5E). The default voice bearer
+// capability value is 0x0F + one octet 3a of 0x80; a national number without
+// a leading '+' encodes TON/NPI as 0xA1.
+TEST(GoldenCC, Setup_WireLayout) {
+    auto setup = L3Setup::builder().ti(7)
+        .calledParty(L3CalledPartyBCDNumber{"1234567890"})
+        .callingParty(L3CallingPartyBCDNumber{"0987654321"})
+        .build();
+    ParsedMessage pm{CCM{std::move(setup)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    const auto& b = *bytes;
+    // Header: TI=7 | TIF=0 | PD=CC, MT=Setup.
+    EXPECT_EQ(b[0], 0xE3);
+    EXPECT_EQ(b[1], 0x05);
+    // Bearer capability TLV: default voice 04 02 0F 80.
+    EXPECT_EQ(b[2], 0x04);
+    EXPECT_EQ(b[3], 0x02);
+    EXPECT_EQ(b[4], 0x0F);
+    EXPECT_EQ(b[5], 0x80);
+    // Calling party BCD number (0x5C) precedes the called party (0x5E).
+    EXPECT_EQ(b[6], 0x5C);
+    EXPECT_EQ(b[7], 0x06);              // value length: TON/NPI octet + 5 BCD octets
+    EXPECT_EQ(b[8], 0xA1);              // TON=National(2), NPI=E.164(1)
+    // 0987654321 in nibble-swapped BCD (first digit in the low nibble).
+    EXPECT_EQ(b[9], 0x90);
+    EXPECT_EQ(b[10], 0x78);
+    EXPECT_EQ(b[11], 0x56);
+    EXPECT_EQ(b[12], 0x34);
+    EXPECT_EQ(b[13], 0x12);
+    EXPECT_EQ(b[14], 0x5E);
+    EXPECT_EQ(b[15], 0x06);
+    EXPECT_EQ(b[16], 0xA1);             // TON=National(2), NPI=E.164(1)
+    // 1234567890 in nibble-swapped BCD (first digit in the low nibble).
+    EXPECT_EQ(b[17], 0x21);
+    EXPECT_EQ(b[18], 0x43);
+    EXPECT_EQ(b[19], 0x65);
+    EXPECT_EQ(b[20], 0x87);
+    EXPECT_EQ(b[21], 0x09);
+    ASSERT_EQ(b.size(), 22u);
+
+    auto parsed = roundtrip(pm);
+    ASSERT_TRUE(parsed);
+    const auto* s = tryGet<L3Setup>(*parsed);
+    ASSERT_NE(s, nullptr);
+    EXPECT_STREQ(s->digits(), "1234567890");
+    EXPECT_EQ(s->typeOfNumber(), TypeOfNumber::National);
+    EXPECT_EQ(s->numberingPlan(), NumberingPlan::E164);
+    EXPECT_TRUE(s->haveCallingParty());
+    EXPECT_TRUE(s->haveBearerCapability());
+}
+
+// [GOLDEN] SETUP carrying a progress indicator (TV form: IEI 0x1E plus one
+// value octet) parses without residue, keeping the following IEs in sync
+// (TS 24.008 section 9.1).
+TEST(GoldenCC, Setup_WithProgress_Parse) {
+    // Byte 0: TI=7 | TIF=0 | PD=CC -> 0xE3 (TS 24.008 L3 header)
+    // Byte 1: MT=0x05(Setup), NSD=0
+    // Bytes 2-5: bearer capability TLV, default voice 04 02 0F 80
+    // Byte 6: progress indicator IEI = 0x1E (TV form, one value octet)
+    // Byte 7: value octet location(4)=1(PrivateServingLocal)|progress(4)=8(InBandAvailable) = 0x18
+    // Bytes 8-15: called party BCD number TLV 5E 06 A1 21 43 65 87 09
+    uint8_t data[] = {
+        0xE3, 0x05,
+        0x04, 0x02, 0x0F, 0x80,
+        0x1E, 0x18,
+        0x5E, 0x06, 0xA1, 0x21, 0x43, 0x65, 0x87, 0x09
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3Setup::MTI);
+    const auto* s = tryGet<L3Setup>(*msg);
+    ASSERT_NE(s, nullptr);
+    EXPECT_TRUE(s->haveBearerCapability());
+    EXPECT_TRUE(s->haveCalledParty());
+    EXPECT_STREQ(s->digits(), "1234567890");
+}
+
+// =====================================================================
+// CC PARSE FROM HEX: Call Confirmed with Cause (GSM 24.008 9.3.2)
+// [GOLDEN] The cause is carried as a TLV element: IEI 0x08, length 2, then
+// the two cause value octets per GSM 24.008 section 10.5.1.2.
+// =====================================================================
+
+TEST(GoldenCC, CallConfirmed_WithCause_Parse) {
+    // Byte 0: TI=7 in bits 7:5, TIF=0, PD=CC in the low nibble -> 0xE3 (TS 24.008 L3 header)
+    // Byte 1: MT=0x08(CallConfirmed) in the six low bits, NSD=0 (GSM 24.008 Table 10.5.4)
+    // Byte 2: cause IEI = 0x08 (TS 24.008 section 10.5.1.2)
+    // Byte 3: cause value length = 2
+    // Byte 4: ext(1)=0|codingStd(2)=11(ITU-T|3GPP)|spare(1)=0|location(4)=1(Private_Serving_Local) = 0x61
+    // Byte 5: extensionIndicator(1)=1|causeValue(7)=16(Normal_Call_Clearing) = 0x90
+    uint8_t data[] = {0xE3, 0x08, 0x08, 0x02, 0x61, 0x90};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3CallConfirmed::MTI);
+    const auto* cc = tryGet<L3CallConfirmed>(*msg);
+    ASSERT_NE(cc, nullptr);
+    EXPECT_TRUE(cc->hasCause());
+    EXPECT_EQ(cc->cause().cause(), CCCause::Normal_Call_Clearing);
+    EXPECT_EQ(cc->cause().location(), CCCauseLocation::Private_Serving_Local);
 }
 
 TEST(GoldenCC, EmergencySetup_RoundTrip) {
@@ -698,12 +811,20 @@ TEST(GoldenCC, CauseElement_RoundTrip) {
 
 // =====================================================================
 // CC IE: L3BearerCapability (GSM 04.08 10.5.4.5)
-// Bearer Capability IE encoding per GSM 24.078 10.5.4.5.
+// Bearer capability value part per GSM 24.008 10.5.4.5: octet 3 followed
+// by all remaining octets 3a. The default is circuit-switched voice, full
+// rate: octet 3 = 0x0F and one octet 3a = 0x80.
 // =====================================================================
 
 TEST(GoldenCC, BearerCapability_Default) {
     L3BearerCapability bc;
-    EXPECT_EQ(bc.lengthV(), 1u);
+    EXPECT_EQ(bc.lengthV(), 2u);
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    bc.write(writer);
+    EXPECT_EQ(writer.position(), 16u);
+    EXPECT_EQ(buf[0], 0x0F); // octet 3: circuit-switched voice, full rate
+    EXPECT_EQ(buf[1], 0x80); // octet 3a: default speech version (full-rate)
 }
 
 // =====================================================================
@@ -922,7 +1043,7 @@ TEST(GoldenCC, BSSCauseValues) {
     EXPECT_EQ(static_cast<uint8_t>(BSSCause::Ciphering_Algorithm_Not_Supported), 0x40);
 }
 
-// Golden: CC Setup header layout (TS 24.078): octet 0 = (TI << 5) | PD(CC=3)
+// Golden: CC Setup header layout (TS 24.008): octet 0 = (TI << 5) | PD(CC=3)
 // for TI=2; the message type sits in the six low bits of octet 1 with the
 // network signalling indicator zero.
 TEST(GoldenCC, HeaderLayout_TIAndMt) {
@@ -936,7 +1057,7 @@ TEST(GoldenCC, HeaderLayout_TIAndMt) {
 }
 
 // =====================================================================
-// Golden: Release carrying the SS version indicator (TS 24.078)
+// Golden: Release carrying the SS version indicator (TS 24.008)
 // The value part ends with the SS version TLV [0x7F][len=1][version];
 // version 1 is the standard supplementary service version indicator.
 // =====================================================================
@@ -963,13 +1084,14 @@ TEST(GoldenCC, Release_SSSVersion_TailShape) {
 }
 
 // =====================================================================
-// Golden: CC Setup identifier set (TS 24.078)
+// Golden: CC Setup identifier set (TS 24.008)
 // With all modelled optional IEs present, the writer emits the identifiers
-// in this order: sub-address 0x5D, low layer compatibility 0x7C, high
-// layer compatibility 0x7D, user-user 0x7E, CLIR suppression 0xA1, CLIR
-// invocation 0xA2, CC capabilities 0x15, stream identifier 0x2D (TLV).
-// The CLIR elements are type T (identifier octet only); bodyLength() must
-// equal the actual wire size of the body.
+// in this order: bearer capability 0x04 (mandatory, default voice),
+// sub-address 0x5D, low layer compatibility 0x7C, high layer compatibility
+// 0x7D, user-user 0x7E, CLIR suppression 0xA1, CLIR invocation 0xA2, CC
+// capabilities 0x15, stream identifier 0x2D (TLV). The CLIR elements are
+// type T (identifier octet only); bodyLength() must equal the actual wire
+// size of the body.
 // =====================================================================
 
 TEST(GoldenCC, Setup_IeiSetAndBodyLength) {
@@ -1023,7 +1145,9 @@ TEST(GoldenCC, Setup_IeiSetAndBodyLength) {
     // Walk the body in write order: IEI octet + (length octet + value part
     // for TLV elements, nothing for the type-T CLIR markers).
     struct Ie { uint8_t iei; size_t afterIei; };
-    const Ie ies[8] = {
+    L3BearerCapability bc;
+    const Ie ies[9] = {
+        {0x04, 1 + bc.lengthV()}, // bearer capability: mandatory, default voice
         {0x5D, 1 + sa.lengthV()},
         {0x7C, 1 + llc.lengthV()},
         {0x7D, 1 + hlc.lengthV()},
@@ -1039,7 +1163,7 @@ TEST(GoldenCC, Setup_IeiSetAndBodyLength) {
         EXPECT_EQ(b[idx], ie.iei);
         idx += 1 + ie.afterIei;
     }
-    EXPECT_EQ(idx, b.size()); // the body is exactly these eight IEs
+    EXPECT_EQ(idx, b.size()); // the body is exactly these nine IEs
     EXPECT_EQ(bodyLen, b.size() - 2u);
 
     auto parsed = roundtrip(pm);

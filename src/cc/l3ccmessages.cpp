@@ -44,20 +44,6 @@ inline Expected<size_t> readLength(BitReader& br) {
     return Expected<size_t>::hold(r.value());
 }
 
-// Read structured length (IEI >= 0x80): first octet low-7-bits = num length octets.
-inline Expected<size_t> readStructuredLength(BitReader& br) {
-    auto r = br.readField(7);
-    if (!r) return Expected<size_t>::error(r.error());
-    size_t numLenOctets = r.value();
-    size_t len = 0;
-    for (size_t i = 0; i < numLenOctets; ++i) {
-        r = br.readField(8);
-        if (!r) return Expected<size_t>::error(r.error());
-        len = (len << 8) | r.value();
-    }
-    return Expected<size_t>::hold(len);
-}
-
 // Skip 'len' bytes from BitReader.
 inline Expected<void> skipBytes(BitReader& br, size_t len) {
     size_t bits = len * 8;
@@ -71,30 +57,20 @@ inline Expected<void> skipBytes(BitReader& br, size_t len) {
     return Expected<void>::hold();
 }
 
-// Skip a TLV element: read IEI, determine length format, skip value.
-inline Expected<void> skipTLV(BitReader& br) {
-    auto ieiRes = readIEI(br);
-    if (!ieiRes) return Expected<void>::error(ieiRes.error());
-    uint8_t iei = ieiRes.value();
-
-    size_t len;
-    if (iei >= 0x80) {
-        auto l = readStructuredLength(br);
-        if (!l) return Expected<void>::error(l.error());
-        len = l.value();
-    } else {
-        auto l = readLength(br);
-        if (!l) return Expected<void>::error(l.error());
-        len = l.value();
-    }
-    return skipBytes(br, len);
-}
-
 // Skip a TV element: IEI already consumed, read 1 value octet.
 inline Expected<void> skipTV(BitReader& br) {
     auto r = br.readField(8);
     if (!r) return Expected<void>::error(r.error());
     return Expected<void>::hold();
+}
+
+// Skip the length-value part of an element whose IEI is already consumed:
+// one length octet followed by that many value octets (TS 24.008 section
+// 9.1).
+inline Expected<void> skipValue(BitReader& br) {
+    auto lenRes = readLength(br);
+    if (!lenRes) return Expected<void>::error(lenRes.error());
+    return skipBytes(br, lenRes.value());
 }
 
 // Parse optional TLV with given IEI. Returns true if found and parsed.
@@ -150,15 +126,19 @@ inline Expected<void> ccCommonParse(BitReader& br,
     while (br.hasMore()) {
         uint8_t peek = static_cast<uint8_t>(br.peekField(8));
         if (peek == 0x1c) {
+            // Facility: LV element, the length octet precedes the value
+            // (TS 24.008 section 10.5.x).
             auto ieiRes = readIEI(br);
             if (!ieiRes) return Expected<void>::error(ieiRes.error());
-            auto f = L3SupServFacilityIE::parse(br, 1);
+            auto lenRes = readLength(br);
+            if (!lenRes) return Expected<void>::error(lenRes.error());
+            auto f = L3SupServFacilityIE::parse(br, lenRes.value());
             if (!f) return Expected<void>::error(f.error());
             facility = std::move(f.value());
             haveFacility = true;
         } else if (peek == 0x7f) {
             // SS version indicator: TLV with a one-octet value part
-            // (TS 24.078 section 10.5.x).
+            // (TS 24.008 section 10.5.x).
             auto ieiRes = readIEI(br);
             if (!ieiRes) return Expected<void>::error(ieiRes.error());
             auto lenRes = readLength(br);
@@ -194,7 +174,7 @@ inline void ccCommonWrite(BitWriter& bw,
     }
     if (haveSSVersion) {
         // SS version indicator: TLV with a one-octet value part
-        // (TS 24.078 section 10.5.x).
+        // (TS 24.008 section 10.5.x).
         bw.writeField(0x7f, 8);
         bw.writeField(static_cast<uint32_t>(L3SupServVersionIndicator::lengthV()), 8);
         ssVersion.write(bw);
@@ -243,9 +223,6 @@ std::ostream& operator<<(std::ostream& os, CCMessageType mti) {
         case CCMessageType::CCStatus:            os << "CCStatus"; break;
         case CCMessageType::Facility:            os << "Facility"; break;
         case CCMessageType::Notify:              os << "Notify"; break;
-        case CCMessageType::UnitData:            os << "UnitData"; break;
-        case CCMessageType::UnitDataAck:         os << "UnitDataAck"; break;
-        case CCMessageType::ErrorIndication:     os << "ErrorIndication"; break;
         default:                                  os << "Unknown_CC(" << static_cast<uint8_t>(mti) << ")"; break;
     }
     return os;
@@ -331,10 +308,10 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
         if (!ieiRes) return Expected<L3Setup>::error(ieiRes.error());
         uint8_t iei = ieiRes.value();
 
-        // Structured elements: skip unrecognized 0xd0-0xdf
+        // Structured elements with the 0xDx tag are single octets: the
+        // value is carried in the low nibble of the identifier and no
+        // further octets follow (TS 24.008 section 9.1).
         if ((iei & 0xf0) == 0xd0) {
-            auto skipRes = detail::skipTLV(br);
-            if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
 
@@ -342,8 +319,7 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
         case 0x04: { // BearerCapability TLV
             auto lenRes = detail::readLength(br);
             if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
-            // BearerCapability parse doesn't take length, reads self-delimiting
-            auto p = L3BearerCapability::parse(br);
+            auto p = L3BearerCapability::parse(br, lenRes.value());
             if (!p) return Expected<L3Setup>::error(p.error());
             msg.mBearerCapability = std::move(p.value());
             msg.mHaveBearerCapability = true;
@@ -358,8 +334,8 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             msg.mHaveFacility = true;
             continue;
         }
-        case 0x1e: { // Skip TLV
-            auto skipRes = detail::skipTLV(br);
+        case 0x1e: { // Progress indicator: TV, one value octet (TS 24.008)
+            auto skipRes = detail::skipTV(br);
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
@@ -397,12 +373,12 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             msg.mHaveCalledParty = true;
             continue;
         }
-        case 0x74: case 0x75: { // Redirecting party number/sub-address - skip TLV
-            auto skipRes = detail::skipTLV(br);
+        case 0x74: case 0x75: { // Redirecting party number/sub-address - skip the length-value part
+            auto skipRes = detail::skipValue(br);
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
-        case 0x7c: { // LowLayerCompatibility TLV (eight-bit length octet, TS 24.078)
+        case 0x7c: { // LowLayerCompatibility TLV (eight-bit length octet, TS 24.008)
             auto lenRes = detail::readLength(br);
             if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
             auto p = L3LowLayerCompatibility::parse(br, lenRes.value());
@@ -411,7 +387,7 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             msg.mHaveLowLayerCompat = true;
             continue;
         }
-        case 0x7d: { // HighLayerCompatibility TLV (eight-bit length octet, TS 24.078)
+        case 0x7d: { // HighLayerCompatibility TLV (eight-bit length octet, TS 24.008)
             auto lenRes = detail::readLength(br);
             if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
             auto p = L3HighLayerCompatibility::parse(br, lenRes.value());
@@ -429,7 +405,7 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             msg.mHaveUserUser = true;
             continue;
         }
-        case 0x7f: { // SS version indicator TLV (one-octet value part, TS 24.078)
+        case 0x7f: { // SS version indicator TLV (one-octet value part, TS 24.008)
             auto lenRes = detail::readLength(br);
             if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
             size_t innerLen = lenRes.value();
@@ -446,14 +422,14 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             }
             continue;
         }
-        case 0xa1: { // CLIR suppression: type T element, identifier octet only (TS 24.078)
+        case 0xa1: { // CLIR suppression: type T element, identifier octet only (TS 24.008)
             auto p = L3CLIRSuppression::parse(br);
             if (!p) return Expected<L3Setup>::error(p.error());
             msg.mCLIRSuppression = std::move(p.value());
             msg.mHaveCLIRSuppression = true;
             continue;
         }
-        case 0xa2: { // CLIR invocation: type T element, identifier octet only (TS 24.078)
+        case 0xa2: { // CLIR invocation: type T element, identifier octet only (TS 24.008)
             auto p = L3CLIRInvocation::parse(br);
             if (!p) return Expected<L3Setup>::error(p.error());
             msg.mCLIRInvocation = std::move(p.value());
@@ -469,7 +445,7 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             msg.mHaveCCCapabilities = true;
             continue;
         }
-        case 0x2d: { // StreamIdentifier TLV (one-octet value part, TS 24.078)
+        case 0x2d: { // StreamIdentifier TLV (one-octet value part, TS 24.008)
             auto lenRes = detail::readLength(br);
             if (!lenRes) return Expected<L3Setup>::error(lenRes.error());
             size_t innerLen = lenRes.value();
@@ -486,8 +462,8 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             continue;
         }
         case 0x1d: case 0x1b: case 0x2e:
-        case 0x19: case 0x2f: case 0x3a: case 0x41: { // Skip TLV
-            auto skipRes = detail::skipTLV(br);
+        case 0x19: case 0x2f: case 0x3a: case 0x41: { // Skip the length-value part
+            auto skipRes = detail::skipValue(br);
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
@@ -500,30 +476,28 @@ Expected<L3Setup> L3Setup::parse(BitReader& br) {
             msg.mHaveSupportedCodecs = true;
             continue;
         }
-        case 0xa3: { // Skip TV
-            auto skipRes = detail::skipTV(br);
+        case 0xa3: { // Redial: type T element, the identifier octet only (TS 24.008)
+            continue;
+        }
+        case 0x51: case 0x86: case 0x87: case 0x9a: case 0x9b: { // Identifiers not modelled as typed fields in this message: skip the length-value part (TS 24.008)
+            auto skipRes = detail::skipValue(br);
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
-        case 0x51: case 0x86: case 0x87: case 0x9a: case 0x9b: { // Identifiers not modelled as typed fields in this message: skip the length-value part (TS 24.078)
-            auto skipRes = detail::skipTLV(br);
-            if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
-            continue;
-        }
-        case 0x8e: case 0xc1: case 0xc2: { // Identifiers not modelled in TV form in this message: skip the value octet (TS 24.078)
+        case 0x8e: case 0xc1: case 0xc2: { // Identifiers not modelled in TV form in this message: skip the value octet (TS 24.008)
             auto skipRes = detail::skipTV(br);
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
         case 0x80: case 0x81: case 0x82: case 0x83: case 0x84: case 0x85:
         case 0x89: case 0x8a: case 0x8b: case 0x8c: case 0x8d:
-        case 0x8f: { // Other structured elements - skip TLV
-            auto skipRes = detail::skipTLV(br);
+        case 0x8f: { // Other structured elements - skip the length-value part
+            auto skipRes = detail::skipValue(br);
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
-        default: { // Unknown IE - skip TLV
-            auto skipRes = detail::skipTLV(br);
+        default: { // Unknown IE - skip the length-value part
+            auto skipRes = detail::skipValue(br);
             if (!skipRes) return Expected<L3Setup>::error(skipRes.error());
             continue;
         }
@@ -539,15 +513,17 @@ void L3Setup::write(BitWriter& bw) const {
         bw.writeField(static_cast<uint32_t>(mBearerCapability.lengthV()), 8);
         mBearerCapability.write(bw);
     }
-    if (mHaveCalledParty) {
-        bw.writeField(0x5e, 8);
-        bw.writeField(static_cast<uint32_t>(mCalledParty.lengthV()), 8);
-        mCalledParty.write(bw);
-    }
+    // The calling party BCD number precedes the called party BCD number on
+    // the wire (TS 24.008 section 9.1).
     if (mHaveCallingParty) {
         bw.writeField(0x5c, 8);
         bw.writeField(static_cast<uint32_t>(mCallingParty.lengthV()), 8);
         mCallingParty.write(bw);
+    }
+    if (mHaveCalledParty) {
+        bw.writeField(0x5e, 8);
+        bw.writeField(static_cast<uint32_t>(mCalledParty.lengthV()), 8);
+        mCalledParty.write(bw);
     }
     if (mHaveSupportedCodecs && (mSupportedCodecs.isGsmPresent() || mSupportedCodecs.isUmtsPresent())) {
         bw.writeField(0x40, 8);
@@ -565,14 +541,14 @@ void L3Setup::write(BitWriter& bw) const {
     }
     if (mHaveLowLayerCompat) {
         // Low layer compatibility: unstructured TLV with an eight-bit
-        // length octet (TS 24.078).
+        // length octet (TS 24.008).
         bw.writeField(0x7c, 8);
         bw.writeField(static_cast<uint32_t>(mLowLayerCompat.lengthV()), 8);
         mLowLayerCompat.write(bw);
     }
     if (mHaveHighLayerCompat) {
         // High layer compatibility: unstructured TLV with an eight-bit
-        // length octet (TS 24.078).
+        // length octet (TS 24.008).
         bw.writeField(0x7d, 8);
         bw.writeField(static_cast<uint32_t>(mHighLayerCompat.lengthV()), 8);
         mHighLayerCompat.write(bw);
@@ -584,12 +560,12 @@ void L3Setup::write(BitWriter& bw) const {
     }
     if (mHaveCLIRSuppression) {
         // CLIR suppression: type T element, the identifier octet is the
-        // whole encoding (TS 24.078).
+        // whole encoding (TS 24.008).
         bw.writeField(L3CLIRSuppression::IEI, 8);
     }
     if (mHaveCLIRInvocation) {
         // CLIR invocation: type T element, the identifier octet is the
-        // whole encoding (TS 24.078).
+        // whole encoding (TS 24.008).
         bw.writeField(L3CLIRInvocation::IEI, 8);
     }
     if (mHaveCCCapabilities) {
@@ -598,7 +574,7 @@ void L3Setup::write(BitWriter& bw) const {
         mCCCapabilities.write(bw);
     }
     if (mHaveStreamIdentifier) {
-        // Stream identifier: unstructured TLV (TS 24.078).
+        // Stream identifier: unstructured TLV (TS 24.008).
         bw.writeField(L3StreamIdentifier::IEI, 8);
         bw.writeField(static_cast<uint32_t>(L3StreamIdentifier::lengthV()), 8);
         mStreamIdentifier.write(bw);
@@ -663,11 +639,17 @@ void L3EmergencySetup::text(std::ostream& os) const {
 Expected<L3CallProceeding> L3CallProceeding::parse(BitReader& br) {
     L3CallProceeding msg;
 
-    // GSM 04.08 9.3.3: skip repeat indicator(TV 0x0d), bearer capability x2(TLV 0x04), facility(TLV 0x1c), parse progress(TLV 0x1e)
+    // GSM 04.08 9.3.3: skip repeat indicator(TV 0x0d), bearer capability x2(TLV 0x04), facility(TLV 0x1c), parse progress(TV 0x1e)
     while (br.hasMore()) {
         auto ieiRes = detail::readIEI(br);
         if (!ieiRes) return Expected<L3CallProceeding>::error(ieiRes.error());
         uint8_t iei = ieiRes.value();
+
+        // Structured elements with the 0xDx tag are single octets (TS 24.008
+        // section 9.1); no further octets follow.
+        if ((iei & 0xf0) == 0xd0) {
+            continue;
+        }
 
         switch (iei) {
         case 0x0d: { // Repeat indicator TV - skip 4 bits
@@ -689,10 +671,8 @@ Expected<L3CallProceeding> L3CallProceeding::parse(BitReader& br) {
             if (!skipRes) return Expected<L3CallProceeding>::error(skipRes.error());
             continue;
         }
-        case 0x1e: { // Progress indicator TLV
-            auto lenRes = detail::readLength(br);
-            if (!lenRes) return Expected<L3CallProceeding>::error(lenRes.error());
-            auto p = L3ProgressIndicator::parse(br);
+        case 0x1e: { // Progress indicator: TV, one value octet (TS 24.008)
+            auto p = L3ProgressIndicator::parseTV(br);
             if (!p) return Expected<L3CallProceeding>::error(p.error());
             msg.mProgress = std::move(p.value());
             msg.mHaveProgress = true;
@@ -734,9 +714,9 @@ void L3CallProceeding::write(BitWriter& bw) const {
         mBearerCapability.write(bw);
     }
     if (mHaveProgress) {
+        // Progress indicator: TV form, one value octet (TS 24.008).
         bw.writeField(0x1e, 8);
-        bw.writeField(static_cast<uint32_t>(L3ProgressIndicator::lengthV()), 8);
-        mProgress.write(bw);
+        mProgress.writeTV(bw);
     }
     if (mHavePriority) {
         bw.writeField(0x88, 8);
@@ -752,7 +732,7 @@ void L3CallProceeding::write(BitWriter& bw) const {
 size_t L3CallProceeding::bodyLength() const {
     size_t sum = 0;
     if (mHaveBearerCapability) sum += 2 + mBearerCapability.lengthV();
-    if (mHaveProgress) sum += 2 + L3ProgressIndicator::lengthV();
+    if (mHaveProgress) sum += 1 + L3ProgressIndicator::lengthTV();
     if (mHavePriority) sum += 1 + L3Priority::lengthV();
     if (mHaveNetworkCCCapabilities) sum += 2 + mNetworkCCCapabilities.lengthV();
     return sum;
@@ -771,18 +751,17 @@ void L3CallProceeding::text(std::ostream& os) const {
 Expected<L3Alerting> L3Alerting::parse(BitReader& br) {
     L3Alerting msg;
 
-    // GSM 04.08 9.3.1: ccCommon, progress(TLV 0x1E), ccCommon again
+    // GSM 04.08 9.3.1: ccCommon, progress(TV 0x1E), ccCommon again
     auto ccRes = detail::ccCommonParse(br, msg.mHaveFacility, msg.mFacility, msg.mHaveSSVersion, msg.mSSVersion);
     if (!ccRes) return Expected<L3Alerting>::error(ccRes.error());
 
     while (br.hasMore()) {
         uint8_t peek = static_cast<uint8_t>(br.peekField(8));
         if (peek == 0x1e) {
+            // Progress indicator: TV form, one value octet (TS 24.008).
             auto ieiRes = detail::readIEI(br);
             if (!ieiRes) return Expected<L3Alerting>::error(ieiRes.error());
-            auto lenRes = detail::readLength(br);
-            if (!lenRes) return Expected<L3Alerting>::error(lenRes.error());
-            auto p = L3ProgressIndicator::parse(br);
+            auto p = L3ProgressIndicator::parseTV(br);
             if (!p) return Expected<L3Alerting>::error(p.error());
             msg.mProgress = std::move(p.value());
             msg.mHaveProgress = true;
@@ -815,12 +794,13 @@ Expected<L3Alerting> L3Alerting::parse(BitReader& br) {
 }
 
 void L3Alerting::write(BitWriter& bw) const {
-    detail::ccCommonWrite(bw, mHaveFacility, mFacility, mHaveSSVersion, mSSVersion);
+    // The progress indicator precedes the common part (facility/SS version)
+    // on the wire (TS 24.008 section 9.1).
     if (mHaveProgress) {
         bw.writeField(0x1e, 8);
-        bw.writeField(static_cast<uint32_t>(L3ProgressIndicator::lengthV()), 8);
-        mProgress.write(bw);
+        mProgress.writeTV(bw);
     }
+    detail::ccCommonWrite(bw, mHaveFacility, mFacility, mHaveSSVersion, mSSVersion);
     if (mHaveUserUser) {
         bw.writeField(L3UserUser::IEI, 8);
         bw.writeField(static_cast<uint32_t>(mUserUser.lengthV()), 8);
@@ -830,7 +810,7 @@ void L3Alerting::write(BitWriter& bw) const {
 
 size_t L3Alerting::bodyLength() const {
     size_t sum = 0;
-    if (mHaveProgress) sum += 2 + L3ProgressIndicator::lengthV();
+    if (mHaveProgress) sum += 1 + L3ProgressIndicator::lengthTV();
     if (mHaveUserUser) sum += 2 + mUserUser.lengthV();
     sum += detail::ccCommonLength(mHaveFacility, mFacility, mHaveSSVersion);
     return sum;
@@ -848,24 +828,28 @@ void L3Alerting::text(std::ostream& os) const {
 Expected<L3Connect> L3Connect::parse(BitReader& br) {
     L3Connect msg;
 
-    // GSM 04.08 9.3.5: skip facility(TLV 0x1c), parse progress(TLV 0x1e)
+    // GSM 04.08 9.3.5: skip facility(TLV 0x1c), parse progress(TV 0x1e)
     while (br.hasMore()) {
         auto ieiRes = detail::readIEI(br);
         if (!ieiRes) return Expected<L3Connect>::error(ieiRes.error());
         uint8_t iei = ieiRes.value();
 
+        // Structured elements with the 0xDx tag are single octets (TS 24.008
+        // section 9.1); no further octets follow.
+        if ((iei & 0xf0) == 0xd0) {
+            continue;
+        }
+
         switch (iei) {
-        case 0x1c: { // Facility - skip
+        case 0x1c: { // Facility - skip the length-value part
             auto lenRes = detail::readLength(br);
             if (!lenRes) return Expected<L3Connect>::error(lenRes.error());
             auto skipRes = detail::skipBytes(br, lenRes.value());
             if (!skipRes) return Expected<L3Connect>::error(skipRes.error());
             continue;
         }
-        case 0x1e: { // Progress indicator
-            auto lenRes = detail::readLength(br);
-            if (!lenRes) return Expected<L3Connect>::error(lenRes.error());
-            auto p = L3ProgressIndicator::parse(br);
+        case 0x1e: { // Progress indicator: TV, one value octet (TS 24.008)
+            auto p = L3ProgressIndicator::parseTV(br);
             if (!p) return Expected<L3Connect>::error(p.error());
             msg.mProgress = std::move(p.value());
             msg.mHaveProgress = true;
@@ -898,7 +882,7 @@ Expected<L3Connect> L3Connect::parse(BitReader& br) {
             msg.mHaveUserUser = true;
             continue;
         }
-        case 0x2d: { // StreamIdentifier TLV (one-octet value part, TS 24.078)
+        case 0x2d: { // StreamIdentifier TLV (one-octet value part, TS 24.008)
             auto lenRes = detail::readLength(br);
             if (!lenRes) return Expected<L3Connect>::error(lenRes.error());
             size_t innerLen = lenRes.value();
@@ -914,7 +898,7 @@ Expected<L3Connect> L3Connect::parse(BitReader& br) {
             }
             continue;
         }
-        case 0x8e: { // Stream identifier carried in TV form: skip the value octet (TS 24.078)
+        case 0x8e: { // Stream identifier carried in TV form: skip the value octet (TS 24.008)
             auto skipRes = detail::skipTV(br);
             if (!skipRes) return Expected<L3Connect>::error(skipRes.error());
             continue;
@@ -933,6 +917,12 @@ Expected<L3Connect> L3Connect::parse(BitReader& br) {
 }
 
 void L3Connect::write(BitWriter& bw) const {
+    // The progress indicator precedes the other elements on the wire
+    // (TS 24.008 section 9.1).
+    if (mHaveProgress) {
+        bw.writeField(0x1e, 8);
+        mProgress.writeTV(bw);
+    }
     if (mHaveConnectedNumber) {
         bw.writeField(0x9c, 8);
         bw.writeField(static_cast<uint32_t>(mConnectedNumber.lengthV()), 8);
@@ -949,25 +939,20 @@ void L3Connect::write(BitWriter& bw) const {
         mUserUser.write(bw);
     }
     if (mHaveStreamIdentifier) {
-        // Stream identifier: unstructured TLV (TS 24.078).
+        // Stream identifier: unstructured TLV (TS 24.008).
         bw.writeField(L3StreamIdentifier::IEI, 8);
         bw.writeField(static_cast<uint32_t>(L3StreamIdentifier::lengthV()), 8);
         mStreamIdentifier.write(bw);
-    }
-    if (mHaveProgress) {
-        bw.writeField(0x1e, 8);
-        bw.writeField(static_cast<uint32_t>(L3ProgressIndicator::lengthV()), 8);
-        mProgress.write(bw);
     }
 }
 
 size_t L3Connect::bodyLength() const {
     size_t len = 0;
+    if (mHaveProgress) len += 1 + L3ProgressIndicator::lengthTV();
     if (mHaveConnectedNumber) len += 2 + mConnectedNumber.lengthV();
     if (mHaveConnectedSubAddress) len += 2 + mConnectedSubAddress.lengthV();
     if (mHaveUserUser) len += 2 + mUserUser.lengthV();
     if (mHaveStreamIdentifier) len += 2 + L3StreamIdentifier::lengthV();
-    if (mHaveProgress) len += 2 + L3ProgressIndicator::lengthV();
     return len;
 }
 
@@ -1001,9 +986,9 @@ Expected<L3CallConfirmed> L3CallConfirmed::parse(BitReader& br) {
         if (!ieiRes) return Expected<L3CallConfirmed>::error(ieiRes.error());
         uint8_t iei = ieiRes.value();
 
+        // Structured elements with the 0xDx tag are single octets (TS 24.008
+        // section 9.1); no further octets follow.
         if ((iei & 0xf0) == 0xd0) {
-            auto skipRes = detail::skipTLV(br);
-            if (!skipRes) return Expected<L3CallConfirmed>::error(skipRes.error());
             continue;
         }
 
@@ -1027,14 +1012,21 @@ Expected<L3CallConfirmed> L3CallConfirmed::parse(BitReader& br) {
             continue;
         }
         case 0x04: { // BearerCapability TLV
-            auto p = L3BearerCapability::parse(br);
+            auto lenRes = detail::readLength(br);
+            if (!lenRes) return Expected<L3CallConfirmed>::error(lenRes.error());
+            auto p = L3BearerCapability::parse(br, lenRes.value());
             if (!p) return Expected<L3CallConfirmed>::error(p.error());
             msg.mBearerCapability = std::move(p.value());
             msg.mHaveBearerCapability = true;
             continue;
         }
-        case 0x15: case 0x2d: { // Skip TLV
-            auto skipRes = detail::skipTLV(br);
+        case 0x1e: { // Progress indicator: TV, one value octet (TS 24.008)
+            auto skipRes = detail::skipTV(br);
+            if (!skipRes) return Expected<L3CallConfirmed>::error(skipRes.error());
+            continue;
+        }
+        case 0x15: case 0x2d: { // Skip the length-value part
+            auto skipRes = detail::skipValue(br);
             if (!skipRes) return Expected<L3CallConfirmed>::error(skipRes.error());
             continue;
         }
@@ -1047,8 +1039,8 @@ Expected<L3CallConfirmed> L3CallConfirmed::parse(BitReader& br) {
             msg.mHaveUserUser = true;
             continue;
         }
-        default: {
-            auto skipRes = detail::skipTLV(br);
+        default: { // Unknown IE - skip the length-value part
+            auto skipRes = detail::skipValue(br);
             if (!skipRes) return Expected<L3CallConfirmed>::error(skipRes.error());
             continue;
         }
@@ -1107,8 +1099,8 @@ Expected<L3Disconnect> L3Disconnect::parse(BitReader& br) {
     L3Disconnect msg;
 
     // The cause is carried as a length-value element without an identifier
-    // (TS 24.078 section 10.5.x): first octet is the value length, followed
-    // by the two cause value octets (TS 24.078 10.5.4.11).
+    // (TS 24.008 section 10.5.x): first octet is the value length, followed
+    // by the two cause value octets (TS 24.008 section 10.5.1.2).
     auto lenRes = detail::readLength(br);
     if (!lenRes) return Expected<L3Disconnect>::error(lenRes.error());
     size_t causeLen = lenRes.value();
@@ -1132,7 +1124,7 @@ Expected<L3Disconnect> L3Disconnect::parse(BitReader& br) {
 
 void L3Disconnect::write(BitWriter& bw) const {
     // The cause is carried as a length-value element without an identifier
-    // (TS 24.078 section 10.5.x): first octet is the value length.
+    // (TS 24.008 section 10.5.x): first octet is the value length.
     bw.writeField(static_cast<uint32_t>(L3CauseElement::lengthV()), 8);
     L3CauseElement cause(mCause, mLocation);
     cause.write(bw);
@@ -1307,9 +1299,9 @@ Expected<L3CCStatus> L3CCStatus::parse(BitReader& br) {
     L3CCStatus msg;
 
     // The cause is carried as a length-value element without an identifier
-    // (TS 24.078 section 10.5.x): first octet is the value length, followed
-    // by the two cause value octets (TS 24.078 10.5.4.11); the call state
-    // follows as a single value octet (TS 24.078 10.5.4.6).
+    // (TS 24.008 section 10.5.x): first octet is the value length, followed
+    // by the two cause value octets (TS 24.008 section 10.5.1.2); the call
+    // state follows as a single value octet (TS 24.008 10.5.4.6).
     auto lenRes = detail::readLength(br);
     if (!lenRes) return Expected<L3CCStatus>::error(lenRes.error());
     size_t causeLen = lenRes.value();
@@ -1337,7 +1329,7 @@ Expected<L3CCStatus> L3CCStatus::parse(BitReader& br) {
 
 void L3CCStatus::write(BitWriter& bw) const {
     // The cause is carried as a length-value element without an identifier
-    // (TS 24.078 section 10.5.x): first octet is the value length.
+    // (TS 24.008 section 10.5.x): first octet is the value length.
     bw.writeField(static_cast<uint32_t>(L3CauseElement::lengthV()), 8);
     L3CauseElement cause(mCause, CCCauseLocation::Private_Serving_Local);
     cause.write(bw); // two value octets (no IEI form)
@@ -1422,7 +1414,7 @@ void L3StartDTMFAcknowledge::text(std::ostream& os) const {
 
 Expected<L3StartDTMFReject> L3StartDTMFReject::parse(BitReader& br) {
     L3StartDTMFReject msg;
-    // Cause LV (no IEI: length + value; TS 24.078 10.5.4.11)
+    // Cause LV (no IEI: length + value; TS 24.008 section 10.5.1.2)
     auto lenRes = detail::readLength(br);
     if (!lenRes) return Expected<L3StartDTMFReject>::error(lenRes.error());
     auto p = L3CauseElement::parse(br);
@@ -1478,11 +1470,37 @@ void L3HoldReject::text(std::ostream& os) const {
 
 // ── L3Progress ─────────────────────────────────────────────────────────
 
-Expected<L3Progress> L3Progress::parse(BitReader&) {
-    return Expected<L3Progress>::hold(L3Progress());
+Expected<L3Progress> L3Progress::parse(BitReader& br) {
+    L3Progress msg;
+
+    // Progress indicator LV (TS 24.008 section 9.3.17): a length octet
+    // followed by the two value octets [0xE0|location][0x80|progress].
+    auto lenRes = detail::readLength(br);
+    if (!lenRes) return Expected<L3Progress>::error(lenRes.error());
+    size_t valueLen = lenRes.value();
+    if (valueLen < L3ProgressIndicator::lengthV()) {
+        return Expected<L3Progress>::error(
+            ParseError{ParseError::Code::TruncatedInput, "Progress indicator value too short", br.position()});
+    }
+    auto p = L3ProgressIndicator::parse(br);
+    if (!p) return Expected<L3Progress>::error(p.error());
+    msg.mProgress = std::move(p.value());
+    // Any bytes beyond the two progress octets are not modelled and are
+    // skipped verbatim.
+    if (valueLen > L3ProgressIndicator::lengthV()) {
+        auto skipRes = detail::skipBytes(br, valueLen - L3ProgressIndicator::lengthV());
+        if (!skipRes) return Expected<L3Progress>::error(skipRes.error());
+    }
+
+    return Expected<L3Progress>::hold(std::move(msg));
 }
 
-void L3Progress::write(BitWriter&) const {}
+void L3Progress::write(BitWriter& bw) const {
+    // Progress indicator LV (TS 24.008 section 9.3.17): a length octet
+    // followed by the two value octets.
+    bw.writeField(static_cast<uint32_t>(L3ProgressIndicator::lengthV()), 8);
+    mProgress.write(bw);
+}
 
 void L3Progress::text(std::ostream& os) const {
     os << "Progress: TI=" << mTI;
@@ -1551,7 +1569,7 @@ void L3Facility::text(std::ostream& os) const {
     }
 }
 
-// ── L3CCNotify (MTI=0x3e, TS 24.078) ───────────────────────────────────
+// ── L3CCNotify (MTI=0x3e, TS 24.008) ───────────────────────────────────
 
 Expected<L3CCNotify> L3CCNotify::parse(BitReader& br) {
     L3CCNotify msg;

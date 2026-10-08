@@ -26,30 +26,52 @@
 namespace gsml3parser {
 
 // ── L3BearerCapability ──────────────────────────────────────────────────
+// Bearer capability value part (TS 24.008 section 10.5.4.5): octet 3 plus
+// all remaining octets 3a. Default voice is octet 3 = 0x0F with one octet
+// 3a = 0x80; bit 7 of octet 3 marks extended content.
 
 size_t L3BearerCapability::lengthV() const {
-    return 1 + mOctet3a.size();
+    return 1 + (mHaveOctet3a ? 1 : 0) + mExtendedOctets.size();
 }
 
-Expected<L3BearerCapability> L3BearerCapability::parse(BitReader& br) {
+Expected<L3BearerCapability> L3BearerCapability::parse(BitReader& br, size_t lengthBytes) {
     L3BearerCapability result;
+    if (lengthBytes == 0) {
+        return Expected<L3BearerCapability>::error(
+            ParseError{ParseError::Code::TruncatedInput, "Bearer capability value is empty"});
+    }
 
     auto r = br.readField(8); if (!r) return Expected<L3BearerCapability>::error(r.error());
     result.mOctet3 = static_cast<uint8_t>(r.value());
 
-    if (result.mOctet3 & 0x10) {
+    size_t remaining = lengthBytes - 1;
+    if (remaining >= 1) {
         r = br.readField(8); if (!r) return Expected<L3BearerCapability>::error(r.error());
-        result.mOctet3a.push_back(static_cast<uint8_t>(r.value()));
-        r = br.readField(8); if (!r) return Expected<L3BearerCapability>::error(r.error());
-        result.mOctet3a.push_back(static_cast<uint8_t>(r.value()));
+        result.mFirstOctet3a = static_cast<uint8_t>(r.value());
+        result.mHaveOctet3a = true;
+        remaining--;
+    }
+    if (remaining > 0) {
+        result.mExtendedOctets.resize(remaining);
+        for (size_t i = 0; i < remaining; ++i) {
+            r = br.readField(8); if (!r) return Expected<L3BearerCapability>::error(r.error());
+            result.mExtendedOctets[i] = static_cast<uint8_t>(r.value());
+        }
     }
 
     return Expected<L3BearerCapability>::hold(std::move(result));
 }
 
+Expected<L3BearerCapability> L3BearerCapability::parse(BitReader& br) {
+    return parse(br, br.remainingBits() / 8);
+}
+
 void L3BearerCapability::write(BitWriter& bw) const {
     bw.writeField(mOctet3, 8);
-    for (const auto& b : mOctet3a) {
+    if (mHaveOctet3a) {
+        bw.writeField(mFirstOctet3a, 8);
+    }
+    for (const auto& b : mExtendedOctets) {
         bw.writeField(b, 8);
     }
 }
@@ -57,7 +79,10 @@ void L3BearerCapability::write(BitWriter& bw) const {
 void L3BearerCapability::text(std::ostream& os) const {
     os << "BearerCap[0x" << std::hex << std::setw(2) << std::setfill('0')
        << static_cast<int>(mOctet3);
-    for (const auto& b : mOctet3a) {
+    if (mHaveOctet3a) {
+        os << " 0x" << std::setw(2) << std::setfill('0') << static_cast<int>(mFirstOctet3a);
+    }
+    for (const auto& b : mExtendedOctets) {
         os << " 0x" << std::setw(2) << std::setfill('0') << static_cast<int>(b);
     }
     os << "]";
@@ -225,8 +250,10 @@ L3CalledPartyBCDNumber::L3CalledPartyBCDNumber(const char* wDigits)
         mType = TypeOfNumber::International;
         mDigits = L3BCDDigits(wDigits + 1);
     } else {
-        mType = TypeOfNumber::Unknown;
-        mPlan = NumberingPlan::Unknown;
+        // A national number without the leading '+' uses the national type
+        // of number with the E.164 numbering plan (TS 24.008): the TON/NPI
+        // octet is spare(1)=1 | TON=National(2) | NPI=E.164(1) = 0xA1.
+        mType = TypeOfNumber::National;
         mDigits = L3BCDDigits(wDigits);
     }
 }
@@ -322,28 +349,44 @@ void L3CallingPartyBCDNumber::text(std::ostream& os) const {
 L3CauseElement::L3CauseElement(Cause wCause, Location wLocation)
     : mLocation(wLocation), mCause(wCause) {}
 
+// Cause value part (TS 24.008 section 10.5.1.2): the first value octet
+// packs the coding standard '11'B and the four-bit location; the second
+// carries the seven-bit cause with the extension indicator set.
 Expected<L3CauseElement> L3CauseElement::parse(BitReader& br) {
     L3CauseElement result;
 
-    auto r = br.readField(4); if (!r) return Expected<L3CauseElement>::error(r.error());
-    result.mLocation = static_cast<Location>(r.value());
-    r = br.readField(1); if (!r) return Expected<L3CauseElement>::error(r.error()); // spare
+    auto r = br.readField(1); if (!r) return Expected<L3CauseElement>::error(r.error()); // ext
+    unsigned ext = r.value();
     r = br.readField(2); if (!r) return Expected<L3CauseElement>::error(r.error()); // coding standard
-    r = br.readField(1); if (!r) return Expected<L3CauseElement>::error(r.error()); // ext
+    unsigned codingStandard = r.value();
+    r = br.readField(1); if (!r) return Expected<L3CauseElement>::error(r.error()); // spare
+    r = br.readField(4); if (!r) return Expected<L3CauseElement>::error(r.error());
+    result.mLocation = static_cast<Location>(r.value());
+    r = br.readField(1); if (!r) return Expected<L3CauseElement>::error(r.error()); // extension indicator
+    unsigned extensionIndicator = r.value();
     r = br.readField(7); if (!r) return Expected<L3CauseElement>::error(r.error());
     result.mCause = static_cast<Cause>(r.value());
-    r = br.readField(1); if (!r) return Expected<L3CauseElement>::error(r.error()); // ext
+
+    // Only the GSM/ITU-T coding standard ('11'B) without the extension bit
+    // in the first value octet, and a set extension indicator in the second,
+    // are accepted (TS 24.008 section 10.5.1.2).
+    if (ext != 0 || codingStandard != 0x3 || extensionIndicator != 1) {
+        return Expected<L3CauseElement>::error(
+            ParseError{ParseError::Code::InvalidValue, "Unsupported cause value octet layout"});
+    }
 
     return Expected<L3CauseElement>::hold(std::move(result));
 }
 
 void L3CauseElement::write(BitWriter& bw) const {
-    bw.writeField(static_cast<uint32_t>(mLocation), 4);
+    // Octet 3: ext(1)=0 | coding standard '11'B(2) | spare(1)=0 | location(4).
     bw.writeField(0, 1);
     bw.writeField(0x3, 2);
     bw.writeField(0, 1);
-    bw.writeField(static_cast<uint32_t>(mCause), 7);
+    bw.writeField(static_cast<uint32_t>(mLocation), 4);
+    // Octet 4: extension indicator(1)=1 | cause value(7).
     bw.writeField(1, 1);
+    bw.writeField(static_cast<uint32_t>(mCause), 7);
 }
 
 void L3CauseElement::text(std::ostream& os) const {
@@ -396,6 +439,25 @@ void L3ProgressIndicator::write(BitWriter& bw) const {
     bw.writeField(static_cast<uint32_t>(mLocation), 4);
     bw.writeField(1, 1);
     bw.writeField(static_cast<uint32_t>(mProgress), 7);
+}
+
+// One-octet TV value part (TS 24.008): the four-bit location in the high
+// nibble and the progress indication in the low nibble, as carried by the
+// SETUP/CONNECT/ALERTING/Call Proceeding messages.
+Expected<L3ProgressIndicator> L3ProgressIndicator::parseTV(BitReader& br) {
+    L3ProgressIndicator result;
+
+    auto r = br.readField(4); if (!r) return Expected<L3ProgressIndicator>::error(r.error());
+    result.mLocation = static_cast<Location>(r.value());
+    r = br.readField(4); if (!r) return Expected<L3ProgressIndicator>::error(r.error());
+    result.mProgress = static_cast<Progress>(r.value());
+
+    return Expected<L3ProgressIndicator>::hold(std::move(result));
+}
+
+void L3ProgressIndicator::writeTV(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mLocation), 4);
+    bw.writeField(static_cast<uint32_t>(mProgress) & 0xF, 4);
 }
 
 void L3ProgressIndicator::text(std::ostream& os) const {
@@ -523,8 +585,9 @@ L3ConnectedNumber::L3ConnectedNumber(const char* wDigits)
         mType = TypeOfNumber::International;
         mDigits = L3BCDDigits(wDigits + 1);
     } else {
-        mType = TypeOfNumber::Unknown;
-        mPlan = NumberingPlan::Unknown;
+        // A national number without the leading '+' uses the national type
+        // of number with the E.164 numbering plan (TS 24.008).
+        mType = TypeOfNumber::National;
         mDigits = L3BCDDigits(wDigits);
     }
 }
@@ -564,7 +627,7 @@ void L3ConnectedNumber::text(std::ostream& os) const {
 
 size_t L3SubAddress::lengthV() const {
     // One octet for the item count, then per item one selector/length
-    // octet followed by the sub-address bytes (TS 24.078).
+    // octet followed by the sub-address bytes (TS 24.008).
     size_t len = 1;
     for (const auto& item : mItems) {
         len += 1 + item.len;

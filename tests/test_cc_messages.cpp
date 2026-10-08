@@ -20,21 +20,21 @@
 // SOFTWARE.
 
 // CC message round-trip tests with spec-compliant hex values.
-// CC message encodings per 3GPP TS 24.078.
+// CC message encodings per 3GPP TS 24.008.
 //
 // [GOLDEN VERIFICATION]
-// All CC hex parse test data verified against 3GPP TS 24.078:
+// All CC hex parse test data verified against 3GPP TS 24.008:
 //   - Setup_Parse {0xE3, 0x05}: PD=CC in the low nibble of byte 0, TI=7 in bits 7:5, TIF=0, MT=Setup(0x05) in the six low bits of byte 1 (NSD=0)
-//     Setup frame: PD = '0011'B, message type = '000101'B (TS 24.078).
+//     Setup frame: PD = '0011'B, message type = '000101'B (TS 24.008).
 //   - Alerting_Parse {0xE3, 0x01}: PD=CC in the low nibble of byte 0, TI=7, TIF=0, MT=Alerting(0x01) (NSD=0)
-//     Alerting frame: PD = '0011'B, message type = '000001'B (TS 24.078).
+//     Alerting frame: PD = '0011'B, message type = '000001'B (TS 24.008).
 //   - Disconnect_Parse {0xE3, 0x25, ...}: PD=CC in the low nibble of byte 0, TI=7, TIF=0, MT=Disconnect(0x25) (NSD=0)
-//     Disconnect frame: PD = '0011'B, message type = '100101'B (TS 24.078).
+//     Disconnect frame: PD = '0011'B, message type = '100101'B (TS 24.008).
 //   - CCCause_Values: verified against ITU-T Q.763 / GSM 24.008 Table 10.5.4.11
 //   - CCCauseLocation_Values: verified against GSM 24.008 Table 10.5.4.11 location field
 //   - Parse_Setup_Hex "E305": same as Setup_Parse, hex string format
 //   - Parse_Release_Hex "F32D": PD=CC in the low nibble of byte 0, TI=7, TIF=1(REPL), MT=Release(0x2D) (NSD=0)
-//     Release frame: PD = '0011'B, TIF set (replacement), message type = '101101'B (TS 24.078).
+//     Release frame: PD = '0011'B, TIF set (replacement), message type = '101101'B (TS 24.008).
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
@@ -51,7 +51,7 @@ static Expected<ParsedMessage> roundtrip(const ParsedMessage& msg) {
 }
 
 // ── Setup (GSM 04.08 9.3.19) ──────────────────────────────────────────
-// Wire layout per GSM 24.078 (Setup).
+// Wire layout per GSM 24.008 (Setup).
 // Byte 0: TI(3)+TIF(1) | PD=0x03, Byte 1: NSD(2)+MTI(6)=000101, [BearerCap TLV], [CalledParty TLV], ...
 
 TEST(CCRoundTripTest, Setup_NoDigits) {
@@ -78,7 +78,7 @@ TEST(CCRoundTripTest, Setup_WithCalledParty) {
 }
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=000101(Setup=0x05), NSD=00
-// Setup MTI = 0x05 (TS 24.078).
+// Setup MTI = 0x05 (TS 24.008).
 // Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
 // Byte 1: messageType(6)<<2 | NSD(2) = 0x05<<2 | 0 = 0x14
 TEST(CCRoundTripTest, Setup_Parse) {
@@ -102,7 +102,7 @@ TEST(CCRoundTripTest, EmergencySetup) {
 }
 
 // ── Call Proceeding (GSM 04.08 9.3.3) ────────────────────────────────
-// Wire layout per GSM 24.078 (Call Proceeding).
+// Wire layout per GSM 24.008 (Call Proceeding).
 
 TEST(CCRoundTripTest, CallProceeding) {
     ParsedMessage msg(CCM(L3CallProceeding{}));
@@ -112,7 +112,7 @@ TEST(CCRoundTripTest, CallProceeding) {
 }
 
 // ── Alerting (GSM 04.08 9.3.1) ───────────────────────────────────────
-// Wire layout per GSM 24.078 (Alerting).
+// Wire layout per GSM 24.008 (Alerting).
 
 TEST(CCRoundTripTest, Alerting) {
     ParsedMessage msg(CCM(L3Alerting{}));
@@ -122,7 +122,7 @@ TEST(CCRoundTripTest, Alerting) {
 }
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=000001(Alerting=0x01), NSD=00
-// Alerting MTI = 0x01 (TS 24.078).
+// Alerting MTI = 0x01 (TS 24.008).
 // Byte 0: PD(4,high) | TIO(3)+TIF(1,low) = 0011 1110 = 0x3E
 // Byte 1: messageType(6)<<2 | NSD(2) = 0x01<<2 | 0 = 0x04
 TEST(CCRoundTripTest, Alerting_Parse) {
@@ -151,7 +151,7 @@ TEST(CCRoundTripTest, ConnectAcknowledge) {
 }
 
 // ── Call Confirmed (GSM 04.08 9.3.2) ─────────────────────────────────
-// Wire layout per GSM 24.078 (Call Confirmed).
+// Wire layout per GSM 24.008 (Call Confirmed).
 
 TEST(CCRoundTripTest, CallConfirmed) {
     ParsedMessage msg(CCM(L3CallConfirmed{}));
@@ -161,7 +161,7 @@ TEST(CCRoundTripTest, CallConfirmed) {
 }
 
 // ── Disconnect (GSM 04.08 9.3.7) ─────────────────────────────────────
-// Wire layout per GSM 24.078 (Disconnect).
+// Wire layout per GSM 24.008 (Disconnect).
 // PD=0x03, TI(3)+TIF(1), MTI(6)=100101, NSD(2), Cause LV (no identifier)
 
 TEST(CCRoundTripTest, Disconnect_NormalClearing) {
@@ -187,20 +187,20 @@ TEST(CCRoundTripTest, Disconnect_UserBusy) {
 }
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=100101(Disconnect=0x25), NSD=00
-// Disconnect body per TS 24.078: cause length-value element without an identifier.
+// Disconnect body per TS 24.008: cause length-value element without an identifier.
 // [GSM SPEC VERIFIED] GSM 24.008 9.3.7: the Disconnect value part carries the
 //   cause as a length-value element: first octet = value length (2), followed
-//   by the two cause value octets per GSM 24.008 10.5.4.11.
+//   by the two cause value octets per GSM 24.008 section 10.5.1.2.
 // Byte 0: TI=7 (bits 7:5) | TIF(4)=0 | PD=CC (low nibble) = 1110 0011 = 0xE3
 // Byte 1: MT(6)=Disconnect (0x25) in the low bits | NSD(2)=0 = 0x25
 // Cause length-value element (no identifier):
 //   Byte 2: Length = 2 (2 octets Cause value part)
-//   Byte 3: location(4)=0001 | spare(1)=0 | codingStd(2)=11 | ext(1)=0 = 0x16
-//   Byte 4: causeValue(7)=0010000(Normal_Call_Clearing=16) | ext(1)=1 = 0x21
+//   Byte 3: ext(1)=0 | codingStd(2)=11 | spare(1)=0 | location(4)=0001 = 0x61
+//   Byte 4: extensionIndicator(1)=1 | causeValue(7)=010000(Normal_Call_Clearing=16) = 0x90
 TEST(CCRoundTripTest, Disconnect_Parse) {
     uint8_t data[] = {
         0xE3, 0x25,
-        0x02, 0x16, 0x21
+        0x02, 0x61, 0x90
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -214,7 +214,7 @@ TEST(CCRoundTripTest, Disconnect_Parse) {
 }
 
 // ── Release (GSM 04.08 9.3.19) ───────────────────────────────────────
-// Wire layout per GSM 24.078 (Release).
+// Wire layout per GSM 24.008 (Release).
 
 TEST(CCRoundTripTest, Release_NoCause) {
     ParsedMessage msg(CCM(L3Release{}));
@@ -236,7 +236,7 @@ TEST(CCRoundTripTest, Release_WithCause) {
 }
 
 // ── Release Complete (GSM 04.08 9.3.19) ──────────────────────────────
-// Wire layout per GSM 24.078 (Release Complete).
+// Wire layout per GSM 24.008 (Release Complete).
 
 TEST(CCRoundTripTest, ReleaseComplete_NoCause) {
     ParsedMessage msg(CCM(L3ReleaseComplete{}));
@@ -269,7 +269,7 @@ TEST(CCRoundTripTest, CCStatus) {
 }
 
 // ── Start DTMF (GSM 04.08 9.3.24) ────────────────────────────────────
-// Wire layout per GSM 24.078 (Start DTMF).
+// Wire layout per GSM 24.008 (Start DTMF).
 
 TEST(CCRoundTripTest, StartDTMF) {
     ParsedMessage msg(CCM(L3StartDTMF{}));
@@ -342,7 +342,9 @@ TEST(CCRoundTripTest, Progress) {
 }
 
 // ── CC Cause values (GSM 04.08 10.5.4.11) ────────────────────────────
-// Cause IE TLV encoding per TS 24.078 10.5.4.11.
+// Cause IE TLV encoding per TS 24.008 section 10.5.1.2: the first value
+// octet is ext(1)=0|codingStandard(2)=11|spare(1)=0|location(4), and the
+// second is extensionIndicator(1)=1|causeValue(7).
 
 TEST(CCRoundTripTest, CCCause_Values) {
     EXPECT_EQ(static_cast<uint8_t>(CCCause::Unassigned_Number), 1u);
@@ -386,11 +388,13 @@ TEST(CCRoundTripTest, CauseElement_RoundTrip) {
 }
 
 // ── L3BearerCapability (GSM 04.08 10.5.4.5) ──────────────────────────
-// Bearer Capability IE encodings per TS 24.078 10.5.4.5 (voice / voice+multirate / CSD).
+// Bearer Capability IE encodings per TS 24.008 10.5.4.5 (voice / voice+multirate / CSD).
+// The default voice bearer capability value is octet 3 = 0x0F plus one
+// octet 3a = 0x80.
 
 TEST(CCRoundTripTest, BearerCapability) {
     L3BearerCapability bc;
-    EXPECT_EQ(bc.lengthV(), 1u);
+    EXPECT_EQ(bc.lengthV(), 2u);
 }
 
 // ── L3CalledPartyBCDNumber (GSM 04.08 10.5.4.7) ──────────────────────
@@ -489,7 +493,7 @@ TEST(CCRoundTripTest, TI_DifferentValues) {
 // ── Parse CC messages from hex ───────────────────────────────────────
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=0, messageType=000101(Setup=0x05), NSD=00
-// Setup MTI = 0x05 (TS 24.078).
+// Setup MTI = 0x05 (TS 24.008).
 // Byte 0: TI(3,high)|TIF(1)|PD(4,low) = 1110 0011 = 0xE3
 // Byte 1: messageType(6)|NSD(2) = 0x05|0 = 0x05
 TEST(CCRoundTripTest, Parse_Setup_Hex) {
@@ -500,7 +504,7 @@ TEST(CCRoundTripTest, Parse_Setup_Hex) {
 }
 
 // GSM 04.08 10.3: PD=0x03(CC), TIO=7, TIF=1(REPL), messageType=101101(Release=0x2D), NSD=00
-// Release MTI = 0x2D (TS 24.078).
+// Release MTI = 0x2D (TS 24.008).
 // Byte 0: TI(3,high)|TIF(1)|PD(4,low) = 1111 0011 = 0xF3
 // Byte 1: messageType(6)|NSD(2) = 0x2D|0 = 0x2D
 TEST(CCRoundTripTest, Parse_Release_Hex) {
@@ -533,7 +537,7 @@ TEST(CCRoundTripTest, Facility_Parse_Golden) {
     EXPECT_EQ(fac->facilityBody().size(), 3u);
 }
 
-// ── CC Notify (TS 24.078, MTI=0x3E) ───────────────────────────────────
+// ── CC Notify (TS 24.008, MTI=0x3E) ───────────────────────────────────
 // Structure: PD=0x03(CC), MT=0x3E in the six low bits of octet 1, body is
 // the single cause octet.
 

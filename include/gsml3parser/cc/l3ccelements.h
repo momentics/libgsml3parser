@@ -36,23 +36,32 @@
 
 namespace gsml3parser {
 
-// ── Bearer Capability (GSM 04.08 10.5.4.5) ──────────────────────────────
+// ── Bearer Capability (TS 24.008 section 10.5.4.5) ─────────────────────
 
 #ifndef GSML3PARSER_L3BEARER_CAPABILITY_DEFINED
 #define GSML3PARSER_L3BEARER_CAPABILITY_DEFINED
+// The value part is octet 3 followed by all remaining octets 3a. The
+// default is circuit-switched voice, full rate: octet 3 = 0x0F and one
+// octet 3a = 0x80; bit 7 of octet 3 marks extended content (octets 3a
+// beyond the first).
 class L3BearerCapability {
     uint8_t mOctet3{0x0f};
-    std::vector<uint8_t> mOctet3a;
+    bool mHaveOctet3a{true};
+    uint8_t mFirstOctet3a{0x80};
+    std::vector<uint8_t> mExtendedOctets;
 public:
     L3BearerCapability() = default;
 
     size_t lengthV() const;
+    [[nodiscard]] static Expected<L3BearerCapability> parse(BitReader& br, size_t lengthBytes);
     [[nodiscard]] static Expected<L3BearerCapability> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
 
     uint8_t octet3() const { return mOctet3; }
-    const std::vector<uint8_t>& octet3a() const { return mOctet3a; }
+    bool hasOctet3a() const { return mHaveOctet3a; }
+    uint8_t firstOctet3a() const { return mFirstOctet3a; }
+    const std::vector<uint8_t>& extendedOctets() const { return mExtendedOctets; }
     bool getHalfRateSupport() const { return mOctet3 & 0x40; }
 };
 #endif
@@ -156,10 +165,13 @@ public:
 };
 #endif
 
-// ── Cause Element (GSM 04.08 10.5.4.11) ────────────────────────────────
+// ── Cause Element (TS 24.008 section 10.5.1.2) ─────────────────────────
 
 #ifndef GSML3PARSER_L3CAUSE_ELEMENT_DEFINED
 #define GSML3PARSER_L3CAUSE_ELEMENT_DEFINED
+// Cause value part (TS 24.008 section 10.5.1.2): the first value octet
+// packs the coding standard '11'B and the four-bit location; the second
+// carries the seven-bit cause with the extension indicator set.
 class L3CauseElement {
 public:
     using Location = CCCauseLocation;
@@ -206,6 +218,11 @@ public:
 
 #ifndef GSML3PARSER_L3PROGRESS_INDICATOR_DEFINED
 #define GSML3PARSER_L3PROGRESS_INDICATOR_DEFINED
+// Two value-part forms: the two-octet LV form (octet 3 = 0xE0|location,
+// octet 4 = 0x80|progress) used by the PROGRESS message, and the one-octet
+// TV form used by SETUP/CONNECT/ALERTING/Call Proceeding, which packs the
+// four-bit location in the high nibble and the progress indication in the
+// low nibble.
 class L3ProgressIndicator {
 public:
     enum Location : uint8_t {
@@ -239,9 +256,12 @@ public:
     Location location() const { return mLocation; }
     Progress progress() const { return mProgress; }
     static constexpr size_t lengthV() { return 2; }
+    static constexpr size_t lengthTV() { return 1; }
 
     [[nodiscard]] static Expected<L3ProgressIndicator> parse(BitReader& br);
     void write(BitWriter& bw) const;
+    [[nodiscard]] static Expected<L3ProgressIndicator> parseTV(BitReader& br);
+    void writeTV(BitWriter& bw) const;
     void text(std::ostream& os) const;
     bool operator==(const L3ProgressIndicator&) const = default;
 };
@@ -462,7 +482,7 @@ public:
 
 // ── CLIR Suppression (GSM 04.08 10.5.4.16) ────────────────────────────
 // Type T information element: the identifier octet is the whole encoding
-// (TS 24.078 section 10.5.x); there is no value part.
+// (TS 24.008 section 10.5.x); there is no value part.
 
 #ifndef GSML3PARSER_L3CLIR_SUPPRESSION_DEFINED
 #define GSML3PARSER_L3CLIR_SUPPRESSION_DEFINED
@@ -485,7 +505,7 @@ public:
 
 // ── CLIR Invocation (GSM 04.08 10.5.4.17) ─────────────────────────────
 // Type T information element: the identifier octet is the whole encoding
-// (TS 24.078 section 10.5.x); there is no value part.
+// (TS 24.008 section 10.5.x); there is no value part.
 
 #ifndef GSML3PARSER_L3CLIR_INVOCATION_DEFINED
 #define GSML3PARSER_L3CLIR_INVOCATION_DEFINED

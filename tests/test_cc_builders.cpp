@@ -92,6 +92,11 @@ TEST(CCBuilders, CallProceeding_WithProgress) {
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
     EXPECT_EQ((*bytes)[1], 0x02); // MT=CallProceeding (six low bits, NSD=0)
+    // Progress indicator: TV form, IEI 0x1E + one value octet
+    // location(4)=1|progress(4)=8(InBandAvailable) = 0x18 (TS 24.008).
+    ASSERT_EQ(bytes.value().size(), 4u);
+    EXPECT_EQ((*bytes)[2], 0x1E);
+    EXPECT_EQ((*bytes)[3], 0x18);
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -177,6 +182,11 @@ TEST(CCBuilders, Disconnect_UserBusy) {
     EXPECT_EQ((*bytes)[1], 0x25); // MT=Disconnect (six low bits, NSD=0)
     ASSERT_EQ(bytes.value().size(), 5u); // 2-byte header + 3-octet cause LV
     EXPECT_EQ((*bytes)[2], 0x02); // Cause value length (length-value form, no identifier)
+    // Cause value octets per TS 24.008 section 10.5.1.2:
+    //   oct3 = ext(1)=0|codingStd(2)=11|spare(1)=0|location(4)=3(Transit) = 0x63
+    //   oct4 = extensionIndicator(1)=1|causeValue(7)=17(User_Busy) = 0x91
+    EXPECT_EQ((*bytes)[3], 0x63);
+    EXPECT_EQ((*bytes)[4], 0x91);
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -232,6 +242,11 @@ TEST(CCBuilders, CCStatus) {
     EXPECT_EQ((*bytes)[1], L3CCStatus::MTI);
     ASSERT_EQ(bytes.value().size(), 6u); // 2-byte header + 4-octet body
     EXPECT_EQ((*bytes)[2], 0x02); // Cause value length (length-value form, no identifier)
+    // Cause value octets per TS 24.008 section 10.5.1.2:
+    //   oct3 = ext(1)=0|codingStd(2)=11|spare(1)=0|location(4)=1(Private_Serving_Local) = 0x61
+    //   oct4 = extensionIndicator(1)=1|causeValue(7)=31(Normal_Unspecified) = 0x9F
+    EXPECT_EQ((*bytes)[3], 0x61);
+    EXPECT_EQ((*bytes)[4], 0x9F);
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -370,7 +385,7 @@ TEST(CCBuilders, Facility_WithBody) {
     EXPECT_EQ(fac->facilityBody().size(), 3u);
 }
 
-// TS 24.078: CC Notify carries the single cause octet
+// TS 24.008: CC Notify carries the single cause octet
 TEST(CCBuilders, Notify_WithCause) {
     auto msg = L3CCNotify::builder()
         .cause(CCCause::Normal_Call_Clearing)

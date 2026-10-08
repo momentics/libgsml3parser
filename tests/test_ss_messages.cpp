@@ -126,15 +126,16 @@ TEST(SSRoundTripTest, ReleaseComplete_WithCause) {
 
 // Golden: SS Release Complete with cause (TS 24.080 release complete): the
 // cause is carried as a TLV element with identifier 0x08 and a two-octet
-// value [loc(4)|spare|std=11|ext=0][cause(7)|ext=1].
+// value [ext=0|std=11|spare=0|loc(4)][ext=1|cause(7)] per TS 24.008
+// section 10.5.1.2.
 TEST(SSRoundTripTest, ReleaseComplete_CauseTLV_Golden) {
     uint8_t data[] = {
         0xEB,                 // PD=11(NonCallSS), TI=7, TIF=0
         0x2A,                 // MTI=Release Complete
         0x08,                 // cause TLV: element identifier 0x08
         0x02,                 // cause value length = 2 octets
-        0x16,                 // [loc(4)=Private_Serving_Local|spare|std=11|ext=0]
-        0x21                  // [cause(7)=Normal_Call_Clearing|ext=1]
+        0x61,                 // [ext=0|std=11|spare=0|loc(4)=Private_Serving_Local]
+        0x90                  // [ext=1|cause(7)=Normal_Call_Clearing]
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -174,7 +175,8 @@ TEST(SSRoundTripTest, ReleaseComplete_FacilityCause_Golden) {
         0x1C, 0x03,           // facility TLV: element identifier 0x1c, length 3
         0x81, 0x01, 0x13,     // TCAP INVOKE: tag=0x81, invoke_id=1, op_code=0x13
         0x08, 0x02,           // cause TLV: element identifier 0x08, length 2
-        0x16, 0x21            // cause value (Normal_Call_Clearing)
+        0x61,                 // [ext=0|std=11|spare=0|loc(4)=Private_Serving_Local]
+        0x90                  // [ext=1|cause(7)=Normal_Call_Clearing] (TS 24.008 10.5.1.2)
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);

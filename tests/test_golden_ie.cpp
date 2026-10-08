@@ -1733,8 +1733,12 @@ TEST(GoldenIE, BearerCapability_Default) {
 }
 
 TEST(GoldenIE, BearerCapability_IE) {
+    // Default voice bearer capability: octet 3 = 0x0F plus one octet 3a = 0x80.
     L3BearerCapability bc;
-    EXPECT_EQ(bc.lengthV(), 1u);
+    EXPECT_EQ(bc.lengthV(), 2u);
+    EXPECT_EQ(bc.octet3(), 0x0Fu);
+    EXPECT_TRUE(bc.hasOctet3a());
+    EXPECT_EQ(bc.firstOctet3a(), 0x80u);
 }
 
 // =====================================================================
@@ -1776,9 +1780,11 @@ TEST(GoldenIE, CalledPartyBCDNumber_ShortNumber) {
 }
 
 TEST(GoldenIE, CalledPartyBCDNumber_National) {
+    // A number without the leading '+' is a national number with the E.164
+    // numbering plan (TS 24.008): TON/NPI octet spare(1)=1|TON=National(2)|NPI=E.164(1).
     L3CalledPartyBCDNumber num("1234567890");
-    EXPECT_EQ(num.type(), TypeOfNumber::Unknown);
-    EXPECT_EQ(num.plan(), NumberingPlan::Unknown);
+    EXPECT_EQ(num.type(), TypeOfNumber::National);
+    EXPECT_EQ(num.plan(), NumberingPlan::E164);
 }
 
 // =====================================================================
@@ -1799,13 +1805,28 @@ TEST(GoldenIE, CallingPartyBCDNumber_RoundTrip) {
 
 // =====================================================================
 // CC IEs: L3CauseElement (GSM 04.08 10.5.4.11)
-// Cause value part (location + coding standard + cause value) per GSM 24.008 10.5.4.11
+// Cause value part per GSM 24.008 section 10.5.1.2: octet 3 =
+// ext(1)=0|codingStandard(2)=11|spare(1)=0|location(4), octet 4 =
+// extensionIndicator(1)=1|causeValue(7)
 // =====================================================================
 
 TEST(GoldenIE, CauseElement_RoundTrip) {
     L3CauseElement orig(CCCause::User_Busy, CCCauseLocation::Transit);
     EXPECT_EQ(orig.lengthV(), 2u);
     ieRoundTrip(orig);
+}
+
+// [GOLDEN] Cause value octets: location=1 (Private_Serving_Local) and
+// cause=16 (Normal_Call_Clearing) encode as 0x61 0x90 per TS 24.008
+// section 10.5.1.2.
+TEST(GoldenIE, CauseElement_ValueOctets) {
+    L3CauseElement orig(CCCause::Normal_Call_Clearing, CCCauseLocation::Private_Serving_Local);
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    EXPECT_EQ(writer.position(), 16u);
+    EXPECT_EQ(buf[0], 0x61); // ext=0|std=11|spare=0|location=1
+    EXPECT_EQ(buf[1], 0x90); // extensionIndicator=1|causeValue=16
 }
 
 TEST(GoldenIE, CauseElement_NormalClearing) {
@@ -1851,6 +1872,25 @@ TEST(GoldenIE, ProgressIndicator_Encoding) {
     pi.write(writer);
     BitReader reader(buf.data(), writer.position());
     auto parsedResult = L3ProgressIndicator::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).progress(), L3ProgressIndicator::InBandAvailable);
+    EXPECT_EQ((*parsedResult).location(), L3ProgressIndicator::PrivateServingLocal);
+}
+
+// [GOLDEN] Progress indicator TV form (SETUP/CONNECT/ALERTING/Call
+// Proceeding, TS 24.008): one value octet with the four-bit location in
+// the high nibble and the progress indication in the low nibble.
+TEST(GoldenIE, ProgressIndicator_TV_Encoding) {
+    L3ProgressIndicator pi(L3ProgressIndicator::InBandAvailable,
+                            L3ProgressIndicator::PrivateServingLocal);
+    EXPECT_EQ(L3ProgressIndicator::lengthTV(), 1u);
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    pi.writeTV(writer);
+    EXPECT_EQ(writer.position(), 8u);
+    EXPECT_EQ(buf[0], 0x18); // location(4)=1 | progress(4)=8(InBandAvailable)
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3ProgressIndicator::parseTV(reader);
     ASSERT_TRUE(parsedResult);
     EXPECT_EQ((*parsedResult).progress(), L3ProgressIndicator::InBandAvailable);
     EXPECT_EQ((*parsedResult).location(), L3ProgressIndicator::PrivateServingLocal);
