@@ -135,9 +135,12 @@ public:
 };
 
 // ── Attach Accept (TS 44.068 section 9.5) ─────────────────────────────
-// SGSN->MS: octet 1 attachResult(3)|spare(1)|forceToStandby(1)|updateTimer(2)|
-//           radioPriority(1); routingAreaIdentification (V, six octets);
-//           [allocatedP-TMSI(TLV, IEI 0x18)] | [opaque optional IEs].
+// SGSN->MS: leading part of three octets — first octet
+// attachResult(3)|spare(1)|forceToStandby(1)|updateTimer(2)|radioPriority(1)
+// (bit positions in the octet value), then two further leading octets;
+// routingAreaIdentification (V, six octets);
+// [P-TMSI signature(TV, IEI 0x19, three octets)] |
+// [allocated P-TMSI(TLV, IEI 0x18)] | [opaque optional IEs].
 // Unrecognized optional information elements are kept as an opaque
 // sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
@@ -146,7 +149,10 @@ class L3AttachAccept {
     bool mForceToStandby{false};
     uint8_t mUpdateTimer{0};
     uint8_t mRadioPriority{0};
+    std::array<uint8_t, 2> mLeadingExtra{0, 0};
     L3RoutingAreaIdentification mRAI;
+    bool mHavePtmsiSignature{false};
+    std::array<uint8_t, 3> mPtmsiSignature{};
     bool mHavePTMSI{false};
     L3MobileIdentity mPTMSI;
     std::vector<uint8_t> mAdditionalIes;
@@ -160,7 +166,10 @@ public:
         bool m_forceToStandby{false};
         uint8_t m_updateTimer{0};
         uint8_t m_radioPriority{0};
+        std::array<uint8_t, 2> m_leadingExtra{0, 0};
         L3RoutingAreaIdentification m_rai;
+        bool m_havePtmsiSignature{false};
+        std::array<uint8_t, 3> m_ptmsiSignature{};
         bool m_havePTMSI{false};
         L3MobileIdentity m_ptmsi;
         std::vector<uint8_t> m_additionalIes;
@@ -173,8 +182,20 @@ public:
         Builder& updateTimer(uint8_t v) { m_updateTimer = v; return *this; }
         /// Set radio priority value.
         Builder& radioPriority(uint8_t v) { m_radioPriority = v; return *this; }
+        /// Set the two leading octets that follow the first one.
+        Builder& leadingExtra(uint8_t first, uint8_t second) {
+            m_leadingExtra[0] = first;
+            m_leadingExtra[1] = second;
+            return *this;
+        }
         /// Set routing area identification.
         Builder& rai(L3RoutingAreaIdentification v) { m_rai = v; return *this; }
+        /// Set the P-TMSI signature (type-value, IEI 0x19, three octets).
+        Builder& ptmsiSignature(std::array<uint8_t, 3> v) {
+            m_havePtmsiSignature = true;
+            m_ptmsiSignature = v;
+            return *this;
+        }
         /// Set PTMSI with flag.
         Builder& ptmsi(L3MobileIdentity v) { m_havePTMSI = true; m_ptmsi = std::move(v); return *this; }
         /// Set the opaque sequence of additional optional IEs.
@@ -193,7 +214,13 @@ public:
     bool forceToStandby() const { return mForceToStandby; }
     uint8_t updateTimer() const { return mUpdateTimer; }
     uint8_t radioPriority() const { return mRadioPriority; }
+    /// The two leading octets that follow the first one (TS 44.068).
+    [[nodiscard]] std::array<uint8_t, 2> leadingExtra() const { return mLeadingExtra; }
     const L3RoutingAreaIdentification& rai() const { return mRAI; }
+    /// Whether a P-TMSI signature (TV, IEI 0x19) is present.
+    bool hasPtmsiSignature() const { return mHavePtmsiSignature; }
+    /// P-TMSI signature value part (three octets), valid when hasPtmsiSignature().
+    [[nodiscard]] const std::array<uint8_t, 3>& ptmsiSignature() const { return mPtmsiSignature; }
     bool hasPTMSI() const { return mHavePTMSI; }
     const L3MobileIdentity& ptmsi() const { return mPTMSI; }
     /// Opaque sequence of additional optional IEs, re-emitted verbatim.
@@ -276,10 +303,11 @@ public:
 };
 
 // ── Detach Request (TS 44.068 section 9.5) ────────────────────────────
-// MS->SGSN or SGSN->MS: detachType(3)|powerOff/forceToStandby(1) in the
-// high half-octet and spare(4) in the low one; then the optional IEs:
-// P-TMSI (TLV, IEI 0x18) and, in the network-to-MS direction, the GMM
-// cause carried as a type-value pair (IEI 0x25 + one value octet).
+// MS->SGSN: one octet detachType(3)|powerOffFlag(1)|spare(4), the type in
+// the low three bits; SGSN->MS: detachType(3)|spare(1)|forceToStandby(1)|
+// spare(3). Then the optional IEs: P-TMSI (TLV, IEI 0x18) and, in the
+// network-to-MS direction, the GMM cause carried as a type-value pair
+// (IEI 0x25 + one value octet).
 // Unrecognized optional information elements are kept as an opaque
 // sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
@@ -455,9 +483,11 @@ public:
 };
 
 // ── Routing Area Update Accept (TS 44.068 section 9.5) ────────────────
-// SGSN->MS: octet 1 forceToStandby(1)|updateResult(3)|spare(1)|raUpdateTimer(2)|
-//           radioPriority(1); routingAreaId (raw six octets);
-//           [allocatedP-TMSI(TLV, IEI 0x18)] | [opaque optional IEs].
+// SGSN->MS: leading part of two octets — first octet
+// forceToStandby(1)|updateResult(3)|spare(1)|raUpdateTimer(2)|spare(2)
+// (bit positions in the octet value), then one further leading octet;
+// routingAreaId (raw six octets); [P-TMSI signature(TV, IEI 0x19, three
+// octets)] | [allocated P-TMSI(TLV, IEI 0x18)] | [opaque optional IEs].
 // Unrecognized optional information elements are kept as an opaque
 // sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
@@ -465,8 +495,10 @@ class L3RoutingAreaUpdateAccept {
     bool mForceToStandby{false};
     GMMUpdateType mUpdateResult{GMMUpdateType::RAUpdated};
     uint8_t mRAUpdateTimer{0};
-    uint8_t mRadioPriority{0};
+    std::array<uint8_t, 1> mLeadingExtra{0};
     L3RoutingAreaIdentification mRAI;
+    bool mHavePtmsiSignature{false};
+    std::array<uint8_t, 3> mPtmsiSignature{};
     bool mHavePTMSI{false};
     L3MobileIdentity mPTMSI;
     std::vector<uint8_t> mAdditionalIes;
@@ -479,8 +511,10 @@ public:
         bool m_forceToStandby{false};
         GMMUpdateType m_updateResult{GMMUpdateType::RAUpdated};
         uint8_t m_raUpdateTimer{0};
-        uint8_t m_radioPriority{0};
+        std::array<uint8_t, 1> m_leadingExtra{0};
         L3RoutingAreaIdentification m_rai;
+        bool m_havePtmsiSignature{false};
+        std::array<uint8_t, 3> m_ptmsiSignature{};
         bool m_havePTMSI{false};
         L3MobileIdentity m_ptmsi;
         std::vector<uint8_t> m_additionalIes;
@@ -491,10 +525,16 @@ public:
         Builder& updateResult(GMMUpdateType v) { m_updateResult = v; return *this; }
         /// Set RA update timer value.
         Builder& raUpdateTimer(uint8_t v) { m_raUpdateTimer = v; return *this; }
-        /// Set radio priority value.
-        Builder& radioPriority(uint8_t v) { m_radioPriority = v; return *this; }
+        /// Set the leading octet that follows the first one.
+        Builder& leadingExtra(uint8_t v) { m_leadingExtra[0] = v; return *this; }
         /// Set routing area identification.
         Builder& rai(L3RoutingAreaIdentification v) { m_rai = v; return *this; }
+        /// Set the P-TMSI signature (type-value, IEI 0x19, three octets).
+        Builder& ptmsiSignature(std::array<uint8_t, 3> v) {
+            m_havePtmsiSignature = true;
+            m_ptmsiSignature = v;
+            return *this;
+        }
         /// Set PTMSI with flag.
         Builder& ptmsi(L3MobileIdentity v) { m_havePTMSI = true; m_ptmsi = std::move(v); return *this; }
         /// Set the opaque sequence of additional optional IEs.
@@ -512,8 +552,13 @@ public:
     bool forceToStandby() const { return mForceToStandby; }
     GMMUpdateType updateResult() const { return mUpdateResult; }
     uint8_t raUpdateTimer() const { return mRAUpdateTimer; }
-    uint8_t radioPriority() const { return mRadioPriority; }
+    /// The leading octet that follows the first one (TS 44.068).
+    [[nodiscard]] uint8_t leadingExtra() const { return mLeadingExtra[0]; }
     const L3RoutingAreaIdentification& rai() const { return mRAI; }
+    /// Whether a P-TMSI signature (TV, IEI 0x19) is present.
+    bool hasPtmsiSignature() const { return mHavePtmsiSignature; }
+    /// P-TMSI signature value part (three octets), valid when hasPtmsiSignature().
+    [[nodiscard]] const std::array<uint8_t, 3>& ptmsiSignature() const { return mPtmsiSignature; }
     bool hasPTMSI() const { return mHavePTMSI; }
     const L3MobileIdentity& ptmsi() const { return mPTMSI; }
     /// Opaque sequence of additional optional IEs, re-emitted verbatim.
@@ -595,8 +640,9 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// ── Service Request (GSM 24.008 9.4.20) ───────────────────────────────
-// MS->SGSN: CKSN(3)|spare(1) | serviceType(3)|spare(1) | PTMSI(LV) | [PDPContextStatus(TLV)]
+// ── Service Request (TS 44.068 section 9.5) ───────────────────────────
+// MS->SGSN: one octet — gprsCKSN(3)|spare(1) in the low half-octet and
+// serviceType(3)|spare(1) in the high one; then PTMSI(LV).
 
 class L3ServiceRequest {
     uint8_t mCKSN{0};
@@ -638,21 +684,52 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// ── Service Accept (GSM 24.008 9.4.21) ────────────────────────────────
-// SGSN->MS: [PDPContextStatus(TLV)]
+// ── Service Accept (TS 44.068 section 9.5) ────────────────────────────
+// SGSN->MS: [PDP context status(TLV, IEI 0x32: length + two-octet bitmap)] |
+//           [opaque optional IEs].
+// Unrecognized optional information elements are kept as an opaque
+// sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
 class L3ServiceAccept {
+    bool mHavePdpContextStatus{false};
+    L3PDPContextStatus mPdpContextStatus;
+    std::vector<uint8_t> mAdditionalIes;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x0d;
 
     struct Builder {
+        bool m_havePdpContextStatus{false};
+        L3PDPContextStatus m_pdpContextStatus;
+        std::vector<uint8_t> m_additionalIes;
+
+        /// Set the PDP context status (TLV, IEI 0x32) with presence flag.
+        Builder& pdpContextStatus(L3PDPContextStatus v) {
+            m_havePdpContextStatus = true;
+            m_pdpContextStatus = std::move(v);
+            return *this;
+        }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
+
         /// Build the final message.
         [[nodiscard]] L3ServiceAccept build() const;
     };
 
     static Builder builder();
 
-    size_t bodyLength() const { return 0; }
+    /// Whether a PDP context status TLV is present.
+    bool hasPdpContextStatus() const { return mHavePdpContextStatus; }
+    /// PDP context status value part, valid when hasPdpContextStatus().
+    const L3PDPContextStatus& pdpContextStatus() const { return mPdpContextStatus; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
+
+    size_t bodyLength() const;
     [[nodiscard]] static Expected<L3ServiceAccept> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -794,9 +871,13 @@ public:
 
 // ── Authentication And Ciphering Request (TS 44.068 section 9.5) ──────
 // SGSN->MS: octet 1 cipheringAlgorithm(3)|spare(1)|imeisvRequest(1)|
-//           forceToStandby(1)|spare(2); octet 2 acReferenceNumber(4)|spare(4);
-//           then authenticationParameterRAND (TV, IEI 0x21: identifier octet +
-//           sixteen value octets)
+//           forceToStandby(1)|spare(2), the algorithm in the low three
+//           bits of the octet value; octet 2 acReferenceNumber(4)|spare(4),
+//           the reference number in the low half-octet; then
+//           authenticationParameterRAND (TV, IEI 0x21: identifier octet +
+//           sixteen value octets) | [opaque optional IEs].
+// Unrecognized optional information elements are kept as an opaque
+// sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
 class L3AuthenticationAndCipheringRequest {
     uint8_t mCipheringAlgorithm{0};
@@ -804,6 +885,7 @@ class L3AuthenticationAndCipheringRequest {
     bool mForceToStandby{false};
     uint8_t mACReferenceNumber{0};
     L3AuthRAND mRAND;
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -815,6 +897,7 @@ public:
         bool m_forceToStandby{false};
         uint8_t m_acReferenceNumber{0};
         L3AuthRAND m_rand;
+        std::vector<uint8_t> m_additionalIes;
 
         /// Set ciphering algorithm.
         Builder& cipheringAlgorithm(uint8_t v) { m_cipheringAlgorithm = v; return *this; }
@@ -826,6 +909,11 @@ public:
         Builder& acReferenceNumber(uint8_t v) { m_acReferenceNumber = v; return *this; }
         /// Set authentication RAND.
         Builder& rand(L3AuthRAND v) { m_rand = std::move(v); return *this; }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
 
         /// Build the final message.
         [[nodiscard]] L3AuthenticationAndCipheringRequest build() const;
@@ -838,6 +926,8 @@ public:
     bool forceToStandby() const { return mForceToStandby; }
     uint8_t acReferenceNumber() const { return mACReferenceNumber; }
     const L3AuthRAND& rand() const { return mRAND; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3AuthenticationAndCipheringRequest> parse(BitReader& br);
@@ -849,13 +939,19 @@ public:
 };
 
 // ── Authentication And Ciphering Response (TS 44.068 section 9.5) ─────
-// MS->SGSN: octet 1 acReferenceNumber(4)|spare(4); then
-//           authenticationParameterResponse (TV, IEI 0x22: identifier octet +
-//           four value octets)
+// MS->SGSN: octet 1 acReferenceNumber(4)|spare(4), the reference number in
+//           the low half-octet; then authenticationParameterResponse
+//           (TV, IEI 0x22: identifier octet + four value octets);
+//           [IMEISV(TLV, IEI 0x23)] | [opaque optional IEs].
+// Unrecognized optional information elements are kept as an opaque
+// sequence and re-emitted verbatim (TS 24.008/24.068 optional IEs).
 
 class L3AuthenticationAndCipheringResponse {
     uint8_t mACReferenceNumber{0};
     L3AuthRES mRES;
+    bool mHaveImeisv{false};
+    L3MobileIdentity mImeisv;
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -864,11 +960,21 @@ public:
     struct Builder {
         uint8_t m_acReferenceNumber{0};
         L3AuthRES m_res;
+        bool m_haveImeisv{false};
+        L3MobileIdentity m_imeisv;
+        std::vector<uint8_t> m_additionalIes;
 
         /// Set AC reference number.
         Builder& acReferenceNumber(uint8_t v) { m_acReferenceNumber = v; return *this; }
         /// Set authentication response.
         Builder& res(L3AuthRES v) { m_res = std::move(v); return *this; }
+        /// Set the IMEISV (TLV, IEI 0x23) with presence flag.
+        Builder& imeisv(L3MobileIdentity v) { m_haveImeisv = true; m_imeisv = std::move(v); return *this; }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
 
         /// Build the final message.
         [[nodiscard]] L3AuthenticationAndCipheringResponse build() const;
@@ -878,6 +984,12 @@ public:
 
     uint8_t acReferenceNumber() const { return mACReferenceNumber; }
     const L3AuthRES& res() const { return mRES; }
+    /// Whether an IMEISV (TLV, IEI 0x23) is present.
+    bool hasImeisv() const { return mHaveImeisv; }
+    /// IMEISV value part, valid when hasImeisv().
+    const L3MobileIdentity& imeisv() const { return mImeisv; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3AuthenticationAndCipheringResponse> parse(BitReader& br);
@@ -911,12 +1023,12 @@ public:
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
 };
 
-// ── Identity Request (GSM 24.008 9.4.7) ───────────────────────────────
-// SGSN->MS: identityType(3)|spare(1) | forceToStandby(1)|spare(7)
+// ── Identity Request (TS 44.068 section 9.5) ──────────────────────────
+// SGSN->MS: one octet, identityType(3) in the low three bits of the octet
+// value and spare(5).
 
 class L3GMMIdentityRequest {
     MobileIDType mIdentityType{MobileIDType::NoID};
-    bool mForceToStandby{false};
 
     friend struct Builder;
 public:
@@ -924,12 +1036,9 @@ public:
 
     struct Builder {
         MobileIDType m_identityType{MobileIDType::NoID};
-        bool m_forceToStandby{false};
 
         /// Set identity type.
         Builder& identityType(MobileIDType v) { m_identityType = v; return *this; }
-        /// Set force to standby flag.
-        Builder& forceToStandby(bool v) { m_forceToStandby = v; return *this; }
 
         /// Build the final message.
         [[nodiscard]] L3GMMIdentityRequest build() const;
@@ -938,9 +1047,8 @@ public:
     static Builder builder();
 
     MobileIDType identityType() const { return mIdentityType; }
-    bool forceToStandby() const { return mForceToStandby; }
 
-    size_t bodyLength() const { return 2; }
+    size_t bodyLength() const { return 1; }
     [[nodiscard]] static Expected<L3GMMIdentityRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;

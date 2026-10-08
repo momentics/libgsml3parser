@@ -311,6 +311,49 @@ TEST(GoldenGMMTest, ServiceAccept_RoundTrip) {
 }
 
 // =====================================================================
+// GMM Service Accept with PDP context status (TS 44.068 section 9.5) -
+// golden parse and round-trip
+// The body is the optional PDP context status TLV (IEI 0x32 + length +
+// two-octet bitmap); any further optional IEs follow and are kept opaque.
+// Hex breakdown:
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
+//   0x0d = MTI(8)=0x0d(ServiceAccept), raw encoding
+//   0x32 = element identifier for PDP context status (TLV)
+//   0x02 = length of the value part = 2 octets
+//   0x03 = contexts 1 and 2 active (bits 0 and 1 of the first octet)
+//   0x00 = second bitmap octet
+// =====================================================================
+
+TEST(GoldenGMMTest, ServiceAccept_WithPdpContextStatus_RoundTrip) {
+    uint8_t data[] = {
+        0x08, 0x0d,                            // header: PD=GMM, MTI=ServiceAccept
+        0x32, 0x02,                            // TLV: element identifier=0x32(PDP context status), length=2
+        0x03, 0x00                             // contexts 1 and 2 active (two-octet bitmap)
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto* acc = tryGet<L3ServiceAccept>(*msg);
+    ASSERT_NE(acc, nullptr);
+    EXPECT_EQ(acc->hasPdpContextStatus(), true);
+    EXPECT_EQ(acc->pdpContextStatus().context(1), 1);
+    EXPECT_EQ(acc->pdpContextStatus().context(2), 1);
+    EXPECT_EQ(acc->pdpContextStatus().context(3), 0);
+    ASSERT_TRUE(acc->additionalIes().empty());
+
+    // Builder path: the same values must reproduce identical bytes.
+    auto built = L3ServiceAccept::builder()
+        .pdpContextStatus(L3PDPContextStatus({0x03, 0x00}))
+        .build();
+    EXPECT_EQ(built.bodyLength(), 4u);
+    auto bytes = writeL3Bytes(ParsedMessage{GMM{built}});
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ((*bytes)[i], data[i]);
+    }
+}
+
+// =====================================================================
 // GMM Status (GSM 24.008 9.4.24) - with cause
 // Reference: 3GPP TS 24.008 Table 10.4, bidirectional message
 // Hex breakdown:
@@ -400,11 +443,17 @@ TEST(GoldenGMMTest, DetachAccept_RoundTrip) {
 
 // =====================================================================
 // GMM Attach Accept (TS 44.068 section 9.5) - golden parse
-// Attach Accept golden parse vector (TS 44.068).
+// Attach Accept golden parse vector (TS 44.068): three-octet leading part
+// (first octet: attachResult(3)|spare(1)|forceToStandby(1)|updateTimer(2)|
+// radioPriority(1); then two further leading octets), routing area
+// identification (six octets, byte 3 of the body), optional P-TMSI
+// signature (TV, IEI 0x19 + three octets), allocated P-TMSI (TLV, IEI
+// 0x18) and any further optional IEs kept opaque.
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x02 = MTI(8)=0x02(AttachAccept), raw encoding
 //   0x23 = attachResult(3)=GPRS(1)|spare(1)=0|forceToStandby(1)=0|updateTimer(2)=1|radioPriority(1)=1
+//   0x00 0x00 = the two further leading octets
 //   09 F1 07 = MCC/MNC BCD: MCC=901, MNC=70 (TS 24.008 10.5.1.3 packing)
 //   0x00 0x01 = LAC = 0x0001
 //   0x5A = RAC = 0x5A
@@ -415,10 +464,12 @@ TEST(GoldenGMMTest, DetachAccept_RoundTrip) {
 // =====================================================================
 
 TEST(GoldenGMMTest, AttachAccept_GoldenParse) {
-    // Body: firstOctet(1) + RAI(6) + PTMSI_TLV(7) = 14 bytes
+    // Body: leading(3) + RAI(6) + PTMSI_TLV(7) = 16 bytes; RAI starts at
+    // body byte 3.
     uint8_t data[] = {
         0x08, 0x02,                            // header: PD=GMM, MTI=AttachAccept
         0x23,                                   // attachResult(3)=GPRS(1)|spare(1)=0|forceToStandby(1)=0|updateTimer(2)=1|radioPriority(1)=1
+        0x00, 0x00,                             // the two further leading octets
         0x09, 0xF1, 0x07, 0x00, 0x01, 0x5A,    // RAI: MCC=901, MNC=70, LAC=0x0001, RAC=0x5A
         0x18, 0x05,                             // TLV: element identifier=0x18(allocated P-TMSI), length=5
         0xF4,                                   // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) = 0xF4
@@ -435,8 +486,12 @@ TEST(GoldenGMMTest, AttachAccept_GoldenParse) {
     EXPECT_EQ(acc->forceToStandby(), false);
     EXPECT_EQ(acc->updateTimer(), 1u);
     EXPECT_EQ(acc->radioPriority(), 1u);
+    const auto extra = acc->leadingExtra();
+    EXPECT_EQ(extra[0], 0x00);
+    EXPECT_EQ(extra[1], 0x00);
     EXPECT_EQ(acc->rai().mcc(), 901);
     EXPECT_EQ(acc->rai().mnc(), 70);
+    EXPECT_EQ(acc->hasPtmsiSignature(), false);
     EXPECT_EQ(acc->hasPTMSI(), true);
     EXPECT_EQ(acc->ptmsi().tmsi(), 0x12345678u);
 
@@ -446,6 +501,7 @@ TEST(GoldenGMMTest, AttachAccept_GoldenParse) {
         .forceToStandby(false)
         .updateTimer(1)
         .radioPriority(1)
+        .leadingExtra(0x00, 0x00)
         .rai(acc->rai())
         .ptmsi(L3MobileIdentity(0x12345678))
         .build();
@@ -458,12 +514,80 @@ TEST(GoldenGMMTest, AttachAccept_GoldenParse) {
 }
 
 // =====================================================================
+// GMM Attach Accept with P-TMSI signature (TS 44.068 section 9.5) -
+// golden parse and round-trip
+// The P-TMSI signature is a type-value pair (IEI 0x19 + three octets)
+// placed between the routing area identification and the allocated
+// P-TMSI TLV.
+// Hex breakdown:
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
+//   0x02 = MTI(8)=0x02(AttachAccept), raw encoding
+//   0x20 = attachResult(3)=GPRS(1)|spare(1)=0|forceToStandby(1)=0|updateTimer(2)=0|radioPriority(1)=0
+//   0x00 0x00 = the two further leading octets
+//   09 F1 07 = MCC/MNC BCD: MCC=901, MNC=70 (TS 24.008 10.5.1.3 packing)
+//   0x00 0x01 = LAC = 0x0001
+//   0x5A = RAC = 0x5A
+//   0x19 = element identifier for the P-TMSI signature (TV)
+//   A1 B2 C3 = P-TMSI signature value (three octets)
+//   0x18 = element identifier for allocated P-TMSI (TLV)
+//   0x05 = length of PTMSI value = 5 bytes
+//   0xF4 = first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B)
+//   0x12 0x34 0x56 0x78 = TMSI value = 0x12345678
+// =====================================================================
+
+TEST(GoldenGMMTest, AttachAccept_WithPtmsiSignature_RoundTrip) {
+    uint8_t data[] = {
+        0x08, 0x02,                            // header: PD=GMM, MTI=AttachAccept
+        0x20,                                   // attachResult(3)=GPRS(1), all other fields zero
+        0x00, 0x00,                             // the two further leading octets
+        0x09, 0xF1, 0x07, 0x00, 0x01, 0x5A,    // RAI: MCC=901, MNC=70, LAC=0x0001, RAC=0x5A
+        0x19, 0xA1, 0xB2, 0xC3,                 // P-TMSI signature TV: IEI 0x19 + three octets
+        0x18, 0x05,                             // TLV: element identifier=0x18(allocated P-TMSI), length=5
+        0xF4,                                   // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) = 0xF4
+        0x12, 0x34, 0x56, 0x78                  // TMSI value = 0x12345678
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto* acc = tryGet<L3AttachAccept>(*msg);
+    ASSERT_NE(acc, nullptr);
+    EXPECT_EQ(acc->attachResult(), GMMAttachType::GPRSAttach);
+    EXPECT_EQ(acc->forceToStandby(), false);
+    EXPECT_EQ(acc->updateTimer(), 0u);
+    EXPECT_EQ(acc->radioPriority(), 0u);
+    EXPECT_EQ(acc->hasPtmsiSignature(), true);
+    const auto& sig = acc->ptmsiSignature();
+    EXPECT_EQ(sig[0], 0xA1);
+    EXPECT_EQ(sig[1], 0xB2);
+    EXPECT_EQ(sig[2], 0xC3);
+    EXPECT_EQ(acc->hasPTMSI(), true);
+    EXPECT_EQ(acc->ptmsi().tmsi(), 0x12345678u);
+
+    // Emit: the same values must reproduce identical bytes (round-trip).
+    auto built = L3AttachAccept::builder()
+        .attachResult(GMMAttachType::GPRSAttach)
+        .leadingExtra(0x00, 0x00)
+        .rai(L3RoutingAreaIdentification("901", "70", 0x0001, 0x5A))
+        .ptmsiSignature({0xA1, 0xB2, 0xC3})
+        .ptmsi(L3MobileIdentity(0x12345678))
+        .build();
+    auto bytes = writeL3Bytes(ParsedMessage{GMM{built}});
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ((*bytes)[i], data[i]);
+    }
+}
+
+// =====================================================================
 // GMM Detach Request (TS 44.068 section 9.5) - golden parse
-// Detach Request golden parse vector (TS 44.068).
+// Detach Request golden parse vector (TS 44.068): the detach type in the
+// low three bits of the first octet, the power-off flag in bit 3 and the
+// force-to-standby indicator (network-to-MS direction) in bit 4; then the
+// optional P-TMSI (TLV, IEI 0x18).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x05 = MTI(8)=0x05(DetachRequest), raw encoding
-//   0x10 = detachType(3)=GPRS(1)|powerOff(1)=0|spare(4)=0
+//   0x01 = detachType(3)=GPRS(1)|powerOff(1)=0|spare(4)=0
 //   0x18 = element identifier for allocated P-TMSI (TLV)
 //   0x05 = length of PTMSI value = 5 bytes
 //   0xF4 = first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B)
@@ -473,7 +597,7 @@ TEST(GoldenGMMTest, AttachAccept_GoldenParse) {
 TEST(GoldenGMMTest, DetachRequest_GoldenParse) {
     uint8_t data[] = {
         0x08, 0x05,
-        0x10,                                     // detachType(3)=GPRS(1)|powerOff(1)=0|spare(4)=0
+        0x01,                                     // detachType(3)=GPRS(1)|powerOff(1)=0|spare(4)=0
         0x18, 0x05,                                // TLV: element identifier=0x18(allocated P-TMSI), length=5
         0xF4,                                      // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) = 0xF4
         0x12, 0x34, 0x56, 0x78                     // TMSI value = 0x12345678
@@ -501,6 +625,35 @@ TEST(GoldenGMMTest, DetachRequest_GoldenParse) {
     for (size_t i = 0; i < sizeof(data); ++i) {
         EXPECT_EQ((*bytes)[i], data[i]);
     }
+}
+
+// =====================================================================
+// GMM Detach Request first-octet layout (TS 44.068 section 9.5)
+// Emit gate: detachType(3)=3 (combined) in the low three bits and the
+// power-off flag in bit 3 produce octet 0x0B.
+// =====================================================================
+
+TEST(GoldenGMMTest, DetachRequest_FirstOctetLayout) {
+    auto msg = L3DetachRequest::builder()
+        .detachType(3)
+        .powerOff(true)
+        .build();
+    EXPECT_EQ(msg.bodyLength(), 1u);
+    ParsedMessage pm{GMM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), 3u);
+    EXPECT_EQ((*bytes)[0], 0x08); // PD=GMM in the low nibble
+    EXPECT_EQ((*bytes)[1], L3DetachRequest::MTI);
+    EXPECT_EQ((*bytes)[2], 0x0B); // detachType(3)=3|powerOff(1)=1|spare(4)=0
+
+    auto reparsed = parseL3(*bytes);
+    ASSERT_TRUE(reparsed);
+    auto* det = tryGet<L3DetachRequest>(*reparsed);
+    ASSERT_NE(det, nullptr);
+    EXPECT_EQ(det->detachType(), 3u);
+    EXPECT_EQ(det->powerOff(), true);
+    EXPECT_EQ(det->forceToStandby(), false);
 }
 
 // =====================================================================
@@ -642,11 +795,17 @@ TEST(GoldenGMMTest, RAUpdateRequest_GoldenParse) {
 
 // =====================================================================
 // GMM Routing Area Update Accept (TS 44.068 section 9.5) - golden parse
-// Routing Area Update Accept golden parse vector (TS 44.068).
+// Routing Area Update Accept golden parse vector (TS 44.068): two-octet
+// leading part (first octet: forceToStandby(1)|updateResult(3)|spare(1)|
+// raUpdateTimer(2)|spare(2); then one further leading octet), routing
+// area identification (six octets, byte 2 of the body), optional P-TMSI
+// signature (TV, IEI 0x19 + three octets), allocated P-TMSI (TLV, IEI
+// 0x18) and any further optional IEs kept opaque.
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x09 = MTI(8)=0x09(RoutingAreaUpdateAccept), raw encoding
-//   0x39 = forceToStandby(1)=0|updateResult(3)=PeriodicUpdating(3)|spare(1)=0|raUpdateTimer(2)=2|radioPriority(1)=1
+//   0x38 = forceToStandby(1)=0|updateResult(3)=PeriodicUpdating(3)|spare(1)=0|raUpdateTimer(2)=2|spare(2)=0
+//   0x00 = the further leading octet
 //   09 F1 07 = MCC/MNC BCD: MCC=901, MNC=70 (TS 24.008 10.5.1.3 packing)
 //   0x00 0x01 = LAC = 0x0001
 //   0x5A = RAC = 0x5A
@@ -657,10 +816,12 @@ TEST(GoldenGMMTest, RAUpdateRequest_GoldenParse) {
 // =====================================================================
 
 TEST(GoldenGMMTest, RAUpdateAccept_GoldenParse) {
-    // Body: firstOctet(1) + RAI(6) + PTMSI_TLV(7) = 14 bytes
+    // Body: leading(2) + RAI(6) + PTMSI_TLV(7) = 15 bytes; RAI starts at
+    // body byte 2.
     uint8_t data[] = {
         0x08, 0x09,                               // header: PD=GMM, MTI=RAUpdateAccept
-        0x39,                                      // forceToStandby(1)=0|updateResult(3)=PeriodicUpdating(3)|spare(1)=0|raUpdateTimer(2)=2|radioPriority(1)=1
+        0x38,                                      // forceToStandby(1)=0|updateResult(3)=PeriodicUpdating(3)|spare(1)=0|raUpdateTimer(2)=2|spare(2)=0
+        0x00,                                      // the further leading octet
         0x09, 0xF1, 0x07, 0x00, 0x01, 0x5A,       // RAI: MCC=901, MNC=70, LAC=0x0001, RAC=0x5A
         0x18, 0x05,                                // TLV: element identifier=0x18(allocated P-TMSI), length=5
         0xF4,                                      // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) = 0xF4
@@ -675,9 +836,10 @@ TEST(GoldenGMMTest, RAUpdateAccept_GoldenParse) {
     EXPECT_EQ(raua->forceToStandby(), false);
     EXPECT_EQ(raua->updateResult(), GMMUpdateType::PeriodicUpdating);
     EXPECT_EQ(raua->raUpdateTimer(), 2u);
-    EXPECT_EQ(raua->radioPriority(), 1u);
+    EXPECT_EQ(raua->leadingExtra(), 0x00);
     EXPECT_EQ(raua->rai().mcc(), 901);
     EXPECT_EQ(raua->rai().mnc(), 70);
+    EXPECT_EQ(raua->hasPtmsiSignature(), false);
     EXPECT_EQ(raua->hasPTMSI(), true);
     EXPECT_EQ(raua->ptmsi().tmsi(), 0x12345678u);
 
@@ -686,7 +848,7 @@ TEST(GoldenGMMTest, RAUpdateAccept_GoldenParse) {
         .forceToStandby(false)
         .updateResult(GMMUpdateType::PeriodicUpdating)
         .raUpdateTimer(2)
-        .radioPriority(1)
+        .leadingExtra(0x00)
         .rai(raua->rai())
         .ptmsi(L3MobileIdentity(0x12345678))
         .build();
@@ -723,12 +885,14 @@ TEST(GoldenGMMTest, RAUpdateReject_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Service Request (GSM 24.008 9.4.20) - golden parse
-// Service Request golden parse vector (GSM 24.008).
+// GMM Service Request (TS 44.068 section 9.5) - golden parse
+// Service Request golden parse vector (TS 44.068): gprsCKSN(3)|spare(1) in
+// the low half-octet and serviceType(3)|spare(1) in the high one, then the
+// P-TMSI as an LV.
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0c = MTI(8)=0x0c(ServiceRequest), raw encoding
-//   0x71 = CKSN(3)=7|spare(1)=0|serviceType(3)=1(signalling)|spare(1)=0
+//   0x17 = CKSN(3)=7|spare(1)=0 (low half-octet)|serviceType(3)=1(signalling)|spare(1)=0 (high)
 //   0x05 = PTMSI LV length = 5 bytes
 //   0xF4 = first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B)
 //   0x12 0x34 0x56 0x78 = TMSI value = 0x12345678
@@ -736,10 +900,11 @@ TEST(GoldenGMMTest, RAUpdateReject_GoldenParse) {
 
 TEST(GoldenGMMTest, ServiceRequest_GoldenParse) {
     // Body: CKSN_serviceType(1) + PTMSI_LV(6) = 7 bytes
-    // First byte: CKSN(4)=7|serviceType(4)=1 -> 0111 0001 = 0x71
+    // First byte: serviceType(3)=1|spare(1)=0 in the high half-octet and
+    // CKSN(3)=7|spare(1)=0 in the low one -> 0001 0111 = 0x17
     uint8_t data[] = {
         0x08, 0x0c,                              // header: PD=GMM, MTI=ServiceRequest
-        0x71,                                     // CKSN(4)=7|serviceType(4)=1(signalling)
+        0x17,                                     // CKSN(3)=7 (low)|serviceType(3)=1(signalling) (high)
         0x05,                                     // PTMSI LV length = 5 bytes
         0xF4,                                     // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) = 0xF4
         0x12, 0x34, 0x56, 0x78                    // TMSI value = 0x12345678
@@ -834,12 +999,16 @@ TEST(GoldenGMMTest, PTMSIRereallocCommand_GoldenParse) {
 
 // =====================================================================
 // GMM Authentication And Ciphering Request (TS 44.068 section 9.5) - golden parse
-// Authentication And Ciphering Request golden parse vector (TS 44.068).
+// Authentication And Ciphering Request golden parse vector (TS 44.068):
+// cipheringAlgorithm(3)|spare(1)|imeisvRequest(1)|forceToStandby(1)|spare(2),
+// the algorithm in the low three bits of octet 1; acReferenceNumber(4) in
+// the low half-octet of octet 2; then the authentication parameter RAND as
+// a type-value pair (IEI 0x21 + sixteen value octets, no length).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x12 = MTI(8)=0x12(AuthenticationAndCipheringRequest), raw encoding
-//   0x28 = cipheringAlgorithm(3)=A5/1(1)|spare(1)=0|imeisvRequest(1)=1|forceToStandby(1)=0|spare(2)=0
-//   0x50 = acReferenceNumber(4)=5|spare(4)=0
+//   0x11 = cipheringAlgorithm(3)=A5/1(1)|spare(1)=0|imeisvRequest(1)=1|forceToStandby(1)=0|spare(2)=0
+//   0x05 = acReferenceNumber(4)=5 (low half-octet)|spare(4)=0
 //   0x21 = element identifier for authentication parameter RAND (TV)
 //   0x10 0x20 0x30 0x40 0x50 0x60 0x70 0x80 = RAND bytes 0-7
 //   0x90 0xA0 0xB0 0xC0 0xD0 0xE0 0xF0 0x01 = RAND bytes 8-15
@@ -849,8 +1018,8 @@ TEST(GoldenGMMTest, AuthAndCipheringRequest_GoldenParse) {
     // Body: firstOctet(1) + acRef(1) + IEI(1) + RAND(16 bytes) = 19 bytes
     uint8_t data[] = {
         0x08, 0x12,                               // header: PD=GMM, MTI=AuthAndCipheringRequest
-        0x28,                                      // cipheringAlg(3)=A5/1(1)|spare|imeisvReq(1)=1|forceStandby(1)=0|spare(2)
-        0x50,                                      // acReferenceNumber(4)=5|spare(4)=0
+        0x11,                                      // cipheringAlg(3)=A5/1(1)|spare|imeisvReq(1)=1 (bit 4)|forceStandby(1)=0|spare
+        0x05,                                      // acReferenceNumber(4)=5 in the low half-octet|spare(4)=0
         0x21,                                      // element identifier for authentication parameter RAND (TV)
         0x10, 0x20, 0x30, 0x40, 0x50, 0x60, 0x70, 0x80,  // RAND bytes
         0x90, 0xA0, 0xB0, 0xC0, 0xD0, 0xE0, 0xF0, 0x01
@@ -888,11 +1057,14 @@ TEST(GoldenGMMTest, AuthAndCipheringRequest_GoldenParse) {
 
 // =====================================================================
 // GMM Authentication And Ciphering Response (TS 44.068 section 9.5) - golden parse
-// Authentication And Ciphering Response golden parse vector (TS 44.068).
+// Authentication And Ciphering Response golden parse vector (TS 44.068):
+// acReferenceNumber(4) in the low half-octet of octet 1, then the
+// authentication parameter response as a type-value pair (IEI 0x22 + four
+// value octets).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x13 = MTI(8)=0x13(AuthenticationAndCipheringResponse), raw encoding
-//   0x50 = acReferenceNumber(4)=5|spare(4)=0
+//   0x05 = acReferenceNumber(4)=5 (low half-octet)|spare(4)=0
 //   0x22 = element identifier for authentication parameter response (TV)
 //   0xAA 0xBB 0xCC 0xDD = RES value (4 bytes)
 // =====================================================================
@@ -901,7 +1073,7 @@ TEST(GoldenGMMTest, AuthAndCipheringResponse_GoldenParse) {
     // Body: acRef(1) + IEI(1) + RES(4 bytes) = 6 bytes
     uint8_t data[] = {
         0x08, 0x13,                           // header: PD=GMM, MTI=AuthAndCipheringResponse
-        0x50,                                  // acReferenceNumber(4)=5|spare(4)=0
+        0x05,                                  // acReferenceNumber(4)=5 in the low half-octet|spare(4)=0
         0x22,                                  // element identifier for authentication parameter response (TV)
         0xAA, 0xBB, 0xCC, 0xDD                // RES value (4 bytes)
     };
@@ -932,17 +1104,70 @@ TEST(GoldenGMMTest, AuthAndCipheringResponse_GoldenParse) {
 }
 
 // =====================================================================
-// GMM Identity Request (GSM 24.008 9.4.7) - golden parse
-// Identity Request golden parse vector (GSM 24.008).
+// GMM Authentication And Ciphering Response with IMEISV (TS 44.068
+// section 9.5) - golden parse and round-trip
+// After the RES type-value pair, the IMEISV is carried as a TLV (IEI
+// 0x23 + length + mobile identity value part); any further optional IEs
+// follow and are kept opaque.
+// Hex breakdown:
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
+//   0x13 = MTI(8)=0x13(AuthenticationAndCipheringResponse), raw encoding
+//   0x05 = acReferenceNumber(4)=5 (low half-octet)|spare(4)=0
+//   0x22 = element identifier for authentication parameter response (TV)
+//   0xAA 0xBB 0xCC 0xDD = RES value (4 bytes)
+//   0x23 = element identifier for IMEISV (TLV)
+//   0x08 = length of IMEI value part = 8 bytes
+//   0x42 = first octet: [first digit '4'(4)|even count(1)=0|type(3)=IMEI('010')]
+//   0x09 0x51 0x24 0x30 0x32 0x57 0xF1 = digit pairs [next or F][current]
+//     for IMEI "49015420323751" (TS 24.008 10.5.1.4)
+// =====================================================================
+
+TEST(GoldenGMMTest, AuthAndCipheringResponse_WithImeisv_RoundTrip) {
+    uint8_t data[] = {
+        0x08, 0x13,                           // header: PD=GMM, MTI=AuthAndCipheringResponse
+        0x05,                                  // acReferenceNumber(4)=5 in the low half-octet|spare(4)=0
+        0x22,                                  // element identifier for authentication parameter response (TV)
+        0xAA, 0xBB, 0xCC, 0xDD,                // RES value (4 bytes)
+        0x23, 0x08,                            // TLV: element identifier=0x23(IMEISV), length=8
+        0x42, 0x09, 0x51, 0x24,                // IMEI "49015420323751" value part (8 octets)
+        0x30, 0x32, 0x57, 0xF1
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto* resp = tryGet<L3AuthenticationAndCipheringResponse>(*msg);
+    ASSERT_NE(resp, nullptr);
+    EXPECT_EQ(resp->acReferenceNumber(), 5u);
+    EXPECT_EQ(resp->hasImeisv(), true);
+    EXPECT_EQ(resp->imeisv().type(), MobileIDType::IMEI);
+    EXPECT_STREQ(resp->imeisv().digits(), "49015420323751");
+    ASSERT_TRUE(resp->additionalIes().empty());
+
+    // Builder path: the same values must reproduce identical bytes.
+    auto built = L3AuthenticationAndCipheringResponse::builder()
+        .acReferenceNumber(5)
+        .res(resp->res())
+        .imeisv(L3MobileIdentity(MobileIDType::IMEI, "49015420323751"))
+        .build();
+    auto bytes = writeL3Bytes(ParsedMessage{GMM{built}});
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ((*bytes)[i], data[i]);
+    }
+}
+
+// =====================================================================
+// GMM Identity Request (TS 44.068 section 9.5) - golden parse
+// Identity Request golden parse vector: a one-octet body with the
+// identity type in the low three bits and spare(5).
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x15 = MTI(8)=0x15(GMMIdentityRequest), raw encoding
-//   0x20 = identityType(3)=IMSI(1)|spare(1)=0|forceToStandby(1)=0|spare(4)=0
-//   0x00 = spare octet
+//   0x01 = identityType(3)=IMSI(1)|spare(5)=0
 // =====================================================================
 
 TEST(GoldenGMMTest, GMMIdentityRequest_GoldenParse) {
-    uint8_t data[] = {0x08, 0x15, 0x20, 0x00};
+    uint8_t data[] = {0x08, 0x15, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3GMMIdentityRequest::MTI);
@@ -950,7 +1175,18 @@ TEST(GoldenGMMTest, GMMIdentityRequest_GoldenParse) {
     auto* idr = tryGet<L3GMMIdentityRequest>(*msg);
     ASSERT_NE(idr, nullptr);
     EXPECT_EQ(idr->identityType(), MobileIDType::IMSI);
-    EXPECT_EQ(idr->forceToStandby(), false);
+    EXPECT_EQ(idr->bodyLength(), 1u);
+
+    // Builder path: the same values must reproduce identical bytes.
+    auto built = L3GMMIdentityRequest::builder()
+        .identityType(MobileIDType::IMSI)
+        .build();
+    auto bytes = writeL3Bytes(ParsedMessage{GMM{built}});
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ((*bytes)[i], data[i]);
+    }
 }
 
 // =====================================================================

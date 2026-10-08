@@ -71,15 +71,33 @@ TEST(GMMBuilders, AttachAccept) {
         .forceToStandby(false)
         .updateTimer(10)
         .radioPriority(0)
+        .leadingExtra(0x00, 0x2B)
         .rai(L3RoutingAreaIdentification{})
+        .ptmsiSignature({0x11, 0x22, 0x33})
         .build();
     ParsedMessage pm{GMM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
 
+    // The two further leading octets and the P-TMSI signature (TV, IEI
+    // 0x19) are part of the body between the first octet and the routing
+    // area identification.
+    EXPECT_EQ((*bytes)[3], 0x00);
+    EXPECT_EQ((*bytes)[4], 0x2B);
+
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
     EXPECT_EQ(messageMTI(*reparsed), L3AttachAccept::MTI);
+    auto* acc = tryGet<L3AttachAccept>(*reparsed);
+    ASSERT_NE(acc, nullptr);
+    const auto extra = acc->leadingExtra();
+    EXPECT_EQ(extra[0], 0x00);
+    EXPECT_EQ(extra[1], 0x2B);
+    EXPECT_EQ(acc->hasPtmsiSignature(), true);
+    const auto& sig = acc->ptmsiSignature();
+    EXPECT_EQ(sig[0], 0x11);
+    EXPECT_EQ(sig[1], 0x22);
+    EXPECT_EQ(sig[2], 0x33);
 }
 
 // 3GPP TS 24.008 9.4.4: Attach Reject
@@ -150,7 +168,7 @@ TEST(GMMBuilders, RoutingAreaUpdateAccept) {
         .forceToStandby(false)
         .updateResult(GMMUpdateType::RAUpdated)
         .raUpdateTimer(15)
-        .radioPriority(0)
+        .leadingExtra(0x00)
         .rai(L3RoutingAreaIdentification{})
         .build();
     ParsedMessage pm{GMM{std::move(msg)}};
@@ -191,13 +209,28 @@ TEST(GMMBuilders, RoutingAreaUpdateReject) {
 // 3GPP TS 24.008 9.4.20: Service Request
 TEST(GMMBuilders, ServiceRequest) {
     auto msg = L3ServiceRequest::builder()
-        .cksn(0)
-        .serviceType(1)
-        .ptmsi(L3MobileIdentity(0xDEADBEEF))
+        .cksn(7)
+        .serviceType(0)
+        .ptmsi(L3MobileIdentity(0x12345678))
         .build();
     ParsedMessage pm{GMM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
+
+    // First-octet layout (TS 44.068 section 9.5): the CKSN occupies the
+    // low three bits of the octet value and the service type the high
+    // half-octet, so cksn=7/serviceType=0 emit octet 0x07.
+    const uint8_t expected[] = {
+        0x08, 0x0c,                 // header: PD=GMM, MTI=ServiceRequest
+        0x07,                       // CKSN(3)=7|spare(1)=0 (low)|serviceType(3)=0|spare(1)=0 (high)
+        0x05,                       // PTMSI LV length = 5 bytes
+        0xF4,                       // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B)
+        0x12, 0x34, 0x56, 0x78      // TMSI value = 0x12345678
+    };
+    ASSERT_EQ(bytes.value().size(), sizeof(expected));
+    for (size_t i = 0; i < sizeof(expected); ++i) {
+        EXPECT_EQ((*bytes)[i], expected[i]);
+    }
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
@@ -307,11 +340,18 @@ TEST(GMMBuilders, AuthenticationAndCipheringReject) {
 TEST(GMMBuilders, GMMIdentityRequest) {
     auto msg = L3GMMIdentityRequest::builder()
         .identityType(MobileIDType::TMSI)
-        .forceToStandby(false)
         .build();
     ParsedMessage pm{GMM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
+
+    // One-octet body (TS 44.068 section 9.5): the identity type in the low
+    // three bits and spare(5), so TMSI ('100'B) emits octet 0x04.
+    const uint8_t expected[] = {0x08, 0x15, 0x04};
+    ASSERT_EQ(bytes.value().size(), sizeof(expected));
+    for (size_t i = 0; i < sizeof(expected); ++i) {
+        EXPECT_EQ((*bytes)[i], expected[i]);
+    }
 
     auto reparsed = roundtrip(pm);
     ASSERT_TRUE(reparsed);
