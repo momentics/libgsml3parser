@@ -1240,9 +1240,9 @@ Expected<L3SystemInformationType2bis> L3SystemInformationType2bis::parse(BitRead
         if (!res) return Expected<L3SystemInformationType2bis>::error(res.error());
         msg.mRACHControlParameters = std::move(res.value());
     }
-    // Opaque rest octets (TS 44.018 section 9.1.33: up to one octet): all
-    // whole octets remaining in the frame are preserved verbatim.
-    const size_t bytes = br.remainingBits() / 8;
+    // Opaque rest octets (TS 44.018 section 9.1.33: zero or one octet); any
+    // further octets are left as trailing data for the parser.
+    const size_t bytes = std::min<size_t>(br.remainingBits() / 8, 1);
     if (bytes > 0) {
         msg.mRestOctets.resize(bytes);
         auto r = br.readBytes(msg.mRestOctets.data(), bytes);
@@ -1295,9 +1295,9 @@ Expected<L3SystemInformationType2ter> L3SystemInformationType2ter::parse(BitRead
         if (!res) return Expected<L3SystemInformationType2ter>::error(res.error());
         msg.mBCCHFrequencyList = std::move(res.value());
     }
-    // Opaque rest octets (TS 44.018 section 9.1.34: up to four octets): all
-    // whole octets remaining in the frame are preserved verbatim.
-    const size_t bytes = br.remainingBits() / 8;
+    // Opaque rest octets (TS 44.018 section 9.1.34: zero to four octets);
+    // any further octets are left as trailing data for the parser.
+    const size_t bytes = std::min<size_t>(br.remainingBits() / 8, 4);
     if (bytes > 0) {
         msg.mRestOctets.resize(bytes);
         auto r = br.readBytes(msg.mRestOctets.data(), bytes);
@@ -1677,7 +1677,7 @@ Expected<L3SystemInformationType7> L3SystemInformationType7::parse(BitReader& br
         unsigned peek = br.peekField(8);
         if (peek == 0x21) {
             { auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType7>::error(_.error()); }
-            auto res = L3CellChannelDescription::parse(br);
+            auto res = L3NeighbourCellDescription::parse(br);
             if (!res) return Expected<L3SystemInformationType7>::error(res.error());
             msg.mCellChannelDescriptions.push_back(std::move(res.value()));
         } else {
@@ -1751,7 +1751,7 @@ Expected<L3SystemInformationType8> L3SystemInformationType8::parse(BitReader& br
         unsigned peek = br.peekField(8);
         if (peek == 0x21) {
             { auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType8>::error(_.error()); }
-            auto res = L3CellChannelDescription::parse(br);
+            auto res = L3NeighbourCellDescription::parse(br);
             if (!res) return Expected<L3SystemInformationType8>::error(res.error());
             msg.mCellChannelDescriptions.push_back(std::move(res.value()));
         } else {
@@ -1838,15 +1838,9 @@ L3SystemInformationType9::Builder L3SystemInformationType9::builder() {
 
 Expected<L3SystemInformationType13> L3SystemInformationType13::parse(BitReader& br) {
     L3SystemInformationType13 msg;
-    auto r = br.readField(1); if (!r) return Expected<L3SystemInformationType13>::error(r.error());
-    r = br.readField(3); if (!r) return Expected<L3SystemInformationType13>::error(r.error());
-    r = br.readField(4); if (!r) return Expected<L3SystemInformationType13>::error(r.error());
-    r = br.readField(1); if (!r) return Expected<L3SystemInformationType13>::error(r.error());
-    r = br.readField(1); if (!r) return Expected<L3SystemInformationType13>::error(r.error());
-    r = br.readField(8); if (!r) return Expected<L3SystemInformationType13>::error(r.error()); msg.mRestOctets.mRAC = r.value();
-    r = br.readField(1); if (!r) return Expected<L3SystemInformationType13>::error(r.error()); msg.mRestOctets.mSPGC_CCCH_SUP = r.value() != 0;
-    r = br.readField(3); if (!r) return Expected<L3SystemInformationType13>::error(r.error()); msg.mRestOctets.mPRIORITY_ACCESS_THR = r.value();
-    r = br.readField(2); if (!r) return Expected<L3SystemInformationType13>::error(r.error()); msg.mRestOctets.mNETWORK_CONTROL_ORDER = r.value();
+    auto res = L3SI13RestOctets::parse(br);
+    if (!res) return Expected<L3SystemInformationType13>::error(res.error());
+    msg.mRestOctets = std::move(res.value());
     return Expected<L3SystemInformationType13>::hold(std::move(msg));
 }
 
@@ -1936,7 +1930,7 @@ Expected<L3SystemInformationType17> L3SystemInformationType17::parse(BitReader& 
         unsigned peek = br.peekField(8);
         if (peek == 0x21) {
             { auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType17>::error(_.error()); }
-            auto res = L3CellChannelDescription::parse(br);
+            auto res = L3NeighbourCellDescription::parse(br);
             if (!res) return Expected<L3SystemInformationType17>::error(res.error());
             msg.mCellChannelDescriptions.push_back(std::move(res.value()));
         } else {
@@ -2688,7 +2682,10 @@ void L3ExtendedMeasurementOrder::text(std::ostream& os) const {
 Expected<L3FrequencyRedefinition> L3FrequencyRedefinition::parse(BitReader& br) {
     L3FrequencyRedefinition msg;
     {
-        auto res = L3FrequencyList::parse(br);
+        // Variable-length BCCH frequency list form, sixteen octets
+        // (TS 44.018 section 10.5.2.1b), followed by the RACH control
+        // parameters (section 10.5.2.29).
+        auto res = L3CellChannelDescription::parse(br);
         if (!res) return Expected<L3FrequencyRedefinition>::error(res.error());
         msg.mCellChannelDescription = std::move(res.value());
     }
@@ -3133,7 +3130,7 @@ Expected<L3SystemInformationType18> L3SystemInformationType18::parse(BitReader& 
         unsigned peek = br.peekField(8);
         if (peek == 0x21) {
             { auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType18>::error(_.error()); }
-            auto res = L3CellChannelDescription::parse(br);
+            auto res = L3NeighbourCellDescription::parse(br);
             if (!res) return Expected<L3SystemInformationType18>::error(res.error());
             msg.mCellChannelDescriptions.push_back(std::move(res.value()));
         } else {
@@ -3180,7 +3177,7 @@ Expected<L3SystemInformationType19> L3SystemInformationType19::parse(BitReader& 
         unsigned peek = br.peekField(8);
         if (peek == 0x21) {
             { auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType19>::error(_.error()); }
-            auto res = L3CellChannelDescription::parse(br);
+            auto res = L3NeighbourCellDescription::parse(br);
             if (!res) return Expected<L3SystemInformationType19>::error(res.error());
             msg.mCellChannelDescriptions.push_back(std::move(res.value()));
         } else {
@@ -3227,7 +3224,7 @@ Expected<L3SystemInformationType20> L3SystemInformationType20::parse(BitReader& 
         unsigned peek = br.peekField(8);
         if (peek == 0x21) {
             { auto _ = br.readField(8); if (!_) return Expected<L3SystemInformationType20>::error(_.error()); }
-            auto res = L3CellChannelDescription::parse(br);
+            auto res = L3NeighbourCellDescription::parse(br);
             if (!res) return Expected<L3SystemInformationType20>::error(res.error());
             msg.mCellChannelDescriptions.push_back(std::move(res.value()));
         } else {

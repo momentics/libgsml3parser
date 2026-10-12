@@ -880,8 +880,9 @@ public:
 // ── System Information Type 1 (GSM 04.08 9.1.31) ──────────────────────
 
 // System Information Type 1 (TS 44.018 section 9.1.31): the cell channel
-// description (ARFCN + BSIC, two octets), the RACH control parameters (three
-// octets) and at most one rest octet.
+// description in the variable-length BCCH frequency list form (sixteen
+// octets, section 10.5.2.1b), the RACH control parameters (three octets)
+// and at most one rest octet.
 class L3SystemInformationType1 {
     L3CellChannelDescription mCellChannelDescription;
     L3RACHControlParameters mRACHControlParameters;
@@ -899,7 +900,7 @@ public:
     bool hasRestOctets() const { return mHaveRestOctets; }
     uint8_t restOctet() const { return mRestOctet; }
 
-    size_t bodyLength() const { return 5 + (mHaveRestOctets ? 1 : 0); }
+    size_t bodyLength() const { return 19 + (mHaveRestOctets ? 1 : 0); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
@@ -914,8 +915,11 @@ public:
         bool mHaveRestOctets{false};
         uint8_t mRestOctet{0};
 
-        /// Set the cell channel description (ARFCN, BSIC = NCC|BCC).
-        Builder& cellChannelDescription(unsigned arfcn, unsigned bsic) { mCellChannelDescription = L3CellChannelDescription(arfcn, bsic); return *this; }
+        /// Set the cell channel description from an ARFCN list (variable
+        /// length BCCH frequency list form, TS 44.018 section 10.5.2.1b).
+        Builder& cellChannelDescription(std::span<const uint16_t> arfcns) { mCellChannelDescription = L3CellChannelDescription(arfcns); return *this; }
+        /// Set the cell channel description element directly.
+        Builder& cellChannelDescription(L3CellChannelDescription v) { mCellChannelDescription = std::move(v); return *this; }
         /// Set RACH control parameters.
         Builder& rachControlParameters(L3RACHControlParameters v) { mRACHControlParameters = v; return *this; }
         /// Set optional rest octet (sets mHaveRestOctets flag).
@@ -1340,7 +1344,7 @@ public:
 
 class L3SystemInformationType7 {
     L3RACHControlParameters mRACHControl;
-    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+    std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
 
     friend struct Builder;
 public:
@@ -1349,7 +1353,7 @@ public:
     L3SystemInformationType7() = default;
 
     const L3RACHControlParameters& rachControl() const { return mRACHControl; }
-    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
+    const std::vector<L3NeighbourCellDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -1361,14 +1365,14 @@ public:
 
     struct Builder {
         L3RACHControlParameters mRACHControl{};
-        std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+        std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
 
         /// Set RACH control parameters.
         Builder& rachControl(L3RACHControlParameters v) { mRACHControl = v; return *this; }
-        /// Add a cell channel description.
-        Builder& addCellChannelDescription(L3CellChannelDescription v) { mCellChannelDescriptions.push_back(std::move(v)); return *this; }
-        /// Set all cell channel descriptions.
-        Builder& cellChannelDescriptions(std::vector<L3CellChannelDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
+        /// Add a neighbour cell description record (ARFCN, BSIC).
+        Builder& addCellChannelDescription(L3NeighbourCellDescription v) { mCellChannelDescriptions.push_back(std::move(v)); return *this; }
+        /// Set all neighbour cell description records.
+        Builder& cellChannelDescriptions(std::vector<L3NeighbourCellDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
         /// Build the final message.
         [[nodiscard]] L3SystemInformationType7 build() const;
     };
@@ -1381,7 +1385,7 @@ public:
 class L3SystemInformationType8 {
     L3NCCPermitted mNCCPermitted;
     L3RACHControlParameters mRACHControl;
-    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+    std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
 
     friend struct Builder;
 public:
@@ -1391,7 +1395,7 @@ public:
 
     const L3NCCPermitted& nccPermitted() const { return mNCCPermitted; }
     const L3RACHControlParameters& rachControl() const { return mRACHControl; }
-    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
+    const std::vector<L3NeighbourCellDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -1404,16 +1408,16 @@ public:
     struct Builder {
         L3NCCPermitted mNCCPermitted{};
         L3RACHControlParameters mRACHControl{};
-        std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+        std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
 
         /// Set NCC permitted.
         Builder& nccPermitted(L3NCCPermitted v) { mNCCPermitted = v; return *this; }
         /// Set RACH control parameters.
         Builder& rachControl(L3RACHControlParameters v) { mRACHControl = v; return *this; }
-        /// Add a cell channel description.
-        Builder& addCellChannelDescription(L3CellChannelDescription v) { mCellChannelDescriptions.push_back(std::move(v)); return *this; }
-        /// Set all cell channel descriptions.
-        Builder& cellChannelDescriptions(std::vector<L3CellChannelDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
+        /// Add a neighbour cell description record (ARFCN, BSIC).
+        Builder& addCellChannelDescription(L3NeighbourCellDescription v) { mCellChannelDescriptions.push_back(std::move(v)); return *this; }
+        /// Set all neighbour cell description records.
+        Builder& cellChannelDescriptions(std::vector<L3NeighbourCellDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
         /// Build the final message.
         [[nodiscard]] L3SystemInformationType8 build() const;
     };
@@ -1466,6 +1470,10 @@ public:
 
 // ── System Information Type 13 (GSM 04.08 9.1.43a) ────────────────────
 
+// System Information Type 13 (TS 44.018 section 9.1.43a): a single rest
+// octets record carrying the GPRS cell options, mobile allocation and power
+// control parameters; the body length varies with the optional groups and is
+// padded to the octet boundary.
 class L3SystemInformationType13 {
     L3SI13RestOctets mRestOctets;
 
@@ -1475,10 +1483,10 @@ public:
 
     const L3SI13RestOctets& restOctets() const { return mRestOctets; }
 
-    size_t bodyLength() const { return 3; }
+    size_t bodyLength() const { return mRestOctets.lengthV(); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 3; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     size_t restOctetsLength() const { return mRestOctets.lengthV(); }
     [[nodiscard]] static Expected<L3SystemInformationType13> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -1543,7 +1551,7 @@ public:
 
 class L3SystemInformationType17 {
     L3RACHControlParameters mRACHControl;
-    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+    std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
 
     friend struct Builder;
 public:
@@ -1552,7 +1560,7 @@ public:
     L3SystemInformationType17() = default;
 
     const L3RACHControlParameters& rachControl() const { return mRACHControl; }
-    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
+    const std::vector<L3NeighbourCellDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -1564,14 +1572,14 @@ public:
 
     struct Builder {
         L3RACHControlParameters mRACHControl{};
-        std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+        std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
 
         /// Set RACH control parameters.
         Builder& rachControl(L3RACHControlParameters v) { mRACHControl = v; return *this; }
-        /// Add a cell channel description.
-        Builder& addCellChannelDescription(L3CellChannelDescription v) { mCellChannelDescriptions.push_back(std::move(v)); return *this; }
-        /// Set all cell channel descriptions.
-        Builder& cellChannelDescriptions(std::vector<L3CellChannelDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
+        /// Add a neighbour cell description record (ARFCN, BSIC).
+        Builder& addCellChannelDescription(L3NeighbourCellDescription v) { mCellChannelDescriptions.push_back(std::move(v)); return *this; }
+        /// Set all neighbour cell description records.
+        Builder& cellChannelDescriptions(std::vector<L3NeighbourCellDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
         /// Build the final message.
         [[nodiscard]] L3SystemInformationType17 build() const;
     };
@@ -2255,17 +2263,17 @@ public:
 // ── Frequency Redefinition (GSM 04.08 9.1.13a) ────────────────────────
 
 class L3FrequencyRedefinition {
-    L3FrequencyList mCellChannelDescription;
+    L3CellChannelDescription mCellChannelDescription;
     L3RACHControlParameters mRACHControlParameters;
 
     friend struct Builder;
 public:
     static constexpr int MTI = 0x14;
 
-    const L3FrequencyList& cellChannelDescription() const { return mCellChannelDescription; }
+    const L3CellChannelDescription& cellChannelDescription() const { return mCellChannelDescription; }
     const L3RACHControlParameters& rachControl() const { return mRACHControlParameters; }
 
-    size_t bodyLength() const { return mCellChannelDescription.lengthV() + mRACHControlParameters.lengthV(); }
+    size_t bodyLength() const { return 16 + 3; }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
@@ -2274,11 +2282,14 @@ public:
     void text(std::ostream& os) const;
 
     struct Builder {
-        L3FrequencyList mCellChannelDescription;
+        L3CellChannelDescription mCellChannelDescription;
         L3RACHControlParameters mRACHControlParameters;
 
-        /// Set cell channel description (frequency list).
-        Builder& cellChannelDescription(L3FrequencyList v) { mCellChannelDescription = v; return *this; }
+        /// Set the cell channel description from an ARFCN list (variable
+        /// length BCCH frequency list form, TS 44.018 section 10.5.2.1b).
+        Builder& cellChannelDescription(std::span<const uint16_t> arfcns) { mCellChannelDescription = L3CellChannelDescription(arfcns); return *this; }
+        /// Set the cell channel description element directly.
+        Builder& cellChannelDescription(L3CellChannelDescription v) { mCellChannelDescription = std::move(v); return *this; }
         /// Set RACH control parameters.
         Builder& rachControlParameters(L3RACHControlParameters v) { mRACHControlParameters = v; return *this; }
         /// Build the final message.
@@ -3039,14 +3050,14 @@ public:
 
 class L3SystemInformationType18 {
     L3RACHControlParameters mRACHControl;
-    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+    std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
 
     friend struct Builder;
 public:
     static constexpr int MTI = 0x40;
 
     const L3RACHControlParameters& rachControl() const { return mRACHControl; }
-    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
+    const std::vector<L3NeighbourCellDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -3058,12 +3069,12 @@ public:
 
     struct Builder {
         L3RACHControlParameters mRACHControl;
-        std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+        std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
 
         /// Set RACH control parameters.
         Builder& rachControl(L3RACHControlParameters v) { mRACHControl = v; return *this; }
-        /// Set cell channel descriptions.
-        Builder& cellChannelDescriptions(std::vector<L3CellChannelDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
+        /// Set neighbour cell description records.
+        Builder& cellChannelDescriptions(std::vector<L3NeighbourCellDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
         /// Build the final message.
         [[nodiscard]] L3SystemInformationType18 build() const {
             L3SystemInformationType18 msg;
@@ -3080,14 +3091,14 @@ public:
 
 class L3SystemInformationType19 {
     L3RACHControlParameters mRACHControl;
-    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+    std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
 
     friend struct Builder;
 public:
     static constexpr int MTI = 0x41;
 
     const L3RACHControlParameters& rachControl() const { return mRACHControl; }
-    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
+    const std::vector<L3NeighbourCellDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -3099,12 +3110,12 @@ public:
 
     struct Builder {
         L3RACHControlParameters mRACHControl;
-        std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+        std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
 
         /// Set RACH control parameters.
         Builder& rachControl(L3RACHControlParameters v) { mRACHControl = v; return *this; }
-        /// Set cell channel descriptions.
-        Builder& cellChannelDescriptions(std::vector<L3CellChannelDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
+        /// Set neighbour cell description records.
+        Builder& cellChannelDescriptions(std::vector<L3NeighbourCellDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
         /// Build the final message.
         [[nodiscard]] L3SystemInformationType19 build() const {
             L3SystemInformationType19 msg;
@@ -3121,14 +3132,14 @@ public:
 
 class L3SystemInformationType20 {
     L3RACHControlParameters mRACHControl;
-    std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+    std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
 
     friend struct Builder;
 public:
     static constexpr int MTI = 0x42;
 
     const L3RACHControlParameters& rachControl() const { return mRACHControl; }
-    const std::vector<L3CellChannelDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
+    const std::vector<L3NeighbourCellDescription>& cellChannelDescriptions() const { return mCellChannelDescriptions; }
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -3140,12 +3151,12 @@ public:
 
     struct Builder {
         L3RACHControlParameters mRACHControl;
-        std::vector<L3CellChannelDescription> mCellChannelDescriptions;
+        std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
 
         /// Set RACH control parameters.
         Builder& rachControl(L3RACHControlParameters v) { mRACHControl = v; return *this; }
-        /// Set cell channel descriptions.
-        Builder& cellChannelDescriptions(std::vector<L3CellChannelDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
+        /// Set neighbour cell description records.
+        Builder& cellChannelDescriptions(std::vector<L3NeighbourCellDescription> v) { mCellChannelDescriptions = std::move(v); return *this; }
         /// Build the final message.
         [[nodiscard]] L3SystemInformationType20 build() const {
             L3SystemInformationType20 msg;

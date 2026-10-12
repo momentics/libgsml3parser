@@ -1383,47 +1383,97 @@ TEST(GoldenIE, ControlChannelDescription_RefValues) {
 
 // =====================================================================
 // Common IEs: L3CellChannelDescription (GSM 04.08 10.5.2.1b)
-// 16 bits: ARFCN(10) + BSIC(6 = NCC(3)|BCC(3))
+// Variable-length BCCH frequency list form, sixteen octets:
+// [format header(7)][base ARFCN(10)][bitmap(111)] — bitmap bit i marks
+// the presence of ARFCN base + 1 + i (TS 44.018 section 10.5.2.1b).
 // =====================================================================
 
 TEST(GoldenIE, CellChannelDescription_Default) {
     L3CellChannelDescription orig;
-    EXPECT_EQ(orig.lengthV(), 2u);
+    EXPECT_EQ(orig.lengthV(), 16u);
+    EXPECT_TRUE(orig.arfcns().empty());
     ieRoundTrip(orig);
 }
 
-TEST(GoldenIE, CellChannelDescription_Custom) {
-    L3CellChannelDescription orig(100, 0x1F);
-    ieRoundTrip(orig);
-}
+TEST(GoldenIE, CellChannelDescription_SingleARFCN) {
+    // Golden: a single ARFCN 874 ('001101101010'B) is the base with an
+    // empty bitmap; header '1000111'B plus the top base bit gives 0x8F,
+    // the remaining nine base bits give 0xB5 (TS 44.018 section 10.5.2.1b).
+    L3CellChannelDescription orig(std::vector<uint16_t>{874});
+    EXPECT_EQ(orig.lengthV(), 16u);
+    EXPECT_EQ(orig.base(), 874u);
 
-TEST(GoldenIE, CellChannelDescription_IE) {
-    // Golden: ARFCN=100 (ten bits '0001100100') and BSIC=0x12 (six bits
-    // '010010', NCC|BCC) pack into the two octets 0x19 0x12
-    // (TS 44.018 section 9.2.3 cell channel description).
-    L3CellChannelDescription chd(100, 0x12);
-    EXPECT_EQ(chd.arfcn(), 100u);
-    EXPECT_EQ(chd.bsic(), 0x12u);
-    EXPECT_EQ(chd.lengthV(), 2u);
-
-    std::vector<uint8_t> buf(4, 0);
+    std::vector<uint8_t> buf(32, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
-    chd.write(writer);
-    EXPECT_EQ(writer.position(), 16u);
-    EXPECT_EQ(buf[0], 0x19u);
-    EXPECT_EQ(buf[1], 0x12u);
+    orig.write(writer);
+    EXPECT_EQ(writer.position(), 128u);
+    const uint8_t expected[16] = {0x8F, 0xB5, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    for (int i = 0; i < 16; i++) {
+        EXPECT_EQ(buf[i], expected[i]);
+    }
 
     BitReader reader(buf.data(), writer.position());
     auto parsedResult = L3CellChannelDescription::parse(reader);
     ASSERT_TRUE(parsedResult);
-    EXPECT_EQ((*parsedResult).arfcn(), 100u);
-    EXPECT_EQ((*parsedResult).bsic(), 0x12u);
+    EXPECT_EQ((*parsedResult).base(), 874u);
+    EXPECT_EQ((*parsedResult).arfcns().size(), 1u);
+    EXPECT_EQ((*parsedResult).arfcns()[0], 874u);
+}
+
+TEST(GoldenIE, CellChannelDescription_RefVector) {
+    // Golden: a broadcast cell channel description carrying a single BCCH
+    // carrier. Header '1000111'B, base ARFCN 871 ('01101100111'B spans the
+    // last bit of octet 0, all of octet 1 and the top bit of octet 2),
+    // empty bitmap (TS 44.018 section 10.5.2.1b).
+    const uint8_t raw[16] = {0x8F, 0xB3, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+    BitReader reader(raw, sizeof(raw) * 8);
+    auto parsedResult = L3CellChannelDescription::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).base(), 871u);
+    ASSERT_EQ((*parsedResult).arfcns().size(), 1u);
+    EXPECT_EQ((*parsedResult).arfcns()[0], 871u);
+
+    // Lossless re-emission: the raw sixteen octets are preserved.
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    (*parsedResult).write(writer);
+    EXPECT_EQ(writer.position(), 128u);
+    for (int i = 0; i < 16; i++) {
+        EXPECT_EQ(buf[i], raw[i]);
+    }
+}
+
+TEST(GoldenIE, CellChannelDescription_MultiARFCN) {
+    // Golden: list {100, 101, 102, 200}: base 100 ('0001100100'B), bitmap
+    // bits 0 and 1 (101, 102) set the top two bits of octet 2, bit 99
+    // (ARFCN 200) sets the low nibble bit of octet 14 (TS 44.018
+    // section 10.5.2.1b).
+    std::vector<uint16_t> arfcns = {100, 101, 102, 200};
+    L3CellChannelDescription orig(arfcns);
+
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    EXPECT_EQ(buf[0], 0x8Eu);   // header '1000111'B, base top bit 0
+    EXPECT_EQ(buf[1], 0x32u);   // base low nine bits of 100
+    EXPECT_EQ(buf[2], 0x60u);   // bitmap bits 0..1 set
+    EXPECT_EQ(buf[14], 0x08u);  // bitmap bit 99 set
+    for (int i = 3; i < 16; i++) {
+        if (i == 14) continue;
+        EXPECT_EQ(buf[i], 0x00u);
+    }
+
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3CellChannelDescription::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    std::vector<uint16_t> decoded((*parsedResult).arfcns().begin(), (*parsedResult).arfcns().end());
+    EXPECT_EQ(decoded, arfcns);
 }
 
 // =====================================================================
-// Common IEs: L3FrequencyList (GSM 04.08 10.5.2.13)
-// Bitmap of ARFCN presence per GSM 24.008 10.5.2.13
-// 16 bytes, variable bitmap format
+// Common IEs: L3FrequencyList / L3BCCHFrequencyList (GSM 04.08 10.5.2.13 /
+// 10.5.2.22) — the same sixteen-octet variable form as the cell channel
+// description
 // =====================================================================
 
 TEST(GoldenIE, FrequencyList_Default) {
@@ -1433,7 +1483,7 @@ TEST(GoldenIE, FrequencyList_Default) {
 }
 
 TEST(GoldenIE, FrequencyList_WithARFCNs) {
-    std::vector<unsigned> arfcns = {100, 101, 102, 200};
+    std::vector<uint16_t> arfcns = {100, 101, 102, 200};
     L3FrequencyList orig(arfcns);
     ieRoundTrip(orig);
 }
@@ -1445,13 +1495,15 @@ TEST(GoldenIE, FrequencyList_Empty) {
     std::vector<uint8_t> buf(32, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     fl.write(writer);
-    for (int i = 0; i < 16; i++) {
+    // Header '1000111'B with a zero base and an empty bitmap.
+    EXPECT_EQ(buf[0], 0x8Eu);
+    for (int i = 1; i < 16; i++) {
         EXPECT_EQ(buf[i], 0x00);
     }
 }
 
 TEST(GoldenIE, FrequencyList_SingleARFCN) {
-    std::vector<unsigned> arfcns = {100};
+    std::vector<uint16_t> arfcns = {100};
     L3FrequencyList fl(arfcns);
     std::vector<uint8_t> buf(32, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
@@ -1459,7 +1511,8 @@ TEST(GoldenIE, FrequencyList_SingleARFCN) {
     BitReader reader(buf.data(), writer.position());
     auto parsedResult = L3FrequencyList::parse(reader);
     ASSERT_TRUE(parsedResult);
-    EXPECT_EQ((*parsedResult).arfcns(), arfcns);
+    std::vector<uint16_t> decoded((*parsedResult).arfcns().begin(), (*parsedResult).arfcns().end());
+    EXPECT_EQ(decoded, arfcns);
 }
 
 // =====================================================================
@@ -1473,9 +1526,47 @@ TEST(GoldenIE, BCCHFrequencyList_Default) {
 }
 
 TEST(GoldenIE, BCCHFrequencyList_WithARFCNs) {
-    std::vector<unsigned> arfcns = {50, 100, 150};
+    std::vector<uint16_t> arfcns = {50, 100, 150};
     L3BCCHFrequencyList orig(arfcns);
+    // Base 50 ('0000110010'B): header + base top bit 0 -> 0x8E, remaining
+    // nine base bits -> 0x19; ARFCN 100 sets bitmap bit 49 (octet 8,
+    // 0x20) and ARFCN 150 sets bitmap bit 99 (octet 14, 0x08).
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    EXPECT_EQ(buf[0], 0x8Eu);
+    EXPECT_EQ(buf[1], 0x19u);
+    EXPECT_EQ(buf[8], 0x20u);
+    EXPECT_EQ(buf[14], 0x08u);
     ieRoundTrip(orig);
+}
+
+// =====================================================================
+// Common IEs: L3NeighbourCellDescription (GSM 04.08 10.5.2.1b records)
+// 16 bits: ARFCN(10) + BSIC(6 = NCC(3)|BCC(3))
+// =====================================================================
+
+TEST(GoldenIE, NeighbourCellDescription_IE) {
+    // Golden: ARFCN=100 (ten bits '0001100100') and BSIC=0x12 (six bits
+    // '010010', NCC|BCC) pack into the two octets 0x19 0x12
+    // (TS 44.018 section 10.5.2.1b neighbour cell description record).
+    L3NeighbourCellDescription chd(100, 0x12);
+    EXPECT_EQ(chd.arfcn(), 100u);
+    EXPECT_EQ(chd.bsic(), 0x12u);
+    EXPECT_EQ(chd.lengthV(), 2u);
+
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    chd.write(writer);
+    EXPECT_EQ(writer.position(), 16u);
+    EXPECT_EQ(buf[0], 0x19u);
+    EXPECT_EQ(buf[1], 0x12u);
+
+    BitReader reader(buf.data(), writer.position());
+    auto parsedResult = L3NeighbourCellDescription::parse(reader);
+    ASSERT_TRUE(parsedResult);
+    EXPECT_EQ((*parsedResult).arfcn(), 100u);
+    EXPECT_EQ((*parsedResult).bsic(), 0x12u);
 }
 
 // =====================================================================
@@ -1654,33 +1745,147 @@ TEST(GoldenIE, SI4RestOctets_Default) {
     EXPECT_FALSE(orig.powerOffsetPresent());
     EXPECT_FALSE(orig.hasGPRS());
     EXPECT_FALSE(orig.restSPresent());
-    // The all-absent O-part record (four presence bits) occupies one octet.
-    EXPECT_EQ(orig.lengthV(), 1u);
+    // With no group present and no S tail the rest octets are zero or more:
+    // the all-absent record contributes nothing (TS 44.018 section 9.1.36).
+    EXPECT_EQ(orig.lengthV(), 0u);
 }
 
 // =====================================================================
 // Common IEs: L3SI13RestOctets (GSM 04.08 10.5.2.37b)
-// GPRS power control parameters in the SI13 rest octets (TS 44.018 9.1.43a)
+// SI13 rest octets: presence, BCCH change mark, SI change field, the
+// optional GPRS mobile allocation group, RAC / SPGC / priority access
+// threshold / network control order, GPRS cell options and GPRS power
+// control parameters; padded with '00101011'B to the octet boundary
+// (TS 44.018 section 10.5.2.37b, TS 44.060 sections 12.9a/12.10a/12.24).
 // =====================================================================
 
 TEST(GoldenIE, SI13RestOctets_Default) {
     L3SI13RestOctets orig;
+    // presence(1)+mark(3)+field(4)+presence2(1)+zero(1)+RAC(8)+SPGC(1)
+    // +PAT(3)+NCO(2) = 24 bits, cell options without the PAN and
+    // extension groups = 19 bits, power control parameters = 19 bits:
+    // 62 bits -> eight octets including the two padding bits.
+    EXPECT_EQ(orig.lengthV(), 8u);
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    EXPECT_EQ(writer.position(), 64u);
+    // The two padding bits are the top of the '00101011'B pattern.
+    EXPECT_EQ(buf[7] & 0xC0u, 0x00u);
+    BitReader reader(buf.data(), writer.position());
+    auto parsed = L3SI13RestOctets::parse(reader);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(reader.remainingBits(), 0u);
+    EXPECT_FALSE((*parsed).presence2());
+    EXPECT_EQ((*parsed).rac(), 0u);
+}
+
+TEST(GoldenIE, SI13RestOctets_GprsGroup_RoundTrip) {
+    // presence2 = '1' with an si13 change mark, a GPRS mobile allocation
+    // (HSN plus RFL list and a 20-bit allocation bitmap), PAN parameters
+    // and the extension information group.
+    L3SI13RestOctets orig;
+    orig.presence(true);
+    orig.bcchChangeMark(2);
+    orig.siChangeField(7);
+    orig.presence2(true);
+    orig.si13ChangeMark(1);
+    orig.gprsMa().hsn(0x2A);
+    orig.gprsMa().rflNumberListPresent(true);
+    orig.gprsMa().rflNumbers(std::vector<uint8_t>{0, 1, 2});
+    orig.gprsMa().maPresent(false);
+    std::vector<uint8_t> maBitmap{0xA5, 0x3C};
+    orig.gprsMa().maBitmap(maBitmap, 20);
+    orig.rac(0x7F);
+    orig.spgcCcchSup(true);
+    orig.priorityAccessThr(5);
+    orig.networkControlOrder(2);
+    orig.cellOptions().nmo(1);
+    orig.cellOptions().t3168(4);
+    orig.cellOptions().t3192(2);
+    orig.cellOptions().drxTimerMax(6);
+    orig.cellOptions().accessBurstType(1);
+    orig.cellOptions().controlAckType(0);
+    orig.cellOptions().bsCvMax(13);
+    orig.cellOptions().panPresence(true);
+    orig.cellOptions().panDec(2);
+    orig.cellOptions().panInc(4);
+    orig.cellOptions().panMax(6);
+    orig.cellOptions().extInfoPresence(true);
+    std::vector<uint8_t> ext{0xDE, 0xAD};
+    orig.cellOptions().extInfo(ext);
+    orig.cellOptions().extInfoLength(15);
+    orig.powerControlParameters().alpha(9);
+    orig.powerControlParameters().tAvgW(17);
+    orig.powerControlParameters().tAvgT(23);
+    orig.powerControlParameters().pcMeasChan(true);
+    orig.powerControlParameters().nAvgI(11);
+
+    // 9 fixed + (2 + 49) MA group + 15 mid + (17 + 10 + 22) cell options +
+    // 19 power control = 143 bits -> 18 octets with one padding bit.
+    EXPECT_EQ(orig.lengthV(), 18u);
+
+    std::vector<uint8_t> buf(64, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    orig.write(writer);
+    EXPECT_EQ(writer.position(), 144u);
+    // The last seven record bits (t_avg_t low two, pc_meas_chan and n_avg_i)
+    // plus the one padding bit '0' of the '00101011'B pattern: 0xF6.
+    EXPECT_EQ(buf[17], 0xF6u);
+
+    BitReader reader(buf.data(), writer.position());
+    auto parsed = L3SI13RestOctets::parse(reader);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(reader.remainingBits(), 0u);
+    const auto& p = *parsed;
+    EXPECT_TRUE(p.presence2());
+    EXPECT_EQ(p.si13ChangeMark(), 1u);
+    EXPECT_EQ(p.gprsMa().hsn(), 0x2Au);
+    ASSERT_EQ(p.gprsMa().rflNumbers().size(), 3u);
+    EXPECT_EQ(p.gprsMa().rflNumbers()[2], 2u);
+    EXPECT_FALSE(p.gprsMa().maPresent());
+    EXPECT_EQ(p.gprsMa().maLength(), 20u);
+    ASSERT_EQ(p.gprsMa().maBitmap().size(), 3u);
+    EXPECT_EQ(p.gprsMa().maBitmap()[0], 0xA5u);
+    EXPECT_EQ(p.rac(), 0x7Fu);
+    EXPECT_TRUE(p.spgcCcchSup());
+    EXPECT_EQ(p.priorityAccessThr(), 5u);
+    EXPECT_EQ(p.networkControlOrder(), 2u);
+    EXPECT_EQ(p.cellOptions().nmo(), 1u);
+    EXPECT_TRUE(p.cellOptions().panPresence());
+    EXPECT_EQ(p.cellOptions().panDec(), 2u);
+    EXPECT_EQ(p.cellOptions().panInc(), 4u);
+    EXPECT_EQ(p.cellOptions().panMax(), 6u);
+    EXPECT_TRUE(p.cellOptions().extInfoPresence());
+    EXPECT_EQ(p.cellOptions().extInfoLength(), 15u);
+    ASSERT_EQ(p.cellOptions().extInfo().size(), 2u);
+    EXPECT_EQ(p.cellOptions().extInfo()[0], 0xDEu);
+    EXPECT_EQ(p.powerControlParameters().alpha(), 9u);
+    EXPECT_EQ(p.powerControlParameters().tAvgW(), 17u);
+    EXPECT_EQ(p.powerControlParameters().tAvgT(), 23u);
+    EXPECT_TRUE(p.powerControlParameters().pcMeasChan());
+    EXPECT_EQ(p.powerControlParameters().nAvgI(), 11u);
 }
 
 // =====================================================================
-// Common IEs: L3GPRSCellOptions
+// Common IEs: L3GPRSCellOptions (TS 44.060 12.24)
 // =====================================================================
 
 TEST(GoldenIE, GPRSCellOptions_Default) {
     L3GPRSCellOptions orig;
+    // NMO(2)+T3168(3)+T3192(3)+DRX(3)+burst(1)+ack(1)+BS_CV_MAX(4) plus the
+    // PAN presence bit and the extension presence bit.
+    EXPECT_EQ(orig.lengthBits(), 19u);
 }
 
 // =====================================================================
-// Common IEs: L3GPRSSI13PowerControlParameters
+// Common IEs: L3GPRSSI13PowerControlParameters (TS 44.060 12.9a)
 // =====================================================================
 
 TEST(GoldenIE, GPRSSI13PowerControlParameters_Default) {
     L3GPRSSI13PowerControlParameters orig;
+    // alpha(4)+t_avg_w(5)+t_avg_t(5)+pc_meas_chan(1)+n_avg_i(4).
+    EXPECT_EQ(orig.lengthBits(), 19u);
 }
 
 // =====================================================================

@@ -415,141 +415,83 @@ void L3CipheringKeySequenceNumber::text(std::ostream& os) const {
     os << "CKSN=" << mCIValue;
 }
 
-// ── Frequency list helpers ──────────────────────────────────────────────
+// ── L3CellChannelDescription (variable-length BCCH frequency list form) ─
 
-namespace {
-std::vector<uint8_t> frequencyListToRaw(const std::vector<unsigned>& arfcns) {
-    std::vector<uint8_t> raw(16, 0);
-    if (arfcns.empty()) return raw;
-    unsigned base = arfcns[0];
-    for (unsigned a : arfcns) if (a < base) base = a;
-    unsigned spread = 0;
-    for (unsigned a : arfcns) { unsigned d = a - base; if (d > spread) spread = d; }
-    // Write header: ext(1)=0, spare(2), base(10)
-    raw[0] = static_cast<uint8_t>((base >> 8) & 0x7F);
-    raw[1] = static_cast<uint8_t>(base & 0xFF);
-    // Bitmap in remaining 14 bytes (112 bits), starting from base+1
-    for (unsigned a : arfcns) {
-        if (a == base) continue;
-        unsigned offset = a - base - 1;
-        if (offset < 112) {
-            size_t byteIdx = 2 + offset / 8;
-            unsigned bitIdx = 7u - (offset % 8);
-            raw[byteIdx] |= static_cast<uint8_t>(1u << bitIdx);
+// Sixteen octets, MSB-first: [format header(7)][base ARFCN(10)]
+// [bitmap(111)]. The header occupies the top seven bits of the first octet;
+// the base spans the last bit of the first octet, all of the second and the
+// top bit of the third; bitmap bit i follows at stream position 17 + i.
+void L3CellChannelDescription::decode(const std::array<uint8_t, 16>& raw, uint16_t& base, std::vector<uint16_t>& arfcns) {
+    // base = b9 (last bit of octet 0), b8..b1 (all of octet 1, shifted one
+    // position up in value), b0 (top bit of octet 2).
+    base = static_cast<uint16_t>(((static_cast<unsigned>(raw[0]) & 0x01u) << 9)
+                                 | (static_cast<unsigned>(raw[1]) << 1)
+                                 | ((raw[2] >> 7) & 0x01u));
+    arfcns.clear();
+    if (base != 0) arfcns.push_back(base);
+    for (unsigned i = 0; i < 111; ++i) {
+        const unsigned pos = 17 + i;
+        if (raw[pos / 8] & (1u << (7 - pos % 8))) {
+            arfcns.push_back(static_cast<uint16_t>(base + 1 + i));
         }
     }
-    return raw;
 }
 
-std::vector<unsigned> frequencyListFromRaw(const std::vector<uint8_t>& raw) {
-    std::vector<unsigned> arfcns;
-    if (raw.size() < 2) return arfcns;
-    unsigned base = (static_cast<unsigned>(raw[0] & 0x7F) << 8) | raw[1];
-    if (base == 0 && raw[0] == 0 && raw[1] == 0) return arfcns;
-    arfcns.push_back(base);
-    unsigned numBits = static_cast<unsigned>((raw.size() - 2) * 8);
-    for (unsigned i = 0; i < numBits; ++i) {
-        size_t byteIdx = 2 + i / 8;
-        if (byteIdx >= raw.size()) break;
-        unsigned bitIdx = 7u - (i % 8);
-        if (raw[byteIdx] & (1u << bitIdx)) {
-            arfcns.push_back(base + 1 + i);
-        }
+void L3CellChannelDescription::encode(std::array<uint8_t, 16>& raw, const std::vector<uint16_t>& sorted) {
+    raw.fill(0);
+    // Format header '1000111'B (TS 44.018 section 10.5.2.1b variable form).
+    const uint16_t base = sorted.empty() ? 0 : sorted.front();
+    raw[0] = static_cast<uint8_t>(0x47u << 1 | (base >> 9));
+    raw[1] = static_cast<uint8_t>((base >> 1) & 0xFFu);
+    for (uint16_t a : sorted) {
+        if (a <= base) continue;
+        const unsigned i = static_cast<unsigned>(a) - static_cast<unsigned>(base) - 1u;
+        if (i >= 111) continue;   // beyond the bitmap span
+        const unsigned pos = 17 + i;
+        raw[pos / 8] |= static_cast<uint8_t>(1u << (7 - pos % 8));
     }
-    std::sort(arfcns.begin(), arfcns.end());
-    return arfcns;
-}
-} // anonymous namespace
-
-// ── L3FrequencyList ────────────────────────────────────────────────────
-
-unsigned L3FrequencyList::base() const {
-    if (mARFCNs.empty()) return 0;
-    unsigned retVal = mARFCNs[0];
-    for (unsigned a : mARFCNs) if (a < retVal) retVal = a;
-    return retVal;
 }
 
-bool L3FrequencyList::contains(unsigned arfcn) const {
-    return std::find(mARFCNs.begin(), mARFCNs.end(), arfcn) != mARFCNs.end();
-}
-
-Expected<L3FrequencyList> L3FrequencyList::parse(BitReader& br) {
-    std::vector<uint8_t> raw(16);
-    auto r = br.readBytes(raw.data(), 16);
-    if (!r) return Expected<L3FrequencyList>::error(r.error());
-    return Expected<L3FrequencyList>::hold(L3FrequencyList(frequencyListFromRaw(raw)));
-}
-
-void L3FrequencyList::write(BitWriter& bw) const {
-    std::vector<uint8_t> raw = frequencyListToRaw(mARFCNs);
-    bw.writeBytes(raw.data(), raw.size());
-}
-
-void L3FrequencyList::text(std::ostream& os) const {
-    os << "FreqList[";
-    for (size_t i = 0; i < mARFCNs.size(); ++i) {
-        if (i) os << ",";
-        os << mARFCNs[i];
-    }
-    os << "]";
-}
-
-// ── L3BCCHFrequencyList ────────────────────────────────────────────────
-
-unsigned L3BCCHFrequencyList::base() const {
-    if (mARFCNs.empty()) return 0;
-    unsigned retVal = mARFCNs[0];
-    for (unsigned a : mARFCNs) if (a < retVal) retVal = a;
-    return retVal;
-}
-
-bool L3BCCHFrequencyList::contains(unsigned arfcn) const {
-    return std::find(mARFCNs.begin(), mARFCNs.end(), arfcn) != mARFCNs.end();
-}
-
-Expected<L3BCCHFrequencyList> L3BCCHFrequencyList::parse(BitReader& br) {
-    // GSM 04.08 10.5.2.22: 16-octet BCCH_Freq_List (base + 112-bit bitmap),
-    // same raw layout as L3FrequencyList.
-    std::vector<uint8_t> raw(16);
-    auto r = br.readBytes(raw.data(), 16); if (!r) return Expected<L3BCCHFrequencyList>::error(r.error());
-    return Expected<L3BCCHFrequencyList>::hold(L3BCCHFrequencyList(frequencyListFromRaw(raw)));
-}
-
-void L3BCCHFrequencyList::write(BitWriter& bw) const {
-    // GSM 04.08 10.5.2.22: 16-octet BCCH_Freq_List (base + 112-bit bitmap),
-    // same raw layout as L3FrequencyList.
-    std::vector<uint8_t> raw = frequencyListToRaw(mARFCNs);
-    bw.writeBytes(raw.data(), raw.size());
-}
-
-void L3BCCHFrequencyList::text(std::ostream& os) const {
-    os << "BCCHFreqList[";
-    for (size_t i = 0; i < mARFCNs.size(); ++i) {
-        if (i) os << ",";
-        os << mARFCNs[i];
-    }
-    os << "]";
-}
-
-// ── L3CellChannelDescription ───────────────────────────────────────────
-
-// Sixteen bits: [ARFCN(10)][BSIC(6) = NCC(3)|BCC(3)] (TS 44.018 section
-// 9.2.3 cell channel description).
 Expected<L3CellChannelDescription> L3CellChannelDescription::parse(BitReader& br) {
     L3CellChannelDescription result;
-    auto r = br.readField(10); if (!r) return Expected<L3CellChannelDescription>::error(r.error()); result.mARfcn = static_cast<uint16_t>(r.value());
-    r = br.readField(6); if (!r) return Expected<L3CellChannelDescription>::error(r.error()); result.mBSIC = static_cast<uint8_t>(r.value());
+    auto r = br.readBytes(result.mRaw.data(), 16);
+    if (!r) return Expected<L3CellChannelDescription>::error(r.error());
+    decode(result.mRaw, result.mBase, result.mArfcns);
     return Expected<L3CellChannelDescription>::hold(std::move(result));
 }
 
 void L3CellChannelDescription::write(BitWriter& bw) const {
+    bw.writeBytes(mRaw.data(), mRaw.size());
+}
+
+void L3CellChannelDescription::text(std::ostream& os) const {
+    os << "CellChannel[base=" << mBase;
+    os << " ARFCNs=" << mArfcns.size() << ": ";
+    for (size_t i = 0; i < mArfcns.size(); ++i) {
+        if (i) os << ",";
+        os << mArfcns[i];
+    }
+    os << "]";
+}
+
+// ── L3NeighbourCellDescription ─────────────────────────────────────────
+
+// Sixteen bits: [ARFCN(10)][BSIC(6) = NCC(3)|BCC(3)] (TS 44.018 section
+// 10.5.2.1b neighbour cell description record).
+Expected<L3NeighbourCellDescription> L3NeighbourCellDescription::parse(BitReader& br) {
+    L3NeighbourCellDescription result;
+    auto r = br.readField(10); if (!r) return Expected<L3NeighbourCellDescription>::error(r.error()); result.mARfcn = static_cast<uint16_t>(r.value());
+    r = br.readField(6); if (!r) return Expected<L3NeighbourCellDescription>::error(r.error()); result.mBSIC = static_cast<uint8_t>(r.value());
+    return Expected<L3NeighbourCellDescription>::hold(std::move(result));
+}
+
+void L3NeighbourCellDescription::write(BitWriter& bw) const {
     bw.writeField(mARfcn, 10);
     bw.writeField(mBSIC, 6);
 }
 
-void L3CellChannelDescription::text(std::ostream& os) const {
-    os << "CellChannel[ARfcn=" << mARfcn << " BSIC=" << static_cast<unsigned>(mBSIC) << "]";
+void L3NeighbourCellDescription::text(std::ostream& os) const {
+    os << "NeighbourCell[ARfcn=" << mARfcn << " BSIC=" << static_cast<unsigned>(mBSIC) << "]";
 }
 
 // ── L3ControlChannelDescription ────────────────────────────────────────
@@ -1539,6 +1481,12 @@ Expected<L3SIType4RestOctets> L3SIType4RestOctets::parse(BitReader& br) {
 }
 
 size_t L3SIType4RestOctets::lengthV() const {
+    // The rest octets are optional (zero or more): with no selection, power,
+    // GPRS group and no S tail the record contributes nothing (TS 44.018
+    // section 9.1.36).
+    if (!mSelPresent && !mPwrOffsetPresent && !mHaveGPRS && !mRestSPresent) {
+        return 0;
+    }
     size_t bits = 1;                                  // sel_pres
     if (mSelPresent) bits += 1 + 6 + 3 + 5;           // cbq|cro|to|pt
     bits += 1;                                        // pwr_pres
@@ -1552,6 +1500,9 @@ size_t L3SIType4RestOctets::lengthV() const {
 }
 
 void L3SIType4RestOctets::write(BitWriter& bw) const {
+    if (!mSelPresent && !mPwrOffsetPresent && !mHaveGPRS && !mRestSPresent) {
+        return;                                       // rest octets absent (0..N)
+    }
     bw.writeField(mSelPresent ? 1u : 0u, 1);
     if (mSelPresent) {
         bw.writeField(mCBQ ? 1u : 0u, 1);
@@ -1599,9 +1550,45 @@ void L3IARestOctets::text(std::ostream& os) const {
     if (mHavePacketAssignment) os << " [PacketAssignment]";
 }
 
-// ── GPRS elements ──────────────────────────────────────────────────────
+// ── GPRS elements (TS 44.060) ──────────────────────────────────────────
 
-size_t L3GPRSCellOptions::lengthBits() const { return 20; }
+size_t L3GPRSCellOptions::lengthBits() const {
+    size_t bits = 2 + 3 + 3 + 3 + 1 + 1 + 4;   // NMO..BS_CV_MAX
+    if (mPanPresence) bits += 1 + 3 + 3 + 3;  // pan_presence + PAN group
+    else bits += 1;                           // pan_presence
+    if (mExtInfoPresence) bits += 1 + 6 + mExtInfoLength;
+    else bits += 1;                           // ext_info_presence
+    return bits;
+}
+
+Expected<L3GPRSCellOptions> L3GPRSCellOptions::parse(BitReader& br) {
+    L3GPRSCellOptions result;
+    auto r = br.readField(2); if (!r) return Expected<L3GPRSCellOptions>::error(r.error()); result.mNMO = r.value();
+    r = br.readField(3); if (!r) return Expected<L3GPRSCellOptions>::error(r.error()); result.mT3168 = r.value();
+    r = br.readField(3); if (!r) return Expected<L3GPRSCellOptions>::error(r.error()); result.mT3192 = r.value();
+    r = br.readField(3); if (!r) return Expected<L3GPRSCellOptions>::error(r.error()); result.mDRX_TIMER_MAX = r.value();
+    r = br.readField(1); if (!r) return Expected<L3GPRSCellOptions>::error(r.error()); result.mACCESS_BURST_TYPE = r.value();
+    r = br.readField(1); if (!r) return Expected<L3GPRSCellOptions>::error(r.error()); result.mCONTROL_ACK_TYPE = r.value();
+    r = br.readField(4); if (!r) return Expected<L3GPRSCellOptions>::error(r.error()); result.mBS_VC_MAX = r.value();
+    r = br.readField(1); if (!r) return Expected<L3GPRSCellOptions>::error(r.error()); result.mPanPresence = r.value() != 0;
+    if (result.mPanPresence) {
+        r = br.readField(3); if (!r) return Expected<L3GPRSCellOptions>::error(r.error()); result.mPanDec = r.value();
+        r = br.readField(3); if (!r) return Expected<L3GPRSCellOptions>::error(r.error()); result.mPanInc = r.value();
+        r = br.readField(3); if (!r) return Expected<L3GPRSCellOptions>::error(r.error()); result.mPanMax = r.value();
+    }
+    r = br.readField(1); if (!r) return Expected<L3GPRSCellOptions>::error(r.error()); result.mExtInfoPresence = r.value() != 0;
+    if (result.mExtInfoPresence) {
+        r = br.readField(6); if (!r) return Expected<L3GPRSCellOptions>::error(r.error()); result.mExtInfoLength = r.value();
+        // Extension information bits are captured raw (TS 44.060 12.24).
+        std::vector<uint8_t> ext((result.mExtInfoLength + 7) / 8, 0);
+        for (unsigned bit = 0; bit < result.mExtInfoLength; ++bit) {
+            r = br.readField(1); if (!r) return Expected<L3GPRSCellOptions>::error(r.error());
+            if (r.value()) ext[bit / 8] |= static_cast<uint8_t>(1u << (7 - bit % 8));
+        }
+        result.mExtInfo = std::move(ext);
+    }
+    return Expected<L3GPRSCellOptions>::hold(std::move(result));
+}
 
 void L3GPRSCellOptions::writeBits(BitWriter& bw) const {
     bw.writeField(mNMO, 2);
@@ -1611,54 +1598,193 @@ void L3GPRSCellOptions::writeBits(BitWriter& bw) const {
     bw.writeField(mACCESS_BURST_TYPE, 1);
     bw.writeField(mCONTROL_ACK_TYPE, 1);
     bw.writeField(mBS_VC_MAX, 4);
-    bw.writeField(0, 2);
+    bw.writeField(mPanPresence ? 1u : 0u, 1);
+    if (mPanPresence) {
+        bw.writeField(mPanDec, 3);
+        bw.writeField(mPanInc, 3);
+        bw.writeField(mPanMax, 3);
+    }
+    bw.writeField(mExtInfoPresence ? 1u : 0u, 1);
+    if (mExtInfoPresence) {
+        bw.writeField(mExtInfoLength, 6);
+        for (unsigned bit = 0; bit < mExtInfoLength; ++bit) {
+            const unsigned v = (bit / 8 < mExtInfo.size())
+                ? (mExtInfo[bit / 8] >> (7 - bit % 8)) & 1u : 0u;
+            bw.writeField(v, 1);
+        }
+    }
 }
 
 void L3GPRSCellOptions::text(std::ostream& os) const {
     os << "GPRSCellOpts[NMO=" << mNMO << " T3168=" << mT3168
-       << " T3192=" << mT3192 << " DRX=" << mDRX_TIMER_MAX << "]";
+       << " T3192=" << mT3192 << " DRX=" << mDRX_TIMER_MAX
+       << " PAN=" << (mPanPresence ? "present" : "absent")
+       << " ExtInfo=" << (mExtInfoPresence ? mExtInfoLength : 0) << "bits]";
 }
 
-size_t L3GPRSSI13PowerControlParameters::lengthBits() const { return 23; }
+// ── L3GprsMobileAllocation ─────────────────────────────────────────────
+
+size_t L3GprsMobileAllocation::lengthBits() const {
+    size_t bits = 6 + 1;                        // HSN + RFL list presence
+    for (uint8_t i = 0; i < mRflCount; ++i) bits += 5;
+    bits += 1;                                  // ma_present
+    if (!mMaPresent) bits += 6 + mMaLength;     // ma_length + ma_bitmap
+    return bits;
+}
+
+Expected<L3GprsMobileAllocation> L3GprsMobileAllocation::parse(BitReader& br) {
+    L3GprsMobileAllocation result;
+    auto r = br.readField(6); if (!r) return Expected<L3GprsMobileAllocation>::error(r.error()); result.mHsn = r.value();
+    r = br.readField(1); if (!r) return Expected<L3GprsMobileAllocation>::error(r.error()); result.mRflNumberListPresent = r.value() != 0;
+    if (result.mRflNumberListPresent) {
+        // {RFL number(4), presence(1)} entries until presence = '0'.
+        while (br.remainingBits() >= 5) {
+            r = br.readField(4); if (!r) return Expected<L3GprsMobileAllocation>::error(r.error());
+            const unsigned rfl = r.value();
+            r = br.readField(1); if (!r) return Expected<L3GprsMobileAllocation>::error(r.error());
+            if (result.mRflCount < result.mRflNumbers.size()) {
+                result.mRflNumbers[result.mRflCount++] = static_cast<uint8_t>(rfl);
+            }
+            if (!r.value()) break;
+        }
+    }
+    r = br.readField(1); if (!r) return Expected<L3GprsMobileAllocation>::error(r.error()); result.mMaPresent = r.value() != 0;
+    if (!result.mMaPresent) {
+        r = br.readField(6); if (!r) return Expected<L3GprsMobileAllocation>::error(r.error()); result.mMaLength = r.value();
+        std::vector<uint8_t> bitmap((result.mMaLength + 7) / 8, 0);
+        for (unsigned bit = 0; bit < result.mMaLength; ++bit) {
+            r = br.readField(1); if (!r) return Expected<L3GprsMobileAllocation>::error(r.error());
+            if (r.value()) bitmap[bit / 8] |= static_cast<uint8_t>(1u << (7 - bit % 8));
+        }
+        for (size_t i = 0; i < result.mMaBitmap.size() && i < bitmap.size(); ++i) {
+            result.mMaBitmap[i] = bitmap[i];
+        }
+    }
+    return Expected<L3GprsMobileAllocation>::hold(std::move(result));
+}
+
+void L3GprsMobileAllocation::writeBits(BitWriter& bw) const {
+    bw.writeField(mHsn, 6);
+    bw.writeField(mRflNumberListPresent ? 1u : 0u, 1);
+    for (uint8_t i = 0; i < mRflCount; ++i) {
+        bw.writeField(mRflNumbers[i] & 0xFu, 4);
+        // Presence '1' marks that another RFL number follows.
+        bw.writeField(i + 1 < mRflCount ? 1u : 0u, 1);
+    }
+    bw.writeField(mMaPresent ? 1u : 0u, 1);
+    if (!mMaPresent) {
+        bw.writeField(mMaLength, 6);
+        for (unsigned bit = 0; bit < mMaLength && bit / 8 < mMaBitmap.size(); ++bit) {
+            const unsigned v = (mMaBitmap[bit / 8] >> (7 - bit % 8)) & 1u;
+            bw.writeField(v, 1);
+        }
+    }
+}
+
+void L3GprsMobileAllocation::text(std::ostream& os) const {
+    os << "GprsMA[HSN=" << mHsn << " RFL=" << (mRflNumberListPresent ? mRflCount : 0)
+       << " MApresent=" << mMaPresent;
+    if (!mMaPresent) os << " MALen=" << mMaLength;
+    os << "]";
+}
+
+size_t L3GPRSSI13PowerControlParameters::lengthBits() const { return 19; }
+
+Expected<L3GPRSSI13PowerControlParameters> L3GPRSSI13PowerControlParameters::parse(BitReader& br) {
+    L3GPRSSI13PowerControlParameters result;
+    auto r = br.readField(4); if (!r) return Expected<L3GPRSSI13PowerControlParameters>::error(r.error()); result.mALPHA = r.value();
+    r = br.readField(5); if (!r) return Expected<L3GPRSSI13PowerControlParameters>::error(r.error()); result.mTAvgW = r.value();
+    r = br.readField(5); if (!r) return Expected<L3GPRSSI13PowerControlParameters>::error(r.error()); result.mTAvgT = r.value();
+    r = br.readField(1); if (!r) return Expected<L3GPRSSI13PowerControlParameters>::error(r.error()); result.mPcMeasChan = r.value() != 0;
+    r = br.readField(4); if (!r) return Expected<L3GPRSSI13PowerControlParameters>::error(r.error()); result.mNAvgI = r.value();
+    return Expected<L3GPRSSI13PowerControlParameters>::hold(std::move(result));
+}
 
 void L3GPRSSI13PowerControlParameters::writeBits(BitWriter& bw) const {
     bw.writeField(mALPHA, 4);
-    bw.writeField(0, 5);
-    bw.writeField(0, 5);
-    bw.writeField(0, 1);
-    bw.writeField(15, 4);
+    bw.writeField(mTAvgW, 5);
+    bw.writeField(mTAvgT, 5);
+    bw.writeField(mPcMeasChan ? 1u : 0u, 1);
+    bw.writeField(mNAvgI, 4);
 }
 
 void L3GPRSSI13PowerControlParameters::text(std::ostream& os) const {
-    os << "GPRSPowerCtrl[ALPHA=" << mALPHA << "]";
+    os << "GPRSPowerCtrl[ALPHA=" << mALPHA << " TAvgW=" << mTAvgW
+       << " TAvgT=" << mTAvgT << " NAvgI=" << mNAvgI << "]";
 }
 
 // ── L3SI13RestOctets ───────────────────────────────────────────────────
 
+// SI13 rest octets bit layout (TS 44.018 section 10.5.2.37b), MSB-first in
+// the bit stream:
+//   presence(1) | bcch_change_mark(3) | si_change_field(4) | presence2(1)
+//   [presence2='1': si13_change_mark(2) + GprsMobileAllocation]
+//   zero(1)=0 | rac(8) | spgc_ccch_sup(1) | priority_access_thr(3)
+//             | network_control_order(2)
+//   GprsCellOptions | GprsPowerControlParameters (TS 44.060)
+// then padding with the '00101011'B pattern up to the octet boundary.
+
+Expected<L3SI13RestOctets> L3SI13RestOctets::parse(BitReader& br) {
+    L3SI13RestOctets result;
+    auto r = br.readField(1); if (!r) return Expected<L3SI13RestOctets>::error(r.error()); result.mPresence = r.value() != 0;
+    r = br.readField(3); if (!r) return Expected<L3SI13RestOctets>::error(r.error()); result.mBcchChangeMark = r.value();
+    r = br.readField(4); if (!r) return Expected<L3SI13RestOctets>::error(r.error()); result.mSiChangeField = r.value();
+    r = br.readField(1); if (!r) return Expected<L3SI13RestOctets>::error(r.error()); result.mPresence2 = r.value() != 0;
+    if (result.mPresence2) {
+        r = br.readField(2); if (!r) return Expected<L3SI13RestOctets>::error(r.error()); result.mSi13ChangeMark = r.value();
+        auto ma = L3GprsMobileAllocation::parse(br);
+        if (!ma) return Expected<L3SI13RestOctets>::error(ma.error());
+        result.mGprsMa = std::move(ma.value());
+    }
+    r = br.readField(1); if (!r) return Expected<L3SI13RestOctets>::error(r.error()); // zero (PBCCH absent)
+    r = br.readField(8); if (!r) return Expected<L3SI13RestOctets>::error(r.error()); result.mRAC = r.value();
+    r = br.readField(1); if (!r) return Expected<L3SI13RestOctets>::error(r.error()); result.mSPGC_CCCH_SUP = r.value() != 0;
+    r = br.readField(3); if (!r) return Expected<L3SI13RestOctets>::error(r.error()); result.mPRIORITY_ACCESS_THR = r.value();
+    r = br.readField(2); if (!r) return Expected<L3SI13RestOctets>::error(r.error()); result.mNETWORK_CONTROL_ORDER = r.value();
+    { auto co = L3GPRSCellOptions::parse(br); if (!co) return Expected<L3SI13RestOctets>::error(co.error()); result.mCellOptions = std::move(co.value()); }
+    { auto pc = L3GPRSSI13PowerControlParameters::parse(br); if (!pc) return Expected<L3SI13RestOctets>::error(pc.error()); result.mPowerControlParameters = std::move(pc.value()); }
+    br.alignToOctet();   // consume the '00101011'B padding, ignored on parse
+    return Expected<L3SI13RestOctets>::hold(std::move(result));
+}
+
 size_t L3SI13RestOctets::lengthV() const {
-    size_t bits = 1 + 3 + 4 + 1 + 1 + 8 + 1 + 3 + 2;
+    size_t bits = 1 + 3 + 4 + 1;                // presence..presence2
+    if (mPresence2) bits += 2 + mGprsMa.lengthBits();
+    bits += 1 + 8 + 1 + 3 + 2;                  // zero|rac|spgc|pat|nco
     bits += mCellOptions.lengthBits();
     bits += mPowerControlParameters.lengthBits();
-    return (bits + 7) / 8;
+    return (bits + 7) / 8;                      // padded to the octet boundary
 }
 
 void L3SI13RestOctets::write(BitWriter& bw) const {
-    bw.writeField(1, 1);
-    bw.writeField(0, 3);
-    bw.writeField(0, 4);
-    bw.writeField(0, 1);
-    bw.writeField(0, 1);
+    bw.writeField(mPresence ? 1u : 0u, 1);
+    bw.writeField(mBcchChangeMark, 3);
+    bw.writeField(mSiChangeField, 4);
+    bw.writeField(mPresence2 ? 1u : 0u, 1);
+    if (mPresence2) {
+        bw.writeField(mSi13ChangeMark, 2);
+        mGprsMa.writeBits(bw);
+    }
+    bw.writeField(0, 1);                        // zero (PBCCH not present)
     bw.writeField(mRAC, 8);
-    bw.writeField(mSPGC_CCCH_SUP ? 1 : 0, 1);
+    bw.writeField(mSPGC_CCCH_SUP ? 1u : 0u, 1);
     bw.writeField(mPRIORITY_ACCESS_THR, 3);
     bw.writeField(mNETWORK_CONTROL_ORDER, 2);
     mCellOptions.writeBits(bw);
     mPowerControlParameters.writeBits(bw);
+    // Pad up to the octet boundary with the '00101011'B pattern (MSB-first).
+    const unsigned spare = static_cast<unsigned>((8u - bw.position() % 8) % 8u);
+    for (unsigned i = 0; i < spare; ++i) {
+        bw.writeField((0x2Bu >> (7u - i)) & 1u, 1);
+    }
 }
 
 void L3SI13RestOctets::text(std::ostream& os) const {
     os << "SI13RestOctets[RAC=" << mRAC << " SPGC=" << mSPGC_CCCH_SUP
-       << " PAT=" << mPRIORITY_ACCESS_THR << " NCO=" << mNETWORK_CONTROL_ORDER << "]";
+       << " PAT=" << mPRIORITY_ACCESS_THR << " NCO=" << mNETWORK_CONTROL_ORDER
+       << " presence2=" << mPresence2;
+    if (mPresence2) { os << " "; mGprsMa.text(os); }
+    os << "]";
 }
 
 // ── L3OctetAlignedProtocolElement ──────────────────────────────────────

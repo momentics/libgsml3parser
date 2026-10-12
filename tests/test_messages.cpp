@@ -31,11 +31,19 @@ using namespace gsml3parser;
 // ── IE Tests ─────────────────────────────────────────────────────────────
 
 TEST(IE_Tests, CellChannelDescription) {
-    // Sixteen-bit value part: [ARFCN(10)][BSIC(6)] (TS 44.018 section 9.2.3).
-    L3CellChannelDescription chd(100, 0x12);
-    EXPECT_EQ(chd.arfcn(), 100u);
-    EXPECT_EQ(chd.bsic(), 0x12u);
-    EXPECT_EQ(chd.lengthV(), 2u);
+    // Sixteen-octet variable length BCCH frequency list form
+    // (TS 44.018 section 10.5.2.1b): base ARFCN plus bitmap members.
+    std::vector<uint16_t> arfcns = {874, 875};
+    L3CellChannelDescription chd(arfcns);
+    EXPECT_EQ(chd.base(), 874u);
+    ASSERT_EQ(chd.arfcns().size(), 2u);
+    EXPECT_EQ(chd.lengthV(), 16u);
+
+    // Sixteen-bit neighbour cell description record: [ARFCN(10)][BSIC(6)].
+    L3NeighbourCellDescription ncd(100, 0x12);
+    EXPECT_EQ(ncd.arfcn(), 100u);
+    EXPECT_EQ(ncd.bsic(), 0x12u);
+    EXPECT_EQ(ncd.lengthV(), 2u);
 }
 
 TEST(IE_Tests, ControlChannelDescription) {
@@ -218,8 +226,10 @@ TEST(MessagesTest, RR_SystemInformationType2ter) {
 TEST(MessagesTest, RR_SystemInformationType4) {
     L3SystemInformationType4 msg;
     EXPECT_EQ(msg.mti(), L3SystemInformationType4::MTI);
-    // SI4 body layout (TS 44.018): LAI(5) + CellSelPar(2) + RachCtrl(3) + RestOctets(1) = 11 bytes
-    EXPECT_EQ(msg.l2BodyLength(), 11u);
+    // SI4 body layout (TS 44.018): LAI(5) + CellSelPar(2) + RachCtrl(3) +
+    // RestOctets(0..N) = 10 bytes; the all-absent rest octets contribute
+    // zero octets.
+    EXPECT_EQ(msg.l2BodyLength(), 10u);
     // Dynamic growth with the optional CBCH IEs: channel description TV(4)
     // + mobile allocation TLV (2 + len octets, TS 44.018 10.5.2.21).
     std::vector<uint8_t> ma = {0xA5, 0x5A};
@@ -230,7 +240,7 @@ TEST(MessagesTest, RR_SystemInformationType4) {
         .cbchChannelDescription(L3ChannelDescription(TDMA_Bm_ACCH, 1, 7, 100))
         .cbchMobileAlloc(L3MobileAllocation(ma))
         .build();
-    EXPECT_EQ(withCbch.l2BodyLength(), 11u + 4u + 4u);
+    EXPECT_EQ(withCbch.l2BodyLength(), 10u + 4u + 4u);
 }
 
 TEST(MessagesTest, RR_SystemInformationType5) {

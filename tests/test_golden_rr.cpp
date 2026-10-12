@@ -532,23 +532,21 @@ TEST(GoldenRR, MeasurementReport_Parse) {
 // Frame shape: PD = '0110'B (RR), MTI = '00101011'B (HandoverCommand, 0x2B).
 // Body per TS 44.018 9.1.15: CellDescriptionV cell_desc, ChannelDescription chan_desc,
 //   ho_ref (1 octet), PowerCommandAndAccesstype_V power_cmd_acc_type
-// CellDescriptionV (TS 24.008 10.5.2.2): bcc(3 bits), ncc(3 bits), bcch_arfcn(10 bits), packed LSB-first
-// Structure: CellDesc(16 bits LSB: bcc+ncc+arfcn) + ChanDesc(24 bits) + HORef(8) + PowerCmdAccType(8) + SyncInd(8)
+// CellDescriptionV (TS 24.008 section 10.5.2.2): octet 1 =
+// [BCCH ARFCN high(2)][NCC(3)][BCC(3)], octet 2 = ARFCN low(8), packed MSB-first.
+// Structure: CellDesc(16 bits) + ChanDesc(24 bits) + HORef(8) + PowerCmdAccType(8) + SyncInd(8)
 // Spec-verified: PD=6(RR), MTI=0x2B(HandoverCommand) per 3GPP TS 44.018 Table 10.4.1
-// [GSM SPEC VERIFIED] CellDescriptionV packs its fields LSB-first (TS 24.008 10.5.2.2): bcc(3) first,
-//   then ncc(3), then arfcn(10). For BCC=3(011), NCC=5(101), ARFCN=100(0001100100):
-//   bits 0-2=bcc=011, bits 3-5=ncc=101, bits 6-15=arfcn=0001100100
-//   Byte 0 = bits 0-7: 011|101|00 = 0b0111_0100 = 0x74
-//   Byte 1 = bits 8-15: 00011001 = 0b0001_1001 = 0x19
+// [GSM SPEC VERIFIED] For BCC=3('011'B), NCC=5('101'B), ARFCN=100('0001100100'B):
+//   octet 1 = arfcn high '00' | ncc '101' | bcc '011' = 0b0010_1011 = 0x2B
+//   octet 2 = arfcn low '01100100' = 0x64
 // =====================================================================
 
 TEST(GoldenRR, HandoverCommand_Parse) {
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x2B (HandoverCommand) [3GPP TS 44.018 Table 10.4.1]
-    // Bytes 2-3: CellDesc: ARFCN=100, NCC=5, BCC=3 [GSM 24.008 10.5.2.2]
-    //   TS 24.008 10.5.2.2: LSB-first packing - bcc first, then ncc, then arfcn
-    //   bcc(3)=011, ncc(3)=101, arfcn(10)=0001100100
-    //   LSB-first: 011|101|00 = 0x74, 00011001|00xxxxxx = 0x19 (arfcn=100=0x64, high 2 bits in byte 1)
+    // Bytes 2-3: CellDesc: ARFCN=100, NCC=5, BCC=3 [TS 24.008 section 10.5.2.2]
+    //   octet 1 = [ARFCN high(2)=00][NCC(3)=101][BCC(3)=011] = 0x2B,
+    //   octet 2 = ARFCN low(8) = 0x64
     // Bytes 4-6: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), ARFCN(12) [GSM 24.008 10.5.2.5]
     //   {0x09, 0xE0, 0x64}: typeAndOffset=1(TDMA_Bm_ACCH, TCH/F or TCH/H ACCH), TN=1, TSC=7, h=0, ARFCN=100
     // Byte 7: HORef = 0x17 [GSM 24.008 10.5.2.15, 5-bit handover reference]
@@ -556,13 +554,18 @@ TEST(GoldenRR, HandoverCommand_Parse) {
     // Byte 9: SyncInd = 0x00 [GSM 24.008 10.5.2.39]
     uint8_t data[] = {
         0x06, 0x2b,
-        0x74, 0x19,
+        0x2B, 0x64,
         0x09, 0xE0, 0x64,
         0x17, 0x00, 0x00
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3HandoverCommand::MTI);
+    auto* ho = tryGet<L3HandoverCommand>(*msg);
+    ASSERT_TRUE(ho);
+    EXPECT_EQ(ho->cellDescription().arfcn(), 100u);
+    EXPECT_EQ(ho->cellDescription().ncc(), 5u);
+    EXPECT_EQ(ho->cellDescription().bcc(), 3u);
 }
 
 // =====================================================================
@@ -2279,6 +2282,281 @@ TEST(GoldenRR, SystemInformationType2ter_RestOctets_Parse) {
     ASSERT_TRUE(bytes);
     ASSERT_EQ((*bytes).size(), sizeof(data));
     for (size_t i = 0; i < sizeof(data); ++i) EXPECT_EQ((*bytes)[i], data[i]);
+}
+
+// =====================================================================
+// RR: SI1 with the broadcast cell channel description (variable-length BCCH
+// frequency list form, sixteen octets per TS 44.018 section 10.5.2.1b).
+// The vector is a real BCCH frame body: [L2 pseudo-length][06 19] followed
+// by cell channel description (16) + RACH control parameters (3) + rest
+// octet (1).
+// =====================================================================
+
+TEST(GoldenRR, SystemInformationType1_RefVector) {
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x19 ('00011001'B, TS 44.018 Table 10.4.1).
+    // Cell channel description (TS 44.018 section 10.5.2.1b): format header
+    // '1000111'B in the top seven bits of 0x8F, base ARFCN 871 spanning the
+    // last bit of 0x8F, all of 0xB3 and the top bit of 0x80, empty bitmap.
+    // The leading 0x55 is the BCCH L2 pseudo-length octet and is not part
+    // of the L3 frame; the vector starts with the L3 header.
+    uint8_t data[] = {
+        0x55,
+        0x06, 0x19,
+        0x8F, 0xB3, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xE5, 0x04, 0x00,
+        0x2B
+    };
+    auto msg = parseL3(std::span(data + 1, sizeof(data) - 1),
+                       ParserConfig{}.withStrictFraming(true));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3SystemInformationType1::MTI);
+    auto* si1 = tryGet<L3SystemInformationType1>(*msg);
+    ASSERT_TRUE(si1);
+    // Base ARFCN and the decoded single-member list.
+    EXPECT_EQ(si1->cellChannelDescription().base(), 871u);
+    ASSERT_EQ(si1->cellChannelDescription().arfcns().size(), 1u);
+    EXPECT_EQ(si1->cellChannelDescription().arfcns()[0], 871u);
+    // RACH control parameters: max_retrans='11'B, tx_integer='1001'B,
+    // cell_barr_access=0, re_not_allowed=1; access class bitmap (low octet
+    // first, TS 44.018 section 10.5.2.29) = 0x04 0x00 -> class 2 permitted.
+    EXPECT_EQ(si1->rachControl().maxRetrans(), 3u);
+    EXPECT_EQ(si1->rachControl().txInteger(), 9u);
+    EXPECT_FALSE(si1->rachControl().cellBarAccess());
+    EXPECT_EQ(si1->rachControl().re(), 1u);
+    EXPECT_EQ(si1->rachControl().ac(), 0x04u);
+    EXPECT_TRUE(si1->hasRestOctets());
+    EXPECT_EQ(si1->restOctet(), 0x2Bu);
+}
+
+TEST(GoldenRR, SystemInformationType1_EmitHeader) {
+    // Emitting a single-ARFCN list uses the variable form: the top seven
+    // bits of the first octet are the format header '1000111'B and the body
+    // is exactly sixteen (description) + three (RACH control) octets.
+    std::vector<uint16_t> arfcns = {874};
+    auto si1 = L3SystemInformationType1::builder()
+        .cellChannelDescription(arfcns)
+        .rachControlParameters(L3RACHControlParameters())
+        .build();
+    EXPECT_EQ(si1.bodyLength(), 19u);
+    ParsedMessage pm{RRM{std::move(si1)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), 21u);
+    EXPECT_EQ((*bytes)[0], 0x06);
+    EXPECT_EQ((*bytes)[1], 0x19);
+    EXPECT_EQ((*bytes)[2] >> 1, 0x47u);   // format header '1000111'B
+
+    auto reparsed = parseL3(*bytes, ParserConfig{}.withStrictFraming(true));
+    ASSERT_TRUE(reparsed);
+    auto* parsed = tryGet<L3SystemInformationType1>(*reparsed);
+    ASSERT_TRUE(parsed);
+    EXPECT_EQ(parsed->cellChannelDescription().base(), 874u);
+    ASSERT_EQ(parsed->cellChannelDescription().arfcns().size(), 1u);
+}
+
+TEST(GoldenRR, SystemInformationType2_RefVector) {
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x1A ('00011010'B, TS 44.018 Table
+    // 10.4.1). The neighbour cell description (BCCH frequency list form,
+    // TS 44.018 section 10.5.2.22) is the zero form here: a zero format
+    // header, base 0 and an empty bitmap (no channels listed); the NCC
+    // permitted octet allows every NCC.
+    uint8_t data[] = {
+        0x06, 0x1A,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00,
+        0xFF,
+        0xE5, 0x04, 0x00
+    };
+
+    auto msg = parseL3(std::span<const uint8_t>(data),
+                       ParserConfig{}.withStrictFraming(true));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3SystemInformationType2::MTI);
+    auto* si2 = tryGet<L3SystemInformationType2>(*msg);
+    ASSERT_TRUE(si2);
+    EXPECT_EQ(si2->bcchFrequencyList().base(), 0u);
+    EXPECT_TRUE(si2->bcchFrequencyList().arfcns().empty());
+    // Lossless: the raw zero form is re-emitted unchanged.
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) EXPECT_EQ((*bytes)[i], data[i]);
+}
+
+TEST(GoldenRR, SystemInformationType2bis_RefVector) {
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x02 ('00000010'B, TS 44.018 Table
+    // 10.4.1). The extended BCCH frequency list (TS 44.018 section
+    // 10.5.2.22) carries a non-zero format header ('1011111'B in 0xBF),
+    // base ARFCN 976 and a hopping list in the bitmap; followed by the RACH
+    // control parameters and one rest octet.
+    uint8_t data[] = {
+        0x06, 0x02,
+        0xBF, 0xE8, 0x09, 0xB3, 0xFF, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00,
+        0x79, 0x00, 0x00,
+        0x2B
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data),
+                       ParserConfig{}.withStrictFraming(true));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3SystemInformationType2bis::MTI);
+    auto* si2bis = tryGet<L3SystemInformationType2bis>(*msg);
+    ASSERT_TRUE(si2bis);
+    EXPECT_EQ(si2bis->bcchFrequencyList().base(), 976u);
+    std::vector<uint16_t> decoded(si2bis->bcchFrequencyList().arfcns().begin(),
+                                  si2bis->bcchFrequencyList().arfcns().end());
+    EXPECT_EQ(decoded, (std::vector<uint16_t>{
+        976, 980, 983, 984, 986, 987, 990, 991, 992, 993, 994, 995, 996,
+        997, 998, 999}));
+    EXPECT_EQ(si2bis->restOctets(), (std::vector<uint8_t>{0x2B}));
+}
+
+// =====================================================================
+// RR: SI13 with the full GPRS rest-octets record (TS 44.018 section
+// 10.5.2.37b): presence2 = '1' carries the si13 change mark and the GPRS
+// mobile allocation; the GPRS cell options carry the PAN and extension
+// groups; the record is padded with the '00101011'B pattern to the octet
+// boundary, so a strict parse consumes the whole frame.
+// =====================================================================
+
+TEST(GoldenRR, SystemInformationType13_GprsRoundTrip) {
+    L3SI13RestOctets ro;
+    ro.presence(true);
+    ro.bcchChangeMark(3);
+    ro.siChangeField(10);
+    ro.presence2(true);
+    ro.si13ChangeMark(2);
+    ro.gprsMa().hsn(55);
+    ro.gprsMa().rflNumberListPresent(true);
+    ro.gprsMa().rflNumbers(std::vector<uint8_t>{3, 7});
+    ro.gprsMa().maPresent(false);
+    ro.gprsMa().maBitmap(std::vector<uint8_t>{0x1F, 0xC0}, 18);
+    ro.rac(64);
+    ro.spgcCcchSup(true);
+    ro.priorityAccessThr(4);
+    ro.networkControlOrder(3);
+    ro.cellOptions().nmo(2);
+    ro.cellOptions().t3168(5);
+    ro.cellOptions().t3192(7);
+    ro.cellOptions().drxTimerMax(3);
+    ro.cellOptions().accessBurstType(1);
+    ro.cellOptions().controlAckType(1);
+    ro.cellOptions().bsCvMax(15);
+    ro.cellOptions().panPresence(true);
+    ro.cellOptions().panDec(1);
+    ro.cellOptions().panInc(2);
+    ro.cellOptions().panMax(3);
+    ro.cellOptions().extInfoPresence(true);
+    ro.cellOptions().extInfo(std::vector<uint8_t>{0x5A});
+    ro.cellOptions().extInfoLength(7);
+    ro.powerControlParameters().alpha(15);
+    ro.powerControlParameters().tAvgW(31);
+    ro.powerControlParameters().tAvgT(29);
+    ro.powerControlParameters().pcMeasChan(true);
+    ro.powerControlParameters().nAvgI(14);
+
+    auto si13 = L3SystemInformationType13::builder()
+        .restOctets(ro)
+        .build();
+
+    ParsedMessage pm{RRM{std::move(si13)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+
+    // Strict framing: the padded record must consume the whole frame.
+    auto reparsed = parseL3(*bytes, ParserConfig{}.withStrictFraming(true));
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3SystemInformationType13::MTI);
+    auto* parsed = tryGet<L3SystemInformationType13>(*reparsed);
+    ASSERT_TRUE(parsed);
+
+    const auto& p = parsed->restOctets();
+    EXPECT_TRUE(p.presence());
+    EXPECT_EQ(p.bcchChangeMark(), 3u);
+    EXPECT_EQ(p.siChangeField(), 10u);
+    EXPECT_TRUE(p.presence2());
+    EXPECT_EQ(p.si13ChangeMark(), 2u);
+    EXPECT_EQ(p.gprsMa().hsn(), 55u);
+    EXPECT_TRUE(p.gprsMa().rflNumberListPresent());
+    ASSERT_EQ(p.gprsMa().rflNumbers().size(), 2u);
+    EXPECT_EQ(p.gprsMa().rflNumbers()[1], 7u);
+    EXPECT_FALSE(p.gprsMa().maPresent());
+    EXPECT_EQ(p.gprsMa().maLength(), 18u);
+    ASSERT_EQ(p.gprsMa().maBitmap().size(), 3u);
+    EXPECT_EQ(p.gprsMa().maBitmap()[0], 0x1Fu);
+    EXPECT_EQ(p.rac(), 64u);
+    EXPECT_TRUE(p.spgcCcchSup());
+    EXPECT_EQ(p.priorityAccessThr(), 4u);
+    EXPECT_EQ(p.networkControlOrder(), 3u);
+    EXPECT_EQ(p.cellOptions().nmo(), 2u);
+    EXPECT_TRUE(p.cellOptions().panPresence());
+    EXPECT_EQ(p.cellOptions().panDec(), 1u);
+    EXPECT_EQ(p.cellOptions().panInc(), 2u);
+    EXPECT_EQ(p.cellOptions().panMax(), 3u);
+    EXPECT_TRUE(p.cellOptions().extInfoPresence());
+    EXPECT_EQ(p.cellOptions().extInfoLength(), 7u);
+    ASSERT_EQ(p.cellOptions().extInfo().size(), 1u);
+    EXPECT_EQ(p.cellOptions().extInfo()[0] & 0xF8u, 0x58u);   // 7 bits kept
+    EXPECT_EQ(p.powerControlParameters().alpha(), 15u);
+    EXPECT_EQ(p.powerControlParameters().tAvgW(), 31u);
+    EXPECT_EQ(p.powerControlParameters().tAvgT(), 29u);
+    EXPECT_TRUE(p.powerControlParameters().pcMeasChan());
+    EXPECT_EQ(p.powerControlParameters().nAvgI(), 14u);
+}
+
+// =====================================================================
+// RR: SI4 rest octets are zero or more (TS 44.018 section 9.1.36): with no
+// selection, power, GPRS group and no S tail the body is exactly
+// LAI(5) + cell selection parameters(2) + RACH control parameters(3).
+// =====================================================================
+
+TEST(GoldenRR, SystemInformationType4_NoRestOctets) {
+    auto si4 = L3SystemInformationType4::builder()
+        .locationAreaIdentity(L3LocationAreaIdentity("250", "01", 0x1234))
+        .cellSelectionParameters(L3CellSelectionParameters{})
+        .rachControlParameters(L3RACHControlParameters{})
+        .build();
+    EXPECT_EQ(si4.restOctets().lengthV(), 0u);
+    EXPECT_EQ(si4.bodyLength(), 10u);
+
+    ParsedMessage pm{RRM{std::move(si4)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes).size(), 12u);   // L3 header + ten-octet body
+
+    auto reparsed = parseL3(*bytes, ParserConfig{}.withStrictFraming(true));
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messageMTI(*reparsed), L3SystemInformationType4::MTI);
+}
+
+TEST(GoldenRR, SystemInformationType2bis_RestOctetCap) {
+    // SI2bis carries at most one rest octet (TS 44.018 section 9.1.33): a
+    // frame with two is rejected by strict framing as trailing data.
+    uint8_t data[] = {
+        0x06, 0x02,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00,
+        0xE5, 0x04, 0x00,
+        0x2B, 0x2B
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data),
+                       ParserConfig{}.withStrictFraming(true));
+    EXPECT_FALSE(msg);
+}
+
+TEST(GoldenRR, SystemInformationType2ter_RestOctetCap) {
+    // SI2ter carries at most four rest octets (TS 44.018 section 9.1.34):
+    // a frame with six is rejected by strict framing as trailing data.
+    uint8_t data[] = {
+        0x06, 0x03,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00,
+        0x2B, 0x2B, 0x2B, 0x2B, 0x2B, 0x2B
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data),
+                       ParserConfig{}.withStrictFraming(true));
+    EXPECT_FALSE(msg);
 }
 
 // =====================================================================

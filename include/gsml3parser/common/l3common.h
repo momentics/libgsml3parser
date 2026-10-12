@@ -21,6 +21,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstring>
@@ -248,45 +249,47 @@ public:
     bool operator==(const L3CipheringKeySequenceNumber&) const = default;
 };
 
-// ── Frequency List (GSM 04.08 10.5.2.13) ──────────────────────────────
+// ── Cell Channel Description / BCCH Frequency List ─────────────────────
 
-class L3FrequencyList {
-    std::vector<unsigned> mARFCNs;
-public:
-    L3FrequencyList() = default;
-    explicit L3FrequencyList(const std::vector<unsigned>& arfcns) : mARFCNs(arfcns) {}
-
-    void arfcns(const std::vector<unsigned>& arfcns) { mARFCNs = arfcns; }
-    const std::vector<unsigned>& arfcns() const { return mARFCNs; }
-    static constexpr size_t lengthV() { return 16; }
-
-    [[nodiscard]] static Expected<L3FrequencyList> parse(BitReader& br);
-    void write(BitWriter& bw) const;
-    void text(std::ostream& os) const;
-    bool operator==(const L3FrequencyList&) const = default;
-
-private:
-    unsigned base() const;
-    bool contains(unsigned arfcn) const;
-};
-
-// ── Cell Channel Description (GSM 04.08 10.5.2.1b) ────────────────────
-
-// Cell channel description: sixteen bits, [ARFCN(10)][BSIC(6)] with the BSIC
-// packed as [NCC(3)|BCC(3)] (TS 44.018 section 9.2.3). The same value part
-// is reused for the repeated neighbor-cell records of System Information
-// Type 17/18/19.
+// Cell channel description in the variable-length BCCH frequency list form
+// (TS 44.018 sections 10.5.2.1b and 10.5.2.22): sixteen octets,
+// [format header(7)][base ARFCN(10)][bitmap(111)]. The base is the lowest
+// channel of the list; bitmap bit i (counted from zero immediately after the
+// base field) marks the presence of ARFCN base + 1 + i. Emitting uses the
+// format header '1000111'B with the lowest list member as the base (zero for
+// an empty list); parsing accepts any seven-bit header value and keeps the
+// raw sixteen octets so a parsed element re-emits byte-identically. ARFCNs
+// farther than 111 channels above the base are not representable in the form.
 class L3CellChannelDescription {
-    uint16_t mARfcn{};
-    uint8_t mBSIC{};      ///< NCC(3)|BCC(3)
-public:
-    L3CellChannelDescription() = default;
-    L3CellChannelDescription(unsigned arfcn, unsigned bsic)
-        : mARfcn(static_cast<uint16_t>(arfcn)), mBSIC(static_cast<uint8_t>(bsic & 0x3Fu)) {}
+    std::array<uint8_t, 16> mRaw{};   ///< lossless storage of the sixteen octets
+    uint16_t mBase{0};                ///< base ARFCN decoded from the raw form
+    std::vector<uint16_t> mArfcns;    ///< decoded list (base plus set bitmap bits)
 
-    uint16_t arfcn() const { return mARfcn; }
-    uint8_t bsic() const { return mBSIC; }
-    static constexpr size_t lengthV() { return 2; }
+    static void decode(const std::array<uint8_t, 16>& raw, uint16_t& base, std::vector<uint16_t>& arfcns);
+    static void encode(std::array<uint8_t, 16>& raw, const std::vector<uint16_t>& sorted);
+
+public:
+    /// Default element: the canonical empty form (format header '1000111'B,
+    /// base zero, empty bitmap).
+    L3CellChannelDescription() { encode(mRaw, mArfcns); }
+    /// Build the sixteen-octet form from an ARFCN list (any order).
+    explicit L3CellChannelDescription(std::span<const uint16_t> arfcns)
+    {
+        std::vector<uint16_t> sorted(arfcns.begin(), arfcns.end());
+        std::sort(sorted.begin(), sorted.end());
+        sorted.erase(std::unique(sorted.begin(), sorted.end()), sorted.end());
+        mArfcns = std::move(sorted);
+        mBase = mArfcns.empty() ? 0 : mArfcns.front();
+        encode(mRaw, mArfcns);
+    }
+
+    /// Decoded ARFCN list; the base is included when it is non-zero.
+    std::span<const uint16_t> arfcns() const { return mArfcns; }
+    /// Base ARFCN decoded from the raw form (zero for an empty list).
+    uint16_t base() const { return mBase; }
+    /// Raw sixteen-octet form, suitable for byte-exact re-emission.
+    std::span<const uint8_t> raw() const { return mRaw; }
+    static constexpr size_t lengthV() { return 16; }
 
     [[nodiscard]] static Expected<L3CellChannelDescription> parse(BitReader& br);
     void write(BitWriter& bw) const;
@@ -294,26 +297,33 @@ public:
     bool operator==(const L3CellChannelDescription&) const = default;
 };
 
-// ── BCCH Frequency List (GSM 04.08 10.5.2.22) ────────────────────────
+// The BCCH frequency list of System Information types 2/2bis/2ter/5/5bis/
+// 5ter and the generic frequency list are the same sixteen-octet variable
+// form as the cell channel description.
+using L3BCCHFrequencyList = L3CellChannelDescription;
+using L3FrequencyList = L3CellChannelDescription;
 
-class L3BCCHFrequencyList {
-    std::vector<unsigned> mARFCNs;
+// ── Neighbour Cell Description record (TS 44.018 10.5.2.1b) ────────────
+
+// Neighbour cell description record: sixteen bits, [ARFCN(10)][BSIC(6)] with
+// the BSIC packed as [NCC(3)|BCC(3)]. The repeated records form the neighbour
+// cell lists of System Information types 7, 8 and 17-20.
+class L3NeighbourCellDescription {
+    uint16_t mARfcn{};
+    uint8_t mBSIC{};      ///< NCC(3)|BCC(3)
 public:
-    L3BCCHFrequencyList() = default;
-    explicit L3BCCHFrequencyList(const std::vector<unsigned>& arfcns) : mARFCNs(arfcns) {}
+    L3NeighbourCellDescription() = default;
+    L3NeighbourCellDescription(unsigned arfcn, unsigned bsic)
+        : mARfcn(static_cast<uint16_t>(arfcn)), mBSIC(static_cast<uint8_t>(bsic & 0x3Fu)) {}
 
-    void arfcns(const std::vector<unsigned>& arfcns) { mARFCNs = arfcns; }
-    const std::vector<unsigned>& arfcns() const { return mARFCNs; }
-    static constexpr size_t lengthV() { return 16; }
+    uint16_t arfcn() const { return mARfcn; }
+    uint8_t bsic() const { return mBSIC; }
+    static constexpr size_t lengthV() { return 2; }
 
-    [[nodiscard]] static Expected<L3BCCHFrequencyList> parse(BitReader& br);
+    [[nodiscard]] static Expected<L3NeighbourCellDescription> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
-    bool operator==(const L3BCCHFrequencyList&) const = default;
-
-private:
-    unsigned base() const;
-    bool contains(unsigned arfcn) const;
+    bool operator==(const L3NeighbourCellDescription&) const = default;
 };
 
 // ── Control Channel Description (GSM 04.08 10.5.2.11) ─────────────────
@@ -1095,10 +1105,11 @@ public:
 // ── SI4 Rest Octets (GSM 04.08 10.5.2.35) ─────────────────────────────
 
 // SI4 Rest Octets (TS 44.018 section 10.5.2.35, carried by System
-// Information Type 4 per TS 44.018 section 9.1.36): the O-part record
-// (selection parameters, power offset, GPRS indicator) plus the S-part
-// presence bit; when the S part is present, all remaining octets of the
-// frame are opaque "Rest Octets S" and are preserved verbatim.
+// Information Type 4 per TS 44.018 section 9.1.36): zero or more octets —
+// the O-part record (selection parameters, power offset, GPRS indicator)
+// plus the S-part presence bit; when the S part is present, all remaining
+// octets of the frame are opaque "Rest Octets S" and are preserved verbatim.
+// With no group present and no S tail the record contributes zero octets.
 class L3SystemInformationType4;
 
 class L3SIType4RestOctets : public L3RestOctets {
@@ -1132,7 +1143,7 @@ public:
     const std::vector<uint8_t>& restS() const { return mRestS; }
 
     [[nodiscard]] static Expected<L3SIType4RestOctets> parse(BitReader& br);
-    size_t lengthV() const override;  // ceil(record bits / 8) + mRestS.size()
+    size_t lengthV() const override;  // 0 when absent, else ceil(bits / 8) + mRestS.size()
     void write(BitWriter& bw) const override;
     void text(std::ostream& os) const;
 };
@@ -1149,8 +1160,11 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── GPRS Cell Options ──────────────────────────────────────────────────
+// ── GPRS Cell Options (TS 44.060 12.24) ───────────────────────────────
 
+// GPRS cell options of the SI13 rest octets: NMO, timers, burst/ack types,
+// BS_CV_MAX, the optional Packet Access Neighbour (PAN) group and the
+// optional extension-information group (length in bits plus raw bits).
 class L3GPRSCellOptions {
     unsigned mNMO{};
     unsigned mT3168{};
@@ -1159,40 +1173,182 @@ class L3GPRSCellOptions {
     unsigned mACCESS_BURST_TYPE{};
     unsigned mCONTROL_ACK_TYPE{};
     unsigned mBS_VC_MAX{};
+    bool mPanPresence{};
+    unsigned mPanDec{};          // 3 bits, when pan_presence = 1
+    unsigned mPanInc{};          // 3 bits, when pan_presence = 1
+    unsigned mPanMax{};          // 3 bits, when pan_presence = 1
+    bool mExtInfoPresence{};
+    unsigned mExtInfoLength{};   // 6 bits (bit count), when ext_info_presence = 1
+    std::vector<uint8_t> mExtInfo;
 public:
     L3GPRSCellOptions() = default;
 
+    unsigned nmo() const { return mNMO; }
+    void nmo(unsigned v) { mNMO = v & 0x3u; }
+    unsigned t3168() const { return mT3168; }
+    void t3168(unsigned v) { mT3168 = v & 0x7u; }
+    unsigned t3192() const { return mT3192; }
+    void t3192(unsigned v) { mT3192 = v & 0x7u; }
+    unsigned drxTimerMax() const { return mDRX_TIMER_MAX; }
+    void drxTimerMax(unsigned v) { mDRX_TIMER_MAX = v & 0x7u; }
+    unsigned accessBurstType() const { return mACCESS_BURST_TYPE; }
+    void accessBurstType(unsigned v) { mACCESS_BURST_TYPE = v & 0x1u; }
+    unsigned controlAckType() const { return mCONTROL_ACK_TYPE; }
+    void controlAckType(unsigned v) { mCONTROL_ACK_TYPE = v & 0x1u; }
+    unsigned bsCvMax() const { return mBS_VC_MAX; }
+    void bsCvMax(unsigned v) { mBS_VC_MAX = v & 0xFu; }
+    bool panPresence() const { return mPanPresence; }
+    void panPresence(bool v) { mPanPresence = v; }
+    unsigned panDec() const { return mPanDec; }
+    void panDec(unsigned v) { mPanDec = v & 0x7u; }
+    unsigned panInc() const { return mPanInc; }
+    void panInc(unsigned v) { mPanInc = v & 0x7u; }
+    unsigned panMax() const { return mPanMax; }
+    void panMax(unsigned v) { mPanMax = v & 0x7u; }
+    bool extInfoPresence() const { return mExtInfoPresence; }
+    void extInfoPresence(bool v) { mExtInfoPresence = v; }
+    unsigned extInfoLength() const { return mExtInfoLength; }
+    void extInfoLength(unsigned v) { mExtInfoLength = v & 0x3Fu; }
+    std::span<const uint8_t> extInfo() const { return mExtInfo; }
+    void extInfo(std::span<const uint8_t> v) { mExtInfo.assign(v.begin(), v.end()); }
+
     size_t lengthBits() const;
+    [[nodiscard]] static Expected<L3GPRSCellOptions> parse(BitReader& br);
     void writeBits(BitWriter& bw) const;
     void text(std::ostream& os) const;
 };
 
+// ── GPRS Mobile Allocation (TS 44.060 12.10a) ──────────────────────────
+
+// GPRS mobile allocation: HSN, an optional RFL number list ({RFL(4),
+// presence(1)} entries until the presence bit is '0') and, when ma_present
+// is '0', a mobile allocation bitmap of ma_length bits (1..64).
+class L3GprsMobileAllocation {
+    unsigned mHsn{};                          // 6 bits
+    bool mRflNumberListPresent{};
+    std::array<uint8_t, 8> mRflNumbers{};     // compact storage (max eight)
+    uint8_t mRflCount{0};
+    bool mMaPresent{};
+    unsigned mMaLength{};                     // 6 bits, valid when ma_present = 0
+    std::array<uint8_t, 8> mMaBitmap{};       // up to 64 bits
+public:
+    L3GprsMobileAllocation() = default;
+
+    unsigned hsn() const { return mHsn; }
+    void hsn(unsigned v) { mHsn = v & 0x3Fu; }
+    bool rflNumberListPresent() const { return mRflNumberListPresent; }
+    void rflNumberListPresent(bool v) { mRflNumberListPresent = v; }
+    std::span<const uint8_t> rflNumbers() const { return {mRflNumbers.data(), mRflCount}; }
+    void rflNumbers(std::span<const uint8_t> v) {
+        mRflCount = static_cast<uint8_t>(std::min<size_t>(v.size(), mRflNumbers.size()));
+        for (uint8_t i = 0; i < mRflCount; ++i) mRflNumbers[i] = static_cast<uint8_t>(v[i] & 0xFu);
+    }
+    bool maPresent() const { return mMaPresent; }
+    void maPresent(bool v) { mMaPresent = v; }
+    unsigned maLength() const { return mMaLength; }
+    void maLength(unsigned v) { mMaLength = v & 0x3Fu; }
+    std::span<const uint8_t> maBitmap() const {
+        return {mMaBitmap.data(), (mMaLength + 7) / 8};
+    }
+    /// Set the allocation bitmap (1..64 bits, stored MSB-first in bytes).
+    void maBitmap(std::span<const uint8_t> v, unsigned bits) {
+        mMaLength = bits & 0x3Fu;
+        const size_t n = std::min<size_t>(v.size(), (mMaLength + 7) / 8);
+        for (size_t i = 0; i < n; ++i) mMaBitmap[i] = v[i];
+    }
+
+    size_t lengthBits() const;
+    [[nodiscard]] static Expected<L3GprsMobileAllocation> parse(BitReader& br);
+    void writeBits(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+};
+
+// ── GPRS SI13 Power Control Parameters (TS 44.060 12.9a) ───────────────
+
 class L3GPRSSI13PowerControlParameters {
-    unsigned mALPHA{};
+    unsigned mALPHA{};      // 4 bits
+    unsigned mTAvgW{};      // 5 bits
+    unsigned mTAvgT{};      // 5 bits
+    bool mPcMeasChan{};     // 1 bit
+    unsigned mNAvgI{};      // 4 bits
 public:
     L3GPRSSI13PowerControlParameters() = default;
 
+    unsigned alpha() const { return mALPHA; }
+    void alpha(unsigned v) { mALPHA = v & 0xFu; }
+    unsigned tAvgW() const { return mTAvgW; }
+    void tAvgW(unsigned v) { mTAvgW = v & 0x1Fu; }
+    unsigned tAvgT() const { return mTAvgT; }
+    void tAvgT(unsigned v) { mTAvgT = v & 0x1Fu; }
+    bool pcMeasChan() const { return mPcMeasChan; }
+    void pcMeasChan(bool v) { mPcMeasChan = v; }
+    unsigned nAvgI() const { return mNAvgI; }
+    void nAvgI(unsigned v) { mNAvgI = v & 0xFu; }
+
     size_t lengthBits() const;
+    [[nodiscard]] static Expected<L3GPRSSI13PowerControlParameters> parse(BitReader& br);
     void writeBits(BitWriter& bw) const;
     void text(std::ostream& os) const;
 };
 
 // ── SI13 Rest Octets (GSM 04.08 10.5.2.37b) ───────────────────────────
 
+// SI13 rest octets (TS 44.018 section 10.5.2.37b): the presence bit, the
+// BCCH change mark and SI change field, the optional GPRS mobile allocation
+// group (si13 change mark plus allocation when presence2 = '1'), the RAC /
+// SPGC-CCCH-support / priority-access-threshold / network-control-order
+// fields, the GPRS cell options and the GPRS power control parameters. The
+// record is padded with the '00101011'B pattern up to the octet boundary on
+// write; the padding bits are consumed and ignored on parse.
 class L3SystemInformationType13;
 
 class L3SI13RestOctets : public L3RestOctets {
+    bool mPresence{};
+    unsigned mBcchChangeMark{};   // 3 bits
+    unsigned mSiChangeField{};    // 4 bits
+    bool mPresence2{};
+    unsigned mSi13ChangeMark{};   // 2 bits, when presence2 = 1
+    L3GprsMobileAllocation mGprsMa;  // when presence2 = 1
     unsigned mRAC{};
     bool mSPGC_CCCH_SUP{};
-    unsigned mPRIORITY_ACCESS_THR{};
-    unsigned mNETWORK_CONTROL_ORDER{};
+    unsigned mPRIORITY_ACCESS_THR{};  // 3 bits
+    unsigned mNETWORK_CONTROL_ORDER{};// 2 bits
     L3GPRSCellOptions mCellOptions;
     L3GPRSSI13PowerControlParameters mPowerControlParameters;
 public:
     friend class L3SystemInformationType13;
     L3SI13RestOctets() = default;
 
-    size_t lengthV() const override;
+    bool presence() const { return mPresence; }
+    void presence(bool v) { mPresence = v; }
+    unsigned bcchChangeMark() const { return mBcchChangeMark; }
+    void bcchChangeMark(unsigned v) { mBcchChangeMark = v & 0x7u; }
+    unsigned siChangeField() const { return mSiChangeField; }
+    void siChangeField(unsigned v) { mSiChangeField = v & 0xFu; }
+    bool presence2() const { return mPresence2; }
+    void presence2(bool v) { mPresence2 = v; }
+    unsigned si13ChangeMark() const { return mSi13ChangeMark; }
+    void si13ChangeMark(unsigned v) { mSi13ChangeMark = v & 0x3u; }
+    const L3GprsMobileAllocation& gprsMa() const { return mGprsMa; }
+    L3GprsMobileAllocation& gprsMa() { return mGprsMa; }
+    void gprsMa(const L3GprsMobileAllocation& v) { mGprsMa = v; }
+    unsigned rac() const { return mRAC; }
+    void rac(unsigned v) { mRAC = v & 0xFFu; }
+    bool spgcCcchSup() const { return mSPGC_CCCH_SUP; }
+    void spgcCcchSup(bool v) { mSPGC_CCCH_SUP = v; }
+    unsigned priorityAccessThr() const { return mPRIORITY_ACCESS_THR; }
+    void priorityAccessThr(unsigned v) { mPRIORITY_ACCESS_THR = v & 0x7u; }
+    unsigned networkControlOrder() const { return mNETWORK_CONTROL_ORDER; }
+    void networkControlOrder(unsigned v) { mNETWORK_CONTROL_ORDER = v & 0x3u; }
+    const L3GPRSCellOptions& cellOptions() const { return mCellOptions; }
+    L3GPRSCellOptions& cellOptions() { return mCellOptions; }
+    void cellOptions(const L3GPRSCellOptions& v) { mCellOptions = v; }
+    const L3GPRSSI13PowerControlParameters& powerControlParameters() const { return mPowerControlParameters; }
+    L3GPRSSI13PowerControlParameters& powerControlParameters() { return mPowerControlParameters; }
+    void powerControlParameters(const L3GPRSSI13PowerControlParameters& v) { mPowerControlParameters = v; }
+
+    [[nodiscard]] static Expected<L3SI13RestOctets> parse(BitReader& br);
+    size_t lengthV() const override;   // ceil(total bits / 8), padding included
     void write(BitWriter& bw) const override;
     void text(std::ostream& os) const;
 };

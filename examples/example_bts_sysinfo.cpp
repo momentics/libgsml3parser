@@ -80,15 +80,16 @@ bool roundTrip(const char* name, ParsedMessage&& pm) {
     return true;
 }
 
-// Build SI1: cell channel description (ARFCN + BSIC) + RACH control
-// parameters + one rest octet (TS 44.018 section 9.1.31): an eight-octet L3
-// frame in total.
+// Build SI1: cell channel description (variable length BCCH frequency list
+// form from an ARFCN list) + RACH control parameters + one rest octet
+// (TS 44.018 section 9.1.31): a twenty-two-octet L3 frame in total.
 void demoSI1() {
     std::cout << "=== System Information Type 1 ===\n";
     std::cout << "Contains cell channel description and RACH control parameters\n\n";
 
+    std::vector<uint16_t> arfcns = {976, 977, 980};
     auto si1 = L3SystemInformationType1::builder()
-        .cellChannelDescription(100, 0x12)
+        .cellChannelDescription(arfcns)
         .rachControlParameters(L3RACHControlParameters(3, 9, false, 1, 0x03FF))
         .restOctet(0x00)
         .build();
@@ -188,16 +189,18 @@ void demoBroadcastCycle() {
     std::vector<std::pair<std::string, ParsedMessage>> messages;
 
     // SI1
+    std::vector<uint16_t> arfcns = {976, 977, 980};
     auto si1 = L3SystemInformationType1::builder()
-        .cellChannelDescription(100, 0x12)
+        .cellChannelDescription(arfcns)
         .rachControlParameters(L3RACHControlParameters(3, 9, false, 1, 0x03FF))
         .restOctet(0x00)
         .build();
     messages.emplace_back("SI1", ParsedMessage{RRM{std::move(si1)}});
 
     // SI2
+    std::vector<uint16_t> neighbours = {983, 984};
     auto si2 = L3SystemInformationType2::builder()
-        .bcchFrequencyList(L3BCCHFrequencyList())
+        .bcchFrequencyList(L3BCCHFrequencyList(neighbours))
         .nccPermitted(L3NCCPermitted())
         .rachControlParameters(L3RACHControlParameters())
         .build();

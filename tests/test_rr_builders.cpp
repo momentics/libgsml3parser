@@ -402,20 +402,22 @@ TEST(RRBuilders, PartialReleaseComplete_Empty) {
 
 // GSM 04.08 9.1.31: System Information Type 1
 TEST(RRBuilders, SystemInformationType1_Full) {
+    std::vector<uint16_t> arfcns = {874};
     auto si1 = L3SystemInformationType1::builder()
-        .cellChannelDescription(100, 0x12)
+        .cellChannelDescription(arfcns)
         .rachControlParameters(L3RACHControlParameters(3, 9, false, 1, 0x03FF))
         .restOctet(0x00)
         .build();
-    // Fixed part: cell channel description (two octets) + RACH control
-    // parameters (three octets); the rest octet adds one more
-    // (TS 44.018 section 9.1.31).
-    EXPECT_EQ(si1.bodyLength(), 6u);
+    // Fixed part: cell channel description (sixteen octets, variable
+    // length BCCH frequency list form) + RACH control parameters (three
+    // octets); the rest octet adds one more (TS 44.018 section 9.1.31).
+    EXPECT_EQ(si1.bodyLength(), 20u);
     ParsedMessage pm{RRM{std::move(si1)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    // L3 header (two octets) + body (six octets): an eight-octet frame.
-    EXPECT_EQ((*bytes).size(), 8u);
+    // L3 header (two octets) + body (twenty octets): a twenty-two-octet
+    // frame.
+    EXPECT_EQ((*bytes).size(), 22u);
     EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x19);
 
@@ -423,30 +425,32 @@ TEST(RRBuilders, SystemInformationType1_Full) {
     ASSERT_TRUE(reparsed);
     auto* parsed = tryGet<L3SystemInformationType1>(*reparsed);
     ASSERT_TRUE(parsed);
-    EXPECT_EQ(parsed->cellChannelDescription().arfcn(), 100u);
-    EXPECT_EQ(parsed->cellChannelDescription().bsic(), 0x12u);
+    ASSERT_EQ(parsed->cellChannelDescription().arfcns().size(), 1u);
+    EXPECT_EQ(parsed->cellChannelDescription().arfcns()[0], 874u);
     EXPECT_EQ(parsed->rachControl().ac(), 0x03FFu);
 }
 
 // GSM 04.08 9.1.31: System Information Type 1 without the rest octet
-// carries a five-octet body (TS 44.018 section 9.1.31).
+// carries a nineteen-octet body (TS 44.018 section 9.1.31).
 TEST(RRBuilders, SystemInformationType1_NoRestOctet) {
+    std::vector<uint16_t> arfcns = {874};
     auto si1 = L3SystemInformationType1::builder()
-        .cellChannelDescription(100, 0x12)
+        .cellChannelDescription(arfcns)
         .rachControlParameters(L3RACHControlParameters())
         .build();
-    EXPECT_EQ(si1.bodyLength(), 5u);
+    EXPECT_EQ(si1.bodyLength(), 19u);
     ParsedMessage pm{RRM{std::move(si1)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
-    EXPECT_EQ((*bytes).size(), 7u);
+    EXPECT_EQ((*bytes).size(), 21u);
 
     auto reparsed = parseL3(*bytes);
     ASSERT_TRUE(reparsed);
     auto* parsed = tryGet<L3SystemInformationType1>(*reparsed);
     ASSERT_TRUE(parsed);
     EXPECT_FALSE(parsed->hasRestOctets());
-    EXPECT_EQ(parsed->cellChannelDescription().arfcn(), 100u);
+    ASSERT_EQ(parsed->cellChannelDescription().arfcns().size(), 1u);
+    EXPECT_EQ(parsed->cellChannelDescription().arfcns()[0], 874u);
 }
 
 // GSM 04.08 9.1.32: System Information Type 2
@@ -556,8 +560,9 @@ TEST(RRBuilders, SystemInformationType4_Full) {
     EXPECT_EQ((*bytes)[0], 0x06);
     EXPECT_EQ((*bytes)[1], 0x1c);
     // Dynamic body length (TS 44.018 9.1.36): LAI(5) + CellSelPar(2) +
-    // RachCtrl(3) + CBCH channel description TV(4) + MA TLV(4) + rest(1).
-    EXPECT_EQ((*bytes).size(), 2u + 19u);
+    // RachCtrl(3) + CBCH channel description TV(4) + MA TLV(4) + rest(0);
+    // the all-absent rest-octets record contributes zero octets.
+    EXPECT_EQ((*bytes).size(), 2u + 18u);
 
     auto reparsed = parseL3(*bytes);
     ASSERT_TRUE(reparsed);
