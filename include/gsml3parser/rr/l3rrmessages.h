@@ -527,12 +527,12 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── Ciphering Mode Command (GSM 04.08 9.1.9) ──────────────────────────
+// ── Ciphering Mode Command (TS 44.018 section 9.2.24) ─────────────────
 
-// Ciphering Mode Command (TS 44.018): a single body octet packing the cipher
-// mode setting first — start-ciphering bit (bit 7) and three-bit algorithm
-// identifier (bits 6:4, '001' = A5/1) — followed by the cipher mode response:
-// the cR bit (bit 3) and three spare bits.
+// Ciphering Mode Command body octet (TS 44.018 section 9.2.24): three spare
+// bits, the cR response-requested bit, the three-bit algorithm identifier and
+// the start-ciphering bit in the least significant position; the identifier
+// carries the algorithm number minus one while start-ciphering is set.
 class L3CipheringModeCommand {
     bool mCiphering{false};
     int mAlgorithm{0};
@@ -762,12 +762,16 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── GPRS Suspension Request (GSM 04.08 9.1.13b) ────────────────────────
+// ── GPRS Suspension Request (TS 44.018 section 9.1.13b) ───────────────
 
+// GPRS Suspension Request body (TS 44.018 section 9.1.13b): the TLLI, the
+// routing area identity (six octets), the suspension cause and the optional
+// service support TV (IEI 0x01, one value octet).
 class L3GPRSSuspensionRequest {
     uint32_t mTLLI{0};
     std::vector<uint8_t> mRaId;
     uint8_t mSuspensionCause{0};
+    bool mHasServiceSupport{false};
     uint8_t mServiceSupport{0};
 
     friend struct Builder;
@@ -776,10 +780,16 @@ public:
 
     L3GPRSSuspensionRequest() : mRaId(6, 0) {}
 
-    size_t bodyLength() const { return 11; }
+    const std::vector<uint8_t>& raId() const { return mRaId; }
+    uint32_t tlli() const { return mTLLI; }
+    uint8_t suspensionCause() const { return mSuspensionCause; }
+    bool hasServiceSupport() const { return mHasServiceSupport; }
+    uint8_t serviceSupport() const { return mServiceSupport; }
+
+    size_t bodyLength() const { return 11 + (mHasServiceSupport ? 2 : 0); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 11; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3GPRSSuspensionRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -788,6 +798,7 @@ public:
         uint32_t mTLLI{0};
         std::vector<uint8_t> mRaId;
         uint8_t mSuspensionCause{0};
+        bool mHasServiceSupport{false};
         uint8_t mServiceSupport{0};
 
         /// Set TLLI value.
@@ -796,14 +807,15 @@ public:
         Builder& raId(std::vector<uint8_t> v) { mRaId = std::move(v); return *this; }
         /// Set suspension cause.
         Builder& suspensionCause(uint8_t v) { mSuspensionCause = v; return *this; }
-        /// Set service support.
-        Builder& serviceSupport(uint8_t v) { mServiceSupport = v; return *this; }
+        /// Set the optional service support value octet (TV, IEI 0x01).
+        Builder& serviceSupport(bool present, uint8_t v) { mHasServiceSupport = present; mServiceSupport = v; return *this; }
         /// Build the final message.
         [[nodiscard]] L3GPRSSuspensionRequest build() const {
             L3GPRSSuspensionRequest msg;
             msg.mTLLI = mTLLI;
             msg.mRaId = mRaId;
             msg.mSuspensionCause = mSuspensionCause;
+            msg.mHasServiceSupport = mHasServiceSupport;
             msg.mServiceSupport = mServiceSupport;
             return msg;
         }
@@ -812,8 +824,12 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── Application Information (GSM 04.08 9.1.53) ────────────────────────
+// ── Application Information (TS 44.018 section 9.1.53) ────────────────
 
+// Application Information body (TS 44.018 section 9.1.53): the first octet
+// packs the APDU flags nibble ([spare|C/R|first segment|last segment]) and
+// the four-bit protocol identifier, followed by the data length octet and
+// that many data octets (LV).
 class L3ApplicationInformation {
     unsigned mProtocolIdentifier{0};
     unsigned mCR{0};
@@ -835,9 +851,10 @@ public:
     unsigned cr() const { return mCR; }
     unsigned firstSegment() const { return mFirstSegment; }
     unsigned lastSegment() const { return mLastSegment; }
+    /// Application data octets (the LV value part, TS 44.018 section 9.1.53).
     const std::vector<uint8_t>& data() const { return mData; }
 
-    size_t bodyLength() const;
+    size_t bodyLength() const { return 2 + mData.size(); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
@@ -2379,126 +2396,237 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── VGCS Uplink Grant (GSM 04.08 9.1.28) ──────────────────────────────
+// ── VGCS Uplink Grant (TS 44.018 section 9.1.28) ──────────────────────
 // Note: MTI=0x09 does not conflict with any other RR message type.
 
+// VGCS Uplink Grant body (TS 44.018 section 9.1.28): the three-octet
+// request reference followed by the one-octet timing advance.
 class L3VGCSUplinkGrant {
+    L3RequestReference mRequestReference;
+    L3TimingAdvance mTimingAdvance;
+
+    friend struct Builder;
 public:
     static constexpr int MTI = 0x09;
 
-    size_t bodyLength() const { return 0; }
-    [[nodiscard]] int mti() const { return MTI; }
-    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 0; }
-    [[nodiscard]] static Expected<L3VGCSUplinkGrant> parse(BitReader&);
-    void write(BitWriter&) const;
-    void text(std::ostream& os) const;
+    L3VGCSUplinkGrant() = default;
 
-    struct Builder {
-        /// Build the final message.
-        [[nodiscard]] L3VGCSUplinkGrant build() const;
-    };
-    friend struct Builder;
-    static Builder builder() { return Builder{}; }
-};
-
-// ── Uplink Release (GSM 04.08 9.1.28a) ────────────────────────────────
-// Note: MTI=0x0e conflicts with CC EmergencySetup; resolved by PD context.
-
-class L3UplinkRelease {
-public:
-    static constexpr int MTI = 0x0e;
-
-    size_t bodyLength() const { return 0; }
-    [[nodiscard]] int mti() const { return MTI; }
-    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 0; }
-    [[nodiscard]] static Expected<L3UplinkRelease> parse(BitReader&);
-    void write(BitWriter&) const;
-    void text(std::ostream& os) const;
-
-    struct Builder {
-        /// Build the final message.
-        [[nodiscard]] L3UplinkRelease build() const;
-    };
-    friend struct Builder;
-    static Builder builder() { return Builder{}; }
-};
-
-// ── Uplink Busy (GSM 04.08 9.1.28b) ───────────────────────────────────
-// Note: MTI=0x2a conflicts with CC ReleaseComplete; resolved by PD context.
-
-class L3UplinkBusy {
-public:
-    static constexpr int MTI = 0x2a;
-
-    size_t bodyLength() const { return 0; }
-    [[nodiscard]] int mti() const { return MTI; }
-    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 0; }
-    [[nodiscard]] static Expected<L3UplinkBusy> parse(BitReader&);
-    void write(BitWriter&) const;
-    void text(std::ostream& os) const;
-
-    struct Builder {
-        /// Build the final message.
-        [[nodiscard]] L3UplinkBusy build() const;
-    };
-    friend struct Builder;
-    static Builder builder() { return Builder{}; }
-};
-
-// ── Talker Indication (GSM 04.08 9.1.28c) ─────────────────────────────
-// MTI=0x11 ('00010001'B), Talker Indication per the RR message type table.
-
-class L3TalkerIndication {
-public:
-    static constexpr int MTI = 0x11;
-
-    size_t bodyLength() const { return 0; }
-    [[nodiscard]] int mti() const { return MTI; }
-    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 0; }
-    [[nodiscard]] static Expected<L3TalkerIndication> parse(BitReader&);
-    void write(BitWriter&) const;
-    void text(std::ostream& os) const;
-
-    struct Builder {
-        /// Build the final message.
-        [[nodiscard]] L3TalkerIndication build() const;
-    };
-    friend struct Builder;
-    static Builder builder() { return Builder{}; }
-};
-
-// ── Priority Uplink Request (GSM 04.08 9.1.28d) ───────────────────────
-
-class L3PriorityUplinkRequest {
-    uint32_t mTMSI{0};
-
-    friend struct Builder;
-public:
-    static constexpr int MTI = 0x66;
-
-    uint32_t tmsi() const { return mTMSI; }
+    const L3RequestReference& requestReference() const { return mRequestReference; }
+    const L3TimingAdvance& timingAdvance() const { return mTimingAdvance; }
 
     size_t bodyLength() const { return 4; }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
     [[nodiscard]] size_t l2BodyLength() const { return 4; }
+    [[nodiscard]] static Expected<L3VGCSUplinkGrant> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+
+    struct Builder {
+        L3RequestReference mRequestReference;
+        L3TimingAdvance mTimingAdvance;
+
+        /// Set the request reference.
+        Builder& requestReference(L3RequestReference v) { mRequestReference = v; return *this; }
+        /// Set the timing advance.
+        Builder& timingAdvance(L3TimingAdvance v) { mTimingAdvance = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3VGCSUplinkGrant build() const {
+            L3VGCSUplinkGrant msg;
+            msg.mRequestReference = mRequestReference;
+            msg.mTimingAdvance = mTimingAdvance;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
+};
+
+// ── Uplink Release (TS 44.018 section 9.1.28a) ────────────────────────
+// Note: MTI=0x0e conflicts with CC EmergencySetup; resolved by PD context.
+
+// Uplink Release body (TS 44.018 section 9.1.28a): a single RR cause octet.
+class L3UplinkRelease {
+    RRCause mCause{RRCause::Normal_Event};
+
+    friend struct Builder;
+public:
+    static constexpr int MTI = 0x0e;
+
+    L3UplinkRelease() = default;
+    explicit L3UplinkRelease(RRCause cause) : mCause(cause) {}
+
+    RRCause cause() const { return mCause; }
+
+    size_t bodyLength() const { return 1; }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return 1; }
+    [[nodiscard]] static Expected<L3UplinkRelease> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+
+    struct Builder {
+        RRCause mCause{RRCause::Normal_Event};
+
+        /// Set the RR cause.
+        Builder& cause(RRCause v) { mCause = v; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3UplinkRelease build() const {
+            L3UplinkRelease msg;
+            msg.mCause = mCause;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
+};
+
+// ── Uplink Busy (TS 44.018 section 9.1.28b) ───────────────────────────
+// Note: MTI=0x2a conflicts with CC ReleaseComplete; resolved by PD context.
+
+// Uplink Busy (TS 44.018 section 9.1.28b): every information element is
+// optional, so a header-only frame is valid; any present IEs are kept as an
+// opaque sequence for lossless re-emission.
+class L3UplinkBusy {
+    std::vector<uint8_t> mAdditionalIes;
+
+    friend struct Builder;
+public:
+    static constexpr int MTI = 0x2a;
+
+    L3UplinkBusy() = default;
+
+    /// Optional IEs are kept as an opaque sequence and re-emitted verbatim
+    /// (TS 44.018 section 9.1.28b).
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
+
+    size_t bodyLength() const { return mAdditionalIes.size(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3UplinkBusy> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+
+    struct Builder {
+        std::vector<uint8_t> mAdditionalIes;
+
+        /// Set the optional trailing IEs (talker priority, token, ...).
+        Builder& additionalIes(std::span<const uint8_t> v) { mAdditionalIes.assign(v.begin(), v.end()); return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3UplinkBusy build() const {
+            L3UplinkBusy msg;
+            msg.mAdditionalIes = mAdditionalIes;
+            return msg;
+        }
+    };
+
+    static Builder builder() { return Builder{}; }
+};
+
+// ── Talker Indication (TS 44.018 section 9.1.28c) ─────────────────────
+// MTI=0x11 ('00010001'B), Talker Indication per the RR message type table.
+
+// Talker Indication body (TS 44.018 section 9.1.28c): the classmark 2 and
+// the talker's mobile identity as LV information elements, followed by an
+// optional ciphering key sequence number TV (IEI 0x0B, one value octet with
+// the four-bit key sequence number in its high nibble).
+class L3TalkerIndication {
+    L3MobileStationClassmark2 mClassmark2;
+    L3MobileIdentity mMobileId;
+    bool mHasCksn{false};
+    unsigned mCksn{0};
+
+    friend struct Builder;
+public:
+    static constexpr int MTI = 0x11;
+
+    L3TalkerIndication() = default;
+
+    const L3MobileStationClassmark2& classmark2() const { return mClassmark2; }
+    const L3MobileIdentity& mobileId() const { return mMobileId; }
+    bool hasCksn() const { return mHasCksn; }
+    unsigned cksn() const { return mCksn; }
+
+    size_t bodyLength() const;
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] static Expected<L3TalkerIndication> parse(BitReader& br);
+    void write(BitWriter& bw) const;
+    void text(std::ostream& os) const;
+
+    struct Builder {
+        L3MobileStationClassmark2 mClassmark2;
+        L3MobileIdentity mMobileId;
+        bool mHasCksn{false};
+        unsigned mCksn{0};
+
+        /// Set the classmark 2.
+        Builder& classmark2(L3MobileStationClassmark2 v) { mClassmark2 = v; return *this; }
+        /// Set the talker's mobile identity.
+        Builder& mobileId(L3MobileIdentity v) { mMobileId = std::move(v); return *this; }
+        /// Set the optional ciphering key sequence number (four bits).
+        Builder& cksn(bool present, unsigned v) { mHasCksn = present; mCksn = v & 0x0Fu; return *this; }
+        /// Build the final message.
+        [[nodiscard]] L3TalkerIndication build() const;
+    };
+
+    static Builder builder();
+};
+
+// ── Priority Uplink Request (TS 44.018 section 9.1.28d) ───────────────
+
+// Priority Uplink Request body (TS 44.018 section 9.1.28d): the estimated
+// cause octet, then the four-bit token and the four-bit reduced GCR sharing
+// the next octet, then the mobile identity as an LV information element.
+class L3PriorityUplinkRequest {
+    uint8_t mEstCause{0};
+    unsigned mToken{0};
+    unsigned mReducedGcr{0};
+    L3MobileIdentity mMobileId;
+
+    friend struct Builder;
+public:
+    static constexpr int MTI = 0x66;
+
+    L3PriorityUplinkRequest() = default;
+
+    uint8_t estCause() const { return mEstCause; }
+    unsigned token() const { return mToken; }
+    unsigned reducedGcr() const { return mReducedGcr; }
+    const L3MobileIdentity& mobileId() const { return mMobileId; }
+
+    size_t bodyLength() const { return 2 + 1 + mMobileId.lengthV(); }
+    [[nodiscard]] int mti() const { return MTI; }
+    [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3PriorityUplinkRequest> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
 
     struct Builder {
-        uint32_t mTMSI{0};
+        uint8_t mEstCause{0};
+        unsigned mToken{0};
+        unsigned mReducedGcr{0};
+        L3MobileIdentity mMobileId;
 
-        /// Set TMSI value.
-        Builder& tmsi(uint32_t v) { mTMSI = v; return *this; }
+        /// Set the estimated cause.
+        Builder& estCause(uint8_t v) { mEstCause = v; return *this; }
+        /// Set the four-bit token.
+        Builder& token(unsigned v) { mToken = v & 0x0Fu; return *this; }
+        /// Set the four-bit reduced GCR.
+        Builder& reducedGcr(unsigned v) { mReducedGcr = v & 0x0Fu; return *this; }
+        /// Set the mobile identity.
+        Builder& mobileId(L3MobileIdentity v) { mMobileId = std::move(v); return *this; }
         /// Build the final message.
         [[nodiscard]] L3PriorityUplinkRequest build() const {
             L3PriorityUplinkRequest msg;
-            msg.mTMSI = mTMSI;
+            msg.mEstCause = mEstCause;
+            msg.mToken = mToken;
+            msg.mReducedGcr = mReducedGcr;
+            msg.mMobileId = mMobileId;
             return msg;
         }
     };
@@ -2506,35 +2634,55 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── Data Indication (GSM 04.08 9.1.28e) ───────────────────────────────
+// ── Data Indication (TS 44.018 section 9.1.28e) ───────────────────────
 
+// Data Indication body (TS 44.018 section 9.1.28e): the TMSI, nine octets
+// of application data and the one-octet data identifier.
 class L3DataIndication {
-    std::vector<uint8_t> mData;
+    uint32_t mTMSI{0};
+    std::array<uint8_t, 9> mApplicationData{};
+    uint8_t mDataId{0};
 
     friend struct Builder;
 public:
     static constexpr int MTI = 0x67;
 
-    std::vector<uint8_t>& data() { return mData; }
-    const std::vector<uint8_t>& data() const { return mData; }
+    L3DataIndication() = default;
 
-    size_t bodyLength() const { return mData.size(); }
+    uint32_t tmsi() const { return mTMSI; }
+    std::span<const uint8_t> applicationData() const { return mApplicationData; }
+    uint8_t dataId() const { return mDataId; }
+
+    size_t bodyLength() const { return 14; }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] size_t l2BodyLength() const { return 14; }
     [[nodiscard]] static Expected<L3DataIndication> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
 
     struct Builder {
-        std::vector<uint8_t> mData;
+        uint32_t mTMSI{0};
+        std::array<uint8_t, 9> mApplicationData{};
+        uint8_t mDataId{0};
 
-        /// Set data payload.
-        Builder& data(std::vector<uint8_t> v) { mData = std::move(v); return *this; }
+        /// Set the TMSI.
+        Builder& tmsi(uint32_t v) { mTMSI = v; return *this; }
+        /// Set the nine application-data octets (shorter input is padded
+        /// with zeros, longer input is truncated).
+        Builder& applicationData(std::span<const uint8_t> v) {
+            for (size_t i = 0; i < mApplicationData.size(); ++i)
+                mApplicationData[i] = (i < v.size()) ? v[i] : 0u;
+            return *this;
+        }
+        /// Set the data identifier.
+        Builder& dataId(uint8_t v) { mDataId = v; return *this; }
         /// Build the final message.
         [[nodiscard]] L3DataIndication build() const {
             L3DataIndication msg;
-            msg.mData = mData;
+            msg.mTMSI = mTMSI;
+            msg.mApplicationData = mApplicationData;
+            msg.mDataId = mDataId;
             return msg;
         }
     };
@@ -2542,35 +2690,62 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── Data Indication 2 (GSM 04.08 9.1.28f) ─────────────────────────────
+// ── Data Indication 2 (TS 44.018 section 9.1.28f) ─────────────────────
 
+// Data Indication 2 body (TS 44.018 section 9.1.28f): the TMSI, the
+// four-bit reduced GCR padded to its octet with spare bits, nine octets of
+// application data and the one-octet data identifier.
 class L3DataIndication2 {
-    std::vector<uint8_t> mData;
+    uint32_t mTMSI{0};
+    unsigned mReducedGcr{0};
+    std::array<uint8_t, 9> mApplicationData{};
+    uint8_t mDataId{0};
 
     friend struct Builder;
 public:
     static constexpr int MTI = 0x68;
 
-    std::vector<uint8_t>& data() { return mData; }
-    const std::vector<uint8_t>& data() const { return mData; }
+    L3DataIndication2() = default;
 
-    size_t bodyLength() const { return mData.size(); }
+    uint32_t tmsi() const { return mTMSI; }
+    unsigned reducedGcr() const { return mReducedGcr; }
+    std::span<const uint8_t> applicationData() const { return mApplicationData; }
+    uint8_t dataId() const { return mDataId; }
+
+    size_t bodyLength() const { return 15; }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
+    [[nodiscard]] size_t l2BodyLength() const { return 15; }
     [[nodiscard]] static Expected<L3DataIndication2> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
 
     struct Builder {
-        std::vector<uint8_t> mData;
+        uint32_t mTMSI{0};
+        unsigned mReducedGcr{0};
+        std::array<uint8_t, 9> mApplicationData{};
+        uint8_t mDataId{0};
 
-        /// Set data payload.
-        Builder& data(std::vector<uint8_t> v) { mData = std::move(v); return *this; }
+        /// Set the TMSI.
+        Builder& tmsi(uint32_t v) { mTMSI = v; return *this; }
+        /// Set the four-bit reduced GCR.
+        Builder& reducedGcr(unsigned v) { mReducedGcr = v & 0x0Fu; return *this; }
+        /// Set the nine application-data octets (shorter input is padded
+        /// with zeros, longer input is truncated).
+        Builder& applicationData(std::span<const uint8_t> v) {
+            for (size_t i = 0; i < mApplicationData.size(); ++i)
+                mApplicationData[i] = (i < v.size()) ? v[i] : 0u;
+            return *this;
+        }
+        /// Set the data identifier.
+        Builder& dataId(uint8_t v) { mDataId = v; return *this; }
         /// Build the final message.
         [[nodiscard]] L3DataIndication2 build() const {
             L3DataIndication2 msg;
-            msg.mData = mData;
+            msg.mTMSI = mTMSI;
+            msg.mReducedGcr = mReducedGcr;
+            msg.mApplicationData = mApplicationData;
+            msg.mDataId = mDataId;
             return msg;
         }
     };

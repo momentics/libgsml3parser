@@ -767,28 +767,55 @@ TEST(RoundTripTest, PriorityUplinkRequest) {
 
 // Data Indication (GSM 04.08 9.1.28e, MTI=0x67)
 // DATA_INDICATION='01100111'B = 0x67 (GSM 44.018).
+// Body: TMSI(4 octets) + application data (9 octets) + data identifier (1
+// octet), TS 44.018 section 9.1.28e.
 TEST(RoundTripTest, DataIndication) {
-    L3DataIndication msg;
-    msg.data() = std::vector<uint8_t>{0xDE, 0xAD};
+    auto msg = L3DataIndication::builder()
+        .tmsi(0xF4123456u)
+        .applicationData(std::span<const uint8_t>(std::array<uint8_t, 9>{
+            0xDE, 0xAD, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06}))
+        .dataId(0x42)
+        .build();
     ParsedMessage pm{RRM{std::move(msg)}};
     auto hex = writeL3Hex(pm);
     ASSERT_TRUE(hex);
     auto reparsed = parseL3Hex(*hex);
     ASSERT_TRUE(reparsed);
     checkHeader(*reparsed, L3PD::RadioResource, L3DataIndication::MTI);
+    auto* di = tryGet<L3DataIndication>(*reparsed);
+    ASSERT_NE(di, nullptr);
+    EXPECT_EQ(di->tmsi(), 0xF4123456u);
+    EXPECT_EQ(di->dataId(), 0x42u);
+    EXPECT_EQ(di->applicationData().size(), 9u);
+    EXPECT_EQ(di->applicationData()[0], 0xDEu);
+    EXPECT_EQ(di->applicationData()[1], 0xADu);
 }
 
 // Data Indication 2 (GSM 04.08 9.1.28f, MTI=0x68)
 // DATA_INDICATION_2='01101000'B = 0x68 (GSM 44.018).
+// Body: TMSI(4 octets) + reduced GCR (four bits, spare padding to the
+// octet) + application data (9 octets) + data identifier (1 octet),
+// TS 44.018 section 9.1.28f.
 TEST(RoundTripTest, DataIndication2) {
-    L3DataIndication2 msg;
-    msg.data() = std::vector<uint8_t>{0xBE, 0xEF};
+    auto msg = L3DataIndication2::builder()
+        .tmsi(0x1A2B3C4Du)
+        .reducedGcr(5)
+        .applicationData(std::span<const uint8_t>(std::array<uint8_t, 9>{
+            0xBE, 0xEF, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66}))
+        .dataId(0x77)
+        .build();
     ParsedMessage pm{RRM{std::move(msg)}};
     auto hex = writeL3Hex(pm);
     ASSERT_TRUE(hex);
     auto reparsed = parseL3Hex(*hex);
     ASSERT_TRUE(reparsed);
     checkHeader(*reparsed, L3PD::RadioResource, L3DataIndication2::MTI);
+    auto* di2 = tryGet<L3DataIndication2>(*reparsed);
+    ASSERT_NE(di2, nullptr);
+    EXPECT_EQ(di2->tmsi(), 0x1A2B3C4Du);
+    EXPECT_EQ(di2->reducedGcr(), 5u);
+    EXPECT_EQ(di2->dataId(), 0x77u);
+    EXPECT_EQ(di2->applicationData()[0], 0xBEu);
 }
 
 // DTM Assignment Failure (GSM 04.08 9.1.3d, MTI=0x80)

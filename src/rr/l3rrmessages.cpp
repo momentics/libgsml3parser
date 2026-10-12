@@ -455,14 +455,18 @@ Expected<L3ChannelRelease> L3ChannelRelease::parse(BitReader& br) {
     auto r = br.readField(8); if (!r) return Expected<L3ChannelRelease>::error(r.error());
     msg.mCause = static_cast<RRCause>(r.value());
 
+    // GPRS resumption octet (TS 44.018 section 9.1.7): the high nibble is
+    // the 'C' marker; the low nibble carries the one-bit value in its least
+    // significant position (resumption requested: 0xC1). The octet is
+    // recognised solely by its high nibble.
     if (br.hasMore()) {
-        unsigned peek = br.peekField(8);
-        if (peek == 0x01) {
-            { auto _ = br.readField(8); if (!_) return Expected<L3ChannelRelease>::error(_.error()); }
-            msg.mGprsResumptionPresent = true;
+        const uint32_t peek = br.peekField(4);
+        if (peek == 0x0Cu) {
+            r = br.readField(4); if (!r) return Expected<L3ChannelRelease>::error(r.error()); // 'C' marker
+            r = br.readField(3); if (!r) return Expected<L3ChannelRelease>::error(r.error()); // spare
             r = br.readField(1); if (!r) return Expected<L3ChannelRelease>::error(r.error());
             msg.mGprsResumptionBit = r.value() != 0;
-            r = br.readField(7); if (!r) return Expected<L3ChannelRelease>::error(r.error());
+            msg.mGprsResumptionPresent = true;
         }
     }
 
@@ -472,9 +476,9 @@ Expected<L3ChannelRelease> L3ChannelRelease::parse(BitReader& br) {
 void L3ChannelRelease::write(BitWriter& bw) const {
     bw.writeField(static_cast<uint32_t>(mCause), 8);
     if (mGprsResumptionPresent) {
-        bw.writeField(0x01, 8);
+        bw.writeField(0x0C, 4);
+        bw.writeField(0, 3);
         bw.writeField(mGprsResumptionBit ? 1 : 0, 1);
-        bw.writeField(0, 7);
     }
 }
 
@@ -784,10 +788,16 @@ void L3MeasurementReport::text(std::ostream& os) const {
 
 // ── L3CipheringModeCommand ─────────────────────────────────────────────
 
-// Single body octet: the cipher mode setting ([sC(1)|algorithm(3)]) comes
-// first, then the cipher mode response ([cR(1)|spare(3)]) (TS 44.018).
+// Single body octet (TS 44.018 section 9.2.24): spare(3)|cR(1) in the high
+// nibble and algorithm-identifier(3)|sC(1) in the low nibble; written
+// MSB-first, hence the cipher mode response field leads.
 Expected<L3CipheringModeCommand> L3CipheringModeCommand::parse(BitReader& br) {
     L3CipheringModeCommand msg;
+    {
+        auto res = L3CipheringModeResponse::parse(br);
+        if (!res) return Expected<L3CipheringModeCommand>::error(res.error());
+        msg.mCipheringModeResponse = std::move(res.value());
+    }
     {
         auto res = L3CipheringModeSetting::parse(br);
         if (!res) return Expected<L3CipheringModeCommand>::error(res.error());
@@ -795,18 +805,13 @@ Expected<L3CipheringModeCommand> L3CipheringModeCommand::parse(BitReader& br) {
         msg.mCiphering = cms.ciphering();
         msg.mAlgorithm = cms.algorithm();
     }
-    {
-        auto res = L3CipheringModeResponse::parse(br);
-        if (!res) return Expected<L3CipheringModeCommand>::error(res.error());
-        msg.mCipheringModeResponse = std::move(res.value());
-    }
     return Expected<L3CipheringModeCommand>::hold(std::move(msg));
 }
 
 void L3CipheringModeCommand::write(BitWriter& bw) const {
+    mCipheringModeResponse.write(bw);
     L3CipheringModeSetting cms(mCiphering, mAlgorithm);
     cms.write(bw);
-    mCipheringModeResponse.write(bw);
 }
 
 void L3CipheringModeCommand::text(std::ostream& os) const {
@@ -1029,12 +1034,15 @@ Expected<L3GPRSSuspensionRequest> L3GPRSSuspensionRequest::parse(BitReader& br) 
     r = br.readField(8); if (!r) return Expected<L3GPRSSuspensionRequest>::error(r.error());
     msg.mSuspensionCause = static_cast<uint8_t>(r.value());
 
+    // Optional service support TV: IEI 0x01 + one value octet
+    // (TS 44.018 section 9.1.13b).
     if (br.hasMore()) {
-        unsigned peek = br.peekField(8);
-        if (peek == 0x01) {
-            { auto _ = br.readField(8); if (!_) return Expected<L3GPRSSuspensionRequest>::error(_.error()); }
+        const uint32_t peek = br.peekField(8);
+        if (peek == 0x01u) {
+            r = br.readField(8); if (!r) return Expected<L3GPRSSuspensionRequest>::error(r.error()); // IEI
             r = br.readField(8); if (!r) return Expected<L3GPRSSuspensionRequest>::error(r.error());
             msg.mServiceSupport = static_cast<uint8_t>(r.value());
+            msg.mHasServiceSupport = true;
         }
     }
 
@@ -1047,72 +1055,70 @@ void L3GPRSSuspensionRequest::write(BitWriter& bw) const {
         bw.writeField(mRaId[i], 8);
     }
     bw.writeField(mSuspensionCause, 8);
-    if (mServiceSupport) {
+    if (mHasServiceSupport) {
         bw.writeField(0x01, 8);
         bw.writeField(mServiceSupport, 8);
     }
 }
 
 void L3GPRSSuspensionRequest::text(std::ostream& os) const {
-    os << "GPRSSuspensionRequest: TLLI=0x" << std::hex << mTLLI
+    os << "GPRSSuspensionRequest: TLLI=0x" << std::hex << mTLLI << std::dec
        << " cause=" << static_cast<int>(mSuspensionCause);
+    if (mHasServiceSupport)
+        os << " serviceSupport=0x" << std::hex << static_cast<int>(mServiceSupport) << std::dec;
 }
 
 // ── L3ApplicationInformation ───────────────────────────────────────────
 
-size_t L3ApplicationInformation::bodyLength() const {
-    size_t dataLen = (mData.size() + 7) / 8;
-    return 1 + dataLen;
-}
-
 Expected<L3ApplicationInformation> L3ApplicationInformation::parse(BitReader& br) {
     L3ApplicationInformation msg;
 
-    auto r = br.readField(4); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
-    msg.mProtocolIdentifier = r.value();
+    // First octet (TS 44.018 section 9.1.53): the APDU flags nibble
+    // [spare(1)|C/R(1)|first segment(1)|last segment(1)] in the high
+    // position, then the four-bit protocol identifier.
+    auto r = br.readField(1); if (!r) return Expected<L3ApplicationInformation>::error(r.error()); // spare
     r = br.readField(1); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
     msg.mCR = r.value();
     r = br.readField(1); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
     msg.mFirstSegment = r.value();
     r = br.readField(1); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
     msg.mLastSegment = r.value();
-    r = br.readField(1); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
+    r = br.readField(4); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
+    msg.mProtocolIdentifier = r.value();
 
-    while (br.hasMore()) {
+    // Data: LV (length octet, then that many data octets).
+    auto lenR = br.readField(8); if (!lenR) return Expected<L3ApplicationInformation>::error(lenR.error());
+    const size_t dataLen = static_cast<size_t>(lenR.value());
+    if (br.remainingBits() < dataLen * 8u)
+        return Expected<L3ApplicationInformation>::error(
+            {ParseError::Code::TruncatedInput, "truncated application data"});
+    msg.mData.reserve(dataLen);
+    for (size_t i = 0; i < dataLen; ++i) {
         r = br.readField(8); if (!r) return Expected<L3ApplicationInformation>::error(r.error());
-        uint8_t byte = static_cast<uint8_t>(r.value());
-        for (int bit = 7; bit >= 0; --bit) {
-            msg.mData.push_back((byte >> bit) & 1);
-        }
+        msg.mData.push_back(static_cast<uint8_t>(r.value()));
     }
 
     return Expected<L3ApplicationInformation>::hold(std::move(msg));
 }
 
 void L3ApplicationInformation::write(BitWriter& bw) const {
-    bw.writeField(mProtocolIdentifier, 4);
-    bw.writeField(mCR, 1);
-    bw.writeField(mFirstSegment, 1);
-    bw.writeField(mLastSegment, 1);
+    // Flags nibble [spare|C/R|first|last], protocol identifier, then the LV
+    // data (TS 44.018 section 9.1.53).
     bw.writeField(0, 1);
-
-    size_t dataLen = (mData.size() + 7) / 8;
-    for (size_t i = 0; i < dataLen; ++i) {
-        uint8_t byte = 0;
-        for (int bit = 0; bit < 8; ++bit) {
-            size_t idx = i * 8 + bit;
-            if (idx < mData.size()) {
-                byte |= (mData[idx] << (7 - bit));
-            }
-        }
-        bw.writeField(byte, 8);
+    bw.writeField(mCR & 0x01u, 1);
+    bw.writeField(mFirstSegment & 0x01u, 1);
+    bw.writeField(mLastSegment & 0x01u, 1);
+    bw.writeField(mProtocolIdentifier & 0x0Fu, 4);
+    bw.writeField(static_cast<uint32_t>(mData.size()), 8);
+    for (const uint8_t b : mData) {
+        bw.writeField(b, 8);
     }
 }
 
 void L3ApplicationInformation::text(std::ostream& os) const {
     os << "ApplicationInformation: PID=" << mProtocolIdentifier
        << " CR=" << mCR << " first=" << mFirstSegment << " last=" << mLastSegment
-       << " len=" << mData.size() << "bits";
+       << " len=" << mData.size() << "octets";
 }
 
 // ── System Information Types ────────────────────────────────────────────
@@ -2197,7 +2203,9 @@ L3ImmediateAssignmentReject::L3ImmediateAssignmentReject(unsigned waitSeconds)
     : mFeatureIndicator(0), mPageMode(0), mWaitIndication(waitSeconds) {}
 
 size_t L3ImmediateAssignmentReject::bodyLength() const {
-    return 1 + static_cast<size_t>(mRequestReferences.size()) * 4;
+    // Exactly four request-reference/wait-indication pairs are always on the
+    // wire (TS 44.018 section 9.1.20).
+    return 1 + 4 * 4;
 }
 
 Expected<L3ImmediateAssignmentReject> L3ImmediateAssignmentReject::parse(BitReader& br) {
@@ -2211,6 +2219,8 @@ Expected<L3ImmediateAssignmentReject> L3ImmediateAssignmentReject::parse(BitRead
         return Expected<L3ImmediateAssignmentReject>::error(ParseError{ParseError::Code::InvalidValue, "unassigned page mode value"});
     msg.mPageMode = r.value();
 
+    // One to four request-reference/wait-indication pairs follow
+    // (TS 44.018 section 9.1.20).
     for (int i = 0; i < 4; ++i) {
         if (!br.hasMore()) break;
         auto res = L3RequestReference::parse(br);
@@ -2221,10 +2231,10 @@ Expected<L3ImmediateAssignmentReject> L3ImmediateAssignmentReject::parse(BitRead
     }
 
     if (msg.mRequestReferences.empty()) {
-        msg.mWaitIndication = 0;
-    } else {
-        msg.mWaitIndication = msg.mWaitIndications.empty() ? 0 : msg.mWaitIndications.back();
+        return Expected<L3ImmediateAssignmentReject>::error(
+            ParseError{ParseError::Code::TruncatedInput, "missing request reference/wait indication pairs"});
     }
+    msg.mWaitIndication = msg.mWaitIndications.empty() ? 0 : msg.mWaitIndications.back();
 
     return Expected<L3ImmediateAssignmentReject>::hold(std::move(msg));
 }
@@ -2232,9 +2242,21 @@ Expected<L3ImmediateAssignmentReject> L3ImmediateAssignmentReject::parse(BitRead
 void L3ImmediateAssignmentReject::write(BitWriter& bw) const {
     bw.writeField(mFeatureIndicator & 0x0F, 4);
     bw.writeField(mPageMode & 0x0F, 4);
-    for (size_t i = 0; i < mRequestReferences.size(); ++i) {
-        mRequestReferences[i].write(bw);
-        bw.writeField(i < mWaitIndications.size() ? mWaitIndications[i] : mWaitIndication, 8);
+    // Emit exactly four pairs: the given ones followed by repeats of the
+    // last (a zero request reference when none is given).
+    for (size_t i = 0; i < 4; ++i) {
+        L3RequestReference ref;
+        if (!mRequestReferences.empty()) {
+            const size_t idx = (i < mRequestReferences.size()) ? i : mRequestReferences.size() - 1;
+            ref = mRequestReferences[idx];
+        }
+        ref.write(bw);
+        unsigned wait = mWaitIndication;
+        if (!mWaitIndications.empty()) {
+            const size_t idx = (i < mWaitIndications.size()) ? i : mWaitIndications.size() - 1;
+            wait = mWaitIndications[idx];
+        }
+        bw.writeField(wait, 8);
     }
 }
 
@@ -2753,109 +2775,223 @@ void L3NotificationResponse::text(std::ostream& os) const {
 
 // ── L3VGCSUplinkGrant ──────────────────────────────────────────────────
 
-Expected<L3VGCSUplinkGrant> L3VGCSUplinkGrant::parse(BitReader&) {
-    return Expected<L3VGCSUplinkGrant>::hold(L3VGCSUplinkGrant{});
+Expected<L3VGCSUplinkGrant> L3VGCSUplinkGrant::parse(BitReader& br) {
+    L3VGCSUplinkGrant msg;
+    {
+        auto res = L3RequestReference::parse(br);
+        if (!res) return Expected<L3VGCSUplinkGrant>::error(res.error());
+        msg.mRequestReference = std::move(res.value());
+    }
+    {
+        auto res = L3TimingAdvance::parse(br);
+        if (!res) return Expected<L3VGCSUplinkGrant>::error(res.error());
+        msg.mTimingAdvance = std::move(res.value());
+    }
+    return Expected<L3VGCSUplinkGrant>::hold(std::move(msg));
 }
 
-void L3VGCSUplinkGrant::write(BitWriter&) const {}
+void L3VGCSUplinkGrant::write(BitWriter& bw) const {
+    mRequestReference.write(bw);
+    mTimingAdvance.write(bw);
+}
 
 void L3VGCSUplinkGrant::text(std::ostream& os) const {
-    os << "VGCSUplinkGrant";
+    os << "VGCSUplinkGrant: ";
+    mRequestReference.text(os);
+    os << " ";
+    mTimingAdvance.text(os);
 }
 
 // ── L3UplinkRelease ────────────────────────────────────────────────────
 
-Expected<L3UplinkRelease> L3UplinkRelease::parse(BitReader&) {
-    return Expected<L3UplinkRelease>::hold(L3UplinkRelease{});
+Expected<L3UplinkRelease> L3UplinkRelease::parse(BitReader& br) {
+    L3UplinkRelease msg;
+    auto r = br.readField(8); if (!r) return Expected<L3UplinkRelease>::error(r.error());
+    msg.mCause = static_cast<RRCause>(r.value());
+    return Expected<L3UplinkRelease>::hold(std::move(msg));
 }
 
-void L3UplinkRelease::write(BitWriter&) const {}
+void L3UplinkRelease::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mCause), 8);
+}
 
 void L3UplinkRelease::text(std::ostream& os) const {
-    os << "UplinkRelease";
+    os << "UplinkRelease: cause=" << RRCause2Str(mCause);
 }
 
 // ── L3UplinkBusy ───────────────────────────────────────────────────────
 
-Expected<L3UplinkBusy> L3UplinkBusy::parse(BitReader&) {
-    return Expected<L3UplinkBusy>::hold(L3UplinkBusy{});
+Expected<L3UplinkBusy> L3UplinkBusy::parse(BitReader& br) {
+    L3UplinkBusy msg;
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3UplinkBusy>::error(
+            {ParseError::Code::TruncatedInput, "truncated optional IEs"});
+    return Expected<L3UplinkBusy>::hold(std::move(msg));
 }
 
-void L3UplinkBusy::write(BitWriter&) const {}
+void L3UplinkBusy::write(BitWriter& bw) const {
+    detail::writeOpaqueTail(mAdditionalIes, bw);
+}
 
 void L3UplinkBusy::text(std::ostream& os) const {
-    os << "UplinkBusy";
+    os << "UplinkBusy: optional IEs=" << mAdditionalIes.size() << " octets";
 }
 
 // ── L3TalkerIndication ─────────────────────────────────────────────────
 
-Expected<L3TalkerIndication> L3TalkerIndication::parse(BitReader&) {
-    return Expected<L3TalkerIndication>::hold(L3TalkerIndication{});
+size_t L3TalkerIndication::bodyLength() const {
+    return 1 + mClassmark2.lengthV() + 1 + mMobileId.lengthV() + (mHasCksn ? 2 : 0);
 }
 
-void L3TalkerIndication::write(BitWriter&) const {}
+Expected<L3TalkerIndication> L3TalkerIndication::parse(BitReader& br) {
+    L3TalkerIndication msg;
+    {
+        auto lenR = br.readField(8); if (!lenR) return Expected<L3TalkerIndication>::error(lenR.error());
+        auto res = L3MobileStationClassmark2::parse(br, lenR.value());
+        if (!res) return Expected<L3TalkerIndication>::error(res.error());
+        msg.mClassmark2 = std::move(res.value());
+    }
+    {
+        auto lenR = br.readField(8); if (!lenR) return Expected<L3TalkerIndication>::error(lenR.error());
+        auto res = L3MobileIdentity::parse(br, lenR.value());
+        if (!res) return Expected<L3TalkerIndication>::error(res.error());
+        msg.mMobileId = std::move(res.value());
+    }
+    // Optional ciphering key sequence number TV: IEI 0x0B, value octet with
+    // the four-bit key sequence number in its high nibble.
+    if (br.hasMore()) {
+        auto r = br.readField(8); if (!r) return Expected<L3TalkerIndication>::error(r.error());
+        if (r.value() == 0x0Bu) {
+            auto c = br.readField(4); if (!c) return Expected<L3TalkerIndication>::error(c.error());
+            msg.mCksn = c.value();
+            r = br.readField(4); if (!r) return Expected<L3TalkerIndication>::error(r.error()); // spare
+            msg.mHasCksn = true;
+        }
+    }
+    return Expected<L3TalkerIndication>::hold(std::move(msg));
+}
+
+void L3TalkerIndication::write(BitWriter& bw) const {
+    bw.writeField(static_cast<uint32_t>(mClassmark2.lengthV()), 8);
+    mClassmark2.write(bw);
+    bw.writeField(static_cast<uint32_t>(mMobileId.lengthV()), 8);
+    mMobileId.write(bw);
+    if (mHasCksn) {
+        bw.writeField(0x0B, 8);
+        bw.writeField(mCksn & 0x0Fu, 4);
+        bw.writeField(0, 4);
+    }
+}
 
 void L3TalkerIndication::text(std::ostream& os) const {
-    os << "TalkerIndication";
+    os << "TalkerIndication: ";
+    mMobileId.text(os);
+    if (mHasCksn) os << " CKSN=" << mCksn;
+}
+
+L3TalkerIndication L3TalkerIndication::Builder::build() const {
+    L3TalkerIndication msg;
+    msg.mClassmark2 = mClassmark2;
+    msg.mMobileId = mMobileId;
+    msg.mHasCksn = mHasCksn;
+    msg.mCksn = mCksn;
+    return msg;
+}
+
+L3TalkerIndication::Builder L3TalkerIndication::builder() {
+    return Builder{};
 }
 
 // ── L3PriorityUplinkRequest ────────────────────────────────────────────
 
 Expected<L3PriorityUplinkRequest> L3PriorityUplinkRequest::parse(BitReader& br) {
     L3PriorityUplinkRequest msg;
-    auto r = br.readField(32); if (!r) return Expected<L3PriorityUplinkRequest>::error(r.error());
-    msg.mTMSI = r.value();
+    auto r = br.readField(8); if (!r) return Expected<L3PriorityUplinkRequest>::error(r.error());
+    msg.mEstCause = static_cast<uint8_t>(r.value());
+    r = br.readField(4); if (!r) return Expected<L3PriorityUplinkRequest>::error(r.error());
+    msg.mToken = r.value();
+    r = br.readField(4); if (!r) return Expected<L3PriorityUplinkRequest>::error(r.error());
+    msg.mReducedGcr = r.value();
+    auto lenR = br.readField(8); if (!lenR) return Expected<L3PriorityUplinkRequest>::error(lenR.error());
+    auto res = L3MobileIdentity::parse(br, lenR.value());
+    if (!res) return Expected<L3PriorityUplinkRequest>::error(res.error());
+    msg.mMobileId = std::move(res.value());
     return Expected<L3PriorityUplinkRequest>::hold(std::move(msg));
 }
 
 void L3PriorityUplinkRequest::write(BitWriter& bw) const {
-    bw.writeField(mTMSI, 32);
+    bw.writeField(mEstCause, 8);
+    bw.writeField(mToken & 0x0Fu, 4);
+    bw.writeField(mReducedGcr & 0x0Fu, 4);
+    bw.writeField(static_cast<uint32_t>(mMobileId.lengthV()), 8);
+    mMobileId.write(bw);
 }
 
 void L3PriorityUplinkRequest::text(std::ostream& os) const {
-    os << "PriorityUplinkRequest: TMSI=0x" << std::hex << mTMSI << std::dec;
+    os << "PriorityUplinkRequest: estCause=" << static_cast<int>(mEstCause)
+       << " token=" << mToken << " reducedGCR=" << mReducedGcr << "; ";
+    mMobileId.text(os);
 }
 
 // ── L3DataIndication ───────────────────────────────────────────────────
 
 Expected<L3DataIndication> L3DataIndication::parse(BitReader& br) {
     L3DataIndication msg;
-    while (br.hasMore()) {
-        auto r = br.readField(8); if (!r) return Expected<L3DataIndication>::error(r.error());
-        msg.mData.push_back(static_cast<uint8_t>(r.value()));
+    auto r = br.readField(32); if (!r) return Expected<L3DataIndication>::error(r.error());
+    msg.mTMSI = r.value();
+    for (size_t i = 0; i < msg.mApplicationData.size(); ++i) {
+        r = br.readField(8); if (!r) return Expected<L3DataIndication>::error(r.error());
+        msg.mApplicationData[i] = static_cast<uint8_t>(r.value());
     }
+    r = br.readField(8); if (!r) return Expected<L3DataIndication>::error(r.error());
+    msg.mDataId = static_cast<uint8_t>(r.value());
     return Expected<L3DataIndication>::hold(std::move(msg));
 }
 
 void L3DataIndication::write(BitWriter& bw) const {
-    for (const auto& b : mData) {
+    bw.writeField(mTMSI, 32);
+    for (const uint8_t b : mApplicationData) {
         bw.writeField(b, 8);
     }
+    bw.writeField(mDataId, 8);
 }
 
 void L3DataIndication::text(std::ostream& os) const {
-    os << "DataIndication: len=" << mData.size();
+    os << "DataIndication: TMSI=0x" << std::hex << mTMSI << std::dec
+       << " dataId=" << static_cast<int>(mDataId);
 }
 
 // ── L3DataIndication2 ──────────────────────────────────────────────────
 
 Expected<L3DataIndication2> L3DataIndication2::parse(BitReader& br) {
     L3DataIndication2 msg;
-    while (br.hasMore()) {
-        auto r = br.readField(8); if (!r) return Expected<L3DataIndication2>::error(r.error());
-        msg.mData.push_back(static_cast<uint8_t>(r.value()));
+    auto r = br.readField(32); if (!r) return Expected<L3DataIndication2>::error(r.error());
+    msg.mTMSI = r.value();
+    r = br.readField(4); if (!r) return Expected<L3DataIndication2>::error(r.error());
+    msg.mReducedGcr = r.value();
+    r = br.readField(4); if (!r) return Expected<L3DataIndication2>::error(r.error()); // spare padding
+    for (size_t i = 0; i < msg.mApplicationData.size(); ++i) {
+        r = br.readField(8); if (!r) return Expected<L3DataIndication2>::error(r.error());
+        msg.mApplicationData[i] = static_cast<uint8_t>(r.value());
     }
+    r = br.readField(8); if (!r) return Expected<L3DataIndication2>::error(r.error());
+    msg.mDataId = static_cast<uint8_t>(r.value());
     return Expected<L3DataIndication2>::hold(std::move(msg));
 }
 
 void L3DataIndication2::write(BitWriter& bw) const {
-    for (const auto& b : mData) {
+    bw.writeField(mTMSI, 32);
+    bw.writeField(mReducedGcr & 0x0Fu, 4);
+    bw.writeField(0, 4);
+    for (const uint8_t b : mApplicationData) {
         bw.writeField(b, 8);
     }
+    bw.writeField(mDataId, 8);
 }
 
 void L3DataIndication2::text(std::ostream& os) const {
-    os << "DataIndication2: len=" << mData.size();
+    os << "DataIndication2: TMSI=0x" << std::hex << mTMSI << std::dec
+       << " reducedGCR=" << mReducedGcr << " dataId=" << static_cast<int>(mDataId);
 }
 
 // ── L3DTMAssignmentFailure ─────────────────────────────────────────────
@@ -3579,22 +3715,6 @@ void L3ImmediatePacketAssignment::text(std::ostream& os) const {
 }
 
 // ── Builder::build() implementations for empty classes ──────────────────
-
-L3VGCSUplinkGrant L3VGCSUplinkGrant::Builder::build() const {
-    return L3VGCSUplinkGrant{};
-}
-
-L3UplinkRelease L3UplinkRelease::Builder::build() const {
-    return L3UplinkRelease{};
-}
-
-L3UplinkBusy L3UplinkBusy::Builder::build() const {
-    return L3UplinkBusy{};
-}
-
-L3TalkerIndication L3TalkerIndication::Builder::build() const {
-    return L3TalkerIndication{};
-}
 
 L3DTMReject L3DTMReject::Builder::build() const {
     return L3DTMReject{};

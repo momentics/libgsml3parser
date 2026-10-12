@@ -786,16 +786,18 @@ void L3HandoverReference::text(std::ostream& os) const {
 
 // ── L3CipheringModeSetting ─────────────────────────────────────────────
 
+// Four bits: [algorithm identifier(3)][sC(1)]; the wire identifier is the
+// algorithm number minus one while sC is set (TS 44.018 section 9.2.24).
 Expected<L3CipheringModeSetting> L3CipheringModeSetting::parse(BitReader& br) {
-    auto r = br.readField(1); if (!r) return Expected<L3CipheringModeSetting>::error(r.error()); bool ciphering = r.value() != 0;
-    r = br.readField(3); if (!r) return Expected<L3CipheringModeSetting>::error(r.error()); int algo = static_cast<int>(r.value());
-    if (!ciphering) algo = 0;
+    auto r = br.readField(3); if (!r) return Expected<L3CipheringModeSetting>::error(r.error()); int identifier = static_cast<int>(r.value());
+    r = br.readField(1); if (!r) return Expected<L3CipheringModeSetting>::error(r.error()); bool ciphering = r.value() != 0;
+    int algo = ciphering ? identifier + 1 : 0;
     return Expected<L3CipheringModeSetting>::hold(L3CipheringModeSetting(ciphering, algo));
 }
 
 void L3CipheringModeSetting::write(BitWriter& bw) const {
+    bw.writeField(mCiphering ? (static_cast<uint32_t>(mAlgorithm) - 1u) & 0x07u : 0u, 3);
     bw.writeField(mCiphering ? 1 : 0, 1);
-    bw.writeField(mAlgorithm & 0x07, 3);
 }
 
 void L3CipheringModeSetting::text(std::ostream& os) const {
@@ -804,17 +806,16 @@ void L3CipheringModeSetting::text(std::ostream& os) const {
 
 // ── L3CipheringModeResponse ────────────────────────────────────────────
 
-// Four bits: [cR(1)][spare(3)] — the response bit leads its half-octet
-// (TS 44.018 section 9.1.x).
+// Four bits: [spare(3)][cR(1)] (TS 44.018 section 9.2.24).
 Expected<L3CipheringModeResponse> L3CipheringModeResponse::parse(BitReader& br) {
-    auto r = br.readField(1); if (!r) return Expected<L3CipheringModeResponse>::error(r.error()); bool imeisv = r.value() != 0;
-    r = br.readField(3); if (!r) return Expected<L3CipheringModeResponse>::error(r.error()); // spare
+    auto r = br.readField(3); if (!r) return Expected<L3CipheringModeResponse>::error(r.error()); // spare
+    r = br.readField(1); if (!r) return Expected<L3CipheringModeResponse>::error(r.error()); bool imeisv = r.value() != 0;
     return Expected<L3CipheringModeResponse>::hold(L3CipheringModeResponse(imeisv));
 }
 
 void L3CipheringModeResponse::write(BitWriter& bw) const {
-    bw.writeField(mIncludeIMEISV ? 1 : 0, 1);
     bw.writeField(0, 3);
+    bw.writeField(mIncludeIMEISV ? 1 : 0, 1);
 }
 
 void L3CipheringModeResponse::text(std::ostream& os) const {

@@ -33,8 +33,9 @@
 //   bcc(3)|ncc(3)|arfcn(10) packed LSB-first across 2 octets.
 // ChannelDescription encoding verified against GSM 24.008 10.5.2.5:
 //   typeAndOffset(5)|TN(3)|TSC(3)|h(1)|ARFCN(12).
-// CipheringModeCommand byte layout per GSM 44.018 9.1.9:
-//   cipherModeSetting(4 MSB)|cipherModeResponse(4 LSB), sC=1|algId=A5/3 -> 0xB0.
+// CipheringModeCommand byte layout per TS 44.018 section 9.2.24:
+//   spare(3)|cR(1)|algorithm identifier(3)|sC(1); the identifier is the
+//   algorithm number minus one while sC is set (sC=1|A5/3|cR=0 -> 0x05).
 // CellSelectionParameters default values for a software BTS (GSM 44.018 SI3).
 // RACHControlParameters default values for a software BTS (GSM 44.018 SI3).
 // ControlChannelDescription default values for a software BTS (GSM 44.018 SI3).
@@ -632,13 +633,14 @@ TEST(GoldenRR, ImmediateAssignment_Parse) {
 // =====================================================================
 // RR PARSE FROM HEX: Immediate Assignment Reject (3GPP TS 44.018 9.1.20 / GSM 04.08 9.1.20)
 // MTI per TS 44.018 Table 10.4.1: IMMEDIATE_ASSIGNMENT_REJECT ('00111010'B = 0x3A).
-// Body per TS 44.018 9.1.20: FeatureIndicator feature_ind, PageMode page_mode, [optional ReqRefWaitInd4]
-// Structure: FeatureIndicator(4 MSB)|PageMode(4 LSB) + [optional RequestReferences]
+// Body per TS 44.018 9.1.20: FeatureIndicator feature_ind, PageMode page_mode, ReqRefWaitInd pairs
+// Structure: FeatureIndicator(4 MSB)|PageMode(4 LSB) + one to four (RequestReference(3 octets) + waitIndication(1 octet)) pairs;
+//   the emit form always carries exactly four pairs.
 // Spec-verified: PD=6(RR), MTI=0x3A(ImmediateAssignmentReject) per 3GPP TS 44.018 Table 10.4.1
 // [GSM SPEC VERIFIED] GSM 24.008 9.1.20: ImmediateAssignmentReject body = FeatureInd + PageMode
-//   + [ReqRefWaitInd4]. FeatureIndicator is 4 bits (peo_bcch_change_mark(2)|cs_ir(1)|ps_ir(1)).
+//   + ReqRefWaitInd pairs. FeatureIndicator is 4 bits (peo_bcch_change_mark(2)|cs_ir(1)|ps_ir(1)).
 //   PageMode is 4 bits: NORMAL(0), EXTENDED(1), REORGANIZATION(2), SAME_AS_BEFORE(3).
-//   ReqRefWaitInd4 is optional: requestReference(8) + waitIndication(8), repeated up to 4 times.
+//   Each pair: requestReference (RA(8)|T1P(5)|T3(6)|T2(5) = 3 octets) + waitIndication(8).
 // =====================================================================
 
 TEST(GoldenRR, ImmediateAssignmentReject_Parse) {
@@ -647,9 +649,9 @@ TEST(GoldenRR, ImmediateAssignmentReject_Parse) {
     // Byte 2: FeatureIndicator(4)=0|PageMode(4)=3(SameAsBefore) = 0x03
     //   FeatureIndicator (TS 44.018): peo_bcch_change_mark(2)=0, cs_ir(1)=0, ps_ir(1)=0
     //   PageMode: SAME_AS_BEFORE(3), four bits (TS 44.018 9.1.20)
-    //   ReqRefWaitInd4 payload is CONDITIONAL per GSM 24.008 9.1.20: "included if the network is able to identify
-    //   for which pending channel request(s) an immediate assignment cannot be given." Minimal message omits it.
-    uint8_t data[] = {0x06, 0x3a, 0x03};
+    // Bytes 3-5: one ReqRefWaitInd pair's requestReference: RA=0x25 with
+    //   T1P=T3=T2=0 ({0x25,0x00,0x00}); byte 6: waitIndication = 0x30 (48 s).
+    uint8_t data[] = {0x06, 0x3a, 0x03, 0x25, 0x00, 0x00, 0x30};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ImmediateAssignmentReject::MTI);
@@ -657,6 +659,8 @@ TEST(GoldenRR, ImmediateAssignmentReject_Parse) {
     ASSERT_TRUE(iar);
     // PageMode=3(SameAsBefore) from the low nibble of byte 2 (TS 44.018 9.1.20).
     EXPECT_EQ(iar->pageMode(), 3u);
+    EXPECT_EQ(iar->requestReferences().size(), 1u);
+    EXPECT_EQ(iar->waitTime(), 0x30u);
 }
 
 // =====================================================================
@@ -685,11 +689,12 @@ TEST(GoldenRR, ChannelModeModify_Parse) {
 // =====================================================================
 // RR PARSE FROM HEX: GPRS Suspension Request (GSM 04.08 9.1.13b / 3GPP TS 44.018 9.1.13b)
 // MTI per TS 44.018 Table 10.4.1: GPRS_SUSPENSION_REQUEST ('00110100'B = 0x34).
-// Structure: TLLI(32 bits) + RA_ID(48 bits) + SuspensionCause(8 bits) + ServiceSupport(8 bits)
+// Structure: TLLI(32 bits) + RA_ID(48 bits) + SuspensionCause(8 bits)
+//   + [optional ServiceSupport TV: IEI 0x01 + one value octet]
 // [GOLDEN VERIFIED] MTI=0x34 matches the TS 44.018 GPRS suspension request identifier.
 //   TLLI is raw 4-octet MSB-first (TS 44.060).
 //   RA_ID is 6 octets per 3GPP TS 04.08 10.5.5.2 (Routing Area Identity).
-//   SuspensionCause: 0=Normal, ServiceSupport: bitmask of supported services.
+//   SuspensionCause: 0=Normal, ServiceSupport value: bitmask of supported services.
 // =====================================================================
 
 TEST(GoldenRR, GPRSSuspensionRequest_Parse) {
@@ -699,38 +704,74 @@ TEST(GoldenRR, GPRSSuspensionRequest_Parse) {
     // Bytes 2-5: TLLI = 0x12345678 (raw 4-octet MSB-first, TS 44.060)
     // Bytes 6-11: RA_ID (6 bytes per 3GPP TS 04.08 10.5.5.2 Routing Area Identity) = 0
     // Byte 12: SuspensionCause = 0x00 (0=Normal suspension)
-    // Byte 13: ServiceSupport = 0x00 (bitmask of supported services)
+    // Bytes 13-14: optional service support TV: IEI 0x01 + value octet
+    //   0x80 (bitmask of supported services, TS 44.018 section 9.1.13b)
     uint8_t data[] = {
         0x06, 0x34,
         0x12, 0x34, 0x56, 0x78,
         0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0x00, 0x00
+        0x00,
+        0x01, 0x80
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3GPRSSuspensionRequest::MTI);
+    const auto* sus = tryGet<L3GPRSSuspensionRequest>(*msg);
+    ASSERT_NE(sus, nullptr);
+    EXPECT_TRUE(sus->hasServiceSupport());
+    EXPECT_EQ(sus->serviceSupport(), 0x80u);
 }
 
 // =====================================================================
 // RR PARSE FROM HEX: Application Information (GSM 04.08 9.1.53 / 3GPP TS 44.018 9.1.53)
 // MTI per TS 44.018 Table 10.4.1: APPLICATION_INFORMATION ('00111000'B = 0x38).
-// Structure: ProtocolIdentifier(4)|CR(4) + FirstSegment(1)|LastSegment(1)|spare(2)|data(4) + [data octets]
+// Structure: flags(4)|ProtocolIdentifier(4) + dataLength(8) + data(dataLength octets, LV)
 // [GOLDEN VERIFIED] MTI=0x38 matches the TS 44.018 application information identifier.
 //   Per GSM 24.008 10.5.2.74: ApplicationInformation carries application-layer data
-//   (e.g., USSD, SIM toolkit) with protocol discriminator and segmentation control.
+//   (e.g., USSD, SIM toolkit) with protocol discriminator and segmentation control;
+//   the flags nibble is [spare(1)|C/R(1)|first segment(1)|last segment(1)].
 // =====================================================================
 
 TEST(GoldenRR, ApplicationInformation_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x38 ('00111000'B, TS 44.018 Table 10.4.1)
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x38 (ApplicationInformation) [3GPP TS 44.018 Table 10.4.1, section 9.1.53]
-    // Byte 2: ProtocolIdentifier(4)=0|CR(4)=0 = 0x00 [GSM 24.008 10.5.2.74]
-    // Byte 3: FirstSegment(1)=0|LastSegment(1)=0|spare(2)=0|data(4) = 0xAB
-    // Byte 4: data continued = 0xCD
-    uint8_t data[] = {0x06, 0x38, 0x00, 0xAB, 0xCD};
+    // Byte 2: flags(4)=spare(0)|CR(1)|first(0)|last(1)=0b0101 | ProtocolIdentifier(4)=0 = 0x50 [GSM 24.008 10.5.2.74]
+    // Byte 3: data length = 2 (LV, octets)
+    // Bytes 4-5: application data = {0xAB, 0xCD}
+    uint8_t data[] = {0x06, 0x38, 0x50, 0x02, 0xAB, 0xCD};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3ApplicationInformation::MTI);
+    const auto* ai = tryGet<L3ApplicationInformation>(*msg);
+    ASSERT_NE(ai, nullptr);
+    EXPECT_EQ(ai->protocolIdentifier(), 0u);
+    EXPECT_EQ(ai->cr(), 1u);
+    EXPECT_EQ(ai->firstSegment(), 0u);
+    EXPECT_EQ(ai->lastSegment(), 1u);
+    EXPECT_EQ(ai->data(), (std::vector<uint8_t>{0xAB, 0xCD}));
+}
+
+TEST(GoldenRR, ApplicationInformation_RoundTrip) {
+    // Flags + protocol identifier + LV data: the length octet sits between
+    // the first octet and the data (TS 44.018 section 9.1.53).
+    auto built = L3ApplicationInformation::builder()
+        .protocolIdentifier(0x05)
+        .cr(1)
+        .firstSegment(0)
+        .lastSegment(1)
+        .data(std::vector<uint8_t>{0xAB, 0xCD})
+        .build();
+    EXPECT_EQ(built.bodyLength(), 2 + 2u);
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto parsed = roundtrip(pm);
+    ASSERT_TRUE(parsed);
+    const auto* ai = tryGet<L3ApplicationInformation>(*parsed);
+    ASSERT_NE(ai, nullptr);
+    EXPECT_EQ(ai->protocolIdentifier(), 0x05u);
+    EXPECT_EQ(ai->cr(), 1u);
+    EXPECT_EQ(ai->lastSegment(), 1u);
+    EXPECT_EQ(ai->data(), (std::vector<uint8_t>{0xAB, 0xCD}));
 }
 
 // =====================================================================
@@ -791,56 +832,55 @@ TEST(GoldenRR, HandoverAccess_Parse) {
 }
 
 // =====================================================================
-// RR PARSE FROM HEX: Ciphering Mode Command (3GPP TS 44.018 9.1.9 / GSM 04.08 9.1.9)
+// RR PARSE FROM HEX: Ciphering Mode Command (3GPP TS 44.018 section 9.2.24 / GSM 04.08 9.1.9)
 // Frame shape: MTI = '00110101'B (0x35); vector cipherModeSetting: sC='1'B, algorithmIdentifier=3
 // MTI per TS 44.018 Table 10.4.1: CIPHERING_MODE_COMMAND ('00110101'B = 0x35).
-// Structure: cipherModeSetting(4 MSB)|cipherModeResponse(4 LSB) = 8 bits
+// Structure: one body octet spare(3)|cR(1)|algorithm identifier(3)|sC(1) (TS 44.018 section 9.2.24);
+//   the identifier carries the algorithm number minus one while sC is set.
 // Spec-verified: PD=6(RR), MTI=0x35(CipheringModeCommand) per 3GPP TS 44.018 Table 10.4.1
-// CipheringModeSetting: GSM 24.008 10.5.2.9 (4 bits: sC(1)|algorithmIdentifier(3))
+// CipheringModeSetting (TS 44.018 section 9.2.24, 4 bits: algorithm identifier(3)|sC(1)):
 //   Algorithm 3 = A5/3 (KASUMI), sC=1 (ciphering on)
-// [GSM SPEC VERIFIED] Byte layout per TS 24.008 10.5.2.9:
-//   cipherModeSetting is FIRST field -> high nibble (MSB), cipherModeResponse is SECOND -> low nibble (LSB).
-//   cipherModeSetting=0b1_011 (sC=1, algId=3=A5/3) -> 0xB in high nibble
-//   cipherModeResponse=0b0_000 (cR=0, spare=000) -> 0x0 in low nibble
-//   Combined: 0b1011_0000 = 0xB0
+// [GSM SPEC VERIFIED] Byte layout per TS 44.018 section 9.2.24:
+//   spare(3)|cR(1) in the high nibble, identifier(3)|sC(1) in the low nibble (MSB-first).
+//   sC=1, A5/3 -> identifier '010'B, cR=0: 0b000_0_010_1 = 0x05
 // =====================================================================
 
 TEST(GoldenRR, CipheringModeCommand_Parse) {
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x35 (CipheringModeCommand) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: cipherModeSetting(4)=sC(1)=1(on)|algorithmIdentifier(3)=3(A5/3) | cipherModeResponse(4)=cR(0)=0|spare(3)=0 = 0xB0
-    //   TS 44.018: cipherModeSetting is the FIRST field -> high nibble,
-    //   cipherModeResponse is the SECOND field -> low nibble (CipheringModeCommand record):
-    //   cipherModeSetting(4 MSB)|cipherModeResponse(4 LSB).
-    //   cipherModeSetting: sC=1, algId=011(A5/3) -> 0b1011 = 0xB (high nibble)
-    //   cipherModeResponse: cR=0, spare=000 -> 0b0000 = 0x0 (low nibble)
-    //   Combined: 0xB0
-    uint8_t data[] = {0x06, 0x35, 0xB0};
+    // Byte 2: spare(3)=0 | cR=0 | identifier(3)=2 (A5/3, i.e. algorithm-1) | sC=1 = 0x05
+    //   TS 44.018 section 9.2.24 body octet: [spare(3)][cR(1)][algorithm identifier(3)][sC(1)].
+    //   sC is the least significant bit of the octet; the identifier holds
+    //   the algorithm number minus one while sC is set.
+    //   spare=000, cR=0 -> high nibble 0x0; identifier='010'B, sC=1 -> low nibble 0b0101 = 0x5
+    //   Combined: 0x05
+    uint8_t data[] = {0x06, 0x35, 0x05};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3CipheringModeCommand::MTI);
     const auto* cm = tryGet<L3CipheringModeCommand>(*msg);
     ASSERT_NE(cm, nullptr);
-    EXPECT_TRUE(cm->isCiphering());          // sC bit (bit 7 of the octet)
-    EXPECT_EQ(cm->algorithm(), 3u);          // A5/3 (bits 6:4)
-    EXPECT_FALSE(cm->includeIMEISV());       // cR bit (bit 3) — clear
+    EXPECT_TRUE(cm->isCiphering());          // sC bit (bit 0 of the octet)
+    EXPECT_EQ(cm->algorithm(), 3u);          // A5/3 (identifier '010'B + 1)
+    EXPECT_FALSE(cm->includeIMEISV());       // cR bit (bit 4) — clear
 }
 
 // =====================================================================
-// Golden: Ciphering Mode Command (TS 44.018): the single body octet packs
-// start-ciphering (bit 7), algorithm identifier (bits 6:4, '001' = A5/1)
-// and the response bit (bit 3, clear) with its three spare bits.
+// Golden: Ciphering Mode Command (TS 44.018 section 9.2.24): the single body
+// octet packs three spare bits, the cR response-requested bit (bit 4), the
+// three-bit algorithm identifier (bits 2:0 of the value while sC is set) and
+// the start-ciphering bit in the least significant position.
 // =====================================================================
 
 TEST(GoldenRR, CipheringModeCommand_RefVector) {
-    uint8_t data[] = {0x06, 0x35, 0x90};   // sC=1, alg=1 (A5/1), cR=0
+    uint8_t data[] = {0x06, 0x35, 0x01};   // sC=1, alg=1 (A5/1), cR=0
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     const auto* cm = tryGet<L3CipheringModeCommand>(*msg);
     ASSERT_NE(cm, nullptr);
-    EXPECT_TRUE(cm->isCiphering());          // sC bit (bit 7 of the octet)
-    EXPECT_EQ(cm->algorithm(), 1u);          // A5/1 (bits 6:4)
-    EXPECT_FALSE(cm->includeIMEISV());       // cR bit (bit 3) — clear
+    EXPECT_TRUE(cm->isCiphering());          // sC bit (bit 0 of the octet)
+    EXPECT_EQ(cm->algorithm(), 1u);          // A5/1 (identifier '000'B + 1)
+    EXPECT_FALSE(cm->includeIMEISV());       // cR bit (bit 4) — clear
 
     // The builder emits the identical octet for the same field values.
     auto built = L3CipheringModeCommand::builder().ciphering(true).algorithm(1).build();
@@ -850,33 +890,75 @@ TEST(GoldenRR, CipheringModeCommand_RefVector) {
     ASSERT_EQ((*bytes).size(), 3u);
     EXPECT_EQ((*bytes)[0], 0x06u);
     EXPECT_EQ((*bytes)[1], 0x35u);
-    EXPECT_EQ((*bytes)[2], 0x90u);
+    EXPECT_EQ((*bytes)[2], 0x01u);
+
+    // Start-ciphering is the least significant bit: an octet with the top
+    // bits set but the low bit clear does not request ciphering
+    // (TS 44.018 section 9.2.24). 0x98 = spare '100', cR=1, identifier
+    // '110', sC=0 -> no ciphering, IMEISV requested.
+    uint8_t inv[] = {0x06, 0x35, 0x98};
+    auto msgInv = parseL3(std::span<const uint8_t>(inv));
+    ASSERT_TRUE(msgInv);
+    const auto* cmInv = tryGet<L3CipheringModeCommand>(*msgInv);
+    ASSERT_NE(cmInv, nullptr);
+    EXPECT_FALSE(cmInv->isCiphering());      // sC = bit 0 of 0x98 is clear
+    EXPECT_EQ(cmInv->algorithm(), 0u);       // identifier is forced to zero with sC=0
+    EXPECT_TRUE(cmInv->includeIMEISV());     // cR = bit 4 of 0x98 is set
 }
 
 TEST(GoldenRR, CipheringModeCommand_StartCipheringOnly) {
-    // 0x80 = '1'000_0000: start-ciphering set (bit 7), algorithm '000'
-    // (no ciphering algorithm), cR clear — pins sC as the top bit of the octet.
-    uint8_t data[] = {0x06, 0x35, 0x80};
+    // 0x03 = 0b000_0_001_1: start-ciphering set (bit 0), identifier '001'B
+    // (A5/2 while sC is set), cR clear.
+    uint8_t data[] = {0x06, 0x35, 0x03};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     const auto* cm = tryGet<L3CipheringModeCommand>(*msg);
     ASSERT_NE(cm, nullptr);
     EXPECT_TRUE(cm->isCiphering());
-    EXPECT_EQ(cm->algorithm(), 0u);
+    EXPECT_EQ(cm->algorithm(), 2u);
     EXPECT_FALSE(cm->includeIMEISV());
 }
 
 TEST(GoldenRR, CipheringModeCommand_ResponseBit) {
-    // sC=1, alg='000' (no algorithm), cR='1' (include IMEISV):
-    // 1_000 | 1_000 = 0x88.
-    uint8_t data[] = {0x06, 0x35, 0x88};
+    // sC=1, identifier='000'B (A5/1), cR='1' (include IMEISV):
+    // 0b000_1_000_1 = 0x11.
+    uint8_t data[] = {0x06, 0x35, 0x11};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     const auto* cm = tryGet<L3CipheringModeCommand>(*msg);
     ASSERT_NE(cm, nullptr);
     EXPECT_TRUE(cm->isCiphering());
+    EXPECT_EQ(cm->algorithm(), 1u);
+    EXPECT_TRUE(cm->includeIMEISV());        // cR bit (bit 4) set
+
+    // The builder emits exactly this octet for (sC=1, A5/1, cR=1).
+    auto built = L3CipheringModeCommand::builder()
+                     .ciphering(true)
+                     .algorithm(1)
+                     .cipheringModeResponse(L3CipheringModeResponse(true))
+                     .build();
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), 3u);
+    EXPECT_EQ((*bytes)[2], 0x11u);
+}
+
+TEST(GoldenRR, CipheringModeCommand_NoCiphering) {
+    // sC=0, cR=0: the body octet is all zeros (identifier forced to '000'B
+    // while start-ciphering is clear), TS 44.018 section 9.2.24.
+    auto built = L3CipheringModeCommand::builder().ciphering(false).build();
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), 3u);
+    EXPECT_EQ((*bytes)[2], 0x00u);
+    auto reparsed = parseL3(*bytes);
+    ASSERT_TRUE(reparsed);
+    const auto* cm = tryGet<L3CipheringModeCommand>(*reparsed);
+    ASSERT_NE(cm, nullptr);
+    EXPECT_FALSE(cm->isCiphering());
     EXPECT_EQ(cm->algorithm(), 0u);
-    EXPECT_TRUE(cm->includeIMEISV());        // cR bit (bit 3) set
 }
 
 // =====================================================================
@@ -1029,12 +1111,38 @@ TEST(GoldenRR, ImmediateAssignmentExtended_RoundTrip) {
 // =====================================================================
 
 TEST(GoldenRR, ImmediateAssignmentReject_RoundTrip) {
+    // The emit form always carries exactly four request-reference/wait-
+    // indication pairs (TS 44.018 section 9.1.20): body = leading octet +
+    // 4 x (3-octet request reference + wait octet) = 17 octets.
+    EXPECT_EQ(L3ImmediateAssignmentReject{}.bodyLength(), 1 + 16u);
     L3ImmediateAssignmentReject concrete(30);
     EXPECT_EQ(concrete.waitTime(), 30u);
     ParsedMessage msg(RRM(std::move(concrete)));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3ImmediateAssignmentReject::MTI);
+
+    // One given pair is padded with repeats of the last pair up to four.
+    auto built = L3ImmediateAssignmentReject::builder()
+        .addWaitIndication(L3RequestReference(0x25u, 0u, 0u, 0u), 30)
+        .build();
+    EXPECT_EQ(built.bodyLength(), 1 + 16u);
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), 2u + 17u);
+    EXPECT_EQ((*bytes)[0], 0x06u);
+    EXPECT_EQ((*bytes)[1], 0x3au);
+    // Request reference RA=0x25 with T1P=T3=T2=0 (TS 44.018 10.5.2.30) =
+    // {0x25, 0x00, 0x00}; the same pair is repeated four times with the
+    // wait indication (30 s).
+    for (int rep = 0; rep < 4; ++rep) {
+        const size_t off = static_cast<size_t>(3 + rep * 4);
+        EXPECT_EQ((*bytes)[off], 0x25u);
+        EXPECT_EQ((*bytes)[off + 1], 0x00u);
+        EXPECT_EQ((*bytes)[off + 2], 0x00u);
+        EXPECT_EQ((*bytes)[off + 3], 0x1Eu);   // wait indication = 30 s
+    }
 }
 
 // =====================================================================
@@ -1266,6 +1374,22 @@ TEST(GoldenRR, GPRSSuspensionRequest_RoundTrip) {
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3GPRSSuspensionRequest::MTI);
+
+    // With the optional service support TV (IEI 0x01) present the body is
+    // eleven + two octets; the TV survives the round trip verbatim.
+    auto built = L3GPRSSuspensionRequest::builder()
+        .tlli(0x12345678u)
+        .suspensionCause(0)
+        .serviceSupport(true, 0x80)
+        .build();
+    EXPECT_EQ(built.bodyLength(), 13u);
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto parsed2 = roundtrip(pm);
+    ASSERT_TRUE(parsed2);
+    const auto* sus = tryGet<L3GPRSSuspensionRequest>(*parsed2);
+    ASSERT_NE(sus, nullptr);
+    EXPECT_TRUE(sus->hasServiceSupport());
+    EXPECT_EQ(sus->serviceSupport(), 0x80u);
 }
 
 // =====================================================================
@@ -1475,46 +1599,75 @@ TEST(GoldenRR, NotificationResponse_RoundTrip) {
 // =====================================================================
 // RR: VGCS Uplink Grant (3GPP TS 44.018 9.1.28)
 // MTI per TS 44.018 Table 10.4.1: VGCS_UPLINK_GRANT ('00001001'B = 0x09).
+// Structure per TS 44.018 section 9.1.28: RequestReference (RA(8)|T1P(5)|T3(6)|T2(5),
+// three octets) + TimingAdvance (one octet, spare(2)|TA(6)).
 // =====================================================================
 
 TEST(GoldenRR, VGCSUplinkGrant_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x09 ('00001001'B, TS 44.018 Table 10.4.1)
-    uint8_t data[] = {0x06, 0x09};
+    // Body = request reference RA=0x25 (T1P=T3=T2=0, three octets) +
+    // timing advance 42 (spare(2)|TA(6)).
+    uint8_t data[] = {0x06, 0x09, 0x25, 0x00, 0x00, 0x2A};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3VGCSUplinkGrant::MTI);
+    const auto* ug = tryGet<L3VGCSUplinkGrant>(*msg);
+    ASSERT_NE(ug, nullptr);
+    EXPECT_EQ(ug->requestReference().ra(), 0x25u);
+    EXPECT_EQ(ug->timingAdvance().timingAdvance(), 42u);
 }
 
 TEST(GoldenRR, VGCSUplinkGrant_RoundTrip) {
-    ParsedMessage msg(RRM(L3VGCSUplinkGrant{}));
+    auto built = L3VGCSUplinkGrant::builder()
+        .requestReference(L3RequestReference(0x25u, 0u, 0u, 0u))
+        .timingAdvance(L3TimingAdvance(42))
+        .build();
+    EXPECT_EQ(built.bodyLength(), 4u);
+    ParsedMessage msg(RRM(std::move(built)));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3VGCSUplinkGrant::MTI);
+    const auto* ug = tryGet<L3VGCSUplinkGrant>(*parsed);
+    ASSERT_NE(ug, nullptr);
+    EXPECT_EQ(ug->requestReference().ra(), 0x25u);
+    EXPECT_EQ(ug->timingAdvance().timingAdvance(), 42u);
 }
 
 // =====================================================================
 // RR: Uplink Release (3GPP TS 44.018 9.1.28a)
 // MTI per TS 44.018 Table 10.4.1: UPLINK_RELEASE ('00001110'B = 0x0E).
+// Structure per TS 44.018 section 9.1.28a: one RR cause octet.
 // =====================================================================
 
 TEST(GoldenRR, UplinkRelease_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x0E ('00001110'B, TS 44.018 Table 10.4.1)
-    uint8_t data[] = {0x06, 0x0e};
+    // Body = RR cause 0x01 (Unspecified).
+    uint8_t data[] = {0x06, 0x0e, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3UplinkRelease::MTI);
+    const auto* ur = tryGet<L3UplinkRelease>(*msg);
+    ASSERT_NE(ur, nullptr);
+    EXPECT_EQ(ur->cause(), RRCause::Unspecified);
 }
 
 TEST(GoldenRR, UplinkRelease_RoundTrip) {
-    ParsedMessage msg(RRM(L3UplinkRelease{}));
+    auto built = L3UplinkRelease::builder().cause(RRCause::Unspecified).build();
+    EXPECT_EQ(built.bodyLength(), 1u);
+    ParsedMessage msg(RRM(std::move(built)));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3UplinkRelease::MTI);
+    const auto* ur = tryGet<L3UplinkRelease>(*parsed);
+    ASSERT_NE(ur, nullptr);
+    EXPECT_EQ(ur->cause(), RRCause::Unspecified);
 }
 
 // =====================================================================
 // RR: Uplink Busy (3GPP TS 44.018 9.1.28b)
 // MTI per TS 44.018 Table 10.4.1: UPLINK_BUSY ('00101010'B = 0x2A).
+// All IEs are optional: a header-only frame is valid, any present IEs are
+// kept opaque for lossless re-emission.
 // =====================================================================
 
 TEST(GoldenRR, UplinkBusy_Parse) {
@@ -1523,6 +1676,9 @@ TEST(GoldenRR, UplinkBusy_Parse) {
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3UplinkBusy::MTI);
+    const auto* ub = tryGet<L3UplinkBusy>(*msg);
+    ASSERT_NE(ub, nullptr);
+    EXPECT_TRUE(ub->additionalIes().empty());
 }
 
 TEST(GoldenRR, UplinkBusy_RoundTrip) {
@@ -1530,68 +1686,149 @@ TEST(GoldenRR, UplinkBusy_RoundTrip) {
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3UplinkBusy::MTI);
+
+    // Optional IEs are preserved verbatim across the round trip.
+    auto built = L3UplinkBusy::builder()
+        .additionalIes(std::span<const uint8_t>(std::array<uint8_t, 4>{0x31, 0x01, 0x80, 0x00}))
+        .build();
+    EXPECT_EQ(built.bodyLength(), 4u);
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto parsed2 = roundtrip(pm);
+    ASSERT_TRUE(parsed2);
+    const auto* ub = tryGet<L3UplinkBusy>(*parsed2);
+    ASSERT_NE(ub, nullptr);
+    EXPECT_EQ(ub->additionalIes(), (std::vector<uint8_t>{0x31, 0x01, 0x80, 0x00}));
 }
 
 // =====================================================================
 // RR: Priority Uplink Request (3GPP TS 44.018 9.1.28d)
 // MTI per TS 44.018 Table 10.4.1: PRIORITY_UPLINK_REQUEST ('01100110'B = 0x66).
-// Structure: TMSI(4 octets)
+// Structure per TS 44.018 section 9.1.28d: estimated cause octet + token(4)|reduced GCR(4)
+// octet + mobile identity LV.
 // =====================================================================
 
 TEST(GoldenRR, PriorityUplinkRequest_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x66 ('01100110'B, TS 44.018 Table 10.4.1)
-    // Body = TMSI(4 octets raw MSB-first)
-    uint8_t data[] = {0x06, 0x66, 0x12, 0x34, 0x56, 0x78};
+    // Body = estCause(1 octet)=2 + token(4)=3|reducedGCR(4)=5 (octet 0x35)
+    //   + mobile identity LV: IMSI "1234567890" (length 6, TS 24.008 10.5.1.4).
+    uint8_t data[] = {0x06, 0x66, 0x02, 0x35,
+                      0x06, 0x11, 0x32, 0x54, 0x76, 0x98, 0xF0};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3PriorityUplinkRequest::MTI);
+    const auto* pur = tryGet<L3PriorityUplinkRequest>(*msg);
+    ASSERT_NE(pur, nullptr);
+    EXPECT_EQ(pur->estCause(), 0x02u);
+    EXPECT_EQ(pur->token(), 3u);
+    EXPECT_EQ(pur->reducedGcr(), 5u);
+    EXPECT_TRUE(pur->mobileId().isIMSI());
+    EXPECT_STREQ(pur->mobileId().digits(), "1234567890");
 }
 
 TEST(GoldenRR, PriorityUplinkRequest_RoundTrip) {
-    ParsedMessage msg(RRM(L3PriorityUplinkRequest{}));
+    auto built = L3PriorityUplinkRequest::builder()
+        .estCause(2)
+        .token(3)
+        .reducedGcr(5)
+        .mobileId(L3MobileIdentity(MobileIDType::IMSI, "1234567890"))
+        .build();
+    ParsedMessage msg(RRM(std::move(built)));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3PriorityUplinkRequest::MTI);
+    const auto* pur = tryGet<L3PriorityUplinkRequest>(*parsed);
+    ASSERT_NE(pur, nullptr);
+    EXPECT_EQ(pur->estCause(), 0x02u);
+    EXPECT_EQ(pur->token(), 3u);
+    EXPECT_EQ(pur->reducedGcr(), 5u);
+    EXPECT_TRUE(pur->mobileId().isIMSI());
+    EXPECT_STREQ(pur->mobileId().digits(), "1234567890");
 }
 
 // =====================================================================
 // RR: Data Indication (3GPP TS 44.018 9.1.28e)
 // MTI per TS 44.018 Table 10.4.1: DATA_INDICATION ('01100111'B = 0x67).
+// Structure per TS 44.018 section 9.1.28e: TMSI(4 octets) + application data
+// (9 octets) + data identifier (1 octet).
 // =====================================================================
 
 TEST(GoldenRR, DataIndication_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x67 ('01100111'B, TS 44.018 Table 10.4.1)
-    uint8_t data[] = {0x06, 0x67};
+    uint8_t data[] = {0x06, 0x67,
+                      0xF4, 0x12, 0x34, 0x56,   // TMSI
+                      0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, // app data
+                      0x42};                    // data identifier
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3DataIndication::MTI);
+    const auto* di = tryGet<L3DataIndication>(*msg);
+    ASSERT_NE(di, nullptr);
+    EXPECT_EQ(di->tmsi(), 0xF4123456u);
+    EXPECT_EQ(di->applicationData()[0], 0x01u);
+    EXPECT_EQ(di->applicationData()[8], 0x09u);
+    EXPECT_EQ(di->dataId(), 0x42u);
 }
 
 TEST(GoldenRR, DataIndication_RoundTrip) {
-    ParsedMessage msg(RRM(L3DataIndication{}));
+    auto built = L3DataIndication::builder()
+        .tmsi(0xF4123456u)
+        .applicationData(std::span<const uint8_t>(std::array<uint8_t, 9>{
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09}))
+        .dataId(0x42)
+        .build();
+    EXPECT_EQ(built.bodyLength(), 14u);
+    ParsedMessage msg(RRM(std::move(built)));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3DataIndication::MTI);
+    const auto* di = tryGet<L3DataIndication>(*parsed);
+    ASSERT_NE(di, nullptr);
+    EXPECT_EQ(di->tmsi(), 0xF4123456u);
+    EXPECT_EQ(di->dataId(), 0x42u);
 }
 
 // =====================================================================
 // RR: Data Indication 2 (3GPP TS 44.018 9.1.28f)
 // MTI per TS 44.018 Table 10.4.1: DATA_INDICATION_2 ('01101000'B = 0x68).
+// Structure per TS 44.018 section 9.1.28f: TMSI(4 octets) + reduced GCR
+// (four bits, spare padding to the octet) + application data (9 octets)
+// + data identifier (1 octet).
 // =====================================================================
 
 TEST(GoldenRR, DataIndication2_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x68 ('01101000'B, TS 44.018 Table 10.4.1)
-    uint8_t data[] = {0x06, 0x68};
+    uint8_t data[] = {0x06, 0x68,
+                      0xF4, 0x12, 0x34, 0x56,   // TMSI
+                      0x50,                     // reduced GCR=5, spare padding
+                      0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, // app data
+                      0x42};                    // data identifier
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3DataIndication2::MTI);
+    const auto* di2 = tryGet<L3DataIndication2>(*msg);
+    ASSERT_NE(di2, nullptr);
+    EXPECT_EQ(di2->tmsi(), 0xF4123456u);
+    EXPECT_EQ(di2->reducedGcr(), 5u);
+    EXPECT_EQ(di2->applicationData()[0], 0x01u);
+    EXPECT_EQ(di2->dataId(), 0x42u);
 }
 
 TEST(GoldenRR, DataIndication2_RoundTrip) {
-    ParsedMessage msg(RRM(L3DataIndication2{}));
+    auto built = L3DataIndication2::builder()
+        .tmsi(0xF4123456u)
+        .reducedGcr(5)
+        .applicationData(std::span<const uint8_t>(std::array<uint8_t, 9>{
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09}))
+        .dataId(0x42)
+        .build();
+    EXPECT_EQ(built.bodyLength(), 15u);
+    ParsedMessage msg(RRM(std::move(built)));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3DataIndication2::MTI);
+    const auto* di2 = tryGet<L3DataIndication2>(*parsed);
+    ASSERT_NE(di2, nullptr);
+    EXPECT_EQ(di2->reducedGcr(), 5u);
 }
 
 // =====================================================================
@@ -2584,17 +2821,35 @@ TEST(GoldenRR, NotificationNCH_RoundTrip) {
 
 TEST(GoldenRR, TalkerIndication_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x11 ('00010001'B, TS 44.018 Table 10.4.1)
-    uint8_t data[] = {0x06, 0x11};
+    // Body per TS 44.018 section 9.1.28c: classmark 2 LV (three zero base
+    // octets) + mobile identity LV (TMSI 0xF4123456, five value octets).
+    uint8_t data[] = {0x06, 0x11,
+                      0x03, 0x00, 0x00, 0x00,
+                      0x05, 0xF4, 0xF4, 0x12, 0x34, 0x56};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3TalkerIndication::MTI);
+    const auto* ti = tryGet<L3TalkerIndication>(*msg);
+    ASSERT_NE(ti, nullptr);
+    EXPECT_TRUE(ti->mobileId().isTMSI());
+    EXPECT_EQ(ti->mobileId().tmsi(), 0xF4123456u);
+    EXPECT_FALSE(ti->hasCksn());
 }
 
 TEST(GoldenRR, TalkerIndication_RoundTrip) {
-    ParsedMessage msg(RRM(L3TalkerIndication{}));
+    auto built = L3TalkerIndication::builder()
+        .mobileId(L3MobileIdentity(0xF4123456u))
+        .cksn(true, 3)
+        .build();
+    ParsedMessage msg(RRM(std::move(built)));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3TalkerIndication::MTI);
+    const auto* ti = tryGet<L3TalkerIndication>(*parsed);
+    ASSERT_NE(ti, nullptr);
+    EXPECT_EQ(ti->mobileId().tmsi(), 0xF4123456u);
+    EXPECT_TRUE(ti->hasCksn());
+    EXPECT_EQ(ti->cksn(), 3u);
 }
 
 TEST(GoldenRR, SystemInformationType10_RoundTrip) {
@@ -2778,6 +3033,45 @@ TEST(GoldenRR, ChannelRelease_RefVector) {
     ASSERT_TRUE(msg);
     EXPECT_EQ(messagePD(*msg), L3PD::RadioResource);
     EXPECT_EQ(messageMTI(*msg), L3ChannelRelease::MTI);
+    const auto* cr = tryGet<L3ChannelRelease>(*msg);
+    ASSERT_NE(cr, nullptr);
+    EXPECT_EQ(cr->cause(), RRCause::Call_Already_Cleared);
+    EXPECT_FALSE(cr->hasGprsResumption());
+}
+
+// Golden: RR Channel Release GPRS resumption octet (TS 44.018 section 9.1.7):
+// [ 'C'(4) | value(1) | spare(3) ]; the octet is recognised solely by its
+// high nibble 'C', the value bit says whether resumption is requested.
+TEST(GoldenRR, ChannelRelease_GprsResumptionOctet) {
+    // cause = Call_Already_Cleared (0x41), resumption requested: 0xC1.
+    uint8_t data[] = {0x06, 0x0D, 0x41, 0xC1};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* cr = tryGet<L3ChannelRelease>(*msg);
+    ASSERT_NE(cr, nullptr);
+    EXPECT_TRUE(cr->hasGprsResumption());
+    EXPECT_TRUE(cr->gprsResumption());
+
+    // The builder emits the identical octet for resumption requested.
+    auto built = L3ChannelRelease::builder()
+        .cause(RRCause::Call_Already_Cleared)
+        .gprsResumption(true, true)
+        .build();
+    EXPECT_EQ(built.bodyLength(), 2u);
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), 4u);
+    EXPECT_EQ((*bytes)[3], 0xC1u);
+
+    // A following octet without the 'C' high nibble is not a GPRS
+    // resumption indicator (it remains trailing data outside strict mode).
+    uint8_t other[] = {0x06, 0x0D, 0x41, 0x20, 0x00};
+    auto msgOther = parseL3(std::span<const uint8_t>(other));
+    ASSERT_TRUE(msgOther);
+    const auto* crOther = tryGet<L3ChannelRelease>(*msgOther);
+    ASSERT_NE(crOther, nullptr);
+    EXPECT_FALSE(crOther->hasGprsResumption());
 }
 
 // Golden: CCCH Immediate Assignment frame (TS 44.018 9.1.19) as captured on a

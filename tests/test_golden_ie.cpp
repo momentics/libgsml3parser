@@ -995,9 +995,10 @@ TEST(GoldenIE, HandoverReference_RoundTrip) {
 }
 
 // =====================================================================
-// Common IEs: L3CipheringModeSetting (GSM 04.08 10.5.2.9)
-// Ciphering mode setting nibble per GSM 24.008 10.5.2.9
-// 4 bits: ciphering(1) | algorithm(3)
+// Common IEs: L3CipheringModeSetting (TS 44.018 section 9.2.24)
+// Cipher mode setting field per TS 44.018 section 9.2.24
+// 4 bits: algorithm identifier(3) | sC(1); the identifier is the
+// algorithm number minus one while sC is set.
 // =====================================================================
 
 TEST(GoldenIE, CipheringModeSetting_Off) {
@@ -1007,33 +1008,34 @@ TEST(GoldenIE, CipheringModeSetting_Off) {
 }
 
 TEST(GoldenIE, CipheringModeSetting_A5_3) {
-    // GSM 24.008 10.5.2.9: cipheringModeSetting is 4 bits: sC(1)|algorithmIdentifier(3)
-    // ciphering=true, algorithm=3(A5/3) -> sC=1, algId=011 -> 4-bit value = 0b1011 = 0x0B
+    // TS 44.018 section 9.2.24: cipher mode setting is 4 bits: identifier(3)|sC(1)
+    // ciphering=true, algorithm=3(A5/3) -> sC=1, identifier=alg-1='010'B -> 4-bit value = 0b0101 = 0x05
     // Vector: sC='1'B (ciphering on), algorithmIdentifier = A5/3.
-    // Spec-verified round-trip per GSM 24.008 10.5.2.9
+    // Spec-verified round-trip per TS 44.018 section 9.2.24
     L3CipheringModeSetting orig(true, 3);
     ieRoundTrip(orig);
 }
 
 TEST(GoldenIE, CipheringModeSetting_Encoding) {
     // Vector: sC='1'B (ciphering on), algorithmIdentifier = 3 bits (A5/3).
-    // Spec-verified: GSM 24.008 10.5.2.9 Ciphering Mode Setting (4 bits)
-    //   ciphering(1)=sC|algorithm(3)=algorithmIdentifier
-    //   ciphering=true, algorithm=3(A5/3) -> sC(1)=1|algId(3)=011 -> 4-bit value = 0b1011 = 0x0B
+    // Spec-verified: TS 44.018 section 9.2.24 cipher mode setting (4 bits)
+    //   algorithm identifier(3)|sC(1); the identifier is the algorithm number
+    //   minus one while sC is set
+    //   ciphering=true, algorithm=3(A5/3) -> identifier(3)=alg-1='010'B | sC(1)=1 -> 4-bit value = 0b0101 = 0x05
     L3CipheringModeSetting cms(true, 3);
     std::vector<uint8_t> buf(4, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     cms.write(writer);
-    // GSM 24.008 10.5.2.9: cipheringModeSetting is 4 bits: sC(1)|algorithmIdentifier(3)
-    // ciphering=true -> sC=1, algorithm=3(A5/3) -> algorithmIdentifier=011
-    // 4-bit value = 0b1_011 = 0x0B. Written MSB-first starting at bit position 0 (high nibble).
-    EXPECT_EQ((buf[0] >> 4) & 0x0F, 0x0B);
+    // TS 44.018 section 9.2.24: cipher mode setting is identifier(3)|sC(1)
+    // ciphering=true -> sC=1, algorithm=3(A5/3) -> identifier=alg-1='010'B
+    // 4-bit value = 0b010_1 = 0x05. Written MSB-first starting at bit position 0 (high nibble).
+    EXPECT_EQ((buf[0] >> 4) & 0x0F, 0x05);
 }
 
 // =====================================================================
-// Common IEs: L3CipheringModeResponse (GSM 04.08 10.5.2.10)
-// Ciphering mode response bits per TS 44.018 (ciphering mode command body)
-// 4 bits: cR(1) | spare(3) — the response bit leads its half-octet
+// Common IEs: L3CipheringModeResponse (TS 44.018 section 9.2.24)
+// Cipher mode response field per TS 44.018 section 9.2.24 (ciphering mode command body)
+// 4 bits: spare(3) | cR(1) — the response bit closes its half-octet
 // =====================================================================
 
 TEST(GoldenIE, CipheringModeResponse_Default) {
@@ -1045,14 +1047,14 @@ TEST(GoldenIE, CipheringModeResponse_Default) {
 
 TEST(GoldenIE, CipheringModeResponse_Encoding) {
     // Vector: cR='1'B (include IMEISV), spare='000'B.
-    // Spec-verified: TS 44.018 ciphering mode response (4 bits):
-    //   cR(1)=1 | spare(3)=000 -> 4-bit value = 0b1000 = 0x08, written
-    //   MSB-first so the bit lands in the high nibble of the octet.
+    // Spec-verified: TS 44.018 section 9.2.24 cipher mode response (4 bits):
+    //   spare(3)=000 | cR(1)=1 -> 4-bit value = 0b0001 = 0x01, written
+    //   MSB-first so the bit lands in the low position of the high nibble.
     L3CipheringModeResponse orig(true);
     std::vector<uint8_t> buf(4, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     orig.write(writer);
-    EXPECT_EQ((buf[0] >> 4) & 0x0F, 0x08u);
+    EXPECT_EQ((buf[0] >> 4) & 0x0F, 0x01u);
 }
 
 // =====================================================================

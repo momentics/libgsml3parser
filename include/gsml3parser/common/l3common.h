@@ -569,8 +569,12 @@ public:
     bool operator==(const L3HandoverReference&) const = default;
 };
 
-// ── Ciphering Mode Setting (GSM 04.08 10.5.2.9) ───────────────────────
+// ── Ciphering Mode Setting (TS 44.018 section 9.2.24) ─────────────────
 
+// Cipher mode setting (TS 44.018 section 9.2.24): a four-bit field holding
+// the three-bit algorithm identifier followed by the start-ciphering bit;
+// the identifier carries the algorithm number minus one while
+// start-ciphering is set ('000'B = A5/1).
 class L3CipheringModeSetting {
     bool mCiphering{};
     int mAlgorithm{};
@@ -588,11 +592,11 @@ public:
     bool operator==(const L3CipheringModeSetting&) const = default;
 };
 
-// ── Ciphering Mode Response (GSM 04.08 10.5.2.10) ─────────────────────
+// ── Ciphering Mode Response (TS 44.018 section 9.2.24) ────────────────
 
-// Ciphering mode response (TS 44.018 section 9.1.x): the response bit (cR)
-// occupies the most significant bit of its half-octet, followed by three
-// spare bits.
+// Cipher mode response (TS 44.018 section 9.2.24): a four-bit field with
+// three spare bits followed by the cR bit (response requested, i.e. the MS
+// shall include the IMEISV).
 class L3CipheringModeResponse {
     bool mIncludeIMEISV{};
 public:
