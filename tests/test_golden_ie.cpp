@@ -1692,17 +1692,6 @@ TEST(GoldenIE, IARestOctets_Default) {
 }
 
 // =====================================================================
-// Common IEs: L3FollowOnProceed (GSM 04.08 10.5.2.38)
-// Follow-on/proceed indicator per GSM 24.008 10.5.2.38
-// =====================================================================
-
-TEST(GoldenIE, FollowOnProceed_Default) {
-    L3FollowOnProceed orig;
-    EXPECT_EQ(orig.lengthV(), 1u);
-    ieRoundTrip(orig);
-}
-
-// =====================================================================
 // Common IEs: L3RestOctets base
 // Generic rest octets (padding) per GSM 24.008
 // =====================================================================

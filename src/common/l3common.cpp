@@ -1299,17 +1299,6 @@ void L3DedicatedModeOrTBF::text(std::ostream& os) const {
     os << "DedModeOrTBF[DL=" << mDownlink << " TBF=" << mDMOrTBF << "]";
 }
 
-// ── L3FollowOnProceed ──────────────────────────────────────────────────
-
-Expected<L3FollowOnProceed> L3FollowOnProceed::parse(BitReader& br) {
-    auto r = br.readField(8); if (!r) return Expected<L3FollowOnProceed>::error(r.error());
-    return Expected<L3FollowOnProceed>::hold(L3FollowOnProceed{});
-}
-
-void L3FollowOnProceed::write(BitWriter& bw) const {
-    bw.writeField(0xA1, 8);
-}
-
 // ── L3CellSelection ────────────────────────────────────────────────────
 
 size_t L3CellSelection::lengthV() const {

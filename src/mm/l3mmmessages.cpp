@@ -597,34 +597,28 @@ L3TMSIReallocationCommand L3TMSIReallocationCommand::Builder::build() const {
     L3TMSIReallocationCommand msg;
     msg.mLAI = m_lai;
     msg.mTMSI = m_tmsi;
-    msg.mFollowOnProceed = m_followOn;
     return msg;
 }
 
 size_t L3TMSIReallocationCommand::bodyLength() const {
-    return mLAI.lengthV() + lvLen(mTMSI.lengthV()) + 1;
+    // Location area identity (five raw octets) plus the new mobile
+    // identity in length-value form; nothing follows (TS 24.008 9.2.17).
+    return mLAI.lengthV() + lvLen(mTMSI.lengthV());
 }
 
 Expected<L3TMSIReallocationCommand> L3TMSIReallocationCommand::parse(BitReader& br) {
     L3TMSIReallocationCommand msg;
+    // Mandatory LAI (raw V, five octets, no length prefix)
     {
         auto laiRes = L3LocationAreaIdentity::parse(br);
         if (!laiRes) return Expected<L3TMSIReallocationCommand>::error(laiRes.error());
         msg.mLAI = laiRes.value();
     }
+    // New mobile identity (LV), the last part of the body.
     {
         auto miRes = parseLVMI(br);
         if (!miRes) return Expected<L3TMSIReallocationCommand>::error(miRes.error());
         msg.mTMSI = miRes.value();
-    }
-    {
-        auto fo = br.readField(1);
-        if (!fo) return Expected<L3TMSIReallocationCommand>::error(fo.error());
-        msg.mFollowOnProceed = (fo.value() != 0);
-    }
-    {
-        auto sp = br.readField(7);
-        if (!sp) return Expected<L3TMSIReallocationCommand>::error(sp.error());
     }
     return Expected<L3TMSIReallocationCommand>::hold(msg);
 }
@@ -632,8 +626,6 @@ Expected<L3TMSIReallocationCommand> L3TMSIReallocationCommand::parse(BitReader& 
 void L3TMSIReallocationCommand::write(BitWriter& bw) const {
     mLAI.write(bw);
     writeLVMI(mTMSI, bw);
-    bw.writeField(mFollowOnProceed ? 1u : 0u, 1);
-    bw.writeField(0, 7);
 }
 
 void L3TMSIReallocationCommand::text(std::ostream& os) const {
@@ -641,7 +633,6 @@ void L3TMSIReallocationCommand::text(std::ostream& os) const {
     mLAI.text(os);
     os << " ";
     mTMSI.text(os);
-    os << " followOn=" << (mFollowOnProceed ? "1" : "0");
 }
 
 // ── L3TMSIReallocationComplete (MTI=0x1b, empty body) ──────────────────
@@ -720,13 +711,26 @@ void L3AuthenticationRequest::text(std::ostream& os) const {
 // ── L3AuthenticationResponse (MTI=0x14) ────────────────────────────────
 
 Expected<L3AuthenticationResponse> L3AuthenticationResponse::parse(BitReader& br) {
-    auto r = br.readField(32);
-    if (!r) return Expected<L3AuthenticationResponse>::error(r.error());
-    return Expected<L3AuthenticationResponse>::hold(L3AuthenticationResponse{r.value()});
+    L3AuthenticationResponse msg;
+    // SRES: four value octets (TS 24.008 9.2.3).
+    {
+        auto r = br.readField(32);
+        if (!r) return Expected<L3AuthenticationResponse>::error(r.error());
+        msg.mSRES = static_cast<uint32_t>(r.value());
+    }
+    // Any further optional authentication parameter IEs (for example the
+    // UMTS extended response, TS 24.008 section 9.2.3) are kept opaque and
+    // re-emitted verbatim.
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3AuthenticationResponse>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
+    }
+    return Expected<L3AuthenticationResponse>::hold(std::move(msg));
 }
 
 void L3AuthenticationResponse::write(BitWriter& bw) const {
     bw.writeField(mSRES, 32);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3AuthenticationResponse::text(std::ostream& os) const {
@@ -920,7 +924,9 @@ L3AuthenticationRequest::Builder L3AuthenticationRequest::builder() {
 
 // L3AuthenticationResponse Builder
 L3AuthenticationResponse L3AuthenticationResponse::Builder::build() const {
-    return L3AuthenticationResponse{m_sres};
+    L3AuthenticationResponse msg{m_sres};
+    msg.mAdditionalIes = m_additionalIes;
+    return msg;
 }
 
 L3AuthenticationResponse::Builder L3AuthenticationResponse::builder() {

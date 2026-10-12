@@ -207,6 +207,44 @@ TEST(MMRoundTripTest, AuthenticationResponse_Parse) {
     EXPECT_EQ(ar->sres(), 0xABCD1234u);
 }
 
+// TS 24.008 9.2.3: the four-octet SRES may be followed by optional further
+// authentication parameter IEs (for example the extended UMTS response TLV,
+// element identifier 0x21). They are kept as an opaque sequence and re-emitted
+// verbatim, so a frame carrying them round-trips losslessly.
+// Byte 0: PD=MM in the low nibble of octet 0, TI/TIF zero -> 0x05 (TS 24.008 L3 header)
+// Byte 1: MT=0x14(AuthenticationResponse) in the six low bits, NSD=0
+// Bytes 2-5: SRES = 0xABCD1234 (GSM 04.08 10.5.3.2, 32 bits)
+// Byte 6: element identifier 0x21 (extended authentication parameter, TS 24.008 9.2.3)
+// Byte 7: length indicator = 4
+// Bytes 8-11: value octets of the extended parameter
+TEST(MMRoundTripTest, AuthenticationResponse_OpaqueTail) {
+    uint8_t data[] = {0x05, 0x14, 0xAB, 0xCD, 0x12, 0x34,
+                      0x21, 0x04, 0x11, 0x22, 0x33, 0x44};
+    // Strict framing: SRES + opaque tail consume the whole frame.
+    auto msg = parseL3(std::span<const uint8_t>(data), ParserConfig{}.withStrictFraming(true));
+    ASSERT_TRUE(msg);
+    auto* ar = tryGet<L3AuthenticationResponse>(*msg);
+    ASSERT_TRUE(ar);
+    EXPECT_EQ(ar->sres(), 0xABCD1234u);
+    std::vector<uint8_t> tail{0x21, 0x04, 0x11, 0x22, 0x33, 0x44};
+    EXPECT_EQ(ar->additionalIes(), tail);
+
+    // Re-emit the frame verbatim (lossless round-trip).
+    auto hex1 = writeL3Hex(*msg);
+    ASSERT_TRUE(hex1);
+    EXPECT_EQ(hex1.value(), "0514abcd1234210411223344");
+
+    // Builder path: the same values produce the identical wire bytes.
+    auto built = L3AuthenticationResponse::builder()
+        .sres(0xABCD1234u)
+        .additionalIes(std::span<const uint8_t>(tail.data(), tail.size()))
+        .build();
+    EXPECT_EQ(built.bodyLength(), 10u);
+    auto hex2 = writeL3Hex(ParsedMessage(MMM(std::move(built))));
+    ASSERT_TRUE(hex2);
+    EXPECT_EQ(hex2.value(), "0514abcd1234210411223344");
+}
+
 // ── Authentication Reject (GSM 04.08 9.2.1) ──────────────────────────
 // Wire layout per GSM 24.008 (Authentication Reject).
 

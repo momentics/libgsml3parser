@@ -377,10 +377,15 @@ public:
 };
 
 // ── Authentication Response (GSM 04.08 9.2.3) ─────────────────────────
+// Body: SRES (four value octets), then optional further authentication
+// parameter IEs (TS 24.008 section 9.2.3). Unrecognized optional
+// information elements are kept as an opaque sequence and re-emitted
+// verbatim.
 
 class L3AuthenticationResponse {
 private:
     uint32_t mSRES{0};
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -390,16 +395,24 @@ public:
 
     struct Builder {
         uint32_t m_sres{0};
+        std::vector<uint8_t> m_additionalIes;
 
         /// Set SRES value.
         Builder& sres(uint32_t v) { m_sres = v; return *this; }
+        /// Set the opaque sequence of additional optional IEs.
+        Builder& additionalIes(std::span<const uint8_t> v) {
+            m_additionalIes.assign(v.begin(), v.end());
+            return *this;
+        }
         /// Build the final message.
         [[nodiscard]] L3AuthenticationResponse build() const;
     };
 
     static Builder builder();
     uint32_t sres() const { return mSRES; }
-    size_t bodyLength() const { return 4; }
+    /// Opaque sequence of additional optional IEs, re-emitted verbatim.
+    [[nodiscard]] const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
+    size_t bodyLength() const { return 4 + mAdditionalIes.size(); }
     [[nodiscard]] static Expected<L3AuthenticationResponse> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -749,16 +762,17 @@ public:
 };
 
 // ── TMSI Reallocation Command (GSM 04.08 9.2.17) ──────────────────────
+// Body: location area identity (five octets, not length-prefixed) followed
+// by the new mobile identity in length-value form (TS 24.008 section
+// 9.2.17). The message carries no further value part.
 
 class L3TMSIReallocationCommand {
 public:
     struct Builder {
         L3LocationAreaIdentity m_lai;
         L3MobileIdentity m_tmsi;
-        bool m_followOn{false};
         Builder& lai(const L3LocationAreaIdentity& v) { m_lai = v; return *this; }
         Builder& tmsi(const L3MobileIdentity& v) { m_tmsi = v; return *this; }
-        Builder& followOn(bool v) { m_followOn = v; return *this; }
         [[nodiscard]] L3TMSIReallocationCommand build() const;
     };
     static Builder builder();
@@ -766,13 +780,11 @@ private:
     friend struct Builder;
     L3LocationAreaIdentity mLAI;
     L3MobileIdentity mTMSI;
-    bool mFollowOnProceed{false};
 public:
     L3TMSIReallocationCommand() = default;
     static constexpr int MTI = 0x1a;
     const L3LocationAreaIdentity& lai() const { return mLAI; }
     const L3MobileIdentity& tmsi() const { return mTMSI; }
-    bool followOnProceed() const { return mFollowOnProceed; }
     size_t bodyLength() const;
     [[nodiscard]] static Expected<L3TMSIReallocationCommand> parse(BitReader& br);
     void write(BitWriter& bw) const;

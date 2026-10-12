@@ -46,7 +46,7 @@
 //     [FOR|spare|LU(2)] low (TS 24.008 9.2.15/10.5.3.5); LAI is RAW (not LV!),
 //     then CM1-V (single value octet), then MI-LV
 //   - LocationUpdatingAccept: LAI is RAW (not LV!), then optional MI + FOP
-//   - TMSIReallocationCommand: LAI RAW + MI-LV + FollowOnProceed(4 bits)
+//   - TMSIReallocationCommand: LAI RAW + MI-LV (TS 24.008 9.2.17, nothing after the MI)
 //   - CMServiceRequest: first octet [CKSN(3)|spare(1)] high |
 //     CM_ServiceType(4) low (TS 24.008 9.2.11), CM2-LV, MI-LV
 //   - CMServiceReject: reject_cause(8 bits) per GSM 24.008 10.5.3.6
@@ -323,13 +323,13 @@ TEST(GoldenMM, LocationUpdatingAccept_Parse) {
 // =====================================================================
 // MM PARSE FROM HEX: TMSI Reallocation Command (GSM 24.008 9.2.17)
 // TMSI Reallocation Command body per GSM 24.008 9.2.17.
-// Structure: LAI(5 octets RAW), MI LV (length + MobileIdentity), FollowOnProceed(4)|spare(4)
+// Structure: LAI(5 octets RAW), MI LV (length + MobileIdentity) — and nothing more
 // Spec-verified: PD=5(MM), MTI=0x1A(TMSIReallocationCommand) per GSM 24.008 Table 10.5.3
-// [GSM SPEC VERIFIED] GSM 24.008 9.2.17: TMSIReallocationCommand body = LAI + MI + FOP.
+// [GSM SPEC VERIFIED] GSM 24.008 9.2.17: TMSIReallocationCommand body = LAI + new-TMSI
+//   mobile identity LV, TS 24.008 section 9.2.17.
 //   LAI is RAW (5 octets, not LV-encoded): MCC/MNC BCD(3) + LAC(2).
 //   MI is LV-encoded: length(1 octet) + type_octet(1) + TMSI_value(4) = 6 octets.
-//   FollowOnProceed is 4 bits: followOnProceed(1)|spare(3), padded to 1 octet.
-//   Total body = 5 + 6 + 1 = 12 octets minimum.
+//   Total body = 5 + 6 = 11 octets; no octets follow the mobile identity.
 // =====================================================================
 
 TEST(GoldenMM, TMSIReallocationCommand_Parse) {
@@ -339,17 +339,28 @@ TEST(GoldenMM, TMSIReallocationCommand_Parse) {
     // Bytes 5-6: LAI LAC = 0x1234
     // Byte 7: MI LV length = 5 (1 type octet + 4 TMSI octets) [GSM 24.008 10.5.1.4]
     // Byte 8: spare 'F'(4)|0(1)|typeOfIdentity(3)=100(TMSI) = 0xF4 [GSM 24.008 10.5.1.4]
-    // Bytes 9-12: TMSI = 0x87654321 (new TMSI assigned by network)
-    // Byte 13: FollowOnProceed(4)=0|spare(4)=0 = 0x00 [GSM 24.008 10.5.2.38]
+    // Bytes 9-12: TMSI = 0x87654321 (new TMSI assigned by network) — end of the message
     uint8_t data[] = {
         0x05, 0x1A,
         0x52, 0xF0, 0x10, 0x12, 0x34,
-        0x05, 0xF4, 0x87, 0x65, 0x43, 0x21,
-        0x00
+        0x05, 0xF4, 0x87, 0x65, 0x43, 0x21
     };
-    auto msg = parseL3(std::span<const uint8_t>(data));
+    // Strict framing: the message must consume exactly LAI + MI LV, with no
+    // trailing octets (TS 24.008 section 9.2.17).
+    auto msg = parseL3(std::span<const uint8_t>(data), ParserConfig{}.withStrictFraming(true));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3TMSIReallocationCommand::MTI);
+    const auto* trc = tryGet<L3TMSIReallocationCommand>(*msg);
+    ASSERT_NE(trc, nullptr);
+    EXPECT_EQ(trc->tmsi().lengthV(), 5u);
+
+    // Emit is exactly [header(2)][LAI(5)][MI LV(6)] = 13 octets, byte-identical.
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ((*bytes)[i], data[i]);
+    }
 }
 
 // =====================================================================
@@ -917,6 +928,11 @@ TEST(GoldenMM, TMSIReallocationCommand_RoundTrip) {
     L3LocationAreaIdentity lai("250", "01", 0x1234);
     L3MobileIdentity tmsi(0x12345678);
     ParsedMessage msg(MMM(L3TMSIReallocationCommand::builder().lai(lai).tmsi(tmsi).build()));
+    // Wire form is exactly header(2) + LAI(5) + MI LV(6) = 13 octets:
+    // the body carries nothing after the mobile identity (TS 24.008 9.2.17).
+    auto bytes = writeL3Bytes(msg);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ(bytes.value().size(), 13u);
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3TMSIReallocationCommand::MTI);

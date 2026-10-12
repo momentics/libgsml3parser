@@ -1197,16 +1197,6 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── Follow On Proceed (GSM 04.08) ─────────────────────────────────────
-
-class L3FollowOnProceed {
-public:
-    static constexpr size_t lengthV() { return 1; }
-
-    [[nodiscard]] static Expected<L3FollowOnProceed> parse(BitReader& br);
-    void write(BitWriter& bw) const;
-};
-
 // ── Octet-aligned raw element (for SS Facility) ────────────────────────
 
 #ifndef GSML3PARSER_L3OCTETALIGNEDPROTOCOL_ELEMENT_DEFINED
