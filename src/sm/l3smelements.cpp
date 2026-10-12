@@ -55,9 +55,7 @@ const char* SMCause2Str(SMCause cause) {
 // ── L3PDPAddress (TS 44.068 section 10.5.6.4) ─────────────────────────
 
 Expected<L3PDPAddress> L3PDPAddress::parse(BitReader& br, size_t lengthBytes) {
-    L3PDPAddress addr;
-
-    // The value always carries the origin/type octet and the type number.
+    // The value always carries the type number octet and the address length octet.
     if (lengthBytes < 2) {
         return Expected<L3PDPAddress>::error(
             ParseError{ParseError::Code::TruncatedInput, "PDP address too short", br.position()});
@@ -65,12 +63,23 @@ Expected<L3PDPAddress> L3PDPAddress::parse(BitReader& br, size_t lengthBytes) {
 
     auto o1 = br.readField(8);
     if (!o1) return Expected<L3PDPAddress>::error(o1.error());
-    addr.mOrigin = static_cast<uint8_t>(o1.value()) & 0x0Fu; // high nibble is spare
+    const uint8_t typeNumber = static_cast<uint8_t>(o1.value());
+    if (typeNumber != kTypeIPv4 && typeNumber != kTypeIPv6) {
+        return Expected<L3PDPAddress>::error(
+            ParseError{ParseError::Code::InvalidValue, "PDP type number", br.position()});
+    }
+
     auto o2 = br.readField(8);
     if (!o2) return Expected<L3PDPAddress>::error(o2.error());
-    addr.mTypeNumber = static_cast<uint8_t>(o2.value());
+    const size_t addrLen = static_cast<size_t>(o2.value());
+    // The declared value length must equal the two header octets plus the address.
+    if (lengthBytes != 2 + addrLen) {
+        return Expected<L3PDPAddress>::error(
+            ParseError{ParseError::Code::InvalidValue, "PDP address length", br.position()});
+    }
 
-    size_t addrLen = lengthBytes - 2;
+    L3PDPAddress addr;
+    addr.mTypeNumber = typeNumber;
     if (addrLen > 0) {
         addr.mAddress.resize(addrLen);
         auto r = br.readBytes(addr.mAddress.data(), addrLen);
@@ -81,9 +90,9 @@ Expected<L3PDPAddress> L3PDPAddress::parse(BitReader& br, size_t lengthBytes) {
 }
 
 void L3PDPAddress::write(BitWriter& bw) const {
-    // Octet 1: spare(4) | pdpTypeOrigin(4); octet 2: pdpTypeNumber.
-    bw.writeField((mOrigin & 0x0Fu), 8);
+    // Octet 1: PDP type number; octet 2: PDP address length.
     bw.writeField(mTypeNumber, 8);
+    bw.writeField(static_cast<uint32_t>(mAddress.size()), 8);
     if (!mAddress.empty()) {
         bw.writeBytes(mAddress.data(), mAddress.size());
     }

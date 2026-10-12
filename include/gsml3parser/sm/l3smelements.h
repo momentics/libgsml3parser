@@ -24,8 +24,8 @@
 //
 // IE encodings on the wire:
 //   PDPAddress: positional LV (no identifier): Length(1) |
-//               [spare(4)|pdpTypeOrigin(4)] | pdpTypeNumber(1) |
-//               AddressInfo(variable; empty when dynamically assigned)
+//               pdpTypeNumber(1) | addressLength(1) |
+//               AddressInfo(variable; absent when dynamically assigned)
 //   QoS: positional LV (no identifier): Length(1) | QoS value octets
 //   AccessPointName: TLV, IEI=0x28: IEI(1) | Length(1) | APN string
 //   ProtocolConfigOptions: TLV, IEI=0x27: IEI(1) | Length(1) | option data
@@ -50,12 +50,11 @@
 namespace gsml3parser {
 
 // ── PDP Type (TS 44.068 section 10.5.6.4) ─────────────────────────────
-// PDP type numbers for the IETF origin, carried in the second octet of the
-// PDP address value. The origin itself ('0001'B = IETF) is stored separately.
+// PDP type numbers carried in the first octet of the PDP address value.
 
 enum class PDPType : uint8_t {
-    IPv4      = 0x21,
-    IPv6      = 0x53,
+    IPv4      = 4,
+    IPv6      = 6,
     Unknown   = 0xFF
 };
 
@@ -96,34 +95,33 @@ const char* SMCause2Str(SMCause cause);
 
 // ── PDP Address (TS 44.068 section 10.5.6.4) ──────────────────────────
 // Positional LV value (no information element identifier):
-//   octet 1: [spare(4) | pdpTypeOrigin(4)]   ('0001'B = IETF origin -> 0x01)
-//   octet 2: pdpTypeNumber                   (IPv4 = 0x21, IPv6 = 0x53)
-//   octets 3..: address information          (empty when dynamically assigned)
+//   octet 1: pdpTypeNumber                   (IETF/IPv4 = 4, IETF/IPv6 = 6)
+//   octet 2: addressLength                   (number of address octets)
+//   octets 3..: address information          (absent when dynamically assigned)
 
 class L3PDPAddress {
-    uint8_t mOrigin{0x01};          ///< PDP type origin, four bits (IETF = '0001'B)
-    uint8_t mTypeNumber{0x21};      ///< PDP type number octet
+    uint8_t mTypeNumber{4};         ///< PDP type number octet (TS 44.068 section 10.5.6.4)
     std::vector<uint8_t> mAddress;  ///< Address information; empty = dynamic allocation
 
 public:
-    static constexpr uint8_t kOriginIETF = 0x01u; ///< PDP type origin '0001'B (IETF)
+    static constexpr uint8_t kTypeIPv4 = 4u; ///< PDP type number: IETF IPv4
+    static constexpr uint8_t kTypeIPv6 = 6u; ///< PDP type number: IETF IPv6
 
     L3PDPAddress() = default;
     explicit L3PDPAddress(PDPType type, std::vector<uint8_t> addr)
-        : mOrigin(kOriginIETF), mTypeNumber(static_cast<uint8_t>(type)), mAddress(std::move(addr)) {}
+        : mTypeNumber(static_cast<uint8_t>(type)), mAddress(std::move(addr)) {}
     /// Raw form for type numbers not covered by the PDPType enum.
-    L3PDPAddress(uint8_t origin, uint8_t typeNumber, std::vector<uint8_t> addr)
-        : mOrigin(origin & 0x0Fu), mTypeNumber(typeNumber), mAddress(std::move(addr)) {}
+    L3PDPAddress(uint8_t typeNumber, std::vector<uint8_t> addr)
+        : mTypeNumber(typeNumber), mAddress(std::move(addr)) {}
 
     bool operator==(const L3PDPAddress&) const = default;
 
-    /// Semantic PDP type (IETF origin): IPv4, IPv6 or Unknown.
+    /// Semantic PDP type: IPv4, IPv6 or Unknown.
     PDPType type() const {
-        if (mOrigin == kOriginIETF && mTypeNumber == static_cast<uint8_t>(PDPType::IPv4)) return PDPType::IPv4;
-        if (mOrigin == kOriginIETF && mTypeNumber == static_cast<uint8_t>(PDPType::IPv6)) return PDPType::IPv6;
+        if (mTypeNumber == kTypeIPv4) return PDPType::IPv4;
+        if (mTypeNumber == kTypeIPv6) return PDPType::IPv6;
         return PDPType::Unknown;
     }
-    uint8_t origin() const { return mOrigin; }
     uint8_t typeNumber() const { return mTypeNumber; }
     const std::vector<uint8_t>& address() const { return mAddress; }
     size_t lengthV() const { return 2 + mAddress.size(); }

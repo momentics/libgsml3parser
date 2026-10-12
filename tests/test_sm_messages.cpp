@@ -41,7 +41,7 @@
 //   - SM MTI values per the SM message type table (TS 24.008 Table 10.4a)
 //   - SM header encoding: PD=0x0A in the low nibble of byte 0, raw MTI in byte 1 (no shift)
 //   - PDP Address LV format per the SM information element definitions
-//     ([spare|pdpTypeOrigin][pdpTypeNumber][address], TS 44.068 10.5.6.4)
+//     ([pdpTypeNumber][addressLength][address], TS 44.068 10.5.6.4)
 //   - APN TLV format (IEI=0x28) per the SM information element definitions
 //   - QoS LV format (no identifier) per the SM information element definitions
 //   - SM cause as a bare value octet in reject/failure/status messages
@@ -109,9 +109,9 @@ TEST(GoldenSMTest, HeaderRoundTrip) {
     // body=NSAPI(5)+LLC SAPI(5)+QoS(LV)+PDP address(LV, dynamic IPv4)+APN(TLV)
     // Hex: 0A 41 50 50 [QoS LV] [PDP address LV] [APN TLV]
     // QoS: 01 (length) 00 (requested type, no elements)
-    // PDP address: 02 (length) 01 (spare|IETF origin) 21 (IPv4 type number)
+    // PDP address: 02 (length) 04 (IPv4 type number) 00 (address length, dynamic)
     // APN: 28 (IEI 0x28) 03 (length) 69 70 6E ("ipn")
-    std::string hex = "0a 41 50 50 01 00 02 0121 28 03 6970 6e";
+    std::string hex = "0a 41 50 50 01 00 02 0400 28 03 6970 6e";
     auto res = parseL3Hex(hex);
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(res.value()), L3PD::GPRSSessionManagement);
@@ -133,12 +133,12 @@ TEST(GoldenSMTest, HeaderRoundTrip) {
 //   01 = QoS LV length 1
 //   00 = QoS type = requested(0), no elements
 //   02 = PDP address LV length 2 (dynamic assignment)
-//   01 = spare(4)|pdpTypeOrigin(4) = IETF origin
-//   21 = pdpTypeNumber = IPv4
+//   04 = pdpTypeNumber = IPv4
+//   00 = addressLength = 0 (dynamically assigned)
 //   28 07 = APN TLV: IEI=0x28, length 7
 //   69 70 2e 67 73 6d 2e = "ip.gsm." (APN string)
 TEST(GoldenSMTest, ActivatePDPContextRequest_Minimal) {
-    std::string hex = "0a 41 50 50 01 00 02 0121 28 07 6970 2e67 736d 2e";
+    std::string hex = "0a 41 50 50 01 00 02 0400 28 07 6970 2e67 736d 2e";
     auto res = parseL3Hex(hex);
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(res.value()), L3PD::GPRSSessionManagement);
@@ -158,13 +158,13 @@ TEST(GoldenSMTest, ActivatePDPContextRequest_Minimal) {
 //   0a 41 = L3 header (SM, ActivatePDPContextRequest)
 //   50 50 = NSAPI=5, LLC SAPI=5 (high nibble of each octet)
 //   01 00 = QoS LV: length 1, requested type
-//   06 = PDP address LV length 6 (2 for type + 4 for IPv4 address)
-//   01 = spare(4)|pdpTypeOrigin(4) = IETF origin
-//   21 = pdpTypeNumber = IPv4
+//   06 = PDP address LV length 6 (2 header octets + 4 IPv4 address octets)
+//   04 = pdpTypeNumber = IPv4
+//   04 = addressLength = 4
 //   c0 a8 01 01 = 192.168.1.1
 //   28 03 6970 6e = APN TLV: IEI=0x28, "ipn"
 TEST(GoldenSMTest, ActivatePDPContextRequest_WithAddress) {
-    std::string hex = "0a 41 50 50 01 00 06 0121 c0a8 0101 28 03 6970 6e";
+    std::string hex = "0a 41 50 50 01 00 06 0404 c0a8 0101 28 03 6970 6e";
     auto res = parseL3Hex(hex);
     ASSERT_TRUE(res);
 
@@ -183,14 +183,14 @@ TEST(GoldenSMTest, ActivatePDPContextRequest_WithAddress) {
 
 // Golden (TS 44.068 section 9.5): SM ACTIVATE PDP CONTEXT REQUEST full body —
 // NSAPI=5, LLC SAPI=5, QoS LV (three value octets), requested PDP address
-// (LV: IETF origin, IPv4 type number, static address 192.168.1.2), APN TLV
+// (LV: IPv4 type number, address length, static address 192.168.1.2), APN TLV
 // "inter"; no protocol configuration options and no request type present.
 TEST(GoldenSMTest, ActivatePDPContextRequest_RefVector) {
     uint8_t data[] = {
         0x0A, 0x41,                    // header: PD=SM, MTI=0x41
         0x50, 0x50,                    // NSAPI=5, LLC SAPI=5
         0x03, 0x01, 0x02, 0x05,        // QoS LV (len=3)
-        0x06, 0x01, 0x21,              // PDP address LV: len=6, origin IETF, IPv4
+        0x06, 0x04, 0x04,              // PDP address LV: len=6, IPv4 type number, address length
         0xC0, 0xA8, 0x01, 0x02,        //   static IPv4 address 192.168.1.2
         0x28, 0x05,                    // APN TLV: IEI=0x28, len=5
         'i', 'n', 't', 'e', 'r'        // APN string "inter"
@@ -221,7 +221,7 @@ TEST(GoldenSMTest, ActivatePDPContextRequest_RefVector) {
     ParsedMessage pm{SM{rebuilt}};
     auto hex = writeL3Hex(pm);
     ASSERT_TRUE(hex);
-    EXPECT_EQ(hex.value(), "0a41505003010205060121c0a801022805696e746572");
+    EXPECT_EQ(hex.value(), "0a41505003010205060404c0a801022805696e746572");
 }
 
 // Golden (TS 44.068 section 9.5): SM ACTIVATE PDP CONTEXT REQUEST with the
@@ -232,7 +232,7 @@ TEST(GoldenSMTest, ActivatePDPContextRequest_WithRequestTypeAndPCO) {
         0x0A, 0x41,                    // header
         0x50, 0x50,                    // NSAPI=5, LLC SAPI=5
         0x01, 0x00,                    // QoS LV (len=1)
-        0x02, 0x01, 0x21,              // PDP address LV: dynamic IPv4
+        0x02, 0x04, 0x00,              // PDP address LV: dynamic IPv4 (address length 0)
         0x28, 0x03, 'i', 'p', 'n',     // APN TLV "ipn"
         0x27, 0x02, 0x01, 0x02,        // PCO TLV (IEI=0x27)
         0xA1                           // request type TV: '1010'B|1
@@ -260,9 +260,10 @@ TEST(GoldenSMTest, ActivatePDPContextRequest_WithRequestTypeAndPCO) {
 //   10 = negotiatedLLCSAPI(4)=1, spare(4)=0
 //   03 0010 01 = QoS LV: type=requested(0), elements=10:01
 //   00 = radioPriorityForSMS(4)=0, spare(4)=0
-//   2b 06 0121 c0a8 0164 = PDP Address TLV (IEI=0x2B): IETF/IPv4, addr=192.168.1.100
+//   2b 06 0404 c0a8 0164 = PDP Address TLV (IEI=0x2B): IPv4 type number,
+//     address length 4, addr=192.168.1.100
 TEST(GoldenSMTest, ActivatePDPContextAccept_WithAddress) {
-    std::string hex = "0a 42 10 03 0010 01 00 2b 06 0121 c0a8 0164";
+    std::string hex = "0a 42 10 03 0010 01 00 2b 06 0404 c0a8 0164";
     auto res = parseL3Hex(hex);
     ASSERT_TRUE(res);
 
@@ -271,7 +272,20 @@ TEST(GoldenSMTest, ActivatePDPContextAccept_WithAddress) {
     EXPECT_EQ(msg->llcSapi(), 1u);
     EXPECT_TRUE(msg->hasPDPAddress());
     EXPECT_EQ(msg->pdpAddress().type(), PDPType::IPv4);
+    EXPECT_EQ(msg->pdpAddress().address().size(), 4u);
     EXPECT_EQ(msg->qos().type(), QoSType::Requested);
+
+    // Builder emit must reproduce the exact reference bytes, including the
+    // PDP Address TLV value octets (TS 44.068 section 10.5.6.4).
+    auto rebuilt = L3ActivatePDPContextAccept::builder()
+        .llcSapi(1)
+        .qos(L3QoS{QoSType::Requested, {0x10, 0x01}})
+        .pdpAddress(L3PDPAddress{PDPType::IPv4, {0xC0, 0xA8, 0x01, 0x64}})
+        .build();
+    ParsedMessage pm{SM{rebuilt}};
+    auto hexOut = writeL3Hex(pm);
+    ASSERT_TRUE(hexOut);
+    EXPECT_EQ(hexOut.value(), "0a421003001001002b060404c0a80164");
 }
 
 // TS 44.068 9.5: ActivatePDPContextAccept minimal (no address assigned).
@@ -545,10 +559,10 @@ TEST(SMIEsTest, TMGI_Roundtrip) {
 // 0a 44 = header (SM, MTI=0x44)
 // 30 = pdpHandle(4)=3, spare(4)=0
 // 01 00 = QoS LV: requested, no elements
-// 02 0121 = PDP address LV: dynamic IPv4 (IETF origin)
+// 02 0400 = PDP address LV: dynamic IPv4 (address length 0)
 // 28 03 6970 6e = APN TLV (IEI=0x28): "ipn"
 TEST(GoldenSMTest, RequestPDPContextActivation) {
-    std::string hex = "0a 44 30 01 00 02 0121 28 03 6970 6e";
+    std::string hex = "0a 44 30 01 00 02 0400 28 03 6970 6e";
     auto res = parseL3Hex(hex);
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(res.value()), L3PD::GPRSSessionManagement);
@@ -592,7 +606,7 @@ TEST(GoldenSMTest, ModifyPDPContextAcceptNet) {
 
 // TS 44.068 9.5: ActivateSecondaryPDPContextRequest
 TEST(GoldenSMTest, ActivateSecondaryPDPContextRequest) {
-    std::string hex = "0a 4d 20 01 00 02 0121 28 03 6970 6e";
+    std::string hex = "0a 4d 20 01 00 02 0400 28 03 6970 6e";
     auto res = parseL3Hex(hex);
     ASSERT_TRUE(res);
     auto* msg = tryGet<L3ActivateSecondaryPDPContextRequest>(res.value());
@@ -685,7 +699,7 @@ TEST(GoldenSMTest, RequestMBMSContextActivationReject) {
 
 // TS 44.068 9.5: RequestSecondaryPDPContextActivation
 TEST(GoldenSMTest, RequestSecondaryPDPContextActivation) {
-    std::string hex = "0a 5b d0 01 00 02 0121 28 03 6970 6e";
+    std::string hex = "0a 5b d0 01 00 02 0400 28 03 6970 6e";
     auto res = parseL3Hex(hex);
     ASSERT_TRUE(res);
     auto* msg = tryGet<L3RequestSecondaryPDPContextActivation>(res.value());
@@ -716,7 +730,7 @@ TEST(GoldenSMTest, SMNotification) {
 // ── Roundtrip tests for additional SM messages ──
 
 TEST(RoundTripTest, RequestPDPContextActivation_RT) {
-    auto res = parseL3Hex("0a 44 30 01 00 02 0121 28 03 6970 6e");
+    auto res = parseL3Hex("0a 44 30 01 00 02 0400 28 03 6970 6e");
     ASSERT_TRUE(res);
     auto rt = roundtrip(res.value());
     ASSERT_TRUE(rt);
@@ -756,7 +770,7 @@ TEST(RoundTripTest, ModifyPDPContextAcceptNet_RT) {
 }
 
 TEST(RoundTripTest, ActivateSecondaryPDPContextRequest_RT) {
-    auto res = parseL3Hex("0a 4d 20 01 00 02 0121 28 03 6970 6e");
+    auto res = parseL3Hex("0a 4d 20 01 00 02 0400 28 03 6970 6e");
     ASSERT_TRUE(res);
     auto rt = roundtrip(res.value());
     ASSERT_TRUE(rt);
@@ -834,7 +848,7 @@ TEST(RoundTripTest, RequestMBMSContextActivationReject_RT) {
 }
 
 TEST(RoundTripTest, RequestSecondaryPDPContextActivation_RT) {
-    auto res = parseL3Hex("0a 5b d0 01 00 02 0121 28 03 6970 6e");
+    auto res = parseL3Hex("0a 5b d0 01 00 02 0400 28 03 6970 6e");
     ASSERT_TRUE(res);
     auto rt = roundtrip(res.value());
     ASSERT_TRUE(rt);
@@ -868,7 +882,7 @@ TEST(RoundTripTest, SMNotification_RT) {
 // GSM 24.008 9.5.1: ActivatePDPContextRequest round-trip.
 // Construct with IPv4, APN="internet", QoS=requested -> serialize -> parse -> verify.
 TEST(RoundTripTest, ActivatePDPContextRequest_Full) {
-    auto res = parseL3Hex("0a 41 50 50 01 00 02 0121 28 08 696e74 65726e 6574");
+    auto res = parseL3Hex("0a 41 50 50 01 00 02 0400 28 08 696e74 65726e 6574");
     ASSERT_TRUE(res);
 
     auto rt = roundtrip(res.value());
@@ -883,7 +897,7 @@ TEST(RoundTripTest, ActivatePDPContextRequest_Full) {
 
 // TS 44.068 9.5: ActivatePDPContextAccept round-trip.
 TEST(RoundTripTest, ActivatePDPContextAccept_Full) {
-    auto res = parseL3Hex("0a 42 10 03 0010 01 00 2b 06 0121 c0a8 0164");
+    auto res = parseL3Hex("0a 42 10 03 0010 01 00 2b 06 0404 c0a8 0164");
     ASSERT_TRUE(res);
 
     auto rt = roundtrip(res.value());
@@ -993,17 +1007,22 @@ TEST(RoundTripTest, SMStatus_Full) {
 // =====================================================================
 
 TEST(SMIEsTest, PDPAddress_IPv4) {
-    uint8_t addr[] = {0x01, 0x21, 0xc0, 0xa8, 0x01, 0x01}; // IETF origin, IPv4, 192.168.1.1
+    uint8_t addr[] = {0x04, 0x04, 0xc0, 0xa8, 0x01, 0x01}; // IPv4 type number, address length 4, 192.168.1.1
     std::vector<uint8_t> bytes(std::begin(addr), std::end(addr));
     BitReader br(bytes.data(), bytes.size() * 8);
 
     auto res = L3PDPAddress::parse(br, 6);
     ASSERT_TRUE(res);
     EXPECT_EQ(res.value().type(), PDPType::IPv4);
-    EXPECT_EQ(res.value().origin(), L3PDPAddress::kOriginIETF);
     EXPECT_EQ(res.value().typeNumber(), static_cast<uint8_t>(PDPType::IPv4));
     EXPECT_EQ(res.value().address()[0], 0xc0);
     EXPECT_EQ(res.value().address()[1], 0xa8);
+
+    // The write path must reproduce the exact value octets (TS 44.068 section 10.5.6.4).
+    uint8_t out[6] = {};
+    BitWriter bw(out, 48);
+    res.value().write(bw);
+    EXPECT_EQ((std::vector<uint8_t>(out, out + 6)), (std::vector<uint8_t>(addr, addr + 6)));
 }
 
 TEST(SMIEsTest, AccessPointName) {
@@ -1040,7 +1059,7 @@ TEST(SMIEsTest, SMCauseToString) {
 
 TEST(SMVisitorTest, MessageNames) {
     auto names = std::vector<std::pair<std::string_view, std::string>>{
-        {"0a 41 50 50 01 00 02 0121 28 03 6970 6e", "ActivatePDPContextRequest"},
+        {"0a 41 50 50 01 00 02 0400 28 03 6970 6e", "ActivatePDPContextRequest"},
         {"0a 42 00 01 00 00", "ActivatePDPContextAccept"},
         {"0a 43 13", "ActivatePDPContextReject"},
         {"0a 46 14", "DeactivatePDPContextRequest"},
@@ -1049,11 +1068,11 @@ TEST(SMVisitorTest, MessageNames) {
         {"0a 49 50 02 0101", "ModifyPDPContextAccept"},
         {"0a 4c 13", "ModifyPDPContextReject"},
         {"0a 55 01", "SMStatus"},
-        {"0a 44 30 01 00 02 0121 28 03 6970 6e", "RequestPDPContextActivation"},
+        {"0a 44 30 01 00 02 0400 28 03 6970 6e", "RequestPDPContextActivation"},
         {"0a 45 13", "RequestPDPContextActivationReject"},
         {"0a 4a 40 02 0001", "ModifyPDPContextRequestMS"},
         {"0a 4b 60 02 0101", "ModifyPDPContextAcceptNet"},
-        {"0a 4d 20 01 00 02 0121 28 03 6970 6e", "ActivateSecondaryPDPContextRequest"},
+        {"0a 4d 20 01 00 02 0400 28 03 6970 6e", "ActivateSecondaryPDPContextRequest"},
         {"0a 4e 10 01 00", "ActivateSecondaryPDPContextAccept"},
         {"0a 4f 14", "ActivateSecondaryPDPContextReject"},
         {"0a 56 01 00 c2 06 45f7 1012 3405", "ActivateMBMSContextRequest"},
@@ -1061,7 +1080,7 @@ TEST(SMVisitorTest, MessageNames) {
         {"0a 58 13", "ActivateMBMSContextReject"},
         {"0a 59 01 00 c2 06 45f7 1012 3405", "RequestMBMSContextActivation"},
         {"0a 5a 13", "RequestMBMSContextActivationReject"},
-        {"0a 5b d0 01 00 02 0121 28 03 6970 6e", "RequestSecondaryPDPContextActivation"},
+        {"0a 5b d0 01 00 02 0400 28 03 6970 6e", "RequestSecondaryPDPContextActivation"},
         {"0a 5c 13", "RequestSecondaryPDPContextActivationReject"},
         {"0a 5d f0", "SMNotification"},
     };
@@ -1076,7 +1095,7 @@ TEST(SMVisitorTest, MessageNames) {
 
 TEST(SMVisitorTest, MessageMTIValues) {
     auto mtis = std::vector<std::pair<std::string_view, int>>{
-        {"0a 41 50 50 01 00 02 0121 28 03 6970 6e", 0x41},
+        {"0a 41 50 50 01 00 02 0400 28 03 6970 6e", 0x41},
         {"0a 42 00 01 00 00", 0x42},
         {"0a 43 13", 0x43},
         {"0a 46 14", 0x46},
@@ -1085,11 +1104,11 @@ TEST(SMVisitorTest, MessageMTIValues) {
         {"0a 49 50 02 0101", 0x49},
         {"0a 4c 13", 0x4c},
         {"0a 55 01", 0x55},
-        {"0a 44 30 01 00 02 0121 28 03 6970 6e", 0x44},
+        {"0a 44 30 01 00 02 0400 28 03 6970 6e", 0x44},
         {"0a 45 13", 0x45},
         {"0a 4a 40 02 0001", 0x4A},
         {"0a 4b 60 02 0101", 0x4B},
-        {"0a 4d 20 01 00 02 0121 28 03 6970 6e", 0x4D},
+        {"0a 4d 20 01 00 02 0400 28 03 6970 6e", 0x4D},
         {"0a 4e 10 01 00", 0x4E},
         {"0a 4f 14", 0x4F},
         {"0a 56 01 00 c2 06 45f7 1012 3405", 0x56},
@@ -1097,7 +1116,7 @@ TEST(SMVisitorTest, MessageMTIValues) {
         {"0a 58 13", 0x58},
         {"0a 59 01 00 c2 06 45f7 1012 3405", 0x59},
         {"0a 5a 13", 0x5A},
-        {"0a 5b d0 01 00 02 0121 28 03 6970 6e", 0x5B},
+        {"0a 5b d0 01 00 02 0400 28 03 6970 6e", 0x5B},
         {"0a 5c 13", 0x5C},
         {"0a 5d f0", 0x5D},
     };
