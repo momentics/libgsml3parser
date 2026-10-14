@@ -135,6 +135,14 @@ Expected<void> LAPDmEntity::sendData(std::span<const uint8_t> l3Data) {
 }
 
 Expected<void> LAPDmEntity::sendSABME(std::span<const uint8_t> info) {
+    // The link is already established: acknowledge the request to the upper
+    // layer without putting a frame on the wire (GSM 04.06 section 5.4.1).
+    if (mState == LAPDmState::LinkEstablished ||
+        mState == LAPDmState::ContentionResolution) {
+        deliverL3(Primitive::L3_ESTABLISH_CONFIRM, {});
+        return Expected<void>::hold();
+    }
+
     if (mState != LAPDmState::LinkReleased) {
         return Expected<void>::error(
             ParseError(ParseError::Code::InvalidValue, "Not in LinkReleased state"));
@@ -197,8 +205,9 @@ bool LAPDmEntity::tickT200(std::chrono::milliseconds elapsed) {
         return true;
     }
 
-    // Exceeded the retransmission budget — abnormal release.
-    abnormalRelease();
+    // Exceeded the retransmission budget — abnormal release without a DM
+    // response (GSM 04.06 section 5.4.1.3).
+    abnormalRelease(false);
     return true;
 }
 
@@ -294,20 +303,24 @@ void LAPDmEntity::transitionTo(LAPDmState newState) noexcept {
     mState = newState;
 }
 
-void LAPDmEntity::abnormalRelease() noexcept {
+void LAPDmEntity::abnormalRelease(bool sendDM) noexcept {
+    if (sendDM) {
+        // A DM(P/F=1) response alerts the peer before the entity leaves
+        // service; the link is then torn down to Unused (GSM 04.06 section
+        // 5.4.2).
+        this->sendDM(true);
+    }
     clearCounters();
     mEstablishmentInProgress = false;
-    transitionTo(LAPDmState::LinkReleased);
+    transitionTo(sendDM ? LAPDmState::Unused : LAPDmState::LinkReleased);
     deliverL3(Primitive::MDL_ERROR_INDICATION, {});
 }
 
 void LAPDmEntity::processAck(uint8_t nr) {
-    nr = static_cast<uint8_t>(nr & 0x07u);
-    // Window k=1: only V(A) (no progress) or V(S) (acknowledges the single
-    // outstanding frame) are meaningful; any other N(R) is stale and is
-    // ignored so a retransmission cannot roll V(A) backwards.
-    if (nr != mVA && nr != mVS) return;
-    mVA = nr;
+    // Any received N(R) is accepted: V(A) follows the value (GSM 04.06
+    // section 5.5.3). Only when V(A) catches up with V(S) does the
+    // retransmission counter reset and T200 stop.
+    mVA = static_cast<uint8_t>(nr & 0x07u);
     if (mVA == mVS) {
         mRC = 0;
         mT200Active = false;
@@ -397,9 +410,9 @@ void LAPDmEntity::buildIFrame(std::span<const uint8_t> payload, bool more) {
     // Advance VS after building frame (NS = VS before increment).
     mVS = static_cast<uint8_t>((mVS + 1) & 0x07u);
 
-    // Remember the segment fields before encoding so an expired T200 or a REJ
-    // can rebuild and retransmit the outstanding I-frame (GSM 04.06 section
-    // 5.5; TS 51.010-1 timer recovery).
+    // Remember the segment fields before encoding so an expired T200 can
+    // rebuild and retransmit the outstanding I-frame (GSM 04.06 section 5.5;
+    // TS 51.010-1 timer recovery).
     mPendingNs = ns;
     mPendingMore = more;
     mPendingInfo.assign(payload.begin(), payload.end());
@@ -440,22 +453,29 @@ void LAPDmEntity::handleSABME(const lapdm::LAPDmFrame& frame) {
 
     switch (mState) {
         case LAPDmState::LinkReleased: {
-            // MS-originated initial establishment is only valid on SAPI 0, and
-            // the command must carry the contention-resolution information;
-            // any other SABME is dropped silently (GSM 04.06 section 5.4.1).
-            if (mSapi != SAPI::SAPI0) return;
-            if (!frame.hasInfo()) return;
+            // An accepted SABME establishes the link on any SAPI
+            // (GSM 04.06 section 5.4.1). A command carrying contention-
+            // resolution information puts SAPI 0 into the contention-
+            // resolution phase; on every other SAPI — and without a payload
+            // in general — the link is established directly. The establishment
+            // is in progress until an I/S frame or DISC command arrives
+            // (GSM 04.06 section 5.4.1.4).
             clearCounters();
-            // The initial SABME is accepted: the establishment is in progress
-            // until an I/S frame or DISC command arrives (GSM 04.06 section
-            // 5.4.1.4).
             mEstablishmentInProgress = true;
-            // Contention resolution (GSM 04.06 5.4.1.4): echo the payload and
-            // answer with a UA whose F bit mirrors the command.
-            mContentionChecksum = computeChecksum(frame.info);
-            sendUAWithEcho(frame.info, frame.pf);
-            transitionTo(LAPDmState::ContentionResolution);
-            deliverL3(Primitive::L3_ESTABLISH_INDICATION, {});
+            deliverL3(Primitive::L3_ESTABLISH_INDICATION,
+                      frame.hasInfo() ? frame.info : std::span<const uint8_t>{});
+            if (frame.hasInfo()) {
+                // Contention resolution (GSM 04.06 5.4.1.4): echo the payload
+                // and answer with a UA whose F bit mirrors the command.
+                mContentionChecksum = computeChecksum(frame.info);
+                sendUAWithEcho(frame.info, frame.pf);
+                transitionTo(mSapi == SAPI::SAPI0
+                                 ? LAPDmState::ContentionResolution
+                                 : LAPDmState::LinkEstablished);
+            } else {
+                transitionTo(LAPDmState::LinkEstablished);
+                sendUA(frame.pf);
+            }
             break;
         }
         case LAPDmState::AwaitingEstablish: {
@@ -481,8 +501,9 @@ void LAPDmEntity::handleSABME(const lapdm::LAPDmFrame& frame) {
                 break;
             }
             if (frame.hasInfo()) {
-                // Unexpected SABME with payload — abnormal release.
-                abnormalRelease();
+                // Unexpected SABME with payload — abnormal release with a DM
+                // response (GSM 04.06 section 5.4.2).
+                abnormalRelease(true);
             } else {
                 // Re-establishment (GSM 04.06 5.6.3).
                 sendUA(frame.pf);
@@ -582,7 +603,9 @@ void LAPDmEntity::handleDISC(const lapdm::LAPDmFrame& frame) {
             break;
         }
         case LAPDmState::AwaitingEstablish: {
-            sendUA(frame.pf);
+            // A DISC arriving during establishment is accepted without any
+            // response frame; the link goes straight to LinkReleased
+            // (GSM 04.06 section 5.4.1.2).
             clearCounters();
             transitionTo(LAPDmState::LinkReleased);
             deliverL3(Primitive::L3_RELEASE_INDICATION, {});
@@ -647,12 +670,13 @@ void LAPDmEntity::receiveIFrame(const lapdm::LAPDmFrame& frame) {
     // Accept frame — advance VR.
     mVR = static_cast<uint8_t>((mVR + 1) & 0x07u);
 
-    // Protocol-error guards for untrusted radio input: an
-    // I-frame payload larger than N201, or a reassembly that would exceed
-    // the maximum L3 message size, is unrecoverable — abnormal release.
+    // Robustness guards for untrusted radio input (intentional, wire-
+    // independent of the DM-bearing release path): an I-frame payload larger
+    // than N201, or a reassembly that would exceed the maximum L3 message
+    // size, is unrecoverable — abnormal release without a DM response.
     if (frame.info.size() > mProfile.n201 ||
         mReassemblyBuffer.size() + frame.info.size() > kMaxReassemblyBytes) {
-        abnormalRelease();
+        abnormalRelease(false);
         return;
     }
 
@@ -680,14 +704,12 @@ void LAPDmEntity::receiveSFrame(const lapdm::LAPDmFrame& frame) {
     // (GSM 04.06 section 5.4.1.4).
     mEstablishmentInProgress = false;
 
-    if (mState == LAPDmState::ContentionResolution) {
-        transitionTo(LAPDmState::LinkEstablished);
-    }
-
-    if (mState != LAPDmState::LinkEstablished) return;
-
     switch (frame.sType) {
         case lapdm::LAPDmSFrameType::RR: {
+            if (mState == LAPDmState::ContentionResolution) {
+                transitionTo(LAPDmState::LinkEstablished);
+            }
+            if (mState != LAPDmState::LinkEstablished) return;
             processAck(frame.nr);
             // If PF=1 on a command, respond with RR.
             if (frame.pf && frame.isCommand()) {
@@ -696,33 +718,27 @@ void LAPDmEntity::receiveSFrame(const lapdm::LAPDmFrame& frame) {
             break;
         }
         case lapdm::LAPDmSFrameType::RNR: {
-            // RNR (TS 44.064): the peer cannot accept I-frames for now.
-            // Acknowledgment processing is the same as for RR, but no
-            // response frame is required.
-            processAck(frame.nr);
+            // RNR is not used on the Um interface: an unexpected frame —
+            // abnormal release with a DM response (GSM 04.06 section 5.4.2).
+            abnormalRelease(true);
             break;
         }
         case lapdm::LAPDmSFrameType::REJ: {
+            if (mState == LAPDmState::ContentionResolution) {
+                transitionTo(LAPDmState::LinkEstablished);
+            }
+            if (mState != LAPDmState::LinkEstablished) return;
             processAck(frame.nr);
-            // REJ (GSM 04.06 5.3.3): the peer requests retransmission
-            // starting from NR. With the k=1 constraint the only outstanding
-            // frame is the pending I-frame; retransmit it when it is still
-            // unacknowledged instead of waiting for T200 to expire
-            // (up to N200*T200 later). The retransmission goes out with P/F
-            // set and the current V(R) in N(R), exactly like the T200-expiry
-            // path. Retransmissions triggered by REJ count toward the N200
-            // budget exactly like T200-expiry retransmissions (tickT200), so a
-            // peer cannot force unbounded retransmits by sending REJ
-            // repeatedly.
-            if (mPending == PendingKind::IFrame && mVA != mVS) {
-                if (mRC < mProfile.n200) {
-                    retransmitPending();
-                    ++mRC;
-                    ++mRetransmissions;
-                    mT200Active = true;
-                    mT200RemainingMs = mProfile.t200Ms;
+            // A REJ does not trigger retransmission here: with the k=1 window
+            // the outstanding frame, if any, goes out on T200 expiry only
+            // (GSM 04.06 5.3.3). A polled REJ response is answered with
+            // RR(P/F=1); a REJ command is an unexpected frame — abnormal
+            // release with a DM response.
+            if (frame.pf) {
+                if (frame.isCommand()) {
+                    abnormalRelease(true);
                 } else {
-                    abnormalRelease();
+                    sendRR(true);
                 }
             }
             break;

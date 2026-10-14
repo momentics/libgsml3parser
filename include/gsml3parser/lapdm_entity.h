@@ -43,7 +43,7 @@ namespace gsml3parser {
 
 /// LAPDm protocol state machine states (GSM 04.06 3.5.2).
 enum class LAPDmState : uint8_t {
-    Unused = 0,               ///< Initial state before open()
+    Unused = 0,               ///< Initial state before open(); also entered by an abnormal release with a DM response
     LinkReleased = 1,         ///< No link, idle
     AwaitingEstablish = 2,    ///< Waiting for UA response to SABME
     AwaitingRelease = 3,      ///< Waiting for UA response to DISC
@@ -72,8 +72,8 @@ struct LAPDmChannelProfile {
     /// N200=34, T200=900 ms (GSM 04.06 section 5.8.2.1).
     [[nodiscard]] static LAPDmChannelProfile FACCH() noexcept;
 
-    /// FACCH profile on TCH/H half-slot channels (Lm): N201=20, N200=29,
-    /// T200=900 ms (GSM 04.06 section 5.8.2.1).
+    /// FACCH profile with half-rate TCH ACCH (Lm) values per TS 44.064:
+    /// N201=20, N200=29, T200=900 ms.
     [[nodiscard]] static LAPDmChannelProfile FACCH_LM() noexcept;
 };
 
@@ -151,13 +151,18 @@ public:
     [[nodiscard]] Expected<void> sendData(std::span<const uint8_t> l3Data);
 
     /// Initiate link establishment by sending SABME — GSM 04.06 5.4.1.
-    /// Transitions to AwaitingEstablish state. Requires LinkReleased state.
+    /// In LinkReleased state the command is transmitted and the entity
+    /// transitions to AwaitingEstablish. If the link is already established
+    /// (LinkEstablished or ContentionResolution), the request succeeds without
+    /// transmitting a frame and an L3_ESTABLISH_CONFIRM is delivered to the
+    /// upper layer immediately.
     /// @param info Contention-resolution information carried by the command:
     ///         an MS-originated initial establishment on SAPI 0 must include a
     ///         Paging Response here (GSM 04.06 section 5.4.1); leave empty for
     ///         all other initiations. The payload is retransmitted verbatim
     ///         with the command.
-    /// @return Success, or error if not in LinkReleased state.
+    /// @return Success, or error if not in a state that allows establishment
+    ///         (LinkReleased or an established link).
     [[nodiscard]] Expected<void> sendSABME(std::span<const uint8_t> info = {});
 
     /// Initiate normal link release by sending DISC — GSM 04.06 5.4.4.
@@ -227,10 +232,10 @@ private:
     uint8_t mVR{0}; // Receive state: expected next NS
 
     // Outstanding-frame storage (k=1 constraint): at most one frame awaits
-    // acknowledgment. An expired T200 or a REJ rebuilds that frame with its
-    // original parameters and retransmits it — an I-frame goes out with P/F
-    // set and the current V(R) in N(R), N(S) unchanged (GSM 04.06 section
-    // 5.5; TS 51.010-1 timer recovery). mPendingInfo is lazy-allocated, empty
+    // acknowledgment. An expired T200 rebuilds that frame with its original
+    // parameters and retransmits it — an I-frame goes out with P/F set and
+    // the current V(R) in N(R), N(S) unchanged (GSM 04.06 section 5.5;
+    // TS 51.010-1 timer recovery). mPendingInfo is lazy-allocated, empty
     // initially.
     enum class PendingKind : uint8_t {
         None = 0,   ///< No outstanding frame
@@ -312,8 +317,13 @@ private:
     /// Transition to a new protocol state.
     void transitionTo(LAPDmState newState) noexcept;
 
-    /// Handle abnormal release: clear state and signal error to L3.
-    void abnormalRelease() noexcept;
+    /// Handle abnormal release (GSM 04.06 section 5.4.2): when `sendDM` is
+    /// set, answer with a DM(P/F=1) response first and transition the entity
+    /// to Unused (protocol errors such as an unexpected frame); otherwise —
+    /// retransmission budget exhausted or robustness guards — return to
+    /// LinkReleased without a frame. Signals MDL_ERROR_INDICATION to L3 in
+    /// both cases.
+    void abnormalRelease(bool sendDM) noexcept;
 
     /// Process acknowledgment from received NR value — GSM 04.06 5.5.3.
     void processAck(uint8_t nr);
