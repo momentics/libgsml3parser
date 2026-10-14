@@ -230,23 +230,61 @@ TEST(RSLB_buildMeasRes_FieldMasking, TruncatedToWidth) {
     EXPECT_EQ(bsIE->val[0], 31u);
 }
 
-// Test: Build CCCH_LOAD_IND and parse back. The RACH Load IE is TV-encoded
-// with its fixed six value octets (TS 48.058 section 9.3.18), so the frame is
-// exactly fourteen octets long.
-TEST(RSLB_buildCCCHLoadInd_Loads, ParsesBack) {
-    auto result = RSLBuilder::buildCCCHLoadInd(0x00, 50, 100, 30, 80);
+// Golden: CCCH_LOAD_IND for the PCH (TS 48.058 section 8.5.2). The channel
+// number is PCH+AGCH ('10010'B), tn 0 (octet 0x90) and the Paging Load IE
+// (0x0F) is TV-encoded with its two-octet big-endian value, so the frame is
+// exactly seven octets long: 0C 12 | 01 90 | 0F 00 32 for paging load 50.
+TEST(RSLB_buildPCHLoadInd_Loads, ParsesBack) {
+    auto result = RSLBuilder::buildPCHLoadInd(50);
     ASSERT_TRUE(result.has_value());
-    ASSERT_EQ((*result).size(), 14u); // header(4) + PagingLoad TV(3) + RachLoad TV(7)
+    ASSERT_EQ((*result).size(), 7u); // header(4) + PagingLoad TV(3)
+    EXPECT_EQ((*result)[0], rslFirstOctet(RSLDiscriminator::CommonChannel, false)); // 0x0C
+    EXPECT_EQ((*result)[1], static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd)); // 0x12
+    // Channel Number TV IE: PCH+AGCH ('10010'B), tn 0.
+    EXPECT_EQ((*result)[2], 0x01u);
+    EXPECT_EQ((*result)[3], 0x90u);
+    // Paging Load TV IE: type 0x0F, value 50 big-endian.
+    EXPECT_EQ((*result)[4], static_cast<uint8_t>(RSL_IE::PagingLoad));
+    EXPECT_EQ((*result)[5], 0x00u);
+    EXPECT_EQ((*result)[6], 0x32u);
+
     auto parsed = RSLParser::parse(*result);
     ASSERT_TRUE(parsed.has_value());
     EXPECT_EQ((*parsed).discriminator, RSLDiscriminator::CommonChannel);
     EXPECT_EQ((*parsed).msgType, static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd));
-    EXPECT_EQ((*parsed).chanNr, 0x00);
+    EXPECT_EQ((*parsed).chanNr, 0x90u);
     auto* pl = RSLParser::findIE(*parsed, RSL_IE::PagingLoad);
-    ASSERT_NE(pl, nullptr); EXPECT_EQ(pl->len, 2u);
+    ASSERT_NE(pl, nullptr); EXPECT_EQ(pl->len, 2u); // TV: no length octet on the wire
     EXPECT_EQ((pl->val[0] << 8) | pl->val[1], 50u);
+}
+
+// Golden: CCCH_LOAD_IND for the RACH (TS 48.058 section 8.5.2). The channel
+// number is RACH ('10001'B), tn 0 (octet 0x88) and the RACH Load IE (0x12) is
+// LV-encoded with an explicit length octet 0x06 followed by the three
+// big-endian u16 counters — total, busy and access (section 9.3.18) — so the
+// frame is exactly twelve octets long: 0C 12 | 01 88 | 12 06 | 00 64 00 1E 00 50.
+TEST(RSLB_buildRACHLoadInd_Loads, ParsesBack) {
+    auto result = RSLBuilder::buildRACHLoadInd(100, 30, 80);
+    ASSERT_TRUE(result.has_value());
+    ASSERT_EQ((*result).size(), 12u); // header(4) + RachLoad LV(8: type + length + value)
+    EXPECT_EQ((*result)[0], rslFirstOctet(RSLDiscriminator::CommonChannel, false)); // 0x0C
+    EXPECT_EQ((*result)[1], static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd)); // 0x12
+    // Channel Number TV IE: RACH ('10001'B), tn 0.
+    EXPECT_EQ((*result)[2], 0x01u);
+    EXPECT_EQ((*result)[3], 0x88u);
+    // RACH Load LV IE: type 0x12, length 0x06, counters 100/30/80 big-endian.
+    EXPECT_EQ((*result)[4], static_cast<uint8_t>(RSL_IE::RachLoad));
+    EXPECT_EQ((*result)[5], 0x06u);
+    const uint8_t expectedCounters[6] = {0x00, 0x64, 0x00, 0x1E, 0x00, 0x50};
+    EXPECT_EQ(0, std::memcmp((*result).data() + 6, expectedCounters, sizeof(expectedCounters)));
+
+    auto parsed = RSLParser::parse(*result);
+    ASSERT_TRUE(parsed.has_value());
+    EXPECT_EQ((*parsed).discriminator, RSLDiscriminator::CommonChannel);
+    EXPECT_EQ((*parsed).msgType, static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd));
+    EXPECT_EQ((*parsed).chanNr, 0x88u);
     auto* rl = RSLParser::findIE(*parsed, RSL_IE::RachLoad);
-    ASSERT_NE(rl, nullptr); EXPECT_EQ(rl->len, 6u); // TV: no length octet on the wire
+    ASSERT_NE(rl, nullptr); EXPECT_EQ(rl->len, 6u); // LV: explicit length octet on the wire
     EXPECT_EQ((rl->val[0] << 8) | rl->val[1], 100u);
     EXPECT_EQ((rl->val[2] << 8) | rl->val[3], 30u);
     EXPECT_EQ((rl->val[4] << 8) | rl->val[5], 80u);
@@ -393,7 +431,7 @@ TEST(RSLB_build_TransparentFlag, SetPerMessageGroup) {
     ASSERT_TRUE(ack.has_value());
     EXPECT_EQ((*ack)[0], rslFirstOctet(RSLDiscriminator::DedicatedChannel, false)); // 0x08
 
-    auto load = RSLBuilder::buildCCCHLoadInd(0x00, 50, 100, 30, 80);
+    auto load = RSLBuilder::buildRACHLoadInd(100, 30, 80);
     ASSERT_TRUE(load.has_value());
     EXPECT_EQ((*load)[0], rslFirstOctet(RSLDiscriminator::CommonChannel, false)); // 0x0C
 }

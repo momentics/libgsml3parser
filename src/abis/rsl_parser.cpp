@@ -306,10 +306,6 @@ std::string_view RSLParser::messageName(RSLDiscriminator disc, uint8_t msgType)
                 case RSLCChanMessageType::ImmediateAssignCmd: return "IMMEDIATE_ASSIGN_CMD";
                 case RSLCChanMessageType::SmsBcReq:           return "SMS_BC_REQ";
                 case RSLCChanMessageType::ChanConf:           return "CHAN_CONF";
-                case RSLCChanMessageType::RfResInd:           return "RF_RES_IND";
-                case RSLCChanMessageType::SacchFill:          return "SACCH_FILL";
-                case RSLCChanMessageType::Overload:           return "OVERLOAD";
-                case RSLCChanMessageType::ErrorReport:        return "ERROR_REPORT";
                 case RSLCChanMessageType::SmsBcCmd:           return "SMS_BC_CMD";
                 case RSLCChanMessageType::CbchLoadInd:        return "CBCH_LOAD_IND";
                 case RSLCChanMessageType::NotCmd:             return "NOT_CMD";
@@ -318,7 +314,20 @@ std::string_view RSLParser::messageName(RSLDiscriminator disc, uint8_t msgType)
             break;
 
         case RSLDiscriminator::TrxManagement:
-            if (msgType == 0x41) return "LOCATION_INFO";
+            switch (static_cast<RSLTrxMessageType>(msgType)) {
+                case RSLTrxMessageType::RfResourceIndication: return "RF_RES_IND";
+                case RSLTrxMessageType::SacchFilling:         return "SACCH_FILL";
+                case RSLTrxMessageType::OverloadIndication:   return "OVERLOAD";
+                case RSLTrxMessageType::ErrorReport:          return "ERROR_REPORT";
+                default: break;
+            }
+            break;
+
+        case RSLDiscriminator::Lcs:
+            switch (static_cast<RSLLcsMessageType>(msgType)) {
+                case RSLLcsMessageType::LocationInformation:  return "LOCATION_INFO";
+                default: break;
+            }
             break;
 
         default:

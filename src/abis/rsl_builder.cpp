@@ -44,8 +44,8 @@ void writeHeader(uint8_t* buf, RSLDiscriminator disc, uint8_t msgType, uint8_t c
     buf[3] = chanNr;
 }
 
-// Write an LV IE (type + 8-bit length + value).
-size_t writeTLV(uint8_t* buf, size_t offset, uint8_t type, const uint8_t* val, uint8_t len) {
+// Write an LV IE: [type][length][value...] (TS 48.058 9.3).
+size_t writeLV(uint8_t* buf, size_t offset, uint8_t type, const uint8_t* val, uint8_t len) {
     buf[offset] = type;
     buf[offset + 1] = len;
     if (len > 0 && val) {
@@ -243,7 +243,7 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildChanActivNack(uint8_t chanNr, RS
             if (n < 0) return -1;
             // Cause IE: LV with a one-octet value.
             uint8_t causeByte = static_cast<uint8_t>(cause);
-            size_t off = writeTLV(out.data(), static_cast<size_t>(n),
+            size_t off = writeLV(out.data(), static_cast<size_t>(n),
                 static_cast<uint8_t>(RSL_IE::Cause), &causeByte, 1);
             return static_cast<int>(off);
         });
@@ -254,7 +254,7 @@ int RSLBuilder::buildChanActivNack(std::span<uint8_t> out, uint8_t chanNr, RSLEr
     int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::ChanActivNack), chanNr);
     if (n < 0) return -1;
     uint8_t causeByte = static_cast<uint8_t>(cause);
-    size_t off = writeTLV(out.data(), static_cast<size_t>(n),
+    size_t off = writeLV(out.data(), static_cast<size_t>(n),
         static_cast<uint8_t>(RSL_IE::Cause), &causeByte, 1);
     return static_cast<int>(off);
 }
@@ -279,7 +279,7 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildConnFail(uint8_t chanNr, RSLErro
             int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::ConnFail), chanNr);
             if (n < 0) return -1;
             uint8_t causeByte = static_cast<uint8_t>(cause);
-            size_t off = writeTLV(out.data(), static_cast<size_t>(n),
+            size_t off = writeLV(out.data(), static_cast<size_t>(n),
                 static_cast<uint8_t>(RSL_IE::Cause), &causeByte, 1);
             return static_cast<int>(off);
         });
@@ -290,7 +290,7 @@ int RSLBuilder::buildConnFail(std::span<uint8_t> out, uint8_t chanNr, RSLErrorCa
     int n = buildDChanMsg(out, static_cast<uint8_t>(RSLDChanMessageType::ConnFail), chanNr);
     if (n < 0) return -1;
     uint8_t causeByte = static_cast<uint8_t>(cause);
-    size_t off = writeTLV(out.data(), static_cast<size_t>(n),
+    size_t off = writeLV(out.data(), static_cast<size_t>(n),
         static_cast<uint8_t>(RSL_IE::Cause), &causeByte, 1);
     return static_cast<int>(off);
 }
@@ -324,7 +324,7 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildMeasRes(
             // UplinkMeas IE (LV): the canonical three value octets.
             uint8_t uplinkData[3];
             writeUplinkMeasValue(uplinkData, rxlevFull, rxlevSub, rxqFull, rxqSub, dtxDownlink);
-            off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::UplinkMeas), uplinkData, 3);
+            off = writeLV(out.data(), off, static_cast<uint8_t>(RSL_IE::UplinkMeas), uplinkData, 3);
             // BS Power IE (TV, 1 octet): always present in MEASUREMENT RESULT,
             // between the Uplink Measurements and the L1 Information IEs
             // (TS 48.058 section 9.3.4).
@@ -348,7 +348,7 @@ int RSLBuilder::buildMeasRes(std::span<uint8_t> out, uint8_t chanNr, uint8_t mea
         static_cast<uint8_t>(RSL_IE::MeasResNr), &measNr, 1);
     uint8_t uplinkData[3];
     writeUplinkMeasValue(uplinkData, rxlevFull, rxlevSub, rxqFull, rxqSub, dtxDownlink);
-    off = writeTLV(out.data(), off, static_cast<uint8_t>(RSL_IE::UplinkMeas), uplinkData, 3);
+    off = writeLV(out.data(), off, static_cast<uint8_t>(RSL_IE::UplinkMeas), uplinkData, 3);
     // BS Power IE (TV, 1 octet): always present (TS 48.058 section 9.3.4).
     off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::BSPower), &bsPower, 1);
     if (l1Info != 0) {
@@ -381,43 +381,73 @@ int RSLBuilder::buildHandoDet(std::span<uint8_t> out, uint8_t chanNr, uint8_t ac
 
 // ── CCHAN messages ────────────────────────────────────────────────────
 
-Expected<std::vector<uint8_t>> RSLBuilder::buildCCCHLoadInd(
-    uint8_t chanNr, uint16_t pagingLoad, uint16_t rachTotal,
-    uint16_t rachBusy, uint16_t rachAccess)
+Expected<std::vector<uint8_t>> RSLBuilder::buildPCHLoadInd(uint16_t pagingLoad)
 {
-    // Header(4) + PagingLoad TV(3) + RachLoad TV(7) = 14 bytes.
-    return buildVector({14},
+    // Header(4) + PagingLoad TV(3) = 7 bytes.
+    return buildVector({RSL_HEADER_SIZE + 3},
         [&](std::span<uint8_t> out) {
-            int n = buildCChanMsg(out, static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd), chanNr);
+            int n = buildCChanMsg(out, static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd),
+                                  RSLChannelNumber::encode(RSLChannelNumber::PchAgch, 0));
             if (n < 0) return -1;
-            size_t off = static_cast<size_t>(n);
-            // Paging Load IE: TV with a two-octet value (big-endian).
-            uint8_t pl[2]; pl[0] = static_cast<uint8_t>((pagingLoad >> 8) & 0xff); pl[1] = static_cast<uint8_t>(pagingLoad & 0xff);
-            off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::PagingLoad), pl, 2);
-            // RACH Load IE: TV with the fixed six value octets — total, busy and access
-            // counters as big-endian u16 each (TS 48.058 section 9.3.18).
-            uint8_t rl[6];
-            rl[0] = static_cast<uint8_t>((rachTotal >> 8) & 0xff); rl[1] = static_cast<uint8_t>(rachTotal & 0xff);
-            rl[2] = static_cast<uint8_t>((rachBusy >> 8) & 0xff);  rl[3] = static_cast<uint8_t>(rachBusy & 0xff);
-            rl[4] = static_cast<uint8_t>((rachAccess >> 8) & 0xff);rl[5] = static_cast<uint8_t>(rachAccess & 0xff);
-            off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::RachLoad), rl, 6);
+            // Paging Load IE: TV with a two-octet big-endian value.
+            uint8_t pl[2];
+            pl[0] = static_cast<uint8_t>((pagingLoad >> 8) & 0xff);
+            pl[1] = static_cast<uint8_t>(pagingLoad & 0xff);
+            size_t off = writeTVFixed(out.data(), static_cast<size_t>(n),
+                static_cast<uint8_t>(RSL_IE::PagingLoad), pl, 2);
             return static_cast<int>(off);
         });
 }
 
-int RSLBuilder::buildCCCHLoadInd(std::span<uint8_t> out, uint8_t chanNr, uint16_t pagingLoad,
+int RSLBuilder::buildPCHLoadInd(std::span<uint8_t> out, uint16_t pagingLoad)
+{
+    int n = buildCChanMsg(out, static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd),
+                          RSLChannelNumber::encode(RSLChannelNumber::PchAgch, 0));
+    if (n < 0) return -1;
+    // Paging Load IE: TV with a two-octet big-endian value.
+    uint8_t pl[2];
+    pl[0] = static_cast<uint8_t>((pagingLoad >> 8) & 0xff);
+    pl[1] = static_cast<uint8_t>(pagingLoad & 0xff);
+    size_t off = writeTVFixed(out.data(), static_cast<size_t>(n),
+        static_cast<uint8_t>(RSL_IE::PagingLoad), pl, 2);
+    return static_cast<int>(off);
+}
+
+Expected<std::vector<uint8_t>> RSLBuilder::buildRACHLoadInd(
     uint16_t rachTotal, uint16_t rachBusy, uint16_t rachAccess)
 {
-    int n = buildCChanMsg(out, static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd), chanNr);
+    // Header(4) + RachLoad LV(8: type + length + six value octets) = 12 bytes.
+    return buildVector({RSL_HEADER_SIZE + 8},
+        [&](std::span<uint8_t> out) {
+            int n = buildCChanMsg(out, static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd),
+                                  RSLChannelNumber::encode(RSLChannelNumber::Rach, 0));
+            if (n < 0) return -1;
+            // RACH Load IE: LV with an explicit length octet — total, busy and
+            // access counters as big-endian u16 each (TS 48.058 section 9.3.18).
+            uint8_t rl[6];
+            rl[0] = static_cast<uint8_t>((rachTotal >> 8) & 0xff); rl[1] = static_cast<uint8_t>(rachTotal & 0xff);
+            rl[2] = static_cast<uint8_t>((rachBusy >> 8) & 0xff);  rl[3] = static_cast<uint8_t>(rachBusy & 0xff);
+            rl[4] = static_cast<uint8_t>((rachAccess >> 8) & 0xff);rl[5] = static_cast<uint8_t>(rachAccess & 0xff);
+            size_t off = writeLV(out.data(), static_cast<size_t>(n),
+                static_cast<uint8_t>(RSL_IE::RachLoad), rl, 6);
+            return static_cast<int>(off);
+        });
+}
+
+int RSLBuilder::buildRACHLoadInd(std::span<uint8_t> out, uint16_t rachTotal,
+    uint16_t rachBusy, uint16_t rachAccess)
+{
+    int n = buildCChanMsg(out, static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd),
+                          RSLChannelNumber::encode(RSLChannelNumber::Rach, 0));
     if (n < 0) return -1;
-    size_t off = static_cast<size_t>(n);
-    uint8_t pl[2]; pl[0] = static_cast<uint8_t>((pagingLoad >> 8) & 0xff); pl[1] = static_cast<uint8_t>(pagingLoad & 0xff);
-    off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::PagingLoad), pl, 2);
+    // RACH Load IE: LV with an explicit length octet — total, busy and access
+    // counters as big-endian u16 each (TS 48.058 section 9.3.18).
     uint8_t rl[6];
     rl[0] = static_cast<uint8_t>((rachTotal >> 8) & 0xff); rl[1] = static_cast<uint8_t>(rachTotal & 0xff);
     rl[2] = static_cast<uint8_t>((rachBusy >> 8) & 0xff);  rl[3] = static_cast<uint8_t>(rachBusy & 0xff);
     rl[4] = static_cast<uint8_t>((rachAccess >> 8) & 0xff);rl[5] = static_cast<uint8_t>(rachAccess & 0xff);
-    off = writeTVFixed(out.data(), off, static_cast<uint8_t>(RSL_IE::RachLoad), rl, 6);
+    size_t off = writeLV(out.data(), static_cast<size_t>(n),
+        static_cast<uint8_t>(RSL_IE::RachLoad), rl, 6);
     return static_cast<int>(off);
 }
 
@@ -464,7 +494,7 @@ Expected<std::vector<uint8_t>> RSLBuilder::buildDeleteInd(
         [&](std::span<uint8_t> out) {
             int n = buildCChanMsg(out, static_cast<uint8_t>(RSLCChanMessageType::DeleteInd), chanNr);
             if (n < 0) return -1;
-            size_t off = writeTLV(out.data(), static_cast<size_t>(n),
+            size_t off = writeLV(out.data(), static_cast<size_t>(n),
                 static_cast<uint8_t>(RSL_IE::FullImmAssInfo), fullImmAssInfo.data(),
                 static_cast<uint8_t>(fullImmAssInfo.size()));
             return static_cast<int>(off);
@@ -476,7 +506,7 @@ int RSLBuilder::buildDeleteInd(std::span<uint8_t> out, uint8_t chanNr,
 {
     int n = buildCChanMsg(out, static_cast<uint8_t>(RSLCChanMessageType::DeleteInd), chanNr);
     if (n < 0) return -1;
-    size_t off = writeTLV(out.data(), static_cast<size_t>(n),
+    size_t off = writeLV(out.data(), static_cast<size_t>(n),
         static_cast<uint8_t>(RSL_IE::FullImmAssInfo), fullImmAssInfo.data(),
         static_cast<uint8_t>(fullImmAssInfo.size()));
     return static_cast<int>(off);

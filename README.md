@@ -259,9 +259,9 @@ queue-model callbacks — and carry no third-party runtime dependencies:
 
 | Language | Mechanism | Coverage | Runnable demo |
 |----------|-----------|----------|---------------|
-| Python | `ctypes`, stdlib only | entire C ABI: 237 functions, completeness pinned by test | [bts_simulation.py](bindings/python/examples/bts_simulation.py) |
-| Go | cgo + `cgo.Handle` callback bridges (needs a C toolchain) | v1 surface: 134 functions incl. typed L3 builders | [cmd/gsmexample](bindings/go/cmd/gsmexample/main.go) |
-| Rust | handwritten `sys` crate + safe wrapper — `Send`, no bindgen/codegen | same 134-function v1 surface; extern block checked at compile time | [bts_simulation.rs](bindings/rust/gsml3parser/examples/bts_simulation.rs) |
+| Python | `ctypes`, stdlib only | entire C ABI: 238 functions, completeness pinned by test | [bts_simulation.py](bindings/python/examples/bts_simulation.py) |
+| Go | cgo + `cgo.Handle` callback bridges (needs a C toolchain) | v1 surface: 135 functions incl. typed L3 builders | [cmd/gsmexample](bindings/go/cmd/gsmexample/main.go) |
+| Rust | handwritten `sys` crate + safe wrapper — `Send`, no bindgen/codegen | same 135-function v1 surface; extern block checked at compile time | [bts_simulation.rs](bindings/rust/gsml3parser/examples/bts_simulation.rs) |
 
 All three run the same "MO call over SDCCH" scenario against the shared C core, and one unified gate
 (`scripts/verify_bindings.ps1`, CI on Linux + Windows) builds and tests them together. Per-language

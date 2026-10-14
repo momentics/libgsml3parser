@@ -323,9 +323,16 @@ GSML3_C_API size_t gsml3_rsl_build_meas_res(uint8_t* out, size_t maxlen,
     int dtx_downlink, uint8_t bs_power, uint8_t l1_info);
 GSML3_C_API size_t gsml3_rsl_build_hando_det(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t access_delay);
-GSML3_C_API size_t gsml3_rsl_build_ccch_load_ind(uint8_t* out, size_t maxlen,
-    uint8_t chan_nr, uint16_t paging_load, uint16_t rach_total,
-    uint16_t rach_busy, uint16_t rach_access);
+/* CCCH Load Indication for the PCH (TS 48.058 section 8.5.2): channel number
+ * PCH+AGCH ('10010'B), tn 0, plus the Paging Load IE (TV, two-octet
+ * big-endian value). */
+GSML3_C_API size_t gsml3_rsl_build_pch_load_ind(uint8_t* out, size_t maxlen,
+    uint16_t paging_load);
+/* CCCH Load Indication for the RACH (TS 48.058 section 8.5.2): channel number
+ * RACH ('10001'B), tn 0, plus the RACH Load IE (LV: type, length 0x06, three
+ * big-endian u16 counters — total, busy and access). */
+GSML3_C_API size_t gsml3_rsl_build_rach_load_ind(uint8_t* out, size_t maxlen,
+    uint16_t rach_total, uint16_t rach_busy, uint16_t rach_access);
 GSML3_C_API size_t gsml3_rsl_build_chan_rqd(uint8_t* out, size_t maxlen,
     uint8_t chan_nr, uint8_t ra, uint8_t t1p, uint8_t t2, uint8_t t3,
     uint8_t access_delay);

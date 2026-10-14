@@ -29,11 +29,11 @@
 //! Surface (v1): sections S1–S7 of the header plus the two typed builders
 //! needed by the demo chain — `gsml3_build_cm_service_request` and
 //! `gsml3_build_setup` — plus the MM Authentication Failure / CM Service
-//! Prompt pair (two typed builders, four typed getters; 134 functions total).
+//! Prompt pair (two typed builders, four typed getters; 135 functions total).
 //! The remaining S8 typed getters are intentionally not declared here.
 //!
 //! Completeness is enforced at compile time by `tests/surface.rs`, which
-//! references every one of the 134 names with its full signature — a missing
+//! references every one of the 135 names with its full signature — a missing
 //! declaration or a drifted type is a compile error of that test. At runtime,
 //! check `ABI_VERSION` against [`gsml3_abi_version`] when linking a prebuilt
 //! binary of a possibly different build (the header documents that public
@@ -497,7 +497,7 @@ extern "C" {
         val: *mut *const c_uchar,
     ) -> c_int;
 
-    // 13 RSL builders — zero-alloc, caller's buffer, bytes written (0 = error /
+    // 14 RSL builders — zero-alloc, caller's buffer, bytes written (0 = error /
     // too small; cause & timing fields range-checked → GSML3_ERR_INVALID_ARG).
     pub fn gsml3_rsl_build_data_req(
         out: *mut c_uchar,
@@ -573,11 +573,14 @@ extern "C" {
         chan_nr: c_uchar,
         access_delay: c_uchar,
     ) -> usize;
-    pub fn gsml3_rsl_build_ccch_load_ind(
+    pub fn gsml3_rsl_build_pch_load_ind(
         out: *mut c_uchar,
         maxlen: usize,
-        chan_nr: c_uchar,
         paging_load: u16,
+    ) -> usize;
+    pub fn gsml3_rsl_build_rach_load_ind(
+        out: *mut c_uchar,
+        maxlen: usize,
         rach_total: u16,
         rach_busy: u16,
         rach_access: u16,

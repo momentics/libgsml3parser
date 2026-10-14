@@ -205,21 +205,31 @@ public:
 
     // ── CCHAN messages (BTS -> BSC) ──────────────────────────────────
 
-    /// Build CCCH_LOAD_IND message with channel load statistics.
-    /// @param chanNr BCCH carrier channel number.
-    /// @param pagingLoad Paging channel load percentage.
+    /// Build CCCH_LOAD_IND message for the PCH (TS 48.058 section 8.5.2):
+    /// channel number PCH+AGCH ('10010'B), tn 0, plus the Paging Load IE (TV,
+    /// two-octet big-endian value).
+    /// @param pagingLoad Paging channel load counter.
+    /// @return Serialized RSL frame or ParseError on failure.
+    [[nodiscard]] static Expected<std::vector<uint8_t>> buildPCHLoadInd(
+        uint16_t pagingLoad);
+
+    /// Build CCCH_LOAD_IND for the PCH into pre-allocated buffer (zero heap alloc).
+    [[nodiscard]] static int buildPCHLoadInd(std::span<uint8_t> out,
+        uint16_t pagingLoad);
+
+    /// Build CCCH_LOAD_IND message for the RACH (TS 48.058 section 8.5.2):
+    /// channel number RACH ('10001'B), tn 0, plus the RACH Load IE (LV: type,
+    /// length 0x06, three big-endian u16 counters per section 9.3.18).
     /// @param rachTotal Total RACH bursts received.
     /// @param rachBusy RACH bursts during busy period.
     /// @param rachAccess Successful RACH accesses.
     /// @return Serialized RSL frame or ParseError on failure.
-    [[nodiscard]] static Expected<std::vector<uint8_t>> buildCCCHLoadInd(
-        uint8_t chanNr, uint16_t pagingLoad, uint16_t rachTotal,
-        uint16_t rachBusy, uint16_t rachAccess);
+    [[nodiscard]] static Expected<std::vector<uint8_t>> buildRACHLoadInd(
+        uint16_t rachTotal, uint16_t rachBusy, uint16_t rachAccess);
 
-    /// Build CCCH_LOAD_IND into pre-allocated buffer (zero heap alloc).
-    [[nodiscard]] static int buildCCCHLoadInd(std::span<uint8_t> out,
-        uint8_t chanNr, uint16_t pagingLoad, uint16_t rachTotal,
-        uint16_t rachBusy, uint16_t rachAccess);
+    /// Build CCCH_LOAD_IND for the RACH into pre-allocated buffer (zero heap alloc).
+    [[nodiscard]] static int buildRACHLoadInd(std::span<uint8_t> out,
+        uint16_t rachTotal, uint16_t rachBusy, uint16_t rachAccess);
 
     /// Build CHAN_RQD message (channel required request from RACH).
     /// @param chanNr Common channel number (typically RACH).

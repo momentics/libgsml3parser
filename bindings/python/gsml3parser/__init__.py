@@ -52,7 +52,7 @@ from ._errors import (
 )
 
 # High-level API: RAII wrappers, the queue-model stack, typed value objects,
-# LAPDm decode and ALL stateless S4/S7/S9 builders (237 C functions total are
+# LAPDm decode and ALL stateless S4/S7/S9 builders (238 C functions total are
 # registered with argtypes/restype in gsml3parser._library — enforced by
 # test_api_surface.py against the C header).
 from .stack import (
@@ -73,13 +73,13 @@ from .stack import (
     PROC_CALL_SETUP_MO, PROC_UNKNOWN, ACTION_CONTINUE, ACTION_SEND_RESPONSE,
 )
 
-# The 13 RSL (A-bis) builders.
+# The 14 RSL (A-bis) builders.
 from .stack import (
     rsl_build_data_req, rsl_build_data_ind, rsl_build_unit_data_req,
     rsl_build_unit_data_ind, rsl_build_chan_activ_ack, rsl_build_chan_activ_nack,
     rsl_build_rf_chan_rel_ack, rsl_build_conn_fail, rsl_build_meas_res,
-    rsl_build_hando_det, rsl_build_ccch_load_ind, rsl_build_chan_rqd,
-    rsl_build_delete_ind,
+    rsl_build_hando_det, rsl_build_pch_load_ind, rsl_build_rach_load_ind,
+    rsl_build_chan_rqd, rsl_build_delete_ind,
 )
 
 # The 20 standalone S7 response builders + the token-based pair.
@@ -174,7 +174,8 @@ __all__ = [
     "rsl_build_data_req", "rsl_build_data_ind", "rsl_build_unit_data_req",
     "rsl_build_unit_data_ind", "rsl_build_chan_activ_ack", "rsl_build_chan_activ_nack",
     "rsl_build_rf_chan_rel_ack", "rsl_build_conn_fail", "rsl_build_meas_res",
-    "rsl_build_hando_det", "rsl_build_ccch_load_ind", "rsl_build_chan_rqd",
+    "rsl_build_hando_det", "rsl_build_pch_load_ind", "rsl_build_rach_load_ind",
+    "rsl_build_chan_rqd",
     "rsl_build_delete_ind",
     "response_build_cm_service_accept", "response_build_cm_service_reject",
     "response_build_identity_request", "response_build_authentication_request",

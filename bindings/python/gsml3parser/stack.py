@@ -975,7 +975,7 @@ def _message_body_get(self, op_name: str) -> bytes:
     return bytes(buf[:rc])
 
 
-# ── S4 RSL / A-bis (frame handle + the 13 builders) ─────────────────────────
+# ── S4 RSL / A-bis (frame handle + the 14 builders) ─────────────────────────
 
 class RslFrame:
     """OWNED wrapper over gsml3_rsl. The handle OWNS A COPY of the parsed
@@ -1115,7 +1115,7 @@ def _builder(op_name: str, args, label: str | None = None) -> bytes:
     return bytes(buf[:rc])
 
 
-# The 13 RSL builders — argument order/validation exactly as gsml3parser_c.h.
+# The 14 RSL builders — argument order/validation exactly as gsml3parser_c.h.
 
 def rsl_build_data_req(chan_nr: int, link_id: int, l3) -> bytes:
     """RSL DATA_REQ (BTS->BSC) frame."""
@@ -1184,11 +1184,18 @@ def rsl_build_hando_det(chan_nr: int, access_delay: int) -> bytes:
                     (_as_u8(chan_nr, "chan_nr"), _as_u8(access_delay, "access_delay")))
 
 
-def rsl_build_ccch_load_ind(chan_nr: int, paging_load: int, rach_total: int,
-                            rach_busy: int, rach_access: int) -> bytes:
-    return _builder("gsml3_rsl_build_ccch_load_ind",
-                    (_as_u8(chan_nr, "chan_nr"), _as_u16(paging_load, "paging_load"),
-                     _as_u16(rach_total, "rach_total"), _as_u16(rach_busy, "rach_busy"),
+def rsl_build_pch_load_ind(paging_load: int) -> bytes:
+    """CCCH Load Indication for the PCH (TS 48.058 section 8.5.2): channel number
+    PCH+AGCH tn 0 plus the two-octet big-endian paging load counter."""
+    return _builder("gsml3_rsl_build_pch_load_ind",
+                    (_as_u16(paging_load, "paging_load"),))
+
+
+def rsl_build_rach_load_ind(rach_total: int, rach_busy: int, rach_access: int) -> bytes:
+    """CCCH Load Indication for the RACH (TS 48.058 section 8.5.2): channel number
+    RACH tn 0 plus the three big-endian u16 RACH load counters (total, busy, access)."""
+    return _builder("gsml3_rsl_build_rach_load_ind",
+                    (_as_u16(rach_total, "rach_total"), _as_u16(rach_busy, "rach_busy"),
                      _as_u16(rach_access, "rach_access")))
 
 

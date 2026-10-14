@@ -484,7 +484,7 @@ BSC ──[DCHAN CHAN_ACTIV]──► BTS: RSLParser::parse() -> getChannelMode(
 BTS ──[DCHAN CHAN_ACTIV_ACK]──► BSC: RSLBuilder::buildChanActivAck() -> send
 
 BTS ──[DCHAN MEAS_RES]──► BSC: RSLBuilder::buildMeasRes(rxlevFull, rxlevSub, rxqFull, rxqSub, dtxDownlink) -> send
-BTS ──[CCHAN CCCH_LOAD_IND]──► BSC: RSLBuilder::buildCCCHLoadInd() -> send
+BTS ──[CCHAN CCCH_LOAD_IND]──► BSC: RSLBuilder::buildPCHLoadInd() / buildRACHLoadInd() -> send
 ```
 
 ### Integration Points

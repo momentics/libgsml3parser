@@ -398,8 +398,14 @@ TEST(CApiRsl, Builders_AgreeWithCpp) {
         EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
     }
     {
-        auto cpp = RSLBuilder::buildCCCHLoadInd(0x00, 85, 120, 10, 90).value();
-        size_t n = gsml3_rsl_build_ccch_load_ind(out, sizeof(out), 0x00, 85, 120, 10, 90);
+        auto cpp = RSLBuilder::buildPCHLoadInd(85).value();
+        size_t n = gsml3_rsl_build_pch_load_ind(out, sizeof(out), 85);
+        ASSERT_EQ(n, cpp.size());
+        EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
+    }
+    {
+        auto cpp = RSLBuilder::buildRACHLoadInd(120, 10, 90).value();
+        size_t n = gsml3_rsl_build_rach_load_ind(out, sizeof(out), 120, 10, 90);
         ASSERT_EQ(n, cpp.size());
         EXPECT_EQ(0, std::memcmp(out, cpp.data(), n));
     }

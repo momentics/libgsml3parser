@@ -209,21 +209,21 @@ TEST(RSLP_parse_CCHAN_PagingCmd, ParsesIEs) {
     EXPECT_EQ(idIE->len, 5u);
 }
 
-// Golden: CCCH Load Indication (RACH) per TS 48.058 section 9.3.18 — the
-// RACH Load IE is TV-encoded with its fixed six value octets (total, busy
-// and access counters as big-endian u16 each), so no length octet appears
-// between the type and the counters.
-TEST(RSLP_parse_CCHAN_CcchLoadInd, RachLoadTv) {
+// Golden: CCCH Load Indication for the RACH (TS 48.058 section 8.5.2/9.3.18) —
+// the channel number is RACH ('10001'B), tn 0 (0x88) and the RACH Load IE is
+// LV-encoded: an explicit length octet 0x06 precedes the three big-endian u16
+// counters (total, busy and access).
+TEST(RSLP_parse_CCHAN_CcchLoadInd, RachLoadLv) {
     std::vector<uint8_t> buf = {
         rslFirstOctet(RSLDiscriminator::CommonChannel, /*transparent=*/false),
         static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd),
-        0x01, 0x00,                                  // ChanNr TV(2)
-        0x0F, 0x00, 0x32,                            // Paging Load TV(2) = 50
-        0x12, 0x00, 0x64, 0x00, 0x1E, 0x00, 0x50,    // RACH Load TV(6): 100/30/80
+        0x01, 0x88,                                  // ChanNr TV(2): RACH, tn 0
+        0x12, 0x06, 0x00, 0x64, 0x00, 0x1E, 0x00, 0x50,    // RACH Load LV(6): 100/30/80
     };
     auto result = RSLParser::parse(buf);
     ASSERT_TRUE(result.has_value());
-    EXPECT_EQ((*result).ieCount, 3u);
+    EXPECT_EQ((*result).ieCount, 2u);
+    EXPECT_EQ((*result).chanNr, 0x88u);
     auto* rl = RSLParser::findIE(*result, RSL_IE::RachLoad);
     ASSERT_NE(rl, nullptr);
     EXPECT_EQ(rl->len, 6u);
@@ -232,10 +232,33 @@ TEST(RSLP_parse_CCHAN_CcchLoadInd, RachLoadTv) {
     EXPECT_EQ((rl->val[4] << 8) | rl->val[5], 80u);
 }
 
+// Golden: CCCH Load Indication for the PCH (TS 48.058 section 8.5.2) — the
+// channel number is PCH+AGCH ('10010'B), tn 0 (0x90) and the Paging Load IE
+// (0x0F) is TV-encoded with its two-octet big-endian value; no RACH Load IE
+// appears in the PCH variant.
+TEST(RSLP_parse_CCHAN_CcchLoadInd, PchPagingLoadTv) {
+    std::vector<uint8_t> buf = {
+        rslFirstOctet(RSLDiscriminator::CommonChannel, /*transparent=*/false),
+        static_cast<uint8_t>(RSLCChanMessageType::CcchLoadInd),
+        0x01, 0x90,                                  // ChanNr TV(2): PCH+AGCH, tn 0
+        0x0F, 0x00, 0x32,                            // Paging Load TV(2) = 50
+    };
+    auto result = RSLParser::parse(buf);
+    ASSERT_TRUE(result.has_value());
+    EXPECT_EQ((*result).ieCount, 2u);
+    EXPECT_EQ((*result).chanNr, 0x90u);
+    auto* pl = RSLParser::findIE(*result, RSL_IE::PagingLoad);
+    ASSERT_NE(pl, nullptr);
+    EXPECT_EQ(pl->len, 2u);
+    EXPECT_EQ((pl->val[0] << 8) | pl->val[1], 50u);
+    EXPECT_EQ(RSLParser::findIE(*result, RSL_IE::RachLoad), nullptr);
+}
+
 // Golden: an RSL frame of the ip.access group carrying the connection
-// identifier and connection statistics IEs, both TV-encoded with their
-// fixed value sizes (two and twenty-eight octets); the IE list stays
-// synchronized, so a following LV Cause IE is located at the correct offset.
+// identifier (TV, two octets) and connection statistics IEs; the latter is
+// LV-encoded with an explicit length octet (twenty-eight value octets — seven
+// big-endian u32 counters); the IE list stays synchronized, so a following LV
+// Cause IE is located at the correct offset.
 TEST(RSLP_parse_IPA, TvSizesKeepIeListSynchronized) {
     std::vector<uint8_t> buf;
     buf.push_back(rslFirstOctet(RSLDiscriminator::IPAccess, /*transparent=*/false));
@@ -243,7 +266,8 @@ TEST(RSLP_parse_IPA, TvSizesKeepIeListSynchronized) {
     buf.insert(buf.end(), {0x01, 0x7C});             // ChanNr TV(2)
     buf.insert(buf.end(), {0xF8, 0x00, 0x2A});       // IpacConnId TV(2) = 42
     buf.push_back(static_cast<uint8_t>(RSL_IE::IpacConnStat));
-    for (uint8_t i = 0; i < 28; ++i) buf.push_back(i); // IpacConnStat TV(28)
+    buf.push_back(0x1Cu);                            // IpacConnStat LV length = 28
+    for (uint8_t i = 0; i < 28; ++i) buf.push_back(i); // IpacConnStat value: seven u32 counters
     buf.insert(buf.end(), {0x1A, 0x01, 0x2F});       // Cause LV: ResUnavail
 
     auto result = RSLParser::parse(buf);
@@ -259,7 +283,7 @@ TEST(RSLP_parse_IPA, TvSizesKeepIeListSynchronized) {
     EXPECT_EQ(stat->val[0], 0x00u);
     EXPECT_EQ(stat->val[27], 0x1Bu);
     auto* cause = RSLParser::findIE(*result, RSL_IE::Cause);
-    ASSERT_NE(cause, nullptr); // LV after the 28-octet TV: no desync
+    ASSERT_NE(cause, nullptr); // LV after the 28-octet LV: no desync
     EXPECT_EQ(cause->len, 1u);
     EXPECT_EQ(cause->val[0], 0x2Fu);
 }
@@ -503,6 +527,19 @@ TEST(RSLP_messageName, KnownTypes) {
     EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::CommonChannel, 0x15), "PAGING_CMD");
     EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::CommonChannel, 0x13), "CHAN_RQD");
     EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::Rll, 0xff), "UNKNOWN");
+}
+
+// Test: message names of the TRX MANAGEMENT group (TS 48.058 section 8.6) and
+// the LCS group (section 8.7); the CCHAN group does not own the 0x19..0x1C
+// type codes.
+TEST(RSLP_messageName, TrxAndLcsGroups) {
+    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::TrxManagement, 0x19), "RF_RES_IND");
+    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::TrxManagement, 0x1A), "SACCH_FILL");
+    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::TrxManagement, 0x1B), "OVERLOAD");
+    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::TrxManagement, 0x1C), "ERROR_REPORT");
+    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::Lcs, 0x41), "LOCATION_INFO");
+    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::CommonChannel, 0x19), "UNKNOWN");
+    EXPECT_EQ(RSLParser::messageName(RSLDiscriminator::TrxManagement, 0x41), "UNKNOWN");
 }
 
 // Test: TL16V IEs longer than 255 bytes keep their full length in the IE

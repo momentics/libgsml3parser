@@ -559,7 +559,7 @@ impl std::fmt::Debug for RslFrame {
     }
 }
 
-// ── RSL builders (S4, 13) ───────────────────────────────────────────────────
+// ── RSL builders (S4, 14) ───────────────────────────────────────────────────
 // All write into the caller's buffer and return bytes written; 0 means error
 // or buffer-too-small — surfaced through last_error() with its code
 // (BUFFER_TOO_SMALL = 11 included), never silently retried with a bigger
@@ -683,20 +683,28 @@ pub fn rsl_build_hando_det(out: &mut [u8], chan_nr: u8, access_delay: u8) -> Res
     build_result("rsl_build_hando_det", n)
 }
 
-/// RSL CCCH LOAD INDICATION (16-bit counters).
-pub fn rsl_build_ccch_load_ind(
+/// RSL CCCH LOAD INDICATION for the PCH (TS 48.058 section 8.5.2): channel
+/// number PCH+AGCH tn 0 plus the two-octet big-endian paging load counter.
+pub fn rsl_build_pch_load_ind(out: &mut [u8], paging_load: u16) -> Result<usize, GsmL3Error> {
+    // SAFETY: valid out slice for this call.
+    let n = unsafe { s::gsml3_rsl_build_pch_load_ind(out.as_mut_ptr(), out.len(), paging_load) };
+    build_result("rsl_build_pch_load_ind", n)
+}
+
+/// RSL CCCH LOAD INDICATION for the RACH (TS 48.058 section 8.5.2): channel
+/// number RACH tn 0 plus the three big-endian u16 RACH load counters
+/// (total, busy, access).
+pub fn rsl_build_rach_load_ind(
     out: &mut [u8],
-    chan_nr: u8,
-    paging_load: u16,
     rach_total: u16,
     rach_busy: u16,
     rach_access: u16,
 ) -> Result<usize, GsmL3Error> {
     // SAFETY: valid out slice for this call.
     let n = unsafe {
-        s::gsml3_rsl_build_ccch_load_ind(out.as_mut_ptr(), out.len(), chan_nr, paging_load, rach_total, rach_busy, rach_access)
+        s::gsml3_rsl_build_rach_load_ind(out.as_mut_ptr(), out.len(), rach_total, rach_busy, rach_access)
     };
-    build_result("rsl_build_ccch_load_ind", n)
+    build_result("rsl_build_rach_load_ind", n)
 }
 
 /// RSL CHANNEL REQUEST (RACH: request reference + timings u8×4, all

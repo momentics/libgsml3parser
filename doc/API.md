@@ -3842,8 +3842,8 @@ groups; the remaining octets are information elements.
 | `RSLDiscriminator::Rll` | `0x01` | Radio Link Layer (L3 data transport) |
 | `RSLDiscriminator::DedicatedChannel` | `0x04` | DCHAN - dedicated channel control |
 | `RSLDiscriminator::CommonChannel` | `0x06` | CCHAN - common channel control |
-| `RSLDiscriminator::TrxManagement` | `0x08` | Transceiver-level management (LOCATION_INFO = 0x41; other TRX types out of scope) |
-| `RSLDiscriminator::Lcs` | `0x10` | Location Services |
+| `RSLDiscriminator::TrxManagement` | `0x08` | Transceiver-level management (TS 48.058 8.6: RF_RES_IND = 0x19, SACCH_FILL = 0x1A, OVERLOAD = 0x1B, ERROR_REPORT = 0x1C) |
+| `RSLDiscriminator::Lcs` | `0x10` | Location Services (TS 48.058 8.7: LOCATION_INFO = 0x41) |
 | `RSLDiscriminator::IPAccess` | `0x3F` | ip.access vendor-specific |
 
 Helpers: `rslFirstOctet(disc, transparent)` encodes the first octet; `decodeRslFirstOctet(octet)`
@@ -3912,13 +3912,24 @@ decodes it (group 0 and groups above 0x3F are rejected); `rslGroupToDiscriminato
 | `RSLCChanMessageType::ImmediateAssignCmd` | `0x16` | IMMEDIATE_ASSIGN_CMD |
 | `RSLCChanMessageType::SmsBcReq` | `0x17` | SMS_BC_REQ: SMS broadcast request |
 | `RSLCChanMessageType::ChanConf` | `0x18` | CHAN_CONF (vendor extension) |
-| `RSLCChanMessageType::RfResInd` | `0x19` | RF_RES_IND |
-| `RSLCChanMessageType::SacchFill` | `0x1A` | SACCH_FILL |
-| `RSLCChanMessageType::Overload` | `0x1B` | OVERLOAD |
-| `RSLCChanMessageType::ErrorReport` | `0x1C` | ERROR_REPORT |
 | `RSLCChanMessageType::SmsBcCmd` | `0x1D` | SMS_BC_CMD: SMS broadcast command (L3Info TL16V IE) |
 | `RSLCChanMessageType::CbchLoadInd` | `0x1E` | CBCH_LOAD_IND |
 | `RSLCChanMessageType::NotCmd` | `0x1F` | NOT_CMD |
+
+### TRX Management Message Types (TS 48.058 8.6)
+
+| Enum | Value | Description |
+|------|-------|-------------|
+| `RSLTrxMessageType::RfResourceIndication` | `0x19` | RF_RES_IND: transceiver RF resource report |
+| `RSLTrxMessageType::SacchFilling` | `0x1A` | SACCH_FILL |
+| `RSLTrxMessageType::OverloadIndication` | `0x1B` | OVERLOAD |
+| `RSLTrxMessageType::ErrorReport` | `0x1C` | ERROR_REPORT |
+
+### LCS Message Types (TS 48.058 8.7)
+
+| Enum | Value | Description |
+|------|-------|-------------|
+| `RSLLcsMessageType::LocationInformation` | `0x41` | LOCATION_INFO: location services information |
 
 ### Information Elements
 
@@ -3928,25 +3939,26 @@ fixed encoding class via `rslIeEncoding()`:
 - **TV** (type + fixed value, no length octet; value sizes in parentheses):
   ChanNr 0x01 (2), LinkIdent 0x02 (1), ActType 0x03 (1), BSPower 0x04 (1),
   FrameNumber 0x08 (2), HandoRef 0x09 (1), L1Info 0x0A (2), MSPower 0x0D (1), PagingGroup 0x0E (1),
-  PagingLoad 0x0F (2), AccessDelay 0x11 (1), RachLoad 0x12 (6), ReqReference 0x13 (3), ReleaseMode 0x14 (1),
+  PagingLoad 0x0F (2), AccessDelay 0x11 (1), ReqReference 0x13 (3), ReleaseMode 0x14 (1),
   StartngTime 0x17 (2), TimingAdvance 0x18 (1), MeasResNr 0x1B (1), MsgId 0x1C (1),
   SysInfoType 0x1E (1), MSTimingOffset 0x25 (1), ChanNeeded 0x28 (1), CbCmdType 0x29 (1),
   CbchLoadInfo 0x2D (1), and the ip.access vendor extensions with a defined value size —
-  Remote/Local IP 0xF0/0xF5 (4), Remote/Local port and Connection ID 0xF1/0xF3/0xF8 (2),
-  RTP payload types, speech mode and RTP CSD format 0xF2/0xF4/0xF9/0xFC (1) and
-  connection statistics 0xF6 (28);
+  Remote/Local IP 0xF0/0xF5 (4), Remote/Local port and Connection ID 0xF1/0xF3/0xF8 (2) and
+  RTP payload types, speech mode and RTP CSD format 0xF2/0xF4/0xF9/0xFC (1);
 - **TL16V** (type + 16-bit big-endian length + value, for payloads above 255 bytes):
   `L3Info` 0x0B only — the L3 payload carrier for RLL DATA_*/UNIT_DATA_* and CCHAN paging/SMS commands;
 - **LV** (type + 8-bit length + value): all remaining codes — in particular ChanIdent 0x05,
   ChanMode 0x06 (four value octets), EncrInfo 0x07, MSIdentity 0x0C, PyhsContext 0x10,
+  RachLoad 0x12 (explicit length octet 0x06, then the three big-endian u16 counters, section 9.3.18),
   ResourceInfo 0x15, RlmCause 0x16, UplinkMeas 0x19 (three value octets, optional vendor supplementary
   bytes appended raw), Cause 0x1A, MSPowerParam 0x1F, BSPowerParam 0x20, PreprocParam 0x21,
   PreprocMeas 0x22, ImmAssInfo 0x23, SmscbInfo 0x24, ErrMsg 0x26, FullBCCHInfo 0x27,
-  SmscbMsg 0x2A, FullImmAssInfo 0x2B, SacchInfo 0x2C, the group-call/NCH EMLPP UIC main-channel MR
-  codec RTD TFO and LLP APDU codes 0x2E–0x3C — plus the vendor extensions 0x60–0x63 (Osmo), the
-  ip.access codes without a defined value size — 0xE0, 0xE1, 0xE2, 0xF7, 0xFA, 0xFB, 0xFD and 0xFE
-  of the IPAccess group 0xE0–0xFE — and unknown codes (decoding them as LV keeps malformed frames
-  parseable without desynchronizing the IE list).
+   SmscbMsg 0x2A, FullImmAssInfo 0x2B, SacchInfo 0x2C, the group-call/NCH EMLPP UIC main-channel MR
+   codec RTD TFO and LLP APDU codes 0x2E–0x3C — plus the vendor extensions 0x60–0x63 (Osmo), the
+   ip.access connection statistics 0xF6 (explicit length octet 0x1C, then seven big-endian u32
+   counters) and the ip.access codes without a defined value size — 0xE0, 0xE1, 0xE2, 0xF7, 0xFA,
+   0xFB, 0xFD and 0xFE of the IPAccess group 0xE0–0xFE — and unknown codes (decoding them as LV
+   keeps malformed frames parseable without desynchronizing the IE list).
 
 `RSLErrorCause` (TS 48.058 section 9.3.26) carries NACK/failure reasons; the code space contains
 reserved gaps that must not be emitted on the wire (`isRslErrorCause()` validates an octet):
@@ -4089,7 +4101,11 @@ The transparent flag is set on RLL data frames (`buildDataReq`/`buildDataInd`/`b
 
 ### CCHAN Messages
 
-- `buildCCCHLoadInd(chanNr, pagingLoad, rachTotal, rachBusy, rachAccess)` - CCCH load statistics
+- `buildPCHLoadInd(pagingLoad)` - CCCH_LOAD_IND for the PCH (TS 48.058 section 8.5.2): channel number
+  PCH+AGCH tn 0 (0x90) plus the Paging Load IE (TV, two-octet big-endian value)
+- `buildRACHLoadInd(rachTotal, rachBusy, rachAccess)` - CCCH_LOAD_IND for the RACH (TS 48.058 section
+  8.5.2): channel number RACH tn 0 (0x88) plus the RACH Load IE (LV: type, length 0x06, three
+  big-endian u16 counters per section 9.3.18)
 - `buildChanRqd(chanNr, reqRef, accessDelay)` - Channel required from RACH
 - `buildDeleteInd(chanNr, fullImmAssInfo)` - Immediate assignment deletion
 
@@ -5030,7 +5046,7 @@ ctypes/cffi, Rust, Go). One C89-clean header
 | Layer | C API |
 |-------|-------|
 | Core L3 | `gsml3_parse_l3` / `gsml3_parse_l3_hex` / `gsml3_parse_l3_into` (all 215 message types), `gsml3_message_name/pd/mti/ti/size/dump`, `gsml3_message_write/hex`, `gsml3_config` |
-| A-bis RSL | `gsml3_rsl_parse` + accessors (IE/L3 views into the handle's copy) + 13 `gsml3_rsl_build_*` |
+| A-bis RSL | `gsml3_rsl_parse` + accessors (IE/L3 views into the handle's copy) + 14 `gsml3_rsl_build_*` |
 | LAPDm | `gsml3_lapdm_frame_decode` (zero-copy) + `gsml3_lapdm_entity` (full FSM, fn+user callbacks) |
 | BTS stack | `gsml3_registry` (plain + sharded {4,8,16,32}), borrowed `gsml3_session` (`assigned_tmsi`, timers, transactions), O(active) ticks, channel assignment/release with link index |
 | Orchestrator | `gsml3_orchestrator_feed/feedExternal*/tick/build_response/required_size/take_retransmit/cancel_all/chain_phase` + 21 `gsml3_response_build_*` + `gsml3_response_required_size` |

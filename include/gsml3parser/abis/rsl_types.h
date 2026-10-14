@@ -166,13 +166,24 @@ enum class RSLCChanMessageType : uint8_t {
     ImmediateAssignCmd = 0x16, ///< IMMEDIATE_ASSIGN_CMD
     SmsBcReq           = 0x17, ///< SMS_BC_REQ
     ChanConf           = 0x18, ///< CHAN_CONF (vendor extension)
-    RfResInd           = 0x19, ///< RF_RES_IND
-    SacchFill          = 0x1A, ///< SACCH_FILL
-    Overload           = 0x1B, ///< OVERLOAD
-    ErrorReport        = 0x1C, ///< ERROR_REPORT
     SmsBcCmd           = 0x1D, ///< SMS_BC_CMD
     CbchLoadInd        = 0x1E, ///< CBCH_LOAD_IND
     NotCmd             = 0x1F  ///< NOT_CMD
+};
+
+/// RSL message types of the TRX MANAGEMENT group (TS 48.058 8.6):
+/// transceiver-level management — RF resource indication, SACCH filling,
+/// overload indication and error reporting.
+enum class RSLTrxMessageType : uint8_t {
+    RfResourceIndication = 0x19, ///< RF_RES_IND
+    SacchFilling         = 0x1A, ///< SACCH_FILL
+    OverloadIndication   = 0x1B, ///< OVERLOAD
+    ErrorReport          = 0x1C  ///< ERROR_REPORT
+};
+
+/// RSL message types of the LCS group (TS 48.058 8.7): location services.
+enum class RSLLcsMessageType : uint8_t {
+    LocationInformation  = 0x41  ///< LOCATION_INFO
 };
 
 /// RSL information element type codes (TS 48.058 9.3). IEs carry channel
@@ -271,13 +282,14 @@ enum class RSLEIEncoding : uint8_t { TV, LV, TL16V };
 
 /// Encoding class of an RSL IE type code (TS 48.058 9.3). The class is fixed
 /// per IE: TV IEs have a constant value size, LV/TL16V IEs carry their value
-/// length explicitly. The RACH Load IE (0x12) and the ip.access vendor
-/// extension IEs with a defined value size are TV; only the L3 Information
-/// IE (0x0B) uses the 16-bit length form; the Full BCCH Information IE (0x27)
-/// is an ordinary LV IE. The ip.access codes without a defined size (0xE0,
-/// 0xE1, 0xE2, 0xF7, 0xFA, 0xFB, 0xFD, 0xFE), all other defined IEs and
-/// unknown type codes are decoded as LV (variable), which keeps malformed or
-/// vendor frames parseable without desynchronizing the IE list.
+/// length explicitly. The RACH Load IE (0x12) and the ip.access connection
+/// statistics IE (0xF6) are LV with an explicit length octet; the remaining
+/// ip.access vendor extension IEs with a defined value size are TV; only the
+/// L3 Information IE (0x0B) uses the 16-bit length form. The ip.access codes
+/// without a defined size (0xE0, 0xE1, 0xE2, 0xF7, 0xFA, 0xFB, 0xFD, 0xFE),
+/// all other defined IEs and unknown type codes are decoded as LV (variable),
+/// which keeps malformed or vendor frames parseable without desynchronizing
+/// the IE list.
 [[nodiscard]] constexpr RSLEIEncoding rslIeEncoding(uint8_t iei) noexcept {
     switch (iei) {
         // TV: fixed value, no length octet.
@@ -292,7 +304,6 @@ enum class RSLEIEncoding : uint8_t { TV, LV, TL16V };
         case 0x0E: // PagingGroup (1)
         case 0x0F: // PagingLoad (2)
         case 0x11: // AccessDelay (1)
-        case 0x12: // RachLoad (6)
         case 0x13: // ReqReference (3)
         case 0x14: // ReleaseMode (1)
         case 0x17: // StartngTime (2)
@@ -313,7 +324,6 @@ enum class RSLEIEncoding : uint8_t { TV, LV, TL16V };
         case 0xF3: // IpacLocalPort (2)
         case 0xF4: // IpacSpeechMode (1)
         case 0xF5: // IpacLocalIp (4)
-        case 0xF6: // IpacConnStat (28)
         case 0xF8: // IpacConnId (2)
         case 0xF9: // IpacRtpCsdFmt (1)
         case 0xFC: // IpacRtpPayload2 (1)
@@ -323,9 +333,10 @@ enum class RSLEIEncoding : uint8_t { TV, LV, TL16V };
         case 0x0B: // L3Info (the only TL16V IE)
             return RSLEIEncoding::TL16V;
 
-        // LV (8-bit length): FullBCCHInfo, the ip.access codes without a
-        // defined size (0xE0, 0xE1, 0xE2, 0xF7, 0xFA, 0xFB, 0xFD, 0xFE), all
-        // other defined IEs and unknown codes.
+        // LV (8-bit length): RachLoad (section 9.3.18) and IpacConnStat with
+        // an explicit length octet, the ip.access codes without a defined
+        // size (0xE0, 0xE1, 0xE2, 0xF7, 0xFA, 0xFB, 0xFD, 0xFE), all other
+        // defined IEs and unknown codes.
         default:
             return RSLEIEncoding::LV;
     }
@@ -371,10 +382,6 @@ enum class RSLEIEncoding : uint8_t { TV, LV, TL16V };
         case 0xF0: // IpacRemoteIp (vendor extension)
         case 0xF5: // IpacLocalIp (vendor extension)
             return 4;
-        case 0x12: // RachLoad
-            return 6;
-        case 0xF6: // IpacConnStat (vendor extension)
-            return 28;
         default:
             return 0;
     }
@@ -493,12 +500,14 @@ struct RSLChannelNumber {
     }
 
     /// Check whether a channel number denotes a dedicated physical channel.
-    /// Common channels occupy codes 16..31 (BCCH, RACH, PCH/AGCH and the
-    /// vendor common-channel extensions).
+    /// Dedicated channels are the sub-channel codes (Bm/Lm/SDCCH) and the
+    /// VAMOS forms; common channels (BCCH, RACH, PCH/AGCH), PS channels and
+    /// reserved codes are not dedicated.
     /// @param chanNr Encoded channel number octet
     /// @return true if this is a dedicated channel
     [[nodiscard]] static bool isDedicated(uint8_t chanNr) noexcept {
-        return (chanNr & 0xC0u) != 0x80u;
+        const uint8_t code = static_cast<uint8_t>(chanNr >> 3);
+        return (code >= 1 && code <= 15) || (code >= 29 && code <= 31);
     }
 };
 

@@ -82,7 +82,7 @@ pub mod message;
 pub mod registry;
 pub mod stack;
 
-/// The raw FFI layer: `#[repr(C)]` structures, callback types and the 134
+/// The raw FFI layer: `#[repr(C)]` structures, callback types and the 135
 /// `extern "C"` declarations of the v1 surface (S1–S7 + two curated S9
 /// builders + the MM Authentication Failure / CM Service Prompt pair).
 /// Exposed for advanced/test use — prefer the safe API.

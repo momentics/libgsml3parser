@@ -20,7 +20,7 @@
 // SOFTWARE.
 
 //! Compile-time completeness check for the curated v1 FFI surface:
-//! every one of the 134 functions (S1–S7 + `gsml3_build_cm_service_request` +
+//! every one of the 135 functions (S1–S7 + `gsml3_build_cm_service_request` +
 //! `gsml3_build_setup` + the MM Authentication Failure / CM Service Prompt
 //! builders and getters) must be declared in the extern block of this crate
 //! with the exact C ABI signature. Each assignment below names the function
@@ -37,9 +37,9 @@ use gsml3parser_sys::{
     gsml3_registry, gsml3_rsl, gsml3_session, gsml3_step_result, gsml3_timer_expiry, lapdm_l1_cb, lapdm_l3_cb,
 };
 
-/// All 134 names, each with its full `extern "C"` function-pointer type: the
+/// All 135 names, each with its full `extern "C"` function-pointer type: the
 /// compiler checks existence AND exact signature of every v1-surface function.
-fn _use_all_134() {
+fn _use_all_135() {
     // ── S1 Core (5) ────────────────────────────────────────────────────────
     let _: unsafe extern "C" fn() -> *const c_char = gsml3parser_sys::gsml3_version;
     let _: unsafe extern "C" fn() -> u32 = gsml3parser_sys::gsml3_abi_version;
@@ -175,12 +175,15 @@ fn _use_all_134() {
     let _: unsafe extern "C" fn(
         *mut c_uchar,
         usize,
-        c_uchar,
+        u16,
+    ) -> usize = gsml3parser_sys::gsml3_rsl_build_pch_load_ind;
+    let _: unsafe extern "C" fn(
+        *mut c_uchar,
+        usize,
         u16,
         u16,
         u16,
-        u16,
-    ) -> usize = gsml3parser_sys::gsml3_rsl_build_ccch_load_ind;
+    ) -> usize = gsml3parser_sys::gsml3_rsl_build_rach_load_ind;
     let _: unsafe extern "C" fn(
         *mut c_uchar,
         usize,
@@ -543,12 +546,12 @@ fn _use_all_134() {
         gsml3parser_sys::gsml3_msg_cm_service_prompt_sapi;
 }
 
-/// The surface check itself. Running `_use_all_134()` has no runtime effect —
-/// the guarantee is at COMPILE time: if any of the 134 declarations in this
+/// The surface check itself. Running `_use_all_135()` has no runtime effect —
+/// the guarantee is at COMPILE time: if any of the 135 declarations in this
 /// crate's extern block is missing or its type has drifted from the C header,
 /// this test binary fails to build. (Runtime counterpart:
 /// `abi_version_matches_header` in the safe crate.)
 #[test]
 fn test_abi_surface() {
-    _use_all_134();
+    _use_all_135();
 }

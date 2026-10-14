@@ -45,16 +45,26 @@ TEST(RSLT_ChannelNumber_EncodeDecode, RoundTrip) {
     }
 }
 
-// Test: common-channel codes (16..31) are identified as non-dedicated.
-// Importance: BCCH, RACH, PCH/AGCH and the common-channel extensions must not
-// be treated as dedicated channels.
+// Test: dedicated channels are the sub-channel codes (Bm/Lm/SDCCH4/8, 1..15)
+// and the VAMOS forms (29..31); common channels (BCCH, RACH, PCH/AGCH), PS
+// channels (PDCH, CBCH) and reserved codes are not dedicated.
+// Importance: BCCH, RACH, PCH/AGCH, dynamic PDCH and CBCH must not be treated
+// as dedicated channels, while VAMOS Bm/Lm sub-slots stay dedicated.
 TEST(RSLT_ChannelNumber_IsDedicated, Correct) {
     EXPECT_FALSE(RSLChannelNumber::isDedicated(RSLChannelNumber::encode(RSLChannelNumber::Bcch, 0)));
     EXPECT_FALSE(RSLChannelNumber::isDedicated(RSLChannelNumber::encode(RSLChannelNumber::Rach, 3)));
     EXPECT_FALSE(RSLChannelNumber::isDedicated(RSLChannelNumber::encode(RSLChannelNumber::PchAgch, 0)));
-    // Dedicated channels: codes below the common-channel range.
+    // Dedicated channels: the sub-channel codes below the common-channel range.
     EXPECT_TRUE(RSLChannelNumber::isDedicated(RSLChannelNumber::encode(RSLChannelNumber::Sdcch8, 0)));  // SDCCH/8 sub 0
     EXPECT_TRUE(RSLChannelNumber::isDedicated(RSLChannelNumber::encode(RSLChannelNumber::BmAcch, 7))); // TCH/F ACCH
+
+    // Explicit encoded octets: PDCH (code 24) tn 0 and RACH (code 17) tn 0 are
+    // common channels; VAMOS Bm (code 29) tn 0 and SDCCH/8 sub-channel 3 tn 0
+    // (octet 0x43) are dedicated.
+    EXPECT_FALSE(RSLChannelNumber::isDedicated(0xC0u)); // PDCH, tn 0
+    EXPECT_FALSE(RSLChannelNumber::isDedicated(0x88u)); // RACH, tn 0
+    EXPECT_TRUE(RSLChannelNumber::isDedicated(0xE8u));  // VAMOS Bm, tn 0
+    EXPECT_TRUE(RSLChannelNumber::isDedicated(0x43u));  // SDCCH/8 sub 3, tn 0
 }
 
 // Golden: the TCH/H sub-slot channel codes pack as a four-bit tag plus one
@@ -227,24 +237,24 @@ TEST(RSLT_IeEncoding_Classes, Correct) {
 
     // LV IEs (defined and undefined codes alike), including the ip.access
     // vendor extension codes without a defined value size.
-    for (uint8_t iei : {0x05u, 0x06u, 0x07u, 0x0Cu, 0x10u, 0x15u, 0x16u,
+    for (uint8_t iei : {0x05u, 0x06u, 0x07u, 0x0Cu, 0x10u, 0x12u, 0x15u, 0x16u,
                         0x19u, 0x1Au, 0x1Fu, 0x20u, 0x21u, 0x22u, 0x23u, 0x24u,
                         0x26u, 0x27u, 0x2Au, 0x2Bu, 0x2Cu, 0x2Fu, 0x30u, 0x31u,
                         0x32u, 0x33u, 0x34u, 0x35u, 0x36u, 0x38u, 0x39u, 0x3Au,
-                        0x3Bu, 0x3Cu, 0x60u, 0x61u, 0x62u, 0x63u,
+                        0x3Bu, 0x3Cu, 0x60u, 0x61u, 0x62u, 0x63u, 0xF6u,
                         0xE0u, 0xE1u, 0xE2u, 0xF7u, 0xFAu, 0xFBu, 0xFDu, 0xFEu}) {
         EXPECT_EQ(rslIeEncoding(iei), RSLEIEncoding::LV) << "iei=" << iei;
     }
 
-    // RACH Load: TV with the fixed six value octets.
-    EXPECT_EQ(rslIeEncoding(0x12u), RSLEIEncoding::TV);
-    EXPECT_EQ(rslIeTvValueSize(0x12u), 6u);
+    // RACH Load: LV with an explicit length octet (TS 48.058 section 9.3.18).
+    EXPECT_EQ(rslIeTvValueSize(0x12u), 0u);
     // ip.access vendor extension IEs with a defined value size are TV.
     for (uint8_t iei : {0xF0u, 0xF5u}) EXPECT_EQ(rslIeTvValueSize(iei), 4u) << "iei=" << iei;
     for (uint8_t iei : {0xF1u, 0xF3u, 0xF8u}) EXPECT_EQ(rslIeTvValueSize(iei), 2u) << "iei=" << iei;
     for (uint8_t iei : {0xF2u, 0xF4u, 0xF9u, 0xFCu}) EXPECT_EQ(rslIeTvValueSize(iei), 1u) << "iei=" << iei;
-    EXPECT_EQ(rslIeTvValueSize(0xF6u), 28u); // IpacConnStat: seven u32 counters
-    for (uint8_t iei : {0xF0u, 0xF1u, 0xF2u, 0xF3u, 0xF4u, 0xF5u, 0xF6u, 0xF8u, 0xF9u, 0xFCu})
+    // ip.access connection statistics: LV with an explicit length octet.
+    EXPECT_EQ(rslIeTvValueSize(0xF6u), 0u);
+    for (uint8_t iei : {0xF0u, 0xF1u, 0xF2u, 0xF3u, 0xF4u, 0xF5u, 0xF8u, 0xF9u, 0xFCu})
         EXPECT_EQ(rslIeEncoding(iei), RSLEIEncoding::TV) << "iei=" << iei;
 }
 

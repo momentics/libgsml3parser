@@ -36,8 +36,8 @@ This module owns every contact point between Python and the C ABI
 
 * **Declarations** — ctypes mirrors of every public C struct and callback
   type, plus ``PROTOTYPES``: ``(restype, argtypes)`` for ALL functions of
-  the C ABI (237 at GSML3_ABI_VERSION 1, ABI
-  inventory). At import time every entry is registered on the loaded
+   the C ABI (238 at GSML3_ABI_VERSION 1, ABI
+   inventory). At import time every entry is registered on the loaded
   library; a missing symbol or an unknown token raises immediately — this
   module never exposes a partially typed binding.
 
@@ -368,7 +368,8 @@ PROTOTYPES = {
     # (section 9.3.4), optional L1 information octet.
     "gsml3_rsl_build_meas_res":        ("SZ", ("PB", "SZ", "U8", "U8", "U8", "U8", "U8", "U8", "I", "U8", "U8")),
     "gsml3_rsl_build_hando_det":       ("SZ", ("PB", "SZ", "U8", "U8")),
-    "gsml3_rsl_build_ccch_load_ind":   ("SZ", ("PB", "SZ", "U8", "U16", "U16", "U16", "U16")),
+    "gsml3_rsl_build_pch_load_ind":    ("SZ", ("PB", "SZ", "U16")),
+    "gsml3_rsl_build_rach_load_ind":   ("SZ", ("PB", "SZ", "U16", "U16", "U16")),
     "gsml3_rsl_build_chan_rqd":        ("SZ", ("PB", "SZ", "U8", "U8", "U8", "U8", "U8", "U8")),
     "gsml3_rsl_build_delete_ind":      ("SZ", ("PB", "SZ", "U8", "B", "SZ")),
     # ── S5 LAPDm (16) ────────────────────────────────────────────────────

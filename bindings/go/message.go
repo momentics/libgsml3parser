@@ -537,7 +537,7 @@ func (f *RslFrame) check(op string) error {
 	return nil
 }
 
-// ── S4 RSL builders (13): fixed caller buffer, causes range-checked in C ───
+// ── S4 RSL builders (14): fixed caller buffer, causes range-checked in C ───
 // Every builder does ONE serializeInto pass into the fixed
 // 512-byte caller buffer; a zero result surfaces the C code (including
 // BUFFER_TOO_SMALL) and is never retried silently.
@@ -620,10 +620,20 @@ func RslBuildHandoDet(chanNr byte, accessDelay byte) ([]byte, error) {
 	})
 }
 
-// RslBuildCCCHLoadInd builds a CCCH LOAD INDICATION with the four load counters.
-func RslBuildCCCHLoadInd(chanNr byte, pagingLoad, rachTotal, rachBusy, rachAccess uint16) ([]byte, error) {
-	return serializeInto("rsl.BuildCCCHLoadInd", func(out *C.uint8_t, maxLen C.size_t) C.size_t {
-		return C.gsml3_rsl_build_ccch_load_ind(out, maxLen, C.uint8_t(chanNr), C.uint16_t(pagingLoad), C.uint16_t(rachTotal), C.uint16_t(rachBusy), C.uint16_t(rachAccess))
+// RslBuildPCHLoadInd builds a CCCH LOAD INDICATION for the PCH (TS 48.058 section
+// 8.5.2): channel number PCH+AGCH tn 0 plus the two-octet big-endian paging load counter.
+func RslBuildPCHLoadInd(pagingLoad uint16) ([]byte, error) {
+	return serializeInto("rsl.BuildPCHLoadInd", func(out *C.uint8_t, maxLen C.size_t) C.size_t {
+		return C.gsml3_rsl_build_pch_load_ind(out, maxLen, C.uint16_t(pagingLoad))
+	})
+}
+
+// RslBuildRACHLoadInd builds a CCCH LOAD INDICATION for the RACH (TS 48.058 section
+// 8.5.2): channel number RACH tn 0 plus the three big-endian u16 RACH load counters
+// (total, busy, access).
+func RslBuildRACHLoadInd(rachTotal, rachBusy, rachAccess uint16) ([]byte, error) {
+	return serializeInto("rsl.BuildRACHLoadInd", func(out *C.uint8_t, maxLen C.size_t) C.size_t {
+		return C.gsml3_rsl_build_rach_load_ind(out, maxLen, C.uint16_t(rachTotal), C.uint16_t(rachBusy), C.uint16_t(rachAccess))
 	})
 }
 

@@ -796,18 +796,31 @@ GSML3_C_API size_t gsml3_rsl_build_hando_det(uint8_t* out, size_t maxlen,
     }
 }
 
-GSML3_C_API size_t gsml3_rsl_build_ccch_load_ind(uint8_t* out, size_t maxlen,
-    uint8_t chan_nr, uint16_t paging_load, uint16_t rach_total,
-    uint16_t rach_busy, uint16_t rach_access) {
+GSML3_C_API size_t gsml3_rsl_build_pch_load_ind(uint8_t* out, size_t maxlen,
+    uint16_t paging_load) {
     try {
         clearLastError();
         if (!out || maxlen == 0) { setError(GSML3_ERR_INVALID_ARG, "NULL output buffer"); return 0; }
-        int n = RSLBuilder::buildCCCHLoadInd({out, maxlen}, chan_nr, paging_load,
-                                             rach_total, rach_busy, rach_access);
+        int n = RSLBuilder::buildPCHLoadInd({out, maxlen}, paging_load);
         if (n < 0) setBufferTooSmallError();
         return rslSpanResult(n);
     } catch (...) {
-        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_ccch_load_ind");
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_pch_load_ind");
+        return 0;
+    }
+}
+
+GSML3_C_API size_t gsml3_rsl_build_rach_load_ind(uint8_t* out, size_t maxlen,
+    uint16_t rach_total, uint16_t rach_busy, uint16_t rach_access) {
+    try {
+        clearLastError();
+        if (!out || maxlen == 0) { setError(GSML3_ERR_INVALID_ARG, "NULL output buffer"); return 0; }
+        int n = RSLBuilder::buildRACHLoadInd({out, maxlen}, rach_total,
+                                              rach_busy, rach_access);
+        if (n < 0) setBufferTooSmallError();
+        return rslSpanResult(n);
+    } catch (...) {
+        setLastErrorUnexpected("unexpected exception in gsml3_rsl_build_rach_load_ind");
         return 0;
     }
 }
