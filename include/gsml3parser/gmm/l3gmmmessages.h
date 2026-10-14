@@ -484,7 +484,7 @@ public:
 
 // ── Routing Area Update Accept (TS 44.068 section 9.5) ────────────────
 // SGSN->MS: leading part of two octets — first octet
-// forceToStandby(1)|updateResult(3)|spare(1)|raUpdateTimer(2)|spare(2)
+// forceToStandby(1)|updateResult(3)|raUpdateTimer(2)|spare(2)
 // (bit positions in the octet value), then one further leading octet;
 // routingAreaId (raw six octets); [P-TMSI signature(TV, IEI 0x19, three
 // octets)] | [allocated P-TMSI(TLV, IEI 0x18)] | [opaque optional IEs].

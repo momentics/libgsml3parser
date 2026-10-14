@@ -34,7 +34,7 @@
 28. [Broadcast Call Control Messages](#28-broadcast-call-control-messages)
 29. [Group Call Control Messages](#29-group-call-control-messages)
 30. [Location Services Messages](#30-location-services-messages)
-31. [Extended PD Messages](#31-extended-pd-messages)
+31. [Packet Domain Supplementary Services (PDSS) Messages](#31-packet-domain-supplementary-services-pdss-messages)
 32. [Test Procedure PD Messages](#32-test-procedure-pd-messages)
 33. [MSContext - Per-Subscriber State](#33-mscontext-per-subscriber-state)
 34. [Timer Framework](#34-timer-framework)
@@ -368,7 +368,7 @@ struct ParserConfig {
 | `withLogLevel(lvl)` | Return new config with changed log level |
 | `withStrictFraming(v)` | Return new config with strict framing on/off |
 
-The struct is reserved for future parser options (log level and similar). It intentionally carries no per-PD handler table: all 12 protocol domains are parsed by the built-in domain parsers in `parseL3()`.
+The struct is reserved for future parser options (log level and similar). It intentionally carries no per-PD handler table: all 13 protocol domains are parsed by the built-in domain parsers in `parseL3()`.
 
 **Thread safety:** Safe for concurrent read access from any number of threads. Builder methods return new instances - the original is never modified.
 
@@ -440,6 +440,7 @@ using SMS      = std::variant< /* 5 SMS CP types */ >;
 using BCCM     = std::variant< /* 8 BCC types */ >;
 using GCCM     = std::variant< /* 8 GCC types */ >;
 using LSM      = std::variant< /* 2 LS types */ >;
+using PDSS1M   = std::variant<L3PDSS1Message>;
 using EXTENDED = std::variant<L3ExtendedMessage>;
 using TESTPROC = std::variant<L3TestProcedureMessage>;
 ```
@@ -449,10 +450,10 @@ using TESTPROC = std::variant<L3TestProcedureMessage>;
 The top-level variant that wraps all domains:
 
 ```cpp
-using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM, EXTENDED, TESTPROC>;
+using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM, PDSS1M, EXTENDED, TESTPROC>;
 ```
 
-Stored on the stack - no heap allocation. `sizeof(ParsedMessage) = 400` bytes on 64-bit (bounded `< 8192` via `static_assert`). The variant spans 12 protocol domains.
+Stored on the stack - no heap allocation. `sizeof(ParsedMessage) = 400` bytes on 64-bit (bounded `< 8192` via `static_assert`). The variant spans 13 protocol domains.
 
 **Usage:**
 
@@ -724,7 +725,7 @@ public:
 **Framing modes:**
 
 - **L2 length mode** (`useL2Length = true`, default): each frame is preceded by a single length octet. Deterministic; what production LAPDm / A-bis paths provide.
-- **Header-based mode** (`useL2Length = false`, opt-in): the frame length is derived from PD + MTI for all 12 protocol domains (the PD is the low nibble of octet 0; MM/CC/NC-SS/GCC/BCC take the six low bits of octet 1 as the MTI, RR short messages with TIF set map to `kRRTifShortBase | code`, GMM/SMS/SM/LS and the extended/test PDs use the raw 8-bit MTI). Fixed-body messages are framed exactly from a single compile-time table (`bitstream/frame_lengths.h`, cross-checked by `tests/test_frame_lengths.cpp`): RR RRStatus, ClassmarkEnquiry, HandoverFailure, AssignmentComplete, HandoverComplete, AssignmentFailure; MM CMServiceAccept, CMServiceReject, CMServiceAbort, MMAbort, MMStatus; CC CCStatus, CCNotify; BCC CallConfirmed, ConnectAcknowledge; GCC CallConfirmed. Every other message (SI, SMS, Setup with IEs, ...) is framed by a boundary heuristic: scan forward for the next plausible L3 header within `maxMessageLength` bytes (O(L), resume-cached across fills); a boundary candidate must carry one of the twelve TS-valid protocol discriminators in the low nibble of octet 0 (GCC 0x00, BCC 0x01, CC 0x03, MM 0x05, RR 0x06, GMM 0x08, SMS 0x09, SM 0x0A, NC-SS 0x0B, LCS 0x0C, Extended 0x0E, TestProcedure 0x0F) to avoid false boundaries inside variable bodies. The heuristic is UNRELIABLE on real variable-length streams — message bodies frequently contain bytes whose low nibble is a valid PD — use L2 length mode for deterministic framing. At source EOF the tail is emitted as the final frame and validated by the parser.
+- **Header-based mode** (`useL2Length = false`, opt-in): the frame length is derived from PD + MTI for all 13 protocol domains (the PD is the low nibble of octet 0; MM/CC/NC-SS/GCC/BCC take the six low bits of octet 1 as the MTI, RR short messages with TIF set map to `kRRTifShortBase | code`, GMM/SMS/SM/LS and the PDSS1/PDSS2/test PDs use the raw 8-bit MTI). Fixed-body messages are framed exactly from a single compile-time table (`bitstream/frame_lengths.h`, cross-checked by `tests/test_frame_lengths.cpp`): RR RRStatus, ClassmarkEnquiry, HandoverFailure, AssignmentComplete, HandoverComplete, AssignmentFailure; MM CMServiceAccept, CMServiceReject, CMServiceAbort, MMAbort, MMStatus; CC CCStatus, CCNotify; BCC CallConfirmed, ConnectAcknowledge; GCC CallConfirmed. Every other message (SI, SMS, Setup with IEs, ...) is framed by a boundary heuristic: scan forward for the next plausible L3 header within `maxMessageLength` bytes (O(L), resume-cached across fills); a boundary candidate must carry one of the thirteen TS-valid protocol discriminators in the low nibble of octet 0 (GCC 0x00, BCC 0x01, CC 0x03, MM 0x05, RR 0x06, GMM 0x08, SMS 0x09, SM 0x0A, NC-SS 0x0B, LCS 0x0C, PDSS1 0x0D, PDSS2 0x0E, TestProcedure 0x0F) to avoid false boundaries inside variable bodies. The heuristic is UNRELIABLE on real variable-length streams — message bodies frequently contain bytes whose low nibble is a valid PD — use L2 length mode for deterministic framing. At source EOF the tail is emitted as the final frame and validated by the parser.
 
 ### L3StreamProcessor
 
@@ -1272,13 +1273,13 @@ LAPDm behaviour rules (TS 51.010-1 / GSM 04.06 section 5):
 
 | Situation | Behaviour |
 |-----------|-----------|
-| Initial SABME command on SAPI 0 with P/F clear and a contention-resolution payload | Accepted: answered by a UA whose F bit mirrors the received P/F; the payload is echoed |
-| Initial SABME command on a SAPI other than 0 | Dropped silently (no response, no state change) — MS-originated establishment is only valid on SAPI 0 |
-| Initial SABME command on SAPI 0 without information (L = 0) | Dropped silently |
-| UA while awaiting establishment | Accepted with any F value; the contention check runs on the payload, then the entity enters LinkEstablished |
-| DM while awaiting establishment | Cancels T200 and the retransmission loop (no further SABME); the entity enters LinkReleased and delivers L3_RELEASE_INDICATION |
+| SABME command with P/F clear | Ignored on every SAPI (GSM 04.06 §5.4.1.2) |
+| Initial SABME command (P/F set) carrying a payload | Accepted on any SAPI: L3_ESTABLISH_INDICATION delivered, answered by a UA echoing the payload with F mirroring the command; the link enters the contention-resolution state on SAPI 0 and is established directly on every other SAPI |
+| Initial SABME command (P/F set) without information (L = 0) | Accepted on any SAPI: L3_ESTABLISH_INDICATION delivered, answered by a plain UA with F mirroring the command; the link enters LinkEstablished |
+| UA while awaiting establishment | Only F set is accepted (F cleared is ignored): the entity enters LinkEstablished and delivers L3_ESTABLISH_CONFIRM |
+| DM while awaiting establishment | Only F set is processed: T200 is restarted, the retransmission loop continues and L3_RELEASE_INDICATION is delivered — the link is not released |
 | T200 expiry on an unacknowledged I-frame | The outstanding I-frame is retransmitted with P/F set and the current V(R) in N(R); N(S) is unchanged |
-| N(R) received in any frame | Progress only when N(R) equals V(A) (no-op) or V(S) (acknowledges the single outstanding frame, window k=1); any other value is stale and ignored so a retransmission cannot roll V(A) backwards |
+| N(R) received in any I/S frame | Any N(R) value is accepted: V(A) := N(R); when V(A) equals V(S) the retransmission counter is reset and T200 is stopped (window k=1) |
 
 #### Performance Characteristics
 
@@ -1430,7 +1431,7 @@ auto msg = L3SomeMessage::builder()
 
 ### Builder Coverage
 
-Builder patterns are implemented for all message types across all 12 protocol domains:
+Builder patterns are implemented for all message types across all 13 protocol domains:
 
 | Domain | Messages with Builder |
 |--------|----------------------|
@@ -1444,7 +1445,8 @@ Builder patterns are implemented for all message types across all 12 protocol do
 | **GCC** | All 8 types |
 | **LS** | Both types |
 | **SS** | Facility, Register, Release Complete |
-| **Extended** | `L3ExtendedMessage` (builder takes `mti()` + `body()`) |
+| **PDSS1** | `L3PDSS1Message` (builder takes `mti()` + `body()`) |
+| **PDSS2 (Extended)** | `L3ExtendedMessage` (builder takes `mti()` + `body()`) |
 | **TestProcedure** | `L3TestProcedureMessage` (builder takes `mti()` + `body()`) |
 
 ### Example - Building an Immediate Assignment
@@ -1549,7 +1551,8 @@ enum class L3PD : int8_t {
     RadioResource = 0x06, GPRSMobilityManagement = 0x08,
     SMS = 0x09, GPRSSessionManagement = 0x0a,
     NonCallSS = 0x0b, Location = 0x0c,
-    Extended = 0x0e, TestProcedure = 0x0f,
+    PacketDomainSupplementaryServices1 = 0x0d,
+    PacketDomainSupplementaryServices2 = 0x0e, TestProcedure = 0x0f,
     Undefined = -1
 };
 ```
@@ -1781,11 +1784,22 @@ LAC plus one RAC octet — six octets total.
 
 2-byte cell identifier.
 
-### L3CellChannelDescription
+### L3CellChannelDescription / L3BCCHFrequencyList
 
-Sixteen-bit cell channel description: [ARFCN(10)][BSIC(6)] with the BSIC packed as [NCC(3)|BCC(3)]
-(TS 44.018 section 9.2.3); `lengthV() == 2`. Used by SI1 and by the repeated neighbor-cell records of
-SI17/18/19.
+Sixteen-octet variable-length BCCH frequency list form (TS 44.018 section 10.5.2.1b):
+`[header(7)][base ARFCN(10)][presence bitmap(111)]` — no length field and no leading spare bits; bit
+*i* of the presence map (counted from the bit immediately after the base) marks the presence of ARFCN
+`base + 1 + i`. The builder takes an ARFCN list (`std::span<const uint16_t>`), emits header `'1000111'B`
+with the smallest ARFCN as base and the bitmap; parse accepts any seven-bit header form and keeps the
+raw sixteen octets for lossless re-emit. Used by the SI1 cell channel description and Frequency
+Redefinition; `L3BCCHFrequencyList` / `L3FrequencyList` are aliases of the same codec for the SI2,
+SI2bis, SI2ter, SI5, SI5bis and SI5ter frequency lists.
+
+### L3NeighbourCellDescription
+
+Sixteen-bit record: [ARFCN(10)][BSIC(6)] with the BSIC packed as [NCC(3)|BCC(3)] (TS 44.018 section
+10.5.2.1b); `lengthV() == 2`. The repeated records form the neighbour-cell lists of SI7, SI8 and
+SI17-20.
 
 ### L3MobileStationClassmark1/2/3
 
@@ -1825,9 +1839,10 @@ for 0–63 the octet equals the value (TS 44.018 section 10.5.2.40).
 
 ### L3CipheringModeSetting / L3CipheringModeResponse
 
-The Ciphering Mode Command body is one octet: the setting — sC(1)|algorithm(3)
-— in the high half-octet, then the response — cR(1)|spare(3) (IMEISV inclusion
-flag) in the low half-octet (TS 44.018).
+The Ciphering Mode Command body is one octet: the response — spare(3)|cR(1)
+(IMEISV inclusion flag) — in the high half-octet, then the setting — algorithm(3)|sC(1)
+— in the low half-octet, so the start-ciphering flag sits in the lowest bit of the octet
+(TS 44.018 section 9.2.24).
 
 ### L3MultiRateConfiguration
 
@@ -1877,20 +1892,20 @@ RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for 
 
 | Message | MTI | Description |
 |---------|-----|-------------|
-| `L3SystemInformationType1` | 0x19 | Cell channel description (2 octets: ARFCN + BSIC), RACH control parameters (3 octets), [rest octet] |
-| `L3SystemInformationType2` | 0x1a | BCCH freq list, NCC permitted, RACH control |
-| `L3SystemInformationType2bis` | 0x02 | Extended BCCH freq list (GPRS) |
-| `L3SystemInformationType2ter` | 0x03 | BCCH freq list with GPRS cell options |
+| `L3SystemInformationType1` | 0x19 | Cell channel description (sixteen-octet variable-length BCCH frequency list form, TS 44.018 §10.5.2.1b), RACH control parameters (3 octets), [rest octet]; body 19–20 octets |
+| `L3SystemInformationType2` | 0x1a | BCCH freq list (sixteen-octet bitmap form), NCC permitted, RACH control |
+| `L3SystemInformationType2bis` | 0x02 | BCCH freq list (sixteen-octet bitmap form) + RACH control, [rest octets 0–1] |
+| `L3SystemInformationType2ter` | 0x03 | BCCH freq list (sixteen-octet bitmap form), [rest octets 0–4] |
 | `L3SystemInformationType3` | 0x1b | Cell desc, BA list type 1, rest octets |
 | `L3SystemInformationType4` | 0x1c | LAI, CI, cell selection, RACH control, rest octets |
-| `L3SystemInformationType5` | 0x1d | BA list type 2 |
-| `L3SystemInformationType5bis` | 0x05 | Extended BA list (GPRS) |
-| `L3SystemInformationType5ter` | 0x06 | BA list with GPRS cell options |
+| `L3SystemInformationType5` | 0x1d | BA list type 2 (sixteen-octet frequency list form) |
+| `L3SystemInformationType5bis` | 0x05 | Extended BA list (GPRS, sixteen-octet frequency list form) |
+| `L3SystemInformationType5ter` | 0x06 | BA list with GPRS cell options (sixteen-octet frequency list form) |
 | `L3SystemInformationType6` | 0x1e | CI, LAI, SACCH cell options, NCC permitted |
 | `L3SystemInformationType7` | 0x1f | BA list type 3 |
 | `L3SystemInformationType8` | 0x18 | NCC permitted (SACCH) |
 | `L3SystemInformationType9` | 0x04 | CI, cell selection, BCCH cell options |
-| `L3SystemInformationType13` | 0x00 | Cell desc, BA list type 1, rest octets |
+| `L3SystemInformationType13` | 0x00 | Rest-octets record only: typed GPRS mobile allocation / cell options / power-control parameters (variable length, padded to the octet boundary) |
 | `L3SystemInformationType2quater` | 0x07 | Extended BCCH freq list, RACH ctrl params, CBCH description (raw body) |
 | `L3SystemInformationType16` | 0x3d | CI, cell selection (SACCH) |
 | `L3SystemInformationType17` | 0x3e | NCC permitted (SACCH extended) |
@@ -1902,7 +1917,7 @@ RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for 
 | `L3ChannelRelease` | 0x0D | DL | Cause [+ GPRS resumption] |
 | `L3ImmediateAssignment` | 0x3F | DL | dedicated mode/TBF + page mode, channel description, request reference, timing advance, [mobile allocation (LV)], [start time (TLV 0x7C: two value octets packing T1(5)/T3(6)/T2(5))] |
 | `L3ImmediateAssignmentExtended` | 0x39 | DL | Extended immediate assignment |
-| `L3ImmediateAssignmentReject` | 0x3A | DL | Wait indication entries |
+| `L3ImmediateAssignmentReject` | 0x3A | DL | First octet [spare(4)\|pageMode(4)] + exactly four (request reference, wait indication) pairs — fewer supplied pairs padded by repeating the last one; body 17 octets |
 | `L3AdditionalAssignment` | 0x3B | DL | Additional channel assignment |
 | `L3PhysicalInformation` | 0x2D | DL | Timing advance command |
 | `L3AssignmentCommand` | 0x2E | DL | Channel desc, mode, power command |
@@ -1915,12 +1930,12 @@ RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for 
 | `L3ClassmarkChange` | 0x16 | UL | Classmark2 (LV, three to seven value octets) [+ Classmark3 (TLV 0x20)] |
 | `L3ClassmarkEnquiry` | 0x13 | DL | Empty body |
 | `L3MeasurementReport` | 0x15 | UL | RxLev/RxQual + neighbors |
-| `L3CipheringModeCommand` | 0x35 | DL | One octet: ciphering setting + response |
+| `L3CipheringModeCommand` | 0x35 | DL | One octet: high nibble [spare(3)\|cR(1)], low nibble [algorithm(3)\|sC(1)] — start-ciphering in the low bit (TS 44.018 §9.2.24) |
 | `L3CipheringModeComplete` | 0x32 | UL | No fixed fields (optional MEI kept opaque) |
 | `L3ChannelModeModify` | 0x10 | DL | Channel desc + mode [+ multi-rate] |
 | `L3ChannelModeModifyAcknowledge` | 0x17 | UL | Channel desc + mode |
-| `L3GPRSSuspensionRequest` | 0x34 | UL | TLLI, RA ID, suspension cause |
-| `L3ApplicationInformation` | 0x38 | DL/UL | RRLP encapsulation data |
+| `L3GPRSSuspensionRequest` | 0x34 | UL | TLLI (V, four octets), RAI (V, six octets), suspension cause [+ service support (TV, IEI 0x01, one value octet)]; body 11 or 13 octets |
+| `L3ApplicationInformation` | 0x38 | DL/UL | First octet [flags(4)\|protocolId(4)] (flags: spare\|CR\|first segment\|last segment), data length octet, then the RRLP data bytes |
 
 ### Configuration Change Messages
 
@@ -1948,7 +1963,7 @@ RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for 
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3FrequencyRedefinition` | 0x14 | DL | CellChannelDescription + RACHControlParameters |
+| `L3FrequencyRedefinition` | 0x14 | DL | CellChannelDescription (sixteen-octet variable BCCH frequency list form) + RACHControlParameters |
 
 ### Notification Messages
 
@@ -1961,18 +1976,18 @@ RR short messages (TIF set) carry the standard L3 header — octet 0 = 0x16 for 
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3VGCSUplinkGrant` | 0x09 | DL | Empty body |
-| `L3UplinkRelease` | 0x0e | DL | Empty body |
-| `L3UplinkBusy` | 0x2a | DL | Empty body |
+| `L3VGCSUplinkGrant` | 0x09 | DL | Request reference (three octets) + timing advance (one octet); body 4 octets |
+| `L3UplinkRelease` | 0x0e | DL | RR cause (one octet) |
+| `L3UplinkBusy` | 0x2a | DL | All information elements optional — a header-only frame is valid; present IEs kept as an opaque tail for lossless re-emit |
 
 ### Data Indication Messages
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3TalkerIndication` | 0x11 | DL | Empty body |
-| `L3PriorityUplinkRequest` | 0x66 | UL | TMSI (4 octets) |
-| `L3DataIndication` | 0x67 | DL | Variable-length data |
-| `L3DataIndication2` | 0x68 | DL | Variable-length data |
+| `L3TalkerIndication` | 0x11 | DL | Classmark2 (LV, three to seven value octets) + mobile identity (LV) [+ CKSN (TV, IEI 0x0B, one value octet)] |
+| `L3PriorityUplinkRequest` | 0x66 | UL | Estimated cause (one octet) + [token(4)\|reduced GCR(4)] (one octet) + mobile identity (LV) |
+| `L3DataIndication` | 0x67 | DL | TMSI (four octets) + application data (nine octets) + data identifier (one octet); body 14 octets |
+| `L3DataIndication2` | 0x68 | DL | TMSI (four octets) + reduced GCR (four bits, zero-padded to its octet) + application data (nine octets) + data identifier (one octet); body 15 octets |
 
 ### DTM and Packet Messages
 
@@ -2064,13 +2079,13 @@ Table 10.4.2 — code 3 and codes 14–31 — have no class).
 | `L3CMServiceAccept` | 0x21 | DL | Empty body |
 | `L3CMServiceReject` | 0x22 | DL | Reject cause |
 | `L3CMServiceAbort` | 0x23 | DL | No value part (TS 24.008 9.2.7) |
-| `L3CMServiceRequest` | 0x24 | UL | CM service type (high half-octet) + CKSN (one octet), classmark2 (LV), mobile identity (LV) |
-| `L3CMReestablishmentRequest` | 0x28 | UL | MobileIdentity (TMSI) |
+| `L3CMServiceRequest` | 0x24 | UL | One octet: CKSN(3)\|reserved(1) high half-octet, CM service type(4) low half-octet; classmark2 (LV), mobile identity (LV), optional IEs opaque |
+| `L3CMReestablishmentRequest` | 0x28 | UL | One octet: CKSN(3)\|spare(5) in the low bits; classmark2 (LV, three to seven value octets), mobile identity (LV) [+ LAI (TLV 0x13)] |
 | `L3MMAbort` | 0x29 | DL/UL | No value part (TS 24.008) |
 | `L3IdentityResponse` | 0x19 | UL | MobileIdentity |
 | `L3IdentityRequest` | 0x18 | DL | Identity type (IMSI/IMEI) |
 | `L3MMInformation` | 0x32 | DL | Network name, time zone, ciphering mode |
-| `L3TMSIReallocationCommand` | 0x1A | DL | New TMSI + old TMSI |
+| `L3TMSIReallocationCommand` | 0x1A | DL | LAI (V, five octets, not length-prefixed) + new mobile identity (LV); no further value part (TS 24.008 §9.2.17) |
 | `L3TMSIReallocationComplete` | 0x1B | UL | Empty body |
 | `L3MMStatus` | 0x31 | UL/DL | Cause + spare |
 | `L3AuthenticationRequest` | 0x12 | DL | CKSN (high half-octet of the first octet, three bits) + RAND (16 octets); optional authentication parameters kept opaque |
@@ -2098,26 +2113,26 @@ Table 10.4.2 — code 3 and codes 14–31 — have no class).
 | `L3CalledPartyBCDNumber` | 0x5e | TLV | Called party number |
 | `L3CallingPartyBCDNumber` | 0x5c | TLV | Calling party number |
 | `L3ConnectedNumber` | 0x9c | TLV | Connected party number (GSM 04.08 10.5.4.7) |
-| `L3RedirectingNumber` | 0x74 | TLV | Redirecting number (TS 24.078 10.5.4.13) |
-| `L3SubAddress` | 0x5d/0x6d/0x9b | TLV | Calling (0x5d, Setup), called (0x6d) and connected (0x9b, Connect) party sub-address (TS 24.078 10.5.4.3) |
-| `L3CauseElement` | 0x08 | TLV | CC cause code + location + diagnostic |
+| `L3RedirectingNumber` | 0x74 | TLV | Redirecting number (TS 24.008 10.5.4.13) |
+| `L3SubAddress` | 0x5d/0x6d/0x9b | TLV | Calling (0x5d, Setup), called (0x6d) and connected (0x9b, Connect) party sub-address (TS 24.008 10.5.4.3) |
+| `L3CauseElement` | 0x08 | TLV | CC cause (length 2; TS 24.008 §10.5.1.2): value octets `[0x60\|location(4)][0x80\|cause(7)]` |
 | `L3CallState` | - | V | Call state flags (speech, DTMF, hold, etc.) |
-| `L3ProgressIndicator` | 0x1e | TLV | Progress cause and location |
+| `L3ProgressIndicator` | 0x1e | TV | Progress indicator: in SETUP/CONNECT/ALERTING/Call Proceeding a one-octet value `[location(4)\|progress(4)]` after the IEI; in the CC PROGRESS body an LV of two octets `[0xE0\|location][0x80\|progress]` |
 | `L3KeypadFacility` | 0x2c | TV | DTMF digit indicator |
 | `L3Signal` | 0x34 | TV | Signal type indicator (GSM 04.08 10.5.4.23) |
 | `L3RepeatIndicator` | 0x0d | TV | Repeat count for keypad DTMF |
-| `L3CLIRSuppression` | 0xa1 | T | CLIR suppression — type T: the identifier octet is the whole encoding, no value part (TS 24.078 10.5.4.16) |
-| `L3CLIRInvocation` | 0xa2 | T | CLIR invocation — type T: the identifier octet is the whole encoding, no value part (TS 24.078 10.5.4.17) |
-| `L3NetworkCCCapabilities` | 0x2f | TLV | Network CC capabilities (TS 24.078 10.5.4.15) |
-| `L3LowLayerCompatibility` | 0x7c | TLV | Low layer compatibility (TS 24.078 10.5.4.14) |
-| `L3HighLayerCompatibility` | 0x7d | TLV | High layer compatibility (TS 24.078 10.5.4.14) |
-| `L3UserUser` | 0x7e | TLV | User-User information element (TS 24.078 10.5.4.27) |
-| `L3Priority` | 0x88 | TV | Priority level and request flag (TS 24.078 10.5.4.19) |
-| `L3StreamIdentifier` | 0x2d | TLV | VBS/VGCS stream identifier, one-octet value part (TS 24.078 10.5.4.29) |
-| `L3AllowedActions` | 0x92 | TLV | Allowed actions bitmask (TS 24.078 10.5.4.2) |
-| `L3CCCapabilities` | 0x15 | TLV | CC capabilities (TS 24.078 10.5.4.4) |
+| `L3CLIRSuppression` | 0xa1 | T | CLIR suppression — type T: the identifier octet is the whole encoding, no value part (TS 24.008 10.5.4.16) |
+| `L3CLIRInvocation` | 0xa2 | T | CLIR invocation — type T: the identifier octet is the whole encoding, no value part (TS 24.008 10.5.4.17) |
+| `L3NetworkCCCapabilities` | 0x2f | TLV | Network CC capabilities (TS 24.008 10.5.4.15) |
+| `L3LowLayerCompatibility` | 0x7c | TLV | Low layer compatibility (TS 24.008 10.5.4.14) |
+| `L3HighLayerCompatibility` | 0x7d | TLV | High layer compatibility (TS 24.008 10.5.4.14) |
+| `L3UserUser` | 0x7e | TLV | User-User information element (TS 24.008 10.5.4.27) |
+| `L3Priority` | 0x88 | TV | Priority level and request flag (TS 24.008 10.5.4.19) |
+| `L3StreamIdentifier` | 0x2d | TLV | VBS/VGCS stream identifier, one-octet value part (TS 24.008 10.5.4.29) |
+| `L3AllowedActions` | 0x92 | TLV | Allowed actions bitmask (TS 24.008 10.5.4.2) |
+| `L3CCCapabilities` | 0x15 | TLV | CC capabilities (TS 24.008 10.5.4.4) |
 | `L3SupServFacilityIE` | 0x1c | TLV | Supplementary service facility data |
-| `L3SupServVersionIndicator` | 0x7f | V/TLV | SS version indicator: value-only class carried as a TLV with a one-octet value part (TS 24.078 10.5.4.24) |
+| `L3SupServVersionIndicator` | 0x7f | V/TLV | SS version indicator: value-only class carried as a TLV with a one-octet value part (TS 24.008 10.5.4.24) |
 
 #### IE Encoding Formats
 
@@ -2137,7 +2152,7 @@ Table 10.4.2 — code 3 and codes 14–31 — have no class).
 | `L3Alerting` | 0x01 | DL | [+ Facility, ProgressIndicator, UserUser, SSVersion] |
 | `L3Connect` | 0x07 | UL | [+ ProgressIndicator, ConnectedNumber, ConnectedSubAddress, UserUser, StreamIdentifier] |
 | `L3ConnectAcknowledge` | 0x0f | DL | Empty body |
-| `L3CCNotify` | 0x3e | MT | Notify: single cause octet (TS 24.078) |
+| `L3CCNotify` | 0x3e | MT | Notify: single cause octet (TS 24.008) |
 | `L3CallConfirmed` | 0x08 | DL | [+ BearerCapability, SupportedCodecs, Cause, UserUser] |
 | `L3Disconnect` | 0x25 | UL | Cause as a length-value element without an identifier (first body octet = value length, two value octets: CCCause + CCCauseLocation) |
 | `L3Release` | 0x2d | DL/UL | [+ Cause, Facility, SSVersion] |
@@ -2151,7 +2166,7 @@ Table 10.4.2 — code 3 and codes 14–31 — have no class).
 | `L3Hold` | 0x18 | UL | Empty body |
 | `L3HoldReject` | 0x1a | DL | Cause |
 | `L3CCStatus` | 0x3d | DL/UL | Cause as a length-value element without an identifier (first body octet = value length, two value octets) + call state (one octet); four-octet body |
-| `L3Progress` | 0x03 | DL | ProgressIndicator |
+| `L3Progress` | 0x03 | DL | Progress indicator LV (`[0x02][0xE0\|location][0x80\|progress]`; TS 24.008 §9.3.17) |
 
 #### CC Message Type Identifiers
 
@@ -2179,7 +2194,7 @@ MTI values are the 6-bit messageType field (GSM 04.08 Table 10.3). In the L3 hea
 | 0x37 | Start DTMF Reject | TS 24.008 9.3.25 |
 | 0x3a | Facility | TS 24.008 9.3.21 |
 | 0x3d | CC Status | TS 24.008 9.3.19 |
-| 0x3e | Notify | TS 24.078 |
+| 0x3e | Notify | TS 24.008 |
 
 ---
 
@@ -2187,11 +2202,14 @@ MTI values are the 6-bit messageType field (GSM 04.08 Table 10.3). In the L3 hea
 
 **File:** `gsml3parser/ss/l3ssmessages.h` - 3 message types in the `SSM` variant.
 
-All three are GSM 04.80 opaque containers: the body carries a CC-style Facility element (TCAP components), parsed further by `L3FacilityOpCode` / `L3USSDData` below. The header carries TI like other dialog messages.
+All three carry an SS-Data body (TS 24.078 / GSM 04.80): a TCAP-style component container
+`[component tag(1)][component length(1)][component]` with tags Invoke=0xA1, ReturnResult=0xA2,
+ReturnError=0xA3, Reject=0xA4; the component is parsed further by `L3FacilityOpCode` / `L3USSDData`
+below and re-emitted losslessly from its raw bytes. The header carries TI like other dialog messages.
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3SupServFacilityMessage` | 0x3a | DL/UL | SS facility data (opaque Facility body) |
+| `L3SupServFacilityMessage` | 0x3a | DL/UL | SS facility data (SS-Data component container — see `L3FacilityOpCode` below) |
 | `L3SupServRegisterMessage` | 0x3b | DL/UL | Registration request/response |
 | `L3SupServReleaseCompleteMessage` | 0x2a | DL/UL | SS release complete |
 
@@ -2374,7 +2392,7 @@ if (ussd) {
 ## 25. GPRS Mobility Management Messages
 
 **File:** `gsml3parser/gmm/l3gmmmessages.h` - 23 message types in the `GMM` variant.
-**Spec:** 3GPP TS 24.008 sections 9.4, Table 10.4.
+**Spec:** 3GPP TS 44.068 section 9.5, Table 10.4a.
 **PD:** `0x08` (GPRSMobilityManagement).
 
 ### GMM Information Elements
@@ -2412,16 +2430,16 @@ if (ussd) {
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
 | `L3AttachRequest` | 0x01 | UL | MS network capability (LV), attach type + forL3 + GPRS CKSN (one octet), DRX parameter (V, two octets), mobile identity (LV), old RAI (V, six octets), MS radio access capability (LV) |
-| `L3AttachAccept` | 0x02 | DL | First octet [attachResult(3)\|spare(1)\|forceToStandby(1)\|updateTimer(2)\|radioPriority(1)], RAI (V, six octets), [P-TMSI (TLV 0x18)]; additional IEs kept opaque |
+| `L3AttachAccept` | 0x02 | DL | Leading part of three octets — first octet [attachResult(3)\|spare(1)\|forceToStandby(1)\|updateTimer(2)\|radioPriority(1)] plus two raw leading octets — RAI (V, six octets) [+ P-TMSI signature (TV, IEI 0x19, three octets)] [+ P-TMSI (TLV 0x18)]; additional IEs kept opaque |
 | `L3AttachComplete` | 0x03 | UL | Empty body |
 | `L3AttachReject` | 0x04 | DL | GMM cause (value octet); optional IEs kept opaque |
-| `L3DetachRequest` | 0x05 | Bidir | Detach type, power-off flag (first octet), [P-TMSI (TLV 0x18)], [cause] |
+| `L3DetachRequest` | 0x05 | Bidir | First octet: detach type in the three low bits + power-off flag (MO, bit 3) or force-to-standby (MT, bit 4); [P-TMSI (TLV 0x18)], [cause (TV, IEI 0x25)] |
 | `L3DetachAccept` | 0x06 | Bidir | Force-to-standby flag |
 | `L3RoutingAreaUpdateRequest` | 0x08 | UL | Update type + forL3 + GPRS CKSN (one octet), old RAI (V, six octets), MS radio access capability (LV) |
-| `L3RoutingAreaUpdateAccept` | 0x09 | DL | First octet [forceToStandby(1)\|updateResult(3)\|spare(1)\|raUpdateTimer(2)\|radioPriority(1)], RAI (V, six octets), [P-TMSI (TLV 0x18)]; additional IEs kept opaque |
+| `L3RoutingAreaUpdateAccept` | 0x09 | DL | Leading part of two octets — first octet [forceToStandby(1)\|updateResult(3)\|raUpdateTimer(2)\|spare(2)] (no radio-priority field) plus one raw leading octet — RAI (V, six octets) [+ P-TMSI signature (TV, IEI 0x19, three octets)] [+ P-TMSI (TLV 0x18)]; additional IEs kept opaque |
 | `L3RoutingAreaUpdateComplete` | 0x0a | UL | Empty body |
 | `L3RoutingAreaUpdateReject` | 0x0b | DL | GMM cause (value octet); optional IEs kept opaque |
-| `L3ServiceRequest` | 0x0c | UL | CKSN, service type, PTMSI, [PDP context status] |
+| `L3ServiceRequest` | 0x0c | UL | One octet: GPRS CKSN(3)\|spare(1) low half-octet, service type(3)\|spare(1) high half-octet; then P-TMSI (LV) |
 | `L3ServiceAccept` | 0x0d | DL | [PDP context status] |
 | `L3ServiceReject` | 0x0e | DL | GMM cause, [T3346 timer] |
 | `L3P_TMSIReallocationCommand` | 0x10 | DL | First octet [PTMSI_Type(1)\|spare(3)\|forceToStandby(1)\|spare(4)], RAI (V, six octets), [allocated P-TMSI (TLV 0x18)]; additional IEs kept opaque |
@@ -2429,7 +2447,7 @@ if (ussd) {
 | `L3AuthenticationAndCipheringRequest` | 0x12 | DL | First octet [ciphering algorithm(3)\|spare(1)\|IMEISV request(1)\|force to standby(1)\|spare(2)], second octet [AC reference number(4)\|spare(4)], RAND (TV, IEI 0x21, sixteen value octets) |
 | `L3AuthenticationAndCipheringResponse` | 0x13 | UL | First octet [AC reference number(4)\|spare(4)], RES (TV, IEI 0x22, four value octets) |
 | `L3AuthenticationAndCipheringReject` | 0x14 | DL | Empty body |
-| `L3GMMIdentityRequest` | 0x15 | DL | Identity type (IMSI/IMEI), force-to-standby |
+| `L3GMMIdentityRequest` | 0x15 | DL | One octet [spare(5)\|identityType(3)] |
 | `L3GMMIdentityResponse` | 0x16 | UL | Mobile identity |
 | `L3AuthenticationAndCipheringFailure` | 0x1c | UL | GMM cause, AUTS failure parameter |
 | `L3GMMStatus` | 0x20 | Bidir | GMM cause |
@@ -2440,7 +2458,7 @@ if (ussd) {
 ## 26. GPRS Session Management Messages
 
 **File:** `gsml3parser/sm/l3smmessages.h` - 24 message types in the `SM` variant.
-**Spec:** 3GPP TS 24.008 sections 9.5, Table 10.4a.
+**Spec:** 3GPP TS 44.068 section 9.5, Table 10.4a.
 **PD:** `0x0a` (GPRSSessionManagement).
 
 ### SM Information Elements
@@ -2449,7 +2467,7 @@ if (ussd) {
 
 | IE | IEI | Format | Description |
 |----|-----|--------|-------------|
-| `L3PDPAddress` | - | LV | PDP type (IPv4/IPv6/PPP/IPsec) + address bytes; positional length octet, no identifier |
+| `L3PDPAddress` | - | LV/TLV | PDP type-and-address: value = [PDP type number(1)][address length(1)][address] — 4 = IETF IPv4, 6 = IETF IPv6; positional in the activate request, TLV length equals the whole value size (six for IPv4) |
 | `L3QoS` | - | LV | QoS profile: type + up to 18 element types; positional length octet, no identifier |
 | `L3AccessPointName` | 0x28 | TLV | APN string (UTF-8 encoded) |
 | `L3ProtocolConfigOptions` | 0x27 | TLV | Protocol config options (e.g. IPCP=0xC029 for IPv4) |
@@ -2467,7 +2485,7 @@ The request type (TS 44.068 section 10.5.6.17) is carried in one octet: the high
 
 | Enum | Values | Description |
 |------|--------|-------------|
-| `PDPType` | 6 values | IPv4, IPv6, IPsecAH, PPP, Private, Unknown |
+| `PDPType` | 3 values | IPv4 = 4, IPv6 = 6, Unknown = 0xFF (sentinel) |
 | `QoSType` | 3 values | Requested, Default, Teardown |
 | `QoSElementType` | 18 values | QoSClass, MaxBitRate UL/DL, Delay, DeliveryOrder, SopClass, ResidualErrorRate, PeakThroughput, MeanThroughput, TrafficClass, GuaranteedBitRate, SRB rate, GPRS/External Priority |
 | `SMCause` | 18 values | SM cause values (ReqAccepted, Unsupported_PDP_Address_Type, Service_Opcode_NotSupported, Multicast_Context_Ack/Reject/Deactivate, Invalid_Flow_Desc, Multicast_PDP_No_Bearer, PDP_Auth_Failed_Primary/Secondary_PDN, plus the common protocol-error codes 95–111) |
@@ -2574,12 +2592,16 @@ The SMS layer uses a three-level encapsulation: L3 header -> CP message -> RP me
 
 **File:** `gsml3parser/sms/l3smselements.h`
 
+The first TP-DU header octet packs (bit positions in the octet value, TS 23.040 §9.1.2)
+`TP-MTI(2)|MMS/RD(1)|VPF(2)|SRI/SRR(1)|UDHI(1)|RP(1)`; the TP user data length counts septets for the
+GSM 7-bit alphabet and octets otherwise.
+
 | Type | TP-MTI | Description |
 |------|--------|-------------|
 | `L3TPDeliver` | 0x00 | MT delivery: MMS, SRI, UDHI, RP flags, OA, PID, DCS, [SCTS], UDL, user data |
 | `L3TPSubmit` | 0x01 | MO submission: RD, VPF, SRR, UDHI, RP flags, MR, DA, PID, DCS, [validity period — one (VPF=1), seven (VPF=2) or ten (VPF=3) octets, preserved verbatim], UDL, user data |
-| `L3TPStatusReport` | 0x02 | Status report: MR, DA, PID, DCS, SCTS, STS |
-| `L3TPCommand` | 0x03 | Command: MR, PID, DCS, CMD, [address] |
+| `L3TPStatusReport` | 0x02 | Status report (wire MTI '10'B in the network→mobile direction): MR, DA, PID, DCS, SCTS, STS |
+| `L3TPCommand` | 0x02 | Command (same wire MTI '10'B in the mobile→network direction): MR, PID, DCS, CMD, [address] |
 
 ### TP Enums
 
@@ -2592,7 +2614,7 @@ The SMS layer uses a three-level encapsulation: L3 header -> CP message -> RP me
 
 | IE | Description |
 |----|-------------|
-| `L3TPAddress` | TP-DA/TP-OA: LV format with TON/NPI + BCD digits |
+| `L3TPAddress` | TP-DA/TP-OA: length octet = number of digits, then the TON/NPI octet and packed BCD digits (first digit in the low nibble of the first digit octet, 'F'-filled when odd) |
 | `TPSCTimeStamp` | Service centre time stamp: year, month, day, hour, minute, second, timezone (7 octets) |
 
 ### GSM 7-bit Alphabet Robustness
@@ -2672,18 +2694,22 @@ Location Services messages carry mobile location service parameters between the 
 
 ---
 
-## 31. Extended PD Messages
+## 31. Packet Domain Supplementary Services (PDSS) Messages
 
-**File:** `gsml3parser/extended/l3extendedmessages.h` - 1 placeholder type in the `EXTENDED` variant.
-**Spec:** GSM 04.08 §10.2.
-**PD:** `0x0e` (Extended).
+**Files:** `gsml3parser/pdss1/l3pdss1messages.h` - 1 passthrough type in the `PDSS1M` variant;
+`gsml3parser/extended/l3extendedmessages.h` - 1 passthrough type in the `EXTENDED` variant.
+**Spec:** GSM 04.08 §10.2 (TS 24.007 Table 11.3).
+**PDs:** `0x0d` (PacketDomainSupplementaryServices1), `0x0e` (PacketDomainSupplementaryServices2).
 
-The Extended PD provides infrastructure for future extended protocol discriminators. The `L3ExtendedMessage` class captures the raw MTI from the L3 header and stores the remaining body as an opaque octet sequence, allowing forward-compatible parsing of unknown extended messages.
+Both packet-domain supplementary service discriminators are valid pass-through domains: the classes
+capture the raw MTI from the L3 header and store the remaining body as an opaque octet sequence, so
+messages of these PDs parse without error and re-emit losslessly. `L3PDSS1Message` serves PD=0x0d and
+`L3ExtendedMessage` serves PD=0x0e (the class/file names keep the historical "extended" spelling).
 
 | Method | Description |
 |--------|-------------|
 | `mti()` | Returns the parsed MTI value |
-| `pd()` | Returns `L3PD::Extended` |
+| `pd()` | Returns `L3PD::PacketDomainSupplementaryServices1` / `...Services2` respectively |
 | `body()` | Raw body bytes |
 | `parse(br, parsedMti)` | Static factory; takes pre-parsed MTI |
 | `write(bw)` | Serializes body octets |
@@ -5045,7 +5071,7 @@ ctypes/cffi, Rust, Go). One C89-clean header
 
 | Layer | C API |
 |-------|-------|
-| Core L3 | `gsml3_parse_l3` / `gsml3_parse_l3_hex` / `gsml3_parse_l3_into` (all 215 message types), `gsml3_message_name/pd/mti/ti/size/dump`, `gsml3_message_write/hex`, `gsml3_config` |
+| Core L3 | `gsml3_parse_l3` / `gsml3_parse_l3_hex` / `gsml3_parse_l3_into` (all 216 message types), `gsml3_message_name/pd/mti/ti/size/dump`, `gsml3_message_write/hex`, `gsml3_config` |
 | A-bis RSL | `gsml3_rsl_parse` + accessors (IE/L3 views into the handle's copy) + 14 `gsml3_rsl_build_*` |
 | LAPDm | `gsml3_lapdm_frame_decode` (zero-copy) + `gsml3_lapdm_entity` (full FSM, fn+user callbacks) |
 | BTS stack | `gsml3_registry` (plain + sharded {4,8,16,32}), borrowed `gsml3_session` (`assigned_tmsi`, timers, transactions), O(active) ticks, channel assignment/release with link index |
@@ -5253,7 +5279,7 @@ The library implements encodings defined by:
 | Standard | Scope | Coverage |
 |----------|-------|----------|
 | **GSM 04.06 / 3GPP TS 44.064** | LAPDm protocol for Um interface (format B on dedicated channels) | `LAPDmFrame` zero-copy decode, `LAPDmEntity` full state machine (SABME/UA/DISC), I-frame segmentation/reassembly, T200 retransmission, contention resolution |
-| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | RR (99), MM (21), CC (24), GMM (23), SM (29), SMS (5 CP-layer messages) message parsing and generation; SS (3), Extended and Test-Procedure PD catch-alls |
+| **GSM 04.08 / 3GPP TS 24.008** | Mobile radio interface L3 protocol | RR (98), MM (21), CC (21), GMM (23), SM (24), SMS (5 CP-layer messages) message parsing and generation; SS (3), PDSS1/PDSS2 and Test-Procedure PD passthroughs |
 | **GSM 04.07 / 3GPP TS 24.007** | Information element encoding rules | V, TV, TLV, LV formats; H/L rest octet padding (0x2B); bit ordering |
 | **GSM 04.80 / 3GPP TS 24.080** | Supplementary services on mobile | Facility, Register, Release Complete messages; SSOpCode/SSErrorCode enums; L3FacilityOpCode TCAP parser; L3USSDData IE |
 | **GSM 02.90 / 3GPP TS 23.038** | USSD alphabet and encoding | GSM 7-bit default/extended alphabet, UCS2, DCS handling in L3USSDData |
@@ -5261,4 +5287,4 @@ The library implements encodings defined by:
 | **3GPP TS 24.011 / GSM 04.11** | SMS over mobile radio interface | CP layer (5 messages), RP layer (4 messages), TP PDUs (Deliver, Submit, StatusReport, Command) |
 | **3GPP TS 23.040 / GSM 03.40** | SMS TPDU formatting and encoding | TP address, TP-DCS, TP-PID, TP-SCTS, GSM 7-bit alphabet |
 | **3GPP TS 44.031 / TS 24.027/24.028** | Location services on mobile radio | LSM: L3LocationServiceRequest, L3LocationServiceProviderMessage |
-| **GSM 04.08 §10.2** | Extended and Test Procedure PDs | EXTENDED (PD=0x0e), TESTPROC (PD=0x0f) raw-body placeholder parsing |
+| **GSM 04.08 §10.2** | Packet Domain Supplementary Services and Test Procedure PDs | PDSS1M (PD=0x0d), EXTENDED/PDSS2 (PD=0x0e) and TESTPROC (PD=0x0f) raw-body passthrough parsing |

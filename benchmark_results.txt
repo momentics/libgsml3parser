@@ -20,7 +20,7 @@ Struct sizes (all static_assert invariants pass):
   ProtocolDispatcher: 35216 bytes (~35 KB compact table [16][136])
   ChannelPool: 2816 bytes (fixed arrays, no unordered_map)
   ShardedChannelPool<16>: 45192 bytes
-  ParsedMessage: 400 bytes (variant of 12 PD domains, stack-resident)
+   ParsedMessage: 400 bytes (variant of 13 PD domains, stack-resident)
   MSContext: 92 bytes
   SubscriberSession: 2056 bytes (context + 3 FSMs + timers + transactions + procedure runner + response)
   ProcedureStepResult: 32 bytes (<= 32)
@@ -45,6 +45,7 @@ Struct sizes (all static_assert invariants pass):
     BCC Setup                                16.0M msg/s
     GCC Setup                                7.6M msg/s
     LS LocationServiceRequest                18.6M msg/s
+    PDSS1 PDSS1Message                       10.6M msg/s
     EXT ExtendedMessage                      21.9M msg/s
     TST TestProcedureMessage                 21.1M msg/s
 
@@ -59,15 +60,18 @@ Struct sizes (all static_assert invariants pass):
     BCC Setup                                13.1M msg/s
     GCC Setup                                7.0M msg/s
     LS LocationServiceRequest                15.0M msg/s
+    PDSS1 PDSS1Message                       9.2M msg/s
     EXT ExtendedMessage                      17.2M msg/s
     TST TestProcedureMessage                 17.1M msg/s
-    Mixed (all 12 PD domains)                10.7M msg/s
+    Mixed (all 13 PD domains)                10.8M msg/s
 
 === ZeroCopyStreamProcessor Benchmark (callback path, fair) ===
-   Zero-copy (all 12 PD domains)            12.9M msg/s
-   L3StreamProcessor (same data)            11.6M msg/s
-   Ratio:                                   1.12x
-  Note: zero-copy benefit scales with frame size; parseL3 dominates for 3-6 byte messages
+   Zero-copy (all 13 PD domains)            9.7M msg/s
+   L3StreamProcessor (same data)            10.8M msg/s
+   Ratio:                                   0.90x
+   Note: zero-copy benefit scales with frame size; parseL3 dominates for 3-6 byte
+   messages (the small-buffer comparison in example_zero_copy still favors
+   zero-copy, ~1.2x on 3-6 byte frames)
 
 === Stack Component Benchmarks ===
     MSContext alloc (10K):                   0.44 ms
@@ -79,9 +83,9 @@ Struct sizes (all static_assert invariants pass):
     Full Stack SM dispatch (1K MS, 10K msgs): 53-75 M msg/sec (5 runs, single core)
    NOTE: pre-constructed ParsedMessage dispatched through RRStateMachine;
    does NOT include byte-level parsing (see parseL3 above for that)
-    Note: Full Stack throughput varies with CPU power state (52.5-74.8 M
-    observed across cold/warm runs); end-to-end parse+stream is
-    10.7 M msg/s (mixed, above)
+     Note: Full Stack throughput varies with CPU power state (52.5-74.8 M
+     observed across cold/warm runs); end-to-end parse+stream is
+     10.8 M msg/s (mixed, above)
 
 === 1M-session scale (Stress._1MSession_* + SSR_tickAllProcedures) ===
    1M create: 1194.7 ms, lookup: 126.5 ms, tick(10K active): 1.4 ms
@@ -99,4 +103,4 @@ Struct sizes (all static_assert invariants pass):
   RT SCALE OK
 
 === Regression ===
-    Tests passed: 2120 / 174 suites
+    Tests passed: 2203 / 193 suites

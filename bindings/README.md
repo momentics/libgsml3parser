@@ -2,7 +2,7 @@
 
 First-party bindings over the stable C ABI of **libgsml3parser**
 (`include/gsml3parser/gsml3parser_c.h`, `GSML3_ABI_VERSION == 1`). They expose
-the full GSM L3 parser (all 12 PD domains), the A-bis RSL interface, the LAPDm
+the full GSM L3 parser (all 13 PD domains), the A-bis RSL interface, the LAPDm
 entity, and the BTS stack layer (subscriber registry / session, procedure
 orchestrator, response builders) with one shared set of semantics: RAII-style
 ownership, a borrowed-session rule, the queue callback model, synchronous

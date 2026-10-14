@@ -20,7 +20,7 @@
 // SOFTWARE.
 
 //! Safe Rust bindings over the libgsml3parser C ABI (`gsml3parser_c.h`):
-//! L3 parsing/serialization (all 12 protocol domains), A-bis RSL, the LAPDm
+//! L3 parsing/serialization (all 13 protocol domains), A-bis RSL, the LAPDm
 //! entity with safe callback delivery, and the BTS stack layer (registry /
 //! borrowed session / orchestrator). The v1 surface covers
 //! sections S1–S7 of the C header plus the two typed builders

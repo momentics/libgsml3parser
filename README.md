@@ -8,12 +8,13 @@
 [![Version](https://img.shields.io/badge/Version-0.19.0-blue.svg)](https://github.com/momentics/libgsml3parser/releases)
 
 A type-safe, **zero-allocation C++20** library with **no external dependencies**, spanning the full GSM
-signalling chain of a software Base Transceiver Station: **215 L3 message classes across 12 PD
+signalling chain of a software Base Transceiver Station: **216 L3 message classes across 13 PD
 domains** — typed fields for RR/SM/CC/GMM/MM/SS and the SMS CP/RP/TP layers; the BCC/GCC/LS blocks have
 no normative reference templates, so they are parsed best-effort as opaque bodies and bit-level
-conformance is not claimed for them — plus passthrough for the Extended/Test PDs, the complete **LAPDm**
-(L2) entity and **A-bis RSL** interface, per-subscriber state (context, FSMs, timers, transactions),
-and ten spec-based **protocol procedures** — from raw radio bytes up to working MO/MT call flows.
+conformance is not claimed for them — plus passthrough for the PDSS1/PDSS2 and Test-Procedure PDs,
+the complete **LAPDm** (L2) entity and **A-bis RSL** interface, per-subscriber state (context, FSMs,
+timers, transactions) and ten spec-based **protocol procedures** — from raw radio bytes up to working
+MO/MT call flows.
 
 ## Why This Library?
 
@@ -65,8 +66,8 @@ Four layers, from raw bits to protocol state:
    SubscriberRegistry — `sizeof(SubscriberSession)` = 2056 B (10K sessions ≈ 20 MB).
 4. **Procedure Framework** — `ProcedureRunner` + `ProcedureOrchestrator` auto-chain ten spec-based
    procedures (Location Update, Authentication, Call Setup MO/MT, Channel Assignment, Ciphering,
-   Paging, Handover, Release, IMSI Detach) through a zero-heap `ResponseToken` → `ResponseBuilder`
-   pattern; plus A-bis RSL parsing and 13 frame builders for BSC integration.
+    Paging, Handover, Release, IMSI Detach) through a zero-heap `ResponseToken` → `ResponseBuilder`
+    pattern; plus A-bis RSL parsing and 14 frame builders for BSC integration.
 
 ```cpp
 auto msg = gsml3parser::parseL3Hex("060D41");            // RR Channel Release
@@ -78,15 +79,16 @@ auto paging = L3PagingRequestType2::builder()
 
 ## Supported Messages Summary
 
-All 12 protocol domains — RR 98 · SM 24 · CC 21 · GMM 23 · MM 21 · SMS 5 · BCC 8 · GCC 8 · SS 3 · LS 2 ·
-Extended + Test PDs 2: **215 message types** in total, with Information Elements and enums defined per domain.
+All 13 protocol domains — RR 98 · SM 24 · CC 21 · GMM 23 · MM 21 · SMS 5 · BCC 8 · GCC 8 · SS 3 · LS 2 ·
+PDSS1 + PDSS2 (Extended) + Test PDs 3: **216 message types** in total, with Information Elements and enums
+defined per domain.
 
 Full catalog (MTIs, directions, IEs, dispatch edge cases such as TIF=1 short messages and build-only
 types): [doc/messages.md](doc/messages.md).
 
 ## Wire Format Conformance
 
-All parse/build paths for RR/SM/CC/GMM/MM and the SMS CP/RP/TP layers follow the normative 3GPP TS wire
+All parse/build paths for RR/SM/CC/GMM/MM/SS and the SMS CP/RP/TP layers follow the normative 3GPP TS wire
 layouts; golden vectors are pinned in the test suite. The BCC/GCC/LS blocks have no normative reference
 templates, so they are parsed best-effort as opaque bodies and bit-level conformance is not claimed for
 them. Highlights of the non-obvious encodings:
@@ -106,25 +108,49 @@ CM Re-establishment Request carry the CKSN (three bits plus one spare) in the
 low half-octet with the high half-octet spare. Authentication Failure (0x1C) is
 a bare reject-cause octet plus, for the "Synch failure" cause, the optional AUTS
 TLV 0x22; CM Service Prompt (0x25) is one `spare(2)|SAPI(2)|PD(4)` octet — both
-present per TS 24.008 Table 10.2. Optional IEs after the mandatory
+present per TS 24.008 Table 10.2. TMSI Reallocation Command body is exactly the
+LAI (five octets, not length-prefixed) followed by the new mobile identity in LV
+form (TS 24.008 section 9.2.17). Optional IEs after the mandatory
 part are preserved opaquely and re-emitted verbatim.
 
-**GMM / SM (TS 24.008)** — Attach/RAU Request pack the type (three bits plus the forL3 indicator) in the low half-octet
+**GMM / SM (TS 44.068)** — Attach/RAU Request pack the type (three bits plus the forL3 indicator) in the low half-octet
 and the GPRS CKSN (three bits plus one reserved) in the high half-octet; the DRX parameter is two value octets without an identifier and the MS radio access
 capability is a mandatory LV. Reject/failure/status messages start with a single bare cause value
-octet. SM ACTIVATE PDP CONTEXT REQUEST carries the NSAPI and the negotiated LLC SAPI as two
+octet. Attach Accept leads with a three-octet part (first octet: attach result(3), spare,
+force-to-standby, update timer(2), radio priority; the two following octets are stored raw), then the RAI and, when a new P-TMSI is allocated, the
+P-TMSI signature (TV, IEI 0x19, three octets) and the P-TMSI (TLV 0x18); RAU Accept leads with a two-octet part
+(no radio-priority field) plus the same tail. Service Request starts with one octet — GPRS CKSN(3) in the
+low bits, service type(3) in the high half-octet — followed by the P-TMSI LV; GMM Identity Request is a single
+`[spare(5)|type(3)]` octet. SM ACTIVATE PDP CONTEXT REQUEST carries the NSAPI and the negotiated LLC SAPI as two
 octets ([NSAPI(4)|spare(4)][LLC SAPI(4)|spare(4)]), requested QoS and requested PDP address as
 positional LVs, the APN as TLV `0x28`, PCO as TLV `0x27` and an optional request type
 `0xAx`; DEACTIVATE PDP CONTEXT REQUEST starts with the SM cause octet followed by an optional
-tear-down indicator TV `0x09`. SM MTI 0x50-0x54 are reserved and not assigned to message
-classes (TS 24.068 Table 10.4a).
+tear-down indicator TV `0x09`. The PDP type-and-address value is `[PDP type number(1)][address
+length(1)][address]` (type 4 = IETF IPv4, 6 = IETF IPv6), so the TLV length octet equals the whole
+value size (six for IPv4). SM MTI 0x50-0x54 are reserved and not assigned to message
+classes (Table 10.4a).
 
-**CC / SMS** — CC message types per TS 24.008 Table 10.3 (no unit-data messages); the SMS PD
-carries CP-DATA/CP-ACK/CP-ERROR plus CP-STATUS/CP-SUBMIT (TS 24.011).
+**CC / SMS** — CC message types per TS 24.008 Table 10.3 (no unit-data messages); the Cause IE
+(IEI 0x08, length 2) value is `[0x60|location][0x80|cause]` (TS 24.008 section 10.5.1.2), CC PROGRESS
+carries the progress indicator as an LV (`[0x02][0xE0|location][0x80|progress]`), structured 0xDx IEs
+are single-octet and Facility is LV. The SMS PD carries CP-DATA/CP-ACK/CP-ERROR plus
+CP-STATUS/CP-SUBMIT (TS 24.011); the TP-DU header octet is `[TP-MTI(2)|MMS/RD(1)|VPF(2)|SRI/SRR(1)|UDHI(1)|RP(1)]`
+(bit positions in the octet value; TP-MTI 2 = status report network→mobile / command mobile→network),
+addresses carry the digit count as length followed by TON/NPI and BCD digits, and the user-data length
+counts septets for GSM 7-bit text (TS 23.040 section 9).
 
-**RR (TS 44.018)** — Ciphering Mode Command is exactly one body octet
-`[sC(1)|algorithm(3)][cR(1)|spare(3)]`; SI1 carries the cell channel description (ARFCN(10)+BSIC(6),
-two octets) plus RACH control parameters (three octets) and at most one rest octet; the access-class
+**SS (TS 24.078)** — the SS-Data body is a TCAP-style component container
+`[component tag(1)][component length(1)][component]` with tags Invoke=0xA1, ReturnResult=0xA2,
+ReturnError=0xA3 and Reject=0xA4; an invoke component is `[02 01 invokeId][02 01 operationCode]
+[30 len {parameters}]`, and every component form re-emits losslessly.
+
+**RR (TS 44.018)** — Ciphering Mode Command is exactly one body octet with sC in the low bit:
+`[sC(1)|algorithm(3)][cR(1)|spare(3)]` (section 9.2.24); SI1 carries the cell channel description in
+the sixteen-octet variable-length BCCH frequency list form — seven-bit header, ten-bit base ARFCN and
+a 111-bit presence map (section 10.5.2.1b) — plus RACH control parameters (three octets) and at most
+one rest octet (body 19–20 octets); SI2/SI2bis/SI2ter and the SI5/SI5bis/SI5ter frequency lists use the
+same sixteen-octet bitmap form (any seven-bit header is accepted on parse, raw sixteen octets kept for
+lossless re-emit); the access-class
 bitmap is a 16-bit value written low byte first (AC *i* ↔ bit *i*); a set bit bars the class
 (emergency = class 10); Paging Request Type 1/2/3 start with the octet `[channelNeeded(4)][pageMode(4)]`
 (channel needed packed as second|first two-bit fields) followed by the identities — two raw TMSIs plus an
@@ -135,16 +161,20 @@ T1(5)/T3(6)/T2(5); channel numbers use the five-bit type-and-offset codes (`'000
 `channelCodeLm/Sdcch4/Sdcch8` helpers. SI3/SI4 rest octets carry the selection parameters, power
 offset, scheduling-if/where, GPRS indicator, UMTS early-CM and SI2quater indicators; SI4
 optionally carries the CBCH mobile allocation (TLV 0x72) after the CBCH channel description
-(TV 0x64); SI2bis/SI2ter accept their rest octets as an opaque tail.
+(TV 0x64); SI4 rest octets are optional (zero or more on emit), SI2bis/SI2ter accept at most one /
+four rest octets respectively, and SI13 rest octets carry the typed GPRS cell options, mobile
+allocation and power-control parameters, padded to the octet boundary.
 
 **LAPDm (GSM 04.06 / TS 51.010-1)** — a SABME command with the P/F bit
-cleared is ignored; an initial SABME is accepted on SAPI 0 only when it
-carries contention-resolution information; every UA and DM we send mirrors
-the P/F of the received command; a UA or DM response with F cleared is
-ignored; a DM while awaiting establishment restarts T200 without releasing
-the link; the retransmission budget allows N200+1 frames before abnormal
-release; a T200-expired I-frame is retransmitted with P/F set and the
-current V(R) in N(R).
+cleared is ignored; an initial SABME command is accepted on any SAPI: with a
+payload it is answered by a UA echoing that payload, and the link enters the
+contention-resolution state on SAPI 0 but is established directly on every
+other SAPI; without a payload the link is established with a plain UA.
+Every UA and DM we send mirrors the P/F of the received command, and a UA or
+DM response with F cleared is ignored; a DM while awaiting establishment
+restarts T200 without releasing the link; the retransmission budget allows
+N200+1 frames before abnormal release; a T200-expired I-frame is retransmitted
+with P/F set and the current V(R) in N(R).
 
 **A-bis RSL (TS 48.058)** — the Channel Mode IE (0x06) value is exactly four octets:
 [reserved(6)|DTX_d(1)|DTX_u(1)], speed indicator (`Speech=0x01`, `Data=0x02`, `Signalling=0x03`),
@@ -155,14 +185,20 @@ canonical section 9.3.26 values (`RadioLinkFail=0x01`, `ResUnavail=0x2F`, `Proto
 three value octets — `[RFU|DTX_d|rxlev_full(6)]`, `[res(2)|rxlev_sub(6)]`, `[res(2)|rxq_full(3)|rxq_sub(3)]`
 — with any vendor supplementary bytes preserved verbatim. The Frame Number IE (0x08) packs t1p(5),
 t3(6) and t2(5) derived from an absolute TDMA frame number (`t1p=(fn/1326)%32`, `t3=fn%51`,
-`t2=fn%26`). The RACH Load IE (0x12) is TV-encoded with its fixed six value
-octets (total/busy/access counters, big-endian u16 each). The IE catalog
+`t2=fn%26`). The RACH Load IE (0x12) is LV-encoded with an explicit length
+octet (0x06) and three big-endian u16 counters (total/busy/access); CCCH LOAD
+INDICATION comes in two channel-number variants — PCH+AGCH tn 0 (0x90) with the
+Paging Load IE (TV, two-octet value) and RACH tn 0 (0x88) with the RACH Load IE
+(LV) — and RF RESOURCE INDICATION / SACCH FILLING / OVERLOAD INDICATION / ERROR
+REPORT belong to the TRX MANAGEMENT group (discriminator 0x08) while LOCATION
+INFORMATION belongs to the LCS group (0x10). The IE catalog
 covers the full section 9 set (0x01–0x3C; 0x1D is not allocated) plus vendor
 extensions 0x60–0x63 (Osmo) and the ip.access group 0xE0–0xFE, in which the
 IEs with a defined value size — Remote/Local IP (four octets), Remote/Local
 port and Connection ID (two octets), RTP payload type(s), speech mode and RTP
-CSD format (one octet) and connection statistics (twenty-eight octets) — are
-TV-encoded and the remaining codes have no defined size and decode as LV;
+CSD format (one octet) — are TV-encoded, connection statistics is LV-encoded
+(length octet 0x1C, seven big-endian u32 counters) and the remaining codes
+have no defined size and decode as LV;
 TL16V for `L3Info` (0x0B) only, and LV for everything else — including Full
 BCCH Info (0x27). The channel number codes include the VAMOS Lm sub-slot extensions
 (30/31); MEASUREMENT RESULT carries the always-present BS_POWER TV IE between Uplink
@@ -187,7 +223,7 @@ Numbers that matter for a real-time radio stack (Release, single core):
 | Metric | Result |
 |--------|--------|
 | L3 parse throughput (per message type) | 7.7 – 26.5 M msg/s |
-| Mixed-domain stream (all 12 PDs) / zero-copy | 11.0 / 12.9 M msg/s |
+| Mixed-domain stream (all 13 PDs) / zero-copy | 10.8 / 9.7 M msg/s |
 | Full BTS stack dispatch (1K MS: timers, FSMs, correlation) | ~66 – 86 M msg/s |
 | TimerManager tick / Transaction match | 42.6 M ticks/s / 0.004 µs per match |
 | 1M and 2M sessions (create / TMSI lookup / tick 10K active) | 1195 / 127 / 1.4 ms and 1096 / 258 / 1.4 ms |
@@ -205,7 +241,7 @@ results are attributed to the machine that produced them; a full annotated run:
 |--------|---------------------|------------------|----------------|
 | **Language** | C | C++ (manual memory) | C++20 |
 | **Type safety** | enum + manual cast | custom structs | `std::variant` + `tryGet<T>()` — compile-time, no RTTI |
-| **Message types** | hand-coded per message | partial coverage | 215 typed messages, all 12 PD domains |
+| **Message types** | hand-coded per message | partial coverage | 216 typed messages, all 13 PD domains |
 | **Builder API** | none (manual struct) | partial | fluent builder for every type |
 | **FSM + timers + correlation** | implicit in handlers | custom | built-in stack modules + procedure framework |
 | **LAPDm / A-bis RSL** | separate library | custom | full LAPDm entity + RSL parse/build included |
@@ -217,10 +253,10 @@ Every detail lives in a dedicated guide; this README is the pitch and the index.
 
 | Document | What It Covers |
 |----------|----------------|
-| [doc/API.md](doc/API.md) | Full API reference (63 numbered sections): core types, bit I/O, streaming, parser/serializer, builders and IEs/enums of all 12 domains, LAPDm, dispatcher, arena, every stack module, RSL, all procedures, C ABI, FFI bindings + spec conformance notes |
+| [doc/API.md](doc/API.md) | Full API reference (63 numbered sections): core types, bit I/O, streaming, parser/serializer, builders and IEs/enums of all 13 domains, LAPDm, dispatcher, arena, every stack module, RSL, all procedures, C ABI, FFI bindings + spec conformance notes |
 | [doc/bts_integration.md](doc/bts_integration.md) | **Primary guide for BTS developers**: step-by-step event loop with `ProcedureOrchestrator`, full worked procedure chains (Location Update, Call Setup MO, Paging), AuC/VLR/BSC typed-data integration, LAPDm link management, L3 timer reference table, SI broadcast, production error handling |
 | [doc/bts_architecture.md](doc/bts_architecture.md) | Two usage modes (L3 Parser vs BTS Stack), component & data-flow diagrams, PHY/SDR integration points, thread-safety matrix, per-MS memory footprint, allocation-free hot paths, scaling guidelines to millions of sessions |
-| [doc/messages.md](doc/messages.md) | Complete message catalog: all 215 types with MTIs and directions, CC/GMM/SM IEs, SMS CP/RP/TP layers, dispatch edge cases (TIF=1 short messages, build-only types) |
+| [doc/messages.md](doc/messages.md) | Complete message catalog: all 216 types with MTIs and directions, CC/GMM/SM IEs, SMS CP/RP/TP layers, dispatch edge cases (TIF=1 short messages, build-only types) |
 | [doc/boundaries.md](doc/boundaries.md) | What the library intentionally excludes — PHY/SDR, speech codecs, A5 ciphering, OML, SIP/media gateways, PS full stack, configuration, logging — and the exact integration point for each |
 | [examples/](examples/) | 20 runnable demos (see below), incl. full BTS flows, benchmarks, and a 1M-session real-time loop |
 | [bindings/README.md](bindings/README.md) | FFI bindings (Python / Go / Rust) over the stable C ABI: unified quickstarts, ownership & threading model, callback safety rules, extension guide, test gate |
@@ -232,7 +268,7 @@ Every detail lives in a dedicated guide; this README is the pitch and the index.
 |---------|-------------|
 | `example_parse_file` | Parse L3 from hex strings/files, typed access via `tryGet<>`, round-trip serialization |
 | `example_streaming` | `L3Framer` + stream processing over `SpanByteSource` and a `RingBuffer` producer/consumer |
-| `example_multithread` | Concurrent parsing across all 12 PD domains with immutable configs (no mutex) |
+| `example_multithread` | Concurrent parsing across all 13 PD domains with immutable configs (no mutex) |
 | `example_zero_copy` | `InlineFramer` + `ZeroCopyStreamProcessor` on a contiguous buffer (DMA/PCAP-style) |
 | `example_benchmark` / `example_benchmark_stack` | Component benchmarks with hardware-ID reporting |
 | `example_lapdm_entity` | Full LAPDm lifecycle: SABME/UA, UI + segmented I-frame data, T200 retransmission, DISC |
@@ -270,7 +306,7 @@ guides (quickstart, building & linking, error model, ownership & callbacks):
 
 ## Testing & Fuzzing
 
-Quality you can audit, not just trust:
+Quality you can verify, not just trust:
 
 - GoogleTest suite: 2100+ tests — parse/golden-vector (normative TS wire layouts),
   round-trip, builders, LAPDm FSM, dispatcher, all procedures and orchestrator chains, RSL, C ABI +

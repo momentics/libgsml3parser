@@ -619,7 +619,7 @@ size_t L3RoutingAreaUpdateAccept::bodyLength() const {
 Expected<L3RoutingAreaUpdateAccept> L3RoutingAreaUpdateAccept::parse(BitReader& br) {
     L3RoutingAreaUpdateAccept msg;
 
-    // forceToStandby(1)|updateResult(3)|spare(1)|raUpdateTimer(2)|spare(2)
+    // forceToStandby(1)|updateResult(3)|raUpdateTimer(2)|spare(2)
     // = first octet of the two-octet leading part (TS 44.068 section 9.5).
     {
         auto o = br.readField(8);
