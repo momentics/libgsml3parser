@@ -142,6 +142,16 @@ template<typename T>
 }
 
 template<typename T>
+[[nodiscard]] const T* tryGet(const PDSS1M& v) {
+    return std::get_if<T>(&v);
+}
+
+template<typename T>
+[[nodiscard]] T* tryGet(PDSS1M& v) {
+    return std::get_if<T>(&v);
+}
+
+template<typename T>
 [[nodiscard]] const T* tryGet(const EXTENDED& v) {
     return std::get_if<T>(&v);
 }
@@ -215,6 +225,11 @@ template<typename T>
             return tryGet<T>(*lsm);
         }
     }
+    if (const auto* pdss1m = std::get_if<PDSS1M>(&msg)) {
+        if constexpr (detail::is_variant_alternative_v<T, PDSS1M>) {
+            return tryGet<T>(*pdss1m);
+        }
+    }
     if (const auto* ext = std::get_if<EXTENDED>(&msg)) {
         if constexpr (detail::is_variant_alternative_v<T, EXTENDED>) {
             return tryGet<T>(*ext);
@@ -278,6 +293,11 @@ template<typename T>
     if (auto* lsm = std::get_if<LSM>(&msg)) {
         if constexpr (detail::is_variant_alternative_v<T, LSM>) {
             return tryGet<T>(*lsm);
+        }
+    }
+    if (auto* pdss1m = std::get_if<PDSS1M>(&msg)) {
+        if constexpr (detail::is_variant_alternative_v<T, PDSS1M>) {
+            return tryGet<T>(*pdss1m);
         }
     }
     if (auto* ext = std::get_if<EXTENDED>(&msg)) {

@@ -367,9 +367,9 @@ TEST(ZeroCopyStreamProcessor, HeaderBasedFraming) {
     EXPECT_EQ(stats.mmMessages, 1u);
 }
 
-// Zero-copy processor with all 12 PD domains via L2 length framing.
-TEST(ZeroCopyStreamProcessor, AllTwelveDomains) {
-    // Build L2-framed stream from known-good roundtrip data for all 12 PD domains.
+// Zero-copy processor with all 13 PD domains via L2 length framing.
+TEST(ZeroCopyStreamProcessor, AllThirteenDomains) {
+    // Build L2-framed stream from known-good roundtrip data for all 13 PD domains.
     std::vector<uint8_t> data;
 
     auto appendFrame = [&data](const ParsedMessage& msg) {
@@ -406,7 +406,9 @@ TEST(ZeroCopyStreamProcessor, AllTwelveDomains) {
     { L3GCCReleaseComplete rc; rc.ti(0); appendFrame(ParsedMessage(GCCM(std::move(rc)))); }
     // LS: LocationServiceRequest
     appendFrame(ParsedMessage(LSM(L3LocationServiceRequest{})));
-    // Extended: raw message with MTI=0x55 and body
+    // PDSS1: raw message with MTI=0x42 and body
+    { uint8_t d[] = {0x0D, 0x42, 0x11}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p.has_value()); appendFrame(*p); }
+    // Extended (PDSS2): raw message with MTI=0x55 and body
     { uint8_t d[] = {0x0E, 0x55, 0xAA, 0xBB}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p.has_value()); appendFrame(*p); }
     // TestProcedure: raw message with MTI=0x99 and body
     { uint8_t d[] = {0x0F, 0x99, 0xCC}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p.has_value()); appendFrame(*p); }
@@ -419,8 +421,8 @@ TEST(ZeroCopyStreamProcessor, AllTwelveDomains) {
     }
 
     const auto& stats = proc.stats();
-    ASSERT_EQ(stats.totalFrames, 12u);
-    ASSERT_EQ(stats.parsedOk, 12u);
+    ASSERT_EQ(stats.totalFrames, 13u);
+    ASSERT_EQ(stats.parsedOk, 13u);
     ASSERT_EQ(stats.parseErrors, 0u);
     ASSERT_EQ(stats.rrMessages, 1u);
     ASSERT_EQ(stats.mmMessages, 1u);
@@ -432,6 +434,7 @@ TEST(ZeroCopyStreamProcessor, AllTwelveDomains) {
     ASSERT_EQ(stats.bccMessages, 1u);
     ASSERT_EQ(stats.gccMessages, 1u);
     ASSERT_EQ(stats.lsMessages, 1u);
+    ASSERT_EQ(stats.pdss1Messages, 1u);
     ASSERT_EQ(stats.extendedMessages, 1u);
     ASSERT_EQ(stats.testprocMessages, 1u);
 }

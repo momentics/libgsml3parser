@@ -363,10 +363,10 @@ TEST(L3StreamProcessor, L2FramedAllDomains) {
     ASSERT_GT(stats.totalFrames, 0u);
 }
 
-// ── All 12 PD domains in a single stream with L2 length framing ─────────
+// ── All 13 PD domains in a single stream with L2 length framing ───────
 
-TEST(L3StreamProcessor, AllTwelveDomains) {
-    // Build L2-framed stream from known-good roundtrip data for all 12 PD domains.
+TEST(L3StreamProcessor, AllThirteenDomains) {
+    // Build L2-framed stream from known-good roundtrip data for all 13 PD domains.
     std::vector<uint8_t> data;
 
     auto appendFrame = [&data](const ParsedMessage& msg) {
@@ -408,7 +408,12 @@ TEST(L3StreamProcessor, AllTwelveDomains) {
     appendFrame(ParsedMessage(GCCM(std::move(gccRC))));
     // LS: LocationServiceRequest
     appendFrame(ParsedMessage(LSM(L3LocationServiceRequest{})));
-    // Extended: raw message with MTI=0x55 and body
+    // PDSS1: raw message with MTI=0x42 and body
+    uint8_t pdss1Data[] = {0x0D, 0x42, 0x11};
+    auto pdss1Parsed = parseL3(std::span<const uint8_t>(pdss1Data));
+    ASSERT_TRUE(pdss1Parsed);
+    appendFrame(*pdss1Parsed);
+    // Extended (PDSS2): raw message with MTI=0x55 and body
     uint8_t extData[] = {0x0E, 0x55, 0xAA, 0xBB};
     auto extParsed = parseL3(std::span<const uint8_t>(extData));
     ASSERT_TRUE(extParsed);
@@ -428,9 +433,9 @@ TEST(L3StreamProcessor, AllTwelveDomains) {
     proc->processUntilEOF(handler);
 
     const auto& stats = proc->stats();
-    // All 12 frames should be processed.
-    ASSERT_EQ(stats.totalFrames, 12u);
-    ASSERT_EQ(stats.parsedOk, 12u);
+    // All 13 frames should be processed.
+    ASSERT_EQ(stats.totalFrames, 13u);
+    ASSERT_EQ(stats.parsedOk, 13u);
     ASSERT_EQ(stats.parseErrors, 0u);
 
     // Each domain counter should be exactly 1.
@@ -444,11 +449,12 @@ TEST(L3StreamProcessor, AllTwelveDomains) {
     ASSERT_EQ(stats.bccMessages, 1u);
     ASSERT_EQ(stats.gccMessages, 1u);
     ASSERT_EQ(stats.lsMessages, 1u);
+    ASSERT_EQ(stats.pdss1Messages, 1u);
     ASSERT_EQ(stats.extendedMessages, 1u);
     ASSERT_EQ(stats.testprocMessages, 1u);
 }
 
-// ── All 12 PD domains: message name verification in stream ─────────────
+// ── All 13 PD domains: message name verification in stream ────────────
 
 TEST(L3StreamProcessor, AllDomainsMessageNames) {
     // Build L2-framed stream from known-good roundtrip data.
@@ -478,6 +484,7 @@ TEST(L3StreamProcessor, AllDomainsMessageNames) {
     { L3BCCReleaseComplete rc; rc.ti(0); appendFrame(ParsedMessage(BCCM(std::move(rc)))); }
     { L3GCCReleaseComplete rc; rc.ti(0); appendFrame(ParsedMessage(GCCM(std::move(rc)))); }
     appendFrame(ParsedMessage(LSM(L3LocationServiceRequest{})));
+    { uint8_t d[] = {0x0D, 0x42, 0x11}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p); appendFrame(*p); }
     { uint8_t d[] = {0x0E, 0x55, 0xAA, 0xBB}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p); appendFrame(*p); }
     { uint8_t d[] = {0x0F, 0x99, 0xCC}; auto p = parseL3(std::span<const uint8_t>(d)); ASSERT_TRUE(p); appendFrame(*p); }
 
@@ -502,7 +509,7 @@ TEST(L3StreamProcessor, AllDomainsMessageNames) {
     NameHandler h(&allNames, &allPds);
     proc->processUntilEOF(h);
 
-    ASSERT_EQ(allNames.size(), 12u);
+    ASSERT_EQ(allNames.size(), 13u);
     EXPECT_EQ(allNames[0], "ChannelRelease");
     EXPECT_EQ(allNames[1], "CMServiceAccept");
     EXPECT_EQ(allNames[2], "Disconnect");
@@ -513,8 +520,9 @@ TEST(L3StreamProcessor, AllDomainsMessageNames) {
     EXPECT_EQ(allNames[7], "BCCReleaseComplete");
     EXPECT_EQ(allNames[8], "GCCReleaseComplete");
     EXPECT_EQ(allNames[9], "LocationServiceRequest");
-    EXPECT_EQ(allNames[10], "ExtendedMessage");
-    EXPECT_EQ(allNames[11], "TestProcedureMessage");
+    EXPECT_EQ(allNames[10], "PDSS1Message");
+    EXPECT_EQ(allNames[11], "ExtendedMessage");
+    EXPECT_EQ(allNames[12], "TestProcedureMessage");
 
     // Verify all PDs are distinct.
     EXPECT_EQ(allPds[0], L3PD::RadioResource);
@@ -527,6 +535,7 @@ TEST(L3StreamProcessor, AllDomainsMessageNames) {
     EXPECT_EQ(allPds[7], L3PD::BroadcastCallControl);
     EXPECT_EQ(allPds[8], L3PD::GroupCallControl);
     EXPECT_EQ(allPds[9], L3PD::Location);
-    EXPECT_EQ(allPds[10], L3PD::Extended);
-    EXPECT_EQ(allPds[11], L3PD::TestProcedure);
+    EXPECT_EQ(allPds[10], L3PD::PacketDomainSupplementaryServices1);
+    EXPECT_EQ(allPds[11], L3PD::PacketDomainSupplementaryServices2);
+    EXPECT_EQ(allPds[12], L3PD::TestProcedure);
 }

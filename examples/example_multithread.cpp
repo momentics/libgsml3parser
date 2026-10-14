@@ -19,8 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Multi-threaded parse benchmark across all 12 PD domains (RR, MM, CC, SS,
-// GMM, SM, SMS, BCC, GCC, LS, EXT, TST).  Each thread uses its own immutable ParserConfig
+// Multi-threaded parse benchmark across all 13 PD domains (RR, MM, CC, SS,
+// GMM, SM, SMS, BCC, GCC, LS, PDSS1, EXT, TST).  Each thread uses its own immutable ParserConfig
 // - no mutex needed for configuration.  Round-trip serialization is verified
 // per message.
 
@@ -50,11 +50,12 @@ struct ThreadStats {
     std::atomic<uint64_t> bccCount{0};
     std::atomic<uint64_t> gccCount{0};
     std::atomic<uint64_t> lsCount{0};
+    std::atomic<uint64_t> pdss1Count{0};
     std::atomic<uint64_t> extCount{0};
     std::atomic<uint64_t> tstCount{0};
 };
 
-// Example messages for all 12 PD domains.
+// Example messages for all 13 PD domains.
 // SMS CP Ack is 2 bytes (CP-ACK has no body, TS 24.011 8.1.3;
 // a 4-byte vector would parse as a HandoverAccess, so the SMS counter
 // stays 0 and RR gets double-counted).
@@ -70,6 +71,7 @@ std::vector<std::string> sExampleHexes = {
     "0101",                       // BCC: Setup
     "000102",                     // GCC: Setup
     "0C01",                       // LS: LocationServiceRequest
+    "0D42",                       // PDSS1: PDSS1Message (passthrough)
     "0E01",                       // EXT: ExtendedMessage
     "0F01",                       // TST: TestProcedureMessage
     };
@@ -83,7 +85,7 @@ void workerThread(int id, ThreadStats& stats, int iterations) {
     uint64_t localErrors = 0;
     uint64_t localRR = 0, localMM = 0, localCC = 0, localSS = 0;
     uint64_t localGMM = 0, localSM = 0, localSMS = 0, localBCC = 0, localGCC = 0;
-    uint64_t localLS = 0, localEXT = 0, localTST = 0;
+    uint64_t localLS = 0, localPDSS1 = 0, localEXT = 0, localTST = 0;
 
     for (int i = 0; i < iterations; ++i) {
         const auto& hex = sExampleHexes[i % static_cast<int>(sExampleHexes.size())];
@@ -105,7 +107,8 @@ void workerThread(int id, ThreadStats& stats, int iterations) {
                 case L3PD::BroadcastCallControl:   ++localBCC; break;
                 case L3PD::GroupCallControl:       ++localGCC; break;
                 case L3PD::Location:               ++localLS; break;
-                case L3PD::Extended:               ++localEXT; break;
+                case L3PD::PacketDomainSupplementaryServices1: ++localPDSS1; break;
+                case L3PD::PacketDomainSupplementaryServices2: ++localEXT; break;
                 case L3PD::TestProcedure:          ++localTST; break;
                 default: break;
             }
@@ -136,6 +139,7 @@ void workerThread(int id, ThreadStats& stats, int iterations) {
     stats.bccCount.fetch_add(localBCC, std::memory_order_relaxed);
     stats.gccCount.fetch_add(localGCC, std::memory_order_relaxed);
     stats.lsCount.fetch_add(localLS, std::memory_order_relaxed);
+    stats.pdss1Count.fetch_add(localPDSS1, std::memory_order_relaxed);
     stats.extCount.fetch_add(localEXT, std::memory_order_relaxed);
     stats.tstCount.fetch_add(localTST, std::memory_order_relaxed);
 }
@@ -195,7 +199,7 @@ int main(int argc, char* argv[]) {
     if (argc > 1) numThreads = std::stoi(argv[1]);
     if (argc > 2) iterations = std::stoi(argv[2]);
 
-    std::cout << "Multi-threaded parse benchmark (12 PD domains)\n";
+    std::cout << "Multi-threaded parse benchmark (13 PD domains)\n";
     std::cout << "  Threads:    " << numThreads << "\n";
     std::cout << "  Iterations: " << iterations << " / thread\n";
     std::cout << "  Total msgs: " << (static_cast<int64_t>(numThreads) * iterations) << "\n";
@@ -232,6 +236,7 @@ int main(int argc, char* argv[]) {
     std::cout << "  BCC msgs: " << stats.bccCount.load() << "\n";
     std::cout << "  GCC msgs: " << stats.gccCount.load() << "\n";
     std::cout << "  LS msgs:  " << stats.lsCount.load() << "\n";
+    std::cout << "  PDSS1 msgs: " << stats.pdss1Count.load() << "\n";
     std::cout << "  EXT msgs: " << stats.extCount.load() << "\n";
     std::cout << "  TST msgs: " << stats.tstCount.load() << "\n";
     std::cout << "  Time:    " << elapsed << "s\n";

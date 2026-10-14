@@ -32,6 +32,7 @@
 #include "bcc/l3bccmessages.h"
 #include "gcc/l3gccmessages.h"
 #include "ls/l3lsmessages.h"
+#include "pdss1/l3pdss1messages.h"
 #include "extended/l3extendedmessages.h"
 #include "testproc/l3testproceduremessages.h"
 
@@ -280,11 +281,13 @@ using LSM = std::variant<
     L3LocationServiceProviderMessage
 >;
 
+using PDSS1M = std::variant<L3PDSS1Message>;
+
 using EXTENDED = std::variant<L3ExtendedMessage>;
 
 using TESTPROC = std::variant<L3TestProcedureMessage>;
 
-using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM, EXTENDED, TESTPROC>;
+using ParsedMessage = std::variant<RRM, MMM, CCM, SSM, GMM, SM, SMS, BCCM, GCCM, LSM, PDSS1M, EXTENDED, TESTPROC>;
 
 static_assert(sizeof(ParsedMessage) < 8192, "ParsedMessage variant too large");
 

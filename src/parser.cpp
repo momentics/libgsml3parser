@@ -71,7 +71,8 @@ using ParseFn = Expected<Variant>(*)(BitReader&, int, unsigned);
 
 /// Parse one concrete message type and wrap it into the domain variant.
 /// Handles the three parse signatures present in the catalog:
-///  - T::parse(BitReader&, int mti)   runtime-MTI types (Extended, TestProc)
+///  - T::parse(BitReader&, int mti)   runtime-MTI passthrough types
+///    (PDSS1, Extended/PDSS2, TestProc)
 ///  - T::parse(BitReader&) + T::ti()  TI-carrying dialogs (CC/SS/BCC/GCC):
 ///    the TI is set from the L3 header after parsing
 ///  - T::parse(BitReader&)            everything else
@@ -90,10 +91,9 @@ template<typename Variant, typename T>
 constexpr void fillParseTableEntry(std::array<ParseFn<Variant>, kMaxMtiSlots>& table) {
     if constexpr (!isNoHeaderShort(T::MTI)) {
         // First alternative wins on MTI overlap: the SMS variant carries
-        // both CP-layer (CP-STATUS 0x12, CP-SMT 0x13) and L3-layer
-        // (SMSProvidedReplyExpected 0x12, SMSSubmitRep 0x13) messages;
-        // the CP alternatives precede the L3 ones in the variant, so the
-        // CP parsers must keep their slots.
+        // CP-layer messages only (CP-DATA 0x01, CP-ACK 0x04, CP-ERROR
+        // 0x10, CP-STATUS 0x12, CP-SMT 0x13), so each MTI slot is claimed
+        // exactly once.
         if (table[static_cast<size_t>(T::MTI)] == nullptr) {
             table[static_cast<size_t>(T::MTI)] = &parseInto<Variant, T>;
         }
@@ -115,8 +115,8 @@ constexpr auto makeParseTable() {
         std::make_index_sequence<std::variant_size_v<Variant>>{});
 }
 
-// One table per fixed-MTI domain (Extended/TestProc are runtime-MTI
-// passthrough domains and keep direct one-line parsers below).
+// One table per fixed-MTI domain (PDSS1/Extended/TestProc are
+// runtime-MTI passthrough domains and keep direct one-line parsers below).
 constexpr auto kRRParseTable = makeParseTable<RRM>();
 constexpr auto kMMParseTable = makeParseTable<MMM>();
 constexpr auto kCCParseTable = makeParseTable<CCM>();
@@ -238,7 +238,12 @@ Expected<LSM> parseL3LS(BitReader& reader, int mti) {
     return parseFromTable(kLSParseTable, reader, mti, 0, "LS");
 }
 
-// Extended PD messages (GSM 04.08 §10.2, PD=0x0e)
+// Packet Domain Supplementary Services 1 PD messages (GSM 04.08 §10.2, PD=0x0d)
+Expected<PDSS1M> parseL3PDSS1(BitReader& reader, uint8_t mti) {
+    return L3PDSS1Message::parse(reader, mti).map([](L3PDSS1Message v){ return PDSS1M(std::move(v)); });
+}
+
+// Packet Domain Supplementary Services 2 PD messages (GSM 04.08 §10.2, PD=0x0e)
 Expected<EXTENDED> parseL3Extended(BitReader& reader, uint8_t mti) {
     return L3ExtendedMessage::parse(reader, mti).map([](L3ExtendedMessage v){ return EXTENDED(std::move(v)); });
 }
@@ -248,7 +253,7 @@ Expected<TESTPROC> parseL3TestProc(BitReader& reader, uint8_t mti) {
     return L3TestProcedureMessage::parse(reader, mti).map([](L3TestProcedureMessage v){ return TESTPROC(std::move(v)); });
 }
 
-/// Parse the body of a standard-header message: the 12-domain switch.
+/// Parse the body of a standard-header message: the 13-domain switch.
 /// Shared by the main parseL3 path and by the four-byte short-message
 /// disambiguation (which additionally requires exact frame consumption
 /// ).
@@ -288,7 +293,10 @@ Expected<TESTPROC> parseL3TestProc(BitReader& reader, uint8_t mti) {
         case L3PD::Location:
             return parseL3LS(reader, hdr.mti)
                 .map([](LSM v){ return ParsedMessage(std::move(v)); });
-        case L3PD::Extended:
+        case L3PD::PacketDomainSupplementaryServices1:
+            return parseL3PDSS1(reader, static_cast<uint8_t>(hdr.mti))
+                .map([](PDSS1M v){ return ParsedMessage(std::move(v)); });
+        case L3PD::PacketDomainSupplementaryServices2:
             return parseL3Extended(reader, static_cast<uint8_t>(hdr.mti))
                 .map([](EXTENDED v){ return ParsedMessage(std::move(v)); });
         case L3PD::TestProcedure:
@@ -299,7 +307,7 @@ Expected<TESTPROC> parseL3TestProc(BitReader& reader, uint8_t mti) {
             // domain (-Wswitch); parseL3Header rejects it upstream anyway.
             break;
     }
-    // Unreachable: parseL3Header only accepts the 12 defined PD values
+    // Unreachable: parseL3Header only accepts the 13 defined PD values
     // (reserved PDs are rejected).
     return Expected<ParsedMessage>::error(
         {ParseError::Code::InvalidPD, "Unsupported Protocol Discriminator"});
@@ -439,7 +447,7 @@ namespace detail {
 
 // ── Write path ───────────────────────────────────────────
 // domainPd<Variant>() maps each domain variant to its PD, serving both
-// parse and write dispatch: 12 one-line mappings.
+// parse and write dispatch: 13 one-line mappings.
 template<typename V> constexpr L3PD domainPd();
 template<> constexpr L3PD domainPd<RRM>() { return L3PD::RadioResource; }
 template<> constexpr L3PD domainPd<MMM>() { return L3PD::MobilityManagement; }
@@ -451,14 +459,16 @@ template<> constexpr L3PD domainPd<SMS>() { return L3PD::SMS; }
 template<> constexpr L3PD domainPd<BCCM>() { return L3PD::BroadcastCallControl; }
 template<> constexpr L3PD domainPd<GCCM>() { return L3PD::GroupCallControl; }
 template<> constexpr L3PD domainPd<LSM>() { return L3PD::Location; }
-template<> constexpr L3PD domainPd<EXTENDED>() { return L3PD::Extended; }
+template<> constexpr L3PD domainPd<PDSS1M>() { return L3PD::PacketDomainSupplementaryServices1; }
+template<> constexpr L3PD domainPd<EXTENDED>() { return L3PD::PacketDomainSupplementaryServices2; }
 template<> constexpr L3PD domainPd<TESTPROC>() { return L3PD::TestProcedure; }
 
 template<L3PD pd, typename ConcreteMsg>
 Expected<size_t> writeL3Body(const ConcreteMsg& msg, uint8_t* out, size_t maxlen) {
     int mtiVal = ConcreteMsg::MTI;
 
-    // For messages with runtime-determined MTI (Extended, TestProcedure), override.
+    // For messages with runtime-determined MTI (PDSS1, Extended,
+    // TestProcedure), override.
     if constexpr (requires { msg.mti(); }) {
         mtiVal = static_cast<int>(msg.mti());
     }

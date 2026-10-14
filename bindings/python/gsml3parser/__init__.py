@@ -64,7 +64,7 @@ from .stack import (
 # Enum-mirror constants used across the demo/tests (values from gsml3parser_c.h).
 from .stack import (
     PD_GCC, PD_BCC, PD_CC, PD_MM, PD_RR, PD_GMM, PD_SMS, PD_SM, PD_SS, PD_LS,
-    PD_EXT, PD_TST,
+    PD_PDSS1, PD_PDSS2, PD_TST,
     ID_NO_ID, ID_IMSI, ID_IMEI, ID_IMEISV, ID_TMSI,
     TOKEN_NONE, TOKEN_CM_SERVICE_ACCEPT, TOKEN_CALL_PROCEEDING,
     PRIM_L3_UNIT_DATA, PRIM_L3_ESTABLISH_CONFIRM,
@@ -162,7 +162,7 @@ __all__ = [
     "TimerExpiryPy", "Channel", "MobileIdentity", "Lai", "lapdm_frame_decode",
     # enum-mirror constants
     "PD_GCC", "PD_BCC", "PD_CC", "PD_MM", "PD_RR", "PD_GMM", "PD_SMS", "PD_SM",
-    "PD_SS", "PD_LS", "PD_EXT", "PD_TST",
+    "PD_SS", "PD_LS", "PD_PDSS1", "PD_PDSS2", "PD_TST",
     "ID_NO_ID", "ID_IMSI", "ID_IMEI", "ID_IMEISV", "ID_TMSI",
     "TOKEN_NONE", "TOKEN_CM_SERVICE_ACCEPT", "TOKEN_CALL_PROCEEDING",
     "PRIM_L3_UNIT_DATA", "PRIM_L3_ESTABLISH_CONFIRM",

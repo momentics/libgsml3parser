@@ -60,12 +60,12 @@ namespace {
 
 struct PDBatch { int pd; const char* hex; int mti; };
 
-// The 12 PD-domain vectors from examples/example_parse_file.cpp (batch
+// The 13 PD-domain vectors from examples/example_parse_file.cpp (batch
 // demo). MTI per the L3 header rules (l3header.cpp): MM/CC/SS/BCC/GCC use
 // the 6-bit MTI ((byte1 & 0xFC) >> 2); GMM/SMS/SM/LS and the raw-body PDs
-// (EXT/TST) use the raw byte; RR uses the raw byte, or 0x100 + raw when
-// TIF=1. The expected values below are the classes' static MTI constants
-// (messageMTI visits them).
+// (PDSS1/PDSS2/TST) use the raw byte; RR uses the raw byte, or 0x100 + raw
+// when TIF=1. The expected values below are the classes' static MTI
+// constants (messageMTI visits them).
 const PDBatch kBatch[] = {
     {GSML3_PD_RR,  "06 0D 00",          0x0d},  // Channel Release
     {GSML3_PD_MM,  "05 21",             0x21},  // CM Service Accept
@@ -77,7 +77,8 @@ const PDBatch kBatch[] = {
     {GSML3_PD_BCC, "01 00",             0x00},  // BCC Setup
     {GSML3_PD_GCC, "00 00 02",          0x00},  // GCC Setup
     {GSML3_PD_LS,  "0C 01",             0x01},  // LocationServiceRequest
-    {GSML3_PD_EXT, "0E 01",             0x01},  // ExtendedMessage
+    {GSML3_PD_PDSS1, "0D 42",           0x42},  // PDSS1Message (passthrough)
+    {GSML3_PD_PDSS2, "0E 01",           0x01},  // ExtendedMessage
     {GSML3_PD_TST, "0F 01",             0x01},  // TestProcedureMessage
 };
 

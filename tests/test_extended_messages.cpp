@@ -19,26 +19,97 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Extended PD (0x0e) and TestProcedure PD (0x0f) message tests.
+// PDSS1 (0x0d), Extended/PDSS2 (0x0e) and TestProcedure (0x0f) message tests.
 // Reference: GSM 04.08 §10.2 - Protocol Discriminator values
 
 #include <gtest/gtest.h>
 #include <gsml3parser/parser.h>
 #include <gsml3parser/l3header.h>
+#include <gsml3parser/pdss1/l3pdss1messages.h>
 #include <gsml3parser/extended/l3extendedmessages.h>
 #include <gsml3parser/testproc/l3testproceduremessages.h>
 #include <gsml3parser/visitor.h>
 
 using namespace gsml3parser;
 
-// ── Extended PD (0x0e) tests ──────────────────────────────────────────
+// ── PDSS1 (0x0d) tests ────────────────────────────────────────────────
+
+TEST(PDSS1MessageTest, Parse_Golden) {
+    // PD=0x0d(PacketDomainSupplementaryServices1), MTI=0x42, body=0xAA 0xBB 0xCC
+    uint8_t data[] = {0xCD, 0x42, 0xAA, 0xBB, 0xCC};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messagePD(*msg), L3PD::PacketDomainSupplementaryServices1);
+    EXPECT_EQ(messageMTI(*msg), 0x42);
+    EXPECT_EQ(messageName(*msg), "PDSS1Message");
+    auto* pdss1 = tryGet<L3PDSS1Message>(*msg);
+    ASSERT_TRUE(pdss1);
+    EXPECT_EQ(pdss1->mti(), 0x42);
+    EXPECT_EQ(pdss1->body().size(), 3u);
+    EXPECT_EQ(pdss1->body()[0], 0xAA);
+    EXPECT_EQ(pdss1->body()[1], 0xBB);
+    EXPECT_EQ(pdss1->body()[2], 0xCC);
+}
+
+TEST(PDSS1MessageTest, Parse_EmptyBody) {
+    // PD=0x0d(PacketDomainSupplementaryServices1), MTI=0x01, no body octets
+    uint8_t data[] = {0x0D, 0x01};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messagePD(*msg), L3PD::PacketDomainSupplementaryServices1);
+    EXPECT_EQ(messageMTI(*msg), 0x01);
+    auto* pdss1 = tryGet<L3PDSS1Message>(*msg);
+    ASSERT_TRUE(pdss1);
+    EXPECT_EQ(pdss1->body().size(), 0u);
+}
+
+TEST(PDSS1MessageTest, RoundTrip) {
+    L3PDSS1Message orig(0x55);
+    PDSS1M pdss1Variant(std::move(orig));
+    ParsedMessage pm(std::move(pdss1Variant));
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    auto reparsed = parseL3Hex(*hex);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messagePD(*reparsed), L3PD::PacketDomainSupplementaryServices1);
+    EXPECT_EQ(messageMTI(*reparsed), 0x55);
+    EXPECT_EQ(messageName(*reparsed), "PDSS1Message");
+}
+
+TEST(PDSS1MessageTest, RoundTrip_WithBody) {
+    uint8_t data[] = {0x0D, 0x7F, 0xDE, 0xAD};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto hex = writeL3Hex(*msg);
+    ASSERT_TRUE(hex);
+    auto reparsed = parseL3Hex(*hex);
+    ASSERT_TRUE(reparsed);
+    EXPECT_EQ(messagePD(*reparsed), L3PD::PacketDomainSupplementaryServices1);
+    EXPECT_EQ(messageMTI(*reparsed), 0x7F);
+    auto* pdss1 = tryGet<L3PDSS1Message>(*reparsed);
+    ASSERT_TRUE(pdss1);
+    EXPECT_EQ(pdss1->body().size(), 2u);
+    EXPECT_EQ(pdss1->body()[0], 0xDE);
+    EXPECT_EQ(pdss1->body()[1], 0xAD);
+}
+
+TEST(VisitorTests, TryGet_PDSS1Message) {
+    L3PDSS1Message orig(0x33);
+    PDSS1M pdss1Variant(std::move(orig));
+    ParsedMessage pm(std::move(pdss1Variant));
+    EXPECT_NE(tryGet<L3PDSS1Message>(pm), nullptr);
+    EXPECT_EQ(messageName(pm), "PDSS1Message");
+    EXPECT_EQ(messagePD(pm), L3PD::PacketDomainSupplementaryServices1);
+}
+
+// ── PDSS2/Extended PD (0x0e) tests ────────────────────────────────────
 
 TEST(ExtendedMessageTest, Parse_Golden) {
-    // PD=0x0e(Extended), MTI=0x42, body=0xAA 0xBB 0xCC
+    // PD=0x0e(PacketDomainSupplementaryServices2), MTI=0x42, body=0xAA 0xBB 0xCC
     uint8_t data[] = {0xCE, 0x42, 0xAA, 0xBB, 0xCC};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
-    EXPECT_EQ(messagePD(*msg), L3PD::Extended);
+    EXPECT_EQ(messagePD(*msg), L3PD::PacketDomainSupplementaryServices2);
     EXPECT_EQ(messageMTI(*msg), 0x42);
     EXPECT_EQ(messageName(*msg), "ExtendedMessage");
     auto* ext = tryGet<L3ExtendedMessage>(*msg);
@@ -51,11 +122,11 @@ TEST(ExtendedMessageTest, Parse_Golden) {
 }
 
 TEST(ExtendedMessageTest, Parse_EmptyBody) {
-    // PD=0x0e(Extended), MTI=0x01, no body octets
+    // PD=0x0e(PacketDomainSupplementaryServices2), MTI=0x01, no body octets
     uint8_t data[] = {0x0E, 0x01};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
-    EXPECT_EQ(messagePD(*msg), L3PD::Extended);
+    EXPECT_EQ(messagePD(*msg), L3PD::PacketDomainSupplementaryServices2);
     EXPECT_EQ(messageMTI(*msg), 0x01);
     auto* ext = tryGet<L3ExtendedMessage>(*msg);
     ASSERT_TRUE(ext);
@@ -71,7 +142,7 @@ TEST(ExtendedMessageTest, RoundTrip) {
     ASSERT_TRUE(hex);
     auto reparsed = parseL3Hex(*hex);
     ASSERT_TRUE(reparsed);
-    EXPECT_EQ(messagePD(*reparsed), L3PD::Extended);
+    EXPECT_EQ(messagePD(*reparsed), L3PD::PacketDomainSupplementaryServices2);
     EXPECT_EQ(messageMTI(*reparsed), 0x55);
     EXPECT_EQ(messageName(*reparsed), "ExtendedMessage");
 }
@@ -86,7 +157,7 @@ TEST(ExtendedMessageTest, RoundTrip_WithBody) {
     ASSERT_TRUE(hex);
     auto reparsed = parseL3Hex(*hex);
     ASSERT_TRUE(reparsed);
-    EXPECT_EQ(messagePD(*reparsed), L3PD::Extended);
+    EXPECT_EQ(messagePD(*reparsed), L3PD::PacketDomainSupplementaryServices2);
     EXPECT_EQ(messageMTI(*reparsed), 0x7F);
     auto* ext = tryGet<L3ExtendedMessage>(*reparsed);
     ASSERT_TRUE(ext);
@@ -101,7 +172,7 @@ TEST(VisitorTests, TryGet_ExtendedMessage) {
     ParsedMessage pm(std::move(extVariant));
     EXPECT_NE(tryGet<L3ExtendedMessage>(pm), nullptr);
     EXPECT_EQ(messageName(pm), "ExtendedMessage");
-    EXPECT_EQ(messagePD(pm), L3PD::Extended);
+    EXPECT_EQ(messagePD(pm), L3PD::PacketDomainSupplementaryServices2);
 }
 
 // ── TestProcedure PD (0x0f) tests ─────────────────────────────────────
@@ -177,13 +248,13 @@ TEST(VisitorTests, TryGet_TestProcedureMessage) {
     EXPECT_EQ(messagePD(pm), L3PD::TestProcedure);
 }
 
-// ── L3Header parse for Extended/TestProcedure PDs ─────────────────────
+// ── L3Header parse for PDSS2/TestProcedure PDs ────────────────────────
 
 TEST(ExtendedHeaderTest, ParseL3Header_Extended) {
     uint8_t data[] = {0x0E, 0x55};
     auto hdr = parseL3Header(std::span<const uint8_t>(data));
     ASSERT_TRUE(hdr);
-    EXPECT_EQ(hdr.value().pd, L3PD::Extended);
+    EXPECT_EQ(hdr.value().pd, L3PD::PacketDomainSupplementaryServices2);
     EXPECT_EQ(hdr.value().mti, 0x55);
 }
 

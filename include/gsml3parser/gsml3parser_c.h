@@ -181,7 +181,8 @@ enum gsml3_pd {
     GSML3_PD_SM = 0x0a,
     GSML3_PD_SS = 0x0b,
     GSML3_PD_LS = 0x0c,
-    GSML3_PD_EXT = 0x0e,
+    GSML3_PD_PDSS1 = 0x0d,
+    GSML3_PD_PDSS2 = 0x0e,
     GSML3_PD_TST = 0x0f,
     GSML3_PD_UNDEFINED = -1
 };

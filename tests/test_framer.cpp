@@ -178,6 +178,46 @@ TEST(L3Framer, L2LengthTruncated) {
     ASSERT_EQ(static_cast<int>(result.error().code), static_cast<int>(ParseError::Code::SourceExhausted));
 }
 
+TEST(L3Framer, L2PseudoLengthBcchStream) {
+    // BCCH-style stream (TS 44.064 section 8): the first octet is the L2
+    // pseudo-length — the number of octets of the L3 message that follows.
+    // The frame is exactly those L3 octets; filler bytes after the L3
+    // message are not part of the frame.
+    // Synthetic SI1 (22 octets, TS 44.018 sections 9.1.31/10.5.2.1b):
+    // header 06 19 + cell channel description (16, variable-length BCCH
+    // frequency list form) + RACH control parameters (3) + rest octet (1).
+    uint8_t l3[] = {
+        0x06, 0x19,
+        0x8F, 0xB3, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xE5, 0x04, 0x00,
+        0x2B
+    };
+    std::vector<uint8_t> data;
+    data.push_back(0x16); // L2 pseudo-length: 22 octets of L3 follow
+    data.insert(data.end(), l3, l3 + sizeof(l3));
+    data.push_back(0x2B); // filler after the L3 message (not part of the frame)
+
+    SpanByteSource src{std::span<const uint8_t>(data.data(), data.size())};
+    FrameConfig cfg;
+    cfg.useL2Length = true;
+    L3Framer framer(src, cfg);
+
+    auto result = framer.nextFrame();
+    ASSERT_TRUE(result.has_value());
+    const auto& frame = result.value();
+    ASSERT_EQ(frame.data.size(), 22u);
+    ASSERT_EQ(frame.l2Length, 22u);
+    for (size_t i = 0; i < sizeof(l3); ++i) {
+        EXPECT_EQ(frame.data[i], l3[i]) << "byte " << i;
+    }
+
+    // The extracted frame is a complete SI1 message.
+    auto msg = parseL3(frame.data, ParserConfig{}.withStrictFraming(true));
+    ASSERT_TRUE(msg);
+    EXPECT_NE(tryGet<L3SystemInformationType1>(*msg), nullptr);
+}
+
 // ── buffered() tracking ────────────────────────────────────────────────
 
 TEST(L3Framer, BufferedCount) {

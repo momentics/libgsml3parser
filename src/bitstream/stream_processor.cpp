@@ -82,7 +82,8 @@ void L3StreamProcessor::processUntilEOF(FrameHandler& handler) {
             case L3PD::BroadcastCallControl:   mStats.bccMessages++; break;
             case L3PD::GroupCallControl:       mStats.gccMessages++; break;
             case L3PD::Location:               mStats.lsMessages++; break;
-            case L3PD::Extended:               mStats.extendedMessages++; break;
+            case L3PD::PacketDomainSupplementaryServices1: mStats.pdss1Messages++; break;
+            case L3PD::PacketDomainSupplementaryServices2: mStats.extendedMessages++; break;
             case L3PD::TestProcedure:          mStats.testprocMessages++; break;
             default:                           mStats.unsupportedPD++; break;
         }
@@ -141,7 +142,8 @@ void L3StreamProcessor::processN(size_t count, FrameHandler& handler) {
             case L3PD::BroadcastCallControl:   mStats.bccMessages++; break;
             case L3PD::GroupCallControl:       mStats.gccMessages++; break;
             case L3PD::Location:               mStats.lsMessages++; break;
-            case L3PD::Extended:               mStats.extendedMessages++; break;
+            case L3PD::PacketDomainSupplementaryServices1: mStats.pdss1Messages++; break;
+            case L3PD::PacketDomainSupplementaryServices2: mStats.extendedMessages++; break;
             case L3PD::TestProcedure:          mStats.testprocMessages++; break;
             default:                           mStats.unsupportedPD++; break;
         }

@@ -103,7 +103,8 @@ pub const GSML3_PD_SMS: c_int = 0x09;
 pub const GSML3_PD_SM: c_int = 0x0a;
 pub const GSML3_PD_SS: c_int = 0x0b;
 pub const GSML3_PD_LS: c_int = 0x0c;
-pub const GSML3_PD_EXT: c_int = 0x0e;
+pub const GSML3_PD_PDSS1: c_int = 0x0d;
+pub const GSML3_PD_PDSS2: c_int = 0x0e;
 pub const GSML3_PD_TST: c_int = 0x0f;
 pub const GSML3_PD_UNDEFINED: c_int = -1;
 

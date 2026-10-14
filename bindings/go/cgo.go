@@ -168,18 +168,19 @@ func Free(p unsafe.Pointer) { C.gsml3_free(p) }
 
 // Protocol discriminators (enum gsml3_pd).
 const (
-	PDGcc = 0x00
-	PDBcc = 0x01
-	PDCC  = 0x03 // Call Control
-	PDMM  = 0x05 // Mobility Management
-	PDRR  = 0x06 // Radio Resource
-	PDGmm = 0x08
-	PDSms = 0x09
-	PDSm  = 0x0a // Switching Mode
-	PDSS  = 0x0b
-	PDLS  = 0x0c
-	PDExt = 0x0e
-	PdTst = 0x0f
+	PDGcc   = 0x00
+	PDBcc   = 0x01
+	PDCC    = 0x03 // Call Control
+	PDMM    = 0x05 // Mobility Management
+	PDRR    = 0x06 // Radio Resource
+	PDGmm   = 0x08
+	PDSms   = 0x09
+	PDSm    = 0x0a // Switching Mode
+	PDSS    = 0x0b
+	PDLS    = 0x0c
+	PDPDSS1 = 0x0d
+	PDPDSS2 = 0x0e
+	PdTst   = 0x0f
 )
 
 // Mobile identity types (enum gsml3_id_type).

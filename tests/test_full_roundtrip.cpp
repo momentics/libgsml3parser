@@ -703,7 +703,11 @@ TEST(FullRoundTrip, LS_Domain) {
         L3PD::Location, L3LocationServiceProviderMessage::MTI, "L3LocationServiceProviderMessage");
 }
 
-// Extended and TestProc domains
+// PDSS1, Extended (PDSS2) and TestProc domains
+TEST(FullRoundTrip, PDSS1_Domain) {
+    expectWriteOnly(ParsedMessage{PDSS1M{L3PDSS1Message{}}}, "L3PDSS1Message");
+}
+
 TEST(FullRoundTrip, Extended_Domain) {
     expectWriteOnly(ParsedMessage{EXTENDED{L3ExtendedMessage{}}}, "L3ExtendedMessage");
 }

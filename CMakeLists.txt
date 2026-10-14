@@ -122,6 +122,10 @@ set(LS_SOURCES
     src/ls/l3lsmessages.cpp
 )
 
+set(PDSS1_SOURCES
+    src/pdss1/l3pdss1messages.cpp
+)
+
 set(EXTENDED_SOURCES
     src/extended/l3extendedmessages.cpp
 )
@@ -164,6 +168,7 @@ set(PUBLIC_HEADERS
     include/gsml3parser/bcc/l3bccmessages.h
     include/gsml3parser/gcc/l3gccmessages.h
     include/gsml3parser/ls/l3lsmessages.h
+    include/gsml3parser/pdss1/l3pdss1messages.h
     include/gsml3parser/extended/l3extendedmessages.h
     include/gsml3parser/testproc/l3testproceduremessages.h
     include/gsml3parser/message_types.h
@@ -226,6 +231,7 @@ add_library(gsml3parser
     ${BCC_SOURCES}
     ${GCC_SOURCES}
     ${LS_SOURCES}
+    ${PDSS1_SOURCES}
     ${EXTENDED_SOURCES}
     ${TESTPROC_SOURCES}
     ${CAPI_SOURCES}

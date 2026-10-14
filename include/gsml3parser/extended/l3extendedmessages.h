@@ -19,9 +19,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Extended PD (PD=0x0e) Message Classes - GSM 04.08 §10.2
-// Placeholder for future extended protocol discriminators.
-// MTI is determined at parse time from the L3 header.
+// Packet Domain Supplementary Services 2 PD (PD=0x0e) Message Classes -
+// GSM 04.08 §10.2. Passthrough domain: the MTI is determined at parse
+// time from the L3 header and the body is carried verbatim.
 
 #pragma once
 
@@ -36,7 +36,8 @@
 
 namespace gsml3parser {
 
-// ── Extended Message (GSM 04.08 PD=0x0e) ─────────────────────────────
+// ── Extended Message (GSM 04.08 PD=0x0e, packet domain supplementary
+// services 2) ──────────────────────────────────────────────────────────
 // Direction: Bidirectional
 // Body: raw octets (MTI determined at parse time)
 class L3ExtendedMessage {
@@ -51,7 +52,7 @@ public:
     explicit L3ExtendedMessage(uint8_t mti) : mMti(mti) {}
 
     uint8_t mti() const { return mMti; }
-    L3PD pd() const { return L3PD::Extended; }
+    L3PD pd() const { return L3PD::PacketDomainSupplementaryServices2; }
     const std::vector<uint8_t>& body() const { return mBody; }
     size_t bodyLength() const { return mBody.size(); }
     size_t l2BodyLength() const { return bodyLength(); }

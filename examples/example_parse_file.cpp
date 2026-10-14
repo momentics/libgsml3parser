@@ -20,8 +20,8 @@
 // SOFTWARE.
 
 // Demonstrates parsing L3 messages from hex strings or files, typed access
-// via tryGet<>, round-trip serialization, and batch parsing across all 12 PD
-// domains (RR, MM, CC, SS, GMM, SM, SMS, BCC, GCC, LS, EXT, TST).
+// via tryGet<>, round-trip serialization, and batch parsing across all 13 PD
+// domains (RR, MM, CC, SS, GMM, SM, SMS, BCC, GCC, LS, PDSS1, EXT, TST).
 
 #include <gsml3parser/gsml3parser.hpp>
 #include <fstream>
@@ -49,7 +49,7 @@ void printMsgDetails(const ParsedMessage& msg) {
     std::cout << "  Name: " << messageName(msg) << "\n";
 }
 
-// Demo: parse multiple hex frames from all 12 PD domains and display their types
+// Demo: parse multiple hex frames from all 13 PD domains and display their types
 void demoBatchParse(const std::vector<std::pair<std::string, std::string>>& hexFrames) {
     for (const auto& [label, hex] : hexFrames) {
         auto result = parseL3Hex(hex);
@@ -93,7 +93,7 @@ int main(int argc, char* argv[]) {
     if (result) {
         const auto& msg = *result;
 
-        // Typed access via tryGet - covers all 12 PD domains
+        // Typed access via tryGet - covers all 13 PD domains
         if (auto* cr = tryGet<L3ChannelRelease>(msg)) {
             std::cout << "RR: Channel Release detected\n";
         } else if (auto* paging = tryGet<L3PagingRequestType1>(msg)) {
@@ -116,6 +116,8 @@ int main(int argc, char* argv[]) {
             std::cout << "LS: LocationServiceRequest detected\n";
         } else if (auto* lsProv = tryGet<L3LocationServiceProviderMessage>(msg)) {
             std::cout << "LS: LocationServiceProviderMessage detected\n";
+        } else if (auto* pdss1 = tryGet<L3PDSS1Message>(msg)) {
+            std::cout << "PDSS1: PDSS1Message detected\n";
         } else if (auto* ext = tryGet<L3ExtendedMessage>(msg)) {
             std::cout << "EXT: ExtendedMessage detected\n";
         } else if (auto* tst = tryGet<L3TestProcedureMessage>(msg)) {
@@ -136,8 +138,8 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Demo batch parsing with representative messages from all 12 PD domains
-    std::cout << "\n--- Batch Parse Demo (All 12 PD Domains) ---\n";
+    // Demo batch parsing with representative messages from all 13 PD domains
+    std::cout << "\n--- Batch Parse Demo (All 13 PD Domains) ---\n";
     std::vector<std::pair<std::string, std::string>> batch{
         {"RR",       "06 0D 00"},                          // Channel Release
         {"MM",       "05 21"},                              // CM Service Accept
@@ -149,6 +151,7 @@ int main(int argc, char* argv[]) {
         {"BCC",      "01 00"},                               // BCC Setup
         {"GCC",      "00 00 02"},                            // GCC Setup
         {"LS",       "0C 01"},                               // LocationServiceRequest
+        {"PDSS1",    "0D 42"},                               // PDSS1Message (passthrough)
         {"EXT",      "0E 01"},                               // ExtendedMessage
         {"TST",      "0F 01"},                               // TestProcedureMessage
     };

@@ -19,8 +19,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-// Performance benchmark for parseL3() and L3StreamProcessor across all 12 PD
-// domains (RR, MM, CC, SS, GMM, SM, SMS, BCC, GCC, LS, EXT, TST).  Also includes a mixed-
+// Performance benchmark for parseL3() and L3StreamProcessor across all 13 PD
+// domains (RR, MM, CC, SS, GMM, SM, SMS, BCC, GCC, LS, PDSS1, EXT, TST).  Also includes a mixed-
 // domain stream benchmark with all message types interleaved.
 
 #include <chrono>
@@ -151,7 +151,7 @@ static uint64_t runZeroCopyBenchmark(const char* label, std::span<const uint8_t>
 }
 
 int main() {
-    printf("=== libgsml3parser Benchmark (12 PD Domains) ===\n");
+    printf("=== libgsml3parser Benchmark (13 PD Domains) ===\n");
     // Attribute results to the machine: performance depends on CPU/RAM/OS.
     printf("Hardware: %s\n\n", benchmark::hardwareId().c_str());
 
@@ -192,6 +192,9 @@ int main() {
     // LS: LocationServiceRequest (2 bytes) - PD=0x0c, MTI=0x01
     uint8_t lsMsg[] = {0x0C, 0x01};
 
+    // PDSS1: PDSS1Message (3 bytes) - PD=0x0d, MTI=0x42
+    uint8_t pdss1Msg[] = {0x0D, 0x42, 0x11};
+
     // EXT: ExtendedMessage (2 bytes) - PD=0x0e, MTI=0x01
     uint8_t extMsg[] = {0x0E, 0x01};
 
@@ -211,6 +214,7 @@ int main() {
     runParseBenchmark("BCC Setup", bccMsg, iterations);
     runParseBenchmark("GCC Setup", gccMsg, iterations);
     runParseBenchmark("LS LocationServiceRequest", lsMsg, iterations);
+    runParseBenchmark("PDSS1 PDSS1Message", pdss1Msg, iterations);
     runParseBenchmark("EXT ExtendedMessage", extMsg, iterations);
     runParseBenchmark("TST TestProcedureMessage", tstMsg, iterations);
 
@@ -236,22 +240,25 @@ int main() {
     if (streamCount != iterations) { printf("FAIL: GCC stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
     streamCount = runStreamBenchmark("LS LocationServiceRequest", lsMsg, iterations);
     if (streamCount != iterations) { printf("FAIL: LS stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
+    streamCount = runStreamBenchmark("PDSS1 PDSS1Message", pdss1Msg, iterations);
+    if (streamCount != iterations) { printf("FAIL: PDSS1 stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
     streamCount = runStreamBenchmark("EXT ExtendedMessage", extMsg, iterations);
     if (streamCount != iterations) { printf("FAIL: EXT stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
     streamCount = runStreamBenchmark("TST TestProcedureMessage", tstMsg, iterations);
     if (streamCount != iterations) { printf("FAIL: TST stream lost frames (%" PRIu64 "/%" PRIu64 ")\n", streamCount, iterations); return 1; }
 
-    printf("\n--- Mixed stream Benchmark (All 12 PD Domains) ---\n");
-    // Build a mixed stream with all 12 message types interleaved
+    printf("\n--- Mixed stream Benchmark (All 13 PD Domains) ---\n");
+    // Build a mixed stream with all 13 message types interleaved
     // (L2-length framing).
     std::vector<std::pair<const uint8_t*, size_t>> allMsgs{
         {rrMsg, sizeof(rrMsg)},   {mmMsg, sizeof(mmMsg)},   {ccMsg.data(), ccMsg.size()},
         {ssMsg, sizeof(ssMsg)},   {gmmMsg, sizeof(gmmMsg)}, {smMsg, sizeof(smMsg)},
         {smsMsg, sizeof(smsMsg)}, {bccMsg, sizeof(bccMsg)}, {gccMsg, sizeof(gccMsg)},
-        {lsMsg, sizeof(lsMsg)},   {extMsg, sizeof(extMsg)}, {tstMsg, sizeof(tstMsg)},
+        {lsMsg, sizeof(lsMsg)},   {pdss1Msg, sizeof(pdss1Msg)}, {extMsg, sizeof(extMsg)},
+        {tstMsg, sizeof(tstMsg)},
     };
     {
-        uint64_t mixedIters = iterations / 12;
+        uint64_t mixedIters = iterations / 13;
         auto data = buildL2Data(allMsgs, mixedIters);
 
         SpanByteSource src(data);
@@ -275,23 +282,23 @@ int main() {
         uint64_t perSec = secs > 0 ? static_cast<uint64_t>(handler.count / secs) : 0;
 
         printf("  %-40s %" PRIu64 " msgs  %8.4f s  %" PRIu64 " msg/s\n",
-                "Mixed (all 12 PD domains)", handler.count, secs, perSec);
+                "Mixed (all 13 PD domains)", handler.count, secs, perSec);
 
-        if (handler.count != mixedIters * 12) {
+        if (handler.count != mixedIters * 13) {
             printf("FAIL: mixed stream lost frames (%" PRIu64 "/%" PRIu64 ")\n",
-                   handler.count, mixedIters * 12);
+                   handler.count, mixedIters * 13);
             return 1;
         }
     }
 
     // Zero-copy benchmark: compare against L3StreamProcessor for mixed stream.
-    printf("\n--- ZeroCopyStreamProcessor Benchmark (All 12 PD Domains) ---\n");
+    printf("\n--- ZeroCopyStreamProcessor Benchmark (All 13 PD Domains) ---\n");
     {
-        uint64_t mixedIters = iterations / 12;
+        uint64_t mixedIters = iterations / 13;
         auto l2Data = buildL2Data(allMsgs, mixedIters);
 
-        uint64_t zcCount = runZeroCopyBenchmark("Zero-copy (all 12 PD domains)", std::span<const uint8_t>(l2Data));
-        if (zcCount != mixedIters * 12) { printf("FAIL: zero-copy stream lost frames\n"); return 1; }
+        uint64_t zcCount = runZeroCopyBenchmark("Zero-copy (all 13 PD domains)", std::span<const uint8_t>(l2Data));
+        if (zcCount != mixedIters * 13) { printf("FAIL: zero-copy stream lost frames\n"); return 1; }
     }
 
     printf("\n=== Benchmark complete ===\n");

@@ -35,12 +35,15 @@ namespace gsml3parser {
 /** Configuration for frame boundary detection. */
 struct FrameConfig {
     /** Use L2 length octet before each L3 message for framing.
-     *  Default: true — deterministic framing, which is what
-     *  production LAPDm / A-bis paths provide. Set to false for the
-     *  header-based heuristic (fixed-length table + next-plausible-
-     *  header scan for variable-length messages; unreliable on real
-     *  variable-length streams — see the Known Limitations in
-     *  doc/bts_architecture.md). */
+      *  Default: true — deterministic framing, which is what
+      *  production LAPDm / A-bis paths provide. BCCH-style stream:
+      *  the first octet is the L2 pseudo-length (the number of
+      *  octets of the L3 message that follows), per TS 44.064
+      *  section 8. Set to false for the header-based heuristic
+      *  (fixed-length table + next-plausible-header scan for
+      *  variable-length messages; unreliable on real variable-length
+      *  streams — see the Known Limitations in
+      *  doc/bts_architecture.md). */
     bool useL2Length{true};
 
     /** Safety limit: reject frames larger than this many bytes. */
@@ -78,7 +81,9 @@ struct ExtractedFrame {
  * ExtractedFrame objects that the caller can pass to parseL3().
  *
  * Two framing modes are supported:
- * - L2 length mode: each frame is preceded by a length octet.
+ * - L2 length mode: each frame is preceded by the L2 pseudo-length
+ *   octet — the number of octets of the L3 message that follows
+ *   (TS 44.064 section 8).
  * - Header-based mode: the L3 header (PD + MTI) is parsed to determine body length.
  */
 class L3Framer {

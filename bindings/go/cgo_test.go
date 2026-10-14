@@ -99,7 +99,8 @@ var kBatch = []pdBatch{
 	{PDBcc, "01 00", 0x00},            // BCC Setup
 	{PDGcc, "00 00 02", 0x00},         // GCC Setup
 	{PDLS, "0C 01", 0x01},             // LocationServiceRequest
-	{PDExt, "0E 01", 0x01},            // ExtendedMessage
+	{PDPDSS1, "0D 42", 0x42},          // PDSS1Message (passthrough)
+	{PDPDSS2, "0E 01", 0x01},          // ExtendedMessage
 	{PdTst, "0F 01", 0x01},            // TestProcedureMessage
 }
 

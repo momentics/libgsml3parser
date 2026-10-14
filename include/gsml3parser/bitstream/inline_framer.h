@@ -42,7 +42,9 @@ namespace gsml3parser {
  * yielding views into the original data with zero allocations.
  *
  * Supports two framing modes:
- * - L2 length mode: each frame preceded by a length octet.
+ * - L2 length mode: each frame preceded by the L2 pseudo-length octet
+ *   (the number of octets of the L3 message that follows, TS 44.064
+ *   section 8).
  * - Header-based mode: frame length derived from PD+MTI fixed-length table.
  *
  * Framing modes: L2 length mode is the DEFAULT (useL2Length =
@@ -70,7 +72,8 @@ public:
      * Construct an InlineFramer over a contiguous data span.
      *
      * @param data        The raw byte buffer containing L3 frames.
-     * @param useL2Length If true, each frame is preceded by a single length octet.
+     * @param useL2Length If true, each frame is preceded by the L2
+     *                    pseudo-length octet (TS 44.064 section 8).
      */
     explicit InlineFramer(std::span<const uint8_t> data, bool useL2Length = true);
 
@@ -179,7 +182,8 @@ inline std::optional<std::span<const uint8_t>> InlineFramer::nextFrame() noexcep
                     candidatePd == 0x06 || candidatePd == 0x08 ||
                     candidatePd == 0x09 || candidatePd == 0x0A ||
                     candidatePd == 0x0B || candidatePd == 0x0C ||
-                    candidatePd == 0x0E || candidatePd == 0x0F) {
+                    candidatePd == 0x0D || candidatePd == 0x0E ||
+                    candidatePd == 0x0F) {
                     frameLen = i - mPos;
                     break;
                 }

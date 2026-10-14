@@ -187,14 +187,15 @@ Expected<ExtractedFrame> L3Framer::tryExtract(bool atEof) {
                     // A boundary candidate must hold a TS-valid protocol
                     // discriminator: GCC 0x00, BCC 0x01, CC 0x03, MM 0x05,
                     // RR 0x06, GMM 0x08, SMS 0x09, SM 0x0a, NC-SS 0x0b,
-                    // LCS 0x0c, extended 0x0e, test procedure 0x0f.
+                    // LCS 0x0c, PDSS1 0x0d, PDSS2 0x0e, test procedure 0x0f.
                     const bool plausible =
                         candidatePd == 0x00 || candidatePd == 0x01 ||
                         candidatePd == 0x03 || candidatePd == 0x05 ||
                         candidatePd == 0x06 || candidatePd == 0x08 ||
                         candidatePd == 0x09 || candidatePd == 0x0a ||
                         candidatePd == 0x0b || candidatePd == 0x0c ||
-                        candidatePd == 0x0e || candidatePd == 0x0f;
+                        candidatePd == 0x0d || candidatePd == 0x0e ||
+                        candidatePd == 0x0f;
                     if (plausible) {
                         // This might be the start of the next message.
                         frameLen = i - mPos;

@@ -57,6 +57,7 @@
 #include "gsml3parser/bcc/l3bccmessages.h"
 #include "gsml3parser/gcc/l3gccmessages.h"
 #include "gsml3parser/ls/l3lsmessages.h"
+#include "gsml3parser/pdss1/l3pdss1messages.h"
 #include "gsml3parser/extended/l3extendedmessages.h"
 #include "gsml3parser/testproc/l3testproceduremessages.h"
 #include "gsml3parser/message_types.h"

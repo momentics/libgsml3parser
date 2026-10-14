@@ -62,7 +62,8 @@ public:
      * Construct a zero-copy processor over a contiguous data span.
      *
      * @param data        The raw byte buffer containing L3 frames.
-     * @param useL2Length If true (default), each frame is preceded by a single length octet.
+     * @param useL2Length If true (default), each frame is preceded by the
+     *                    L2 pseudo-length octet (TS 44.064 section 8).
      */
     explicit ZeroCopyStreamProcessor(std::span<const uint8_t> data,
                                       bool useL2Length = true);
@@ -116,7 +117,8 @@ public:
                 case L3PD::BroadcastCallControl:   mStats.bccMessages++; break;
                 case L3PD::GroupCallControl:       mStats.gccMessages++; break;
                 case L3PD::Location:               mStats.lsMessages++; break;
-                case L3PD::Extended:               mStats.extendedMessages++; break;
+                case L3PD::PacketDomainSupplementaryServices1: mStats.pdss1Messages++; break;
+                case L3PD::PacketDomainSupplementaryServices2: mStats.extendedMessages++; break;
                 case L3PD::TestProcedure:          mStats.testprocMessages++; break;
                 default:                           mStats.unsupportedPD++; break;
             }
@@ -178,7 +180,8 @@ inline std::optional<ParsedMessage> ZeroCopyStreamProcessor::nextMessage() {
         case L3PD::BroadcastCallControl:   mStats.bccMessages++; break;
         case L3PD::GroupCallControl:       mStats.gccMessages++; break;
         case L3PD::Location:               mStats.lsMessages++; break;
-        case L3PD::Extended:               mStats.extendedMessages++; break;
+        case L3PD::PacketDomainSupplementaryServices1: mStats.pdss1Messages++; break;
+        case L3PD::PacketDomainSupplementaryServices2: mStats.extendedMessages++; break;
         case L3PD::TestProcedure:          mStats.testprocMessages++; break;
         default:                           mStats.unsupportedPD++; break;
     }

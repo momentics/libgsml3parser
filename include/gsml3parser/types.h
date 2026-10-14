@@ -52,7 +52,8 @@ enum class L3PD : int8_t {
     GPRSSessionManagement = 0x0a,
     NonCallSS            = 0x0b,
     Location             = 0x0c,
-    Extended             = 0x0e,
+    PacketDomainSupplementaryServices1 = 0x0d,
+    PacketDomainSupplementaryServices2 = 0x0e,
     TestProcedure        = 0x0f,
     Undefined            = -1
 };

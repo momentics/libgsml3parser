@@ -567,11 +567,11 @@ TEST(ParserTest, SevenByteGccFrame_StandardParse) {
 }
 
 // Test: 4-byte frames whose low nibble of octet 0 is a reserved PD
-// (0x02/0x04/0x07/0x0d) are HandoverAccess, not "invalid PD" errors
+// (0x02/0x04/0x07) are HandoverAccess, not "invalid PD" errors
 // (parseL3Header rejects reserved PDs, so the short-message path must
 // still be reached for such frames).
 TEST(ParserTest, ShortMessage_HandoverAccess_ReservedPDNibble) {
-    for (uint8_t first : {0x02u, 0x04u, 0x07u, 0x0Du}) {
+    for (uint8_t first : {0x02u, 0x04u, 0x07u}) {
         // Last byte 0x00: the 5 reserved bits are zero .
         uint8_t data[] = {first, 0x00, 0x00, 0x00};
         auto res = parseL3(std::span<const uint8_t>(data));
@@ -689,11 +689,19 @@ TEST(ParserTest, ParseL3Hex_LS) {
     EXPECT_NE(tryGet<L3LocationServiceRequest>(*res), nullptr);
 }
 
+TEST(ParserTest, ParseL3Hex_PDSS1) {
+    // PDSS1: PD=0x0d (low nibble), MTI=0x42, body=AA BB CC
+    auto res = parseL3Hex("0D42 AABBCC");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::PacketDomainSupplementaryServices1);
+    EXPECT_NE(tryGet<L3PDSS1Message>(*res), nullptr);
+}
+
 TEST(ParserTest, ParseL3Hex_Extended) {
-    // Extended: PD=0x0e (low nibble), MTI=0x42, body=AA BB CC
+    // Extended (PDSS2): PD=0x0e (low nibble), MTI=0x42, body=AA BB CC
     auto res = parseL3Hex("0E42 AABBCC");
     ASSERT_TRUE(res);
-    EXPECT_EQ(messagePD(*res), L3PD::Extended);
+    EXPECT_EQ(messagePD(*res), L3PD::PacketDomainSupplementaryServices2);
     EXPECT_NE(tryGet<L3ExtendedMessage>(*res), nullptr);
 }
 
@@ -749,6 +757,17 @@ TEST(ParserTest, RoundTrip_LS_LocationServiceRequest) {
     EXPECT_NE(tryGet<L3LocationServiceRequest>(*res), nullptr);
 }
 
+TEST(ParserTest, RoundTrip_PDSS1) {
+    L3PDSS1Message orig(0x55);
+    ParsedMessage pm{PDSS1M{std::move(orig)}};
+    auto hex = writeL3Hex(pm);
+    ASSERT_TRUE(hex);
+    auto res = parseL3Hex(hex.value());
+    ASSERT_TRUE(res);
+    EXPECT_EQ(messagePD(*res), L3PD::PacketDomainSupplementaryServices1);
+    EXPECT_NE(tryGet<L3PDSS1Message>(*res), nullptr);
+}
+
 TEST(ParserTest, RoundTrip_Extended) {
     L3ExtendedMessage orig(0x55);
     ParsedMessage pm{EXTENDED{std::move(orig)}};
@@ -756,7 +775,7 @@ TEST(ParserTest, RoundTrip_Extended) {
     ASSERT_TRUE(hex);
     auto res = parseL3Hex(hex.value());
     ASSERT_TRUE(res);
-    EXPECT_EQ(messagePD(*res), L3PD::Extended);
+    EXPECT_EQ(messagePD(*res), L3PD::PacketDomainSupplementaryServices2);
     EXPECT_NE(tryGet<L3ExtendedMessage>(*res), nullptr);
 }
 
@@ -784,7 +803,7 @@ TEST(ParserTest, BinaryRoundTrip_Extended) {
     ASSERT_TRUE(writeRes);
     auto readRes = parseL3(std::span<const uint8_t>(buf, writeRes.value()));
     ASSERT_TRUE(readRes);
-    EXPECT_EQ(messagePD(*readRes), L3PD::Extended);
+    EXPECT_EQ(messagePD(*readRes), L3PD::PacketDomainSupplementaryServices2);
     EXPECT_NE(tryGet<L3ExtendedMessage>(*readRes), nullptr);
 }
 

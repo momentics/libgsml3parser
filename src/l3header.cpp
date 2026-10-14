@@ -38,9 +38,10 @@ Expected<L3Header> parseL3Header(std::span<const uint8_t> data) {
     // (TS 24.007 Table 11.3).
     hdr.pd = static_cast<L3PD>(byte0 & 0x0F);
     if (static_cast<uint8_t>(hdr.pd) == 0x02 || static_cast<uint8_t>(hdr.pd) == 0x04 ||
-        static_cast<uint8_t>(hdr.pd) == 0x07 || static_cast<uint8_t>(hdr.pd) == 0x0D) {
-        // 0x02, 0x04, 0x07 and 0x0D are reserved PDs (TS 44.018 section 10.2);
-        // parseL3Header rejects them with InvalidPD.
+        static_cast<uint8_t>(hdr.pd) == 0x07) {
+        // 0x02, 0x04 and 0x07 are reserved PDs (TS 44.018 section 10.2);
+        // parseL3Header rejects them with InvalidPD. PDSS1 (0x0D) and
+        // PDSS2 (0x0E) are parsed as passthrough domains.
         return Expected<L3Header>::error(
             {ParseError::Code::InvalidPD, "Reserved Protocol Discriminator"});
     }
@@ -65,7 +66,8 @@ Expected<L3Header> parseL3Header(std::span<const uint8_t> data) {
         // (TS 24.011 section 8.2).
         hdr.mti = byte1 & 0x1F;
     } else {
-        // RR normal, GMM, SM, LCS and the extended/test PDs carry the
+        // RR normal, GMM, SM, LCS, the packet-domain supplementary
+        // service PDs (0x0D/0x0E) and the test-procedure PD carry the
         // message type as a full octet.
         hdr.mti = byte1;
     }

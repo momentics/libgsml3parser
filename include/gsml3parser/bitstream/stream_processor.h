@@ -60,6 +60,7 @@ struct StreamStats {
     uint64_t bccMessages{};
     uint64_t gccMessages{};
     uint64_t lsMessages{};
+    uint64_t pdss1Messages{};
     uint64_t extendedMessages{};
     uint64_t testprocMessages{};
 };
@@ -199,7 +200,8 @@ bool L3StreamProcessor::processOne(F&& handler) {
         case L3PD::BroadcastCallControl:   mStats.bccMessages++; break;
         case L3PD::GroupCallControl:       mStats.gccMessages++; break;
         case L3PD::Location:               mStats.lsMessages++; break;
-        case L3PD::Extended:               mStats.extendedMessages++; break;
+        case L3PD::PacketDomainSupplementaryServices1: mStats.pdss1Messages++; break;
+        case L3PD::PacketDomainSupplementaryServices2: mStats.extendedMessages++; break;
         case L3PD::TestProcedure:          mStats.testprocMessages++; break;
         default:                           mStats.unsupportedPD++; break;
     }

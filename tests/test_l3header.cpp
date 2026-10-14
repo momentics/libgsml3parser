@@ -99,27 +99,42 @@ TEST(L3HeaderTest, SingleByte) {
     EXPECT_EQ(res.error().code, ParseError::Code::TruncatedInput);
 }
 
-// ── Extended PD (0x0e) header ──────────────────────────────────────────
+// ── PDSS1 (0x0d) header ───────────────────────────────────────────────
+
+TEST(L3HeaderTest, PDSS1Header) {
+    // PD=0x0d(PacketDomainSupplementaryServices1) in the low nibble of
+    // octet 0, MTI=0x42, raw byte extraction
+    std::array<uint8_t, 2> data{0x0D, 0x42};
+    auto res = parseL3Header(data);
+    EXPECT_TRUE(res.has_value());
+    L3Header hdr = res.value();
+    EXPECT_EQ(hdr.pd, L3PD::PacketDomainSupplementaryServices1);
+    EXPECT_EQ(hdr.mti, 0x42);
+    EXPECT_EQ(hdr.ti, 0u);
+    EXPECT_FALSE(hdr.tif);
+}
+
+// ── PDSS2 (0x0e) header ───────────────────────────────────────────────
 
 TEST(L3HeaderTest, ExtendedHeader) {
-    // PD=0x0e(Extended) in the low nibble of octet 0, MTI=0x55, raw byte extraction
+    // PD=0x0e(PacketDomainSupplementaryServices2) in the low nibble of octet 0, MTI=0x55, raw byte extraction
     std::array<uint8_t, 2> data{0x0E, 0x55};
     auto res = parseL3Header(data);
     EXPECT_TRUE(res.has_value());
     L3Header hdr = res.value();
-    EXPECT_EQ(hdr.pd, L3PD::Extended);
+    EXPECT_EQ(hdr.pd, L3PD::PacketDomainSupplementaryServices2);
     EXPECT_EQ(hdr.mti, 0x55);
     EXPECT_EQ(hdr.ti, 0u);
     EXPECT_FALSE(hdr.tif);
 }
 
 TEST(L3HeaderTest, ExtendedHeader_HighMTI) {
-    // PD=0x0e(Extended), MTI=0xFF (high raw byte value)
+    // PD=0x0e(PacketDomainSupplementaryServices2), MTI=0xFF (high raw byte value)
     std::array<uint8_t, 2> data{0x0E, 0xFF};
     auto res = parseL3Header(data);
     EXPECT_TRUE(res.has_value());
     L3Header hdr = res.value();
-    EXPECT_EQ(hdr.pd, L3PD::Extended);
+    EXPECT_EQ(hdr.pd, L3PD::PacketDomainSupplementaryServices2);
     EXPECT_EQ(hdr.mti, 0xFF);
 }
 
@@ -214,11 +229,11 @@ TEST(L3HeaderTest, SMSHeader) {
     EXPECT_EQ(res.value().mti, 0x01);
 }
 
-// Test: reserved PD values (0x02, 0x04, 0x07, 0x0d) are rejected with
+// Test: reserved PD values (0x02, 0x04, 0x07) are rejected with
 // InvalidPD instead of producing an L3Header with a non-enumerator PD.
 // The PD occupies the low nibble of octet 0 (TS 24.008 L3 header).
 TEST(L3HeaderTest, ReservedPD_Invalid) {
-    for (uint8_t pd : {0x02u, 0x04u, 0x07u, 0x0Du}) {
+    for (uint8_t pd : {0x02u, 0x04u, 0x07u}) {
         uint8_t data[] = {static_cast<uint8_t>(pd), 0x00};
         auto res = parseL3Header(std::span<const uint8_t>(data, 2));
         ASSERT_FALSE(res) << "PD 0x" << std::hex << pd << " must be rejected";

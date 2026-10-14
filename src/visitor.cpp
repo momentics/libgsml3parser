@@ -259,10 +259,9 @@ struct NameVisitor {
     std::string_view operator()(const L3LocationServiceRequest&) const { return "LocationServiceRequest"; }
     std::string_view operator()(const L3LocationServiceProviderMessage&) const { return "LocationServiceProviderMessage"; }
 
-    // Extended names
+    // Passthrough PD names (runtime-determined MTI)
+    std::string_view operator()(const L3PDSS1Message&) const { return "PDSS1Message"; }
     std::string_view operator()(const L3ExtendedMessage&) const { return "ExtendedMessage"; }
-
-    // TestProcedure names
     std::string_view operator()(const L3TestProcedureMessage&) const { return "TestProcedureMessage"; }
 };
 
@@ -277,7 +276,8 @@ struct PDVisitor {
     L3PD operator()(const BCCM&) const { return L3PD::BroadcastCallControl; }
     L3PD operator()(const GCCM&) const { return L3PD::GroupCallControl; }
     L3PD operator()(const LSM&) const { return L3PD::Location; }
-    L3PD operator()(const EXTENDED&) const { return L3PD::Extended; }
+    L3PD operator()(const PDSS1M&) const { return L3PD::PacketDomainSupplementaryServices1; }
+    L3PD operator()(const EXTENDED&) const { return L3PD::PacketDomainSupplementaryServices2; }
     L3PD operator()(const TESTPROC&) const { return L3PD::TestProcedure; }
 };
 
@@ -292,6 +292,7 @@ struct MTIVisitor {
     int operator()(const BCCM& v) const { return std::visit(*this, v); }
     int operator()(const GCCM& v) const { return std::visit(*this, v); }
     int operator()(const LSM& v) const { return std::visit(*this, v); }
+    int operator()(const PDSS1M& v) const { return std::visit(*this, v); }
     int operator()(const EXTENDED& v) const { return std::visit(*this, v); }
     int operator()(const TESTPROC& v) const { return std::visit(*this, v); }
 
@@ -524,10 +525,9 @@ struct MTIVisitor {
     int operator()(const L3LocationServiceRequest&) const { return L3LocationServiceRequest::MTI; }
     int operator()(const L3LocationServiceProviderMessage&) const { return L3LocationServiceProviderMessage::MTI; }
 
-    // Extended PD MTI values (runtime-determined)
+    // Passthrough PD MTI values (runtime-determined)
+    int operator()(const L3PDSS1Message& msg) const { return msg.mti(); }
     int operator()(const L3ExtendedMessage& msg) const { return msg.mti(); }
-
-    // TestProcedure PD MTI values (runtime-determined)
     int operator()(const L3TestProcedureMessage& msg) const { return msg.mti(); }
 };
 
@@ -543,6 +543,7 @@ struct TIVisitor {
     uint8_t operator()(const BCCM&) const { return 0; }
     uint8_t operator()(const GCCM&) const { return 0; }
     uint8_t operator()(const LSM&) const { return 0; }
+    uint8_t operator()(const PDSS1M&) const { return 0; }
     uint8_t operator()(const EXTENDED&) const { return 0; }
     uint8_t operator()(const TESTPROC&) const { return 0; }
 

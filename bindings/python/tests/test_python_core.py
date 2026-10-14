@@ -68,13 +68,14 @@ K_BATCH = [
     (g.PD_BCC,  "01 00",             0x00),   # BCC Setup
     (g.PD_GCC,  "00 00 02",          0x00),   # GCC Setup
     (g.PD_LS,   "0C 01",             0x01),   # LocationServiceRequest
-    (g.PD_EXT,  "0E 01",             0x01),   # ExtendedMessage
+    (g.PD_PDSS1, "0D 42",            0x42),   # PDSS1Message (passthrough)
+    (g.PD_PDSS2, "0E 01",            0x01),   # ExtendedMessage
     (g.PD_TST,  "0F 01",             0x01),   # TestProcedureMessage
 ]
 
 
 @pytest.mark.parametrize("pd,hexstr,mti", K_BATCH, ids=[f"PD{pd:02X}_{hexstr}" for pd, hexstr, _ in K_BATCH])
-def roundtrip_12_pd_vectors(pd, hexstr, mti):
+def roundtrip_13_pd_vectors(pd, hexstr, mti):
     """Parse -> metadata (pd/mti) -> exact wire write -> reparse identity.
     The write is byte-exact against the original vector."""
     m = g.Message.from_hex(hexstr)
