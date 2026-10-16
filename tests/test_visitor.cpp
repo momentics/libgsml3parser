@@ -726,7 +726,7 @@ TEST(Visitor, messageMTI_GCC) {
 // =====================================================================
 
 TEST(Visitor, ParseAndTryGet_GMM) {
-    ParsedMessage orig{GMM{L3GMMStatus{GMMCause::ReqAccepted}}};
+    ParsedMessage orig{GMM{L3GMMStatus{GMMCause::Unspecified}}};
     auto hex = writeL3Hex(orig);
     ASSERT_TRUE(hex);
     auto res = parseL3Hex(hex.value());

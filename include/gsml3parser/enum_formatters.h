@@ -81,8 +81,6 @@ GSML3PARSER_FORMATTER(gsml3parser::BSSCause)
 
 GSML3PARSER_FORMATTER(gsml3parser::CCMessageType)
 
-GSML3PARSER_FORMATTER(gsml3parser::GMMPTMSIType)
-
 } // namespace std
 
 #undef GSML3PARSER_FORMATTER

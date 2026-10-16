@@ -25,7 +25,7 @@
 //
 // Bit layout (per spec):
 //   PDPContextStatus: TLV(IEI=0x32) | Length(1) | StatusBitmap(2)
-//   T3302: TLV(IEI=0x1b) | Length(1) | TimerValue(1)
+//   T3302: TLV(IEI=0x2a) | Length(1) | TimerValue(1)
 //   MSNetworkCapability: V-format (variable length, bit fields per 10.5.7.3)
 //   RoutingAreaIdentification: MCC/MNC BCD(3) | LAC(2) | RAC(1) = 6 octets
 //   DRXParameter: V-format (two value octets, no identifier, per 10.5.5.13)
@@ -44,41 +44,69 @@
 
 namespace gsml3parser {
 
-// ── GMM Cause (GSM 24.008 10.5.3.2.2) ─────────────────────────────────
-// Cause values specific to GMM procedures. Shared coding with MM cause
-// where values overlap, but semantically distinct per spec section.
+// ── GMM Cause (TS 44.068 / TS 24.008 section 10.5.5.14) ───────────────
+// Cause values specific to GMM procedures, carried as a single value
+// octet at the start of the body of reject and failure messages.
 
 enum class GMMCause : uint8_t {
-    Unspecified = 0,
-    ReqAccepted = 1,
-    GprsNotAllowed = 7,
-    GprsAndImsiAttachNotAllowedIn_PLMN = 8,
-    No_Suitable_Cells_In_RAC = 0xb,
-    GPRS_Service_Not_Allowed = 0xc,
-    ES_Service_Not_Allowed = 0xd,
-    PLMN_Not_Allowed = 0xe,
-    RAC_Not_Allowed = 0xf,
-    Roaming_Not_Allowed_In_RAC = 0x10,
-    GPRS_Packet_Service_Not_Available = 0x12,
-    Local_Optimisation = 0x13,
-    MAC_Failure = 0x14,
-    Synch_Failure = 0x15,
-    Physical_Channel_Could_Not_Be_Assigned = 0x18,
-    Uplink_Interference = 0x19,
-    Downlink_Interference = 0x1a,
-    CS_domain_not_allowing_access_to_GPRS = 0x23,
-    PDP_Context_Without_Transforming_Linkage_Exist = 0x24,
-    Semantically_Incorrect_Message = 0x5f,
+    Unspecified = 0x00,             // builder sentinel only; must be replaced with a defined cause before wire emission
+    IMSI_Unknown_In_HLR = 0x02,     Illegal_MS = 0x03,
+    IMEI_Not_Accepted = 0x05,       Illegal_ME = 0x06,
+    GPRS_Services_Not_Allowed = 0x07,
+    GPRS_And_Non_GPRS_Services_Not_Allowed = 0x08,
+    MS_Identity_Cannot_Be_Derived = 0x09,
+    Implicitly_Detached = 0x0A,
+    PLMN_Not_Allowed = 0x0B,        Location_Area_Not_Allowed = 0x0C,
+    Roaming_Not_Allowed_In_Location_Area = 0x0D,
+    GPRS_Services_Not_Allowed_In_PLMN = 0x0E,
+    No_Suitable_Cells_In_Location_Routing_Area = 0x0F,
+    MSC_Temporarily_Not_Reachable = 0x10,
+    Network_Failure = 0x11,
+    MAC_Failure = 0x14,             Synch_Failure = 0x15,
+    Congestion = 0x16,              GSM_Authentication_Unacceptable = 0x17,
+    Not_Authorized_For_This_CSG = 0x19,
+    No_PDP_Context_Activated = 0x28,
+    Semantically_Incorrect_Message = 0x5F,
     Invalid_Mandatory_Information = 0x60,
-    Message_Type_Invalid = 0x61,
+    Message_Type_Not_Implemented = 0x61,
     Message_Type_Not_Compatible_With_State = 0x62,
-    IE_Invalid = 0x63,
-    Conditional_IE_Error = 0x64,
-    Message_Not_Compatible_With_State = 0x65,
-    Protocol_Error_Unspecified = 0x6f
+    Protocol_Error_Unspecified = 0x6F
 };
 
 const char* GMMCause2Str(GMMCause cause);
+
+namespace detail {
+
+// GPRS timer value part, one octet (TS 24.008 section 10.5.7.3):
+// high three bits are the time unit, low five bits the value within that
+// unit. Units: 0 = 2 s interval, 1 = minutes, 2 = deci-hours, 7 = deactivated.
+struct GprsTimerValue {
+    uint8_t units{7};
+    uint8_t value{0};
+
+    bool operator==(const GprsTimerValue&) const = default;
+
+    [[nodiscard]] constexpr uint8_t octet() const noexcept {
+        return static_cast<uint8_t>((units & 0x07u) << 5 | (value & 0x1Fu));
+    }
+
+    // Convert a duration in seconds to the unit/value coding: a zero
+    // duration deactivates the timer; values up to 62 s use the 2-second
+    // interval unit; larger values are converted to minutes and then to
+    // deci-hours, with durations that do not fit clamped to the deactivated
+    // coding (TS 24.008 section 10.5.7.3).
+    [[nodiscard]] static constexpr GprsTimerValue fromSeconds(unsigned s) noexcept {
+        if (s == 0) return GprsTimerValue{7, 0};
+        if (s <= 62) return GprsTimerValue{0, static_cast<uint8_t>(s / 2)};
+        unsigned m = (s + 59) / 60;
+        if (m >= 200) return GprsTimerValue{7, 0};
+        if (m > 186) return GprsTimerValue{2, 31};
+        if (m > 31) return GprsTimerValue{2, static_cast<uint8_t>((m + 5) / 6)};
+        return GprsTimerValue{1, static_cast<uint8_t>(m)};
+    }
+};
+
+} // namespace detail
 
 // ── Attach Type (GSM 24.008 10.5.5.19) ────────────────────────────────
 
@@ -110,15 +138,6 @@ enum class GMMDetachTypeMT : uint8_t {
     IMSIDetach = 3             // '011'B
 };
 
-// ── P-TMSI Type (GSM 24.008) ──────────────────────────────────────────
-
-enum class GMMPTMSIType : uint8_t {
-    Native = 0,
-    Mapped = 1
-};
-
-std::ostream& operator<<(std::ostream& os, GMMPTMSIType type);
-
 // ── PDP Context Status (GSM 24.008 10.5.7.1) ──────────────────────────
 // TLV format: IEI=0x32 | Length(1) | Value(2 octets bitmap)
 // Each bit represents a PDP context identifier (1-16).
@@ -145,13 +164,13 @@ public:
     void text(std::ostream& os) const;
 };
 
-// ── T3302 Timer (GSM 24.008 10.5.7.2) ─────────────────────────────────
-// TLV format: IEI=0x1b | Length(1) | Value(1 octet)
+// ── T3302 Timer (TS 44.068 section 9.5) ───────────────────────────────
+// TLV format: IEI=0x2a | Length(1) | Value(1 octet)
 
 class L3T3302Timer {
     uint8_t mValue{};
 public:
-    static constexpr uint8_t IEI = 0x1b;
+    static constexpr uint8_t IEI = 0x2a;
     L3T3302Timer() = default;
     explicit L3T3302Timer(uint8_t value) : mValue(value) {}
 
@@ -245,25 +264,6 @@ public:
     static constexpr size_t lengthV() { return 2; }
 
     [[nodiscard]] static Expected<L3DRXParameter> parse(BitReader& br);
-    void write(BitWriter& bw) const;
-    void text(std::ostream& os) const;
-};
-
-// ── GMM Ciphering Key Sequence Number (CKSN) ──────────────────────────
-// 4 bits: CKSN(3)|spare(1). Same encoding as RR CKSN.
-
-class L3GMMCKSN {
-    uint8_t mValue{};
-public:
-    L3GMMCKSN() = default;
-    explicit L3GMMCKSN(unsigned value) : mValue(static_cast<uint8_t>(value & 0x0F)) {}
-
-    bool operator==(const L3GMMCKSN&) const = default;
-
-    uint8_t cksn() const { return (mValue >> 1) & 0x07; }
-    static constexpr size_t lengthV() { return 0; } // bit-level field
-
-    [[nodiscard]] static Expected<L3GMMCKSN> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
 };

@@ -32,31 +32,31 @@ namespace gsml3parser {
 const char* GMMCause2Str(GMMCause cause) {
     switch (cause) {
         case GMMCause::Unspecified: return "Unspecified";
-        case GMMCause::ReqAccepted: return "Request Accepted";
-        case GMMCause::GprsNotAllowed: return "GPRS not allowed";
-        case GMMCause::GprsAndImsiAttachNotAllowedIn_PLMN: return "GPRS/IMSI attach not allowed in PLMN";
-        case GMMCause::No_Suitable_Cells_In_RAC: return "No suitable cells in RAC";
-        case GMMCause::GPRS_Service_Not_Allowed: return "GPRS service not allowed";
-        case GMMCause::ES_Service_Not_Allowed: return "Emergency service not allowed";
+        case GMMCause::IMSI_Unknown_In_HLR: return "IMSI unknown in HLR";
+        case GMMCause::Illegal_MS: return "Illegal MS";
+        case GMMCause::IMEI_Not_Accepted: return "IMEI not accepted";
+        case GMMCause::Illegal_ME: return "Illegal ME";
+        case GMMCause::GPRS_Services_Not_Allowed: return "GPRS services not allowed";
+        case GMMCause::GPRS_And_Non_GPRS_Services_Not_Allowed: return "GPRS and non-GPRS services not allowed";
+        case GMMCause::MS_Identity_Cannot_Be_Derived: return "MS identity cannot be derived";
+        case GMMCause::Implicitly_Detached: return "Implicitly detached";
         case GMMCause::PLMN_Not_Allowed: return "PLMN not allowed";
-        case GMMCause::RAC_Not_Allowed: return "RAC not allowed";
-        case GMMCause::Roaming_Not_Allowed_In_RAC: return "Roaming not allowed in RAC";
-        case GMMCause::GPRS_Packet_Service_Not_Available: return "GPRS packet service not available";
-        case GMMCause::Local_Optimisation: return "Local optimisation";
+        case GMMCause::Location_Area_Not_Allowed: return "Location area not allowed";
+        case GMMCause::Roaming_Not_Allowed_In_Location_Area: return "Roaming not allowed in location area";
+        case GMMCause::GPRS_Services_Not_Allowed_In_PLMN: return "GPRS services not allowed in PLMN";
+        case GMMCause::No_Suitable_Cells_In_Location_Routing_Area: return "No suitable cells in location/routing area";
+        case GMMCause::MSC_Temporarily_Not_Reachable: return "MSC temporarily not reachable";
+        case GMMCause::Network_Failure: return "Network failure";
         case GMMCause::MAC_Failure: return "MAC failure";
         case GMMCause::Synch_Failure: return "Sync failure";
-        case GMMCause::Physical_Channel_Could_Not_Be_Assigned: return "Physical channel could not be assigned";
-        case GMMCause::Uplink_Interference: return "Uplink interference";
-        case GMMCause::Downlink_Interference: return "Downlink interference";
-        case GMMCause::CS_domain_not_allowing_access_to_GPRS: return "CS domain not allowing access to GPRS";
-        case GMMCause::PDP_Context_Without_Transforming_Linkage_Exist: return "PDP context without transforming linkage exists";
+        case GMMCause::Congestion: return "Congestion";
+        case GMMCause::GSM_Authentication_Unacceptable: return "GSM authentication unacceptable";
+        case GMMCause::Not_Authorized_For_This_CSG: return "Not authorized for this CSG";
+        case GMMCause::No_PDP_Context_Activated: return "No PDP context activated";
         case GMMCause::Semantically_Incorrect_Message: return "Semantically incorrect message";
         case GMMCause::Invalid_Mandatory_Information: return "Invalid mandatory information";
-        case GMMCause::Message_Type_Invalid: return "Message type invalid";
+        case GMMCause::Message_Type_Not_Implemented: return "Message type not implemented";
         case GMMCause::Message_Type_Not_Compatible_With_State: return "Message type not compatible with state";
-        case GMMCause::IE_Invalid: return "IE invalid";
-        case GMMCause::Conditional_IE_Error: return "Conditional IE error";
-        case GMMCause::Message_Not_Compatible_With_State: return "Message not compatible with state";
         case GMMCause::Protocol_Error_Unspecified: return "Protocol error unspecified";
     }
     return "Unknown";
@@ -252,22 +252,6 @@ void L3DRXParameter::text(std::ostream& os) const {
        << ",cnCycle=" << mCNSpecificDRXCycleLength << ")";
 }
 
-// ── L3GMMCKSN ─────────────────────────────────────────────────────────
-
-Expected<L3GMMCKSN> L3GMMCKSN::parse(BitReader& br) {
-    auto r = br.readField(4);
-    if (!r) return Expected<L3GMMCKSN>::error(r.error());
-    return Expected<L3GMMCKSN>::hold(L3GMMCKSN{static_cast<unsigned>(r.value())});
-}
-
-void L3GMMCKSN::write(BitWriter& bw) const {
-    bw.writeField(mValue, 4);
-}
-
-void L3GMMCKSN::text(std::ostream& os) const {
-    os << "CKSN(" << cksn() << ")";
-}
-
 // ── L3GMMCauseIE ──────────────────────────────────────────────────────
 
 Expected<L3GMMCauseIE> L3GMMCauseIE::parse(BitReader& br) {
@@ -393,14 +377,6 @@ void L3GMMStatusCause::write(BitWriter& bw) const {
 
 void L3GMMStatusCause::text(std::ostream& os) const {
     os << "GMMStatusCause(" << GMMCause2Str(mCause) << ")";
-}
-
-std::ostream& operator<<(std::ostream& os, GMMPTMSIType type) {
-    switch (type) {
-        case GMMPTMSIType::Native: os << "Native"; break;
-        case GMMPTMSIType::Mapped: os << "Mapped"; break;
-    }
-    return os;
 }
 
 } // namespace gsml3parser

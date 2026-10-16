@@ -516,7 +516,9 @@ TEST(FullRoundTrip, GMM_Domain) {
     expectRoundTrip(ParsedMessage{GMM{L3ServiceReject{}}},
         L3PD::GPRSMobilityManagement, L3ServiceReject::MTI, "L3ServiceReject");
 
-    expectRoundTrip(ParsedMessage{GMM{L3P_TMSIReallocationCommand{}}},
+    // The body starts with the allocated P-TMSI as a positional LV in the
+    // TMSI mobile identity form (TS 44.068 section 9.5).
+    expectRoundTrip(ParsedMessage{GMM{L3P_TMSIReallocationCommand::builder().ptmsi(L3MobileIdentity(0x12345678)).build()}},
         L3PD::GPRSMobilityManagement, L3P_TMSIReallocationCommand::MTI, "L3P_TMSIReallocationCommand");
 
     expectRoundTrip(ParsedMessage{GMM{L3P_TMSIReallocationComplete{}}},

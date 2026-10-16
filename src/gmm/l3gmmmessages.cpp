@@ -198,9 +198,10 @@ L3AttachRequest::Builder L3AttachRequest::builder() {
 // ── L3AttachAccept (TS 44.068 section 9.5) ────────────────────────────
 
 size_t L3AttachAccept::bodyLength() const {
-    size_t len = 3; // leading part: first octet + two further leading octets
+    size_t len = 3; // leading part: result/FTS octet, timer IE octet, priority octet
     len += 6;       // routingAreaIdentification (raw)
     if (mHavePtmsiSignature) len += 4; // P-TMSI signature TV: IEI + three octets
+    if (mHaveReadyTimer) len += 3;     // ready timer TV: IEI + two octets
     if (mHavePTMSI) len += tlvLen(mPTMSI.lengthV());
     len += mAdditionalIes.size();
     return len;
@@ -209,22 +210,28 @@ size_t L3AttachAccept::bodyLength() const {
 Expected<L3AttachAccept> L3AttachAccept::parse(BitReader& br) {
     L3AttachAccept msg;
 
-    // attachResult(3)|spare(1)|forceToStandby(1)|updateTimer(2)|radioPriority(1)
-    // = first octet of the three-octet leading part (TS 44.068 section 9.5).
+    // Three-octet leading part (TS 44.068 section 9.5): first octet is
+    // forceToStandby in the high nibble and the attach result (a raw 3-bit
+    // value) in the low one; second octet is the periodic RA update timer
+    // (units(3) high|value(5) low, TS 24.008 section 10.5.7.3); third octet
+    // is the radio priority for SMS (high nibble) and TOM8 (low nibble).
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3AttachAccept>::error(o.error());
-        msg.mAttachResult = static_cast<GMMAttachType>((o.value() >> 5) & 0x07u);
-        msg.mForceToStandby = ((o.value() >> 3) & 0x01u) != 0;
-        msg.mUpdateTimer = (o.value() >> 1) & 0x03u;
-        msg.mRadioPriority = o.value() & 0x01u;
+        msg.mForceToStandby = ((o.value() >> 4) & 0x01u) != 0;
+        msg.mAttachResult = static_cast<GMMAttachType>(o.value() & 0x0Fu);
     }
-
-    // The two further leading octets, kept raw (TS 44.068 section 9.5).
-    for (uint8_t& extra : msg.mLeadingExtra) {
+    {
         auto o = br.readField(8);
         if (!o) return Expected<L3AttachAccept>::error(o.error());
-        extra = static_cast<uint8_t>(o.value());
+        msg.mRaUpdateTimer.units = static_cast<uint8_t>((o.value() >> 5) & 0x07u);
+        msg.mRaUpdateTimer.value = static_cast<uint8_t>(o.value() & 0x1Fu);
+    }
+    {
+        auto o = br.readField(8);
+        if (!o) return Expected<L3AttachAccept>::error(o.error());
+        msg.mRadioPrioritySms = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+        msg.mRadioPriorityTom8 = static_cast<uint8_t>(o.value() & 0x0Fu);
     }
 
     // routingAreaIdentification (raw, 6 octets)
@@ -234,23 +241,27 @@ Expected<L3AttachAccept> L3AttachAccept::parse(BitReader& br) {
         msg.mRAI = std::move(rai).value();
     }
 
-    // Optional P-TMSI signature (TV, element identifier 0x19 + three value
-    // octets), then the optional allocated P-TMSI (TLV, element identifier
-    // 0x18), then any remaining optional information elements kept opaque
+    // Optional IEs in any order: P-TMSI signature (TV, element identifier
+    // 0x19 + three value octets), ready timer (TV, element identifier 0x17
+    // + two value octets) and the allocated P-TMSI (TLV, element identifier
+    // 0x18); any remaining optional information elements are kept opaque
     // and re-emitted verbatim (TS 44.068 section 9.5).
-    if (br.hasMore()) {
+    while (br.hasMore()) {
         uint8_t raw = static_cast<uint8_t>(br.peekField(8));
-        if ((raw & 0x7Fu) == 0x19u) {
+        uint8_t iei = static_cast<uint8_t>(raw & 0x7Fu);
+        if (iei == 0x19u && !msg.mHavePtmsiSignature) {
             auto type = br.readField(8);
             if (!type) return Expected<L3AttachAccept>::error(type.error());
             auto sig = br.readBytes(msg.mPtmsiSignature.data(), 3);
             if (!sig) return Expected<L3AttachAccept>::error(sig.error());
             msg.mHavePtmsiSignature = true;
-        }
-    }
-    if (br.hasMore()) {
-        uint8_t raw = static_cast<uint8_t>(br.peekField(8));
-        if ((raw & 0x7Fu) == 0x18u) {
+        } else if (iei == 0x17u && !msg.mHaveReadyTimer) {
+            auto type = br.readField(8);
+            if (!type) return Expected<L3AttachAccept>::error(type.error());
+            auto rt = br.readBytes(msg.mReadyTimer.data(), 2);
+            if (!rt) return Expected<L3AttachAccept>::error(rt.error());
+            msg.mHaveReadyTimer = true;
+        } else if (iei == 0x18u && !msg.mHavePTMSI) {
             auto type = br.readField(8);
             if (!type) return Expected<L3AttachAccept>::error(type.error());
             auto len = br.readField(8);
@@ -259,6 +270,8 @@ Expected<L3AttachAccept> L3AttachAccept::parse(BitReader& br) {
             if (!mi) return Expected<L3AttachAccept>::error(mi.error());
             msg.mHavePTMSI = true;
             msg.mPTMSI = std::move(mi).value();
+        } else {
+            break; // unknown IE: the remainder is kept opaque
         }
     }
     if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
@@ -270,15 +283,24 @@ Expected<L3AttachAccept> L3AttachAccept::parse(BitReader& br) {
 }
 
 void L3AttachAccept::write(BitWriter& bw) const {
-    bw.writeField(((static_cast<uint8_t>(mAttachResult) & 0x07u) << 5) |
-                  (mForceToStandby ? 0x08u : 0u) |
-                  ((mUpdateTimer & 0x03u) << 1) | (mRadioPriority & 0x01u), 8);
-    bw.writeBytes(mLeadingExtra.data(), 2);
+    // forceToStandby(4) high nibble | attachResult(4) low nibble; the result
+    // is a raw 3-bit value stored in the four-bit field (TS 44.068 section 9.5).
+    bw.writeField(((mForceToStandby ? 1u : 0u) << 4) |
+                  (static_cast<uint8_t>(mAttachResult) & 0x0Fu), 8);
+    // periodic RA update timer value part (TS 24.008 section 10.5.7.3).
+    bw.writeField(mRaUpdateTimer.octet(), 8);
+    // radio priority for SMS (high nibble) and TOM8 (low nibble).
+    bw.writeField(((mRadioPrioritySms & 0x0Fu) << 4) | (mRadioPriorityTom8 & 0x0Fu), 8);
     mRAI.write(bw);
     if (mHavePtmsiSignature) {
         // P-TMSI signature: element identifier followed by the value (TV).
         bw.writeField(0x19u, 8);
         bw.writeBytes(mPtmsiSignature.data(), 3);
+    }
+    if (mHaveReadyTimer) {
+        // ready timer: element identifier followed by the two value octets (TV).
+        bw.writeField(0x17u, 8);
+        bw.writeBytes(mReadyTimer.data(), 2);
     }
     if (mHavePTMSI) {
         // allocated P-TMSI: element identifier, length, value (TLV).
@@ -295,19 +317,22 @@ void L3AttachAccept::text(std::ostream& os) const {
         case GMMAttachType::GPRSAttach: os << "GPRS"; break;
         case GMMAttachType::CombinedGPRSAndIMSIAttach: os << "Combined"; break;
     }
-    os << ",forceStandby=" << mForceToStandby << ")";
+    os << ",forceStandby=" << mForceToStandby
+       << ",timer=" << static_cast<int>(mRaUpdateTimer.octet()) << ")";
 }
 
 L3AttachAccept L3AttachAccept::Builder::build() const {
     L3AttachAccept msg;
     msg.mAttachResult = m_attachResult;
     msg.mForceToStandby = m_forceToStandby;
-    msg.mUpdateTimer = m_updateTimer;
-    msg.mRadioPriority = m_radioPriority;
-    msg.mLeadingExtra = m_leadingExtra;
+    msg.mRaUpdateTimer = m_raUpdateTimer;
+    msg.mRadioPrioritySms = static_cast<uint8_t>(m_radioPrioritySms & 0x0Fu);
+    msg.mRadioPriorityTom8 = static_cast<uint8_t>(m_radioPriorityTom8 & 0x0Fu);
     msg.mRAI = m_rai;
     msg.mHavePtmsiSignature = m_havePtmsiSignature;
     msg.mPtmsiSignature = m_ptmsiSignature;
+    msg.mHaveReadyTimer = m_haveReadyTimer;
+    msg.mReadyTimer = m_readyTimer;
     msg.mHavePTMSI = m_havePTMSI;
     msg.mPTMSI = m_ptmsi;
     msg.mAdditionalIes = m_additionalIes;
@@ -320,18 +345,29 @@ L3AttachAccept::Builder L3AttachAccept::builder() {
 
 // ── L3AttachComplete (GSM 24.008 9.4.3) ──────────────────────────────
 
-Expected<L3AttachComplete> L3AttachComplete::parse(BitReader&) {
-    return Expected<L3AttachComplete>::hold(L3AttachComplete{});
+Expected<L3AttachComplete> L3AttachComplete::parse(BitReader& br) {
+    L3AttachComplete msg;
+    // No mandatory body fields; any optional IEs are kept opaque and
+    // re-emitted verbatim (TS 44.068 section 9.5).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3AttachComplete>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
+    }
+    return Expected<L3AttachComplete>::hold(std::move(msg));
 }
 
-void L3AttachComplete::write(BitWriter&) const {}
+void L3AttachComplete::write(BitWriter& bw) const {
+    detail::writeOpaqueTail(mAdditionalIes, bw);
+}
 
 void L3AttachComplete::text(std::ostream& os) const {
     os << "AttachComplete";
 }
 
 L3AttachComplete L3AttachComplete::Builder::build() const {
-    return L3AttachComplete{};
+    L3AttachComplete msg;
+    msg.mAdditionalIes = m_additionalIes;
+    return msg;
 }
 
 L3AttachComplete::Builder L3AttachComplete::builder() {
@@ -482,20 +518,23 @@ L3DetachRequest::Builder L3DetachRequest::builder() {
 // ── L3DetachAccept (GSM 24.008 9.4.6) ────────────────────────────────
 
 size_t L3DetachAccept::bodyLength() const {
-    return mForceToStandby ? 1 : 0;
+    // Exactly one octet, always present (TS 44.068 section 9.5).
+    return 1;
 }
 
 Expected<L3DetachAccept> L3DetachAccept::parse(BitReader& br) {
     L3DetachAccept msg;
-    if (br.hasMore()) {
-        auto o = br.readField(8);
-        if (o) msg.mForceToStandby = ((o.value() >> 7) & 0x01) != 0;
-    }
+    // One-octet body: forceToStandby in bit 0 of the octet value, the
+    // remaining bits spare (TS 44.068 section 9.5).
+    auto o = br.readField(8);
+    if (!o) return Expected<L3DetachAccept>::error(o.error());
+    msg.mForceToStandby = (o.value() & 0x01u) != 0;
     return Expected<L3DetachAccept>::hold(std::move(msg));
 }
 
 void L3DetachAccept::write(BitWriter& bw) const {
-    if (mForceToStandby) bw.writeField(0x80, 8);
+    // Spare high bits are zero; the force-to-standby indicator is bit 0.
+    bw.writeField(mForceToStandby ? 1u : 0u, 8);
 }
 
 void L3DetachAccept::text(std::ostream& os) const {
@@ -608,10 +647,12 @@ L3RoutingAreaUpdateRequest::Builder L3RoutingAreaUpdateRequest::builder() {
 // ── L3RoutingAreaUpdateAccept (TS 44.068 section 9.5) ─────────────────
 
 size_t L3RoutingAreaUpdateAccept::bodyLength() const {
-    size_t len = 2; // leading part: first octet + one further leading octet
+    size_t len = 2; // leading part: result/FTS octet + timer IE octet
     len += 6;       // routingAreaId (raw)
     if (mHavePtmsiSignature) len += 4; // P-TMSI signature TV: IEI + three octets
     if (mHavePTMSI) len += tlvLen(mPTMSI.lengthV());
+    if (mHaveReadyTimer) len += 3;     // ready timer TV: IEI + two octets
+    if (mHavePdpContextStatus) len += 4; // PDP context status TLV: IEI + length + two octets
     len += mAdditionalIes.size();
     return len;
 }
@@ -619,21 +660,21 @@ size_t L3RoutingAreaUpdateAccept::bodyLength() const {
 Expected<L3RoutingAreaUpdateAccept> L3RoutingAreaUpdateAccept::parse(BitReader& br) {
     L3RoutingAreaUpdateAccept msg;
 
-    // forceToStandby(1)|updateResult(3)|raUpdateTimer(2)|spare(2)
-    // = first octet of the two-octet leading part (TS 44.068 section 9.5).
+    // Two-octet leading part (TS 44.068 section 9.5): first octet carries
+    // the update result in bits 1-3 and force to standby in bit 0 of the
+    // octet value; second octet is the periodic RA update timer (units(3)
+    // high|value(5) low, TS 24.008 section 10.5.7.3).
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3RoutingAreaUpdateAccept>::error(o.error());
-        msg.mForceToStandby = ((o.value() >> 7) & 0x01u) != 0;
-        msg.mUpdateResult = static_cast<GMMUpdateType>((o.value() >> 4) & 0x07u);
-        msg.mRAUpdateTimer = (o.value() >> 2) & 0x03u;
+        msg.mUpdateResult = static_cast<GMMUpdateType>((o.value() >> 1) & 0x07u);
+        msg.mForceToStandby = (o.value() & 0x01u) != 0;
     }
-
-    // The further leading octet, kept raw (TS 44.068 section 9.5).
     {
         auto o = br.readField(8);
         if (!o) return Expected<L3RoutingAreaUpdateAccept>::error(o.error());
-        msg.mLeadingExtra[0] = static_cast<uint8_t>(o.value());
+        msg.mRaUpdateTimer.units = static_cast<uint8_t>((o.value() >> 5) & 0x07u);
+        msg.mRaUpdateTimer.value = static_cast<uint8_t>(o.value() & 0x1Fu);
     }
 
     // routingAreaId (raw, 6 octets)
@@ -643,23 +684,23 @@ Expected<L3RoutingAreaUpdateAccept> L3RoutingAreaUpdateAccept::parse(BitReader& 
         msg.mRAI = std::move(rai).value();
     }
 
-    // Optional P-TMSI signature (TV, element identifier 0x19 + three value
-    // octets), then the optional allocated P-TMSI (TLV, element identifier
-    // 0x18), then any remaining optional information elements kept opaque
-    // and re-emitted verbatim (TS 44.068 section 9.5).
-    if (br.hasMore()) {
+    // Optional IEs in any order: P-TMSI signature (TV, element identifier
+    // 0x19 + three value octets), allocated P-TMSI (TLV, element identifier
+    // 0x18), ready timer (TV, element identifier 0x17 + two value octets)
+    // and the PDP context status included by the network (TLV, element
+    // identifier 0x32 with length two); any remaining optional information
+    // elements are kept opaque and re-emitted verbatim
+    // (TS 44.068 section 9.5).
+    while (br.hasMore()) {
         uint8_t raw = static_cast<uint8_t>(br.peekField(8));
-        if ((raw & 0x7Fu) == 0x19u) {
+        uint8_t iei = static_cast<uint8_t>(raw & 0x7Fu);
+        if (iei == 0x19u && !msg.mHavePtmsiSignature) {
             auto type = br.readField(8);
             if (!type) return Expected<L3RoutingAreaUpdateAccept>::error(type.error());
             auto sig = br.readBytes(msg.mPtmsiSignature.data(), 3);
             if (!sig) return Expected<L3RoutingAreaUpdateAccept>::error(sig.error());
             msg.mHavePtmsiSignature = true;
-        }
-    }
-    if (br.hasMore()) {
-        uint8_t raw = static_cast<uint8_t>(br.peekField(8));
-        if ((raw & 0x7Fu) == 0x18u) {
+        } else if (iei == 0x18u && !msg.mHavePTMSI) {
             auto type = br.readField(8);
             if (!type) return Expected<L3RoutingAreaUpdateAccept>::error(type.error());
             auto len = br.readField(8);
@@ -668,6 +709,26 @@ Expected<L3RoutingAreaUpdateAccept> L3RoutingAreaUpdateAccept::parse(BitReader& 
             if (!mi) return Expected<L3RoutingAreaUpdateAccept>::error(mi.error());
             msg.mHavePTMSI = true;
             msg.mPTMSI = std::move(mi).value();
+        } else if (iei == 0x17u && !msg.mHaveReadyTimer) {
+            auto type = br.readField(8);
+            if (!type) return Expected<L3RoutingAreaUpdateAccept>::error(type.error());
+            auto rt = br.readBytes(msg.mReadyTimer.data(), 2);
+            if (!rt) return Expected<L3RoutingAreaUpdateAccept>::error(rt.error());
+            msg.mHaveReadyTimer = true;
+        } else if (iei == L3PDPContextStatus::IEI && !msg.mHavePdpContextStatus) {
+            auto type = br.readField(8);
+            if (!type) return Expected<L3RoutingAreaUpdateAccept>::error(type.error());
+            auto len = br.readField(8);
+            if (!len) return Expected<L3RoutingAreaUpdateAccept>::error(len.error());
+            if (len.value() != L3PDPContextStatus::lengthV()) {
+                return Expected<L3RoutingAreaUpdateAccept>::error(
+                    ParseError{ParseError::Code::InvalidValue, "invalid PDP context status length"});
+            }
+            auto st = br.readBytes(msg.mPdpContextStatus.data(), 2);
+            if (!st) return Expected<L3RoutingAreaUpdateAccept>::error(st.error());
+            msg.mHavePdpContextStatus = true;
+        } else {
+            break; // unknown IE: the remainder is kept opaque
         }
     }
     if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
@@ -679,10 +740,12 @@ Expected<L3RoutingAreaUpdateAccept> L3RoutingAreaUpdateAccept::parse(BitReader& 
 }
 
 void L3RoutingAreaUpdateAccept::write(BitWriter& bw) const {
-    bw.writeField((mForceToStandby ? 0x80u : 0u) |
-                  ((static_cast<uint8_t>(mUpdateResult) & 0x07u) << 4) |
-                  ((mRAUpdateTimer & 0x03u) << 2), 8);
-    bw.writeBytes(mLeadingExtra.data(), 1);
+    // Update result in bits 1-3, force to standby in bit 0 of the octet
+    // value (TS 44.068 section 9.5).
+    bw.writeField(((static_cast<uint8_t>(mUpdateResult) & 0x07u) << 1) |
+                  (mForceToStandby ? 1u : 0u), 8);
+    // periodic RA update timer value part (TS 24.008 section 10.5.7.3).
+    bw.writeField(mRaUpdateTimer.octet(), 8);
     mRAI.write(bw);
     if (mHavePtmsiSignature) {
         // P-TMSI signature: element identifier followed by the value (TV).
@@ -694,6 +757,17 @@ void L3RoutingAreaUpdateAccept::write(BitWriter& bw) const {
         bw.writeField(0x18u, 8);
         bw.writeField(static_cast<uint32_t>(mPTMSI.lengthV()), 8);
         mPTMSI.write(bw);
+    }
+    if (mHaveReadyTimer) {
+        // ready timer: element identifier followed by the two value octets (TV).
+        bw.writeField(0x17u, 8);
+        bw.writeBytes(mReadyTimer.data(), 2);
+    }
+    if (mHavePdpContextStatus) {
+        // PDP context status: element identifier, length, two-octet value (TLV).
+        bw.writeField(L3PDPContextStatus::IEI, 8);
+        bw.writeField(static_cast<uint32_t>(L3PDPContextStatus::lengthV()), 8);
+        bw.writeBytes(mPdpContextStatus.data(), 2);
     }
     detail::writeOpaqueTail(mAdditionalIes, bw);
 }
@@ -713,13 +787,16 @@ L3RoutingAreaUpdateAccept L3RoutingAreaUpdateAccept::Builder::build() const {
     L3RoutingAreaUpdateAccept msg;
     msg.mForceToStandby = m_forceToStandby;
     msg.mUpdateResult = m_updateResult;
-    msg.mRAUpdateTimer = m_raUpdateTimer;
-    msg.mLeadingExtra = m_leadingExtra;
+    msg.mRaUpdateTimer = m_raUpdateTimer;
     msg.mRAI = m_rai;
     msg.mHavePtmsiSignature = m_havePtmsiSignature;
     msg.mPtmsiSignature = m_ptmsiSignature;
     msg.mHavePTMSI = m_havePTMSI;
     msg.mPTMSI = m_ptmsi;
+    msg.mHaveReadyTimer = m_haveReadyTimer;
+    msg.mReadyTimer = m_readyTimer;
+    msg.mHavePdpContextStatus = m_havePdpContextStatus;
+    msg.mPdpContextStatus = m_pdpContextStatus;
     msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
@@ -730,18 +807,29 @@ L3RoutingAreaUpdateAccept::Builder L3RoutingAreaUpdateAccept::builder() {
 
 // ── L3RoutingAreaUpdateComplete (GSM 24.008 9.4.16) ──────────────────
 
-Expected<L3RoutingAreaUpdateComplete> L3RoutingAreaUpdateComplete::parse(BitReader&) {
-    return Expected<L3RoutingAreaUpdateComplete>::hold(L3RoutingAreaUpdateComplete{});
+Expected<L3RoutingAreaUpdateComplete> L3RoutingAreaUpdateComplete::parse(BitReader& br) {
+    L3RoutingAreaUpdateComplete msg;
+    // No mandatory body fields; any optional IEs are kept opaque and
+    // re-emitted verbatim (TS 44.068 section 9.5).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3RoutingAreaUpdateComplete>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
+    }
+    return Expected<L3RoutingAreaUpdateComplete>::hold(std::move(msg));
 }
 
-void L3RoutingAreaUpdateComplete::write(BitWriter&) const {}
+void L3RoutingAreaUpdateComplete::write(BitWriter& bw) const {
+    detail::writeOpaqueTail(mAdditionalIes, bw);
+}
 
 void L3RoutingAreaUpdateComplete::text(std::ostream& os) const {
     os << "RAUpdateComplete";
 }
 
 L3RoutingAreaUpdateComplete L3RoutingAreaUpdateComplete::Builder::build() const {
-    return L3RoutingAreaUpdateComplete{};
+    L3RoutingAreaUpdateComplete msg;
+    msg.mAdditionalIes = m_additionalIes;
+    return msg;
 }
 
 L3RoutingAreaUpdateComplete::Builder L3RoutingAreaUpdateComplete::builder() {
@@ -751,8 +839,8 @@ L3RoutingAreaUpdateComplete::Builder L3RoutingAreaUpdateComplete::builder() {
 // ── L3RoutingAreaUpdateReject (TS 44.068 section 9.5) ─────────────────
 
 size_t L3RoutingAreaUpdateReject::bodyLength() const {
-    // gmmCause (one value octet) + opaque optional IEs
-    return 1 + mAdditionalIes.size();
+    // gmmCause (one value octet) + force-to-standby octet + opaque optional IEs
+    return 2 + mAdditionalIes.size();
 }
 
 Expected<L3RoutingAreaUpdateReject> L3RoutingAreaUpdateReject::parse(BitReader& br) {
@@ -763,6 +851,12 @@ Expected<L3RoutingAreaUpdateReject> L3RoutingAreaUpdateReject::parse(BitReader& 
     auto r = br.readField(8);
     if (!r) return Expected<L3RoutingAreaUpdateReject>::error(r.error());
     msg.mCause = static_cast<GMMCause>(r.value());
+
+    // Second octet, always present: forceToStandby in bit 0 of the octet
+    // value, the remaining bits spare (TS 44.068 section 9.5).
+    auto o = br.readField(8);
+    if (!o) return Expected<L3RoutingAreaUpdateReject>::error(o.error());
+    msg.mForceToStandby = (o.value() & 0x01u) != 0;
 
     // Unrecognized optional IEs are kept opaque and re-emitted verbatim.
     if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
@@ -775,6 +869,8 @@ Expected<L3RoutingAreaUpdateReject> L3RoutingAreaUpdateReject::parse(BitReader& 
 
 void L3RoutingAreaUpdateReject::write(BitWriter& bw) const {
     bw.writeField(static_cast<uint8_t>(mCause), 8);
+    // Spare high bits are zero; the force-to-standby indicator is bit 0.
+    bw.writeField(mForceToStandby ? 1u : 0u, 8);
     detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
@@ -785,6 +881,7 @@ void L3RoutingAreaUpdateReject::text(std::ostream& os) const {
 L3RoutingAreaUpdateReject L3RoutingAreaUpdateReject::Builder::build() const {
     L3RoutingAreaUpdateReject msg;
     msg.mCause = m_cause;
+    msg.mForceToStandby = m_forceToStandby;
     msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
@@ -798,6 +895,7 @@ L3RoutingAreaUpdateReject::Builder L3RoutingAreaUpdateReject::builder() {
 size_t L3ServiceRequest::bodyLength() const {
     size_t len = 1; // gprsCKSN|serviceType
     len += lvLen(mPTMSI.lengthV());
+    len += mAdditionalIes.size();
     return len;
 }
 
@@ -820,12 +918,21 @@ Expected<L3ServiceRequest> L3ServiceRequest::parse(BitReader& br) {
         msg.mPTMSI = std::move(mi).value();
     }
 
+    // Remaining optional IEs (conforming MSes append the PDP context status
+    // TLV 0x32 here) are kept opaque and re-emitted verbatim
+    // (TS 44.068 section 9.5).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3ServiceRequest>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
+    }
+
     return Expected<L3ServiceRequest>::hold(std::move(msg));
 }
 
 void L3ServiceRequest::write(BitWriter& bw) const {
     bw.writeField(((mServiceType & 0x07u) << 4) | (mCKSN & 0x07u), 8);
     writeLVMI(mPTMSI, bw);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ServiceRequest::text(std::ostream& os) const {
@@ -837,6 +944,7 @@ L3ServiceRequest L3ServiceRequest::Builder::build() const {
     msg.mCKSN = static_cast<uint8_t>(mCKSN & 0x07u);
     msg.mServiceType = static_cast<uint8_t>(m_serviceType & 0x07u);
     msg.mPTMSI = m_ptmsi;
+    msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
 
@@ -960,9 +1068,10 @@ L3ServiceReject::Builder L3ServiceReject::builder() {
 // ── L3P_TMSIReallocationCommand (GSM 24.008 9.4.8) ───────────────────
 
 size_t L3P_TMSIReallocationCommand::bodyLength() const {
-    size_t len = 1; // PTMSI_Type|forceToStandby
-    len += 6;       // routingAreaId (raw)
-    if (mHavePTMSI) len += tlvLen(mPTMSI.lengthV());
+    size_t len = lvLen(mPTMSI.lengthV()); // allocated P-TMSI (positional LV, first)
+    len += 6;                            // routingAreaId (raw)
+    len += 1;                            // force-to-standby octet
+    if (mHavePtmsiSignature) len += 4;   // P-TMSI signature TV: IEI + three octets
     len += mAdditionalIes.size();
     return len;
 }
@@ -970,12 +1079,24 @@ size_t L3P_TMSIReallocationCommand::bodyLength() const {
 Expected<L3P_TMSIReallocationCommand> L3P_TMSIReallocationCommand::parse(BitReader& br) {
     L3P_TMSIReallocationCommand msg;
 
-    // P-TMSI type in bit 7, force to standby in bit 4 (TS 44.068 section 9.5).
+    // The body starts with the allocated P-TMSI as a positional LV in the
+    // TMSI mobile identity form: length five, first value octet 0xF4
+    // followed by four big-endian octets (TS 44.068 section 9.5).
     {
-        auto o = br.readField(8);
-        if (!o) return Expected<L3P_TMSIReallocationCommand>::error(o.error());
-        msg.mPTMSIType = static_cast<GMMPTMSIType>((o.value() >> 7) & 0x01u);
-        msg.mForceToStandby = ((o.value() >> 4) & 0x01u) != 0;
+        auto len = br.readField(8);
+        if (!len) return Expected<L3P_TMSIReallocationCommand>::error(len.error());
+        size_t vLen = len.value();
+        if (vLen * 8 > br.remainingBits()) {
+            return Expected<L3P_TMSIReallocationCommand>::error(
+                ParseError{ParseError::Code::TruncatedInput, "truncated P-TMSI value", br.position() - 8});
+        }
+        auto mi = L3MobileIdentity::parse(br, vLen);
+        if (!mi) return Expected<L3P_TMSIReallocationCommand>::error(mi.error());
+        if (!mi.value().isTMSI()) {
+            return Expected<L3P_TMSIReallocationCommand>::error(
+                ParseError{ParseError::Code::InvalidValue, "allocated P-TMSI must be in the TMSI form"});
+        }
+        msg.mPTMSI = std::move(mi).value();
     }
 
     // routingAreaId (raw, 6 octets)
@@ -985,20 +1106,25 @@ Expected<L3P_TMSIReallocationCommand> L3P_TMSIReallocationCommand::parse(BitRead
         msg.mRAI = std::move(rai).value();
     }
 
-    // Optional P-TMSI (TLV, element identifier 0x18), then any remaining
-    // optional information elements kept opaque and re-emitted verbatim
-    // (TS 44.068 section 9.5).
+    // Force-to-standby octet: bit 0 of the octet value, the remaining bits
+    // spare (TS 44.068 section 9.5).
+    {
+        auto o = br.readField(8);
+        if (!o) return Expected<L3P_TMSIReallocationCommand>::error(o.error());
+        msg.mForceToStandby = (o.value() & 0x01u) != 0;
+    }
+
+    // Optional P-TMSI signature (TV, element identifier 0x19 + three value
+    // octets), then any remaining optional information elements kept opaque
+    // and re-emitted verbatim (TS 44.068 section 9.5).
     if (br.hasMore()) {
         uint8_t raw = static_cast<uint8_t>(br.peekField(8));
-        if ((raw & 0x7Fu) == 0x18u) {
+        if ((raw & 0x7Fu) == 0x19u) {
             auto type = br.readField(8);
             if (!type) return Expected<L3P_TMSIReallocationCommand>::error(type.error());
-            auto len = br.readField(8);
-            if (!len) return Expected<L3P_TMSIReallocationCommand>::error(len.error());
-            auto mi = L3MobileIdentity::parse(br, len.value());
-            if (!mi) return Expected<L3P_TMSIReallocationCommand>::error(mi.error());
-            msg.mHavePTMSI = true;
-            msg.mPTMSI = std::move(mi).value();
+            auto sig = br.readBytes(msg.mPtmsiSignature.data(), 3);
+            if (!sig) return Expected<L3P_TMSIReallocationCommand>::error(sig.error());
+            msg.mHavePtmsiSignature = true;
         }
     }
     if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
@@ -1010,28 +1136,30 @@ Expected<L3P_TMSIReallocationCommand> L3P_TMSIReallocationCommand::parse(BitRead
 }
 
 void L3P_TMSIReallocationCommand::write(BitWriter& bw) const {
-    bw.writeField((static_cast<uint8_t>(mPTMSIType) << 7) | (mForceToStandby ? 0x10u : 0u), 8);
+    // allocated P-TMSI: positional LV in the TMSI mobile identity form.
+    writeLVMI(mPTMSI, bw);
     mRAI.write(bw);
-    if (mHavePTMSI) {
-        // allocated P-TMSI: element identifier, length, value (TLV).
-        bw.writeField(0x18u, 8);
-        bw.writeField(static_cast<uint32_t>(mPTMSI.lengthV()), 8);
-        mPTMSI.write(bw);
+    // Spare high bits are zero; the force-to-standby indicator is bit 0.
+    bw.writeField(mForceToStandby ? 1u : 0u, 8);
+    if (mHavePtmsiSignature) {
+        // P-TMSI signature: element identifier followed by the value (TV).
+        bw.writeField(0x19u, 8);
+        bw.writeBytes(mPtmsiSignature.data(), 3);
     }
     detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3P_TMSIReallocationCommand::text(std::ostream& os) const {
-    os << "P_TMSIRreallocCmd(type=" << mPTMSIType << ")";
+    os << "P_TMSIRreallocCmd(forceStandby=" << mForceToStandby << ")";
 }
 
 L3P_TMSIReallocationCommand L3P_TMSIReallocationCommand::Builder::build() const {
     L3P_TMSIReallocationCommand msg;
-    msg.mPTMSIType = m_ptmsiType;
-    msg.mForceToStandby = m_forceToStandby;
-    msg.mRAI = m_rai;
-    msg.mHavePTMSI = m_havePTMSI;
     msg.mPTMSI = m_ptmsi;
+    msg.mRAI = m_rai;
+    msg.mForceToStandby = m_forceToStandby;
+    msg.mHavePtmsiSignature = m_havePtmsiSignature;
+    msg.mPtmsiSignature = m_ptmsiSignature;
     msg.mAdditionalIes = m_additionalIes;
     return msg;
 }
@@ -1042,18 +1170,29 @@ L3P_TMSIReallocationCommand::Builder L3P_TMSIReallocationCommand::builder() {
 
 // ── L3P_TMSIReallocationComplete (GSM 24.008 9.4.8) ──────────────────
 
-Expected<L3P_TMSIReallocationComplete> L3P_TMSIReallocationComplete::parse(BitReader&) {
-    return Expected<L3P_TMSIReallocationComplete>::hold(L3P_TMSIReallocationComplete{});
+Expected<L3P_TMSIReallocationComplete> L3P_TMSIReallocationComplete::parse(BitReader& br) {
+    L3P_TMSIReallocationComplete msg;
+    // No mandatory body fields; any optional IEs are kept opaque and
+    // re-emitted verbatim (TS 44.068 section 9.5).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3P_TMSIReallocationComplete>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
+    }
+    return Expected<L3P_TMSIReallocationComplete>::hold(std::move(msg));
 }
 
-void L3P_TMSIReallocationComplete::write(BitWriter&) const {}
+void L3P_TMSIReallocationComplete::write(BitWriter& bw) const {
+    detail::writeOpaqueTail(mAdditionalIes, bw);
+}
 
 void L3P_TMSIReallocationComplete::text(std::ostream& os) const {
     os << "P_TMSIRreallocComplete";
 }
 
 L3P_TMSIReallocationComplete L3P_TMSIReallocationComplete::Builder::build() const {
-    return L3P_TMSIReallocationComplete{};
+    L3P_TMSIReallocationComplete msg;
+    msg.mAdditionalIes = m_additionalIes;
+    return msg;
 }
 
 L3P_TMSIReallocationComplete::Builder L3P_TMSIReallocationComplete::builder() {
@@ -1237,18 +1376,29 @@ L3AuthenticationAndCipheringResponse::Builder L3AuthenticationAndCipheringRespon
 
 // ── L3AuthenticationAndCipheringReject (GSM 24.008 9.4.9) ─────────────
 
-Expected<L3AuthenticationAndCipheringReject> L3AuthenticationAndCipheringReject::parse(BitReader&) {
-    return Expected<L3AuthenticationAndCipheringReject>::hold(L3AuthenticationAndCipheringReject{});
+Expected<L3AuthenticationAndCipheringReject> L3AuthenticationAndCipheringReject::parse(BitReader& br) {
+    L3AuthenticationAndCipheringReject msg;
+    // No mandatory body fields; any optional IEs are kept opaque and
+    // re-emitted verbatim (TS 44.068 section 9.5).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3AuthenticationAndCipheringReject>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
+    }
+    return Expected<L3AuthenticationAndCipheringReject>::hold(std::move(msg));
 }
 
-void L3AuthenticationAndCipheringReject::write(BitWriter&) const {}
+void L3AuthenticationAndCipheringReject::write(BitWriter& bw) const {
+    detail::writeOpaqueTail(mAdditionalIes, bw);
+}
 
 void L3AuthenticationAndCipheringReject::text(std::ostream& os) const {
     os << "AuthCipherReject";
 }
 
 L3AuthenticationAndCipheringReject L3AuthenticationAndCipheringReject::Builder::build() const {
-    return L3AuthenticationAndCipheringReject{};
+    L3AuthenticationAndCipheringReject msg;
+    msg.mAdditionalIes = m_additionalIes;
+    return msg;
 }
 
 L3AuthenticationAndCipheringReject::Builder L3AuthenticationAndCipheringReject::builder() {
@@ -1260,26 +1410,34 @@ L3AuthenticationAndCipheringReject::Builder L3AuthenticationAndCipheringReject::
 Expected<L3GMMIdentityRequest> L3GMMIdentityRequest::parse(BitReader& br) {
     L3GMMIdentityRequest msg;
 
-    // One-octet body: identityType(3) in the low three bits of the octet
-    // value and spare(5) (GMM Identity Request, TS 44.068 section 9.5).
+    // One-octet body: forceToStandby(1) in bit 4, identityType(3) in the
+    // low three bits of the octet value; bit 3 is spare (TS 44.068 section 9.5).
     auto o = br.readField(8);
     if (!o) return Expected<L3GMMIdentityRequest>::error(o.error());
+    if ((o.value() & 0x08u) != 0) {
+        return Expected<L3GMMIdentityRequest>::error(
+            ParseError{ParseError::Code::InvalidValue, "non-zero spare bit in the identity request octet"});
+    }
+    msg.mForceToStandby = ((o.value() >> 4) & 0x01u) != 0;
     msg.mIdentityType = static_cast<MobileIDType>(o.value() & 0x07u);
 
     return Expected<L3GMMIdentityRequest>::hold(std::move(msg));
 }
 
 void L3GMMIdentityRequest::write(BitWriter& bw) const {
-    bw.writeField(static_cast<uint8_t>(mIdentityType) & 0x07u, 8);
+    bw.writeField(((mForceToStandby ? 1u : 0u) << 4) |
+                  (static_cast<uint8_t>(mIdentityType) & 0x07u), 8);
 }
 
 void L3GMMIdentityRequest::text(std::ostream& os) const {
-    os << "GMMIdentityReq(type=" << mIdentityType << ")";
+    os << "GMMIdentityReq(type=" << mIdentityType
+       << ",forceStandby=" << mForceToStandby << ")";
 }
 
 L3GMMIdentityRequest L3GMMIdentityRequest::Builder::build() const {
     L3GMMIdentityRequest msg;
     msg.mIdentityType = static_cast<MobileIDType>(static_cast<uint8_t>(m_identityType) & 0x07u);
+    msg.mForceToStandby = m_forceToStandby;
     return msg;
 }
 
@@ -1414,18 +1572,29 @@ L3GMMStatus::Builder L3GMMStatus::builder() {
 
 // ── L3GMMInformation (GSM 24.008) ─────────────────────────────────────
 
-Expected<L3GMMInformation> L3GMMInformation::parse(BitReader&) {
-    return Expected<L3GMMInformation>::hold(L3GMMInformation{});
+Expected<L3GMMInformation> L3GMMInformation::parse(BitReader& br) {
+    L3GMMInformation msg;
+    // The whole body (network information) is kept opaque and re-emitted
+    // verbatim (TS 44.068 section 9.5).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
+        return Expected<L3GMMInformation>::error(
+            ParseError{ParseError::Code::TruncatedInput, "truncated optional IEs"});
+    }
+    return Expected<L3GMMInformation>::hold(std::move(msg));
 }
 
-void L3GMMInformation::write(BitWriter&) const {}
+void L3GMMInformation::write(BitWriter& bw) const {
+    detail::writeOpaqueTail(mAdditionalIes, bw);
+}
 
 void L3GMMInformation::text(std::ostream& os) const {
     os << "GMMInformation";
 }
 
 L3GMMInformation L3GMMInformation::Builder::build() const {
-    return L3GMMInformation{};
+    L3GMMInformation msg;
+    msg.mAdditionalIes = m_additionalIes;
+    return msg;
 }
 
 L3GMMInformation::Builder L3GMMInformation::builder() {

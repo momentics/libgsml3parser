@@ -170,7 +170,7 @@ TEST(GoldenGMMTest, AttachComplete_RoundTrip) {
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x04 = MTI(8)=0x04(AttachReject), raw encoding
-//   0x0c = cause value = GPRS_Service_Not_Allowed (single octet, no IEI)
+//   0x0c = cause value = Location_Area_Not_Allowed (single octet, no IEI)
 // =====================================================================
 
 TEST(GoldenGMMTest, AttachReject_WithCause) {
@@ -181,7 +181,7 @@ TEST(GoldenGMMTest, AttachReject_WithCause) {
     EXPECT_EQ(messageMTI(*msg), L3AttachReject::MTI);
     auto* rej = tryGet<L3AttachReject>(*msg);
     ASSERT_NE(rej, nullptr);
-    EXPECT_EQ(rej->cause(), GMMCause::GPRS_Service_Not_Allowed);
+    EXPECT_EQ(rej->cause(), GMMCause::Location_Area_Not_Allowed);
     EXPECT_EQ(rej->bodyLength(), 1u);
 }
 
@@ -414,24 +414,58 @@ TEST(GoldenGMMTest, GMMInformation_RoundTrip) {
 }
 
 // =====================================================================
-// GMM Detach Accept (GSM 24.008 9.4.6) - minimal
-// Detach Accept wire layout (GSM 24.008).
+// GMM Detach Accept (TS 44.068 section 9.5) - minimal
+// Detach Accept wire layout (TS 44.068): the body is exactly one octet,
+// always present, with forceToStandby(1) in bit 0 and spare bits zero.
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x06 = MTI(8)=0x06(DetachAccept), raw encoding
-// No mandatory body octets for MS->SGSN direction.
+//   0x00 = forceToStandby(1)=0 (bit 0), spare bits zero
 // =====================================================================
 
 TEST(GoldenGMMTest, DetachAccept_Minimal) {
-    uint8_t data[] = {0x08, 0x06};
+    uint8_t data[] = {0x08, 0x06, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3DetachAccept::MTI);
+    auto* acc = tryGet<L3DetachAccept>(*msg);
+    ASSERT_NE(acc, nullptr);
+    EXPECT_EQ(acc->forceToStandby(), false);
+    EXPECT_EQ(acc->bodyLength(), 1u);
+}
+
+// =====================================================================
+// GMM Detach Accept force to standby set (TS 44.068 section 9.5) -
+// golden parse and round-trip
+// Hex breakdown:
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
+//   0x06 = MTI(8)=0x06(DetachAccept), raw encoding
+//   0x01 = forceToStandby(1)=1 (bit 0), spare bits zero
+// =====================================================================
+
+TEST(GoldenGMMTest, DetachAccept_ForceToStandby_RoundTrip) {
+    uint8_t data[] = {0x08, 0x06, 0x01};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto* acc = tryGet<L3DetachAccept>(*msg);
+    ASSERT_NE(acc, nullptr);
+    EXPECT_EQ(acc->forceToStandby(), true);
+
+    // Builder path: the same values must reproduce identical bytes.
+    auto built = L3DetachAccept::builder()
+        .forceToStandby(true)
+        .build();
+    auto bytes = writeL3Bytes(ParsedMessage{GMM{built}});
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ((*bytes)[i], data[i]);
+    }
 }
 
 // =====================================================================
 // GMM Detach Accept Round-Trip
-// Detach Accept wire layout (GSM 24.008).
+// Detach Accept wire layout (TS 44.068).
 // =====================================================================
 
 TEST(GoldenGMMTest, DetachAccept_RoundTrip) {
@@ -444,16 +478,19 @@ TEST(GoldenGMMTest, DetachAccept_RoundTrip) {
 // =====================================================================
 // GMM Attach Accept (TS 44.068 section 9.5) - golden parse
 // Attach Accept golden parse vector (TS 44.068): three-octet leading part
-// (first octet: attachResult(3)|spare(1)|forceToStandby(1)|updateTimer(2)|
-// radioPriority(1); then two further leading octets), routing area
-// identification (six octets, byte 3 of the body), optional P-TMSI
-// signature (TV, IEI 0x19 + three octets), allocated P-TMSI (TLV, IEI
-// 0x18) and any further optional IEs kept opaque.
+// (first octet: forceToStandby(4, high nibble)|attachResult(4, low nibble);
+// second octet: periodic RA update timer, units(3) high|value(5) low per
+// TS 24.008 section 10.5.7.3; third octet: radio priority for SMS (high
+// nibble)|radio priority for TOM8 (low nibble)), routing area
+// identification (six octets, body byte 3), optional P-TMSI signature
+// (TV, IEI 0x19 + three octets), allocated P-TMSI (TLV, IEI 0x18) and any
+// further optional IEs kept opaque.
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x02 = MTI(8)=0x02(AttachAccept), raw encoding
-//   0x23 = attachResult(3)=GPRS(1)|spare(1)=0|forceToStandby(1)=0|updateTimer(2)=1|radioPriority(1)=1
-//   0x00 0x00 = the two further leading octets
+//   0x01 = forceToStandby(4)=0 (high)|attachResult(4)=GPRS(1) (low)
+//   0x47 = periodic RA update timer: units(3)=2 (deci-hours)|value(5)=7
+//   0x44 = radioPrioritySMS(4)=4 (high)|radioPriorityTOM8(4)=4 (low)
 //   09 F1 07 = MCC/MNC BCD: MCC=901, MNC=70 (TS 24.008 10.5.1.3 packing)
 //   0x00 0x01 = LAC = 0x0001
 //   0x5A = RAC = 0x5A
@@ -468,8 +505,9 @@ TEST(GoldenGMMTest, AttachAccept_GoldenParse) {
     // body byte 3.
     uint8_t data[] = {
         0x08, 0x02,                            // header: PD=GMM, MTI=AttachAccept
-        0x23,                                   // attachResult(3)=GPRS(1)|spare(1)=0|forceToStandby(1)=0|updateTimer(2)=1|radioPriority(1)=1
-        0x00, 0x00,                             // the two further leading octets
+        0x01,                                   // forceToStandby(4)=0 (high)|attachResult(4)=GPRS(1) (low)
+        0x47,                                   // periodic RA update timer: units(3)=2|value(5)=7
+        0x44,                                   // radioPrioritySMS(4)=4 (high)|radioPriorityTOM8(4)=4 (low)
         0x09, 0xF1, 0x07, 0x00, 0x01, 0x5A,    // RAI: MCC=901, MNC=70, LAC=0x0001, RAC=0x5A
         0x18, 0x05,                             // TLV: element identifier=0x18(allocated P-TMSI), length=5
         0xF4,                                   // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) = 0xF4
@@ -484,11 +522,9 @@ TEST(GoldenGMMTest, AttachAccept_GoldenParse) {
     ASSERT_NE(acc, nullptr);
     EXPECT_EQ(acc->attachResult(), GMMAttachType::GPRSAttach);
     EXPECT_EQ(acc->forceToStandby(), false);
-    EXPECT_EQ(acc->updateTimer(), 1u);
-    EXPECT_EQ(acc->radioPriority(), 1u);
-    const auto extra = acc->leadingExtra();
-    EXPECT_EQ(extra[0], 0x00);
-    EXPECT_EQ(extra[1], 0x00);
+    EXPECT_EQ(acc->raUpdateTimer().octet(), 0x47u);
+    EXPECT_EQ(acc->radioPrioritySms(), 4u);
+    EXPECT_EQ(acc->radioPriorityTom8(), 4u);
     EXPECT_EQ(acc->rai().mcc(), 901);
     EXPECT_EQ(acc->rai().mnc(), 70);
     EXPECT_EQ(acc->hasPtmsiSignature(), false);
@@ -499,11 +535,68 @@ TEST(GoldenGMMTest, AttachAccept_GoldenParse) {
     auto built = L3AttachAccept::builder()
         .attachResult(GMMAttachType::GPRSAttach)
         .forceToStandby(false)
-        .updateTimer(1)
-        .radioPriority(1)
-        .leadingExtra(0x00, 0x00)
+        .raUpdateTimer(detail::GprsTimerValue{2, 7})
+        .radioPrioritySms(4)
+        .radioPriorityTom8(4)
         .rai(acc->rai())
         .ptmsi(L3MobileIdentity(0x12345678))
+        .build();
+    auto bytes = writeL3Bytes(ParsedMessage{GMM{built}});
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ((*bytes)[i], data[i]);
+    }
+}
+
+// =====================================================================
+// GMM Attach Accept golden vector (TS 44.068 section 9.5) - exact frame
+// result=1 (GPRS attach), FTS=0, periodic RA update timer octet 0x47
+// (units=2 deci-hours, value=7), radio priorities 4/4, RAI PLMN 250/10,
+// LAC 0x04D2, RAC 0x03; no optional IEs.
+// Hex breakdown:
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
+//   0x02 = MTI(8)=0x02(AttachAccept), raw encoding
+//   0x01 = forceToStandby(4)=0 (high)|attachResult(4)=GPRS(1) (low)
+//   0x47 = periodic RA update timer: units(3)=2|value(5)=7 (TS 24.008 section 10.5.7.3)
+//   0x44 = radioPrioritySMS(4)=4 (high)|radioPriorityTOM8(4)=4 (low)
+//   52 F0 01 = MCC/MNC BCD: MCC=250, MNC=10 (TS 24.008 10.5.1.3 packing)
+//   0x04 0xD2 = LAC = 0x04D2
+//   0x03 = RAC = 0x03
+// =====================================================================
+
+TEST(GoldenGMMTest, AttachAccept_GoldenVector) {
+    uint8_t data[] = {
+        0x08, 0x02,                 // header: PD=GMM, MTI=AttachAccept
+        0x01,                       // forceToStandby(4)=0 (high)|attachResult(4)=GPRS(1) (low)
+        0x47,                       // periodic RA update timer: units(3)=2|value(5)=7
+        0x44,                       // radioPrioritySMS(4)=4 (high)|radioPriorityTOM8(4)=4 (low)
+        0x52, 0xF0, 0x01,           // RAI: MCC=250, MNC=10 (TS 24.008 10.5.1.3 packing)
+        0x04, 0xD2,                 // LAC = 0x04D2
+        0x03                        // RAC = 0x03
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto* acc = tryGet<L3AttachAccept>(*msg);
+    ASSERT_NE(acc, nullptr);
+    EXPECT_EQ(acc->attachResult(), GMMAttachType::GPRSAttach);
+    EXPECT_EQ(acc->forceToStandby(), false);
+    EXPECT_EQ(acc->raUpdateTimer().octet(), 0x47u);
+    EXPECT_EQ(acc->radioPrioritySms(), 4u);
+    EXPECT_EQ(acc->radioPriorityTom8(), 4u);
+    EXPECT_EQ(acc->rai().mcc(), 250);
+    EXPECT_EQ(acc->rai().mnc(), 10);
+    EXPECT_EQ(acc->rai().lac(), 0x04D2);
+    EXPECT_EQ(acc->rai().rac(), 0x03u);
+
+    // Builder path: the same values must reproduce identical bytes.
+    auto built = L3AttachAccept::builder()
+        .attachResult(GMMAttachType::GPRSAttach)
+        .forceToStandby(false)
+        .raUpdateTimer(detail::GprsTimerValue{2, 7})
+        .radioPrioritySms(4)
+        .radioPriorityTom8(4)
+        .rai(L3RoutingAreaIdentification("250", "10", 0x04D2, 0x03))
         .build();
     auto bytes = writeL3Bytes(ParsedMessage{GMM{built}});
     ASSERT_TRUE(bytes);
@@ -522,29 +615,31 @@ TEST(GoldenGMMTest, AttachAccept_GoldenParse) {
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x02 = MTI(8)=0x02(AttachAccept), raw encoding
-//   0x20 = attachResult(3)=GPRS(1)|spare(1)=0|forceToStandby(1)=0|updateTimer(2)=0|radioPriority(1)=0
-//   0x00 0x00 = the two further leading octets
+//   0x01 = forceToStandby(4)=0 (high)|attachResult(4)=GPRS(1) (low)
+//   0xE0 = periodic RA update timer: units(3)=7 (deactivated)|value(5)=0
+//   0x00 = radioPrioritySMS(4)=0 (high)|radioPriorityTOM8(4)=0 (low)
 //   09 F1 07 = MCC/MNC BCD: MCC=901, MNC=70 (TS 24.008 10.5.1.3 packing)
 //   0x00 0x01 = LAC = 0x0001
 //   0x5A = RAC = 0x5A
 //   0x19 = element identifier for the P-TMSI signature (TV)
-//   A1 B2 C3 = P-TMSI signature value (three octets)
+//   AA BB CC = P-TMSI signature value (three octets)
 //   0x18 = element identifier for allocated P-TMSI (TLV)
 //   0x05 = length of PTMSI value = 5 bytes
 //   0xF4 = first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B)
-//   0x12 0x34 0x56 0x78 = TMSI value = 0x12345678
+//   0x11 0x22 0x33 0x44 = TMSI value = 0x11223344
 // =====================================================================
 
 TEST(GoldenGMMTest, AttachAccept_WithPtmsiSignature_RoundTrip) {
     uint8_t data[] = {
         0x08, 0x02,                            // header: PD=GMM, MTI=AttachAccept
-        0x20,                                   // attachResult(3)=GPRS(1), all other fields zero
-        0x00, 0x00,                             // the two further leading octets
+        0x01,                                   // forceToStandby(4)=0 (high)|attachResult(4)=GPRS(1) (low)
+        0xE0,                                   // periodic RA update timer: units(3)=7 (deactivated)|value(5)=0
+        0x00,                                   // radioPrioritySMS(4)=0 (high)|radioPriorityTOM8(4)=0 (low)
         0x09, 0xF1, 0x07, 0x00, 0x01, 0x5A,    // RAI: MCC=901, MNC=70, LAC=0x0001, RAC=0x5A
-        0x19, 0xA1, 0xB2, 0xC3,                 // P-TMSI signature TV: IEI 0x19 + three octets
+        0x19, 0xAA, 0xBB, 0xCC,                 // P-TMSI signature TV: IEI 0x19 + three octets
         0x18, 0x05,                             // TLV: element identifier=0x18(allocated P-TMSI), length=5
         0xF4,                                   // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) = 0xF4
-        0x12, 0x34, 0x56, 0x78                  // TMSI value = 0x12345678
+        0x11, 0x22, 0x33, 0x44                  // TMSI value = 0x11223344
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -552,23 +647,24 @@ TEST(GoldenGMMTest, AttachAccept_WithPtmsiSignature_RoundTrip) {
     ASSERT_NE(acc, nullptr);
     EXPECT_EQ(acc->attachResult(), GMMAttachType::GPRSAttach);
     EXPECT_EQ(acc->forceToStandby(), false);
-    EXPECT_EQ(acc->updateTimer(), 0u);
-    EXPECT_EQ(acc->radioPriority(), 0u);
+    EXPECT_EQ(acc->raUpdateTimer().octet(), 0xE0u);
+    EXPECT_EQ(acc->radioPrioritySms(), 0u);
+    EXPECT_EQ(acc->radioPriorityTom8(), 0u);
     EXPECT_EQ(acc->hasPtmsiSignature(), true);
     const auto& sig = acc->ptmsiSignature();
-    EXPECT_EQ(sig[0], 0xA1);
-    EXPECT_EQ(sig[1], 0xB2);
-    EXPECT_EQ(sig[2], 0xC3);
+    EXPECT_EQ(sig[0], 0xAA);
+    EXPECT_EQ(sig[1], 0xBB);
+    EXPECT_EQ(sig[2], 0xCC);
     EXPECT_EQ(acc->hasPTMSI(), true);
-    EXPECT_EQ(acc->ptmsi().tmsi(), 0x12345678u);
+    EXPECT_EQ(acc->ptmsi().tmsi(), 0x11223344u);
 
     // Emit: the same values must reproduce identical bytes (round-trip).
     auto built = L3AttachAccept::builder()
         .attachResult(GMMAttachType::GPRSAttach)
-        .leadingExtra(0x00, 0x00)
+        .raUpdateTimer(detail::GprsTimerValue{7, 0})
         .rai(L3RoutingAreaIdentification("901", "70", 0x0001, 0x5A))
-        .ptmsiSignature({0xA1, 0xB2, 0xC3})
-        .ptmsi(L3MobileIdentity(0x12345678))
+        .ptmsiSignature({0xAA, 0xBB, 0xCC})
+        .ptmsi(L3MobileIdentity(0x11223344))
         .build();
     auto bytes = writeL3Bytes(ParsedMessage{GMM{built}});
     ASSERT_TRUE(bytes);
@@ -796,16 +892,19 @@ TEST(GoldenGMMTest, RAUpdateRequest_GoldenParse) {
 // =====================================================================
 // GMM Routing Area Update Accept (TS 44.068 section 9.5) - golden parse
 // Routing Area Update Accept golden parse vector (TS 44.068): two-octet
-// leading part (first octet: forceToStandby(1)|updateResult(3)|spare(1)|
-// raUpdateTimer(2)|spare(2); then one further leading octet), routing
-// area identification (six octets, byte 2 of the body), optional P-TMSI
-// signature (TV, IEI 0x19 + three octets), allocated P-TMSI (TLV, IEI
-// 0x18) and any further optional IEs kept opaque.
+// leading part (first octet: updateResult(3, bits 1-3 of the octet
+// value)|forceToStandby(1, bit 0); second octet: periodic RA update
+// timer, units(3) high|value(5) low per TS 24.008 section 10.5.7.3),
+// routing area identification (six octets, byte 2 of the body), optional
+// P-TMSI signature (TV, IEI 0x19 + three octets), allocated P-TMSI (TLV,
+// IEI 0x18) and any further optional IEs kept opaque. The network
+// includes the PDP context status (TLV, IEI 0x32, length two) in this
+// message.
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x09 = MTI(8)=0x09(RoutingAreaUpdateAccept), raw encoding
-//   0x38 = forceToStandby(1)=0|updateResult(3)=PeriodicUpdating(3)|spare(1)=0|raUpdateTimer(2)=2|spare(2)=0
-//   0x00 = the further leading octet
+//   0x02 = updateResult(3)=CombinedRA-LA(1) in bits 1-3|forceToStandby(1)=0 (bit 0)
+//   0x47 = periodic RA update timer: units(3)=2 (deci-hours)|value(5)=7
 //   09 F1 07 = MCC/MNC BCD: MCC=901, MNC=70 (TS 24.008 10.5.1.3 packing)
 //   0x00 0x01 = LAC = 0x0001
 //   0x5A = RAC = 0x5A
@@ -820,8 +919,8 @@ TEST(GoldenGMMTest, RAUpdateAccept_GoldenParse) {
     // body byte 2.
     uint8_t data[] = {
         0x08, 0x09,                               // header: PD=GMM, MTI=RAUpdateAccept
-        0x38,                                      // forceToStandby(1)=0|updateResult(3)=PeriodicUpdating(3)|spare(1)=0|raUpdateTimer(2)=2|spare(2)=0
-        0x00,                                      // the further leading octet
+        0x02,                                      // updateResult(3)=CombinedRA-LA(1) in bits 1-3|forceToStandby(1)=0 (bit 0)
+        0x47,                                      // periodic RA update timer: units(3)=2|value(5)=7
         0x09, 0xF1, 0x07, 0x00, 0x01, 0x5A,       // RAI: MCC=901, MNC=70, LAC=0x0001, RAC=0x5A
         0x18, 0x05,                                // TLV: element identifier=0x18(allocated P-TMSI), length=5
         0xF4,                                      // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) = 0xF4
@@ -834,9 +933,8 @@ TEST(GoldenGMMTest, RAUpdateAccept_GoldenParse) {
     auto* raua = tryGet<L3RoutingAreaUpdateAccept>(*msg);
     ASSERT_NE(raua, nullptr);
     EXPECT_EQ(raua->forceToStandby(), false);
-    EXPECT_EQ(raua->updateResult(), GMMUpdateType::PeriodicUpdating);
-    EXPECT_EQ(raua->raUpdateTimer(), 2u);
-    EXPECT_EQ(raua->leadingExtra(), 0x00);
+    EXPECT_EQ(raua->updateResult(), GMMUpdateType::CombinedRALAUpdated);
+    EXPECT_EQ(raua->raUpdateTimer().octet(), 0x47u);
     EXPECT_EQ(raua->rai().mcc(), 901);
     EXPECT_EQ(raua->rai().mnc(), 70);
     EXPECT_EQ(raua->hasPtmsiSignature(), false);
@@ -846,9 +944,8 @@ TEST(GoldenGMMTest, RAUpdateAccept_GoldenParse) {
     // Builder path: the same values must reproduce identical bytes.
     auto built = L3RoutingAreaUpdateAccept::builder()
         .forceToStandby(false)
-        .updateResult(GMMUpdateType::PeriodicUpdating)
-        .raUpdateTimer(2)
-        .leadingExtra(0x00)
+        .updateResult(GMMUpdateType::CombinedRALAUpdated)
+        .raUpdateTimer(detail::GprsTimerValue{2, 7})
         .rai(raua->rai())
         .ptmsi(L3MobileIdentity(0x12345678))
         .build();
@@ -861,27 +958,127 @@ TEST(GoldenGMMTest, RAUpdateAccept_GoldenParse) {
 }
 
 // =====================================================================
+// GMM Routing Area Update Accept golden vector (TS 44.068 section 9.5) -
+// exact frame with the PDP context status TLV
+// res=0 (RA updated), FTS=0, timer octet 0x47 (units=2, value=7), RAI
+// PLMN 250/10, LAC 0x04D2, RAC 0x03, PDP context status zero.
+// Hex breakdown:
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
+//   0x09 = MTI(8)=0x09(RoutingAreaUpdateAccept), raw encoding
+//   0x00 = updateResult(3)=RAUpdated(0) in bits 1-3|forceToStandby(1)=0 (bit 0)
+//   0x47 = periodic RA update timer: units(3)=2|value(5)=7 (TS 24.008 section 10.5.7.3)
+//   52 F0 01 = MCC/MNC BCD: MCC=250, MNC=10 (TS 24.008 10.5.1.3 packing)
+//   0x04 0xD2 = LAC = 0x04D2
+//   0x03 = RAC = 0x03
+//   0x32 = element identifier for PDP context status (TLV, length two)
+//   0x02 = length of the PDP context status value = 2 octets
+//   0x00 0x00 = no PDP context active (two-octet bitmap)
+// =====================================================================
+
+TEST(GoldenGMMTest, RAUpdateAccept_GoldenVector) {
+    uint8_t data[] = {
+        0x08, 0x09,                               // header: PD=GMM, MTI=RAUpdateAccept
+        0x00,                                      // updateResult(3)=RAUpdated(0) in bits 1-3|forceToStandby(1)=0 (bit 0)
+        0x47,                                      // periodic RA update timer: units(3)=2|value(5)=7
+        0x52, 0xF0, 0x01,                          // RAI: MCC=250, MNC=10 (TS 24.008 10.5.1.3 packing)
+        0x04, 0xD2,                                // LAC = 0x04D2
+        0x03,                                      // RAC = 0x03
+        0x32, 0x02,                                // TLV: element identifier=0x32(PDP context status), length=2
+        0x00, 0x00                                 // no PDP context active (two-octet bitmap)
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto* raua = tryGet<L3RoutingAreaUpdateAccept>(*msg);
+    ASSERT_NE(raua, nullptr);
+    EXPECT_EQ(raua->updateResult(), GMMUpdateType::RAUpdated);
+    EXPECT_EQ(raua->forceToStandby(), false);
+    EXPECT_EQ(raua->raUpdateTimer().octet(), 0x47u);
+    EXPECT_EQ(raua->rai().mcc(), 250);
+    EXPECT_EQ(raua->rai().mnc(), 10);
+    EXPECT_EQ(raua->rai().lac(), 0x04D2);
+    EXPECT_EQ(raua->rai().rac(), 0x03u);
+    EXPECT_EQ(raua->hasPdpContextStatus(), true);
+    const auto& pdp = raua->pdpContextStatus();
+    EXPECT_EQ(pdp[0], 0x00);
+    EXPECT_EQ(pdp[1], 0x00);
+    ASSERT_TRUE(raua->additionalIes().empty());
+
+    // Builder path: the same values must reproduce identical bytes.
+    auto built = L3RoutingAreaUpdateAccept::builder()
+        .updateResult(GMMUpdateType::RAUpdated)
+        .forceToStandby(false)
+        .raUpdateTimer(detail::GprsTimerValue{2, 7})
+        .rai(L3RoutingAreaIdentification("250", "10", 0x04D2, 0x03))
+        .pdpContextStatus({0x00, 0x00})
+        .build();
+    auto bytes = writeL3Bytes(ParsedMessage{GMM{built}});
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ((*bytes)[i], data[i]);
+    }
+}
+
+// =====================================================================
+// GMM Routing Area Update Accept first-octet layout (TS 44.068 section
+// 9.5) - emit gate
+// The update result occupies bits 1-3 of the octet value and the force
+// to standby indicator bit 0: result=1 with force to standby set emits
+// octet 0x03.
+// =====================================================================
+
+TEST(GoldenGMMTest, RAUpdateAccept_FirstOctetLayout) {
+    auto msg = L3RoutingAreaUpdateAccept::builder()
+        .updateResult(GMMUpdateType::CombinedRALAUpdated)
+        .forceToStandby(true)
+        .raUpdateTimer(detail::GprsTimerValue{7, 0})
+        .rai(L3RoutingAreaIdentification{})
+        .build();
+    ParsedMessage pm{GMM{std::move(msg)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    EXPECT_EQ((*bytes)[0], 0x08); // PD=GMM in the low nibble
+    EXPECT_EQ((*bytes)[1], L3RoutingAreaUpdateAccept::MTI);
+    EXPECT_EQ((*bytes)[2], 0x03); // updateResult(3)=1 (bits 1-3)|forceToStandby(1)=1 (bit 0)
+}
+
+// =====================================================================
 // GMM Routing Area Update Reject (TS 44.068 section 9.5) - golden parse
 // Routing Area Update Reject golden parse vector (TS 44.068): the body
-// starts with the GMM cause as a single value octet carried without an
-// identifier; any further optional IEs follow.
+// is the GMM cause as a single value octet carried without an identifier
+// followed by one octet with forceToStandby(1) in bit 0 and spare bits
+// zero; any further optional IEs follow.
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0b = MTI(8)=0x0b(RoutingAreaUpdateReject), raw encoding
-//   0x0c = cause value = GPRS_Service_Not_Allowed (single octet, no IEI)
+//   0x07 = cause value = GPRS_Services_Not_Allowed (single octet, no IEI)
+//   0x00 = forceToStandby(1)=0 (bit 0), spare bits zero
 // =====================================================================
 
 TEST(GoldenGMMTest, RAUpdateReject_GoldenParse) {
     // GMM cause carried as a bare value octet (TS 44.068): no IEI, no length.
-    uint8_t data[] = {0x08, 0x0b, 0x0c};
+    uint8_t data[] = {0x08, 0x0b, 0x07, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3RoutingAreaUpdateReject::MTI);
     EXPECT_EQ(messageName(*msg), "RoutingAreaUpdateReject");
     auto* rej = tryGet<L3RoutingAreaUpdateReject>(*msg);
     ASSERT_NE(rej, nullptr);
-    EXPECT_EQ(rej->cause(), GMMCause::GPRS_Service_Not_Allowed);
-    EXPECT_EQ(rej->bodyLength(), 1u);
+    EXPECT_EQ(rej->cause(), GMMCause::GPRS_Services_Not_Allowed);
+    EXPECT_EQ(rej->forceToStandby(), false);
+    EXPECT_EQ(rej->bodyLength(), 2u);
+
+    // Builder path: the same values must reproduce identical bytes.
+    auto built = L3RoutingAreaUpdateReject::builder()
+        .cause(GMMCause::GPRS_Services_Not_Allowed)
+        .forceToStandby(false)
+        .build();
+    auto bytes = writeL3Bytes(ParsedMessage{GMM{built}});
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ((*bytes)[i], data[i]);
+    }
 }
 
 // =====================================================================
@@ -921,6 +1118,56 @@ TEST(GoldenGMMTest, ServiceRequest_GoldenParse) {
 }
 
 // =====================================================================
+// GMM Service Request with PDP context status tail (TS 44.068 section
+// 9.5) - lossless round-trip
+// Conforming MSes append the PDP context status TLV (IEI 0x32 + length +
+// two-octet bitmap) after the P-TMSI LV; the remainder of the body is
+// preserved opaquely and re-emitted byte for byte.
+// Hex breakdown:
+//   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
+//   0x0c = MTI(8)=0x0c(ServiceRequest), raw encoding
+//   0x17 = CKSN(3)=7 (low half-octet)|serviceType(3)=1(signalling) (high)
+//   0x05 = PTMSI LV length = 5 bytes
+//   0xF4 = first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B)
+//   0x12 0x34 0x56 0x78 = TMSI value = 0x12345678
+//   0x32 = element identifier for PDP context status (TLV, length two)
+//   0x02 = length of the PDP context status value = 2 octets
+//   0x03 0x00 = contexts 1 and 2 active (two-octet bitmap)
+// =====================================================================
+
+TEST(GoldenGMMTest, ServiceRequest_WithPdpContextStatus_RoundTrip) {
+    uint8_t data[] = {
+        0x08, 0x0c,                              // header: PD=GMM, MTI=ServiceRequest
+        0x17,                                     // CKSN(3)=7 (low)|serviceType(3)=1(signalling) (high)
+        0x05,                                     // PTMSI LV length = 5 bytes
+        0xF4,                                     // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) = 0xF4
+        0x12, 0x34, 0x56, 0x78,                   // TMSI value = 0x12345678
+        0x32, 0x02,                               // TLV: element identifier=0x32(PDP context status), length=2
+        0x03, 0x00                                // contexts 1 and 2 active (two-octet bitmap)
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto* srv = tryGet<L3ServiceRequest>(*msg);
+    ASSERT_NE(srv, nullptr);
+    EXPECT_EQ(srv->cksn(), 0x07);
+    EXPECT_EQ(srv->serviceType(), 0x01);
+    EXPECT_EQ(srv->ptmsi().tmsi(), 0x12345678u);
+    ASSERT_EQ(srv->additionalIes().size(), 4u);
+    EXPECT_EQ(srv->additionalIes()[0], 0x32);
+    EXPECT_EQ(srv->additionalIes()[1], 0x02);
+    EXPECT_EQ(srv->additionalIes()[2], 0x03);
+    EXPECT_EQ(srv->additionalIes()[3], 0x00);
+
+    // Re-emit: the tail must be reproduced byte for byte.
+    auto bytes = writeL3Bytes(ParsedMessage{GMM{*srv}});
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ((*bytes)[i], data[i]);
+    }
+}
+
+// =====================================================================
 // GMM Service Reject (TS 44.068 section 9.5) - golden parse
 // Service Reject golden parse vector (TS 44.068): the body starts with
 // the GMM cause as a single value octet carried without an identifier;
@@ -928,7 +1175,7 @@ TEST(GoldenGMMTest, ServiceRequest_GoldenParse) {
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x0e = MTI(8)=0x0e(ServiceReject), raw encoding
-//   0x0c = cause value = GPRS_Service_Not_Allowed (single octet, no IEI)
+//   0x0c = cause value = Location_Area_Not_Allowed (single octet, no IEI)
 // =====================================================================
 
 TEST(GoldenGMMTest, ServiceReject_GoldenParse) {
@@ -940,35 +1187,39 @@ TEST(GoldenGMMTest, ServiceReject_GoldenParse) {
     EXPECT_EQ(messageName(*msg), "ServiceReject");
     auto* rej = tryGet<L3ServiceReject>(*msg);
     ASSERT_NE(rej, nullptr);
-    EXPECT_EQ(rej->cause(), GMMCause::GPRS_Service_Not_Allowed);
+    EXPECT_EQ(rej->cause(), GMMCause::Location_Area_Not_Allowed);
     EXPECT_EQ(rej->bodyLength(), 1u);
 }
 
 // =====================================================================
 // GMM P-TMSI Reallocation Command (TS 44.068 section 9.5) - golden parse
-// Reference: TS 44.068 section 9.5 message structure
+// The body starts with the allocated P-TMSI as a positional LV in the
+// TMSI mobile identity form (length five, 0xF4 + four octets), then the
+// routing area identification (six octets), then one octet with
+// forceToStandby(1) in bit 0 and spare bits zero.
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x10 = MTI(8)=0x10(P_TMSIReallocationCommand), raw encoding
-//   0x90 = PTMSI_Type(1)=Mapped(1)|spare(3)=0|forceToStandby(1)=1|spare(4)=0
-//   09 F1 07 = MCC/MNC BCD: MCC=901, MNC=70 (TS 24.008 10.5.1.3 packing)
-//   0x00 0x01 = LAC = 0x0001
-//   0x5A = RAC = 0x5A
-//   0x18 = element identifier for allocated P-TMSI (TLV)
-//   0x05 = length of PTMSI value = 5 bytes
+//   0x05 = allocated P-TMSI LV length = 5 (positional, no element identifier)
 //   0xF4 = first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B)
 //   0x12 0x34 0x56 0x78 = TMSI value = 0x12345678
+//   52 F0 01 = MCC/MNC BCD: MCC=250, MNC=10 (TS 24.008 10.5.1.3 packing)
+//   0x04 0xD2 = LAC = 0x04D2
+//   0x03 = RAC = 0x03
+//   0x00 = forceToStandby(1)=0 (bit 0), spare bits zero
 // =====================================================================
 
 TEST(GoldenGMMTest, PTMSIRereallocCommand_GoldenParse) {
-    // Body: firstOctet(1) + RAI(6) + PTMSI_TLV(7) = 14 bytes
+    // Body: P-TMSI LV(6) + RAI(6) + FTS octet(1) = 13 bytes
     uint8_t data[] = {
         0x08, 0x10,                               // header: PD=GMM, MTI=P_TMSIReallocationCommand
-        0x90,                                      // P-TMSI type Mapped(1) in bit 7, force to standby in bit 4
-        0x09, 0xF1, 0x07, 0x00, 0x01, 0x5A,       // RAI: MCC=901, MNC=70, LAC=0x0001, RAC=0x5A
-        0x18, 0x05,                                // TLV: element identifier=0x18(allocated P-TMSI), length=5
+        0x05,                                      // allocated P-TMSI LV length = 5 (positional)
         0xF4,                                      // first octet: spare 'F'(4)|0(1)|type(3)=TMSI('100'B) = 0xF4
-        0x12, 0x34, 0x56, 0x78                     // TMSI value = 0x12345678
+        0x12, 0x34, 0x56, 0x78,                    // TMSI value = 0x12345678
+        0x52, 0xF0, 0x01,                          // RAI: MCC=250, MNC=10 (TS 24.008 10.5.1.3 packing)
+        0x04, 0xD2,                                // LAC = 0x04D2
+        0x03,                                      // RAC = 0x03
+        0x00                                       // forceToStandby(1)=0 (bit 0), spare bits zero
     };
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -976,18 +1227,63 @@ TEST(GoldenGMMTest, PTMSIRereallocCommand_GoldenParse) {
     EXPECT_EQ(messageName(*msg), "P_TMSIReallocationCommand");
     auto* cmd = tryGet<L3P_TMSIReallocationCommand>(*msg);
     ASSERT_NE(cmd, nullptr);
-    EXPECT_EQ(cmd->ptmsiType(), GMMPTMSIType::Mapped);
-    EXPECT_EQ(cmd->forceToStandby(), true);
-    EXPECT_EQ(cmd->rai().mcc(), 901);
-    EXPECT_EQ(cmd->hasPTMSI(), true);
+    EXPECT_EQ(cmd->forceToStandby(), false);
+    EXPECT_EQ(cmd->rai().mcc(), 250);
+    EXPECT_EQ(cmd->rai().mnc(), 10);
+    EXPECT_EQ(cmd->rai().lac(), 0x04D2);
+    EXPECT_EQ(cmd->rai().rac(), 0x03u);
     EXPECT_EQ(cmd->ptmsi().tmsi(), 0x12345678u);
 
     // Builder path: the same values must reproduce identical bytes.
     auto built = L3P_TMSIReallocationCommand::builder()
-        .ptmsiType(GMMPTMSIType::Mapped)
-        .forceToStandby(true)
+        .forceToStandby(false)
         .rai(cmd->rai())
         .ptmsi(L3MobileIdentity(0x12345678))
+        .build();
+    auto bytes = writeL3Bytes(ParsedMessage{GMM{built}});
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) {
+        EXPECT_EQ((*bytes)[i], data[i]);
+    }
+}
+
+// =====================================================================
+// GMM P-TMSI Reallocation Command with P-TMSI signature (TS 44.068
+// section 9.5) - golden parse and round-trip
+// The optional P-TMSI signature is a type-value pair (IEI 0x19 + three
+// octets) placed after the force-to-standby octet.
+// =====================================================================
+
+TEST(GoldenGMMTest, PTMSIRereallocCommand_WithSignature_RoundTrip) {
+    uint8_t data[] = {
+        0x08, 0x10,                               // header: PD=GMM, MTI=P_TMSIReallocationCommand
+        0x05, 0xF4,                                // allocated P-TMSI LV: length=5, TMSI form first octet
+        0x12, 0x34, 0x56, 0x78,                    // TMSI value = 0x12345678
+        0x52, 0xF0, 0x01,                          // RAI: MCC=250, MNC=10 (TS 24.008 10.5.1.3 packing)
+        0x04, 0xD2,                                // LAC = 0x04D2
+        0x03,                                      // RAC = 0x03
+        0x01,                                      // forceToStandby(1)=1 (bit 0), spare bits zero
+        0x19, 0xA1, 0xB2, 0xC3                     // P-TMSI signature TV: IEI 0x19 + three octets
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    auto* cmd = tryGet<L3P_TMSIReallocationCommand>(*msg);
+    ASSERT_NE(cmd, nullptr);
+    EXPECT_EQ(cmd->ptmsi().tmsi(), 0x12345678u);
+    EXPECT_EQ(cmd->forceToStandby(), true);
+    EXPECT_EQ(cmd->hasPtmsiSignature(), true);
+    const auto& sig = cmd->ptmsiSignature();
+    EXPECT_EQ(sig[0], 0xA1);
+    EXPECT_EQ(sig[1], 0xB2);
+    EXPECT_EQ(sig[2], 0xC3);
+
+    // Builder path: the same values must reproduce identical bytes.
+    auto built = L3P_TMSIReallocationCommand::builder()
+        .ptmsi(L3MobileIdentity(0x12345678))
+        .rai(L3RoutingAreaIdentification("250", "10", 0x04D2, 0x03))
+        .forceToStandby(true)
+        .ptmsiSignature({0xA1, 0xB2, 0xC3})
         .build();
     auto bytes = writeL3Bytes(ParsedMessage{GMM{built}});
     ASSERT_TRUE(bytes);
@@ -1158,16 +1454,17 @@ TEST(GoldenGMMTest, AuthAndCipheringResponse_WithImeisv_RoundTrip) {
 
 // =====================================================================
 // GMM Identity Request (TS 44.068 section 9.5) - golden parse
-// Identity Request golden parse vector: a one-octet body with the
-// identity type in the low three bits and spare(5).
+// Identity Request golden parse vector: a one-octet body with
+// forceToStandby(1) in bit 4, the identity type in the low three bits
+// and the remaining bits spare.
 // Hex breakdown:
 //   0x08 = PD=0x08(GMM) in the low nibble of octet 0, TI/TIF zero
 //   0x15 = MTI(8)=0x15(GMMIdentityRequest), raw encoding
-//   0x01 = identityType(3)=IMSI(1)|spare(5)=0
+//   0x11 = forceToStandby(1)=1 (bit 4)|identityType(3)=IMSI(1)|spare bits zero
 // =====================================================================
 
 TEST(GoldenGMMTest, GMMIdentityRequest_GoldenParse) {
-    uint8_t data[] = {0x08, 0x15, 0x01};
+    uint8_t data[] = {0x08, 0x15, 0x11};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3GMMIdentityRequest::MTI);
@@ -1175,11 +1472,13 @@ TEST(GoldenGMMTest, GMMIdentityRequest_GoldenParse) {
     auto* idr = tryGet<L3GMMIdentityRequest>(*msg);
     ASSERT_NE(idr, nullptr);
     EXPECT_EQ(idr->identityType(), MobileIDType::IMSI);
+    EXPECT_EQ(idr->forceToStandby(), true);
     EXPECT_EQ(idr->bodyLength(), 1u);
 
     // Builder path: the same values must reproduce identical bytes.
     auto built = L3GMMIdentityRequest::builder()
         .identityType(MobileIDType::IMSI)
+        .forceToStandby(true)
         .build();
     auto bytes = writeL3Bytes(ParsedMessage{GMM{built}});
     ASSERT_TRUE(bytes);
@@ -1187,6 +1486,18 @@ TEST(GoldenGMMTest, GMMIdentityRequest_GoldenParse) {
     for (size_t i = 0; i < sizeof(data); ++i) {
         EXPECT_EQ((*bytes)[i], data[i]);
     }
+}
+
+// =====================================================================
+// GMM Identity Request spare-bit validation (TS 44.068 section 9.5)
+// The bit between the force-to-standby indicator and the identity type
+// is spare: a frame with that bit set is rejected.
+// =====================================================================
+
+TEST(GoldenGMMTest, GMMIdentityRequest_SpareBitRejected) {
+    uint8_t data[] = {0x08, 0x15, 0x19}; // identityType=1, spare bit 3 set
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    EXPECT_FALSE(msg);
 }
 
 // =====================================================================
@@ -1321,9 +1632,9 @@ TEST(GoldenGMMTest, PDPContextStatus_IE) {
 }
 
 // =====================================================================
-// GMM IE: T3302 Timer (GSM 24.008 10.5.7.2)
-// TLV format: IEI=0x1b | Length(1) | Value(1 octet)
-// Timer encoding per GSM 24.008 Table 10.5a (GPRSTimer2).
+// GMM IE: T3302 Timer (TS 44.068 section 9.5)
+// TLV format: IEI=0x2a | Length(1) | Value(1 octet)
+// Timer encoding per the GMM information element table (TS 24.008 Table 10.5a).
 // =====================================================================
 
 TEST(GoldenGMMTest, T3302Timer_IE) {
@@ -1391,14 +1702,153 @@ TEST(GoldenGMMTest, MSNetworkCapability_IE) {
 // =====================================================================
 // GMM Cause String Conversion
 // Verify GMMCause2Str returns correct names for known cause values.
-// Reference: 3GPP TS 24.008 Table 10.5.3.2.2
+// Reference: 3GPP TS 24.008 Table 10.5a / TS 44.068 section 9.5 causes
 // =====================================================================
 
 TEST(GoldenGMMTest, GMMCauseStrings) {
     EXPECT_STREQ(GMMCause2Str(GMMCause::Unspecified), "Unspecified");
-    EXPECT_STREQ(GMMCause2Str(GMMCause::GprsNotAllowed), "GPRS not allowed");
+    EXPECT_STREQ(GMMCause2Str(GMMCause::GPRS_Services_Not_Allowed), "GPRS services not allowed");
     EXPECT_STREQ(GMMCause2Str(GMMCause::Synch_Failure), "Sync failure");
     EXPECT_STREQ(GMMCause2Str(GMMCause::MAC_Failure), "MAC failure");
+}
+
+// =====================================================================
+// GMM Cause value table (TS 44.068 section 9.5 / TS 24.008 Table 10.5a)
+// Every defined cause value is pinned to its wire octet by round-trip
+// through the L3AttachReject body: build with the cause, serialize,
+// check the exact byte, parse back and verify the enum identity.
+// =====================================================================
+
+TEST(GoldenGMMTest, GMMCauseTable_RoundTrip) {
+    const GMMCause causes[] = {
+        GMMCause::IMSI_Unknown_In_HLR,               // 0x02
+        GMMCause::Illegal_MS,                        // 0x03
+        GMMCause::IMEI_Not_Accepted,                 // 0x05
+        GMMCause::Illegal_ME,                        // 0x06
+        GMMCause::GPRS_Services_Not_Allowed,         // 0x07
+        GMMCause::GPRS_And_Non_GPRS_Services_Not_Allowed, // 0x08
+        GMMCause::MS_Identity_Cannot_Be_Derived,     // 0x09
+        GMMCause::Implicitly_Detached,               // 0x0A
+        GMMCause::PLMN_Not_Allowed,                  // 0x0B
+        GMMCause::Location_Area_Not_Allowed,         // 0x0C
+        GMMCause::Roaming_Not_Allowed_In_Location_Area, // 0x0D
+        GMMCause::GPRS_Services_Not_Allowed_In_PLMN, // 0x0E
+        GMMCause::No_Suitable_Cells_In_Location_Routing_Area, // 0x0F
+        GMMCause::MSC_Temporarily_Not_Reachable,    // 0x10
+        GMMCause::Network_Failure,                   // 0x11
+        GMMCause::MAC_Failure,                       // 0x14
+        GMMCause::Synch_Failure,                     // 0x15
+        GMMCause::Congestion,                        // 0x16
+        GMMCause::GSM_Authentication_Unacceptable,   // 0x17
+        GMMCause::Not_Authorized_For_This_CSG,       // 0x19
+        GMMCause::No_PDP_Context_Activated,          // 0x28
+        GMMCause::Semantically_Incorrect_Message,    // 0x5F
+        GMMCause::Invalid_Mandatory_Information,     // 0x60
+        GMMCause::Message_Type_Not_Implemented,      // 0x61
+        GMMCause::Message_Type_Not_Compatible_With_State, // 0x62
+        GMMCause::Protocol_Error_Unspecified         // 0x6F
+    };
+    for (GMMCause cause : causes) {
+        const uint8_t wire = static_cast<uint8_t>(cause);
+        auto msg = L3AttachReject::builder().cause(cause).build();
+        ParsedMessage pm{GMM{std::move(msg)}};
+        auto bytes = writeL3Bytes(pm);
+        ASSERT_TRUE(bytes) << "write failed for cause 0x" << std::hex << wire;
+        // header(2) + one-octet cause body
+        ASSERT_EQ(bytes.value().size(), 3u) << "cause 0x" << std::hex << wire;
+        EXPECT_EQ((*bytes)[2], wire) << "wrong wire octet for cause 0x" << std::hex << wire;
+        auto reparsed = parseL3(*bytes);
+        ASSERT_TRUE(reparsed) << "parse failed for cause 0x" << std::hex << wire;
+        auto* rej = tryGet<L3AttachReject>(*reparsed);
+        ASSERT_NE(rej, nullptr);
+        EXPECT_EQ(rej->cause(), cause);
+    }
+}
+
+// =====================================================================
+// GMM empty-body messages with opaque optional IEs (TS 44.068 section 9.5)
+// Attach Complete, Routing Area Update Complete, P-TMSI Reallocation
+// Complete, Authentication And Ciphering Reject and GMM Information carry
+// no mandatory body fields; any optional IEs present in the frame are
+// preserved opaquely and re-emitted byte for byte.
+// =====================================================================
+
+TEST(GoldenGMMTest, EmptyBodyMessages_OpaqueTail_RoundTrip) {
+    const uint8_t tail[] = {0x2a, 0x01, 0x47}; // e.g. a T3302 timer TLV (IEI 0x2a)
+
+    {
+        auto built = L3AttachComplete::builder()
+            .additionalIes(std::span<const uint8_t>(tail))
+            .build();
+        ParsedMessage pm{GMM{std::move(built)}};
+        auto bytes = writeL3Bytes(pm);
+        ASSERT_TRUE(bytes);
+        ASSERT_EQ(bytes.value().size(), 2u + sizeof(tail));
+        EXPECT_EQ((*bytes)[0], 0x08);
+        EXPECT_EQ((*bytes)[1], L3AttachComplete::MTI);
+        auto reparsed = parseL3(*bytes);
+        ASSERT_TRUE(reparsed);
+        auto* msg = tryGet<L3AttachComplete>(*reparsed);
+        ASSERT_NE(msg, nullptr);
+        EXPECT_EQ(msg->additionalIes(), std::vector<uint8_t>(tail, tail + sizeof(tail)));
+    }
+
+    {
+        auto built = L3RoutingAreaUpdateComplete::builder()
+            .additionalIes(std::span<const uint8_t>(tail))
+            .build();
+        ParsedMessage pm{GMM{std::move(built)}};
+        auto bytes = writeL3Bytes(pm);
+        ASSERT_TRUE(bytes);
+        auto reparsed = parseL3(*bytes);
+        ASSERT_TRUE(reparsed);
+        auto* msg = tryGet<L3RoutingAreaUpdateComplete>(*reparsed);
+        ASSERT_NE(msg, nullptr);
+        EXPECT_EQ(msg->additionalIes(), std::vector<uint8_t>(tail, tail + sizeof(tail)));
+    }
+
+    {
+        auto built = L3P_TMSIReallocationComplete::builder()
+            .additionalIes(std::span<const uint8_t>(tail))
+            .build();
+        ParsedMessage pm{GMM{std::move(built)}};
+        auto bytes = writeL3Bytes(pm);
+        ASSERT_TRUE(bytes);
+        auto reparsed = parseL3(*bytes);
+        ASSERT_TRUE(reparsed);
+        auto* msg = tryGet<L3P_TMSIReallocationComplete>(*reparsed);
+        ASSERT_NE(msg, nullptr);
+        EXPECT_EQ(msg->additionalIes(), std::vector<uint8_t>(tail, tail + sizeof(tail)));
+    }
+
+    {
+        auto built = L3AuthenticationAndCipheringReject::builder()
+            .additionalIes(std::span<const uint8_t>(tail))
+            .build();
+        ParsedMessage pm{GMM{std::move(built)}};
+        auto bytes = writeL3Bytes(pm);
+        ASSERT_TRUE(bytes);
+        auto reparsed = parseL3(*bytes);
+        ASSERT_TRUE(reparsed);
+        auto* msg = tryGet<L3AuthenticationAndCipheringReject>(*reparsed);
+        ASSERT_NE(msg, nullptr);
+        EXPECT_EQ(msg->additionalIes(), std::vector<uint8_t>(tail, tail + sizeof(tail)));
+    }
+
+    {
+        const uint8_t info[] = {0x41, 0x42, 0x43};
+        auto built = L3GMMInformation::builder()
+            .additionalIes(std::span<const uint8_t>(info))
+            .build();
+        ParsedMessage pm{GMM{std::move(built)}};
+        auto bytes = writeL3Bytes(pm);
+        ASSERT_TRUE(bytes);
+        auto reparsed = parseL3(*bytes);
+        ASSERT_TRUE(reparsed);
+        auto* msg = tryGet<L3GMMInformation>(*reparsed);
+        ASSERT_NE(msg, nullptr);
+        EXPECT_EQ(msg->additionalIes(), std::vector<uint8_t>(info, info + sizeof(info)));
+    }
 }
 
 // =====================================================================
