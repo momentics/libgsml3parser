@@ -986,12 +986,12 @@ GSML3_C_API size_t gsml3_msg_sup_serv_facility_data(const gsml3_message* msg,
  /* cause parameters: RRCause / MMRejectCause / CMServiceAbortCause /
   * CCCause values (include/gsml3parser/enums.h); id_type: GSML3_ID_*;
   * service_type: L3CMServiceType::TypeCode value. All parameters are
-  * range-checked against the protocol domain, including the fixed-width
-  * frame fields of channel descriptions (timeslot and time slot code 0..7,
-  * ARFCN 0..4095, twelve-bit field per TS 44.018 10.5.2.5) and timing advance
-  * (0..63), and the reserved all-zero
-  * TMSI: an out-of-domain value fails with GSML3_ERR_INVALID_ARG (return
-  * 0) and is never truncated into the frame. */
+   * range-checked against the protocol domain, including the fixed-width
+   * frame fields of channel descriptions (timeslot and time slot code 0..7,
+   * ARFCN 0..4095, twelve-bit field per TS 44.018 10.5.2.5) and timing advance
+   * (one raw octet, 0..219, per TS 44.018 9.1.12), and the reserved all-zero
+   * TMSI: an out-of-domain value fails with GSML3_ERR_INVALID_ARG (return
+   * 0) and is never truncated into the frame. */
 GSML3_C_API size_t gsml3_build_channel_release(uint8_t* out, size_t maxlen,
                                                 int rr_cause);
 GSML3_C_API size_t gsml3_build_channel_request(uint8_t* out, size_t maxlen,

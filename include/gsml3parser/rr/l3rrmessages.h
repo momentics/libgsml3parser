@@ -54,6 +54,7 @@ class L3PagingRequestType1 {
     size_t mMobileIdCount{0};
     std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
     L3PageMode mPageMode{};
+    std::vector<uint8_t> mAdditionalIes;
 public:
     static constexpr int MTI = 0x21;
 
@@ -78,6 +79,9 @@ public:
     std::span<const L3MobileIdentity> mobileIds() const { return {mMobileIDs.data(), mMobileIdCount}; }
     const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
     [[nodiscard]] unsigned pageMode() const { return mPageMode.pageMode(); }
+    /// Trailing rest octets after the mobile identity part, preserved
+    /// verbatim for lossless re-emission (TS 44.018 section 9.1.22).
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -104,6 +108,7 @@ class L3PagingRequestType2 {
     // no heap allocation.
     L3MobileIdentity mThirdIdentity{};
     bool mHaveThirdIdentity{false};
+    std::vector<uint8_t> mAdditionalIes;
 public:
     static constexpr int MTI = 0x22;
 
@@ -135,6 +140,9 @@ public:
     [[nodiscard]] unsigned pageMode() const { return mPageMode.pageMode(); }
     bool hasThirdIdentity() const { return mHaveThirdIdentity; }
     const L3MobileIdentity& thirdIdentity() const { return mThirdIdentity; }
+    /// Trailing rest octets after the TMSI/third-identity part, preserved
+    /// verbatim for lossless re-emission (TS 44.018 section 9.1.23).
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -157,6 +165,7 @@ class L3PagingRequestType3 {
     std::array<uint32_t, 4> mTMSIs{};
     std::array<ChannelType, 2> mChannelsNeeded{ChannelType::AnyDCCHType, ChannelType::AnyDCCHType};
     L3PageMode mPageMode{};
+    std::vector<uint8_t> mAdditionalIes;
 public:
     static constexpr int MTI = 0x24;
 
@@ -181,6 +190,9 @@ public:
     std::span<const uint32_t> tmsis() const { return mTMSIs; }
     const std::array<ChannelType, 2>& channelsNeeded() const { return mChannelsNeeded; }
     [[nodiscard]] unsigned pageMode() const { return mPageMode.pageMode(); }
+    /// Trailing rest octets after the TMSI part, preserved verbatim for
+    /// lossless re-emission (TS 44.018 section 9.1.24).
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -193,10 +205,18 @@ public:
 
 // ── Paging Response (GSM 04.08 9.1.25) ─────────────────────────────────
 
+// Paging Response (TS 44.018 section 9.1.25): spare half-octet plus the
+// four-bit ciphering key sequence number, the classmark 2 LV and the mobile
+// identity LV, followed by the optional one-octet additional update
+// parameter; any further trailing octets are preserved opaquely for lossless
+// re-emission.
 class L3PagingResponse {
     unsigned mCKSN{0};
     L3MobileStationClassmark2 mClassmark;
     L3MobileIdentity mMobileID;
+    bool mHaveAdditionalUpdateParameter{false};
+    uint8_t mAdditionalUpdateParameter{0};
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -205,6 +225,11 @@ public:
     const L3MobileIdentity& mobileId() const { return mMobileID; }
     unsigned cksn() const { return mCKSN; }
     const L3MobileStationClassmark2& classmark() const { return mClassmark; }
+    bool hasAdditionalUpdateParameter() const { return mHaveAdditionalUpdateParameter; }
+    uint8_t additionalUpdateParameter() const { return mAdditionalUpdateParameter; }
+    /// Trailing octets after the optional additional update parameter,
+    /// preserved verbatim for lossless round-trip.
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     size_t bodyLength() const;
     [[nodiscard]] int mti() const { return MTI; }
@@ -218,6 +243,8 @@ public:
         unsigned mCKSN{0};
         L3MobileStationClassmark2 mClassmark;
         L3MobileIdentity mMobileID;
+        bool mHaveAdditionalUpdateParameter{false};
+        uint8_t mAdditionalUpdateParameter{0};
 
         /// Set CKSN value.
         Builder& cksn(unsigned v) { mCKSN = v; return *this; }
@@ -225,12 +252,17 @@ public:
         Builder& classmark(L3MobileStationClassmark2 v) { mClassmark = v; return *this; }
         /// Set mobile identity.
         Builder& mobileId(L3MobileIdentity v) { mMobileID = std::move(v); return *this; }
+        /// Set the optional additional update parameter octet
+        /// (TS 44.018 section 9.1.25).
+        Builder& additionalUpdateParameter(bool present, uint8_t v) { mHaveAdditionalUpdateParameter = present; mAdditionalUpdateParameter = v; return *this; }
         /// Build the final message.
         [[nodiscard]] L3PagingResponse build() const {
             L3PagingResponse msg;
             msg.mCKSN = mCKSN;
             msg.mClassmark = mClassmark;
             msg.mMobileID = mMobileID;
+            msg.mHaveAdditionalUpdateParameter = mHaveAdditionalUpdateParameter;
+            msg.mAdditionalUpdateParameter = mAdditionalUpdateParameter;
             return msg;
         }
     };
@@ -244,6 +276,7 @@ class L3ChannelRelease {
     RRCause mCause{RRCause::Normal_Event};
     bool mGprsResumptionPresent{false};
     bool mGprsResumptionBit{false};
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -255,6 +288,10 @@ public:
     RRCause cause() const { return mCause; }
     bool hasGprsResumption() const { return mGprsResumptionPresent; }
     bool gprsResumption() const { return mGprsResumptionBit; }
+    /// Optional IEs following the cause and GPRS resumption octet (cell
+    /// selection indicator and similar IRAT information elements); kept as
+    /// an opaque sequence and re-emitted verbatim (TS 44.018 section 9.1.7).
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     struct Builder {
         RRCause mCause{RRCause::Normal_Event};
@@ -319,6 +356,7 @@ class L3AssignmentCommand {
     bool mHaveMode1{false};
     L3ChannelMode mMode1;
     L3MultiRateConfiguration mMultiRate;
+    std::vector<uint8_t> mAdditionalIes;
 public:
     static constexpr int MTI = 0x2e;
 
@@ -330,6 +368,11 @@ public:
     const L3ChannelMode& mode1() const { return mMode1; }
     bool isAMR() const { return mHaveMode1 && mMode1.isAMR(); }
     const L3MultiRateConfiguration& multiRate() const { return mMultiRate; }
+    /// Trailing optional IEs after the channel mode and multi-rate parts
+    /// (frequency lists, cell channel description, mobile allocation, ...);
+    /// kept as an opaque sequence and re-emitted verbatim
+    /// (TS 44.018 section 9.1.2).
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     class Builder {
         L3ChannelDescription mChannel;
@@ -496,17 +539,28 @@ public:
 
 class L3MeasurementReport {
     L3MeasurementResults mMeasurementResults;
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
     static constexpr int MTI = 0x15;
 
     const L3MeasurementResults& measurementResults() const { return mMeasurementResults; }
+    /// Trailing octets after the measurement results, preserved verbatim
+    /// for lossless re-emission (TS 44.018 section 9.1.21).
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
-    size_t bodyLength() const { return 16; }
+    // The measurement results block is bit packed: twenty-six base bits
+    // plus seventeen per neighbor-cell report (at most six), padded to the
+    // octet boundary; preserved trailing IEs follow.
+    size_t bodyLength() const {
+        const unsigned n = mMeasurementResults.noNcell() < 6u
+                               ? mMeasurementResults.noNcell() : 6u;
+        return (26 + 17 * n + 7) / 8 + mAdditionalIes.size();
+    }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 16; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3MeasurementReport> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -623,12 +677,16 @@ public:
 
 class L3HandoverComplete {
     RRCause mCause{RRCause::Normal_Event};
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
     static constexpr int MTI = 0x2c;
 
     RRCause cause() const { return mCause; }
+    /// Optional IEs following the cause, kept as an opaque sequence and
+    /// re-emitted verbatim (TS 44.018 section 9.1.16).
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     struct Builder {
         RRCause mCause{RRCause::Normal_Event};
@@ -641,10 +699,10 @@ public:
 
     static Builder builder();
 
-    size_t bodyLength() const { return 1; }
+    size_t bodyLength() const { return 1 + mAdditionalIes.size(); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 1; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3HandoverComplete> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -654,12 +712,16 @@ public:
 
 class L3HandoverFailure {
     RRCause mCause{RRCause::Normal_Event};
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
     static constexpr int MTI = 0x28;
 
     RRCause cause() const { return mCause; }
+    /// Optional IEs following the cause, kept as an opaque sequence and
+    /// re-emitted verbatim (TS 44.018 section 9.1.17).
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     struct Builder {
         RRCause mCause{RRCause::Normal_Event};
@@ -672,10 +734,10 @@ public:
 
     static Builder builder();
 
-    size_t bodyLength() const { return 1; }
+    size_t bodyLength() const { return 1 + mAdditionalIes.size(); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 1; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3HandoverFailure> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -1624,6 +1686,7 @@ class L3ImmediateAssignment {
     std::vector<uint8_t> mMobileAllocation;
     bool mStartTimePresent{false};
     StartTime mStartTime{};
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -1635,6 +1698,10 @@ public:
     const L3RequestReference& requestReference() const { return mRequestReference; }
     const L3TimingAdvance& timingAdvance() const { return mTimingAdvance; }
     bool hasStartTime() const { return mStartTimePresent; }
+    /// Trailing rest octets of network frames, preserved verbatim for
+    /// lossless re-emission (TS 44.018 section 9.1.19); optional rest
+    /// octets are never added by the encoder.
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
     /// Starting time field T1 (five bits).
     [[nodiscard]] uint8_t startTimeT1() const { return mStartTime.t1; }
     /// Starting time field T3 (six bits).
@@ -1795,6 +1862,7 @@ class L3ImmediateAssignmentReject {
     std::vector<L3RequestReference> mRequestReferences;
     std::vector<unsigned> mWaitIndications;
     unsigned mWaitIndication{0};
+    std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
 public:
@@ -1807,6 +1875,10 @@ public:
     unsigned featureIndicator() const { return mFeatureIndicator; }
     unsigned waitTime() const { return mWaitIndication; }
     const std::vector<L3RequestReference>& requestReferences() const { return mRequestReferences; }
+    /// Rest octets after the request-reference/wait-indication pairs,
+    /// preserved verbatim for lossless re-emission (TS 44.018 section
+    /// 9.1.20); the encoder never adds rest octets of its own.
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     struct Builder {
         unsigned mFeatureIndicator{0};
@@ -1920,6 +1992,7 @@ class L3HandoverCommand {
     L3HandoverReference mHandoverReference;
     L3PowerCommandAndAccessType mPowerCommandAccessType;
     L3SynchronizationIndication mSynchronizationIndication;
+    std::vector<uint8_t> mAdditionalIes;
 public:
     static constexpr int MTI = 0x2b;
 
@@ -1930,6 +2003,11 @@ public:
     const L3HandoverReference& handoverReference() const { return mHandoverReference; }
     const L3PowerCommandAndAccessType& powerCommandAccessType() const { return mPowerCommandAccessType; }
     const L3SynchronizationIndication& syncIndication() const { return mSynchronizationIndication; }
+    /// Trailing optional IEs after the synchronization indication
+    /// (frequency lists, cell channel description, cipher mode setting,
+    /// ...); kept as an opaque sequence and re-emitted verbatim
+    /// (TS 44.018 section 9.1.15).
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
     class Builder {
         L3CellDescription mCellDescription;
@@ -2576,15 +2654,15 @@ public:
     static Builder builder();
 };
 
-// ── Priority Uplink Request (TS 44.018 section 9.1.28d) ───────────────
+// ── Priority Uplink Request (TS 44.018 section 9.1.44a) ───────────────
 
-// Priority Uplink Request body (TS 44.018 section 9.1.28d): the estimated
-// cause octet, then the four-bit token and the four-bit reduced GCR sharing
-// the next octet, then the mobile identity as an LV information element.
+// Priority Uplink Request body (TS 44.018 section 9.1.44a): the estimated
+// cause octet, the four-octet token, the four-octet reduced GCR and the
+// mobile identity as an LV information element.
 class L3PriorityUplinkRequest {
     uint8_t mEstCause{0};
-    unsigned mToken{0};
-    unsigned mReducedGcr{0};
+    std::array<uint8_t, 4> mToken{};
+    std::array<uint8_t, 4> mReducedGcr{};
     L3MobileIdentity mMobileId;
 
     friend struct Builder;
@@ -2594,11 +2672,11 @@ public:
     L3PriorityUplinkRequest() = default;
 
     uint8_t estCause() const { return mEstCause; }
-    unsigned token() const { return mToken; }
-    unsigned reducedGcr() const { return mReducedGcr; }
+    std::span<const uint8_t> token() const { return mToken; }
+    std::span<const uint8_t> reducedGcr() const { return mReducedGcr; }
     const L3MobileIdentity& mobileId() const { return mMobileId; }
 
-    size_t bodyLength() const { return 2 + 1 + mMobileId.lengthV(); }
+    size_t bodyLength() const { return 1 + 4 + 4 + 1 + mMobileId.lengthV(); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
@@ -2608,16 +2686,26 @@ public:
 
     struct Builder {
         uint8_t mEstCause{0};
-        unsigned mToken{0};
-        unsigned mReducedGcr{0};
+        std::array<uint8_t, 4> mToken{};
+        std::array<uint8_t, 4> mReducedGcr{};
         L3MobileIdentity mMobileId;
 
         /// Set the estimated cause.
         Builder& estCause(uint8_t v) { mEstCause = v; return *this; }
-        /// Set the four-bit token.
-        Builder& token(unsigned v) { mToken = v & 0x0Fu; return *this; }
-        /// Set the four-bit reduced GCR.
-        Builder& reducedGcr(unsigned v) { mReducedGcr = v & 0x0Fu; return *this; }
+        /// Set the four-octet token (shorter input is padded with zeros,
+        /// longer input is truncated).
+        Builder& token(std::span<const uint8_t> v) {
+            for (size_t i = 0; i < mToken.size(); ++i)
+                mToken[i] = (i < v.size()) ? v[i] : 0u;
+            return *this;
+        }
+        /// Set the four-octet reduced GCR (shorter input is padded with
+        /// zeros, longer input is truncated).
+        Builder& reducedGcr(std::span<const uint8_t> v) {
+            for (size_t i = 0; i < mReducedGcr.size(); ++i)
+                mReducedGcr[i] = (i < v.size()) ? v[i] : 0u;
+            return *this;
+        }
         /// Set the mobile identity.
         Builder& mobileId(L3MobileIdentity v) { mMobileId = std::move(v); return *this; }
         /// Build the final message.
@@ -2690,14 +2778,14 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
-// ── Data Indication 2 (TS 44.018 section 9.1.28f) ─────────────────────
+// ── Data Indication 2 (TS 44.018 section 9.1.44c) ─────────────────────
 
-// Data Indication 2 body (TS 44.018 section 9.1.28f): the TMSI, the
-// four-bit reduced GCR padded to its octet with spare bits, nine octets of
-// application data and the one-octet data identifier.
+// Data Indication 2 body (TS 44.018 section 9.1.44c): the TMSI, the
+// four-octet reduced GCR, nine octets of application data and the one-octet
+// data identifier; an eighteen-octet body.
 class L3DataIndication2 {
     uint32_t mTMSI{0};
-    unsigned mReducedGcr{0};
+    std::array<uint8_t, 4> mReducedGcr{};
     std::array<uint8_t, 9> mApplicationData{};
     uint8_t mDataId{0};
 
@@ -2708,28 +2796,33 @@ public:
     L3DataIndication2() = default;
 
     uint32_t tmsi() const { return mTMSI; }
-    unsigned reducedGcr() const { return mReducedGcr; }
+    std::span<const uint8_t> reducedGcr() const { return mReducedGcr; }
     std::span<const uint8_t> applicationData() const { return mApplicationData; }
     uint8_t dataId() const { return mDataId; }
 
-    size_t bodyLength() const { return 15; }
+    size_t bodyLength() const { return 18; }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 15; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3DataIndication2> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
 
     struct Builder {
         uint32_t mTMSI{0};
-        unsigned mReducedGcr{0};
+        std::array<uint8_t, 4> mReducedGcr{};
         std::array<uint8_t, 9> mApplicationData{};
         uint8_t mDataId{0};
 
         /// Set the TMSI.
         Builder& tmsi(uint32_t v) { mTMSI = v; return *this; }
-        /// Set the four-bit reduced GCR.
-        Builder& reducedGcr(unsigned v) { mReducedGcr = v & 0x0Fu; return *this; }
+        /// Set the four-octet reduced GCR (shorter input is padded with
+        /// zeros, longer input is truncated).
+        Builder& reducedGcr(std::span<const uint8_t> v) {
+            for (size_t i = 0; i < mReducedGcr.size(); ++i)
+                mReducedGcr[i] = (i < v.size()) ? v[i] : 0u;
+            return *this;
+        }
         /// Set the nine application-data octets (shorter input is padded
         /// with zeros, longer input is truncated).
         Builder& applicationData(std::span<const uint8_t> v) {

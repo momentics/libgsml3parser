@@ -170,6 +170,7 @@ class L3MobileStationClassmark2 {
     unsigned mFC{};
     unsigned mCM3{};
     unsigned mLCSVACapability{};
+    unsigned mUcs2{};
     unsigned mSoLSA{};
     unsigned mCMSF{};
     /// Value octets beyond the base three (extended classmark), zero to four
@@ -206,30 +207,44 @@ public:
     unsigned rfPowerCapability() const { return mRFPowerCapability; }
     /// CM3 indicator (classmark 3 support, TS 24.008 section 10.5.1.6).
     unsigned cm3() const { return mCM3; }
+    /// UCS2 capability indicator (TS 24.008 section 10.5.1.6).
+    unsigned ucs2() const { return mUcs2; }
 };
 
 // ── Mobile Station Classmark 3 (GSM 04.08 10.5.1.7) ───────────────────
 
+// Mobile station classmark 3 (TS 24.008 section 10.5.1.7): the value part
+// is carried opaquely; a conforming value is fourteen octets long. In the
+// classmark change it appears as the TLV with element identifier 0x20 and
+// a one-octet length indicator (one to thirty-two value octets).
 class L3MobileStationClassmark3 {
-    unsigned mMultiband{};
-    unsigned mA5_4{};
-    unsigned mA5_5{};
-    unsigned mA5_6{};
-    unsigned mA5_7{};
+    uint8_t mLength{14};
+    std::array<uint8_t, 32> mRaw{};
 public:
     L3MobileStationClassmark3() = default;
-    static constexpr size_t lengthV() { return 14; }
+    /// Construct from raw value octets (at most thirty-two; an empty input
+    /// keeps the default fourteen-octet zero form).
+    explicit L3MobileStationClassmark3(std::span<const uint8_t> v) { set(v); }
 
+    /// Value length in octets (default form: fourteen).
+    [[nodiscard]] size_t lengthV() const { return mLength; }
+    /// Maximum representable value length (the TLV length octet is
+    /// validated to one..thirty-two on parse).
+    static constexpr size_t maxLengthV() { return 32; }
+    /// Raw value octets; the first `lengthV()` are significant.
+    [[nodiscard]] std::span<const uint8_t> value() const {
+        return std::span<const uint8_t>(mRaw.data(), mLength);
+    }
+    /// Replace the stored value (at most thirty-two octets).
+    void set(std::span<const uint8_t> v);
+
+    /// Parse the full TLV form: element identifier 0x20, length octet, then
+    /// exactly that many raw value octets.
     [[nodiscard]] static Expected<L3MobileStationClassmark3> parse(BitReader& br);
+    /// Emit the full TLV form (element identifier + length + value).
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
     bool operator==(const L3MobileStationClassmark3&) const = default;
-
-    unsigned multiband() const { return mMultiband; }
-    unsigned a5_4() const { return mA5_4; }
-    unsigned a5_5() const { return mA5_5; }
-    unsigned a5_6() const { return mA5_6; }
-    unsigned a5_7() const { return mA5_7; }
 };
 
 // ── Ciphering Key Sequence Number (GSM 04.08 10.5.1.2) ────────────────
@@ -450,13 +465,17 @@ public:
 };
 
 // ── Power Command (GSM 04.08 10.5.2.28) ───────────────────────────────
+// Power command octet (TS 44.018 section 10.5.2.28): three reserved high
+// bits (zero) followed by the five-bit MS power level; the octet value is
+// the power level itself for levels zero to thirty-one.
 
 class L3PowerCommand {
-    uint8_t mCommand{};
+    uint8_t mCommand{}; // ms power level, five bits
 public:
     L3PowerCommand() = default;
-    explicit L3PowerCommand(unsigned cmd) : mCommand(static_cast<uint8_t>(cmd)) {}
+    explicit L3PowerCommand(unsigned cmd) : mCommand(static_cast<uint8_t>(cmd & 0x1Fu)) {}
 
+    /// MS power level (zero to thirty-one).
     uint8_t command() const { return mCommand; }
     static constexpr size_t lengthV() { return 1; }
 
@@ -467,14 +486,31 @@ public:
 };
 
 // ── Power Command And Access Type (GSM 04.08 10.5.2.28a) ──────────────
+// Power command and access type octet (TS 44.018 section 10.5.2.28a): the
+// aTC bit leads, then the ePC mode bit and the fPC/EP bit, followed by the
+// five-bit MS power level; octet value = (aTC<<7)|(ePcMode<<6)|(fPcEp<<5)
+// | power.
 
 class L3PowerCommandAndAccessType {
-    uint8_t mCommand{};
+    uint8_t mCommand{}; // ms power level, five bits
+    bool maTC{false};
+    bool mePcMode{false};
+    bool mfPcEp{false};
 public:
     L3PowerCommandAndAccessType() = default;
-    explicit L3PowerCommandAndAccessType(unsigned cmd) : mCommand(static_cast<uint8_t>(cmd)) {}
+    explicit L3PowerCommandAndAccessType(unsigned cmd) : mCommand(static_cast<uint8_t>(cmd & 0x1Fu)) {}
+    L3PowerCommandAndAccessType(bool aTC, bool ePcMode, bool fPcEp, unsigned power)
+        : mCommand(static_cast<uint8_t>(power & 0x1Fu)), maTC(aTC),
+          mePcMode(ePcMode), mfPcEp(fPcEp) {}
 
+    /// MS power level (zero to thirty-one).
     uint8_t command() const { return mCommand; }
+    /// Access-type control bit (aTC).
+    bool aTC() const { return maTC; }
+    /// Enhanced power control mode bit (ePC_Mode).
+    bool ePcMode() const { return mePcMode; }
+    /// fPC/EP bit.
+    bool fPcEp() const { return mfPcEp; }
     static constexpr size_t lengthV() { return 1; }
 
     [[nodiscard]] static Expected<L3PowerCommandAndAccessType> parse(BitReader& br);
@@ -514,12 +550,13 @@ public:
 
 // ── Timing Advance (GSM 04.08 10.5.2.40) ───────────────────────────────
 
+// One wire octet holding the raw timing advance value, valid range zero to
+// two hundred nineteen (TS 44.018 section 9.1.12).
 class L3TimingAdvance {
     uint8_t mTimingAdvance{};
 public:
-    // One wire octet: [spare(2)=0 | TA(6)]; for 0-63 the octet equals the value (TS 44.018 section 10.5.2.40).
     L3TimingAdvance() = default;
-    explicit L3TimingAdvance(unsigned ta) : mTimingAdvance(static_cast<uint8_t>(ta)) {}
+    explicit L3TimingAdvance(unsigned ta) : mTimingAdvance(static_cast<uint8_t>(ta & 0xFFu)) {}
 
     uint8_t timingAdvance() const { return mTimingAdvance; }
     static constexpr size_t lengthV() { return 1; }

@@ -43,9 +43,7 @@ TEST(FrameLengths, TableMatchesMessageDefinitions) {
     // clear failure messages and pin the table against definition drift.
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3RRStatus::MTI), 2 + L3RRStatus{}.bodyLength()) << "RR Status";
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3ClassmarkEnquiry::MTI), 2 + L3ClassmarkEnquiry{}.bodyLength()) << "Classmark Enquiry";
-    EXPECT_EQ(detail::fixedFrameLength(0x06, L3HandoverFailure::MTI), 2 + L3HandoverFailure{}.bodyLength()) << "Handover Failure";
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3AssignmentComplete::MTI), 2 + L3AssignmentComplete{}.bodyLength()) << "Assignment Complete";
-    EXPECT_EQ(detail::fixedFrameLength(0x06, L3HandoverComplete::MTI), 2 + L3HandoverComplete{}.bodyLength()) << "Handover Complete";
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3AssignmentFailure::MTI), 2 + L3AssignmentFailure{}.bodyLength()) << "Assignment Failure";
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3CipheringModeCommand::MTI), 2 + L3CipheringModeCommand{}.bodyLength()) << "Ciphering Mode Command";
     EXPECT_EQ(detail::fixedFrameLength(0x05, L3CMServiceAccept::MTI), 2 + L3CMServiceAccept{}.bodyLength()) << "CM Service Accept";
@@ -69,6 +67,10 @@ TEST(FrameLengths, VariableLengthTypesAbsent) {
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3ChannelRelease::MTI), 0u);
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3ClassmarkChange::MTI), 0u);
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3CipheringModeComplete::MTI), 0u);
+    // Handover Complete/Failure carry the cause plus optional trailing IEs
+    // (TS 44.018 sections 9.1.16/9.1.17), so their body is variable.
+    EXPECT_EQ(detail::fixedFrameLength(0x06, L3HandoverComplete::MTI), 0u);
+    EXPECT_EQ(detail::fixedFrameLength(0x06, L3HandoverFailure::MTI), 0u);
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3ImmediateAssignmentReject::MTI), 0u);
     EXPECT_EQ(detail::fixedFrameLength(0x06, L3PhysicalInformation::MTI), 0u);
     EXPECT_EQ(detail::fixedFrameLength(0x05, L3CMServiceRequest::MTI), 0u);
@@ -90,9 +92,7 @@ TEST(FrameLengths, NormativeFixedLengthTable) {
     // Radio Resource (TS 44.018).
     EXPECT_EQ(detail::fixedFrameLength(0x06, 0x12), 3u); // RR Status (1-byte body)
     EXPECT_EQ(detail::fixedFrameLength(0x06, 0x13), 2u); // Classmark Enquiry (no value part)
-    EXPECT_EQ(detail::fixedFrameLength(0x06, 0x28), 3u); // Handover Failure (cause)
     EXPECT_EQ(detail::fixedFrameLength(0x06, 0x29), 3u); // Assignment Complete (cause)
-    EXPECT_EQ(detail::fixedFrameLength(0x06, 0x2C), 3u); // Handover Complete (cause)
     EXPECT_EQ(detail::fixedFrameLength(0x06, 0x2F), 3u); // Assignment Failure (cause)
     EXPECT_EQ(detail::fixedFrameLength(0x06, 0x35), 3u); // Ciphering Mode Command (1-byte body)
     // Mobility Management (TS 24.008).

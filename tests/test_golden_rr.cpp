@@ -380,6 +380,71 @@ TEST(GoldenRR, PagingRequestType3_Parse) {
     EXPECT_EQ(messageMTI(*msg), L3PagingRequestType3::MTI);
 }
 
+// Golden: Paging Request Type 1 rest octets (TS 44.018 section 9.1.22):
+// trailing octets after the mobile identity part are preserved losslessly.
+TEST(GoldenRR, PagingRequestType1_OpaqueTailRoundTrip) {
+    // MI LV (TMSI 0x12345678, length 5) followed by two rest octets.
+    uint8_t data[] = {0x06, 0x21, 0x00,
+                      0x05, 0xF4, 0x12, 0x34, 0x56, 0x78,
+                      0x5A, 0xA5};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* p = tryGet<L3PagingRequestType1>(*msg);
+    ASSERT_NE(p, nullptr);
+    EXPECT_EQ(p->additionalIes(), (std::vector<uint8_t>{0x5A, 0xA5}));
+    auto rt = roundtrip(*msg);
+    ASSERT_TRUE(rt);
+    auto bytes = writeL3Bytes(*rt);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
+}
+
+// Golden: Paging Request Type 2 rest octets (TS 44.018 section 9.1.23):
+// trailing octets after the TMSI part are preserved losslessly.
+TEST(GoldenRR, PagingRequestType2_OpaqueTailRoundTrip) {
+    uint8_t data[] = {0x06, 0x22, 0x00,
+                      0x12, 0x34, 0x56, 0x78,
+                      0xDE, 0xAD, 0xBE, 0xEF,
+                      0x5A};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* p = tryGet<L3PagingRequestType2>(*msg);
+    ASSERT_NE(p, nullptr);
+    EXPECT_EQ(p->additionalIes(), (std::vector<uint8_t>{0x5A}));
+    auto rt = roundtrip(*msg);
+    ASSERT_TRUE(rt);
+    auto bytes = writeL3Bytes(*rt);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
+}
+
+// Golden: Paging Request Type 3 rest octets (TS 44.018 section 9.1.24):
+// trailing octets after the TMSI part are preserved losslessly.
+TEST(GoldenRR, PagingRequestType3_OpaqueTailRoundTrip) {
+    uint8_t data[] = {0x06, 0x24, 0x00,
+                      0x12, 0x34, 0x56, 0x78,
+                      0xDE, 0xAD, 0xBE, 0xEF,
+                      0xAB, 0xCD, 0xEF, 0x01,
+                      0x11, 0x22, 0x33, 0x44,
+                      0xA5};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* p = tryGet<L3PagingRequestType3>(*msg);
+    ASSERT_NE(p, nullptr);
+    EXPECT_EQ(p->additionalIes(), (std::vector<uint8_t>{0xA5}));
+    auto rt = roundtrip(*msg);
+    ASSERT_TRUE(rt);
+    auto bytes = writeL3Bytes(*rt);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
+}
+
 // =====================================================================
 // RR PARSE FROM HEX: Paging Response (3GPP TS 44.018 9.1.25 / GSM 04.08 9.1.25)
 // Frame shape: PD = '0110'B (RR), MTI = '00100111'B (PagingResponse, 0x27).
@@ -458,16 +523,65 @@ TEST(GoldenRR, PagingResponse_ExtendedClassmark) {
 
     // Builder round-trip: the frame is re-emitted byte for byte.
     auto built = L3PagingResponse::builder()
-                     .cksn(0)
-                     .classmark(p->classmark())
-                     .mobileId(L3MobileIdentity(0x12345678u))
-                     .build();
+                      .cksn(0)
+                      .classmark(p->classmark())
+                      .mobileId(L3MobileIdentity(0x12345678u))
+                      .build();
     ParsedMessage pm{RRM{std::move(built)}};
     auto bytes = writeL3Bytes(pm);
     ASSERT_TRUE(bytes);
     ASSERT_EQ(bytes.value().size(), sizeof(data));
     for (size_t i = 0; i < sizeof(data); ++i)
         EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
+}
+
+// Golden: Paging Response with the optional additional update parameter
+// (TS 44.018 section 9.1.25): one raw octet after the mobile identity LV.
+// The octet is emitted only when present and survives a round trip byte for
+// byte; any further trailing octets are preserved opaquely.
+TEST(GoldenRR, PagingResponse_AdditionalUpdateParameter) {
+    uint8_t data[] = {0x06, 0x27, 0x00,
+                      0x03, 0x20, 0x00, 0x80,
+                      0x05, 0xF4, 0x12, 0x34, 0x56, 0x78,
+                      0xA5}; // additional update parameter octet
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* p = tryGet<L3PagingResponse>(*msg);
+    ASSERT_NE(p, nullptr);
+    EXPECT_TRUE(p->hasAdditionalUpdateParameter());
+    EXPECT_EQ(p->additionalUpdateParameter(), 0xA5u);
+
+    // The frame re-emits the parameter octet verbatim.
+    auto rt = roundtrip(*msg);
+    ASSERT_TRUE(rt);
+    const auto* q = tryGet<L3PagingResponse>(*rt);
+    ASSERT_NE(q, nullptr);
+    auto bytes = writeL3Bytes(*rt);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
+
+    // Builder path: the octet is present exactly when the flag is set.
+    auto built = L3PagingResponse::builder()
+                      .cksn(0)
+                      .mobileId(L3MobileIdentity(0x12345678u))
+                      .additionalUpdateParameter(true, 0xA5)
+                      .build();
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto out = writeL3Bytes(pm);
+    ASSERT_TRUE(out);
+    ASSERT_GE(out.value().size(), 2u + 1u + 1u + 3u + 1u + 5u + 1u);
+    EXPECT_EQ((*out)[out.value().size() - 1], 0xA5u);
+
+    auto builtAbsent = L3PagingResponse::builder()
+                      .cksn(0)
+                      .mobileId(L3MobileIdentity(0x12345678u))
+                      .build();
+    ParsedMessage pmAbsent{RRM{std::move(builtAbsent)}};
+    auto outAbsent = writeL3Bytes(pmAbsent);
+    ASSERT_TRUE(outAbsent);
+    EXPECT_EQ((*outAbsent).back(), 0x78u); // no trailing parameter octet
 }
 
 // =====================================================================
@@ -578,7 +692,8 @@ TEST(GoldenRR, HandoverCommand_Parse) {
 // [GSM SPEC VERIFIED] GSM 24.008 9.1.2: AssignmentCommand body = ChanDesc + PowerCmd + [optional].
 //   ChannelDescription (GSM 24.008 10.5.2.5): 3 octets, MSB-first bit packing:
 //   typeAndOffset(5)|TN(3)|TSC(3)|h(1)|ARFCN(12).
-//   PowerCommand (GSM 24.008 10.5.2.28): 1 octet, power_command(5 MSB)|spare(3 LSB).
+//   PowerCommand (TS 44.018 10.5.2.28): 1 octet, spare(3 MSB)=0|power_level(5 LSB);
+//   the octet equals the power level for values 0..31.
 // =====================================================================
 
 TEST(GoldenRR, AssignmentCommand_Parse) {
@@ -586,7 +701,7 @@ TEST(GoldenRR, AssignmentCommand_Parse) {
     // Byte 1: MTI = 0x2E (AssignmentCommand) [3GPP TS 44.018 Table 10.4.1]
     // Bytes 2-4: ChanDesc: typeAndOffset(5), TN(3), TSC(3), h(1), ARFCN(12) [GSM 24.008 10.5.2.5]
     //   {0x08, 0xE0, 0x64}: typeAndOffset=1(TDMA_Bm_ACCH, TCH/F or TCH/H ACCH), TN=0, TSC=7, h=0, ARFCN=100
-    // Byte 5: PowerCmd = 0x00 [GSM 24.008 10.5.2.28, 5-bit power_command << 3]
+    // Byte 5: PowerCmd = 0x00 [TS 44.018 10.5.2.28, power level zero]
     uint8_t data[] = {0x06, 0x2e, 0x08, 0xE0, 0x64, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -604,7 +719,9 @@ TEST(GoldenRR, AssignmentCommand_Parse) {
 //   DedicatedModeOrTBF (4 bits): tbf(1)|downlink(1)|spare(2), high nibble of byte.
 //   PageMode (4 bits): NORMAL(0), EXTENDED(1), REORGANIZATION(2), SAME_AS_BEFORE(3).
 //   RequestReference (GSM 24.008 10.5.2.30): 3 octets, RA(8)|T1p(5)|T3(6)|T2(5).
-//   TimingAdvance (GSM 04.08 10.5.2.40): 1 octet, spare(2 MSB)=0|TA(6 LSB); octet equals the value for 0..63.
+//   TimingAdvance (TS 44.018 9.1.12): one raw octet, valid range 0..219; the
+//   octet equals the value. MobileAllocation LV is mandatory (a zero length
+//   octet denotes an empty list).
 // =====================================================================
 
 TEST(GoldenRR, ImmediateAssignment_Parse) {
@@ -617,8 +734,8 @@ TEST(GoldenRR, ImmediateAssignment_Parse) {
     //   {0x08, 0x00, 0x64}: typeAndOffset=1(TDMA_Bm_ACCH, TCH/F or TCH/H ACCH), TN=0, TSC=0, h=0, ARFCN=100
     // Bytes 6-8: ReqRef: RA(8)=0x42, T1p(5)=0, T3(6)=0, T2(5)=0 [GSM 24.008 10.5.2.30]
     //   TS 24.008 10.5.2.30: ra(8), t1p(5), t3(6), t2(5)
-    // Byte 9: TA = 0x00 [GSM 24.008 10.5.2.40, octet = TA value (spare bits zero)]
-    // Byte 10: MobileAlloc LV length = 0 (no mobile allocation)
+    // Byte 9: TA = 0x00 [TS 44.018 9.1.12, one raw octet equal to the value]
+    // Byte 10: MobileAlloc LV length = 0 (mandatory LV; zero length denotes an empty list)
     uint8_t data[] = {
         0x06, 0x3f, 0x00,
         0x08, 0x00, 0x64,
@@ -1037,7 +1154,7 @@ TEST(GoldenRR, RRStatus_Parse_ProtocolError) {
 TEST(GoldenRR, PhysicalInformation_Parse) {
     // Byte 0: PD=RR in the low nibble of octet 0, TI/TIF zero -> 0x06 (TS 24.008 L3 header)
     // Byte 1: MTI = 0x2D (PhysicalInformation) [3GPP TS 44.018 Table 10.4.1]
-    // Byte 2: TA=63 -> 0b00_111111 = 0x3F [GSM 24.008 10.5.2.40: spare(2 MSB)=0|timing_advance(6 LSB)]
+    // Byte 2: TA=63 -> 0x3F [TS 44.018 9.1.12: one raw octet, valid range 0..219]
     uint8_t data[] = {0x06, 0x2d, 0x3F};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -1076,6 +1193,59 @@ TEST(GoldenRR, AssignmentCommand_RoundTrip) {
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3AssignmentCommand::MTI);
+}
+
+// Golden: Assignment Command power octet (TS 44.018 section 10.5.2.28):
+// spare(3)=0|power_level(5); power=5 -> the wire octet is 0x05.
+TEST(GoldenRR, AssignmentCommand_PowerOctet) {
+    auto built = L3AssignmentCommand::builder()
+        .channel(L3ChannelDescription(TDMA_Bm_ACCH, 1, 0, 50))
+        .powerCommand(L3PowerCommand(5))
+        .build();
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    // L3 header (2) + channel description (3): the power octet is byte 5.
+    ASSERT_GE(bytes.value().size(), 6u);
+    EXPECT_EQ((*bytes)[5], 0x05u);
+
+    auto parsed = parseL3(*bytes);
+    ASSERT_TRUE(parsed);
+    const auto* ac = tryGet<L3AssignmentCommand>(*parsed);
+    ASSERT_NE(ac, nullptr);
+    EXPECT_EQ(ac->powerCommand().command(), 5u);
+}
+
+// Golden: Assignment Command with a frequency list TLV (IEI 0x05) in the
+// trailing optional IEs (TS 44.018 section 9.1.2): the whole frame parses
+// and is re-emitted byte for byte.
+TEST(GoldenRR, AssignmentCommand_FreqListTailRoundTrip) {
+    // Body = channel description (3 octets: typeAndOffset=1(TDMA_Bm_ACCH),
+    // TN=0, TSC=7, h=0, ARFCN=100) + power command 0x00 + frequency list
+    // TLV: IEI 0x05, length 0x10, sixteen-octet variable BCCH form.
+    L3BCCHFrequencyList fl{};
+    std::vector<uint8_t> data = {0x06, 0x2E,
+                                 0x08, 0xE0, 0x64,
+                                 0x00,
+                                 0x05, 0x10};
+    for (uint8_t b : fl.raw()) data.push_back(b);
+
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* ac = tryGet<L3AssignmentCommand>(*msg);
+    ASSERT_NE(ac, nullptr);
+    EXPECT_EQ(ac->channel().arfcn(), 100u);
+    ASSERT_EQ(ac->additionalIes().size(), 18u); // IEI + length + sixteen octets
+    EXPECT_EQ(ac->additionalIes()[0], 0x05u);
+    EXPECT_EQ(ac->additionalIes()[1], 0x10u);
+
+    auto rt = roundtrip(*msg);
+    ASSERT_TRUE(rt);
+    auto bytes = writeL3Bytes(*rt);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), data.size());
+    for (size_t i = 0; i < data.size(); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
 }
 
 // =====================================================================
@@ -1145,6 +1315,35 @@ TEST(GoldenRR, ImmediateAssignmentReject_RoundTrip) {
     }
 }
 
+// Golden: Immediate Assignment Reject rest octets (TS 44.018 section
+// 9.1.20): trailing octets after the four request-reference/wait-indication
+// pairs are preserved losslessly; the encoder adds none of its own.
+TEST(GoldenRR, ImmediateAssignmentReject_OpaqueTailRoundTrip) {
+    // FeatureInd(4)=0|PageMode(4)=0, then four pairs
+    // {RA=0x25,T1P=T3=T2=0, wait=0x1E} and two trailing rest octets.
+    uint8_t data[] = {0x06, 0x3A, 0x00,
+                      0x25, 0x00, 0x00, 0x1E,
+                      0x25, 0x00, 0x00, 0x1E,
+                      0x26, 0x00, 0x00, 0x3C,
+                      0x27, 0x00, 0x00, 0x78,
+                      0x5A, 0xA5};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* iar = tryGet<L3ImmediateAssignmentReject>(*msg);
+    ASSERT_NE(iar, nullptr);
+    EXPECT_EQ(iar->requestReferences().size(), 4u);
+    EXPECT_EQ(iar->additionalIes(), (std::vector<uint8_t>{0x5A, 0xA5}));
+
+    // Lossless: the frame is re-emitted byte for byte.
+    auto rt = roundtrip(*msg);
+    ASSERT_TRUE(rt);
+    auto bytes = writeL3Bytes(*rt);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
+}
+
 // =====================================================================
 // RR ROUNDTrip: AdditionalAssignment (GSM 04.08 9.1.1)
 // MTI per TS 44.018 Table 10.4.1: ADDITIONAL_ASSIGNMENT ('00111011'B = 0x3B).
@@ -1203,6 +1402,36 @@ TEST(GoldenRR, MeasurementReport_RoundTrip) {
     EXPECT_EQ(messageMTI(*parsed), L3MeasurementReport::MTI);
 }
 
+// Golden: Measurement Report tail (TS 44.018 section 9.1.21): exactly one
+// measurement results block is consumed (with zero neighbor cells it spans
+// the first three value octets plus the spare bits to the octet boundary);
+// any whole octets after it are preserved losslessly.
+TEST(GoldenRR, MeasurementReport_OpaqueTailRoundTrip) {
+    // Sixteen zero measurement-results octets followed by two tail octets.
+    std::vector<uint8_t> data = {0x06, 0x15};
+    for (int i = 0; i < 16; ++i) data.push_back(0x00);
+    data.push_back(0x2B);
+    data.push_back(0x5A);
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* mr = tryGet<L3MeasurementReport>(*msg);
+    ASSERT_NE(mr, nullptr);
+    // The tail starts at the fifth body octet (the twenty-six base result
+    // bits span four octets): twelve zero octets plus the two trailing ones.
+    std::vector<uint8_t> expectedTail(12, 0x00);
+    expectedTail.push_back(0x2B);
+    expectedTail.push_back(0x5A);
+    EXPECT_EQ(mr->additionalIes(), expectedTail);
+
+    auto rt = roundtrip(*msg);
+    ASSERT_TRUE(rt);
+    auto bytes = writeL3Bytes(*rt);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), data.size());
+    for (size_t i = 0; i < data.size(); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
+}
+
 // =====================================================================
 // RR ROUNDTrip: ClassmarkEnquiry (GSM 04.08 9.1.14)
 // MTI per TS 44.018 Table 10.4.1: CLASSMARK_ENQUIRY ('00010011'B = 0x13).
@@ -1233,6 +1462,59 @@ TEST(GoldenRR, ClassmarkChange_RoundTrip) {
     EXPECT_EQ(messageMTI(*parsed), L3ClassmarkChange::MTI);
 }
 
+// Golden: Classmark Change carrying the classmark 3 TLV (TS 24.008 section
+// 10.5.1.7): element identifier 0x20, length octet 0x0E and the fourteen
+// raw value octets, carried opaquely. The parse consumes the whole frame
+// (no leftover) and the re-emit is byte for byte identical.
+TEST(GoldenRR, ClassmarkChange_Classmark3Tlv) {
+    // Body = CM2-LV (length=3, {0x20, 0x00, 0x80}) + classmark 3 TLV:
+    //   0x20 (element identifier) | 0x0E (length = 14) | 14 raw value octets.
+    uint8_t cm3value[14];
+    for (size_t i = 0; i < sizeof(cm3value); ++i) cm3value[i] = static_cast<uint8_t>(i + 1);
+    std::vector<uint8_t> data = {0x06, 0x16, 0x03, 0x20, 0x00, 0x80, 0x20, 0x0E};
+    for (uint8_t b : cm3value) data.push_back(b);
+
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* cm = tryGet<L3ClassmarkChange>(*msg);
+    ASSERT_NE(cm, nullptr);
+    EXPECT_TRUE(cm->hasAdditionalClassmark());
+    EXPECT_EQ(cm->additionalClassmark().lengthV(), 14u);
+    for (size_t i = 0; i < sizeof(cm3value); ++i)
+        EXPECT_EQ(cm->additionalClassmark().value()[i], cm3value[i]) << "byte " << i;
+
+    // The TLV closes the frame: nothing is left unconsumed.
+    auto rt = roundtrip(*msg);
+    ASSERT_TRUE(rt);
+    const auto* cm2 = tryGet<L3ClassmarkChange>(*rt);
+    ASSERT_NE(cm2, nullptr);
+    auto bytes = writeL3Bytes(*rt);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), data.size());
+    for (size_t i = 0; i < data.size(); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
+}
+
+// Golden: Classmark 3 with a non-default TLV length (one to thirty-two value
+// octets are accepted; the stored length drives the re-emitted length octet).
+TEST(GoldenRR, ClassmarkChange_Classmark3ShortValue) {
+    uint8_t data[] = {0x06, 0x16, 0x03, 0x20, 0x00, 0x80,
+                      0x20, 0x03, 0x11, 0x22, 0x33};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* cm = tryGet<L3ClassmarkChange>(*msg);
+    ASSERT_NE(cm, nullptr);
+    EXPECT_EQ(cm->additionalClassmark().lengthV(), 3u);
+    EXPECT_EQ(cm->additionalClassmark().value()[0], 0x11u);
+    EXPECT_EQ(cm->additionalClassmark().value()[2], 0x33u);
+
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
+}
+
 // =====================================================================
 // RR ROUNDTrip: HandoverCommand (GSM 04.08 9.1.15)
 // MTI per TS 44.018 Table 10.4.1: HANDOVER_COMMAND ('00101011'B = 0x2B).
@@ -1243,6 +1525,39 @@ TEST(GoldenRR, HandoverCommand_RoundTrip) {
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3HandoverCommand::MTI);
+}
+
+// Golden: Handover Command trailing optional IEs (TS 44.018 section 9.1.15):
+// after the synchronization indication, further IEs (frequency lists, cell
+// channel description, cipher mode setting, ...) are kept as an opaque
+// sequence and re-emitted verbatim.
+TEST(GoldenRR, HandoverCommand_OpaqueTailRoundTrip) {
+    // CellDesc(2) + ChanDesc2(3) + HORef(1) + PowerCmdAccType(1) +
+    // SyncInd(1: 0xD marker nibble | NCI | ROT | SI(2)), then a frequency
+    // list TLV (IEI 0x05, length 0x10).
+    L3BCCHFrequencyList fl{};
+    std::vector<uint8_t> data = {0x06, 0x2B,
+                                 0x2B, 0x64,
+                                 0x09, 0xE0, 0x64,
+                                 0x17, 0x00, 0xD0,
+                                 0x05, 0x10};
+    for (uint8_t b : fl.raw()) data.push_back(b);
+
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* ho = tryGet<L3HandoverCommand>(*msg);
+    ASSERT_NE(ho, nullptr);
+    EXPECT_EQ(ho->cellDescription().arfcn(), 100u);
+    ASSERT_EQ(ho->additionalIes().size(), 18u);
+    EXPECT_EQ(ho->additionalIes()[0], 0x05u);
+
+    auto rt = roundtrip(*msg);
+    ASSERT_TRUE(rt);
+    auto bytes = writeL3Bytes(*rt);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), data.size());
+    for (size_t i = 0; i < data.size(); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
 }
 
 // =====================================================================
@@ -1337,12 +1652,34 @@ TEST(GoldenRR, HandoverComplete_RoundTrip) {
     uint8_t data[] = {0x06, 0x2c, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
-    auto* hc = tryGet<L3HandoverComplete>(*msg);
-    ASSERT_TRUE(hc);
+    const auto* hc = tryGet<L3HandoverComplete>(*msg);
+    ASSERT_NE(hc, nullptr);
     EXPECT_EQ(hc->cause(), RRCause::Normal_Event);
     auto parsed = roundtrip(*msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3HandoverComplete::MTI);
+}
+
+// Golden: Handover Complete with optional IEs after the cause (TS 44.018
+// section 9.1.16): the trailing IEs are kept as an opaque sequence and
+// re-emitted verbatim.
+TEST(GoldenRR, HandoverComplete_OpaqueTailRoundTrip) {
+    // cause = Normal_Event (0x00), then two trailing IE octets.
+    uint8_t data[] = {0x06, 0x2c, 0x00, 0x77, 0x02, 0x01, 0x00};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* hc = tryGet<L3HandoverComplete>(*msg);
+    ASSERT_NE(hc, nullptr);
+    EXPECT_EQ(hc->cause(), RRCause::Normal_Event);
+    EXPECT_EQ(hc->additionalIes(), (std::vector<uint8_t>{0x77, 0x02, 0x01, 0x00}));
+
+    auto rt = roundtrip(*msg);
+    ASSERT_TRUE(rt);
+    auto bytes = writeL3Bytes(*rt);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
 }
 
 // =====================================================================
@@ -1356,12 +1693,34 @@ TEST(GoldenRR, HandoverFailure_RoundTrip) {
     uint8_t data[] = {0x06, 0x28, 0x08};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
-    auto* hf = tryGet<L3HandoverFailure>(*msg);
-    ASSERT_TRUE(hf);
+    const auto* hf = tryGet<L3HandoverFailure>(*msg);
+    ASSERT_NE(hf, nullptr);
     EXPECT_EQ(hf->cause(), RRCause::Handover_Impossible);
     auto parsed = roundtrip(*msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3HandoverFailure::MTI);
+}
+
+// Golden: Handover Failure with optional IEs after the cause (TS 44.018
+// section 9.1.17): the trailing IEs are kept as an opaque sequence and
+// re-emitted verbatim.
+TEST(GoldenRR, HandoverFailure_OpaqueTailRoundTrip) {
+    // cause = Handover_Impossible (0x08), then one trailing IE octet pair.
+    uint8_t data[] = {0x06, 0x28, 0x08, 0x31, 0x01, 0x80};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* hf = tryGet<L3HandoverFailure>(*msg);
+    ASSERT_NE(hf, nullptr);
+    EXPECT_EQ(hf->cause(), RRCause::Handover_Impossible);
+    EXPECT_EQ(hf->additionalIes(), (std::vector<uint8_t>{0x31, 0x01, 0x80}));
+
+    auto rt = roundtrip(*msg);
+    ASSERT_TRUE(rt);
+    auto bytes = writeL3Bytes(*rt);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
 }
 
 // =====================================================================
@@ -1606,7 +1965,7 @@ TEST(GoldenRR, NotificationResponse_RoundTrip) {
 TEST(GoldenRR, VGCSUplinkGrant_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x09 ('00001001'B, TS 44.018 Table 10.4.1)
     // Body = request reference RA=0x25 (T1P=T3=T2=0, three octets) +
-    // timing advance 42 (spare(2)|TA(6)).
+    // timing advance 42 (one raw octet, valid range 0..219 per TS 44.018 9.1.12).
     uint8_t data[] = {0x06, 0x09, 0x25, 0x00, 0x00, 0x2A};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
@@ -1701,37 +2060,46 @@ TEST(GoldenRR, UplinkBusy_RoundTrip) {
 }
 
 // =====================================================================
-// RR: Priority Uplink Request (3GPP TS 44.018 9.1.28d)
+// RR: Priority Uplink Request (3GPP TS 44.018 9.1.44a)
 // MTI per TS 44.018 Table 10.4.1: PRIORITY_UPLINK_REQUEST ('01100110'B = 0x66).
-// Structure per TS 44.018 section 9.1.28d: estimated cause octet + token(4)|reduced GCR(4)
-// octet + mobile identity LV.
+// Structure per TS 44.018 section 9.1.44a: estimated cause octet + token
+// (four octets) + reduced GCR (four octets) + mobile identity LV.
 // =====================================================================
 
 TEST(GoldenRR, PriorityUplinkRequest_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x66 ('01100110'B, TS 44.018 Table 10.4.1)
-    // Body = estCause(1 octet)=2 + token(4)=3|reducedGCR(4)=5 (octet 0x35)
-    //   + mobile identity LV: IMSI "1234567890" (length 6, TS 24.008 10.5.1.4).
-    uint8_t data[] = {0x06, 0x66, 0x02, 0x35,
-                      0x06, 0x11, 0x32, 0x54, 0x76, 0x98, 0xF0};
+    // Body = estCause(1 octet)=2 + token {00 00 00 03} + reduced GCR
+    //   {00 00 00 05} (TS 44.018 section 9.1.44a)
+    //   + mobile identity LV: TMSI 0x12345678 (length 5, MI form F4|TMSI,
+    //     TS 24.008 10.5.1.4).
+    uint8_t data[] = {0x06, 0x66,
+                      0x02,
+                      0x00, 0x00, 0x00, 0x03,   // token (four octets)
+                      0x00, 0x00, 0x00, 0x05,   // reduced GCR (four octets)
+                      0x05, 0xF4, 0x12, 0x34, 0x56, 0x78};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3PriorityUplinkRequest::MTI);
     const auto* pur = tryGet<L3PriorityUplinkRequest>(*msg);
     ASSERT_NE(pur, nullptr);
     EXPECT_EQ(pur->estCause(), 0x02u);
-    EXPECT_EQ(pur->token(), 3u);
-    EXPECT_EQ(pur->reducedGcr(), 5u);
-    EXPECT_TRUE(pur->mobileId().isIMSI());
-    EXPECT_STREQ(pur->mobileId().digits(), "1234567890");
+    EXPECT_EQ(pur->token().size(), 4u);
+    EXPECT_EQ(pur->token()[0], 0x00u);
+    EXPECT_EQ(pur->token()[3], 0x03u);
+    EXPECT_EQ(pur->reducedGcr()[3], 0x05u);
+    EXPECT_TRUE(pur->mobileId().isTMSI());
+    EXPECT_EQ(pur->mobileId().tmsi(), 0x12345678u);
 }
 
 TEST(GoldenRR, PriorityUplinkRequest_RoundTrip) {
     auto built = L3PriorityUplinkRequest::builder()
         .estCause(2)
-        .token(3)
-        .reducedGcr(5)
-        .mobileId(L3MobileIdentity(MobileIDType::IMSI, "1234567890"))
+        .token(std::span<const uint8_t>(std::array<uint8_t, 4>{0x00, 0x00, 0x00, 0x03}))
+        .reducedGcr(std::span<const uint8_t>(std::array<uint8_t, 4>{0x00, 0x00, 0x00, 0x05}))
+        .mobileId(L3MobileIdentity(0x12345678u))
         .build();
+    // Body = estCause(1) + token(4) + reduced GCR(4) + MI LV (1 + 5).
+    EXPECT_EQ(built.bodyLength(), 1 + 4 + 4 + 1 + 5u);
     ParsedMessage msg(RRM(std::move(built)));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
@@ -1739,10 +2107,10 @@ TEST(GoldenRR, PriorityUplinkRequest_RoundTrip) {
     const auto* pur = tryGet<L3PriorityUplinkRequest>(*parsed);
     ASSERT_NE(pur, nullptr);
     EXPECT_EQ(pur->estCause(), 0x02u);
-    EXPECT_EQ(pur->token(), 3u);
-    EXPECT_EQ(pur->reducedGcr(), 5u);
-    EXPECT_TRUE(pur->mobileId().isIMSI());
-    EXPECT_STREQ(pur->mobileId().digits(), "1234567890");
+    EXPECT_EQ(pur->token()[3], 0x03u);
+    EXPECT_EQ(pur->reducedGcr()[3], 0x05u);
+    EXPECT_TRUE(pur->mobileId().isTMSI());
+    EXPECT_EQ(pur->mobileId().tmsi(), 0x12345678u);
 }
 
 // =====================================================================
@@ -1788,18 +2156,18 @@ TEST(GoldenRR, DataIndication_RoundTrip) {
 }
 
 // =====================================================================
-// RR: Data Indication 2 (3GPP TS 44.018 9.1.28f)
+// RR: Data Indication 2 (3GPP TS 44.018 9.1.44c)
 // MTI per TS 44.018 Table 10.4.1: DATA_INDICATION_2 ('01101000'B = 0x68).
-// Structure per TS 44.018 section 9.1.28f: TMSI(4 octets) + reduced GCR
-// (four bits, spare padding to the octet) + application data (9 octets)
-// + data identifier (1 octet).
+// Structure per TS 44.018 section 9.1.44c: TMSI(4 octets) + reduced GCR
+// (four octets) + application data (9 octets) + data identifier (1 octet);
+// an eighteen-octet body.
 // =====================================================================
 
 TEST(GoldenRR, DataIndication2_Parse) {
     // [GOLDEN VERIFIED] PD=6(RR), MTI=0x68 ('01101000'B, TS 44.018 Table 10.4.1)
     uint8_t data[] = {0x06, 0x68,
                       0xF4, 0x12, 0x34, 0x56,   // TMSI
-                      0x50,                     // reduced GCR=5, spare padding
+                      0x00, 0x00, 0x00, 0x05,   // reduced GCR (four octets)
                       0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, // app data
                       0x42};                    // data identifier
     auto msg = parseL3(std::span<const uint8_t>(data));
@@ -1808,7 +2176,8 @@ TEST(GoldenRR, DataIndication2_Parse) {
     const auto* di2 = tryGet<L3DataIndication2>(*msg);
     ASSERT_NE(di2, nullptr);
     EXPECT_EQ(di2->tmsi(), 0xF4123456u);
-    EXPECT_EQ(di2->reducedGcr(), 5u);
+    EXPECT_EQ(di2->reducedGcr().size(), 4u);
+    EXPECT_EQ(di2->reducedGcr()[3], 0x05u);
     EXPECT_EQ(di2->applicationData()[0], 0x01u);
     EXPECT_EQ(di2->dataId(), 0x42u);
 }
@@ -1816,19 +2185,20 @@ TEST(GoldenRR, DataIndication2_Parse) {
 TEST(GoldenRR, DataIndication2_RoundTrip) {
     auto built = L3DataIndication2::builder()
         .tmsi(0xF4123456u)
-        .reducedGcr(5)
+        .reducedGcr(std::span<const uint8_t>(std::array<uint8_t, 4>{0x00, 0x00, 0x00, 0x05}))
         .applicationData(std::span<const uint8_t>(std::array<uint8_t, 9>{
             0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09}))
         .dataId(0x42)
         .build();
-    EXPECT_EQ(built.bodyLength(), 15u);
+    // TMSI(4) + reduced GCR(4) + application data(9) + data id(1) = 18.
+    EXPECT_EQ(built.bodyLength(), 18u);
     ParsedMessage msg(RRM(std::move(built)));
     auto parsed = roundtrip(msg);
     ASSERT_TRUE(parsed);
     EXPECT_EQ(messageMTI(*parsed), L3DataIndication2::MTI);
     const auto* di2 = tryGet<L3DataIndication2>(*parsed);
     ASSERT_NE(di2, nullptr);
-    EXPECT_EQ(di2->reducedGcr(), 5u);
+    EXPECT_EQ(di2->reducedGcr()[3], 0x05u);
 }
 
 // =====================================================================
@@ -3065,13 +3435,48 @@ TEST(GoldenRR, ChannelRelease_GprsResumptionOctet) {
     EXPECT_EQ((*bytes)[3], 0xC1u);
 
     // A following octet without the 'C' high nibble is not a GPRS
-    // resumption indicator (it remains trailing data outside strict mode).
+    // resumption indicator; it is kept as an opaque trailing IE sequence.
     uint8_t other[] = {0x06, 0x0D, 0x41, 0x20, 0x00};
     auto msgOther = parseL3(std::span<const uint8_t>(other));
     ASSERT_TRUE(msgOther);
     const auto* crOther = tryGet<L3ChannelRelease>(*msgOther);
     ASSERT_NE(crOther, nullptr);
     EXPECT_FALSE(crOther->hasGprsResumption());
+    EXPECT_EQ(crOther->additionalIes(), (std::vector<uint8_t>{0x20, 0x00}));
+
+    // The trailing octets are re-emitted verbatim.
+    auto rtOther = roundtrip(*msgOther);
+    ASSERT_TRUE(rtOther);
+    auto bytesOther = writeL3Bytes(*rtOther);
+    ASSERT_TRUE(bytesOther);
+    ASSERT_EQ(bytesOther.value().size(), sizeof(other));
+    for (size_t i = 0; i < sizeof(other); ++i)
+        EXPECT_EQ((*bytesOther)[i], other[i]) << "byte " << i;
+}
+
+// Golden: RR Channel Release with a trailing cell selection indicator TLV
+// (TS 44.018 section 9.1.7): cause + optional IRAT information elements
+// after the GPRS resumption octet are preserved losslessly.
+TEST(GoldenRR, ChannelRelease_OpaqueTailRoundTrip) {
+    // cause = Call_Already_Cleared (0x41), then TLV 0x77 (length 2,
+    // {0x01, 0x00}) as the trailing cell selection indicator.
+    uint8_t data[] = {0x06, 0x0D, 0x41, 0x77, 0x02, 0x01, 0x00};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* cr = tryGet<L3ChannelRelease>(*msg);
+    ASSERT_NE(cr, nullptr);
+    EXPECT_EQ(cr->cause(), RRCause::Call_Already_Cleared);
+    EXPECT_FALSE(cr->hasGprsResumption());
+    EXPECT_EQ(cr->additionalIes(), (std::vector<uint8_t>{0x77, 0x02, 0x01, 0x00}));
+
+    // Lossless: the frame is re-emitted byte for byte.
+    auto rt = roundtrip(*msg);
+    ASSERT_TRUE(rt);
+    auto bytes = writeL3Bytes(*rt);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
 }
 
 // Golden: CCCH Immediate Assignment frame (TS 44.018 9.1.19) as captured on a
@@ -3139,6 +3544,62 @@ TEST(GoldenRR, ImmediateAssignment_StartTime) {
     for (size_t i = 0; i < bytes.value().size(); ++i) {
         EXPECT_EQ((*rtBytes)[i], (*bytes)[i]) << "byte " << i;
     }
+}
+
+// Golden: Immediate Assignment with a missing mobile allocation LV is
+// rejected (TS 44.018 section 9.1.19): the LV length octet is mandatory
+// after the timing advance, even for an empty list.
+TEST(GoldenRR, ImmediateAssignment_MissingMobileAllocationRejected) {
+    // Body ends right after the timing advance octet: no MA length octet.
+    uint8_t data[] = {0x06, 0x3F,
+                      0x03, 0x0C, 0xE3, 0x69,
+                      0x25, 0x00, 0x00,
+                      0x00};
+    EXPECT_FALSE(parseL3(std::span<const uint8_t>(data)));
+}
+
+// Golden: Immediate Assignment rest octets (TS 44.018 section 9.1.19):
+// optional rest octets may be present in network frames; they are preserved
+// losslessly and never added by the encoder.
+TEST(GoldenRR, ImmediateAssignment_RestOctetsRoundTrip) {
+    // RefVector body plus two trailing rest octets after the MA LV.
+    uint8_t data[] = {0x06, 0x3F,
+                      0x03, 0x0C, 0xE3, 0x69,
+                      0x25, 0x00, 0x00, 0x00, 0x00,
+                      0x5A, 0xA5};
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    const auto* ia = tryGet<L3ImmediateAssignment>(*msg);
+    ASSERT_NE(ia, nullptr);
+    EXPECT_EQ(ia->additionalIes(), (std::vector<uint8_t>{0x5A, 0xA5}));
+
+    auto rt = roundtrip(*msg);
+    ASSERT_TRUE(rt);
+    auto bytes = writeL3Bytes(*rt);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i)
+        EXPECT_EQ((*bytes)[i], data[i]) << "byte " << i;
+}
+
+// Golden: Physical Information timing advance above sixty-three (TS 44.018
+// section 9.1.12): the raw octet is emitted as-is and round-trips; TA=200
+// is 0xC8.
+TEST(GoldenRR, PhysicalInformation_TaAbove63) {
+    auto built = L3PhysicalInformation::builder()
+        .timingAdvance(L3TimingAdvance(200))
+        .build();
+    ParsedMessage pm{RRM{std::move(built)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ(bytes.value().size(), 3u);
+    EXPECT_EQ((*bytes)[2], 0xC8u);
+
+    auto parsed = parseL3(*bytes);
+    ASSERT_TRUE(parsed);
+    const auto* pi = tryGet<L3PhysicalInformation>(*parsed);
+    ASSERT_NE(pi, nullptr);
+    EXPECT_EQ(pi->timingAdvance().timingAdvance(), 200u);
 }
 
 // Golden: Classmark Enquiry is a header-only message (TS 44.018).

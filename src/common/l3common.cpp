@@ -318,7 +318,7 @@ Expected<L3MobileStationClassmark2> L3MobileStationClassmark2::parse(BitReader& 
     r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark2>::error(r.error()); result.mCM3 = r.value();
     r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark2>::error(r.error()); // spare
     r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark2>::error(r.error()); result.mLCSVACapability = r.value();
-    r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark2>::error(r.error()); // spare
+    r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark2>::error(r.error()); result.mUcs2 = r.value();
     r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark2>::error(r.error()); result.mSoLSA = r.value();
     r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark2>::error(r.error()); result.mCMSF = r.value();
     r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark2>::error(r.error()); result.mA5_3 = r.value();
@@ -348,7 +348,7 @@ void L3MobileStationClassmark2::write(BitWriter& bw) const {
     bw.writeField(mCM3, 1);
     bw.writeField(0, 1);
     bw.writeField(mLCSVACapability, 1);
-    bw.writeField(0, 1);
+    bw.writeField(mUcs2, 1);
     bw.writeField(mSoLSA, 1);
     bw.writeField(mCMSF, 1);
     bw.writeField(mA5_3, 1);
@@ -373,30 +373,42 @@ int L3MobileStationClassmark2::getA5Bits() const {
 
 // ── L3MobileStationClassmark3 ───────────────────────────────────────────
 
+void L3MobileStationClassmark3::set(std::span<const uint8_t> v) {
+    const size_t n = std::min<size_t>(v.size(), mRaw.size());
+    if (n == 0) return; // keep the default fourteen-octet zero form
+    std::memcpy(mRaw.data(), v.data(), n);
+    mLength = static_cast<uint8_t>(n);
+}
+
+// Full TLV form of the classmark change (TS 24.008 section 10.5.1.7):
+// element identifier 0x20, one length octet, then exactly that many raw
+// value octets (one to thirty-two).
 Expected<L3MobileStationClassmark3> L3MobileStationClassmark3::parse(BitReader& br) {
     L3MobileStationClassmark3 result;
-    auto r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark3>::error(r.error()); // spare
-    r = br.readField(3); if (!r) return Expected<L3MobileStationClassmark3>::error(r.error()); result.mMultiband = r.value();
-    r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark3>::error(r.error()); result.mA5_7 = r.value();
-    r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark3>::error(r.error()); result.mA5_6 = r.value();
-    r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark3>::error(r.error()); result.mA5_5 = r.value();
-    r = br.readField(1); if (!r) return Expected<L3MobileStationClassmark3>::error(r.error()); result.mA5_4 = r.value();
+    auto r = br.readField(8); if (!r) return Expected<L3MobileStationClassmark3>::error(r.error());
+    // The high spare bit of the element identifier is tolerated.
+    if ((r.value() & 0x7Fu) != 0x20u)
+        return Expected<L3MobileStationClassmark3>::error(ParseError{ParseError::Code::InvalidValue, "unexpected classmark 3 element identifier"});
+    r = br.readField(8); if (!r) return Expected<L3MobileStationClassmark3>::error(r.error());
+    const unsigned len = r.value();
+    if (len < 1u || len > 32u)
+        return Expected<L3MobileStationClassmark3>::error(ParseError{ParseError::Code::InvalidValue, "classmark 3 length out of range"});
+    for (unsigned i = 0; i < len; ++i) {
+        auto e = br.readField(8); if (!e) return Expected<L3MobileStationClassmark3>::error(e.error());
+        result.mRaw[i] = static_cast<uint8_t>(e.value());
+    }
+    result.mLength = static_cast<uint8_t>(len);
     return Expected<L3MobileStationClassmark3>::hold(std::move(result));
 }
 
 void L3MobileStationClassmark3::write(BitWriter& bw) const {
-    bw.writeField(0, 1);
-    bw.writeField(mMultiband, 3);
-    bw.writeField(mA5_7, 1);
-    bw.writeField(mA5_6, 1);
-    bw.writeField(mA5_5, 1);
-    bw.writeField(mA5_4, 1);
-    for (int i = 0; i < 106; ++i) bw.writeField(0, 1);
+    bw.writeField(0x20, 8);
+    bw.writeField(mLength, 8);
+    bw.writeBytes(mRaw.data(), mLength);
 }
 
 void L3MobileStationClassmark3::text(std::ostream& os) const {
-    os << "CM3[MB=" << mMultiband << " A5_4=" << mA5_4
-       << " A5_5=" << mA5_5 << " A5_6=" << mA5_6 << " A5_7=" << mA5_7;
+    os << "CM3[" << static_cast<unsigned>(mLength) << " octets]";
 }
 
 // ── L3CipheringKeySequenceNumber ────────────────────────────────────────
@@ -679,15 +691,18 @@ void L3AdditionalChannelDescription::text(std::ostream& os) const {
 // ── L3PowerCommand ─────────────────────────────────────────────────────
 
 Expected<L3PowerCommand> L3PowerCommand::parse(BitReader& br) {
-    auto r = br.readField(5); if (!r) return Expected<L3PowerCommand>::error(r.error());
-    uint8_t cmd = static_cast<uint8_t>(r.value());
-    r = br.readField(3); if (!r) return Expected<L3PowerCommand>::error(r.error()); // spare
-    return Expected<L3PowerCommand>::hold(L3PowerCommand(cmd));
+    // Reserved high bits must be zero (TS 44.018 section 10.5.2.28).
+    auto r = br.readField(3); if (!r) return Expected<L3PowerCommand>::error(r.error());
+    if (r.value() != 0)
+        return Expected<L3PowerCommand>::error(ParseError{ParseError::Code::InvalidValue, "power command reserved bits set"});
+    r = br.readField(5); if (!r) return Expected<L3PowerCommand>::error(r.error());
+    return Expected<L3PowerCommand>::hold(L3PowerCommand(r.value()));
 }
 
 void L3PowerCommand::write(BitWriter& bw) const {
-    bw.writeField(mCommand, 5);
+    // Symmetric to parse: reserved(3)=0, then the five-bit power level.
     bw.writeField(0, 3);
+    bw.writeField(mCommand & 0x1Fu, 5);
 }
 
 void L3PowerCommand::text(std::ostream& os) const {
@@ -697,19 +712,32 @@ void L3PowerCommand::text(std::ostream& os) const {
 // ── L3PowerCommandAndAccessType ────────────────────────────────────────
 
 Expected<L3PowerCommandAndAccessType> L3PowerCommandAndAccessType::parse(BitReader& br) {
-    auto r = br.readField(5); if (!r) return Expected<L3PowerCommandAndAccessType>::error(r.error());
-    uint8_t cmd = static_cast<uint8_t>(r.value());
-    r = br.readField(3); if (!r) return Expected<L3PowerCommandAndAccessType>::error(r.error());
-    return Expected<L3PowerCommandAndAccessType>::hold(L3PowerCommandAndAccessType(cmd));
+    // aTC(1)|ePC_Mode(1)|fPC_EP(1)|ms_power_level(5), MSB-first
+    // (TS 44.018 section 10.5.2.28a).
+    L3PowerCommandAndAccessType result;
+    auto r = br.readField(1); if (!r) return Expected<L3PowerCommandAndAccessType>::error(r.error());
+    result.maTC = (r.value() != 0);
+    r = br.readField(1); if (!r) return Expected<L3PowerCommandAndAccessType>::error(r.error());
+    result.mePcMode = (r.value() != 0);
+    r = br.readField(1); if (!r) return Expected<L3PowerCommandAndAccessType>::error(r.error());
+    result.mfPcEp = (r.value() != 0);
+    r = br.readField(5); if (!r) return Expected<L3PowerCommandAndAccessType>::error(r.error());
+    result.mCommand = static_cast<uint8_t>(r.value());
+    return Expected<L3PowerCommandAndAccessType>::hold(std::move(result));
 }
 
 void L3PowerCommandAndAccessType::write(BitWriter& bw) const {
-    bw.writeField(mCommand, 5);
-    bw.writeField(0, 3);
+    // Symmetric to parse: aTC, ePC mode, fPC/EP, then the five-bit power.
+    bw.writeField(maTC ? 1u : 0u, 1);
+    bw.writeField(mePcMode ? 1u : 0u, 1);
+    bw.writeField(mfPcEp ? 1u : 0u, 1);
+    bw.writeField(mCommand & 0x1Fu, 5);
 }
 
 void L3PowerCommandAndAccessType::text(std::ostream& os) const {
-    os << "PowerCommandAT[" << mCommand << "]";
+    os << "PowerCommandAT[" << static_cast<unsigned>(mCommand)
+       << (maTC ? " aTC" : "") << (mePcMode ? " ePC_Mode" : "")
+       << (mfPcEp ? " fPC_EP" : "") << "]";
 }
 
 // ── L3ChannelMode ───────────────────────────────────────────────────────
@@ -730,18 +758,16 @@ void L3ChannelMode::text(std::ostream& os) const {
 // ── L3TimingAdvance ────────────────────────────────────────────────────
 
 Expected<L3TimingAdvance> L3TimingAdvance::parse(BitReader& br) {
-    // Timing Advance (TS 44.018 section 10.5.2.40): one octet, two spare bits in the
-    // high position followed by the six-bit value; for values 0..63 the wire octet
-    // equals the timing advance.
-    auto r = br.readField(2); if (!r) return Expected<L3TimingAdvance>::error(r.error()); // spare
-    r = br.readField(6); if (!r) return Expected<L3TimingAdvance>::error(r.error());
-    uint8_t ta = static_cast<uint8_t>(r.value());
-    return Expected<L3TimingAdvance>::hold(L3TimingAdvance(ta));
+    // Timing Advance (TS 44.018 section 9.1.12): one raw octet, valid range
+    // zero to two hundred nineteen.
+    auto r = br.readField(8); if (!r) return Expected<L3TimingAdvance>::error(r.error());
+    if (r.value() > 219u)
+        return Expected<L3TimingAdvance>::error(ParseError{ParseError::Code::InvalidValue, "timing advance out of range"});
+    return Expected<L3TimingAdvance>::hold(L3TimingAdvance(r.value()));
 }
 
 void L3TimingAdvance::write(BitWriter& bw) const {
-    bw.writeField(0, 2); // spare (high bits)
-    bw.writeField(mTimingAdvance & 0x3F, 6);
+    bw.writeField(mTimingAdvance, 8); // raw octet
 }
 
 void L3TimingAdvance::text(std::ostream& os) const {

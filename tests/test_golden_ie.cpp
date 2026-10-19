@@ -40,7 +40,7 @@
 // ControlChannelDescription vector values for a software BTS (GSM 24.008 SI3):
 //   {0xC9, 0x00, 0x01} -> msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1, t3212=1.
 // PowerCommand encoding verified: power_command(5 MSB)|spare(3 LSB), cmd=15 -> 0x78.
-// TimingAdvance encoding verified: spare(2 MSB)=0|timing_advance(6 LSB), val=42 -> 0x2A.
+// TimingAdvance encoding verified: one raw octet (0..219), val=42 -> 0x2A.
 // GSM Alphabet decoding verified against 3GPP TS 23.038 Table 1 (default alphabet).
 // RxLev conversion verified: dBm = RxLev - 110, range -110 to -47 dBm.
 // GSM timing constants per TS 45.008: hyperframe = 2715648 TDMA frames.
@@ -65,8 +65,8 @@
 //     max_retrans=3, tx_integer=9, cell_bar=false, re_not_allowed=1, ACC=0x03FF (classes 0-9 barred)
 //   - ControlChannelDescription {0xC9, 0x00, 0x01} vector values for a software BTS:
 //     msc_r99=1, att=1, bs_ag_blks_res=1, ccch_conf=1(combined), t3212=1(6 min)
-//   - PowerCommand: power_command(5 MSB)|spare(3 LSB), cmd=15 -> 0x78
-//   - TimingAdvance: spare(2 MSB)=0|timing_advance(6 LSB), val=42 -> 0x2A
+//   - PowerCommand: spare(3 MSB)=0|power_level(5 LSB), power=5 -> 0x05
+//   - TimingAdvance: one raw octet (0..219), val=42 -> 0x2A
 //   - GSM Alphabet decoding verified against 3GPP TS 23.038 Table 1 (default alphabet)
 //   - RxLev conversion: dBm = RxLev - 110, range -110 to -47 dBm (TS 45.008 8.1.4)
 //   - GSM timing constants per TS 45.008:
@@ -521,7 +521,7 @@ TEST(GoldenIE, Classmark2_AllBitsSet) {
     // Golden: Classmark 2 with every defined capability bit set (TS 24.008
     // section 10.5.1.6): octet1 [spare|rev(2)=11|ES|A5/1|RF power(3)=111],
     // octet2 [spare|PS|SS screen(2)=11|SM|VBS|VGCS|FC],
-    // octet3 [CM3|spare|LCS-VA|UCS-2 spare|SoLSA|CMSP|A5/3|A5/2]
+    // octet3 [CM3|spare|LCS-VA|UCS-2|SoLSA|CMSP|A5/3|A5/2]
     // = {0xFF, 0xFF, 0xFF}.
     uint8_t raw[] = {0xFF, 0xFF, 0xFF};
     BitReader reader(raw, sizeof(raw) * 8);
@@ -535,19 +535,21 @@ TEST(GoldenIE, Classmark2_AllBitsSet) {
     EXPECT_EQ(cm2.a5_1(), 1u);
     EXPECT_EQ(cm2.rfPowerCapability(), 7u);   // RF power(3) = '111'
     EXPECT_EQ(cm2.cm3(), 1u);
+    EXPECT_EQ(cm2.ucs2(), 1u);
     EXPECT_EQ(cm2.a5_3(), 1u);
     EXPECT_EQ(cm2.a5_2(), 1u);
 
     // write() keeps every defined bit in its canonical position; the
     // reserved spare bits are emitted as zero:
     // octet1 [0|11|1|1|111] = 0x7F, octet2 [0|1|11|1|1|1|1] = 0x7F,
-    // octet3 [1|0|1|0|1|1|1|1] = 0xAF.
+    // octet3 [CM3|spare|LCS-VA|UCS-2|SoLSA|CMSP|A5/3|A5/2]
+    //        [1|0|1|1|1|1|1|1] = 0xBF.
     std::vector<uint8_t> buf(8, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     cm2.write(writer);
     EXPECT_EQ(buf[0], 0x7F);
     EXPECT_EQ(buf[1], 0x7F);
-    EXPECT_EQ(buf[2], 0xAF);
+    EXPECT_EQ(buf[2], 0xBF);
 
     // The written value parses back with every capability bit still set.
     BitReader reread(buf.data(), 24);
@@ -556,7 +558,7 @@ TEST(GoldenIE, Classmark2_AllBitsSet) {
     EXPECT_EQ(reparsedIE.value(), cm2);
 
     // Full-message round-trip through Paging Response keeps every bit,
-    // including cm3 = 1.
+    // including cm3 = 1 and the UCS-2 capability indicator.
     L3PagingResponse resp = L3PagingResponse::builder()
         .cksn(5)
         .classmark(cm2)
@@ -571,6 +573,40 @@ TEST(GoldenIE, Classmark2_AllBitsSet) {
     ASSERT_NE(reparsed, nullptr);
     EXPECT_EQ(reparsed->classmark(), cm2);
     EXPECT_EQ(reparsed->cksn(), 5u);
+}
+
+// Golden: Classmark 2 UCS-2 capability indicator (TS 24.008 section
+// 10.5.1.6): the fourth octet-3 bit round-trips through every classmark 2
+// emitter. Octet 3 = [CM3|spare|LCS-VA|UCS-2|SoLSA|CMSP|A5/3|A5/2].
+TEST(GoldenIE, Classmark2_Ucs2BitRoundTrip) {
+    // Only the UCS-2 bit set: octet3 = 0x10.
+    uint8_t raw[] = {0x00, 0x00, 0x10};
+    BitReader reader(raw, sizeof(raw) * 8);
+    auto parsed = L3MobileStationClassmark2::parse(reader, 3);
+    ASSERT_TRUE(parsed);
+    const auto& cm2 = parsed.value();
+    EXPECT_EQ(cm2.ucs2(), 1u);
+    EXPECT_EQ(cm2.cm3(), 0u);
+
+    // write() re-emits the exact octet (the UCS-2 bit is preserved).
+    std::vector<uint8_t> buf(8, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    cm2.write(writer);
+    for (size_t i = 0; i < 3; ++i) EXPECT_EQ(buf[i], raw[i]) << "byte " << i;
+
+    // Talker Indication carries the same classmark 2 LV and round-trips it.
+    auto ti = L3TalkerIndication::builder()
+        .classmark2(cm2)
+        .mobileId(L3MobileIdentity(0x12345678u))
+        .build();
+    ParsedMessage pm{RRM{std::move(ti)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    auto rt = parseL3(std::span<const uint8_t>(bytes.value().data(), bytes.value().size()));
+    ASSERT_TRUE(rt);
+    const auto* reparsed = tryGet<L3TalkerIndication>(*rt);
+    ASSERT_NE(reparsed, nullptr);
+    EXPECT_EQ(reparsed->classmark2().ucs2(), 1u);
 }
 
 // Golden: Classmark 2 as an LV information element with a five-octet value
@@ -606,11 +642,54 @@ TEST(GoldenIE, Classmark2_ExtendedValue) {
 
 // =====================================================================
 // Common IEs: L3MobileStationClassmark3 (GSM 04.08 10.5.1.7)
+// The value part is carried opaquely; a conforming value is fourteen
+// octets long (TS 24.008 section 10.5.1.7).
 // =====================================================================
 
 TEST(GoldenIE, Classmark3_Default) {
     L3MobileStationClassmark3 cm3;
     EXPECT_EQ(cm3.lengthV(), 14u);
+    // Full TLV form of the default value: element identifier 0x20, length
+    // 0x0E and fourteen zero octets (TS 24.008 section 10.5.1.7).
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    cm3.write(writer);
+    EXPECT_EQ(writer.position(), 16u * 8);
+    EXPECT_EQ(buf[0], 0x20u);
+    EXPECT_EQ(buf[1], 0x0Eu);
+    for (size_t i = 2; i < 16; ++i) EXPECT_EQ(buf[i], 0x00u);
+
+    // The full TLV survives a round trip.
+    ieRoundTrip(cm3);
+}
+
+TEST(GoldenIE, Classmark3_OpaqueValue) {
+    // A non-default fourteen-octet value is preserved byte for byte.
+    uint8_t raw[14];
+    for (int i = 0; i < 14; ++i) raw[i] = static_cast<uint8_t>(0xA0 + i);
+    const std::span<const uint8_t> rawSpan{raw};
+    L3MobileStationClassmark3 cm3(rawSpan);
+    EXPECT_EQ(cm3.lengthV(), 14u);
+    EXPECT_EQ(cm3.value().size(), 14u);
+
+    std::vector<uint8_t> buf(32, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    cm3.write(writer);
+    EXPECT_EQ(buf[0], 0x20u);
+    EXPECT_EQ(buf[1], 0x0Eu);
+    for (int i = 0; i < 14; ++i) EXPECT_EQ(buf[2 + i], raw[i]) << "byte " << i;
+
+    BitReader reader(buf.data(), writer.position());
+    auto res = L3MobileStationClassmark3::parse(reader);
+    ASSERT_TRUE(res);
+    EXPECT_EQ((*res).value().size(), 14u);
+    for (int i = 0; i < 14; ++i)
+        EXPECT_EQ((*res).value()[i], raw[i]) << "byte " << i;
+
+    // Out-of-range TLV lengths are rejected (one to thirty-two octets).
+    uint8_t shortLen[] = {0x20, 0x00, 0x00};
+    BitReader shortReader(shortLen, 24);
+    EXPECT_FALSE(L3MobileStationClassmark3::parse(shortReader));
 }
 
 // =====================================================================
@@ -820,7 +899,7 @@ TEST(GoldenIE, AdditionalChannelDescription_RoundTrip) {
 // =====================================================================
 // Common IEs: L3PowerCommand (GSM 04.08 10.5.2.28)
 // One-octet power command value per GSM 24.008 10.5.2.28
-// 8 bits: power_command(5) | spare(3)
+// 8 bits: spare(3 MSB)=0 | power_level(5 LSB)
 // =====================================================================
 
 TEST(GoldenIE, PowerCommand_Default) {
@@ -840,17 +919,29 @@ TEST(GoldenIE, PowerCommand_MaxValue) {
 }
 
 TEST(GoldenIE, PowerCommand_Encoding) {
-    // Test vector: command = 15.
-    // Spec-verified: GSM 24.008 10.5.2.28 Power Command
-    //   power_command(5 bits MSB)|spare(3 bits LSB) = 1 octet
-    //   command=15 -> 0b01111_000 = 0x78 (15 in high 5 bits, spare 0 in low 3 bits)
-    L3PowerCommand pc(15);
+    // Test vector: command = 5.
+    // Spec-verified: TS 44.018 10.5.2.28 Power Command
+    //   spare(3 bits MSB)=0|power_level(5 bits LSB) = 1 octet
+    //   power=5 -> 0b000_00101 = 0x05
+    L3PowerCommand pc(5);
     std::vector<uint8_t> buf(4, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     pc.write(writer);
-    // GSM 24.008 10.5.2.28: power_command(5 bits MSB)|spare(3 bits LSB) = 1 octet
-    // power_command=15 -> 0b01111_000 = 0x78 (15 in high 5 bits, spare 0 in low 3 bits)
-    EXPECT_EQ(buf[0], 0x78);
+    // TS 44.018 10.5.2.28: spare(3 bits MSB)=0|power_level(5 bits LSB) = 1 octet
+    // power=5 -> 0b000_00101 = 0x05 (octet equals the power level for 0..31)
+    EXPECT_EQ(buf[0], 0x05);
+
+    // command = 15 -> 0b000_01111 = 0x0F.
+    L3PowerCommand pc15(15);
+    std::vector<uint8_t> buf2(4, 0);
+    BitWriter writer2(buf2.data(), buf2.size() * 8);
+    pc15.write(writer2);
+    EXPECT_EQ(buf2[0], 0x0F);
+
+    // Reserved bits set in the high position are rejected on parse.
+    uint8_t bad[] = {0x20}; // reserved(3) = 010, power zero
+    BitReader badReader(bad, 8);
+    EXPECT_FALSE(L3PowerCommand::parse(badReader));
 }
 
 // =====================================================================
@@ -865,6 +956,33 @@ TEST(GoldenIE, PowerCommandAndAccessType_Default) {
 TEST(GoldenIE, PowerCommandAndAccessType_RoundTrip) {
     L3PowerCommandAndAccessType orig(15);
     ieRoundTrip(orig);
+}
+
+TEST(GoldenIE, PowerCommandAndAccessType_Encoding) {
+    // Spec-verified: TS 44.018 10.5.2.28a
+    //   aTC(1)|ePC_Mode(1)|fPC_EP(1)|power_level(5) = 1 octet
+    //   aTC=1, ePC_Mode=0, fPC_EP=0, power=7 -> 0b1000_0111 = 0x87
+    L3PowerCommandAndAccessType pc(true, false, false, 7);
+    std::vector<uint8_t> buf(4, 0);
+    BitWriter writer(buf.data(), buf.size() * 8);
+    pc.write(writer);
+    EXPECT_EQ(buf[0], 0x87);
+
+    // All access-type bits set with the maximum power level: 0xFF.
+    L3PowerCommandAndAccessType pcall(true, true, true, 31);
+    std::vector<uint8_t> buf2(4, 0);
+    BitWriter writer2(buf2.data(), buf2.size() * 8);
+    pcall.write(writer2);
+    EXPECT_EQ(buf2[0], 0xFF);
+
+    // The flags survive a round trip.
+    BitReader reader(buf.data(), 8);
+    auto res = L3PowerCommandAndAccessType::parse(reader);
+    ASSERT_TRUE(res);
+    EXPECT_EQ((*res).command(), 7u);
+    EXPECT_TRUE((*res).aTC());
+    EXPECT_FALSE((*res).ePcMode());
+    EXPECT_FALSE((*res).fPcEp());
 }
 
 // =====================================================================
@@ -908,7 +1026,7 @@ TEST(GoldenIE, ChannelMode_Equality) {
 // =====================================================================
 // Common IEs: L3TimingAdvance (GSM 04.08 10.5.2.40)
 // One-octet timing advance value per GSM 24.008 10.5.2.40
-// 8 bits: spare(2 MSB) | timing_advance(6 LSB); for 0..63 the octet equals the value (TS 44.018 section 10.5.2.40)
+// 8 bits: the raw octet is the timing advance value, valid range 0..219 (TS 44.018 section 9.1.12)
 // =====================================================================
 
 TEST(GoldenIE, TimingAdvance_Default) {
@@ -923,27 +1041,27 @@ TEST(GoldenIE, TimingAdvance_RoundTrip) {
 }
 
 TEST(GoldenIE, TimingAdvance_MaxValue) {
-    L3TimingAdvance orig(63);
+    L3TimingAdvance orig(219);
     ieRoundTrip(orig);
 }
 
 TEST(GoldenIE, TimingAdvance_Encoding) {
-    // Timing advance is an integer value (range 0..219 per TS 45.008) in the low six bits.
+    // Timing advance is the raw wire octet (range 0..219 per TS 44.018 9.1.12).
     // Spec-verified: GSM 24.008 10.5.2.40 Timing Advance
-    //   spare(2 bits MSB)=0|timing_advance(6 bits LSB) = 1 octet
-    //   value=42 -> 0b00_101010 = 0x2A (spare 0 in high 2 bits, 42 in low 6 bits)
+    //   one octet, the octet equals the value
+    //   value=42 -> 0x2A
     L3TimingAdvance ta(42);
     std::vector<uint8_t> buf(4, 0);
     BitWriter writer(buf.data(), buf.size() * 8);
     ta.write(writer);
-    // GSM 24.008 10.5.2.40: spare(2 bits MSB)=0|timing_advance(6 bits LSB) = 1 octet
-    // timing_advance=42 -> 0b00_101010 = 0x2A (spare 0 in high 2 bits, 42 in low 6 bits)
+    // GSM 24.008 10.5.2.40: one octet, the octet equals the value
+    // timing_advance=42 -> 0x2A
     EXPECT_EQ(buf[0], 0x2A);
 }
 
-// Golden: Timing Advance octet (TS 44.018 section 10.5.2.40): two spare bits in
-// the high position, six-bit value in the low position; the wire octet equals
-// the timing advance for values 0..63.
+// Golden: Timing Advance octet (TS 44.018 section 9.1.12): one raw octet,
+// the valid range is zero to two hundred nineteen; values above the range
+// are rejected on parse.
 TEST(GoldenIE, TimingAdvance_ParseVector) {
     std::vector<uint8_t> buf(1);
     buf[0] = 0x2A;   // TA = 42
@@ -952,11 +1070,15 @@ TEST(GoldenIE, TimingAdvance_ParseVector) {
     ASSERT_TRUE(res);
     EXPECT_EQ((*res).timingAdvance(), 42u);
 
-    buf[0] = 0x3F;   // TA = 63 (maximum)
+    buf[0] = 0xDB;   // TA = 219 (maximum)
     BitReader r2(buf.data(), 8);
     auto res2 = L3TimingAdvance::parse(r2);
     ASSERT_TRUE(res2);
-    EXPECT_EQ((*res2).timingAdvance(), 63u);
+    EXPECT_EQ((*res2).timingAdvance(), 219u);
+
+    buf[0] = 0xDC;   // TA = 220 (out of range)
+    BitReader r3(buf.data(), 8);
+    EXPECT_FALSE(L3TimingAdvance::parse(r3));
 }
 
 // =====================================================================

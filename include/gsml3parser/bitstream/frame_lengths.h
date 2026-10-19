@@ -46,9 +46,7 @@ inline constexpr size_t kFixedFrameEntries[] = {
     // Radio Resource (pd 0x06, raw 8-bit MTI)
     0x06, 0x12, 3,  // RR Status (1-byte body)
     0x06, 0x13, 2,  // Classmark Enquiry (no value part, TS 44.018 9.1.14)
-    0x06, 0x28, 3,  // Handover Failure (1-byte body)
     0x06, 0x29, 3,  // Assignment Complete (1-byte body)
-    0x06, 0x2C, 3,  // Handover Complete (1-byte body)
     0x06, 0x2F, 3,  // Assignment Failure (1-byte body)
     0x06, 0x35, 3,  // Ciphering Mode Command (1-byte body, TS 44.018)
     // Mobility Management (pd 0x05, MT in the six low bits of octet 1)
@@ -69,8 +67,10 @@ inline constexpr size_t kFixedFrameEntries[] = {
     // Not listed (variable bodies on the air interface, TS 44.018 /
     // 24.008): IMSI Detach Indication (LV classmark + LV mobile
     // identity), Location Service Request/Response (opaque body), Paging
-    // Response, Ciphering Mode Complete, all System Information messages,
-    // IE-bearing CC messages such as Setup/Connect, GMM, SM and SMS.
+    // Response, Ciphering Mode Complete, Handover Complete and Handover
+    // Failure (cause plus optional trailing IEs), all System Information
+    // messages, IE-bearing CC messages such as Setup/Connect, GMM, SM and
+    // SMS.
     0xFF, 0, 0      // terminator
 };
 

@@ -755,7 +755,7 @@ TEST(RoundTripTest, TalkerIndication) {
     checkHeader(*parsed, L3PD::RadioResource, L3TalkerIndication::MTI);
 }
 
-// Priority Uplink Request (GSM 04.08 9.1.28d, MTI=0x66)
+// Priority Uplink Request (GSM 04.08 9.1.44a, MTI=0x66)
 // PRIORITY_UPLINK_REQUEST='01100110'B = 0x66 (GSM 44.018).
 TEST(RoundTripTest, PriorityUplinkRequest) {
     L3PriorityUplinkRequest msg;
@@ -765,10 +765,10 @@ TEST(RoundTripTest, PriorityUplinkRequest) {
     checkHeader(*parsed, L3PD::RadioResource, L3PriorityUplinkRequest::MTI);
 }
 
-// Data Indication (GSM 04.08 9.1.28e, MTI=0x67)
+// Data Indication (GSM 04.08 9.1.44b, MTI=0x67)
 // DATA_INDICATION='01100111'B = 0x67 (GSM 44.018).
 // Body: TMSI(4 octets) + application data (9 octets) + data identifier (1
-// octet), TS 44.018 section 9.1.28e.
+// octet), TS 44.018 section 9.1.44b.
 TEST(RoundTripTest, DataIndication) {
     auto msg = L3DataIndication::builder()
         .tmsi(0xF4123456u)
@@ -791,15 +791,14 @@ TEST(RoundTripTest, DataIndication) {
     EXPECT_EQ(di->applicationData()[1], 0xADu);
 }
 
-// Data Indication 2 (GSM 04.08 9.1.28f, MTI=0x68)
+// Data Indication 2 (GSM 04.08 9.1.44c, MTI=0x68)
 // DATA_INDICATION_2='01101000'B = 0x68 (GSM 44.018).
-// Body: TMSI(4 octets) + reduced GCR (four bits, spare padding to the
-// octet) + application data (9 octets) + data identifier (1 octet),
-// TS 44.018 section 9.1.28f.
+// Body: TMSI(4 octets) + reduced GCR (four octets) + application data
+// (9 octets) + data identifier (1 octet), TS 44.018 section 9.1.44c.
 TEST(RoundTripTest, DataIndication2) {
     auto msg = L3DataIndication2::builder()
         .tmsi(0x1A2B3C4Du)
-        .reducedGcr(5)
+        .reducedGcr(std::span<const uint8_t>(std::array<uint8_t, 4>{0x00, 0x00, 0x00, 0x05}))
         .applicationData(std::span<const uint8_t>(std::array<uint8_t, 9>{
             0xBE, 0xEF, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66}))
         .dataId(0x77)
@@ -813,7 +812,7 @@ TEST(RoundTripTest, DataIndication2) {
     auto* di2 = tryGet<L3DataIndication2>(*reparsed);
     ASSERT_NE(di2, nullptr);
     EXPECT_EQ(di2->tmsi(), 0x1A2B3C4Du);
-    EXPECT_EQ(di2->reducedGcr(), 5u);
+    EXPECT_EQ(di2->reducedGcr()[3], 0x05u);
     EXPECT_EQ(di2->dataId(), 0x77u);
     EXPECT_EQ(di2->applicationData()[0], 0xBEu);
 }

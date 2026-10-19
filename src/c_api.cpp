@@ -229,7 +229,7 @@ namespace fields {
 inline constexpr int timeslotHi = 7;     // 3-bit TDMA timeslot number
 inline constexpr int tscHi      = 7;     // 3-bit time slot code
 inline constexpr int arfcnHi    = 4095;  // 12-bit ARFCN (H=0 channel description, TS 44.018 10.5.2.5)
-inline constexpr int timingHi   = 63;    // 6-bit timing advance
+inline constexpr int timingHi   = 219;   // one raw octet, valid range 0..219 (TS 44.018 9.1.12)
 inline constexpr int t1pHi      = 31;    // request-reference T1 timing (5 bits)
 inline constexpr int t2Hi       = 31;    // request-reference T2 timing (5 bits)
 inline constexpr int t3Hi       = 63;    // request-reference T3 timing (6 bits)
@@ -246,8 +246,8 @@ inline bool checkChannelFields(uint8_t tn, uint8_t tsc, uint16_t arfcn) {
     return checkEnumValue(arfcn, 0, fields::arfcnHi, "ARFCN");
 }
 
-// Timing advance exactly as emitted by L3TimingAdvance::write() (6-bit field
-// plus spare bits).
+// Timing advance exactly as emitted by L3TimingAdvance::write() (one raw
+// octet, valid range zero to two hundred nineteen).
 inline bool checkTimingAdvance(uint8_t ta) {
     return checkEnumValue(ta, 0, fields::timingHi, "timing advance");
 }

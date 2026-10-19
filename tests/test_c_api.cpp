@@ -1555,13 +1555,16 @@ TEST(CApi, InputValidation) {
     expectInvalid(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 8, 0, 50, 0, 0));
     expectInvalid(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 0, 8, 50, 0, 0));
     expectInvalid(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 0, 0, 4096, 0, 0));
-    EXPECT_GT(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 7, 7, 1024, 63, 0), 0u);
+    EXPECT_GT(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 7, 7, 1024, 219, 0), 0u);
     EXPECT_GT(gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 7, 7, 4095, 63, 0), 0u);
     expectInvalid(gsml3_response_build_assignment_command(buf, sizeof(buf), 2, 9, 0, 50));
     expectInvalid(gsml3_response_build_immediate_assignment(buf, sizeof(buf), 2, 0, 0, 4096, 1));
-    EXPECT_GT(gsml3_build_physical_information(buf, sizeof(buf), 63), 0u);
-    expectInvalid(gsml3_build_physical_information(buf, sizeof(buf), 64));
-    expectInvalid(gsml3_response_build_physical_information(buf, sizeof(buf), 64));
+    // Timing advance is one raw octet with the valid range zero to two
+    // hundred nineteen (TS 44.018 section 9.1.12).
+    EXPECT_GT(gsml3_build_physical_information(buf, sizeof(buf), 64), 0u);
+    EXPECT_GT(gsml3_build_physical_information(buf, sizeof(buf), 219), 0u);
+    expectInvalid(gsml3_build_physical_information(buf, sizeof(buf), 220));
+    expectInvalid(gsml3_response_build_physical_information(buf, sizeof(buf), 220));
 
     // Request-reference timing fields (5/5/6 bits on the wire).
     expectInvalid(gsml3_rsl_build_chan_rqd(buf, sizeof(buf), 0x7C, 5, 32, 0, 0, 1));

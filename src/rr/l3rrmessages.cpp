@@ -179,6 +179,7 @@ size_t L3PagingRequestType1::bodyLength() const {
     size_t len = 1;
     len += mMobileIDs[0].lengthV() + 1;
     if (sz > 1) len += 2 + mMobileIDs[1].lengthV();
+    len += mAdditionalIes.size();
     return len;
 }
 
@@ -217,6 +218,12 @@ Expected<L3PagingRequestType1> L3PagingRequestType1::parse(BitReader& br) {
         }
     }
 
+    // Trailing rest octets after the mobile identity part are preserved
+    // verbatim for lossless re-emission (TS 44.018 section 9.1.22).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3PagingRequestType1>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
+
     return Expected<L3PagingRequestType1>::hold(std::move(msg));
 }
 
@@ -235,6 +242,7 @@ void L3PagingRequestType1::write(BitWriter& bw) const {
         bw.writeField(static_cast<uint32_t>(mMobileIDs[1].lengthV()), 8);
         mMobileIDs[1].write(bw);
     }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3PagingRequestType1::text(std::ostream& os) const {
@@ -270,7 +278,8 @@ L3PagingRequestType2 L3PagingRequestType2::Builder::build() {
 
 size_t L3PagingRequestType2::bodyLength() const {
     return 1 + mTMSIs.size() * 4 +
-           (mHaveThirdIdentity ? 2 + mThirdIdentity.lengthV() : 0);
+           (mHaveThirdIdentity ? 2 + mThirdIdentity.lengthV() : 0) +
+           mAdditionalIes.size();
 }
 
 Expected<L3PagingRequestType2> L3PagingRequestType2::parse(BitReader& br) {
@@ -302,6 +311,12 @@ Expected<L3PagingRequestType2> L3PagingRequestType2::parse(BitReader& br) {
         }
     }
 
+    // Trailing rest octets after the TMSI/third-identity part are preserved
+    // verbatim for lossless re-emission (TS 44.018 section 9.1.23).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3PagingRequestType2>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
+
     return Expected<L3PagingRequestType2>::hold(std::move(msg));
 }
 
@@ -315,11 +330,12 @@ void L3PagingRequestType2::write(BitWriter& bw) const {
         bw.writeField(tmsi, 32);
     }
     if (mHaveThirdIdentity) {
-        // Optional third identity (TLV, element identifier 0x17).
+        // Optional third identity (TLV with element identifier 0x17).
         bw.writeField(0x17, 8);
         bw.writeField(static_cast<uint32_t>(mThirdIdentity.lengthV()), 8);
         mThirdIdentity.write(bw);
     }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3PagingRequestType2::text(std::ostream& os) const {
@@ -356,7 +372,7 @@ L3PagingRequestType3 L3PagingRequestType3::Builder::build() {
 }
 
 size_t L3PagingRequestType3::bodyLength() const {
-    return 1 + mTMSIs.size() * 4;
+    return 1 + mTMSIs.size() * 4 + mAdditionalIes.size();
 }
 
 Expected<L3PagingRequestType3> L3PagingRequestType3::parse(BitReader& br) {
@@ -374,6 +390,12 @@ Expected<L3PagingRequestType3> L3PagingRequestType3::parse(BitReader& br) {
         msg.mTMSIs[i] = static_cast<uint32_t>(r.value());
     }
 
+    // Trailing rest octets after the TMSI part are preserved verbatim for
+    // lossless re-emission (TS 44.018 section 9.1.24).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3PagingRequestType3>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
+
     return Expected<L3PagingRequestType3>::hold(std::move(msg));
 }
 
@@ -386,6 +408,7 @@ void L3PagingRequestType3::write(BitWriter& bw) const {
     for (const auto& tmsi : mTMSIs) {
         bw.writeField(tmsi, 32);
     }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3PagingRequestType3::text(std::ostream& os) const {
@@ -398,7 +421,10 @@ void L3PagingRequestType3::text(std::ostream& os) const {
 // ── L3PagingResponse ───────────────────────────────────────────────────
 
 size_t L3PagingResponse::bodyLength() const {
-    return 1 + 1 + mClassmark.lengthV() + 1 + mMobileID.lengthV();
+    size_t len = 1 + 1 + mClassmark.lengthV() + 1 + mMobileID.lengthV();
+    if (mHaveAdditionalUpdateParameter) len += 1;
+    len += mAdditionalIes.size();
+    return len;
 }
 
 Expected<L3PagingResponse> L3PagingResponse::parse(BitReader& br) {
@@ -424,6 +450,18 @@ Expected<L3PagingResponse> L3PagingResponse::parse(BitReader& br) {
         msg.mMobileID = std::move(res.value());
     }
 
+    // Optional additional update parameter (TS 44.018 section 9.1.25): one
+    // raw octet after the mobile identity; any further trailing octets are
+    // preserved verbatim for lossless re-emission.
+    if (br.hasMore()) {
+        auto a = br.readField(8); if (!a) return Expected<L3PagingResponse>::error(a.error());
+        msg.mAdditionalUpdateParameter = static_cast<uint8_t>(a.value());
+        msg.mHaveAdditionalUpdateParameter = true;
+        if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+            return Expected<L3PagingResponse>::error(
+                {ParseError::Code::TruncatedInput, "truncated rest octets"});
+    }
+
     return Expected<L3PagingResponse>::hold(std::move(msg));
 }
 
@@ -435,6 +473,10 @@ void L3PagingResponse::write(BitWriter& bw) const {
     mClassmark.write(bw);
     bw.writeField(static_cast<uint32_t>(mMobileID.lengthV()), 8);
     mMobileID.write(bw);
+    if (mHaveAdditionalUpdateParameter) {
+        bw.writeField(mAdditionalUpdateParameter, 8);
+    }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3PagingResponse::text(std::ostream& os) const {
@@ -447,7 +489,7 @@ void L3PagingResponse::text(std::ostream& os) const {
 // ── L3ChannelRelease ───────────────────────────────────────────────────
 
 size_t L3ChannelRelease::bodyLength() const {
-    return 1 + (mGprsResumptionPresent ? 1 : 0);
+    return 1 + (mGprsResumptionPresent ? 1 : 0) + mAdditionalIes.size();
 }
 
 Expected<L3ChannelRelease> L3ChannelRelease::parse(BitReader& br) {
@@ -470,6 +512,13 @@ Expected<L3ChannelRelease> L3ChannelRelease::parse(BitReader& br) {
         }
     }
 
+    // Trailing optional IEs after the cause and GPRS resumption octet (cell
+    // selection indicator and similar IRAT information elements) are kept as
+    // an opaque sequence for lossless re-emission (TS 44.018 section 9.1.7).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3ChannelRelease>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
+
     return Expected<L3ChannelRelease>::hold(std::move(msg));
 }
 
@@ -480,6 +529,7 @@ void L3ChannelRelease::write(BitWriter& bw) const {
         bw.writeField(0, 3);
         bw.writeField(mGprsResumptionBit ? 1 : 0, 1);
     }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ChannelRelease::text(std::ostream& os) const {
@@ -567,6 +617,7 @@ size_t L3AssignmentCommand::bodyLength() const {
     size_t len = mChannel.lengthV() + mPowerCommand.lengthV();
     if (mHaveMode1) len += 1 + mMode1.lengthV();
     if (isAMR()) len += 1 + 1 + mMultiRate.lengthV();
+    len += mAdditionalIes.size();
     return len;
 }
 
@@ -608,6 +659,14 @@ Expected<L3AssignmentCommand> L3AssignmentCommand::parse(BitReader& br) {
         }
     }
 
+    // Trailing optional IEs after the channel mode and multi-rate parts
+    // (frequency lists, cell channel description, mobile allocation, ...)
+    // are kept as an opaque sequence for lossless re-emission
+    // (TS 44.018 section 9.1.2).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3AssignmentCommand>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
+
     return Expected<L3AssignmentCommand>::hold(std::move(msg));
 }
 
@@ -624,6 +683,7 @@ void L3AssignmentCommand::write(BitWriter& bw) const {
         bw.writeField(static_cast<uint32_t>(mMultiRate.lengthV()), 8);
         mMultiRate.write(bw);
     }
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3AssignmentCommand::text(std::ostream& os) const {
@@ -726,15 +786,12 @@ Expected<L3ClassmarkChange> L3ClassmarkChange::parse(BitReader& br) {
         msg.mClassmark = std::move(res.value());
     }
 
+    // Optional classmark 3 (TLV with element identifier 0x20, one length
+    // octet and the raw value part; TS 24.008 section 10.5.1.7). The value
+    // is carried opaquely.
     if (br.hasMore()) {
         unsigned peek = br.peekField(8);
-        if ((peek & 0x7F) == 0x20) {
-            auto ieiR = br.readField(8); if (!ieiR) return Expected<L3ClassmarkChange>::error(ieiR.error());
-            bool ext = (ieiR.value() & 0x80) != 0;
-            if (ext) {
-                auto lR = br.readField(8); if (!lR) return Expected<L3ClassmarkChange>::error(lR.error());
-                (void)lR;
-            }
+        if ((peek & 0x7F) == 0x20u) {
             auto res = L3MobileStationClassmark3::parse(br);
             if (!res) return Expected<L3ClassmarkChange>::error(res.error());
             msg.mAdditionalClassmark = std::move(res.value());
@@ -749,9 +806,8 @@ void L3ClassmarkChange::write(BitWriter& bw) const {
     bw.writeField(static_cast<uint32_t>(mClassmark.lengthV()), 8);
     mClassmark.write(bw);
     if (mHaveAdditionalClassmark) {
-        // Additional classmark: TLV with element identifier 0x20.
-        bw.writeField(0x20, 8);
-        bw.writeField(static_cast<uint32_t>(L3MobileStationClassmark3::lengthV()), 8);
+        // Additional classmark: full TLV form with element identifier 0x20
+        // and the opaque value part (TS 24.008 section 10.5.1.7).
         mAdditionalClassmark.write(bw);
     }
 }
@@ -774,11 +830,23 @@ Expected<L3MeasurementReport> L3MeasurementReport::parse(BitReader& br) {
         if (!res) return Expected<L3MeasurementReport>::error(res.error());
         msg.mMeasurementResults = std::move(res.value());
     }
+    // The measurement results block may end mid-octet (the remaining bits
+    // are spare); align before the trailing IEs. Octets after the results
+    // are preserved verbatim for lossless re-emission (TS 44.018 section
+    // 9.1.21).
+    br.alignToOctet();
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3MeasurementReport>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
     return Expected<L3MeasurementReport>::hold(std::move(msg));
 }
 
 void L3MeasurementReport::write(BitWriter& bw) const {
     mMeasurementResults.write(bw);
+    // Zero-fill the spare bits to the octet boundary (symmetric to parse),
+    // then re-emit any preserved trailing IEs.
+    bw.alignToOctet();
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3MeasurementReport::text(std::ostream& os) const {
@@ -864,11 +932,17 @@ Expected<L3HandoverComplete> L3HandoverComplete::parse(BitReader& br) {
     L3HandoverComplete msg;
     auto r = br.readField(8); if (!r) return Expected<L3HandoverComplete>::error(r.error());
     msg.mCause = static_cast<RRCause>(r.value());
+    // Optional IEs following the cause are kept as an opaque sequence for
+    // lossless re-emission (TS 44.018 section 9.1.16).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3HandoverComplete>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
     return Expected<L3HandoverComplete>::hold(std::move(msg));
 }
 
 void L3HandoverComplete::write(BitWriter& bw) const {
     bw.writeField(static_cast<uint32_t>(mCause), 8);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3HandoverComplete::text(std::ostream& os) const {
@@ -891,11 +965,17 @@ Expected<L3HandoverFailure> L3HandoverFailure::parse(BitReader& br) {
     L3HandoverFailure msg;
     auto r = br.readField(8); if (!r) return Expected<L3HandoverFailure>::error(r.error());
     msg.mCause = static_cast<RRCause>(r.value());
+    // Optional IEs following the cause are kept as an opaque sequence for
+    // lossless re-emission (TS 44.018 section 9.1.17).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3HandoverFailure>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
     return Expected<L3HandoverFailure>::hold(std::move(msg));
 }
 
 void L3HandoverFailure::write(BitWriter& bw) const {
     bw.writeField(static_cast<uint32_t>(mCause), 8);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3HandoverFailure::text(std::ostream& os) const {
@@ -1981,6 +2061,7 @@ size_t L3ImmediateAssignment::bodyLength() const {
     size_t len = 1 + 1 + mRequestReference.lengthV() + mChannelDescription.lengthV() + mTimingAdvance.lengthV();
     if (!mMobileAllocation.empty()) len += 1 + mMobileAllocation.size();
     if (mStartTimePresent) len += 1 + 2;   // IEI 0x7C + two T1/T3/T2 octets
+    len += mAdditionalIes.size();
     return len;
 }
 
@@ -1996,7 +2077,12 @@ Expected<L3ImmediateAssignment> L3ImmediateAssignment::parse(BitReader& br) {
     { auto res = L3RequestReference::parse(br); if (!res) return Expected<L3ImmediateAssignment>::error(res.error()); msg.mRequestReference = std::move(res.value()); }
     { auto res = L3TimingAdvance::parse(br); if (!res) return Expected<L3ImmediateAssignment>::error(res.error()); msg.mTimingAdvance = std::move(res.value()); }
 
-    if (br.hasMore()) {
+    // Mobile allocation LV: mandatory in the message (a zero length octet
+    // denotes an empty list; TS 44.018 section 9.1.19).
+    if (!br.hasMore())
+        return Expected<L3ImmediateAssignment>::error(
+            ParseError{ParseError::Code::InvalidValue, "missing mobile allocation"});
+    {
         auto lenR = br.readField(8); if (!lenR) return Expected<L3ImmediateAssignment>::error(lenR.error());
         size_t maLen = lenR.value();
         if (maLen > 0) {
@@ -2025,6 +2111,13 @@ Expected<L3ImmediateAssignment> L3ImmediateAssignment::parse(BitReader& br) {
         }
     }
 
+    // Optional rest octets may follow in network frames; they are preserved
+    // verbatim for lossless re-emission and never added by the encoder
+    // (TS 44.018 section 9.1.19).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3ImmediateAssignment>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
+
     return Expected<L3ImmediateAssignment>::hold(std::move(msg));
 }
 
@@ -2048,6 +2141,10 @@ void L3ImmediateAssignment::write(BitWriter& bw) const {
         bw.writeField((static_cast<uint32_t>(mStartTime.t1) << 3) | (mStartTime.t3 >> 3), 8);
         bw.writeField(((static_cast<uint32_t>(mStartTime.t3) & 0x07u) << 5) | mStartTime.t2, 8);
     }
+
+    // Preserved rest octets are re-emitted verbatim; the encoder adds none
+    // of its own (TS 44.018 section 9.1.19).
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ImmediateAssignment::text(std::ostream& os) const {
@@ -2204,8 +2301,8 @@ L3ImmediateAssignmentReject::L3ImmediateAssignmentReject(unsigned waitSeconds)
 
 size_t L3ImmediateAssignmentReject::bodyLength() const {
     // Exactly four request-reference/wait-indication pairs are always on the
-    // wire (TS 44.018 section 9.1.20).
-    return 1 + 4 * 4;
+    // wire (TS 44.018 section 9.1.20); preserved rest octets follow.
+    return 1 + 4 * 4 + mAdditionalIes.size();
 }
 
 Expected<L3ImmediateAssignmentReject> L3ImmediateAssignmentReject::parse(BitReader& br) {
@@ -2236,6 +2333,12 @@ Expected<L3ImmediateAssignmentReject> L3ImmediateAssignmentReject::parse(BitRead
     }
     msg.mWaitIndication = msg.mWaitIndications.empty() ? 0 : msg.mWaitIndications.back();
 
+    // Rest octets after the request-reference/wait-indication pairs are
+    // preserved verbatim for lossless re-emission (TS 44.018 section 9.1.20).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3ImmediateAssignmentReject>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
+
     return Expected<L3ImmediateAssignmentReject>::hold(std::move(msg));
 }
 
@@ -2258,6 +2361,9 @@ void L3ImmediateAssignmentReject::write(BitWriter& bw) const {
         }
         bw.writeField(wait, 8);
     }
+    // Preserved rest octets are re-emitted verbatim; the encoder adds none
+    // of its own (TS 44.018 section 9.1.20).
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3ImmediateAssignmentReject::text(std::ostream& os) const {
@@ -2414,7 +2520,8 @@ size_t L3HandoverCommand::bodyLength() const {
            mChannelDescriptionAfter.lengthV() +
            mHandoverReference.lengthV() +
            mPowerCommandAccessType.lengthV() +
-           mSynchronizationIndication.lengthV();
+           mSynchronizationIndication.lengthV() +
+           mAdditionalIes.size();
 }
 
 Expected<L3HandoverCommand> L3HandoverCommand::parse(BitReader& br) {
@@ -2424,6 +2531,12 @@ Expected<L3HandoverCommand> L3HandoverCommand::parse(BitReader& br) {
     { auto res = L3HandoverReference::parse(br); if (!res) return Expected<L3HandoverCommand>::error(res.error()); msg.mHandoverReference = std::move(res.value()); }
     { auto res = L3PowerCommandAndAccessType::parse(br); if (!res) return Expected<L3HandoverCommand>::error(res.error()); msg.mPowerCommandAccessType = std::move(res.value()); }
     { auto res = L3SynchronizationIndication::parse(br); if (!res) return Expected<L3HandoverCommand>::error(res.error()); msg.mSynchronizationIndication = std::move(res.value()); }
+    // Trailing optional IEs after the synchronization indication (frequency
+    // lists, cell channel description, cipher mode setting, ...) are kept as
+    // an opaque sequence for lossless re-emission (TS 44.018 section 9.1.15).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3HandoverCommand>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
     return Expected<L3HandoverCommand>::hold(std::move(msg));
 }
 
@@ -2433,6 +2546,7 @@ void L3HandoverCommand::write(BitWriter& bw) const {
     mHandoverReference.write(bw);
     mPowerCommandAccessType.write(bw);
     mSynchronizationIndication.write(bw);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3HandoverCommand::text(std::ostream& os) const {
@@ -2908,10 +3022,16 @@ Expected<L3PriorityUplinkRequest> L3PriorityUplinkRequest::parse(BitReader& br) 
     L3PriorityUplinkRequest msg;
     auto r = br.readField(8); if (!r) return Expected<L3PriorityUplinkRequest>::error(r.error());
     msg.mEstCause = static_cast<uint8_t>(r.value());
-    r = br.readField(4); if (!r) return Expected<L3PriorityUplinkRequest>::error(r.error());
-    msg.mToken = r.value();
-    r = br.readField(4); if (!r) return Expected<L3PriorityUplinkRequest>::error(r.error());
-    msg.mReducedGcr = r.value();
+    // Token and reduced GCR are each four raw octets (TS 44.018 section
+    // 9.1.44a).
+    for (size_t i = 0; i < msg.mToken.size(); ++i) {
+        r = br.readField(8); if (!r) return Expected<L3PriorityUplinkRequest>::error(r.error());
+        msg.mToken[i] = static_cast<uint8_t>(r.value());
+    }
+    for (size_t i = 0; i < msg.mReducedGcr.size(); ++i) {
+        r = br.readField(8); if (!r) return Expected<L3PriorityUplinkRequest>::error(r.error());
+        msg.mReducedGcr[i] = static_cast<uint8_t>(r.value());
+    }
     auto lenR = br.readField(8); if (!lenR) return Expected<L3PriorityUplinkRequest>::error(lenR.error());
     auto res = L3MobileIdentity::parse(br, lenR.value());
     if (!res) return Expected<L3PriorityUplinkRequest>::error(res.error());
@@ -2921,15 +3041,24 @@ Expected<L3PriorityUplinkRequest> L3PriorityUplinkRequest::parse(BitReader& br) 
 
 void L3PriorityUplinkRequest::write(BitWriter& bw) const {
     bw.writeField(mEstCause, 8);
-    bw.writeField(mToken & 0x0Fu, 4);
-    bw.writeField(mReducedGcr & 0x0Fu, 4);
+    for (const uint8_t b : mToken) {
+        bw.writeField(b, 8);
+    }
+    for (const uint8_t b : mReducedGcr) {
+        bw.writeField(b, 8);
+    }
     bw.writeField(static_cast<uint32_t>(mMobileId.lengthV()), 8);
     mMobileId.write(bw);
 }
 
 void L3PriorityUplinkRequest::text(std::ostream& os) const {
     os << "PriorityUplinkRequest: estCause=" << static_cast<int>(mEstCause)
-       << " token=" << mToken << " reducedGCR=" << mReducedGcr << "; ";
+       << " token=";
+    for (uint8_t b : mToken) os << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned>(b);
+    os << std::dec << std::setfill(' ')
+       << " reducedGCR=";
+    for (uint8_t b : mReducedGcr) os << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned>(b);
+    os << std::dec << std::setfill(' ') << "; ";
     mMobileId.text(os);
 }
 
@@ -2967,9 +3096,11 @@ Expected<L3DataIndication2> L3DataIndication2::parse(BitReader& br) {
     L3DataIndication2 msg;
     auto r = br.readField(32); if (!r) return Expected<L3DataIndication2>::error(r.error());
     msg.mTMSI = r.value();
-    r = br.readField(4); if (!r) return Expected<L3DataIndication2>::error(r.error());
-    msg.mReducedGcr = r.value();
-    r = br.readField(4); if (!r) return Expected<L3DataIndication2>::error(r.error()); // spare padding
+    // The reduced GCR is four raw octets (TS 44.018 section 9.1.44c).
+    for (size_t i = 0; i < msg.mReducedGcr.size(); ++i) {
+        r = br.readField(8); if (!r) return Expected<L3DataIndication2>::error(r.error());
+        msg.mReducedGcr[i] = static_cast<uint8_t>(r.value());
+    }
     for (size_t i = 0; i < msg.mApplicationData.size(); ++i) {
         r = br.readField(8); if (!r) return Expected<L3DataIndication2>::error(r.error());
         msg.mApplicationData[i] = static_cast<uint8_t>(r.value());
@@ -2981,8 +3112,9 @@ Expected<L3DataIndication2> L3DataIndication2::parse(BitReader& br) {
 
 void L3DataIndication2::write(BitWriter& bw) const {
     bw.writeField(mTMSI, 32);
-    bw.writeField(mReducedGcr & 0x0Fu, 4);
-    bw.writeField(0, 4);
+    for (const uint8_t b : mReducedGcr) {
+        bw.writeField(b, 8);
+    }
     for (const uint8_t b : mApplicationData) {
         bw.writeField(b, 8);
     }
@@ -2991,7 +3123,10 @@ void L3DataIndication2::write(BitWriter& bw) const {
 
 void L3DataIndication2::text(std::ostream& os) const {
     os << "DataIndication2: TMSI=0x" << std::hex << mTMSI << std::dec
-       << " reducedGCR=" << mReducedGcr << " dataId=" << static_cast<int>(mDataId);
+       << " reducedGCR=";
+    for (uint8_t b : mReducedGcr) os << std::hex << std::setw(2) << std::setfill('0') << static_cast<unsigned>(b);
+    os << std::dec << std::setfill(' ')
+       << " dataId=" << static_cast<int>(mDataId);
 }
 
 // ── L3DTMAssignmentFailure ─────────────────────────────────────────────

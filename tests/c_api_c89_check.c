@@ -227,12 +227,17 @@ static void check_validation(void)
     n = gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 0, 0, 5120, 0, 0);
     check(n == 0 && gsml3_last_error_code() == GSML3_ERR_INVALID_ARG,
           "ARFCN beyond the wire width rejected");
-    n = gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 7, 7, 1023, 63, 0);
+    n = gsml3_build_immediate_assignment(buf, sizeof(buf), 2, 7, 7, 1023, 219, 0);
     check(n > 0 && gsml3_last_error_code() == GSML3_OK,
           "channel field boundary accepted");
-    n = gsml3_build_physical_information(buf, sizeof(buf), 64);
+    /* Timing advance is one raw octet, valid range 0..219 (TS 44.018
+     * section 9.1.12). */
+    n = gsml3_build_physical_information(buf, sizeof(buf), 219);
+    check(n > 0 && gsml3_last_error_code() == GSML3_OK,
+          "timing advance boundary accepted");
+    n = gsml3_build_physical_information(buf, sizeof(buf), 220);
     check(n == 0 && gsml3_last_error_code() == GSML3_ERR_INVALID_ARG,
-          "timing advance 64 rejected");
+          "timing advance 220 rejected");
 
     /* The reserved all-zero TMSI never reaches a built frame either. */
     n = gsml3_build_paging_request_type1(buf, sizeof(buf), 0);
