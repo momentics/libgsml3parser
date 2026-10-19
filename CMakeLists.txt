@@ -294,6 +294,16 @@ if(MSVC)
     # Debug codegen of the heavily template-instantiated sources exceeds the
     # default COFF section limit (C1128); /bigobj lifts it (Debug only).
     target_compile_options(gsml3parser PRIVATE $<$<CONFIG:Debug>:/bigobj>)
+
+    # ── Оптимизация многопоточной сборки cl.exe ────────────────────
+    if(DEFINED ENV{GITHUB_ACTIONS})
+        message(STATUS "Running in GitHub Actions CI. Limiting cl.exe to 2 threads to prevent RAM OOM.")
+        target_compile_options(gsml3parser PRIVATE /MP2)
+    else()
+        message(STATUS "Running locally. Maximizing cl.exe parallel execution on all cores.")
+        target_compile_options(gsml3parser PRIVATE /MP)
+    endif()
+    # ───────────────────────────────────────────────────────────────
 else()
     target_compile_options(gsml3parser PRIVATE -Wall -Wextra -Wpedantic -Werror)
     target_compile_options(gsml3parser PRIVATE $<$<CONFIG:Release>:-O2>)

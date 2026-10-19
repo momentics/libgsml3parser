@@ -31,12 +31,9 @@ const char* RRCause2Str(RRCause cause) {
         case RRCause::Timer_Expired:                 return "Timer_Expired";
         case RRCause::No_Activity_On_The_Radio:      return "No_Activity";
         case RRCause::Preemptive_Release:            return "Preemptive_Release";
-        case RRCause::UTRAN_Configuration_Unknown:   return "UTRAN_Config_Unknown";
         case RRCause::Handover_Impossible:           return "Handover_Impossible";
         case RRCause::Channel_Mode_Unacceptable:     return "Channel_Mode_Unacceptable";
         case RRCause::Frequency_Not_Implemented:     return "Frequency_Not_Implemented";
-        case RRCause::Leaving_Group_Call_Area:       return "Leaving_Group_Call_Area";
-        case RRCause::Lower_Layer_Failure:           return "Lower_Layer_Failure";
         case RRCause::Call_Already_Cleared:          return "Call_Already_Cleared";
         case RRCause::Semantically_Incorrect_Message: return "Semantically_Incorrect";
         case RRCause::Invalid_Mandatory_Information: return "Invalid_Mandatory_IE";
@@ -44,15 +41,6 @@ const char* RRCause2Str(RRCause cause) {
         case RRCause::Message_Type_Not_Compatible:   return "Message_Type_Not_Compatible";
         case RRCause::Conditional_IE_Error:          return "Conditional_IE_Error";
         case RRCause::No_Cell_Available:                return "No_Cell_Available";
-        case RRCause::IE_Not_Coded:                     return "IE_Not_Coded";
-        case RRCause::Unidentified_IE:                  return "Unidentified_IE";
-        case RRCause::Condensed_IE_Error:               return "Condensed_IE_Error";
-        case RRCause::OutOfRange_IE:                    return "OutOfRange_IE";
-        case RRCause::Message_Type_Incompatible:        return "Message_Type_Incompatible";
-        case RRCause::Protocol_Error_T3312_Expired:     return "Protocol_Error_T3312_Expired";
-        case RRCause::Protocol_Error_T3395_Expired:     return "Protocol_Error_T3395_Expired";
-        case RRCause::Protocol_Error_GMM_T3346_Expired: return "Protocol_Error_GMM_T3346_Expired";
-        case RRCause::Protocol_Error_Unknown:           return "Protocol_Error_Unknown";
         case RRCause::Protocol_Error_Unspecified:       return "Protocol_Error";
         default:                                     return "Unknown_RR_Cause";
     }
@@ -71,7 +59,6 @@ const char* MMRejectCause2Str(MMRejectCause cause) {
         case MMRejectCause::Roaming_Not_Allowed_In_LA:   return "Roaming_Not_Allowed";
         case MMRejectCause::No_Suitable_Cells_In_LA:     return "No_Suitable_Cells";
         case MMRejectCause::Network_Failure:                   return "Network_Failure";
-        case MMRejectCause::Gprs_Packet_Service_Not_Available: return "GPRS_Packet_Service_Not_Available";
         case MMRejectCause::MAC_Failure:                       return "MAC_Failure";
         case MMRejectCause::Synch_Failure:               return "Synch_Failure";
         case MMRejectCause::Congestion:                  return "Congestion";

@@ -1656,7 +1656,7 @@ enum class GSMAlphabet : uint8_t {
 
 ### RRCause - RR Cause Codes
 
-3GPP TS 24.008 10.5.2.31. Values: `Normal_Event`, `Unspecified`, `Channel_Unacceptable`, `Timer_Expired`, `No_Activity_On_The_Radio`, `Preemptive_Release`, `Handover_Impossible`, `Channel_Mode_Unacceptable`, `Frequency_Not_Implemented`, `Leaving_Group_Call_Area`, `Lower_Layer_Failure`, and protocol error codes.
+3GPP TS 24.008 10.5.2.31. Values: `Normal_Event`, `Unspecified`, `Channel_Unacceptable`, `Timer_Expired`, `No_Activity_On_The_Radio`, `Preemptive_Release`, `Handover_Impossible`, `Channel_Mode_Unacceptable`, `Frequency_Not_Implemented`, `Call_Already_Cleared`, and protocol error codes.
 
 ```cpp
 const char* RRCause2Str(RRCause cause);
