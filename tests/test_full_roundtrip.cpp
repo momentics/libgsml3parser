@@ -575,7 +575,7 @@ TEST(FullRoundTrip, SM_Domain) {
     expectRoundTrip(ParsedMessage{SM{L3ModifyPDPContextReject{}}},
         L3PD::GPRSSessionManagement, L3ModifyPDPContextReject::MTI, "L3ModifyPDPContextReject");
 
-    expectRoundTrip(ParsedMessage{SM{L3SMStatus{SMCause::ReqAccepted}}},
+    expectRoundTrip(ParsedMessage{SM{L3SMStatus{SMCause::Regular_Deactivation}}},
         L3PD::GPRSSessionManagement, L3SMStatus::MTI, "L3SMStatus");
 
     expectRoundTrip(ParsedMessage{SM{L3RequestPDPContextActivation{}}},

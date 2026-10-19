@@ -672,10 +672,11 @@ TEST(ParserTest, SMS_MTIOverlap_CPTakesPrecedence) {
 
 TEST(ParserTest, ParseL3Hex_SM) {
     // SM: ActivatePDPContextRequest - PD=0x0a (low nibble), MTI=0x41,
-    // body: NSAPI(4)|spare(4)=0, LLC SAPI(4)|spare(4)=0, QoS LV (len 1),
-    // PDP address LV (dynamic IPv4: type number 4, address length 0),
+    // body: NSAPI(4) in the low nibble, spare(4)=0; LLC SAPI(4) in the low
+    // nibble, spare(4)=0; QoS LV (default profile, len 3); PDP address LV
+    // (dynamic IPv4: typeOrg IETF in the low nibble, type number 0x21);
     // APN TLV (IEI 0x28, empty string)
-    auto res = parseL3Hex("0A41 0000 0100 020400 2800");
+    auto res = parseL3Hex("0A41 0000 03 2302 00 02 0121 2800");
     ASSERT_TRUE(res);
     EXPECT_EQ(messagePD(*res), L3PD::GPRSSessionManagement);
     EXPECT_NE(tryGet<L3ActivatePDPContextRequest>(*res), nullptr);

@@ -55,7 +55,8 @@ TEST(SMBuilders, ActivatePDPContextRequest) {
     ASSERT_NE(m, nullptr);
     EXPECT_EQ(m->nsapi(), 5u);
     EXPECT_EQ(m->llcSapi(), 3u);
-    EXPECT_EQ(m->pdpAddress().type(), PDPType::IPv4);
+    EXPECT_TRUE(m->hasApn());
+    EXPECT_EQ(m->pdpAddress().typeNumber(), PdpTypeNumber::IPv4);
 }
 
 // 3GPP TS 24.008 9.5.2: Activate PDP Context Accept
@@ -90,7 +91,7 @@ TEST(SMBuilders, ActivatePDPContextReject) {
 // 3GPP TS 24.008 9.5.4: Deactivate PDP Context Request
 TEST(SMBuilders, DeactivatePDPContextRequest) {
     auto msg = L3DeactivatePDPContextRequest::builder()
-        .cause(SMCause::ReqAccepted)
+        .cause(SMCause::Regular_Deactivation)
         .tearDownIndicator(true)
         .build();
     ParsedMessage pm{SM{std::move(msg)}};
@@ -166,7 +167,7 @@ TEST(SMBuilders, ModifyPDPContextReject) {
 // 3GPP TS 24.008 9.5.9: SM Status
 TEST(SMBuilders, SMStatus) {
     auto msg = L3SMStatus::builder()
-        .cause(SMCause::ReqAccepted)
+        .cause(SMCause::Regular_Deactivation)
         .build();
     ParsedMessage pm{SM{std::move(msg)}};
     auto bytes = writeL3Bytes(pm);

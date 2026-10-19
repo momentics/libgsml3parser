@@ -24,21 +24,25 @@
 //
 // IE encodings on the wire:
 //   PDPAddress: positional LV (no identifier): Length(1) |
-//               pdpTypeNumber(1) | addressLength(1) |
-//               AddressInfo(variable; absent when dynamically assigned)
-//   QoS: positional LV (no identifier): Length(1) | QoS value octets
+//               spare(4)=0|typeOrg(4)=0x01 | pdpTypeNumber(1; IETF IPv4=0x21,
+//               IETF IPv6=0x53) | addressInfo (absent when dynamically
+//               assigned: 4 octets for IPv4, 16 octets for IPv6)
+//   QoS: positional LV (no identifier): Length(1) | QoS value octets; the
+//        first three value octets carry the mandatory characteristics, any
+//        further octets are optional characteristics
 //   AccessPointName: TLV, IEI=0x28: IEI(1) | Length(1) | APN string
 //   ProtocolConfigOptions: TLV, IEI=0x27: IEI(1) | Length(1) | option data
 //   SMCause: bare value octet without an identifier; the first body octet of
 //            SM reject, failure and status messages
 //   TearDownIndicator: TV in a single octet: identifier '1001'B (high nibble)
-//            + [tear-down flag(1)|spare(3)] (low nibble)
+//            + tear-down flag in bit 0 (low nibble)
 
 #pragma once
 
 #include <array>
 #include <cstdint>
 #include <ostream>
+#include <span>
 #include <string>
 #include <vector>
 
@@ -49,129 +53,179 @@
 
 namespace gsml3parser {
 
-// ── PDP Type (TS 44.068 section 10.5.6.4) ─────────────────────────────
-// PDP type numbers carried in the first octet of the PDP address value.
+// ── PDP Type Number (TS 24.008 section 10.5.6.4) ──────────────────────
+// PDP type numbers carried in the second octet of the PDP address value;
+// only IETF-defined types are recognized on the wire.
 
-enum class PDPType : uint8_t {
-    IPv4      = 4,
-    IPv6      = 6,
-    Unknown   = 0xFF
+enum class PdpTypeNumber : uint8_t {
+    IPv4 = 0x21,
+    IPv6 = 0x53
 };
 
-// ── QoS Type (TS 44.068 section 10.5.6.5) ─────────────────────────────
-// Indicates the nature of the QoS profile.
-
-enum class QoSType : uint8_t {
-    Requested = 0,
-    Default   = 1,
-    Teardown  = 3
-};
-
-// ── SM Cause (GSM 24.008 10.5.3.2.3) ──────────────────────────────────
-// Cause values specific to Session Management procedures.
+// ── SM Cause (TS 44.068 / TS 24.008 section 10.5.5.6) ─────────────────
+// Cause values specific to Session Management procedures, carried as a
+// single value octet at the start of the body of reject and failure
+// messages.
 
 enum class SMCause : uint8_t {
-    ReqAccepted                     = 1,
-    Unsupported_PDP_Address_Type    = 19,
-    Service_Opcode_NotSupported     = 20,
-    Multicast_Context_Ack           = 22,
-    Multicast_Context_Reject        = 23,
-    Multicast_Context_Deactivate    = 24,
-    Invalid_Flow_Desc               = 26,
-    Multicast_PDP_No_Bearer         = 27,
-    PDP_Auth_Failed_Primary_PDN     = 39,
-    PDP_Auth_Failed_Secondary_PDN   = 40,
-    Semantically_Incorrect_Message  = 95,
-    Invalid_Mandatory_Information   = 96,
-    Message_Type_Invalid            = 97,
-    Message_Type_Not_Compatible     = 98,
-    IE_Invalid                      = 99,
-    Conditional_IE_Error            = 100,
-    Message_Not_Compatible          = 101,
-    Protocol_Error_Unspecified      = 111
+    Unspecified = 0x00,                     // builder sentinel only; must be replaced with a defined cause before wire emission
+    Operator_Determined_Barring = 0x08,
+    MBMS_Bearer_Caps_Insufficient = 0x18,   LLC_Or_SNDPC_Failure = 0x19,
+    Insufficient_Resources = 0x1A,          Missing_Or_Unknown_APN = 0x1B,
+    Unknown_PDP_Address_Or_Type = 0x1C,     User_Authentication_Failed = 0x1D,
+    Activation_Rejected_By_GGSN = 0x1E,     Activation_Rejected_Unspecified = 0x1F,
+    Service_Option_Not_Supported = 0x20,    Requested_Service_Option_Not_Subscribed = 0x21,
+    Service_Option_Temporarily_Out_Of_Order = 0x22,
+    NSAPI_Already_Used = 0x23,              Regular_Deactivation = 0x24,
+    QoS_Not_Accepted = 0x25,                Network_Failure = 0x26,
+    Reactivation_Required = 0x27,           Feature_Not_Supported = 0x28,
+    Semantic_Error_In_TFT = 0x29,           Syntactical_Error_In_TFT = 0x2A,
+    Unknown_PDP_Context = 0x2B,             Semantic_Errors_In_Packet_Filter = 0x2C,
+    Syntactical_Errors_In_Packet_Filter = 0x2D,
+    PDP_Context_Without_TFT_Already_Activated = 0x2E,
+    Multicast_Group_Membership_Timeout = 0x2F,
+    Activation_Rejected_BCM_Violation = 0x30,
+    PDP_Type_IPv4_Only_Allowed = 0x32,      PDP_Type_IPv6_Only_Allowed = 0x33,
+    Single_Address_Bearers_Only_Allowed = 0x34,
+    Collision_With_Network_Initiated_Request = 0x38,
+    Invalid_Transaction_Identifier_Value = 0x51,
+    Semantically_Incorrect_Message = 0x5F,  Invalid_Mandatory_Information = 0x60,
+    Message_Type_Not_Existent = 0x61,       Message_Type_Not_Compatible_With_State = 0x62,
+    IE_Not_Existent = 0x63,                 Conditional_IE_Error = 0x64,
+    Message_Not_Compatible = 0x65,          Protocol_Error_Unspecified = 0x6F,
+    APN_Restriction_Value_Incompatible = 0xF0
 };
 
 const char* SMCause2Str(SMCause cause);
 
-// ── PDP Address (TS 44.068 section 10.5.6.4) ──────────────────────────
+// ── PDP Address (TS 24.008 section 10.5.6.4) ──────────────────────────
 // Positional LV value (no information element identifier):
-//   octet 1: pdpTypeNumber                   (IETF/IPv4 = 4, IETF/IPv6 = 6)
-//   octet 2: addressLength                   (number of address octets)
-//   octets 3..: address information          (absent when dynamically assigned)
+//   octet 1: spare(4)=0 high | typeOrg(4) low   (typeOrg 0x01 = IETF; stored raw)
+//   octet 2: pdpTypeNumber            (IETF IPv4 = 0x21, IETF IPv6 = 0x53)
+//   octets 3..: address information   (absent when dynamically assigned)
 
 class L3PDPAddress {
-    uint8_t mTypeNumber{4};         ///< PDP type number octet (TS 44.068 section 10.5.6.4)
-    std::vector<uint8_t> mAddress;  ///< Address information; empty = dynamic allocation
+    uint8_t mTypeOrg{0x01};                     ///< PDP type organization nibble, low half of the first value octet (TS 24.008 section 10.5.6.4)
+    PdpTypeNumber mTypeNumber{PdpTypeNumber::IPv4};
+    bool mStaticAddress{false};
+    std::array<uint8_t, 16> mAddress{};         ///< 4 octets (IPv4) or 16 octets (IPv6), most significant first
 
 public:
-    static constexpr uint8_t kTypeIPv4 = 4u; ///< PDP type number: IETF IPv4
-    static constexpr uint8_t kTypeIPv6 = 6u; ///< PDP type number: IETF IPv6
-
     L3PDPAddress() = default;
-    explicit L3PDPAddress(PDPType type, std::vector<uint8_t> addr)
-        : mTypeNumber(static_cast<uint8_t>(type)), mAddress(std::move(addr)) {}
-    /// Raw form for type numbers not covered by the PDPType enum.
-    L3PDPAddress(uint8_t typeNumber, std::vector<uint8_t> addr)
-        : mTypeNumber(typeNumber), mAddress(std::move(addr)) {}
+
+    /// Dynamic IETF IPv4 address assignment (no address octets on the wire).
+    [[nodiscard]] static constexpr L3PDPAddress ipv4Dynamic() noexcept {
+        return L3PDPAddress{};
+    }
+    /// Static IETF IPv4 address; \p addrBe holds the four octets with the
+    /// most significant one first (192.168.1.100 is 0xC0A80164).
+    [[nodiscard]] static constexpr L3PDPAddress ipv4Static(uint32_t addrBe) noexcept {
+        L3PDPAddress a;
+        a.mTypeNumber = PdpTypeNumber::IPv4;
+        a.mStaticAddress = true;
+        a.mAddress[0] = static_cast<uint8_t>((addrBe >> 24) & 0xFFu);
+        a.mAddress[1] = static_cast<uint8_t>((addrBe >> 16) & 0xFFu);
+        a.mAddress[2] = static_cast<uint8_t>((addrBe >> 8) & 0xFFu);
+        a.mAddress[3] = static_cast<uint8_t>(addrBe & 0xFFu);
+        return a;
+    }
+    /// Dynamic IETF IPv6 address assignment (no address octets on the wire).
+    [[nodiscard]] static constexpr L3PDPAddress ipv6Dynamic() noexcept {
+        L3PDPAddress a;
+        a.mTypeNumber = PdpTypeNumber::IPv6;
+        return a;
+    }
+    /// Static IETF IPv6 address (sixteen octets, most significant first).
+    [[nodiscard]] static constexpr L3PDPAddress ipv6Static(std::span<const uint8_t, 16> addr) noexcept {
+        L3PDPAddress a;
+        a.mTypeNumber = PdpTypeNumber::IPv6;
+        a.mStaticAddress = true;
+        for (size_t i = 0; i < 16; ++i) a.mAddress[i] = addr[i];
+        return a;
+    }
 
     bool operator==(const L3PDPAddress&) const = default;
 
-    /// Semantic PDP type: IPv4, IPv6 or Unknown.
-    PDPType type() const {
-        if (mTypeNumber == kTypeIPv4) return PDPType::IPv4;
-        if (mTypeNumber == kTypeIPv6) return PDPType::IPv6;
-        return PDPType::Unknown;
+    /// PDP type organization nibble, stored raw (only 0x01 = IETF is defined).
+    uint8_t typeOrg() const { return mTypeOrg; }
+    PdpTypeNumber typeNumber() const { return mTypeNumber; }
+    /// True when a static address is carried; the octet count is implied by
+    /// the type number (4 for IPv4, 16 for IPv6).
+    bool staticAddress() const { return mStaticAddress; }
+    /// Number of address octets carried on the wire (0 = dynamically assigned).
+    [[nodiscard]] size_t addressSize() const noexcept {
+        if (!mStaticAddress) return 0;
+        return mTypeNumber == PdpTypeNumber::IPv4 ? 4u : 16u;
     }
-    uint8_t typeNumber() const { return mTypeNumber; }
-    const std::vector<uint8_t>& address() const { return mAddress; }
-    size_t lengthV() const { return 2 + mAddress.size(); }
+    /// The address octets actually carried (empty when dynamically assigned).
+    [[nodiscard]] std::span<const uint8_t> address() const noexcept {
+        return std::span<const uint8_t>{mAddress.data(), addressSize()};
+    }
+    /// Value part size in octets: 2 when dynamically assigned, 6 for a static
+    /// IPv4 address, 18 for a static IPv6 address.
+    [[nodiscard]] size_t lengthV() const noexcept { return 2 + addressSize(); }
 
     [[nodiscard]] static Expected<L3PDPAddress> parse(BitReader& br, size_t lengthBytes);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
 };
 
-// ── QoS Element (TS 44.068 section 10.5.6.5) ──────────────────────────
-// The QoS profile value octets following the LV length octet.
-
-enum class QoSElementType : uint8_t {
-    QoSClass            = 1,
-    MaxBitRateUL        = 2,
-    MaxBitRateDL        = 3,
-    Delay               = 4,
-    DeliveryOrder       = 5,
-    DeliveryOfExcessPackets = 6,
-    SopClass            = 7,
-    ResidualErrorRate   = 8,
-    PeakThroughput      = 9,
-    MeanThroughputDL    = 10,
-    MeanThroughputUL    = 11,
-    TrafficClass        = 12,
-    GuaranteedBitRateDL = 13,
-    GuaranteedBitRateUL = 14,
-    MaxBitRateDL_SRB    = 15,
-    MaxBitRateUL_SRB    = 16,
-    GPRS_Priority       = 17,
-    ExternalPriority    = 18
-};
-
-// ── QoS Profile (TS 44.068 section 10.5.6.5) ──────────────────────────
-// Positional LV value (no information element identifier): a QoS type octet
-// followed by the remaining QoS profile octets, kept opaque.
+// ── QoS Profile (TS 24.008 section 10.5.6.5) ──────────────────────────
+// Positional LV value (no information element identifier): the first three
+// octets carry the mandatory characteristics; any further octets hold
+// optional characteristics and are preserved verbatim.
 
 class L3QoS {
-    QoSType mType{QoSType::Requested};
-    std::vector<uint8_t> mElements;
+    uint8_t mDelayClass{0};        ///< bits 3-5 of octet 1 (7 = not defined)
+    uint8_t mReliabilityClass{0};  ///< bits 0-2 of octet 1 (7 = not defined)
+    uint8_t mPrecedenceClass{0};   ///< bits 0-2 of octet 2 (2 = normal)
+    uint8_t mPeakThroughput{0};    ///< bits 4-7 of octet 2
+    uint8_t mMeanThroughput{0};    ///< bits 0-4 of octet 3
+    std::vector<uint8_t> mAdditionalCharacteristics; // opaque, empty by default
+
 public:
     L3QoS() = default;
-    L3QoS(QoSType type, std::vector<uint8_t> elements)
-        : mType(type), mElements(std::move(elements)) {}
+
+    /// Default profile: reliability class '011'B (acknowledged RLC), delay
+    /// class '100'B (best effort), precedence class '010'B (normal), peak
+    /// and mean throughput codes 0; value octets 23 02 00.
+    [[nodiscard]] static L3QoS defaultProfile() noexcept;
 
     bool operator==(const L3QoS&) const = default;
 
-    QoSType type() const { return mType; }
-    const std::vector<uint8_t>& elements() const { return mElements; }
-    size_t lengthV() const { return 1 + mElements.size(); }
+    /// Delay class code (three bits).
+    uint8_t delayClass() const { return mDelayClass; }
+    /// Reliability class code (three bits).
+    uint8_t reliabilityClass() const { return mReliabilityClass; }
+    /// Precedence class code (three bits).
+    uint8_t precedenceClass() const { return mPrecedenceClass; }
+    /// Peak throughput code (four bits).
+    uint8_t peakThroughput() const { return mPeakThroughput; }
+    /// Mean throughput code (five bits).
+    uint8_t meanThroughput() const { return mMeanThroughput; }
+    /// Optional characteristics from the fourth value octet on, re-emitted
+    /// verbatim.
+    const std::vector<uint8_t>& additionalCharacteristics() const { return mAdditionalCharacteristics; }
+
+    /// Set the delay class code (three bits).
+    L3QoS& delayClass(uint8_t v) { mDelayClass = v & 0x07u; return *this; }
+    /// Set the reliability class code (three bits).
+    L3QoS& reliabilityClass(uint8_t v) { mReliabilityClass = v & 0x07u; return *this; }
+    /// Set the precedence class code (three bits).
+    L3QoS& precedenceClass(uint8_t v) { mPrecedenceClass = v & 0x07u; return *this; }
+    /// Set the peak throughput code (four bits).
+    L3QoS& peakThroughput(uint8_t v) { mPeakThroughput = v & 0x0Fu; return *this; }
+    /// Set the mean throughput code (five bits).
+    L3QoS& meanThroughput(uint8_t v) { mMeanThroughput = v & 0x1Fu; return *this; }
+    /// Set the optional characteristics (from the fourth value octet on).
+    L3QoS& additionalCharacteristics(std::span<const uint8_t> v) {
+        mAdditionalCharacteristics.assign(v.begin(), v.end());
+        return *this;
+    }
+
+    /// Value part size in octets: three mandatory characteristics plus the
+    /// preserved optional characteristics.
+    [[nodiscard]] size_t lengthV() const noexcept { return 3 + mAdditionalCharacteristics.size(); }
 
     [[nodiscard]] static Expected<L3QoS> parse(BitReader& br, size_t lengthBytes);
     void write(BitWriter& bw) const;
@@ -225,7 +279,7 @@ public:
 // start of the body of SM reject, failure and status messages.
 
 class L3SMCauseIE {
-    SMCause mCause{SMCause::ReqAccepted};
+    SMCause mCause{SMCause::Unspecified};
 public:
     L3SMCauseIE() = default;
     explicit L3SMCauseIE(SMCause cause) : mCause(cause) {}
@@ -267,10 +321,10 @@ public:
 constexpr uint8_t kSMRequestTypeIdentifier = 0xAu; ///< identifier nibble '1010'B
 constexpr uint8_t kSMRequestTypeMask = 0xF0u;      ///< mask selecting the identifier nibble
 
-// ── Tear-Down Indicator (TS 44.068 section 10.5.6.10) ─────────────────
+// ── Tear-Down Indicator (TS 24.008 section 10.5.6.10) ─────────────────
 // TV information element carried in a single octet: the high nibble is the
-// four-bit identifier '1001'B and the low nibble holds the tear-down flag
-// (most significant bit of the nibble) followed by three spare bits.
+// four-bit identifier '1001'B, bit 0 of the low nibble holds the tear-down
+// flag and the remaining bits are spare.
 
 class L3TearDownIndicator {
     bool mFlag{false};
@@ -292,7 +346,8 @@ public:
 };
 
 // ── PDP Handle (TS 44.068 section 9.5) ────────────────────────────────
-// Four-bit value identifying an activated PDP context.
+// Four-bit value identifying an activated PDP context, carried in one
+// octet: [spare(4)=0][value(4)].
 
 class L3PDPHandle {
     uint8_t mValue{0};
@@ -303,7 +358,7 @@ public:
     bool operator==(const L3PDPHandle&) const = default;
 
     uint8_t value() const { return mValue; }
-    static constexpr size_t lengthV() { return 0; } // bit-level field, no separate length
+    static constexpr size_t lengthV() { return 1; } // one octet on the wire
 
     [[nodiscard]] static Expected<L3PDPHandle> parse(BitReader& br);
     void write(BitWriter& bw) const;

@@ -75,7 +75,7 @@ size_t L3ActivatePDPContextRequest::bodyLength() const {
     size_t len = 2; // NSAPI octet + LLC SAPI octet
     len += 1 + mQoS.lengthV();         // requested QoS (LV)
     len += 1 + mPDPAddress.lengthV();  // requested PDP address (LV)
-    len += tlvLen(mAPN.lengthV());     // APN (TLV, mandatory)
+    if (mHaveApn) len += tlvLen(mAPN.lengthV());  // APN (TLV, optional)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
     if (mHasRequestType) len += 1;     // request type TV octet
     len += mAdditionalIes.size();
@@ -83,20 +83,32 @@ size_t L3ActivatePDPContextRequest::bodyLength() const {
 }
 
 Expected<L3ActivatePDPContextRequest> L3ActivatePDPContextRequest::parse(BitReader& br) {
-    // SM ACTIVATE PDP CONTEXT REQUEST (TS 44.068): NSAPI and the requested
-    // LLC SAPI in the first two octets, requested QoS (LV) and requested
-    // PDP type and address (LV), access point name (TLV, IEI 0x28,
-    // mandatory); protocol configuration options (TLV, IEI 0x27), the
-    // request type TV and any further optional IEs follow when present.
+    // SM ACTIVATE PDP CONTEXT REQUEST (TS 44.068): the requested NSAPI and
+    // LLC SAPI values in the low nibbles of the first two octets, requested
+    // QoS (LV) and requested PDP type and address (LV); the access point
+    // name (TLV, IEI 0x28), protocol configuration options (TLV, IEI 0x27),
+    // the request type TV and any further optional IEs follow when present.
     L3ActivatePDPContextRequest msg;
 
     auto o1 = br.readField(8);
     if (!o1) return Expected<L3ActivatePDPContextRequest>::error(o1.error());
-    msg.mNSapi = static_cast<uint8_t>((o1.value() >> 4) & 0x0Fu);
+    const uint8_t b1 = static_cast<uint8_t>(o1.value());
+    // The NSAPI value is in the low nibble; the high nibble is spare.
+    if ((b1 & 0xF0u) != 0) {
+        return Expected<L3ActivatePDPContextRequest>::error(
+            ParseError{ParseError::Code::InvalidValue, "requested NSAPI", br.position()});
+    }
+    msg.mNSapi = b1 & 0x0Fu;
 
     auto o2 = br.readField(8);
     if (!o2) return Expected<L3ActivatePDPContextRequest>::error(o2.error());
-    msg.mLLcSapi = static_cast<uint8_t>((o2.value() >> 4) & 0x0Fu);
+    const uint8_t b2 = static_cast<uint8_t>(o2.value());
+    // The LLC SAPI value is in the low nibble; the high nibble is spare.
+    if ((b2 & 0xF0u) != 0) {
+        return Expected<L3ActivatePDPContextRequest>::error(
+            ParseError{ParseError::Code::InvalidValue, "requested LLC SAPI", br.position()});
+    }
+    msg.mLLcSapi = b2 & 0x0Fu;
 
     // Requested QoS: LV (mandatory).
     auto qlen = br.readField(8);
@@ -116,22 +128,9 @@ Expected<L3ActivatePDPContextRequest> L3ActivatePDPContextRequest::parse(BitRead
         msg.mPDPAddress = std::move(addr).value();
     }
 
-    // Access point name: TLV 0x28 (mandatory).
-    {
-        size_t vLen = 0;
-        auto iei = readTLVHeader(br, vLen);
-        if (!iei) return Expected<L3ActivatePDPContextRequest>::error(iei.error());
-        if (iei.value() != L3AccessPointName::IEI) {
-            return Expected<L3ActivatePDPContextRequest>::error(
-                ParseError{ParseError::Code::InvalidIE, "activate PDP context request: missing access point name", br.position()});
-        }
-        auto apn = L3AccessPointName::parse(br, vLen);
-        if (!apn) return Expected<L3ActivatePDPContextRequest>::error(apn.error());
-        msg.mAPN = std::move(apn).value();
-    }
-
-    // Optional IE region: request type TV (one octet '1010'B|value), PCO
-    // TLV 0x27, everything else preserved in the opaque tail.
+    // Optional IE region: access point name TLV 0x28, request type TV (one
+    // octet '1010'B|value), PCO TLV 0x27, everything else preserved in the
+    // opaque tail.
     while (br.remainingBits() >= 8) {
         uint32_t next = br.peekField(8);
         if ((next & kSMRequestTypeMask) == (static_cast<uint32_t>(kSMRequestTypeIdentifier) << 4)) {
@@ -150,7 +149,13 @@ Expected<L3ActivatePDPContextRequest> L3ActivatePDPContextRequest::parse(BitRead
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3ActivatePDPContextRequest>::error(iei.error());
         bool typed = false;
-        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+        if (iei.value() == L3AccessPointName::IEI && !msg.mHaveApn) {
+            if (auto apn = L3AccessPointName::parse(br, vLen)) {
+                msg.mHaveApn = true;
+                msg.mAPN = std::move(apn).value();
+                typed = true;
+            }
+        } else if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
             if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
                 msg.mHavePCO = true;
                 msg.mPCO = std::move(pco).value();
@@ -171,9 +176,9 @@ Expected<L3ActivatePDPContextRequest> L3ActivatePDPContextRequest::parse(BitRead
 }
 
 void L3ActivatePDPContextRequest::write(BitWriter& bw) const {
-    // NSAPI(4)|spare(4), LLC SAPI(4)|spare(4).
-    bw.writeField((static_cast<uint32_t>(mNSapi) & 0x0Fu) << 4, 8);
-    bw.writeField((static_cast<uint32_t>(mLLcSapi) & 0x0Fu) << 4, 8);
+    // [spare(4)=0][NSAPI(4)], [spare(4)=0][LLC SAPI(4)].
+    bw.writeField(static_cast<uint32_t>(mNSapi & 0x0Fu), 8);
+    bw.writeField(static_cast<uint32_t>(mLLcSapi & 0x0Fu), 8);
 
     // Requested QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
@@ -183,10 +188,12 @@ void L3ActivatePDPContextRequest::write(BitWriter& bw) const {
     bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
     mPDPAddress.write(bw);
 
-    // Access point name: TLV 0x28 (mandatory).
-    bw.writeField(L3AccessPointName::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
-    mAPN.write(bw);
+    // Access point name: TLV 0x28 (optional).
+    if (mHaveApn) {
+        bw.writeField(L3AccessPointName::IEI, 8);
+        bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
+        mAPN.write(bw);
+    }
 
     // Protocol configuration options: TLV 0x27 (optional).
     if (mHavePCO) {
@@ -210,8 +217,10 @@ void L3ActivatePDPContextRequest::text(std::ostream& os) const {
     mQoS.text(os);
     os << ", ";
     mPDPAddress.text(os);
-    os << ", ";
-    mAPN.text(os);
+    if (mHaveApn) {
+        os << ", ";
+        mAPN.text(os);
+    }
     if (mHavePCO) {
         os << ", ";
         mPCO.text(os);
@@ -228,6 +237,7 @@ L3ActivatePDPContextRequest L3ActivatePDPContextRequest::Builder::build() const 
     msg.mLLcSapi = m_llcSapi & 0x0Fu;
     msg.mQoS = m_qos;
     msg.mPDPAddress = m_pdpAddress;
+    msg.mHaveApn = m_haveApn;
     msg.mAPN = m_apn;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
@@ -254,16 +264,22 @@ size_t L3ActivatePDPContextAccept::bodyLength() const {
 }
 
 Expected<L3ActivatePDPContextAccept> L3ActivatePDPContextAccept::parse(BitReader& br) {
-    // SM ACTIVATE PDP CONTEXT ACCEPT (TS 44.068): negotiated LLC SAPI in the
-    // first octet, negotiated QoS (LV), radio priority for SMS (four bits)
-    // with three spare bits, then optional IEs: PDP type and address
-    // (TLV, IEI 0x2B), protocol configuration options (TLV, IEI 0x27); any
-    // further optional IEs are kept opaque.
+    // SM ACTIVATE PDP CONTEXT ACCEPT (TS 44.068): negotiated LLC SAPI value
+    // in the low nibble of the first octet, negotiated QoS (LV), radio
+    // priority for SMS value in the low nibble of its octet, then optional
+    // IEs: PDP type and address (TLV, IEI 0x2B), protocol configuration
+    // options (TLV, IEI 0x27); any further optional IEs are kept opaque.
     L3ActivatePDPContextAccept msg;
 
     auto o = br.readField(8);
     if (!o) return Expected<L3ActivatePDPContextAccept>::error(o.error());
-    msg.mLLcSapi = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+    const uint8_t b1 = static_cast<uint8_t>(o.value());
+    // The SAPI value is in the low nibble; the high nibble is spare.
+    if ((b1 & 0xF0u) != 0) {
+        return Expected<L3ActivatePDPContextAccept>::error(
+            ParseError{ParseError::Code::InvalidValue, "negotiated LLC SAPI", br.position()});
+    }
+    msg.mLLcSapi = b1 & 0x0Fu;
 
     // Negotiated QoS: LV (mandatory).
     auto qlen = br.readField(8);
@@ -274,10 +290,15 @@ Expected<L3ActivatePDPContextAccept> L3ActivatePDPContextAccept::parse(BitReader
         msg.mQoS = std::move(qos).value();
     }
 
-    // Radio priority for SMS(4)|spare(4).
+    // Radio priority for SMS value in the low nibble.
     auto rp = br.readField(8);
     if (!rp) return Expected<L3ActivatePDPContextAccept>::error(rp.error());
-    msg.mRadioPriority = static_cast<uint8_t>((rp.value() >> 4) & 0x0Fu);
+    const uint8_t b2 = static_cast<uint8_t>(rp.value());
+    if ((b2 & 0xF0u) != 0) {
+        return Expected<L3ActivatePDPContextAccept>::error(
+            ParseError{ParseError::Code::InvalidValue, "radio priority for SMS", br.position()});
+    }
+    msg.mRadioPriority = b2 & 0x0Fu;
 
     // Optional IE region: PDP address TLV 0x2B, PCO TLV 0x27, rest opaque.
     while (br.remainingBits() >= 16) {
@@ -312,15 +333,15 @@ Expected<L3ActivatePDPContextAccept> L3ActivatePDPContextAccept::parse(BitReader
 }
 
 void L3ActivatePDPContextAccept::write(BitWriter& bw) const {
-    // LLC SAPI(4)|spare(4).
-    bw.writeField((static_cast<uint32_t>(mLLcSapi) & 0x0Fu) << 4, 8);
+    // [spare(4)=0][LLC SAPI(4)].
+    bw.writeField(static_cast<uint32_t>(mLLcSapi & 0x0Fu), 8);
 
     // Negotiated QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
     mQoS.write(bw);
 
-    // Radio priority for SMS(4)|spare(4).
-    bw.writeField((static_cast<uint32_t>(mRadioPriority) & 0x0Fu) << 4, 8);
+    // [spare(4)=0][radio priority for SMS(4)].
+    bw.writeField(static_cast<uint32_t>(mRadioPriority & 0x0Fu), 8);
 
     // PDP type and address: TLV 0x2B (optional).
     if (mHavePDPAddress) {
@@ -560,7 +581,7 @@ L3DeactivatePDPContextAccept::Builder L3DeactivatePDPContextAccept::builder() {
 // ── L3ModifyPDPContextRequest (TS 44.068 section 9.5) ─────────────────
 
 size_t L3ModifyPDPContextRequest::bodyLength() const {
-    size_t len = 1; // pdpHandle(4)|spare(4)
+    size_t len = 1; // [spare(4)=0][pdpHandle(4)]
     len += 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
     len += mAdditionalIes.size();
@@ -568,14 +589,21 @@ size_t L3ModifyPDPContextRequest::bodyLength() const {
 }
 
 Expected<L3ModifyPDPContextRequest> L3ModifyPDPContextRequest::parse(BitReader& br) {
-    // SM MODIFY PDP CONTEXT REQUEST (TS 44.068): PDP handle in the first
-    // octet, requested QoS (LV); optional IEs follow (protocol configuration
-    // options TLV 0x27 and others, kept opaque).
+    // SM MODIFY PDP CONTEXT REQUEST (TS 44.068): PDP handle value in the
+    // low nibble of the first octet, requested QoS (LV); optional IEs
+    // follow (protocol configuration options TLV 0x27 and others, kept
+    // opaque).
     L3ModifyPDPContextRequest msg;
 
     auto o = br.readField(8);
     if (!o) return Expected<L3ModifyPDPContextRequest>::error(o.error());
-    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+    const uint8_t b1 = static_cast<uint8_t>(o.value());
+    // The PDP handle value is in the low nibble; the high nibble is spare.
+    if ((b1 & 0xF0u) != 0) {
+        return Expected<L3ModifyPDPContextRequest>::error(
+            ParseError{ParseError::Code::InvalidValue, "PDP handle", br.position()});
+    }
+    msg.mPDPHandle = b1 & 0x0Fu;
 
     // QoS: LV (mandatory).
     auto qlen = br.readField(8);
@@ -612,8 +640,8 @@ Expected<L3ModifyPDPContextRequest> L3ModifyPDPContextRequest::parse(BitReader& 
 }
 
 void L3ModifyPDPContextRequest::write(BitWriter& bw) const {
-    // pdpHandle(4)|spare(4).
-    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+    // [spare(4)=0][pdpHandle(4)].
+    bw.writeField(static_cast<uint32_t>(mPDPHandle & 0x0Fu), 8);
 
     // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
@@ -657,7 +685,7 @@ L3ModifyPDPContextRequest::Builder L3ModifyPDPContextRequest::builder() {
 // ── L3ModifyPDPContextAccept (TS 44.068 section 9.5) ──────────────────
 
 size_t L3ModifyPDPContextAccept::bodyLength() const {
-    size_t len = 1; // pdpHandle(4)|spare(4)
+    size_t len = 1; // [spare(4)=0][pdpHandle(4)]
     len += 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
     len += mAdditionalIes.size();
@@ -665,13 +693,20 @@ size_t L3ModifyPDPContextAccept::bodyLength() const {
 }
 
 Expected<L3ModifyPDPContextAccept> L3ModifyPDPContextAccept::parse(BitReader& br) {
-    // SM MODIFY PDP CONTEXT ACCEPT (TS 44.068): PDP handle in the first
-    // octet, QoS (LV); optional IEs follow (kept opaque except PCO TLV 0x27).
+    // SM MODIFY PDP CONTEXT ACCEPT (TS 44.068): PDP handle value in the
+    // low nibble of the first octet, QoS (LV); optional IEs follow (kept
+    // opaque except PCO TLV 0x27).
     L3ModifyPDPContextAccept msg;
 
     auto o = br.readField(8);
     if (!o) return Expected<L3ModifyPDPContextAccept>::error(o.error());
-    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+    const uint8_t b1 = static_cast<uint8_t>(o.value());
+    // The PDP handle value is in the low nibble; the high nibble is spare.
+    if ((b1 & 0xF0u) != 0) {
+        return Expected<L3ModifyPDPContextAccept>::error(
+            ParseError{ParseError::Code::InvalidValue, "PDP handle", br.position()});
+    }
+    msg.mPDPHandle = b1 & 0x0Fu;
 
     // QoS: LV (mandatory).
     auto qlen = br.readField(8);
@@ -708,8 +743,8 @@ Expected<L3ModifyPDPContextAccept> L3ModifyPDPContextAccept::parse(BitReader& br
 }
 
 void L3ModifyPDPContextAccept::write(BitWriter& bw) const {
-    // pdpHandle(4)|spare(4).
-    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+    // [spare(4)=0][pdpHandle(4)].
+    bw.writeField(static_cast<uint32_t>(mPDPHandle & 0x0Fu), 8);
 
     // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
@@ -846,25 +881,31 @@ L3SMStatus::Builder L3SMStatus::builder() {
 // ── L3RequestPDPContextActivation (TS 44.068 section 9.5) ─────────────
 
 size_t L3RequestPDPContextActivation::bodyLength() const {
-    size_t len = 1; // pdpHandle(4)|spare(4)
+    size_t len = 1; // [spare(4)=0][pdpHandle(4)]
     len += 1 + mQoS.lengthV();         // QoS (LV)
     len += 1 + mPDPAddress.lengthV();  // PDP address (LV)
-    len += tlvLen(mAPN.lengthV());     // APN (TLV, mandatory)
+    if (mHaveApn) len += tlvLen(mAPN.lengthV());  // APN (TLV, optional)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
     len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3RequestPDPContextActivation> L3RequestPDPContextActivation::parse(BitReader& br) {
-    // SM REQUEST PDP CONTEXT ACTIVATION (TS 44.068): PDP handle in the first
-    // octet, QoS (LV), PDP type and address (LV), access point name (TLV,
-    // IEI 0x28); protocol configuration options (TLV, IEI 0x27) and any
-    // further optional IEs follow.
+    // SM REQUEST PDP CONTEXT ACTIVATION (TS 44.068): PDP handle value in the
+    // low nibble of the first octet, QoS (LV), PDP type and address (LV);
+    // the access point name (TLV, IEI 0x28), protocol configuration options
+    // (TLV, IEI 0x27) and any further optional IEs follow when present.
     L3RequestPDPContextActivation msg;
 
     auto o = br.readField(8);
     if (!o) return Expected<L3RequestPDPContextActivation>::error(o.error());
-    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+    const uint8_t b1 = static_cast<uint8_t>(o.value());
+    // The PDP handle value is in the low nibble; the high nibble is spare.
+    if ((b1 & 0xF0u) != 0) {
+        return Expected<L3RequestPDPContextActivation>::error(
+            ParseError{ParseError::Code::InvalidValue, "PDP handle", br.position()});
+    }
+    msg.mPDPHandle = b1 & 0x0Fu;
 
     // QoS: LV (mandatory).
     auto qlen = br.readField(8);
@@ -884,26 +925,20 @@ Expected<L3RequestPDPContextActivation> L3RequestPDPContextActivation::parse(Bit
         msg.mPDPAddress = std::move(addr).value();
     }
 
-    // APN: TLV 0x28 (mandatory).
-    {
-        size_t vLen = 0;
-        auto iei = readTLVHeader(br, vLen);
-        if (!iei) return Expected<L3RequestPDPContextActivation>::error(iei.error());
-        if (iei.value() != L3AccessPointName::IEI) {
-            return Expected<L3RequestPDPContextActivation>::error(
-                ParseError{ParseError::Code::InvalidIE, "request PDP context activation: missing access point name", br.position()});
-        }
-        auto apn = L3AccessPointName::parse(br, vLen);
-        if (!apn) return Expected<L3RequestPDPContextActivation>::error(apn.error());
-        msg.mAPN = std::move(apn).value();
-    }
-
+    // Optional IE region: access point name TLV 0x28, PCO TLV 0x27,
+    // everything else preserved in the opaque tail.
     while (br.remainingBits() >= 16) {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3RequestPDPContextActivation>::error(iei.error());
         bool typed = false;
-        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+        if (iei.value() == L3AccessPointName::IEI && !msg.mHaveApn) {
+            if (auto apn = L3AccessPointName::parse(br, vLen)) {
+                msg.mHaveApn = true;
+                msg.mAPN = std::move(apn).value();
+                typed = true;
+            }
+        } else if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
             if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
                 msg.mHavePCO = true;
                 msg.mPCO = std::move(pco).value();
@@ -924,8 +959,8 @@ Expected<L3RequestPDPContextActivation> L3RequestPDPContextActivation::parse(Bit
 }
 
 void L3RequestPDPContextActivation::write(BitWriter& bw) const {
-    // pdpHandle(4)|spare(4).
-    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+    // [spare(4)=0][pdpHandle(4)].
+    bw.writeField(static_cast<uint32_t>(mPDPHandle & 0x0Fu), 8);
 
     // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
@@ -935,10 +970,12 @@ void L3RequestPDPContextActivation::write(BitWriter& bw) const {
     bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
     mPDPAddress.write(bw);
 
-    // APN: TLV 0x28 (mandatory).
-    bw.writeField(L3AccessPointName::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
-    mAPN.write(bw);
+    // APN: TLV 0x28 (optional).
+    if (mHaveApn) {
+        bw.writeField(L3AccessPointName::IEI, 8);
+        bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
+        mAPN.write(bw);
+    }
 
     // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
@@ -954,7 +991,7 @@ void L3RequestPDPContextActivation::text(std::ostream& os) const {
     os << "RequestPDPAct(handle=" << static_cast<int>(mPDPHandle);
     os << ", "; mQoS.text(os);
     os << ", "; mPDPAddress.text(os);
-    os << ", "; mAPN.text(os);
+    if (mHaveApn) { os << ", "; mAPN.text(os); }
     if (mHavePCO) { os << ", "; mPCO.text(os); }
     os << ")";
 }
@@ -964,6 +1001,7 @@ L3RequestPDPContextActivation L3RequestPDPContextActivation::Builder::build() co
     msg.mPDPHandle = m_pdpHandle & 0x0Fu;
     msg.mQoS = m_qos;
     msg.mPDPAddress = m_pdpAddress;
+    msg.mHaveApn = m_haveApn;
     msg.mAPN = m_apn;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
@@ -1025,7 +1063,7 @@ L3RequestPDPContextActivationReject::Builder L3RequestPDPContextActivationReject
 // ── L3ModifyPDPContextRequestMS (TS 44.068 section 9.5) ───────────────
 
 size_t L3ModifyPDPContextRequestMS::bodyLength() const {
-    size_t len = 1; // pdpHandle(4)|spare(4)
+    size_t len = 1; // [spare(4)=0][pdpHandle(4)]
     len += 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
     len += mAdditionalIes.size();
@@ -1033,14 +1071,20 @@ size_t L3ModifyPDPContextRequestMS::bodyLength() const {
 }
 
 Expected<L3ModifyPDPContextRequestMS> L3ModifyPDPContextRequestMS::parse(BitReader& br) {
-    // SM MODIFY PDP CONTEXT REQUEST, MS->SGSN (TS 44.068): PDP handle in
-    // the first octet, requested QoS (LV); optional IEs follow (kept opaque
-    // except PCO TLV 0x27).
+    // SM MODIFY PDP CONTEXT REQUEST, MS->SGSN (TS 44.068): PDP handle value
+    // in the low nibble of the first octet, requested QoS (LV); optional IEs
+    // follow (kept opaque except PCO TLV 0x27).
     L3ModifyPDPContextRequestMS msg;
 
     auto o = br.readField(8);
     if (!o) return Expected<L3ModifyPDPContextRequestMS>::error(o.error());
-    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+    const uint8_t b1 = static_cast<uint8_t>(o.value());
+    // The PDP handle value is in the low nibble; the high nibble is spare.
+    if ((b1 & 0xF0u) != 0) {
+        return Expected<L3ModifyPDPContextRequestMS>::error(
+            ParseError{ParseError::Code::InvalidValue, "PDP handle", br.position()});
+    }
+    msg.mPDPHandle = b1 & 0x0Fu;
 
     // QoS: LV (mandatory).
     auto qlen = br.readField(8);
@@ -1077,8 +1121,8 @@ Expected<L3ModifyPDPContextRequestMS> L3ModifyPDPContextRequestMS::parse(BitRead
 }
 
 void L3ModifyPDPContextRequestMS::write(BitWriter& bw) const {
-    // pdpHandle(4)|spare(4).
-    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+    // [spare(4)=0][pdpHandle(4)].
+    bw.writeField(static_cast<uint32_t>(mPDPHandle & 0x0Fu), 8);
 
     // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
@@ -1118,7 +1162,7 @@ L3ModifyPDPContextRequestMS::Builder L3ModifyPDPContextRequestMS::builder() {
 // ── L3ModifyPDPContextAcceptNet (TS 44.068 section 9.5) ───────────────
 
 size_t L3ModifyPDPContextAcceptNet::bodyLength() const {
-    size_t len = 1; // pdpHandle(4)|spare(4)
+    size_t len = 1; // [spare(4)=0][pdpHandle(4)]
     len += 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
     len += mAdditionalIes.size();
@@ -1126,14 +1170,20 @@ size_t L3ModifyPDPContextAcceptNet::bodyLength() const {
 }
 
 Expected<L3ModifyPDPContextAcceptNet> L3ModifyPDPContextAcceptNet::parse(BitReader& br) {
-    // SM MODIFY PDP CONTEXT ACCEPT, SGSN->MS (TS 44.068): PDP handle in
-    // the first octet, QoS (LV); optional IEs follow (kept opaque except
-    // PCO TLV 0x27).
+    // SM MODIFY PDP CONTEXT ACCEPT, SGSN->MS (TS 44.068): PDP handle value
+    // in the low nibble of the first octet, QoS (LV); optional IEs follow
+    // (kept opaque except PCO TLV 0x27).
     L3ModifyPDPContextAcceptNet msg;
 
     auto o = br.readField(8);
     if (!o) return Expected<L3ModifyPDPContextAcceptNet>::error(o.error());
-    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+    const uint8_t b1 = static_cast<uint8_t>(o.value());
+    // The PDP handle value is in the low nibble; the high nibble is spare.
+    if ((b1 & 0xF0u) != 0) {
+        return Expected<L3ModifyPDPContextAcceptNet>::error(
+            ParseError{ParseError::Code::InvalidValue, "PDP handle", br.position()});
+    }
+    msg.mPDPHandle = b1 & 0x0Fu;
 
     // QoS: LV (mandatory).
     auto qlen = br.readField(8);
@@ -1170,8 +1220,8 @@ Expected<L3ModifyPDPContextAcceptNet> L3ModifyPDPContextAcceptNet::parse(BitRead
 }
 
 void L3ModifyPDPContextAcceptNet::write(BitWriter& bw) const {
-    // pdpHandle(4)|spare(4).
-    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+    // [spare(4)=0][pdpHandle(4)].
+    bw.writeField(static_cast<uint32_t>(mPDPHandle & 0x0Fu), 8);
 
     // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
@@ -1211,25 +1261,32 @@ L3ModifyPDPContextAcceptNet::Builder L3ModifyPDPContextAcceptNet::builder() {
 // ── L3ActivateSecondaryPDPContextRequest (TS 44.068 section 9.5) ──────
 
 size_t L3ActivateSecondaryPDPContextRequest::bodyLength() const {
-    size_t len = 1; // pdpHandle(4)|spare(4)
+    size_t len = 1; // [spare(4)=0][pdpHandle(4)]
     len += 1 + mQoS.lengthV();         // QoS (LV)
     len += 1 + mPDPAddress.lengthV();  // PDP address (LV)
-    len += tlvLen(mAPN.lengthV());     // APN (TLV, mandatory)
+    if (mHaveApn) len += tlvLen(mAPN.lengthV());  // APN (TLV, optional)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
     len += mAdditionalIes.size();
     return len;
 }
 
 Expected<L3ActivateSecondaryPDPContextRequest> L3ActivateSecondaryPDPContextRequest::parse(BitReader& br) {
-    // SM ACTIVATE SECONDARY PDP CONTEXT REQUEST (TS 44.068): PDP handle in
-    // the first octet, requested QoS (LV), requested PDP type and address
-    // (LV), access point name (TLV, IEI 0x28); protocol configuration
-    // options (TLV, IEI 0x27) and any further optional IEs follow.
+    // SM ACTIVATE SECONDARY PDP CONTEXT REQUEST (TS 44.068): PDP handle
+    // value in the low nibble of the first octet, requested QoS (LV),
+    // requested PDP type and address (LV); the access point name (TLV,
+    // IEI 0x28), protocol configuration options (TLV, IEI 0x27) and any
+    // further optional IEs follow when present.
     L3ActivateSecondaryPDPContextRequest msg;
 
     auto o = br.readField(8);
     if (!o) return Expected<L3ActivateSecondaryPDPContextRequest>::error(o.error());
-    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+    const uint8_t b1 = static_cast<uint8_t>(o.value());
+    // The PDP handle value is in the low nibble; the high nibble is spare.
+    if ((b1 & 0xF0u) != 0) {
+        return Expected<L3ActivateSecondaryPDPContextRequest>::error(
+            ParseError{ParseError::Code::InvalidValue, "PDP handle", br.position()});
+    }
+    msg.mPDPHandle = b1 & 0x0Fu;
 
     // QoS: LV (mandatory).
     auto qlen = br.readField(8);
@@ -1249,26 +1306,20 @@ Expected<L3ActivateSecondaryPDPContextRequest> L3ActivateSecondaryPDPContextRequ
         msg.mPDPAddress = std::move(addr).value();
     }
 
-    // APN: TLV 0x28 (mandatory).
-    {
-        size_t vLen = 0;
-        auto iei = readTLVHeader(br, vLen);
-        if (!iei) return Expected<L3ActivateSecondaryPDPContextRequest>::error(iei.error());
-        if (iei.value() != L3AccessPointName::IEI) {
-            return Expected<L3ActivateSecondaryPDPContextRequest>::error(
-                ParseError{ParseError::Code::InvalidIE, "activate secondary PDP context request: missing access point name", br.position()});
-        }
-        auto apn = L3AccessPointName::parse(br, vLen);
-        if (!apn) return Expected<L3ActivateSecondaryPDPContextRequest>::error(apn.error());
-        msg.mAPN = std::move(apn).value();
-    }
-
+    // Optional IE region: access point name TLV 0x28, PCO TLV 0x27,
+    // everything else preserved in the opaque tail.
     while (br.remainingBits() >= 16) {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3ActivateSecondaryPDPContextRequest>::error(iei.error());
         bool typed = false;
-        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+        if (iei.value() == L3AccessPointName::IEI && !msg.mHaveApn) {
+            if (auto apn = L3AccessPointName::parse(br, vLen)) {
+                msg.mHaveApn = true;
+                msg.mAPN = std::move(apn).value();
+                typed = true;
+            }
+        } else if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
             if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
                 msg.mHavePCO = true;
                 msg.mPCO = std::move(pco).value();
@@ -1289,8 +1340,8 @@ Expected<L3ActivateSecondaryPDPContextRequest> L3ActivateSecondaryPDPContextRequ
 }
 
 void L3ActivateSecondaryPDPContextRequest::write(BitWriter& bw) const {
-    // pdpHandle(4)|spare(4).
-    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+    // [spare(4)=0][pdpHandle(4)].
+    bw.writeField(static_cast<uint32_t>(mPDPHandle & 0x0Fu), 8);
 
     // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
@@ -1300,10 +1351,12 @@ void L3ActivateSecondaryPDPContextRequest::write(BitWriter& bw) const {
     bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
     mPDPAddress.write(bw);
 
-    // APN: TLV 0x28 (mandatory).
-    bw.writeField(L3AccessPointName::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
-    mAPN.write(bw);
+    // APN: TLV 0x28 (optional).
+    if (mHaveApn) {
+        bw.writeField(L3AccessPointName::IEI, 8);
+        bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
+        mAPN.write(bw);
+    }
 
     // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
@@ -1319,7 +1372,7 @@ void L3ActivateSecondaryPDPContextRequest::text(std::ostream& os) const {
     os << "ActSecPDPReq(handle=" << static_cast<int>(mPDPHandle);
     os << ", "; mQoS.text(os);
     os << ", "; mPDPAddress.text(os);
-    os << ", "; mAPN.text(os);
+    if (mHaveApn) { os << ", "; mAPN.text(os); }
     if (mHavePCO) { os << ", "; mPCO.text(os); }
     os << ")";
 }
@@ -1329,6 +1382,7 @@ L3ActivateSecondaryPDPContextRequest L3ActivateSecondaryPDPContextRequest::Build
     msg.mPDPHandle = m_pdpHandle & 0x0Fu;
     msg.mQoS = m_qos;
     msg.mPDPAddress = m_pdpAddress;
+    msg.mHaveApn = m_haveApn;
     msg.mAPN = m_apn;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
@@ -1343,7 +1397,7 @@ L3ActivateSecondaryPDPContextRequest::Builder L3ActivateSecondaryPDPContextReque
 // ── L3ActivateSecondaryPDPContextAccept (TS 44.068 section 9.5) ───────
 
 size_t L3ActivateSecondaryPDPContextAccept::bodyLength() const {
-    size_t len = 1; // pdpHandle(4)|spare(4)
+    size_t len = 1; // [spare(4)=0][pdpHandle(4)]
     len += 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePDPAddress) len += tlvLen(mPDPAddress.lengthV());
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
@@ -1352,15 +1406,22 @@ size_t L3ActivateSecondaryPDPContextAccept::bodyLength() const {
 }
 
 Expected<L3ActivateSecondaryPDPContextAccept> L3ActivateSecondaryPDPContextAccept::parse(BitReader& br) {
-    // SM ACTIVATE SECONDARY PDP CONTEXT ACCEPT (TS 44.068): PDP handle in
-    // the first octet, negotiated QoS (LV); optional IEs follow: PDP type
-    // and address (TLV, IEI 0x2B), protocol configuration options (TLV,
-    // IEI 0x27); any further optional IEs are kept opaque.
+    // SM ACTIVATE SECONDARY PDP CONTEXT ACCEPT (TS 44.068): PDP handle
+    // value in the low nibble of the first octet, negotiated QoS (LV);
+    // optional IEs follow: PDP type and address (TLV, IEI 0x2B), protocol
+    // configuration options (TLV, IEI 0x27); any further optional IEs are
+    // kept opaque.
     L3ActivateSecondaryPDPContextAccept msg;
 
     auto o = br.readField(8);
     if (!o) return Expected<L3ActivateSecondaryPDPContextAccept>::error(o.error());
-    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+    const uint8_t b1 = static_cast<uint8_t>(o.value());
+    // The PDP handle value is in the low nibble; the high nibble is spare.
+    if ((b1 & 0xF0u) != 0) {
+        return Expected<L3ActivateSecondaryPDPContextAccept>::error(
+            ParseError{ParseError::Code::InvalidValue, "PDP handle", br.position()});
+    }
+    msg.mPDPHandle = b1 & 0x0Fu;
 
     // QoS: LV (mandatory).
     auto qlen = br.readField(8);
@@ -1403,8 +1464,8 @@ Expected<L3ActivateSecondaryPDPContextAccept> L3ActivateSecondaryPDPContextAccep
 }
 
 void L3ActivateSecondaryPDPContextAccept::write(BitWriter& bw) const {
-    // pdpHandle(4)|spare(4).
-    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+    // [spare(4)=0][pdpHandle(4)].
+    bw.writeField(static_cast<uint32_t>(mPDPHandle & 0x0Fu), 8);
 
     // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
@@ -1585,7 +1646,7 @@ L3ActivateMBMSContextRequest::Builder L3ActivateMBMSContextRequest::builder() {
 // ── L3ActivateMBMSContextAccept (TS 44.068 section 9.5) ───────────────
 
 size_t L3ActivateMBMSContextAccept::bodyLength() const {
-    size_t len = 1; // pdpHandle(4)|spare(4)
+    size_t len = 1; // [spare(4)=0][pdpHandle(4)]
     len += 1 + mQoS.lengthV(); // QoS (LV)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
     len += mAdditionalIes.size();
@@ -1593,14 +1654,20 @@ size_t L3ActivateMBMSContextAccept::bodyLength() const {
 }
 
 Expected<L3ActivateMBMSContextAccept> L3ActivateMBMSContextAccept::parse(BitReader& br) {
-    // SM ACTIVATE MBMS CONTEXT ACCEPT (TS 44.068): PDP handle in the first
-    // octet, negotiated QoS (LV); optional IEs follow (kept opaque except
-    // PCO TLV 0x27).
+    // SM ACTIVATE MBMS CONTEXT ACCEPT (TS 44.068): PDP handle value in the
+    // low nibble of the first octet, negotiated QoS (LV); optional IEs
+    // follow (kept opaque except PCO TLV 0x27).
     L3ActivateMBMSContextAccept msg;
 
     auto o = br.readField(8);
     if (!o) return Expected<L3ActivateMBMSContextAccept>::error(o.error());
-    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+    const uint8_t b1 = static_cast<uint8_t>(o.value());
+    // The PDP handle value is in the low nibble; the high nibble is spare.
+    if ((b1 & 0xF0u) != 0) {
+        return Expected<L3ActivateMBMSContextAccept>::error(
+            ParseError{ParseError::Code::InvalidValue, "PDP handle", br.position()});
+    }
+    msg.mPDPHandle = b1 & 0x0Fu;
 
     // QoS: LV (mandatory).
     auto qlen = br.readField(8);
@@ -1637,8 +1704,8 @@ Expected<L3ActivateMBMSContextAccept> L3ActivateMBMSContextAccept::parse(BitRead
 }
 
 void L3ActivateMBMSContextAccept::write(BitWriter& bw) const {
-    // pdpHandle(4)|spare(4).
-    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+    // [spare(4)=0][pdpHandle(4)].
+    bw.writeField(static_cast<uint32_t>(mPDPHandle & 0x0Fu), 8);
 
     // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
@@ -1856,10 +1923,10 @@ L3RequestMBMSContextActivationReject::Builder L3RequestMBMSContextActivationReje
 // ── L3RequestSecondaryPDPContextActivation (TS 44.068 section 9.5) ────
 
 size_t L3RequestSecondaryPDPContextActivation::bodyLength() const {
-    size_t len = 1; // pdpHandle(4)|spare(4)
+    size_t len = 1; // [spare(4)=0][pdpHandle(4)]
     len += 1 + mQoS.lengthV();         // QoS (LV)
     len += 1 + mPDPAddress.lengthV();  // PDP address (LV)
-    len += tlvLen(mAPN.lengthV());     // APN (TLV, mandatory)
+    if (mHaveApn) len += tlvLen(mAPN.lengthV());  // APN (TLV, optional)
     if (mHavePCO) len += tlvLen(mPCO.lengthV());
     len += mAdditionalIes.size();
     return len;
@@ -1867,15 +1934,21 @@ size_t L3RequestSecondaryPDPContextActivation::bodyLength() const {
 
 Expected<L3RequestSecondaryPDPContextActivation> L3RequestSecondaryPDPContextActivation::parse(BitReader& br) {
     // SM REQUEST SECONDARY PDP CONTEXT ACTIVATION (TS 44.068): PDP handle
-    // in the first octet, requested QoS (LV), requested PDP type and
-    // address (LV), access point name (TLV, IEI 0x28); protocol
-    // configuration options (TLV, IEI 0x27) and any further optional IEs
-    // follow.
+    // value in the low nibble of the first octet, requested QoS (LV),
+    // requested PDP type and address (LV); the access point name (TLV,
+    // IEI 0x28), protocol configuration options (TLV, IEI 0x27) and any
+    // further optional IEs follow when present.
     L3RequestSecondaryPDPContextActivation msg;
 
     auto o = br.readField(8);
     if (!o) return Expected<L3RequestSecondaryPDPContextActivation>::error(o.error());
-    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+    const uint8_t b1 = static_cast<uint8_t>(o.value());
+    // The PDP handle value is in the low nibble; the high nibble is spare.
+    if ((b1 & 0xF0u) != 0) {
+        return Expected<L3RequestSecondaryPDPContextActivation>::error(
+            ParseError{ParseError::Code::InvalidValue, "PDP handle", br.position()});
+    }
+    msg.mPDPHandle = b1 & 0x0Fu;
 
     // QoS: LV (mandatory).
     auto qlen = br.readField(8);
@@ -1895,26 +1968,20 @@ Expected<L3RequestSecondaryPDPContextActivation> L3RequestSecondaryPDPContextAct
         msg.mPDPAddress = std::move(addr).value();
     }
 
-    // APN: TLV 0x28 (mandatory).
-    {
-        size_t vLen = 0;
-        auto iei = readTLVHeader(br, vLen);
-        if (!iei) return Expected<L3RequestSecondaryPDPContextActivation>::error(iei.error());
-        if (iei.value() != L3AccessPointName::IEI) {
-            return Expected<L3RequestSecondaryPDPContextActivation>::error(
-                ParseError{ParseError::Code::InvalidIE, "request secondary PDP context activation: missing access point name", br.position()});
-        }
-        auto apn = L3AccessPointName::parse(br, vLen);
-        if (!apn) return Expected<L3RequestSecondaryPDPContextActivation>::error(apn.error());
-        msg.mAPN = std::move(apn).value();
-    }
-
+    // Optional IE region: access point name TLV 0x28, PCO TLV 0x27,
+    // everything else preserved in the opaque tail.
     while (br.remainingBits() >= 16) {
         size_t vLen = 0;
         auto iei = readTLVHeader(br, vLen);
         if (!iei) return Expected<L3RequestSecondaryPDPContextActivation>::error(iei.error());
         bool typed = false;
-        if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
+        if (iei.value() == L3AccessPointName::IEI && !msg.mHaveApn) {
+            if (auto apn = L3AccessPointName::parse(br, vLen)) {
+                msg.mHaveApn = true;
+                msg.mAPN = std::move(apn).value();
+                typed = true;
+            }
+        } else if (iei.value() == L3ProtocolConfigOptions::IEI && !msg.mHavePCO) {
             if (auto pco = L3ProtocolConfigOptions::parse(br, vLen)) {
                 msg.mHavePCO = true;
                 msg.mPCO = std::move(pco).value();
@@ -1935,8 +2002,8 @@ Expected<L3RequestSecondaryPDPContextActivation> L3RequestSecondaryPDPContextAct
 }
 
 void L3RequestSecondaryPDPContextActivation::write(BitWriter& bw) const {
-    // pdpHandle(4)|spare(4).
-    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+    // [spare(4)=0][pdpHandle(4)].
+    bw.writeField(static_cast<uint32_t>(mPDPHandle & 0x0Fu), 8);
 
     // QoS: LV (mandatory).
     bw.writeField(static_cast<uint32_t>(mQoS.lengthV()), 8);
@@ -1946,10 +2013,12 @@ void L3RequestSecondaryPDPContextActivation::write(BitWriter& bw) const {
     bw.writeField(static_cast<uint32_t>(mPDPAddress.lengthV()), 8);
     mPDPAddress.write(bw);
 
-    // APN: TLV 0x28 (mandatory).
-    bw.writeField(L3AccessPointName::IEI, 8);
-    bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
-    mAPN.write(bw);
+    // APN: TLV 0x28 (optional).
+    if (mHaveApn) {
+        bw.writeField(L3AccessPointName::IEI, 8);
+        bw.writeField(static_cast<uint32_t>(mAPN.lengthV()), 8);
+        mAPN.write(bw);
+    }
 
     // PCO: TLV 0x27 (optional).
     if (mHavePCO) {
@@ -1965,7 +2034,7 @@ void L3RequestSecondaryPDPContextActivation::text(std::ostream& os) const {
     os << "ReqSecPDPAct(handle=" << static_cast<int>(mPDPHandle);
     os << ", "; mQoS.text(os);
     os << ", "; mPDPAddress.text(os);
-    os << ", "; mAPN.text(os);
+    if (mHaveApn) { os << ", "; mAPN.text(os); }
     if (mHavePCO) { os << ", "; mPCO.text(os); }
     os << ")";
 }
@@ -1975,6 +2044,7 @@ L3RequestSecondaryPDPContextActivation L3RequestSecondaryPDPContextActivation::B
     msg.mPDPHandle = m_pdpHandle & 0x0Fu;
     msg.mQoS = m_qos;
     msg.mPDPAddress = m_pdpAddress;
+    msg.mHaveApn = m_haveApn;
     msg.mAPN = m_apn;
     msg.mHavePCO = m_havePCO;
     msg.mPCO = m_pco;
@@ -2036,13 +2106,19 @@ L3RequestSecondaryPDPContextActivationReject::Builder L3RequestSecondaryPDPConte
 // ── L3SMNotification (TS 44.068 section 9.5) ──────────────────────────
 
 Expected<L3SMNotification> L3SMNotification::parse(BitReader& br) {
-    // SM NOTIFICATION (TS 44.068): PDP handle in the first octet; any
-    // further optional IEs are kept opaque.
+    // SM NOTIFICATION (TS 44.068): PDP handle value in the low nibble of
+    // the first octet; any further optional IEs are kept opaque.
     L3SMNotification msg;
 
     auto o = br.readField(8);
     if (!o) return Expected<L3SMNotification>::error(o.error());
-    msg.mPDPHandle = static_cast<uint8_t>((o.value() >> 4) & 0x0Fu);
+    const uint8_t b1 = static_cast<uint8_t>(o.value());
+    // The PDP handle value is in the low nibble; the high nibble is spare.
+    if ((b1 & 0xF0u) != 0) {
+        return Expected<L3SMNotification>::error(
+            ParseError{ParseError::Code::InvalidValue, "PDP handle", br.position()});
+    }
+    msg.mPDPHandle = b1 & 0x0Fu;
 
     if (!detail::readOpaqueTail(br, msg.mAdditionalIes)) {
         return Expected<L3SMNotification>::error(
@@ -2053,8 +2129,8 @@ Expected<L3SMNotification> L3SMNotification::parse(BitReader& br) {
 }
 
 void L3SMNotification::write(BitWriter& bw) const {
-    // pdpHandle(4)|spare(4).
-    bw.writeField((static_cast<uint32_t>(mPDPHandle) & 0x0Fu) << 4, 8);
+    // [spare(4)=0][pdpHandle(4)].
+    bw.writeField(static_cast<uint32_t>(mPDPHandle & 0x0Fu), 8);
     detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 

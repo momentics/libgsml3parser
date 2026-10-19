@@ -44,9 +44,10 @@
 namespace gsml3parser {
 
 // ── Activate PDP Context Request (TS 44.068 section 9.5) ──────────────
-// MS->SGSN: requestedNSAPI(4)|spare(4) | requestedLLCSAPI(4)|spare(4) |
+// MS->SGSN: requestedNSAPI(4) in the low nibble, spare high nibble |
+// requestedLLCSAPI(4) in the low nibble, spare high nibble |
 // requestedQoS(LV, mandatory) | requestedPDPaddress(LV, mandatory) |
-// accessPointName(TLV, IEI=0x28, mandatory) | [protocolConfigOpts(TLV,
+// [accessPointName(TLV, IEI=0x28)] | [protocolConfigOpts(TLV,
 // IEI=0x27)] | [requestType TV: one octet, high nibble '1010'B + value] |
 // [opaque optional IEs].
 // Unrecognized optional information elements are kept as an opaque
@@ -57,6 +58,7 @@ class L3ActivatePDPContextRequest {
     uint8_t mLLcSapi{0};
     L3QoS mQoS;
     L3PDPAddress mPDPAddress;
+    bool mHaveApn{false};
     L3AccessPointName mAPN;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
@@ -73,6 +75,7 @@ public:
         uint8_t m_llcSapi{0};
         L3QoS m_qos;
         L3PDPAddress m_pdpAddress;
+        bool m_haveApn{false};
         L3AccessPointName m_apn;
         bool m_havePCO{false};
         L3ProtocolConfigOptions m_pco;
@@ -88,8 +91,8 @@ public:
         Builder& qos(L3QoS v) { m_qos = v; return *this; }
         /// Set the requested PDP type and address (mandatory LV on the wire).
         Builder& pdpAddress(L3PDPAddress v) { m_pdpAddress = v; return *this; }
-        /// Set the access point name (mandatory TLV on the wire).
-        Builder& apn(L3AccessPointName v) { m_apn = v; return *this; }
+        /// Set the access point name (optional TLV, sets mHaveApn flag).
+        Builder& apn(L3AccessPointName v) { m_apn = v; m_haveApn = true; return *this; }
         /// Set protocol configuration options (optional TLV).
         Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
         /// Set the request type value (TS 44.068), written as one octet '1010'B|value.
@@ -105,12 +108,14 @@ public:
 
     static Builder builder();
 
-    /// Requested NSAPI (four bits).
+    /// Requested NSAPI (four bits, low nibble of the first body octet).
     uint8_t nsapi() const { return mNSapi; }
-    /// Requested LLC SAPI (four bits).
+    /// Requested LLC SAPI (four bits, low nibble of the second body octet).
     uint8_t llcSapi() const { return mLLcSapi; }
     const L3QoS& qos() const { return mQoS; }
     const L3PDPAddress& pdpAddress() const { return mPDPAddress; }
+    /// True when the access point name TLV was present.
+    [[nodiscard]] bool hasApn() const { return mHaveApn; }
     const L3AccessPointName& apn() const { return mAPN; }
     bool hasPCO() const { return mHavePCO; }
     const L3ProtocolConfigOptions& pco() const { return mPCO; }
@@ -131,8 +136,9 @@ public:
 };
 
 // ── Activate PDP Context Accept (TS 44.068 section 9.5) ───────────────
-// SGSN->MS: negotiatedLLCSAPI(4)|spare(4) | negotiatedQoS(LV) |
-// radioPriorityForSMS(4)|spare(4) | [PDP type and address (TLV, IEI=0x2B)] |
+// SGSN->MS: negotiatedLLCSAPI(4) in the low nibble, spare high nibble |
+// negotiatedQoS(LV) | radioPriorityForSMS(4) in the low nibble, spare high
+// nibble | [PDP type and address (TLV, IEI=0x2B)] |
 // [protocolConfigOpts(TLV, IEI=0x27)] | [opaque optional IEs].
 
 class L3ActivatePDPContextAccept {
@@ -180,10 +186,10 @@ public:
 
     static Builder builder();
 
-    /// Negotiated LLC SAPI (four bits).
+    /// Negotiated LLC SAPI (four bits, low nibble of the first body octet).
     uint8_t llcSapi() const { return mLLcSapi; }
     const L3QoS& qos() const { return mQoS; }
-    /// Radio priority for SMS (four bits).
+    /// Radio priority for SMS (four bits, low nibble of its body octet).
     uint8_t radioPriority() const { return mRadioPriority; }
     bool hasPDPAddress() const { return mHavePDPAddress; }
     const L3PDPAddress& pdpAddress() const { return mPDPAddress; }
@@ -206,7 +212,7 @@ public:
 // (protocol configuration options, back-off timer, re-attempt indicator)].
 
 class L3ActivatePDPContextReject {
-    SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
+    SMCause mCause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
     std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
@@ -214,7 +220,7 @@ public:
     static constexpr int MTI = 0x43;
 
     struct Builder {
-        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+        SMCause m_cause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
         std::vector<uint8_t> m_additionalIes;
 
         /// Set SM cause (first body octet on the wire).
@@ -245,12 +251,13 @@ public:
 
 // ── Deactivate PDP Context Request (TS 44.068 section 9.5) ────────────
 // Bidirectional: smCause(value octet, no identifier, mandatory) |
-// [tearDownIndicator TV: one octet '1001'B + [flag(1)|spare(3)]] |
+// [tearDownIndicator TV: one octet, high nibble '1001'B identifier +
+// tear-down flag in bit 0] |
 // [protocolConfigOpts(TLV, IEI=0x27)] | [opaque optional IEs (MBMS PCO,
 // T3396 timer value, WLAN offload indication)].
 
 class L3DeactivatePDPContextRequest {
-    SMCause mCause{SMCause::ReqAccepted};
+    SMCause mCause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
     bool mHasTearDownIndicator{false};
     L3TearDownIndicator mTearDownIndicator;
     bool mHavePCO{false};
@@ -262,7 +269,7 @@ public:
     static constexpr int MTI = 0x46;
 
     struct Builder {
-        SMCause m_cause{SMCause::ReqAccepted};
+        SMCause m_cause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
         bool m_hasTearDownIndicator{false};
         L3TearDownIndicator m_tearDownIndicator;
         bool m_havePCO{false};
@@ -345,8 +352,8 @@ public:
 };
 
 // ── Modify PDP Context Request (TS 44.068 section 9.5) ────────────────
-// SGSN->MS: pdpHandle(4)|spare(4) | QoS(LV) | [PCO(TLV, IEI=0x27)] |
-// [opaque optional IEs].
+// SGSN->MS: pdpHandle(4) in the low nibble, spare high nibble | QoS(LV) |
+// [PCO(TLV, IEI=0x27)] | [opaque optional IEs].
 
 class L3ModifyPDPContextRequest {
     uint8_t mPDPHandle{0};
@@ -400,8 +407,8 @@ public:
 };
 
 // ── Modify PDP Context Accept (TS 44.068 section 9.5) ─────────────────
-// MS->SGSN: pdpHandle(4)|spare(4) | QoS(LV) | [PCO(TLV, IEI=0x27)] |
-// [opaque optional IEs].
+// MS->SGSN: pdpHandle(4) in the low nibble, spare high nibble | QoS(LV) |
+// [PCO(TLV, IEI=0x27)] | [opaque optional IEs].
 
 class L3ModifyPDPContextAccept {
     uint8_t mPDPHandle{0};
@@ -459,7 +466,7 @@ public:
 // IEs (back-off timer and others)].
 
 class L3ModifyPDPContextReject {
-    SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
+    SMCause mCause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
     std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
@@ -467,7 +474,7 @@ public:
     static constexpr int MTI = 0x4c;
 
     struct Builder {
-        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+        SMCause m_cause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
         std::vector<uint8_t> m_additionalIes;
 
         /// Set SM cause (first body octet on the wire).
@@ -500,7 +507,7 @@ public:
 // Bidirectional: smCause(value octet, no identifier) | [opaque optional IEs].
 
 class L3SMStatus {
-    SMCause mCause{SMCause::ReqAccepted};
+    SMCause mCause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
     std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
@@ -510,7 +517,7 @@ public:
     explicit L3SMStatus(SMCause cause) : mCause(cause) {}
 
     struct Builder {
-        SMCause m_cause{SMCause::ReqAccepted};
+        SMCause m_cause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
         std::vector<uint8_t> m_additionalIes;
 
         /// Set SM cause (first body octet on the wire).
@@ -540,13 +547,15 @@ public:
 };
 
 // ── Request PDP Context Activation (TS 44.068 section 9.5) ────────────
-// Net->MS: pdpHandle(4)|spare(4) | QoS(LV) | PDP address(LV) |
-// APN(TLV, IEI=0x28) | [PCO(TLV, IEI=0x27)] | [opaque optional IEs].
+// Net->MS: pdpHandle(4) in the low nibble, spare high nibble | QoS(LV) |
+// PDP address(LV) | [APN(TLV, IEI=0x28)] | [PCO(TLV, IEI=0x27)] |
+// [opaque optional IEs].
 
 class L3RequestPDPContextActivation {
     uint8_t mPDPHandle{0};
     L3QoS mQoS;
     L3PDPAddress mPDPAddress;
+    bool mHaveApn{false};
     L3AccessPointName mAPN;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
@@ -560,6 +569,7 @@ public:
         uint8_t m_pdpHandle{0};
         L3QoS m_qos;
         L3PDPAddress m_pdpAddress;
+        bool m_haveApn{false};
         L3AccessPointName m_apn;
         bool m_havePCO{false};
         L3ProtocolConfigOptions m_pco;
@@ -571,8 +581,8 @@ public:
         Builder& qos(L3QoS v) { m_qos = v; return *this; }
         /// Set PDP type and address (LV on the wire).
         Builder& pdpAddress(L3PDPAddress v) { m_pdpAddress = v; return *this; }
-        /// Set APN (TLV on the wire).
-        Builder& apn(L3AccessPointName v) { m_apn = v; return *this; }
+        /// Set APN (optional TLV on the wire, sets mHaveApn flag).
+        Builder& apn(L3AccessPointName v) { m_apn = v; m_haveApn = true; return *this; }
         /// Set PCO (sets mHavePCO flag).
         Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
         /// Set the opaque sequence of additional optional IEs.
@@ -589,6 +599,8 @@ public:
     uint8_t pdpHandle() const { return mPDPHandle; }
     const L3QoS& qos() const { return mQoS; }
     const L3PDPAddress& pdpAddress() const { return mPDPAddress; }
+    /// True when the access point name TLV was present.
+    [[nodiscard]] bool hasApn() const { return mHaveApn; }
     const L3AccessPointName& apn() const { return mAPN; }
     bool hasPCO() const { return mHavePCO; }
     const L3ProtocolConfigOptions& pco() const { return mPCO; }
@@ -608,7 +620,7 @@ public:
 // MS->Net: smCause(value octet, no identifier) | [opaque optional IEs].
 
 class L3RequestPDPContextActivationReject {
-    SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
+    SMCause mCause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
     std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
@@ -616,7 +628,7 @@ public:
     static constexpr int MTI = 0x45;
 
     struct Builder {
-        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+        SMCause m_cause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
         std::vector<uint8_t> m_additionalIes;
 
         /// Set SM cause (first body octet on the wire).
@@ -646,8 +658,8 @@ public:
 };
 
 // ── Modify PDP Context Request (MS->Net) (TS 44.068 section 9.5) ──────
-// MS->Net: pdpHandle(4)|spare(4) | QoS(LV) | [PCO(TLV, IEI=0x27)] |
-// [opaque optional IEs].
+// MS->Net: pdpHandle(4) in the low nibble, spare high nibble | QoS(LV) |
+// [PCO(TLV, IEI=0x27)] | [opaque optional IEs].
 
 class L3ModifyPDPContextRequestMS {
     uint8_t mPDPHandle{0};
@@ -701,8 +713,8 @@ public:
 };
 
 // ── Modify PDP Context Accept (Net->MS) (TS 44.068 section 9.5) ───────
-// Net->MS: pdpHandle(4)|spare(4) | QoS(LV) | [PCO(TLV, IEI=0x27)] |
-// [opaque optional IEs].
+// Net->MS: pdpHandle(4) in the low nibble, spare high nibble | QoS(LV) |
+// [PCO(TLV, IEI=0x27)] | [opaque optional IEs].
 
 class L3ModifyPDPContextAcceptNet {
     uint8_t mPDPHandle{0};
@@ -756,13 +768,15 @@ public:
 };
 
 // ── Activate Secondary PDP Context Request (TS 44.068 section 9.5) ────
-// Net->MS: pdpHandle(4)|spare(4) | QoS(LV) | PDP address(LV) |
-// APN(TLV, IEI=0x28) | [PCO(TLV, IEI=0x27)] | [opaque optional IEs].
+// MS->SGSN: pdpHandle(4) in the low nibble, spare high nibble | QoS(LV) |
+// PDP address(LV) | [APN(TLV, IEI=0x28)] | [PCO(TLV, IEI=0x27)] |
+// [opaque optional IEs].
 
 class L3ActivateSecondaryPDPContextRequest {
     uint8_t mPDPHandle{0};
     L3QoS mQoS;
     L3PDPAddress mPDPAddress;
+    bool mHaveApn{false};
     L3AccessPointName mAPN;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
@@ -776,6 +790,7 @@ public:
         uint8_t m_pdpHandle{0};
         L3QoS m_qos;
         L3PDPAddress m_pdpAddress;
+        bool m_haveApn{false};
         L3AccessPointName m_apn;
         bool m_havePCO{false};
         L3ProtocolConfigOptions m_pco;
@@ -787,8 +802,8 @@ public:
         Builder& qos(L3QoS v) { m_qos = v; return *this; }
         /// Set PDP type and address (LV on the wire).
         Builder& pdpAddress(L3PDPAddress v) { m_pdpAddress = v; return *this; }
-        /// Set APN (TLV on the wire).
-        Builder& apn(L3AccessPointName v) { m_apn = v; return *this; }
+        /// Set APN (optional TLV on the wire, sets mHaveApn flag).
+        Builder& apn(L3AccessPointName v) { m_apn = v; m_haveApn = true; return *this; }
         /// Set PCO (sets mHavePCO flag).
         Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
         /// Set the opaque sequence of additional optional IEs.
@@ -805,6 +820,8 @@ public:
     uint8_t pdpHandle() const { return mPDPHandle; }
     const L3QoS& qos() const { return mQoS; }
     const L3PDPAddress& pdpAddress() const { return mPDPAddress; }
+    /// True when the access point name TLV was present.
+    [[nodiscard]] bool hasApn() const { return mHaveApn; }
     const L3AccessPointName& apn() const { return mAPN; }
     bool hasPCO() const { return mHavePCO; }
     const L3ProtocolConfigOptions& pco() const { return mPCO; }
@@ -821,8 +838,9 @@ public:
 };
 
 // ── Activate Secondary PDP Context Accept (TS 44.068 section 9.5) ─────
-// MS->Net: pdpHandle(4)|spare(4) | QoS(LV) | [PDP type and address
-// (TLV, IEI=0x2B)] | [PCO(TLV, IEI=0x27)] | [opaque optional IEs].
+// MS->Net: pdpHandle(4) in the low nibble, spare high nibble | QoS(LV) |
+// [PDP type and address (TLV, IEI=0x2B)] | [PCO(TLV, IEI=0x27)] |
+// [opaque optional IEs].
 
 class L3ActivateSecondaryPDPContextAccept {
     uint8_t mPDPHandle{0};
@@ -887,7 +905,7 @@ public:
 // MS->Net: smCause(value octet, no identifier) | [opaque optional IEs].
 
 class L3ActivateSecondaryPDPContextReject {
-    SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
+    SMCause mCause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
     std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
@@ -895,7 +913,7 @@ public:
     static constexpr int MTI = 0x4F;
 
     struct Builder {
-        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+        SMCause m_cause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
         std::vector<uint8_t> m_additionalIes;
 
         /// Set SM cause (first body octet on the wire).
@@ -975,8 +993,8 @@ public:
 };
 
 // ── Activate MBMS Context Accept (TS 44.068 section 9.5) ──────────────
-// Net->MS: pdpHandle(4)|spare(4) | QoS(LV) | [PCO(TLV, IEI=0x27)] |
-// [opaque optional IEs].
+// Net->MS: pdpHandle(4) in the low nibble, spare high nibble | QoS(LV) |
+// [PCO(TLV, IEI=0x27)] | [opaque optional IEs].
 
 class L3ActivateMBMSContextAccept {
     uint8_t mPDPHandle{0};
@@ -1033,7 +1051,7 @@ public:
 // Net->MS: smCause(value octet, no identifier) | [opaque optional IEs].
 
 class L3ActivateMBMSContextReject {
-    SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
+    SMCause mCause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
     std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
@@ -1041,7 +1059,7 @@ public:
     static constexpr int MTI = 0x58;
 
     struct Builder {
-        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+        SMCause m_cause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
         std::vector<uint8_t> m_additionalIes;
 
         /// Set SM cause (first body octet on the wire).
@@ -1124,7 +1142,7 @@ public:
 // MS->Net: smCause(value octet, no identifier) | [opaque optional IEs].
 
 class L3RequestMBMSContextActivationReject {
-    SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
+    SMCause mCause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
     std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
@@ -1132,7 +1150,7 @@ public:
     static constexpr int MTI = 0x5A;
 
     struct Builder {
-        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+        SMCause m_cause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
         std::vector<uint8_t> m_additionalIes;
 
         /// Set SM cause (first body octet on the wire).
@@ -1162,13 +1180,15 @@ public:
 };
 
 // ── Request Secondary PDP Context Activation (TS 44.068 section 9.5) ──
-// Net->MS: pdpHandle(4)|spare(4) | QoS(LV) | PDP address(LV) |
-// APN(TLV, IEI=0x28) | [PCO(TLV, IEI=0x27)] | [opaque optional IEs].
+// Net->MS: pdpHandle(4) in the low nibble, spare high nibble | QoS(LV) |
+// PDP address(LV) | [APN(TLV, IEI=0x28)] | [PCO(TLV, IEI=0x27)] |
+// [opaque optional IEs].
 
 class L3RequestSecondaryPDPContextActivation {
     uint8_t mPDPHandle{0};
     L3QoS mQoS;
     L3PDPAddress mPDPAddress;
+    bool mHaveApn{false};
     L3AccessPointName mAPN;
     bool mHavePCO{false};
     L3ProtocolConfigOptions mPCO;
@@ -1182,6 +1202,7 @@ public:
         uint8_t m_pdpHandle{0};
         L3QoS m_qos;
         L3PDPAddress m_pdpAddress;
+        bool m_haveApn{false};
         L3AccessPointName m_apn;
         bool m_havePCO{false};
         L3ProtocolConfigOptions m_pco;
@@ -1193,8 +1214,8 @@ public:
         Builder& qos(L3QoS v) { m_qos = v; return *this; }
         /// Set PDP type and address (LV on the wire).
         Builder& pdpAddress(L3PDPAddress v) { m_pdpAddress = v; return *this; }
-        /// Set APN (TLV on the wire).
-        Builder& apn(L3AccessPointName v) { m_apn = v; return *this; }
+        /// Set APN (optional TLV on the wire, sets mHaveApn flag).
+        Builder& apn(L3AccessPointName v) { m_apn = v; m_haveApn = true; return *this; }
         /// Set PCO (sets mHavePCO flag).
         Builder& pco(L3ProtocolConfigOptions v) { m_pco = v; m_havePCO = true; return *this; }
         /// Set the opaque sequence of additional optional IEs.
@@ -1211,6 +1232,8 @@ public:
     uint8_t pdpHandle() const { return mPDPHandle; }
     const L3QoS& qos() const { return mQoS; }
     const L3PDPAddress& pdpAddress() const { return mPDPAddress; }
+    /// True when the access point name TLV was present.
+    [[nodiscard]] bool hasApn() const { return mHaveApn; }
     const L3AccessPointName& apn() const { return mAPN; }
     bool hasPCO() const { return mHavePCO; }
     const L3ProtocolConfigOptions& pco() const { return mPCO; }
@@ -1230,7 +1253,7 @@ public:
 // MS->Net: smCause(value octet, no identifier) | [opaque optional IEs].
 
 class L3RequestSecondaryPDPContextActivationReject {
-    SMCause mCause{SMCause::Unsupported_PDP_Address_Type};
+    SMCause mCause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
     std::vector<uint8_t> mAdditionalIes;
 
     friend struct Builder;
@@ -1238,7 +1261,7 @@ public:
     static constexpr int MTI = 0x5C;
 
     struct Builder {
-        SMCause m_cause{SMCause::Unsupported_PDP_Address_Type};
+        SMCause m_cause{SMCause::Unspecified}; // must be replaced with a defined cause before wire emission
         std::vector<uint8_t> m_additionalIes;
 
         /// Set SM cause (first body octet on the wire).
@@ -1268,7 +1291,8 @@ public:
 };
 
 // ── SM Notification (TS 44.068 section 9.5) ───────────────────────────
-// Net->MS: pdpHandle(4)|spare(4) | [opaque optional IEs].
+// Net->MS: pdpHandle(4) in the low nibble, spare high nibble |
+// [opaque optional IEs].
 
 class L3SMNotification {
     uint8_t mPDPHandle{0};
