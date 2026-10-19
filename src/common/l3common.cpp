@@ -1328,66 +1328,155 @@ void L3CellSelection::text(std::ostream& os) const {
 //   iu_mode_ind(1)             — only when gprs_pres = 0
 //   si21_pres(1) [si21_pos(1)] — only when sched_pres = 0
 
+namespace {
+
+// Rest-octets padding pattern: '00101011'B per octet (TS 44.018 sections
+// 10.5.2.34/10.5.2.35). A rest region made up entirely of this pattern
+// carries no record at all.
+constexpr uint8_t kRestOctetsPadding = 0x2Bu;
+
+[[nodiscard]] bool isAllPadding(const std::vector<uint8_t>& v) noexcept {
+    for (uint8_t b : v) {
+        if (b != kRestOctetsPadding) return false;
+    }
+    return true;
+}
+
+/// Fill the bits to the next octet boundary with the leading bits of the
+/// '00101011'B padding pattern (TS 44.018 section 10.5.2.34).
+void padToOctetWithPattern(BitWriter& bw) noexcept {
+    const unsigned spare = static_cast<unsigned>((8u - bw.position() % 8u) % 8u);
+    for (unsigned i = 0; i < spare; ++i) {
+        bw.writeField((kRestOctetsPadding >> (7u - i)) & 1u, 1);
+    }
+}
+
+/// Preserve the whole octets still unread by \p r into \p out verbatim.
+Expected<void> captureTrailingOctets(BitReader& r, std::vector<uint8_t>& out) {
+    const size_t tailBytes = r.remainingBits() / 8;
+    if (tailBytes == 0) return Expected<void>::hold();
+    out.resize(tailBytes);
+    return r.readBytes(out.data(), tailBytes);
+}
+
+} // namespace
+
 Expected<L3SI3RestOctets> L3SI3RestOctets::parse(BitReader& br) {
     // The record starts directly with the selection-parameter presence bit
     // (TS 44.018 section 10.5.2.34), so a frame without rest octets — or a
     // truncated one — parses to the all-absent default: reads stop at end
-    // of input instead of failing.
+    // of input instead of failing. A rest region made up entirely of the
+    // '00101011'B (0x2B) padding octets carries no record either: the
+    // presence fields stay at their defaults and the octets are preserved
+    // verbatim for a byte-exact re-emit.
     L3SI3RestOctets result;
-    auto readField = [&br](unsigned nbits, unsigned& out) -> bool {
-        if (br.remainingBits() < nbits) return false;
-        auto r = br.readField(nbits);
-        if (!r) return false;
-        out = r.value();
-        return true;
-    };
-    unsigned v{};
-    if (readField(1, v) && v) {                       // sel_pres
-        result.mSelPresent = true;                    // [cbq|cro(6)|to(3)|pt(5)]
-        if (readField(1, v)) result.mCBQ = (v != 0);
-        if (readField(6, v)) result.mCRO = v;
-        if (readField(3, v)) result.mTO = v;
-        if (readField(5, v)) result.mPT = v;
+    const size_t regionBytes = br.remainingBits() / 8;
+    if (regionBytes == 0) {
+        return Expected<L3SI3RestOctets>::hold(std::move(result));
     }
-    if (readField(1, v) && v) {                       // pwr_pres
-        result.mPwrOffsetPresent = true;              // [power_offset(2)]
-        if (readField(2, v)) result.mPowerOffset = v;
-    }
-    if (readField(1, v)) result.mSi2terInd = (v != 0);
-    if (readField(1, v)) result.mEarlyCmInd = (v != 0);
-    if (readField(1, v) && v) {                       // sched_pres
-        result.mSchedWherePresent = true;             // [where(3)]
-        if (readField(3, v)) result.mWhere = v;
-    }
-    if (readField(1, v) && v) {                       // gprs_pres
-        result.mHaveGPRS = true;                      // [ra_colour(3)|si13_pos(1)]
-        if (readField(3, v)) result.mRA_COLOUR = v;
-        if (readField(1, v)) result.mSi13Position = (v != 0);
-    }
-    if (readField(1, v)) result.mUmtsEarlyCmInd = (v != 0);
-    if (readField(1, v) && v) {                       // si2quater_pres
-        result.mSi2quaterPresent = true;              // [si2quater_ind(1)]
-        if (readField(1, v)) result.mSi2quaterInd = (v != 0);
-    }
-    if (!result.mHaveGPRS) {                          // iu_mode_ind — only when gprs_pres = 0
-        if (readField(1, v)) {
-            result.mIuModePresent = true;
-            result.mIuModeInd = (v != 0);
+
+    auto decodeRecord = [&result](BitReader& r) {
+        auto readField = [&r](unsigned nbits, unsigned& out) -> bool {
+            if (r.remainingBits() < nbits) return false;
+            auto rr = r.readField(nbits);
+            if (!rr) return false;
+            out = rr.value();
+            return true;
+        };
+        unsigned v{};
+        if (readField(1, v) && v) {                   // sel_pres
+            result.mSelPresent = true;                // [cbq|cro(6)|to(3)|pt(5)]
+            if (readField(1, v)) result.mCBQ = (v != 0);
+            if (readField(6, v)) result.mCRO = v;
+            if (readField(3, v)) result.mTO = v;
+            if (readField(5, v)) result.mPT = v;
         }
-    }
-    if (!result.mSchedWherePresent) {                 // si21 group — only when sched_pres = 0
-        if (readField(1, v)) {
-            result.mSi21Present = (v != 0);
-            if (v) {
-                unsigned p{};
-                if (readField(1, p)) result.mSi21Pos = p;
+        if (readField(1, v) && v) {                   // pwr_pres
+            result.mPwrOffsetPresent = true;          // [power_offset(2)]
+            if (readField(2, v)) result.mPowerOffset = v;
+        }
+        if (readField(1, v)) result.mSi2terInd = (v != 0);
+        if (readField(1, v)) result.mEarlyCmInd = (v != 0);
+        if (readField(1, v) && v) {                   // sched_pres
+            result.mSchedWherePresent = true;         // [where(3)]
+            if (readField(3, v)) result.mWhere = v;
+        }
+        if (readField(1, v) && v) {                   // gprs_pres
+            result.mHaveGPRS = true;                  // [ra_colour(3)|si13_pos(1)]
+            if (readField(3, v)) result.mRA_COLOUR = v;
+            if (readField(1, v)) result.mSi13Position = (v != 0);
+        }
+        if (readField(1, v)) result.mUmtsEarlyCmInd = (v != 0);
+        if (readField(1, v) && v) {                   // si2quater_pres
+            result.mSi2quaterPresent = true;          // [si2quater_ind(1)]
+            if (readField(1, v)) result.mSi2quaterInd = (v != 0);
+        }
+        if (!result.mHaveGPRS) {                      // iu_mode_ind — only when gprs_pres = 0
+            if (readField(1, v)) {
+                result.mIuModePresent = true;
+                result.mIuModeInd = (v != 0);
             }
         }
+        if (!result.mSchedWherePresent) {             // si21 group — only when sched_pres = 0
+            if (readField(1, v)) {
+                result.mSi21Present = (v != 0);
+                if (v) {
+                    unsigned p{};
+                    if (readField(1, p)) result.mSi21Pos = p;
+                }
+            }
+        }
+    };
+
+    if ((br.peekField(8) & 0xFFu) != kRestOctetsPadding) {
+        // No leading padding octet: a genuine record. Positional decode in
+        // place, then preserve any unread trailing octets verbatim.
+        decodeRecord(br);
+        br.alignToOctet();                            // drop the pattern pad bits
+        auto ct = captureTrailingOctets(br, result.mOpaqueTail);
+        if (!ct) return Expected<L3SI3RestOctets>::error(ct.error());
+        return Expected<L3SI3RestOctets>::hold(std::move(result));
+    }
+
+    // Leading padding octet: stage the whole region to decide between a
+    // pure-padding tail (no record) and a genuine record that starts with
+    // a 0x2B byte.
+    std::vector<uint8_t> region(regionBytes);
+    auto r0 = br.readBytes(region.data(), regionBytes);
+    if (!r0) return Expected<L3SI3RestOctets>::error(r0.error());
+    bool paddingOnly = true;
+    for (uint8_t b : region) {
+        if (b != kRestOctetsPadding) { paddingOnly = false; break; }
+    }
+    if (paddingOnly) {
+        result.mOpaqueTail = std::move(region);       // verbatim, all presence fields default
+        return Expected<L3SI3RestOctets>::hold(std::move(result));
+    }
+    BitReader regionReader(region.data(), regionBytes * 8);
+    decodeRecord(regionReader);
+    regionReader.alignToOctet();
+    const size_t tailBytes = regionReader.remainingBits() / 8;
+    if (tailBytes > 0) {
+        result.mOpaqueTail.assign(region.data() + (regionBytes - tailBytes),
+                                  region.data() + regionBytes);
     }
     return Expected<L3SI3RestOctets>::hold(std::move(result));
 }
 
+bool L3SI3RestOctets::noRecordBits() const noexcept {
+    // No presence flag and no unconditional indicator bit is set: the
+    // decoded record carries nothing but defaults.
+    return !mSelPresent && !mPwrOffsetPresent && !mSchedWherePresent &&
+           !mHaveGPRS && !mSi2quaterPresent && !mSi21Present &&
+           !mSi2terInd && !mEarlyCmInd && !mUmtsEarlyCmInd && !mIuModeInd;
+}
+
 size_t L3SI3RestOctets::lengthV() const {
+    // A preserved padding-only region (no record bits) re-emits exactly its
+    // own octets.
+    if (noRecordBits() && !mOpaqueTail.empty() && isAllPadding(mOpaqueTail)) {
+        return mOpaqueTail.size();
+    }
     size_t bits = 1;                                  // sel_pres
     if (mSelPresent) bits += 1 + 6 + 3 + 5;           // cbq|cro|to|pt
     bits += 1;                                        // pwr_pres
@@ -1405,10 +1494,16 @@ size_t L3SI3RestOctets::lengthV() const {
         bits += 1;                                    // si21_pres
         if (mSi21Present) bits += 1;                  // si21_pos
     }
-    return (bits + 7) / 8;
+    return (bits + 7) / 8 + mOpaqueTail.size();
 }
 
 void L3SI3RestOctets::write(BitWriter& bw) const {
+    // A padding-only preserved region (no record bits) is re-emitted
+    // verbatim, without the all-absent record (TS 44.018 section 10.5.2.34).
+    if (noRecordBits() && !mOpaqueTail.empty() && isAllPadding(mOpaqueTail)) {
+        bw.writeBytes(mOpaqueTail.data(), mOpaqueTail.size());
+        return;
+    }
     bw.writeField(mSelPresent ? 1u : 0u, 1);
     if (mSelPresent) {
         bw.writeField(mCBQ ? 1u : 0u, 1);
@@ -1435,7 +1530,8 @@ void L3SI3RestOctets::write(BitWriter& bw) const {
         bw.writeField(mSi21Present ? 1u : 0u, 1);
         if (mSi21Present) bw.writeField(mSi21Pos & 0x01u, 1);
     }
-    bw.alignToOctet();   // sub-octet padding is zero-filled (TS 44.018 10.5.2.34)
+    padToOctetWithPattern(bw);   // unused bits take the '00101011'B pattern (TS 44.018 10.5.2.34)
+    detail::writeOpaqueTail(mOpaqueTail, bw);
 }
 
 void L3SI3RestOctets::text(std::ostream& os) const {
@@ -1453,6 +1549,7 @@ void L3SI3RestOctets::text(std::ostream& os) const {
     if (mSi2quaterPresent) os << " SI2quaterInd=" << mSi2quaterInd;
     if (!mHaveGPRS && mIuModeInd) os << " IuModeInd";
     if (!mSchedWherePresent && mSi21Present) os << " SI21Pos=" << mSi21Pos;
+    if (!mOpaqueTail.empty()) os << " Tail[" << mOpaqueTail.size() << " octets]";
 }
 
 // ── L3SIType4RestOctets ────────────────────────────────────────────────
@@ -1468,50 +1565,104 @@ Expected<L3SIType4RestOctets> L3SIType4RestOctets::parse(BitReader& br) {
     // Reads stop at end of input instead of failing on truncated frames;
     // when the S-part presence bit is set, all remaining whole octets of
     // the frame are captured as opaque data (TS 44.018 section 10.5.2.35).
+    // A rest region made up entirely of the '00101011'B (0x2B) padding
+    // octets carries no record at all: the presence fields stay at their
+    // defaults and the octets are preserved verbatim for a byte-exact
+    // re-emit.
     L3SIType4RestOctets result;
-    auto readField = [&br](unsigned nbits, unsigned& out) -> bool {
-        if (br.remainingBits() < nbits) return false;
-        auto r = br.readField(nbits);
-        if (!r) return false;
-        out = r.value();
-        return true;
-    };
-    unsigned v{};
-    if (readField(1, v) && v) {                       // sel_pres
-        result.mSelPresent = true;                    // [cbq|cro(6)|to(3)|pt(5)]
-        if (readField(1, v)) result.mCBQ = (v != 0);
-        if (readField(6, v)) result.mCRO = v;
-        if (readField(3, v)) result.mTO = v;
-        if (readField(5, v)) result.mPT = v;
+    const size_t regionBytes = br.remainingBits() / 8;
+    if (regionBytes == 0) {
+        return Expected<L3SIType4RestOctets>::hold(std::move(result));
     }
-    if (readField(1, v) && v) {                       // pwr_pres
-        result.mPwrOffsetPresent = true;              // [power_offset(2)]
-        if (readField(2, v)) result.mPowerOffset = v;
-    }
-    if (readField(1, v) && v) {                       // gprs_pres
-        result.mHaveGPRS = true;                      // [ra_colour(3)|si13_pos(1)]
-        if (readField(3, v)) result.mRA_COLOUR = v;
-        if (readField(1, v)) result.mSi13Position = (v != 0);
-    }
-    if (readField(1, v) && v) {                       // s_presence
-        result.mRestSPresent = true;
-        br.alignToOctet();                            // drop sub-octet padding
-        const size_t bytes = br.remainingBits() / 8;
-        if (bytes > 0) {
-            std::vector<uint8_t> tail(bytes);
-            auto r = br.readBytes(tail.data(), bytes);
-            if (!r) return Expected<L3SIType4RestOctets>::error(r.error());
-            result.mRestS = std::move(tail);
+
+    auto decodeRecord = [&result](BitReader& r) {
+        auto readField = [&r](unsigned nbits, unsigned& out) -> bool {
+            if (r.remainingBits() < nbits) return false;
+            auto rr = r.readField(nbits);
+            if (!rr) return false;
+            out = rr.value();
+            return true;
+        };
+        unsigned v{};
+        if (readField(1, v) && v) {                   // sel_pres
+            result.mSelPresent = true;                // [cbq|cro(6)|to(3)|pt(5)]
+            if (readField(1, v)) result.mCBQ = (v != 0);
+            if (readField(6, v)) result.mCRO = v;
+            if (readField(3, v)) result.mTO = v;
+            if (readField(5, v)) result.mPT = v;
         }
+        if (readField(1, v) && v) {                   // pwr_pres
+            result.mPwrOffsetPresent = true;          // [power_offset(2)]
+            if (readField(2, v)) result.mPowerOffset = v;
+        }
+        if (readField(1, v) && v) {                   // gprs_pres
+            result.mHaveGPRS = true;                  // [ra_colour(3)|si13_pos(1)]
+            if (readField(3, v)) result.mRA_COLOUR = v;
+            if (readField(1, v)) result.mSi13Position = (v != 0);
+        }
+        if (readField(1, v) && v) {                   // s_presence
+            result.mRestSPresent = true;
+            r.alignToOctet();                         // drop the pattern pad bits
+            const size_t bytes = r.remainingBits() / 8;
+            if (bytes > 0) {
+                std::vector<uint8_t> tail(bytes);
+                auto rb = r.readBytes(tail.data(), bytes);
+                if (!rb) return;
+                result.mRestS = std::move(tail);
+            }
+        }
+    };
+
+    if ((br.peekField(8) & 0xFFu) != kRestOctetsPadding) {
+        // No leading padding octet: a genuine record. Positional decode in
+        // place, then preserve any unread trailing octets verbatim.
+        decodeRecord(br);
+        br.alignToOctet();                            // drop the pattern pad bits
+        auto ct = captureTrailingOctets(br, result.mOpaqueTail);
+        if (!ct) return Expected<L3SIType4RestOctets>::error(ct.error());
+        return Expected<L3SIType4RestOctets>::hold(std::move(result));
+    }
+
+    // Leading padding octet: stage the whole region to decide between a
+    // pure-padding tail (no record) and a genuine record that starts with
+    // a 0x2B byte.
+    std::vector<uint8_t> region(regionBytes);
+    auto r0 = br.readBytes(region.data(), regionBytes);
+    if (!r0) return Expected<L3SIType4RestOctets>::error(r0.error());
+    bool paddingOnly = true;
+    for (uint8_t b : region) {
+        if (b != kRestOctetsPadding) { paddingOnly = false; break; }
+    }
+    if (paddingOnly) {
+        result.mOpaqueTail = std::move(region);       // verbatim, all presence fields default
+        return Expected<L3SIType4RestOctets>::hold(std::move(result));
+    }
+    BitReader regionReader(region.data(), regionBytes * 8);
+    decodeRecord(regionReader);
+    regionReader.alignToOctet();
+    const size_t tailBytes = regionReader.remainingBits() / 8;
+    if (tailBytes > 0) {
+        result.mOpaqueTail.assign(region.data() + (regionBytes - tailBytes),
+                                  region.data() + regionBytes);
     }
     return Expected<L3SIType4RestOctets>::hold(std::move(result));
 }
 
+bool L3SIType4RestOctets::noRecordBits() const noexcept {
+    // No group and no S-part presence: every record bit is zero.
+    return !mSelPresent && !mPwrOffsetPresent && !mHaveGPRS && !mRestSPresent;
+}
+
 size_t L3SIType4RestOctets::lengthV() const {
+    // A preserved padding-only region (no record bits) re-emits exactly its
+    // own octets.
+    if (noRecordBits() && !mOpaqueTail.empty() && isAllPadding(mOpaqueTail)) {
+        return mOpaqueTail.size();
+    }
     // The rest octets are optional (zero or more): with no selection, power,
     // GPRS group and no S tail the record contributes nothing (TS 44.018
     // section 9.1.36).
-    if (!mSelPresent && !mPwrOffsetPresent && !mHaveGPRS && !mRestSPresent) {
+    if (noRecordBits() && mOpaqueTail.empty()) {
         return 0;
     }
     size_t bits = 1;                                  // sel_pres
@@ -1523,11 +1674,18 @@ size_t L3SIType4RestOctets::lengthV() const {
     bits += 1;                                        // s_presence
     size_t len = (bits + 7) / 8;                      // O part, octet-aligned
     if (mRestSPresent) len += mRestS.size();          // opaque S tail
+    len += mOpaqueTail.size();                        // preserved trailing octets
     return len;
 }
 
 void L3SIType4RestOctets::write(BitWriter& bw) const {
-    if (!mSelPresent && !mPwrOffsetPresent && !mHaveGPRS && !mRestSPresent) {
+    // A padding-only preserved region (no record bits) is re-emitted
+    // verbatim, without the all-absent record (TS 44.018 section 10.5.2.35).
+    if (noRecordBits() && !mOpaqueTail.empty() && isAllPadding(mOpaqueTail)) {
+        bw.writeBytes(mOpaqueTail.data(), mOpaqueTail.size());
+        return;
+    }
+    if (noRecordBits() && mOpaqueTail.empty()) {
         return;                                       // rest octets absent (0..N)
     }
     bw.writeField(mSelPresent ? 1u : 0u, 1);
@@ -1545,10 +1703,11 @@ void L3SIType4RestOctets::write(BitWriter& bw) const {
         bw.writeField(mSi13Position ? 1u : 0u, 1);
     }
     bw.writeField(mRestSPresent ? 1u : 0u, 1);
+    padToOctetWithPattern(bw);   // unused bits take the '00101011'B pattern (TS 44.018 10.5.2.35)
     if (mRestSPresent) {
-        bw.alignToOctet();   // zero-fill to the octet boundary before the S tail
         bw.writeBytes(mRestS.data(), mRestS.size());
     }
+    detail::writeOpaqueTail(mOpaqueTail, bw);
 }
 
 void L3SIType4RestOctets::text(std::ostream& os) const {
@@ -1560,6 +1719,7 @@ void L3SIType4RestOctets::text(std::ostream& os) const {
     if (mPwrOffsetPresent) os << " PwrOff=" << mPowerOffset;
     if (mHaveGPRS) os << " GPRS RA_COLOUR=" << mRA_COLOUR << " SI13Pos=" << mSi13Position;
     if (mRestSPresent) os << " RestS[" << mRestS.size() << " octets]";
+    if (!mOpaqueTail.empty()) os << " Tail[" << mOpaqueTail.size() << " octets]";
 }
 
 // ── L3IARestOctets ─────────────────────────────────────────────────────

@@ -1086,8 +1086,12 @@ public:
 // is no outer presence bit. Each optional group is its presence bit
 // followed by the value bits; the Iu-mode indicator appears only when the
 // GPRS indicator is absent, and the SI21 group only when the
-// scheduling-if/where information is absent. Sub-octet padding is
-// discarded on parse and zero-filled on write.
+// scheduling-if/where information is absent. A rest region made up
+// entirely of the '00101011'B (0x2B) padding octets carries no record at
+// all: every presence field stays false and the raw octets are preserved
+// verbatim. Unused bits to the octet boundary are filled on write with
+// the leading bits of the '00101011'B pattern; unread trailing octets of a
+// decoded record are preserved verbatim.
 class L3SystemInformationType3;
 
 class L3SI3RestOctets : public L3RestOctets {
@@ -1112,6 +1116,7 @@ class L3SI3RestOctets : public L3RestOctets {
     bool mIuModeInd{};            // only if !mHaveGPRS
     bool mSi21Present{};          // only if !mSchedWherePresent
     unsigned mSi21Pos{};          // 1 bit, only if mSi21Present && !mSchedWherePresent
+    std::vector<uint8_t> mOpaqueTail{};   // verbatim trailing octets, empty by default
 public:
     friend class L3SystemInformationType3;
     L3SI3RestOctets() = default;
@@ -1136,11 +1141,19 @@ public:
     bool iuModeInd() const { return mIuModeInd; }
     bool si21Present() const { return mSi21Present; }
     unsigned si21Pos() const { return mSi21Pos; }
+    /// Trailing octets preserved verbatim (padding-only region or the
+    /// unread remainder of a decoded record); empty by default.
+    const std::vector<uint8_t>& opaqueTail() const { return mOpaqueTail; }
 
     [[nodiscard]] static Expected<L3SI3RestOctets> parse(BitReader& br);
-    size_t lengthV() const override;   // ceil(used bits / 8)
-    void write(BitWriter& bw) const override;  // zero-padded to an octet boundary
+    size_t lengthV() const override;   // ceil(used bits / 8) + preserved octets
+    void write(BitWriter& bw) const override;  // '00101011'B pattern padding to an octet boundary
     void text(std::ostream& os) const;
+
+private:
+    /// True when no record bit is set: every presence flag and the
+    /// unconditional indicator bits hold their default values.
+    [[nodiscard]] bool noRecordBits() const noexcept;
 };
 
 // ── SI4 Rest Octets (GSM 04.08 10.5.2.35) ─────────────────────────────
@@ -1151,6 +1164,11 @@ public:
 // plus the S-part presence bit; when the S part is present, all remaining
 // octets of the frame are opaque "Rest Octets S" and are preserved verbatim.
 // With no group present and no S tail the record contributes zero octets.
+// A rest region made up entirely of the '00101011'B (0x2B) padding octets
+// carries no record at all: every presence field stays false and the raw
+// octets are preserved verbatim. Unused bits to the octet boundary are
+// filled on write with the leading bits of the '00101011'B pattern;
+// unread trailing octets of a decoded record are preserved verbatim.
 class L3SystemInformationType4;
 
 class L3SIType4RestOctets : public L3RestOctets {
@@ -1166,6 +1184,7 @@ class L3SIType4RestOctets : public L3RestOctets {
     bool mSi13Position{};
     bool mRestSPresent{};
     std::vector<uint8_t> mRestS;  // opaque "Rest Octets S", empty by default
+    std::vector<uint8_t> mOpaqueTail{};   // verbatim trailing octets, empty by default
 public:
     friend class L3SystemInformationType4;
     L3SIType4RestOctets() = default;
@@ -1182,11 +1201,18 @@ public:
     bool si13Position() const { return mSi13Position; }
     bool restSPresent() const { return mRestSPresent; }
     const std::vector<uint8_t>& restS() const { return mRestS; }
+    /// Trailing octets preserved verbatim (padding-only region or the
+    /// unread remainder of a decoded record); empty by default.
+    const std::vector<uint8_t>& opaqueTail() const { return mOpaqueTail; }
 
     [[nodiscard]] static Expected<L3SIType4RestOctets> parse(BitReader& br);
-    size_t lengthV() const override;  // 0 when absent, else ceil(bits / 8) + mRestS.size()
+    size_t lengthV() const override;  // 0 when absent, else ceil(bits / 8) + preserved octets
     void write(BitWriter& bw) const override;
     void text(std::ostream& os) const;
+
+private:
+    /// True when no record bit is set: no group and no S-part presence.
+    [[nodiscard]] bool noRecordBits() const noexcept;
 };
 
 // ── IA Rest Octets ─────────────────────────────────────────────────────

@@ -1373,11 +1373,14 @@ public:
 
 // ── System Information Type 6 (GSM 04.08 9.1.40) ─────────────────────
 
+// Trailing rest octets after the NCC permitted IE are preserved verbatim
+// and re-emitted without loss (TS 44.018 section 9.1.40).
 class L3SystemInformationType6 {
     L3CellIdentity mCI;
     L3LocationAreaIdentity mLAI;
     L3CellOptionsSACCH mCellOptions;
     L3NCCPermitted mNCCPermitted;
+    std::vector<uint8_t> mAdditionalIes;   // trailing rest octets, verbatim
 
     friend struct Builder;
 public:
@@ -1389,11 +1392,14 @@ public:
     const L3LocationAreaIdentity& lai() const { return mLAI; }
     const L3CellOptionsSACCH& cellOptions() const { return mCellOptions; }
     const L3NCCPermitted& nccPermitted() const { return mNCCPermitted; }
+    /// Trailing rest octets after the NCC permitted IE, preserved verbatim
+    /// (TS 44.018 section 9.1.40); empty when the frame carries none.
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
-    size_t bodyLength() const { return 9; }
+    size_t bodyLength() const { return 9 + mAdditionalIes.size(); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
-    [[nodiscard]] size_t l2BodyLength() const { return 9; }
+    [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
     [[nodiscard]] static Expected<L3SystemInformationType6> parse(BitReader& br);
     void write(BitWriter& bw) const;
     void text(std::ostream& os) const;
@@ -1421,6 +1427,9 @@ public:
 
 // ── System Information Type 7 (GSM 04.08 9.1.41) ─────────────────────
 
+// RACH control parameters and neighbour cell descriptions are value-form
+// IEs carried without identifier octets; the NCD records keep their TV
+// 0x21 form (TS 44.018 section 9.1.41).
 class L3SystemInformationType7 {
     L3RACHControlParameters mRACHControl;
     std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
@@ -1461,6 +1470,9 @@ public:
 
 // ── System Information Type 8 (GSM 04.08 9.1.42) ─────────────────────
 
+// NCC permitted and RACH control parameters are value-form IEs carried
+// without identifier octets; the NCD records keep their TV 0x21 form (TS
+// 44.018 section 9.1.42).
 class L3SystemInformationType8 {
     L3NCCPermitted mNCCPermitted;
     L3RACHControlParameters mRACHControl;
@@ -1628,6 +1640,9 @@ public:
 
 // ── System Information Type 17 (GSM 04.08 9.1.43c) ───────────────────
 
+// RACH control parameters are a value-form IE carried without an
+// identifier octet; the NCD records keep their TV 0x21 form (TS 44.018
+// section 9.1.46).
 class L3SystemInformationType17 {
     L3RACHControlParameters mRACHControl;
     std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
@@ -3316,6 +3331,9 @@ public:
 
 // ── System Information Type 18 (GSM 04.08 9.1.43f) ────────────────────
 
+// RACH control parameters are a value-form IE carried without an
+// identifier octet; the NCD records keep their TV 0x21 form (TS 44.018
+// section 9.1.47).
 class L3SystemInformationType18 {
     L3RACHControlParameters mRACHControl;
     std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
@@ -3357,6 +3375,9 @@ public:
 
 // ── System Information Type 19 (GSM 04.08 9.1.43g) ────────────────────
 
+// RACH control parameters are a value-form IE carried without an
+// identifier octet; the NCD records keep their TV 0x21 form (TS 44.018
+// section 9.1.48).
 class L3SystemInformationType19 {
     L3RACHControlParameters mRACHControl;
     std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
@@ -3398,6 +3419,9 @@ public:
 
 // ── System Information Type 20 (GSM 04.08 9.1.43h) ────────────────────
 
+// RACH control parameters are a value-form IE carried without an
+// identifier octet; the NCD records keep their TV 0x21 form (TS 44.018
+// section 9.1.49).
 class L3SystemInformationType20 {
     L3RACHControlParameters mRACHControl;
     std::vector<L3NeighbourCellDescription> mCellChannelDescriptions;
@@ -3556,6 +3580,7 @@ class L3SystemInformationType10 {
     L3LocationAreaIdentity mLAI;
     L3CellOptionsBCCH mCellOptions;
     L3CellSelectionParameters mCellSelectionParameters;
+    std::vector<uint8_t> mAdditionalIes;   // trailing rest octets, verbatim
 
     friend struct Builder;
 public:
@@ -3565,8 +3590,11 @@ public:
     const L3LocationAreaIdentity& lai() const { return mLAI; }
     const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
     const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
+    /// Trailing rest octets after the typed part, preserved verbatim for
+    /// lossless re-emission; empty when the frame carries none.
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
-    size_t bodyLength() const { return 10; }
+    size_t bodyLength() const { return 10 + mAdditionalIes.size(); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
@@ -3611,6 +3639,7 @@ class L3SystemInformationType10bis {
     L3LocationAreaIdentity mLAI;
     L3CellOptionsBCCH mCellOptions;
     L3CellSelectionParameters mCellSelectionParameters;
+    std::vector<uint8_t> mAdditionalIes;   // trailing rest octets, verbatim
 
     friend struct Builder;
 public:
@@ -3620,8 +3649,11 @@ public:
     const L3LocationAreaIdentity& lai() const { return mLAI; }
     const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
     const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
+    /// Trailing rest octets after the typed part, preserved verbatim for
+    /// lossless re-emission; empty when the frame carries none.
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
-    size_t bodyLength() const { return 10; }
+    size_t bodyLength() const { return 10 + mAdditionalIes.size(); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }
@@ -3666,6 +3698,7 @@ class L3SystemInformationType10ter {
     L3LocationAreaIdentity mLAI;
     L3CellOptionsBCCH mCellOptions;
     L3CellSelectionParameters mCellSelectionParameters;
+    std::vector<uint8_t> mAdditionalIes;   // trailing rest octets, verbatim
 
     friend struct Builder;
 public:
@@ -3675,8 +3708,11 @@ public:
     const L3LocationAreaIdentity& lai() const { return mLAI; }
     const L3CellOptionsBCCH& cellOptions() const { return mCellOptions; }
     const L3CellSelectionParameters& cellSelectionParameters() const { return mCellSelectionParameters; }
+    /// Trailing rest octets after the typed part, preserved verbatim for
+    /// lossless re-emission; empty when the frame carries none.
+    const std::vector<uint8_t>& additionalIes() const { return mAdditionalIes; }
 
-    size_t bodyLength() const { return 10; }
+    size_t bodyLength() const { return 10 + mAdditionalIes.size(); }
     [[nodiscard]] int mti() const { return MTI; }
     [[nodiscard]] L3PD pd() const { return L3PD::RadioResource; }
     [[nodiscard]] size_t l2BodyLength() const { return bodyLength(); }

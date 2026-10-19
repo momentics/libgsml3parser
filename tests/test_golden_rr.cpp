@@ -2492,8 +2492,10 @@ TEST(GoldenRR, SystemInformationType15_RoundTrip) {
 // =====================================================================
 
 TEST(GoldenRR, SystemInformationType18_Parse) {
-    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x40 ('01000000'B, TS 44.018 Table 10.4.1)
-    uint8_t data[] = {0x06, 0x40, 0x28, 0x00, 0x00, 0x00};
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x40 ('01000000'B, TS 44.018 Table 10.4.1).
+    // Body: RACH control parameters(3), a value-form IE without an
+    // identifier octet (TS 44.018 section 9.1.47).
+    uint8_t data[] = {0x06, 0x40, 0x00, 0x00, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3SystemInformationType18::MTI);
@@ -2512,8 +2514,10 @@ TEST(GoldenRR, SystemInformationType18_RoundTrip) {
 // =====================================================================
 
 TEST(GoldenRR, SystemInformationType19_Parse) {
-    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x41 ('01000001'B, TS 44.018 Table 10.4.1)
-    uint8_t data[] = {0x06, 0x41, 0x28, 0x00, 0x00, 0x00};
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x41 ('01000001'B, TS 44.018 Table 10.4.1).
+    // Body: RACH control parameters(3), a value-form IE without an
+    // identifier octet (TS 44.018 section 9.1.48).
+    uint8_t data[] = {0x06, 0x41, 0x00, 0x00, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3SystemInformationType19::MTI);
@@ -2532,8 +2536,10 @@ TEST(GoldenRR, SystemInformationType19_RoundTrip) {
 // =====================================================================
 
 TEST(GoldenRR, SystemInformationType20_Parse) {
-    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x42 ('01000010'B, TS 44.018 Table 10.4.1)
-    uint8_t data[] = {0x06, 0x42, 0x28, 0x00, 0x00, 0x00};
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x42 ('01000010'B, TS 44.018 Table 10.4.1).
+    // Body: RACH control parameters(3), a value-form IE without an
+    // identifier octet (TS 44.018 section 9.1.49).
+    uint8_t data[] = {0x06, 0x42, 0x00, 0x00, 0x00};
     auto msg = parseL3(std::span<const uint8_t>(data));
     ASSERT_TRUE(msg);
     EXPECT_EQ(messageMTI(*msg), L3SystemInformationType20::MTI);
@@ -2830,6 +2836,219 @@ TEST(GoldenRR, SystemInformationType4_RestOctets_SPresent_TailPreserved) {
     EXPECT_EQ(si4->restOctets().raColour(), 1u);
     EXPECT_TRUE(si4->restOctets().restSPresent());
     EXPECT_EQ(si4->restOctets().restS(), (std::vector<uint8_t>{0x2B}));
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) EXPECT_EQ((*bytes)[i], data[i]);
+}
+
+// =====================================================================
+// RR: SI3/SI4 rest-octets padding rule (3GPP TS 44.018 9.1.35/9.1.36,
+// 10.5.2.34/10.5.2.35): a rest region made up entirely of the
+// '00101011'B (0x2B) padding octets carries no record — every presence
+// field stays false and the raw octets are preserved verbatim; unused
+// bits to the octet boundary take the leading bits of that pattern on
+// write.
+// =====================================================================
+
+TEST(GoldenRR, SystemInformationType3_RestOctets_PaddingTail) {
+    // [GOLDEN VERIFIED] Same fixed part as the full-record vector above
+    // (CI 0x1234, LAI MCC=250/MNC=01/LAC=0x5678, CCD 51 04 0A, cell options
+    // 00, CSP 00 00, RACH 00 00 00). The rest region is pure '00101011'B
+    // padding (3 octets): no rest-octets record is present, so every
+    // presence field must stay false and the octets round-trip verbatim.
+    uint8_t data[] = {
+        0x06, 0x1B,
+        0x12, 0x34,
+        0x52, 0xF0, 0x10, 0x56, 0x78,
+        0x51, 0x04, 0x0A,
+        0x00,
+        0x00, 0x00,
+        0x00, 0x00, 0x00,
+        0x2B, 0x2B, 0x2B
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3SystemInformationType3::MTI);
+    auto* si3 = tryGet<L3SystemInformationType3>(*msg);
+    ASSERT_TRUE(si3);
+    const auto& rest = si3->restOctets();
+    EXPECT_FALSE(rest.selPresent());
+    EXPECT_FALSE(rest.powerOffsetPresent());
+    EXPECT_FALSE(rest.si2terInd());
+    EXPECT_FALSE(rest.earlyCmInd());
+    EXPECT_FALSE(rest.schedWherePresent());
+    EXPECT_FALSE(rest.hasGPRS());
+    EXPECT_FALSE(rest.umtsEarlyCmInd());
+    EXPECT_FALSE(rest.si2quaterPresent());
+    EXPECT_FALSE(rest.iuModeInd());
+    EXPECT_FALSE(rest.si21Present());
+    EXPECT_EQ(rest.opaqueTail(), (std::vector<uint8_t>{0x2B, 0x2B, 0x2B}));
+    // Byte-for-byte round-trip of the whole frame.
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) EXPECT_EQ((*bytes)[i], data[i]);
+}
+
+TEST(GoldenRR, SystemInformationType3_RestOctets_PatternPadding) {
+    // [GOLDEN VERIFIED] All-default SI3: the all-absent rest record is ten
+    // bits (eight fixed bits plus iu_mode_ind and si21_pres), so six unused
+    // bits to the octet boundary take the leading six bits of the
+    // '00101011'B pattern ('001010') -> rest region 0x00 0x0A
+    // (TS 44.018 10.5.2.34).
+    auto si3 = L3SystemInformationType3::builder().build();
+    ParsedMessage pm{RRM{std::move(si3)}};
+    auto bytes = writeL3Bytes(pm);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), 20u);   // header + 16 fixed + 2 record octets
+    EXPECT_EQ((*bytes)[0], 0x06);
+    EXPECT_EQ((*bytes)[1], 0x1B);
+    for (size_t i = 2; i < 18; ++i) EXPECT_EQ((*bytes)[i], 0x00);
+    EXPECT_EQ((*bytes)[18], 0x00);     // all presence/indicator bits zero
+    EXPECT_EQ((*bytes)[19], 0x0A);     // iu_mode_ind=0, si21_pres=0, pad '001010'
+    auto reparsed = parseL3(*bytes);
+    ASSERT_TRUE(reparsed);
+    auto* parsed = tryGet<L3SystemInformationType3>(*reparsed);
+    ASSERT_TRUE(parsed);
+    const auto& rest = parsed->restOctets();
+    EXPECT_FALSE(rest.selPresent());
+    EXPECT_FALSE(rest.powerOffsetPresent());
+    EXPECT_FALSE(rest.hasGPRS());
+    EXPECT_TRUE(rest.opaqueTail().empty());
+    // The pattern-padded record is stable under a second re-emit.
+    auto again = writeL3Bytes(*reparsed);
+    ASSERT_TRUE(again);
+    ASSERT_EQ((*again).size(), (*bytes).size());
+    for (size_t i = 0; i < (*bytes).size(); ++i) EXPECT_EQ((*again)[i], (*bytes)[i]);
+}
+
+TEST(GoldenRR, SystemInformationType4_NonGprs_PaddingTail) {
+    // [GOLDEN VERIFIED] Non-GPRS SI4 frame: LAI MCC=262/MNC=42/LAC=0x04D2
+    //   {62 F2 24 04 D2} + cell selection parameters(2)
+    //   (hyst=2,txpwr=29,acs=0,neci=1,rxlev=16 -> 5D 40)
+    //   + RACH control parameters(3) (max_retrans=3,tx_integer=9,bar=0,
+    //   re=1,ac=0x0004 -> E5 04 00) + a ten-octet rest region of pure
+    //   '00101011'B padding. The GPRS indicator must NOT be fabricated from
+    //   the padding; the octets round-trip verbatim.
+    uint8_t data[] = {
+        0x06, 0x1C,
+        0x62, 0xF2, 0x24, 0x04, 0xD2,
+        0x5D, 0x40,
+        0xE5, 0x04, 0x00,
+        0x2B, 0x2B, 0x2B, 0x2B, 0x2B, 0x2B, 0x2B, 0x2B, 0x2B, 0x2B
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3SystemInformationType4::MTI);
+    auto* si4 = tryGet<L3SystemInformationType4>(*msg);
+    ASSERT_TRUE(si4);
+    EXPECT_EQ(si4->lai().mcc(), 262);
+    EXPECT_EQ(si4->lai().mnc(), 42);
+    EXPECT_EQ(si4->lai().lac(), 0x04D2);
+    EXPECT_FALSE(si4->hasCBCH());
+    const auto& rest = si4->restOctets();
+    EXPECT_FALSE(rest.selPresent());
+    EXPECT_FALSE(rest.powerOffsetPresent());
+    EXPECT_FALSE(rest.hasGPRS());
+    EXPECT_EQ(rest.raColour(), 0u);
+    EXPECT_FALSE(rest.si13Position());
+    EXPECT_FALSE(rest.restSPresent());
+    std::vector<uint8_t> pad(10, 0x2B);
+    EXPECT_EQ(rest.opaqueTail(), pad);
+    // Byte-for-byte round-trip of the whole frame.
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) EXPECT_EQ((*bytes)[i], data[i]);
+}
+
+TEST(GoldenRR, SystemInformationType6_RestOctets_LosslessTail) {
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x1E ('00011110'B, TS 44.018 Table
+    // 10.4.1). Body: CI(2)=0x1234 + LAI(5) MCC=250/MNC=01/LAC=0x5678
+    //   {52 F0 10 56 78} + cell options SACCH(1)=00 + NCC permitted(1)=0xFF
+    //   + two trailing rest octets, preserved and re-emitted verbatim.
+    uint8_t data[] = {
+        0x06, 0x1E,
+        0x12, 0x34,
+        0x52, 0xF0, 0x10, 0x56, 0x78,
+        0x00,
+        0xFF,
+        0x2B, 0x2B
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3SystemInformationType6::MTI);
+    auto* si6 = tryGet<L3SystemInformationType6>(*msg);
+    ASSERT_TRUE(si6);
+    EXPECT_EQ(si6->ci().id(), 0x1234u);
+    EXPECT_EQ(si6->nccPermitted().permitted(), 0xFF);
+    EXPECT_EQ(si6->additionalIes(), (std::vector<uint8_t>{0x2B, 0x2B}));
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) EXPECT_EQ((*bytes)[i], data[i]);
+}
+
+TEST(GoldenRR, SystemInformationType7_ValueFormIes) {
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x1F ('00011111'B, TS 44.018 Table
+    // 10.4.1). The RACH control parameters are a value-form IE carried
+    // without an identifier octet (TS 44.018 9.1.41); the neighbour cell
+    // description records keep their TV 0x21 form.
+    // Body: RACH ctrl(3) (max_retrans=3,tx_integer=9,bar=0,re=1,ac=0x0004
+    //   -> E5 04 00) + one NCD record: IEI 0x21 + arfcn(10)=100 +
+    //   bsic(6)=0b001010 (NCC=1,BCC=2) -> 19 06.
+    uint8_t data[] = {
+        0x06, 0x1F,
+        0xE5, 0x04, 0x00,
+        0x21, 0x19, 0x06
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3SystemInformationType7::MTI);
+    auto* si7 = tryGet<L3SystemInformationType7>(*msg);
+    ASSERT_TRUE(si7);
+    EXPECT_EQ(si7->rachControl().maxRetrans(), 3u);
+    EXPECT_EQ(si7->rachControl().txInteger(), 9u);
+    EXPECT_FALSE(si7->rachControl().cellBarAccess());
+    EXPECT_EQ(si7->rachControl().re(), 1u);
+    EXPECT_EQ(si7->rachControl().ac(), 0x0004u);
+    ASSERT_EQ(si7->cellChannelDescriptions().size(), 1u);
+    EXPECT_EQ(si7->cellChannelDescriptions()[0].arfcn(), 100u);
+    EXPECT_EQ(si7->cellChannelDescriptions()[0].bsic(), 6u);
+    auto bytes = writeL3Bytes(*msg);
+    ASSERT_TRUE(bytes);
+    ASSERT_EQ((*bytes).size(), sizeof(data));
+    for (size_t i = 0; i < sizeof(data); ++i) EXPECT_EQ((*bytes)[i], data[i]);
+}
+
+TEST(GoldenRR, SystemInformationType8_ValueFormIes) {
+    // [GOLDEN VERIFIED] PD=6(RR), MTI=0x18 ('00011000'B, TS 44.018 Table
+    // 10.4.1). NCC permitted and RACH control parameters are value-form IEs
+    // carried without identifier octets (TS 44.018 9.1.42); the NCD records
+    // keep their TV 0x21 form.
+    // Body: NCC permitted(1)=0xFF + RACH ctrl(3) E5 04 00 (as in the SI7
+    //   vector) + one NCD record 21 19 06 (arfcn=100, bsic=NCC=1|BCC=2).
+    uint8_t data[] = {
+        0x06, 0x18,
+        0xFF,
+        0xE5, 0x04, 0x00,
+        0x21, 0x19, 0x06
+    };
+    auto msg = parseL3(std::span<const uint8_t>(data));
+    ASSERT_TRUE(msg);
+    EXPECT_EQ(messageMTI(*msg), L3SystemInformationType8::MTI);
+    auto* si8 = tryGet<L3SystemInformationType8>(*msg);
+    ASSERT_TRUE(si8);
+    EXPECT_EQ(si8->nccPermitted().permitted(), 0xFF);
+    EXPECT_EQ(si8->rachControl().maxRetrans(), 3u);
+    EXPECT_EQ(si8->rachControl().txInteger(), 9u);
+    EXPECT_FALSE(si8->rachControl().cellBarAccess());
+    EXPECT_EQ(si8->rachControl().re(), 1u);
+    EXPECT_EQ(si8->rachControl().ac(), 0x0004u);
+    ASSERT_EQ(si8->cellChannelDescriptions().size(), 1u);
+    EXPECT_EQ(si8->cellChannelDescriptions()[0].arfcn(), 100u);
+    EXPECT_EQ(si8->cellChannelDescriptions()[0].bsic(), 6u);
     auto bytes = writeL3Bytes(*msg);
     ASSERT_TRUE(bytes);
     ASSERT_EQ((*bytes).size(), sizeof(data));

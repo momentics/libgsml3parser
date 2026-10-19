@@ -1701,6 +1701,13 @@ Expected<L3SystemInformationType6> L3SystemInformationType6::parse(BitReader& br
     { auto res = L3LocationAreaIdentity::parse(br); if (!res) return Expected<L3SystemInformationType6>::error(res.error()); msg.mLAI = std::move(res.value()); }
     { auto res = L3CellOptionsSACCH::parse(br); if (!res) return Expected<L3SystemInformationType6>::error(res.error()); msg.mCellOptions = std::move(res.value()); }
     { auto res = L3NCCPermitted::parse(br); if (!res) return Expected<L3SystemInformationType6>::error(res.error()); msg.mNCCPermitted = std::move(res.value()); }
+
+    // Trailing rest octets after the NCC permitted IE are preserved verbatim
+    // for lossless re-emission (TS 44.018 section 9.1.40).
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3SystemInformationType6>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
+
     return Expected<L3SystemInformationType6>::hold(std::move(msg));
 }
 
@@ -1709,6 +1716,7 @@ void L3SystemInformationType6::write(BitWriter& bw) const {
     mLAI.write(bw);
     mCellOptions.write(bw);
     mNCCPermitted.write(bw);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3SystemInformationType6::text(std::ostream& os) const {
@@ -1740,7 +1748,9 @@ L3SystemInformationType6::Builder L3SystemInformationType6::builder() {
 // ── L3SystemInformationType7 ───────────────────────────────────────────
 
 size_t L3SystemInformationType7::bodyLength() const {
-    size_t len = 1 + mRACHControl.lengthV();
+    // V-form RACH control parameters (no IEI octet) plus the NCD TV 0x21
+    // records (TS 44.018 section 9.1.41).
+    size_t len = mRACHControl.lengthV();
     for (const auto& ch : mCellChannelDescriptions) {
         len += 1 + ch.lengthV();
     }
@@ -1750,10 +1760,8 @@ size_t L3SystemInformationType7::bodyLength() const {
 Expected<L3SystemInformationType7> L3SystemInformationType7::parse(BitReader& br) {
     L3SystemInformationType7 msg;
     {
-        auto ieiR = br.readField(8); if (!ieiR) return Expected<L3SystemInformationType7>::error(ieiR.error());
-        if (ieiR.value() != 0x28) {
-            return Expected<L3SystemInformationType7>::error(ParseError{ParseError::Code::InvalidIE, "SI7: expected IEI 0x28"});
-        }
+        // RACH control parameters are a value-form IE carried without an
+        // identifier octet (TS 44.018 section 9.1.41).
         auto res = L3RACHControlParameters::parse(br);
         if (!res) return Expected<L3SystemInformationType7>::error(res.error());
         msg.mRACHControl = std::move(res.value());
@@ -1775,7 +1783,8 @@ Expected<L3SystemInformationType7> L3SystemInformationType7::parse(BitReader& br
 }
 
 void L3SystemInformationType7::write(BitWriter& bw) const {
-    bw.writeField(0x28, 8);
+    // V-form IEs carry no identifier octet (TS 44.018 section 9.1.41); the
+    // neighbour cell description records keep their TV 0x21 form.
     mRACHControl.write(bw);
     for (const auto& ch : mCellChannelDescriptions) {
         bw.writeField(0x21, 8);
@@ -1805,7 +1814,9 @@ L3SystemInformationType7::Builder L3SystemInformationType7::builder() {
 // ── L3SystemInformationType8 ───────────────────────────────────────────
 
 size_t L3SystemInformationType8::bodyLength() const {
-    size_t len = 1 + mNCCPermitted.lengthV() + 1 + mRACHControl.lengthV();
+    // V-form NCC permitted and RACH control parameters (no IEI octets) plus
+    // the NCD TV 0x21 records (TS 44.018 section 9.1.42).
+    size_t len = mNCCPermitted.lengthV() + mRACHControl.lengthV();
     for (const auto& ch : mCellChannelDescriptions) {
         len += 1 + ch.lengthV();
     }
@@ -1815,19 +1826,13 @@ size_t L3SystemInformationType8::bodyLength() const {
 Expected<L3SystemInformationType8> L3SystemInformationType8::parse(BitReader& br) {
     L3SystemInformationType8 msg;
     {
-        auto ieiR = br.readField(8); if (!ieiR) return Expected<L3SystemInformationType8>::error(ieiR.error());
-        if (ieiR.value() != 0x27) {
-            return Expected<L3SystemInformationType8>::error(ParseError{ParseError::Code::InvalidIE, "SI8: expected IEI 0x27"});
-        }
+        // NCC permitted is a value-form IE carried without an identifier
+        // octet (TS 44.018 section 9.1.42).
         auto res = L3NCCPermitted::parse(br);
         if (!res) return Expected<L3SystemInformationType8>::error(res.error());
         msg.mNCCPermitted = std::move(res.value());
     }
     {
-        auto ieiR = br.readField(8); if (!ieiR) return Expected<L3SystemInformationType8>::error(ieiR.error());
-        if (ieiR.value() != 0x28) {
-            return Expected<L3SystemInformationType8>::error(ParseError{ParseError::Code::InvalidIE, "SI8: expected IEI 0x28"});
-        }
         auto res = L3RACHControlParameters::parse(br);
         if (!res) return Expected<L3SystemInformationType8>::error(res.error());
         msg.mRACHControl = std::move(res.value());
@@ -1849,9 +1854,9 @@ Expected<L3SystemInformationType8> L3SystemInformationType8::parse(BitReader& br
 }
 
 void L3SystemInformationType8::write(BitWriter& bw) const {
-    bw.writeField(0x27, 8);
+    // V-form IEs carry no identifier octet (TS 44.018 section 9.1.42); the
+    // neighbour cell description records keep their TV 0x21 form.
     mNCCPermitted.write(bw);
-    bw.writeField(0x28, 8);
     mRACHControl.write(bw);
     for (const auto& ch : mCellChannelDescriptions) {
         bw.writeField(0x21, 8);
@@ -1993,7 +1998,9 @@ L3SystemInformationType16::Builder L3SystemInformationType16::builder() {
 // ── L3SystemInformationType17 ──────────────────────────────────────────
 
 size_t L3SystemInformationType17::bodyLength() const {
-    size_t len = 1 + mRACHControl.lengthV();
+    // V-form RACH control parameters (no IEI octet) plus the NCD TV 0x21
+    // records (TS 44.018 section 9.1.46).
+    size_t len = mRACHControl.lengthV();
     for (const auto& ch : mCellChannelDescriptions) {
         len += 1 + ch.lengthV();
     }
@@ -2003,10 +2010,8 @@ size_t L3SystemInformationType17::bodyLength() const {
 Expected<L3SystemInformationType17> L3SystemInformationType17::parse(BitReader& br) {
     L3SystemInformationType17 msg;
     {
-        auto ieiR = br.readField(8); if (!ieiR) return Expected<L3SystemInformationType17>::error(ieiR.error());
-        if (ieiR.value() != 0x28) {
-            return Expected<L3SystemInformationType17>::error(ParseError{ParseError::Code::InvalidIE, "SI17: expected IEI 0x28"});
-        }
+        // RACH control parameters are a value-form IE carried without an
+        // identifier octet (TS 44.018 section 9.1.46).
         auto res = L3RACHControlParameters::parse(br);
         if (!res) return Expected<L3SystemInformationType17>::error(res.error());
         msg.mRACHControl = std::move(res.value());
@@ -2028,7 +2033,8 @@ Expected<L3SystemInformationType17> L3SystemInformationType17::parse(BitReader& 
 }
 
 void L3SystemInformationType17::write(BitWriter& bw) const {
-    bw.writeField(0x28, 8);
+    // V-form IEs carry no identifier octet (TS 44.018 section 9.1.46); the
+    // neighbour cell description records keep their TV 0x21 form.
     mRACHControl.write(bw);
     for (const auto& ch : mCellChannelDescriptions) {
         bw.writeField(0x21, 8);
@@ -3382,7 +3388,9 @@ void L3SystemInformationType15::text(std::ostream& os) const {
 // ── L3SystemInformationType18 ──────────────────────────────────────────
 
 size_t L3SystemInformationType18::bodyLength() const {
-    size_t len = 1 + mRACHControl.lengthV();
+    // V-form RACH control parameters (no IEI octet) plus the NCD TV 0x21
+    // records (TS 44.018 section 9.1.47).
+    size_t len = mRACHControl.lengthV();
     for (const auto& ch : mCellChannelDescriptions) {
         len += 1 + ch.lengthV();
     }
@@ -3392,7 +3400,8 @@ size_t L3SystemInformationType18::bodyLength() const {
 Expected<L3SystemInformationType18> L3SystemInformationType18::parse(BitReader& br) {
     L3SystemInformationType18 msg;
     {
-        auto ieiR = br.readField(8); if (!ieiR) return Expected<L3SystemInformationType18>::error(ieiR.error());
+        // RACH control parameters are a value-form IE carried without an
+        // identifier octet (TS 44.018 section 9.1.47).
         auto res = L3RACHControlParameters::parse(br);
         if (!res) return Expected<L3SystemInformationType18>::error(res.error());
         msg.mRACHControl = std::move(res.value());
@@ -3412,7 +3421,8 @@ Expected<L3SystemInformationType18> L3SystemInformationType18::parse(BitReader& 
 }
 
 void L3SystemInformationType18::write(BitWriter& bw) const {
-    bw.writeField(0x28, 8);
+    // V-form IEs carry no identifier octet (TS 44.018 section 9.1.47); the
+    // neighbour cell description records keep their TV 0x21 form.
     mRACHControl.write(bw);
     for (const auto& ch : mCellChannelDescriptions) {
         bw.writeField(0x21, 8);
@@ -3429,7 +3439,9 @@ void L3SystemInformationType18::text(std::ostream& os) const {
 // ── L3SystemInformationType19 ──────────────────────────────────────────
 
 size_t L3SystemInformationType19::bodyLength() const {
-    size_t len = 1 + mRACHControl.lengthV();
+    // V-form RACH control parameters (no IEI octet) plus the NCD TV 0x21
+    // records (TS 44.018 section 9.1.48).
+    size_t len = mRACHControl.lengthV();
     for (const auto& ch : mCellChannelDescriptions) {
         len += 1 + ch.lengthV();
     }
@@ -3439,7 +3451,8 @@ size_t L3SystemInformationType19::bodyLength() const {
 Expected<L3SystemInformationType19> L3SystemInformationType19::parse(BitReader& br) {
     L3SystemInformationType19 msg;
     {
-        auto ieiR = br.readField(8); if (!ieiR) return Expected<L3SystemInformationType19>::error(ieiR.error());
+        // RACH control parameters are a value-form IE carried without an
+        // identifier octet (TS 44.018 section 9.1.48).
         auto res = L3RACHControlParameters::parse(br);
         if (!res) return Expected<L3SystemInformationType19>::error(res.error());
         msg.mRACHControl = std::move(res.value());
@@ -3459,7 +3472,8 @@ Expected<L3SystemInformationType19> L3SystemInformationType19::parse(BitReader& 
 }
 
 void L3SystemInformationType19::write(BitWriter& bw) const {
-    bw.writeField(0x28, 8);
+    // V-form IEs carry no identifier octet (TS 44.018 section 9.1.48); the
+    // neighbour cell description records keep their TV 0x21 form.
     mRACHControl.write(bw);
     for (const auto& ch : mCellChannelDescriptions) {
         bw.writeField(0x21, 8);
@@ -3476,7 +3490,9 @@ void L3SystemInformationType19::text(std::ostream& os) const {
 // ── L3SystemInformationType20 ──────────────────────────────────────────
 
 size_t L3SystemInformationType20::bodyLength() const {
-    size_t len = 1 + mRACHControl.lengthV();
+    // V-form RACH control parameters (no IEI octet) plus the NCD TV 0x21
+    // records (TS 44.018 section 9.1.49).
+    size_t len = mRACHControl.lengthV();
     for (const auto& ch : mCellChannelDescriptions) {
         len += 1 + ch.lengthV();
     }
@@ -3486,7 +3502,8 @@ size_t L3SystemInformationType20::bodyLength() const {
 Expected<L3SystemInformationType20> L3SystemInformationType20::parse(BitReader& br) {
     L3SystemInformationType20 msg;
     {
-        auto ieiR = br.readField(8); if (!ieiR) return Expected<L3SystemInformationType20>::error(ieiR.error());
+        // RACH control parameters are a value-form IE carried without an
+        // identifier octet (TS 44.018 section 9.1.49).
         auto res = L3RACHControlParameters::parse(br);
         if (!res) return Expected<L3SystemInformationType20>::error(res.error());
         msg.mRACHControl = std::move(res.value());
@@ -3506,7 +3523,8 @@ Expected<L3SystemInformationType20> L3SystemInformationType20::parse(BitReader& 
 }
 
 void L3SystemInformationType20::write(BitWriter& bw) const {
-    bw.writeField(0x28, 8);
+    // V-form IEs carry no identifier octet (TS 44.018 section 9.1.49); the
+    // neighbour cell description records keep their TV 0x21 form.
     mRACHControl.write(bw);
     for (const auto& ch : mCellChannelDescriptions) {
         bw.writeField(0x21, 8);
@@ -3588,6 +3606,13 @@ Expected<L3SystemInformationType10> L3SystemInformationType10::parse(BitReader& 
     { auto res = L3LocationAreaIdentity::parse(br); if (!res) return Expected<L3SystemInformationType10>::error(res.error()); msg.mLAI = std::move(res.value()); }
     { auto res = L3CellOptionsBCCH::parse(br); if (!res) return Expected<L3SystemInformationType10>::error(res.error()); msg.mCellOptions = std::move(res.value()); }
     { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType10>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
+
+    // Trailing rest octets after the typed part are preserved verbatim for
+    // lossless re-emission.
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3SystemInformationType10>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
+
     return Expected<L3SystemInformationType10>::hold(std::move(msg));
 }
 
@@ -3596,6 +3621,7 @@ void L3SystemInformationType10::write(BitWriter& bw) const {
     mLAI.write(bw);
     mCellOptions.write(bw);
     mCellSelectionParameters.write(bw);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3SystemInformationType10::text(std::ostream& os) const {
@@ -3617,6 +3643,13 @@ Expected<L3SystemInformationType10bis> L3SystemInformationType10bis::parse(BitRe
     { auto res = L3LocationAreaIdentity::parse(br); if (!res) return Expected<L3SystemInformationType10bis>::error(res.error()); msg.mLAI = std::move(res.value()); }
     { auto res = L3CellOptionsBCCH::parse(br); if (!res) return Expected<L3SystemInformationType10bis>::error(res.error()); msg.mCellOptions = std::move(res.value()); }
     { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType10bis>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
+
+    // Trailing rest octets after the typed part are preserved verbatim for
+    // lossless re-emission.
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3SystemInformationType10bis>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
+
     return Expected<L3SystemInformationType10bis>::hold(std::move(msg));
 }
 
@@ -3625,6 +3658,7 @@ void L3SystemInformationType10bis::write(BitWriter& bw) const {
     mLAI.write(bw);
     mCellOptions.write(bw);
     mCellSelectionParameters.write(bw);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3SystemInformationType10bis::text(std::ostream& os) const {
@@ -3646,6 +3680,13 @@ Expected<L3SystemInformationType10ter> L3SystemInformationType10ter::parse(BitRe
     { auto res = L3LocationAreaIdentity::parse(br); if (!res) return Expected<L3SystemInformationType10ter>::error(res.error()); msg.mLAI = std::move(res.value()); }
     { auto res = L3CellOptionsBCCH::parse(br); if (!res) return Expected<L3SystemInformationType10ter>::error(res.error()); msg.mCellOptions = std::move(res.value()); }
     { auto res = L3CellSelectionParameters::parse(br); if (!res) return Expected<L3SystemInformationType10ter>::error(res.error()); msg.mCellSelectionParameters = std::move(res.value()); }
+
+    // Trailing rest octets after the typed part are preserved verbatim for
+    // lossless re-emission.
+    if (!detail::readOpaqueTail(br, msg.mAdditionalIes))
+        return Expected<L3SystemInformationType10ter>::error(
+            {ParseError::Code::TruncatedInput, "truncated rest octets"});
+
     return Expected<L3SystemInformationType10ter>::hold(std::move(msg));
 }
 
@@ -3654,6 +3695,7 @@ void L3SystemInformationType10ter::write(BitWriter& bw) const {
     mLAI.write(bw);
     mCellOptions.write(bw);
     mCellSelectionParameters.write(bw);
+    detail::writeOpaqueTail(mAdditionalIes, bw);
 }
 
 void L3SystemInformationType10ter::text(std::ostream& os) const {
