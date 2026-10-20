@@ -858,15 +858,17 @@ public:
 
     struct Builder {
         uint32_t mTLLI{0};
-        std::vector<uint8_t> mRaId;
+        // The RAI is six octets on the wire; default to six zero octets so a
+        // built message is always well-formed.
+        std::vector<uint8_t> mRaId{0, 0, 0, 0, 0, 0};
         uint8_t mSuspensionCause{0};
         bool mHasServiceSupport{false};
         uint8_t mServiceSupport{0};
 
         /// Set TLLI value.
         Builder& tlli(uint32_t v) { mTLLI = v; return *this; }
-        /// Set RA ID.
-        Builder& raId(std::vector<uint8_t> v) { mRaId = std::move(v); return *this; }
+        /// Set RA ID (six octets, TS 44.018 section 9.1.13b).
+        Builder& raId(std::span<const uint8_t, 6> v) { mRaId.assign(v.begin(), v.end()); return *this; }
         /// Set suspension cause.
         Builder& suspensionCause(uint8_t v) { mSuspensionCause = v; return *this; }
         /// Set the optional service support value octet (TV, IEI 0x01).

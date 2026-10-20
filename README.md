@@ -116,25 +116,37 @@ part are preserved opaquely and re-emitted verbatim.
 **GMM / SM (TS 44.068)** — Attach/RAU Request pack the type (three bits plus the forL3 indicator) in the low half-octet
 and the GPRS CKSN (three bits plus one reserved) in the high half-octet; the DRX parameter is two value octets without an identifier and the MS radio access
 capability is a mandatory LV. Reject/failure/status messages start with a single bare cause value
-octet. Attach Accept leads with a three-octet part (first octet: attach result(3), spare,
-force-to-standby, update timer(2), radio priority; the two following octets are stored raw), then the RAI and, when a new P-TMSI is allocated, the
-P-TMSI signature (TV, IEI 0x19, three octets) and the P-TMSI (TLV 0x18); RAU Accept leads with a two-octet part
-(no radio-priority field) plus the same tail. Service Request starts with one octet — GPRS CKSN(3) in the
-low bits, service type(3) in the high half-octet — followed by the P-TMSI LV; GMM Identity Request is a single
-`[spare(5)|type(3)]` octet. SM ACTIVATE PDP CONTEXT REQUEST carries the NSAPI and the negotiated LLC SAPI as two
-octets ([NSAPI(4)|spare(4)][LLC SAPI(4)|spare(4)]), requested QoS and requested PDP address as
-positional LVs, the APN as TLV `0x28`, PCO as TLV `0x27` and an optional request type
-`0xAx`; DEACTIVATE PDP CONTEXT REQUEST starts with the SM cause octet followed by an optional
-tear-down indicator TV `0x09`. The PDP type-and-address value is `[PDP type number(1)][address
-length(1)][address]` (type 4 = IETF IPv4, 6 = IETF IPv6), so the TLV length octet equals the whole
-value size (six for IPv4). SM MTI 0x50-0x54 are reserved and not assigned to message
-classes (Table 10.4a).
+octet; RAU Reject appends one force-to-standby octet after the cause, and Detach Accept is that
+one octet alone (the low bit is force-to-standby). Attach Accept leads with `[forceToStandby(4)][attachResult(4)]`
+(result: 1 = GPRS attach, 3 = combined IMSI+GPRS), then the periodic RA update timer octet
+`[units(3)][value(5)]` and the radio-priority octet `[radioPrioritySMS(4)][radioPriorityTOM8(4)]`, then the RAI
+(six raw PLMN/LAC/RAC octets) and, when a new P-TMSI is allocated, the P-TMSI signature (TV 0x19, three
+octets) and the allocated P-TMSI (TLV 0x18, MI form `0xF4` + TMSI); remaining IEs are preserved opaquely. RAU Accept
+leads with `[spare(4)][updateResult(3)][forceToStandby(1)]`, then the same timer octet and the RAI in
+octets 2–7, then the optional P-TMSI signature / allocated P-TMSI / MS identity / ready-timer IEs and, when included by
+the network, the PDP context status (TLV 0x32, two-octet value). P-TMSI Reallocation Command is
+positional: allocated P-TMSI LV (length 5, MI form), RAI, one force-to-standby octet, optional
+P-TMSI signature. Service Request starts with one octet — GPRS CKSN(3) in the low bits, service type(3) in the
+high half-octet — followed by the P-TMSI LV; further IEs (a conforming MS appends the PDP context
+status TLV 0x32) are preserved opaquely. GMM Identity Request is a single
+`[spare(3)|forceToStandby(1)|type(3)]` octet. SM ACTIVATE PDP CONTEXT REQUEST carries the NSAPI and the negotiated LLC SAPI as two
+octets with the value in the low four bits and the high nibble zero, the requested QoS profile (three mandatory
+octets — delay/reliability class, peak/precedence, mean throughput — plus any optional characteristics, preserved opaquely)
+and the requested PDP address as positional LVs, the APN as TLV `0x28` when present, PCO as TLV `0x27` and an
+optional request type `0xAx`; DEACTIVATE PDP CONTEXT REQUEST starts with the SM cause octet followed by an optional
+tear-down indicator octet (`0x90`, flag in bit 0). The PDP type-and-address value is
+`[type organization(4) = 0x01 IETF | spare(4)][type number(8)]` plus, for a static address only, the address
+octets — type numbers `0x21` (IPv4) and `0x53` (IPv6), four / sixteen address octets; a dynamic address
+carries no address octets, so the LV length is 2 (dynamic), 6 (static IPv4) or 18 (static IPv6). SM MTI
+0x50-0x54 are reserved and not assigned to message classes (Table 10.4a).
 
 **CC / SMS** — CC message types per TS 24.008 Table 10.3 (no unit-data messages); the Cause IE
 (IEI 0x08, length 2) value is `[0x60|location][0x80|cause]` (TS 24.008 section 10.5.1.2), CC PROGRESS
 carries the progress indicator as an LV (`[0x02][0xE0|location][0x80|progress]`), structured 0xDx IEs
 are single-octet and Facility is LV. The SMS PD carries CP-DATA/CP-ACK/CP-ERROR plus
-CP-STATUS/CP-SUBMIT (TS 24.011); the TP-DU header octet is `[TP-MTI(2)|MMS/RD(1)|VPF(2)|SRI/SRR(1)|UDHI(1)|RP(1)]`
+CP-STATUS/CP-SUBMIT (TS 24.011); the RP header octet is `[reserved(5)=0][RP-MTI(3)]` and the MTI is direction
+dependent (TS 24.079 section 7.2.1, Table 8.3): uplink Data/Ack/Error/SMMA = 0/2/4/6, downlink = the uplink
+value plus one; the TP-DU header octet is `[TP-MTI(2)|MMS/RD(1)|VPF(2)|SRI/SRR(1)|UDHI(1)|RP(1)]`
 (bit positions in the octet value; TP-MTI 2 = status report network→mobile / command mobile→network),
 addresses carry the digit count as length followed by TON/NPI and BCD digits, and the user-data length
 counts septets for GSM 7-bit text (TS 23.040 section 9).
@@ -145,7 +157,9 @@ ReturnError=0xA3 and Reject=0xA4; an invoke component is `[02 01 invokeId][02 01
 [30 len {parameters}]`, and every component form re-emits losslessly.
 
 **RR (TS 44.018)** — Ciphering Mode Command is exactly one body octet with sC in the low bit:
-`[sC(1)|algorithm(3)][cR(1)|spare(3)]` (section 9.2.24); SI1 carries the cell channel description in
+`[sC(1)|algorithm(3)][cR(1)|spare(3)]` (section 9.2.24); Power Command is one octet
+`[reserved(3)=0][msPowerLevel(5)]` (section 10.5.2.6) and Power Command And Access Type adds the aTC,
+ePC_Mode and fPC_EP bits above the power level (section 10.5.2.7); SI1 carries the cell channel description in
 the sixteen-octet variable-length BCCH frequency list form — seven-bit header, ten-bit base ARFCN and
 a 111-bit presence map (section 10.5.2.1b) — plus RACH control parameters (three octets) and at most
 one rest octet (body 19–20 octets); SI2/SI2bis/SI2ter and the SI5/SI5bis/SI5ter frequency lists use the
@@ -159,8 +173,9 @@ with `[spare(4)][CKSN(4)]`; the Immediate Assignment start time (IEI `0x7C`) is 
 T1(5)/T3(6)/T2(5); channel numbers use the five-bit type-and-offset codes (`'00001'B` Bm ACCH …
 `'10000'B` BCCH, `'10001'B` RACH, `'10010'B` PCH+AGCH, PDCH/CBCH/VAMOS extensions) with
 `channelCodeLm/Sdcch4/Sdcch8` helpers. SI3/SI4 rest octets carry the selection parameters, power
-offset, scheduling-if/where, GPRS indicator, UMTS early-CM and SI2quater indicators; SI4
-optionally carries the CBCH mobile allocation (TLV 0x72) after the CBCH channel description
+offset, scheduling-if/where, GPRS indicator, UMTS early-CM and SI2quater indicators; a rest region made purely of
+the 0x2B padding pattern means no rest octets are present, and sub-octet alignment is padded with that pattern on emit
+(sections 10.5.2.35/10.5.2.37); SI4 optionally carries the CBCH mobile allocation (TLV 0x72) after the CBCH channel description
 (TV 0x64); SI4 rest octets are optional (zero or more on emit), SI2bis/SI2ter accept at most one /
 four rest octets respectively, and SI13 rest octets carry the typed GPRS cell options, mobile
 allocation and power-control parameters, padded to the octet boundary.

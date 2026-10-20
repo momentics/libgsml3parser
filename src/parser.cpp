@@ -406,7 +406,7 @@ Expected<ParsedMessage> parseL3(std::span<const uint8_t> data, const ParserConfi
     auto res = detail::parseStandardBody(hdrResult.value(), reader);
     if (res && cfg.requireFullConsumption && reader.remainingBits() != 0) {
         // Strict framing: trailing bytes after a complete message mean the
-        // frame boundary was wrong.
+        // frame boundary was detected incorrectly.
         return Expected<ParsedMessage>::error(
             {ParseError::Code::LengthMismatch, "trailing data after L3 message"});
     }

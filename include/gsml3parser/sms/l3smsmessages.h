@@ -20,9 +20,9 @@
 // SOFTWARE.
 
 // SMS CP (Control Part) & RP (Relay Part) Messages - GSM L3 SMS layer
-// Spec: 3GPP TS 24.008 sections 9.6, Table 10.6a; 3GPP TS 24.011 sections 7-8
-// CP/RP message identifiers per 3GPP TS 24.011 sections 7-8 and the TPDU
-// structures of 3GPP TS 23.040.
+// Spec: 3GPP TS 24.008 sections 9.6, Table 10.6a and 3GPP TS 24.011
+// sections 7-8 for the CP messages; 3GPP TS 24.079 sections 7-8 for the RP
+// messages. TPDU structures per 3GPP TS 23.040.
 //
 // L3 header (per 24.008 10.5.1):
 //   Byte 0: TI(3) | TIF(1) | PD(4)=0x09(SMS)
@@ -34,11 +34,13 @@
 //   CP-DATA  = 0x01, CP-ACK  = 0x04, CP-ERROR = 0x10
 //   CP-STATUS = 0x12, CP-SMT = 0x13
 //
-// RP-MTI values (3-bit field in RP header byte):
-//   RP-DATA: MO='000'B(0), MT='001'B(1)
-//   RP-ACK:  MO='010'B(2), MT='011'B(3)
-//   RP-ERROR: MO='100'B(4), MT='101'B(5)
-//   RP-SMMA:  MO='110'B(6), MT='111'B(7)
+// RP header octet: reserved(5)=0 | RP-MTI(3) (TS 24.079 section 7.2.1,
+// Table 8.3). The MTI is direction dependent; a downlink (network to MS)
+// message carries the uplink (MS to network) value plus one:
+//   RP-DATA:  uplink=0, downlink=1
+//   RP-ACK:   uplink=2, downlink=3
+//   RP-ERROR: uplink=4, downlink=5
+//   RP-SMMA:  uplink=6, downlink=7
 
 #pragma once
 
@@ -267,15 +269,33 @@ public:
     static Builder builder() { return Builder{}; }
 };
 
+// ── Relay Part MTI (TS 24.079 section 7.2.1, Table 8.3) ───────────────
+
+// Relay layer message type indicator values (TS 24.079 section 7.2.1,
+// Table 8.3). The MTI is direction dependent: downlink messages carry the
+// uplink value plus one.
+enum class RPMTI : uint8_t {
+    DataUplink = 0x00,
+    DataDownlink = 0x01,
+    AckUplink = 0x02,
+    AckDownlink = 0x03,
+    ErrorUplink = 0x04,
+    ErrorDownlink = 0x05,
+    SMMAUplink = 0x06,
+    SMMADownlink = 0x07,
+};
+
 // ── RP-DATA (GSM 24.011 7.3.1) ────────────────────────────────────────
-// RP-MTI: MO='000'B(0), MT='001'B(1)
-// Header: Spare(5)|RP-MTI(3) | RP-Message-Reference(1)
+// Header: reserved(5)=0 | RP-MTI(3) | RP-Message-Reference(1). The MTI is
+// direction dependent (TS 24.079 section 7.2.1, Table 8.3): uplink Data = 0,
+// downlink Data = 1.
 // Body: RP-Originator-SM-SC-Address(LV) | RP-Destination-SM-SC-Address(LV)
 //       | RP-User-Data(LV). Both SMSC addresses are always present; an
 //       empty address is a single zero length octet.
 
 class L3RPData {
-    uint8_t mRpMti{0};
+    // Raw RP-MTI value (0..7); even = uplink, odd = downlink (Table 8.3).
+    uint8_t mRpMti{static_cast<uint8_t>(RPMTI::DataUplink)};
     uint8_t mMessageRef{0};
     std::optional<L3TPAddress> mOriginatorAddress;
     std::optional<L3TPAddress> mDestinationAddress;
@@ -283,11 +303,13 @@ class L3RPData {
 
     friend struct Builder;
 public:
-    static constexpr int RP_MTI_MO = 0x00;
-    static constexpr int RP_MTI_MT = 0x01;
-
-    uint8_t rpMti() const { return mRpMti; }
-    bool isMo() const { return mRpMti == RP_MTI_MO; }
+    /// Raw RP-MTI value from the header octet (TS 24.079 Table 8.3).
+    [[nodiscard]] RPMTI mti() const { return static_cast<RPMTI>(mRpMti); }
+    /// True for the downlink (network to MS) direction; bit 0 of the MTI.
+    [[nodiscard]] bool isDownlink() const { return (mRpMti & 0x01u) != 0u; }
+    /// Direction-independent message type: the uplink MTI value of this
+    /// message kind (Data = 0, Ack = 2, Error = 4, SMMA = 6).
+    [[nodiscard]] RPMTI messageType() const { return static_cast<RPMTI>(mRpMti & 0xFEu); }
     uint8_t messageRef() const { return mMessageRef; }
     const std::optional<L3TPAddress>& originatorAddress() const { return mOriginatorAddress; }
     const std::optional<L3TPAddress>& destinationAddress() const { return mDestinationAddress; }
@@ -299,14 +321,16 @@ public:
     void text(std::ostream& os) const;
 
     struct Builder {
-        uint8_t mRpMti{0};
+        // Default MTI: uplink Data (TS 24.079 Table 8.3).
+        uint8_t mRpMti{static_cast<uint8_t>(RPMTI::DataUplink)};
         uint8_t mMessageRef{0};
         std::optional<L3TPAddress> mOriginatorAddress;
         std::optional<L3TPAddress> mDestinationAddress;
         std::vector<uint8_t> mUserData;
 
-        /// Set the RP-MTI value.
-        Builder& rpMti(uint8_t v) { mRpMti = v; return *this; }
+        /// Set the RP-MTI value: an uplink or downlink code (TS 24.079
+        /// Table 8.3); a downlink sender must use the downlink code.
+        Builder& mti(RPMTI v) { mRpMti = static_cast<uint8_t>(v); return *this; }
         /// Set the message reference.
         Builder& messageRef(uint8_t v) { mMessageRef = v; return *this; }
         /// Set the originator address.
@@ -331,23 +355,28 @@ public:
 };
 
 // ── RP-ACK (GSM 24.011 7.3.2) ─────────────────────────────────────────
-// RP-MTI: MO='010'B(2), MT='011'B(3)
-// Header: Spare(5)|RP-MTI(3) | RP-Message-Reference(1)
+// Header: reserved(5)=0 | RP-MTI(3) | RP-Message-Reference(1). The MTI is
+// direction dependent (TS 24.079 section 7.2.1, Table 8.3): uplink Ack = 2,
+// downlink Ack = 3.
 // No body
 
 class L3RPAck {
-    uint8_t mRpMti{0};
+    // Raw RP-MTI value (0..7); even = uplink, odd = downlink (Table 8.3).
+    uint8_t mRpMti{static_cast<uint8_t>(RPMTI::AckUplink)};
     uint8_t mMessageRef{0};
 
     friend struct Builder;
 public:
-    static constexpr int RP_MTI_MO = 0x02;
-    static constexpr int RP_MTI_MT = 0x03;
-
-    void setRpMti(uint8_t v) { mRpMti = v; }
+    /// Set the RP-MTI value (TS 24.079 Table 8.3).
+    void setRpMti(RPMTI v) { mRpMti = static_cast<uint8_t>(v); }
     void setMessageRef(uint8_t v) { mMessageRef = v; }
-    uint8_t rpMti() const { return mRpMti; }
-    bool isMo() const { return mRpMti == RP_MTI_MO; }
+    /// Raw RP-MTI value from the header octet (TS 24.079 Table 8.3).
+    [[nodiscard]] RPMTI mti() const { return static_cast<RPMTI>(mRpMti); }
+    /// True for the downlink (network to MS) direction; bit 0 of the MTI.
+    [[nodiscard]] bool isDownlink() const { return (mRpMti & 0x01u) != 0u; }
+    /// Direction-independent message type: the uplink MTI value of this
+    /// message kind (Data = 0, Ack = 2, Error = 4, SMMA = 6).
+    [[nodiscard]] RPMTI messageType() const { return static_cast<RPMTI>(mRpMti & 0xFEu); }
     uint8_t messageRef() const { return mMessageRef; }
 
     size_t bodyLength() const;
@@ -356,11 +385,13 @@ public:
     void text(std::ostream& os) const;
 
     struct Builder {
-        uint8_t mRpMti{0};
+        // Default MTI: uplink Ack (TS 24.079 Table 8.3).
+        uint8_t mRpMti{static_cast<uint8_t>(RPMTI::AckUplink)};
         uint8_t mMessageRef{0};
 
-        /// Set the RP-MTI value.
-        Builder& rpMti(uint8_t v) { mRpMti = v; return *this; }
+        /// Set the RP-MTI value: an uplink or downlink code (TS 24.079
+        /// Table 8.3); a downlink sender must use the downlink code.
+        Builder& mti(RPMTI v) { mRpMti = static_cast<uint8_t>(v); return *this; }
         /// Set the message reference.
         Builder& messageRef(uint8_t v) { mMessageRef = v; return *this; }
         /// Build the final message.
@@ -376,25 +407,30 @@ public:
 };
 
 // ── RP-ERROR (GSM 24.011 7.3.4) ───────────────────────────────────────
-// RP-MTI: MO='100'B(4), MT='101'B(5)
-// Header: Spare(5)|RP-MTI(3) | RP-Message-Reference(1)
+// Header: reserved(5)=0 | RP-MTI(3) | RP-Message-Reference(1). The MTI is
+// direction dependent (TS 24.079 section 7.2.1, Table 8.3): uplink Error = 4,
+// downlink Error = 5.
 // Body: RP-Cause(LV): Length(1) | CauseValue(7 bits + extension bit)
 
 class L3RPError {
-    uint8_t mRpMti{0};
+    // Raw RP-MTI value (0..7); even = uplink, odd = downlink (Table 8.3).
+    uint8_t mRpMti{static_cast<uint8_t>(RPMTI::ErrorUplink)};
     uint8_t mMessageRef{0};
     CPCause mCause{CPCause::Unspecified};
 
     friend struct Builder;
 public:
-    static constexpr int RP_MTI_MO = 0x04;
-    static constexpr int RP_MTI_MT = 0x05;
-
-    void setRpMti(uint8_t v) { mRpMti = v; }
+    /// Set the RP-MTI value (TS 24.079 Table 8.3).
+    void setRpMti(RPMTI v) { mRpMti = static_cast<uint8_t>(v); }
     void setMessageRef(uint8_t v) { mMessageRef = v; }
     void setCause(CPCause v) { mCause = v; }
-    uint8_t rpMti() const { return mRpMti; }
-    bool isMo() const { return mRpMti == RP_MTI_MO; }
+    /// Raw RP-MTI value from the header octet (TS 24.079 Table 8.3).
+    [[nodiscard]] RPMTI mti() const { return static_cast<RPMTI>(mRpMti); }
+    /// True for the downlink (network to MS) direction; bit 0 of the MTI.
+    [[nodiscard]] bool isDownlink() const { return (mRpMti & 0x01u) != 0u; }
+    /// Direction-independent message type: the uplink MTI value of this
+    /// message kind (Data = 0, Ack = 2, Error = 4, SMMA = 6).
+    [[nodiscard]] RPMTI messageType() const { return static_cast<RPMTI>(mRpMti & 0xFEu); }
     uint8_t messageRef() const { return mMessageRef; }
     CPCause cause() const { return mCause; }
 
@@ -404,12 +440,14 @@ public:
     void text(std::ostream& os) const;
 
     struct Builder {
-        uint8_t mRpMti{0};
+        // Default MTI: uplink Error (TS 24.079 Table 8.3).
+        uint8_t mRpMti{static_cast<uint8_t>(RPMTI::ErrorUplink)};
         uint8_t mMessageRef{0};
         CPCause mCause{CPCause::Unspecified};
 
-        /// Set the RP-MTI value.
-        Builder& rpMti(uint8_t v) { mRpMti = v; return *this; }
+        /// Set the RP-MTI value: an uplink or downlink code (TS 24.079
+        /// Table 8.3); a downlink sender must use the downlink code.
+        Builder& mti(RPMTI v) { mRpMti = static_cast<uint8_t>(v); return *this; }
         /// Set the message reference.
         Builder& messageRef(uint8_t v) { mMessageRef = v; return *this; }
         /// Set the CP cause.
@@ -428,23 +466,28 @@ public:
 };
 
 // ── RP-SMMA (GSM 24.011 7.3.3) ────────────────────────────────────────
-// RP-MTI: MO='110'B(6), MT='111'B(7)
-// Header: Spare(5)|RP-MTI(3) | RP-Message-Reference(1)
+// Header: reserved(5)=0 | RP-MTI(3) | RP-Message-Reference(1). The MTI is
+// direction dependent (TS 24.079 section 7.2.1, Table 8.3): uplink SMMA = 6,
+// downlink SMMA = 7.
 // No body
 
 class L3RPSMMA {
-    uint8_t mRpMti{0};
+    // Raw RP-MTI value (0..7); even = uplink, odd = downlink (Table 8.3).
+    uint8_t mRpMti{static_cast<uint8_t>(RPMTI::SMMAUplink)};
     uint8_t mMessageRef{0};
 
     friend struct Builder;
 public:
-    static constexpr int RP_MTI_MO = 0x06;
-    static constexpr int RP_MTI_MT = 0x07;
-
-    void setRpMti(uint8_t v) { mRpMti = v; }
+    /// Set the RP-MTI value (TS 24.079 Table 8.3).
+    void setRpMti(RPMTI v) { mRpMti = static_cast<uint8_t>(v); }
     void setMessageRef(uint8_t v) { mMessageRef = v; }
-    uint8_t rpMti() const { return mRpMti; }
-    bool isMo() const { return mRpMti == RP_MTI_MO; }
+    /// Raw RP-MTI value from the header octet (TS 24.079 Table 8.3).
+    [[nodiscard]] RPMTI mti() const { return static_cast<RPMTI>(mRpMti); }
+    /// True for the downlink (network to MS) direction; bit 0 of the MTI.
+    [[nodiscard]] bool isDownlink() const { return (mRpMti & 0x01u) != 0u; }
+    /// Direction-independent message type: the uplink MTI value of this
+    /// message kind (Data = 0, Ack = 2, Error = 4, SMMA = 6).
+    [[nodiscard]] RPMTI messageType() const { return static_cast<RPMTI>(mRpMti & 0xFEu); }
     uint8_t messageRef() const { return mMessageRef; }
 
     size_t bodyLength() const;
@@ -453,11 +496,13 @@ public:
     void text(std::ostream& os) const;
 
     struct Builder {
-        uint8_t mRpMti{0};
+        // Default MTI: uplink SMMA (TS 24.079 Table 8.3).
+        uint8_t mRpMti{static_cast<uint8_t>(RPMTI::SMMAUplink)};
         uint8_t mMessageRef{0};
 
-        /// Set the RP-MTI value.
-        Builder& rpMti(uint8_t v) { mRpMti = v; return *this; }
+        /// Set the RP-MTI value: an uplink or downlink code (TS 24.079
+        /// Table 8.3); a downlink sender must use the downlink code.
+        Builder& mti(RPMTI v) { mRpMti = static_cast<uint8_t>(v); return *this; }
         /// Set the message reference.
         Builder& messageRef(uint8_t v) { mMessageRef = v; return *this; }
         /// Build the final message.

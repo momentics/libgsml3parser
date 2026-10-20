@@ -138,10 +138,10 @@ No normative reference templates exist for this block: bodies are kept as opaque
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3PagingRequestType1` | 0x21 | DL | First body octet [channelNeeded(4)\|pageMode(4)] (channel needed packed second\|first), mobile identity (LV) [+ optional second identity (TLV 0x17)] |
-| `L3PagingRequestType2` | 0x22 | DL | First body octet [channelNeeded(4)\|pageMode(4)], two raw TMSIs (8 octets) [+ optional third identity (TLV 0x17)] |
-| `L3PagingRequestType3` | 0x24 | DL | First body octet [channelNeeded(4)\|pageMode(4)], four raw TMSIs (16 octets) |
-| `L3PagingResponse` | 0x27 | UL | First body octet [spare(4)\|CKSN(4)], classmark2 (LV, three to seven value octets), mobile identity (LV) |
+| `L3PagingRequestType1` | 0x21 | DL | First body octet [channelNeeded(4)\|pageMode(4)] (channel needed packed second\|first), mobile identity (LV) [+ optional second identity (TLV 0x17)]; trailing rest octets kept as an opaque tail |
+| `L3PagingRequestType2` | 0x22 | DL | First body octet [channelNeeded(4)\|pageMode(4)], two raw TMSIs (8 octets) [+ optional third identity (TLV 0x17)]; trailing rest octets kept as an opaque tail |
+| `L3PagingRequestType3` | 0x24 | DL | First body octet [channelNeeded(4)\|pageMode(4)], four raw TMSIs (16 octets); trailing rest octets kept as an opaque tail |
+| `L3PagingResponse` | 0x27 | UL | First body octet [spare(4)\|CKSN(4)], classmark2 (LV, three to seven value octets), mobile identity (LV), [additional update parameter (one raw octet)] |
 
 ### System Information (BCCH/SACCH)
 
@@ -151,24 +151,24 @@ No normative reference templates exist for this block: bodies are kept as opaque
 | `L3SystemInformationType2` | 0x1a | BCCH frequency list (sixteen-octet bitmap form), NCC permitted, RACH control |
 | `L3SystemInformationType2bis` | 0x02 | BCCH frequency list (sixteen-octet bitmap form) + RACH control, [rest octets 0–1] |
 | `L3SystemInformationType2ter` | 0x03 | BCCH frequency list (sixteen-octet bitmap form), [rest octets 0–4] |
-| `L3SystemInformationType3` | 0x1b | Cell desc, BA list type 1, rest octets |
-| `L3SystemInformationType4` | 0x1c | LAI, CI, cell selection, RACH control |
+| `L3SystemInformationType3` | 0x1b | Cell desc, BA list type 1, rest octets — a rest region of pure 0x2B padding means no rest octets are present; sub-octet alignment is padded with the 0x2B pattern (TS 44.018 §10.5.2.35) |
+| `L3SystemInformationType4` | 0x1c | LAI, CI, cell selection, RACH control, rest octets — same 0x2B padding rule (§10.5.2.37) |
 | `L3SystemInformationType5` | 0x1d | BA list type 2 (sixteen-octet frequency list form) |
 | `L3SystemInformationType5bis` | 0x05 | Extended BA list (GPRS, sixteen-octet frequency list form) |
 | `L3SystemInformationType5ter` | 0x06 | BA list with GPRS cell options (sixteen-octet frequency list form) |
 | `L3SystemInformationType6` | 0x1e | CI, LAI, SACCH cell options, NCC permitted |
-| `L3SystemInformationType7` | 0x1f | BA list type 3 |
-| `L3SystemInformationType8` | 0x18 | NCC permitted (SACCH) |
+| `L3SystemInformationType7` | 0x1f | RACH control parameters (V-form, no identifier octet) + neighbour cell description records (TV 0x21) — TS 44.018 §9.1.41 |
+| `L3SystemInformationType8` | 0x18 | NCC permitted + RACH control parameters (V-form, no identifier octets) + neighbour cell description records (TV 0x21) — TS 44.018 §9.1.42 |
 | `L3SystemInformationType9` | 0x04 | CI, cell selection, BCCH cell options |
 | `L3SystemInformationType13` | 0x00 | Rest-octets record only: typed GPRS mobile allocation / cell options / power-control parameters (variable length, padded to the octet boundary) |
 | `L3SystemInformationType2quater` | 0x07 | Extended BCCH freq list, RACH ctrl params, CBCH description (raw body) |
 | `L3SystemInformationType14` | 0x01 | CellIdentity + CellSelectionParameters |
 | `L3SystemInformationType15` | 0x43 | Empty body |
 | `L3SystemInformationType16` | 0x3d | CI, cell selection (SACCH) |
-| `L3SystemInformationType17` | 0x3e | NCC permitted (SACCH extended) |
-| `L3SystemInformationType18` | 0x40 | RACHControl + CellChannelDescriptions |
-| `L3SystemInformationType19` | 0x41 | RACHControl + CellChannelDescriptions |
-| `L3SystemInformationType20` | 0x42 | RACHControl + CellChannelDescriptions |
+| `L3SystemInformationType17` | 0x3e | RACH control parameters (V-form, no identifier octet) + neighbour cell description records (TV 0x21) — TS 44.018 §9.1.46 |
+| `L3SystemInformationType18` | 0x40 | RACH control parameters / NCC permitted (V-form, no identifier octets) + neighbour cell description records (TV 0x21) — TS 44.018 §9.1.47 |
+| `L3SystemInformationType19` | 0x41 | RACH control parameters / NCC permitted (V-form, no identifier octets) + neighbour cell description records (TV 0x21) — TS 44.018 §9.1.48 |
+| `L3SystemInformationType20` | 0x42 | RACH control parameters / NCC permitted (V-form, no identifier octets) + neighbour cell description records (TV 0x21) — TS 44.018 §9.1.49 |
 | `L3SystemInformationType13alt` | 0x44 | SACCH alternative format |
 | `L3SystemInformationType2n` | 0x45 | Empty body |
 | `L3SystemInformationType21` | 0x46 | Empty body |
@@ -189,22 +189,22 @@ No normative reference templates exist for this block: bodies are kept as opaque
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3ChannelRelease` | 0x0D | DL | Cause [+ GPRS resumption] |
-| `L3ImmediateAssignment` | 0x3F | DL | dedicated mode/TBF + page mode, channel description, request reference, timing advance, [mobile allocation (LV)], [start time (TLV 0x7C: two value octets packing T1(5)/T3(6)/T2(5))] |
+| `L3ChannelRelease` | 0x0D | DL | Cause [+ GPRS resumption]; trailing optional IEs (e.g. cell-selection indicator TLV 0x77) kept as an opaque tail |
+| `L3ImmediateAssignment` | 0x3F | DL | dedicated mode/TBF + page mode, channel description, request reference, timing advance (raw octet, 0..219), mobile allocation (LV, mandatory on parse), [start time (TLV 0x7C: two value octets packing T1(5)/T3(6)/T2(5))]; trailing rest octets kept as an opaque tail |
 | `L3ImmediateAssignmentExtended` | 0x39 | DL | Extended immediate assignment |
-| `L3ImmediateAssignmentReject` | 0x3A | DL | First octet [spare(4)\|pageMode(4)] + exactly four (request reference, wait indication) pairs — fewer supplied pairs are padded by repeating the last one; body 17 octets |
+| `L3ImmediateAssignmentReject` | 0x3A | DL | First octet [spare(4)\|pageMode(4)] + exactly four (request reference, wait indication) pairs — fewer supplied pairs are padded by repeating the last one; body 17 octets plus any preserved trailing rest octets (opaque tail, never added on emit) |
 | `L3AdditionalAssignment` | 0x3B | DL | Additional channel assignment |
-| `L3PhysicalInformation` | 0x2D | DL | Timing advance command |
-| `L3AssignmentCommand` | 0x2E | DL | Channel desc, mode, power command |
+| `L3PhysicalInformation` | 0x2D | DL | Timing advance command (raw octet, valid range 0..219) |
+| `L3AssignmentCommand` | 0x2E | DL | Channel desc, mode, power command ([reserved(3)=0\|msPowerLevel(5)]); trailing optional IEs kept as an opaque tail |
 | `L3AssignmentComplete` | 0x29 | UL | Cause |
 | `L3AssignmentFailure` | 0x2F | UL | Cause |
-| `L3HandoverCommand` | 0x2B | DL | Cell desc, channel desc2, HO ref, power |
-| `L3HandoverComplete` | 0x2C | UL | Cause |
-| `L3HandoverFailure` | 0x28 | UL | Cause |
+| `L3HandoverCommand` | 0x2B | DL | Cell desc, channel desc2, HO ref, power ([reserved(3)=0\|msPowerLevel(5)]); trailing optional IEs kept as an opaque tail |
+| `L3HandoverComplete` | 0x2C | UL | Cause; optional IEs after the cause kept as an opaque tail |
+| `L3HandoverFailure` | 0x28 | UL | Cause; optional IEs after the cause kept as an opaque tail |
 | `L3RRStatus` | 0x12 | UL | Cause |
-| `L3ClassmarkChange` | 0x16 | UL | classmark2 (LV, three to seven value octets) [+ classmark3 (TLV 0x20)] |
+| `L3ClassmarkChange` | 0x16 | UL | classmark2 (LV, three to seven value octets) [+ classmark3 (TLV 0x20: one-octet length + raw value octets, fourteen for a conforming value)] |
 | `L3ClassmarkEnquiry` | 0x13 | DL | Empty body |
-| `L3MeasurementReport` | 0x15 | UL | RxLev/RxQual + neighbors |
+| `L3MeasurementReport` | 0x15 | UL | RxLev/RxQual + neighbors; bytes after the measurement reports kept as an opaque tail |
 | `L3ExtendedMeasurementReport` | 0x36 | UL | Extended measurement results |
 | `L3ExtendedMeasurementOrder` | 0x37 | DL | Measurement order |
 | `L3CipheringModeCommand` | 0x35 | DL | One octet: high nibble [spare(3)\|cR(1)], low nibble [algorithm(3)\|sC(1)] — start-ciphering in the low bit, algorithm identifier bits 1–3 (TS 44.018 §9.2.24) |
@@ -237,9 +237,9 @@ No normative reference templates exist for this block: bodies are kept as opaque
 | `L3UplinkRelease` | 0x0e | DL | RR cause (one octet) |
 | `L3UplinkBusy` | 0x2a | DL | All information elements optional — a header-only frame is valid; present IEs kept as an opaque tail for lossless re-emit |
 | `L3TalkerIndication` | 0x11 | DL | Classmark2 (LV, three to seven value octets) + mobile identity (LV) [+ CKSN (TV, IEI 0x0B, one value octet)] |
-| `L3PriorityUplinkRequest` | 0x66 | UL | Estimated cause (one octet) + [token(4)\|reduced GCR(4)] (one octet) + mobile identity (LV) |
+| `L3PriorityUplinkRequest` | 0x66 | UL | Estimated cause (one octet) + token (four octets) + reduced GCR (four octets) + mobile identity (LV) |
 | `L3DataIndication` | 0x67 | DL | TMSI (four octets) + application data (nine octets) + data identifier (one octet); body 14 octets |
-| `L3DataIndication2` | 0x68 | DL | TMSI (four octets) + reduced GCR (four bits, zero-padded to its octet) + application data (nine octets) + data identifier (one octet); body 15 octets |
+| `L3DataIndication2` | 0x68 | DL | TMSI (four octets) + reduced GCR (four octets) + application data (nine octets) + data identifier (one octet); body 18 octets |
 
 ### DTM and Packet
 
@@ -289,24 +289,24 @@ InvalidMTI.
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
 | `L3AttachRequest` | 0x01 | UL | MS network capability (LV), attach type + forL3 + GPRS CKSN (one octet), DRX parameter (V, two octets), mobile identity (LV), old RAI (V, six octets), MS radio access capability (LV) |
-| `L3AttachAccept` | 0x02 | DL | Leading part of three octets — first octet [attachResult(3)\|spare(1)\|forceToStandby(1)\|updateTimer(2)\|radioPriority(1)] (bit positions in the octet value) plus two raw leading octets — RAI (V, six octets) [+ P-TMSI signature (TV, IEI 0x19, three octets)] [+ P-TMSI (TLV 0x18)]; additional IEs kept opaque |
+| `L3AttachAccept` | 0x02 | DL | [forceToStandby(4)\|attachResult(4)] (bit positions in the octet value), periodic RA update timer octet ([units(3)\|value(5)]), radio priority octet ([SMS(4)\|TOM8(4)]), RAI (V, six octets); optional IEs after the RAI in any order: P-TMSI signature (TV, IEI 0x19, three octets), allocated P-TMSI (TLV 0x18, MI form), ready timer (TV 0x17, two value octets); remaining IEs kept opaque |
 | `L3AttachComplete` | 0x03 | UL | Attach complete |
 | `L3AttachReject` | 0x04 | DL | GMM cause (value octet); optional IEs kept opaque |
 | `L3DetachRequest` | 0x05 | Bidir | First octet: detach type in the three low bits + power-off flag (MO, bit 3) or force-to-standby (MT, bit 4); [P-TMSI (TLV 0x18)], [cause (TV, IEI 0x25)] |
-| `L3DetachAccept` | 0x06 | Bidir | Detach accepted |
+| `L3DetachAccept` | 0x06 | Bidir | Exactly one octet, always present: force-to-standby in the low bit, remaining bits zero |
 | `L3RoutingAreaUpdateRequest` | 0x08 | UL | Update type + forL3 + GPRS CKSN (one octet), old RAI (V, six octets), MS radio access capability (LV) |
-| `L3RoutingAreaUpdateAccept` | 0x09 | DL | Leading part of two octets — first octet [forceToStandby(1)\|updateResult(3)\|raUpdateTimer(2)\|spare(2)] (no radio-priority field) plus one raw leading octet — RAI (V, six octets) [+ P-TMSI signature (TV, IEI 0x19, three octets)] [+ P-TMSI (TLV 0x18)]; additional IEs kept opaque |
+| `L3RoutingAreaUpdateAccept` | 0x09 | DL | [spare(4)\|updateResult(3)\|forceToStandby(1)] (bit positions in the octet value), periodic RA update timer octet ([units(3)\|value(5)]), RAI (V, six octets); optional IEs after the RAI in any order: P-TMSI signature (TV 0x19, three octets), allocated P-TMSI (TLV 0x18), MS identity / old P-TMSI (TLV 0x23), ready timer (TV 0x17, two value octets), PDP context status (TLV 0x32, two value octets) when included by the network; remaining IEs kept opaque |
 | `L3RoutingAreaUpdateComplete` | 0x0a | UL | RA update complete |
-| `L3RoutingAreaUpdateReject` | 0x0b | DL | GMM cause (value octet); optional IEs kept opaque |
-| `L3ServiceRequest` | 0x0c | UL | First octet: GPRS CKSN(3)\|spare(1) low half-octet, service type(3)\|spare(1) high half-octet; then P-TMSI (LV) |
+| `L3RoutingAreaUpdateReject` | 0x0b | DL | GMM cause (value octet) + one force-to-standby octet (low bit, remaining bits zero) |
+| `L3ServiceRequest` | 0x0c | UL | First octet: GPRS CKSN(3)\|spare(1) low half-octet, service type(3)\|spare(1) high half-octet; then P-TMSI (LV); further optional IEs after the P-TMSI LV kept opaque (a conforming MS appends the PDP context status TLV 0x32 here) |
 | `L3ServiceAccept` | 0x0d | DL | [PDP context status (TLV 0x32)]; additional IEs kept opaque |
 | `L3ServiceReject` | 0x0e | DL | Service rejected |
-| `L3P_TMSIReallocationCommand` | 0x10 | DL | First octet [PTMSI_Type(1)\|spare(3)\|forceToStandby(1)\|spare(4)], RAI (V, six octets), [P-TMSI (TLV 0x18)]; additional IEs kept opaque |
+| `L3P_TMSIReallocationCommand` | 0x10 | DL | Positional: allocated P-TMSI LV (length 5, MI form `0xF4` + TMSI), RAI (V, six octets), one force-to-standby octet (low bit); [P-TMSI signature (TV, IEI 0x19, three octets)]; additional IEs kept opaque |
 | `L3P_TMSIReallocationComplete` | 0x11 | UL | P-TMSI reallocation complete |
 | `L3AuthenticationAndCipheringRequest` | 0x12 | DL | First octet [ciphering algorithm(3)\|spare(1)\|IMEISV request(1)\|force to standby(1)\|spare(2)], second octet [AC reference(4)\|spare(4)], RAND (TV, IEI 0x21, sixteen value octets) |
 | `L3AuthenticationAndCipheringResponse` | 0x13 | UL | First octet [AC reference(4)\|spare(4)], RES (TV, IEI 0x22, four value octets) |
 | `L3AuthenticationAndCipheringReject` | 0x14 | DL | Auth rejected |
-| `L3GMMIdentityRequest` | 0x15 | DL | One octet [spare(5)\|identityType(3)] |
+| `L3GMMIdentityRequest` | 0x15 | DL | One octet [spare(3)\|forceToStandby(1)\|identityType(3)] (bit positions in the octet value) |
 | `L3GMMIdentityResponse` | 0x16 | UL | Identity response |
 | `L3AuthenticationAndCipheringFailure` | 0x1c | UL | Auth failure with AUTS |
 | `L3GMMStatus` | 0x20 | Bidir | GMM status report |
@@ -321,7 +321,6 @@ InvalidMTI.
 | `L3MSNetworkCapability` | MS network capability bit string |
 | `L3RoutingAreaIdentification` | MCC/MNC + LAC + RAC (6 octets) |
 | `L3DRXParameter` | DRX parameter (two value octets, no identifier) |
-| `L3GMMCKSN` | Ciphering key sequence number (three bits) |
 | `L3GMMCauseIE` | GMM cause value octet (no identifier; first body octet of reject/failure/status messages) |
 | `L3AuthRAND` | 128-bit authentication challenge |
 | `L3AuthRES` | 32-bit authentication response |
@@ -329,7 +328,7 @@ InvalidMTI.
 | `L3PTMSISignature` | P-TMSI signature (3 octets) |
 | `L3GMMStatusCause` | GMM status cause octet |
 
-Enums: `GMMCause`, `GMMAttachType`, `GMMUpdateType`, `GMMDetachTypeMO`, `GMMDetachTypeMT`, `GMMPTMSIType`.
+Enums: `GMMCause`, `GMMAttachType`, `GMMUpdateType`, `GMMDetachTypeMO`, `GMMDetachTypeMT`.
 
 ## SMS (PD=0x09) — 5 L3 messages in the `SMS` variant, plus 4 TP types and 4 RP types
 
@@ -347,7 +346,11 @@ The variant holds 5 CP-layer messages. The CP-layer messages follow TS 24.011; n
 
 ### Relay Part (RP) Messages
 
-| Message | RP-MTI (MO/MT) | Description |
+The RP header octet is `reserved(5)=0 | RP-MTI(3)`; the MTI is direction dependent — a downlink
+(network to MS) message carries the uplink value plus one (TS 24.079 §7.2.1, Table 8.3). The reserved
+high bits must be zero on parse.
+
+| Message | RP-MTI (uplink / downlink) | Description |
 |---------|----------------|-------------|
 | `L3RPData` | 0 / 1 | Relay data (wraps TPDU) |
 | `L3RPAck` | 2 / 3 | Relay acknowledgement |
@@ -378,10 +381,10 @@ The variant holds 5 CP-layer messages. The CP-layer messages follow TS 24.011; n
 
 | Message | MTI | Direction | Description |
 |---------|-----|-----------|-------------|
-| `L3ActivatePDPContextRequest` | 0x41 | UL | NSAPI and LLC SAPI (two octets: [NSAPI(4)\|spare(4)][LLC SAPI(4)\|spare(4)]), requested QoS (LV), requested PDP address (LV), APN (TLV 0x28), [PCO (TLV 0x27)], [request type (0xAx)] |
+| `L3ActivatePDPContextRequest` | 0x41 | UL | NSAPI and LLC SAPI (two octets, value in the low four bits with the high nibble zero), requested QoS (LV), requested PDP address (LV), [APN (TLV 0x28)], [PCO (TLV 0x27)], [request type (0xAx)] |
 | `L3ActivatePDPContextAccept` | 0x42 | DL | PDP context activated |
 | `L3ActivatePDPContextReject` | 0x43 | DL | SM cause (value octet); optional IEs kept opaque |
-| `L3DeactivatePDPContextRequest` | 0x46 | Bidir | SM cause (value octet), [tear-down indicator (TV 0x09)], [PCO (TLV 0x27)] |
+| `L3DeactivatePDPContextRequest` | 0x46 | Bidir | SM cause (value octet), [tear-down indicator (one octet: high nibble 0x9, flag in bit 0)], [PCO (TLV 0x27)] |
 | `L3DeactivatePDPContextAccept` | 0x47 | Bidir | PDP context deactivated |
 | `L3ModifyPDPContextRequest` | 0x48 | DL | Modify PDP context (QoS change) |
 | `L3ModifyPDPContextAccept` | 0x49 | UL | PDP context modified |
@@ -432,17 +435,17 @@ The variant holds 5 CP-layer messages. The CP-layer messages follow TS 24.011; n
 
 | IE | Description |
 |----|-------------|
-| `L3PDPAddress` | PDP type-and-address (LV/TLV, no positional length): value = [PDP type number(1)][address length(1)][address] — type 4 = IETF IPv4, 6 = IETF IPv6; the TLV length octet equals the whole value size (six for IPv4) |
-| `L3QoS` | QoS profile: type + up to 18 element types (LV, no identifier) |
+| `L3PDPAddress` | PDP type-and-address (LV): value = [type organization(4) = 0x01 IETF \| spare(4)][type number(8)] + address octets only for a static address — type numbers 0x21 (IPv4, four octets) and 0x53 (IPv6, sixteen octets); LV length 2 (dynamic), 6 (static IPv4) or 18 (static IPv6) |
+| `L3QoS` | QoS profile (LV, no identifier): three mandatory octets — reserved(2)\|delay class(3)\|reliability class(3), peak throughput(4)\|reserved(1)\|precedence class(3), reserved(3)\|mean throughput(5) — plus any optional characteristics, preserved verbatim |
 | `L3AccessPointName` | APN string (UTF-8), TLV IEI 0x28 |
 | `L3ProtocolConfigOptions` | Protocol config (e.g. IPCP for IPv4), TLV IEI 0x27 |
 | `L3SMCauseIE` | SM cause value octet (no identifier; first body octet of reject/failure/status messages) |
 | `L3BackOffTimer` | Back-off timer (GPRS Timer 2 encoding); kept in the message's opaque additional-IE sequence |
 | `L3PDPHandle` | PDP context identifier (0–15) |
-| `L3TearDownIndicator` | Tear-down indicator (TV, IEI 0x09: identifier nibble + flag) |
+| `L3TearDownIndicator` | Tear-down indicator (one octet: high nibble 0x9, flag in bit 0 — `0x90` cleared / `0x91` set) |
 | `L3TMGI` | Temporary Mobile Group Identity: PLMN(3) + ServiceID(2) + SessionID(1) |
 
-Enums: `PDPType`, `QoSType`, `QoSElementType`, `SMCause`.
+Enums: `PdpTypeNumber`, `SMCause`.
 
 ## Supplementary Services (PD=0x0b) — 3 message types, 2 enums, 2 IEs
 

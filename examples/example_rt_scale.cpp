@@ -24,7 +24,10 @@
 // Creates 1,000,000 subscriber sessions, then runs 1000 event-loop ticks
 // of 10 ms each (tickAllTimers + tickAllProcedures + 500 parsed L3
 // messages per tick = 50K msg/s aggregate) and verifies the real-time
-// budget: no tick may exceed its 10 ms period.
+// budget: no tick may exceed its period. The strict 10 ms budget is a
+// production (optimized, NDEBUG) claim; debug/sanitizer builds carry large
+// instrumentation overhead (bounds checks, shadow memory), so the same
+// workload is checked against a scaled 100 ms budget there.
 
 #include <algorithm>  // std::min / std::max for tick statistics
 #include <array>      // std::array<TimerExpiry, 1024>
@@ -82,7 +85,11 @@ int main() {
     constexpr uint32_t N = 1'000'000;
     constexpr int TICKS = 1000;
     constexpr int MSGS_PER_TICK = 500;
-    constexpr int64_t PERIOD_NS = 10'000'000; // 10 ms tick period
+#ifdef NDEBUG
+    constexpr int64_t PERIOD_NS = 10'000'000; // strict production budget: 10 ms tick period
+#else
+    constexpr int64_t PERIOD_NS = 100'000'000; // scaled budget for debug/sanitizer builds (see file header)
+#endif
 
     ShardedSubscriberRegistry<32> reg;
     reg.reserve(N);
@@ -132,14 +139,16 @@ int main() {
     double elapsedSec = std::chrono::duration_cast<std::chrono::microseconds>(loopEnd - loopStart).count() / 1e6;
     double totalMsgs = static_cast<double>(TICKS) * MSGS_PER_TICK;
 
-    std::printf("tick: avg %.3f ms, min %.3f ms, max %.3f ms, overruns %" PRId64 "/%d\n",
-                totalNs / 1e6 / TICKS, tickMin / 1e6, tickMax / 1e6, overruns, TICKS);
+    std::printf("tick: avg %.3f ms, min %.3f ms, max %.3f ms, overruns %" PRId64 "/%d (budget %lld ms)\n",
+                totalNs / 1e6 / TICKS, tickMin / 1e6, tickMax / 1e6, overruns, TICKS,
+                static_cast<long long>(PERIOD_NS / 1'000'000));
     std::printf("throughput: %.2f M msg/s\n", totalMsgs / elapsedSec / 1e6);
     double peakGB = peakWorkingSetGB();
     std::printf("peak working set: %.2f GB\n", peakGB);
 
     if (overruns > 0) {
-        std::printf("FAIL: %" PRId64 " tick(s) exceeded the 10 ms period\n", overruns);
+        std::printf("FAIL: %" PRId64 " tick(s) exceeded the %lld ms period\n", overruns,
+                    static_cast<long long>(PERIOD_NS / 1'000'000));
         return 1;
     }
     std::printf("RT SCALE OK\n");

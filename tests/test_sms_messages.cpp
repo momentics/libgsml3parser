@@ -38,7 +38,9 @@
 //   - CP-MTI values per the CP message type table (TS 24.008 Table 10.6a)
 //   - SMS header encoding: PD=9 in the low nibble of byte 0, CP-MTI in the
 //     low five bits of byte 1 (the three high bits are spare, TS 24.011 8.2)
-//   - RP-MTI encoding: Spare(5)=0 | RP-MTI(3) in first RP octet
+//   - RP header octet: reserved(5)=0 | RP-MTI(3); the MTI is direction
+//     dependent, downlink = uplink value plus one (TS 24.079 section 7.2.1,
+//     Table 8.3)
 //   - TP-DU header octet (TS 23.040 section 9.1.2, bit positions in the octet
 //     value): MTI(2)=bits0-1, MMS/RD(1)=bit2, VPF(2)=bits3-4, SRI/SRR(1)=bit5,
 //     UDHI(1)=bit6, RP(1)=bit7
@@ -353,7 +355,7 @@ TEST(GoldenSMSTest, MessagePD) {
 // SMS RP-ACK (GSM 24.011 7.3.2) - parse from raw bytes
 // RP-ACK wire layout (GSM 24.011).
 // Hex breakdown (within CP-DATA RPDU):
-//   0x02 = Spare(5)=0 | RP-MTI(3)=2 (RP-ACK MO)
+//   0x02 = reserved(5)=0 | RP-MTI(3)=2 (RP-ACK uplink)
 //   0x0A = RP-Message-Reference = 10
 // =====================================================================
 
@@ -362,8 +364,8 @@ TEST(GoldenSMSTest, RPAck_Parse) {
     BitReader br(data, 16);
     auto ack = L3RPAck::parse(br);
     ASSERT_TRUE(ack);
-    EXPECT_EQ(ack.value().rpMti(), L3RPAck::RP_MTI_MO);
-    EXPECT_TRUE(ack.value().isMo());
+    EXPECT_EQ(ack.value().mti(), RPMTI::AckUplink);
+    EXPECT_FALSE(ack.value().isDownlink());
     EXPECT_EQ(ack.value().messageRef(), 0x0A);
 }
 
@@ -375,7 +377,7 @@ TEST(GoldenSMSTest, RPAck_Parse) {
 
 TEST(GoldenSMSTest, RPAck_RoundTrip) {
     L3RPAck orig;
-    orig.setRpMti(L3RPAck::RP_MTI_MO);
+    orig.setRpMti(RPMTI::AckUplink);
     orig.setMessageRef(0x0A);
 
     std::vector<uint8_t> buf(32);
@@ -385,7 +387,7 @@ TEST(GoldenSMSTest, RPAck_RoundTrip) {
     BitReader br(buf.data(), orig.bodyLength() * 8);
     auto rt = L3RPAck::parse(br);
     ASSERT_TRUE(rt);
-    EXPECT_EQ(rt.value().rpMti(), L3RPAck::RP_MTI_MO);
+    EXPECT_EQ(rt.value().mti(), RPMTI::AckUplink);
     EXPECT_EQ(rt.value().messageRef(), 0x0A);
 }
 
@@ -393,7 +395,7 @@ TEST(GoldenSMSTest, RPAck_RoundTrip) {
 // SMS RP-ERROR (GSM 24.011 7.3.4) - parse from raw bytes
 // RP-ERROR wire layout (GSM 24.011).
 // Hex breakdown (within CP-DATA RPDU):
-//   0x04 = Spare(5)=0 | RP-MTI(3)=4 (RP-ERROR MO)
+//   0x04 = reserved(5)=0 | RP-MTI(3)=4 (RP-ERROR uplink)
 //   0x14 = RP-Message-Reference = 20
 //   0x01 = RP-Cause Length = 1
 //   0x05 = RP-Cause Value = RPUserBusy
@@ -404,7 +406,7 @@ TEST(GoldenSMSTest, RPError_Parse) {
     BitReader br(data, 32);
     auto err = L3RPError::parse(br);
     ASSERT_TRUE(err);
-    EXPECT_EQ(err.value().rpMti(), L3RPError::RP_MTI_MO);
+    EXPECT_EQ(err.value().mti(), RPMTI::ErrorUplink);
     EXPECT_EQ(err.value().messageRef(), 0x14);
     EXPECT_EQ(err.value().cause(), CPCause::RPUserBusy);
 }
@@ -417,7 +419,7 @@ TEST(GoldenSMSTest, RPError_Parse) {
 
 TEST(GoldenSMSTest, RPError_RoundTrip) {
     L3RPError orig;
-    orig.setRpMti(L3RPError::RP_MTI_MO);
+    orig.setRpMti(RPMTI::ErrorUplink);
     orig.setMessageRef(0x14);
     orig.setCause(CPCause::RPUserBusy);
 
@@ -428,7 +430,7 @@ TEST(GoldenSMSTest, RPError_RoundTrip) {
     BitReader br(buf.data(), orig.bodyLength() * 8);
     auto rt = L3RPError::parse(br);
     ASSERT_TRUE(rt);
-    EXPECT_EQ(rt.value().rpMti(), L3RPError::RP_MTI_MO);
+    EXPECT_EQ(rt.value().mti(), RPMTI::ErrorUplink);
     EXPECT_EQ(rt.value().messageRef(), 0x14);
     EXPECT_EQ(rt.value().cause(), CPCause::RPUserBusy);
 }
@@ -437,7 +439,7 @@ TEST(GoldenSMSTest, RPError_RoundTrip) {
 // SMS RP-SMMA (GSM 24.011 7.3.3) - parse from raw bytes
 // RP-SMMA wire layout (GSM 24.011).
 // Hex breakdown (within CP-DATA RPDU):
-//   0x06 = Spare(5)=0 | RP-MTI(3)=6 (RP-SMMA MO)
+//   0x06 = reserved(5)=0 | RP-MTI(3)=6 (RP-SMMA uplink)
 //   0xFF = RP-Message-Reference = 255
 // =====================================================================
 
@@ -446,8 +448,8 @@ TEST(GoldenSMSTest, RPSMMA_Parse) {
     BitReader br(data, 16);
     auto smma = L3RPSMMA::parse(br);
     ASSERT_TRUE(smma);
-    EXPECT_EQ(smma.value().rpMti(), L3RPSMMA::RP_MTI_MO);
-    EXPECT_TRUE(smma.value().isMo());
+    EXPECT_EQ(smma.value().mti(), RPMTI::SMMAUplink);
+    EXPECT_FALSE(smma.value().isDownlink());
     EXPECT_EQ(smma.value().messageRef(), 0xFF);
 }
 
@@ -459,7 +461,7 @@ TEST(GoldenSMSTest, RPSMMA_Parse) {
 
 TEST(GoldenSMSTest, RPSMMA_RoundTrip) {
     L3RPSMMA orig;
-    orig.setRpMti(L3RPSMMA::RP_MTI_MO);
+    orig.setRpMti(RPMTI::SMMAUplink);
     orig.setMessageRef(0xFF);
 
     std::vector<uint8_t> buf(32);
@@ -469,7 +471,7 @@ TEST(GoldenSMSTest, RPSMMA_RoundTrip) {
     BitReader br(buf.data(), orig.bodyLength() * 8);
     auto rt = L3RPSMMA::parse(br);
     ASSERT_TRUE(rt);
-    EXPECT_EQ(rt.value().rpMti(), L3RPSMMA::RP_MTI_MO);
+    EXPECT_EQ(rt.value().mti(), RPMTI::SMMAUplink);
     EXPECT_EQ(rt.value().messageRef(), 0xFF);
 }
 
@@ -694,7 +696,7 @@ TEST(GoldenSMSTest, FullSMSWrapper_MO) {
 
     // Build RP-DATA: header + message-ref + both (empty) SMSC LVs + user data
     std::vector<uint8_t> rpdu;
-    rpdu.push_back(0x00); // RP header: Spare(5)=0 | RP-MTI(3)=0 (RP-DATA MO)
+    rpdu.push_back(0x00); // RP header: reserved(5)=0 | RP-MTI(3)=0 (RP-DATA uplink)
     rpdu.push_back(0x01); // RP-Message-Reference = 1
     rpdu.push_back(0x00); // RP-Originator-SM-SC-Address: empty LV
     rpdu.push_back(0x00); // RP-Destination-SM-SC-Address: empty LV
@@ -716,15 +718,15 @@ TEST(GoldenSMSTest, FullSMSWrapper_MO) {
     auto* cpd = tryGet<L3CPData>(*msg);
     ASSERT_NE(cpd, nullptr);
     EXPECT_EQ(cpd->rpdu().size(), rpdu.size());
-    EXPECT_EQ(cpd->rpdu()[0], 0x00); // RP-DATA MO header
+    EXPECT_EQ(cpd->rpdu()[0], 0x00); // RP-DATA uplink header
     EXPECT_EQ(cpd->rpdu()[1], 0x01); // RP-Message-Reference
 
     // Parse RP layer from CP-DATA body
     BitReader rpBr(cpd->rpdu().data(), cpd->rpdu().size() * 8);
     auto rpData = L3RPData::parse(rpBr);
     ASSERT_TRUE(rpData);
-    EXPECT_EQ(rpData.value().rpMti(), L3RPData::RP_MTI_MO);
-    EXPECT_TRUE(rpData.value().isMo());
+    EXPECT_EQ(rpData.value().mti(), RPMTI::DataUplink);
+    EXPECT_FALSE(rpData.value().isDownlink());
     EXPECT_EQ(rpData.value().messageRef(), 1u);
     // Both SMSC addresses are present on the wire; empty LVs parse back to
     // "not set".
@@ -755,9 +757,9 @@ TEST(GoldenSMSTest, FullSMSWrapper_MT) {
     tpdu.push_back(0x05); // TP-UDL = 5 octets
     tpdu.insert(tpdu.end(), {0x48, 0x65, 0x6C, 0x6C, 0x6F}); // "Hello"
 
-    // Build RP-DATA MT: header + message-ref + both (empty) SMSC LVs + user data
+    // Build RP-DATA downlink: header + message-ref + both (empty) SMSC LVs + user data
     std::vector<uint8_t> rpdu;
-    rpdu.push_back(0x01); // RP header: Spare(5)=0 | RP-MTI(3)=1 (RP-DATA MT)
+    rpdu.push_back(0x01); // RP header: reserved(5)=0 | RP-MTI(3)=1 (RP-DATA downlink)
     rpdu.push_back(0x02); // RP-Message-Reference = 2
     rpdu.push_back(0x00); // RP-Originator-SM-SC-Address: empty LV
     rpdu.push_back(0x00); // RP-Destination-SM-SC-Address: empty LV
@@ -778,13 +780,13 @@ TEST(GoldenSMSTest, FullSMSWrapper_MT) {
 
     auto* cpd = tryGet<L3CPData>(*msg);
     ASSERT_NE(cpd, nullptr);
-    EXPECT_EQ(cpd->rpdu()[0], 0x01); // RP-DATA MT header (RP-MTI=1)
+    EXPECT_EQ(cpd->rpdu()[0], 0x01); // RP-DATA downlink header (RP-MTI=1)
 
     BitReader rpBr(cpd->rpdu().data(), cpd->rpdu().size() * 8);
     auto rpData = L3RPData::parse(rpBr);
     ASSERT_TRUE(rpData);
-    EXPECT_EQ(rpData.value().rpMti(), L3RPData::RP_MTI_MT);
-    EXPECT_FALSE(rpData.value().isMo());
+    EXPECT_EQ(rpData.value().mti(), RPMTI::DataDownlink);
+    EXPECT_TRUE(rpData.value().isDownlink());
     EXPECT_FALSE(rpData.value().originatorAddress().has_value());
     EXPECT_FALSE(rpData.value().destinationAddress().has_value());
     ASSERT_EQ(rpData.value().userData().size(), tpdu.size());
@@ -1223,27 +1225,27 @@ TEST(SMSBuilderTest, CPSMT) {
 // 3GPP TS 24.011 7.3.1: RP-DATA Builder
 TEST(SMSBuilderTest, RPData) {
     auto msg = L3RPData::builder()
-        .rpMti(L3RPData::RP_MTI_MO)
+        .mti(RPMTI::DataUplink)
         .messageRef(3)
         .userData(std::vector<uint8_t>{0x65, 0x6C, 0x6C, 0x6F})
         .build();
-    EXPECT_EQ(msg.rpMti(), L3RPData::RP_MTI_MO);
+    EXPECT_EQ(msg.mti(), RPMTI::DataUplink);
     EXPECT_EQ(msg.messageRef(), 3u);
 }
 
 // 3GPP TS 24.011 7.3.2: RP-ACK Builder
 TEST(SMSBuilderTest, RPAck) {
     auto msg = L3RPAck::builder()
-        .rpMti(L3RPAck::RP_MTI_MO)
+        .mti(RPMTI::AckUplink)
         .messageRef(3)
         .build();
-    EXPECT_EQ(msg.rpMti(), L3RPAck::RP_MTI_MO);
+    EXPECT_EQ(msg.mti(), RPMTI::AckUplink);
 }
 
 // 3GPP TS 24.011 7.3.4: RP-ERROR Builder
 TEST(SMSBuilderTest, RPError) {
     auto msg = L3RPError::builder()
-        .rpMti(L3RPError::RP_MTI_MO)
+        .mti(RPMTI::ErrorUplink)
         .messageRef(4)
         .cause(CPCause::NoRPLPDU)
         .build();
@@ -1253,8 +1255,89 @@ TEST(SMSBuilderTest, RPError) {
 // 3GPP TS 24.011 7.3.3: RP-SMMA Builder
 TEST(SMSBuilderTest, RPSMMA) {
     auto msg = L3RPSMMA::builder()
-        .rpMti(L3RPSMMA::RP_MTI_MO)
+        .mti(RPMTI::SMMAUplink)
         .messageRef(5)
         .build();
-    EXPECT_EQ(msg.rpMti(), L3RPSMMA::RP_MTI_MO);
+    EXPECT_EQ(msg.mti(), RPMTI::SMMAUplink);
+}
+
+// =====================================================================
+// SMS RP header direction-dependent MTI
+// The RP header octet is reserved(5)=0 | RP-MTI(3) (TS 24.079 section
+// 7.2.1, Table 8.3). The MTI is direction dependent: the downlink value
+// is the uplink value plus one (Data=0/1, Ack=2/3, Error=4/5, SMMA=6/7).
+// =====================================================================
+
+TEST(GoldenSMSTest, RPHeader_BothDirections) {
+    // Uplink and downlink octets of every message type parse to the raw
+    // value; isDownlink() reflects bit 0. RP-DATA needs its full minimal
+    // body: header + ref + two (empty) SMSC LVs + empty user data.
+    uint8_t dataUp[] = {0x00, 0x21, 0x00, 0x00, 0x00};   // Data uplink
+    BitReader brUp(dataUp, 40);
+    auto dUp = L3RPData::parse(brUp);
+    ASSERT_TRUE(dUp);
+    EXPECT_EQ(dUp.value().mti(), RPMTI::DataUplink);
+    EXPECT_FALSE(dUp.value().isDownlink());
+    EXPECT_EQ(dUp.value().messageType(), RPMTI::DataUplink);
+
+    uint8_t dataDn[] = {0x01, 0x21, 0x00, 0x00, 0x00};   // Data downlink
+    BitReader brDn(dataDn, 40);
+    auto dDn = L3RPData::parse(brDn);
+    ASSERT_TRUE(dDn);
+    EXPECT_EQ(dDn.value().mti(), RPMTI::DataDownlink);
+    EXPECT_TRUE(dDn.value().isDownlink());
+    EXPECT_EQ(dDn.value().messageType(), RPMTI::DataUplink);
+
+    uint8_t ack[] = {0x03, 0x21};      // Ack downlink header + ref
+    BitReader brAck(ack, 16);
+    auto a = L3RPAck::parse(brAck);
+    ASSERT_TRUE(a);
+    EXPECT_EQ(a.value().mti(), RPMTI::AckDownlink);
+    EXPECT_TRUE(a.value().isDownlink());
+
+    uint8_t err[] = {0x04, 0x21, 0x01, 0x05}; // Error uplink + cause
+    BitReader brErr(err, 32);
+    auto e = L3RPError::parse(brErr);
+    ASSERT_TRUE(e);
+    EXPECT_EQ(e.value().mti(), RPMTI::ErrorUplink);
+    EXPECT_FALSE(e.value().isDownlink());
+
+    uint8_t smma[] = {0x07, 0xFF};      // SMMA downlink header + ref
+    BitReader brSmma(smma, 16);
+    auto s = L3RPSMMA::parse(brSmma);
+    ASSERT_TRUE(s);
+    EXPECT_EQ(s.value().mti(), RPMTI::SMMADownlink);
+    EXPECT_TRUE(s.value().isDownlink());
+}
+
+TEST(GoldenSMSTest, RPData_WriteDownlinkHeader) {
+    // A downlink sender uses the downlink MTI code; the header octet is
+    // emitted verbatim (TS 24.079 Table 8.3: downlink Data = 1).
+    auto msg = L3RPData::builder()
+        .mti(RPMTI::DataDownlink)
+        .messageRef(0x21)
+        .build();
+    std::vector<uint8_t> buf(64);
+    BitWriter bw(buf.data(), buf.size() * 8);
+    msg.write(bw);
+    EXPECT_EQ(buf[0], 0x01); // downlink Data header octet
+    EXPECT_EQ(buf[1], 0x21); // message reference
+}
+
+TEST(GoldenSMSTest, RPHeader_ReservedBitsRejected) {
+    // The five high bits of the RP header octet are reserved; a frame with
+    // them set is rejected (TS 24.079 section 7.2.1).
+    uint8_t data[] = {0x21, 0x00};
+    BitReader br(data, 16);
+    auto res = L3RPAck::parse(br);
+    ASSERT_FALSE(res);
+    EXPECT_EQ(res.error().code, ParseError::Code::InvalidValue);
+}
+
+TEST(SMSBuilderTest, RPDefaultMTIs) {
+    // Builders default to the uplink MTI of their message kind.
+    EXPECT_EQ(L3RPData::builder().build().mti(), RPMTI::DataUplink);
+    EXPECT_EQ(L3RPAck::builder().build().mti(), RPMTI::AckUplink);
+    EXPECT_EQ(L3RPError::builder().build().mti(), RPMTI::ErrorUplink);
+    EXPECT_EQ(L3RPSMMA::builder().build().mti(), RPMTI::SMMAUplink);
 }

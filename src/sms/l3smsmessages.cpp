@@ -191,7 +191,9 @@ void L3CPSMT::text(std::ostream& os) const {
 }
 
 // ── L3RPData (24.011 7.3.1) ───────────────────────────────────────────
-// Header: Spare(5)|RP-MTI(3) | RP-Message-Reference(1)
+// Header: reserved(5)=0 | RP-MTI(3) | RP-Message-Reference(1). The MTI is
+// direction dependent (TS 24.079 section 7.2.1, Table 8.3): uplink Data = 0,
+// downlink Data = 1.
 // Body: RP-Originator-SM-SC-Address(LV) | RP-Destination-SM-SC-Address(LV)
 //       | RP-User-Data(LV). Both SMSC addresses are always present; an
 //       empty address is a single zero length octet (TS 24.011 section 7.3.1).
@@ -218,7 +220,13 @@ Expected<L3RPData> L3RPData::parse(BitReader& br) {
 
     auto hdr = br.readField(8);
     if (!hdr) return Expected<L3RPData>::error(hdr.error());
-    msg.mRpMti = static_cast<uint8_t>(hdr.value() & 0x07);
+    // The five high bits of the RP header octet are reserved and must be
+    // zero (TS 24.079 section 7.2.1).
+    if ((hdr.value() & 0xF8u) != 0u) {
+        return Expected<L3RPData>::error(
+            ParseError{ParseError::Code::InvalidValue, "invalid RP header octet", br.position()});
+    }
+    msg.mRpMti = static_cast<uint8_t>(hdr.value());
 
     auto ref = br.readField(8);
     if (!ref) return Expected<L3RPData>::error(ref.error());
@@ -253,7 +261,9 @@ Expected<L3RPData> L3RPData::parse(BitReader& br) {
 }
 
 void L3RPData::write(BitWriter& bw) const {
-    bw.writeField(mRpMti & 0x07, 8);
+    // The stored MTI value (0..7) is written verbatim; direction is encoded
+    // in the value itself (TS 24.079 section 7.2.1, Table 8.3).
+    bw.writeField(mRpMti, 8);
     bw.writeField(mMessageRef, 8);
 
     // Both SMSC addresses are always written as LV elements; an empty
@@ -292,7 +302,13 @@ Expected<L3RPAck> L3RPAck::parse(BitReader& br) {
 
     auto hdr = br.readField(8);
     if (!hdr) return Expected<L3RPAck>::error(hdr.error());
-    msg.mRpMti = static_cast<uint8_t>(hdr.value() & 0x07);
+    // The five high bits of the RP header octet are reserved and must be
+    // zero (TS 24.079 section 7.2.1).
+    if ((hdr.value() & 0xF8u) != 0u) {
+        return Expected<L3RPAck>::error(
+            ParseError{ParseError::Code::InvalidValue, "invalid RP header octet", br.position()});
+    }
+    msg.mRpMti = static_cast<uint8_t>(hdr.value());
 
     auto ref = br.readField(8);
     if (!ref) return Expected<L3RPAck>::error(ref.error());
@@ -302,7 +318,9 @@ Expected<L3RPAck> L3RPAck::parse(BitReader& br) {
 }
 
 void L3RPAck::write(BitWriter& bw) const {
-    bw.writeField(mRpMti & 0x07, 8);
+    // The stored MTI value (0..7) is written verbatim; direction is encoded
+    // in the value itself (TS 24.079 section 7.2.1, Table 8.3).
+    bw.writeField(mRpMti, 8);
     bw.writeField(mMessageRef, 8);
 }
 
@@ -322,7 +340,13 @@ Expected<L3RPError> L3RPError::parse(BitReader& br) {
 
     auto hdr = br.readField(8);
     if (!hdr) return Expected<L3RPError>::error(hdr.error());
-    msg.mRpMti = static_cast<uint8_t>(hdr.value() & 0x07);
+    // The five high bits of the RP header octet are reserved and must be
+    // zero (TS 24.079 section 7.2.1).
+    if ((hdr.value() & 0xF8u) != 0u) {
+        return Expected<L3RPError>::error(
+            ParseError{ParseError::Code::InvalidValue, "invalid RP header octet", br.position()});
+    }
+    msg.mRpMti = static_cast<uint8_t>(hdr.value());
 
     auto ref = br.readField(8);
     if (!ref) return Expected<L3RPError>::error(ref.error());
@@ -340,7 +364,9 @@ Expected<L3RPError> L3RPError::parse(BitReader& br) {
 }
 
 void L3RPError::write(BitWriter& bw) const {
-    bw.writeField(mRpMti & 0x07, 8);
+    // The stored MTI value (0..7) is written verbatim; direction is encoded
+    // in the value itself (TS 24.079 section 7.2.1, Table 8.3).
+    bw.writeField(mRpMti, 8);
     bw.writeField(mMessageRef, 8);
     bw.writeField(1, 8);
     bw.writeField(static_cast<uint8_t>(mCause), 8);
@@ -363,7 +389,13 @@ Expected<L3RPSMMA> L3RPSMMA::parse(BitReader& br) {
 
     auto hdr = br.readField(8);
     if (!hdr) return Expected<L3RPSMMA>::error(hdr.error());
-    msg.mRpMti = static_cast<uint8_t>(hdr.value() & 0x07);
+    // The five high bits of the RP header octet are reserved and must be
+    // zero (TS 24.079 section 7.2.1).
+    if ((hdr.value() & 0xF8u) != 0u) {
+        return Expected<L3RPSMMA>::error(
+            ParseError{ParseError::Code::InvalidValue, "invalid RP header octet", br.position()});
+    }
+    msg.mRpMti = static_cast<uint8_t>(hdr.value());
 
     auto ref = br.readField(8);
     if (!ref) return Expected<L3RPSMMA>::error(ref.error());
@@ -373,7 +405,9 @@ Expected<L3RPSMMA> L3RPSMMA::parse(BitReader& br) {
 }
 
 void L3RPSMMA::write(BitWriter& bw) const {
-    bw.writeField(mRpMti & 0x07, 8);
+    // The stored MTI value (0..7) is written verbatim; direction is encoded
+    // in the value itself (TS 24.079 section 7.2.1, Table 8.3).
+    bw.writeField(mRpMti, 8);
     bw.writeField(mMessageRef, 8);
 }
 
